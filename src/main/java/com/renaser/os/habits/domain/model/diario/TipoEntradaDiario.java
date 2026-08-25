@@ -1,0 +1,12 @@
+package com.renaser.os.habits.domain.model.diario;
+
+public enum TipoEntradaDiario {
+    ESCRITURA_LIBRE,
+    BITACORA_NOCTURNA,
+    ESPEJO_SOMBRA,
+    OBSERVACION_CONDUCTAS,
+    REGISTRO_INTOXICACION,
+    VISUALIZACION_NOCTURNA,
+    CONTROL_DISTRACCIONES,
+    EVALUACION_DIA
+}
