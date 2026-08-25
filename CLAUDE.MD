@@ -409,23 +409,26 @@ Analogía: un módulo es un **restaurante**.
 
 **Cómo saber si algo va en `domain/` o en `application/`:** si la regla es verdad **siempre**, sin importar quién la invoque ni desde dónde (*"un aprendiz se gradúa 90 días después de empezar"*), va en `domain/`. Si describe **una secuencia de pasos** que incluye hablar con el exterior (*"buscá el usuario, validá que no exista, guardalo, mandá el mail"*), va en `application/`.
 
-#### La regla de `domain/`: solo clases, sin subcarpetas
+#### La regla de `domain/`: subcarpeta por agregado, NUNCA por capa ni "para ordenar"
 
-**Dentro de `domain/` van archivos `.java` sueltos. Nunca subcarpetas.** Verificado contra las dos referencias:
+**Corregido 2026-08-24.** La versión anterior de esta regla ("domain/ siempre plano, nunca subcarpetas") estaba mal calibrada — se basó en una sola referencia (`buckpal`) que da la casualidad de que **tiene un solo agregado**. Verificado ahora contra una segunda referencia con **varios agregados**, y la regla real es otra.
 
-- **`thombergs/buckpal`** (el repo del propio libro de Hombergs): `application/domain/model/` contiene `Account.java`, `Activity.java`, `ActivityWindow.java`, `Money.java` — **cuatro clases planas, cero subcarpetas**.
-- **`xsreality/spring-modulith-with-ddd`** (referencia de Spring Modulith + DDD): cada módulo tiene su `domain/` plano (`Book.java`, `Hold.java`, `Patron.java` + `package-info.java`).
+- **`thombergs/buckpal`** — `application/domain/model/`: `Account.java`, `Activity.java`, `ActivityWindow.java`, `Money.java`. Plano. Pero las 4 clases son **una sola historia**: una cuenta, sus movimientos, su dinero. Un solo agregado.
+- **`xsreality/spring-modulith-with-ddd`** — `borrow/domain/`: `Book.java`, `Hold.java`, `Patron.java`, `BookRepository.java`, `HoldRepository.java`. Plano. Mismo motivo: las 3 entidades sirven **un solo caso de uso** ("pedir prestado un libro"), ninguna tiene vida propia sin las otras.
+- **`citerus/dddsample-core`** (la referencia clásica de DDD, citada en el libro de Eric Evans) — acá **sí** hay subcarpetas, y es la prueba que faltaba: `domain/model/cargo/` (11 archivos: `Cargo`, `Delivery`, `Itinerary`, `Leg`, `RouteSpecification`, `CargoRepository`...), `domain/model/handling/` (7 archivos), `domain/model/location/` (3), `domain/model/voyage/` (5). Cuatro carpetas, una por **agregado independiente** — porque un `Cargo` y un `Voyage` son cosas distintas, cada una con su propia identidad, su propio ciclo de vida y su propio repositorio. Uno no es "parte de" el otro.
 
-**El porqué, que es lo que importa:**
+**La regla real: la subcarpeta no es por capa (eso nunca) ni "para que se vea ordenado" — es por agregado, y solo cuando hay más de uno de verdad.**
 
-1. **Una subcarpeta dentro de `domain/` es siempre la señal de que ahí adentro hay dos módulos, no uno.** Si `habits/domain/santuario/` se siente necesario, la pregunta correcta no es "¿qué subcarpeta le pongo?" sino "¿`santuario` debería ser su propio módulo Modulith?". La subcarpeta esconde esa decisión en vez de forzarla.
-2. **Un `domain/` que no entra en una pantalla ya es un problema de diseño**, y la carpeta plana lo hace visible de inmediato. Con subcarpetas, un dominio de 40 clases parece ordenado cuando en realidad está pidiendo a gritos que lo partan.
-3. **Modulith razona por paquete.** Subpaquetes dentro de un módulo agregan superficie de reglas de visibilidad sin dar nada a cambio.
-4. **Java es plano igual.** `domain/santuario/` no da encapsulamiento real: `PhoneFreeRun` queda en otro paquete, así que para que `HabitTrack` lo use tenés que hacerlo `public` — es decir, la subcarpeta te obliga a **abrir** lo que querías cerrar. La carpeta plana permite `package-private`, que es encapsulamiento de verdad.
+- ¿Las clases del `domain/` de este módulo cuentan **una sola historia** (una raíz de agregado + sus value objects + sus enums, todos sin sentido unos sin otros)? → **plano**, como `buckpal`.
+- ¿Hay **dos o más raíces de agregado independientes** (cada una con su propia identidad, su propio ciclo de vida, su propio repositorio — capaz de existir y tener sentido sin la otra)? → **una subcarpeta por agregado**, como `dddsample-core`. Ejemplo real de este repo: `users/domain/` tiene `User` (identidad), `AccountRequest` (una solicitud, con su propio `id`, su propio estado, su propio repositorio futuro) y `MentorProfile` (perfil 1:1, con su propio repositorio futuro) — son tres agregados, no uno, así que van en `user/`, `accountrequest/`, `mentorprofile/`.
 
-**Límite operativo:** si un `domain/` pasa de ~10 clases, no crear una subcarpeta — abrir la discusión de partir el módulo.
+**Por qué esto no contradice el espíritu de la regla vieja (evitar el "por si acaso"):**
 
-Esta regla aplica **solo a `domain/`**. En `adapter/` sí se agrupa por tecnología (`adapter/in/web`, `adapter/in/scheduler`, `adapter/out/persistence`) porque ahí la carpeta sí separa mundos distintos, y en `adapter/in/web/dto/` los DTOs sí van agrupados.
+1. **Sigue prohibido subdividir por capa** dentro de `domain/` (nada de `domain/entities/`, `domain/valueobjects/`) — eso seguía siendo una mala idea y la razón 3-4 de la regla vieja (Modulith razona por paquete; Java no da encapsulamiento real ahí) sigue aplicando tal cual.
+2. **La subcarpeta sigue siendo la señal de una pregunta**, solo que ahora la pregunta correcta es "¿esto es un agregado nuevo?" en vez de "¿me armo una carpeta?". Si la respuesta es sí, la subcarpeta documenta esa decisión — no la esconde.
+3. **El límite de ~10 clases sigue siendo la señal de alarma**, pero ahora la primera reacción no es "¿parto el módulo?" sino "¿ya tengo más de un agregado ahí adentro sin haberlo notado?" — que es más barato de corregir y muchas veces es la causa real de por qué la carpeta creció.
+
+Esta regla aplica **solo a `domain/`**. En `adapter/` se sigue agrupando por tecnología (`adapter/in/web`, `adapter/in/scheduler`, `adapter/out/persistence`), y en `adapter/in/web/dto/` los DTOs van agrupados — eso no cambió.
 
 ---
 
@@ -674,7 +677,26 @@ Tres cosas que el `pom.xml` **ya tiene resueltas** y no hay que romper:
 
 **Riesgo abierto:** MapStruct estable es **1.6.3 (nov-2024)**; el soporte de JDK 25/26 se agregó en CI recién en abr-2026, sobre la línea **1.7, todavía en beta** (1.7.0.Beta2, jun-2026). Con el uso acotado de arriba el riesgo es bajo, pero **si aparece un mapper que genera código raro en Java 25, la primera hipótesis es la versión**, no el código.
 
-**Lombok, además:** prohibido en `domain/`. `@Data`/`@Setter` generan setters públicos que destruyen los invariantes que §5.3.2 exige (`advanceProgramDay()`, no `setProgramDay()`). Lombok vive en adaptadores y DTOs; en entidades JPA, nunca `@Data` (rompe `equals`/`hashCode` con relaciones lazy).
+**Lombok en `domain/`, corregido 2026-08-24 contra evidencia real:** la prohibición no es "nada de Lombok", es **"nada que genere setters públicos"**. Verificado en vivo contra `thombergs/buckpal` (la referencia que este documento ya citaba en §5.1.1) — su `Account.java` (dominio, cero JPA) usa:
+
+```java
+@AllArgsConstructor(access = AccessLevel.PRIVATE)   // constructor privado: solo lo llaman los factory methods
+public class Account {
+    private final AccountId id;
+    @Getter private final Money baselineBalance;      // getter, NUNCA setter
+    @Getter private final ActivityWindow activityWindow;
+    public static Account withoutId(...) { return new Account(null, ...); }  // factory methods, como los nuestros
+    public static Account withId(AccountId id, ...) { return new Account(id, ...); }
+}
+```
+
+Y su `Money.java` (value object) usa `@Value` (todo `final`, sin setters, `equals`/`hashCode` generados) — el equivalente pre-`record` de lo que acá ya se hace con `record Email(...)`, `record UserId(...)`.
+
+**Lo que SÍ se usa en `domain/`:** `@Getter`, `@AllArgsConstructor(access = AccessLevel.PRIVATE)`, `@EqualsAndHashCode(of = "id")`, y `@Accessors(fluent = true)` para que el getter generado sea `id()` en vez de `getId()` (mantiene el estilo fluent ya establecido en `User`/`UserId`/`Email`). La validación de invariantes NO va en el constructor (Lombok no soporta lógica ahí) — va en los factory methods estáticos (`registerTrainee`, `submit`, etc.), igual que en `buckpal` (`withId`/`withoutId`).
+
+**Lo que sigue prohibido, sin excepción:** `@Data`, `@Setter`, `@NoArgsConstructor` público — cualquier cosa que abra una forma de mutar el estado sin pasar por un método con nombre de intención. Y `@ToString`/`@EqualsAndHashCode` sin acotar (`of = "..."`) porque puede filtrar campos con PII (email, etc.) a un log — el `toString()` de una entidad con datos personales se escribe a mano, corto, sin PII (ver `User.toString()`).
+
+**Dónde SÍ van `@Entity`/`@NoArgsConstructor`:** nunca en `domain/`. Van en la clase JPA separada de `adapter/out/persistence/` (ej. `UserJpaEntity`), que ni siquiera se ve desde el dominio. `buckpal` lo prueba en el mismo repo: `AccountJpaEntity` (con `@Entity @Table @Data @AllArgsConstructor @NoArgsConstructor`) vive en `adapter/out/persistence/`, es una clase totalmente distinta de `Account`, y un `AccountMapper` a mano traduce entre las dos. Ese paso (adaptador de persistencia) es el paso 6 del orden de construcción de `docs/MODULOS_A_AVANZAR.md` §4.4 — **todavía no se llegó ahí** en `users`, por eso hoy no hay ningún `@Entity` en el repo.
 
 ### 5.4.6 El controller es tonto: sin lógica de negocio, sin repositorio
 
