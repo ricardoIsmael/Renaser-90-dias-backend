@@ -1,5 +1,7 @@
-package com.renaser.os.users.domain;
+package com.renaser.os.users.domain.model.user;
 
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
@@ -22,7 +24,7 @@ class UserTest {
 
     private static User adminActor() {
         return User.rehydrate(newId(), new Email("admin@renaser.com"), UserRole.ADMIN,
-                UserStatus.ACTIVE, "Admin", null, null);
+                UserStatus.ACTIVE, "Admin", null, null, null, null);
     }
 
     private static UserId newId() {
@@ -99,5 +101,19 @@ class UserTest {
         User two = User.registerTrainee(id, new Email("b@renaser.com"), "B");
 
         assertThat(one).isEqualTo(two);
+    }
+
+    @Test
+    @DisplayName("bio y department son opcionales y se actualizan por metodo de intencion (sin tabla propia: D-25)")
+    void bioAndDepartmentAreUpdatable() {
+        User user = trainee();
+        assertThat(user.bio()).isNull();
+        assertThat(user.department()).isNull();
+
+        user.updateBio("Alquimista fundador");
+        user.updateDepartment("Operaciones");
+
+        assertThat(user.bio()).isEqualTo("Alquimista fundador");
+        assertThat(user.department()).isEqualTo("Operaciones");
     }
 }

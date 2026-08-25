@@ -1,4 +1,4 @@
-package com.renaser.os.users.domain;
+package com.renaser.os.users.domain.model.user;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
