@@ -1,0 +1,103 @@
+package com.renaser.os.community.infrastructure.adapter.in.rest.cohorte;
+
+import com.renaser.os.community.application.ports.in.cohorte.ActualizarCohorteUseCase;
+import com.renaser.os.community.application.ports.in.cohorte.ActualizarCohorteUseCase.ActualizarCohorteCommand;
+import com.renaser.os.community.application.ports.in.cohorte.CambiarEstadoCohorteUseCase;
+import com.renaser.os.community.application.ports.in.cohorte.CambiarEstadoCohorteUseCase.CambiarEstadoCohorteCommand;
+import com.renaser.os.community.application.ports.in.cohorte.ConsultarCohortesUseCase;
+import com.renaser.os.community.application.ports.in.cohorte.CrearCohorteUseCase;
+import com.renaser.os.community.application.ports.in.cohorte.CrearCohorteUseCase.CrearCohorteCommand;
+import com.renaser.os.community.application.ports.in.cohorte.EliminarCohorteUseCase;
+import com.renaser.os.community.application.ports.in.cohorte.EliminarCohorteUseCase.EliminarCohorteCommand;
+import com.renaser.os.community.domain.model.cohorte.CohorteId;
+import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
+import com.renaser.os.shared.domain.UserId;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/v1/admin/cohorts")
+public class CohorteAdminController {
+
+    private final CrearCohorteUseCase crearUseCase;
+    private final ActualizarCohorteUseCase actualizarUseCase;
+    private final CambiarEstadoCohorteUseCase cambiarEstadoUseCase;
+    private final EliminarCohorteUseCase eliminarUseCase;
+    private final ConsultarCohortesUseCase consultarUseCase;
+
+    public CohorteAdminController(CrearCohorteUseCase crearUseCase, ActualizarCohorteUseCase actualizarUseCase,
+                                   CambiarEstadoCohorteUseCase cambiarEstadoUseCase,
+                                   EliminarCohorteUseCase eliminarUseCase, ConsultarCohortesUseCase consultarUseCase) {
+        this.crearUseCase = crearUseCase;
+        this.actualizarUseCase = actualizarUseCase;
+        this.cambiarEstadoUseCase = cambiarEstadoUseCase;
+        this.eliminarUseCase = eliminarUseCase;
+        this.consultarUseCase = consultarUseCase;
+    }
+
+    @GetMapping
+    public List<CohorteResponse> listar(@RequestHeader("X-Actor-Id") String actorId,
+                                         @RequestParam(required = false) String status) {
+        EstadoCohorte filtro = status == null ? null : parseEstado(status);
+        return consultarUseCase.listar(UserId.of(actorId), filtro).stream().map(CohorteResponse::from).toList();
+    }
+
+    @GetMapping("/{id}")
+    public CohorteResponse obtener(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id) {
+        return CohorteResponse.from(consultarUseCase.obtener(UserId.of(actorId), CohorteId.of(id)));
+    }
+
+    @PostMapping
+    public ResponseEntity<CohorteResponse> crear(@RequestHeader("X-Actor-Id") String actorId,
+                                                  @RequestBody @Valid CrearCohorteRequest request) {
+        var cohorte = crearUseCase.crear(new CrearCohorteCommand(UserId.of(actorId), request.name(),
+                request.startDate(), request.endDate()));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(CohorteResponse.from(consultarUseCase.obtener(UserId.of(actorId), cohorte.id())));
+    }
+
+    @PatchMapping("/{id}")
+    public CohorteResponse actualizar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
+                                       @RequestBody ActualizarCohorteRequest request) {
+        actualizarUseCase.actualizar(new ActualizarCohorteCommand(UserId.of(actorId), CohorteId.of(id),
+                request.name(), request.startDate(), request.endDate(), true));
+        return CohorteResponse.from(consultarUseCase.obtener(UserId.of(actorId), CohorteId.of(id)));
+    }
+
+    @PatchMapping("/{id}/status")
+    public CohorteResponse cambiarEstado(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
+                                          @RequestBody @Valid CambiarEstadoCohorteRequest request) {
+        cambiarEstadoUseCase.cambiarEstado(new CambiarEstadoCohorteCommand(UserId.of(actorId), CohorteId.of(id),
+                parseEstado(request.status())));
+        return CohorteResponse.from(consultarUseCase.obtener(UserId.of(actorId), CohorteId.of(id)));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> eliminar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id) {
+        eliminarUseCase.eliminar(new EliminarCohorteCommand(UserId.of(actorId), CohorteId.of(id)));
+        return ResponseEntity.noContent().build();
+    }
+
+    private static EstadoCohorte parseEstado(String status) {
+        return switch (status) {
+            case "PLANNED" -> EstadoCohorte.PLANIFICADA;
+            case "ACTIVE" -> EstadoCohorte.ACTIVA;
+            case "COMPLETED" -> EstadoCohorte.COMPLETADA;
+            default -> throw new IllegalArgumentException("status invalido: " + status);
+        };
+    }
+}

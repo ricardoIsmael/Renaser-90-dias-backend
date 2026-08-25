@@ -1,0 +1,187 @@
+package com.renaser.os.community.application.services;
+
+import com.renaser.os.community.api.PublicacionCreadaEvent;
+import com.renaser.os.community.application.ports.in.categoria.ConsultarCategoriasMuroUseCase;
+import com.renaser.os.community.application.ports.in.publicacion.OcultarPublicacionUseCase.OcultarPublicacionCommand;
+import com.renaser.os.community.application.ports.in.publicacion.PublicarUseCase.ArchivoEntrada;
+import com.renaser.os.community.application.ports.in.publicacion.PublicarUseCase.PublicarCommand;
+import com.renaser.os.community.application.ports.in.publicacion.ReaccionarUseCase.ReaccionarCommand;
+import com.renaser.os.community.application.ports.out.publicacion.EliminarPublicacionPort;
+import com.renaser.os.community.application.ports.out.publicacion.LoadComentarioPort;
+import com.renaser.os.community.application.ports.out.publicacion.LoadPublicacionPort;
+import com.renaser.os.community.application.ports.out.publicacion.ReaccionMuroPort;
+import com.renaser.os.community.application.ports.out.publicacion.SavePublicacionPort;
+import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort;
+import com.renaser.os.community.domain.model.publicacion.MediaPublicacion;
+import com.renaser.os.community.domain.model.publicacion.Publicacion;
+import com.renaser.os.community.domain.model.publicacion.PublicacionId;
+import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
+import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.infrastructure.storage.NoOpAlmacenamientoAdapter;
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.UserSummaryFinder;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class PublicacionMuroServiceTest {
+
+    private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+
+    @Mock
+    private LoadPublicacionPort loadPublicacionPort;
+    @Mock
+    private SavePublicacionPort savePublicacionPort;
+    @Mock
+    private EliminarPublicacionPort eliminarPublicacionPort;
+    @Mock
+    private LoadComentarioPort loadComentarioPort;
+    @Mock
+    private ReaccionMuroPort reaccionMuroPort;
+    @Mock
+    private ConsultarCategoriasMuroUseCase categoriasUseCase;
+    @Mock
+    private ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort;
+    @Mock
+    private UserSummaryFinder userSummaryFinder;
+    @Mock
+    private ApplicationEventPublisher events;
+
+    private PublicacionMuroService service;
+
+    private final UserId autor = UserId.of(UUID.randomUUID());
+    private final UserId otro = UserId.of(UUID.randomUUID());
+    private final UserId admin = UserId.of(UUID.randomUUID());
+
+    @BeforeEach
+    void setUp() {
+        service = new PublicacionMuroService(loadPublicacionPort, savePublicacionPort, eliminarPublicacionPort,
+                loadComentarioPort, reaccionMuroPort, categoriasUseCase, consultarPerfilUsuarioPort,
+                new NoOpAlmacenamientoAdapter(), userSummaryFinder, events, CLOCK);
+        lenient().when(userSummaryFinder.findById(autor))
+                .thenReturn(Optional.of(new UserSummary(autor, "Autor", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        lenient().when(userSummaryFinder.findById(otro))
+                .thenReturn(Optional.of(new UserSummary(otro, "Otro", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        lenient().when(userSummaryFinder.findById(admin))
+                .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
+        lenient().when(consultarPerfilUsuarioPort.porId(any())).thenReturn(Optional.empty());
+        lenient().when(reaccionMuroPort.contarPorTipo(any())).thenReturn(Map.of());
+        lenient().when(loadComentarioPort.contar(any())).thenReturn(0);
+        lenient().when(savePublicacionPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    private static List<ArchivoEntrada> unaFoto() {
+        return List.of(new ArchivoEntrada("wall", "muro/x/1.jpg", "image/jpeg"));
+    }
+
+    private Publicacion publicacionVisible(UserId autorId) {
+        return Publicacion.rehydrate(PublicacionId.newId(), autorId,
+                com.renaser.os.community.domain.model.publicacion.TipoPublicacion.MANUAL, null, "hola",
+                List.of(new MediaPublicacion("wall", "muro/x/1.jpg", "image/jpeg", 0)), false, CLOCK.now(),
+                CLOCK.now());
+    }
+
+    @Test
+    void publicarConCategoriaDesconocidaFalla() {
+        when(categoriasUseCase.clavesExistentes()).thenReturn(Set.of("LOGROS"));
+        var command = new PublicarCommand(autor, "hola comunidad", unaFoto(), "INEXISTENTE");
+        assertThatThrownBy(() -> service.publicar(command)).isInstanceOf(IllegalArgumentException.class);
+        verify(savePublicacionPort, never()).save(any());
+    }
+
+    @Test
+    void publicarPublicaElEventoDeDominio() {
+        var command = new PublicarCommand(autor, "hola comunidad", unaFoto(), null);
+        service.publicar(command);
+        verify(events, times(1)).publishEvent(any(PublicacionCreadaEvent.class));
+    }
+
+    @Test
+    void ocultarUnaAjenaSinModerarFalla() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        var command = new OcultarPublicacionCommand(otro, publicacion.id());
+        assertThatThrownBy(() -> service.ocultar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePublicacionPort, never()).save(any());
+    }
+
+    /** Regresion de seguridad (mismo criterio que ComentarioMuroServiceTest): un actor
+     * que no existe en `usuarios` intentando moderar debe recibir 403, nunca 404 — un 404
+     * en este punto delataria que la publicacion SI existe (docs/MODULO_COMMUNITY.md sec. 5). */
+    @Test
+    void ocultarConActorInexistenteEsRechazadoComo403NoComo404() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        UserId fantasma = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(fantasma)).thenReturn(Optional.empty());
+
+        var command = new OcultarPublicacionCommand(fantasma, publicacion.id());
+        assertThatThrownBy(() -> service.ocultar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePublicacionPort, never()).save(any());
+    }
+
+    @Test
+    void ocultarLaPropiaFunciona() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        service.ocultar(new OcultarPublicacionCommand(autor, publicacion.id()));
+        assertThat(publicacion.oculta()).isTrue();
+    }
+
+    @Test
+    void moderadorPuedeOcultarUnaAjena() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        service.ocultar(new OcultarPublicacionCommand(admin, publicacion.id()));
+        assertThat(publicacion.oculta()).isTrue();
+    }
+
+    @Test
+    void reaccionarConElMismoTipoLaQuita() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        when(reaccionMuroPort.deUsuario(publicacion.id(), otro)).thenReturn(Optional.of(TipoReaccion.ME_GUSTA));
+
+        var resultado = service.reaccionar(new ReaccionarCommand(otro, publicacion.id(), TipoReaccion.ME_GUSTA));
+
+        assertThat(resultado.reaccionado()).isFalse();
+        verify(reaccionMuroPort).eliminar(publicacion.id(), otro);
+        verify(reaccionMuroPort, never()).upsert(any(), any(), any());
+    }
+
+    @Test
+    void reaccionarConOtroTipoLoReemplaza() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        when(reaccionMuroPort.deUsuario(publicacion.id(), otro)).thenReturn(Optional.of(TipoReaccion.ME_GUSTA));
+
+        var resultado = service.reaccionar(new ReaccionarCommand(otro, publicacion.id(), TipoReaccion.NO_ME_GUSTA));
+
+        assertThat(resultado.reaccionado()).isTrue();
+        verify(reaccionMuroPort).upsert(publicacion.id(), otro, TipoReaccion.NO_ME_GUSTA);
+    }
+}
