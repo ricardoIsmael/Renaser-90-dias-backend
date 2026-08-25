@@ -59,8 +59,6 @@ class ArchitectureTest {
                         "org.springframework.web..",
                         "org.springframework.http..")
                 .because("el caso de uso no conoce el transporte (CLAUDE.MD sec. 5.4.6)")
-                // TODO quitar allowEmptyShould cuando exista el primer caso de uso
-                .allowEmptyShould(true)
                 .check(CLASSES);
     }
 
@@ -68,15 +66,13 @@ class ArchitectureTest {
     @DisplayName("el controller no toca repositorios ni puertos de salida")
     void controllersDoNotTouchPersistence() {
         noClasses()
-                .that().resideInAPackage("..adapter.in.web..")
+                .that().resideInAPackage("..adapter.in.rest..")
                 .should().dependOnClassesThat().resideInAnyPackage(
-                        "..port.out..",
+                        "..ports.out..",
                         "..adapter.out..",
                         "org.springframework.data..",
                         "jakarta.persistence..")
                 .because("el controller solo invoca casos de uso (CLAUDE.MD sec. 5.4.6)")
-                // TODO quitar allowEmptyShould cuando exista el primer controller
-                .allowEmptyShould(true)
                 .check(CLASSES);
     }
 

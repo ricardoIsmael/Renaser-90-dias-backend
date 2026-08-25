@@ -1,0 +1,16 @@
+spring:
+  ai:
+    model:
+      chat: none
+      embedding: none
+      vectorstore: none
+  autoconfigure:
+    exclude:
+      # Sin credenciales de Gemini/Vertex en este entorno de test — los tests no llaman
+      # IA todavia (evidence/onboarding/rag no estan construidos). El selector
+      # spring.ai.model.* no alcanzo a desactivar el autoconfig de conexion de
+      # embeddings, asi que se excluye la clase de punta a punta (E-15 en la bitacora).
+      - org.springframework.ai.model.google.genai.autoconfigure.chat.GoogleGenAiChatAutoConfiguration
+      - org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiEmbeddingConnectionAutoConfiguration
+      - org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiTextEmbeddingAutoConfiguration
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration

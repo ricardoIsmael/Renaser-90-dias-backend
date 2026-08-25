@@ -2,12 +2,6 @@ package com.renaser.os.shared.domain;
 
 import java.util.UUID;
 
-/**
- * Identidad de un usuario.
- *
- * Es el UUID que emite Supabase Auth (CLAUDE.MD §5.3.1): este tipo NUNCA genera
- * identidad propia. El id viaja desde el adaptador de auth hasta el repositorio.
- */
 public record UserId(UUID value) {
 
     public UserId {

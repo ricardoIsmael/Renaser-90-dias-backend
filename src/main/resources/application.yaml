@@ -1,3 +1,31 @@
 spring:
   application:
     name: renaser-backend
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5433/renaser
+    username: postgres
+    password: postgres
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  ai:
+    model:
+      chat: none
+      embedding: none
+      vectorstore: none
+  # Sin credenciales de Gemini/Vertex configuradas todavia (bloqueante B-2 / checklist Pendiente,
+  # docs/MODULOS_A_AVANZAR.md): estas auto-configuraciones intentan instanciar el cliente de forma
+  # eager y tumban el arranque. Ningun modulo construido hasta ahora (users/points/phasecontracts/
+  # support/habits/rocks/notifications) usa IA -- se excluyen hasta que evidence/onboarding/rag
+  # (que si la necesitan) se construyan con sus credenciales reales. Mismo criterio que
+  # src/test/resources/application.yaml (E-15 en docs/BITACORA_ERRORES.md).
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.google.genai.autoconfigure.chat.GoogleGenAiChatAutoConfiguration
+      - org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiEmbeddingConnectionAutoConfiguration
+      - org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiTextEmbeddingAutoConfiguration
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
