@@ -137,7 +137,7 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         registrarEvidenciaPort.registrar(new RegistrarEvidenciaComando(command.actorId(),
                 new DestinoEvidencia.RocaDiaria(roca.id().value()), aEvidenceTipo(command.tipo()), command.bucket(),
                 command.rutaStorage(), command.contenidoTexto(), command.timestampExif(), command.gpsLat(),
-                command.gpsLng(), true, ahora));
+                command.gpsLng(), command.esPrincipal(), ahora));
 
         roca.completar(ahora, clock);
         RocaDiaria completada = saveRocaDiariaPort.save(roca);

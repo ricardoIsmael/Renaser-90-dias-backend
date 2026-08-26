@@ -47,6 +47,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -107,7 +108,7 @@ class RocaDiariaServiceTest {
 
     private CompletarRocaDiariaCommand comandoTexto(RocaDiariaId id) {
         return new CompletarRocaDiariaCommand(actorId, id, TipoEvidenciaRoca.TEXTO, null, null, "hecho", null, null,
-                null);
+                null, true);
     }
 
     @Test
@@ -163,7 +164,7 @@ class RocaDiariaServiceTest {
 
         Instant exifMuyViejo = CLOCK.now().minus(Duration.ofMinutes(20));
         var command = new CompletarRocaDiariaCommand(actorId, verde.id(), TipoEvidenciaRoca.FOTO, "bucket", "ruta",
-                null, exifMuyViejo, null, null);
+                null, exifMuyViejo, null, null, true);
 
         assertThatThrownBy(() -> service.completar(command)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("EXIF_MISMATCH");
@@ -201,6 +202,20 @@ class RocaDiariaServiceTest {
         service.completar(comandoTexto(verde.id()));
 
         verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), anyString());
+    }
+
+    @Test
+    @DisplayName("Hueco #17: esPrincipal viaja del comando al RegistrarEvidenciaComando, ya no hardcodeado en true")
+    void esPrincipalViajaAlComandoDeEvidencia() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
+        RocaDiaria verde = rocaVerde(null);
+        when(loadRocaDiariaPort.byId(verde.id())).thenReturn(Optional.of(verde));
+        var command = new CompletarRocaDiariaCommand(actorId, verde.id(), TipoEvidenciaRoca.TEXTO, null, null,
+                "hecho", null, null, null, false);
+
+        service.completar(command);
+
+        verify(registrarEvidenciaPort).registrar(argThat(c -> !c.esPrincipal()));
     }
 
     @Test

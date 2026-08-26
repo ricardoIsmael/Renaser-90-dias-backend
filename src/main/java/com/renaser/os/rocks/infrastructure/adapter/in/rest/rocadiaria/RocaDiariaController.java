@@ -81,10 +81,11 @@ public class RocaDiariaController {
     @PostMapping("/{id}/evidence")
     public RocaDiariaResponse completar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
                                          @Valid @RequestBody CompletarRocaDiariaRequest request) {
+        boolean esPrincipal = request.esPrincipal() == null || request.esPrincipal();
         var completada = completarUseCase.completar(new CompletarRocaDiariaCommand(UserId.of(actorId),
                 RocaDiariaId.of(id), TipoEvidenciaRoca.valueOf(request.tipo()), request.bucket(),
                 request.rutaStorage(), request.contenidoTexto(), request.timestampExif(), request.gpsLat(),
-                request.gpsLng()));
+                request.gpsLng(), esPrincipal));
         return RocaDiariaResponse.from(completada);
     }
 }

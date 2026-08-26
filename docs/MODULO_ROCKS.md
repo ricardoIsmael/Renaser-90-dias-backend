@@ -10,6 +10,11 @@
 
 🔄 **Construido, sin ejecutar `./mvnw clean test` todavía** (regla del encargo: este agente no corre Maven — lo corre el supervisor).
 
+**2026-08-26 — Huecos #15/#16/#17** (encargo nuevo, agente en paralelo con `habits`/`evidence`/`users`):
+- **Hueco #15 (dashboard agregado `GET /rocks`): construido.** Ver §9.
+- **Hueco #16 (Diario Nocturno `journal/today`): NO construido — colisión real con `habits.EntradaDiario`.** Ver §10. No se tocó `habits`.
+- **Hueco #17 (`esPrincipal`/`publishedToWall` al completar evidencia): `esPrincipal` construido, `publishedToWall` NO construido** (depende de `evidence.api`/`community.api`, ninguno expone lo necesario). Ver §11.
+
 ---
 
 ## 1. Paso 0 — reglas extraídas del código viejo (D-33)
@@ -55,9 +60,9 @@ Reglas de posición/color/ejes portadas literal desde `schema.ts:69-124` (semana
 
 ### 1.8 Lo que NO se portó (fuera de alcance, con motivo)
 
-- **Bitácora Nocturna / `JournalEntry`** (R-05/R-06 de `rocks/service.ts`): pertenece al agregado `diario/` de `habits` (`docs/PLAN_DE_MODULOS.md`), no a `rocks`. No se tocó.
-- **Dashboard agregado W-01** (`getDashboard`: `rhythmStatus`, `weekProgress`, `weekGrid`, navegador de semanas admin): es agregación de presentación, no regla de negocio nueva — se puede construir después sin tocar dominio. Ver §6.
-- **`planningBlocked` (Ley II)** y **`coherenceScore`** en la respuesta de "hoy": dependen de datos que no son de `rocks` (`computeRockCoherenceScore` ya vive conceptualmente en `points`, ver `docs/MODULO_POINTS.md` Q-2/Q-3). No se inventó.
+- **Bitácora Nocturna / `JournalEntry`** (R-05/R-06 de `rocks/service.ts`): pertenece al agregado `diario/` de `habits` (`docs/PLAN_DE_MODULOS.md`), no a `rocks`. No se tocó. **Ver §10 (2026-08-26): confirmado que es el mismo concepto que `habits.domain.model.diario.EntradaDiario` (`TipoEntradaDiario.BITACORA_NOCTURNA`), ya con dominio/puertos/persistencia construidos ahí.**
+- ~~Dashboard agregado W-01~~ **Construido 2026-08-26, ver §9.**
+- ~~`planningBlocked` (Ley II)~~ **Construido 2026-08-26, ver §9 — una relectura de `rocks/service.ts` mostró que SÍ es construible dentro de `rocks` (no depende de `points`, a diferencia de `coherenceScore`; ver la nota en §9.2).** `coherenceScore` en la respuesta de "hoy" sigue sin construirse: depende de datos que no son de `rocks` (`computeRockCoherenceScore` ya vive conceptualmente en `points`, ver `docs/MODULO_POINTS.md` Q-2/Q-3). No se inventó.
 
 ---
 
@@ -129,8 +134,9 @@ rocks/
 | POST | `/api/v1/rocks/{id}/evidence/upload-url` | `SolicitarUrlAdjuntoRocaUseCase` | nuevo (D-34) |
 | POST | `/api/v1/rocks/{id}/evidence` | `CompletarRocaDiariaUseCase` | `POST /api/v1/rocks/:id/evidence` (R-02, body cambia — ver RK-2) |
 | GET/POST | `/api/v1/enforcer-events` | `ConsultarEventosVerdugoUseCase`/`RegistrarEventoVerdugoUseCase` | preservado literal |
+| GET | `/api/v1/rocks` | `ConsultarDashboardRocasUseCase` | `GET /api/v1/rocks` (W-01, construido 2026-08-26 — ver §9) |
 
-**Rutas NO portadas** (§1.8): `GET /api/v1/rocks` (W-01 dashboard), `GET/PUT /api/v1/journal/today` (R-05/R-06, es de `habits`).
+**Rutas NO portadas**: `GET/PUT /api/v1/journal/today` (R-05/R-06, es de `habits` — ver §10).
 
 ---
 
@@ -159,8 +165,10 @@ Idempotencia: `RocaDiaria.puedeOtorgarPuntos()` (`puntosOtorgados <= 0`) evita p
 
 ## 6. Qué NO se construyó / preguntas abiertas
 
-- **Dashboard agregado (W-01: `rhythmStatus`, `weekProgress`, `weekGrid`, navegador de semanas admin)** — agregación de presentación pura, sin regla de negocio nueva. Se puede construir sobre los puertos ya existentes sin tocar dominio. No se hizo por presupuesto de esta tarea.
-- **`planningBlocked` (Ley II) y `coherenceScore` de rocas en la respuesta "hoy"** — dependen de fórmulas que viven conceptualmente en `points` (ver `docs/MODULO_POINTS.md` Q-2/Q-3, todavía sin resolver ahí tampoco). No implementado para no inventar una integración que `points` no expone todavía.
+- ~~Dashboard agregado (W-01...)~~ **Construido 2026-08-26, ver §9.**
+- **`coherenceScore` de rocas en la respuesta "hoy"/dashboard** — depende de una fórmula que vive conceptualmente en `points` (ver `docs/MODULO_POINTS.md` Q-2/Q-3, todavía sin resolver ahí tampoco). No implementado para no inventar una integración que `points` no expone todavía. (`planningBlocked` (Ley II) SÍ se construyó — ver §9.2, corrige la nota anterior de esta sección que lo agrupaba con `coherenceScore`.)
+- **Diario Nocturno (`journal/today`, Hueco #16, 2026-08-26)** — no construido, colisión real con `habits.EntradaDiario`. Ver §10, decisión pendiente de quien tenga visión de los dos módulos.
+- **`publishedToWall` al completar una Roca con evidencia (Hueco #17, 2026-08-26)** — no construido, faltan puertos públicos en `evidence`/`community`. Ver §11.
 - **Creación/actualización de Rocas Maestras** — las crea `onboarding` (Ola 5, no existe). `rocks` solo lee (RK-1... perdón, ver RocaMaestra javadoc). Sin `onboarding`, no hay forma real de sembrar datos end-to-end (mismo bloqueante que `docs/MODULO_POINTS.md` §7 documentó para `participantes_programa`).
 - ~~**Pregunta abierta real (RK-2):** ¿es correcto que `rocks` escriba en `evidencias` (tabla de `evidence`), o el negocio prefiere que `rocks` no complete una roca hasta que `evidence` exista, dejando R-02 bloqueado como `points` dejó bloqueado su ledger real?~~ **Resuelta 2026-08-25**: `evidence` ya se construyó (`docs/MODULO_EVIDENCE.md`) y `rocks` migró a su puerto público — ver RK-2 en §5.
 - **Pregunta abierta real (RK-6):** ¿quién dispara un Evento Verdugo del lado servidor (para que el barrido de las 23:55 tenga algo que resolver)? No hay respuesta en el repo viejo ni en el encargo — documentado, no inventado.
@@ -173,8 +181,8 @@ Idempotencia: `RocaDiaria.puedeOtorgarPuntos()` (`puntosOtorgados <= 0`) evita p
 
 | Tipo | Cobertura |
 |---|---|
-| Unit dominio | `VentanaPlanificacionSemanalTest`, `VentanaPlanificacionDiariaTest`, `EscalaPuntosRocaTest` (matriz completa de la escala de puntos, bordes exactos), `SemanaProgramaTest`, `RocaSemanalTest`, `RocaDiariaTest`, `EventoVerdugoTest` |
-| Unit servicio (Mockito) | `RocaMaestraServiceTest`, `RocaSemanalServiceTest`, `RocaDiariaServiceTest`, `VerdugoServiceTest` — incluyen las pruebas de seguridad de CLAUDE.MD §0.3 (rol sin permiso → `NotAuthorizedException`, actor SUSPENDIDO → `NotAuthorizedException`) en cada servicio, más Ley IV, Ley VI, idempotencia de puntos, rechazo de `IGNORADO` desde el cliente |
+| Unit dominio | `VentanaPlanificacionSemanalTest`, `VentanaPlanificacionDiariaTest`, `EscalaPuntosRocaTest` (matriz completa de la escala de puntos, bordes exactos), `SemanaProgramaTest` (+ casos nuevos de `limites`/`finDelPrograma`, 2026-08-26), `RocaSemanalTest`, `RocaDiariaTest`, `EventoVerdugoTest`, `EstadoRitmoRocasTest`, `ProgresoSemanalTest`, `BloqueoPlanificacionTest`, `DiaGrillaSemanalTest` (los 4 últimos, Hueco #15, 2026-08-26) |
+| Unit servicio (Mockito) | `RocaMaestraServiceTest`, `RocaSemanalServiceTest`, `RocaDiariaServiceTest` (+ caso nuevo `esPrincipalViajaAlComandoDeEvidencia`, Hueco #17), `VerdugoServiceTest`, `DashboardRocasServiceTest` (nuevo, Hueco #15) — incluyen las pruebas de seguridad de CLAUDE.MD §0.3 (rol sin permiso → `NotAuthorizedException`, actor SUSPENDIDO → `NotAuthorizedException`) en cada servicio, más Ley IV, Ley VI, idempotencia de puntos, rechazo de `IGNORADO` desde el cliente, Ley II (`planificacionBloqueada`), ritmo, grilla semanal, guard de programa no iniciado |
 | Integración Testcontainers | `ConsultarProgresoParticipanteRocksPersistenceAdapterTest`, `RocaMaestraPersistenceAdapterTest`, `RocaSemanalPersistenceAdapterTest` (cubre el riesgo real del `@ElementCollection` de `acciones_criticas`), `RocaDiariaPersistenceAdapterTest`, `EventoVerdugoPersistenceAdapterTest`, `RegistrarEvidenciaRocaPersistenceAdapterTest` (confirma el INSERT nativo contra `evidencias` real) |
 
 **Lo que quedó explícitamente sin verificar** (CLAUDE.MD §0.2): no se ejecutó `./mvnw clean test` ni `ArchitectureTest` (prohibido en este encargo) — el supervisor los corre. Puntos de mayor riesgo si algo falla:
@@ -182,6 +190,7 @@ Idempotencia: `RocaDiaria.puedeOtorgarPuntos()` (`puntosOtorgados <= 0`) evita p
 - El `CAST(?4 AS renaser.tipo_evidencia)`/`renaser.estado_validacion` del INSERT nativo de evidencia — mismo tipo de riesgo que `phasecontracts` señaló para sus lecturas de enum vía `Object[]`, acá en la dirección de escritura.
 - La reconciliación de `MotivoPuntos` con el agente paralelo de `habits` (RK-1) — el estado final descrito en este documento es el que quedó en el repo al terminar esta tarea, pero otro agente pudo seguir tocando `points/**` después.
 - Todos los `@RestController` de este módulo son nuevos (sin precedente propio) — el patrón X-Actor-Id/DTOs es el mismo de `phasecontracts`/`support`, pero no se verificó en vivo.
+- **2026-08-26 (Huecos #15/#17):** tampoco se corrió `./mvnw clean test` para este lote de cambios. Puntos de mayor riesgo: `DashboardRocasService` es el primer caso de uso de `rocks` que inyecta OTROS casos de uso del mismo módulo (ver §9.3); y el nuevo campo `esPrincipal` de `CompletarRocaDiariaCommand` obligó a pasarlo también a `SelfValidating.validateConstructorArgs(...)` (booleano autoboxeado) — mismo patrón ya usado en `points.RegistrarCoherenciaDiariaCommand`, verificado como precedente antes de aplicarlo, pero sin correr el test real todavía.
 
 **Deuda de bitácora:** no se encontró ningún error/bug real de entorno durante la construcción (solo decisiones de diseño, documentadas como RK-N arriba) — no se agregó una entrada artificial a `docs/BITACORA_ERRORES.md`.
 
@@ -245,3 +254,111 @@ rocks/
 - **`points` todavía no consume este puerto** — no se construyó `points` en esta tarea (fuera de alcance: solo se tocó `rocks/**`). Cuando `points` combine los tres pesos, va a necesitar el mismo puerto de `habits` (`PorcentajeHabitosFinder` o como se llame — no existe todavía, verificado) y uno de `academy`/`cursos` para `cursosPct`.
 - **No se verificó `./mvnw clean test`** (regla del encargo — lo corre el supervisor). Riesgo concreto de esta pieza si algo falla: el JPQL con `SUM(CASE WHEN r.completada = true THEN 1L ELSE 0L END)` sobre un campo `boolean` de un `@Entity` con Lombok `@Data` — sin precedente exacto en el resto del módulo (la única consulta agregada previa, `contarPorLecciones` en `academy`, no tiene `CASE WHEN`, solo `COUNT`).
 - **No se corrigió ni se le preguntó al negocio** si una roca AMARILLA/ROJA bloqueada por Ley IV "debería" contar distinto en este ranking — se portó tal cual el criterio del repo viejo (bloqueada sí cuenta en el total, ver §8.2), sin inventar una excepción que ni `coherence.ts` ni la función SQL contemplan.
+
+---
+
+## 9. Hueco #15 — dashboard agregado `GET /api/v1/rocks`
+
+**Encargo:** un solo llamado para la pantalla principal de Rocas: compuertas de planificación, `rhythmStatus`, grilla semanal. §1.8/§6 (versión anterior de este documento) daban esto por agregación de presentación pura "sin regla de negocio nueva" y `rhythmStatus` por no encontrado. Una relectura completa de `getDashboard`/`buildWeekData` en `rocks/service.ts` (repo viejo, `C:\Users\Usuario\Documents\Backend90dias\RenaserBack\src\features\rocks\service.ts:746-949`) mostró que **sí está completo ahí**, con reglas y umbrales exactos — se portó literal, no se inventó nada.
+
+### 9.1 Qué se construyó
+
+```
+rocks/
+├── domain/model/dashboard/                          (paquete nuevo — no es un agregado propio,
+│   ├── EstadoRitmoRocas.java                         son cálculos puros de presentación, mismo
+│   ├── DiaGrillaSemanal.java                         criterio que domain/model/coherencia/ del D-43)
+│   ├── ProgresoSemanal.java
+│   └── BloqueoPlanificacion.java
+├── domain/model/rocasemanal/SemanaPrograma.java      + limites(fechaInicio, numeroSemana), finDelPrograma(...)
+├── application/
+│   ├── ports/in/dashboard/ConsultarDashboardRocasUseCase.java
+│   └── services/DashboardRocasService.java           compone Consultar{RocasMaestras,RocasSemanales,RocasDeHoy}UseCase
+└── infrastructure/adapter/in/rest/dashboard/
+    ├── DashboardRocasController.java                 GET /api/v1/rocks
+    └── DashboardRocasResponse.java
+```
+
+`DashboardRocasService` **no duplica reglas**: llama a `ConsultarRocasMaestrasUseCase`, `ConsultarRocasSemanalesUseCase` (dos veces — semana actual y semana de mañana, para la compuerta diaria) y `ConsultarRocasDeHoyUseCase` ya existentes, y usa `CargarConteoDiarioRocasPort` (el mismo puerto EN LOTE del D-43, §8) para la grilla semanal y el ritmo — dos consultas agregadas (rango de la semana, rango de los últimos 7 días), nunca una consulta por día ni por roca. Evita el incidente de N+1 que motivó D-43.
+
+### 9.2 Campos, uno por uno, con su cita exacta del repo viejo
+
+| Campo | Regla | Cita (repo viejo) |
+|---|---|---|
+| `rocasDesbloqueadas` | `rocasMaestras.size() >= 3` | `service.ts:920` |
+| `tieneRocaSemanal` | hay Roca Semanal para los 3 ejes de la semana en curso | `service.ts:806` |
+| `rocasSemanales[].editable` | **NO** es `createdAt+48h` (eso es un bug ya corregido, ver RK-5) — se computa con `VentanaPlanificacionSemanal.puedeEditar`, la regla real de W-03 | — (corrección deliberada sobre `service.ts:801`, que sí tiene el `editableUntil` fijo; ver nota abajo) |
+| `grillaSemanal` | un día por fecha de la semana (recortada al fin de programa), `null`/`null` si es futuro, `total=null` si no hubo rocas ese día | `service.ts:774-788` |
+| `ritmo` (`EstadoRitmoRocas`) | días con >=1 roca completada de los últimos 7 (terminando AYER): `>=5` OK, `>=3` LENTO, si no CRITICO | `service.ts:885-890` |
+| `progresoSemanalPct` | completadas/planificadas × 100 redondeado, solo días YA transcurridos de la semana | `service.ts:892-901` |
+| `planificacionBloqueada` (Ley II) | día de programa >= 31 Y hora local >= 20:00 Y < 3 Rocas Diarias para mañana | `service.ts:106-124` (`ROCKS_PHASE_START_DAY=31`, `PLANNING_LOCK_HOUR=20`) |
+| `puedeCrearPlanDiario` | `rocasDesbloqueadas && ventanaDiariaAbierta(18:00+) && hayRocaSemanalParaLaSemanaDeManana` | `service.ts:145-154, 935` |
+| `puedeCrearPlanSemanal` | `rocasDesbloqueadas` (planificar siempre se admite; la ventana solo decide si cuenta en plazo) | `service.ts:938` |
+| `planificacionSemanalTardia` | `!VentanaPlanificacionSemanal.abierta(ahora, zona)` | `service.ts:939` |
+| `rocasDeHoy` | reutiliza `ConsultarRocasDeHoyUseCase.hoy()` tal cual (ya resuelve Ley IV) | `service.ts:904-912` (portado ya antes, no se duplicó) |
+| `coherenceScore` | **NO incluido** — depende de `points`, sin puerto público (`docs/MODULO_POINTS.md` Q-2/Q-3) | `service.ts:930` |
+
+**Corrección sobre `editableUntil`:** el repo viejo calcula `editableUntil: new Date(wr.createdAt.getTime() + 48*60*60*1000)` (`service.ts:801`) — literal, sería la franja fija de 48h que RK-5 (§5) ya documentó como **incorrecta** desde el 2026-08-07 (reemplazada por `plazos.ts`, el sistema de plazo/a-destiempo). Portar ese cálculo tal cual habría reintroducido el mismo bug que el propio repo viejo dejó vivo en el dashboard mientras lo corregía en el resto de `rocks/service.ts`. Se usa `VentanaPlanificacionSemanal.puedeEditar` (la misma regla que ya usa `EditarDentroDe48hUseCase`) en su lugar — un booleano `editable`, no una fecha límite, para no prometerle a la app un instante que la regla real no respeta.
+
+**Guard "programa no iniciado":** portado de `service.ts:826-873` — si `hoy < fechaInicio`, se responde el mismo contrato con colecciones vacías (`grillaSemanal=[]`, `rocasSemanales=[]`, `rocasDeHoy=[]`), `ritmo=OK` fijo, todas las compuertas en `false`, pero `rocasMaestras` y `rocasDesbloqueadas` sí resueltas (se definen en el onboarding, antes del día 1). Evita un 4xx en una pantalla navegable desde la barra inferior.
+
+**`completedDays` por eje de `weeklyRocks` (repo viejo, `service.ts:794-796`) — NO portado.** Requeriría o bien N+1 (una consulta por eje/día) o un puerto agregado nuevo con desglose por eje que no existe (`CargarConteoDiarioRocasPort` agrega TODOS los ejes juntos por diseño, D-43). Se dejó fuera en vez de violar "evitar N+1" o inventar un puerto nuevo sin pedido explícito — pregunta abierta si se necesita, ver abajo.
+
+### 9.3 Qué quedó abierto
+
+- **`coherenceScore`** — no incluido, depende de `points` (ver tabla arriba).
+- **`completedDays` por eje en `rocasSemanales`** — no portado, ver 9.2. Si la app lo necesita, hace falta un puerto agregado nuevo en `application/ports/out/coherencia/` con desglose por `EjeObjetivo` (no reutilizable desde `CargarConteoDiarioRocasPort`).
+- **Navegador de semanas admin** (`getDashboardForWeek`/vista de mentor sobre una semana arbitraria, `service.ts:951+`) — no pedido en el encargo (Hueco #15 es la pantalla del propio aprendiz) y **RK-7** ya estableció que `rocks` es TRAINEE-únicamente, sin vista de mentor/admin. No construido.
+- **No se verificó `./mvnw clean test`** (regla del encargo) — riesgo concreto si algo falla: es la primera vez en este módulo que un caso de uso inyecta OTROS casos de uso del mismo módulo como dependencias (`DashboardRocasService` depende de `ConsultarRocasMaestrasUseCase`/`ConsultarRocasSemanalesUseCase`/`ConsultarRocasDeHoyUseCase`) — sin precedente exacto en el resto de `rocks` para verificar que Spring resuelve el grafo de beans sin ciclos (no debería haberlos: es un grafo estrictamente hacia afuera desde el nuevo servicio).
+
+---
+
+## 10. Hueco #16 — Diario Nocturno (`journal/today`): colisión confirmada con `habits.EntradaDiario`, NO construido
+
+**Encargo:** construir `journal/today` en `rocks`, salvo que sea el mismo concepto que `EntradaDiario` de `habits` — en ese caso, documentar y no duplicar.
+
+**Confirmado: es el mismo concepto.** Evidencia, no solo el nombre:
+
+- `habits/domain/model/diario/EntradaDiario.java` — javadoc: *"Entrada de diario consolidada (tabla `entradas_diario`)"*. Campos: `id`, `participanteId`, `fecha`, `tipo` (`TipoEntradaDiario`), `contenidoTexto`, `audioBucket`, `audioRuta`, `transcripcion`. `TipoEntradaDiario` incluye el valor **`BITACORA_NOCTURNA`** — la traducción literal de "Diario Nocturno"/"Nightly Journal" (R-05/R-06 del repo viejo, ya documentado como tal en §1.8 de este mismo archivo desde antes de esta tarea).
+- La tabla `entradas_diario` (baseline `V1__baseline_renaser.sql:369-383`) es de `habits` — `UNIQUE (participante_id, fecha, tipo)`, exactamente la clave de negocio de un diario de una entrada por día y por tipo.
+- `habits/application/ports/out/diario/{Load,Save}EntradaDiarioPort.java` — puertos de aplicación ya existen (`porParticipanteFechaYTipo`, `save`), y `habits/infrastructure/adapter/out/persistence/diario/*` — el adaptador JPA completo también existe. **Lo único que falta en `habits` es el caso de uso y el controller que los use** (confirmado: no hay ningún `EscribirEntradaDiarioUseCase` ni controller en `habits` para este agregado — solo dominio + puertos + persistencia, tal como el encargo advertía).
+- `habits/api/EntradaDiarioFinder.java` + `EntradaDiarioSummary.java` — contrato público ya existe, pero es de **lectura** (`entradasEntre`, consumido hoy por el Espejo Sombra de `rag`), no de escritura.
+
+**Por qué no se construyó nada, ni en `rocks` ni en `habits`:**
+
+1. El encargo de este agente es **`rocks` únicamente** — no tocar `habits`, donde trabaja otro agente en paralelo.
+2. Construir un "Diario Nocturno" propio en `rocks` (tabla/agregado nuevo) sería **duplicar** un concepto que ya tiene dueño, con el riesgo real de terminar con dos tablas de diario (`entradas_diario` de `habits` más algo nuevo en `rocks`) sirviendo la misma pantalla de la app — exactamente el resultado que el encargo pedía evitar explícitamente.
+3. La BD está congelada (D-40, regla dura) — no se puede crear una tabla nueva de todos modos, y `entradas_diario` ya cubre el caso de uso (columna `tipo` con `BITACORA_NOCTURNA` dedicado).
+
+**Decisión que le queda a quien tenga visión de los dos módulos (no a este agente):** `GET/PUT /api/v1/journal/today` (o el nombre de ruta que la app espera) debería exponerse desde **`habits`**, escribiendo/leyendo `EntradaDiario` con `tipo=BITACORA_NOCTURNA`, reutilizando `LoadEntradaDiarioPort`/`SaveEntradaDiarioPort` que ya existen ahí. Falta solo el caso de uso (`EscribirEntradaDiarioUseCase`/`ConsultarEntradaDiarioDeHoyUseCase`) y el controller REST — trabajo acotado, ningún dominio nuevo. Si en cambio el negocio quisiera que "Diario Nocturno" fuera conceptualmente distinto de las demás entradas de diario (con reglas propias, ej. vinculado a Rocas del día), eso sería una decisión de producto que ningún documento confirma hoy — no se inventó.
+
+---
+
+## 11. Hueco #17 — `esPrincipal`/`publishedToWall` al completar una Roca con evidencia
+
+**Encargo:** aceptar `publishedToWall` y `esPrincipal` al completar una Roca con evidencia (`POST /api/v1/rocks/{id}/evidence`). `esPrincipal` construido completo; `publishedToWall` documentado como no construible hoy sin cambios en `evidence`/`community` (fuera del alcance de este agente).
+
+### 11.1 `esPrincipal` — construido
+
+Antes de esto, `RocaDiariaService.completar()` mandaba `esPrincipal=true` HARDCODEADO al llamar a `evidence.api.RegistrarEvidenciaPort` — ya viajaba en el comando público de `evidence` (RK-2, §5), pero como constante, no como decisión del cliente. Cambios:
+
+- `CompletarRocaDiariaUseCase.CompletarRocaDiariaCommand` — nuevo campo `boolean esPrincipal`.
+- `RocaDiariaService.completar()` — pasa `command.esPrincipal()` en vez de `true`.
+- `CompletarRocaDiariaRequest` (DTO web) — nuevo campo `Boolean esPrincipal` (nullable). `RocaDiariaController.completar()`: `null` → `true`, para que un cliente móvil viejo que todavía no manda el campo vea exactamente el mismo comportamiento de antes (nadie tiene que actualizarse a la fuerza).
+- Como el destino de esta evidencia SIEMPRE es `DestinoEvidencia.RocaDiaria`, el CHECK `principal_solo_en_roca` que ya valida `RegistrarEvidenciaComando` nunca puede fallar acá — no hace falta validación extra en `rocks`.
+- No hace falta tocar el dominio `RocaDiaria` ni su persistencia: `esPrincipal` es un atributo de la EVIDENCIA (tabla `evidencias`, dueña `evidence`), no de la Roca Diaria.
+
+### 11.2 `publishedToWall` — NO construido, con lo que haría falta exacto
+
+`evidencias.publicada_en_muro` (baseline `V1__baseline_renaser.sql:775`) es la columna real detrás de este campo. **Ya estaba documentado como fuera de alcance de `evidence` mismo** (`docs/MODULO_EVIDENCE.md:127`: *"columna presente, sin ningún caso de uso que la togglee — pertenece conceptualmente a `community` (el "Muro"), fuera del alcance de este módulo"*). Confirmado en código: `evidence.api.RegistrarEvidenciaPort.RegistrarEvidenciaComando` no tiene un parámetro `publicadaEnMuro`, y no existe ningún otro puerto público de `evidence` para togglear ese flag después de registrar.
+
+Tampoco `community.api` (paquete público de `community`) resuelve esto — hoy solo expone `CelulaFinder`, `CelulaCreadaEvent` y `PublicacionCreadaEvent`. No hay ningún puerto para que OTRO módulo cree una publicación en `publicaciones_muro`, ni para vincular una evidencia existente a una publicación nueva.
+
+**Lo que le falta a `rocks` para construir esto, sin adivinar el diseño correcto (dos caminos posibles, no es a este agente a quien le toca elegir):**
+
+1. **Camino A — solo el flag:** `evidence.api` expone un parámetro nuevo (o un puerto nuevo, ej. `MarcarPublicadaEnMuroPort`) para setear `evidencias.publicada_en_muro=true` al registrar o después. `rocks` lo llamaría junto a `RegistrarEvidenciaPort.registrar(...)`, dentro de la misma transacción. Esto NO crea ninguna fila en `publicaciones_muro` — sería un flag informativo nada más, sin que la evidencia aparezca realmente en el feed del Muro (`community` no lee ese flag hoy, verificado: cero referencias a `publicada_en_muro` fuera de `evidence`).
+2. **Camino B — publicación real:** `community.api` expone un puerto nuevo (ej. `CrearPublicacionDesdeEvidenciaPort`) que, dado el `evidenceId`/`participanteId`/`rutaStorage`, cree una fila real en `publicaciones_muro` (+ `medias_publicacion` referenciando el archivo) — el `tipo_publicacion` de esa tabla ya distingue `MANUAL` de otros orígenes (`tipo_publicacion NOT NULL DEFAULT 'MANUAL'`, baseline:1083), así que probablemente exista o haga falta un valor de enum para "publicado automáticamente desde una Roca" (no confirmado, no se inventó).
+
+Ninguno de los dos existe hoy. Se dejó **sin construir por completo** — ni el campo de request, ni la lógica — para no aceptar un campo que no hace nada (peor que no aceptarlo: un cliente que lo manda creería que funcionó). Queda como pregunta abierta real para quien tenga alcance sobre `evidence`/`community`: ¿cuál de los dos caminos, o algo distinto?
+
+**Nota de seguridad, por si se retoma:** cuando esto se construya, recordar CLAUDE.md §0.3/E-42 (`docs/BITACORA_ERRORES.md`) — el chequeo de actor va siempre DESPUÉS del de visibilidad del recurso. Publicar en el Muro la evidencia de una Roca de OTRO participante (por ejemplo, si el `rocaDiariaId` del comando no fuera del actor) ya está cubierto por `requireRocaPropia` existente — pero cualquier nuevo puerto de `community` que reciba un `evidenceId` directo desde otro módulo debe volver a verificar propiedad, no asumir que quien lo llama ya lo hizo.

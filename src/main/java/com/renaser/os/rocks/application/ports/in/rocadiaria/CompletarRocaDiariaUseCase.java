@@ -22,14 +22,24 @@ public interface CompletarRocaDiariaUseCase {
      * Para {@code tipo != TEXTO}: {@code bucket}+{@code rutaStorage} (ya subidos vía
      * {@code SolicitarUrlAdjuntoRocaUseCase}). Para {@code TEXTO}: {@code contenidoTexto}.
      * {@code timestampExif} obligatorio solo para FOTO (Ley VI, ±15 min).
+     *
+     * <p>{@code esPrincipal} (Hueco #17): antes de esto viajaba hardcodeado en
+     * {@code true} dentro de {@code RocaDiariaService} — la app lo necesita
+     * como campo del cliente para elegir qué evidencia mostrar como
+     * representativa de la roca al publicarla en el Muro. Se traduce 1:1 a
+     * {@code evidence.api.RegistrarEvidenciaPort.RegistrarEvidenciaComando#esPrincipal},
+     * que ya valida el mismo CHECK {@code principal_solo_en_roca} — acá
+     * siempre es legal porque el destino de esta evidencia SIEMPRE es una
+     * Roca Diaria.
      */
     record CompletarRocaDiariaCommand(@NotNull UserId actorId, @NotNull RocaDiariaId rocaDiariaId,
                                        @NotNull TipoEvidenciaRoca tipo, String bucket, String rutaStorage,
-                                       String contenidoTexto, Instant timestampExif, Double gpsLat, Double gpsLng) {
+                                       String contenidoTexto, Instant timestampExif, Double gpsLat, Double gpsLng,
+                                       boolean esPrincipal) {
 
         public CompletarRocaDiariaCommand {
             SelfValidating.validateConstructorArgs(CompletarRocaDiariaCommand.class, actorId, rocaDiariaId, tipo,
-                    bucket, rutaStorage, contenidoTexto, timestampExif, gpsLat, gpsLng);
+                    bucket, rutaStorage, contenidoTexto, timestampExif, gpsLat, gpsLng, esPrincipal);
             if (tipo == TipoEvidenciaRoca.TEXTO) {
                 if (contenidoTexto == null || contenidoTexto.isBlank()) {
                     throw new IllegalArgumentException("contenidoTexto es obligatorio para evidencia de tipo TEXTO");

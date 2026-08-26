@@ -44,4 +44,31 @@ class SemanaProgramaTest {
         assertThat(SemanaPrograma.numeroSemanaParaFecha(lunes, LocalDate.of(2026, 9, 6))).isEqualTo(2); // domingo semana 2
         assertThat(SemanaPrograma.numeroSemanaParaFecha(lunes, LocalDate.of(2026, 9, 7))).isEqualTo(3); // lunes semana 3
     }
+
+    @Test
+    @DisplayName("limites: inicio en miercoles, semana 1 corta va de miercoles al primer domingo")
+    void limitesSemana1CortaConInicioAMitadDeSemana() {
+        LocalDate miercoles = LocalDate.of(2026, 8, 26);
+        var limites = SemanaPrograma.limites(miercoles, 1);
+        assertThat(limites.inicio()).isEqualTo(miercoles);
+        assertThat(limites.fin()).isEqualTo(LocalDate.of(2026, 8, 30));
+    }
+
+    @Test
+    @DisplayName("limites: semana 2+ siempre lunes-domingo completa, sin importar el dia de inicio")
+    void limitesSemanaCompletaLunesADomingo() {
+        LocalDate miercoles = LocalDate.of(2026, 8, 26);
+        var limites = SemanaPrograma.limites(miercoles, 2);
+        assertThat(limites.inicio()).isEqualTo(LocalDate.of(2026, 8, 31)); // lunes siguiente al primer domingo
+        assertThat(limites.fin()).isEqualTo(LocalDate.of(2026, 9, 6));
+        assertThat(limites.inicio().getDayOfWeek().getValue()).isEqualTo(1);
+        assertThat(limites.fin().getDayOfWeek().getValue()).isEqualTo(7);
+    }
+
+    @Test
+    @DisplayName("finDelPrograma: dia 90, inclusive de fechaInicio como dia 1")
+    void finDelProgramaEsNoventaDias() {
+        LocalDate inicio = LocalDate.of(2026, 1, 1);
+        assertThat(SemanaPrograma.finDelPrograma(inicio)).isEqualTo(LocalDate.of(2026, 3, 31)); // 89 dias despues
+    }
 }

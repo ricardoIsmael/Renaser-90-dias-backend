@@ -29,4 +29,29 @@ public final class SemanaPrograma {
         long diasDespuesSemana1 = ChronoUnit.DAYS.between(primerDomingo, fecha);
         return 2 + (int) ((diasDespuesSemana1 - 1) / 7);
     }
+
+    /**
+     * Inicio y fin (lunes-domingo) de una semana de programa — semana 1 corta
+     * si {@code fechaInicio} no cae lunes (flexible, igual que arriba). Portado
+     * de {@code week.ts::getWeekBoundaries} (repo viejo), sin recortar contra
+     * el fin del programa — quien llama recorta con {@link #finDelPrograma}
+     * si lo necesita (mismo criterio que el repo viejo, `getWeekBoundaries`
+     * doc: "Not clipped to the 90-day program end").
+     */
+    public static LimitesSemana limites(LocalDate fechaInicio, int numeroSemana) {
+        LocalDate primerDomingo = primerDomingoDesde(fechaInicio);
+        if (numeroSemana <= 1) {
+            return new LimitesSemana(fechaInicio, primerDomingo);
+        }
+        LocalDate inicio = primerDomingo.plusDays(1L + (numeroSemana - 2) * 7L);
+        return new LimitesSemana(inicio, inicio.plusDays(6));
+    }
+
+    /** Último día del programa de 90 días (día 1 = {@code fechaInicio}). Portado de {@code week.ts::getProgramEndDate}. */
+    public static LocalDate finDelPrograma(LocalDate fechaInicio) {
+        return fechaInicio.plusDays(89);
+    }
+
+    public record LimitesSemana(LocalDate inicio, LocalDate fin) {
+    }
 }
