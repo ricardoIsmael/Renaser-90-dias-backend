@@ -1,5 +1,7 @@
 # Gaps entre el frontend (RenaserPlayStoreCopy) y el backend Java
 
+> **SUPERADO — 2026-08-26.** Este documento se auditó contra `C:\RenaserPlayStoreCopy` (una copia usada solo para pruebas de esa sesión, con parches temporales que **no** están en la app real). La app real es `C:\renaserPlayStore`, que además resultó estar en un estado bien distinto (ya no usa Supabase, tiene su propio contrato `JAVA_BACKEND_CONTRACT.md` que no coincide con lo que construimos). Ver [`docs/PLAN_INTEGRACION_FRONTEND.md`](PLAN_INTEGRACION_FRONTEND.md) — reemplaza este documento por completo, con hallazgos verificados contra el repo real y los 14 módulos completos. Se deja este archivo como registro histórico, no como referencia vigente.
+
 **Fecha:** 2026-08-25
 **Alcance:** auditoría de qué llama el frontend (`C:\RenaserPlayStoreCopy`, Expo/React Native con build web) contra lo que el backend Java (`com.renaser.os`) realmente expone hoy. Generado con agentes de exploración en paralelo, uno por grupo de módulos, más revisión directa del módulo `users`.
 
