@@ -55,6 +55,15 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-redis</artifactId>
 		</dependency>
+		<!--
+			Sesion opaca guardada en Redis. Da hecho lo que si no habria que escribir a mano:
+			generar el identificador, guardarlo, expirarlo por TTL, manejar la cookie, y buscar
+			todas las sesiones de un usuario para cerrarlas de un golpe. Ver docs/MODULO_AUTH.md.
+		-->
+		<dependency>
+			<groupId>org.springframework.session</groupId>
+			<artifactId>spring-session-data-redis</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-websocket</artifactId>
