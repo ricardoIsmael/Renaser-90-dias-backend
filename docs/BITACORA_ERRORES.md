@@ -602,6 +602,8 @@ Apareció en el gate del Lote 4, después de resolver E-32, como el segundo bloq
 1. **En este proyecto (Boot 4.1), nunca pedir `ObjectMapper`/tipos de Jackson por inyección de Spring esperando la clase clásica de `com.fasterxml.jackson.*`** — el bean autoconfigurado es Jackson 3 (`tools.jackson.*`). Si de verdad hace falta el `ObjectMapper` de Spring, hay que usar el tipo nuevo y su API (parcialmente distinta); si el código existente usa Jackson 2 (como el resto del repo, vía `com.fasterxml.jackson.databind.ObjectMapper` para DTOs con anotaciones `@JsonProperty` etc.), la solución más simple y aislada es construir un `ObjectMapper` propio de esa clase en vez de pedirlo por DI.
 2. **Antes de escribir `new Constructor(SomeSpringManagedType tipo)` para un tipo que no es obviamente un bean de la app** (no es un puerto, no es un `@Repository`/`@Service` propio), verificar primero que existe un bean de ESE tipo exacto — `./mvnw dependency:tree | grep -i <libreria>` para confirmar qué versión/paquete gana en este proyecto específico, en vez de asumir la convención más común del ecosistema.
 
+**Reincidencia (módulo `rag`, construido por agente):** `PgVectorNativoAdapter` (adapter de persistencia vectorial, necesita serializar `metadatos` a `jsonb` a mano porque usa SQL nativo, no un `@RestController`) volvió a pedir `com.fasterxml.jackson.databind.ObjectMapper` por constructor — exactamente el mismo error, exactamente la misma causa, un módulo entero después. Se corrigió con el mismo remedio: `ObjectMapper` propio como campo, no inyectado. **Confirma el patrón de E-29/E-32: cualquier clase nueva que serialice JSON a mano (fuera del ciclo normal de un `@RestController`) es candidata segura a este error** — al encargar a un agente una tarea que involucre serializar JSON manualmente (payloads de Redis, columnas `jsonb` por SQL nativo, eventos con cuerpo serializado), hay que advertírselo explícitamente en el encargo, no asumir que "ya está documentado en la bitácora" alcanza — el agente no la lee sin que se le diga.
+
 ## E-34 — Dependencia circular: un mismo servicio implementa el "disparador" y el "trabajo real" de un flujo `@Async`
 
 **Síntoma exacto:**
@@ -819,3 +821,21 @@ Si se cumplen los cuatro: **es el entorno, no el código.** No empieces a "arreg
 1. **Un solo proceso Maven a la vez, siempre.** Antes de lanzar un gate: `Get-CimInstance Win32_Process -Filter "Name='java.exe'"` y confirmar que no hay ni app corriendo ni otro Maven. Mientras un gate está en vuelo, **no correr NADA de Maven** — ni un `compile` "rapidito", ni un test puntual. Si hace falta verificar algo urgente, se espera o se mata el gate primero.
 2. **Cerrar la app antes del gate.** Un `spring-boot:run` vivo más un `clean` es la receta exacta de la primera ocurrencia. Especialmente peligroso porque la app puede haber quedado de una fase anterior de la misma sesión, sin que uno la recuerde.
 3. **Ante la duda, repetir el gate en un entorno limpio antes de diagnosticar.** Cuesta unos minutos; perseguir 150 errores fantasma cuesta mucho más.
+
+## E-40 — `src/test/resources/application.yaml` REEMPLAZA al de `main` (no lo complementa): partir el bloque `spring:` por accidente tumba el contexto entero
+
+**Síntoma exacto:**
+
+```
+Caused by: java.lang.IllegalStateException: Google GenAI project-id must be set!
+```
+… en un módulo (`rag`) que ni siquiera llama a Gemini todavía (usa adaptadores NoOp), en un gate que antes pasaba.
+
+**Causa real:** Maven/Spring resuelve `application.yaml` por **nombre de archivo en el classpath**, y el de `src/test/resources` **gana por completo** sobre el de `src/main/resources` cuando corren los tests — no se fusionan propiedad por propiedad, uno tapa al otro entero. Al agregar `renaser.web.cors.origenes` y `renaser.renasia.limite-diario` (propiedades nuevas que un `@Value` de `rag`/`shared` necesita para arrancar) se insertó el bloque `renaser:` **en medio** del bloque `spring:` del yaml de test, dejando la lista `spring.autoconfigure.exclude` (que apaga la autoconfig de Google GenAI/PgVectorStore, ver E-15) **huérfana fuera de `spring:`** — YAML no marca error de sintaxis por esto, simplemente cambia de qué es hijo de qué. Sin esa exclusión activa, Spring intentó levantar el cliente de Google GenAI de verdad y explotó por falta de credenciales.
+
+**Solución aplicada:** reescribir el archivo completo con `spring:` intacto de punta a punta y el bloque `renaser:` como una clave de **primer nivel, al final del archivo, fuera de `spring:`** — nunca intercalado.
+
+**Cómo evitar que vuelva a pasar:**
+1. **Cualquier propiedad nueva que un bean resuelva con `@Value("${renaser...}")` en `main` tiene que agregarse TAMBIÉN en `src/test/resources/application.yaml`**, o el contexto de test no levanta — no son dos archivos que se combinan, es un reemplazo total.
+2. **Al editar ese archivo, agregar bloques de primer nivel (`renaser:`, o cualquier otro hermano de `spring:`) siempre al final, nunca en medio de un bloque existente.** Un editor con resaltado de indentación lo hace obvio; a simple vista en un diff chico, no.
+3. **Antes de asumir que un fallo de arranque es un bug de código, mirar el YAML completo del archivo que realmente se está usando** (`src/test/resources` para tests) — la sangría es la única pista, no hay error de parseo que avise.
