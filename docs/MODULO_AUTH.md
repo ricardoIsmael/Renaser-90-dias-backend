@@ -273,6 +273,50 @@ Se conserva lo ya resuelto en D-18/R-5: **no se crea el usuario en silencio.** S
 
 **La regla de seguridad que no se negocia:** la identidad se resuelve **siempre por `(proveedor, sujeto)`, nunca por email.** Vincular por email permitiría que quien registre una cuenta social con el correo de un aprendiz existente se apodere de su cuenta. Un email que coincide con un usuario ya existente **no vincula automáticamente**: requiere que el dueño de la cuenta lo confirme estando ya autenticado.
 
+### 6.5 Apple y Facebook — hecho 2026-08-26
+
+Construidos como `@Component` que implementan `VerificadorIdentidadProveedor` (el puerto y el enum `ProveedorIdentidad` **no existían todavía** cuando se arrancó esta tarea, así que se crearon con la forma exacta encargada — ver §6.2 — para que el trabajo en paralelo de Google los reuse sin tocarlos). También se creó `CanjeCodigoCommand` (no estaba especificado en el puerto, hacía falta como entrada de `verificar`): self-validating, con `code`/`codeVerifier`/`redirectUri`, ninguno se loguea.
+
+**`AppleIdentidadAdapter`** (`users/infrastructure/adapter/out/oauth/`):
+- El `client_secret` (JWT ES256, firmado con la clave `.p8` vía `nimbus-jose-jwt` — ya venía transitivamente por `spring-boot-starter-security-oauth2-resource-server`, no hizo falta agregar dependencia nueva) se **regenera en cada intercambio de código**, con 5 minutos de vigencia. Decisión de diseño no cerrada por el documento: la alternativa era cachear el JWT y rotarlo cerca del vencimiento de 6 meses, pero regenerarlo siempre hace que "vencido" sea imposible por construcción, a costa de una firma criptográfica de más por login — un costo despreciable frente a la llamada de red que sigue.
+- El ID token se decodifica con `NimbusJwtDecoder.withJwkSetUri` (bean separado en `AppleJwtDecoderConfig` para poder inyectar un decoder falso en los tests sin pegarle a la red). Además de firma/vigencia, el adaptador verifica a mano `iss=https://appleid.apple.com` y que `aud` contenga el `client_id` — no se valida `nonce` porque `CanjeCodigoCommand` no lo lleva (no estaba en el alcance de esta tarea; si hace falta, es un campo más en el comando y una comparación más acá).
+- `nombre` queda siempre `null`: confirmado el límite documentado en §6.3 (Apple no lo manda en el ID token). Si la app captura el nombre en el primer login, tiene que mandarlo aparte — este adaptador no tiene de dónde sacarlo.
+
+**`FacebookIdentidadAdapter`** (mismo paquete): dos llamadas REST con `RestClient` (canje de código → `access_token`, y `GET /me?fields=id,email,name`), sin ID token que verificar (Facebook es OAuth 2.0 plano, no OIDC). `emailVerificado` se deriva de "¿la Graph API devolvió un email?" — **supuesto documentado, no confirmado contra la API real** (sin credenciales de Meta para probarlo). Versión de Graph API fijada en `v21.0` como constante; Meta las deprecha cada ~2 años.
+
+**Lo que NO se construyó, a propósito:** el caso de uso compositor (`IniciarSesionConProveedorUseCase`), el controller (`POST /api/v1/auth/social`), y el agregado `IdentidadExterna` con su persistencia. La instrucción de esta tarea permitía construirlos si hacía falta para que los adaptadores quedaran usables, pero eso es exactamente lo que "el flujo de Google" (§6, en construcción en paralelo) más probablemente ya cubre o va a cubrir — construirlo acá corría el riesgo real de pisar archivos que el otro agente estaba escribiendo al mismo tiempo (confirmado: `GlobalExceptionHandler.java` fue tocado por un tercer agente, el de reset de contraseña, mientras esta tarea corría, sin conflicto porque cada uno agregó su handler en un punto distinto). Los dos adaptadores quedan como `@Component` listos: cualquier caso de uso que inyecte `List<VerificadorIdentidadProveedor>` los va a encontrar automáticamente vía Spring, sin registro manual.
+
+### 6.6 Pendiente antes de que Apple/Facebook funcionen en producción
+
+- Dar de alta el Services ID + la App ID de Apple en Apple Developer, descargar el `.p8`, y cargar `APPLE_AUTH_KEY_PATH`/`APPLE_KEY_ID`/`APPLE_TEAM_ID`/`APPLE_CLIENT_ID` (placeholders ya en `application.yaml`, vacíos).
+- Dar de alta la app de Facebook en Meta for Developers y cargar `FACEBOOK_APP_ID`/`FACEBOOK_APP_SECRET` (placeholders ya en `application.yaml`, vacíos).
+- **Facebook, además, no arranca solo con las credenciales**: Meta exige revisión de app y verificación de negocio antes de aceptar llamadas de producción contra la Graph API — el código puede estar listo y compilando y el proveedor real igual rechazar las llamadas hasta que ese trámite esté aprobado. Conviene iniciarlo ya, no cuando haga falta.
+- El caso de uso compositor + controller de §6.5 (verificar qué hizo el flujo de Google antes de construirlo, para no duplicar).
+- Sin credenciales reales de ninguno de los dos proveedores, ningún test contra la API real fue posible — toda la cobertura es contra `MockRestServiceServer`/un `JwtDecoder` mockeado, ver §0.2 de CLAUDE.MD.
+
+### 6.7 Google, `IdentidadExterna` y el caso de uso compositor — hecho 2026-08-26
+
+Construido sobre lo que ya había dejado el trabajo en paralelo de §6.5 (`VerificadorIdentidadProveedor`, `CanjeCodigoCommand`, `IdentidadVerificada`, `ProveedorIdentidad`, `IdentidadProveedorInvalidaException` con su handler en `GlobalExceptionHandler` ya agregado) — se reutilizó tal cual, sin duplicar nada.
+
+**`GoogleIdentidadAdapter`** (`users/infrastructure/adapter/out/oauth/`): mismo patrón que `AppleIdentidadAdapter`/`FacebookIdentidadAdapter`. Canjea `code` + `code_verifier` contra `https://oauth2.googleapis.com/token` con `RestClient`, decodifica el ID token con `NimbusJwtDecoder.withJwkSetUri` (bean separado en `GoogleJwtDecoderConfig`, mismo motivo que en Apple: poder inyectar un decoder falso en los tests), y verifica a mano `iss=https://accounts.google.com` y que `aud` contenga el `client_id` — Google es el más simple de los tres: `client_secret` fijo (no firmado por nosotros como Apple) y sí es OIDC (a diferencia de Facebook, que no tiene ID token). Config nueva en `application.yaml`: `renaser.auth.google.client-id`/`client-secret` (`GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET`, vacíos). El `redirect_uri` **no** es config del servidor: viaja en `CanjeCodigoCommand` (ya definido así por §6.5), lo manda el cliente en cada llamada porque tiene que coincidir con el que se usó al pedir el `code`.
+
+**`IdentidadExterna`** (`users/domain/model/identidadexterna/`): agregado nuevo, `record` inmutable (mismo criterio que `Credencial`: sin comportamiento más allá de construirse). `LoadIdentidadExternaPort`/`SaveIdentidadExternaPort` + `IdentidadExternaPersistenceAdapter` contra `identidades_externas` (queries nativas con clave compuesta `(proveedor, sujeto_proveedor)`, mismo truco de `Repository<UserJpaEntity, UUID>` como marcador que ya usa `SpringDataCredencialRepository`). Probado con Testcontainers contra Postgres real: alta/lectura, que el mismo `sub` en proveedores distintos no colisiona, PK duplicada → `DataIntegrityViolationException` (409, ya mapeado), y FK contra un usuario inexistente → mismo 409.
+
+**`IniciarSesionConProveedorUseCase`** + `AutenticacionSocialService` (`application/services`): resuelve el adaptador por proveedor vía `RegistroVerificadoresIdentidad` (mismo patrón que `RegistroPoliticasHabito` de `habits`, pero en `application/services` y no en `domain/` — referencia un puerto `out`, y `domain/` no puede conocer puertos). Si `(proveedor, sujeto)` ya está vinculado → `ResultadoLoginSocial.SesionIniciada`; si no, reusa **el mismo** `SubmitAccountRequestUseCase` que el autoregistro por formulario para abrir una `AccountRequest` (§6.4: nunca se crea el usuario en silencio) → `ResultadoLoginSocial.SolicitudCreada`. `ResultadoLoginSocial` es sellado, mismo criterio que `DecisionPolitica`/`AccessDecision`.
+
+Controller: se agregó `POST /api/v1/auth/social` a `AutenticacionController` (ya existente, con los endpoints de password y de reset de §7.5) — no se creó un controller nuevo porque el endpoint compuesto (un solo `code` puede resolver a cualquiera de los tres proveedores) es, por diseño de §6.1, uno solo para los tres. Recibe `{proveedor, code, codeVerifier, redirectUri, phone?, city?}`; según la variante de `ResultadoLoginSocial`, establece sesión + 200 con el perfil, o 202 con el id de la `AccountRequest` (reusa `AccountRequestIdResponse`, ya existente).
+
+**Tres decisiones de diseño que no estaban 100% especificadas, documentadas para revisión:**
+
+1. **`email_verified=false` rechaza el login** (`IdentidadProveedorInvalidaException`), no pedido explícitamente pero consistente con la premisa de §6.4 ("el email llega pre-verificado, no se pide verificación aparte") — si el proveedor no lo confirma, esa premisa no se sostiene.
+2. **Un email que ya tiene cuenta activa rechaza el login social con 409**, en vez de crear una segunda `AccountRequest` para el mismo email. Es la aplicación literal de §6.4 ("no vincula automáticamente, requiere confirmación autenticada") — esa confirmación todavía no existe como funcionalidad, así que hoy el camino correcto es rechazar, no crear una solicitud duplicada.
+3. **`SubmitAccountRequestCommand.phone` es `@NotBlank`** (comando existente, no tocado) y Google/Apple/Facebook no devuelven teléfono. Se resolvió agregando `phone`/`city` como campos **opcionales** en `IniciarSesionConProveedorCommand`/`POST /api/v1/auth/social`: si la identidad es nueva y falta el teléfono, se rechaza con 400 explícito en vez de inventar un valor. Esto implica que, tal como quedó, la app tiene que conocer/pedir el teléfono **antes** de (o en la misma llamada que) el primer intento de login social — y como el `code` de OAuth es de un solo uso, un primer intento sin teléfono lo consume igual y el segundo intento necesita un `code` nuevo (reiniciar el flujo del navegador). No es un bug, es una limitación de diseño real que conviene resolver del lado de producto/UX, no inventada acá.
+
+**Lo que quedó pendiente, documentado y no resuelto (ver A-7/A-8 en §10):**
+
+- **`SaveIdentidadExternaPort.guardar` nunca se invoca todavía.** La FK de `identidades_externas.usuario_id` exige que la fila de `usuarios` ya exista, y eso solo pasa cuando `ApproveAccountRequestUseCase`/`AccountRequestService.approve()` corre — un archivo que esta tarea no tocó a propósito (es compartido, en uso por los otros dos agentes en paralelo). Efecto concreto: hoy, un usuario aprobado por este camino social **no queda vinculado** — su próximo login con el mismo proveedor no encuentra `(proveedor, sujeto)` y el caso de uso intenta abrir **otra** `AccountRequest` para el mismo email, que `rejectIfEmailYaRegistrado` ahora sí rechaza (porque el `User` ya existe) con un 409 poco claro para ese caso ("ya existe una cuenta, iniciá sesión con tu método actual" — pero el aprendiz no tiene contraseña si solo se registró por Google). Es un hueco funcional real, no cosmético.
+- El puerto y el adaptador de `IdentidadExterna` están completos y probados de punta a punta (Testcontainers) para cuando se resuelva el punto anterior — falta enchufar la llamada a `guardar()` en el momento exacto en que se crea el `User`.
+
 ---
 
 ## 7. Spring Security
@@ -328,6 +372,27 @@ El tope de 200 no es de seguridad: BCrypt trunca en 72 bytes, así que aceptar e
 
 La capa 3 mejora de verdad: antes un suspendido podía seguir operando hasta 30 s; ahora su sesión desaparece en la misma transacción que lo suspende.
 
+### 7.5 Reset de contraseña — hecho 2026-08-26
+
+Construido en paralelo con el trabajo de Google/Apple/Facebook de §6.5 sobre el mismo checkout — sin conflicto: los únicos archivos compartidos (`GlobalExceptionHandler.java`, `AutenticacionController.java`, `application.yaml`) se tocaron en puntos distintos cada vez.
+
+**Lo que se construyó**, todo dentro de `users` (§3), sin tabla nueva (§2.2 ya preveía esto):
+
+- `SolicitarResetContrasenaUseCase` / `ConfirmarResetContrasenaUseCase` (`application/ports/in/autenticacion`) + `ResetContrasenaService` (`application/services`). `solicitar` responde igual exista o no la cuenta (misma no-enumeración que el login, §5.3.3 de CLAUDE.MD); `confirmar` valida el token, fija la contraseña nueva (mismo `PasswordEncoder` de §7.2) y cierra todas las sesiones.
+- `TokenResetContrasenaPort` + `TokenResetContrasenaRedisAdapter` (`infrastructure/adapter/out/redis`): clave `reset-password:{token}` → `UserId`, TTL de 30 min (§2.2). El token es 256 bits de `SecureRandom` codificados en Base64 URL-safe. El "un solo uso" es atómico de verdad: `consumir` usa `ValueOperations#getAndDelete` (equivalente a `GETDEL`), no un GET seguido de un DEL — así dos requests casi simultáneas con el mismo token nunca pueden las dos tener éxito. Probado contra Redis real (Testcontainers): ronda completa, doble consumo, token nunca emitido, vencimiento por TTL, y dos tokens del mismo usuario son independientes.
+- `LimitarSolicitudesResetPort` + `LimitarSolicitudesResetRedisAdapter`: mismo patrón que `ControlCuotaRenasiaPort` (rag, D-48) — `INCR` atómico con TTL fijado solo la primera vez. Se registra un intento por email y, si hay IP, otro por IP; cualquiera de los dos que se agote corta con `RateLimitExceededException` (429), antes incluso de mirar si la cuenta existe.
+- **`CerrarTodasLasSesionesUseCase`** (el que `§3` dejaba pendiente de construir) + `GestionSesionesService`: inyecta `FindByIndexNameSessionRepository<? extends Session>` directo, sin puerto de indirección — mismo criterio que `PasswordEncoder` en `AutenticacionService` (§3): no es HTTP ni JPA, y Spring Session ya es la única implementación de "sesión" posible acá.
+- `EnviarEmailPort` (`application/ports/out/autenticacion`) + `NoOpEnviarEmailAdapter`: **no existía ningún puerto de email en el proyecto** (se buscó en `notifications`, que solo tiene `PushPort` para push — nada de mail). Se creó nuevo, con el mismo patrón que `NoOpPushAdapter`/`NoOpSupabaseAdminAuthAdapter`: solo loguea (sin el token ni el email, nunca), listo para un adaptador real (Resend/SES) el día que haya credenciales. **Decisión a confirmar:** si mañana otro módulo necesita mandar mail, ¿se generaliza este puerto o se mueve a `shared`? Por ahora vive en `users` porque es el único consumidor.
+- Dos endpoints en `AutenticacionController`: `POST /api/v1/auth/password/reset-request` (siempre 202) y `POST /api/v1/auth/password/reset-confirm` (204 si el token es válido, 400 vía `TokenResetInvalidoException` si no).
+
+**Decisiones tomadas sin especificación explícita, documentadas para revisión:**
+
+- **Umbrales del rate limit**: CLAUDE.MD solo pedía "por email y por IP", sin números. Se asumió 5/hora por email y 20/hora por IP, por analogía con el único precedente del repo (60/hora por IP en `AccountRequestService` para altas). **No confirmado con el dueño del producto.**
+- **URL del link de reset**: `renaser.web.reset-password-url` en `application.yaml`, con placeholder `https://TODO-frontend-no-definido.renaser.dev/reset-password` — el frontend todavía no tiene definida esa pantalla. Sobreescribir con `RESET_PASSWORD_URL` antes de producción.
+- `confirmar` no vuelve a chequear `cuentaHabilitada()`: si el token es válido, se fija la contraseña igual aunque la cuenta esté suspendida (no puede loguear igual, el guard de estado sigue en `AutenticacionService`) — se siguió literal la instrucción de la tarea, que solo pedía chequear `permiteLoginPorContrasena()` al solicitar.
+
+**Lo que NO se construyó, a propósito:** el envío real de correo (Resend/SES) — sin credenciales, prohibido explícitamente integrar un proveedor real en esta fase. `NoOpEnviarEmailAdapter` deja el flujo completo y probado detrás del puerto.
+
 ---
 
 ## 8. La migración de `X-Actor-Id` — el trabajo real
@@ -354,9 +419,9 @@ Orden: `users` primero (es donde vive el login), después el resto por tamaño a
 | **2** | Migraciones (`V2` columnas, `V3` tabla) + `CredencialJpaEntity` + puertos | En curso |
 | **3** | Cadena de Spring Security + login/logout por contraseña + CSRF | |
 | **4** | Migración de `X-Actor-Id`, módulo por módulo (§8) | |
-| **5** | Google | |
-| **6** | Apple + Facebook | |
-| **7** | Reset de contraseña (Redis + envío de correo) | |
+| **5** | Google | ✅ Hecho, ver §6.7. Falta crear el OAuth client en Google Cloud Console (A-9) |
+| **6** | Apple + Facebook | Adaptadores hechos (§6.5); caso de uso compositor, `IdentidadExterna` y controller ahora también hechos (§6.7, compartidos por los tres proveedores). Falta lo de §6.6 (altas en Apple Developer/Meta, revisión de negocio de Meta) |
+| **7** | Reset de contraseña (Redis + envío de correo) | ✅ Hecho, ver §7.5. Envío de correo es `NoOpEnviarEmailAdapter` (sin proveedor real todavía) |
 
 Fuera de alcance por ahora, y anotado para no perderlo: MFA/TOTP para roles administrativos, CAPTCHA en el alta, y protección contra contraseñas filtradas (HaveIBeenPwned) — los tres estaban en la checklist de `MODULO_USERS.md` §5.8 y siguen pendientes.
 
@@ -370,3 +435,8 @@ Fuera de alcance por ahora, y anotado para no perderlo: MFA/TOTP para roles admi
 | A-2 | ¿Cuántos usuarios reales hay hoy en el Supabase de producción? Si son de prueba, la migración es gratis | Ídem |
 | A-3 | Cookie jar de RN vs `Authorization: Bearer` para la app nativa (§5.1) | Fase 3 del lado de la app |
 | A-4 | ¿El futuro panel web comparte esta `SecurityFilterChain` o va separada? | Nada hoy |
+| A-5 | Umbrales de rate limit de reset de contraseña (§7.5): se asumieron 5/hora por email y 20/hora por IP sin confirmar con producto | Nada hoy, son ajustables sin recompilar el patron (constantes en `ResetContrasenaService`) |
+| A-6 | `EnviarEmailPort` (§7.5): ¿se generaliza a `shared` cuando otro módulo necesite mandar mail, o se queda en `users`? | Nada hoy |
+| A-7 | **`IdentidadExterna` nunca se vincula tras aprobar la `AccountRequest`** (§6.7): falta que `AccountRequestService.approve()` llame a `SaveIdentidadExternaPort.guardar` con `(proveedor, sujeto)` en la misma transacción que crea el `User`. Sin esto, un usuario que se registró por Google no puede volver a entrar por Google — su segundo intento choca contra `rejectIfEmailYaRegistrado` | Login social funcionando de punta a punta para un usuario ya aprobado |
+| A-8 | ¿Cuándo/cómo se pide el teléfono para un alta por login social? (§6.7, punto 3) `phone` quedó como campo opcional de `POST /api/v1/auth/social`, pero el `code` de OAuth es de un solo uso — un primer intento sin teléfono lo consume y el segundo intento necesita reiniciar el flujo del navegador. Es una decisión de UX de la app, no del backend | Fase 3/5 del lado de la app (pantalla de alta social) |
+| A-9 | Crear el OAuth client de Google en Google Cloud Console y cargar `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` (hoy vacíos en `application.yaml`) — mismo estado que Apple/Facebook en A-6.6 | Probar el login con Google contra el proveedor real |

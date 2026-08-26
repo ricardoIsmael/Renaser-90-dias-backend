@@ -1,9 +1,11 @@
 package com.renaser.os.shared.web;
 
 import com.renaser.os.shared.domain.CredencialesInvalidasException;
+import com.renaser.os.shared.domain.IdentidadProveedorInvalidaException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.SesionNoIniciadaException;
+import com.renaser.os.shared.domain.TokenResetInvalidoException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +43,24 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(SesionNoIniciadaException.class)
     public ResponseEntity<ApiErrorResponse> handleSesionNoIniciada(SesionNoIniciadaException ex) {
         return respond(HttpStatus.UNAUTHORIZED, ex.getMessage());
+    }
+
+    /** Token de reset inexistente, vencido o ya usado: el request es invalido, no una falla de autorizacion. */
+    @ExceptionHandler(TokenResetInvalidoException.class)
+    public ResponseEntity<ApiErrorResponse> handleTokenResetInvalido(TokenResetInvalidoException ex) {
+        return respond(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    /**
+     * Login social fallido: 401, misma categoria que {@link CredencialesInvalidasException}. Se
+     * loguea con la excepcion completa (a diferencia de {@link #respond}) porque la causa real
+     * (firma invalida, proveedor caido, `iss`/`aud` que no corresponden) importa para
+     * diagnosticar — nunca viaja al cliente, solo al log del servidor.
+     */
+    @ExceptionHandler(IdentidadProveedorInvalidaException.class)
+    public ResponseEntity<ApiErrorResponse> handleIdentidadProveedorInvalida(IdentidadProveedorInvalidaException ex) {
+        log.warn("401 -> login social rechazado", ex);
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiErrorResponse.of(ex.getMessage()));
     }
 
     @ExceptionHandler(NoSuchElementException.class)

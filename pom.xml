@@ -59,10 +59,16 @@
 			Sesion opaca guardada en Redis. Da hecho lo que si no habria que escribir a mano:
 			generar el identificador, guardarlo, expirarlo por TTL, manejar la cookie, y buscar
 			todas las sesiones de un usuario para cerrarlas de un golpe. Ver docs/MODULO_AUTH.md.
+
+			El STARTER de Boot, no la libreria `org.springframework.session:spring-session-data-redis`
+			suelta: en Boot 4 la autoconfiguracion vive en un modulo aparte, asi que la libreria sola
+			pone las clases en el classpath pero NO registra ningun bean. Sintoma: todo compila y los
+			tests pasan hasta que algo inyecta FindByIndexNameSessionRepository, y ahi revienta el
+			contexto entero con "required a bean that could not be found".
 		-->
 		<dependency>
-			<groupId>org.springframework.session</groupId>
-			<artifactId>spring-session-data-redis</artifactId>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-session-data-redis</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -88,6 +94,18 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
+		</dependency>
+		<!--
+			Spring Boot 4 saco RestClientAutoConfiguration (el bean RestClient.Builder) del
+			autoconfigure core a este starter dedicado. Sin el, cualquier @Component que pida
+			RestClient.Builder por constructor (los adaptadores OAuth de Google/Apple/Facebook,
+			docs/MODULO_AUTH.md §6) rompe el arranque del contexto entero con
+			NoSuchBeanDefinitionException — no un fallo de esos beans en particular, sino de
+			cualquier test @SpringBootTest del proyecto que comparta ese contexto cacheado.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-restclient</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.flywaydb</groupId>

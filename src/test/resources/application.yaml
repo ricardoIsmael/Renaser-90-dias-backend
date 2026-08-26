@@ -1,4 +1,13 @@
 spring:
+  # Espeja el bloque de main: sin esto, Spring Session no registra su repositorio Redis y
+  # GestionSesionesService (que inyecta FindByIndexNameSessionRepository para cerrar todas
+  # las sesiones de un usuario) rompe el contexto de TODO test @SpringBootTest. El contenedor
+  # Redis ya lo levanta TestcontainersConfiguration, asi que apunta a uno real (E-40).
+  session:
+    timeout: 30d
+    data:
+      redis:
+        repository-type: indexed
   ai:
     model:
       chat: none
@@ -23,5 +32,22 @@ renaser:
   web:
     cors:
       origenes: http://localhost:8081
+    # Placeholder de test: ningun test manda un mail real (EnviarEmailPort es NoOp).
+    reset-password-url: http://localhost:8081/reset-password
+  auth:
+    # Vacios a proposito, igual que en main: los adaptadores OAuth fallan explicito al
+    # INVOCARSE sin configurar, no al arrancar. Tienen que existir como propiedades igual,
+    # porque los @Value de sus constructores se resuelven al crear el bean (E-40).
+    apple:
+      auth-key-path:
+      key-id:
+      team-id:
+      client-id:
+    facebook:
+      app-id:
+      app-secret:
+    google:
+      client-id:
+      client-secret:
   renasia:
     limite-diario: 25
