@@ -84,8 +84,22 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         ZoneId zona = ZoneId.of(progreso.timezone());
         Instant ahora = clock.now();
         LocalDate hoy = ahora.atZone(zona).toLocalDate();
-        int diaPrograma = progreso.diaPrograma();
 
+        ContextoCuota contexto = resolverContextoCuota(command, habito, progreso.diaPrograma(), zona, ahora);
+        aplicarEdicion(command, contexto, ahora, hoy);
+
+        return construirResultado(command, contexto);
+    }
+
+    /**
+     * Resuelve si el pedido entra en la ventana libre, si hay cupo semanal, y si se difiere a
+     * manana. Separado de {@link #editar} para que el caso de uso quede como una lectura de
+     * arriba a abajo (§5.4.8: metodo publico corto, cada paso con nombre) en vez de una sola
+     * funcion con toda la logica de cuota entremezclada.
+     */
+    private ContextoCuota resolverContextoCuota(EditarPreferenciaHorarioCommand command, Habito habito,
+                                                 int diaPrograma, ZoneId zona, Instant ahora) {
+        LocalDate hoy = ahora.atZone(zona).toLocalDate();
         boolean semanaLibreGlobal = diaPrograma <= FREE_SCHEDULE_EDITS_UNTIL_DAY;
         int libreHasta = Math.max(FREE_SCHEDULE_EDITS_UNTIL_DAY,
                 habito.diaLimiteEdicionLibre() != null ? habito.diaLimiteEdicionLibre() : FREE_SCHEDULE_EDITS_UNTIL_DAY);
@@ -96,19 +110,28 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         if (!semanaLibreGlobal) {
             LocalDate inicioSemana = inicioSemanaPrograma(hoy, diaPrograma);
             tocados = historialPort.distintosHabitosCambiadosDesde(command.actorId(), inicioSemana);
-            if (!habitoLibre && !diferido && tocados.size() >= WEEKLY_SCHEDULE_EDIT_LIMIT
-                    && !tocados.contains(command.habitoId())) {
-                throw new IllegalStateException("Esta semana ya reacomodaste " + WEEKLY_SCHEDULE_EDIT_LIMIT
-                        + " habitos. Puedes seguir ajustando esos, y el resto la semana que viene.");
-            }
+            requireCupoDisponible(command.habitoId(), habitoLibre, diferido, tocados);
         }
 
-        LocalDate fechaEfectiva = null;
-        if (diferido) {
-            fechaEfectiva = hoy.plusDays(1);
+        LocalDate fechaEfectiva = diferido ? hoy.plusDays(1) : null;
+        return new ContextoCuota(semanaLibreGlobal, habitoLibre, diferido, fechaEfectiva, tocados);
+    }
+
+    private static void requireCupoDisponible(HabitoId habitoId, boolean habitoLibre, boolean diferido,
+                                                List<HabitoId> tocados) {
+        if (!habitoLibre && !diferido && tocados.size() >= WEEKLY_SCHEDULE_EDIT_LIMIT
+                && !tocados.contains(habitoId)) {
+            throw new IllegalStateException("Esta semana ya reacomodaste " + WEEKLY_SCHEDULE_EDIT_LIMIT
+                    + " habitos. Puedes seguir ajustando esos, y el resto la semana que viene.");
+        }
+    }
+
+    private void aplicarEdicion(EditarPreferenciaHorarioCommand command, ContextoCuota contexto, Instant ahora,
+                                 LocalDate hoy) {
+        if (contexto.diferido()) {
             CambioHorarioPendiente pendiente = CambioHorarioPendiente.programar(command.actorId(), command.habitoId(),
                     command.horaDisparo(), command.horaLimite(), command.recordatorioActivo(),
-                    command.minutosRecordatorio(), fechaEfectiva, ahora);
+                    command.minutosRecordatorio(), contexto.fechaEfectivaDiferido(), ahora);
             saveCambioPendientePort.save(pendiente);
         } else {
             aplicarInmediato(command, ahora);
@@ -116,9 +139,6 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
             historialPort.registrar(command.actorId(), command.habitoId(), hoy, command.horaDisparo(),
                     command.horaLimite(), ahora);
         }
-
-        return construirResultado(command, diaPrograma, semanaLibreGlobal, habitoLibre, diferido, fechaEfectiva,
-                tocados);
     }
 
     private void aplicarInmediato(EditarPreferenciaHorarioCommand command, Instant ahora) {
@@ -179,22 +199,30 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
      * esta editando ({@code habitoLibre}). Ver docs/MODULO_HABITS.md.
      */
     private static ResultadoEdicionPreferencia construirResultado(EditarPreferenciaHorarioCommand command,
-                                                                    int diaPrograma, boolean semanaLibreGlobal,
-                                                                    boolean habitoLibre, boolean diferido,
-                                                                    LocalDate fechaEfectivaDiferido,
-                                                                    List<HabitoId> tocados) {
-        String periodo = semanaLibreGlobal ? "FREE" : "WEEK";
+                                                                    ContextoCuota contexto) {
+        String periodo = contexto.semanaLibreGlobal() ? "FREE" : "WEEK";
         int usados;
-        if (semanaLibreGlobal || diferido || habitoLibre) {
-            usados = tocados.size();
+        if (contexto.semanaLibreGlobal() || contexto.diferido() || contexto.habitoLibre()) {
+            usados = contexto.tocados().size();
         } else {
-            Set<HabitoId> conjunto = new LinkedHashSet<>(tocados);
+            Set<HabitoId> conjunto = new LinkedHashSet<>(contexto.tocados());
             conjunto.add(command.habitoId());
             usados = conjunto.size();
         }
         int restantes = Math.max(0, WEEKLY_SCHEDULE_EDIT_LIMIT - usados);
         return new ResultadoEdicionPreferencia(command.habitoId(), command.horaDisparo(), command.horaLimite(),
-                diferido, fechaEfectivaDiferido, usados, restantes, WEEKLY_SCHEDULE_EDIT_LIMIT, periodo);
+                contexto.diferido(), contexto.fechaEfectivaDiferido(), usados, restantes, WEEKLY_SCHEDULE_EDIT_LIMIT,
+                periodo);
+    }
+
+    /**
+     * Agrupa lo que {@link #resolverContextoCuota} resuelve para no repartir 7 parametros
+     * sueltos entre {@link #aplicarEdicion} y {@link #construirResultado} (§5.4.8, techo de 4
+     * parametros por metodo). {@code diaPrograma} no viaja aca: solo lo usa el propio calculo
+     * de cuota, ningun consumidor de este record lo necesita.
+     */
+    private record ContextoCuota(boolean semanaLibreGlobal, boolean habitoLibre, boolean diferido,
+                                  LocalDate fechaEfectivaDiferido, List<HabitoId> tocados) {
     }
 
     private Habito requireHabito(HabitoId id) {

@@ -58,9 +58,12 @@ public class BitacoraNocturnaService implements EscribirBitacoraNocturnaUseCase,
     }
 
     @Override
-    public Optional<EntradaDiario> consultarHoy(UserId actorId) {
+    public EstadoBitacoraHoy consultarHoy(UserId actorId) {
         ProgresoParticipanteHabits progreso = requireProgreso(actorId);
-        return loadPort.porParticipanteFechaYTipo(actorId, hoyDe(progreso), TipoEntradaDiario.BITACORA_NOCTURNA);
+        LocalDate hoy = hoyDe(progreso);
+        EntradaDiario entrada = loadPort.porParticipanteFechaYTipo(actorId, hoy, TipoEntradaDiario.BITACORA_NOCTURNA)
+                .orElse(null);
+        return new EstadoBitacoraHoy(hoy, entrada);
     }
 
     private LocalDate hoyDe(ProgresoParticipanteHabits progreso) {

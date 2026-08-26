@@ -12,8 +12,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDate;
-
 /**
  * "Bitacora Nocturna" / Diario Nocturno — desbloquea el Espejo Sombra de `rag`. Ruta
  * literal del contrato viejo (D-36): {@code GET/PUT /api/v1/journal/today} (R-05/R-06,
@@ -34,8 +32,7 @@ public class JournalTodayController {
 
     @GetMapping
     public JournalEntryResponse hoy(@RequestHeader("X-Actor-Id") String actorId) {
-        UserId actor = UserId.of(actorId);
-        return JournalEntryResponse.from(consultarUseCase.consultarHoy(actor), LocalDate.now());
+        return JournalEntryResponse.from(consultarUseCase.consultarHoy(UserId.of(actorId)));
     }
 
     @PutMapping
@@ -43,6 +40,6 @@ public class JournalTodayController {
                                           @RequestBody @Valid UpsertJournalEntryRequest request) {
         var entrada = escribirUseCase.escribir(new EscribirBitacoraNocturnaCommand(UserId.of(actorId),
                 request.textContent(), request.audioBucket(), request.audioPath()));
-        return JournalEntryResponse.from(java.util.Optional.of(entrada), entrada.fecha());
+        return JournalEntryResponse.from(entrada);
     }
 }
