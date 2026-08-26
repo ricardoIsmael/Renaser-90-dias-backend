@@ -2,7 +2,7 @@
 
 Backend del programa de transformación de 90 días **Renaser OS**, migrado de Next.js/Prisma/Supabase a **Java 25 + Spring Boot 4.1 + Spring Modulith**, consumido por la app móvil **RenaserPlayStore** (React Native). Los 14 módulos del dominio están construidos, auditados y probados de punta a punta contra Postgres/Redis reales.
 
-> Documentos hermanos: [`docs/MODULOS_A_AVANZAR.md`](docs/MODULOS_A_AVANZAR.md) (qué se construyó y en qué orden), [`CLAUDE.md`](CLAUDE.md) (por qué se decidió cada pieza de la arquitectura), [`docs/BITACORA_ERRORES.md`](docs/BITACORA_ERRORES.md) (cada bug real encontrado, su causa y cómo evitarlo).
+> Documentos hermanos: [`docs/MODULOS_A_AVANZAR.md`](docs/MODULOS_A_AVANZAR.md) (qué se construyó y en qué orden), [`CLAUDE.md`](CLAUDE.md) (por qué se decidió cada pieza de la arquitectura), [`docs/BITACORA_ERRORES.md`](docs/BITACORA_ERRORES.md) (cada bug real encontrado, su causa y cómo evitarlo), [`docs/CUMPLIMIENTO_REQUISITOS.md`](docs/CUMPLIMIENTO_REQUISITOS.md) (los 45 requisitos del cliente contrastados uno por uno contra lo construido).
 
 ---
 
