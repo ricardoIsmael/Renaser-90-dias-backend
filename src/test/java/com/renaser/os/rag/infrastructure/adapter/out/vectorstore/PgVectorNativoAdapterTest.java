@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,7 +36,6 @@ import static org.mockito.Mockito.when;
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @Transactional
-@DirtiesContext
 class PgVectorNativoAdapterTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-25T12:00:00Z"));
