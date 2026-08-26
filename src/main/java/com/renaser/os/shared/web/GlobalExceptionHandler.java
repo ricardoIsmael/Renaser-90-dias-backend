@@ -107,6 +107,21 @@ public class GlobalExceptionHandler {
                 "Fecha u hora con formato invalido: se espera ISO-8601 (ej. 2026-08-25T10:00:00Z)");
     }
 
+    /**
+     * Cualquier otro rechazo del API de fecha/hora que NO sea de parseo.
+     *
+     * <p>El handler de arriba cubria solo {@code DateTimeParseException} y por eso dejaba
+     * pasar a sus hermanas: {@code ZoneId.of("basura")} lanza {@code ZoneRulesException}, que
+     * cuelga de {@code DateTimeException} por otra rama, y devolvia 500 con stacktrace al
+     * crear un evento con zona horaria invalida. Se captura la clase padre para cerrar la
+     * familia completa de una vez, en lugar de ir agregando una subclase por cada bug nuevo.
+     */
+    @ExceptionHandler(java.time.DateTimeException.class)
+    public ResponseEntity<ApiErrorResponse> handleValorTemporalInvalido(java.time.DateTimeException ex) {
+        return respond(HttpStatus.BAD_REQUEST,
+                "Valor de fecha, hora o zona horaria invalido");
+    }
+
     /** Verbo HTTP no soportado en esa ruta (ej. GET donde solo hay POST). */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ApiErrorResponse> handleMethodNotAllowed(HttpRequestMethodNotSupportedException ex) {

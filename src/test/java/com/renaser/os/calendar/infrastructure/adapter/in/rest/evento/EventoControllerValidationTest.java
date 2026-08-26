@@ -135,4 +135,27 @@ class EventoControllerValidationTest {
         assertThat(captor.getValue().notificarAlCrear()).isFalse();
         assertThat(captor.getValue().recordarPorEmail()).isFalse();
     }
+
+    /**
+     * El controller hace {@code ZoneId.of(r.timezone())} sobre texto que manda el cliente.
+     * Una zona inexistente lanza {@code ZoneRulesException}, que NO es
+     * {@code DateTimeParseException} ni {@code IllegalArgumentException}, asi que se escapaba
+     * de los dos handlers que ya existian y salia como 500 con stacktrace. Ver E-38 en la
+     * bitacora: la primera correccion capturo solo la subclase de parseo y dejo esta hermana
+     * abierta.
+     */
+    @Test
+    void crearEventoConTimezoneInexistenteDevuelve400YNoLlegaAlCasoDeUso() throws Exception {
+        mockMvc.perform(post("/api/v1/calendar/events")
+                        .header("X-Actor-Id", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Sesion","eventType":"ESPONTANEO","startsAt":"2026-09-01T19:00:00Z",
+                                 "locationType":"MEET","locationValue":"https://meet.google.com/abc",
+                                 "timezone":"America/Nolandia"}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(crearUseCase);
+    }
 }
