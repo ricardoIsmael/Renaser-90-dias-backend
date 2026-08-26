@@ -102,13 +102,16 @@ Ver la tabla consolidada en §5. Prioridad sugerida dentro de esta fase: primero
 
 ---
 
-## 4. Estado de la base de datos (verificado, sigue vigente)
+## 4. Estado de la base de datos (re-verificado 2026-08-26 contra el código real, no contra el análisis viejo)
 
-**75 de 90 tablas en uso (83%).** Las 15 restantes, agrupadas:
+**78 de 90 tablas en uso (87%).** Las 12 restantes, agrupadas:
 
-- **RAG/Renasia (6 tablas)** — ya NO aplica esta excusa: el módulo `rag` se construyó esta sesión y esas 6 tablas ya están en uso (`base_conocimiento`, `conversaciones_renasia`, `mensajes_renasia`, `fuentes_mensaje_renasia`, `informes_espejo_sombra`, `preguntas_confrontacion`). Actualizar el conteo si se vuelve a auditar.
-- **RBAC superado (D-21/D-40, 2 tablas)** — `rol_permiso`, `auditoria_cambios_rol`. Decisión ya tomada: los permisos se resuelven con el enum `UserRole` en código.
-- **Funciones de `habits` no construidas (7 tablas)** — `categorias_habito`, `iconos_habito`, `audioterapias`, `dias_semanales_habito`, `historial_cambios_horario`, `revisiones_semanales_sin_celular`, `mensajes_bienvenida`. **Coincide exactamente** con los GAPs de esta sesión (`habitsAdmin.ts` entero, `weekly-habit-days`, `habit-preferences`, `habits/:id/rename`) — dos auditorías independientes, misma conclusión: esas funciones del frontend nunca tuvieron backend.
+- **RBAC superado (D-21, 3 tablas)** — `permisos`, `rol_permiso`, `auditoria_cambios_rol`. Decisión ya tomada: los permisos se resuelven con el enum `UserRole` en código. `roles` (la 4ta tabla del set RBAC original) sí está en uso — `academy.RolesCatalogo` la lee por SQL nativo para traducir `roles.clave → UserRole`.
+- **Funciones de `habits` no construidas (7 tablas)** — `categorias_habito`, `iconos_habito`, `audioterapias`, `dias_semanales_habito`, `historial_cambios_horario`, `revisiones_semanales_sin_celular`, `mensajes_bienvenida`. **Coincide exactamente** con GAP-11/GAP-12 de este documento (`habitsAdmin.ts` entero, `weekly-habit-days`, `habit-preferences`, `habits/:id/rename`) — dos auditorías independientes, misma conclusión: esas funciones del frontend nunca tuvieron backend.
+- **Ranking por célula (1 tabla)** — `ranking_celulas`, documentado como pendiente en el propio código de `community` (`MiCelulaResponse`). Coincide con GAP-24 (ranking agregado).
+- **Catálogo de grupos sin lectura (1 tabla)** — `grupos` (`id, nombre, creado_en`). `academy` sí usa su tabla hija `miembros_grupo`, pero nada resuelve todavía `grupoId → nombre` — puede ser una función pendiente, no necesariamente un gap bloqueante.
+
+(El módulo `rag`, construido esta sesión, ya usa sus 6 tablas — `base_conocimiento`, `conversaciones_renasia`, `mensajes_renasia`, `fuentes_mensaje_renasia`, `informes_espejo_sombra`, `preguntas_confrontacion` — por eso el número subió de 75 a 78 respecto al análisis anterior.)
 
 ---
 
