@@ -221,4 +221,45 @@ class EvidenciaTest {
         Evidencia e = evidenciaTexto();
         assertThatThrownBy(() -> e.anularVeredicto("x")).isInstanceOf(IllegalStateException.class);
     }
+
+    // ---- anular = "override" del backend viejo: idempotencia + reversion de penalizacion ----
+
+    @Test
+    @DisplayName("anularVeredicto es idempotente: repetido sobre ANULADA_ADMIN no lanza, no pisa notas, devuelve false")
+    void anularVeredictoEsIdempotente() {
+        Evidencia e = evidenciaTexto();
+        e.aprobarPorIa();
+        e.anularVeredicto("primera anulacion");
+
+        boolean segundaRequiereReversion = e.anularVeredicto("segunda anulacion, deberia ser no-op");
+
+        assertThat(segundaRequiereReversion).isFalse();
+        assertThat(e.estadoValidacion()).isEqualTo(EstadoValidacion.ANULADA_ADMIN);
+        assertThat(e.notasValidacion()).isEqualTo("primera anulacion");
+    }
+
+    @Test
+    @DisplayName("anularVeredicto devuelve true y apaga penalizacionAplicada cuando la evidencia tenia una penalizacion")
+    void anularVeredictoSenalaReversionDePenalizacionYLaApaga() {
+        Evidencia e = Evidencia.rehydrate(EvidenciaId.newId(), participante(), destinoHabito(), TipoEvidencia.TEXTO,
+                null, null, "hecho", null, CLOCK.now(), null, null, false, EstadoValidacion.RECHAZADA,
+                "rechazada por IA", 3, true, false, CLOCK.now());
+
+        boolean requiereReversion = e.anularVeredicto("admin revierte el veredicto");
+
+        assertThat(requiereReversion).isTrue();
+        assertThat(e.penalizacionAplicada()).isFalse();
+        assertThat(e.estadoValidacion()).isEqualTo(EstadoValidacion.ANULADA_ADMIN);
+    }
+
+    @Test
+    @DisplayName("anularVeredicto devuelve false cuando no habia penalizacion aplicada")
+    void anularVeredictoSinPenalizacionDevuelveFalse() {
+        Evidencia e = evidenciaTexto();
+        e.aprobarPorIa();
+
+        boolean requiereReversion = e.anularVeredicto("sin penalizacion de por medio");
+
+        assertThat(requiereReversion).isFalse();
+    }
 }

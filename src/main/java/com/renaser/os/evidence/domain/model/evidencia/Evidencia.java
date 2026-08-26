@@ -31,6 +31,16 @@ public final class Evidencia {
     /** Espejo del CHECK {@code intentos_ia BETWEEN 0 AND 3}: al llegar a 3, cae a REVISION_MANUAL. */
     public static final int MAX_INTENTOS_IA = 3;
 
+    /** Puntos descontados cuando una evidencia de HABITO es rechazada (y revertidos si un
+     * admin anula ese veredicto, ver {@link #anularVeredicto}). Valor confirmado contra el
+     * backend viejo (`Backend90dias/RenaserBack/src/features/evidence-ai/service.ts:21`,
+     * {@code INVALID_EVIDENCE_PENALTY_POINTS} — "misma magnitud que la rotura de
+     * Santuario", ver {@code habits.SesionBloqueo.PENALIZACION_ROTURA_PUNTOS}). Quién
+     * aplica la penalización por primera vez sigue sin implementarse en este alcance
+     * (pregunta abierta #2 de docs/MODULO_EVIDENCE.md) — esta constante hoy solo la usa
+     * la reversión. */
+    public static final int PENALIZACION_EVIDENCIA_INVALIDA_PUNTOS = 10;
+
     private final EvidenciaId id;
     private final UserId participanteId;
     private final DestinoEvidencia destino;
@@ -121,14 +131,36 @@ public final class Evidencia {
         this.notasValidacion = notas;
     }
 
-    /** Un admin anula el veredicto (IA o manual) de una evidencia ya resuelta. */
-    public void anularVeredicto(String notas) {
+    /**
+     * Un admin anula el veredicto (IA o manual) de una evidencia ya resuelta — es el
+     * equivalente de este backend al "override" del backend viejo
+     * (`evidence-ai/service.ts:174`, `overrideEvidence`/`aiOverriddenByAdmin`): P-14
+     * (`docs/db/AUDITORIA_REDISENO_BD.md`) documenta que el enum {@code estado_validacion}
+     * reemplazó esa bandera junto a otras 3, así que {@code ANULADA_ADMIN} YA es
+     * "overrideada por admin" — no hace falta una columna ni un estado nuevo.
+     *
+     * <p><b>Idempotente</b>, igual que el viejo {@code overrideEvidence}: si ya estaba
+     * {@code ANULADA_ADMIN}, no hace nada (dos admins resolviendo la misma fila no es un
+     * error). Si la evidencia tenía una penalización aplicada, la apaga acá mismo y
+     * devuelve {@code true} para que el llamador ({@code EvidenciaService}, el único que
+     * conoce {@code points.api}) revierta los puntos — el dominio no importa `points`.
+     *
+     * @return {@code true} si había una penalización que revertir, {@code false} en
+     *         cualquier otro caso (incluida la llamada repetida, que es un no-op)
+     */
+    public boolean anularVeredicto(String notas) {
+        if (estadoValidacion == EstadoValidacion.ANULADA_ADMIN) {
+            return false;
+        }
         if (estadoValidacion != EstadoValidacion.VALIDA && estadoValidacion != EstadoValidacion.RECHAZADA) {
             throw new IllegalStateException(
                     "Solo se anula el veredicto de una evidencia VALIDA o RECHAZADA, esta esta en " + estadoValidacion);
         }
+        boolean teniaPenalizacion = this.penalizacionAplicada;
         this.estadoValidacion = EstadoValidacion.ANULADA_ADMIN;
         this.notasValidacion = notas;
+        this.penalizacionAplicada = false;
+        return teniaPenalizacion;
     }
 
     private void requireEnPendiente() {

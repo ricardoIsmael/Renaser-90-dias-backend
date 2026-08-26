@@ -5,6 +5,9 @@ import com.renaser.os.evidence.application.ports.out.evidencia.SaveEvidenciaPort
 import com.renaser.os.evidence.domain.model.evidencia.Evidencia;
 import com.renaser.os.evidence.domain.model.evidencia.EvidenciaId;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -38,5 +41,16 @@ class EvidenciaPersistenceAdapter implements LoadEvidenciaPort, SaveEvidenciaPor
     public Evidencia save(Evidencia evidencia) {
         var saved = repository.saveAndFlush(mapper.toEntity(evidencia));
         return mapper.toDomain(saved);
+    }
+
+    /**
+     * {@code limite + 1} filas (mismo truco que {@code community.PublicacionPersistenceAdapter.paginaDe}):
+     * el llamador sabe si hay página siguiente sin un COUNT aparte.
+     */
+    @Override
+    public List<Evidencia> buscar(FiltroEvidencia filtro, Instant cursor, int limite) {
+        Specification<EvidenciaJpaEntity> spec = EvidenciaSpecifications.filtro(filtro, cursor);
+        Pageable pageable = PageRequest.of(0, limite + 1, Sort.by(Sort.Direction.DESC, "creadoEn"));
+        return repository.findAll(spec, pageable).getContent().stream().map(mapper::toDomain).toList();
     }
 }

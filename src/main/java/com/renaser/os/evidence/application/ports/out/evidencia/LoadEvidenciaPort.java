@@ -1,7 +1,10 @@
 package com.renaser.os.evidence.application.ports.out.evidencia;
 
+import com.renaser.os.evidence.api.EstadoValidacion;
+import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase.TipoDestino;
 import com.renaser.os.evidence.domain.model.evidencia.Evidencia;
 import com.renaser.os.evidence.domain.model.evidencia.EvidenciaId;
+import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
 import java.util.List;
@@ -19,4 +22,26 @@ public interface LoadEvidenciaPort {
      * su vez cita el comentario original de este mismo índice en el baseline).
      */
     List<Evidencia> pendientesLote(Instant hasta, int limite);
+
+    /**
+     * Listado paginado por keyset, más nueva primero ({@code creadoEn} descendente) —
+     * mismo patrón que {@code community.LoadPublicacionPort.feed}: {@code cursor} es el
+     * {@code creadoEn} de la última evidencia ya cargada ({@code null} para la primera
+     * página), y {@code limite} es el tamaño de página deseado; el adaptador trae
+     * {@code limite + 1} filas para que el llamador sepa si hay más sin un COUNT aparte.
+     * Todos los campos de {@link FiltroEvidencia} son opcionales — filtro vacío = todas
+     * las evidencias visibles para quien haya resuelto el filtro (la autorización, quién
+     * puede pedir qué {@code participanteId}, vive en {@code EvidenciaService}, no acá).
+     */
+    List<Evidencia> buscar(FiltroEvidencia filtro, Instant cursor, int limite);
+
+    /**
+     * Filtro de {@link #buscar}. {@code null} en cualquier campo = sin restringir por
+     * ese campo. {@code desde}/{@code hasta} filtran por {@code creadoEn} (mismo campo
+     * que ordena el keyset, para que "evidencia subida en tal rango" y "página siguiente"
+     * hablen del mismo reloj).
+     */
+    record FiltroEvidencia(UserId participanteId, EstadoValidacion estado, TipoDestino tipoDestino, Instant desde,
+                            Instant hasta) {
+    }
 }
