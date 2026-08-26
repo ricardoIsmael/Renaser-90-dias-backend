@@ -114,6 +114,41 @@ class ConversacionRenasiaServiceTest {
     }
 
     @Test
+    void preguntarLiberaLaCuotaSiFallaLaBusquedaDeContexto() {
+        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5)))
+                .thenThrow(new RuntimeException("pgvector no disponible"));
+
+        assertThatThrownBy(() -> service.preguntar(pregunta(activo))).isInstanceOf(RuntimeException.class);
+
+        verify(controlCuotaRenasiaPort).liberar(activo);
+    }
+
+    @Test
+    void preguntarLiberaLaCuotaSiElStreamDeIaFalla() {
+        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5))).thenReturn(List.of());
+        when(chatIAPort.responder(anyString(), anyList()))
+                .thenReturn(Flux.error(new RuntimeException("Gemini no responde")));
+
+        assertThatThrownBy(() -> service.preguntar(pregunta(activo)).collectList().block())
+                .isInstanceOf(RuntimeException.class);
+
+        verify(controlCuotaRenasiaPort).liberar(activo);
+    }
+
+    @Test
+    void preguntarNoLiberaLaCuotaCuandoElStreamTerminaBien() {
+        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5))).thenReturn(List.of());
+        when(chatIAPort.responder(anyString(), anyList())).thenReturn(Flux.just("ok"));
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        verify(controlCuotaRenasiaPort, never()).liberar(any());
+    }
+
+    @Test
     void preguntarCreaLaConversacionCuandoElActorNuncaHablóConRenasia() {
         when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
         when(chatIAPort.responder(anyString(), anyList())).thenReturn(Flux.just("ok"));

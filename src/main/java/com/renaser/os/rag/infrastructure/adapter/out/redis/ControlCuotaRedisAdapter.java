@@ -51,6 +51,11 @@ class ControlCuotaRedisAdapter implements ControlCuotaRenasiaPort {
         return consumidos <= limiteDiario;
     }
 
+    @Override
+    public void liberar(UserId actorId) {
+        redisTemplate.opsForValue().decrement(claveDeHoy(actorId));
+    }
+
     private String claveDeHoy(UserId actorId) {
         return CLAVE_PREFIJO + actorId.value() + ":" + clock.today();
     }

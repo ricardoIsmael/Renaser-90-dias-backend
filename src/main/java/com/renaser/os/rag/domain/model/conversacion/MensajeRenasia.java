@@ -47,12 +47,14 @@ public final class MensajeRenasia {
                                          List<FuenteMensaje> fuentes, Instant ahora) {
         requireUsuarioId(usuarioId);
         requireContenido(contenido);
+        requireFuentesSoloDeAsistente(rol, fuentes);
         return new MensajeRenasia(MensajeRenasiaId.newId(), usuarioId, rol, contenido, List.copyOf(fuentes), ahora);
     }
 
     /** Solo para el adaptador de persistencia. */
     public static MensajeRenasia rehydrate(MensajeRenasiaId id, UserId usuarioId, RolMensaje rol, String contenido,
                                             List<FuenteMensaje> fuentes, Instant creadoEn) {
+        requireFuentesSoloDeAsistente(rol, fuentes);
         return new MensajeRenasia(id, usuarioId, rol, contenido, List.copyOf(fuentes), creadoEn);
     }
 
@@ -65,6 +67,16 @@ public final class MensajeRenasia {
     private static void requireContenido(String contenido) {
         if (contenido == null || contenido.isBlank()) {
             throw new IllegalArgumentException("El contenido del mensaje es obligatorio");
+        }
+    }
+
+    /** Las fuentes son citas de la base de conocimiento que respaldan una respuesta del
+     * ASISTENTE — un mensaje de USUARIO nunca puede llevarlas (auditoria adversarial: el
+     * adaptador de persistencia reconstruye objetos sin cruzar rol contra fuentes, asi que
+     * esta validacion tiene que vivir en el dominio, no confiar en que el llamador se porte bien). */
+    private static void requireFuentesSoloDeAsistente(RolMensaje rol, List<FuenteMensaje> fuentes) {
+        if (rol == RolMensaje.USUARIO && !fuentes.isEmpty()) {
+            throw new IllegalArgumentException("Un mensaje de USUARIO no puede tener fuentes");
         }
     }
 

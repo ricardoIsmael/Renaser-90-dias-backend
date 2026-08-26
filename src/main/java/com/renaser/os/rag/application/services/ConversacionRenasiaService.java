@@ -89,11 +89,16 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         requireActivo(command.actorId());
         requireCuotaDisponible(command.actorId());
 
-        buscarOCrearConversacion(command.actorId());
-        saveMensajeRenasiaPort.save(
-                MensajeRenasia.escribirDeUsuario(command.actorId(), command.pregunta(), clock.now()));
-
-        List<FragmentoRelevante> fragmentos = vectorStorePort.buscarSimilares(command.pregunta(), TOP_K);
+        List<FragmentoRelevante> fragmentos;
+        try {
+            buscarOCrearConversacion(command.actorId());
+            saveMensajeRenasiaPort.save(
+                    MensajeRenasia.escribirDeUsuario(command.actorId(), command.pregunta(), clock.now()));
+            fragmentos = vectorStorePort.buscarSimilares(command.pregunta(), TOP_K);
+        } catch (RuntimeException e) {
+            controlCuotaRenasiaPort.liberar(command.actorId());
+            throw e;
+        }
         List<String> contexto = fragmentos.stream().map(FragmentoRelevante::contenido).toList();
 
         StringBuilder respuestaCompleta = new StringBuilder();
@@ -101,7 +106,10 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                 .doOnNext(respuestaCompleta::append)
                 .doOnComplete(() -> persistirRespuestaAsistente(command.actorId(), respuestaCompleta.toString(),
                         fragmentos))
-                .doOnError(this::logFalloDeStreaming);
+                .doOnError(error -> {
+                    logFalloDeStreaming(error);
+                    controlCuotaRenasiaPort.liberar(command.actorId());
+                });
     }
 
     @Override

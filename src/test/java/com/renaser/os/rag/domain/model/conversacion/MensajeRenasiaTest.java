@@ -58,6 +58,25 @@ class MensajeRenasiaTest {
     }
 
     @Test
+    void rehydrateRechazaFuentesEnMensajeDeUsuario() {
+        List<FuenteMensaje> fuentes = List.of(FuenteMensaje.of("leccion-1"));
+
+        assertThatThrownBy(() -> MensajeRenasia.rehydrate(MensajeRenasiaId.newId(), usuarioId, RolMensaje.USUARIO,
+                "hola", fuentes, ahora))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rehydrateAceptaMensajeDeAsistenteConFuentes() {
+        List<FuenteMensaje> fuentes = List.of(FuenteMensaje.of("leccion-1"));
+
+        MensajeRenasia mensaje = MensajeRenasia.rehydrate(MensajeRenasiaId.newId(), usuarioId, RolMensaje.ASISTENTE,
+                "la respuesta", fuentes, ahora);
+
+        assertThat(mensaje.fuentes()).containsExactlyElementsOf(fuentes);
+    }
+
+    @Test
     void dosMensajesConDistintoIdNuncaSonIguales() {
         MensajeRenasia m1 = MensajeRenasia.escribirDeUsuario(usuarioId, "hola", ahora);
         MensajeRenasia m2 = MensajeRenasia.escribirDeUsuario(usuarioId, "hola", ahora);
