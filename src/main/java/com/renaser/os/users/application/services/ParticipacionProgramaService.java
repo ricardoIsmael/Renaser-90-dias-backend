@@ -8,6 +8,7 @@ import com.renaser.os.users.api.ParticipacionProgramaFinder.UsuarioConDiaProgram
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.AssignMentorToTraineeUseCase;
+import com.renaser.os.users.application.ports.in.participante.ConsultarSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.DeactivateSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.out.mentorprofile.LoadMentorProfilePort;
 import com.renaser.os.users.application.ports.out.participante.ConsultarResumenParticipacionPort;
@@ -38,7 +39,7 @@ import java.util.UUID;
  */
 @Service
 public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase, DeactivateSelfTrackingUseCase,
-        AssignMentorToTraineeUseCase, ParticipacionProgramaFinder {
+        ConsultarSelfTrackingUseCase, AssignMentorToTraineeUseCase, ParticipacionProgramaFinder {
 
     /**
      * Mismo conjunto que {@code requireRole(auth.data, ['MENTOR', 'MENTOR_LEAD', 'ADMIN', 'ALCHEMIST'])}
@@ -93,6 +94,19 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
         requireStaffRole(actor);
 
         return deleteParticipacionProgramaPort.deleteByParticipanteId(actor.id());
+    }
+
+    /**
+     * Verifica el actor igual que {@link #activate}/{@link #deactivate} — a diferencia de
+     * ellos NO exige rol de staff: un TRAINEE tiene participacion obligatoria y consultarla
+     * es legitimo, lo que no puede es activarla/desactivarla por esta via (E-38).
+     */
+    @Override
+    public boolean estaActivo(ConsultarSelfTrackingQuery query) {
+        User actor = requireActiveUserGuard.of(query.actorId());
+        return deParticipante(actor.id())
+                .map(com.renaser.os.users.api.ParticipacionPrograma::inscrito)
+                .orElse(false);
     }
 
     @Override

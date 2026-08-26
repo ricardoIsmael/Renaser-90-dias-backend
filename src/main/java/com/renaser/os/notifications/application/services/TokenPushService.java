@@ -11,16 +11,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class TokenPushService implements RegistrarTokenPushUseCase {
 
     private final UpsertTokenPushPort upsertTokenPushPort;
+    private final ActorNotificacionesGuard actorGuard;
     private final Clock clock;
 
-    public TokenPushService(UpsertTokenPushPort upsertTokenPushPort, Clock clock) {
+    public TokenPushService(UpsertTokenPushPort upsertTokenPushPort, ActorNotificacionesGuard actorGuard,
+                             Clock clock) {
         this.upsertTokenPushPort = upsertTokenPushPort;
+        this.actorGuard = actorGuard;
         this.clock = clock;
     }
 
     @Override
     @Transactional
     public TokenPush registrar(RegistrarTokenPushCommand command) {
+        actorGuard.requireActivo(command.usuarioId());
         TokenPush tokenPush = TokenPush.registrar(command.usuarioId(), command.token(), command.plataforma(), clock);
         return upsertTokenPushPort.upsertPorToken(tokenPush);
     }

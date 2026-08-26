@@ -1,12 +1,12 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.participante;
 
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.users.api.ParticipacionPrograma;
-import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase.ActivateSelfTrackingCommand;
 import com.renaser.os.users.application.ports.in.participante.AssignMentorToTraineeUseCase;
 import com.renaser.os.users.application.ports.in.participante.AssignMentorToTraineeUseCase.AssignMentorCommand;
+import com.renaser.os.users.application.ports.in.participante.ConsultarSelfTrackingUseCase;
+import com.renaser.os.users.application.ports.in.participante.ConsultarSelfTrackingUseCase.ConsultarSelfTrackingQuery;
 import com.renaser.os.users.application.ports.in.participante.DeactivateSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.DeactivateSelfTrackingUseCase.DeactivateSelfTrackingCommand;
 import jakarta.validation.Valid;
@@ -41,24 +41,22 @@ public class ParticipacionProgramaController {
 
     private final ActivateSelfTrackingUseCase activateUseCase;
     private final DeactivateSelfTrackingUseCase deactivateUseCase;
+    private final ConsultarSelfTrackingUseCase consultarUseCase;
     private final AssignMentorToTraineeUseCase assignMentorUseCase;
-    private final ParticipacionProgramaFinder finder;
 
     public ParticipacionProgramaController(ActivateSelfTrackingUseCase activateUseCase,
                                             DeactivateSelfTrackingUseCase deactivateUseCase,
-                                            AssignMentorToTraineeUseCase assignMentorUseCase,
-                                            ParticipacionProgramaFinder finder) {
+                                            ConsultarSelfTrackingUseCase consultarUseCase,
+                                            AssignMentorToTraineeUseCase assignMentorUseCase) {
         this.activateUseCase = activateUseCase;
         this.deactivateUseCase = deactivateUseCase;
+        this.consultarUseCase = consultarUseCase;
         this.assignMentorUseCase = assignMentorUseCase;
-        this.finder = finder;
     }
 
     @GetMapping("/api/v1/mentor/activate-tracking")
     public SelfTrackingStatusResponse status(@RequestHeader("X-Actor-Id") String actorId) {
-        boolean active = finder.deParticipante(UserId.of(actorId))
-                .map(ParticipacionPrograma::inscrito)
-                .orElse(false);
+        boolean active = consultarUseCase.estaActivo(new ConsultarSelfTrackingQuery(UserId.of(actorId)));
         return new SelfTrackingStatusResponse(active);
     }
 

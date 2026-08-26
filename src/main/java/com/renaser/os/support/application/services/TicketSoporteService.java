@@ -58,6 +58,7 @@ public class TicketSoporteService implements AbrirTicketSoporteUseCase, ListarTi
     @Override
     @Transactional
     public TicketSoporteVista abrir(AbrirTicketSoporteCommand command) {
+        requireActorExiste(command.usuarioId());
         CategoriaSoporte categoria = command.categoria() != null ? command.categoria() : CategoriaSoporte.OTRO;
         AdjuntoSoporte adjunto = command.adjuntoBucket() != null && command.adjuntoRuta() != null
                 ? new AdjuntoSoporte(command.adjuntoBucket(), command.adjuntoRuta())
@@ -69,6 +70,7 @@ public class TicketSoporteService implements AbrirTicketSoporteUseCase, ListarTi
 
     @Override
     public List<TicketSoporteVista> misTickets(UserId usuarioId) {
+        requireActorExiste(usuarioId);
         return loadTicketSoportePort.porUsuario(usuarioId).stream().map(this::aVista).toList();
     }
 
@@ -98,6 +100,7 @@ public class TicketSoporteService implements AbrirTicketSoporteUseCase, ListarTi
 
     @Override
     public UrlAdjuntoSoporte solicitar(SolicitarUrlAdjuntoCommand command) {
+        requireActorExiste(command.usuarioId());
         String ruta = PREFIJO_RUTA + command.usuarioId().value() + "/" + clock.now().toEpochMilli()
                 + extraerExtension(command.nombreArchivo());
         URI urlSubida = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
@@ -105,14 +108,37 @@ public class TicketSoporteService implements AbrirTicketSoporteUseCase, ListarTi
     }
 
     private void requireAdmin(UserId actorId) {
-        UserSummary actor = userSummaryFinder.findById(actorId)
-                .orElseThrow(() -> new NoSuchElementException("Actor no encontrado: " + actorId));
-        if (actor.status() != UserStatus.ACTIVE) {
-            throw new NotAuthorizedException("La cuenta esta suspendida");
-        }
+        UserSummary actor = requireActorActivo(actorId);
         if (actor.role() != UserRole.ADMIN && actor.role() != UserRole.ALCHEMIST) {
             throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST administran tickets de soporte");
         }
+    }
+
+    /**
+     * Solo verifica que el actor EXISTA — deliberadamente NO mira si esta suspendido.
+     *
+     * <p><b>Excepcion consciente a CLAUDE.MD §0.3</b> ("un SUSPENDED recibe 403"): soporte es
+     * el unico canal que le queda a una cuenta suspendida para reclamar su propia suspension.
+     * Bloquearlo la dejaria sin forma de pedir ayuda. La regla esta fijada por dos tests
+     * ({@code suspendidoSiPuedeAbrirTicketDeSoporte}, {@code suspendidoSiPuedeVerSuHistorial})
+     * que existen justamente para que nadie la "corrija" por simetria con el resto del sistema
+     * — atajaron ese intento durante la pasada de E-38.
+     *
+     * <p>Lo que SI aporta: un {@code X-Actor-Id} inexistente ahora falla como 404 acá, en vez
+     * de llegar hasta la violacion de FK en Postgres y salir como un 409 enganioso (E-38).
+     */
+    private UserSummary requireActorExiste(UserId actorId) {
+        return userSummaryFinder.findById(actorId)
+                .orElseThrow(() -> new NoSuchElementException("Actor no encontrado: " + actorId));
+    }
+
+    /** Para las rutas administrativas, donde la suspension SI bloquea (regla normal §0.3). */
+    private UserSummary requireActorActivo(UserId actorId) {
+        UserSummary actor = requireActorExiste(actorId);
+        if (actor.status() != UserStatus.ACTIVE) {
+            throw new NotAuthorizedException("La cuenta esta suspendida");
+        }
+        return actor;
     }
 
     private TicketSoporte requireTicket(TicketSoporteId id) {

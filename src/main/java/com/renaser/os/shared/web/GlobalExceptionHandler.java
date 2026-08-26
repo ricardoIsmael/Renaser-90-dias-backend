@@ -89,6 +89,24 @@ public class GlobalExceptionHandler {
         return respond(HttpStatus.BAD_REQUEST, "El valor de '" + ex.getName() + "' no tiene el formato esperado");
     }
 
+    /**
+     * Fecha/hora mal formada en un parametro que el controller parsea a mano
+     * ({@code Instant.parse(from)}, cursores de paginacion, {@code occurrenceStart}...).
+     *
+     * <p>Sin este handler devolvia 500 con el stacktrace COMPLETO en el cuerpo — filtrando
+     * al cliente rutas de clases internas y la cadena de filtros de Spring Security (E-38,
+     * encontrado probando {@code GET /calendar/events?from=notadate}). No alcanzaba con el
+     * handler de {@code IllegalArgumentException}: {@code DateTimeParseException} extiende
+     * {@code DateTimeException}, que NO es un {@code IllegalArgumentException} — un detalle
+     * facil de asumir al reves. Se resuelve aca, en el unico lugar que conoce HTTP, en vez
+     * de repetir un try/catch por cada parseo en cada controller.
+     */
+    @ExceptionHandler(java.time.format.DateTimeParseException.class)
+    public ResponseEntity<ApiErrorResponse> handleFechaInvalida(java.time.format.DateTimeParseException ex) {
+        return respond(HttpStatus.BAD_REQUEST,
+                "Fecha u hora con formato invalido: se espera ISO-8601 (ej. 2026-08-25T10:00:00Z)");
+    }
+
     /** Verbo HTTP no soportado en esa ruta (ej. GET donde solo hay POST). */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ApiErrorResponse> handleMethodNotAllowed(HttpRequestMethodNotSupportedException ex) {

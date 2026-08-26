@@ -5,8 +5,12 @@ import com.renaser.os.rocks.application.ports.in.verdugo.RegistrarEventoVerdugoU
 import com.renaser.os.rocks.application.ports.in.verdugo.ResolverEventosIgnoradosUseCase;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort.RolParticipante;
+import com.renaser.os.rocks.application.ports.out.rocadiaria.LoadRocaDiariaPort;
 import com.renaser.os.rocks.application.ports.out.verdugo.LoadEventoVerdugoPort;
 import com.renaser.os.rocks.application.ports.out.verdugo.SaveEventoVerdugoPort;
+import com.renaser.os.rocks.application.ports.out.verdugo.VerificarDestinoVerdugoPort;
+import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria;
+import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
 import com.renaser.os.rocks.domain.model.verdugo.EventoVerdugo;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -29,13 +33,19 @@ public class VerdugoService implements RegistrarEventoVerdugoUseCase, ConsultarE
     private final LoadEventoVerdugoPort loadEventoVerdugoPort;
     private final SaveEventoVerdugoPort saveEventoVerdugoPort;
     private final ConsultarProgresoParticipanteRocksPort progresoPort;
+    private final LoadRocaDiariaPort loadRocaDiariaPort;
+    private final VerificarDestinoVerdugoPort verificarDestinoPort;
     private final Clock clock;
 
     public VerdugoService(LoadEventoVerdugoPort loadEventoVerdugoPort, SaveEventoVerdugoPort saveEventoVerdugoPort,
-                           ConsultarProgresoParticipanteRocksPort progresoPort, Clock clock) {
+                           ConsultarProgresoParticipanteRocksPort progresoPort,
+                           LoadRocaDiariaPort loadRocaDiariaPort,
+                           VerificarDestinoVerdugoPort verificarDestinoPort, Clock clock) {
         this.loadEventoVerdugoPort = loadEventoVerdugoPort;
         this.saveEventoVerdugoPort = saveEventoVerdugoPort;
         this.progresoPort = progresoPort;
+        this.loadRocaDiariaPort = loadRocaDiariaPort;
+        this.verificarDestinoPort = verificarDestinoPort;
         this.clock = clock;
     }
 
@@ -43,9 +53,32 @@ public class VerdugoService implements RegistrarEventoVerdugoUseCase, ConsultarE
     @Transactional
     public EventoVerdugo registrar(RegistrarEventoVerdugoCommand command) {
         requireProgreso(command.actorId());
+        requireDestinoPropio(command);
         EventoVerdugo evento = EventoVerdugo.registrar(command.actorId(), command.destinoTipo(),
                 command.destinoId(), command.disparadoEn(), command.resultado(), clock);
         return saveEventoVerdugoPort.save(evento);
+    }
+
+    /**
+     * El destino tiene que ser del propio actor: sin esta verificacion, un aprendiz podia
+     * registrar eventos Verdugo apuntando a la roca o al registro de habito de OTRO
+     * participante (E-38) — quedaba una fila con su `participante_id` referenciando algo
+     * ajeno, y ensuciaba el historial del tercero. Mismo criterio que
+     * {@code RocaDiariaService.requireRocaPropia} y {@code RegistroService.requireSelf}.
+     */
+    private void requireDestinoPropio(RegistrarEventoVerdugoCommand command) {
+        boolean propio = switch (command.destinoTipo()) {
+            case ROCA_DIARIA -> loadRocaDiariaPort.byId(RocaDiariaId.of(command.destinoId()))
+                    .map(RocaDiaria::participanteId)
+                    .map(command.actorId()::equals)
+                    .orElseThrow(() -> new NoSuchElementException(
+                            "Roca diaria no encontrada: " + command.destinoId()));
+            case REGISTRO_HABITO -> verificarDestinoPort.registroHabitoPerteneceA(command.destinoId(),
+                    command.actorId());
+        };
+        if (!propio) {
+            throw new NotAuthorizedException("Ese destino no te pertenece");
+        }
     }
 
     @Override

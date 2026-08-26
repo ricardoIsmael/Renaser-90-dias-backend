@@ -9,6 +9,8 @@ import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase.ActivateSelfTrackingCommand;
 import com.renaser.os.users.application.ports.in.participante.AssignMentorToTraineeUseCase;
+import com.renaser.os.users.application.ports.in.participante.ConsultarSelfTrackingUseCase;
+import com.renaser.os.users.application.ports.in.participante.ConsultarSelfTrackingUseCase.ConsultarSelfTrackingQuery;
 import com.renaser.os.users.application.ports.in.participante.DeactivateSelfTrackingUseCase;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import org.junit.jupiter.api.Test;
@@ -51,28 +53,47 @@ class ParticipacionProgramaControllerTest {
     @MockitoBean
     private AssignMentorToTraineeUseCase assignMentorUseCase;
     @MockitoBean
-    private ParticipacionProgramaFinder finder;
+    private ConsultarSelfTrackingUseCase consultarUseCase;
 
     @Test
     void statusDevuelveActiveTrueCuandoElActorEstaInscripto() throws Exception {
         UserId actorId = UserId.of(UUID.randomUUID());
-        when(finder.deParticipante(actorId)).thenReturn(Optional.of(
-                new com.renaser.os.users.api.ParticipacionPrograma(actorId, true, 5, null,
-                        java.time.ZoneId.of("America/Lima"), FasePrograma.PHASE_1_REBIRTH, null, null,
-                        UserRole.MENTOR, false)));
+        when(consultarUseCase.estaActivo(new ConsultarSelfTrackingQuery(actorId))).thenReturn(true);
 
         mockMvc.perform(get("/api/v1/mentor/activate-tracking").header("X-Actor-Id", actorId.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.active").value(true));
     }
 
+    /**
+     * E-38: el GET consultaba el finder publico directo, sin verificar al actor — un
+     * {@code X-Actor-Id} inventado devolvia 200 {@code {"active":false}} en vez de 404,
+     * a diferencia del POST/DELETE de la MISMA ruta que si lo verificaban.
+     */
+    @Test
+    void statusConActorInexistenteDevuelve404YNoUn200Enganioso() throws Exception {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(consultarUseCase.estaActivo(new ConsultarSelfTrackingQuery(actorId)))
+                .thenThrow(new java.util.NoSuchElementException("Usuario no encontrado: " + actorId));
+
+        mockMvc.perform(get("/api/v1/mentor/activate-tracking").header("X-Actor-Id", actorId.toString()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void statusConActorSuspendidoDevuelve403() throws Exception {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(consultarUseCase.estaActivo(new ConsultarSelfTrackingQuery(actorId)))
+                .thenThrow(new NotAuthorizedException("Cuenta suspendida"));
+
+        mockMvc.perform(get("/api/v1/mentor/activate-tracking").header("X-Actor-Id", actorId.toString()))
+                .andExpect(status().isForbidden());
+    }
+
     @Test
     void statusDevuelveActiveFalseCuandoElActorNoEstaInscripto() throws Exception {
         UserId actorId = UserId.of(UUID.randomUUID());
-        when(finder.deParticipante(actorId)).thenReturn(Optional.of(
-                new com.renaser.os.users.api.ParticipacionPrograma(actorId, false, 0, null,
-                        java.time.ZoneId.of("America/Lima"), FasePrograma.PHASE_1_REBIRTH, null, null,
-                        UserRole.ADMIN, false)));
+        when(consultarUseCase.estaActivo(new ConsultarSelfTrackingQuery(actorId))).thenReturn(false);
 
         mockMvc.perform(get("/api/v1/mentor/activate-tracking").header("X-Actor-Id", actorId.toString()))
                 .andExpect(status().isOk())

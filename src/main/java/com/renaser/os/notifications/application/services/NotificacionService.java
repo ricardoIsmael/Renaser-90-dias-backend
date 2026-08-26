@@ -35,19 +35,28 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
     private final LoadPreferenciasPort loadPreferenciasPort;
     private final LoadTokenPushPort loadTokenPushPort;
     private final PushPort pushPort;
+    private final ActorNotificacionesGuard actorGuard;
     private final Clock clock;
 
     public NotificacionService(LoadNotificacionPort loadNotificacionPort, SaveNotificacionPort saveNotificacionPort,
                                 LoadPreferenciasPort loadPreferenciasPort, LoadTokenPushPort loadTokenPushPort,
-                                PushPort pushPort, Clock clock) {
+                                PushPort pushPort, ActorNotificacionesGuard actorGuard, Clock clock) {
         this.loadNotificacionPort = loadNotificacionPort;
         this.saveNotificacionPort = saveNotificacionPort;
         this.loadPreferenciasPort = loadPreferenciasPort;
         this.loadTokenPushPort = loadTokenPushPort;
         this.pushPort = pushPort;
+        this.actorGuard = actorGuard;
         this.clock = clock;
     }
 
+    /**
+     * SIN guard de actor a proposito (a diferencia de {@link #listar}/{@link #marcarLeida}/
+     * {@link #marcarTodas}): no lo invoca un usuario, lo invocan los listeners de eventos de
+     * OTROS modulos sobre un destinatario. Bloquear aca por cuenta suspendida rompería el
+     * flujo del outbox de Modulith — un suspendido igual debe acumular su bandeja, lo que no
+     * puede es leerla ni operarla (E-38).
+     */
     @Override
     @Transactional
     public Optional<Notificacion> emitir(EmitirNotificacionCommand command) {
@@ -78,6 +87,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
 
     @Override
     public List<Notificacion> listar(UserId actorId) {
+        actorGuard.requireActivo(actorId);
         Instant desde = clock.now().minus(Notificacion.RETENCION_DIAS, ChronoUnit.DAYS);
         return loadNotificacionPort.bandeja(actorId, desde, Notificacion.LIMITE_BANDEJA);
     }
@@ -85,6 +95,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
     @Override
     @Transactional
     public ResultadoLectura marcarLeida(UserId actorId, Long notificacionId) {
+        actorGuard.requireActivo(actorId);
         Instant ahora = clock.now();
         int actualizadas = saveNotificacionPort.marcarLeida(notificacionId, actorId, ahora);
         if (actualizadas == 0 && !loadNotificacionPort.existeDe(notificacionId, actorId)) {
@@ -97,6 +108,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
     @Override
     @Transactional
     public int marcarTodas(UserId actorId) {
+        actorGuard.requireActivo(actorId);
         return saveNotificacionPort.marcarTodasLeidas(actorId, clock.now());
     }
 }

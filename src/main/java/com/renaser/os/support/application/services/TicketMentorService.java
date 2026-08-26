@@ -15,6 +15,8 @@ import com.renaser.os.support.application.ports.out.ticketmentor.LoadTicketMento
 import com.renaser.os.support.application.ports.out.ticketmentor.SaveTicketMentorPort;
 import com.renaser.os.support.domain.model.ticketmentor.TicketMentor;
 import com.renaser.os.support.domain.model.ticketmentor.TicketMentorId;
+import com.renaser.os.users.api.ParticipacionPrograma;
+import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import com.renaser.os.users.api.UserRole;
@@ -38,16 +40,19 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
     private final SaveTicketMentorPort saveTicketMentorPort;
     private final BuscarBibliotecaPort buscarBibliotecaPort;
     private final UserSummaryFinder userSummaryFinder;
+    private final ParticipacionProgramaFinder participacionFinder;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public TicketMentorService(LoadTicketMentorPort loadTicketMentorPort, SaveTicketMentorPort saveTicketMentorPort,
                                 BuscarBibliotecaPort buscarBibliotecaPort, UserSummaryFinder userSummaryFinder,
+                                ParticipacionProgramaFinder participacionFinder,
                                 ApplicationEventPublisher events, Clock clock) {
         this.loadTicketMentorPort = loadTicketMentorPort;
         this.saveTicketMentorPort = saveTicketMentorPort;
         this.buscarBibliotecaPort = buscarBibliotecaPort;
         this.userSummaryFinder = userSummaryFinder;
+        this.participacionFinder = participacionFinder;
         this.events = events;
         this.clock = clock;
     }
@@ -68,6 +73,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
     public TicketMentor responder(ResponderTicketMentorCommand command) {
         requireRol(command.actorId(), UserRole.MENTOR, "Solo el mentor asignado puede responder un ticket");
         TicketMentor ticket = requireTicket(command.ticketId());
+        requireMentorAsignado(command.actorId(), ticket);
         ticket.responder(command.respuesta(), clock);
         TicketMentor saved = saveTicketMentorPort.save(ticket);
         events.publishEvent(new TicketMentorRespondidoEvent(saved.id(), saved.participanteId(), clock.now()));
@@ -79,6 +85,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
     public TicketMentor guardar(GuardarEnBibliotecaCommand command) {
         requireRol(command.actorId(), UserRole.MENTOR, "Solo el mentor asignado puede guardar en la biblioteca");
         TicketMentor ticket = requireTicket(command.ticketId());
+        requireMentorAsignado(command.actorId(), ticket);
         ticket.guardarEnBiblioteca();
         return saveTicketMentorPort.save(ticket);
     }
@@ -130,6 +137,21 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
         UserSummary actor = requireActor(actorId);
         if (actor.role() != requerido) {
             throw new NotAuthorizedException(mensaje);
+        }
+    }
+
+    /**
+     * El rol MENTOR no alcanza: tiene que ser EL mentor asignado a ese aprendiz. Antes
+     * faltaba esta verificacion y cualquier mentor podia responder o archivar el ticket de
+     * un aprendiz ajeno — el mensaje de error decia "solo el mentor asignado" pero el codigo
+     * solo miraba el rol (E-38, docs/BITACORA_ERRORES.md).
+     */
+    private void requireMentorAsignado(UserId actorId, TicketMentor ticket) {
+        UserId mentorAsignado = participacionFinder.deParticipante(ticket.participanteId())
+                .map(ParticipacionPrograma::mentorId)
+                .orElse(null);
+        if (!actorId.equals(mentorAsignado)) {
+            throw new NotAuthorizedException("Solo el mentor asignado a ese aprendiz puede operar su ticket");
         }
     }
 

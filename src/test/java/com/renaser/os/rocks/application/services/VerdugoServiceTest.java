@@ -4,8 +4,10 @@ import com.renaser.os.rocks.application.ports.in.verdugo.RegistrarEventoVerdugoU
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort.ProgresoParticipanteRocks;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort.RolParticipante;
+import com.renaser.os.rocks.application.ports.out.rocadiaria.LoadRocaDiariaPort;
 import com.renaser.os.rocks.application.ports.out.verdugo.LoadEventoVerdugoPort;
 import com.renaser.os.rocks.application.ports.out.verdugo.SaveEventoVerdugoPort;
+import com.renaser.os.rocks.application.ports.out.verdugo.VerificarDestinoVerdugoPort;
 import com.renaser.os.rocks.domain.model.verdugo.DestinoVerdugo;
 import com.renaser.os.rocks.domain.model.verdugo.EventoVerdugo;
 import com.renaser.os.rocks.domain.model.verdugo.EventoVerdugoId;
@@ -24,6 +26,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -44,14 +47,26 @@ class VerdugoServiceTest {
     private SaveEventoVerdugoPort saveEventoVerdugoPort;
     @Mock
     private ConsultarProgresoParticipanteRocksPort progresoPort;
+    @Mock
+    private LoadRocaDiariaPort loadRocaDiariaPort;
+    @Mock
+    private VerificarDestinoVerdugoPort verificarDestinoPort;
 
     private VerdugoService service;
     private UserId actorId;
 
     @BeforeEach
     void setUp() {
-        service = new VerdugoService(loadEventoVerdugoPort, saveEventoVerdugoPort, progresoPort, CLOCK);
+        service = new VerdugoService(loadEventoVerdugoPort, saveEventoVerdugoPort, progresoPort, loadRocaDiariaPort,
+                verificarDestinoPort, CLOCK);
         actorId = UserId.of(UUID.randomUUID());
+    }
+
+    /** Roca del propio actor, para los casos donde la pertenencia no es lo que se prueba. */
+    private com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria rocaDe(UserId dueno) {
+        return com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria.planificar(dueno, CLOCK.today(), 1,
+                "Roca de prueba", null, 5, false,
+                com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo.CUERPO, null, null, null, CLOCK);
     }
 
     private static ProgresoParticipanteRocks progreso(RolParticipante rol, boolean suspendido) {
@@ -93,13 +108,57 @@ class VerdugoServiceTest {
     @Test
     void registraElEventoConElResultadoDelCliente() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(false)));
+        var roca = rocaDe(actorId);
+        when(loadRocaDiariaPort.byId(roca.id())).thenReturn(Optional.of(roca));
         when(saveEventoVerdugoPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        var command = new RegistrarEventoVerdugoCommand(actorId, DestinoVerdugo.ROCA_DIARIA, UUID.randomUUID(),
+        var command = new RegistrarEventoVerdugoCommand(actorId, DestinoVerdugo.ROCA_DIARIA, roca.id().value(),
                 CLOCK.now(), ResultadoVerdugo.POSTERGADO);
         EventoVerdugo evento = service.registrar(command);
 
         assertThat(evento.resultado()).isEqualTo(ResultadoVerdugo.POSTERGADO);
+    }
+
+    @Test
+    @DisplayName("E-38: no se puede registrar un evento Verdugo contra la roca de OTRO participante")
+    void rocaDeOtroParticipanteRechazada() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(false)));
+        var rocaAjena = rocaDe(UserId.of(UUID.randomUUID()));
+        when(loadRocaDiariaPort.byId(rocaAjena.id())).thenReturn(Optional.of(rocaAjena));
+
+        var command = new RegistrarEventoVerdugoCommand(actorId, DestinoVerdugo.ROCA_DIARIA,
+                rocaAjena.id().value(), CLOCK.now(), ResultadoVerdugo.POSTERGADO);
+
+        assertThatThrownBy(() -> service.registrar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveEventoVerdugoPort, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    @DisplayName("E-38: no se puede registrar un evento Verdugo contra el registro de habito de OTRO participante")
+    void registroHabitoDeOtroParticipanteRechazado() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(false)));
+        UUID registroAjeno = UUID.randomUUID();
+        when(verificarDestinoPort.registroHabitoPerteneceA(registroAjeno, actorId)).thenReturn(false);
+
+        var command = new RegistrarEventoVerdugoCommand(actorId, DestinoVerdugo.REGISTRO_HABITO, registroAjeno,
+                CLOCK.now(), ResultadoVerdugo.POSTERGADO);
+
+        assertThatThrownBy(() -> service.registrar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveEventoVerdugoPort, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    @DisplayName("E-38: destino inexistente -> 404, no 403 (no existe, no es un problema de permiso)")
+    void rocaInexistenteDevuelveNotFound() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(false)));
+        UUID inexistente = UUID.randomUUID();
+        when(loadRocaDiariaPort.byId(com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId.of(inexistente)))
+                .thenReturn(Optional.empty());
+
+        var command = new RegistrarEventoVerdugoCommand(actorId, DestinoVerdugo.ROCA_DIARIA, inexistente,
+                CLOCK.now(), ResultadoVerdugo.POSTERGADO);
+
+        assertThatThrownBy(() -> service.registrar(command)).isInstanceOf(NoSuchElementException.class);
     }
 
     @Test

@@ -711,3 +711,111 @@ Relacionado (mismo agente de auditoría, ángulo de concurrencia): `GrabacionV90
 2. **Cuando dos módulos implementan la MISMA forma de máquina de estados de forma independiente (por diseño, ver `evidence`/`onboarding` — "análoga en forma pero independiente en código"), auditarlas una contra la otra es barato y efectivo**: si una tiene un guard que la otra no tiene para el mismo tipo de transición, es señal de un hueco real, no de una diferencia de diseño intencional — así se encontró este hallazgo.
 3. **Todo disparo de `@Async`/publish a un sistema externo que dependa de leer el estado recién guardado debe ir después del commit** (`TransactionSynchronizationManager.afterCommit()`), nunca dentro del método `@Transactional` — ya era la regla para Redis en `chat`, ahora es la regla general para cualquier disparo async post-persistencia.
 4. **La auditoría adversarial con agentes en paralelo, cada uno con un ángulo distinto (seguridad/concurrencia/lógica de negocio/integración) sobre el MISMO código, encuentra cosas que un solo pase no encuentra** — el hallazgo 2 fue reportado independientemente por el agente de concurrencia (el síntoma: disparo antes del commit) y por el agente de lógica de negocio (la causa raíz: falta de guards de estado) — dos ángulos distintos sobre el mismo bug real, que se complementaron en vez de duplicarse.
+
+## E-38 — Pasada exhaustiva de endpoints contra la app real: 3 bugs que ninguna auditoría de código había encontrado
+
+Tras el gate en verde, se probaron TODOS los endpoints REST del sistema uno por uno con `curl` contra la app corriendo (Postgres y Redis reales), con 5 agentes en paralelo, cada uno cubriendo un grupo de módulos, probando por endpoint: happy path, sin `X-Actor-Id`, actor inexistente, actor suspendido, actor sin permiso, y recurso inexistente. ~300 pruebas en total. Los 3 hallazgos, todos corregidos:
+
+**Bug 1 (ALTO) — `GET /calendar/events` con fecha mal formada devolvía 500 con el stacktrace COMPLETO en el cuerpo de la respuesta.**
+
+```bash
+curl -H "X-Actor-Id: <uuid>" "http://localhost:8080/api/v1/calendar/events?from=notadate&to=2027-01-01T00:00:00Z"
+# 500 + ~130 lineas de stacktrace Java: rutas de clases internas, cadena de filtros de Spring Security
+```
+
+**Causa real:** `EventoController` llama `Instant.parse(from)` sin try/catch. El `GlobalExceptionHandler` ya traducía `IllegalArgumentException` → 400, y era razonable asumir que cubría esto — pero **`DateTimeParseException` extiende `DateTimeException`, NO `IllegalArgumentException`**, así que caía al handler genérico de 500 filtrando información interna. El mismo patrón sin proteger existía en 6 lugares (`calendar` ×5 entre controller y request DTO, `chat` ×1 en el cursor de paginación); curiosamente `support` sí lo capturaba a mano en sus dos controllers, lo que muestra que el hueco era inconsistente, no sistemático.
+
+**Solución aplicada:** un `@ExceptionHandler(DateTimeParseException.class)` → 400 en el `GlobalExceptionHandler`, en vez de repetir try/catch en cada controller. Es el único lugar del sistema que conoce HTTP (CLAUDE.MD §5.4.4), así que cubre los 6 sitios de una y cualquier parseo futuro.
+
+**Bug 2 (MEDIO, seguridad) — `GET /me/cell` y `GET /me/cell/members` no verificaban cuenta suspendida.**
+
+Un usuario `SUSPENDIDO` recibía `404 {"assigned":false}` y `200 {"members":[]}` respectivamente, en vez de 403. Viola directamente CLAUDE.MD §0.3 ("un usuario SUSPENDED recibe 403 aunque su token sea válido"). **Causa real:** `CelulaService.miCelula()`/`misCompaneros()` no llamaban a `requireActorActivo(...)` — un helper que **ya existía en esa misma clase** y que los otros métodos del servicio sí usaban. No faltaba escribir la verificación, faltaba invocarla en dos métodos. **Solución:** agregado el llamado en ambos.
+
+**Bug 3 (BAJO, consistencia de autenticación) — `GET /mentor/activate-tracking` aceptaba un `X-Actor-Id` inventado y respondía 200.**
+
+Un UUID que no corresponde a ningún usuario devolvía `200 {"active":false}` en vez de 404, mientras que el `POST` y el `DELETE` de **la misma ruta** sí rechazaban al actor inexistente. **Causa real:** el `GET` del controller llamaba directo a `ParticipacionProgramaFinder.deParticipante(...)` como atajo. Ese finder es la **API pública para otros módulos** — que ya validaron su propio actor antes de llamar — y por eso, correctamente, no verifica nada. Usarlo desde un controller salteaba la única capa que sí debía verificar. **Solución:** se creó el caso de uso que faltaba (`ConsultarSelfTrackingUseCase`, implementado en `ParticipacionProgramaService` con el mismo `RequireActiveUserGuard` que sus hermanos) y el controller ahora lo usa. Nota de diseño: a diferencia de `activate`/`deactivate`, **no** exige rol de staff — un TRAINEE puede consultar su propia participación, lo que no puede es activarla/desactivarla por esa vía.
+
+**Cómo evitar que vuelva a pasar:**
+1. **Un `Finder` del paquete `api/` NUNCA debe inyectarse en un controller.** Es el contrato entre módulos, diseñado para consumidores que ya autenticaron; un controller es una frontera externa y necesita un caso de uso (`port/in`) que aplique los guards. Si un controller inyecta algo de `<modulo>.api`, es señal de que falta un caso de uso.
+2. **Cuando varios métodos comparten ruta (GET/POST/DELETE sobre el mismo recurso), verificar que TODOS apliquen la misma autenticación.** El bug 3 existía justamente porque dos de tres la aplicaban — la asimetría entre verbos hermanos es un lugar donde mirar específicamente.
+3. **No asumir qué jerarquía tiene una excepción de la librería estándar.** `DateTimeParseException` parece un "argumento ilegal" conceptualmente, pero no lo es en la jerarquía de Java. Ante un handler genérico, verificar la cadena real de herencia (`extends`) antes de darla por cubierta.
+4. **Probar endpoints contra la app real encuentra cosas que ninguna auditoría de código encontró.** Los 4 agentes de auditoría adversarial (E-37) leyeron este mismo código y no reportaron ninguno de estos 3 — porque los tres solo se manifiestan al ejercitar el borde exacto (una fecha basura, un UUID inventado, una cuenta suspendida en un endpoint puntual). Leer código y ejercitar código encuentran clases distintas de bugs; hacen falta los dos.
+
+**Bug 4 (MEDIO, IDOR) — `POST /enforcer-events` no verificaba que el destino fuera del propio actor.**
+
+Cualquier aprendiz podía registrar un evento Verdugo apuntando a la roca diaria o al registro de hábito de OTRO participante: la fila quedaba con su `participante_id` referenciando algo ajeno, rompiendo el invariante implícito de `eventos_verdugo` y ensuciando el historial del tercero. `VerdugoService.registrar` solo llamaba `requireProgreso(actorId)` — verificaba QUIÉN registra, nunca SOBRE QUÉ.
+
+**Solución:** `requireDestinoPropio(command)` antes de construir el evento. Para `ROCA_DIARIA` usa el `LoadRocaDiariaPort` que ya existía (tabla propia de `rocks`); para `REGISTRO_HABITO` — tabla de `habits` — se agregó `VerificarDestinoVerdugoPort`, una consulta acotada a "¿pertenece a este participante?", mismo criterio con el que este módulo ya lee `participantes_programa`. Destino inexistente da 404, destino ajeno 403 (distinguirlos importa: "no existe" y "no es tuyo" son respuestas distintas).
+
+**Bug 5 (ALTO, autorización) — cualquier MENTOR podía responder o archivar el ticket de un aprendiz ajeno.**
+
+`TicketMentorService.responder()`/`guardar()` llamaban `requireRol(actorId, UserRole.MENTOR, "Solo el mentor asignado puede...")` — el mensaje decía "el mentor asignado" pero el código **solo miraba el rol**, nunca comparaba contra el mentor realmente asignado a ese aprendiz. Un mentor cualquiera podía contestar tickets de aprendices que no son suyos.
+
+**Solución:** `requireMentorAsignado(actorId, ticket)`, que resuelve el mentor real vía `users.api.ParticipacionProgramaFinder` (el contrato público entre módulos, que ya exponía `mentorId`) y lo compara con el actor.
+
+**Bug 6 (ALTO, seguridad) — el módulo `notifications` ENTERO no validaba al actor en ningún endpoint.**
+
+Los 5 endpoints (`GET/PUT /notifications`, `GET/PATCH /notification-preferences`, `POST /push-tokens`) aceptaban cuentas SUSPENDIDAS y hasta `X-Actor-Id` inventados (devolvían `200 {"items":[]}` en vez de rechazar). Ninguno de los tres servicios del módulo inyectaba siquiera `UserSummaryFinder` — no era un chequeo mal hecho, era la ausencia total del chequeo.
+
+**Solución:** `ActorNotificacionesGuard`, una sola clase compartida por los 3 servicios en vez de tres copias del mismo método privado.
+
+**FALSO POSITIVO en el mismo hallazgo — `TicketSoporteService` NO era un bug, y "arreglarlo" rompió una regla de negocio deliberada.**
+
+El agente reportó, con la misma forma que el caso anterior, que las rutas de autoservicio de tickets de soporte (`abrir`/`misTickets`/`solicitar`) aceptaban cuentas suspendidas. Se aplicó el mismo guard que a `notifications`... y el gate falló con **dos tests que afirmaban exactamente lo contrario**:
+
+```
+suspendidoSiPuedeAbrirTicketDeSoporte
+    "seguridad INVERSA: un actor SUSPENDED SI puede abrir un ticket de soporte
+     (regla deliberada, docs/FEATURE_SUPPORT.md)"
+suspendidoSiPuedeVerSuHistorial
+```
+
+El cuerpo del propio test explica el porqué mejor que cualquier comentario: el mensaje de prueba es *"No puedo acceder a mi cuenta suspendida, necesito hablar con alguien"*. **Soporte es el único canal que le queda a una cuenta suspendida para reclamar su propia suspensión.** Bloquearlo la deja sin forma de pedir ayuda — es una excepción consciente a §0.3, no un olvido.
+
+**Solución real:** se revirtió el guard de suspensión en las 3 rutas de autoservicio y se dejó `requireActorExiste` (solo verifica existencia, no estado). Eso conserva la regla de negocio Y arregla la parte que sí era real: un `X-Actor-Id` inexistente ahora falla como 404 en el servicio, en vez de llegar hasta la violación de FK en Postgres y salir como un 409 engañoso. `requireActorActivo` (con chequeo de suspensión) queda solo para las rutas admin.
+
+**Lecciones — las más importantes de esta entrada:**
+
+8. **Un agente que audita contra una regla general va a reportar toda excepción legítima como violación.** El agente aplicó §0.3 correctamente; lo que no podía saber es que existía una excepción documentada. **La responsabilidad de distinguir "viola la regla" de "es la excepción a la regla" es de quien integra el hallazgo, no del que lo reporta.**
+9. **Los tests que fijan una regla contraintuitiva valen más que los que fijan la obvia.** Estos dos tests existían precisamente porque alguien anticipó que un futuro lector "corregiría" la asimetría por simetría con el resto del sistema. Atajaron ese intento exacto. Al escribir una excepción deliberada a una regla del proyecto, **el test que la fija no es opcional** — y su `@DisplayName` debe decir *por qué*, no solo *qué*.
+10. **Antes de aplicar un hallazgo de seguridad, correr los tests del módulo afectado.** No para ver si compila: para ver si algún test ya documentaba la intención contraria. Es más barato que el gate completo y agarra justo este caso.
+
+**Excepción deliberada, documentada en el código:** `NotificacionService.emitir()` **no** lleva guard. No lo invoca un usuario — lo invocan los listeners de eventos de otros módulos sobre un destinatario. Un suspendido debe seguir acumulando su bandeja (lo que no puede es leerla ni operarla), y bloquear ahí rompería el outbox de Modulith. Hay un test que fija ese comportamiento para que nadie lo "corrija" por simetría más adelante.
+
+**Lecciones adicionales de estos tres:**
+5. **Un mensaje de error que promete más de lo que el código verifica es una pista de bug, no solo un problema de redacción.** El texto "solo el mentor asignado" describía la intención del autor; el código implementaba la mitad. Al revisar autorización, vale leer el mensaje y preguntarse si el código realmente hace eso.
+6. **Verificar QUIÉN actúa no es verificar SOBRE QUÉ actúa.** Los bugs 4 y 5 comparten forma: el actor estaba correctamente autenticado y tenía el rol correcto, pero nadie comprobó que el recurso destino le correspondiera. Todo caso de uso que reciba un id de recurso en el comando necesita las dos verificaciones.
+7. **Cuando un módulo entero carece de una verificación, no aparece como "bug en el endpoint X" sino como ausencia total** — y por eso es fácil que pase inadvertido leyendo código módulo por módulo (no hay nada anómalo que ver; simplemente no está). Un chequeo barato: `grep -L "UserSummaryFinder\|requireActor" <servicios>` por módulo para listar los que NO lo mencionan.
+
+## E-39 — Dos procesos Maven a la vez sobre el mismo `target/` corrompen el build y simulan cientos de bugs que no existen
+
+**Síntoma exacto** (visto DOS veces el mismo día, con la misma firma):
+
+```
+[ERROR] Tests run: 1011, Failures: 4, Errors: 150
+...
+Caused by: java.lang.IllegalArgumentException: Not a managed type:
+    class com.renaser.os.academy.infrastructure.adapter.out.persistence.asignacion.AsignacionCursoJpaEntity
+```
+
+Cientos de errores en cascada, concentrados en módulos **que no se habían tocado**, quejándose de que una `@Entity` "no es un tipo gestionado". Al abrir el archivo, la anotación `@Entity` **está perfectamente ahí**.
+
+**Causa real:** algo más estaba escribiendo o borrando `target/classes` mientras el gate corría.
+
+- **Primera vez:** la app había quedado corriendo (`spring-boot:run`, PID 13708) desde la sesión de pruebas de endpoints. El `mvnw clean` del gate borró `target/classes` bajo los pies de la JVM viva, que tenía las clases cargadas y DevTools vigilando el directorio.
+- **Segunda vez:** error propio del supervisor — se lanzó `./mvnw -q compile` y `./mvnw test -Dtest=X` para verificaciones rápidas **mientras un `./mvnw clean test` seguía en vuelo**. Dos procesos Maven escribiendo el mismo `target/` se pisan.
+
+En ambos casos el código fuente estaba intacto: el build era el corrupto, no el programa.
+
+**Cómo reconocerlo en 10 segundos (antes de perder media hora diagnosticando):**
+1. Cientos de errores, no unos pocos.
+2. Concentrados en clases/módulos **que no tocaste en este cambio**.
+3. Firma tipo "Not a managed type", "NoClassDefFoundError", o un `ApplicationContext` que no levanta por beans que siempre funcionaron.
+4. Abrís el archivo señalado y **está bien**.
+
+Si se cumplen los cuatro: **es el entorno, no el código.** No empieces a "arreglar" nada.
+
+**Reglas para que no vuelva a pasar:**
+1. **Un solo proceso Maven a la vez, siempre.** Antes de lanzar un gate: `Get-CimInstance Win32_Process -Filter "Name='java.exe'"` y confirmar que no hay ni app corriendo ni otro Maven. Mientras un gate está en vuelo, **no correr NADA de Maven** — ni un `compile` "rapidito", ni un test puntual. Si hace falta verificar algo urgente, se espera o se mata el gate primero.
+2. **Cerrar la app antes del gate.** Un `spring-boot:run` vivo más un `clean` es la receta exacta de la primera ocurrencia. Especialmente peligroso porque la app puede haber quedado de una fase anterior de la misma sesión, sin que uno la recuerde.
+3. **Ante la duda, repetir el gate en un entorno limpio antes de diagnosticar.** Cuesta unos minutos; perseguir 150 errores fantasma cuesta mucho más.

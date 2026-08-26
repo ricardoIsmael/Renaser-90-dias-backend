@@ -5,27 +5,49 @@ spring:
     virtual:
       enabled: true
   datasource:
-    url: jdbc:postgresql://localhost:5433/renaser
-    username: postgres
-    password: postgres
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/renaser}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${SUPABASE_JWKS_URL:https://apvnaigldsjqeloiolcu.supabase.co/auth/v1/.well-known/jwks.json}
   ai:
     model:
       chat: none
       embedding: none
       vectorstore: none
-  # Sin credenciales de Gemini/Vertex configuradas todavia (bloqueante B-2 / checklist Pendiente,
-  # docs/MODULOS_A_AVANZAR.md): estas auto-configuraciones intentan instanciar el cliente de forma
-  # eager y tumban el arranque. Ningun modulo construido hasta ahora (users/points/phasecontracts/
-  # support/habits/rocks/notifications) usa IA -- se excluyen hasta que evidence/onboarding/rag
-  # (que si la necesitan) se construyan con sus credenciales reales. Mismo criterio que
-  # src/test/resources/application.yaml (E-15 en docs/BITACORA_ERRORES.md).
+  ai.google.genai.api-key: ${GOOGLE_GENAI_API_KEY:}
+  # D-51 (rag/conocimiento): text-embedding-004 da 768 dimensiones nativo, calza con
+  # `base_conocimiento.embedding vector(768)`. El default de Spring AI (gemini-embedding-001)
+  # da 3072 y rompería el CAST(? AS vector) en cada INSERT. Sin efecto hoy: la autoconfig de
+  # embeddings sigue excluida arriba hasta que haya credenciales (D-39); queda declarado para
+  # cuando se habilite.
+  ai.google.genai.embedding.text.model: ${RENASIA_EMBEDDING_MODEL:text-embedding-004}
   autoconfigure:
     exclude:
       - org.springframework.ai.model.google.genai.autoconfigure.chat.GoogleGenAiChatAutoConfiguration
       - org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiEmbeddingConnectionAutoConfiguration
       - org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiTextEmbeddingAutoConfiguration
       - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+
+renaser:
+  storage:
+    s3:
+      bucket: ${AWS_S3_BUCKET:s3-renaser90dias}
+      region: ${AWS_REGION:us-east-1}
+  web:
+    cors:
+      # Origenes del build web de Expo. En despliegue se sobreescribe con CORS_ORIGENES
+      # (lista separada por comas) — nunca usar `*`: con allowCredentials(true) el navegador
+      # lo rechaza, y ademas abriria la API a cualquier sitio.
+      origenes: ${CORS_ORIGENES:http://localhost:8081,http://localhost:19006,http://localhost:3000}
+  renasia:
+    # Tope diario de mensajes al chat de IA por aprendiz (D-48). Se cuenta en Redis, no en la
+    # BD (congelada, sin columna de contador). Al superarlo: 429. Ajustable sin recompilar.
+    limite-diario: ${RENASIA_LIMITE_DIARIO:25}

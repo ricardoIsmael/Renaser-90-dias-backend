@@ -184,6 +184,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
 
     @Override
     public Optional<MiCelula> miCelula(UserId traineeId) {
+        requireActorActivo(traineeId);
         CelulaId celulaId = consultarCelulaDeParticipantePort.celulaDeUsuario(traineeId).orElse(null);
         if (celulaId == null) {
             return Optional.empty();
@@ -198,6 +199,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
 
     @Override
     public List<PerfilBasico> misCompaneros(UserId traineeId) {
+        requireActorActivo(traineeId);
         return consultarCelulaDeParticipantePort.celulaDeUsuario(traineeId)
                 .map(celulaId -> consultarMiembrosCelulaPort.deCelula(celulaId).stream()
                         .map(this::perfilBasico).toList())

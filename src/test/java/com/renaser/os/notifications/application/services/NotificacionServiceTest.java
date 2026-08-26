@@ -9,7 +9,12 @@ import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPus
 import com.renaser.os.notifications.domain.model.notificacion.Notificacion;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,13 +55,17 @@ class NotificacionServiceTest {
     private LoadTokenPushPort loadTokenPushPort;
     @Mock
     private PushPort pushPort;
+    @Mock
+    private UserSummaryFinder userSummaryFinder;
 
     private NotificacionService service;
 
     @BeforeEach
     void setUp() {
         service = new NotificacionService(loadNotificacionPort, saveNotificacionPort, loadPreferenciasPort,
-                loadTokenPushPort, pushPort, CLOCK);
+                loadTokenPushPort, pushPort, new ActorNotificacionesGuard(userSummaryFinder), CLOCK);
+        lenient().when(userSummaryFinder.findById(any())).thenAnswer(inv -> Optional.of(
+                new UserSummary(inv.getArgument(0), "Test", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(saveNotificacionPort.guardar(any())).thenAnswer(inv -> {
             Notificacion n = inv.getArgument(0);
             return Notificacion.rehydrate(1L, n.usuarioId(), n.tipo(), n.titulo(), n.cuerpo(), n.rutaApp(),
@@ -166,5 +175,40 @@ class NotificacionServiceTest {
         int actualizadas = service.marcarTodas(actor);
 
         assertThat(actualizadas).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("E-38: una cuenta SUSPENDIDA no puede leer ni operar su bandeja")
+    void actorSuspendidoNoOperaLaBandeja() {
+        UserId actor = usuario();
+        when(userSummaryFinder.findById(actor)).thenReturn(Optional.of(
+                new UserSummary(actor, "Suspendido", null, UserRole.TRAINEE, UserStatus.SUSPENDED)));
+
+        assertThatThrownBy(() -> service.listar(actor)).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> service.marcarLeida(actor, 1L)).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> service.marcarTodas(actor)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveNotificacionPort, never()).marcarTodasLeidas(any(), any());
+    }
+
+    /**
+     * E-38: {@code emitir} es la excepcion deliberada — la invocan los listeners de eventos de
+     * otros modulos, no un usuario. Un suspendido debe seguir ACUMULANDO su bandeja (lo que no
+     * puede es leerla), y bloquear aca romperia el outbox de Modulith.
+     */
+    @Test
+    @DisplayName("E-38: emitir() ni siquiera consulta el estado del destinatario — un suspendido "
+            + "sigue acumulando bandeja (lo que no puede es leerla)")
+    void emitirNoVerificaElEstadoDelDestinatario() {
+        UserId destinatario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(destinatario, TipoNotificacion.MENSAJE_MENTOR))
+                .thenReturn(Optional.of(true));
+
+        Optional<Notificacion> emitida = service.emitir(new EmitirNotificacionCommand(destinatario,
+                TipoNotificacion.MENSAJE_MENTOR, "Titulo", "Cuerpo", null));
+
+        assertThat(emitida).isPresent();
+        verify(saveNotificacionPort).guardar(any());
+        // La asercion clave: el guard no se invoca en este camino, por eso da igual el estado.
+        verify(userSummaryFinder, never()).findById(any());
     }
 }

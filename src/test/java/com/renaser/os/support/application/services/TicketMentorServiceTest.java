@@ -31,6 +31,7 @@ class TicketMentorServiceTest {
 
     private InMemoryTicketMentorPort port;
     private FakeUserSummaryFinder actores;
+    private FakeParticipacionProgramaFinder participaciones;
     private RecordingEventPublisher events;
     private TicketMentorService service;
 
@@ -42,14 +43,16 @@ class TicketMentorServiceTest {
     void setUp() {
         port = new InMemoryTicketMentorPort();
         actores = new FakeUserSummaryFinder();
+        participaciones = new FakeParticipacionProgramaFinder();
         events = new RecordingEventPublisher();
-        service = new TicketMentorService(port, port, port, actores, events, CLOCK);
+        service = new TicketMentorService(port, port, port, actores, participaciones, events, CLOCK);
 
         trainee = UserId.of(UUID.randomUUID());
         mentor = UserId.of(UUID.randomUUID());
         admin = UserId.of(UUID.randomUUID());
         actores.conActor(trainee, UserRole.TRAINEE).conActor(mentor, UserRole.MENTOR)
                 .conActor(admin, UserRole.ADMIN);
+        participaciones.conMentorAsignado(trainee, mentor);
     }
 
     private TicketMentor abrirTicketDeTrainee() {
@@ -201,5 +204,36 @@ class TicketMentorServiceTest {
         TicketMentor ticket = service.abrir(command);
         assertThat(ticket.estado()).isEqualTo(EstadoTicketMentor.ABIERTO);
         assertThat(ticket.guardadoEnBiblioteca()).isFalse();
+    }
+
+    /**
+     * E-38: el rol MENTOR no alcanza — antes cualquier mentor podia responder o archivar el
+     * ticket de un aprendiz ajeno, aunque el mensaje de error ya decia "solo el mentor
+     * asignado". Encontrado probando endpoints contra la app real.
+     */
+    @Test
+    @DisplayName("E-38: un MENTOR que NO es el asignado al aprendiz no puede responder su ticket")
+    void mentorNoAsignadoNoPuedeResponder() {
+        TicketMentor ticket = abrirTicketDeTrainee();
+        UserId otroMentor = UserId.of(UUID.randomUUID());
+        actores.conActor(otroMentor, UserRole.MENTOR);
+
+        assertThatThrownBy(() -> service.responder(
+                new ResponderTicketMentorCommand(ticket.id(), otroMentor, "respuesta de un ajeno")))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThat(port.byId(ticket.id()).orElseThrow().estado()).isEqualTo(EstadoTicketMentor.ABIERTO);
+    }
+
+    @Test
+    @DisplayName("E-38: un MENTOR que NO es el asignado tampoco puede archivar el ticket en la biblioteca")
+    void mentorNoAsignadoNoPuedeGuardarEnBiblioteca() {
+        TicketMentor ticket = abrirTicketDeTrainee();
+        service.responder(new ResponderTicketMentorCommand(ticket.id(), mentor, "respuesta legitima"));
+        UserId otroMentor = UserId.of(UUID.randomUUID());
+        actores.conActor(otroMentor, UserRole.MENTOR);
+
+        assertThatThrownBy(() -> service.guardar(new GuardarEnBibliotecaCommand(ticket.id(), otroMentor)))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThat(port.byId(ticket.id()).orElseThrow().guardadoEnBiblioteca()).isFalse();
     }
 }

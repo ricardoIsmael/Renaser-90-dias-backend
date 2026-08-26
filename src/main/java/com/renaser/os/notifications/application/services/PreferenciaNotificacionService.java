@@ -24,17 +24,21 @@ public class PreferenciaNotificacionService implements GestionarPreferenciasUseC
 
     private final LoadPreferenciasPort loadPreferenciasPort;
     private final SavePreferenciaPort savePreferenciaPort;
+    private final ActorNotificacionesGuard actorGuard;
     private final Clock clock;
 
     public PreferenciaNotificacionService(LoadPreferenciasPort loadPreferenciasPort,
-                                           SavePreferenciaPort savePreferenciaPort, Clock clock) {
+                                           SavePreferenciaPort savePreferenciaPort,
+                                           ActorNotificacionesGuard actorGuard, Clock clock) {
         this.loadPreferenciasPort = loadPreferenciasPort;
         this.savePreferenciaPort = savePreferenciaPort;
+        this.actorGuard = actorGuard;
         this.clock = clock;
     }
 
     @Override
     public List<PreferenciaNotificacion> consultar(UserId actorId) {
+        actorGuard.requireActivo(actorId);
         Map<TipoNotificacion, PreferenciaNotificacion> guardadas = new LinkedHashMap<>();
         for (PreferenciaNotificacion pref : loadPreferenciasPort.porUsuario(actorId)) {
             guardadas.put(pref.tipo(), pref);
@@ -45,6 +49,7 @@ public class PreferenciaNotificacionService implements GestionarPreferenciasUseC
     @Override
     @Transactional
     public List<PreferenciaNotificacion> actualizar(ActualizarPreferenciasCommand command) {
+        actorGuard.requireActivo(command.actorId());
         for (ItemPreferencia item : command.preferencias()) {
             savePreferenciaPort.upsert(
                     PreferenciaNotificacion.de(command.actorId(), item.tipo(), item.habilitada(), clock));
