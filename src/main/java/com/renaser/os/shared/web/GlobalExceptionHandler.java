@@ -1,7 +1,9 @@
 package com.renaser.os.shared.web;
 
+import com.renaser.os.shared.domain.CredencialesInvalidasException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
+import com.renaser.os.shared.domain.SesionNoIniciadaException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +30,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NotAuthorizedException.class)
     public ResponseEntity<ApiErrorResponse> handleNotAuthorized(NotAuthorizedException ex) {
         return respond(HttpStatus.FORBIDDEN, ex.getMessage());
+    }
+
+    /** Login fallido: 401, no 403 — todavia no hay identidad establecida que autorizar o no. */
+    @ExceptionHandler(CredencialesInvalidasException.class)
+    public ResponseEntity<ApiErrorResponse> handleCredencialesInvalidas(CredencialesInvalidasException ex) {
+        return respond(HttpStatus.UNAUTHORIZED, ex.getMessage());
+    }
+
+    @ExceptionHandler(SesionNoIniciadaException.class)
+    public ResponseEntity<ApiErrorResponse> handleSesionNoIniciada(SesionNoIniciadaException ex) {
+        return respond(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
 
     @ExceptionHandler(NoSuchElementException.class)

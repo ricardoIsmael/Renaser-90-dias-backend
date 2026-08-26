@@ -8,6 +8,8 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -39,11 +41,40 @@ public class SecurityConfig {
         return PasswordEncoderFactories.createDelegatingPasswordEncoder();
     }
 
+    /**
+     * El mismo bean que usa el filtro de lectura (via {@code .securityContext(...)} abajo) y que
+     * {@link com.renaser.os.users.infrastructure.adapter.in.rest.autenticacion.AutenticacionController}
+     * usa para escribir el contexto tras un login exitoso. Tienen que ser el MISMO bean: si cada
+     * lado tuviera su propia instancia, el patron de guardado seguiria siendo compatible (los dos
+     * son {@code HttpSessionSecurityContextRepository}, sin estado propio mas alla de la key del
+     * atributo de sesion), pero declararlo una vez es lo que documenta la relacion y evita que
+     * alguien cambie uno sin el otro.
+     */
     @Bean
-    SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
+    SecurityContextRepository securityContextRepository() {
+        return new HttpSessionSecurityContextRepository();
+    }
+
+    /**
+     * Sin {@code sessionCreationPolicy}: la sesion la administra Spring Session sobre Redis
+     * (spring-session-data-redis, docs/MODULO_AUTH.md §4), no la {@code HttpSession} generica
+     * del contenedor. Poner {@code STATELESS} aca apagaria justo lo que se quiere usar.
+     *
+     * <p>Todavia sin {@code .authorizeHttpRequests(anyRequest().authenticated())}: eso es la
+     * fase 4 (migrar los 162 usos de {@code X-Actor-Id} en 54 controllers). Activarlo ahora
+     * dejaria a toda la API existente respondiendo 401 de golpe.
+     */
+    @Bean
+    SecurityFilterChain apiFilterChain(HttpSecurity http, SecurityContextRepository securityContextRepository)
+            throws Exception {
         http.securityMatcher("/api/v1/**")
                 .cors(Customizer.withDefaults())
+                // Sigue deshabilitado: la sesion todavia no es el mecanismo de auth EXIGIDO en
+                // ningun endpoint (X-Actor-Id sigue siendo lo que se valida, hasta la fase 4). El
+                // esquema de CSRF para cuando la cookie sea obligatoria queda pendiente y ya
+                // documentado (docs/MODULO_AUTH.md §5.2, D-31) — no se activa a medias.
                 .csrf(csrf -> csrf.disable())
+                .securityContext(ctx -> ctx.securityContextRepository(securityContextRepository))
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
         return http.build();
     }

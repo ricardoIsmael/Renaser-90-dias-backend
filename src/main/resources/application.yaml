@@ -12,6 +12,13 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  session:
+    store-type: redis
+    timeout: 30d
+    redis:
+      # indexed y no default: sin esto Redis no mantiene el indice por usuario, y no se puede
+      # cerrar todas las sesiones de alguien de un golpe (suspension, cambio de contrasena).
+      repository-type: indexed
   security:
     oauth2:
       resourceserver:
