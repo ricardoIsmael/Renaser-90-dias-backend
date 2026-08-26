@@ -55,6 +55,7 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
     @Transactional
     public EscribirComentarioUseCase.Resultado escribir(EscribirComentarioCommand command) {
         requireVisible(command.publicacionId());
+        requireActorHabilitado(command.autorId());
         Comentario comentario = Comentario.escribir(command.publicacionId(), command.autorId(), command.texto(),
                 clock.now());
         Comentario guardado = saveComentarioPort.save(comentario);
@@ -66,6 +67,7 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
     @Transactional
     public ComentarioVista editar(EditarComentarioCommand command) {
         Comentario comentario = requireComentarioVisible(command.comentarioId());
+        requireActorHabilitado(command.actorId());
         if (!comentario.autorId().equals(command.actorId())) {
             throw new NotAuthorizedException("No autorizado");
         }
@@ -77,6 +79,7 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
     @Transactional
     public OcultarComentarioUseCase.Resultado ocultar(OcultarComentarioCommand command) {
         Comentario comentario = requireComentarioVisible(command.comentarioId());
+        requireActorHabilitado(command.actorId());
         boolean puedeModerar = esModerador(command.actorId());
         if (!comentario.autorId().equals(command.actorId()) && !puedeModerar) {
             throw new NotAuthorizedException("No autorizado");
@@ -132,5 +135,23 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
                 .map(actor -> actor.status() == UserStatus.ACTIVE
                         && (actor.role() == UserRole.ADMIN || actor.role() == UserRole.ALCHEMIST))
                 .orElse(false);
+    }
+
+    /** Fail-closed, mismo criterio que {@code esModerador}: actor inexistente o suspendido
+     * -> false, nunca una excepcion de tipo distinto — se llama siempre DESPUES de
+     * confirmar visibilidad, para que cualquier fallo de actor caiga a 403 y no a un 404
+     * con mensaje distinto que delataria que el recurso SI existe (auditoria E2E
+     * adversarial: escribir/editar/ocultar un comentario no chequeaban el estado del actor
+     * en absoluto). */
+    private boolean actorActivo(UserId actorId) {
+        return userSummaryFinder.findById(actorId)
+                .map(actor -> actor.status() == UserStatus.ACTIVE)
+                .orElse(false);
+    }
+
+    private void requireActorHabilitado(UserId actorId) {
+        if (!actorActivo(actorId)) {
+            throw new NotAuthorizedException("Cuenta inexistente o suspendida");
+        }
     }
 }

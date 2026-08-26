@@ -107,6 +107,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Transactional
     public PublicacionVista editar(EditarPublicacionCommand command) {
         Publicacion publicacion = requireVisible(command.publicacionId());
+        requireActorHabilitado(command.actorId());
         if (!publicacion.autorId().equals(command.actorId())) {
             throw new NotAuthorizedException("No autorizado");
         }
@@ -119,6 +120,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Transactional
     public void ocultar(OcultarPublicacionCommand command) {
         Publicacion publicacion = requireVisible(command.publicacionId());
+        requireActorHabilitado(command.actorId());
         boolean puedeModerar = esModerador(command.actorId());
         if (!publicacion.autorId().equals(command.actorId()) && !puedeModerar) {
             throw new NotAuthorizedException("No autorizado");
@@ -148,6 +150,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Transactional
     public ResultadoReaccion reaccionar(ReaccionarCommand command) {
         requireVisible(command.publicacionId());
+        requireActorHabilitado(command.actorId());
         TipoReaccion existente = reaccionMuroPort.deUsuario(command.publicacionId(), command.actorId()).orElse(null);
         ReaccionMuro.ResultadoToggle resultado = ReaccionMuro.calcularToggle(existente, command.tipo());
         boolean reaccionado;
@@ -288,5 +291,23 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
             throw new NotAuthorizedException("La cuenta esta suspendida");
         }
         return actor;
+    }
+
+    /** Fail-closed, mismo criterio que {@code esModerador}: actor inexistente o suspendido
+     * -> false, nunca una excepcion de tipo distinto. Se usa DESPUES de confirmar que el
+     * recurso es visible (a diferencia de {@code requireActorActivo}, que se usa donde no
+     * hay un recurso previo que filtrar) — asi cualquier fallo de actor cae siempre a 403,
+     * nunca a un 404 con mensaje distinto que delataria, por comparacion, que el recurso SI
+     * existe (auditoria E2E adversarial; mismo motivo que el fail-closed de esModerador). */
+    private boolean actorActivo(UserId actorId) {
+        return userSummaryFinder.findById(actorId)
+                .map(actor -> actor.status() == UserStatus.ACTIVE)
+                .orElse(false);
+    }
+
+    private void requireActorHabilitado(UserId actorId) {
+        if (!actorActivo(actorId)) {
+            throw new NotAuthorizedException("Cuenta inexistente o suspendida");
+        }
     }
 }

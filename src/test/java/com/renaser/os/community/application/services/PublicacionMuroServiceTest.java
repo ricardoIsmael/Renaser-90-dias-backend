@@ -2,6 +2,7 @@ package com.renaser.os.community.application.services;
 
 import com.renaser.os.community.api.PublicacionCreadaEvent;
 import com.renaser.os.community.application.ports.in.categoria.ConsultarCategoriasMuroUseCase;
+import com.renaser.os.community.application.ports.in.publicacion.EditarPublicacionUseCase.EditarPublicacionCommand;
 import com.renaser.os.community.application.ports.in.publicacion.OcultarPublicacionUseCase.OcultarPublicacionCommand;
 import com.renaser.os.community.application.ports.in.publicacion.PublicarUseCase.ArchivoEntrada;
 import com.renaser.os.community.application.ports.in.publicacion.PublicarUseCase.PublicarCommand;
@@ -76,6 +77,7 @@ class PublicacionMuroServiceTest {
     private final UserId autor = UserId.of(UUID.randomUUID());
     private final UserId otro = UserId.of(UUID.randomUUID());
     private final UserId admin = UserId.of(UUID.randomUUID());
+    private final UserId suspendido = UserId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
@@ -88,6 +90,8 @@ class PublicacionMuroServiceTest {
                 .thenReturn(Optional.of(new UserSummary(otro, "Otro", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
+        lenient().when(userSummaryFinder.findById(suspendido)).thenReturn(
+                Optional.of(new UserSummary(suspendido, "Suspendido", null, UserRole.TRAINEE, UserStatus.SUSPENDED)));
         lenient().when(consultarPerfilUsuarioPort.porId(any())).thenReturn(Optional.empty());
         lenient().when(reaccionMuroPort.contarPorTipo(any())).thenReturn(Map.of());
         lenient().when(loadComentarioPort.contar(any())).thenReturn(0);
@@ -183,5 +187,37 @@ class PublicacionMuroServiceTest {
 
         assertThat(resultado.reaccionado()).isTrue();
         verify(reaccionMuroPort).upsert(publicacion.id(), otro, TipoReaccion.NO_ME_GUSTA);
+    }
+
+    /** Regresion (auditoria E2E adversarial): reaccionar/editar/ocultar no chequeaban el
+     * estado del actor en absoluto — a diferencia de publicar/feed, que si lo hacian. */
+    @Test
+    void reaccionarConActorSuspendidoFalla() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        var command = new ReaccionarCommand(suspendido, publicacion.id(), TipoReaccion.ME_GUSTA);
+        assertThatThrownBy(() -> service.reaccionar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(reaccionMuroPort, never()).upsert(any(), any(), any());
+    }
+
+    @Test
+    void editarConActorSuspendidoFalla() {
+        Publicacion publicacion = publicacionVisible(suspendido);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        var command = new EditarPublicacionCommand(suspendido, publicacion.id(), "nuevo texto", unaFoto());
+        assertThatThrownBy(() -> service.editar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePublicacionPort, never()).save(any());
+    }
+
+    @Test
+    void ocultarConActorSuspendidoFalla() {
+        Publicacion publicacion = publicacionVisible(suspendido);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        var command = new OcultarPublicacionCommand(suspendido, publicacion.id());
+        assertThatThrownBy(() -> service.ocultar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePublicacionPort, never()).save(any());
     }
 }

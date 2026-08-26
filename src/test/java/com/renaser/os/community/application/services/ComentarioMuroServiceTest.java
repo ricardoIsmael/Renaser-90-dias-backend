@@ -60,6 +60,7 @@ class ComentarioMuroServiceTest {
     private final UserId autor = UserId.of(UUID.randomUUID());
     private final UserId otro = UserId.of(UUID.randomUUID());
     private final UserId admin = UserId.of(UUID.randomUUID());
+    private final UserId suspendido = UserId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
@@ -70,6 +71,10 @@ class ComentarioMuroServiceTest {
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(otro))
                 .thenReturn(Optional.of(new UserSummary(otro, "Otro", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        lenient().when(userSummaryFinder.findById(autor))
+                .thenReturn(Optional.of(new UserSummary(autor, "Autor", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        lenient().when(userSummaryFinder.findById(suspendido)).thenReturn(
+                Optional.of(new UserSummary(suspendido, "Suspendido", null, UserRole.TRAINEE, UserStatus.SUSPENDED)));
     }
 
     private Publicacion publicacionVisible() {
@@ -144,5 +149,39 @@ class ComentarioMuroServiceTest {
 
         var command = new EscribirComentarioCommand(autor, oculta.id(), "hola");
         assertThatThrownBy(() -> service.escribir(command)).isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
+    /** Regresion (auditoria E2E adversarial): escribir/editar/ocultar un comentario no
+     * chequeaban el estado del actor en absoluto -- un SUSPENDIDO pasaba sin problema. */
+    @Test
+    void escribirConActorSuspendidoFalla() {
+        Publicacion publicacion = publicacionVisible();
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        var command = new EscribirComentarioCommand(suspendido, publicacion.id(), "hola");
+        assertThatThrownBy(() -> service.escribir(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveComentarioPort, never()).save(any());
+    }
+
+    @Test
+    void editarConActorSuspendidoFalla() {
+        Publicacion publicacion = publicacionVisible();
+        Comentario comentario = comentarioDe(suspendido, publicacion.id());
+        when(loadComentarioPort.porId(comentario.id())).thenReturn(Optional.of(comentario));
+
+        var command = new EditarComentarioCommand(suspendido, comentario.id(), "nuevo texto");
+        assertThatThrownBy(() -> service.editar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveComentarioPort, never()).save(any());
+    }
+
+    @Test
+    void ocultarConActorSuspendidoFalla() {
+        Publicacion publicacion = publicacionVisible();
+        Comentario comentario = comentarioDe(suspendido, publicacion.id());
+        when(loadComentarioPort.porId(comentario.id())).thenReturn(Optional.of(comentario));
+
+        var command = new OcultarComentarioCommand(suspendido, comentario.id());
+        assertThatThrownBy(() -> service.ocultar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveComentarioPort, never()).save(any());
     }
 }
