@@ -7,10 +7,21 @@ spring:
   autoconfigure:
     exclude:
       # Sin credenciales de Gemini/Vertex en este entorno de test — los tests no llaman
-      # IA todavia (evidence/onboarding/rag no estan construidos). El selector
-      # spring.ai.model.* no alcanzo a desactivar el autoconfig de conexion de
-      # embeddings, asi que se excluye la clase de punta a punta (E-15 en la bitacora).
+      # IA de verdad (rag usa adaptadores NoOp). El selector spring.ai.model.* no alcanzo
+      # a desactivar el autoconfig de conexion de embeddings, asi que se excluye la clase
+      # de punta a punta (E-15 en la bitacora).
       - org.springframework.ai.model.google.genai.autoconfigure.chat.GoogleGenAiChatAutoConfiguration
       - org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiEmbeddingConnectionAutoConfiguration
       - org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiTextEmbeddingAutoConfiguration
       - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+
+# Este archivo REEMPLAZA a src/main/resources/application.yaml en el classpath de test
+# (mismo nombre: gana el de test), NO lo complementa — toda propiedad que un bean resuelva
+# con @Value tiene que estar TAMBIEN aca o el contexto no levanta. Va al final, fuera del
+# bloque `spring:`, para no partirlo por accidente.
+renaser:
+  web:
+    cors:
+      origenes: http://localhost:8081
+  renasia:
+    limite-diario: 25

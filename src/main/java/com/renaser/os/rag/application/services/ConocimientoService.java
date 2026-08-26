@@ -1,0 +1,57 @@
+package com.renaser.os.rag.application.services;
+
+import com.renaser.os.rag.application.ports.in.conocimiento.IndexarConocimientoUseCase;
+import com.renaser.os.rag.application.ports.out.conocimiento.SaveChunkConocimientoPort;
+import com.renaser.os.rag.application.ports.out.ia.EmbeddingPort;
+import com.renaser.os.rag.domain.model.conocimiento.ChunkConocimiento;
+import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.UserSummaryFinder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.NoSuchElementException;
+
+/** Único caso de uso del agregado {@code conocimiento}: la ingesta administrada (D-46). */
+@Service
+public class ConocimientoService implements IndexarConocimientoUseCase {
+
+    private final SaveChunkConocimientoPort saveChunkConocimientoPort;
+    private final EmbeddingPort embeddingPort;
+    private final UserSummaryFinder userSummaryFinder;
+    private final Clock clock;
+
+    public ConocimientoService(SaveChunkConocimientoPort saveChunkConocimientoPort, EmbeddingPort embeddingPort,
+                                UserSummaryFinder userSummaryFinder, Clock clock) {
+        this.saveChunkConocimientoPort = saveChunkConocimientoPort;
+        this.embeddingPort = embeddingPort;
+        this.userSummaryFinder = userSummaryFinder;
+        this.clock = clock;
+    }
+
+    @Override
+    @Transactional
+    public ChunkIndexado indexar(IndexarConocimientoCommand command) {
+        requireAdmin(command.actorId());
+        var embedding = embeddingPort.generar(command.contenido());
+        var chunk = ChunkConocimiento.indexar(command.tipoFuente(), command.clase(), command.documentoId(),
+                command.leccionId(), command.contenido(), embedding, command.metadatos(), clock);
+        var guardado = saveChunkConocimientoPort.save(chunk);
+        return new ChunkIndexado(guardado.id().value());
+    }
+
+    private void requireAdmin(UserId actorId) {
+        UserSummary actor = userSummaryFinder.findById(actorId)
+                .orElseThrow(() -> new NoSuchElementException("Actor no encontrado: " + actorId));
+        if (actor.status() != UserStatus.ACTIVE) {
+            throw new NotAuthorizedException("Cuenta suspendida");
+        }
+        if (actor.role() != UserRole.ADMIN && actor.role() != UserRole.ALCHEMIST) {
+            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST indexan conocimiento");
+        }
+    }
+}
