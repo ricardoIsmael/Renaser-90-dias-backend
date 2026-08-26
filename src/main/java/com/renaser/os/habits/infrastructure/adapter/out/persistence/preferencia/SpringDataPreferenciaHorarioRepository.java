@@ -9,4 +9,7 @@ interface SpringDataPreferenciaHorarioRepository
         extends JpaRepository<PreferenciaHorarioJpaEntity, PreferenciaHorarioPk> {
 
     Optional<PreferenciaHorarioJpaEntity> findByParticipanteIdAndHabitoId(UUID participanteId, UUID habitoId);
+
+    java.util.List<PreferenciaHorarioJpaEntity> findByParticipanteIdAndHabitoIdIn(UUID participanteId,
+                                                                                    java.util.Collection<UUID> habitoIds);
 }

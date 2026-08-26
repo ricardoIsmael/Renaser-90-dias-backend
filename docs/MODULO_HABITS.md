@@ -295,3 +295,158 @@ habits/
 
 - **No verificado contra `rocks`/`academy` en vivo**: se siguió la corrección del coordinador de que los tres exponen `BigDecimal` escala 1, pero no se leyó el código de esos dos módulos (fuera del alcance de este agente — reglas duras del encargo).
 - **`points` (consumidor) no existe todavía** en este repo — el contrato de `PorcentajeHabitosFinder` es especulativo hasta que se construya y se confirme que encaja.
+
+---
+
+## 10. "Espíritu" (audioterapia diaria) — completado 2026-08-26
+
+**Encargo:** D-H5 tenía `espiritu/` como solo-dominio (`RegistroEspiritu`, `EstadoRegistroEspiritu`, `RegistroEspirituId`, y ya existían los puertos `Load/SaveRegistroEspirituPort`). Esta pasada cierra el agregado de punta a punta: casos de uso, persistencia, controller y el catálogo de audios detrás de un puerto (sin integrar Drive — pedido explícito del encargo).
+
+### 10.1 Paso 0 — reglas verificadas contra el repo viejo (`C:\Users\Usuario\Documents\Backend90dias\RenaserBack`, `src/features/spirit-audio/service.ts`)
+
+- **Hora de desbloqueo 7:00, hora límite 12:00**, hora local del participante (`UNLOCK_HOUR`/`DEADLINE_HOUR`, service.ts:55-56).
+- **`AUDIO_UNLOCK_START_DAY = 7`**: `audioDay = diaPrograma - 7` → diaPrograma 8 da audioDay 1 (confirmado con el cliente 2026-08-10 según el comentario del repo viejo; verificado, no asumido).
+- **State machine lazy (`ensureAdvanced`)**: se evalúa en cada lectura de estado y en cada entrega, nunca por un cron dedicado — auto-sanador. Sin track → crea el primero si `audioDay >= 1` y el catálogo tiene ese día. Con track: si el último es de hoy, no-op; si es de un día anterior, resuelve PENDIENTE→PERDIDO (si corresponde) y aplica el bloqueo de exactamente un día tras un PERDIDO antes de desbloquear el siguiente.
+- **`RegistroEspiritu.entregar()` — CORREGIDO Y CONFIRMADO** (ver §10.2): una entrega fuera de plazo queda PENDIENTE, no lanza excepción.
+- **Fuera de alcance, decisión explícita (CLAUDE.MD §0.6):** el espejo hacia "Pastilla Renacer" (repo viejo: una entrega a tiempo completa además ese hábito JOURNALING, `completePastillaRenacerTrack`, best-effort/no-fatal) **no se replicó**. No estaba en el encargo explícito de esta pasada, y hacerlo bien en Spring exige aislar esa escritura en su propia transacción (`REQUIRES_NEW`) para no arriesgar marcar la transacción principal como rollback-only ante un fallo en un hábito ajeno — se prefirió no improvisarlo. Pregunta abierta para una pasada futura.
+- **Catálogo de audios (`audios_espiritu`) detrás de `AudioCatalogPort`**, con `NoOpAudioCatalogAdapter` (mismo patrón que `NoOpAlmacenamientoAdapter`/`NoOpEvidenciaValidacionIAAdapter`) — sin credenciales de Drive, el catálogo devuelve vacío y el aprendiz queda "al día", nunca en error.
+
+### 10.2 Corrección confirmada por el dueño del producto (2026-08-26)
+
+**La regla "una entrega fuera de plazo queda PENDIENTE, no se rechaza" fue confirmada explícitamente por el dueño del producto (Luis/Ricardo) el 2026-08-26** — no es una inferencia de este agente ni un simple "portado del repo viejo": es la corrección de un bug real que tenía `RegistroEspiritu.entregar()` (tiraba `IllegalStateException` fuera de plazo). Con esta confirmación, la regla queda **cerrada** — no hay que volver a preguntarla. `RegistroEspirituTest` la fija con casos explícitos (a tiempo, justo en el límite, tarde con sobreescritura, ya entregado).
+
+### 10.3 Qué se construyó
+
+```
+habits/
+├── domain/model/espiritu/
+│   └── RegistroEspiritu.java                    entregar() corregido (§10.2), devuelve boolean aTiempo
+├── application/
+│   ├── ports/in/espiritu/
+│   │   ├── ConsultarEstadoEspirituUseCase.java   vista día-por-día (LOCKED/CURRENT/SUBMITTED/MISSED)
+│   │   └── EntregarResumenEspirituUseCase.java
+│   ├── ports/out/espiritu/
+│   │   ├── LoadRegistroEspirituPort.java         + ultimoDe/todosDe (nuevos, para el state machine y la vista)
+│   │   ├── SaveRegistroEspirituPort.java         (ya existía)
+│   │   └── AudioCatalogPort.java                 nuevo — puerto al catálogo (Drive en producción)
+│   └── services/EspirituService.java             state machine lazy + vista + entrega, exclusivo TRAINEE (mismo criterio que radar, RD-3)
+└── infrastructure/adapter/
+    ├── in/rest/espiritu/EspirituController.java  GET /api/v1/spirit-audio/status, POST /api/v1/spirit-audio/submit (rutas literales del contrato viejo, D-36)
+    ├── out/espiritu/NoOpAudioCatalogAdapter.java  placeholder — sin Drive en esta pasada
+    └── out/persistence/espiritu/                 JPA entity + mapper + Spring Data repo + adapter para `registros_espiritu`
+```
+
+Tests: `RegistroEspirituTest` (dominio, sin Spring) y `EspirituServiceTest` (Mockito) — seguridad (suspendido, rol≠TRAINEE), desbloqueo del primer audio, no-desbloqueo si `diaPrograma - 7 < 1`, entrega a tiempo, entrega a un día no desbloqueado (404), vista LOCKED para un día del catálogo sin track.
+
+### 10.4 Preguntas abiertas de este agregado
+
+1. **Espejo hacia "Pastilla Renacer"** (ver §10.1) — no implementado, decisión explícita.
+2. **Sin scheduler dedicado de avance** — fiel al repo viejo (`ensureAdvanced` se llama en cada lectura/escritura, "self-healing", sin cron de por medio). Si el negocio pide notificar el desbloqueo antes de que el aprendiz abra la app, hace falta un scheduler nuevo.
+
+---
+
+## 11. Hueco #10 — catálogo resuelto en `GET /habit-tracks/today` — completado 2026-08-26
+
+**Problema:** el endpoint devolvía solo el registro crudo (`RegistroHabitoResponse`) — la pantalla principal de la app necesita, por cada registro, el título del hábito, su tipo, la guía vigente y el horario resuelto (preferencia del participante si existe, si no el del catálogo).
+
+**Solución — una proyección de lectura, nunca N+1** (`TracksDelDiaProyeccionService`, `ConsultarTracksDelDiaConCatalogoUseCase`): delega la autorización en `ConsultarTracksDelDiaUseCase` (ya probada, sin repetir esa lógica) y agrega UN batch por tabla — `LoadHabitoPort.porIds`, `LoadHorarioHabitoPort.porHabitos`, `LoadPreferenciaHorarioPort.porParticipanteYHabitos` (los tres nuevos, agregados a los puertos existentes) y `LoadGuiaHabitoPort.porHabitos` (agregado nuevo — `guia/` era solo-dominio, D-H5; esta pasada le suma persistencia completa: JPA entity, mapper, Spring Data repo, adapter, todo de solo lectura). La resolución de "horario vigente" y "guía vigente" reutiliza los mismos criterios que `RegistroService.resolverVentana` (`HorarioHabito.aplicaEnDia`) y agrega `GuiaHabito.aplicaEnDia` (nuevo método de dominio, mismo criterio) — la guía vigente es la de mayor `diaInicio` que todavía aplica.
+
+**Contrato preservado:** `RegistroHabitoConCatalogoResponse` tiene los mismos campos que `RegistroHabitoResponse` (mismo nombre, misma forma) más `tituloHabito`, `tipoHabito`, `guia` (objeto anidado o `null`), `horaDisparo`, `horaLimite`. `POST /{id}/complete` sigue devolviendo el DTO viejo sin cambios — no se tocó.
+
+Tests: `TracksDelDiaProyeccionServiceTest` — sin registros no consulta ningún puerto de catálogo, resuelve título/tipo/guía/horario con una sola consulta por tabla (verificado con `verify(..., times(1))`), la guía más específica (mayor `diaInicio` que aplica) gana sobre una más genérica, la preferencia del participante gana al horario del catálogo cuando está seteada.
+
+**Qué quedó fuera:** el `GuiaResumen` expuesto es un subconjunto (mantra + qué hacer/cómo hacerlo) — no incluye ciencia/renaser/alquimia/resultados ni los adjuntos de `adjuntos_guia` (sin persistencia propia todavía). Ampliar es agregar campos al record, no un cambio de arquitectura.
+
+---
+
+## 12. Hueco #12 — personalización de hábitos — completado 2026-08-26
+
+Cuatro piezas nuevas, todas construidas sobre lo que ya existía en `preferencia/` (dominio completo, sin caso de uso — D-H7) o sobre tablas del baseline sin ningún dominio todavía. **Todas simplificadas deliberadamente respecto al repo viejo** — el detalle de qué se dejó afuera está en cada subsección; nada está escondido.
+
+### 12.1 `habit-preferences` — editar el horario personal de un hábito
+
+`PATCH /api/v1/habit-preferences/{habitId}` (ruta literal del contrato viejo, D-36), `EditarPreferenciaHorarioUseCase`/`PreferenciaHorarioService`. Traducción de `updateHabitPreference` (repo viejo, `service.ts:2021`, `limits.ts`):
+
+- **`FREE_SCHEDULE_EDITS_UNTIL_DAY = 7`**: hasta el día 7 de programa (o el propio `Habito.diaLimiteEdicionLibre` si es mayor — columna `dia_limite_edicion_libre` del baseline, **ahora mapeada** en `Habito`/`HabitoJpaEntity`/`HabitoPersistenceMapper`, cerrando parte de D-H5), los cambios inmediatos son ilimitados.
+- **`WEEKLY_SCHEDULE_EDIT_LIMIT = 3`**: pasada la semana libre, hasta 3 hábitos DISTINTOS reacomodables por semana de programa. Se cuenta con una bitácora append-only nueva (`historial_cambios_horario`, tabla ya existente en el baseline sin dueño hasta ahora — puerto `HistorialCambioHorarioPort`) — reeditar un hábito ya tocado esa semana no gasta cupo nuevo.
+- **"No se improvisa el día"**: si la ventana de HOY de ese hábito ya arrancó (la hora de disparo vigente ya pasó), el cambio nunca se rechaza — queda PROGRAMADO para mañana vía `CambioHorarioPendiente` (dominio ya existía, **ahora con persistencia**: `LoadCambioHorarioPendientePort`/`SaveCambioHorarioPendientePort`, tabla `cambios_horario_pendientes`). Un cambio programado NO gasta cupo (igual que el repo viejo).
+
+**Simplificación deliberada:** la cuota reportada en la respuesta no excluye a OTROS hábitos que hoy tengan su propia ventana extendida (el repo viejo lo hace vía `readExtendedFreeWindows`, una lista de todos los hábitos con ventana propia) — solo se resuelve la ventana extendida DEL hábito que se está editando. El campo `horaDisparo`/`horaLimite` de la respuesta es lo que se acaba de guardar (inmediato o programado), no un "vigente hoy" recalculado aparte — simplificación respecto al repo viejo, que separaba ambas cosas. `isProgramCompleted` (post-programa, cupo libre para siempre) no existe todavía en `ConsultarProgresoParticipanteHabitsPort` — no implementado.
+
+Tests: `PreferenciaHorarioServiceTest` — orden de horas inválido, semana libre sin consultar historial, cupo agotado lanza, reeditar un hábito ya tocado no gasta cupo nuevo, ventana de hoy ya arrancada difiere el cambio a mañana.
+
+### 12.2 `weekly-habit-days` — elegir el día de la semana
+
+`PUT /api/v1/weekly-habit-days/{habitId}` (ruta literal, D-36), `ElegirDiaSemanalUseCase`/`EleccionDiaSemanalService`. Nuevo agregado `domain/model/eleccion/EleccionDiaSemanal` + persistencia completa sobre `dias_semanales_habito`. Traducción de `chooseWeeklyHabitDay` (`weeklyChoice.ts`): ancla de semana **MONDAY** (lunes de calendario, no semana de programa — el repo viejo migró de PROGRAM a MONDAY el 2026-08-07 por un bug de desalineamiento, documentado en `weeklyChoice.ts`; se portó directamente la versión vigente, MONDAY), elegir un día reemplaza (borra+guarda) cualquier elección previa de esa semana, solo se puede elegir hoy o un día futuro de la semana vigente, día 0 de programa rechazado (vista previa).
+
+**Fuera de alcance, ambas decisiones explícitas y documentadas ya en D-H2/D-H3 antes de esta pasada:**
+- No valida el desbloqueo escalonado (`isHabitUnlocked`) — D-H2, el algoritmo de staggering no está portado.
+- No genera el track de HOY cuando se elige hoy (`seedTrackForChosenDay` del repo viejo) — y, más de fondo, **`GenerarTracksDelDiaUseCase` sigue sin filtrar por elección semanal (D-H3 sigue abierto)**: un hábito de elección semanal hoy genera track TODOS los días que su horario aplique, no solo el elegido. Esta pasada agrega la persistencia de la elección pero no cierra D-H3 — la plumbing (`LoadEleccionDiaSemanalPort`) ya existe para cuando se aborde.
+
+Tests: `EleccionDiaSemanalTest` (dominio) y `EleccionDiaSemanalServiceTest` — día 0 rechazado, hábito sin elección semanal rechazado, fecha fuera de la semana rechazada, elección reemplaza la anterior.
+
+### 12.3 Renombre de hábitos (`GREEN_JUICE`/`WARM_LEMON_WATER`)
+
+`PUT`/`DELETE /api/v1/habits/{habitId}/rename` (ruta literal, D-36), `RenombrarHabitoUseCase`/`QuitarRenombreHabitoUseCase`/`RenombreHabitoService`. Nuevo agregado `domain/model/renombre/RenombreHabito` + persistencia sobre `renombres_habito`. Traducción literal de `renameableKeys.ts`: **solo** `GREEN_JUICE`/`WARM_LEMON_WATER` (las dos bebidas), emparejado por `claveSistema` — nunca por título (el título es editable desde el panel y emparejar por texto haría desaparecer la función en silencio, mismo motivo documentado ya para Pastilla Renacer/Día sin celular). Solo hasta el **día 0** de programa (`RENAME_ALLOWED_UNTIL_PROGRAM_DAY = 0`) — después el hábito ya generó tracks con su nombre. Topes de longitud: título 60, motivo 200 (`RENAME_TITLE_MAX_LENGTH`/`RENAME_REASON_MAX_LENGTH`, validados en el dominio, no solo en el DTO — CLAUDE.MD §5.4.3 nivel 3).
+
+**Simplificación:** la respuesta no incluye `originalTitle` (el título del catálogo) — el repo viejo lo agregaba para que la app ofrezca "volver al original"; acá el cliente ya lo tiene del catálogo. El nombre resuelto (custom si existe, si no el del catálogo) **no se aplica todavía** en `RegistroHabitoConCatalogoResponse` (§11) — `resolveHabitTitle` del repo viejo no se portó a la proyección del hueco #10; sigue mostrando el título del catálogo sin importar el renombre. Pendiente de una pasada futura que cruce ambos huecos.
+
+Tests: `RenombreHabitoTest` (dominio — título/motivo vacíos o demasiado largos, actualizar) y `RenombreHabitoServiceTest` — hábito no renombrable rechazado, fuera de la ventana del día 0 rechazado, renombra en el día 0, quitar borra el renombre, suspendido rechazado.
+
+### 12.4 `habit-unlocks` — plan de desbloqueo escalonado (SOLO LECTURA)
+
+`GET /api/v1/habit-unlocks` (ruta literal, D-36), `ConsultarDesbloqueosHabitoUseCase`/`DesbloqueoHabitoService`. Nuevo agregado `domain/model/desbloqueo/DesbloqueoHabito` (solo `rehydrate`, sin caso de uso de escritura) + persistencia de solo lectura sobre `desbloqueos_habito`.
+
+**Alcance deliberadamente reducido:** el repo viejo (`habitStaggering.ts`/`staggerService.ts`, ~1470 líneas, D-H2) reparte el catálogo completo en lotes (días 1/3/5/7) y deja que el aprendiz reacomode lotes — ese ALGORITMO sigue sin portarse, es la deuda más grande documentada del módulo. Esta pasada solo expone, en lectura, lo que ya esté guardado en `desbloqueos_habito` — sin escribir ni reorganizar nada. `enabled` es una aproximación: `true` si hay al menos un desbloqueo guardado, en vez del campo propio del perfil (`staggeredHabitsAt`) que este backend no tiene todavía.
+
+Tests: `DesbloqueoHabitoServiceTest` — suspendido rechazado, sin desbloqueos → `enabled=false`, con desbloqueos → `enabled=true` y los items.
+
+---
+
+## 13. Hueco #13 — evidencia al cerrar la racha "Día sin celular" — completado 2026-08-26
+
+**Problema:** `POST /habit-tracks/phone-free/complete` no aceptaba evidencia — el repo viejo (`phoneFree.ts`, `completePhoneFreeRun`) exige SIEMPRE evidencia (foto/audio/nota) para cerrar, precisamente porque "marcar tareas a mano no existe" y el catálogo pide "declaración + foto del cuaderno".
+
+**Solución:** `CerrarRachaCommand` ahora exige `tipoEvidencia` (FOTO/AUDIO/TEXTO — espejo de `TipoEvidencia` de `evidence.api`, mismo enum que usa el resto del módulo) + `bucket`/`rutaStorage` (no-TEXTO) o `contenidoTexto` (TEXTO) + `timestampExif` opcional. `RachaService.cerrar()` registra la evidencia vía `evidence.api.RegistrarEvidenciaPort`, colgada del **registro en que ARRANCÓ la racha** (no del de hoy — es el que se completa y el que lleva los puntos, mismo criterio que el repo viejo). Se agrega también `SolicitarUrlAdjuntoRachaUseCase` (`POST /habit-tracks/phone-free/evidence/upload-url`) siguiendo el mismo patrón upload-url→PUT→confirm que ya usan `rocks`/`onboarding`/`habit-tracks/{id}/evidence` — bucket propio `dia-sin-celular/`, mismo bucket físico `renaser-files` que el resto del backend.
+
+**No se tocó** `sesiones_bloqueo.evidencia_salida_bucket/ruta` — esas columnas son de un concepto distinto (evidencia de SALIDA TEMPRANA del Santuario/`SesionBloqueo`, no del cierre de la racha "Día sin celular"/`RachaSinCelular`) y no correspondían a este hueco.
+
+Tests: `RachaServiceTest` extendido — `cerrarConEvidencia` ahora exige evidencia en todos los casos, nuevo test que verifica el `RegistrarEvidenciaComando` exacto (destino = el registro que arrancó la racha, no el de hoy), nuevos tests de `solicitarUrl` (URL firmada para la racha activa, sin racha activa lanza).
+
+---
+
+## 14. Bonus — "Bitácora Nocturna" (Diario Nocturno) — completado 2026-08-26
+
+Fuera del encargo A-D, agregado a pedido explícito del coordinador tras confirmar con el agente de `rocks` que el "Diario Nocturno" del hueco #16 **es el mismo concepto que `habits.domain.model.diario.EntradaDiario`** (dominio, puertos y persistencia ya completos, incluido `TipoEntradaDiario.BITACORA_NOCTURNA`) — solo faltaba el caso de uso de escritura y el controller.
+
+`GET`/`PUT /api/v1/journal/today` (ruta literal del contrato viejo, R-05/R-06 — vivía en la feature `rocks` de Next.js, pero `entradas_diario` es tabla de `habits` en este backend, así que el endpoint se construyó acá). `EscribirBitacoraNocturnaUseCase`/`ConsultarBitacoraNocturnaUseCase`/`BitacoraNocturnaService`: upsert por (participante, fecha de HOY en su timezone, `BITACORA_NOCTURNA`) — escribir dos veces el mismo día pisa el contenido anterior, no acumula. Al menos uno de `textContent` o `audioBucket`+`audioPath` es obligatorio (mismo `refine` que `UpsertJournalEntryInput` del repo viejo). El audio ya debe estar subido vía `AlmacenamientoPort` (patrón upload-url del backend, no una URL directa como en el repo viejo — P-03, nunca persistir una URL).
+
+**Fuera de alcance:** `transcripcion` (el dominio tiene el campo pero ningún mutador público — se llena por un proceso de transcripción async que no existe en este backend todavía). Sin endpoint de upload-url dedicado para el audio de esta bitácora — reutiliza el patrón, pero no se construyó un endpoint propio (`/api/v1/journal/today/evidence/upload-url` o similar) en esta pasada; el cliente tendría que usar otro camino existente para conseguir bucket/ruta antes de llamar al PUT.
+
+Tests: `BitacoraNocturnaServiceTest` — suspendido rechazado, comando sin texto ni audio rechazado en el constructor, primera escritura crea la entrada, escribir de nuevo el mismo día pisa el contenido.
+
+Esto desbloquea, del lado de `habits`, el Espejo Sombra de `rag` (`habits.api.EntradaDiarioFinder`/`EntradaDiarioSummary`, D-50) — ese consumidor ya podía leer entradas existentes, pero hasta ahora nada las escribía.
+
+---
+
+## 15. Estado / checklist DoD — actualizado 2026-08-26
+
+- [x] `domain/` de los agregados nuevos (`eleccion/`, `renombre/`, `desbloqueo/`) plano, sin imports de Spring/JPA/Jackson
+- [x] Tests unitarios de dominio para las reglas nuevas (`RegistroEspirituTest`, `EleccionDiaSemanalTest`, `RenombreHabitoTest`)
+- [x] Comandos self-validating para los casos de uso nuevos
+- [x] Controllers tontos: sin repositorios, sin `@Transactional`, sin `if` de negocio
+- [x] DTOs de salida como proyección explícita (`RegistroHabitoConCatalogoResponse` agrega campos sin romper el contrato viejo)
+- [x] Pruebas de seguridad §0.3 en los servicios nuevos: suspendido → `NotAuthorizedException` en los 6 servicios nuevos/tocados (`EspirituService`, `TracksDelDiaProyeccionService` vía `ConsultarTracksDelDiaUseCase`, `PreferenciaHorarioService`, `EleccionDiaSemanalService`, `RenombreHabitoService`, `DesbloqueoHabitoService`, `BitacoraNocturnaService`); rol≠TRAINEE → `NotAuthorizedException` en `EspirituService` (mismo criterio que `radar`, RD-3)
+- [ ] `ArchitectureTest`/`./mvnw clean test` — no ejecutados por este agente (regla del encargo: nunca correr Maven), el supervisor los corre
+- [x] Avance documentado en este archivo (§10-14), con honestidad explícita de lo que quedó afuera en cada sección
+- [x] Bitácora de errores (`docs/BITACORA_ERRORES.md`) — revisada; no se encontró ningún error/bug de configuración real durante esta pasada (correcciones de diseño ya documentadas en §10.2, con fuente y fecha)
+
+**Preguntas abiertas nuevas de esta pasada (CLAUDE.MD §0.6), consolidadas:**
+
+1. Espejo Espíritu→Pastilla Renacer, no implementado (§10.4).
+2. `isProgramCompleted` (post-programa, cupo de edición libre para siempre) no existe en `ConsultarProgresoParticipanteHabitsPort` (§12.1).
+3. Ventanas de edición extendida de OTROS hábitos no se excluyen de la cuota reportada — solo la del hábito que se edita (§12.1).
+4. D-H3 sigue abierto: `GenerarTracksDelDiaUseCase` no filtra por elección semanal (§12.2, ya documentado antes de esta pasada, sigue sin cerrar).
+5. Renombre de hábito no se refleja todavía en la proyección del hueco #10 (§12.3).
+6. Staggering (D-H2) sigue sin portarse — `habit-unlocks` es de solo lectura (§12.4).
+7. Sin endpoint de upload-url dedicado para el audio de la Bitácora Nocturna (§14).

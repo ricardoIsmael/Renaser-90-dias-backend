@@ -7,6 +7,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,6 +25,15 @@ class HabitoPersistenceAdapter implements LoadHabitoPort, SaveHabitoPort {
     @Override
     public Optional<Habito> byId(HabitoId id) {
         return repository.findById(id.value()).map(mapper::toDomain);
+    }
+
+    @Override
+    public List<Habito> porIds(Collection<HabitoId> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        List<java.util.UUID> valores = ids.stream().map(HabitoId::value).toList();
+        return repository.findByIdIn(valores).stream().map(mapper::toDomain).toList();
     }
 
     @Override

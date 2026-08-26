@@ -19,6 +19,7 @@ class HabitoPersistenceMapper {
                 e.getClaveSistema(), toDomainExigencia(e.getExigenciaEvidencia()), e.isEsOpcional(),
                 e.isObligatorioEnIntoxicacion(), e.isEleccionDiaSemanal(),
                 e.getHorasExtraEvidencia() != null ? e.getHorasExtraEvidencia().intValue() : null,
+                e.getDiaLimiteEdicionLibre() != null ? e.getDiaLimiteEdicionLibre().intValue() : null,
                 toDomainPlantilla(e.getPlantillaClave()), e.getEtiquetaMeta(), e.isActivo(), e.getCreadoEn(),
                 e.getActualizadoEn());
     }
@@ -29,6 +30,7 @@ class HabitoPersistenceMapper {
                 toJpaTipo(h.tipo()), h.categoriaClave(), h.iconoClave(), h.claveSistema(),
                 toJpaExigencia(h.exigenciaEvidencia()), h.esOpcional(), h.obligatorioEnIntoxicacion(),
                 h.eleccionDiaSemanal(), h.horasExtraEvidencia() != null ? h.horasExtraEvidencia().shortValue() : null,
+                h.diaLimiteEdicionLibre() != null ? h.diaLimiteEdicionLibre().shortValue() : null,
                 toJpaPlantilla(h.plantillaClave()), h.etiquetaMeta(), h.activo(), h.creadoEn(), h.actualizadoEn());
     }
 

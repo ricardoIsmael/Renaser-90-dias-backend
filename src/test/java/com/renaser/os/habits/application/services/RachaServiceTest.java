@@ -1,7 +1,14 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.evidence.api.DestinoEvidencia;
+import com.renaser.os.evidence.api.EstadoValidacion;
+import com.renaser.os.evidence.api.RegistrarEvidenciaPort;
+import com.renaser.os.evidence.api.RegistrarEvidenciaPort.EvidenciaRegistrada;
+import com.renaser.os.evidence.api.RegistrarEvidenciaPort.RegistrarEvidenciaComando;
+import com.renaser.os.evidence.api.TipoEvidencia;
 import com.renaser.os.habits.application.ports.in.santuario.CerrarRachaUseCase.CerrarRachaCommand;
 import com.renaser.os.habits.application.ports.in.santuario.IniciarRachaUseCase.IniciarRachaCommand;
+import com.renaser.os.habits.application.ports.in.santuario.SolicitarUrlAdjuntoRachaUseCase.SolicitarUrlAdjuntoRachaCommand;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
@@ -16,11 +23,13 @@ import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
+import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.habits.domain.model.santuario.EstadoRacha;
 import com.renaser.os.habits.domain.model.santuario.RachaSinCelular;
 import com.renaser.os.points.api.AjustarPuntosPort;
 import com.renaser.os.points.api.MotivoPuntos;
 import com.renaser.os.points.api.ResumenAjustePuntos;
+import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -30,6 +39,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -66,6 +76,10 @@ class RachaServiceTest {
     @Mock
     private AjustarPuntosPort ajustarPuntosPort;
     @Mock
+    private RegistrarEvidenciaPort registrarEvidenciaPort;
+    @Mock
+    private AlmacenamientoPort almacenamientoPort;
+    @Mock
     private org.springframework.context.ApplicationEventPublisher events;
 
     private RachaService service;
@@ -73,9 +87,11 @@ class RachaServiceTest {
     @BeforeEach
     void setUp() {
         service = new RachaService(loadRachaPort, saveRachaPort, loadRegistroPort, saveRegistroPort, loadHabitoPort,
-                progresoPort, ajustarPuntosPort, events, CLOCK);
+                progresoPort, ajustarPuntosPort, registrarEvidenciaPort, almacenamientoPort, events, CLOCK);
         lenient().when(saveRachaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(registrarEvidenciaPort.registrar(any()))
+                .thenReturn(new EvidenciaRegistrada(UUID.randomUUID(), EstadoValidacion.PENDIENTE));
     }
 
     private static Habito habitoSinCelular() {
@@ -89,7 +105,12 @@ class RachaServiceTest {
         Habito h = habitoSinCelular();
         return Habito.rehydrate(h.id(), h.ambito(), null, h.titulo(), null, h.tipo(), h.categoriaClave(), null,
                 RachaService.CLAVE_SISTEMA_SIN_CELULAR, h.exigenciaEvidencia(), false, false, false, null, null,
-                null, true, CLOCK.now(), CLOCK.now());
+                null, null, true, CLOCK.now(), CLOCK.now());
+    }
+
+    /** Evidencia minima valida (TEXTO) para cerrar — el cierre va siempre con evidencia (Hueco #13). */
+    private static CerrarRachaCommand cerrarConEvidencia(UserId actorId) {
+        return new CerrarRachaCommand(actorId, TipoEvidencia.TEXTO, null, null, "cerre mi racha", null);
     }
 
     @Test
@@ -129,7 +150,7 @@ class RachaServiceTest {
                 Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
         when(loadRachaPort.activaDeParaEscritura(participante)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.cerrar(new CerrarRachaCommand(participante)))
+        assertThatThrownBy(() -> service.cerrar(cerrarConEvidencia(participante)))
                 .isInstanceOf(java.util.NoSuchElementException.class);
     }
 
@@ -139,7 +160,7 @@ class RachaServiceTest {
         when(progresoPort.deParticipante(participante)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, true)));
 
-        assertThatThrownBy(() -> service.cerrar(new CerrarRachaCommand(participante)))
+        assertThatThrownBy(() -> service.cerrar(cerrarConEvidencia(participante)))
                 .isInstanceOf(NotAuthorizedException.class);
     }
 
@@ -160,11 +181,61 @@ class RachaServiceTest {
         when(ajustarPuntosPort.ajustar(any(), any(), anyInt(), any()))
                 .thenReturn(new ResumenAjustePuntos(participante, 10, 110));
 
-        RachaSinCelular resultado = service.cerrar(new CerrarRachaCommand(participante));
+        RachaSinCelular resultado = service.cerrar(cerrarConEvidencia(participante));
 
         assertThat(resultado.estado()).isEqualTo(EstadoRacha.COMPLETADA);
         assertThat(registro.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
         verify(ajustarPuntosPort).ajustar(eq(participante), eq(MotivoPuntos.HABIT_COMPLETED), eq(10), any());
+    }
+
+    @Test
+    void cerrarRegistraLaEvidenciaColgadaDelRegistroQueArrancoLaRacha() {
+        UserId participante = UserId.of(UUID.randomUUID());
+        Habito habito = habitoSinCelularConClave();
+        RegistroHabito registro = RegistroHabito.generar(participante, habito.id(), LocalDate.of(2026, 8, 24), 5,
+                TipoDia.DISCIPLINA, false, CLOCK.now());
+        registro.iniciar(CLOCK.now());
+        RachaSinCelular racha = RachaSinCelular.iniciar(participante, registro.id(), 24,
+                CLOCK.now().minus(Duration.ofHours(4))); // hito parcial, no ciclo completo
+
+        when(progresoPort.deParticipante(participante)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadRachaPort.activaDeParaEscritura(participante)).thenReturn(Optional.of(racha));
+        when(loadRegistroPort.byId(registro.id())).thenReturn(Optional.of(registro));
+
+        service.cerrar(new CerrarRachaCommand(participante, TipoEvidencia.TEXTO, null, null, "una nota", null));
+
+        verify(registrarEvidenciaPort).registrar(new RegistrarEvidenciaComando(participante,
+                new DestinoEvidencia.RegistroHabito(registro.id().value()), TipoEvidencia.TEXTO, null, null,
+                "una nota", null, null, null, false, CLOCK.now()));
+        verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
+    }
+
+    @Test
+    void solicitarUrlDevuelveUrlFirmadaParaLaRachaActiva() {
+        UserId participante = UserId.of(UUID.randomUUID());
+        RachaSinCelular racha = RachaSinCelular.iniciar(participante, RegistroHabitoId.newId(), 24, CLOCK.now());
+        when(progresoPort.deParticipante(participante)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadRachaPort.activaDe(participante)).thenReturn(Optional.of(racha));
+        when(almacenamientoPort.firmarSubida(any(), any(), any())).thenReturn(URI.create("https://example.com/x"));
+
+        var url = service.solicitarUrl(new SolicitarUrlAdjuntoRachaCommand(participante, "image/jpeg"));
+
+        assertThat(url.bucket()).isEqualTo(RachaService.BUCKET_DIA_SIN_CELULAR);
+        assertThat(url.ruta()).contains(racha.id().toString());
+        assertThat(url.url()).isEqualTo(URI.create("https://example.com/x"));
+    }
+
+    @Test
+    void solicitarUrlSinRachaActivaLanza() {
+        UserId participante = UserId.of(UUID.randomUUID());
+        when(progresoPort.deParticipante(participante)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadRachaPort.activaDe(participante)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.solicitarUrl(new SolicitarUrlAdjuntoRachaCommand(participante, "image/jpeg")))
+                .isInstanceOf(java.util.NoSuchElementException.class);
     }
 
     @Test

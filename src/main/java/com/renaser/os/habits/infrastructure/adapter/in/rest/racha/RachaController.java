@@ -1,11 +1,14 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.racha;
 
+import com.renaser.os.evidence.api.TipoEvidencia;
 import com.renaser.os.habits.application.ports.in.santuario.CerrarRachaUseCase;
 import com.renaser.os.habits.application.ports.in.santuario.CerrarRachaUseCase.CerrarRachaCommand;
 import com.renaser.os.habits.application.ports.in.santuario.IniciarRachaUseCase;
 import com.renaser.os.habits.application.ports.in.santuario.IniciarRachaUseCase.IniciarRachaCommand;
 import com.renaser.os.habits.application.ports.in.santuario.RomperRachaUseCase;
 import com.renaser.os.habits.application.ports.in.santuario.RomperRachaUseCase.RomperRachaCommand;
+import com.renaser.os.habits.application.ports.in.santuario.SolicitarUrlAdjuntoRachaUseCase;
+import com.renaser.os.habits.application.ports.in.santuario.SolicitarUrlAdjuntoRachaUseCase.SolicitarUrlAdjuntoRachaCommand;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
@@ -29,13 +32,16 @@ public class RachaController {
     private final IniciarRachaUseCase iniciarUseCase;
     private final CerrarRachaUseCase cerrarUseCase;
     private final RomperRachaUseCase romperUseCase;
+    private final SolicitarUrlAdjuntoRachaUseCase urlAdjuntoUseCase;
     private final Clock clock;
 
     public RachaController(IniciarRachaUseCase iniciarUseCase, CerrarRachaUseCase cerrarUseCase,
-                            RomperRachaUseCase romperUseCase, Clock clock) {
+                            RomperRachaUseCase romperUseCase, SolicitarUrlAdjuntoRachaUseCase urlAdjuntoUseCase,
+                            Clock clock) {
         this.iniciarUseCase = iniciarUseCase;
         this.cerrarUseCase = cerrarUseCase;
         this.romperUseCase = romperUseCase;
+        this.urlAdjuntoUseCase = urlAdjuntoUseCase;
         this.clock = clock;
     }
 
@@ -47,9 +53,21 @@ public class RachaController {
         return RachaSinCelularResponse.from(racha, clock.now(), EXTENSION_DEFAULT_HORAS);
     }
 
+    /** D-H13 (hueco #13): URL prefirmada para la evidencia con la que se cierra la racha. */
+    @PostMapping("/phone-free/evidence/upload-url")
+    public UrlAdjuntoRachaResponse urlDeSubida(@RequestHeader("X-Actor-Id") String actorId,
+                                                @Valid @RequestBody SolicitarUrlAdjuntoRachaRequest request) {
+        var url = urlAdjuntoUseCase.solicitarUrl(
+                new SolicitarUrlAdjuntoRachaCommand(UserId.of(actorId), request.tipoContenido()));
+        return UrlAdjuntoRachaResponse.from(url);
+    }
+
     @PostMapping("/phone-free/complete")
-    public RachaSinCelularResponse completar(@RequestHeader("X-Actor-Id") String actorId) {
-        var racha = cerrarUseCase.cerrar(new CerrarRachaCommand(UserId.of(actorId)));
+    public RachaSinCelularResponse completar(@RequestHeader("X-Actor-Id") String actorId,
+                                              @RequestBody @Valid CompletarRachaRequest request) {
+        var racha = cerrarUseCase.cerrar(new CerrarRachaCommand(UserId.of(actorId),
+                TipoEvidencia.valueOf(request.tipo()), request.bucket(), request.rutaStorage(),
+                request.contenidoTexto(), request.timestampExif()));
         return RachaSinCelularResponse.from(racha, clock.now(), EXTENSION_DEFAULT_HORAS);
     }
 

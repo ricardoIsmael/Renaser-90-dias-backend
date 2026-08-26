@@ -10,4 +10,6 @@ interface SpringDataHabitoRepository extends JpaRepository<HabitoJpaEntity, UUID
     List<HabitoJpaEntity> findByAmbitoAndActivoTrue(AmbitoHabitoJpa ambito);
 
     List<HabitoJpaEntity> findByAmbitoAndParticipanteIdAndActivoTrue(AmbitoHabitoJpa ambito, UUID participanteId);
+
+    List<HabitoJpaEntity> findByIdIn(java.util.Collection<UUID> ids);
 }

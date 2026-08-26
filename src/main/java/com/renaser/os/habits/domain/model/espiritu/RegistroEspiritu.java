@@ -51,17 +51,31 @@ public final class RegistroEspiritu {
                 estado, creadoEn, actualizadoEn);
     }
 
-    public void entregar(String resumenTexto, Instant ahora) {
+    /**
+     * Entrega el resumen del audio del dia. A TIEMPO (antes de {@code fechaLimite}) pasa a
+     * ENTREGADO. FUERA DE PLAZO queda PENDIENTE — no lanza excepcion — con el contenido
+     * igual guardado (para que un mentor lo pueda leer) y {@code entregadoEn} actualizado;
+     * es el propio state machine de {@code EspirituService} (via
+     * {@code asegurarAvance}/{@link #marcarPerdido}) el unico lugar que la pasa a PERDIDO,
+     * en el proximo chequeo lazy — igual criterio en TODOS los casos de tardanza, sin
+     * importar CUANDO se descubre (repo viejo: service.ts, submitSpiritSummary /
+     * ensureAdvanced). Devuelve si la entrega fue a tiempo, para que el llamador decida
+     * efectos secundarios (ej. reflejar en "Pastilla Renacer" solo si fue a tiempo).
+     *
+     * <p>Corregido 2026-08-26 (encargo original): antes tiraba {@code IllegalStateException}
+     * fuera de plazo, lo que no coincide con el comportamiento real del backend viejo — una
+     * entrega tardia es un caso de negocio valido, no un error.
+     */
+    public boolean entregar(String resumenTexto, Instant ahora) {
         if (estado != EstadoRegistroEspiritu.PENDIENTE) {
             throw new IllegalStateException("Este registro de espiritu ya no esta pendiente: " + estado);
         }
-        if (ahora.isAfter(fechaLimite)) {
-            throw new IllegalStateException("El plazo para entregar este audio ya vencio");
-        }
-        this.estado = EstadoRegistroEspiritu.ENTREGADO;
+        boolean aTiempo = !ahora.isAfter(fechaLimite);
         this.entregadoEn = ahora;
         this.resumenTexto = resumenTexto;
+        this.estado = aTiempo ? EstadoRegistroEspiritu.ENTREGADO : EstadoRegistroEspiritu.PENDIENTE;
         this.actualizadoEn = ahora;
+        return aTiempo;
     }
 
     public void marcarPerdido(Instant ahora) {

@@ -21,13 +21,14 @@ class RegistroPoliticasHabitoTest {
 
     private static Habito habito(TipoHabito tipo, String claveSistema) {
         return Habito.rehydrate(HabitoId.newId(), AmbitoHabito.SISTEMA, null, "Habito", null, tipo, null, null,
-                claveSistema, ExigenciaEvidencia.OPCIONAL, false, false, false, null, null, null, true, AHORA, AHORA);
+                claveSistema, ExigenciaEvidencia.OPCIONAL, false, false, false, null, null, null, null, true, AHORA,
+                AHORA);
     }
 
     private static Habito habitoPersonal(TipoHabito tipo) {
         return Habito.rehydrate(HabitoId.newId(), AmbitoHabito.PERSONAL, UserId.of(UUID.randomUUID()), "Mio", null,
-                tipo, null, null, null, ExigenciaEvidencia.OPCIONAL, false, false, false, null, null, null, true,
-                AHORA, AHORA);
+                tipo, null, null, null, ExigenciaEvidencia.OPCIONAL, false, false, false, null, null, null, null,
+                true, AHORA, AHORA);
     }
 
     private static PoliticaHabito politica(SelectorHabito selector, DecisionPolitica decision) {

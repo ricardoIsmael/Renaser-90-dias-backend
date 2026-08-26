@@ -42,6 +42,7 @@ public final class Habito {
     private boolean obligatorioEnIntoxicacion;
     private boolean eleccionDiaSemanal;
     private Integer horasExtraEvidencia; // null = usar el default global (VentanaEntrega)
+    private Integer diaLimiteEdicionLibre; // null = usar el default global FREE_SCHEDULE_EDITS_UNTIL_DAY=7 (hueco #12)
     private PlantillaHabitoPersonal plantillaClave; // solo PERSONAL
     private String etiquetaMeta; // solo PERSONAL
     private boolean activo;
@@ -52,7 +53,7 @@ public final class Habito {
                                          ExigenciaEvidencia exigenciaEvidencia, Instant ahora) {
         return new Habito(HabitoId.newId(), AmbitoHabito.SISTEMA, null, requireTitulo(titulo), null, tipo,
                 requireCategoria(categoriaClave), null, null, exigenciaEvidencia, false, false, false, null, null,
-                null, true, ahora, ahora);
+                null, null, true, ahora, ahora);
     }
 
     public static Habito crearPersonal(UserId participanteId, String titulo, TipoHabito tipo, String categoriaClave,
@@ -60,7 +61,7 @@ public final class Habito {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio para un habito PERSONAL");
         return new Habito(HabitoId.newId(), AmbitoHabito.PERSONAL, participanteId, requireTitulo(titulo), null, tipo,
                 requireCategoria(categoriaClave), null, null, ExigenciaEvidencia.OPCIONAL, false, false, false, null,
-                plantilla, etiquetaMeta, true, ahora, ahora);
+                null, plantilla, etiquetaMeta, true, ahora, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */
@@ -68,11 +69,13 @@ public final class Habito {
                                     String descripcion, TipoHabito tipo, String categoriaClave, String iconoClave,
                                     String claveSistema, ExigenciaEvidencia exigenciaEvidencia, boolean esOpcional,
                                     boolean obligatorioEnIntoxicacion, boolean eleccionDiaSemanal,
-                                    Integer horasExtraEvidencia, PlantillaHabitoPersonal plantillaClave,
-                                    String etiquetaMeta, boolean activo, Instant creadoEn, Instant actualizadoEn) {
+                                    Integer horasExtraEvidencia, Integer diaLimiteEdicionLibre,
+                                    PlantillaHabitoPersonal plantillaClave, String etiquetaMeta, boolean activo,
+                                    Instant creadoEn, Instant actualizadoEn) {
         return new Habito(id, ambito, participanteId, titulo, descripcion, tipo, categoriaClave, iconoClave,
                 claveSistema, exigenciaEvidencia, esOpcional, obligatorioEnIntoxicacion, eleccionDiaSemanal,
-                horasExtraEvidencia, plantillaClave, etiquetaMeta, activo, creadoEn, actualizadoEn);
+                horasExtraEvidencia, diaLimiteEdicionLibre, plantillaClave, etiquetaMeta, activo, creadoEn,
+                actualizadoEn);
     }
 
     public void renombrar(String nuevoTitulo, Instant ahora) {

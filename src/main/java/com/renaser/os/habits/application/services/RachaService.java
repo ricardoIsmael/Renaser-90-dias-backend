@@ -1,11 +1,15 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.evidence.api.DestinoEvidencia;
+import com.renaser.os.evidence.api.RegistrarEvidenciaPort;
+import com.renaser.os.evidence.api.RegistrarEvidenciaPort.RegistrarEvidenciaComando;
 import com.renaser.os.habits.api.HabitoCompletadoEvent;
 import com.renaser.os.habits.api.RachaCompletadaEvent;
 import com.renaser.os.habits.application.ports.in.santuario.CerrarRachaUseCase;
 import com.renaser.os.habits.application.ports.in.santuario.ExpirarRachasVencidasUseCase;
 import com.renaser.os.habits.application.ports.in.santuario.IniciarRachaUseCase;
 import com.renaser.os.habits.application.ports.in.santuario.RomperRachaUseCase;
+import com.renaser.os.habits.application.ports.in.santuario.SolicitarUrlAdjuntoRachaUseCase;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
@@ -19,6 +23,7 @@ import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.habits.domain.model.santuario.RachaSinCelular;
 import com.renaser.os.points.api.AjustarPuntosPort;
 import com.renaser.os.points.api.MotivoPuntos;
+import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -26,6 +31,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -42,7 +49,7 @@ import java.util.NoSuchElementException;
  */
 @Service
 public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, RomperRachaUseCase,
-        ExpirarRachasVencidasUseCase {
+        SolicitarUrlAdjuntoRachaUseCase, ExpirarRachasVencidasUseCase {
 
     /** Habit.systemKey que identifica "Dia sin celular" — nunca por titulo (phoneFreeKeys.ts:12). */
     public static final String CLAVE_SISTEMA_SIN_CELULAR = "PHONE_FREE_DAY";
@@ -50,6 +57,10 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
     private static final int PUNTOS_CICLO_COMPLETO = 10;
     /** Horas de extension por default para el plazo de cierre (phoneFree.ts usa EXTENSION_WINDOW_HOURS=3). */
     private static final int EXTENSION_DEFAULT_HORAS = 3;
+    /** Bucket propio de evidencia (D-34), mismo patron que `rocks`/`calendar`/`support`. */
+    static final String BUCKET_DIA_SIN_CELULAR = "renaser-files";
+    private static final String PREFIJO_RUTA = "dia-sin-celular";
+    private static final Duration VALIDEZ_URL_SUBIDA = Duration.ofMinutes(10);
 
     private final LoadRachaSinCelularPort loadRachaPort;
     private final SaveRachaSinCelularPort saveRachaPort;
@@ -58,13 +69,16 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
     private final LoadHabitoPort loadHabitoPort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final AjustarPuntosPort ajustarPuntosPort;
+    private final RegistrarEvidenciaPort registrarEvidenciaPort;
+    private final AlmacenamientoPort almacenamientoPort;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public RachaService(LoadRachaSinCelularPort loadRachaPort, SaveRachaSinCelularPort saveRachaPort,
                          LoadRegistroHabitoPort loadRegistroPort, SaveRegistroHabitoPort saveRegistroPort,
                          LoadHabitoPort loadHabitoPort, ConsultarProgresoParticipanteHabitsPort progresoPort,
-                         AjustarPuntosPort ajustarPuntosPort, ApplicationEventPublisher events, Clock clock) {
+                         AjustarPuntosPort ajustarPuntosPort, RegistrarEvidenciaPort registrarEvidenciaPort,
+                         AlmacenamientoPort almacenamientoPort, ApplicationEventPublisher events, Clock clock) {
         this.loadRachaPort = loadRachaPort;
         this.saveRachaPort = saveRachaPort;
         this.loadRegistroPort = loadRegistroPort;
@@ -72,6 +86,8 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
         this.loadHabitoPort = loadHabitoPort;
         this.progresoPort = progresoPort;
         this.ajustarPuntosPort = ajustarPuntosPort;
+        this.registrarEvidenciaPort = registrarEvidenciaPort;
+        this.almacenamientoPort = almacenamientoPort;
         this.events = events;
         this.clock = clock;
     }
@@ -119,6 +135,13 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
         boolean completo = racha.cerrar(ahora);
         RachaSinCelular guardada = saveRachaPort.save(racha);
 
+        // La evidencia se cuelga del registro en que ARRANCO la racha, no del de hoy — es
+        // el que se completa y el que lleva los puntos (mismo criterio que phoneFree.ts).
+        registrarEvidenciaPort.registrar(new RegistrarEvidenciaComando(racha.participanteId(),
+                new DestinoEvidencia.RegistroHabito(racha.registroHabitoId().value()), command.tipoEvidencia(),
+                command.bucket(), command.rutaStorage(), command.contenidoTexto(), command.timestampExif(), null,
+                null, false, ahora));
+
         if (completo) {
             RegistroHabito registro = requireRegistro(racha.registroHabitoId());
             registro.completar(PUNTOS_CICLO_COMPLETO, null, null, null, ahora);
@@ -132,6 +155,16 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
             liberarRegistro(racha, ahora);
         }
         return guardada;
+    }
+
+    @Override
+    public UrlAdjuntoRacha solicitarUrl(SolicitarUrlAdjuntoRachaCommand command) {
+        requireProgreso(command.actorId());
+        RachaSinCelular racha = loadRachaPort.activaDe(command.actorId())
+                .orElseThrow(() -> new NoSuchElementException("No tienes ninguna racha en curso"));
+        String ruta = PREFIJO_RUTA + "/" + command.actorId() + "/" + racha.id();
+        URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
+        return new UrlAdjuntoRacha(url, BUCKET_DIA_SIN_CELULAR, ruta);
     }
 
     @Override

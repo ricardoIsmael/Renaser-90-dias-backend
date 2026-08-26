@@ -53,6 +53,11 @@ public final class GuiaHabito {
                 resultados, mantraTitulo, mantraIntro, mantraCuerpo, referenciaFuente, creadoEn, actualizadoEn);
     }
 
+    /** Si esta guia rige para ese dia de programa — mismo criterio que {@code HorarioHabito.aplicaEnDia}. */
+    public boolean aplicaEnDia(int diaPrograma) {
+        return diaPrograma >= diaInicio && (diaFin == null || diaPrograma <= diaFin);
+    }
+
     public void actualizarContenido(String queHacer, String comoHacerlo, String ciencia, String renaser,
                                      String alquimia, String resultados, Instant ahora) {
         this.queHacer = queHacer;

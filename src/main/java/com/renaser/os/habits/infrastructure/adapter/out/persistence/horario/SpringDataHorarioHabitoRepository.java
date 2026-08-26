@@ -8,4 +8,6 @@ import java.util.UUID;
 interface SpringDataHorarioHabitoRepository extends JpaRepository<HorarioHabitoJpaEntity, UUID> {
 
     List<HorarioHabitoJpaEntity> findByHabitoId(UUID habitoId);
+
+    List<HorarioHabitoJpaEntity> findByHabitoIdIn(java.util.Collection<UUID> habitoIds);
 }

@@ -16,12 +16,13 @@ import java.util.UUID;
 
 /**
  * Mapeo PARCIAL de `habitos` (CLAUDE.MD §5.4.1/§5.4.5) — no incluye `grupo`,
- * `tipo_entrada_diario`, `dia_limite_edicion_libre` ni `orden`: columnas
- * nullable o con DEFAULT de Postgres que este agregado no modela todavia (ver
- * docs/MODULO_HABITS.md "que quedo simplificado"). Omitirlas del mapeo deja que
- * la columna tome su DEFAULT/NULL en el INSERT — no rompe el esquema, pero
- * cualquier valor previo en esas columnas se pierde en un UPDATE via este
- * adaptador (riesgo aceptado y documentado, sin flujo de escritura que las use hoy).
+ * `tipo_entrada_diario` ni `orden`: columnas nullable o con DEFAULT de Postgres
+ * que este agregado no modela todavia (ver docs/MODULO_HABITS.md "que quedo
+ * simplificado"). Omitirlas del mapeo deja que la columna tome su DEFAULT/NULL
+ * en el INSERT — no rompe el esquema, pero cualquier valor previo en esas
+ * columnas se pierde en un UPDATE via este adaptador (riesgo aceptado y
+ * documentado, sin flujo de escritura que las use hoy). {@code dia_limite_edicion_libre}
+ * SI se mapea desde 2026-08-26 (hueco #12, EditarPreferenciaHorarioUseCase).
  */
 @Entity
 @Table(name = "habitos", schema = "renaser")
@@ -64,6 +65,8 @@ public class HabitoJpaEntity {
     private boolean eleccionDiaSemanal;
 
     private Short horasExtraEvidencia;
+
+    private Short diaLimiteEdicionLibre;
 
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
