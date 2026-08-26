@@ -16,6 +16,9 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.politica.DecisionPolitica;
+import com.renaser.os.habits.domain.model.politica.PoliticaHabito;
+import com.renaser.os.habits.domain.model.politica.RegistroPoliticasHabito;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.FaseOtorgamiento;
@@ -61,12 +64,13 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     private final AjustarPuntosPort ajustarPuntosPort;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final RegistroPoliticasHabito politicas;
 
     public RegistroService(LoadRegistroHabitoPort loadRegistroPort, SaveRegistroHabitoPort saveRegistroPort,
                             LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
                             LoadPreferenciaHorarioPort loadPreferenciaPort,
                             ConsultarProgresoParticipanteHabitsPort progresoPort, AjustarPuntosPort ajustarPuntosPort,
-                            ApplicationEventPublisher events, Clock clock) {
+                            ApplicationEventPublisher events, Clock clock, List<PoliticaHabito> politicas) {
         this.loadRegistroPort = loadRegistroPort;
         this.saveRegistroPort = saveRegistroPort;
         this.loadHabitoPort = loadHabitoPort;
@@ -76,6 +80,9 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         this.ajustarPuntosPort = ajustarPuntosPort;
         this.events = events;
         this.clock = clock;
+        // Se indexa UNA vez, en el arranque: en `completar` la resolucion es un lookup de
+        // mapa, sin streams ni asignaciones (CLAUDE.MD §5.4.7, hot path).
+        this.politicas = new RegistroPoliticasHabito(politicas);
     }
 
     @Override
@@ -117,10 +124,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         RegistroHabito registro = requireRegistro(command.registroId());
         requireSelf(command.actorId(), registro.participanteId());
         Habito habito = requireHabito(registro.habitoId());
-        if (habito.esBloqueo()) {
-            throw new IllegalArgumentException(
-                    "Los habitos BLOQUEO (Santuario) se completan via /habit-tracks/{id}/santuario, no aca");
-        }
+        requirePoliticaPermiteCompletarDirecto(habito);
 
         Instant ahora = clock.now();
         VentanaEntrega ventana = resolverVentana(registro, habito);
@@ -207,6 +211,24 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
      * asi que un aprendiz SUSPENDIDO podia operar igual. La autorizacion no puede depender
      * de si el habito tiene horario configurado.
      */
+    /**
+     * Un habito con regla propia (Santuario y los que vengan) se completa por su propio
+     * gesto, no por este. La regla la aporta su politica; este servicio solo la consulta
+     * y traduce el rechazo a HTTP — asi agregar el proximo habito especial no lo toca.
+     *
+     * <p>El {@code switch} sobre {@link DecisionPolitica} es exhaustivo por ser sellada:
+     * si manana aparece una tercera variante, el compilador obliga a contemplarla aca.
+     */
+    private void requirePoliticaPermiteCompletarDirecto(Habito habito) {
+        PoliticaHabito politica = politicas.para(habito);
+        switch (politica.puedeCompletarseDirecto(habito)) {
+            case DecisionPolitica.Procede ignorada -> {
+                // sigue el camino compartido
+            }
+            case DecisionPolitica.NoProcede(String motivo) -> throw new IllegalArgumentException(motivo);
+        }
+    }
+
     private void requireSelf(UserId actorId, UserId participanteId) {
         if (!actorId.equals(participanteId)) {
             throw new NotAuthorizedException("Solo el propio participante puede operar sobre sus habitos");

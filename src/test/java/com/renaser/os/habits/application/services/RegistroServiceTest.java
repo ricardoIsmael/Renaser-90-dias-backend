@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.application.politica.PoliticaSantuario;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
@@ -70,8 +71,12 @@ class RegistroServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Las politicas reales, no mocks: son funciones puras sin dependencias, y usarlas
+        // tal cual mantiene el test fiel al comportamiento de produccion (el rechazo de
+        // BLOQUEO que antes estaba hardcodeado en el servicio ahora lo aporta esta).
         service = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
-                loadPreferenciaPort, progresoPort, ajustarPuntosPort, events, CLOCK);
+                loadPreferenciaPort, progresoPort, ajustarPuntosPort, events, CLOCK,
+                List.of(new PoliticaSantuario()));
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
