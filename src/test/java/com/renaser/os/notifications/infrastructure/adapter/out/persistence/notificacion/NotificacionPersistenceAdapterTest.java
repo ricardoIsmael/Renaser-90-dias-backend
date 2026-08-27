@@ -140,6 +140,25 @@ class NotificacionPersistenceAdapterTest {
     }
 
     @Test
+    void contarNoLeidasCuentaSoloSinLeerDentroDeLaVentana() {
+        FixedClock hace100Dias = FixedClock.at(CLOCK.now().minusSeconds(100L * 24 * 3600));
+        adapter.guardar(Notificacion.emitir(UserId.of(usuarioId), TipoNotificacion.ANUNCIO_SISTEMA, "vieja", "c",
+                null, hace100Dias)); // fuera de la ventana de retencion, no cuenta
+        Notificacion leida = adapter.guardar(Notificacion.emitir(UserId.of(usuarioId), TipoNotificacion.ANUNCIO_SISTEMA,
+                "leida", "c", null, CLOCK));
+        adapter.marcarLeida(leida.id(), UserId.of(usuarioId), CLOCK.now());
+        adapter.guardar(Notificacion.emitir(UserId.of(usuarioId), TipoNotificacion.ANUNCIO_SISTEMA, "sin leer 1", "c",
+                null, CLOCK));
+        adapter.guardar(Notificacion.emitir(UserId.of(usuarioId), TipoNotificacion.ANUNCIO_SISTEMA, "sin leer 2", "c",
+                null, CLOCK));
+
+        var desde = CLOCK.now().minusSeconds(90L * 24 * 3600);
+        long noLeidas = adapter.contarNoLeidas(UserId.of(usuarioId), desde);
+
+        assertThat(noLeidas).isEqualTo(2);
+    }
+
+    @Test
     void purgarAnterioresABorraSoloLasViejas() {
         FixedClock hace100Dias = FixedClock.at(CLOCK.now().minusSeconds(100L * 24 * 3600));
         Notificacion vieja = adapter.guardar(Notificacion.emitir(UserId.of(usuarioId), TipoNotificacion.ANUNCIO_SISTEMA,

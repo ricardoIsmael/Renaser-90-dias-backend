@@ -38,6 +38,11 @@ class NotificacionPersistenceAdapter implements LoadNotificacionPort, SaveNotifi
     }
 
     @Override
+    public long contarNoLeidas(UserId usuarioId, Instant desde) {
+        return repository.countByUsuarioIdAndLeidaEnIsNullAndCreadoEnGreaterThanEqual(usuarioId.value(), desde);
+    }
+
+    @Override
     public Notificacion guardar(Notificacion notificacion) {
         var guardada = repository.save(mapper.toEntity(notificacion));
         return mapper.toDomain(guardada);

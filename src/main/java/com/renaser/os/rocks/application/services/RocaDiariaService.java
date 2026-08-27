@@ -9,6 +9,8 @@ import com.renaser.os.evidence.api.TipoEvidencia;
 import com.renaser.os.points.api.AjustarPuntosPort;
 import com.renaser.os.points.api.MotivoPuntos;
 import com.renaser.os.rocks.api.RocaCompletadaEvent;
+import com.renaser.os.points.api.RocaDelDiaResumen;
+import com.renaser.os.points.api.RocasDelDiaFinder;
 import com.renaser.os.rocks.application.ports.in.rocadiaria.CompletarRocaDiariaUseCase;
 import com.renaser.os.rocks.application.ports.in.rocadiaria.ConsultarRocasDeHoyUseCase;
 import com.renaser.os.rocks.application.ports.in.rocadiaria.ConsultarRocasDeMananaUseCase;
@@ -55,7 +57,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaDiariaUseCase,
-        SolicitarUrlAdjuntoRocaUseCase, ConsultarRocasDeHoyUseCase, ConsultarRocasDeMananaUseCase {
+        SolicitarUrlAdjuntoRocaUseCase, ConsultarRocasDeHoyUseCase, ConsultarRocasDeMananaUseCase,
+        RocasDelDiaFinder {
 
     /** Bucket propio de evidencia de rocas (D-34), mismo patron que `phasecontracts`/`support`. */
     static final String BUCKET_ROCAS = "renaser-files";
@@ -192,6 +195,25 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         LocalDate hoy = clock.now().atZone(progreso.zona()).toLocalDate();
         List<RocaDiaria> rocas = loadRocaDiariaPort.deParticipanteYFecha(actorId, hoy);
         return rocas.stream().map(r -> new RocaDiariaVista(r, estaBloqueada(r, rocas))).toList();
+    }
+
+    /**
+     * Implementa {@link RocasDelDiaFinder}. Reutiliza la MISMA cuenta de "hoy" (zona
+     * horaria del participante) que {@link #hoy(UserId)}, pero sin su {@code requireProgreso}:
+     * ese finder es de lectura para otro módulo (`points`, {@code GET /home}), que ya resolvió
+     * su propia autorización antes de preguntar — un participante sin progreso de Rocas
+     * (todavía no hizo onboarding, o no es TRAINEE) simplemente no tiene nada "de hoy".
+     */
+    @Override
+    public List<RocaDelDiaResumen> deHoy(UserId participanteId) {
+        return progresoPort.deParticipante(participanteId)
+                .map(progreso -> {
+                    LocalDate hoy = clock.now().atZone(progreso.zona()).toLocalDate();
+                    return loadRocaDiariaPort.deParticipanteYFecha(participanteId, hoy).stream()
+                            .map(r -> new RocaDelDiaResumen(r.id().value(), r.titulo(), r.descripcion(), r.completada()))
+                            .toList();
+                })
+                .orElseGet(List::of);
     }
 
     @Override

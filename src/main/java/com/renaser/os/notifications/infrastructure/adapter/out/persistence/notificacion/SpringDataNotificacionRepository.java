@@ -18,6 +18,8 @@ interface SpringDataNotificacionRepository extends JpaRepository<NotificacionJpa
 
     boolean existsByIdAndUsuarioId(Long id, UUID usuarioId);
 
+    long countByUsuarioIdAndLeidaEnIsNullAndCreadoEnGreaterThanEqual(UUID usuarioId, Instant desde);
+
     /** UPDATE atomico: solo mueve leidaEn si sigue null y es del usuario — ver
      * {@code SaveNotificacionPort.marcarLeida} para el porque (nunca "cargar y comparar"). */
     @Modifying
