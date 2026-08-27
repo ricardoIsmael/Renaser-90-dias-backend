@@ -1,29 +1,46 @@
 package com.renaser.os.academy.infrastructure.adapter.in.rest.clasediaria;
 
+import com.renaser.os.academy.application.ports.in.clasediaria.CompletarClaseDiariaUseCase;
+import com.renaser.os.academy.application.ports.in.clasediaria.CompletarClaseDiariaUseCase.CompletarClaseDiariaCommand;
 import com.renaser.os.academy.application.ports.in.clasediaria.ConsultarClaseDiariaUseCase;
+import com.renaser.os.academy.domain.model.curso.LeccionId;
 import com.renaser.os.shared.domain.UserId;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Espejo de `GET /api/v1/classroom/clase-diaria` (RenaserBack). Solo lectura
- * — completar la clase (que ademas cierra el habito y otorga puntos) queda
- * pendiente de coordinar con `habits`, ver `docs/MODULO_ACADEMY.md` §6.
+ * Espejo de `GET`/`POST /api/v1/classroom/clase-diaria` (RenaserBack). Completar
+ * ademas cierra el habito {@code DAILY_CLASS} (`habits`) y otorga puntos — ver
+ * javadoc de {@link CompletarClaseDiariaUseCase} y `docs/MODULO_ACADEMY.md` §6.
  */
 @RestController
 @RequestMapping("/api/v1/classroom/clase-diaria")
 public class ClaseDiariaController {
 
     private final ConsultarClaseDiariaUseCase claseDiariaUseCase;
+    private final CompletarClaseDiariaUseCase completarClaseDiariaUseCase;
 
-    public ClaseDiariaController(ConsultarClaseDiariaUseCase claseDiariaUseCase) {
+    public ClaseDiariaController(ConsultarClaseDiariaUseCase claseDiariaUseCase,
+                                  CompletarClaseDiariaUseCase completarClaseDiariaUseCase) {
         this.claseDiariaUseCase = claseDiariaUseCase;
+        this.completarClaseDiariaUseCase = completarClaseDiariaUseCase;
     }
 
     @GetMapping
     public ClaseDiariaResponse claseDeHoy(@RequestHeader("X-Actor-Id") String actorId) {
         return ClaseDiariaResponse.from(claseDiariaUseCase.claseDeHoy(UserId.of(actorId)));
+    }
+
+    @PostMapping
+    public CompletarClaseDiariaResponse completar(@RequestHeader("X-Actor-Id") String actorId,
+                                                    @Valid @RequestBody CompletarClaseDiariaRequest request) {
+        var comando = new CompletarClaseDiariaCommand(UserId.of(actorId), LeccionId.of(request.leccionId()),
+                request.resumen());
+        return CompletarClaseDiariaResponse.from(completarClaseDiariaUseCase.completar(comando));
     }
 }

@@ -401,9 +401,37 @@ inofensivo hoy porque la app **firma la portada del lado cliente** contra el buc
 - **Admin CRUD de catálogo** (AC-11): crear/editar/borrar curso, secciones, lecciones, recursos,
   subir portada, asignar usuarios/grupos uno a uno o en lote, revocar/restaurar asignación. Todo
   `adminService.ts` del repo viejo queda sin portar.
-- **Completar Clase Diaria de verdad** (AC-13): necesita un hook hacia `habits`
-  (`completeTodayDailyClassWithSummary`) para cerrar el hábito + otorgar puntos. **Reportado al
-  supervisor** — no sé quién construye `habits` ni si ya existe un tipo de hábito "clase diaria".
+- **Completar Clase Diaria de verdad** (AC-13): ✅ **Cerrada (2026-08-26).** Investigado contra el
+  repo viejo (`clase-diaria/service.ts:60-90` + `habits/service.ts:1747-1811`): completar la Clase
+  Diaria son **dos escrituras relacionadas, no un solo concepto**. La cita exacta del repo viejo:
+  > `// Se guarda antes de completar el hábito. Ambos pasos son idempotentes: si una red se corta
+  > entre ellos, repetir la acción termina el segundo sin duplicar progreso ni puntos.`
+  > `const completed = await habitService.completeTodayDailyClassWithSummary(userId, resumen)`
+  > `if (!completed.success) return completed`
+  > `await repo.markLeccionCompleted(userId, clase.leccionId)`
+
+  (1) cierra el registro de HOY del hábito de catálogo `DAILY_CLASS` (`claveSistema` — sí existe en
+  el catálogo, confirmado por `isDailyClassHabit`/`DAILY_CLASS_SYSTEM_KEY` en `habits/service.ts:1542-1546`
+  y por las referencias ya presentes en este backend en `SelectorHabito`/`PoliticaHabito`), dominio
+  exclusivo de `habits`: puntos, ventana de entrega y evento de dominio; (2) marca
+  `leccion_progreso`, dominio propio de `academy` ya cubierto por `CompletarLeccionUseCase`.
+
+  Construido en consecuencia, sin tocar BD (D-40): `habits.api.CompletarClaseDiariaHabitoUseCase`
+  (nuevo puerto público de `habits`, deliberadamente específico a `DAILY_CLASS` — no un "completar
+  cualquier hábito por clave" genérico, para no reabrir desde otro módulo el bypass de evidencia que
+  el repo viejo cierra a este único hábito) localiza el registro de HOY sin exponer su
+  `RegistroHabitoId` a `academy`, y delega el cálculo de puntos/ventana en el
+  `CompletarRegistroUseCase` ya existente (no se duplica esa lógica). `academy` agrega
+  `CompletarClaseDiariaUseCase`, implementado en `ClaseDiariaService`: revalida en servidor que la
+  lección pedida es la Clase Diaria real de hoy (nunca confía en lo que mande el cliente), llama al
+  puerto de `habits` y recién después a `CompletarLeccionUseCase` — mismo orden que el repo viejo,
+  ahora envuelto en una única transacción local (`@Transactional`, CLAUDE.MD §9.1) ya que ambos
+  pasos son idempotentes de por sí (`EstadoRegistro.COMPLETADO` es terminal en `habits`,
+  `marcarCompletada` es upsert-ignore en `academy`) y viven en el mismo Postgres. Nuevo endpoint:
+  `POST /api/v1/classroom/clase-diaria` (antes solo existía el `GET`). Tests en
+  `ClaseDiariaServiceTest`/`ClaseDiariaHabitoServiceTest` (unitarios, Mockito): camino feliz,
+  idempotencia, lección que no coincide con la de hoy (403), sin clase disponible (409), y actor
+  suspendido en ambos módulos (403).
 - **Academia Adaptativa completa** (AC-12): generación real vía Gemini, necesita `RadarEntry` (dueño:
   otro módulo, probablemente `onboarding` u otro futuro) + ranking de lecciones disponibles. Ola 5.
 - **Pregunta abierta AC-02**: ¿`acceso = RESTRINGIDO` debería, en algún escenario, ser visible (p.ej.

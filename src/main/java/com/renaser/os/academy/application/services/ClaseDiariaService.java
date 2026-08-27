@@ -1,6 +1,8 @@
 package com.renaser.os.academy.application.services;
 
+import com.renaser.os.academy.application.ports.in.clasediaria.CompletarClaseDiariaUseCase;
 import com.renaser.os.academy.application.ports.in.clasediaria.ConsultarClaseDiariaUseCase;
+import com.renaser.os.academy.application.ports.in.leccion.CompletarLeccionUseCase;
 import com.renaser.os.academy.application.ports.out.curso.LoadCursoPort;
 import com.renaser.os.academy.application.ports.out.curso.LoadLeccionPort;
 import com.renaser.os.academy.application.ports.out.curso.LoadSeccionCursoPort;
@@ -12,10 +14,14 @@ import com.renaser.os.academy.domain.model.curso.CursoId;
 import com.renaser.os.academy.domain.model.curso.Leccion;
 import com.renaser.os.academy.domain.model.curso.LeccionId;
 import com.renaser.os.academy.domain.model.curso.SeccionCurso;
+import com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase;
+import com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase.CompletarClaseDiariaHabitoCommand;
+import com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase.RegistroCompletado;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -25,14 +31,13 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
- * Resuelve la Clase Diaria del dia real del aprendiz. Espejo de
- * `resolveAvailableClass`/`findClaseDiaria` (RenaserBack
- * `clase-diaria/service.ts` + `repository.ts:168-233`), solo la parte de
- * LECTURA — completar la clase ademas cierra el habito diario y otorga
- * puntos, y eso vive en `habits` (ver javadoc del puerto, `docs/MODULO_ACADEMY.md` §6).
+ * Resuelve y completa la Clase Diaria del dia real del aprendiz. La resolucion es espejo de
+ * `resolveAvailableClass`/`findClaseDiaria` (RenaserBack `clase-diaria/service.ts` +
+ * `repository.ts:168-233`); completarla ademas cierra el habito diario y otorga puntos —
+ * ver javadoc de {@link CompletarClaseDiariaUseCase} y `docs/MODULO_ACADEMY.md` §6.
  */
 @Service
-public class ClaseDiariaService implements ConsultarClaseDiariaUseCase {
+public class ClaseDiariaService implements ConsultarClaseDiariaUseCase, CompletarClaseDiariaUseCase {
 
     /** Espejo de `ULTIMO_DIA_CON_CLASE` (clase-diaria/repository.ts:118). */
     private static final int ULTIMO_DIA_CON_CLASE = 90;
@@ -43,13 +48,19 @@ public class ClaseDiariaService implements ConsultarClaseDiariaUseCase {
     private final LoadSeccionCursoPort loadSeccionCursoPort;
     private final LoadLeccionPort loadLeccionPort;
     private final ConsultarProgresoParticipanteAcademyPort progresoPort;
+    private final CompletarClaseDiariaHabitoUseCase completarHabitoUseCase;
+    private final CompletarLeccionUseCase completarLeccionUseCase;
 
     public ClaseDiariaService(LoadCursoPort loadCursoPort, LoadSeccionCursoPort loadSeccionCursoPort,
-                               LoadLeccionPort loadLeccionPort, ConsultarProgresoParticipanteAcademyPort progresoPort) {
+                               LoadLeccionPort loadLeccionPort, ConsultarProgresoParticipanteAcademyPort progresoPort,
+                               CompletarClaseDiariaHabitoUseCase completarHabitoUseCase,
+                               CompletarLeccionUseCase completarLeccionUseCase) {
         this.loadCursoPort = loadCursoPort;
         this.loadSeccionCursoPort = loadSeccionCursoPort;
         this.loadLeccionPort = loadLeccionPort;
         this.progresoPort = progresoPort;
+        this.completarHabitoUseCase = completarHabitoUseCase;
+        this.completarLeccionUseCase = completarLeccionUseCase;
     }
 
     @Override
@@ -73,6 +84,40 @@ public class ClaseDiariaService implements ConsultarClaseDiariaUseCase {
 
         ClaseEncontrada c = clase.get();
         return new Disponible(diaActual, c.cursoId(), c.cursoTitulo(), c.leccionId(), c.leccionTitulo());
+    }
+
+    /**
+     * Espejo de {@code completeClaseDiaria} (clase-diaria/service.ts:60-90): resuelve la
+     * Clase Diaria de HOY en servidor (nunca confia en el {@code programDay} ni en la
+     * leccion que mande el cliente salvo para el chequeo de coincidencia), cierra el habito
+     * {@code DAILY_CLASS} en `habits` y recien despues marca la leccion como vista — mismo
+     * orden que el repo viejo. Ambos pasos son ademas individualmente idempotentes
+     * (`EstadoRegistro.COMPLETADO` es terminal en el lado de habits, `marcarCompletada` es
+     * upsert-ignore en el lado de academy), asi que envolver todo en una transaccion local
+     * (CLAUDE.MD §9.1) no cambia el comportamiento ante un reintento — solo lo hace atomico.
+     */
+    @Override
+    @Transactional
+    public ClaseDiariaCompletada completar(CompletarClaseDiariaCommand command) {
+        UserId actorId = command.actorId();
+        ClaseDiariaResolution resolucion = claseDeHoy(actorId);
+        Disponible disponible = requireDisponible(resolucion);
+        if (!disponible.leccionId().equals(command.leccionId())) {
+            throw new NotAuthorizedException("Esta no es la clase diaria de hoy");
+        }
+
+        RegistroCompletado registro = completarHabitoUseCase
+                .completarDeHoy(new CompletarClaseDiariaHabitoCommand(actorId, command.resumen()));
+        completarLeccionUseCase.completar(actorId, disponible.leccionId());
+
+        return new ClaseDiariaCompletada(disponible.leccionId(), registro.registroId(), registro.puntosOtorgados());
+    }
+
+    private Disponible requireDisponible(ClaseDiariaResolution resolucion) {
+        if (resolucion instanceof Disponible disponible) {
+            return disponible;
+        }
+        throw new IllegalStateException("No hay una clase diaria disponible para completar hoy");
     }
 
     /**
