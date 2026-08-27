@@ -13,6 +13,8 @@ interface SpringDataAccountRequestRepository extends JpaRepository<AccountReques
     @Query("select count(a) from AccountRequestJpaEntity a where a.ipSolicitud = :ip and a.creadoEn >= :since")
     long countByIpSolicitudAndCreadoEnAfter(String ip, Instant since);
 
+    boolean existsByEmail(String email);
+
     List<AccountRequestJpaEntity> findByEstado(EstadoSolicitudJpa estado, Pageable pageable);
 
     long countByEstado(EstadoSolicitudJpa estado);

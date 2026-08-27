@@ -23,6 +23,15 @@ public record Email(String value) {
         return normalized;
     }
 
+    /**
+     * Parte de dominio, ya normalizada a minusculas. Es donde se pregunta si el correo puede
+     * entregarse: los registros MX son del dominio, no del buzon. Seguro por construccion — el
+     * formato ya se valido en {@link #normalize}, asi que siempre hay exactamente una arroba.
+     */
+    public String dominio() {
+        return value.substring(value.indexOf('@') + 1);
+    }
+
     @Override
     public String toString() {
         return value;
