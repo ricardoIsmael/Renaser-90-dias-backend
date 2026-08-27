@@ -13,6 +13,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneId;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -171,5 +172,61 @@ class ConsultarResumenParticipacionPersistenceAdapterTest {
         crearParticipante(suspendido, 5, "America/Lima", celulaId, mentorId);
 
         assertThat(adapter.contarMiembrosDeCelula(celulaId)).isEqualTo(2);
+    }
+
+    // ─── Consultas por rol ───────────────────────────────────────────────────
+    //
+    // Estas dos quedaron sin cubrir y por eso E-47 (el enum `rol_usuario` comparado contra un
+    // parametro `varchar`) llego a runtime: reventaba en cada vuelta del scheduler de
+    // recordatorios, no al compilar ni en la suite. El unico test que puede atrapar eso es uno
+    // que EJECUTE el SQL contra Postgres de verdad, como estos.
+
+    @Test
+    void usuariosActivosConRolFiltraPorRolYPorEstado() {
+        UserId aprendizActivo = crearUsuario("APRENDIZ", "ACTIVO");
+        crearUsuario("APRENDIZ", "SUSPENDIDO");
+        crearUsuario("MENTOR", "ACTIVO");
+
+        var encontrados = adapter.usuariosActivosConRol(Set.of(UserRole.TRAINEE));
+
+        assertThat(encontrados).contains(aprendizActivo);
+    }
+
+    @Test
+    void usuariosActivosConRolAceptaVariosRolesALaVez() {
+        UserId aprendiz = crearUsuario("APRENDIZ", "ACTIVO");
+        UserId lider = crearUsuario("LIDER_MENTORES", "ACTIVO");
+        UserId alquimista = crearUsuario("ALQUIMISTA", "ACTIVO");
+
+        var encontrados = adapter.usuariosActivosConRol(Set.of(UserRole.TRAINEE, UserRole.MENTOR_LEAD));
+
+        assertThat(encontrados).contains(aprendiz, lider).doesNotContain(alquimista);
+    }
+
+    @Test
+    void usuariosActivosConRolNoConsultaSiNoHayRoles() {
+        assertThat(adapter.usuariosActivosConRol(Set.of())).isEmpty();
+    }
+
+    @Test
+    void usuariosActivosConDiaProgramaToleraUsuarioSinParticipacion() {
+        UserId aprendiz = crearUsuario("APRENDIZ", "ACTIVO");
+        UserId mentorId = crearUsuario("MENTOR", "ACTIVO");
+        UUID celulaId = crearCelula(mentorId);
+        crearParticipante(aprendiz, 42, "America/Lima", celulaId, mentorId);
+        UserId admin = crearUsuario("ADMIN", "ACTIVO");
+
+        var encontrados = adapter.usuariosActivosConDiaPrograma(Set.of(UserRole.TRAINEE, UserRole.ADMIN));
+
+        // El LEFT JOIN tiene que dejar pasar al ADMIN sin fila de programa, con dia null.
+        assertThat(encontrados)
+                .anySatisfy(u -> {
+                    assertThat(u.id()).isEqualTo(aprendiz);
+                    assertThat(u.diaPrograma()).isEqualTo(42);
+                })
+                .anySatisfy(u -> {
+                    assertThat(u.id()).isEqualTo(admin);
+                    assertThat(u.diaPrograma()).isNull();
+                });
     }
 }

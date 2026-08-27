@@ -62,14 +62,15 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             """;
 
     private static final String QUERY_ACTIVOS_POR_ROL = """
-            SELECT id FROM renaser.usuarios WHERE estado = 'ACTIVO' AND rol = ANY (?1)
+            SELECT id FROM renaser.usuarios
+            WHERE estado = 'ACTIVO' AND rol = ANY (CAST(?1 AS renaser.rol_usuario[]))
             """;
 
     private static final String QUERY_ACTIVOS_POR_ROL_CON_DIA = """
             SELECT u.id, pp.dia_programa
             FROM renaser.usuarios u
             LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
-            WHERE u.estado = 'ACTIVO' AND u.rol = ANY (?1)
+            WHERE u.estado = 'ACTIVO' AND u.rol = ANY (CAST(?1 AS renaser.rol_usuario[]))
             """;
 
     private static final String QUERY_INSCRITOS_ACTIVOS = """
@@ -137,9 +138,20 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
     }
 
     /**
-     * `= ANY (?)` con un array de texto en vez de un `IN (...)` armado a mano: evita
-     * concatenar placeholders y deja el enum nativo `rol_usuario` comparandose contra
-     * texto, que Postgres resuelve sin cast explicito.
+     * `= ANY (?)` con un array en vez de un `IN (...)` armado a mano: evita concatenar
+     * placeholders.
+     *
+     * <p><b>El CAST no es opcional</b> (E-47, 2026-08-27). La version anterior pasaba el array
+     * sin castear, confiando en que Postgres compararia el enum nativo {@code rol_usuario}
+     * contra texto por su cuenta; no lo hace, y la consulta reventaba en runtime con
+     * <em>"operator does not exist: renaser.rol_usuario = character varying"</em>. Es distinto
+     * del {@code estado = 'ACTIVO'} de al lado, que si funciona: un literal en el SQL llega
+     * SIN tipo y Postgres lo coacciona al enum, mientras que un parametro ligado llega tipado
+     * como {@code varchar} y ya no hay coercion posible.
+     *
+     * <p>Se castea el ARRAY al enum y no la columna a texto ({@code rol::text = ANY (?)}):
+     * castear la columna descartaria cualquier indice sobre {@code rol}. Es seguro porque
+     * {@link #aClave} mapea de forma exhaustiva a las cinco etiquetas reales del enum.
      */
     @Override
     @SuppressWarnings("unchecked")
