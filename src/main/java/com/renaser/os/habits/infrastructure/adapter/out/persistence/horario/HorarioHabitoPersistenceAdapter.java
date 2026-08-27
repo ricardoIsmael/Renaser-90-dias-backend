@@ -4,10 +4,12 @@ import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort
 import com.renaser.os.habits.application.ports.out.horario.SaveHorarioHabitoPort;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Component
@@ -37,7 +39,17 @@ class HorarioHabitoPersistenceAdapter implements LoadHorarioHabitoPort, SaveHora
     }
 
     @Override
+    public Optional<HorarioHabito> byId(HorarioHabitoId id) {
+        return repository.findById(id.value()).map(mapper::toDomain);
+    }
+
+    @Override
     public HorarioHabito save(HorarioHabito horario) {
         return mapper.toDomain(repository.saveAndFlush(mapper.toEntity(horario)));
+    }
+
+    @Override
+    public void eliminar(HorarioHabitoId id) {
+        repository.deleteById(id.value());
     }
 }

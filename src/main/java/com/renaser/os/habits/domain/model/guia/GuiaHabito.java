@@ -69,6 +69,51 @@ public final class GuiaHabito {
         this.actualizadoEn = ahora;
     }
 
+    /**
+     * Edicion completa desde el panel admin (hueco #11): los 6 textos +
+     * mantra + referencia de fuente, todo lo que {@link ContenidoGuia} agrupa.
+     * {@code habitoId}/{@code diaInicio} no se tocan — identifican la guia, no su
+     * contenido (ver {@code UpsertGuiaHabitoUseCase}: cambiar el tramo de dias
+     * es "crear otra guia", no editar esta).
+     */
+    public void actualizarContenidoCompleto(ContenidoGuia contenido, Instant ahora) {
+        Objects.requireNonNull(contenido, "contenido es obligatorio");
+        this.queHacer = contenido.queHacer();
+        this.comoHacerlo = contenido.comoHacerlo();
+        this.ciencia = contenido.ciencia();
+        this.renaser = contenido.renaser();
+        this.alquimia = contenido.alquimia();
+        this.resultados = contenido.resultados();
+        this.mantraTitulo = contenido.mantraTitulo();
+        this.mantraIntro = contenido.mantraIntro();
+        this.mantraCuerpo = contenido.mantraCuerpo();
+        this.referenciaFuente = contenido.referenciaFuente();
+        this.actualizadoEn = ahora;
+    }
+
+    /**
+     * Cierra la vigencia de esta guia en {@code diaFinInclusive} — usado por
+     * {@code closePrevious} (hueco #11): al dar de alta una guia nueva que empieza en el
+     * dia N, la guia anterior (con {@code diaFin == null}, abierta) se cierra en N-1 para
+     * que los rangos de {@link #aplicaEnDia} no se pisen.
+     */
+    public void cerrarEn(int diaFinInclusive, Instant ahora) {
+        if (diaFinInclusive < diaInicio) {
+            throw new IllegalArgumentException("diaFin no puede ser anterior a diaInicio (" + diaInicio + ")");
+        }
+        this.diaFin = diaFinInclusive;
+        this.actualizadoEn = ahora;
+    }
+
+    /** Fija (o quita, con {@code null}) el dia de cierre — panel admin, hueco #11. */
+    public void establecerDiaFin(Integer diaFin, Instant ahora) {
+        if (diaFin != null && diaFin < diaInicio) {
+            throw new IllegalArgumentException("diaFin no puede ser anterior a diaInicio (" + diaInicio + ")");
+        }
+        this.diaFin = diaFin;
+        this.actualizadoEn = ahora;
+    }
+
     @Override
     public String toString() {
         return "GuiaHabito[" + id + ", " + habitoId + ", dia " + diaInicio + "]";

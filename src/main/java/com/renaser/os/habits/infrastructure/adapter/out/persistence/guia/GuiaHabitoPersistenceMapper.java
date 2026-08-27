@@ -15,4 +15,11 @@ class GuiaHabitoPersistenceMapper {
                 e.getMantraIntro(), e.getMantraCuerpo(), e.getReferenciaFuente(), e.getCreadoEn(),
                 e.getActualizadoEn());
     }
+
+    GuiaHabitoJpaEntity toEntity(GuiaHabito g) {
+        return new GuiaHabitoJpaEntity(g.id().value(), g.habitoId().value(), (short) g.diaInicio(),
+                g.diaFin() != null ? g.diaFin().shortValue() : null, g.queHacer(), g.comoHacerlo(), g.ciencia(),
+                g.renaser(), g.alquimia(), g.resultados(), g.mantraTitulo(), g.mantraIntro(), g.mantraCuerpo(),
+                g.referenciaFuente(), g.creadoEn(), g.actualizadoEn());
+    }
 }

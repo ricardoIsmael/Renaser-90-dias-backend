@@ -56,6 +56,22 @@ public final class Habito {
                 null, null, true, ahora, ahora);
     }
 
+    /**
+     * Alta desde el panel admin (hueco #11, docs/PLAN_INTEGRACION_FRONTEND.md #11):
+     * variante de {@link #crearDeSistema(String, TipoHabito, String, ExigenciaEvidencia, Instant)}
+     * que además fija descripcion/opcionalidad desde el alta, en vez de dejarlas en su
+     * default y forzar un segundo PATCH. {@code claveSistema} queda null a proposito — el
+     * panel admin no crea claves funcionales (esas las siembra la migracion baseline).
+     */
+    public static Habito crearDeSistema(String titulo, TipoHabito tipo, DetallesHabito detalles, Instant ahora) {
+        Objects.requireNonNull(detalles, "detalles es obligatorio");
+        Objects.requireNonNull(tipo, "tipo es obligatorio");
+        return new Habito(HabitoId.newId(), AmbitoHabito.SISTEMA, null, requireTitulo(titulo), detalles.descripcion(),
+                tipo, requireCategoria(detalles.categoriaClave()), null, null, detalles.exigenciaEvidencia(),
+                detalles.esOpcional(), detalles.obligatorioEnIntoxicacion(), false, null, null, null, null, true,
+                ahora, ahora);
+    }
+
     public static Habito crearPersonal(UserId participanteId, String titulo, TipoHabito tipo, String categoriaClave,
                                         PlantillaHabitoPersonal plantilla, String etiquetaMeta, Instant ahora) {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio para un habito PERSONAL");
@@ -85,6 +101,39 @@ public final class Habito {
 
     public void desactivar(Instant ahora) {
         this.activo = false;
+        this.actualizadoEn = ahora;
+    }
+
+    /** Reactiva un habito de catalogo dado de baja logica (panel admin). */
+    public void activar(Instant ahora) {
+        this.activo = true;
+        this.actualizadoEn = ahora;
+    }
+
+    /**
+     * Edicion administrativa (panel admin, hueco #11). Deliberadamente NO toca:
+     * <ul>
+     *   <li>{@code titulo} — tiene su propio metodo ({@link #renombrar}), con su propia
+     *       validacion de "obligatorio y recortado".</li>
+     *   <li>{@code ambito}/{@code participanteId} — identidad del agregado, no se
+     *       reasignan jamas.</li>
+     *   <li>{@code claveSistema} — clave funcional estable que {@code SelectorHabito.PorClaveSistema}
+     *       usa para resolver politicas (ej. {@code PASTILLA_RENACER}); cambiarla en caliente
+     *       deja politicas ya indexadas apuntando a un habito distinto sin que nadie lo note.</li>
+     *   <li>{@code tipo} — {@code SelectorHabito.PorTipo} lo usa para reglas estructurales
+     *       (ej. BLOQUEO = Santuario) y el flujo de un {@code registro_habito} ya generado
+     *       asume el tipo que tenia el habito al crearse (Santuario vs completar directo).
+     *       Reclasificar un CHECKBOX en BLOQUEO (o viceversa) despues de que ya existan
+     *       tracks es un cambio de regla de negocio no confirmado — no se implementa.</li>
+     * </ul>
+     */
+    public void actualizarDetalles(DetallesHabito detalles, Instant ahora) {
+        Objects.requireNonNull(detalles, "detalles es obligatorio");
+        this.descripcion = detalles.descripcion();
+        this.categoriaClave = requireCategoria(detalles.categoriaClave());
+        this.exigenciaEvidencia = detalles.exigenciaEvidencia();
+        this.esOpcional = detalles.esOpcional();
+        this.obligatorioEnIntoxicacion = detalles.obligatorioEnIntoxicacion();
         this.actualizadoEn = ahora;
     }
 

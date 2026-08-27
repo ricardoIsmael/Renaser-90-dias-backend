@@ -42,13 +42,32 @@ class HabitoPersistenceAdapter implements LoadHabitoPort, SaveHabitoPort {
     }
 
     @Override
+    public List<Habito> catalogoCompleto() {
+        return repository.findByAmbito(AmbitoHabitoJpa.SISTEMA).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
     public List<Habito> personalesActivosDe(UserId participanteId) {
         return repository.findByAmbitoAndParticipanteIdAndActivoTrue(AmbitoHabitoJpa.PERSONAL, participanteId.value())
                 .stream().map(mapper::toDomain).toList();
     }
 
     @Override
+    public Optional<Habito> porClaveSistema(String claveSistema) {
+        return repository.findByClaveSistema(claveSistema).map(mapper::toDomain);
+    }
+
+    @Override
     public Habito save(Habito habito) {
         return mapper.toDomain(repository.saveAndFlush(mapper.toEntity(habito)));
+    }
+
+    @Override
+    public void eliminar(HabitoId id) {
+        // flush() fuerza el DELETE ya, para que un violacion de la FK RESTRICT de
+        // registros_habito (SaveHabitoPort.eliminar) explote aca dentro del mismo metodo
+        // transaccional, no en un flush tardio en otro punto del request.
+        repository.deleteById(id.value());
+        repository.flush();
     }
 }

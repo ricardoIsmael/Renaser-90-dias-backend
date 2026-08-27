@@ -450,3 +450,234 @@ Esto desbloquea, del lado de `habits`, el Espejo Sombra de `rag` (`habits.api.En
 5. Renombre de hábito no se refleja todavía en la proyección del hueco #10 (§12.3).
 6. Staggering (D-H2) sigue sin portarse — `habit-unlocks` es de solo lectura (§12.4).
 7. Sin endpoint de upload-url dedicado para el audio de la Bitácora Nocturna (§14).
+
+---
+
+## 16. `CompletarClaseDiariaHabitoUseCase` — cierre del gap #23 con `academy` (DAILY_CLASS) — completado 2026-08-26
+
+**Encargo:** el gap #23 de `docs/PLAN_INTEGRACION_FRONTEND.md` (`POST /classroom/clase-diaria`
+completar) estaba diferido a coordinar con `habits` — `academy` no sabía si el hábito
+`DAILY_CLASS` ya existía en este backend ni cómo se relacionaba con "ver la clase de hoy".
+
+**Investigación contra el repo viejo, con cita exacta** (`RenaserBack`,
+`clase-diaria/service.ts:55-90` + `habits/service.ts:1542-1811`): completar la Clase Diaria son
+**dos escrituras relacionadas, no un solo concepto**.
+
+```ts
+// Se guarda antes de completar el hábito. Ambos pasos son idempotentes: si una red se corta
+// entre ellos, repetir la acción termina el segundo sin duplicar progreso ni puntos.
+const completed = await habitService.completeTodayDailyClassWithSummary(userId, resumen)
+if (!completed.success) return completed
+await repo.markLeccionCompleted(userId, clase.leccionId)
+```
+
+`DAILY_CLASS` **sí es** un hábito de catálogo real (`claveSistema`), verificado contra
+`DAILY_CLASS_SYSTEM_KEY`/`isDailyClassHabit` (`habits/service.ts:1542-1546`) — y ya estaba citado
+como ejemplo en el javadoc de `SelectorHabito`/`PoliticaHabito` de este mismo backend, aunque
+todavía no tenía ningún caso de uso que lo resolviera por su clave.
+
+**Qué se construyó, sin tocar BD (D-40):**
+
+- `LoadHabitoPort.porClaveSistema(String)` — nuevo lookup por `clave_sistema` (columna ya existía,
+  `UNIQUE`, sin usar todavía desde ningún puerto). Implementado en `HabitoPersistenceAdapter` +
+  `SpringDataHabitoRepository.findByClaveSistema`.
+- `habits.api.CompletarClaseDiariaHabitoUseCase` (nuevo, `@NamedInterface`) — localiza el registro
+  de HOY del hábito `DAILY_CLASS` sin exponer su `RegistroHabitoId` al llamador, y delega el
+  cálculo de puntos/ventana/evento de dominio en el `CompletarRegistroUseCase` ya existente (no se
+  duplica esa lógica — sigue viviendo en un solo lugar, `RegistroService`, tal como exige el
+  javadoc de `PoliticaHabito`). Idempotente: si el registro de hoy ya está `COMPLETADO`, devuelve
+  el resultado ya otorgado sin volver a completar. Implementado en `ClaseDiariaHabitoService`.
+- **Deliberadamente NO es un "completar cualquier hábito por clave" genérico.** El repo viejo
+  cierra el bypass de evidencia de `completeDailyClassTrack` a `DAILY_CLASS` únicamente — la ruta
+  pública de completar hábitos (H-02) no puede activarlo para ningún otro. Generalizar este puerto
+  abriría, para cualquier módulo futuro que importe `habits.api`, un atajo para completar hábitos
+  con evidencia obligatoria sin subirla.
+- Defensa propia dentro de `ClaseDiariaHabitoService`: aunque hoy el único llamador (`academy`) ya
+  valida cuenta suspendida antes de llegar acá (resolviendo la Clase Diaria del día), el puerto es
+  público y no confía en que todo futuro llamador repita ese chequeo.
+
+**Del lado de `academy`:** `CompletarClaseDiariaUseCase` (nuevo puerto), implementado en
+`ClaseDiariaService` junto a la resolución de lectura ya existente. Revalida en servidor que la
+lección pedida coincide con la Clase Diaria real de hoy (403 si no), delega en el puerto de
+`habits` y recién después llama al `CompletarLeccionUseCase` de `academy` ya existente — mismo
+orden que el repo viejo. Envuelto en una única `@Transactional` (CLAUDE.MD §9.1): ambos pasos ya
+son idempotentes por separado, así que la transacción local no cambia el comportamiento ante un
+reintento, solo lo hace atómico (ventaja real del monolito frente al repo viejo, que dependía de
+la idempotencia de cada paso porque no tenía una transacción compartida). Nuevo endpoint
+`POST /api/v1/classroom/clase-diaria`. Detalle completo en `docs/MODULO_ACADEMY.md` §6 (AC-13).
+
+**Tests (unitarios, Mockito, sin Spring/Postgres):** `ClaseDiariaHabitoServiceTest` — camino feliz
+delegando en `CompletarRegistroUseCase`, idempotencia si ya estaba `COMPLETADO`, suspendido →
+`NotAuthorizedException`, sin hábito `DAILY_CLASS` en catálogo → `NoSuchElementException`, sin
+registro de hoy → `NoSuchElementException`, resumen corto rechazado en el constructor del comando.
+Del lado de `academy`, `ClaseDiariaServiceTest` extendido con los mismos casos más "lección que no
+es la de hoy" (403).
+
+**Qué quedó fuera:** no se tocó `RegistroService`/la matriz de políticas (`PoliticaHabito`) — no
+hizo falta una `PoliticaHabito` propia para `DAILY_CLASS` porque el nuevo puerto no pasa por la
+ruta genérica de completar (H-02); si el día de mañana se necesita bloquear el completado directo
+de `DAILY_CLASS` vía H-02, ese es un cambio aparte, en `RegistroPoliticasHabito`.
+
+---
+
+## 17. Panel admin de catálogo — hueco #11 — completado 2026-08-26 (adjuntos ENLACE solamente)
+
+**Encargo:** `docs/PLAN_INTEGRACION_FRONTEND.md` #11 — `habitsAdmin.ts` (cliente ya escrito,
+`C:\renaserPlayStore\src\services\habitsAdmin.ts`) esperaba un backend admin de catálogo, horarios
+y guías/adjuntos que todavía no existía. La capa de LECTURA de estos tres agregados ya existía
+(usada por `TracksDelDiaProyeccionService`); lo que faltaba era la capa de ESCRITURA
+administrativa.
+
+### 17.1 Invariantes de `Habito` protegidos deliberadamente (y por qué)
+
+Antes de exponer un endpoint de edición se revisaron los invariantes de `Habito` contra el resto
+del código que ya lo consume:
+
+- **`claveSistema` — inmutable, ni antes ni ahora tenía setter.** `SelectorHabito.PorClaveSistema`
+  (usado hoy por `PoliticaHabito`/`RegistroPoliticasHabito`, ej. `PASTILLA_RENACER`, `DAILY_CLASS`
+  del §16) resuelve políticas por esta clave — cambiarla en caliente deja una política ya indexada
+  apuntando a un hábito distinto sin que nada lo note. El DTO de creación/edición del panel admin
+  (`CreateHabitRequest`/`UpdateHabitRequest`) ni siquiera tiene este campo — el panel admin no crea
+  claves funcionales, esas las siembra la migración baseline.
+- **`tipo` — se hizo explícitamente inmutable post-creación, aunque el tipo TS del cliente
+  (`UpdateHabitInput`) técnicamente permite mandar `habitType` en la edición.** `SelectorHabito.PorTipo`
+  usa `tipo` para reglas estructurales (`BLOQUEO` = Santuario, ver §0.4) y el significado de un
+  `registro_habito` ya generado depende de qué tipo tenía el hábito al crearse (Santuario vs
+  completar directo). Reclasificar un `CHECKBOX` en `BLOQUEO` después de que ya existan tracks es
+  un cambio de regla de negocio no confirmado por nadie — se decidió **no implementarlo**:
+  `UpdateHabitRequest.habitType` se acepta en el JSON (para no romper si el cliente lo manda) pero
+  se ignora al construir el comando, documentado explícitamente en el javadoc del DTO y de
+  `Habito.actualizarDetalles`.
+- **`ambito`/`participanteId` — identidad del agregado, nunca se reasignan.** No expuesto en ningún
+  DTO de escritura.
+- **Categoría/exigencia de evidencia/opcionalidad — sí editables**, no tienen ningún consumidor que
+  dependa de que permanezcan fijas tras la creación.
+
+Se agregó `Habito.actualizarDetalles(DetallesHabito, Instant)` (value object nuevo,
+`domain/model/habito/DetallesHabito.java`) y `Habito.activar(Instant)` (faltaba el inverso de
+`desactivar`). Un test de dominio (`HabitoTest.tipoYClaveSistemaNoTienenNingunMetodoMutadorPublico`)
+documenta la garantía: ningún método de instancia toca `tipo` ni `claveSistema` fuera del
+constructor privado.
+
+### 17.2 Qué se construyó
+
+```
+habitoadmin/    (nuevo) — ConsultarCatalogoAdminUseCase, Crear/Actualizar/CambiarActivo/EliminarHabitoUseCase
+                HabitoAdminService, HabitoAdminGuard (compartido por los 3 servicios de este hueco)
+                HabitoAdminController — /api/v1/admin/habits (GET, POST, POST /{id}, POST /{id}/toggle, DELETE /{id})
+horarioadmin/   (nuevo) — Consultar/Crear/Actualizar/EliminarHorarioHabitoUseCase, HorarioHabitoAdminService
+                HorarioHabitoAdminController — /api/v1/admin/habits/{id}/schedules, /schedules/{id}
+guiaadmin/      (nuevo) — Consultar/Upsert/EliminarGuiaHabitoUseCase, Crear/EliminarAdjuntoGuiaUseCase
+                GuiaHabitoAdminService, GuiaHabitoAdminController + GuiaAdjuntoAdminController
+```
+
+- **`HorarioHabito` ganó `actualizarRango` y `diaInicio` pasó a mutable** (antes `final`) — el panel
+  admin puede correr el rango de días de un horario existente; no hay ningún consumidor que
+  dependiera de que `diaInicio` fuera inmutable (a diferencia de `tipo`/`claveSistema` en `Habito`).
+- **`GuiaHabito` ganó `actualizarContenidoCompleto`, `cerrarEn` y `establecerDiaFin`** (value object
+  nuevo `ContenidoGuia`). El endpoint de guías (`UpsertGuiaHabitoUseCase`) es un upsert real por
+  `(habitoId, diaInicio)` — mismo `UNIQUE` de `guias_habito` — con `closePrevious`: si viene en
+  `true`, cierra en `diaInicio-1` la guía abierta (`diaFin IS NULL`) más reciente del hábito, salvo
+  que sea la misma que se está editando (test `upsertConClosePreviousNoSeCierraASiMisma`).
+- **`AdjuntoGuia` NO tenía NINGUNA persistencia** (solo dominio, documentado en §1 de este archivo
+  como pendiente) — se construyó el stack completo (`AdjuntoGuiaJpaEntity`, mapper con los dos
+  enums espejo `SeccionGuiaJpa`/`TipoMedioGuiaJpa`, `SpringDataAdjuntoGuiaRepository`,
+  `AdjuntoGuiaPersistenceAdapter`) más los puertos `Load/SaveAdjuntoGuiaPort`.
+- **Traducción de vocabulario en la frontera REST** (CLAUDE.MD §5.4.1, a mano): el dominio habla
+  español (`CALIFICACION`, `BLOQUEO`, `CUERPO`/`MENTE`/`CONSCIENCIA`/`ESPIRITU`, `OPCIONAL`/
+  `OBLIGATORIA`, `QUE_HACER`/`COMO_HACERLO`/..., `ENLACE`/`IMAGEN`/`AUDIO`) y `habitsAdmin.ts` habla
+  inglés (`RATING`/`BLOCKING`, `BODY`/`MIND`/`CONSCIENCE`/`SPIRIT`, `OPTIONAL`/`REQUIRED`,
+  `WHAT_TO_DO`/`HOW_TO_DO`/..., `LINK`/`IMAGE`/`AUDIO`) — el mapeo de categorías está tomado literal
+  del comentario de la propia siembra SQL (`V1__baseline_renaser.sql`: "BODY→CUERPO, MIND→MENTE,
+  CONSCIENCE→CONSCIENCIA, SPIRIT→ESPIRITU"), no inventado.
+- **`PATCH` real para horarios** (`ActualizarHorarioHabitoUseCase`): `UpdateScheduleInput` del
+  cliente distingue "clave ausente" (no tocar) de "clave presente en `null`" (limpiar, ej. volver el
+  horario abierto quitando `endDay`) — un record normal no puede distinguir eso, así que
+  `HorarioHabitoAdminController.actualizar` lee el body como `JsonNode` (única excepción al mapeo a
+  mano con DTOs tipados de esta pasada) vía `PartialUpdateScheduleRequest.from(JsonNode)`.
+- **`updateHabit` (catálogo) SÍ es reemplazo completo, no merge parcial** — decisión de alcance
+  documentada en el javadoc de `UpdateHabitRequest`: aunque el tipo TS del cliente marca todo
+  opcional, se asumió que el panel siempre reenvía el formulario completo ya hidratado (patrón
+  estándar de una pantalla de edición), evitando construir la misma capa de "ausente vs. null" que
+  sí hizo falta para horarios.
+- **Borrado de hábito (`DELETE /api/v1/admin/habits/{id}`) es físico, no lógico** — `SaveHabitoPort.eliminar`
+  deja que la FK `RESTRICT` de `registros_habito.habito_id` (P-02, "el catálogo no arrastra
+  historial") frene el DELETE con una violación de integridad si el hábito ya tiene tracks; el
+  `GlobalExceptionHandler` ya traducía `DataIntegrityViolationException` a 409 (nada nuevo que
+  escribir ahí). Un hábito sin historial se borra de verdad; uno con historial se da de baja lógica
+  con el toggle (`activo=false`).
+
+### 17.3 Autorización
+
+Mismo criterio que `CategoriaMuroService` (`community`)/`EvidenciaService`/etc.: ADMIN/ALCHEMIST,
+`SUSPENDED` → 403. Extraído a una clase compartida DENTRO del módulo (`HabitoAdminGuard`, package-
+private) en vez de duplicado 3 veces en los 3 servicios nuevos — la duplicación *entre* módulos es
+deliberada (CLAUDE.MD §4.3), pero duplicar dentro del mismo módulo no protege ningún límite de
+Modulith. El actor viaja por `X-Actor-Id` (patrón temporal de todo este backend mientras B-2 sigue
+bloqueante) — el cliente ya escrito (`habitsAdmin.ts`) manda `Authorization: Bearer` (JWT de
+Supabase), que este backend todavía no valida; es la misma deuda conocida de siempre, no una nueva.
+
+### 17.4 Qué quedó explícitamente sin cubrir
+
+1. **Subida de archivo para adjuntos IMAGEN/AUDIO** (`POST .../guide-attachments/upload`,
+   multipart). Solo se construyó el adjunto tipo ENLACE (`CrearAdjuntoGuiaEnlaceUseCase`) — cubre
+   el caso de uso real documentado en el propio cliente ("el vídeo se queda como enlace de YouTube,
+   decisión de Luis 2026-08-11"). Subir un archivo de verdad necesita (a) manejo de multipart —
+   sin precedente en este backend, ningún controller usa `MultipartFile` todavía — y (b) un puerto
+   de almacenamiento que reciba bytes directos: `shared.application.ports.out.AlmacenamientoPort`
+   solo firma URLs de subida/lectura (patrón presign-and-PUT), no acepta un archivo. Construir esto
+   a medias bajo presión de tiempo, sin poder correr los tests contra un bucket real, parecía peor
+   que dejarlo documentado.
+2. **CRUD de `categorias_habito`/`iconos_habito`** (las tablas-catálogo, P-23) no se tocó — el
+   encargo pedía catálogo de hábitos/horarios/guías, no administrar las categorías en sí. El mapeo
+   de categorías (`HabitCategoryDto`) asume las 4 claves ya sembradas; si se agrega una 5ª
+   categoría a la tabla sin actualizar este enum, la respuesta de listado explota con
+   `IllegalStateException` (409) — riesgo bajo porque el propio cliente (`HabitCategory` en
+   `habitsAdmin.ts`) tampoco soporta una 5ª categoría hoy.
+3. **`icono_clave` no es editable desde el panel** — `AdminHabit`/`CreateHabitInput` del cliente no
+   tienen ningún campo de ícono; se deja `null` en la creación, igual que antes de esta pasada.
+
+### 17.5 Tests
+
+- Dominio (sin Spring): `HabitoTest`, `HorarioHabitoTest`, `GuiaHabitoTest` — invariantes de rango,
+  el invariante protegido de `tipo`/`claveSistema`, `cerrarEn`/`establecerDiaFin`.
+- Aplicación (Mockito): `HabitoAdminServiceTest`, `HorarioHabitoAdminServiceTest`,
+  `GuiaHabitoAdminServiceTest` — mentor rechazado, admin suspendido rechazado (test de autorización
+  negativa exigido por CLAUDE.MD §0.3), 404 sobre ids inexistentes, semántica de `closePrevious`
+  (incluida "no se cierra a sí misma"), semántica PATCH de horarios (omitido vs. limpiar).
+- Integración (Testcontainers): `GuiaHabitoPersistenceAdapterTest`, `AdjuntoGuiaPersistenceAdapterTest`
+  (adaptador enteramente nuevo) — guardar/recuperar, `masRecienteAbierta`, cascada de borrado
+  `guía → adjuntos`.
+- No se agregó el "test de reflexión que falle si un endpoint no declara `@RequiresPermission` ni
+  `@PublicEndpoint`" que pide CLAUDE.MD §0.3: ese mecanismo de anotaciones **todavía no existe en
+  este backend** (confirmado — ver `docs/BITACORA_ERRORES.md`/comentario en
+  `AccountRequestController`, "NO todavía con @RequiresPermission + AccessGuard"); el criterio real
+  usado hoy en todo el código (`requireAdmin` a mano en el servicio) es el que se replicó aquí,
+  igual que en `community`/`evidence`/`rag`/`support`.
+
+---
+
+## 18. Verdugo y hábitos personales — hueco #18, mitad de `rocks` — investigado 2026-08-26
+
+**Encargo:** confirmar si `rocks.DestinoVerdugo` acepta hábitos personales por FK, y si falta un
+valor para "Código Renaser". No se tocó ningún archivo de `rocks` — los dos hallazgos fueron de
+solo lectura.
+
+- **Hábitos personales: YA funciona, verificado contra la base real, sin cambio de código.**
+  `registros_habito.habito_id` referencia la tabla unificada `habitos` (P-12 — SISTEMA y PERSONAL
+  conviven en la misma tabla, discriminados por `ambito`). `rocks.VerificarDestinoVerdugoPersistenceAdapter.registroHabitoPerteneceA`
+  hace `SELECT COUNT(*) FROM registros_habito WHERE id = ? AND participante_id = ?` — nunca
+  joinea `habitos.ambito`. Un evento Verdugo contra el track de un hábito PERSONAL pasa exactamente
+  igual que contra uno SISTEMA. Se agregó `VerificarDestinoVerdugoPersistenceAdapterTest` (nuevo,
+  con Testcontainers) en `rocks` para dejarlo probado, no solo leído.
+- **Código Renaser (`RADAR`): sigue sin valor en `DestinoVerdugo`, y no se agregó.** Dos bloqueantes
+  reales, no uno solo de esquema: (1) `eventos_verdugo` tiene el CHECK `verdugo_un_destino` atado a
+  exactamente dos columnas (`registro_habito_id`/`roca_diaria_id`) — agregar un tercer destino
+  necesita una columna nueva, y la BD está congelada (D-40) sin una razón de negocio confirmada
+  todavía; (2) más de fondo, **Verdugo dispara sobre un plazo vencido y `registros_radar` no tiene
+  ningún plazo**: es un log append-only (`RegistroRadar`, sin `diaFin` ni estado pendiente), y el
+  propio §8.0 de este documento ya dejó citado que el gating de horario del Código Renaser "es UX
+  del cliente, nunca una restricción de servidor ni de base". Sin una regla de negocio confirmada
+  de qué cuenta como "Código Renaser vencido", implementar el valor del enum sería inventar la
+  regla que CLAUDE.MD prohíbe. Queda como pregunta abierta para quien confirme esa regla, documentado
+  también en `docs/PLAN_INTEGRACION_FRONTEND.md` #18.

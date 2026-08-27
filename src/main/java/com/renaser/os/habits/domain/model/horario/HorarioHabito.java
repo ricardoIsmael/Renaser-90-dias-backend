@@ -27,7 +27,7 @@ public final class HorarioHabito {
 
     private final HorarioHabitoId id;
     private final HabitoId habitoId;
-    private final int diaInicio;
+    private int diaInicio; // mutable desde 2026-08-26 (hueco #11): el panel admin puede correr el rango de dias
     private Integer diaFin;
     private TipoDia tipoDia;
     private LocalTime horaDisparo;
@@ -66,6 +66,21 @@ public final class HorarioHabito {
     public void actualizarHoras(LocalTime horaDisparo, LocalTime horaLimite, Instant ahora) {
         this.horaDisparo = horaDisparo;
         this.horaLimite = horaLimite;
+        this.actualizadoEn = ahora;
+    }
+
+    /** Edicion administrativa del rango de dias/tipo de dia (panel admin, hueco #11). */
+    public void actualizarRango(int diaInicio, Integer diaFin, TipoDia tipoDia, Instant ahora) {
+        Objects.requireNonNull(tipoDia, "tipoDia es obligatorio");
+        if (diaInicio < 1 || diaInicio > 90) {
+            throw new IllegalArgumentException("diaInicio fuera de rango 1..90: " + diaInicio);
+        }
+        if (diaFin != null && diaFin < diaInicio) {
+            throw new IllegalArgumentException("diaFin no puede ser anterior a diaInicio");
+        }
+        this.diaInicio = diaInicio;
+        this.diaFin = diaFin;
+        this.tipoDia = tipoDia;
         this.actualizadoEn = ahora;
     }
 

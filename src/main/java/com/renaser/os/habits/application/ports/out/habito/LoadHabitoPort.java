@@ -17,5 +17,12 @@ public interface LoadHabitoPort {
 
     List<Habito> catalogoActivo();
 
+    /** Catalogo SISTEMA completo (activos e inactivos) — panel admin, hueco #11. */
+    List<Habito> catalogoCompleto();
+
     List<Habito> personalesActivosDe(UserId participanteId);
+
+    /** Lookup por identidad funcional estable del catalogo (ej. {@code DAILY_CLASS}) — ver
+     * {@code SelectorHabito.PorClaveSistema}. Vacio si no existe ninguno con esa clave. */
+    Optional<Habito> porClaveSistema(String claveSistema);
 }
