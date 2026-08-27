@@ -169,7 +169,7 @@ Todo lo que sigue es trabajo de **código nuevo en el backend**, no un simple re
 | 27 | Sin endpoint de directorio de usuarios/miembros (`GET /members`) | Buscador de DM, roster del chat global |
 | 28 | Sin miembros/rename de la conversación global | Pantalla de info del chat global |
 | 29 | Mensajes de chat sin nombre/avatar del emisor ni preview de respuesta resuelto — solo ids crudos | UI de chat con nombres/avatares sin una vuelta extra por usuario |
-| 30 | Sin "marcar/reportar mensaje" en Renasia — el frontend ya tiene la UI, el backend no tiene ni el campo ni la ruta | Feature de moderación de chat con IA |
+| 30 | ~~Sin "marcar/reportar mensaje" en Renasia~~ | ❌ **No es un gap — es D-49 (RAG), decisión ya tomada el 2026-08-25: "el dueño decidió quitar la funcion de marcar un mensaje del chat de la IA"** (`docs/MODULO_RAG.md`). Este item se coló al reescribir este documento el 26/08 sin cruzar esa decisión ya firmada. Reconfirmado 2026-08-26 noche: sigue rechazado, no se construye |
 | 31 | ~~Sin caso de uso ni controller para escribir una entrada de diario~~ | ✅ **Cerrado 2026-08-26** — ver #16, es el mismo trabajo (Bitácora Nocturna) |
 
 ---
