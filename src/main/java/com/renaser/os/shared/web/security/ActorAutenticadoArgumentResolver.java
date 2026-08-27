@@ -3,6 +3,7 @@ package com.renaser.os.shared.web.security;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.MethodParameter;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -35,8 +36,13 @@ public class ActorAutenticadoArgumentResolver implements HandlerMethodArgumentRe
     @Override
     public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
                                    NativeWebRequest webRequest, WebDataBinderFactory binderFactory) {
+        // El token anonimo que Spring Security instala cuando NO hay sesion reporta
+        // isAuthenticated()==true y se llama "anonymousUser". Sin descartarlo, este metodo lo
+        // tomaria por un actor valido, jamas caeria al header, y devolveria esa cadena a los 54
+        // controladores al migrarlos — rompiendolos justamente en el caso mas comun (sin sesion).
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.isAuthenticated()) {
+        if (authentication != null && authentication.isAuthenticated()
+                && !(authentication instanceof AnonymousAuthenticationToken)) {
             return UserId.of(authentication.getName());
         }
         HttpServletRequest request = webRequest.getNativeRequest(HttpServletRequest.class);

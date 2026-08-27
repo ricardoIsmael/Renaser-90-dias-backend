@@ -5,7 +5,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.context.request.NativeWebRequest;
 
@@ -41,6 +43,28 @@ class ActorAutenticadoArgumentResolverTest {
     @Test
     void sinSesionCaeAlHeaderXActorId() {
         UUID id = UUID.randomUUID();
+        HttpServletRequest servletRequest = mock(HttpServletRequest.class);
+        when(servletRequest.getHeader("X-Actor-Id")).thenReturn(id.toString());
+        NativeWebRequest webRequest = mock(NativeWebRequest.class);
+        when(webRequest.getNativeRequest(HttpServletRequest.class)).thenReturn(servletRequest);
+
+        UserId resuelto = (UserId) resolver.resolveArgument(mock(MethodParameter.class), null, webRequest, null);
+
+        assertThat(resuelto).isEqualTo(UserId.of(id));
+    }
+
+    /**
+     * Sin sesion, Spring Security instala un token anonimo que reporta isAuthenticated()==true.
+     * Si el resolver lo tomara por valido devolveria la cadena "anonymousUser" y nunca caeria al
+     * header — rompiendo todo controlador migrado en el caso mas comun. Encontrado probando la
+     * app real: ningun test previo lo detecto porque todos inyectan un token autenticado de verdad.
+     */
+    @Test
+    void unTokenAnonimoNoCuentaComoSesionYCaeAlHeader() {
+        UUID id = UUID.randomUUID();
+        SecurityContextHolder.getContext().setAuthentication(
+                new AnonymousAuthenticationToken("clave", "anonymousUser",
+                        List.of(new SimpleGrantedAuthority("ROLE_ANONYMOUS"))));
         HttpServletRequest servletRequest = mock(HttpServletRequest.class);
         when(servletRequest.getHeader("X-Actor-Id")).thenReturn(id.toString());
         NativeWebRequest webRequest = mock(NativeWebRequest.class);

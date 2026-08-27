@@ -5,6 +5,7 @@ import com.renaser.os.shared.domain.UserId;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
@@ -50,9 +51,17 @@ public class SesionWebAdapter {
         SecurityContextHolder.clearContext();
     }
 
+    /**
+     * El descarte de {@link AnonymousAuthenticationToken} no es defensivo de mas: cuando NO hay
+     * sesion, Spring Security instala un token anonimo cuyo {@code isAuthenticated()} devuelve
+     * <b>true</b> y cuyo nombre es la cadena "anonymousUser". Sin esta condicion, ese texto
+     * llegaba a {@code UserId.of(...)} y salia un 400 ("no es un UUID valido") en vez del 401
+     * que corresponde — con el detalle de que el mensaje de error delataba el mecanismo interno.
+     */
     public UserId actorActual() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken) {
             throw new SesionNoIniciadaException();
         }
         return UserId.of(authentication.getName());
