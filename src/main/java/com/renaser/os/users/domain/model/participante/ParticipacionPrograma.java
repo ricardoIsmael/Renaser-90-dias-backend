@@ -148,6 +148,26 @@ public final class ParticipacionPrograma {
         this.actualizadoEn = clock.now();
     }
 
+    /**
+     * Panel admin de celulas (gap #25, docs/PLAN_INTEGRACION_FRONTEND.md §5). `users` es
+     * dueño de la columna `participantes_programa.celula_id`, pero NO de la existencia de
+     * la celula misma (eso vive en `community.domain.model.celula.Celula`, otro modulo) —
+     * por eso este metodo no valida el UUID contra nada, solo escribe el valor que el
+     * llamador (que ya validó la celula en su propio modulo) le pasa. Mismo criterio de
+     * dos metodos separados (asignar/quitar) que {@code Celula.asignarMentor}/{@code
+     * quitarMentor} en `community`.
+     */
+    public void asignarCelula(UUID nuevaCelulaId, Clock clock) {
+        this.celulaId = Objects.requireNonNull(nuevaCelulaId, "celulaId es obligatorio");
+        this.actualizadoEn = clock.now();
+    }
+
+    /** Contraparte de {@link #asignarCelula} — saca al participante de su celula actual. */
+    public void quitarCelula(Clock clock) {
+        this.celulaId = null;
+        this.actualizadoEn = clock.now();
+    }
+
     public boolean estaActivado() {
         return programaActivadoEn != null;
     }
