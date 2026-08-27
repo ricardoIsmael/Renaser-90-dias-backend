@@ -65,9 +65,20 @@ class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, DeleteUserPo
                 : repository.countByRolInAndEstado(rolesJpa, mapper.toJpaStatusPublic(statusFilter));
     }
 
+    /**
+     * {@code saveAndFlush}, no {@code save} (2026-08-27): {@code AccountRequestService.submit}
+     * crea el usuario y, en la MISMA transaccion, escribe su credencial con una query nativa
+     * ({@code CredencialPersistenceAdapter.actualizarHash}). Una query nativa bypasea el
+     * contexto de persistencia — Hibernate no sabe que tabla toca un SQL crudo, asi que no
+     * garantiza vaciar antes el INSERT pendiente. Sin el flush explicito, esa fila podria
+     * no existir todavia en la base cuando corre el UPDATE, y {@code actualizarHash}
+     * fallaria con 0 filas afectadas pese a que el usuario "ya se guardo". El costo es un
+     * viaje a la base que de todas formas iba a pasar al hacer commit — no un round-trip
+     * nuevo.
+     */
     @Override
     public User save(User user) {
-        var saved = repository.save(mapper.toEntity(user));
+        var saved = repository.saveAndFlush(mapper.toEntity(user));
         return mapper.toDomain(saved);
     }
 

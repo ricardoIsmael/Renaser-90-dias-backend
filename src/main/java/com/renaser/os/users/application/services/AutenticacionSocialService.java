@@ -85,8 +85,12 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
         String fullName = nombreOFallback(identidad);
         String verificationToken = tokenVerificacionEmailPort.generar(identidad.email(),
                 VerificacionEmailService.VIGENCIA_TOKEN_VERIFICACION);
+        // Sin contrasena (null): esta cuenta entra por el proveedor, no por clave propia. Es el
+        // caso para el que `usuarios.hash_contrasena` ya era nullable. Si mas adelante quiere
+        // una, la fija por "olvide mi contrasena" como cualquiera.
         AccountRequestId solicitudId = submitAccountRequestUseCase.submit(new SubmitAccountRequestCommand(
-                identidad.email(), fullName, phone, command.city(), verificationToken, command.requestIp()));
+                identidad.email(), fullName, phone, command.city(), verificationToken, null,
+                command.requestIp()));
         return new ResultadoLoginSocial.SolicitudCreada(solicitudId);
     }
 

@@ -50,6 +50,36 @@ public final class User {
                 UserStatus.ACTIVE, requireName(fullName), null, null, null, null, null);
     }
 
+    /**
+     * Autoregistro: la persona lleno el formulario y verifico su correo, pero todavia no la
+     * aprobo nadie (2026-08-27).
+     *
+     * <p>La fila se crea ACA y no al aprobar porque el alta ahora captura la contrasena en el
+     * formulario, y {@code hash_contrasena} vive en {@code usuarios} — es la unica tabla donde
+     * puede guardarse sin duplicar la credencial. Nace {@link UserStatus#INACTIVE}, que no da
+     * acceso: el login la rechaza por construccion hasta que {@link #aprobar()} la active.
+     *
+     * <p>El rol lo fuerza {@link UserRole#defaultForSelfRegistration()}, igual que
+     * {@link #registerTrainee}: nunca llega desde el cliente (§5.3.3).
+     */
+    public static User registrarPendienteAprobacion(UserId id, Email email, String fullName) {
+        return new User(requireId(id), requireEmail(email), UserRole.defaultForSelfRegistration(),
+                UserStatus.INACTIVE, requireName(fullName), null, null, null, null, null);
+    }
+
+    /**
+     * Un admin aprobo la solicitud: la cuenta pasa a dar acceso. Solo tiene sentido sobre una
+     * cuenta recien registrada — aprobar algo que no esta {@link UserStatus#INACTIVE} seria
+     * reactivar a alguien suspendido por la puerta de atras, que es otra operacion
+     * ({@link #reactivate()}) y con otra autorizacion.
+     */
+    public void aprobar() {
+        if (status != UserStatus.INACTIVE) {
+            throw new IllegalStateException("Solo se puede aprobar una cuenta pendiente de aprobacion");
+        }
+        this.status = UserStatus.ACTIVE;
+    }
+
     /** Alta por invitacion de un admin, con rol explicito (§5.3.3, InviteAndCreateUser). */
     public static User invite(UserId id, Email email, String fullName, UserRole role, User actor) {
         requireRoleManager(actor);

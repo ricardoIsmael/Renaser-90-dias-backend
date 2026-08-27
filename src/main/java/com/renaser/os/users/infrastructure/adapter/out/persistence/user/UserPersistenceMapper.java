@@ -74,9 +74,14 @@ class UserPersistenceMapper {
         };
     }
 
+    // R-3 resuelta (2026-08-27): INACTIVO ya tiene significado en el dominio — "registrado, sin
+    // aprobar todavia" — asi que el mapeo es 1:1 en ambos sentidos y ya no hay estado de la BD
+    // que el dominio no sepa leer.
+
     private EstadoUsuarioJpa toJpaStatus(UserStatus status) {
         return switch (status) {
             case ACTIVE -> EstadoUsuarioJpa.ACTIVO;
+            case INACTIVE -> EstadoUsuarioJpa.INACTIVO;
             case SUSPENDED -> EstadoUsuarioJpa.SUSPENDIDO;
         };
     }
@@ -84,9 +89,8 @@ class UserPersistenceMapper {
     private UserStatus toDomainStatus(EstadoUsuarioJpa jpa) {
         return switch (jpa) {
             case ACTIVO -> UserStatus.ACTIVE;
+            case INACTIVO -> UserStatus.INACTIVE;
             case SUSPENDIDO -> UserStatus.SUSPENDED;
-            case INACTIVO -> throw new IllegalStateException(
-                    "estado_usuario.INACTIVO no tiene equivalente en UserStatus todavia (pregunta abierta R-3)");
         };
     }
 }

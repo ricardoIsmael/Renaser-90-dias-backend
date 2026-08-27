@@ -14,11 +14,12 @@ import com.renaser.os.users.application.ports.out.accountrequest.DeleteAccountRe
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SaveAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SupabaseAdminAuthPort;
-import com.renaser.os.users.application.ports.out.autenticacion.EnviarEmailPort;
-import com.renaser.os.users.application.ports.out.autenticacion.TokenResetContrasenaPort;
+import com.renaser.os.users.application.ports.out.autenticacion.SaveCredencialPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
+import com.renaser.os.users.application.ports.out.user.DeleteUserPort;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
@@ -66,15 +67,17 @@ class AccountRequestServiceTest {
     @Mock
     private SaveUserPort saveUserPort;
     @Mock
+    private DeleteUserPort deleteUserPort;
+    @Mock
+    private SaveCredencialPort saveCredencialPort;
+    @Mock
+    private PasswordEncoder passwordEncoder;
+    @Mock
     private SupabaseAdminAuthPort supabaseAdminAuthPort;
     @Mock
     private SaveParticipacionProgramaPort saveParticipacionProgramaPort;
     @Mock
-    private TokenResetContrasenaPort tokenResetContrasenaPort;
-    @Mock
     private com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort tokenVerificacionEmailPort;
-    @Mock
-    private EnviarEmailPort enviarEmailPort;
     @Mock
     private org.springframework.context.ApplicationEventPublisher events;
 
@@ -83,13 +86,13 @@ class AccountRequestServiceTest {
     @BeforeEach
     void setUp() {
         service = new AccountRequestService(loadAccountRequestPort, saveAccountRequestPort, deleteAccountRequestPort,
-                saveUserPort, supabaseAdminAuthPort, saveParticipacionProgramaPort, tokenResetContrasenaPort,
-                tokenVerificacionEmailPort, enviarEmailPort, new RequireActiveUserGuard(loadUserPort),
-                new RequireAdminGuard(loadUserPort), events, CLOCK);
+                loadUserPort, saveUserPort, deleteUserPort, saveCredencialPort, passwordEncoder,
+                supabaseAdminAuthPort, saveParticipacionProgramaPort, tokenVerificacionEmailPort,
+                new RequireActiveUserGuard(loadUserPort), new RequireAdminGuard(loadUserPort), events, CLOCK);
         lenient().when(saveAccountRequestPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        lenient().when(tokenResetContrasenaPort.generar(any(), any())).thenReturn("token-activacion-test");
+        lenient().when(passwordEncoder.encode(any())).thenReturn("hash-de-prueba");
     }
 
     private static UserId id() {
@@ -112,32 +115,65 @@ class AccountRequestServiceTest {
                 "Solicitante", "555-0000", "Lima", null, CLOCK);
     }
 
+    /** El usuario tal como queda tras {@code submit()}: ya existe, INACTIVE, esperando aprobar. */
+    private static User pendienteDeAprobacion(AccountRequest request) {
+        return User.registrarPendienteAprobacion(request.supabaseUserId(), request.email(), request.fullName());
+    }
+
+    /** Stub comun a los tests de {@code approve()}: el usuario que la solicitud ya creo. */
+    private void stubUsuarioPendiente(AccountRequest request) {
+        lenient().when(loadUserPort.byId(request.supabaseUserId()))
+                .thenReturn(Optional.of(pendienteDeAprobacion(request)));
+    }
+
+    private static com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand
+    comandoDeAlta(String verificationToken) {
+        return new com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand(
+                "solicitante@renaser.dev", "Solicitante", "555-0000", "Lima", verificationToken,
+                "una-contrasena-de-12-o-mas", "127.0.0.1");
+    }
+
     @Test
     @DisplayName("2026-08-27: submit consume el token de verificacion y arma la solicitud")
     void submitConTokenValidoArmaLaSolicitud() {
         when(tokenVerificacionEmailPort.consumir("token-valido")).thenReturn(Optional.of("solicitante@renaser.dev"));
 
-        var command = new com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand(
-                "solicitante@renaser.dev", "Solicitante", "555-0000", "Lima", "token-valido", "127.0.0.1");
-
-        service.submit(command);
+        service.submit(comandoDeAlta("token-valido"));
 
         verify(saveAccountRequestPort).save(any());
         verify(tokenVerificacionEmailPort).consumir("token-valido");
     }
 
     @Test
-    @DisplayName("2026-08-27: submit rechaza un token que nunca se emitio, ya vencio, o ya se uso")
+    @DisplayName("2026-08-27: submit crea el usuario YA en el alta (INACTIVE) con su contrasena hasheada, "
+            + "no recien al aprobar")
+    void submitCreaElUsuarioInactivoConSuCredencial() {
+        when(tokenVerificacionEmailPort.consumir("token-valido")).thenReturn(Optional.of("solicitante@renaser.dev"));
+
+        service.submit(comandoDeAlta("token-valido"));
+
+        var userCaptor = org.mockito.ArgumentCaptor.forClass(User.class);
+        verify(saveUserPort).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().status()).isEqualTo(UserStatus.INACTIVE);
+
+        verify(passwordEncoder).encode("una-contrasena-de-12-o-mas");
+        var credencialCaptor = org.mockito.ArgumentCaptor.forClass(com.renaser.os.users.domain.model.user.Credencial.class);
+        verify(saveCredencialPort).guardar(eq(userCaptor.getValue().id()), credencialCaptor.capture());
+        assertThat(credencialCaptor.getValue().hash()).isEqualTo("hash-de-prueba");
+    }
+
+    @Test
+    @DisplayName("2026-08-27: submit rechaza un token que nunca se emitio, ya vencio, o ya se uso — "
+            + "y no llega a crear ni el usuario ni la solicitud")
     void submitRechazaUnTokenInvalido() {
         when(tokenVerificacionEmailPort.consumir("token-invalido")).thenReturn(Optional.empty());
 
-        var command = new com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand(
-                "solicitante@renaser.dev", "Solicitante", "555-0000", "Lima", "token-invalido", "127.0.0.1");
-
-        assertThatThrownBy(() -> service.submit(command))
+        assertThatThrownBy(() -> service.submit(comandoDeAlta("token-invalido")))
                 .isInstanceOf(com.renaser.os.shared.domain.TokenVerificacionEmailInvalidoException.class);
 
         verify(saveAccountRequestPort, never()).save(any());
+        verify(saveUserPort, never()).save(any());
+        verify(saveCredencialPort, never()).guardar(any(), any());
     }
 
     @Test
@@ -147,13 +183,11 @@ class AccountRequestServiceTest {
         when(tokenVerificacionEmailPort.consumir("token-de-otro-email"))
                 .thenReturn(Optional.of("otro-email-verificado@renaser.dev"));
 
-        var command = new com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand(
-                "solicitante@renaser.dev", "Solicitante", "555-0000", "Lima", "token-de-otro-email", "127.0.0.1");
-
-        assertThatThrownBy(() -> service.submit(command))
+        assertThatThrownBy(() -> service.submit(comandoDeAlta("token-de-otro-email")))
                 .isInstanceOf(com.renaser.os.shared.domain.TokenVerificacionEmailInvalidoException.class);
 
         verify(saveAccountRequestPort, never()).save(any());
+        verify(saveUserPort, never()).save(any());
     }
 
     @Test
@@ -179,6 +213,7 @@ class AccountRequestServiceTest {
         UserId actorId = id();
         when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        stubUsuarioPendiente(request);
 
         service.approve(new ApproveAccountRequestCommand(request.id(), actorId));
 
@@ -187,23 +222,39 @@ class AccountRequestServiceTest {
     }
 
     @Test
-    @DisplayName("2026-08-27: aprobar genera un token de activacion y manda el correo, "
-            + "porque el nuevo usuario no tiene ninguna credencial todavia")
-    void approveGeneraTokenDeActivacionYEnviaElCorreo() {
+    @DisplayName("2026-08-27: aprobar SOLO activa al usuario que el alta ya creo — no genera token "
+            + "ni manda correo, porque la credencial ya la eligio la persona al registrarse")
+    void approveActivaSinTocarLaCredencial() {
         AccountRequest request = pendiente();
         UserId actorId = id();
         when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        stubUsuarioPendiente(request);
 
         service.approve(new ApproveAccountRequestCommand(request.id(), actorId));
 
-        var userIdCaptor = org.mockito.ArgumentCaptor.forClass(UserId.class);
-        verify(tokenResetContrasenaPort).generar(userIdCaptor.capture(), eq(AccountRequestService.VIGENCIA_TOKEN_ACTIVACION));
-        verify(enviarEmailPort).enviarActivacionCuenta(eq(request.email().value()), eq("token-activacion-test"));
-
         var saveUserCaptor = org.mockito.ArgumentCaptor.forClass(User.class);
         verify(saveUserPort).save(saveUserCaptor.capture());
-        assertThat(userIdCaptor.getValue()).isEqualTo(saveUserCaptor.getValue().id());
+        assertThat(saveUserCaptor.getValue().id()).isEqualTo(request.supabaseUserId());
+        assertThat(saveUserCaptor.getValue().status()).isEqualTo(UserStatus.ACTIVE);
+        verify(saveCredencialPort, never()).guardar(any(), any());
+    }
+
+    @Test
+    @DisplayName("aprobar una solicitud cuyo usuario ya no esta INACTIVE (doble aprobacion, por ejemplo) "
+            + "falla en el dominio en vez de reactivar algo que no corresponde")
+    void approveRechazaUnUsuarioQueYaNoEstaPendiente() {
+        AccountRequest request = pendiente();
+        UserId actorId = id();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        when(loadUserPort.byId(request.supabaseUserId()))
+                .thenReturn(Optional.of(activo(request.supabaseUserId(), UserRole.TRAINEE)));
+
+        assertThatThrownBy(() -> service.approve(new ApproveAccountRequestCommand(request.id(), actorId)))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(saveAccountRequestPort, never()).save(any());
     }
 
     @Test
@@ -214,6 +265,7 @@ class AccountRequestServiceTest {
         UserId actorId = id();
         when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        stubUsuarioPendiente(request);
 
         service.approve(new ApproveAccountRequestCommand(request.id(), actorId));
 
@@ -239,6 +291,21 @@ class AccountRequestServiceTest {
 
         verify(saveAccountRequestPort, never()).save(any());
         verify(supabaseAdminAuthPort, never()).deleteUser(any());
+        verify(deleteUserPort, never()).deleteById(any());
+    }
+
+    @Test
+    @DisplayName("2026-08-27: rechazar borra al usuario que el alta ya habia creado — si no, el "
+            + "correo quedaria ocupado para siempre por una cuenta que nunca se va a activar")
+    void rejectBorraElUsuarioParaLiberarElCorreo() {
+        AccountRequest request = pendiente();
+        UserId actorId = id();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+
+        service.reject(new RejectAccountRequestCommand(request.id(), actorId, "motivo"));
+
+        verify(deleteUserPort).deleteById(request.supabaseUserId());
     }
 
     // ─── panel admin de solicitudes de cuenta (gap #9) ─────────────────────

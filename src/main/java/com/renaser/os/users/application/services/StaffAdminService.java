@@ -89,6 +89,12 @@ class StaffAdminService implements ListStaffUseCase, UpdateUserStatusUseCase, Up
         switch (newStatus) {
             case ACTIVE -> target.reactivate();
             case SUSPENDED -> target.suspend();
+            // INACTIVE es "registrado, sin aprobar todavia" (R-3, 2026-08-27): lo pone el
+            // autoregistro y lo saca la aprobacion. Un admin no puede devolver a alguien de
+            // staff a ese estado desde este panel — no seria "desactivar", seria dejarlo
+            // esperando una aprobacion que ya ocurrio. Para quitarle el acceso esta SUSPENDED.
+            case INACTIVE -> throw new IllegalArgumentException(
+                    "No se puede pasar una cuenta a pendiente de aprobacion; para quitar acceso, suspendela");
         }
     }
 

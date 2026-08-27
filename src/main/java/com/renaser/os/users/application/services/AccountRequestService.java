@@ -13,9 +13,10 @@ import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountReq
 import com.renaser.os.users.application.ports.out.accountrequest.DeleteAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SaveAccountRequestPort;
-import com.renaser.os.users.application.ports.out.autenticacion.EnviarEmailPort;
-import com.renaser.os.users.application.ports.out.autenticacion.TokenResetContrasenaPort;
+import com.renaser.os.users.application.ports.out.autenticacion.SaveCredencialPort;
 import com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort;
+import com.renaser.os.users.application.ports.out.user.DeleteUserPort;
+import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SupabaseAdminAuthPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
@@ -23,8 +24,10 @@ import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.api.UsuarioRegistradoEvent;
+import com.renaser.os.users.domain.model.user.Credencial;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,24 +52,21 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
 
     private static final int RATE_LIMIT_PER_HOUR = 60;
 
-    /**
-     * Vigencia del link de activacion (2026-08-27) — mas larga que la del reset de contrasena
-     * (30 min, ResetContrasenaService.VIGENCIA_TOKEN): esa es para alguien que ya esta mirando
-     * la pantalla de "olvide mi contrasena" en el momento; esta es para alguien que se entera
-     * de la aprobacion por correo, posiblemente horas despues. Valor no confirmado por
-     * producto, asumido por analogia — documentado para que se ajuste si hace falta.
-     */
-    static final Duration VIGENCIA_TOKEN_ACTIVACION = Duration.ofHours(24);
+    // Ya no hay token ni correo de activacion (2026-08-27): la contrasena se elige en el alta,
+    // asi que aprobar no necesita mandar nada. Quien olvide su clave usa el flujo normal de
+    // "olvide mi contrasena" (ResetContrasenaService), que es exactamente para eso.
 
     private final LoadAccountRequestPort loadAccountRequestPort;
     private final SaveAccountRequestPort saveAccountRequestPort;
     private final DeleteAccountRequestPort deleteAccountRequestPort;
+    private final LoadUserPort loadUserPort;
     private final SaveUserPort saveUserPort;
+    private final DeleteUserPort deleteUserPort;
+    private final SaveCredencialPort saveCredencialPort;
+    private final PasswordEncoder passwordEncoder;
     private final SupabaseAdminAuthPort supabaseAdminAuthPort;
     private final SaveParticipacionProgramaPort saveParticipacionProgramaPort;
-    private final TokenResetContrasenaPort tokenResetContrasenaPort;
     private final TokenVerificacionEmailPort tokenVerificacionEmailPort;
-    private final EnviarEmailPort enviarEmailPort;
     private final RequireActiveUserGuard requireActiveUserGuard;
     private final RequireAdminGuard requireAdminGuard;
     private final ApplicationEventPublisher events;
@@ -74,22 +74,26 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
 
     public AccountRequestService(LoadAccountRequestPort loadAccountRequestPort,
                                   SaveAccountRequestPort saveAccountRequestPort,
-                                  DeleteAccountRequestPort deleteAccountRequestPort, SaveUserPort saveUserPort,
+                                  DeleteAccountRequestPort deleteAccountRequestPort,
+                                  LoadUserPort loadUserPort, SaveUserPort saveUserPort,
+                                  DeleteUserPort deleteUserPort, SaveCredencialPort saveCredencialPort,
+                                  PasswordEncoder passwordEncoder,
                                   SupabaseAdminAuthPort supabaseAdminAuthPort,
                                   SaveParticipacionProgramaPort saveParticipacionProgramaPort,
-                                  TokenResetContrasenaPort tokenResetContrasenaPort,
-                                  TokenVerificacionEmailPort tokenVerificacionEmailPort, EnviarEmailPort enviarEmailPort,
+                                  TokenVerificacionEmailPort tokenVerificacionEmailPort,
                                   RequireActiveUserGuard requireActiveUserGuard, RequireAdminGuard requireAdminGuard,
                                   ApplicationEventPublisher events, Clock clock) {
         this.loadAccountRequestPort = loadAccountRequestPort;
         this.saveAccountRequestPort = saveAccountRequestPort;
         this.deleteAccountRequestPort = deleteAccountRequestPort;
+        this.loadUserPort = loadUserPort;
         this.saveUserPort = saveUserPort;
+        this.deleteUserPort = deleteUserPort;
+        this.saveCredencialPort = saveCredencialPort;
+        this.passwordEncoder = passwordEncoder;
         this.supabaseAdminAuthPort = supabaseAdminAuthPort;
         this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
-        this.tokenResetContrasenaPort = tokenResetContrasenaPort;
         this.tokenVerificacionEmailPort = tokenVerificacionEmailPort;
-        this.enviarEmailPort = enviarEmailPort;
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.requireAdminGuard = requireAdminGuard;
         this.events = events;
@@ -114,11 +118,31 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         rejectIfRateLimitExceeded(command.requestIp());
         requireEmailVerificado(command.email(), command.verificationToken());
 
-        UserId nuevoUserId = UserId.of(UUID.randomUUID());
+        Email email = new Email(command.email());
+        User usuario = User.registrarPendienteAprobacion(UserId.of(UUID.randomUUID()), email,
+                command.fullName());
+        saveUserPort.save(usuario);
+        guardarCredencialSiEligioContrasena(usuario, command.contrasena());
 
-        AccountRequest request = AccountRequest.submit(nuevoUserId, new Email(command.email()),
+        AccountRequest request = AccountRequest.submit(usuario.id(), email,
                 command.fullName(), command.phone(), command.city(), command.requestIp(), clock);
         return saveAccountRequestPort.save(request).id();
+    }
+
+    /**
+     * El alta por formulario trae contrasena; la de proveedor social no (entra por Google/Apple
+     * y {@code usuarios.hash_contrasena} queda null, que es justo para lo que esa columna era
+     * nullable). La credencial se escribe aparte del usuario a proposito: {@code
+     * SaveCredencialPort} solo toca las dos columnas de contrasena, asi el hash nunca pasa por
+     * {@code UserJpaEntity} y no puede salir por una respuesta HTTP ni por un log
+     * (docs/MODULO_AUTH.md §2.2).
+     */
+    private void guardarCredencialSiEligioContrasena(User usuario, String contrasenaEnClaro) {
+        if (contrasenaEnClaro == null) {
+            return;
+        }
+        saveCredencialPort.guardar(usuario.id(),
+                new Credencial(passwordEncoder.encode(contrasenaEnClaro), clock.now()));
     }
 
     private void requireEmailVerificado(String email, String verificationToken) {
@@ -134,28 +158,27 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         AccountRequest request = requireRequest(command.accountRequestId());
         User actor = requireActiveUserGuard.of(command.actorId());
 
-        User newUser = User.registerTrainee(request.supabaseUserId(), request.email(), request.fullName());
-        compensateSupabaseUserOnRollback(newUser.id());
+        // El usuario YA existe desde el alta, en estado INACTIVE y con su contrasena elegida
+        // (ver SubmitAccountRequestUseCase): aprobar solo le da acceso. Antes se creaba aca,
+        // lo que obligaba a un segundo correo de activacion para que fijara su clave — dos
+        // envios en el camino critico y nadie sabia por que no llegaba el segundo.
+        User usuario = loadUserPort.byId(request.supabaseUserId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "La solicitud no tiene usuario asociado: " + request.supabaseUserId()));
+        usuario.aprobar();
+        saveUserPort.save(usuario);
 
-        saveUserPort.save(newUser);
         // Invariante de participantes_programa (baseline V1, comentario de la tabla): el
         // programa de 90 dias es obligatorio para TRAINEE y la fila se crea al aprobar la
-        // cuenta, en la MISMA transaccion — registerTrainee() fuerza el rol TRAINEE, asi
-        // que todo alta por este camino la necesita. Porte de
+        // cuenta, en la MISMA transaccion — el alta fuerza el rol TRAINEE, asi que todo alta
+        // por este camino la necesita. Porte de
         // onboarding/service.ts::createTraineePendingActivation (repo viejo): el reloj del
         // programa arranca pausado, lo activa despues el primer login + Ficha + Terminos.
-        saveParticipacionProgramaPort.save(ParticipacionPrograma.inscribirTraineeAprobado(newUser.id(), clock));
-        request.approve(actor, newUser.id(), clock);
+        saveParticipacionProgramaPort.save(ParticipacionPrograma.inscribirTraineeAprobado(usuario.id(), clock));
+        request.approve(actor, usuario.id(), clock);
         saveAccountRequestPort.save(request);
 
-        // 2026-08-27: el aprendiz recien creado no tiene Credencial (el alta no captura
-        // contrasena) — reusa el MISMO mecanismo que ResetContrasenaService (token opaco en
-        // Redis, confirmar via ConfirmarResetContrasenaUseCase), asi que "activar cuenta" y
-        // "recuperar contrasena" comparten toda la infraestructura, solo cambia el correo.
-        String tokenActivacion = tokenResetContrasenaPort.generar(newUser.id(), VIGENCIA_TOKEN_ACTIVACION);
-        enviarEmailPort.enviarActivacionCuenta(newUser.email().value(), tokenActivacion);
-
-        events.publishEvent(new UsuarioRegistradoEvent(newUser.id(), clock.now()));
+        events.publishEvent(new UsuarioRegistradoEvent(usuario.id(), clock.now()));
     }
 
     @Override
@@ -167,6 +190,13 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         request.reject(actor, command.reason(), clock);
         saveAccountRequestPort.save(request);
 
+        // Borrar el usuario es OBLIGATORIO desde que el alta lo crea (2026-08-27): sin esto,
+        // una solicitud rechazada dejaria la fila en `usuarios` ocupando el correo para
+        // siempre (el indice UNIQUE de usuarios.email), y ademas conservando una credencial
+        // de alguien que no es usuario. Es el mismo squatting de correos que el repo viejo
+        // resolvia con `deleteUser` en Supabase (PROPOSAL_ACCOUNT_REQUESTS.md punto 3), ahora
+        // sobre nuestra propia tabla. Idempotente: si no existe, no falla (E-44).
+        deleteUserPort.deleteById(request.supabaseUserId());
         deleteSupabaseUserAfterCommit(request.supabaseUserId());
     }
 
@@ -186,24 +216,11 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
                 .orElseThrow(() -> new NoSuchElementException("Solicitud no encontrada: " + id));
     }
 
-    /**
-     * §5.3.3/§9.1: si la transaccion no llega a commit, el usuario ya creado en
-     * Supabase Auth queda liberado (afterCompletion, no afterCommit: se dispara
-     * exactamente cuando el rollback ya paso).
-     */
-    private void compensateSupabaseUserOnRollback(UserId supabaseUserId) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status != TransactionSynchronization.STATUS_COMMITTED) {
-                    supabaseAdminAuthPort.deleteUser(supabaseUserId);
-                }
-            }
-        });
-    }
+    // Se elimino compensateSupabaseUserOnRollback (2026-08-27): compensaba la creacion de un
+    // usuario en Supabase Auth durante approve(), y approve() ya no crea a nadie. La creacion
+    // vive ahora en submit(), dentro de UNA sola transaccion contra NUESTRO Postgres — si algo
+    // falla, el rollback deshace usuario, credencial y solicitud junto, sin compensacion manual
+    // (CLAUDE.MD §9.1: el rollback gratis es justamente lo que da el monolito).
 
     /** §5.3.6: rechazar SIEMPRE libera el email, solo una vez que el rechazo quedo durable. */
     private void deleteSupabaseUserAfterCommit(UserId supabaseUserId) {

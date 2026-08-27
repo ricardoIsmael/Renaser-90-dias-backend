@@ -109,6 +109,8 @@ class AutenticacionSocialServiceTest {
         assertThat(captor.getValue().phone()).isEqualTo("+54 341 1234567");
         assertThat(captor.getValue().city()).isEqualTo("Rosario");
         assertThat(captor.getValue().verificationToken()).isEqualTo("token-verificacion-social");
+        // 2026-08-27: sin contrasena — esta cuenta entra por el proveedor, no por clave propia.
+        assertThat(captor.getValue().contrasena()).isNull();
     }
 
     @Test
