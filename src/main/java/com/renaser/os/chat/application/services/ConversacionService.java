@@ -4,6 +4,7 @@ import com.renaser.os.chat.application.ports.in.conversacion.CrearConversacionCe
 import com.renaser.os.chat.application.ports.in.conversacion.CrearConversacionDirectaUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.ListarConversacionesUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.MarcarLeidoUseCase;
+import com.renaser.os.chat.application.ports.in.conversacion.RenombrarConversacionGlobalUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.UnirseAConversacionGlobalUseCase;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.conversacion.SaveConversacionPort;
@@ -34,7 +35,8 @@ import java.util.UUID;
 
 @Service
 public class ConversacionService implements CrearConversacionDirectaUseCase, ListarConversacionesUseCase,
-        MarcarLeidoUseCase, UnirseAConversacionGlobalUseCase, CrearConversacionCelulaUseCase {
+        MarcarLeidoUseCase, UnirseAConversacionGlobalUseCase, CrearConversacionCelulaUseCase,
+        RenombrarConversacionGlobalUseCase {
 
     private final LoadConversacionPort loadConversacionPort;
     private final SaveConversacionPort saveConversacionPort;
@@ -130,6 +132,15 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         saveConversacionPort.save(Conversacion.crearCelula(celulaId, clock.now()));
     }
 
+    @Override
+    @Transactional
+    public Conversacion renombrar(RenombrarConversacionGlobalCommand command) {
+        requireActivoAdmin(command.actorId());
+        Conversacion global = loadConversacionPort.global()
+                .orElseThrow(() -> new NoSuchElementException("La conversacion GLOBAL todavia no existe"));
+        return saveConversacionPort.save(global.renombrada(command.nuevoNombre()));
+    }
+
     private void requireParticipante(ConversacionId conversacionId, UserId usuarioId) {
         if (!esParticipantePort.esParticipante(conversacionId, usuarioId)) {
             throw new NotAuthorizedException("No sos participante de esta conversacion");
@@ -146,6 +157,19 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
                 .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado: " + usuarioId));
         if (usuario.status() != UserStatus.ACTIVE) {
             throw new NotAuthorizedException("La cuenta esta suspendida");
+        }
+    }
+
+    /** Igual que {@link #requireActivo} + exige ademas ADMIN/ALCHEMIST
+     * ({@code UserRole.canManageRoles()}) — solo lo usa {@link #renombrar}. */
+    private void requireActivoAdmin(UserId usuarioId) {
+        UserSummary usuario = userSummaryFinder.findById(usuarioId)
+                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado: " + usuarioId));
+        if (usuario.status() != UserStatus.ACTIVE) {
+            throw new NotAuthorizedException("La cuenta esta suspendida");
+        }
+        if (!usuario.role().canManageRoles()) {
+            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST puede renombrar el chat global");
         }
     }
 }

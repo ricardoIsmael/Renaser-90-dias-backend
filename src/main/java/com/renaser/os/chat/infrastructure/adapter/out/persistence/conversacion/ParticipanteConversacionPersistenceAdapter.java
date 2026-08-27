@@ -3,6 +3,7 @@ package com.renaser.os.chat.infrastructure.adapter.out.persistence.conversacion;
 import com.renaser.os.chat.application.ports.out.participante.AgregarParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ContarNoLeidosPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
+import com.renaser.os.chat.application.ports.out.participante.ListarUsuariosDeConversacionPort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.Participante;
@@ -18,7 +19,8 @@ import java.util.UUID;
 
 @Component
 class ParticipanteConversacionPersistenceAdapter
-        implements AgregarParticipantePort, EsParticipantePort, MarcarLeidoPort, ContarNoLeidosPort {
+        implements AgregarParticipantePort, EsParticipantePort, MarcarLeidoPort, ContarNoLeidosPort,
+        ListarUsuariosDeConversacionPort {
 
     private final SpringDataParticipanteConversacionRepository repository;
 
@@ -64,5 +66,10 @@ class ParticipanteConversacionPersistenceAdapter
             resultado.put(ConversacionId.of(fila.getConversacionId()), fila.getConteo());
         }
         return resultado;
+    }
+
+    @Override
+    public List<UserId> usuariosDe(ConversacionId conversacionId) {
+        return repository.usuarioIdsDeConversacion(conversacionId.value()).stream().map(UserId::of).toList();
     }
 }

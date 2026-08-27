@@ -25,6 +25,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -147,5 +150,71 @@ class MensajeServiceTest {
         assertThat(pagina.mensajes()).hasSize(1);
         assertThat(pagina.hayMas()).isTrue();
         assertThat(pagina.siguienteCursor()).isEqualTo(m1.creadoEn());
+    }
+
+    @Test
+    void listarResuelveNombreYAvatarDelEmisorEnUnaSolaConsultaALaPagina() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+        Mensaje m1 = Mensaje.escribir(conversacionId, activo, TipoMensaje.TEXTO, "1", null, null, null, null, null,
+                null, CLOCK.now());
+        Mensaje m2 = Mensaje.escribir(conversacionId, activo, TipoMensaje.TEXTO, "2", null, null, null, null, null,
+                null, CLOCK.now());
+        when(loadMensajePort.pagina(conversacionId, null, 31)).thenReturn(List.of(m1, m2));
+        when(userSummaryFinder.findByIds(any())).thenReturn(
+                Map.of(activo, new UserSummary(activo, "Activo", "http://avatar", UserRole.TRAINEE,
+                        UserStatus.ACTIVE)));
+
+        var pagina = service.listar(activo, conversacionId, null, 30);
+
+        assertThat(pagina.mensajes()).hasSize(2);
+        assertThat(pagina.mensajes().get(0).nombreEmisor()).isEqualTo("Activo");
+        assertThat(pagina.mensajes().get(0).avatarEmisor()).isEqualTo("http://avatar");
+        // Nunca N+1: UNA sola llamada en lote a users.api para toda la pagina, sin
+        // importar cuantos mensajes tenga.
+        verify(userSummaryFinder, times(1)).findByIds(any());
+    }
+
+    @Test
+    void listarResuelvePreviewDeRespuestaTruncadoYNombreDelEmisorOriginal() {
+        UserId otroActivo = UserId.of(UUID.randomUUID());
+        lenient().when(userSummaryFinder.findById(otroActivo)).thenReturn(
+                Optional.of(new UserSummary(otroActivo, "Otro", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+
+        String textoLargo = "x".repeat(200);
+        Mensaje original = Mensaje.escribir(conversacionId, otroActivo, TipoMensaje.TEXTO, textoLargo, null, null,
+                null, null, null, null, CLOCK.now());
+        Mensaje respuesta = Mensaje.escribir(conversacionId, activo, TipoMensaje.TEXTO, "respondo", null, null, null,
+                null, null, original.id(), CLOCK.now());
+
+        when(loadMensajePort.pagina(conversacionId, null, 31)).thenReturn(List.of(respuesta));
+        when(loadMensajePort.porIds(List.of(original.id()))).thenReturn(Map.of(original.id(), original));
+        when(userSummaryFinder.findByIds(any())).thenReturn(Map.of(
+                activo, new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE),
+                otroActivo, new UserSummary(otroActivo, "Otro", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+
+        var pagina = service.listar(activo, conversacionId, null, 30);
+
+        var preview = pagina.mensajes().get(0).respuestaPreview();
+        assertThat(preview).isNotNull();
+        assertThat(preview.nombreEmisor()).isEqualTo("Otro");
+        assertThat(preview.previewTexto()).hasSize(81); // 80 caracteres + el "…" de corte
+        assertThat(preview.previewTexto()).endsWith("…");
+        // Nunca N+1: una sola consulta en lote para resolver los mensajes originales
+        // citados por toda la pagina, sin importar cuantas respuestas tenga.
+        verify(loadMensajePort, times(1)).porIds(any());
+    }
+
+    @Test
+    void listarNoConsultaMensajesOriginalesSiNingunoResponde() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+        Mensaje m1 = Mensaje.escribir(conversacionId, activo, TipoMensaje.TEXTO, "1", null, null, null, null, null,
+                null, CLOCK.now());
+        when(loadMensajePort.pagina(conversacionId, null, 31)).thenReturn(List.of(m1));
+
+        var pagina = service.listar(activo, conversacionId, null, 30);
+
+        assertThat(pagina.mensajes().get(0).respuestaPreview()).isNull();
+        verify(loadMensajePort, never()).porIds(any());
     }
 }

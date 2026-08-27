@@ -10,6 +10,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +31,20 @@ class MensajePersistenceAdapter implements SaveMensajePort, LoadMensajePort {
     @Override
     public Optional<Mensaje> porId(MensajeId id) {
         return repository.findById(id.value()).map(mapper::toDomain);
+    }
+
+    @Override
+    public Map<MensajeId, Mensaje> porIds(Collection<MensajeId> ids) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> crudos = ids.stream().map(MensajeId::value).toList();
+        Map<MensajeId, Mensaje> resultado = new LinkedHashMap<>();
+        for (MensajeJpaEntity fila : repository.findAllById(crudos)) {
+            Mensaje mensaje = mapper.toDomain(fila);
+            resultado.put(mensaje.id(), mensaje);
+        }
+        return resultado;
     }
 
     @Override

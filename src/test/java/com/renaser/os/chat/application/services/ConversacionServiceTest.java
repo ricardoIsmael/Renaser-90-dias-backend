@@ -3,6 +3,7 @@ package com.renaser.os.chat.application.services;
 import com.renaser.os.chat.application.ports.in.conversacion.CrearConversacionDirectaUseCase.CrearConversacionDirectaCommand;
 import com.renaser.os.chat.application.ports.in.conversacion.ListarConversacionesUseCase.ConversacionResumen;
 import com.renaser.os.chat.application.ports.in.conversacion.MarcarLeidoUseCase.MarcarLeidoCommand;
+import com.renaser.os.chat.application.ports.in.conversacion.RenombrarConversacionGlobalUseCase.RenombrarConversacionGlobalCommand;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.conversacion.SaveConversacionPort;
 import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
@@ -68,6 +69,7 @@ class ConversacionServiceTest {
     private final UserId activo = UserId.of(UUID.randomUUID());
     private final UserId otroActivo = UserId.of(UUID.randomUUID());
     private final UserId suspendido = UserId.of(UUID.randomUUID());
+    private final UserId admin = UserId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
@@ -79,6 +81,8 @@ class ConversacionServiceTest {
                 Optional.of(new UserSummary(otroActivo, "Otro", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(suspendido)).thenReturn(
                 Optional.of(new UserSummary(suspendido, "Suspendido", null, UserRole.TRAINEE, UserStatus.SUSPENDED)));
+        lenient().when(userSummaryFinder.findById(admin)).thenReturn(
+                Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
         lenient().when(saveConversacionPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -206,5 +210,35 @@ class ConversacionServiceTest {
         service.crearParaCelula(celulaId);
 
         verify(saveConversacionPort).save(any());
+    }
+
+    @Test
+    void renombrarFuncionaParaUnAdmin() {
+        Conversacion global = Conversacion.crearGlobal(CLOCK.now());
+        when(loadConversacionPort.global()).thenReturn(Optional.of(global));
+
+        Conversacion renombrada = service.renombrar(new RenombrarConversacionGlobalCommand(admin, "Comunidad Renaser"));
+
+        assertThat(renombrada.nombre()).isEqualTo("Comunidad Renaser");
+        verify(saveConversacionPort).save(any());
+    }
+
+    @Test
+    void renombrarRechazaAQuienNoEsAdminNiAlquimista() {
+        Conversacion global = Conversacion.crearGlobal(CLOCK.now());
+        lenient().when(loadConversacionPort.global()).thenReturn(Optional.of(global));
+
+        assertThatThrownBy(() -> service.renombrar(new RenombrarConversacionGlobalCommand(activo, "Otro nombre")))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        verify(saveConversacionPort, never()).save(any());
+    }
+
+    @Test
+    void renombrarRechazaAUnActorSuspendidoAunqueFueraAdmin() {
+        assertThatThrownBy(() -> service.renombrar(new RenombrarConversacionGlobalCommand(suspendido, "Otro nombre")))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        verify(saveConversacionPort, never()).save(any());
     }
 }

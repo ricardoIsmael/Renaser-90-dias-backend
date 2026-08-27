@@ -101,4 +101,33 @@ class ConversacionTest {
 
         assertThat(Conversacion.claveDirectaDe(a, b)).isEqualTo(Conversacion.claveDirectaDe(b, a));
     }
+
+    @Test
+    void renombradaCambiaElNombreDeUnaGlobal() {
+        Conversacion global = Conversacion.crearGlobal(AHORA);
+
+        Conversacion renombrada = global.renombrada("  Comunidad Renaser  ");
+
+        assertThat(renombrada.nombre()).isEqualTo("Comunidad Renaser");
+        assertThat(renombrada.id()).isEqualTo(global.id());
+        // "cambiar" devuelve una instancia nueva, nunca muta la original (CLAUDE.MD sec. 5.4.7).
+        assertThat(global.nombre()).isEqualTo("Global");
+    }
+
+    @Test
+    void renombradaRechazaUnNombreVacio() {
+        Conversacion global = Conversacion.crearGlobal(AHORA);
+
+        assertThatThrownBy(() -> global.renombrada("   ")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> global.renombrada(null)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void renombradaRechazaUnaConversacionQueNoEsGlobal() {
+        Conversacion celula = Conversacion.crearCelula(UUID.randomUUID(), AHORA);
+        Conversacion directa = Conversacion.crearDirecta("a_b", AHORA);
+
+        assertThatThrownBy(() -> celula.renombrada("Nuevo nombre")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> directa.renombrada("Nuevo nombre")).isInstanceOf(IllegalStateException.class);
+    }
 }

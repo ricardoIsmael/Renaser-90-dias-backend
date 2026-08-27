@@ -15,6 +15,9 @@ interface SpringDataParticipanteConversacionRepository
     @Query("SELECT p.conversacionId FROM ParticipanteConversacionJpaEntity p WHERE p.usuarioId = :usuarioId")
     List<UUID> conversacionIdsDeUsuario(@Param("usuarioId") UUID usuarioId);
 
+    @Query("SELECT p.usuarioId FROM ParticipanteConversacionJpaEntity p WHERE p.conversacionId = :conversacionId")
+    List<UUID> usuarioIdsDeConversacion(@Param("conversacionId") UUID conversacionId);
+
     /**
      * Conteo de no-leidos EN UNA SOLA consulta por lote (nunca N+1 — CLAUDE.MD del
      * encargo): un mensaje cuenta como no-leido si es mas reciente que

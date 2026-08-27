@@ -51,6 +51,24 @@ public final class Conversacion {
         return new Conversacion(ConversacionId.newId(), TipoConversacion.GLOBAL, null, null, "Global", ahora);
     }
 
+    /**
+     * Devuelve una instancia nueva con {@code nombre} cambiado (CLAUDE.MD sec. 5.4.7:
+     * "cambiar" = instancia nueva, nunca mutar). Solo GLOBAL tiene sentido renombrar —
+     * es la unica de las tres que llega con un {@code nombre} propio (ver
+     * {@link #crearCelula} / {@link #crearDirecta}, que lo dejan en {@code null}: su
+     * titulo en pantalla sale de otro lado — la celula de `community`, el otro
+     * participante del DM).
+     */
+    public Conversacion renombrada(String nuevoNombre) {
+        if (tipo != TipoConversacion.GLOBAL) {
+            throw new IllegalStateException("Solo la conversacion GLOBAL se puede renombrar");
+        }
+        if (nuevoNombre == null || nuevoNombre.isBlank()) {
+            throw new IllegalArgumentException("El nombre no puede estar vacio");
+        }
+        return new Conversacion(id, tipo, celulaId, claveDirecta, nuevoNombre.strip(), creadoEn);
+    }
+
     /** Solo para el adaptador de persistencia — valida la coherencia igual que las fabricas
      * de arriba, para que un dato corrupto en la base falle rapido, no en silencio. */
     public static Conversacion rehydrate(ConversacionId id, TipoConversacion tipo, UUID celulaId,

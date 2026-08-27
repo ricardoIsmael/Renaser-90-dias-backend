@@ -8,11 +8,13 @@ import com.renaser.os.chat.application.ports.out.mensaje.SaveMensajePort;
 import com.renaser.os.chat.application.ports.out.participante.AgregarParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ContarNoLeidosPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
+import com.renaser.os.chat.application.ports.out.participante.ListarUsuariosDeConversacionPort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.Participante;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
+import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.persistence.EntityManager;
@@ -57,6 +59,8 @@ class ChatPersistenceAdapterTest {
     private MarcarLeidoPort marcarLeidoPort;
     @Autowired
     private ContarNoLeidosPort contarNoLeidosPort;
+    @Autowired
+    private ListarUsuariosDeConversacionPort listarUsuariosDeConversacionPort;
     @Autowired
     private SaveMensajePort saveMensajePort;
     @Autowired
@@ -191,5 +195,31 @@ class ChatPersistenceAdapterTest {
         List<Mensaje> segundaPagina = loadMensajePort.pagina(c1.id(), primeraPagina.get(1).creadoEn(), 2);
         assertThat(segundaPagina).hasSize(2);
         assertThat(segundaPagina.get(0).texto()).isEqualTo("mensaje 2");
+    }
+
+    @Test
+    void usuariosDeDevuelveTodosLosParticipantesDeUnaConversacion() {
+        Conversacion global = saveConversacionPort.save(Conversacion.crearGlobal(Instant.now()));
+        agregarParticipantePort.agregar(Participante.unirse(global.id(), usuarioA, Instant.now()));
+        agregarParticipantePort.agregar(Participante.unirse(global.id(), usuarioB, Instant.now()));
+
+        List<UserId> usuarios = listarUsuariosDeConversacionPort.usuariosDe(global.id());
+
+        assertThat(usuarios).containsExactlyInAnyOrder(usuarioA, usuarioB);
+    }
+
+    @Test
+    void porIdsResuelveVariosMensajesEnUnaSolaConsulta() {
+        Conversacion global = saveConversacionPort.save(Conversacion.crearGlobal(Instant.now()));
+        Mensaje m1 = saveMensajePort.save(Mensaje.escribir(global.id(), usuarioA, TipoMensaje.TEXTO, "uno", null,
+                null, null, null, null, null, Instant.parse("2026-08-21T10:00:00Z")));
+        Mensaje m2 = saveMensajePort.save(Mensaje.escribir(global.id(), usuarioB, TipoMensaje.TEXTO, "dos", null,
+                null, null, null, null, null, Instant.parse("2026-08-21T10:01:00Z")));
+
+        Map<MensajeId, Mensaje> resueltos = loadMensajePort.porIds(List.of(m1.id(), m2.id()));
+
+        assertThat(resueltos).containsOnlyKeys(m1.id(), m2.id());
+        assertThat(resueltos.get(m1.id()).texto()).isEqualTo("uno");
+        assertThat(resueltos.get(m2.id()).texto()).isEqualTo("dos");
     }
 }
