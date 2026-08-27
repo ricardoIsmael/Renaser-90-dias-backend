@@ -71,7 +71,7 @@ public class AccountRequestController {
                                                              HttpServletRequest httpRequest) {
         AccountRequestId id = submitUseCase.submit(new SubmitAccountRequestCommand(
                 request.email(), request.fullName(), request.phone(),
-                request.city(), httpRequest.getRemoteAddr()));
+                request.city(), request.verificationToken(), httpRequest.getRemoteAddr()));
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(new AccountRequestIdResponse(id.value()));
     }
 

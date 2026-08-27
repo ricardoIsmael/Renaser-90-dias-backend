@@ -34,4 +34,14 @@ public interface EnviarEmailPort {
      * correo distinta ("activa tu cuenta" en vez de "recupera tu contrasena").
      */
     void enviarActivacionCuenta(String destinatarioEmail, String token);
+
+    /**
+     * Codigo de 6 digitos para probar que el solicitante controla la casilla, ANTES del alta
+     * (2026-08-27, cierra el gap dejado por Supabase Auth — ver javadoc de
+     * {@code CodigoVerificacionEmailPort}). El propio codigo viaja en claro por este puerto (es
+     * la unica vez que existe en texto plano — nunca se persiste asi, solo en Redis con TTL
+     * corto) hacia quien implemente el envio real, mismo criterio que
+     * {@code enviarInvitacionStaff}.
+     */
+    void enviarCodigoVerificacionEmail(String destinatarioEmail, String codigo);
 }

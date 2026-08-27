@@ -9,7 +9,7 @@ class SubmitAccountRequestCommandTest {
     @Test
     void construyeUnComandoConDatosValidosSinExplotar() {
         var command = new SubmitAccountRequestUseCase.SubmitAccountRequestCommand(
-                "valido@renaser.com", "Ana", "+51999999999", "Lima", "127.0.0.1");
+                "valido@renaser.com", "Ana", "+51999999999", "Lima", "token-verificacion", "127.0.0.1");
 
         assertThat(command.email()).isEqualTo("valido@renaser.com");
     }

@@ -8,6 +8,7 @@ import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionConP
 import com.renaser.os.users.application.ports.out.autenticacion.CanjeCodigoCommand;
 import com.renaser.os.users.application.ports.out.autenticacion.IdentidadVerificada;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadIdentidadExternaPort;
+import com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort;
 import com.renaser.os.users.application.ports.out.autenticacion.VerificadorIdentidadProveedor;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
@@ -34,14 +35,17 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
     private final LoadIdentidadExternaPort loadIdentidadExternaPort;
     private final LoadUserPort loadUserPort;
     private final SubmitAccountRequestUseCase submitAccountRequestUseCase;
+    private final TokenVerificacionEmailPort tokenVerificacionEmailPort;
 
     public AutenticacionSocialService(List<VerificadorIdentidadProveedor> verificadores,
                                        LoadIdentidadExternaPort loadIdentidadExternaPort, LoadUserPort loadUserPort,
-                                       SubmitAccountRequestUseCase submitAccountRequestUseCase) {
+                                       SubmitAccountRequestUseCase submitAccountRequestUseCase,
+                                       TokenVerificacionEmailPort tokenVerificacionEmailPort) {
         this.verificadores = new RegistroVerificadoresIdentidad(verificadores);
         this.loadIdentidadExternaPort = loadIdentidadExternaPort;
         this.loadUserPort = loadUserPort;
         this.submitAccountRequestUseCase = submitAccountRequestUseCase;
+        this.tokenVerificacionEmailPort = tokenVerificacionEmailPort;
     }
 
     @Override
@@ -66,18 +70,23 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
     }
 
     /**
-     * §6.4: "no se crea el usuario en silencio" — misma AccountRequest que el autoregistro. El
-     * `supabaseUserId` que exige {@link SubmitAccountRequestCommand} es, en los hechos, el id que
-     * tendra el usuario si se aprueba (no un id real de Supabase Auth, que ya no existe — D-49);
-     * se pre-genera aca por el mismo motivo que el autoregistro lo trae del cliente.
+     * §6.4: "no se crea el usuario en silencio" — misma AccountRequest que el autoregistro.
+     * {@link SubmitAccountRequestCommand} exige un {@code verificationToken} (2026-08-27,
+     * ver {@code ConfirmarCodigoVerificacionEmailUseCase}) que normalmente sale de tipear un
+     * codigo de 6 digitos — pero {@code requireEmailVerificado} ya confirmo que el PROVEEDOR
+     * (Google/Apple) responde por este email, una garantia mas fuerte que nuestro propio
+     * codigo. En vez de forzar al usuario a verificar dos veces el mismo correo, se genera el
+     * token directo (mismo puerto, mismo mecanismo, se salta el paso del codigo).
      */
     private ResultadoLoginSocial crearSolicitudDeAlta(IniciarSesionConProveedorCommand command,
                                                         IdentidadVerificada identidad) {
         rejectIfEmailYaRegistrado(identidad.email());
         String phone = requirePhoneParaAlta(command.phone());
         String fullName = nombreOFallback(identidad);
+        String verificationToken = tokenVerificacionEmailPort.generar(identidad.email(),
+                VerificacionEmailService.VIGENCIA_TOKEN_VERIFICACION);
         AccountRequestId solicitudId = submitAccountRequestUseCase.submit(new SubmitAccountRequestCommand(
-                identidad.email(), fullName, phone, command.city(), command.requestIp()));
+                identidad.email(), fullName, phone, command.city(), verificationToken, command.requestIp()));
         return new ResultadoLoginSocial.SolicitudCreada(solicitudId);
     }
 

@@ -8,6 +8,7 @@ import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionConP
 import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionConProveedorUseCase.ResultadoLoginSocial;
 import com.renaser.os.users.application.ports.out.autenticacion.IdentidadVerificada;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadIdentidadExternaPort;
+import com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort;
 import com.renaser.os.users.application.ports.out.autenticacion.VerificadorIdentidadProveedor;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
@@ -17,6 +18,7 @@ import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -31,6 +33,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,11 +49,13 @@ class AutenticacionSocialServiceTest {
     private LoadUserPort loadUserPort;
     @Mock
     private SubmitAccountRequestUseCase submitAccountRequestUseCase;
+    @Mock
+    private TokenVerificacionEmailPort tokenVerificacionEmailPort;
 
     private AutenticacionSocialService service() {
         when(verificadorGoogle.proveedor()).thenReturn(ProveedorIdentidad.GOOGLE);
         return new AutenticacionSocialService(List.of(verificadorGoogle), loadIdentidadExternaPort, loadUserPort,
-                submitAccountRequestUseCase);
+                submitAccountRequestUseCase, tokenVerificacionEmailPort);
     }
 
     private static IniciarSesionConProveedorCommand command(String phone) {
@@ -89,6 +94,8 @@ class AutenticacionSocialServiceTest {
         when(loadUserPort.byEmail(new Email("nuevo@renaser.dev"))).thenReturn(Optional.empty());
         AccountRequestId solicitudId = AccountRequestId.newId();
         when(submitAccountRequestUseCase.submit(any())).thenReturn(solicitudId);
+        when(tokenVerificacionEmailPort.generar(eq("nuevo@renaser.dev"), any()))
+                .thenReturn("token-verificacion-social");
 
         ResultadoLoginSocial resultado = service().iniciarSesion(command("+54 341 1234567"));
 
@@ -101,6 +108,24 @@ class AutenticacionSocialServiceTest {
         assertThat(captor.getValue().fullName()).isEqualTo("Persona Nueva");
         assertThat(captor.getValue().phone()).isEqualTo("+54 341 1234567");
         assertThat(captor.getValue().city()).isEqualTo("Rosario");
+        assertThat(captor.getValue().verificationToken()).isEqualTo("token-verificacion-social");
+    }
+
+    @Test
+    @DisplayName("2026-08-27: la identidad social ya viene pre-verificada por el proveedor, asi "
+            + "que se salta el codigo de 6 digitos y genera el token de verificacion directo")
+    void identidadNuevaGeneraElTokenDeVerificacionSinPedirCodigo() {
+        when(verificadorGoogle.verificar(any()))
+                .thenReturn(new IdentidadVerificada("google-sub-directo", "directo@renaser.dev", true, "Directo"));
+        when(loadIdentidadExternaPort.porProveedorYSujeto(any(), any())).thenReturn(Optional.empty());
+        when(loadUserPort.byEmail(any())).thenReturn(Optional.empty());
+        when(submitAccountRequestUseCase.submit(any())).thenReturn(AccountRequestId.newId());
+        when(tokenVerificacionEmailPort.generar(eq("directo@renaser.dev"), any())).thenReturn("otro-token");
+
+        service().iniciarSesion(command("+54 341 1234567"));
+
+        verify(tokenVerificacionEmailPort).generar(eq("directo@renaser.dev"),
+                eq(VerificacionEmailService.VIGENCIA_TOKEN_VERIFICACION));
     }
 
     @Test
@@ -110,6 +135,7 @@ class AutenticacionSocialServiceTest {
         when(loadIdentidadExternaPort.porProveedorYSujeto(any(), any())).thenReturn(Optional.empty());
         when(loadUserPort.byEmail(any())).thenReturn(Optional.empty());
         when(submitAccountRequestUseCase.submit(any())).thenReturn(AccountRequestId.newId());
+        when(tokenVerificacionEmailPort.generar(any(), any())).thenReturn("token-verificacion-sin-nombre");
 
         service().iniciarSesion(command("+54 341 1234567"));
 

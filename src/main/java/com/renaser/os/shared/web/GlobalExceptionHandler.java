@@ -1,11 +1,13 @@
 package com.renaser.os.shared.web;
 
+import com.renaser.os.shared.domain.CodigoVerificacionInvalidoException;
 import com.renaser.os.shared.domain.CredencialesInvalidasException;
 import com.renaser.os.shared.domain.IdentidadProveedorInvalidaException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.SesionNoIniciadaException;
 import com.renaser.os.shared.domain.TokenResetInvalidoException;
+import com.renaser.os.shared.domain.TokenVerificacionEmailInvalidoException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +50,17 @@ public class GlobalExceptionHandler {
     /** Token de reset inexistente, vencido o ya usado: el request es invalido, no una falla de autorizacion. */
     @ExceptionHandler(TokenResetInvalidoException.class)
     public ResponseEntity<ApiErrorResponse> handleTokenResetInvalido(TokenResetInvalidoException ex) {
+        return respond(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(CodigoVerificacionInvalidoException.class)
+    public ResponseEntity<ApiErrorResponse> handleCodigoVerificacionInvalido(CodigoVerificacionInvalidoException ex) {
+        return respond(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(TokenVerificacionEmailInvalidoException.class)
+    public ResponseEntity<ApiErrorResponse> handleTokenVerificacionEmailInvalido(
+            TokenVerificacionEmailInvalidoException ex) {
         return respond(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 

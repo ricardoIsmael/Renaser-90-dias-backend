@@ -2,6 +2,7 @@ package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.RateLimitExceededException;
+import com.renaser.os.shared.domain.TokenVerificacionEmailInvalidoException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.in.accountrequest.ApproveAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.CheckAccountRequestStatusUseCase;
@@ -14,6 +15,7 @@ import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequ
 import com.renaser.os.users.application.ports.out.accountrequest.SaveAccountRequestPort;
 import com.renaser.os.users.application.ports.out.autenticacion.EnviarEmailPort;
 import com.renaser.os.users.application.ports.out.autenticacion.TokenResetContrasenaPort;
+import com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SupabaseAdminAuthPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
@@ -63,6 +65,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
     private final SupabaseAdminAuthPort supabaseAdminAuthPort;
     private final SaveParticipacionProgramaPort saveParticipacionProgramaPort;
     private final TokenResetContrasenaPort tokenResetContrasenaPort;
+    private final TokenVerificacionEmailPort tokenVerificacionEmailPort;
     private final EnviarEmailPort enviarEmailPort;
     private final RequireActiveUserGuard requireActiveUserGuard;
     private final RequireAdminGuard requireAdminGuard;
@@ -74,7 +77,8 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
                                   DeleteAccountRequestPort deleteAccountRequestPort, SaveUserPort saveUserPort,
                                   SupabaseAdminAuthPort supabaseAdminAuthPort,
                                   SaveParticipacionProgramaPort saveParticipacionProgramaPort,
-                                  TokenResetContrasenaPort tokenResetContrasenaPort, EnviarEmailPort enviarEmailPort,
+                                  TokenResetContrasenaPort tokenResetContrasenaPort,
+                                  TokenVerificacionEmailPort tokenVerificacionEmailPort, EnviarEmailPort enviarEmailPort,
                                   RequireActiveUserGuard requireActiveUserGuard, RequireAdminGuard requireAdminGuard,
                                   ApplicationEventPublisher events, Clock clock) {
         this.loadAccountRequestPort = loadAccountRequestPort;
@@ -84,6 +88,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         this.supabaseAdminAuthPort = supabaseAdminAuthPort;
         this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
         this.tokenResetContrasenaPort = tokenResetContrasenaPort;
+        this.tokenVerificacionEmailPort = tokenVerificacionEmailPort;
         this.enviarEmailPort = enviarEmailPort;
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.requireAdminGuard = requireAdminGuard;
@@ -97,17 +102,30 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
      * emite y valida su propia identidad de punta a punta, no hay ninguna razón para depender
      * de un tercero para algo tan simple como un UUID nuevo. Mismo patrón que
      * {@code AccountRequestId.newId()}/{@code CelulaId.newId()} en el resto del código.
+     *
+     * <p>Exige y consume {@code verificationToken} (2026-08-27): el reemplazo propio del email
+     * de un solo uso que antes emitia Supabase Auth. Se valida ANTES de tocar nada mas — si el
+     * token no existe, ya vencio, o certifica un email distinto al del comando (alguien
+     * verifico un correo e intento usarlo para dar de alta otro), la solicitud ni se arma.
      */
     @Override
     @Transactional
     public AccountRequestId submit(SubmitAccountRequestCommand command) {
         rejectIfRateLimitExceeded(command.requestIp());
+        requireEmailVerificado(command.email(), command.verificationToken());
 
         UserId nuevoUserId = UserId.of(UUID.randomUUID());
 
         AccountRequest request = AccountRequest.submit(nuevoUserId, new Email(command.email()),
                 command.fullName(), command.phone(), command.city(), command.requestIp(), clock);
         return saveAccountRequestPort.save(request).id();
+    }
+
+    private void requireEmailVerificado(String email, String verificationToken) {
+        String emailVerificado = tokenVerificacionEmailPort.consumir(verificationToken).orElse(null);
+        if (emailVerificado == null || !emailVerificado.equalsIgnoreCase(email)) {
+            throw new TokenVerificacionEmailInvalidoException();
+        }
     }
 
     @Override

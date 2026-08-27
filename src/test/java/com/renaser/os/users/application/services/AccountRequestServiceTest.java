@@ -72,6 +72,8 @@ class AccountRequestServiceTest {
     @Mock
     private TokenResetContrasenaPort tokenResetContrasenaPort;
     @Mock
+    private com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort tokenVerificacionEmailPort;
+    @Mock
     private EnviarEmailPort enviarEmailPort;
     @Mock
     private org.springframework.context.ApplicationEventPublisher events;
@@ -82,8 +84,8 @@ class AccountRequestServiceTest {
     void setUp() {
         service = new AccountRequestService(loadAccountRequestPort, saveAccountRequestPort, deleteAccountRequestPort,
                 saveUserPort, supabaseAdminAuthPort, saveParticipacionProgramaPort, tokenResetContrasenaPort,
-                enviarEmailPort, new RequireActiveUserGuard(loadUserPort), new RequireAdminGuard(loadUserPort),
-                events, CLOCK);
+                tokenVerificacionEmailPort, enviarEmailPort, new RequireActiveUserGuard(loadUserPort),
+                new RequireAdminGuard(loadUserPort), events, CLOCK);
         lenient().when(saveAccountRequestPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -108,6 +110,50 @@ class AccountRequestServiceTest {
     private static AccountRequest pendiente() {
         return AccountRequest.submit(UserId.of(UUID.randomUUID()), new Email("solicitante@renaser.dev"),
                 "Solicitante", "555-0000", "Lima", null, CLOCK);
+    }
+
+    @Test
+    @DisplayName("2026-08-27: submit consume el token de verificacion y arma la solicitud")
+    void submitConTokenValidoArmaLaSolicitud() {
+        when(tokenVerificacionEmailPort.consumir("token-valido")).thenReturn(Optional.of("solicitante@renaser.dev"));
+
+        var command = new com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand(
+                "solicitante@renaser.dev", "Solicitante", "555-0000", "Lima", "token-valido", "127.0.0.1");
+
+        service.submit(command);
+
+        verify(saveAccountRequestPort).save(any());
+        verify(tokenVerificacionEmailPort).consumir("token-valido");
+    }
+
+    @Test
+    @DisplayName("2026-08-27: submit rechaza un token que nunca se emitio, ya vencio, o ya se uso")
+    void submitRechazaUnTokenInvalido() {
+        when(tokenVerificacionEmailPort.consumir("token-invalido")).thenReturn(Optional.empty());
+
+        var command = new com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand(
+                "solicitante@renaser.dev", "Solicitante", "555-0000", "Lima", "token-invalido", "127.0.0.1");
+
+        assertThatThrownBy(() -> service.submit(command))
+                .isInstanceOf(com.renaser.os.shared.domain.TokenVerificacionEmailInvalidoException.class);
+
+        verify(saveAccountRequestPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("2026-08-27: submit rechaza un token que verifica un email DISTINTO al del comando — "
+            + "alguien verifico un correo y trato de usar el token para dar de alta otro")
+    void submitRechazaUnTokenQueVerificaOtroEmail() {
+        when(tokenVerificacionEmailPort.consumir("token-de-otro-email"))
+                .thenReturn(Optional.of("otro-email-verificado@renaser.dev"));
+
+        var command = new com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand(
+                "solicitante@renaser.dev", "Solicitante", "555-0000", "Lima", "token-de-otro-email", "127.0.0.1");
+
+        assertThatThrownBy(() -> service.submit(command))
+                .isInstanceOf(com.renaser.os.shared.domain.TokenVerificacionEmailInvalidoException.class);
+
+        verify(saveAccountRequestPort, never()).save(any());
     }
 
     @Test

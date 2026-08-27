@@ -60,4 +60,13 @@ public class NoOpEnviarEmailAdapter implements EnviarEmailPort {
                 + "(adaptador placeholder, sin proveedor real todavia; link de {} caracteres armado)",
                 link.length());
     }
+
+    @Override
+    public void enviarCodigoVerificacionEmail(String destinatarioEmail, String codigo) {
+        // Ni el email (PII) ni el codigo (credencial de un solo uso) se loguean nunca
+        // (CLAUDE.MD §5.4.9) — mismo criterio que el resto de este adaptador.
+        log.info("[users.NoOpEnviarEmailAdapter] email de codigo de verificacion simulado "
+                + "(adaptador placeholder, sin proveedor real todavia; codigo de {} digitos generado)",
+                codigo.length());
+    }
 }
