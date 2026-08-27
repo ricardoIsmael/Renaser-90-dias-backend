@@ -920,3 +920,52 @@ Mismo E2E: un mentor real y asignado a un aprendiz recibe 403 al consultar el pu
 **Lecciones:**
 1. **Spring Data JPA y SQL plano no tienen la misma semántica de "borrar lo que no existe".** Un `DELETE ... WHERE id = ?` en SQL nunca falla por 0 filas afectadas; `deleteById` de Spring Data sí, porque internamente carga la entidad primero. Quien viene de pensar en SQL directo puede asumir mal.
 2. **Un patrón ya resuelto en el mismo módulo (`ParticipacionProgramaPersistenceAdapter`) es la primera referencia a mirar antes de escribir un puerto de borrado nuevo** — el `existsById` ya estaba ahí, con el mismo razonamiento, un día antes.
+
+---
+
+## E-45 — Tres endpoints del contrato de la app nunca se migraron y devolvían **405**, no 404: el frontend los tomaba como "no se pudo comprobar" y seguía
+
+**Síntoma:** con el backend Java levantado, la pantalla de registro de la app quedaba fija en *"Comprobando…"* bajo el campo de correo, y el botón de pedir código nunca aparecía. Al probar a mano:
+
+```
+POST /api/v1/account-requests/check-email   -> 405
+POST /api/v1/account-requests/verify-email  -> 405
+POST /api/v1/account-requests/exists        -> 405
+```
+
+**Causa real — dos cosas distintas superpuestas, y esa fue la parte que costó:**
+
+1. **El cuelgue NO era el 405.** Era red: un dispositivo Android **físico** no alcanza el `localhost` de la PC (su `localhost` es el propio teléfono), así que el `fetch` no devolvía nada — ni error ni respuesta — y `estadoLocal` se quedaba en `comprobando` para siempre. Se resuelve con `adb reverse tcp:8080 tcp:8080`, que mapea el `localhost:8080` del teléfono al de la PC.
+2. **Los tres endpoints existían en el contrato que la app ya consumía (AR-04/05/06 del repo viejo) pero nunca se portaron a Java.** Devolvían 405 y no 404 porque Spring resuelve primero la ruta contra `@RequestMapping("/api/v1/account-requests")` y recién después el método.
+
+Lo insidioso: el frontend **degrada bien** ante un no-2xx (`if (!res.ok) return null` → estado `sin_comprobar` → *"No pudimos comprobarlo ahora. Puedes continuar"*). O sea que una vez arreglada la red, la app **funcionaba igual** con los tres endpoints faltando — el hueco quedaba invisible salvo por un mensaje degradado que se lee como un problema de conexión pasajero.
+
+**Solución:** portar los tres (D-46) con sus reglas literales del repo viejo, y `adb reverse` para probar contra un teléfono físico.
+
+**Cómo evitar que vuelva a pasar:**
+- Al migrar un módulo, el paso 0 (D-33) tiene que incluir **listar las rutas que el cliente ya consume** (`grep -rhoE '/api/v1/[a-z0-9/_{}$.-]+' src/services src/lib`) y contrastarlas contra los `@*Mapping` del backend. La diferencia es la lista de lo que falta — es una comprobación de dos comandos que acá habría ahorrado el diagnóstico entero.
+- **Un endpoint faltante que el cliente tolera es peor que uno que rompe**, porque no aparece en ninguna pantalla de error. La comprobación de arriba es la única que lo encuentra.
+
+**Lecciones:**
+1. **405 en vez de 404 no significa "método equivocado": con un `@RequestMapping` de clase, significa "la ruta base existe, ese sub-path no".** Leerlo como error del cliente hace perder tiempo.
+2. **Separar "no responde" de "responde mal" antes de tocar código.** Un `curl` desde la PC contra el mismo endpoint (que sí llegaba, y devolvía 405) distinguió en un comando dos fallos que desde la app se veían como uno solo.
+3. **Un teléfono físico no comparte `localhost` con la PC.** `adb reverse tcp:PUERTO tcp:PUERTO` lo resuelve sin depender de la IP de la LAN, que cambia de red en red.
+
+---
+
+## E-46 — Un factory estático no puede llamarse igual que el accessor del `record`: `invalid accessor method`
+
+**Síntoma:** al compilar, sobre un `record` con un método estático de fábrica del mismo nombre que uno de sus componentes:
+
+```
+invalid accessor method in record ...ResultadoVerificacionDominio
+  (return type of accessor method entregable() must match the type of record component entregable)
+```
+
+**Causa real:** el `record` tenía el componente `Boolean entregable` (por lo tanto un accessor `entregable()`) y además un factory `public static ResultadoVerificacionDominio entregable()`. Para el compilador ese estático es un intento de **redefinir el accessor** con otro tipo de retorno, no un método nuevo — de ahí el mensaje, que habla de accessor cuando uno cree estar escribiendo una fábrica.
+
+**Solución:** nombrar los factories por **intención** en vez de por el campo que setean: `puedeRecibir()`, `noPuedeRecibir(motivo)`, `noSeSabe()`. Quedó mejor que el original — `ResultadoVerificacionDominio.puedeRecibir()` se lee como una frase y no repite el nombre del campo.
+
+**Cómo evitar que vuelva a pasar:** en un `record`, ningún método (ni de instancia ni estático, con o sin parámetros) puede llamarse igual que un componente. Con la convención de CLAUDE.MD §5.4.8 de nombrar por intención de negocio esto casi no aparece; surge justo cuando uno nombra el factory por el campo.
+
+**Lección:** el mensaje del compilador nombra el síntoma (`accessor`) y no la causa (colisión con un componente del record). Ante un `invalid accessor method`, buscar el **choque de nombres**, no un problema de tipos.
