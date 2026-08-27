@@ -135,21 +135,23 @@ Todo lo que sigue es trabajo de **código nuevo en el backend**, no un simple re
 
 ### `habits` / `rocks` / `evidence` / `points`
 
-| # | Gap | Bloquea |
+**Actualizado 2026-08-26 (noche) — lote de 3 agentes en paralelo cerró 8 de estos 14 gaps, más uno resuelto de rebote. Verificado contra el código real, no contra el reporte de los agentes.**
+
+| # | Gap | Estado |
 |---|---|---|
-| 10 | `GET /habit-tracks/today` no trae catálogo del hábito (título, tipo, guía, horario resuelto) — solo el registro | Toda la pantalla de hábitos del día necesita esos datos |
-| 11 | `habitsAdmin.ts` completo sin backend (catálogo, horarios, guías/adjuntos) | Panel admin de hábitos |
-| 12 | Sin `habit-preferences`, `weekly-habit-days`, renombrado de hábito, `habit-unlocks` | Personalización de hábitos |
-| 13 | Cierre de racha "Día sin celular" no acepta evidencia (foto/audio/nota) | Cerrar Santuario con evidencia |
-| 14 | No confirmado si `habits` (evidencia de hábito) tiene su propio `upload-url` como sí tienen `rocks`/`onboarding`/`phasecontracts` | Definir antes de migrar la subida de evidencia de hábitos |
-| 15 | Sin dashboard agregado `GET /rocks` (con compuertas de planificación, `rhythmStatus`, grilla semanal) — solo piezas sueltas (`/today`, `/tomorrow`, `/master`, `/weekly`) | Pantalla principal de Rocas |
-| 16 | Sin Diario Nocturno (`journal/today`) en `rocks` | Feature de diario nocturno completo |
-| 17 | `publishedToWall`/`esPrincipal` no aceptados al completar una Roca con evidencia | Publicar evidencia de Roca al Muro |
-| 18 | `DestinoVerdugo` no tiene valor para Código Renaser (`RADAR`) ni está confirmado que acepte hábitos personales por FK | Verdugo sobre esos dos tipos de tarea (hoy no se dispara en la práctica) |
-| 19 | Sin listado `GET /evidence` (solo por id) | El fallback a Storage sigue siendo necesario, no es código muerto |
-| 20 | Panel admin de revisión de evidencia: sin listado, y el "override" de un paso no tiene equivalente (existen `review`/`void`, semántica distinta) | Panel admin de evidencia marcada por IA |
-| 21 | Sin agregador `GET /home` (resumen del día) | Pantalla de inicio |
-| 22 | "Logros" no es un concepto de dominio en `points` — no existe en absoluto | Pantalla de logros/badges |
+| 10 | `GET /habit-tracks/today` no trae catálogo del hábito | ✅ **Cerrado.** `ConsultarTracksDelDiaConCatalogoUseCase` + `TracksDelDiaProyeccionService`, una proyección por lote (sin N+1) |
+| 11 | `habitsAdmin.ts` completo sin backend (catálogo, horarios, guías/adjuntos) | ⬜ Sigue abierto |
+| 12 | Sin `habit-preferences`, `weekly-habit-days`, renombrado de hábito, `habit-unlocks` | ✅ **Cerrado.** `HabitPreferenceController`, `WeeklyHabitDayController`, `HabitRenameController`, `HabitUnlockController` (este último solo lectura — el algoritmo de escalonamiento en sí no se portó) |
+| 13 | Cierre de racha "Día sin celular" no acepta evidencia | ✅ **Cerrado.** `CerrarRachaCommand` exige evidencia, colgada del registro que inició la racha |
+| 14 | No confirmado si `habits` tiene su propio `upload-url` para evidencia | ✅ **Resuelto de rebote** al cerrar el #13: `POST /habit-tracks/racha/phone-free/evidence/upload-url`, mismo patrón que `rocks`/`onboarding` |
+| 15 | Sin dashboard agregado `GET /rocks` | ✅ **Cerrado.** `DashboardRocasController` — semáforo, grilla semanal, compuertas de Ley II. Los umbrales exactos se recuperaron del backend viejo, citados línea por línea |
+| 16 | Sin Diario Nocturno (`journal/today`) | ✅ **Cerrado, y en `habits` no en `rocks`** — es el mismo concepto que `EntradaDiario` (dominio ya existía). `JournalTodayController`, cierra también el #31 |
+| 17 | `publishedToWall`/`esPrincipal` no aceptados al completar una Roca | 🟡 **Mitad cerrado.** `esPrincipal` sí; `publishedToWall` sigue abierto — necesita un puerto de `community.api` que hoy no existe |
+| 18 | `DestinoVerdugo` sin valor para Código Renaser (`RADAR`) | ⬜ Sigue abierto |
+| 19 | Sin listado `GET /evidence` | ✅ **Cerrado.** `ListarEvidenciaUseCase`, paginación por keyset, alcance de mentor verificado contra la asignación real |
+| 20 | Panel admin de evidencia: sin listado; el "override" no tiene equivalente | ✅ **Cerrado.** `ListarEvidenciaAdminUseCase` + `EvidenciaAdminController`. El "override" resultó ser un gap real (devolver puntos de una penalización revertida), no un remapeo — se construyó reutilizando el estado `ANULADA_ADMIN` ya existente, sin tocar el esquema |
+| 21 | Sin agregador `GET /home` (resumen del día) | ⬜ Sigue abierto |
+| 22 | "Logros" no es un concepto de dominio en `points` | ⬜ Sigue abierto |
 
 ### `academy` / `community` / `calendar`
 
@@ -168,7 +170,7 @@ Todo lo que sigue es trabajo de **código nuevo en el backend**, no un simple re
 | 28 | Sin miembros/rename de la conversación global | Pantalla de info del chat global |
 | 29 | Mensajes de chat sin nombre/avatar del emisor ni preview de respuesta resuelto — solo ids crudos | UI de chat con nombres/avatares sin una vuelta extra por usuario |
 | 30 | Sin "marcar/reportar mensaje" en Renasia — el frontend ya tiene la UI, el backend no tiene ni el campo ni la ruta | Feature de moderación de chat con IA |
-| 31 | Sin caso de uso ni controller para escribir una entrada de diario (`EntradaDiario`) — el dominio y los puertos existen, falta la capa de aplicación/web completa | Shadow Mirror y cualquier futuro tipo de entrada de diario |
+| 31 | ~~Sin caso de uso ni controller para escribir una entrada de diario~~ | ✅ **Cerrado 2026-08-26** — ver #16, es el mismo trabajo (Bitácora Nocturna) |
 
 ---
 
