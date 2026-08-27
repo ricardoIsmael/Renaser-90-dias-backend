@@ -114,16 +114,24 @@ points/
 │   └── ranking/TipoRanking.java                 GENERAL/COHORT/CELL/LEAGUE
 ├── application/
 │   ├── ports/in/puntaje/                        Ajustar(Manualmente)/Consultar/RegistrarCoherenciaDiaria
-│   ├── ports/in/ranking/                        Consultar/GenerarSnapshot
+│   ├── ports/in/ranking/                        Consultar/GenerarSnapshot/ConsultarRankingAgregado (2026-08-26)
+│   ├── ports/in/home/                           ConsultarResumenHome (2026-08-26, gap #21)
 │   ├── ports/out/{puntaje,ajuste,ranking}/       Load/Save por agregado + VerificarActorAdministrativoPort
-│   └── services/{PuntajeService, RankingService}.java
+│   └── services/{PuntajeService, RankingService, RankingAgregadoService, HomeAgregadoService}.java
 └── infrastructure/adapter/
     ├── in/rest/puntaje/PuntajeController.java    GET /api/v1/points/{id}, POST /api/v1/points/adjustments
-    ├── in/rest/ranking/RankingController.java    GET /api/v1/ranking/{tipo}
+    ├── in/rest/ranking/RankingController.java    GET /api/v1/ranking (agregado) + GET /api/v1/ranking/{tipo}
+    ├── in/rest/home/HomeController.java          GET /api/v1/home (agregado, gap #21)
     ├── in/scheduler/SnapshotRankingScheduler.java @Scheduled 05:05 UTC, LEAGUE+CELL
     ├── in/scheduler/PointsSchedulingConfig.java   @EnableScheduling (ver §6, decisión sobre alcance)
     └── out/persistence/{puntaje,ajuste,ranking}/  JpaEntity + mapper a mano + adapter, patrón `users`
 ```
+
+**Actualización 2026-08-26 (agente compositor de agregados, `docs/PLAN_INTEGRACION_FRONTEND.md` #21/#22/#24):**
+
+- `GET /api/v1/ranking` (nuevo, sin `{tipo}`) — `ConsultarRankingAgregadoUseCase`/`RankingAgregadoService` componen LEAGUE+CELL+GENERAL (reusando `ConsultarRankingUseCase.consultar` 3 veces, sin duplicar su validación de actor activo) más la célula del actor, leída de `community.api.CelulaFinder.celulaDeParticipante` — método nuevo en esa interfaz (extensión mínima autorizada por el encargo), implementado en `CelulaService`. Sigue sin replicar el contrato viejo completo — ver D-P9 actualizado abajo y gap #24.
+- `GET /api/v1/home` (nuevo) — `ConsultarResumenHomeUseCase`/`HomeAgregadoService` devuelven `puntosLiga`/`coherencia`/`rachaActual`/`rachaMaxima` (dominio propio de `points`, vía `ConsultarPuntajeUseCase.consultar(actorId, actorId)`) más un campo `bloqueos: string[]` que documenta, en la propia respuesta, los 3 datos que NO se pudieron componer: hábitos del día (`habits.api` sin finder agregado), próximo evento de calendario (`calendar.api` solo publica un evento de dominio, no un finder de lectura) y notificaciones sin leer (`notifications` sin paquete `api`/`@NamedInterface` todavía). Ninguno de los 3 se inventó — CLAUDE.MD §0.6.
+- **"Logros" (gap #22) — investigado, NO construido.** El backend viejo sí lo definía completo (`GET /api/v1/profile/logros`, P-05) pero ninguno de sus 9 campos es dominio de `points` (mezcla `TraineeProfile.programDay` de `users` — gap #1, sin construir — con conteos de `habits`/`rocks`/radar que hoy no tienen finder en `habits.api`/`rocks.api`). Construirlo en `points` hubiera sido inventar quién es dueño de un dato ajeno. Detalle completo, con cita exacta del archivo/línea del backend viejo y del contrato que ya consume la app real, en `docs/PLAN_INTEGRACION_FRONTEND.md` gap #22.
 
 Tests: `domain` (unit puro, sin Spring), `application/services` (unit con Mockito, sin Postgres), `infrastructure/.../persistence` (IT con Testcontainers, patrón `AccountRequestPersistenceAdapterTest`).
 
@@ -140,6 +148,7 @@ Tests: `domain` (unit puro, sin Spring), `application/services` (unit con Mockit
 - **D-P7 — `GenerarSnapshotRankingUseCase`/`RankingService` implementan solo LEAGUE y CELL.** GENERAL y COHORT lanzan `UnsupportedOperationException` con mensaje explícito. No se inventó una fórmula parcial para no violar CLAUDE.MD §0.6 ("no inventar reglas de negocio"). Ver preguntas Q-1/Q-3.
 - **D-P8 — sin `CoherenciaDiariaScheduler`.** `RegistrarCoherenciaDiariaUseCase` necesita `valor`/`diaHabitosPerfecto` que solo `habits`/`rocks` pueden calcular (no existen). Un scheduler sin datos que iterar sería una clase vacía o, peor, lógica inventada — se documenta como pendiente en vez de crear una clase de relleno. Ver Q-2.
 - **D-P9 — `GET /api/v1/ranking/{tipo}` NO replica el contrato viejo `GET /api/v1/ranking`** (una respuesta con las 4 pestañas agrupadas por la célula del caller). Ese armado necesita datos de célula/cohorte (tabla `celulas`, dueño futuro `community`, Ola 3) que `points` no tiene. Se expone en cambio el snapshot plano por tipo. Ver Q-1.
+  - **Actualizado 2026-08-26:** dueño del producto decidió construir el agregador (gap #24, `docs/PLAN_INTEGRACION_FRONTEND.md`) — ahora existe `GET /api/v1/ranking` (sin `{tipo}`) componiendo los 3 snapshots + célula del actor vía `community.api.CelulaFinder`. Sigue sin las 2 piezas que dependían de Q-1/Q-1b (`celulas` del cohort y `miCelula`/`miCelulaPorHabitos` DENTRO de la célula propia) — esas necesitan decidir primero quién puebla `ranking_celulas` y con qué fórmula, no solo agregar un finder de lectura. La fórmula candidata (si se decide que `points` la implementa) es la del cron viejo `coherence-group-score`: `coherenceScoreGroup = AVG(coherenceScore de los aprendices activos de la célula)` (100 si no hay ninguno), y `rankingPosition` = orden descendente de esa métrica dentro de cada cohort activo (`RenaserBack/src/app/api/cron/coherence-group-score/route.ts`).
 
 ---
 
@@ -186,3 +195,5 @@ No se creó el agregado `participante` en `users` — está fuera del alcance de
 - `@RequiresPermission`/`@PublicEndpoint` + test de reflexión — el mecanismo no existe en el repo todavía (B-5/R-2 de `users`).
 - Migración Flyway propia — no hizo falta: las 5 tablas de `points` (`puntajes_participante`, `ajustes_puntos_liga`, `historial_coherencia`, `ranking_aprendices`, `ranking_celulas`) ya están en `V1__baseline_renaser.sql`, que este módulo tiene prohibido tocar.
 - Batch lookup de nombres en `RankingPersistenceAdapter.porTipoYFecha` — hoy es un `SELECT` por fila (documentado en el código como optimización futura si el volumen crece; el repo viejo documentaba ~30 aprendices activos).
+- `GET /api/v1/home`: `programDay`/`currentPhase`/`weekStatus`/`habitsToday`/`rocksToday`/`radarCheckinsToday` que espera el frontend real (`HomeSummaryResponse`, `C:\renaserPlayStore\src\types\home.ts`) — bloqueados por falta de finder en `habits.api`/`calendar.api`, paquete `api` inexistente en `notifications`, y `TraineeProfile` inexistente en `users` (gap #1). Documentado explícitamente en la propia respuesta (`bloqueos`), no inventado.
+- "Logros" (gap #22) — investigado con cita exacta del backend viejo, no construido: no es dominio de `points`. Ver `docs/PLAN_INTEGRACION_FRONTEND.md` gap #22 y la actualización 2026-08-26 de §3 de este documento.
