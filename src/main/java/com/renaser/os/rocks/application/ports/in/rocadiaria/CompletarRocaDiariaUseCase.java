@@ -31,15 +31,28 @@ public interface CompletarRocaDiariaUseCase {
      * que ya valida el mismo CHECK {@code principal_solo_en_roca} — acá
      * siempre es legal porque el destino de esta evidencia SIEMPRE es una
      * Roca Diaria.
+     *
+     * <p>{@code publishedToWall} (Hueco #17, cierre 2026-08-26): si viene en
+     * {@code true}, {@code RocaDiariaService} llama a
+     * {@code community.api.PublicarEnMuroPort} para crear una publicación real
+     * en el Muro con esta misma evidencia — solo válido para evidencia visual
+     * ({@code FOTO}/{@code VIDEO}/{@code CAPTURA}; el Muro nunca acepta
+     * audio/texto puro, ver {@code MediaPublicacion}). {@code false} por
+     * defecto: un cliente viejo que no manda el campo no publica nada nuevo.
      */
     record CompletarRocaDiariaCommand(@NotNull UserId actorId, @NotNull RocaDiariaId rocaDiariaId,
                                        @NotNull TipoEvidenciaRoca tipo, String bucket, String rutaStorage,
                                        String contenidoTexto, Instant timestampExif, Double gpsLat, Double gpsLng,
-                                       boolean esPrincipal) {
+                                       boolean esPrincipal, boolean publishedToWall) {
 
         public CompletarRocaDiariaCommand {
             SelfValidating.validateConstructorArgs(CompletarRocaDiariaCommand.class, actorId, rocaDiariaId, tipo,
-                    bucket, rutaStorage, contenidoTexto, timestampExif, gpsLat, gpsLng, esPrincipal);
+                    bucket, rutaStorage, contenidoTexto, timestampExif, gpsLat, gpsLng, esPrincipal, publishedToWall);
+            if (publishedToWall && tipo != TipoEvidenciaRoca.FOTO && tipo != TipoEvidenciaRoca.VIDEO
+                    && tipo != TipoEvidenciaRoca.CAPTURA) {
+                throw new IllegalArgumentException(
+                        "publishedToWall solo aplica a evidencia visual (FOTO/VIDEO/CAPTURA)");
+            }
             if (tipo == TipoEvidenciaRoca.TEXTO) {
                 if (contenidoTexto == null || contenidoTexto.isBlank()) {
                     throw new IllegalArgumentException("contenidoTexto es obligatorio para evidencia de tipo TEXTO");

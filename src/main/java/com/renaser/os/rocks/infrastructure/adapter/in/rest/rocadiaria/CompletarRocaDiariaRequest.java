@@ -11,7 +11,13 @@ import java.time.Instant;
  * campo no existía y el servicio lo mandaba siempre en {@code true}; un cliente viejo
  * que no lo manda sigue viendo el mismo comportamiento (mismo criterio que
  * {@code categoriaClave} nulo en `community`, CLAUDE.MD: no romper compatibilidad).
+ *
+ * <p>{@code publishedToWall} (Hueco #17, cierre 2026-08-26): {@code null} = {@code false}
+ * — a diferencia de {@code esPrincipal}, esto es una funcionalidad NUEVA sin
+ * comportamiento previo que preservar, asi que el default es "no publicar nada" hasta
+ * que el cliente lo pida explicitamente.
  */
 public record CompletarRocaDiariaRequest(@NotBlank String tipo, String bucket, String rutaStorage, String contenidoTexto,
-                                          Instant timestampExif, Double gpsLat, Double gpsLng, Boolean esPrincipal) {
+                                          Instant timestampExif, Double gpsLat, Double gpsLng, Boolean esPrincipal,
+                                          Boolean publishedToWall) {
 }

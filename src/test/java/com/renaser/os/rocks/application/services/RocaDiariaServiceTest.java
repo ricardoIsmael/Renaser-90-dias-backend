@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.application.services;
 
+import com.renaser.os.community.api.PublicarEnMuroPort;
 import com.renaser.os.evidence.api.RegistrarEvidenciaPort;
 import com.renaser.os.evidence.api.RegistrarEvidenciaPort.EvidenciaRegistrada;
 import com.renaser.os.evidence.api.EstadoValidacion;
@@ -76,6 +77,8 @@ class RocaDiariaServiceTest {
     @Mock
     private AjustarPuntosPort ajustarPuntosPort;
     @Mock
+    private PublicarEnMuroPort publicarEnMuroPort;
+    @Mock
     private ApplicationEventPublisher events;
 
     private RocaDiariaService service;
@@ -85,7 +88,7 @@ class RocaDiariaServiceTest {
     void setUp() {
         service = new RocaDiariaService(loadRocaMaestraPort, loadRocaSemanalPort, loadRocaDiariaPort,
                 saveRocaDiariaPort, registrarEvidenciaPort, progresoPort, almacenamientoPort, ajustarPuntosPort,
-                events, CLOCK);
+                publicarEnMuroPort, events, CLOCK);
         actorId = UserId.of(UUID.randomUUID());
         lenient().when(saveRocaDiariaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(registrarEvidenciaPort.registrar(any()))
@@ -108,7 +111,7 @@ class RocaDiariaServiceTest {
 
     private CompletarRocaDiariaCommand comandoTexto(RocaDiariaId id) {
         return new CompletarRocaDiariaCommand(actorId, id, TipoEvidenciaRoca.TEXTO, null, null, "hecho", null, null,
-                null, true);
+                null, true, false);
     }
 
     @Test
@@ -164,7 +167,7 @@ class RocaDiariaServiceTest {
 
         Instant exifMuyViejo = CLOCK.now().minus(Duration.ofMinutes(20));
         var command = new CompletarRocaDiariaCommand(actorId, verde.id(), TipoEvidenciaRoca.FOTO, "bucket", "ruta",
-                null, exifMuyViejo, null, null, true);
+                null, exifMuyViejo, null, null, true, false);
 
         assertThatThrownBy(() -> service.completar(command)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("EXIF_MISMATCH");
@@ -211,11 +214,48 @@ class RocaDiariaServiceTest {
         RocaDiaria verde = rocaVerde(null);
         when(loadRocaDiariaPort.byId(verde.id())).thenReturn(Optional.of(verde));
         var command = new CompletarRocaDiariaCommand(actorId, verde.id(), TipoEvidenciaRoca.TEXTO, null, null,
-                "hecho", null, null, null, false);
+                "hecho", null, null, null, false, false);
 
         service.completar(command);
 
         verify(registrarEvidenciaPort).registrar(argThat(c -> !c.esPrincipal()));
+    }
+
+    @Test
+    @DisplayName("Hueco #17: publishedToWall solo aplica a evidencia visual (FOTO/VIDEO/CAPTURA)")
+    void publishedToWallConEvidenciaNoVisualEsRechazado() {
+        assertThatThrownBy(() -> new CompletarRocaDiariaCommand(actorId, RocaDiariaId.newId(),
+                TipoEvidenciaRoca.TEXTO, null, null, "hecho", null, null, null, true, true))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("publishedToWall");
+    }
+
+    @Test
+    @DisplayName("Hueco #17: publishedToWall=true llama a community.api.PublicarEnMuroPort en la misma transaccion")
+    void publishedToWallLlamaAlPuertoDeCommunity() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
+        RocaDiaria verde = rocaVerde(null);
+        when(loadRocaDiariaPort.byId(verde.id())).thenReturn(Optional.of(verde));
+        var command = new CompletarRocaDiariaCommand(actorId, verde.id(), TipoEvidenciaRoca.FOTO, "renaser-files",
+                "rocas/x/y", null, CLOCK.now(), null, null, true, true);
+
+        service.completar(command);
+
+        verify(publicarEnMuroPort).publicarDesdeEvidencia(argThat(
+                c -> c.autorId().equals(actorId) && c.bucket().equals("renaser-files") && c.ruta().equals("rocas/x/y")
+                        && c.mime().equals("image/jpeg") && c.texto().contains("verde")));
+    }
+
+    @Test
+    @DisplayName("Hueco #17: publishedToWall=false (default) nunca llama a community")
+    void publishedToWallFalseNoLlamaANadie() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
+        RocaDiaria verde = rocaVerde(null);
+        when(loadRocaDiariaPort.byId(verde.id())).thenReturn(Optional.of(verde));
+
+        service.completar(comandoTexto(verde.id()));
+
+        verify(publicarEnMuroPort, never()).publicarDesdeEvidencia(any());
     }
 
     @Test

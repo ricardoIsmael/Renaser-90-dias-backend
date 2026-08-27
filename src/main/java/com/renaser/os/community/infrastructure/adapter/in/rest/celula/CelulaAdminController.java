@@ -4,7 +4,9 @@ import com.renaser.os.community.application.ports.in.celula.ActualizarCelulaUseC
 import com.renaser.os.community.application.ports.in.celula.ActualizarCelulaUseCase.ActualizarCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase.AsignarMentorCelulaCommand;
+import com.renaser.os.community.application.ports.in.celula.ConsultarCandidatosCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.ConsultarCelulasUseCase;
+import com.renaser.os.community.application.ports.in.celula.ConsultarDashboardCelulasUseCase;
 import com.renaser.os.community.application.ports.in.celula.CrearCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.CrearCelulaUseCase.CrearCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.EliminarCelulaUseCase;
@@ -45,12 +47,16 @@ public class CelulaAdminController {
     private final ProgramarSesionCelulaUseCase programarSesionUseCase;
     private final EliminarCelulaUseCase eliminarUseCase;
     private final ConsultarCelulasUseCase consultarUseCase;
+    private final ConsultarDashboardCelulasUseCase dashboardUseCase;
+    private final ConsultarCandidatosCelulaUseCase candidatosUseCase;
 
     public CelulaAdminController(CrearCelulaUseCase crearUseCase, ActualizarCelulaUseCase actualizarUseCase,
                                   AsignarMentorCelulaUseCase asignarMentorUseCase,
                                   QuitarMentorCelulaUseCase quitarMentorUseCase,
                                   ProgramarSesionCelulaUseCase programarSesionUseCase,
-                                  EliminarCelulaUseCase eliminarUseCase, ConsultarCelulasUseCase consultarUseCase) {
+                                  EliminarCelulaUseCase eliminarUseCase, ConsultarCelulasUseCase consultarUseCase,
+                                  ConsultarDashboardCelulasUseCase dashboardUseCase,
+                                  ConsultarCandidatosCelulaUseCase candidatosUseCase) {
         this.crearUseCase = crearUseCase;
         this.actualizarUseCase = actualizarUseCase;
         this.asignarMentorUseCase = asignarMentorUseCase;
@@ -58,6 +64,36 @@ public class CelulaAdminController {
         this.programarSesionUseCase = programarSesionUseCase;
         this.eliminarUseCase = eliminarUseCase;
         this.consultarUseCase = consultarUseCase;
+        this.dashboardUseCase = dashboardUseCase;
+        this.candidatosUseCase = candidatosUseCase;
+    }
+
+    /** #25: panel admin cross-cohorte — ruta propia (no {@code GET /admin/cells} a
+     * secas) para no romper el contrato ya vigente de {@link #listarPorCohorte}, que
+     * exige {@code cohortId}. */
+    @GetMapping("/dashboard")
+    public List<CelulaDashboardResponse> dashboard(@RequestHeader("X-Actor-Id") String actorId) {
+        return dashboardUseCase.dashboard(UserId.of(actorId)).stream().map(CelulaDashboardResponse::from).toList();
+    }
+
+    /** #25: mentores ACTIVOS sin celula — candidatos del selector "Asignar mentor". */
+    @GetMapping("/mentores-disponibles")
+    public List<MentorCandidatoResponse> mentoresDisponibles(@RequestHeader("X-Actor-Id") String actorId) {
+        return candidatosUseCase.mentoresDisponibles(UserId.of(actorId)).stream().map(MentorCandidatoResponse::from)
+                .toList();
+    }
+
+    /** #25: TODOS los mentores ACTIVOS, marcando con {@code cellId} a quien ya lidera una. */
+    @GetMapping("/mentores")
+    public List<MentorCandidatoResponse> mentores(@RequestHeader("X-Actor-Id") String actorId) {
+        return candidatosUseCase.mentores(UserId.of(actorId)).stream().map(MentorCandidatoResponse::from).toList();
+    }
+
+    /** #25: aprendices ACTIVOS sin celula (alcance global, ver javadoc del caso de uso). */
+    @GetMapping("/aprendices-disponibles")
+    public List<AprendizCandidatoResponse> aprendicesDisponibles(@RequestHeader("X-Actor-Id") String actorId) {
+        return candidatosUseCase.aprendicesDisponibles(UserId.of(actorId)).stream()
+                .map(AprendizCandidatoResponse::from).toList();
     }
 
     @GetMapping

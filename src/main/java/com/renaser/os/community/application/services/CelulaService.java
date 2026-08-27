@@ -2,9 +2,12 @@ package com.renaser.os.community.application.services;
 
 import com.renaser.os.community.api.CelulaCreadaEvent;
 import com.renaser.os.community.api.CelulaFinder;
+import com.renaser.os.community.api.CelulaFinder.CelulaParticipanteResumen;
 import com.renaser.os.community.application.ports.in.celula.ActualizarCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase;
+import com.renaser.os.community.application.ports.in.celula.ConsultarCandidatosCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.ConsultarCelulasUseCase;
+import com.renaser.os.community.application.ports.in.celula.ConsultarDashboardCelulasUseCase;
 import com.renaser.os.community.application.ports.in.celula.ConsultarMiCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.CrearCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.EliminarCelulaUseCase;
@@ -18,6 +21,7 @@ import com.renaser.os.community.application.ports.out.cohorte.LoadCohortePort;
 import com.renaser.os.community.application.ports.out.participante.ConsultarCelulaDeParticipantePort;
 import com.renaser.os.community.application.ports.out.participante.ConsultarMiembrosCelulaPort;
 import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort;
+import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort.PerfilUsuario;
 import com.renaser.os.community.domain.model.celula.Celula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.Cohorte;
@@ -26,6 +30,7 @@ import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
@@ -34,15 +39,19 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCase, AsignarMentorCelulaUseCase,
         QuitarMentorCelulaUseCase, ProgramarSesionCelulaUseCase, EliminarCelulaUseCase, ConsultarCelulasUseCase,
-        ConsultarMiCelulaUseCase, CelulaFinder {
+        ConsultarMiCelulaUseCase, ConsultarDashboardCelulasUseCase, ConsultarCandidatosCelulaUseCase, CelulaFinder {
 
     private final LoadCelulaPort loadCelulaPort;
     private final SaveCelulaPort saveCelulaPort;
@@ -53,6 +62,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     private final ConsultarCelulaDeParticipantePort consultarCelulaDeParticipantePort;
     private final ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort;
     private final UserSummaryFinder userSummaryFinder;
+    private final ParticipacionProgramaFinder participacionProgramaFinder;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
@@ -62,7 +72,8 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
                           ConsultarMiembrosCelulaPort consultarMiembrosCelulaPort,
                           ConsultarCelulaDeParticipantePort consultarCelulaDeParticipantePort,
                           ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort, UserSummaryFinder userSummaryFinder,
-                          ApplicationEventPublisher events, Clock clock) {
+                          ParticipacionProgramaFinder participacionProgramaFinder, ApplicationEventPublisher events,
+                          Clock clock) {
         this.loadCelulaPort = loadCelulaPort;
         this.saveCelulaPort = saveCelulaPort;
         this.eliminarCelulaPort = eliminarCelulaPort;
@@ -72,6 +83,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         this.consultarCelulaDeParticipantePort = consultarCelulaDeParticipantePort;
         this.consultarPerfilUsuarioPort = consultarPerfilUsuarioPort;
         this.userSummaryFinder = userSummaryFinder;
+        this.participacionProgramaFinder = participacionProgramaFinder;
         this.events = events;
         this.clock = clock;
     }
@@ -206,6 +218,92 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
                 .orElseGet(List::of);
     }
 
+    /** #25 (docs/PLAN_INTEGRACION_FRONTEND.md sec. 5): dashboard cross-cohorte — a
+     * diferencia de {@link #listarPorCohorte}, no exige elegir una cohorte primero.
+     * Solo ADMIN/ALCHEMIST: un MENTOR sigue viendo la propia por {@code GET /me/cell}. */
+    @Override
+    public List<CelulaConCohorte> dashboard(UserId actorId) {
+        requireAdmin(actorId);
+        return loadCelulaPort.todas().stream().map(this::aCelulaConCohorte).toList();
+    }
+
+    private CelulaConCohorte aCelulaConCohorte(Celula celula) {
+        int cantidad = consultarMiembrosCelulaPort.contarMiembros(celula.id());
+        PerfilBasico mentor = celula.mentorId() != null ? perfilBasico(celula.mentorId()) : null;
+        Cohorte cohorte = requireCohorte(celula.cohorteId());
+        return new CelulaConCohorte(celula, cantidad, mentor, cohorte);
+    }
+
+    /** #25: mentores ACTIVOS que hoy no lideran ninguna celula — candidatos del selector
+     * "Asignar mentor". {@link LoadCelulaPort#todas()} resuelve quien ya lidera sin
+     * tocar `perfiles_mentor` (tabla ajena, mismo criterio que {@link #asignar}). */
+    @Override
+    public List<MentorCandidato> mentoresDisponibles(UserId actorId) {
+        requireAdmin(actorId);
+        Set<UserId> yaLideran = mentoresQueYaLideran();
+        return mentoresActivos().stream().filter(id -> !yaLideran.contains(id)).map(id -> aMentorCandidato(id, null))
+                .toList();
+    }
+
+    /** #25: TODOS los mentores ACTIVOS, marcando con {@code celulaActual} a quien ya
+     * lidera una — el picker los muestra a todos en vez de ocultar a los ocupados
+     * (mismo criterio que el frontend ya documenta para este picker). */
+    @Override
+    public List<MentorCandidato> mentores(UserId actorId) {
+        requireAdmin(actorId);
+        Map<UserId, CelulaId> celulaPorMentor = new HashMap<>();
+        for (Celula celula : loadCelulaPort.todas()) {
+            if (celula.mentorId() != null) {
+                celulaPorMentor.put(celula.mentorId(), celula.id());
+            }
+        }
+        return mentoresActivos().stream().map(id -> aMentorCandidato(id, celulaPorMentor.get(id))).toList();
+    }
+
+    /** #25: aprendices ACTIVOS sin celula asignada — alcance GLOBAL (ver javadoc de
+     * {@link ConsultarCandidatosCelulaUseCase#aprendicesDisponibles}). Recorre las
+     * celulas existentes (acotadas, no crecen con la cantidad de aprendices) para armar
+     * el conjunto de "ya asignados" en vez de consultar participante por participante —
+     * mismo criterio anti-N+1 que {@code PorcentajeRocasFinder} (D-43). */
+    @Override
+    public List<AprendizCandidato> aprendicesDisponibles(UserId actorId) {
+        requireAdmin(actorId);
+        Set<UserId> yaAsignados = new HashSet<>();
+        for (Celula celula : loadCelulaPort.todas()) {
+            yaAsignados.addAll(participacionProgramaFinder.miembrosDeCelula(celula.id().value()));
+        }
+        List<UserId> aprendicesActivos = participacionProgramaFinder.usuariosActivosConRol(Set.of(UserRole.TRAINEE));
+        List<UserId> disponibles = aprendicesActivos.stream().filter(id -> !yaAsignados.contains(id)).toList();
+        Map<UserId, UserSummary> resumenes = userSummaryFinder.findByIds(disponibles);
+        return disponibles.stream()
+                .map(id -> {
+                    UserSummary resumen = resumenes.get(id);
+                    return new AprendizCandidato(id, resumen != null ? resumen.fullName() : null,
+                            resumen != null ? resumen.avatarUrl() : null);
+                })
+                .toList();
+    }
+
+    private List<UserId> mentoresActivos() {
+        return participacionProgramaFinder.usuariosActivosConRol(Set.of(UserRole.MENTOR));
+    }
+
+    private Set<UserId> mentoresQueYaLideran() {
+        Set<UserId> yaLideran = new HashSet<>();
+        for (Celula celula : loadCelulaPort.todas()) {
+            if (celula.mentorId() != null) {
+                yaLideran.add(celula.mentorId());
+            }
+        }
+        return yaLideran;
+    }
+
+    private MentorCandidato aMentorCandidato(UserId id, CelulaId celulaActual) {
+        UserSummary resumen = userSummaryFinder.findById(id).orElse(null);
+        return new MentorCandidato(id, resumen != null ? resumen.fullName() : null,
+                resumen != null ? resumen.avatarUrl() : null, celulaActual);
+    }
+
     private CelulaResumen aResumen(Celula celula) {
         int cantidad = consultarMiembrosCelulaPort.contarMiembros(celula.id());
         PerfilBasico mentor = celula.mentorId() != null ? perfilBasico(celula.mentorId()) : null;
@@ -254,6 +352,29 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     @Override
     public Optional<UserId> mentorDe(UUID celulaId) {
         return loadCelulaPort.porId(new CelulaId(celulaId)).map(Celula::mentorId);
+    }
+
+    /**
+     * {@link CelulaFinder} — contrato publico consumido por el agregador de ranking de
+     * `points` (gap #24). Deliberadamente sin las validaciones de {@link #miCelula} (actor
+     * activo, etc.): esas son responsabilidad del modulo que llama, no de esta lectura.
+     */
+    @Override
+    public Optional<CelulaParticipanteResumen> celulaDeParticipante(UserId participanteId) {
+        return consultarCelulaDeParticipantePort.celulaDeUsuario(participanteId)
+                .flatMap(loadCelulaPort::porId)
+                .map(this::aCelulaParticipanteResumen);
+    }
+
+    private CelulaParticipanteResumen aCelulaParticipanteResumen(Celula celula) {
+        String cohortName = loadCohortePort.porId(celula.cohorteId()).map(Cohorte::nombre).orElse(null);
+        String mentorName = celula.mentorId() != null
+                ? consultarPerfilUsuarioPort.porId(celula.mentorId()).map(PerfilUsuario::nombreCompleto).orElse(null)
+                : null;
+        int cantidadMiembros = consultarMiembrosCelulaPort.contarMiembros(celula.id());
+        int totalCelulas = loadCelulaPort.porCohorte(celula.cohorteId()).size();
+        return new CelulaParticipanteResumen(celula.id().value(), celula.nombre(), cohortName, mentorName,
+                cantidadMiembros, totalCelulas);
     }
 
 }

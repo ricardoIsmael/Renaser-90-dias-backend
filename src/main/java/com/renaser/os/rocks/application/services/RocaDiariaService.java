@@ -1,5 +1,7 @@
 package com.renaser.os.rocks.application.services;
 
+import com.renaser.os.community.api.PublicarEnMuroPort;
+import com.renaser.os.community.api.PublicarEnMuroPort.PublicarDesdeEvidenciaComando;
 import com.renaser.os.evidence.api.DestinoEvidencia;
 import com.renaser.os.evidence.api.RegistrarEvidenciaPort;
 import com.renaser.os.evidence.api.RegistrarEvidenciaPort.RegistrarEvidenciaComando;
@@ -71,6 +73,7 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
     private final ConsultarProgresoParticipanteRocksPort progresoPort;
     private final AlmacenamientoPort almacenamientoPort;
     private final AjustarPuntosPort ajustarPuntosPort;
+    private final PublicarEnMuroPort publicarEnMuroPort;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
@@ -78,7 +81,8 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
                               LoadRocaDiariaPort loadRocaDiariaPort, SaveRocaDiariaPort saveRocaDiariaPort,
                               RegistrarEvidenciaPort registrarEvidenciaPort,
                               ConsultarProgresoParticipanteRocksPort progresoPort, AlmacenamientoPort almacenamientoPort,
-                              AjustarPuntosPort ajustarPuntosPort, ApplicationEventPublisher events, Clock clock) {
+                              AjustarPuntosPort ajustarPuntosPort, PublicarEnMuroPort publicarEnMuroPort,
+                              ApplicationEventPublisher events, Clock clock) {
         this.loadRocaMaestraPort = loadRocaMaestraPort;
         this.loadRocaSemanalPort = loadRocaSemanalPort;
         this.loadRocaDiariaPort = loadRocaDiariaPort;
@@ -87,6 +91,7 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         this.progresoPort = progresoPort;
         this.almacenamientoPort = almacenamientoPort;
         this.ajustarPuntosPort = ajustarPuntosPort;
+        this.publicarEnMuroPort = publicarEnMuroPort;
         this.events = events;
         this.clock = clock;
     }
@@ -143,8 +148,30 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         RocaDiaria completada = saveRocaDiariaPort.save(roca);
         completada = aplicarPremio(completada, progreso.zona(), ahora);
 
+        if (command.publishedToWall()) {
+            publicarEnMuro(completada, command);
+        }
+
         events.publishEvent(new RocaCompletadaEvent(completada.id().value(), command.actorId(), ahora));
         return completada;
+    }
+
+    /** Hueco #17 (docs/MODULO_ROCKS.md sec. 11.2, "Camino B"): la validacion de que el
+     * evidencia sea visual ya la hizo {@code CompletarRocaDiariaCommand} en su
+     * constructor compacto (falla 400 antes de llegar aca) — este metodo solo arma la
+     * leyenda y delega la creacion real de la publicacion a `community`, dentro de la
+     * MISMA transaccion que completa la roca (si `community` falla, la roca tampoco
+     * queda completada). */
+    private void publicarEnMuro(RocaDiaria roca, CompletarRocaDiariaCommand command) {
+        String mime = switch (command.tipo()) {
+            case VIDEO -> "video/mp4";
+            case FOTO, CAPTURA -> "image/jpeg";
+            default -> throw new IllegalStateException("Tipo de evidencia no visual: " + command.tipo());
+        };
+        String texto = "Complete mi Roca: " + roca.titulo();
+        publicarEnMuroPort.publicarDesdeEvidencia(
+                new PublicarDesdeEvidenciaComando(command.actorId(), texto, command.bucket(), command.rutaStorage(),
+                        mime));
     }
 
     @Override

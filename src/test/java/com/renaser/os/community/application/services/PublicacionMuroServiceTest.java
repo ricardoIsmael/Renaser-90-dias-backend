@@ -1,6 +1,7 @@
 package com.renaser.os.community.application.services;
 
 import com.renaser.os.community.api.PublicacionCreadaEvent;
+import com.renaser.os.community.api.PublicarEnMuroPort.PublicarDesdeEvidenciaComando;
 import com.renaser.os.community.application.ports.in.categoria.ConsultarCategoriasMuroUseCase;
 import com.renaser.os.community.application.ports.in.publicacion.EditarPublicacionUseCase.EditarPublicacionCommand;
 import com.renaser.os.community.application.ports.in.publicacion.OcultarPublicacionUseCase.OcultarPublicacionCommand;
@@ -16,6 +17,7 @@ import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsu
 import com.renaser.os.community.domain.model.publicacion.MediaPublicacion;
 import com.renaser.os.community.domain.model.publicacion.Publicacion;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
+import com.renaser.os.community.domain.model.publicacion.TipoPublicacion;
 import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -42,6 +44,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -218,6 +221,32 @@ class PublicacionMuroServiceTest {
 
         var command = new OcultarPublicacionCommand(suspendido, publicacion.id());
         assertThatThrownBy(() -> service.ocultar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePublicacionPort, never()).save(any());
+    }
+
+    /** Hueco #17 (docs/MODULO_ROCKS.md sec. 11.2): puerto publico para que otro modulo
+     * (rocks) publique en el Muro desde una evidencia ya subida. */
+    @Test
+    void publicarDesdeEvidenciaCreaUnaPublicacionHitoAutomatico() {
+        var comando = new PublicarDesdeEvidenciaComando(autor, "Completo mi Roca: Meditar", "renaser-files",
+                "rocas/x/y", "image/jpeg");
+
+        UUID id = service.publicarDesdeEvidencia(comando);
+
+        assertThat(id).isNotNull();
+        verify(savePublicacionPort).save(argThat(p -> p.tipo() == TipoPublicacion.HITO_AUTOMATICO
+                && p.autorId().equals(autor) && p.media().size() == 1
+                && p.media().get(0).bucket().equals("renaser-files") && p.media().get(0).ruta().equals("rocas/x/y")
+                && p.categoriaClave() == null));
+        verify(events).publishEvent(any(PublicacionCreadaEvent.class));
+    }
+
+    @Test
+    void publicarDesdeEvidenciaConActorSuspendidoFalla() {
+        var comando = new PublicarDesdeEvidenciaComando(suspendido, "texto", "renaser-files", "rocas/x/y",
+                "image/jpeg");
+
+        assertThatThrownBy(() -> service.publicarDesdeEvidencia(comando)).isInstanceOf(NotAuthorizedException.class);
         verify(savePublicacionPort, never()).save(any());
     }
 }

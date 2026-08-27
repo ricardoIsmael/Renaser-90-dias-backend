@@ -1,6 +1,8 @@
 package com.renaser.os.community.application.services;
 
 import com.renaser.os.community.api.PublicacionCreadaEvent;
+import com.renaser.os.community.api.PublicarEnMuroPort;
+import com.renaser.os.community.api.PublicarEnMuroPort.PublicarDesdeEvidenciaComando;
 import com.renaser.os.community.application.ports.in.categoria.ConsultarCategoriasMuroUseCase;
 import com.renaser.os.community.application.ports.in.publicacion.ConsultarFeedUseCase;
 import com.renaser.os.community.application.ports.in.publicacion.EditarPublicacionUseCase;
@@ -49,7 +51,7 @@ import java.util.UUID;
 @Service
 public class PublicacionMuroService implements PublicarUseCase, EditarPublicacionUseCase, OcultarPublicacionUseCase,
         RestaurarPublicacionUseCase, EliminarPublicacionUseCase, ReaccionarUseCase, ConsultarFeedUseCase,
-        SolicitarUrlSubidaMediaUseCase {
+        SolicitarUrlSubidaMediaUseCase, PublicarEnMuroPort {
 
     private static final int TAMANO_PAGINA = 20;
     private static final Duration VALIDEZ_URL_SUBIDA = Duration.ofMinutes(10);
@@ -203,6 +205,23 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         String ruta = "muro/" + command.actorId() + "/" + UUID.randomUUID();
         URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
         return new UrlSubidaMedia(url, MediaPublicacion.BUCKET_DEFAULT, ruta);
+    }
+
+    /** Hueco #17 (docs/MODULO_ROCKS.md sec. 11.2): entrada publica para que OTRO modulo
+     * (hoy `rocks`) cree una publicacion real en el Muro a partir de una evidencia ya
+     * subida. Mismas reglas de autorizacion que {@code publicar()} — no hay bypass por
+     * venir de otro modulo. */
+    @Override
+    @Transactional
+    public UUID publicarDesdeEvidencia(PublicarDesdeEvidenciaComando comando) {
+        requireActorPuedePublicar(comando.autorId());
+        MediaPublicacion media = new MediaPublicacion(comando.bucket(), comando.ruta(), comando.mime(), 0);
+        Publicacion publicacion = Publicacion.publicarAutomatica(comando.autorId(), comando.texto(), List.of(media),
+                clock.now());
+        Publicacion guardada = savePublicacionPort.save(publicacion);
+        events.publishEvent(new PublicacionCreadaEvent(guardada.id().value(), guardada.autorId(),
+                guardada.categoriaClave(), clock.now()));
+        return guardada.id().value();
     }
 
     private PaginaPublicaciones aPagina(List<Publicacion> filasConExtra, UserId actorId) {

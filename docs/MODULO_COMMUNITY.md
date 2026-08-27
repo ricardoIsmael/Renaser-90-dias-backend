@@ -116,6 +116,8 @@ Repo Next.js clonado en `C:\Users\Usuario\Documents\Backend90dias\RenaserBack`. 
 | CRUD | `/api/v1/admin/wall-categories` | nuevo — no existía como ruta REST (CM-13) |
 | CRUD | `/api/v1/admin/cohorts` | + `/status`, `/cells` |
 | CRUD | `/api/v1/admin/cells` | + `/mentor`, `/session` |
+| GET | `/api/v1/admin/cells/dashboard` | nuevo (#25, §8) — cross-cohorte, ADMIN/ALCHEMIST |
+| GET | `/api/v1/admin/cells/mentores-disponibles`, `/mentores`, `/aprendices-disponibles` | nuevo (#25, §8) — pickers del panel admin |
 | GET | `/api/v1/me/cell`, `/api/v1/me/cell/members` | TRAINEE-únicamente |
 | GET/POST | `/api/v1/testimonios` | `wallPostId` en el body ⇒ promoción (admin) |
 
@@ -158,10 +160,10 @@ Todos los controllers reciben el actor por `X-Actor-Id` (temporal, sin JWT — b
 
 ## 6. Qué NO se construyó / preguntas abiertas
 
-- **Ranking de células/aprendices** (CM-1) — depende de `points` y de una función SQL que combina módulos que no existen todavía (`academy`, `rocks` ya sí). Pregunta abierta real: ¿este módulo debería exponer un puerto de lectura (`community.api`) para que `points` arme el ranking con los nombres/avatares de célula, o al revés, `points` expone los puntajes y `community` arma la vista? No decidido.
-- **Asignación de aprendices a células** (CM-2) — bloqueada hasta que `users` construya `participantes_programa` con sus casos de uso propios.
-- **Pickers de administración de mentores/aprendices sin célula** (CM-3) — no construidos, ver razón arriba.
-- **`avatarUrl` en `users.api.UserSummary`** (CM-5) — pregunta directa para el dueño de `users`: ¿se puede sumar el campo? Elimina la necesidad de `ConsultarPerfilUsuarioPort`.
+- **Ranking de células/aprendices** (CM-1) — depende de `points` y de una función SQL que combina módulos que no existen todavía (`academy`, `rocks` ya sí). Pregunta abierta real: ¿este módulo debería exponer un puerto de lectura (`community.api`) para que `points` arme el ranking con los nombres/avatares de célula, o al revés, `points` expone los puntajes y `community` arma la vista? No decidido — nota 2026-08-26: `CelulaFinder.celulaDeParticipante` (agregado por el agente de `points` en paralelo con este mismo trabajo) ya resuelve el sentido "dame la célula de un participante", pero deliberadamente sin `rankingPosition`/`coherenceScoreGroup` (esas siguen siendo Q-1/Q-1b de `docs/MODULO_POINTS.md`, sin resolver).
+- **Asignación de aprendices a células** (CM-2) — **sigue bloqueada, confirmado de nuevo 2026-08-26** al construir el panel admin (#25, ver §8): `participantes_programa.celula_id` no tiene NINGÚN puerto de escritura en `users.api` (se confirmó no reinventar uno — `AssignMentorToTraineeUseCase` en `users` es el precedente exacto a replicar para célula, pero tocar `users` está fuera del alcance de este agente). `community` no escribe en una tabla que no es suya (CLAUDE.MD sec. 5.1) — la solución correcta es un puerto nuevo en `users.api` (ej. `AsignarCelulaAParticipanteUseCase`/`Port`), no un bypass.
+- **Pickers de administración de mentores/aprendices sin célula** (CM-3) — **cerrado 2026-08-26**, ver §8: `users.api.ParticipacionProgramaFinder.usuariosActivosConRol`/`miembrosDeCelula` (agregados después de que se escribió esta sección) lo desbloquearon sin N+1.
+- **`avatarUrl` en `users.api.UserSummary`** (CM-5) — **cerrado**: `UserSummary` ya expone `avatarUrl` (verificado 2026-08-26). `ConsultarPerfilUsuarioPort` sigue en uso donde ya estaba (no se migró en esta pasada, fuera del alcance puntual de #25/#17), pero los pickers nuevos del panel admin (§8) usan `UserSummaryFinder` directo, sin sumar otro consumidor de `ConsultarPerfilUsuarioPort`.
 - **Flujo real de subida de media firmada** — el puerto (`SolicitarUrlSubidaMediaUseCase`) y el endpoint existen, pero como el `AlmacenamientoPort` es NoOp (faltan credenciales AWS, D-34), no hay forma de probarlo de punta a punta todavía. El wire de creación de posts sigue aceptando `{url, mimeType}` (CM-6) mientras tanto.
 - **Contadores denormalizados de reacciones/comentarios** — hoy se calculan por request con una agregación SQL (CM-15). Si el volumen de publicaciones crece mucho, valdría medir antes de decidir si hace falta una columna cacheada — explícitamente no se tocó el esquema para esto ahora.
 - **`@RequiresPermission`/`@PublicEndpoint` + test de reflexión** — el mecanismo no existe todavía en `shared/` (mismo bloqueante que el resto de los módulos ya construidos).
@@ -188,3 +190,44 @@ Sondeo manual contra Postgres real (no detectado por los tests con mocks) encont
 **Arreglo elegido:** separar cada consulta en un método de repositorio por combinación de filtro opcional (`feedSinCursorSinCategoria`/`feedSinCursorConCategoria`/`feedConCursorSinCategoria`/`feedConCursorConCategoria` para `feed` — dos filtros opcionales, 4 combinaciones; `feedOcultoSinCursor`/`feedOcultoConCursor`; `paginaSinCursor`/`paginaConCursor`), con el adaptador de persistencia (`PublicacionPersistenceAdapter`, `ComentarioPersistenceAdapter`) eligiendo cuál llamar según qué venga `null`. Se prefirió esto sobre `CAST(:cursor AS ...)` en el JPQL o una query nativa con `?::timestamptz`: cada método queda con SQL simple, sin casts que dependan de que Hibernate los traduzca bien, y es el criterio que ya pide CLAUDE.MD §5.2 (RabbitMQ vs Kafka) y §9 en general — preferir lo explícito y sin magia en el hot path, que es exactamente lo que es el feed del Muro.
 
 Detalle completo, síntoma literal y cómo evitarlo: `docs/BITACORA_ERRORES.md` **E-31**.
+
+---
+
+## 8. 2026-08-26 — Panel admin de células/cohortes (#25) y puerto de publicación en el Muro (Hueco #17)
+
+Encargo nuevo, dos partes, ambas cerradas salvo lo explícitamente documentado como bloqueado.
+
+### 8.1 Panel admin de células (#25, `docs/PLAN_INTEGRACION_FRONTEND.md` §5)
+
+Construido usando `users.api.ParticipacionProgramaFinder.usuariosActivosConRol`/`miembrosDeCelula` — puertos EN LOTE que no existían cuando se escribió CM-2/CM-3 (§6) y que desbloquean los pickers sin N+1:
+
+- **`GET /api/v1/admin/cells/dashboard`** (`ConsultarDashboardCelulasUseCase`) — todas las células, de cualquier cohorte, con su cohorte ya resuelta (`nombre`/`estado`). Ruta propia, no `GET /api/v1/admin/cells` a secas: ese endpoint ya existe y exige `cohortId` (`listarPorCohorte`); reutilizar la misma ruta sin parámetro habría hecho que un mismo endpoint devolviera dos shapes distintas según presencia de query param, lo que se prefirió evitar. Solo ADMIN/ALCHEMIST.
+- **`GET /api/v1/admin/cells/mentores-disponibles`** / **`/mentores`** (`ConsultarCandidatosCelulaUseCase`) — mentores ACTIVOS sin/con marca de célula actual. `LoadCelulaPort.todas()` resuelve quién ya lidera sin tocar `perfiles_mentor` (tabla ajena), mismo criterio que ya usaba `asignar()`.
+- **`GET /api/v1/admin/cells/aprendices-disponibles`** — aprendices ACTIVOS sin célula, **alcance GLOBAL, no por cohorte**: un aprendiz sin célula no tiene ninguna columna que diga a qué cohorte "pertenece" todavía (`participantes_programa` no tiene `cohorte_id`, solo `celula_id`) — esa relación nace recién al asignarlo. No se inventó una columna que no existe.
+- Construido recorriendo las células existentes (acotadas) para armar el conjunto de "ya asignados", nunca participante por participante — mismo criterio anti-N+1 que `PorcentajeRocasFinder` (D-43).
+
+**Lo que sigue sin construir, documentado explícitamente:**
+
+- **Asignar/quitar aprendiz de célula.** Escribe `participantes_programa.celula_id`, tabla que no es de `community` (CLAUDE.MD sec. 5.1: un módulo no escribe la tabla de otro). `users.api` no expone ningún puerto de escritura para esto — el precedente exacto a replicar es `users.application.ports.in.AssignMentorToTraineeUseCase` (asigna `mentor_id`), pero construir su equivalente para `celula_id` requiere tocar el módulo `users`, fuera del alcance de este encargo (acotado a `community` + una extensión mínima en `rocks`). Queda para quien tenga alcance sobre `users`.
+- **`rankingPosition`/`coherenceScoreGroup`** en las respuestas del dashboard — siguen sin puerto público en `points` (`points.api` solo expone finders de porcentaje EN LOTE de hábitos/rocas/cursos, ninguno de ranking por célula). Mismo Q-1/Q-1b de `docs/MODULO_POINTS.md` que ya documenta el gap #24 (agregador de ranking, cerrado en paralelo por otro agente hoy mismo — ver esa entrada en `docs/PLAN_INTEGRACION_FRONTEND.md`).
+- Los campos de `CellDetail`/`CellTrainee` que el frontend (`C:\renaserPlayStore\src\services\cells.ts`) espera pero que dependen de un `TraineeProfile` que `users` todavía no construyó como dominio (`programDay`, `currentPhase`, `startDate`, `expectedGraduationDate`, `goalType`, `coherenceScore` — gap #1) — no se inventaron valores default para rellenarlos.
+
+### 8.2 `community.api.PublicarEnMuroPort` — cierre del Hueco #17 del lado de `community`
+
+`docs/MODULO_ROCKS.md` §11.2 documentó el gap: `rocks` no tenía forma de publicar en el Muro la evidencia de una Roca completada porque `community.api` no exponía ningún puerto para que OTRO módulo creara una publicación. Se construyó el "Camino B" que ese documento dejó planteado:
+
+- **`PublicarEnMuroPort.publicarDesdeEvidencia(...)`** (nuevo, `community/api/PublicarEnMuroPort.java`) — recibe `autorId`/`texto`/`bucket`/`ruta`/`mime` (evidencia YA subida por el módulo llamador) y crea una `Publicacion` real vía un nuevo factory de dominio, `Publicacion.publicarAutomatica(...)`, que produce **`HITO_AUTOMATICO`** — nunca `MANUAL` (reservado a un POST directo del autor) ni `GUERRERO_CAIDO`. Sin categoría: clasificar en una categoría del Muro es una decisión manual del autor, no aplica a un post automático.
+- Implementado en `PublicacionMuroService` (ya implementaba `PublicarUseCase` y el resto de casos de uso de publicación) — reutiliza las mismas guardas de autorización que `publicar()` (`requireActorPuedePublicar`: cuenta activa + rol habilitado). Un módulo que llama esto con un `autorId` suspendido recibe la misma `NotAuthorizedException` que un POST normal — no hay bypass por venir de otro módulo.
+- **Consumidor:** `rocks.application.services.RocaDiariaService.completar()` — nuevo campo `publishedToWall` en `CompletarRocaDiariaCommand`/`CompletarRocaDiariaRequest` (default `false`, a diferencia de `esPrincipal` que ya existía y por compatibilidad default a `true`). Solo válido para evidencia visual (`FOTO`/`VIDEO`/`CAPTURA` — el Muro nunca acepta audio/texto puro, mismo CHECK que `MediaPublicacion`); `TEXTO`/`AUDIO` con `publishedToWall=true` se rechaza con 400 en el constructor del comando, antes de tocar la base. La leyenda del post se arma con el título de la Roca (`"Complete mi Roca: " + roca.titulo()`) — no hay campo de "caption" propio en el flujo de evidencia de rocas, así que se usa el dato que ya existe en vez de inventar uno nuevo. El mime se infiere del tipo de evidencia (`FOTO`/`CAPTURA` → `image/jpeg`, `VIDEO` → `video/mp4`) porque el comando de evidencia de rocas no transporta un mime propio.
+- Todo dentro de la MISMA transacción que completa la roca (CLAUDE.MD sec. 9.1): si `community` rechaza la publicación, la roca tampoco queda completada.
+- **Único archivo de negocio de `rocks` tocado además del comando/DTO/controller de completar evidencia**: `RocaDiariaService.java` (inyecta el nuevo puerto, agrega el método privado `publicarEnMuro`). Ningún otro caso de uso de `rocks` se reabrió.
+
+### 8.3 Pruebas agregadas
+
+| Archivo | Cobertura nueva |
+|---|---|
+| `PublicacionMuroServiceTest` | `publicarDesdeEvidenciaCreaUnaPublicacionHitoAutomatico`, `publicarDesdeEvidenciaConActorSuspendidoFalla` |
+| `CelulaServiceTest` | `dashboardComoMentorEsRechazado`, `dashboardListaCelulasDeTodasLasCohortesConSuCohorte`, `mentoresDisponiblesComoMentorEsRechazado`, `mentoresDisponiblesExcluyeAQuienesYaLideranUnaCelula`, `mentoresMarcaLaCelulaActualDeQuienYaLidera`, `aprendicesDisponiblesComoMentorEsRechazado`, `aprendicesDisponiblesExcluyeAQuienesYaTienenCelula` |
+| `RocaDiariaServiceTest` (módulo `rocks`) | `publishedToWallConEvidenciaNoVisualEsRechazado`, `publishedToWallLlamaAlPuertoDeCommunity`, `publishedToWallFalseNoLlamaANadie` |
+
+No se corrió `./mvnw clean test` (regla del encargo: lo corre el supervisor junto con otros agentes en paralelo). Riesgo concreto a vigilar: este mismo módulo (`community`) estaba siendo tocado en simultáneo por el agente de `points` (agregó `CelulaFinder.celulaDeParticipante` y el campo `participacionProgramaFinder` a `CelulaServiceTest` mientras este trabajo estaba en curso) — se verificó en vivo que ambos cambios conviven sin pisarse (mismo constructor de `CelulaService`, sin colisión de nombres), pero vale una relectura rápida de `CelulaService.java`/`CelulaServiceTest.java` si el build falla justo ahí.

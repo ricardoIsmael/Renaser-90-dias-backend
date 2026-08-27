@@ -81,4 +81,20 @@ class PublicacionTest {
         p.restaurar(CLOCK.now());
         assertThat(p.oculta()).isFalse();
     }
+
+    /** Hueco #17 (docs/MODULO_ROCKS.md sec. 11.2): entrada para community.api.PublicarEnMuroPort. */
+    @Test
+    void publicarAutomaticaEsHitoAutomaticoYSinCategoria() {
+        Publicacion p = Publicacion.publicarAutomatica(UserId.of(UUID.randomUUID()), "Complete mi Roca: Meditar",
+                List.of(foto()), CLOCK.now());
+        assertThat(p.tipo()).isEqualTo(TipoPublicacion.HITO_AUTOMATICO);
+        assertThat(p.categoriaClave()).isNull();
+        assertThat(p.oculta()).isFalse();
+    }
+
+    @Test
+    void publicarAutomaticaSinMediaEsInvalido() {
+        assertThatThrownBy(() -> Publicacion.publicarAutomatica(UserId.of(UUID.randomUUID()), "texto", List.of(),
+                CLOCK.now())).isInstanceOf(IllegalArgumentException.class);
+    }
 }

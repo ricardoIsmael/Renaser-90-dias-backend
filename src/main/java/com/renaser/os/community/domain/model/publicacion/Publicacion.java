@@ -58,6 +58,24 @@ public final class Publicacion {
                 mediaOrdenada, false, ahora, ahora);
     }
 
+    /**
+     * Publicacion generada automaticamente por OTRO modulo (ej. `rocks` al completar una
+     * Roca con evidencia y {@code publishedToWall=true}), no por un POST directo de un
+     * actor sobre el Muro. Produce {@code HITO_AUTOMATICO} — el unico valor del enum
+     * pensado para esto (ver {@link TipoPublicacion}, CM-7 de docs/MODULO_COMMUNITY.md:
+     * documentado desde el inicio como "sin ningun trigger que lo genere todavia"). Sin
+     * categoria: clasificar en una categoria del Muro es una decision manual del autor,
+     * no aplica a un post que ningun humano redacto desde el editor.
+     */
+    public static Publicacion publicarAutomatica(UserId autorId, String texto, List<MediaPublicacion> media,
+                                                  Instant ahora) {
+        Objects.requireNonNull(autorId, "autorId es obligatorio");
+        requireTextoValido(texto);
+        List<MediaPublicacion> mediaOrdenada = requireMediaValida(media);
+        return new Publicacion(PublicacionId.newId(), autorId, TipoPublicacion.HITO_AUTOMATICO, null, texto.trim(),
+                mediaOrdenada, false, ahora, ahora);
+    }
+
     /** Solo para el adaptador de persistencia. */
     public static Publicacion rehydrate(PublicacionId id, UserId autorId, TipoPublicacion tipo,
                                          String categoriaClave, String texto, List<MediaPublicacion> media,
