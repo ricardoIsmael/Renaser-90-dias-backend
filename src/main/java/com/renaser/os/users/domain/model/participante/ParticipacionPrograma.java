@@ -48,6 +48,14 @@ public final class ParticipacionPrograma {
     private int diaPostPrograma;
     private final Instant creadoEn;
     private Instant actualizadoEn;
+    /** `tipo_meta` — nullable, ver javadoc de {@link TipoMeta}. Sin setter propio todavia:
+     * ningun caso de uso de este agregado lo escribe hoy (hueco #3, onboarding). */
+    private TipoMeta tipoMeta;
+    /** `nombre_reto_personal` — self-editable via {@link #renombrarRetoPersonal}. */
+    private String nombreRetoPersonal;
+    /** `programa_completado_en` — ver docs/FEATURE_POST_PROGRAM.md. Sin setter propio
+     * todavia: ningun caso de uso de este agregado marca la graduacion hoy. */
+    private Instant programaCompletadoEn;
 
     /**
      * Alta de "seguimiento personal" (Habitos/Rocas opcional para staff — MENTOR,
@@ -61,7 +69,7 @@ public final class ParticipacionPrograma {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Instant now = clock.now();
         return new ParticipacionPrograma(participanteId, null, null, 1, FasePrograma.initial(), clock.today(),
-                now, ZONA_POR_DEFECTO, false, 0, now, now);
+                now, ZONA_POR_DEFECTO, false, 0, now, now, null, null, null);
     }
 
     /**
@@ -77,7 +85,19 @@ public final class ParticipacionPrograma {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Instant now = clock.now();
         return new ParticipacionPrograma(participanteId, null, null, 0, FasePrograma.initial(),
-                clock.today().plusDays(1), null, ZONA_POR_DEFECTO, false, 0, now, now);
+                clock.today().plusDays(1), null, ZONA_POR_DEFECTO, false, 0, now, now, null, null, null);
+    }
+
+    /** Firma historica (12 campos, sin tipoMeta/nombreRetoPersonal/programaCompletadoEn): se
+     * conserva para no obligar a los llamadores existentes a agregar 3 campos que la
+     * mayoria no necesita rehidratar. */
+    public static ParticipacionPrograma rehydrate(UserId participanteId, UserId mentorId, UUID celulaId,
+                                                   int diaPrograma, FasePrograma fase, LocalDate fechaInicio,
+                                                   Instant programaActivadoEn, ZoneId timezone,
+                                                   boolean programaCompletado, int diaPostPrograma, Instant creadoEn,
+                                                   Instant actualizadoEn) {
+        return rehydrate(participanteId, mentorId, celulaId, diaPrograma, fase, fechaInicio, programaActivadoEn,
+                timezone, programaCompletado, diaPostPrograma, creadoEn, actualizadoEn, null, null, null);
     }
 
     /** Solo para el adaptador de persistencia: reconstruye una fila ya existente. */
@@ -85,9 +105,11 @@ public final class ParticipacionPrograma {
                                                    int diaPrograma, FasePrograma fase, LocalDate fechaInicio,
                                                    Instant programaActivadoEn, ZoneId timezone,
                                                    boolean programaCompletado, int diaPostPrograma, Instant creadoEn,
-                                                   Instant actualizadoEn) {
+                                                   Instant actualizadoEn, TipoMeta tipoMeta,
+                                                   String nombreRetoPersonal, Instant programaCompletadoEn) {
         return new ParticipacionPrograma(participanteId, mentorId, celulaId, diaPrograma, fase, fechaInicio,
-                programaActivadoEn, timezone, programaCompletado, diaPostPrograma, creadoEn, actualizadoEn);
+                programaActivadoEn, timezone, programaCompletado, diaPostPrograma, creadoEn, actualizadoEn,
+                tipoMeta, nombreRetoPersonal, programaCompletadoEn);
     }
 
     /** `fecha_inicio + 90` — NUNCA se persiste (columna generada en Postgres, se calcula al vuelo). */
@@ -103,6 +125,24 @@ public final class ParticipacionPrograma {
         this.actualizadoEn = clock.now();
     }
 
+    /**
+     * Ajuste operativo de un ADMIN/ALCHEMIST (panel admin de aprendices, gap #7 de
+     * docs/PLAN_INTEGRACION_FRONTEND.md) — a diferencia de {@link #avanzarDia}, que solo
+     * incrementa de a 1 (el paso normal del reloj del programa), esto fija el dia
+     * exacto que pide un operador humano (ej. corregir un desfase). NO es una regla de
+     * negocio nueva: el limite [0, 90] es la misma invariante que ya impone
+     * {@link #avanzarDia} (nunca supera {@value #DURACION_PROGRAMA_DIAS}), aplicada
+     * tambien al piso.
+     */
+    public void fijarDia(int nuevoDia, Clock clock) {
+        if (nuevoDia < 0 || nuevoDia > DURACION_PROGRAMA_DIAS) {
+            throw new IllegalArgumentException(
+                    "diaPrograma debe estar entre 0 y " + DURACION_PROGRAMA_DIAS + ", recibido: " + nuevoDia);
+        }
+        this.diaPrograma = nuevoDia;
+        this.actualizadoEn = clock.now();
+    }
+
     public void asignarMentor(UserId nuevoMentorId, Clock clock) {
         this.mentorId = Objects.requireNonNull(nuevoMentorId, "mentorId es obligatorio");
         this.actualizadoEn = clock.now();
@@ -110,6 +150,17 @@ public final class ParticipacionPrograma {
 
     public boolean estaActivado() {
         return programaActivadoEn != null;
+    }
+
+    /**
+     * U-05 (CLAUDE.MD §5.3.3, `UpdateTraineeProfileUseCase`): el unico campo de este
+     * agregado que el propio participante edita directamente. {@code null} no borra el
+     * valor — el comando de aplicacion ya filtra "no cambiar" antes de llegar aca (mismo
+     * criterio que {@code User.rename}, nunca se llama con null desde el caso de uso).
+     */
+    public void renombrarRetoPersonal(String nuevoNombre, Clock clock) {
+        this.nombreRetoPersonal = nuevoNombre;
+        this.actualizadoEn = clock.now();
     }
 
     @Override
