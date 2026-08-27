@@ -2,6 +2,8 @@ package com.renaser.os.community.infrastructure.adapter.in.rest.celula;
 
 import com.renaser.os.community.application.ports.in.celula.ActualizarCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.ActualizarCelulaUseCase.ActualizarCelulaCommand;
+import com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase;
+import com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase.AsignarAprendizCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase.AsignarMentorCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.ConsultarCandidatosCelulaUseCase;
@@ -13,6 +15,8 @@ import com.renaser.os.community.application.ports.in.celula.EliminarCelulaUseCas
 import com.renaser.os.community.application.ports.in.celula.EliminarCelulaUseCase.EliminarCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.ProgramarSesionCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.ProgramarSesionCelulaUseCase.ProgramarSesionCelulaCommand;
+import com.renaser.os.community.application.ports.in.celula.QuitarAprendizCelulaUseCase;
+import com.renaser.os.community.application.ports.in.celula.QuitarAprendizCelulaUseCase.QuitarAprendizCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUseCase.QuitarMentorCelulaCommand;
 import com.renaser.os.community.domain.model.celula.CelulaId;
@@ -49,6 +53,8 @@ public class CelulaAdminController {
     private final ConsultarCelulasUseCase consultarUseCase;
     private final ConsultarDashboardCelulasUseCase dashboardUseCase;
     private final ConsultarCandidatosCelulaUseCase candidatosUseCase;
+    private final AsignarAprendizCelulaUseCase asignarAprendizUseCase;
+    private final QuitarAprendizCelulaUseCase quitarAprendizUseCase;
 
     public CelulaAdminController(CrearCelulaUseCase crearUseCase, ActualizarCelulaUseCase actualizarUseCase,
                                   AsignarMentorCelulaUseCase asignarMentorUseCase,
@@ -56,7 +62,9 @@ public class CelulaAdminController {
                                   ProgramarSesionCelulaUseCase programarSesionUseCase,
                                   EliminarCelulaUseCase eliminarUseCase, ConsultarCelulasUseCase consultarUseCase,
                                   ConsultarDashboardCelulasUseCase dashboardUseCase,
-                                  ConsultarCandidatosCelulaUseCase candidatosUseCase) {
+                                  ConsultarCandidatosCelulaUseCase candidatosUseCase,
+                                  AsignarAprendizCelulaUseCase asignarAprendizUseCase,
+                                  QuitarAprendizCelulaUseCase quitarAprendizUseCase) {
         this.crearUseCase = crearUseCase;
         this.actualizarUseCase = actualizarUseCase;
         this.asignarMentorUseCase = asignarMentorUseCase;
@@ -66,6 +74,8 @@ public class CelulaAdminController {
         this.consultarUseCase = consultarUseCase;
         this.dashboardUseCase = dashboardUseCase;
         this.candidatosUseCase = candidatosUseCase;
+        this.asignarAprendizUseCase = asignarAprendizUseCase;
+        this.quitarAprendizUseCase = quitarAprendizUseCase;
     }
 
     /** #25: panel admin cross-cohorte — ruta propia (no {@code GET /admin/cells} a
@@ -137,6 +147,26 @@ public class CelulaAdminController {
     public CelulaDetalleResponse quitarMentor(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id) {
         quitarMentorUseCase.quitar(new QuitarMentorCelulaCommand(UserId.of(actorId), CelulaId.of(id)));
         return CelulaDetalleResponse.from(consultarUseCase.obtener(UserId.of(actorId), CelulaId.of(id)));
+    }
+
+    /** #25: asigna un aprendiz a esta celula (escribe `participantes_programa.celula_id`
+     * via `users.api.AsignacionCelulaPort` — ver javadoc de {@code CelulaService.asignar}). */
+    @PostMapping("/{id}/trainees")
+    public CelulaDetalleResponse asignarAprendiz(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
+                                                  @RequestBody @Valid AsignarAprendizRequest request) {
+        asignarAprendizUseCase.asignar(new AsignarAprendizCelulaCommand(UserId.of(actorId), CelulaId.of(id),
+                UserId.of(request.traineeId())));
+        return CelulaDetalleResponse.from(consultarUseCase.obtener(UserId.of(actorId), CelulaId.of(id)));
+    }
+
+    /** #25: contraparte de {@link #asignarAprendiz}. {@code id} de celula no hace falta
+     * para la escritura (la columna se limpia por `traineeId`), se mantiene en la ruta
+     * por consistencia con el resto de este controller (todo cuelga de `/cells/{id}`). */
+    @DeleteMapping("/{id}/trainees/{traineeId}")
+    public ResponseEntity<Void> quitarAprendiz(@RequestHeader("X-Actor-Id") String actorId,
+                                                @PathVariable UUID id, @PathVariable UUID traineeId) {
+        quitarAprendizUseCase.quitar(new QuitarAprendizCelulaCommand(UserId.of(actorId), UserId.of(traineeId)));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/session")

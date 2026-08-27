@@ -3,15 +3,18 @@ package com.renaser.os.users.application.services;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AsignacionCelulaPort;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.ParticipacionProgramaFinder.UsuarioConDiaPrograma;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.AssignMentorToTraineeUseCase;
+import com.renaser.os.users.application.ports.in.participante.AssignTraineeCellUseCase;
 import com.renaser.os.users.application.ports.in.participante.ConsultarSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.DeactivateSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.GetTraineeDetailUseCase;
 import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase;
+import com.renaser.os.users.application.ports.in.participante.RemoveTraineeCellUseCase;
 import com.renaser.os.users.application.ports.in.participante.SetTraineeProgramDayUseCase;
 import com.renaser.os.users.application.ports.in.participante.UpdateTraineeProfileUseCase;
 import com.renaser.os.users.application.ports.out.mentorprofile.LoadMentorProfilePort;
@@ -45,7 +48,8 @@ import java.util.UUID;
 @Service
 public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase, DeactivateSelfTrackingUseCase,
         ConsultarSelfTrackingUseCase, AssignMentorToTraineeUseCase, ParticipacionProgramaFinder,
-        ListTraineesUseCase, GetTraineeDetailUseCase, SetTraineeProgramDayUseCase, UpdateTraineeProfileUseCase {
+        ListTraineesUseCase, GetTraineeDetailUseCase, SetTraineeProgramDayUseCase, UpdateTraineeProfileUseCase,
+        AssignTraineeCellUseCase, RemoveTraineeCellUseCase, AsignacionCelulaPort {
 
     /**
      * Mismo conjunto que {@code requireRole(auth.data, ['MENTOR', 'MENTOR_LEAD', 'ADMIN', 'ALCHEMIST'])}
@@ -243,6 +247,51 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
 
         participacion.fijarDia(command.newProgramDay(), clock);
         saveParticipacionProgramaPort.save(participacion);
+    }
+
+    /**
+     * Gap #25 — recurso primero (participacion), gate de admin despues (mismo orden que
+     * {@link #fijarDia}, E-42). No valida la celula contra `community`: ver javadoc de
+     * {@link AssignTraineeCellUseCase}.
+     */
+    @Override
+    @Transactional
+    public void assign(AssignTraineeCellCommand command) {
+        ParticipacionPrograma participacion = loadParticipacionProgramaPort.byParticipanteId(command.traineeId())
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Participante no inscripto en el programa: " + command.traineeId()));
+        requireAdminGuard.requireAdminActivo(command.actorId());
+
+        participacion.asignarCelula(command.celulaId(), clock);
+        saveParticipacionProgramaPort.save(participacion);
+    }
+
+    /** Contraparte de {@link #assign}. Mismo orden E-42 que el resto del panel admin. */
+    @Override
+    @Transactional
+    public void remove(RemoveTraineeCellCommand command) {
+        ParticipacionPrograma participacion = loadParticipacionProgramaPort.byParticipanteId(command.traineeId())
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Participante no inscripto en el programa: " + command.traineeId()));
+        requireAdminGuard.requireAdminActivo(command.actorId());
+
+        participacion.quitarCelula(clock);
+        saveParticipacionProgramaPort.save(participacion);
+    }
+
+    /**
+     * {@link AsignacionCelulaPort} (users/api): delega en {@link #assign}/{@link #remove}
+     * — la unica diferencia es que ESTA interfaz es la que `community` puede importar
+     * (gap #25), porque `community` es quien valida que la celula exista antes de llamar.
+     */
+    @Override
+    public void asignarCelula(UserId actorId, UserId traineeId, UUID celulaId) {
+        assign(new AssignTraineeCellCommand(actorId, traineeId, celulaId));
+    }
+
+    @Override
+    public void quitarCelula(UserId actorId, UserId traineeId) {
+        remove(new RemoveTraineeCellCommand(actorId, traineeId));
     }
 
     private User requireUsuario(UserId id) {

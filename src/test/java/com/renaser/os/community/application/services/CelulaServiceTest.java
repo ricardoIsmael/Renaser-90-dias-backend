@@ -16,6 +16,7 @@ import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AsignacionCelulaPort;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -66,6 +67,8 @@ class CelulaServiceTest {
     @Mock
     private ParticipacionProgramaFinder participacionProgramaFinder;
     @Mock
+    private AsignacionCelulaPort asignacionCelulaPort;
+    @Mock
     private org.springframework.context.ApplicationEventPublisher events;
 
     private CelulaService service;
@@ -78,7 +81,8 @@ class CelulaServiceTest {
     void setUp() {
         service = new CelulaService(loadCelulaPort, saveCelulaPort, eliminarCelulaPort, loadCohortePort,
                 existePerfilMentorPort, consultarMiembrosCelulaPort, consultarCelulaDeParticipantePort,
-                consultarPerfilUsuarioPort, userSummaryFinder, participacionProgramaFinder, events, CLOCK);
+                consultarPerfilUsuarioPort, userSummaryFinder, participacionProgramaFinder, asignacionCelulaPort,
+                events, CLOCK);
         lenient().when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(mentor))
@@ -138,6 +142,55 @@ class CelulaServiceTest {
         var command = new AsignarMentorCelulaCommand(admin, celula.id(), mentor);
         Celula actualizada = service.asignar(command);
         assertThat(actualizada.mentorId()).isEqualTo(mentor);
+    }
+
+    @Test
+    void asignarAprendizComoMentorEsRechazado() {
+        Celula celula = celulaExistente();
+        var command = new com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase.AsignarAprendizCelulaCommand(
+                mentor, celula.id(), trainee);
+        assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(asignacionCelulaPort, never()).asignarCelula(any(), any(), any());
+    }
+
+    @Test
+    void asignarUnMentorComoAprendizFalla() {
+        Celula celula = celulaExistente();
+        when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
+        var command = new com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase.AsignarAprendizCelulaCommand(
+                admin, celula.id(), mentor);
+        assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(IllegalArgumentException.class);
+        verify(asignacionCelulaPort, never()).asignarCelula(any(), any(), any());
+    }
+
+    @Test
+    void asignarAprendizElegibleDelegaEnUsers() {
+        Celula celula = celulaExistente();
+        when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
+        var command = new com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase.AsignarAprendizCelulaCommand(
+                admin, celula.id(), trainee);
+
+        service.asignar(command);
+
+        verify(asignacionCelulaPort).asignarCelula(admin, trainee, celula.id().value());
+    }
+
+    @Test
+    void quitarAprendizComoMentorEsRechazado() {
+        var command = new com.renaser.os.community.application.ports.in.celula.QuitarAprendizCelulaUseCase.QuitarAprendizCelulaCommand(
+                mentor, trainee);
+        assertThatThrownBy(() -> service.quitar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(asignacionCelulaPort, never()).quitarCelula(any(), any());
+    }
+
+    @Test
+    void quitarAprendizDelegaEnUsers() {
+        var command = new com.renaser.os.community.application.ports.in.celula.QuitarAprendizCelulaUseCase.QuitarAprendizCelulaCommand(
+                admin, trainee);
+
+        service.quitar(command);
+
+        verify(asignacionCelulaPort).quitarCelula(admin, trainee);
     }
 
     @Test

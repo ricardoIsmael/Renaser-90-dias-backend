@@ -7,9 +7,11 @@ import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase.ActivateSelfTrackingCommand;
 import com.renaser.os.users.application.ports.in.participante.AssignMentorToTraineeUseCase.AssignMentorCommand;
+import com.renaser.os.users.application.ports.in.participante.AssignTraineeCellUseCase.AssignTraineeCellCommand;
 import com.renaser.os.users.application.ports.in.participante.DeactivateSelfTrackingUseCase.DeactivateSelfTrackingCommand;
 import com.renaser.os.users.application.ports.in.participante.GetTraineeDetailUseCase.GetTraineeDetailCommand;
 import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase.ListTraineesCommand;
+import com.renaser.os.users.application.ports.in.participante.RemoveTraineeCellUseCase.RemoveTraineeCellCommand;
 import com.renaser.os.users.application.ports.in.participante.SetTraineeProgramDayUseCase.SetProgramDayCommand;
 import com.renaser.os.users.application.ports.in.participante.UpdateTraineeProfileUseCase.UpdateTraineeProfileCommand;
 import com.renaser.os.users.application.ports.out.mentorprofile.LoadMentorProfilePort;
@@ -322,6 +324,116 @@ class ParticipacionProgramaServiceTest {
         var captor = org.mockito.ArgumentCaptor.forClass(ParticipacionPrograma.class);
         verify(saveParticipacionProgramaPort).save(captor.capture());
         assertThat(captor.getValue().diaPrograma()).isEqualTo(45);
+    }
+
+    // ─── assign/remove celula (panel admin de aprendices, gap #25) ─────────
+
+    @Test
+    void assignCelulaRechazaParticipanteNoInscriptoAntesDeChequearElActor() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        UUID celulaId = UUID.randomUUID();
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.assign(new AssignTraineeCellCommand(actorId, traineeId, celulaId)))
+                .isInstanceOf(java.util.NoSuchElementException.class);
+
+        verify(saveParticipacionProgramaPort, never()).save(any());
+    }
+
+    /** Test de autorizacion negativa (CLAUDE.MD §0.3): rol sin permiso. */
+    @Test
+    void assignCelulaRechazaActorNoAdmin() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        UUID celulaId = UUID.randomUUID();
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId))
+                .thenReturn(Optional.of(ParticipacionPrograma.inscribirTraineeAprobado(traineeId, CLOCK)));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.MENTOR, UserStatus.ACTIVE)));
+
+        assertThatThrownBy(() -> service.assign(new AssignTraineeCellCommand(actorId, traineeId, celulaId)))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        verify(saveParticipacionProgramaPort, never()).save(any());
+    }
+
+    /** Test de autorizacion negativa (CLAUDE.MD §0.3): SUSPENDED con token valido. */
+    @Test
+    void assignCelulaRechazaActorSuspendido() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        UUID celulaId = UUID.randomUUID();
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId))
+                .thenReturn(Optional.of(ParticipacionPrograma.inscribirTraineeAprobado(traineeId, CLOCK)));
+        when(loadUserPort.byId(actorId))
+                .thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN, UserStatus.SUSPENDED)));
+
+        assertThatThrownBy(() -> service.assign(new AssignTraineeCellCommand(actorId, traineeId, celulaId)))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        verify(saveParticipacionProgramaPort, never()).save(any());
+    }
+
+    @Test
+    void assignCelulaAdminActivoAsignaLaCelula() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        UUID celulaId = UUID.randomUUID();
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId))
+                .thenReturn(Optional.of(ParticipacionPrograma.inscribirTraineeAprobado(traineeId, CLOCK)));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN, UserStatus.ACTIVE)));
+        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.assign(new AssignTraineeCellCommand(actorId, traineeId, celulaId));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(ParticipacionPrograma.class);
+        verify(saveParticipacionProgramaPort).save(captor.capture());
+        assertThat(captor.getValue().celulaId()).isEqualTo(celulaId);
+    }
+
+    @Test
+    void removeCelulaRechazaParticipanteNoInscriptoAntesDeChequearElActor() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.remove(new RemoveTraineeCellCommand(actorId, traineeId)))
+                .isInstanceOf(java.util.NoSuchElementException.class);
+
+        verify(saveParticipacionProgramaPort, never()).save(any());
+    }
+
+    /** Test de autorizacion negativa (CLAUDE.MD §0.3): rol sin permiso. */
+    @Test
+    void removeCelulaRechazaActorNoAdmin() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        ParticipacionPrograma existente = ParticipacionPrograma.inscribirTraineeAprobado(traineeId, CLOCK);
+        existente.asignarCelula(UUID.randomUUID(), CLOCK);
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId)).thenReturn(Optional.of(existente));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.MENTOR, UserStatus.ACTIVE)));
+
+        assertThatThrownBy(() -> service.remove(new RemoveTraineeCellCommand(actorId, traineeId)))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        verify(saveParticipacionProgramaPort, never()).save(any());
+    }
+
+    @Test
+    void removeCelulaAdminActivoQuitaLaCelula() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        ParticipacionPrograma existente = ParticipacionPrograma.inscribirTraineeAprobado(traineeId, CLOCK);
+        existente.asignarCelula(UUID.randomUUID(), CLOCK);
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId)).thenReturn(Optional.of(existente));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN, UserStatus.ACTIVE)));
+        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.remove(new RemoveTraineeCellCommand(actorId, traineeId));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(ParticipacionPrograma.class);
+        verify(saveParticipacionProgramaPort).save(captor.capture());
+        assertThat(captor.getValue().celulaId()).isNull();
     }
 
     // ─── updateMyTraineeProfile (hueco #1, U-05) ───────────────────────────

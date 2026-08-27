@@ -132,6 +132,48 @@ class ParticipacionProgramaTest {
         assertThatThrownBy(() -> p.fijarDia(91, CLOCK)).isInstanceOf(IllegalArgumentException.class);
     }
 
+    // ─── asignarCelula / quitarCelula (panel admin, gap #25) ───────────────
+
+    @Test
+    void asignarCelulaCambiaLaCelulaYElTimestamp() {
+        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
+        UUID celulaId = UUID.randomUUID();
+        FixedClock later = FixedClock.at(CLOCK.now().plusSeconds(60));
+
+        p.asignarCelula(celulaId, later);
+
+        assertThat(p.celulaId()).isEqualTo(celulaId);
+        assertThat(p.actualizadoEn()).isEqualTo(later.now());
+    }
+
+    @Test
+    void asignarCelulaRechazaCelulaIdNula() {
+        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
+
+        assertThatThrownBy(() -> p.asignarCelula(null, CLOCK)).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void quitarCelulaLimpiaElCampoYActualizaTimestamp() {
+        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
+        p.asignarCelula(UUID.randomUUID(), CLOCK);
+        FixedClock later = FixedClock.at(CLOCK.now().plusSeconds(60));
+
+        p.quitarCelula(later);
+
+        assertThat(p.celulaId()).isNull();
+        assertThat(p.actualizadoEn()).isEqualTo(later.now());
+    }
+
+    @Test
+    void quitarCelulaEsIdempotenteCuandoYaNoTieneCelula() {
+        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
+
+        p.quitarCelula(CLOCK);
+
+        assertThat(p.celulaId()).isNull();
+    }
+
     // ─── renombrarRetoPersonal (hueco #1, U-05) ────────────────────────────
 
     @Test

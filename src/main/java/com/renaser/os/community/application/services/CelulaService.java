@@ -4,6 +4,7 @@ import com.renaser.os.community.api.CelulaCreadaEvent;
 import com.renaser.os.community.api.CelulaFinder;
 import com.renaser.os.community.api.CelulaFinder.CelulaParticipanteResumen;
 import com.renaser.os.community.application.ports.in.celula.ActualizarCelulaUseCase;
+import com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.ConsultarCandidatosCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.ConsultarCelulasUseCase;
@@ -12,6 +13,7 @@ import com.renaser.os.community.application.ports.in.celula.ConsultarMiCelulaUse
 import com.renaser.os.community.application.ports.in.celula.CrearCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.EliminarCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.ProgramarSesionCelulaUseCase;
+import com.renaser.os.community.application.ports.in.celula.QuitarAprendizCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUseCase;
 import com.renaser.os.community.application.ports.out.celula.EliminarCelulaPort;
 import com.renaser.os.community.application.ports.out.celula.ExistePerfilMentorPort;
@@ -30,6 +32,7 @@ import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AsignacionCelulaPort;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -51,7 +54,8 @@ import java.util.UUID;
 @Service
 public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCase, AsignarMentorCelulaUseCase,
         QuitarMentorCelulaUseCase, ProgramarSesionCelulaUseCase, EliminarCelulaUseCase, ConsultarCelulasUseCase,
-        ConsultarMiCelulaUseCase, ConsultarDashboardCelulasUseCase, ConsultarCandidatosCelulaUseCase, CelulaFinder {
+        ConsultarMiCelulaUseCase, ConsultarDashboardCelulasUseCase, ConsultarCandidatosCelulaUseCase, CelulaFinder,
+        AsignarAprendizCelulaUseCase, QuitarAprendizCelulaUseCase {
 
     private final LoadCelulaPort loadCelulaPort;
     private final SaveCelulaPort saveCelulaPort;
@@ -63,6 +67,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     private final ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort;
     private final UserSummaryFinder userSummaryFinder;
     private final ParticipacionProgramaFinder participacionProgramaFinder;
+    private final AsignacionCelulaPort asignacionCelulaPort;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
@@ -72,7 +77,8 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
                           ConsultarMiembrosCelulaPort consultarMiembrosCelulaPort,
                           ConsultarCelulaDeParticipantePort consultarCelulaDeParticipantePort,
                           ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort, UserSummaryFinder userSummaryFinder,
-                          ParticipacionProgramaFinder participacionProgramaFinder, ApplicationEventPublisher events,
+                          ParticipacionProgramaFinder participacionProgramaFinder,
+                          AsignacionCelulaPort asignacionCelulaPort, ApplicationEventPublisher events,
                           Clock clock) {
         this.loadCelulaPort = loadCelulaPort;
         this.saveCelulaPort = saveCelulaPort;
@@ -84,6 +90,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         this.consultarPerfilUsuarioPort = consultarPerfilUsuarioPort;
         this.userSummaryFinder = userSummaryFinder;
         this.participacionProgramaFinder = participacionProgramaFinder;
+        this.asignacionCelulaPort = asignacionCelulaPort;
         this.events = events;
         this.clock = clock;
     }
@@ -143,6 +150,36 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         Celula celula = requireCelula(command.celulaId());
         celula.quitarMentor(clock.now());
         return saveCelulaPort.save(celula);
+    }
+
+    /**
+     * Gap #25: `community` valida que la celula exista y que el destinatario sea un
+     * TRAINEE activo (mismo criterio que {@link #asignar} valida rol/estado del mentor
+     * antes de delegar en `users`, que es dueno de la columna pero no de estas
+     * invariantes de asignacion).
+     */
+    @Override
+    @Transactional
+    public void asignar(AsignarAprendizCelulaCommand command) {
+        requireAdmin(command.actorId());
+        requireCelula(command.celulaId());
+        UserSummary trainee = userSummaryFinder.findById(command.traineeId())
+                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado: " + command.traineeId()));
+        if (trainee.status() != UserStatus.ACTIVE) {
+            throw new IllegalArgumentException("El aprendiz seleccionado no esta activo");
+        }
+        if (trainee.role() != UserRole.TRAINEE) {
+            throw new IllegalArgumentException("Solo se puede asignar celula a un aprendiz");
+        }
+        asignacionCelulaPort.asignarCelula(command.actorId(), command.traineeId(), command.celulaId().value());
+    }
+
+    /** Contraparte de {@link #asignar(AsignarAprendizCelulaCommand)}. */
+    @Override
+    @Transactional
+    public void quitar(QuitarAprendizCelulaCommand command) {
+        requireAdmin(command.actorId());
+        asignacionCelulaPort.quitarCelula(command.actorId(), command.traineeId());
     }
 
     @Override
