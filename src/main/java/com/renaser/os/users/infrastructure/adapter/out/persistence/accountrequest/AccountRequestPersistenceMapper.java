@@ -46,6 +46,11 @@ class AccountRequestPersistenceMapper {
                 r.updatedAt());
     }
 
+    /** Version no-privada de {@link #toJpaStatus}, para que el adaptador traduzca filtros de busqueda. */
+    EstadoSolicitudJpa toJpaStatusPublic(AccountRequestStatus status) {
+        return toJpaStatus(status);
+    }
+
     private EstadoSolicitudJpa toJpaStatus(AccountRequestStatus status) {
         return switch (status) {
             case PENDING -> EstadoSolicitudJpa.PENDIENTE;

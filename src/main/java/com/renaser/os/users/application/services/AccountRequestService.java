@@ -4,8 +4,12 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.in.accountrequest.ApproveAccountRequestUseCase;
+import com.renaser.os.users.application.ports.in.accountrequest.CheckAccountRequestStatusUseCase;
+import com.renaser.os.users.application.ports.in.accountrequest.DeleteAccountRequestUseCase;
+import com.renaser.os.users.application.ports.in.accountrequest.ListAccountRequestsUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.RejectAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase;
+import com.renaser.os.users.application.ports.out.accountrequest.DeleteAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SaveAccountRequestPort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
@@ -35,31 +39,37 @@ import java.util.NoSuchElementException;
  */
 @Service
 public class AccountRequestService implements SubmitAccountRequestUseCase, ApproveAccountRequestUseCase,
-        RejectAccountRequestUseCase {
+        RejectAccountRequestUseCase, ListAccountRequestsUseCase, DeleteAccountRequestUseCase,
+        CheckAccountRequestStatusUseCase {
 
     private static final int RATE_LIMIT_PER_HOUR = 60;
 
     private final LoadAccountRequestPort loadAccountRequestPort;
     private final SaveAccountRequestPort saveAccountRequestPort;
+    private final DeleteAccountRequestPort deleteAccountRequestPort;
     private final SaveUserPort saveUserPort;
     private final SupabaseAdminAuthPort supabaseAdminAuthPort;
     private final SaveParticipacionProgramaPort saveParticipacionProgramaPort;
     private final RequireActiveUserGuard requireActiveUserGuard;
+    private final RequireAdminGuard requireAdminGuard;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public AccountRequestService(LoadAccountRequestPort loadAccountRequestPort,
-                                  SaveAccountRequestPort saveAccountRequestPort, SaveUserPort saveUserPort,
+                                  SaveAccountRequestPort saveAccountRequestPort,
+                                  DeleteAccountRequestPort deleteAccountRequestPort, SaveUserPort saveUserPort,
                                   SupabaseAdminAuthPort supabaseAdminAuthPort,
                                   SaveParticipacionProgramaPort saveParticipacionProgramaPort,
-                                  RequireActiveUserGuard requireActiveUserGuard, ApplicationEventPublisher events,
-                                  Clock clock) {
+                                  RequireActiveUserGuard requireActiveUserGuard, RequireAdminGuard requireAdminGuard,
+                                  ApplicationEventPublisher events, Clock clock) {
         this.loadAccountRequestPort = loadAccountRequestPort;
         this.saveAccountRequestPort = saveAccountRequestPort;
+        this.deleteAccountRequestPort = deleteAccountRequestPort;
         this.saveUserPort = saveUserPort;
         this.supabaseAdminAuthPort = supabaseAdminAuthPort;
         this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
         this.requireActiveUserGuard = requireActiveUserGuard;
+        this.requireAdminGuard = requireAdminGuard;
         this.events = events;
         this.clock = clock;
     }
@@ -158,5 +168,32 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
                 supabaseAdminAuthPort.deleteUser(supabaseUserId);
             }
         });
+    }
+
+    /** Panel admin de solicitudes de cuenta (gap #9). Listado, sin un recurso previo por
+     * id que proteger: el gate de admin va primero. */
+    @Override
+    public PaginaAccountRequests listar(ListAccountRequestsCommand command) {
+        requireAdminGuard.requireAdminActivo(command.actorId());
+        var contenido = loadAccountRequestPort.pagina(command.statusFilter(), command.page(), command.size());
+        long total = loadAccountRequestPort.contar(command.statusFilter());
+        return new PaginaAccountRequests(contenido, total, command.page(), command.size());
+    }
+
+    /** El recurso se carga PRIMERO (404 si no existe), el gate de admin va DESPUES
+     * (docs/BITACORA_ERRORES.md E-42), fail-closed via {@link RequireAdminGuard}. */
+    @Override
+    @Transactional
+    public void eliminar(DeleteAccountRequestUseCase.DeleteAccountRequestCommand command) {
+        requireRequest(command.requestId());
+        requireAdminGuard.requireAdminActivo(command.actorId());
+        deleteAccountRequestPort.deleteById(command.requestId());
+    }
+
+    /** PUBLIC_ENDPOINT (gap #9) — ver javadoc de {@link CheckAccountRequestStatusUseCase}. */
+    @Override
+    public AccountRequestStatusView consultar(AccountRequestId requestId) {
+        AccountRequest request = requireRequest(requestId);
+        return new AccountRequestStatusView(request.status(), request.rejectionReason());
     }
 }

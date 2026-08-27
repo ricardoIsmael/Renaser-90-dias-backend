@@ -39,4 +39,13 @@ public class NoOpEnviarEmailAdapter implements EnviarEmailPort {
                 + "(adaptador placeholder, sin proveedor real todavia; link de {} caracteres armado)",
                 link.length());
     }
+
+    @Override
+    public void enviarInvitacionStaff(String destinatarioEmail, String temporaryPassword) {
+        // Ni el email (PII) ni la contrasena temporal (credencial) se loguean nunca
+        // (CLAUDE.MD §5.4.9) — mismo criterio que enviarResetContrasena.
+        log.info("[users.NoOpEnviarEmailAdapter] email de invitacion de staff simulado "
+                + "(adaptador placeholder, sin proveedor real todavia; contrasena temporal de {} caracteres generada)",
+                temporaryPassword.length());
+    }
 }

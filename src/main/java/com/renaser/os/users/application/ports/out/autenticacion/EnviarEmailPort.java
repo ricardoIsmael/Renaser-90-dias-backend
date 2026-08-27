@@ -15,4 +15,13 @@ public interface EnviarEmailPort {
      * producto), nunca hardcodeada aca.
      */
     void enviarResetContrasena(String destinatarioEmail, String token);
+
+    /**
+     * Panel admin de staff (gap #6): comunica la contrasena temporal generada al invitar
+     * a un mentor/admin/alquimista nuevo. {@code temporaryPassword} viaja EN CLARO por
+     * este puerto (es la unica vez que existe en texto plano — nunca se persiste, solo se
+     * hashea antes de guardar) hacia quien implemente el envio real. Mismo criterio de
+     * "nunca se loguea" que {@code enviarResetContrasena} (CLAUDE.MD §5.4.9).
+     */
+    void enviarInvitacionStaff(String destinatarioEmail, String temporaryPassword);
 }

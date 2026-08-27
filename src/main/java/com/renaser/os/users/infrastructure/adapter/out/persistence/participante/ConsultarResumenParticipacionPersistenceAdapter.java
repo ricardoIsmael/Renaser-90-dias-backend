@@ -4,6 +4,8 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase.ResumenTraineeAdmin;
 import com.renaser.os.users.application.ports.out.participante.ConsultarResumenParticipacionPort;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Component;
@@ -79,6 +81,23 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
 
     private static final String QUERY_CONTAR_MIEMBROS = """
             SELECT COUNT(*) FROM renaser.participantes_programa WHERE celula_id = ?1
+            """;
+
+    /** Panel admin de aprendices (gap #7): todos los TRAINEE, con o sin fila de programa. */
+    private static final String QUERY_LISTAR_APRENDICES = """
+            SELECT u.id, u.nombre_completo, u.email, u.estado,
+                   COALESCE(pp.dia_programa, 0) AS dia_programa,
+                   COALESCE(pp.fase::text, 'FASE_1_RENACER') AS fase,
+                   pp.celula_id, pp.mentor_id
+            FROM renaser.usuarios u
+            LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
+            WHERE u.rol = 'APRENDIZ'
+            ORDER BY u.nombre_completo
+            LIMIT ?1 OFFSET ?2
+            """;
+
+    private static final String QUERY_CONTAR_APRENDICES = """
+            SELECT COUNT(*) FROM renaser.usuarios WHERE rol = 'APRENDIZ'
             """;
 
     private final EntityManager entityManager;
@@ -177,6 +196,36 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                 .setParameter(1, celulaId)
                 .getSingleResult();
         return total.intValue();
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<ResumenTraineeAdmin> listarAprendices(int offset, int limit) {
+        List<Object[]> filas = entityManager.createNativeQuery(QUERY_LISTAR_APRENDICES)
+                .setParameter(1, limit)
+                .setParameter(2, offset)
+                .getResultList();
+        return filas.stream().map(this::aResumenTraineeAdmin).collect(Collectors.toList());
+    }
+
+    @Override
+    public long contarAprendices() {
+        Number total = (Number) entityManager.createNativeQuery(QUERY_CONTAR_APRENDICES).getSingleResult();
+        return total.longValue();
+    }
+
+    private ResumenTraineeAdmin aResumenTraineeAdmin(Object[] fila) {
+        UserId id = UserId.of(aUuid(fila[0]));
+        String fullName = String.valueOf(fila[1]);
+        String email = String.valueOf(fila[2]);
+        boolean suspendido = "SUSPENDIDO".equals(String.valueOf(fila[3]));
+        int diaPrograma = ((Number) fila[4]).intValue();
+        FasePrograma fase = mapearFase(String.valueOf(fila[5]));
+        UUID celulaId = fila[6] == null ? null : aUuid(fila[6]);
+        UserId mentorId = fila[7] == null ? null : UserId.of(aUuid(fila[7]));
+        return new ResumenTraineeAdmin(id, fullName, email,
+                suspendido ? UserStatus.SUSPENDED : UserStatus.ACTIVE,
+                diaPrograma, fase, celulaId, mentorId);
     }
 
     /**

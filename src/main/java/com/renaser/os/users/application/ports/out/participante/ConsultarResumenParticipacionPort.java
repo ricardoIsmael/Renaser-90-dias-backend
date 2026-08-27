@@ -2,6 +2,7 @@ package com.renaser.os.users.application.ports.out.participante;
 
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.ParticipacionPrograma;
+import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase.ResumenTraineeAdmin;
 
 import java.util.Set;
 import com.renaser.os.users.api.UserRole;
@@ -33,4 +34,15 @@ public interface ConsultarResumenParticipacionPort {
     List<UserId> participantesInscritosActivos();
 
     int contarMiembrosDeCelula(UUID celulaId);
+
+    /**
+     * Panel admin de aprendices (gap #7 de docs/PLAN_INTEGRACION_FRONTEND.md): pagina de
+     * TODOS los usuarios con rol TRAINEE (cualquier estado), con su resumen de programa
+     * si tienen fila en `participantes_programa` (siempre deberian, ver D-33, pero LEFT
+     * JOIN de todas formas por robustez). Sin filtros: el encargo solo pide "listar,
+     * detalle, editar dia" — se agregan filtros el dia que se pidan explicitamente.
+     */
+    List<ResumenTraineeAdmin> listarAprendices(int offset, int limit);
+
+    long contarAprendices();
 }

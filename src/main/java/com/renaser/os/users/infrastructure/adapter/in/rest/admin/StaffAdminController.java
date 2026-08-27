@@ -1,0 +1,89 @@
+package com.renaser.os.users.infrastructure.adapter.in.rest.admin;
+
+import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.application.ports.in.admin.ListStaffUseCase;
+import com.renaser.os.users.application.ports.in.admin.ListStaffUseCase.ListStaffCommand;
+import com.renaser.os.users.application.ports.in.admin.UpdateStaffProfileUseCase;
+import com.renaser.os.users.application.ports.in.admin.UpdateStaffProfileUseCase.UpdateStaffProfileCommand;
+import com.renaser.os.users.application.ports.in.admin.UpdateUserStatusUseCase;
+import com.renaser.os.users.application.ports.in.admin.UpdateUserStatusUseCase.UpdateUserStatusCommand;
+import com.renaser.os.users.application.ports.in.user.InviteAndCreateUserUseCase;
+import com.renaser.os.users.application.ports.in.user.InviteAndCreateUserUseCase.InviteStaffCommand;
+import com.renaser.os.users.infrastructure.adapter.in.rest.user.UserIdResponse;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.UUID;
+
+/**
+ * Panel admin de staff (gap #6 de docs/PLAN_INTEGRACION_FRONTEND.md): listar, invitar con
+ * contrasena temporal, cambiar estado, editar a otro usuario. Solo ADMIN/ALCHEMIST — gate
+ * DENTRO del servicio ({@code RequireAdminGuard}), nunca en el controller (CLAUDE.MD §5.4.6).
+ *
+ * <p>X-Actor-Id: header TEMPORAL (ver nota de AccountRequestController) — B-2 sigue sin
+ * resolver del todo el reemplazo por sesion real de docs/MODULO_AUTH.md.
+ */
+@RestController
+@RequestMapping("/api/v1/admin/staff")
+public class StaffAdminController {
+
+    private final ListStaffUseCase listStaffUseCase;
+    private final InviteAndCreateUserUseCase inviteUseCase;
+    private final UpdateUserStatusUseCase updateStatusUseCase;
+    private final UpdateStaffProfileUseCase updateStaffProfileUseCase;
+
+    public StaffAdminController(ListStaffUseCase listStaffUseCase, InviteAndCreateUserUseCase inviteUseCase,
+                                 UpdateUserStatusUseCase updateStatusUseCase,
+                                 UpdateStaffProfileUseCase updateStaffProfileUseCase) {
+        this.listStaffUseCase = listStaffUseCase;
+        this.inviteUseCase = inviteUseCase;
+        this.updateStatusUseCase = updateStatusUseCase;
+        this.updateStaffProfileUseCase = updateStaffProfileUseCase;
+    }
+
+    @GetMapping
+    public StaffPageResponse listar(@RequestHeader("X-Actor-Id") String actorId,
+                                     @RequestParam(required = false) UserRole role,
+                                     @RequestParam(required = false) com.renaser.os.users.api.UserStatus status,
+                                     @RequestParam(defaultValue = "0") int page,
+                                     @RequestParam(defaultValue = "20") int size) {
+        var pagina = listStaffUseCase.listar(new ListStaffCommand(UserId.of(actorId), role, status, page, size));
+        return StaffPageResponse.from(pagina);
+    }
+
+    @PostMapping("/invite")
+    public ResponseEntity<UserIdResponse> invite(@RequestHeader("X-Actor-Id") String actorId,
+                                                  @RequestBody @Valid InviteStaffRequest request) {
+        UserId invited = inviteUseCase.inviteStaff(new InviteStaffCommand(request.email(), request.fullName(),
+                request.role(), UserId.of(actorId)));
+        return ResponseEntity.status(HttpStatus.CREATED).body(new UserIdResponse(invited.value()));
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<Void> updateStatus(@PathVariable UUID id, @RequestHeader("X-Actor-Id") String actorId,
+                                              @RequestBody @Valid UpdateUserStatusRequest request) {
+        updateStatusUseCase.updateStatus(new UpdateUserStatusCommand(UserId.of(actorId), UserId.of(id),
+                request.status()));
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Void> updateProfile(@PathVariable UUID id, @RequestHeader("X-Actor-Id") String actorId,
+                                               @RequestBody UpdateStaffProfileRequest request) {
+        updateStaffProfileUseCase.updateStaffProfile(new UpdateStaffProfileCommand(UserId.of(actorId), UserId.of(id),
+                request.fullName(), request.avatarUrl(), request.bio(), request.department()));
+        return ResponseEntity.noContent().build();
+    }
+}

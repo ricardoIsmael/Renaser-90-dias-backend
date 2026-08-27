@@ -7,7 +7,10 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.application.ports.in.accountrequest.ApproveAccountRequestUseCase.ApproveAccountRequestCommand;
+import com.renaser.os.users.application.ports.in.accountrequest.DeleteAccountRequestUseCase.DeleteAccountRequestCommand;
+import com.renaser.os.users.application.ports.in.accountrequest.ListAccountRequestsUseCase.ListAccountRequestsCommand;
 import com.renaser.os.users.application.ports.in.accountrequest.RejectAccountRequestUseCase.RejectAccountRequestCommand;
+import com.renaser.os.users.application.ports.out.accountrequest.DeleteAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SaveAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SupabaseAdminAuthPort;
@@ -15,6 +18,7 @@ import com.renaser.os.users.application.ports.out.participante.SaveParticipacion
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
+import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
@@ -29,6 +33,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -52,6 +57,8 @@ class AccountRequestServiceTest {
     @Mock
     private SaveAccountRequestPort saveAccountRequestPort;
     @Mock
+    private DeleteAccountRequestPort deleteAccountRequestPort;
+    @Mock
     private LoadUserPort loadUserPort;
     @Mock
     private SaveUserPort saveUserPort;
@@ -66,9 +73,9 @@ class AccountRequestServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AccountRequestService(loadAccountRequestPort, saveAccountRequestPort, saveUserPort,
-                supabaseAdminAuthPort, saveParticipacionProgramaPort, new RequireActiveUserGuard(loadUserPort),
-                events, CLOCK);
+        service = new AccountRequestService(loadAccountRequestPort, saveAccountRequestPort, deleteAccountRequestPort,
+                saveUserPort, supabaseAdminAuthPort, saveParticipacionProgramaPort,
+                new RequireActiveUserGuard(loadUserPort), new RequireAdminGuard(loadUserPort), events, CLOCK);
         lenient().when(saveAccountRequestPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -157,5 +164,91 @@ class AccountRequestServiceTest {
 
         verify(saveAccountRequestPort, never()).save(any());
         verify(supabaseAdminAuthPort, never()).deleteUser(any());
+    }
+
+    // ─── panel admin de solicitudes de cuenta (gap #9) ─────────────────────
+
+    @Test
+    @DisplayName("listar: un actor no-ADMIN es rechazado con 403")
+    void listarRechazaActorSinPermiso() {
+        UserId actorId = id();
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.MENTOR)));
+
+        assertThatThrownBy(() -> service.listar(new ListAccountRequestsCommand(actorId, null, 0, 20)))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("listar: un ADMIN activo si puede listar solicitudes")
+    void listarAceptaAdminActivo() {
+        UserId actorId = id();
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        when(loadAccountRequestPort.pagina(null, 0, 20)).thenReturn(java.util.List.of());
+        when(loadAccountRequestPort.contar(null)).thenReturn(0L);
+
+        var pagina = service.listar(new ListAccountRequestsCommand(actorId, null, 0, 20));
+
+        assertThat(pagina.total()).isZero();
+    }
+
+    @Test
+    @DisplayName("eliminar: una solicitud inexistente da 404 sin importar si el actor es valido")
+    void eliminarRechazaSolicitudInexistenteAntesDeChequearElActor() {
+        UserId actorId = id();
+        AccountRequestId requestId = AccountRequestId.newId();
+        when(loadAccountRequestPort.byId(requestId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.eliminar(new DeleteAccountRequestCommand(actorId, requestId)))
+                .isInstanceOf(java.util.NoSuchElementException.class);
+
+        verify(deleteAccountRequestPort, never()).deleteById(any());
+    }
+
+    @Test
+    @DisplayName("eliminar: un actor SUSPENDIDO no puede borrar una solicitud (403, no 404)")
+    void eliminarRechazaActorSuspendido() {
+        AccountRequest request = pendiente();
+        UserId actorId = id();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(suspendido(actorId, UserRole.ADMIN)));
+
+        assertThatThrownBy(() -> service.eliminar(new DeleteAccountRequestCommand(actorId, request.id())))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        verify(deleteAccountRequestPort, never()).deleteById(any());
+    }
+
+    @Test
+    @DisplayName("eliminar: un ADMIN activo si puede borrar una solicitud")
+    void eliminarAceptaAdminActivo() {
+        AccountRequest request = pendiente();
+        UserId actorId = id();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+
+        service.eliminar(new DeleteAccountRequestCommand(actorId, request.id()));
+
+        verify(deleteAccountRequestPort).deleteById(request.id());
+    }
+
+    @Test
+    @DisplayName("consultar: PUBLIC_ENDPOINT, sin actor — una solicitud inexistente da 404")
+    void consultarRechazaSolicitudInexistente() {
+        AccountRequestId requestId = AccountRequestId.newId();
+        when(loadAccountRequestPort.byId(requestId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.consultar(requestId)).isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
+    @Test
+    @DisplayName("consultar: devuelve el estado y el motivo de rechazo si aplica, sin exponer mas datos")
+    void consultarDevuelveEstadoYMotivo() {
+        AccountRequest request = pendiente();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+
+        var vista = service.consultar(request.id());
+
+        assertThat(vista.status()).isEqualTo(com.renaser.os.users.domain.model.accountrequest.AccountRequestStatus.PENDING);
+        assertThat(vista.rejectionReason()).isNull();
     }
 }
