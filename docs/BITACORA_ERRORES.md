@@ -906,3 +906,17 @@ Mismo E2E: un mentor real y asignado a un aprendiz recibe 403 al consultar el pu
 **Lecciones:**
 1. **Un fix que captura una subclase concreta cierra un caso, no una clase de bugs.** E-38 se cerró con la excepción que se había visto en el navegador ese día; la hermana quedó viva cuatro días hasta que otro sondeo la encontró. Cuando la jerarquía es cerrada y conocida (como `java.time`), capturar el padre es más barato que ir agregando una subclase por reporte.
 2. **El mismo síntoma exacto reapareciendo es señal de fix incompleto, no de bug nuevo.** Buscar en esta bitácora por el síntoma (no por la excepción) antes de diagnosticar de cero: acá la entrada de E-38 ya tenía el diagnóstico correcto a medias, incluida la observación de que `DateTimeException` NO es un `IllegalArgumentException` — le faltaba dar el paso de subir un nivel más.
+
+## E-44 — `JpaRepository.deleteById` por default NO es idempotente: un cron de purga que reintenta puede tirar `EmptyResultDataAccessException`
+
+**Síntoma:** al escribir el cron de purga de bajas de cuenta (gap #5, `AccountDeletionService.purgeExpired`), la primera versión de `UserPersistenceAdapter.deleteById` delegaba directo en `SpringDataUserRepository.deleteById(id)`. En un escenario realista — dos pasadas del cron solapadas, o un reintento manual sobre una fila que ya se purgó en la pasada anterior — Spring Data lanza `EmptyResultDataAccessException` en vez de simplemente no hacer nada.
+
+**Causa real:** `SimpleJpaRepository.deleteById` (la implementación por default de Spring Data JPA) hace `findById(id).orElseThrow(...)` antes de borrar — está pensado para el caso "yo sé que el id existe", no para un borrado tipo "si está, sacalo". El contrato de `CrudRepository.deleteById` en la documentación no promete idempotencia; asumir que sí la tiene (como haría, por ejemplo, un `DELETE FROM tabla WHERE id = ?` en SQL plano, que no falla si no matchea ninguna fila) es el error.
+
+**Solución:** `UserPersistenceAdapter.deleteById` ahora hace `existsById` antes de `deleteById` — la misma idempotencia que ya tenía `ParticipacionProgramaPersistenceAdapter.deleteByParticipanteId` (ese sí, desde el principio, con `existsById` + devolver `boolean`). Documentado en el javadoc del método y del puerto (`DeleteUserPort`): "idempotente: borrar un id que ya no existe no falla" es parte del contrato, no un detalle de implementación.
+
+**Cómo evitar que vuelva a pasar:** cualquier puerto de borrado que un cron o un flujo con reintentos vaya a llamar debe documentar explícitamente si es idempotente, y si usa Spring Data `deleteById` directo, agregar el `existsById` antes — no asumir que el ORM se comporta como el `DELETE` de SQL plano.
+
+**Lecciones:**
+1. **Spring Data JPA y SQL plano no tienen la misma semántica de "borrar lo que no existe".** Un `DELETE ... WHERE id = ?` en SQL nunca falla por 0 filas afectadas; `deleteById` de Spring Data sí, porque internamente carga la entidad primero. Quien viene de pensar en SQL directo puede asumir mal.
+2. **Un patrón ya resuelto en el mismo módulo (`ParticipacionProgramaPersistenceAdapter`) es la primera referencia a mirar antes de escribir un puerto de borrado nuevo** — el `existsById` ya estaba ahí, con el mismo razonamiento, un día antes.

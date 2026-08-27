@@ -42,6 +42,10 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | PATCH | `/api/v1/users/{mentorId}/mentor-profile` |
 | PUT | `/api/v1/participants/{traineeId}/mentor` |
 | GET · POST · DELETE | `/api/v1/mentor/activate-tracking` |
+| PATCH | `/api/v1/users/me/trainee-profile` |
+| POST | `/api/v1/users/me/avatar/upload-url` |
+| PATCH | `/api/v1/users/me/avatar` |
+| GET · POST · DELETE | `/api/v1/users/me/account-deletion` |
 
 > Ojo: el perfil propio es **`POST /users/me`**, no `GET`.
 
