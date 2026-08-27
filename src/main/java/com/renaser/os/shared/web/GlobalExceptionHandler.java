@@ -2,6 +2,7 @@ package com.renaser.os.shared.web;
 
 import com.renaser.os.shared.domain.CodigoVerificacionInvalidoException;
 import com.renaser.os.shared.domain.CredencialesInvalidasException;
+import com.renaser.os.shared.domain.EnvioEmailFallidoException;
 import com.renaser.os.shared.domain.IdentidadProveedorInvalidaException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
@@ -62,6 +63,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleTokenVerificacionEmailInvalido(
             TokenVerificacionEmailInvalidoException ex) {
         return respond(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    /**
+     * El proveedor de correo no respondio o rechazo el envio: 503, no 500. Es una dependencia
+     * externa caida y el reintento tiene sentido — el cliente puede volver a pedir el codigo.
+     * El detalle del fallo ya quedo en el log del adaptador, nunca viaja al cliente.
+     */
+    @ExceptionHandler(EnvioEmailFallidoException.class)
+    public ResponseEntity<ApiErrorResponse> handleEnvioEmailFallido(EnvioEmailFallidoException ex) {
+        return respond(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 
     /**

@@ -91,6 +91,18 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
+		<!--
+			Envio de correo transaccional (codigo de verificacion, activacion de cuenta,
+			reseteo de contrasena, invitacion de staff). Aporta JavaMailSender, que Spring Boot
+			autoconfigura a partir de las propiedades `spring.mail.*`
+			(https://docs.spring.io/spring-boot/reference/io/email.html). Sin esas propiedades
+			no se crea el bean y el perfil se queda en el adaptador NoOp — ver
+			SmtpEnviarEmailAdapter.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>

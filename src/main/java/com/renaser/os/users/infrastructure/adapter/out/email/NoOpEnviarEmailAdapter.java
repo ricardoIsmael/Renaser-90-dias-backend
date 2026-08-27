@@ -4,16 +4,23 @@ import com.renaser.os.users.application.ports.out.autenticacion.EnviarEmailPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * Placeholder sin proveedor de email real (Resend, SES, etc.) — no hay credenciales todavia y
- * CLAUDE.MD prohibe integrar un proveedor real sin que se pida explicitamente. Mismo patron que
- * {@code NoOpPushAdapter}/{@code NoOpSupabaseAdminAuthAdapter}: el resto del flujo de reseteo
- * queda completo y probado detras de {@link EnviarEmailPort}, listo para enchufar un adaptador
- * real (Resend/SES) sin tocar el caso de uso.
+ * Placeholder cuando no hay proveedor de correo configurado. Mismo patron que
+ * {@code NoOpPushAdapter}/{@code NoOpSupabaseAdminAuthAdapter}: el flujo queda completo y
+ * probado detras de {@link EnviarEmailPort} sin depender de credenciales.
+ *
+ * <p><b>Ya existe el adaptador real:</b> {@link SmtpEnviarEmailAdapter} (2026-08-27). Este sigue
+ * siendo el de por defecto — activo mientras {@code renaser.email.proveedor} no diga
+ * {@code smtp}— para que tests y entorno local no necesiten un servidor SMTP. Las dos
+ * condiciones son simetricas sobre la misma propiedad, asi que siempre hay exactamente un
+ * {@code EnviarEmailPort}; el porque de usar propiedad y no {@code @ConditionalOnBean} esta en
+ * el javadoc de {@link SmtpEnviarEmailAdapter}.
  */
 @Component
+@ConditionalOnProperty(name = "renaser.email.proveedor", havingValue = "noop", matchIfMissing = true)
 public class NoOpEnviarEmailAdapter implements EnviarEmailPort {
 
     private static final Logger log = LoggerFactory.getLogger(NoOpEnviarEmailAdapter.class);

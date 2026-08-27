@@ -12,6 +12,21 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  # SMTP. Spring Boot solo crea el bean JavaMailSender si `spring.mail.host` tiene valor
+  # (docs.spring.io/spring-boot/reference/io/email.html); sin credenciales queda vacio y el
+  # perfil se sostiene con NoOpEnviarEmailAdapter. Los timeouts son obligatorios: sin ellos, un
+  # servidor SMTP que no responde bloquea el hilo de la request hasta el timeout del SO.
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      "[mail.smtp.auth]": true
+      "[mail.smtp.starttls.enable]": true
+      "[mail.smtp.connectiontimeout]": 5000
+      "[mail.smtp.timeout]": 5000
+      "[mail.smtp.writetimeout]": 5000
   session:
     timeout: 30d
     data:
@@ -37,6 +52,13 @@ spring:
       - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
 
 renaser:
+  # Proveedor de correo transaccional: `smtp` (SmtpEnviarEmailAdapter, real) o `noop`
+  # (NoOpEnviarEmailAdapter, solo loguea). Por defecto `noop` para que el entorno local y los
+  # tests no necesiten un servidor SMTP. Para activar el envio real hacen falta LAS DOS cosas:
+  # EMAIL_PROVEEDOR=smtp y las credenciales de `spring.mail.*` de mas abajo.
+  email:
+    proveedor: ${EMAIL_PROVEEDOR:noop}
+    remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}
   storage:
     s3:
       bucket: ${AWS_S3_BUCKET:s3-renaser90dias}
