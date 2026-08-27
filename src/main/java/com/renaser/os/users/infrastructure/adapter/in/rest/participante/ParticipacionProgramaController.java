@@ -9,10 +9,13 @@ import com.renaser.os.users.application.ports.in.participante.ConsultarSelfTrack
 import com.renaser.os.users.application.ports.in.participante.ConsultarSelfTrackingUseCase.ConsultarSelfTrackingQuery;
 import com.renaser.os.users.application.ports.in.participante.DeactivateSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.DeactivateSelfTrackingUseCase.DeactivateSelfTrackingCommand;
+import com.renaser.os.users.application.ports.in.participante.UpdateTraineeProfileUseCase;
+import com.renaser.os.users.application.ports.in.participante.UpdateTraineeProfileUseCase.UpdateTraineeProfileCommand;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -43,15 +46,18 @@ public class ParticipacionProgramaController {
     private final DeactivateSelfTrackingUseCase deactivateUseCase;
     private final ConsultarSelfTrackingUseCase consultarUseCase;
     private final AssignMentorToTraineeUseCase assignMentorUseCase;
+    private final UpdateTraineeProfileUseCase updateTraineeProfileUseCase;
 
     public ParticipacionProgramaController(ActivateSelfTrackingUseCase activateUseCase,
                                             DeactivateSelfTrackingUseCase deactivateUseCase,
                                             ConsultarSelfTrackingUseCase consultarUseCase,
-                                            AssignMentorToTraineeUseCase assignMentorUseCase) {
+                                            AssignMentorToTraineeUseCase assignMentorUseCase,
+                                            UpdateTraineeProfileUseCase updateTraineeProfileUseCase) {
         this.activateUseCase = activateUseCase;
         this.deactivateUseCase = deactivateUseCase;
         this.consultarUseCase = consultarUseCase;
         this.assignMentorUseCase = assignMentorUseCase;
+        this.updateTraineeProfileUseCase = updateTraineeProfileUseCase;
     }
 
     @GetMapping("/api/v1/mentor/activate-tracking")
@@ -81,5 +87,19 @@ public class ParticipacionProgramaController {
         assignMentorUseCase.assignMentor(new AssignMentorCommand(UserId.of(actorId), UserId.of(traineeId),
                 UserId.of(request.mentorId())));
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Hueco #1 (docs/PLAN_INTEGRACION_FRONTEND.md): {@code services/profile.ts#updateTraineeProfile}
+     * del frontend real ya le pega a esta ruta exacta. Vive aca, no en {@code UserController},
+     * porque el campo pertenece al 4to agregado de `users` (`participantes_programa`), no a
+     * `usuarios` — mismo criterio que el resto de este controller.
+     */
+    @PatchMapping("/api/v1/users/me/trainee-profile")
+    public TraineeProfileResponse updateTraineeProfile(@RequestHeader("X-Actor-Id") String actorId,
+                                                         @RequestBody UpdateTraineeProfileRequest request) {
+        var participacion = updateTraineeProfileUseCase.updateMyTraineeProfile(
+                new UpdateTraineeProfileCommand(UserId.of(actorId), request.personalChallengeName()));
+        return TraineeProfileResponse.from(participacion);
     }
 }

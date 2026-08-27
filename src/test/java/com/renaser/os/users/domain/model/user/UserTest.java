@@ -2,11 +2,13 @@ package com.renaser.os.users.domain.model.user;
 
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -115,5 +117,63 @@ class UserTest {
 
         assertThat(user.bio()).isEqualTo("Alquimista fundador");
         assertThat(user.department()).isEqualTo("Operaciones");
+    }
+
+    // ─── baja de cuenta autogestionada (gap #5) ────────────────────────────
+
+    @Test
+    @DisplayName("un usuario nuevo no tiene baja pendiente")
+    void newUserHasNoBajaPendiente() {
+        User user = trainee();
+
+        assertThat(user.bajaPendiente()).isFalse();
+        assertThat(user.bajaSolicitadaEn()).isNull();
+    }
+
+    @Test
+    @DisplayName("solicitarBaja marca el instante y bajaPendiente pasa a true")
+    void solicitarBajaMarcaElInstante() {
+        User user = trainee();
+        FixedClock clock = FixedClock.at(Instant.parse("2026-08-26T10:00:00Z"));
+
+        user.solicitarBaja(clock);
+
+        assertThat(user.bajaPendiente()).isTrue();
+        assertThat(user.bajaSolicitadaEn()).isEqualTo(clock.now());
+    }
+
+    @Test
+    @DisplayName("solicitarBaja es idempotente: repetirla NO reinicia el contador")
+    void solicitarBajaEsIdempotente() {
+        User user = trainee();
+        FixedClock primero = FixedClock.at(Instant.parse("2026-08-26T10:00:00Z"));
+        FixedClock segundo = FixedClock.at(Instant.parse("2026-08-27T10:00:00Z"));
+
+        user.solicitarBaja(primero);
+        user.solicitarBaja(segundo);
+
+        assertThat(user.bajaSolicitadaEn()).isEqualTo(primero.now());
+    }
+
+    @Test
+    @DisplayName("cancelarBaja deshace la solicitud sin dejar rastro")
+    void cancelarBajaDeshaceLaSolicitud() {
+        User user = trainee();
+        user.solicitarBaja(FixedClock.at(Instant.parse("2026-08-26T10:00:00Z")));
+
+        user.cancelarBaja();
+
+        assertThat(user.bajaPendiente()).isFalse();
+        assertThat(user.bajaSolicitadaEn()).isNull();
+    }
+
+    @Test
+    @DisplayName("bajaSolicitadaEn NO corta hasAccess(): la gracia deja arrepentirse")
+    void bajaSolicitadaNoCortaElAcceso() {
+        User user = trainee();
+
+        user.solicitarBaja(FixedClock.at(Instant.parse("2026-08-26T10:00:00Z")));
+
+        assertThat(user.hasAccess()).isTrue();
     }
 }

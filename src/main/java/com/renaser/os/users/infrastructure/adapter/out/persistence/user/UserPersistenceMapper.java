@@ -26,7 +26,8 @@ class UserPersistenceMapper {
                 entity.getAvatarUrl(),
                 entity.getBio(),
                 entity.getDepartamento(),
-                entity.getUltimaActividadEn());
+                entity.getUltimaActividadEn(),
+                entity.getBajaSolicitadaEn());
     }
 
     UserJpaEntity toEntity(User user) {
@@ -39,7 +40,18 @@ class UserPersistenceMapper {
                 user.department(),
                 toJpaRole(user.role()),
                 toJpaStatus(user.status()),
-                user.lastActiveAt());
+                user.lastActiveAt(),
+                user.bajaSolicitadaEn());
+    }
+
+    /** Version no-privada de {@link #toJpaRole}, para que el adaptador traduzca filtros de busqueda. */
+    RolUsuarioJpa toJpaRolePublic(UserRole role) {
+        return toJpaRole(role);
+    }
+
+    /** Version no-privada de {@link #toJpaStatus}, para que el adaptador traduzca filtros de busqueda. */
+    EstadoUsuarioJpa toJpaStatusPublic(UserStatus status) {
+        return toJpaStatus(status);
     }
 
     private RolUsuarioJpa toJpaRole(UserRole role) {

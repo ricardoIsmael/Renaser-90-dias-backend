@@ -8,6 +8,10 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase.ActivateSelfTrackingCommand;
 import com.renaser.os.users.application.ports.in.participante.AssignMentorToTraineeUseCase.AssignMentorCommand;
 import com.renaser.os.users.application.ports.in.participante.DeactivateSelfTrackingUseCase.DeactivateSelfTrackingCommand;
+import com.renaser.os.users.application.ports.in.participante.GetTraineeDetailUseCase.GetTraineeDetailCommand;
+import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase.ListTraineesCommand;
+import com.renaser.os.users.application.ports.in.participante.SetTraineeProgramDayUseCase.SetProgramDayCommand;
+import com.renaser.os.users.application.ports.in.participante.UpdateTraineeProfileUseCase.UpdateTraineeProfileCommand;
 import com.renaser.os.users.application.ports.out.mentorprofile.LoadMentorProfilePort;
 import com.renaser.os.users.application.ports.out.participante.ConsultarResumenParticipacionPort;
 import com.renaser.os.users.application.ports.out.participante.DeleteParticipacionProgramaPort;
@@ -59,7 +63,8 @@ class ParticipacionProgramaServiceTest {
     void setUp() {
         service = new ParticipacionProgramaService(new RequireActiveUserGuard(loadUserPort),
                 loadParticipacionProgramaPort, saveParticipacionProgramaPort, deleteParticipacionProgramaPort,
-                consultarResumenParticipacionPort, loadMentorProfilePort, CLOCK);
+                consultarResumenParticipacionPort, loadMentorProfilePort, loadUserPort,
+                new RequireAdminGuard(loadUserPort), CLOCK);
     }
 
     private User usuario(UserId id, UserRole role, UserStatus status) {
@@ -227,5 +232,160 @@ class ParticipacionProgramaServiceTest {
         when(consultarResumenParticipacionPort.resumenDe(id)).thenReturn(Optional.empty());
 
         assertThat(service.deParticipante(id)).isEmpty();
+    }
+
+    // ─── panel admin de aprendices (gap #7) ────────────────────────────────
+
+    @Test
+    void listarTraineesRechazaActorNoAdmin() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.MENTOR, UserStatus.ACTIVE)));
+
+        assertThatThrownBy(() -> service.listar(new ListTraineesCommand(actorId, 0, 20)))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    void listarTraineesAceptaAdminActivo() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN, UserStatus.ACTIVE)));
+        when(consultarResumenParticipacionPort.listarAprendices(0, 20)).thenReturn(java.util.List.of());
+        when(consultarResumenParticipacionPort.contarAprendices()).thenReturn(0L);
+
+        var pagina = service.listar(new ListTraineesCommand(actorId, 0, 20));
+
+        assertThat(pagina.total()).isZero();
+    }
+
+    @Test
+    void obtenerDetalleRechazaTraineeInexistenteAntesDeChequearElActor() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(traineeId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.obtener(new GetTraineeDetailCommand(actorId, traineeId)))
+                .isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
+    @Test
+    void obtenerDetalleRechazaActorNoAdmin() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(traineeId)).thenReturn(Optional.of(usuario(traineeId, UserRole.TRAINEE,
+                UserStatus.ACTIVE)));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.MENTOR,
+                UserStatus.ACTIVE)));
+
+        assertThatThrownBy(() -> service.obtener(new GetTraineeDetailCommand(actorId, traineeId)))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    void fijarDiaRechazaParticipanteNoInscriptoAntesDeChequearElActor() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.fijarDia(new SetProgramDayCommand(actorId, traineeId, 10)))
+                .isInstanceOf(java.util.NoSuchElementException.class);
+
+        verify(saveParticipacionProgramaPort, never()).save(any());
+    }
+
+    @Test
+    void fijarDiaRechazaActorSuspendido() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId))
+                .thenReturn(Optional.of(ParticipacionPrograma.inscribirTraineeAprobado(traineeId, CLOCK)));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN,
+                UserStatus.SUSPENDED)));
+
+        assertThatThrownBy(() -> service.fijarDia(new SetProgramDayCommand(actorId, traineeId, 10)))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        verify(saveParticipacionProgramaPort, never()).save(any());
+    }
+
+    @Test
+    void fijarDiaAdminActivoFijaElDiaExacto() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId))
+                .thenReturn(Optional.of(ParticipacionPrograma.inscribirTraineeAprobado(traineeId, CLOCK)));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN,
+                UserStatus.ACTIVE)));
+        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.fijarDia(new SetProgramDayCommand(actorId, traineeId, 45));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(ParticipacionPrograma.class);
+        verify(saveParticipacionProgramaPort).save(captor.capture());
+        assertThat(captor.getValue().diaPrograma()).isEqualTo(45);
+    }
+
+    // ─── updateMyTraineeProfile (hueco #1, U-05) ───────────────────────────
+
+    @Test
+    void actualizarMiPerfilDeTraineeCambiaElRetoPersonal() {
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(traineeId))
+                .thenReturn(Optional.of(usuario(traineeId, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId))
+                .thenReturn(Optional.of(ParticipacionPrograma.inscribirTraineeAprobado(traineeId, CLOCK)));
+        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var resultado = service.updateMyTraineeProfile(
+                new UpdateTraineeProfileCommand(traineeId, "Correr una maraton"));
+
+        assertThat(resultado.nombreRetoPersonal()).isEqualTo("Correr una maraton");
+    }
+
+    @Test
+    void actualizarMiPerfilDeTraineeSinCambioDeNombreNoLoBorra() {
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        ParticipacionPrograma existente = ParticipacionPrograma.inscribirTraineeAprobado(traineeId, CLOCK);
+        existente.renombrarRetoPersonal("Ya tenia un reto", CLOCK);
+        when(loadUserPort.byId(traineeId))
+                .thenReturn(Optional.of(usuario(traineeId, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId)).thenReturn(Optional.of(existente));
+        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var resultado = service.updateMyTraineeProfile(new UpdateTraineeProfileCommand(traineeId, null));
+
+        assertThat(resultado.nombreRetoPersonal()).isEqualTo("Ya tenia un reto");
+    }
+
+    @Test
+    void actualizarMiPerfilDeTraineeSinFilaDeProgramaTiraNoSuchElement() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.MENTOR, UserStatus.ACTIVE)));
+        when(loadParticipacionProgramaPort.byParticipanteId(actorId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updateMyTraineeProfile(new UpdateTraineeProfileCommand(actorId, "algo")))
+                .isInstanceOf(java.util.NoSuchElementException.class);
+
+        verify(saveParticipacionProgramaPort, never()).save(any());
+    }
+
+    /** Test de autorizacion negativa (CLAUDE.MD §0.3). */
+    @Test
+    void actualizarMiPerfilDeTraineeRechazaActorSuspendido() {
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(traineeId))
+                .thenReturn(Optional.of(usuario(traineeId, UserRole.TRAINEE, UserStatus.SUSPENDED)));
+
+        assertThatThrownBy(
+                () -> service.updateMyTraineeProfile(new UpdateTraineeProfileCommand(traineeId, "algo")))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        verify(saveParticipacionProgramaPort, never()).save(any());
+    }
+
+    /** Self-only por diseño: el comando no tiene campo "traineeId" — solo edita al propio actor. */
+    @Test
+    void updateTraineeProfileCommandEsSelfOnly() {
+        assertThat(UpdateTraineeProfileCommand.class.getRecordComponents()).extracting("name")
+                .containsExactly("actorId", "personalChallengeName");
     }
 }

@@ -255,7 +255,7 @@ mismo patrón que `RolUsuarioJpa`/`UserPersistenceMapper`.
 | # | Pregunta | Estado |
 |---|---|---|
 | R-6 | Los 6 módulos consumidores (`points`/`phasecontracts`/`habits`/`rocks`/`calendar`/`community`) siguen con su propia query nativa contra `participantes_programa`/`usuarios` — `ParticipacionProgramaFinder` existe pero nadie lo consume todavía. ¿Quién y cuándo hace ese refactor? | ⬜ Abierto — explícitamente fuera de alcance de esta sesión (agentes en paralelo en `academy`/`habits`) |
-| R-7 | La fila de `participantes_programa` para un TRAINEE real se sigue sin crear en `ApproveAccountRequestUseCase` (mencionado como pendiente ya en versiones anteriores de este documento). ¿Se crea ahí, o via un caso de uso separado del propio agregado `participante`? | ⬜ Abierto |
+| R-7 | ~~La fila de `participantes_programa` para un TRAINEE real se sigue sin crear en `ApproveAccountRequestUseCase`~~ | ✅ **Resuelto — el documento estaba desactualizado.** Verificado en el código real (2026-08-26): `AccountRequestService.approve()` ya llama a `saveParticipacionProgramaPort.save(ParticipacionPrograma.inscribirTraineeAprobado(...))` en la MISMA transacción que crea el `User`, con comentario explícito citando la invariante del baseline. No quedaba pendiente nada que hacer aquí |
 
 ## 7. Decisiones específicas de `users` (registro, numeración compartida con `MODULOS_A_AVANZAR.md` §8)
 
@@ -284,3 +284,186 @@ mismo patrón que `RolUsuarioJpa`/`UserPersistenceMapper`.
 | D-34 | `/api/v1/mentor/activate-tracking` (GET/POST/DELETE) preservado tal cual la app móvil ya lo consume — reemplaza el fallback inseguro a Supabase directo (mass-assignment de `program_day`/`coherence_score`/`current_phase`) | 2026-08-24 |
 | D-35 | `AssignMentorToTraineeUseCase` NO escribe ningún contador en `perfiles_mentor` — `total_trainees_managed` fue eliminado del baseline (P-17, derivable via `COUNT`). Escribirlo sería inventar una columna | 2026-08-24 |
 | D-36 | `users.api.FasePrograma` usa vocabulario inglés (`PHASE_1_REBIRTH`...) igual que la app y el backend viejo; la columna Postgres `fase_programa` sigue en español — traducción explícita en el mapper, nunca en el dominio | 2026-08-24 |
+| D-52 | Hueco #1 no era "falta `TraineeProfile`": era falta de 3 columnas sin mapear en `ParticipacionPrograma` (`tipo_meta`/`nombre_reto_personal`/`programa_completado_en`) + 2 endpoints. `GetMyFullProfileUseCase` compone `User`+`ParticipacionPrograma` en la capa de aplicación (nunca en el controller) para no tocar `GetMyProfileUseCase`, que ya usa el flujo de login | 2026-08-26 |
+| D-53 | Avatar genérico (gap #4): mismo patrón upload-url→PUT→confirmar del resto del sistema, pero la confirmación resuelve y persiste una URL de LECTURA firmada (7 días) en vez de guardar solo la ruta — `usuarios.avatar_url` ya es consumido como URL directa por `community`/`chat`/`mentor` vía `UserSummary`, cambiar esa semántica los rompería | 2026-08-26 |
+| D-54 | Baja de cuenta (gap #5): 14 días de gracia CONFIRMADOS (comentario de `usuarios.baja_solicitada_en` en el baseline + `DIAS_DE_GRACIA` del backend viejo coinciden), configurable vía `renaser.users.account-deletion.grace-period-days`. Acceso se conserva durante la gracia a propósito (permite cancelar). Purga = un solo `DeleteUserPort.deleteById` — las FK del baseline hacen el resto (CASCADE/SET NULL) | 2026-08-26 |
+
+## 9. Paneles admin — staff, aprendices, solicitudes de cuenta (gaps #6/#7/#9)
+
+**Fecha:** 2026-08-26. Construidos sobre un checkout compartido con otros agentes en paralelo
+(`UserAccountService`, `ParticipacionProgramaService`, `LoadUserPort`, `User`,
+`ParticipacionPrograma` fueron tocados por más de una tarea a la vez) — cada archivo se
+releyó antes de editarlo para no pisar trabajo concurrente; no se encontró conflicto real,
+solo adiciones en puntos distintos de las mismas clases.
+
+- **`RequireAdminGuard`** (`application/services`, nuevo, package-private): gate ADMIN/ALCHEMIST
+  FAIL-CLOSED — nunca lanza para un actor inexistente/suspendido (a diferencia de
+  `RequireActiveUserGuard`, que sí lanza y por eso solo se usa donde el actor mismo es el
+  recurso). Reusado por los tres gaps de esta sección y por el dashboard de onboarding (#8).
+  Regla aplicada en los tres: si la operación apunta a un recurso por id (un staff, un
+  aprendiz, una solicitud), ese recurso se carga PRIMERO (404 si no existe) y el gate de
+  admin va DESPUÉS (docs/BITACORA_ERRORES.md E-42) — así un actor inválido siempre cae a
+  403, nunca a un 404 con mensaje distinto que delataría si el recurso existía.
+- **Gap #6 — staff**: `GET/POST /api/v1/admin/staff`, `PATCH /{id}/status`, `PUT /{id}`.
+  `InviteAndCreateUserUseCase` ganó `inviteStaff(...)` (id generado por el propio backend
+  vía `UUID.randomUUID()` — D-49/MODULO_AUTH.md: ya no hay Supabase de donde tomar un id
+  externo para un alta admin-iniciada) que, además de crear el `User`, genera una
+  contraseña temporal (`SecureRandom`, 20 bytes, Base64 URL-safe), la hashea con el mismo
+  `PasswordEncoder` ya declarado en `SecurityConfig` y la envía con
+  `EnviarEmailPort.enviarInvitacionStaff` — **método nuevo en el mismo puerto** que ya
+  usaba el reset de contraseña (se reutilizó tal como pedía el encargo, no se creó un
+  segundo puerto de email). Suspender a un staff invoca `CerrarTodasLasSesionesUseCase`
+  (MODULO_AUTH.md §7.4: revocación en el acto, no en 30s).
+- **Gap #7 — aprendices**: `GET /api/v1/admin/trainees` (paginado), `GET /{id}` (detalle:
+  `User` + `ParticipacionPrograma` vía `ConsultarResumenParticipacionPort`), `PUT
+  /{id}/program-day`. Nuevo método de dominio `ParticipacionPrograma.fijarDia(int, Clock)`:
+  misma invariante [0, 90] que ya imponía `avanzarDia` (no es una regla de negocio nueva,
+  es la misma cota aplicada también al piso) — a diferencia de `avanzarDia` (incrementa de
+  a 1, el paso normal del reloj), permite fijar el día exacto que pide un operador humano.
+- **Gap #9 — solicitudes de cuenta**: `GET/DELETE /api/v1/account-requests` (admin,
+  paginado) + `GET /api/v1/account-requests/{id}/status` **PUBLIC_ENDPOINT**. Decisión de
+  diseño (el encargo pedía elegir entre email o id y documentarlo): se resuelve por el
+  `AccountRequestId` que el cliente ya recibió en el 202 de `submit`, NO por email — un
+  UUID v4 no adivinable evita abrir una enumeración de qué emails tienen solicitud (probar
+  a fuerza bruta "¿existe una solicitud para X@Y.com?"). `DeleteAccountRequestUseCase`
+  permite borrar en cualquier estado (PENDING/APPROVED/REJECTED): es limpieza del registro
+  de la solicitud, no afecta al `User` ya creado (la FK es de la solicitud hacia el
+  usuario, nunca al revés) — **supuesto documentado, no confirmado con producto** si
+  conviene restringir el borrado a estados ya decididos.
+- **Paginación**: los tres listados (`ListStaffUseCase`, `ListTraineesUseCase`,
+  `ListAccountRequestsUseCase`) usan `page`/`size` primitivos en el puerto — nunca
+  `org.springframework.data.Pageable` cruzando la frontera `application` (aunque
+  `ArchitectureTest` no lo prohíbe explícitamente, es el mismo criterio ya establecido por
+  `calendar.LoadRecordatorioPort`: el puerto no conoce Spring Data, solo el adaptador
+  arma el `PageRequest`).
+- **Lo que NO se construyó**: tests `@WebMvcTest` para los 4 controllers nuevos
+  (`StaffAdminController`, `TraineeAdminController`, `AccountRequestController` ampliado,
+  `OnboardingDashboardController` en `onboarding`) — la cobertura de autorización negativa
+  (CLAUDE.MD §0.3) se hizo a nivel de servicio (guard clauses, orden E-42, 403 vs 404),
+  que es donde vive la lógica; falta la vuelta de integración HTTP completa si se quiere
+  cerrar del todo.
+
+## 10. Perfil de aprendiz enriquecido, avatar y baja de cuenta (gaps #1/#4/#5)
+
+**Fecha:** 2026-08-26. Igual que la sección anterior, sobre un checkout compartido con los
+agentes de los gaps #6/#7/#9 (`UserAccountService`, `ParticipacionProgramaService`,
+`LoadUserPort`, `SpringDataUserRepository`, `UserPersistenceAdapter`, `UserPersistenceMapper`,
+`UserController`, `User`, `ParticipacionPrograma` fueron tocados por más de una tarea a la
+vez) — cada archivo se releyó antes de editarlo; los cambios de esta sección son adiciones
+en puntos distintos, sin conflicto real con el trabajo paralelo.
+
+### Gap #1 — investigado primero, no asumido
+
+El encargo pedía verificar si `docs/PLAN_INTEGRACION_FRONTEND.md` ("no existe `TraineeProfile`
+como dominio") seguía vigente contra D-33/§6.bis (`ParticipacionPrograma` YA es el 4to
+agregado). **D-33 tenía razón; el documento de gaps estaba desactualizado.** Lo que de
+verdad faltaba, verificado contra `services/profile.ts`/`useProgramStartDate.ts` del
+frontend real:
+
+- Tres columnas del baseline sin mapear en `ParticipacionProgramaJpaEntity`: `tipo_meta`,
+  `nombre_reto_personal`, `programa_completado_en` — existían en la tabla desde el
+  principio, el comentario del propio archivo decía "quedan fuera a propósito" porque
+  ningún caso de uso los necesitaba todavía.
+- `POST /api/v1/users/me` no traía ningún dato de `ParticipacionPrograma`.
+- No existía forma de editar `personalChallengeName` (U-05 de CLAUDE.MD §5.3.3, ya
+  documentado como caso de uso pendiente, nunca construido).
+
+**Qué se construyó:**
+
+- `users.domain.model.participante.TipoMeta` (dominio, vocabulario inglés PHYSICAL/SALES/FEAR)
+  + `TipoMetaJpa` (espejo español FISICA/VENTAS/MIEDO) — mismo patrón D-36 que `FasePrograma`.
+  Sin setter de dominio todavía: ningún caso de uso de `users` lo escribe (lo hará el
+  onboarding de "Meta Maestra", gap #3, ya cerrado en otro módulo pero sin tocar esta
+  columna).
+- `ParticipacionPrograma.renombrarRetoPersonal(String, Clock)` — el único de los 3 campos
+  nuevos con escritura propia, vía `UpdateTraineeProfileUseCase` (U-05):
+  `PATCH /api/v1/users/me/trainee-profile`, self-only, `null` = "no cambiar" (no borra).
+  Vive en `ParticipacionProgramaController`, no en `UserController`, porque el campo es del
+  4to agregado.
+- `GetMyFullProfileUseCase` (nuevo, en `UserAccountService`): compone `User` +
+  `ParticipacionPrograma` para `POST /api/v1/users/me`. **Deliberadamente no se tocó
+  `GetMyProfileUseCase`** — ese puerto lo usa también el flujo de login
+  (`AutenticacionController`/`IniciarSesionUseCase`) y cambiar su forma de retorno hubiera
+  arrastrado esos otros llamadores sin necesidad; es la composición que exige CLAUDE.MD
+  §5.4.6 resuelta como caso de uso nuevo, no como el controller orquestando dos.
+- `traineeProfile` aparece en la respuesta si el actor tiene fila en `participantes_programa`
+  (cualquier rol — incluye staff con "seguimiento personal" activado, D-34), no solo TRAINEE.
+- **No implementado a propósito:** el enmascaramiento "ALCHEMIST con `traineeProfile` ve
+  `role: TRAINEE`" que sí hacía el backend viejo (`route.ts` de `/users/me`) — es una regla
+  real pero no estaba en el alcance del encargo (que hablaba de campos faltantes, no de
+  esta lógica de mascarado) y tocarla arrastra decisiones sobre cómo el resto de la app
+  (navegación, gates) trata el rol. Queda como pregunta abierta, no como bug.
+
+### Gap #4 — avatar genérico
+
+`SolicitarUrlAvatarUseCase` (`POST /api/v1/users/me/avatar/upload-url`) +
+`ConfirmarAvatarUseCase` (`PATCH /api/v1/users/me/avatar`), clase propia `AvatarService`
+(no `UserAccountService`: es un concepto distinto, sube y confirma un archivo). Mismo bucket
+compartido `renaser-files` que `rocks`/`habits`/`calendar` (D-34), ruta `avatares/{userId}`.
+
+**Limitación conocida y documentada, no un gap silencioso:** a diferencia de `calendar`
+(que guarda solo la `ruta` y resuelve una URL de lectura firmada EN CADA respuesta),
+`usuarios.avatar_url` es un string plano que `community`/`chat`/`mentor` ya consumen
+directo como URL servible vía `UserSummary` — cambiar esa semántica rompería esos
+consumidores (fuera del alcance de este encargo, que era solo `users`). La confirmación
+resuelve la URL de lectura UNA VEZ (validez 7 días, la más larga razonable) y la persiste
+tal cual. Como el sistema entero sigue con `NoOpAlmacenamientoAdapter` (D-34: sin
+credenciales AWS S3 reales), esto es hoy un placeholder consistente con el resto del
+sistema, no un gap nuevo — el día que exista un adaptador real, la vía correcta a largo
+plazo es un bucket de avatares público (URL permanente), no una URL firmada.
+
+### Gap #5 — baja de cuenta autogestionada
+
+Portado 1:1 de `features/account-deletion` del backend viejo (Next.js) — código real
+consultado, no reconstruido de memoria:
+
+- **`EstadoBajaCuenta`** (`users/domain/model/user`): lógica pura del plazo de gracia,
+  puerto de `plazo.ts`. `diasRestantes` redondea HACIA ARRIBA (30 minutos antes de purgar
+  sigue siendo "1 día", no "0"), `null` si no hay solicitud o si ya venció (el cron la
+  purgará en su próxima pasada).
+- **`User.solicitarBaja`/`cancelarBaja`/`bajaPendiente`**: idempotente (repetir la solicitud
+  NO reinicia el contador — si reiniciara, pulsar dos veces regalaría días de gracia de más
+  sin que el usuario lo entienda). `bajaSolicitadaEn` es una columna aparte de
+  `UserStatus`, a propósito: NO corta `hasAccess()` — sin acceso durante la gracia no habría
+  forma de arrepentirse y cancelar.
+- **14 días de gracia — CONFIRMADO, no un supuesto.** El comentario de la columna
+  `usuarios.baja_solicitada_en` en el baseline SQL ("cron purga a los 14 días, política
+  actual") coincide exactamente con `DIAS_DE_GRACIA` del backend viejo
+  (`features/account-deletion/plazo.ts`). Configurable sin recompilar
+  (`renaser.users.account-deletion.grace-period-days`, default 14) por si el producto
+  decide cambiarlo, pero el valor de partida está confirmado por dos fuentes independientes.
+- **`GET/POST/DELETE /api/v1/users/me/account-deletion`** — mismo estilo de recurso que
+  `/api/v1/mentor/activate-tracking` (D-34). `POST` exige `{"confirmacion":"ELIMINAR"}`
+  (backend viejo, `PALABRA_DE_CONFIRMACION`) — no sustituye a la reautenticación (la hace
+  el cliente contra su propia sesión antes de llamar), pero cierra la puerta a que un
+  reintento automático o un request suelto borren una cuenta. `DELETE` cancela (self-only).
+- **Purga real (`AccountDeletionService.purgeExpired` + `PurgarCuentasBajaScheduler`,
+  04:15 UTC diario)**: a diferencia del backend viejo (Prisma + Supabase Auth: 26 tablas +
+  Storage + Auth Supabase borrados a mano en `borrarCuenta`, porque el ORM no cascadea y
+  encima había una tabla — `account_requests` — completamente fuera del grafo de Prisma),
+  acá **alcanza con un solo `DeleteUserPort.deleteById`**: las ~30 FK contra `usuarios` en
+  el baseline SQL son `ON DELETE CASCADE` (o `SET NULL` en las de auditoría, que
+  deliberadamente sobreviven a la baja) y desde D-49 el propio backend es dueño de
+  credenciales/identidades (ya no hay una fila de Supabase Auth aparte que borrar). El
+  `UNIQUE` de `usuarios.email` libera el correo apenas la fila se va — no hace falta
+  borrar nada más a mano.
+- Cada cuenta se purga en su propio intento (`try`/`catch` por id): un fallo puntual no
+  deja sin purgar a las demás, mismo criterio que `purgarBajasVencidas` del backend viejo.
+- **Demostrado con Testcontainers, no solo con mocks** (`AccountDeletionIntegrationTest`):
+  crear cuenta → pedir baja → purgar (con el reloj adelantado 15 días) → el email queda
+  libre → registrar una cuenta nueva con el mismo email funciona sin violar el `UNIQUE`.
+  Es la prueba explícita de que el bug viejo (borrar una cuenta no liberaba el email) no
+  se repite acá.
+- **No implementado a propósito** (fuera del alcance literal del encargo, que hablaba de
+  autogestión): el borrado inmediato sin gracia que el backend viejo ofrecía a un
+  admin desde el panel de aprendices/mentores (`eliminarCuentaComoAdmin`/
+  `eliminarMentorComoAdmin`), ni el flujo de baja pública sin sesión por enlace de correo
+  (`solicitarEnlacePublico`/`confirmarBajaPublica`) que exige Google Play para quien ya
+  desinstaló la app. Quedan como trabajo futuro si el producto los pide.
+
+### Preguntas abiertas de esta sección
+
+| # | Pregunta | Estado |
+|---|---|---|
+| R-8 | ¿Se quiere replicar el enmascaramiento "ALCHEMIST con `traineeProfile` → `role: TRAINEE`" del backend viejo en `POST /api/v1/users/me`? | ⬜ Abierto — no implementado a propósito, ver gap #1 arriba |
+| R-9 | ¿Hace falta baja de cuenta SIN gracia para el panel admin, y/o baja pública sin sesión por enlace de correo (exigida por Google Play para quien desinstaló la app)? | ⬜ Abierto — fuera del alcance literal de este encargo (autogestión) |

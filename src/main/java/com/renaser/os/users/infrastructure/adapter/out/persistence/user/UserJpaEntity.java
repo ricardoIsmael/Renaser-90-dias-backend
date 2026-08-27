@@ -16,9 +16,10 @@ import java.util.UUID;
 
 /**
  * Tabla `usuarios` (docs/db/sql/BD_NUEVA_V1.sql). Solo mapea las columnas que el
- * dominio usa hoy — telefono/ciudad/pais/motivo_estado/baja_solicitada_en/creado_en/
- * actualizado_en quedan fuera a proposito: son nullable o tienen DEFAULT en Postgres,
- * asi que Hibernate no necesita conocerlas para insertar una fila valida.
+ * dominio usa hoy — telefono/ciudad/pais/motivo_estado/creado_en/actualizado_en quedan
+ * fuera a proposito: son nullable o tienen DEFAULT en Postgres, asi que Hibernate no
+ * necesita conocerlas para insertar una fila valida. `baja_solicitada_en` SI se mapea
+ * desde 2026-08-26 (gap #5, baja de cuenta autogestionada).
  *
  * @Data aca es seguro (a diferencia de en domain/): esta entidad no tiene relaciones
  * @ManyToOne/@OneToMany perezosas que @Data pueda romper (CLAUDE.MD §5.4.5) — mismo
@@ -57,4 +58,8 @@ public class UserJpaEntity {
     private EstadoUsuarioJpa estado;
 
     private Instant ultimaActividadEn;
+
+    /** `usuarios.baja_solicitada_en` - baja de cuenta autogestionada (soft-delete diferido,
+     * D-XX cuenta con purga por cron). Nullable: la inmensa mayoria de las filas no la tiene. */
+    private Instant bajaSolicitadaEn;
 }

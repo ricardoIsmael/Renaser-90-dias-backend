@@ -12,6 +12,8 @@ import com.renaser.os.users.application.ports.in.participante.AssignMentorToTrai
 import com.renaser.os.users.application.ports.in.participante.ConsultarSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.ConsultarSelfTrackingUseCase.ConsultarSelfTrackingQuery;
 import com.renaser.os.users.application.ports.in.participante.DeactivateSelfTrackingUseCase;
+import com.renaser.os.users.application.ports.in.participante.UpdateTraineeProfileUseCase;
+import com.renaser.os.users.application.ports.in.participante.UpdateTraineeProfileUseCase.UpdateTraineeProfileCommand;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +34,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -54,6 +57,8 @@ class ParticipacionProgramaControllerTest {
     private AssignMentorToTraineeUseCase assignMentorUseCase;
     @MockitoBean
     private ConsultarSelfTrackingUseCase consultarUseCase;
+    @MockitoBean
+    private UpdateTraineeProfileUseCase updateTraineeProfileUseCase;
 
     @Test
     void statusDevuelveActiveTrueCuandoElActorEstaInscripto() throws Exception {
@@ -181,5 +186,49 @@ class ParticipacionProgramaControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"mentorId\":\"" + UUID.randomUUID() + "\"}"))
                 .andExpect(status().isNoContent());
+    }
+
+    /** Hueco #1: el frontend real (services/profile.ts#updateTraineeProfile) le pega a esta ruta exacta. */
+    @Test
+    void actualizarTraineeProfileDevuelveElRetoPersonalActualizado() throws Exception {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        ParticipacionPrograma participacion = ParticipacionPrograma.inscribirTraineeAprobado(actorId, CLOCK);
+        participacion.renombrarRetoPersonal("Correr una maraton", CLOCK);
+        when(updateTraineeProfileUseCase.updateMyTraineeProfile(
+                new UpdateTraineeProfileCommand(actorId, "Correr una maraton"))).thenReturn(participacion);
+
+        mockMvc.perform(patch("/api/v1/users/me/trainee-profile")
+                        .header("X-Actor-Id", actorId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"personalChallengeName\":\"Correr una maraton\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.personalChallengeName").value("Correr una maraton"))
+                .andExpect(jsonPath("$.timezone").value("America/Lima"));
+    }
+
+    @Test
+    void actualizarTraineeProfileSinPerfilDevuelve404() throws Exception {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(updateTraineeProfileUseCase.updateMyTraineeProfile(any()))
+                .thenThrow(new java.util.NoSuchElementException("No tenes un perfil de programa activo para editar"));
+
+        mockMvc.perform(patch("/api/v1/users/me/trainee-profile")
+                        .header("X-Actor-Id", actorId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"personalChallengeName\":\"Correr una maraton\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void actualizarTraineeProfileComoSuspendidoDevuelve403() throws Exception {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(updateTraineeProfileUseCase.updateMyTraineeProfile(any()))
+                .thenThrow(new NotAuthorizedException("Cuenta suspendida"));
+
+        mockMvc.perform(patch("/api/v1/users/me/trainee-profile")
+                        .header("X-Actor-Id", actorId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"personalChallengeName\":\"Correr una maraton\"}"))
+                .andExpect(status().isForbidden());
     }
 }

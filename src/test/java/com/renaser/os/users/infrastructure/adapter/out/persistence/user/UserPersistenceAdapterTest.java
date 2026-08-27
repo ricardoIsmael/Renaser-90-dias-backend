@@ -11,9 +11,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * Contra Postgres real (Testcontainers), no un mock: es lo unico que prueba de verdad
@@ -68,5 +70,40 @@ class UserPersistenceAdapterTest {
 
         assertThat(adapter.byEmail(new Email("buscame@renaser.com"))).isPresent();
         assertThat(adapter.byEmail(new Email("noexiste@renaser.com"))).isEmpty();
+    }
+
+    // ─── gap #5: baja de cuenta ─────────────────────────────────────────────
+
+    @Test
+    void deleteByIdBorraLaFilaYLibraElEmail() {
+        UserId id = UserId.of(UUID.randomUUID());
+        adapter.save(User.registerTrainee(id, new Email("borrame@renaser.com"), "Borrame"));
+
+        adapter.deleteById(id);
+
+        assertThat(adapter.byId(id)).isEmpty();
+        assertThat(adapter.byEmail(new Email("borrame@renaser.com"))).isEmpty();
+    }
+
+    @Test
+    void deleteByIdEsIdempotenteConUnIdInexistente() {
+        UserId inexistente = UserId.of(UUID.randomUUID());
+
+        assertThatCode(() -> adapter.deleteById(inexistente)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void pendingDeletionUpToSoloTraeLasQueTienenBajaSolicitadaDentroDelCorte() {
+        UserId conBajaVencida = UserId.of(UUID.randomUUID());
+        UserId sinBaja = UserId.of(UUID.randomUUID());
+        Instant corte = Instant.parse("2026-08-20T00:00:00Z");
+        User usuarioConBaja = User.registerTrainee(conBajaVencida, new Email("vencida@renaser.com"), "Vencida");
+        usuarioConBaja.solicitarBaja(com.renaser.os.shared.domain.FixedClock.at(Instant.parse("2026-08-01T00:00:00Z")));
+        adapter.save(usuarioConBaja);
+        adapter.save(User.registerTrainee(sinBaja, new Email("sinbaja@renaser.com"), "Sin Baja"));
+
+        var candidatas = adapter.pendingDeletionUpTo(corte);
+
+        assertThat(candidatas).contains(conBajaVencida).doesNotContain(sinBaja);
     }
 }

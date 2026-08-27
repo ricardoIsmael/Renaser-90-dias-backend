@@ -3,6 +3,7 @@ package com.renaser.os.users.infrastructure.adapter.out.persistence.participante
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
+import com.renaser.os.users.domain.model.participante.TipoMeta;
 import org.springframework.stereotype.Component;
 
 import java.time.ZoneId;
@@ -25,7 +26,10 @@ class ParticipacionProgramaPersistenceMapper {
                 e.isProgramaCompletado(),
                 e.getDiaPostPrograma(),
                 e.getCreadoEn(),
-                e.getActualizadoEn());
+                e.getActualizadoEn(),
+                toDomainTipoMeta(e.getTipoMeta()),
+                e.getNombreRetoPersonal(),
+                e.getProgramaCompletadoEn());
     }
 
     ParticipacionProgramaJpaEntity toEntity(ParticipacionPrograma p) {
@@ -41,7 +45,32 @@ class ParticipacionProgramaPersistenceMapper {
                 p.programaCompletado(),
                 (short) p.diaPostPrograma(),
                 p.creadoEn(),
-                p.actualizadoEn());
+                p.actualizadoEn(),
+                toJpaTipoMeta(p.tipoMeta()),
+                p.nombreRetoPersonal(),
+                p.programaCompletadoEn());
+    }
+
+    private TipoMetaJpa toJpaTipoMeta(TipoMeta tipoMeta) {
+        if (tipoMeta == null) {
+            return null;
+        }
+        return switch (tipoMeta) {
+            case PHYSICAL -> TipoMetaJpa.FISICA;
+            case SALES -> TipoMetaJpa.VENTAS;
+            case FEAR -> TipoMetaJpa.MIEDO;
+        };
+    }
+
+    private TipoMeta toDomainTipoMeta(TipoMetaJpa jpa) {
+        if (jpa == null) {
+            return null;
+        }
+        return switch (jpa) {
+            case FISICA -> TipoMeta.PHYSICAL;
+            case VENTAS -> TipoMeta.SALES;
+            case MIEDO -> TipoMeta.FEAR;
+        };
     }
 
     private FaseProgramaJpa toJpaFase(FasePrograma fase) {

@@ -11,6 +11,7 @@ import com.renaser.os.users.application.ports.out.participante.LoadParticipacion
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
+import com.renaser.os.users.domain.model.participante.TipoMeta;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
 import org.junit.jupiter.api.Test;
@@ -96,5 +97,33 @@ class ParticipacionProgramaPersistenceAdapterTest {
         boolean borrado = deletePort.deleteByParticipanteId(usuarioId);
 
         assertThat(borrado).isFalse();
+    }
+
+    /** Hueco #1: tipoMeta/nombreRetoPersonal/programaCompletadoEn ahora se mapean —
+     * verificado contra Postgres real, no un mock (CLAUDE.MD §0.2). */
+    @Test
+    void guardaYRecuperaTipoMetaNombreRetoPersonalYProgramaCompletadoEn() {
+        UserId usuarioId = crearUsuario(UserRole.TRAINEE);
+        ParticipacionPrograma nueva = ParticipacionPrograma.rehydrate(usuarioId, null, null, 90,
+                FasePrograma.PHASE_4_ASCENSION, CLOCK.today().minusDays(90), CLOCK.now(), ZoneId.of("America/Lima"),
+                true, 3, CLOCK.now(), CLOCK.now(), TipoMeta.SALES, "Vender 100 unidades", CLOCK.now());
+
+        savePort.save(nueva);
+
+        ParticipacionPrograma cargada = loadPort.byParticipanteId(usuarioId).orElseThrow();
+        assertThat(cargada.tipoMeta()).isEqualTo(TipoMeta.SALES);
+        assertThat(cargada.nombreRetoPersonal()).isEqualTo("Vender 100 unidades");
+        assertThat(cargada.programaCompletadoEn()).isEqualTo(CLOCK.now());
+    }
+
+    @Test
+    void tipoMetaYRetoPersonalSonNullPorDefecto() {
+        UserId usuarioId = crearUsuario(UserRole.MENTOR);
+        savePort.save(ParticipacionPrograma.activarSeguimientoPersonal(usuarioId, CLOCK));
+
+        ParticipacionPrograma cargada = loadPort.byParticipanteId(usuarioId).orElseThrow();
+        assertThat(cargada.tipoMeta()).isNull();
+        assertThat(cargada.nombreRetoPersonal()).isNull();
+        assertThat(cargada.programaCompletadoEn()).isNull();
     }
 }

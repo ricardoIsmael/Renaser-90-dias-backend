@@ -85,3 +85,11 @@ renaser:
     # Tope diario de mensajes al chat de IA por aprendiz (D-48). Se cuenta en Redis, no en la
     # BD (congelada, sin columna de contador). Al superarlo: 429. Ajustable sin recompilar.
     limite-diario: ${RENASIA_LIMITE_DIARIO:25}
+  users:
+    account-deletion:
+      # 14 dias: CONFIRMADO, no un supuesto — coincide el comentario de la columna
+      # `usuarios.baja_solicitada_en` en el baseline SQL ("cron purga a los 14 dias,
+      # politica actual") con `DIAS_DE_GRACIA` del backend viejo
+      # (features/account-deletion/plazo.ts). Ajustable sin recompilar si el producto
+      # decide cambiar el plazo.
+      grace-period-days: ${ACCOUNT_DELETION_GRACE_DAYS:14}

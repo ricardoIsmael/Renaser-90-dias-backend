@@ -10,11 +10,16 @@ import com.renaser.os.users.application.ports.in.participante.ActivateSelfTracki
 import com.renaser.os.users.application.ports.in.participante.AssignMentorToTraineeUseCase;
 import com.renaser.os.users.application.ports.in.participante.ConsultarSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.DeactivateSelfTrackingUseCase;
+import com.renaser.os.users.application.ports.in.participante.GetTraineeDetailUseCase;
+import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase;
+import com.renaser.os.users.application.ports.in.participante.SetTraineeProgramDayUseCase;
+import com.renaser.os.users.application.ports.in.participante.UpdateTraineeProfileUseCase;
 import com.renaser.os.users.application.ports.out.mentorprofile.LoadMentorProfilePort;
 import com.renaser.os.users.application.ports.out.participante.ConsultarResumenParticipacionPort;
 import com.renaser.os.users.application.ports.out.participante.DeleteParticipacionProgramaPort;
 import com.renaser.os.users.application.ports.out.participante.LoadParticipacionProgramaPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
+import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.user.User;
 import org.springframework.stereotype.Service;
@@ -39,7 +44,8 @@ import java.util.UUID;
  */
 @Service
 public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase, DeactivateSelfTrackingUseCase,
-        ConsultarSelfTrackingUseCase, AssignMentorToTraineeUseCase, ParticipacionProgramaFinder {
+        ConsultarSelfTrackingUseCase, AssignMentorToTraineeUseCase, ParticipacionProgramaFinder,
+        ListTraineesUseCase, GetTraineeDetailUseCase, SetTraineeProgramDayUseCase, UpdateTraineeProfileUseCase {
 
     /**
      * Mismo conjunto que {@code requireRole(auth.data, ['MENTOR', 'MENTOR_LEAD', 'ADMIN', 'ALCHEMIST'])}
@@ -56,6 +62,8 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     private final DeleteParticipacionProgramaPort deleteParticipacionProgramaPort;
     private final ConsultarResumenParticipacionPort consultarResumenParticipacionPort;
     private final LoadMentorProfilePort loadMentorProfilePort;
+    private final LoadUserPort loadUserPort;
+    private final RequireAdminGuard requireAdminGuard;
     private final Clock clock;
 
     public ParticipacionProgramaService(RequireActiveUserGuard requireActiveUserGuard,
@@ -63,13 +71,16 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
                                          SaveParticipacionProgramaPort saveParticipacionProgramaPort,
                                          DeleteParticipacionProgramaPort deleteParticipacionProgramaPort,
                                          ConsultarResumenParticipacionPort consultarResumenParticipacionPort,
-                                         LoadMentorProfilePort loadMentorProfilePort, Clock clock) {
+                                         LoadMentorProfilePort loadMentorProfilePort, LoadUserPort loadUserPort,
+                                         RequireAdminGuard requireAdminGuard, Clock clock) {
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.loadParticipacionProgramaPort = loadParticipacionProgramaPort;
         this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
         this.deleteParticipacionProgramaPort = deleteParticipacionProgramaPort;
         this.consultarResumenParticipacionPort = consultarResumenParticipacionPort;
         this.loadMentorProfilePort = loadMentorProfilePort;
+        this.loadUserPort = loadUserPort;
+        this.requireAdminGuard = requireAdminGuard;
         this.clock = clock;
     }
 
@@ -128,6 +139,24 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     }
 
     /**
+     * U-05 (hueco #1, `PATCH /api/v1/users/me/trainee-profile`). Self-only: el actor solo
+     * edita su PROPIA fila (no recibe traineeId, solo actorId — igual criterio que
+     * {@code UpdateMyProfileUseCase} en `users/api`).
+     */
+    @Override
+    @Transactional
+    public ParticipacionPrograma updateMyTraineeProfile(UpdateTraineeProfileCommand command) {
+        User actor = requireActiveUserGuard.of(command.actorId());
+        ParticipacionPrograma participacion = loadParticipacionProgramaPort.byParticipanteId(actor.id())
+                .orElseThrow(() -> new NoSuchElementException(
+                        "No tenes un perfil de programa activo para editar"));
+        if (command.personalChallengeName() != null) {
+            participacion.renombrarRetoPersonal(command.personalChallengeName(), clock);
+        }
+        return saveParticipacionProgramaPort.save(participacion);
+    }
+
+    /**
      * Nota de estilo: el tipo de retorno usa el nombre calificado completo a proposito
      * — {@code com.renaser.os.users.api.ParticipacionPrograma} (proyeccion publica) es
      * un tipo DISTINTO de {@link ParticipacionPrograma} (agregado interno, importado
@@ -176,4 +205,47 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
         }
     }
 
+    /**
+     * Panel admin de aprendices (gap #7). Sin un recurso previo por id que proteger
+     * (es un listado): el gate de admin va primero.
+     */
+    @Override
+    public PaginaTrainees listar(ListTraineesCommand command) {
+        requireAdminGuard.requireAdminActivo(command.actorId());
+        var contenido = consultarResumenParticipacionPort.listarAprendices(command.page() * command.size(),
+                command.size());
+        long total = consultarResumenParticipacionPort.contarAprendices();
+        return new PaginaTrainees(contenido, total, command.page(), command.size());
+    }
+
+    /**
+     * El recurso (el propio aprendiz) se carga PRIMERO — 404 si no existe — y el gate de
+     * admin va DESPUES (docs/BITACORA_ERRORES.md E-42), fail-closed via
+     * {@link RequireAdminGuard}.
+     */
+    @Override
+    public TraineeDetail obtener(GetTraineeDetailCommand command) {
+        User trainee = requireUsuario(command.traineeId());
+        requireAdminGuard.requireAdminActivo(command.actorId());
+        var participacion = consultarResumenParticipacionPort.resumenDe(command.traineeId())
+                .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + command.traineeId()));
+        return new TraineeDetail(trainee, participacion);
+    }
+
+    /** Mismo orden que {@link #obtener}: recurso primero, gate de admin despues (E-42). */
+    @Override
+    @Transactional
+    public void fijarDia(SetProgramDayCommand command) {
+        ParticipacionPrograma participacion = loadParticipacionProgramaPort.byParticipanteId(command.traineeId())
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Participante no inscripto en el programa: " + command.traineeId()));
+        requireAdminGuard.requireAdminActivo(command.actorId());
+
+        participacion.fijarDia(command.newProgramDay(), clock);
+        saveParticipacionProgramaPort.save(participacion);
+    }
+
+    private User requireUsuario(UserId id) {
+        return loadUserPort.byId(id).orElseThrow(() -> new NoSuchElementException("Usuario no encontrado: " + id));
+    }
 }

@@ -86,4 +86,84 @@ class ParticipacionProgramaTest {
 
         assertThatThrownBy(() -> p.asignarMentor(null, CLOCK)).isInstanceOf(NullPointerException.class);
     }
+
+    // ─── fijarDia (panel admin de aprendices, gap #7) ──────────────────────
+
+    @Test
+    void fijarDiaEstableceElDiaExactoYActualizaTimestamp() {
+        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
+        FixedClock later = FixedClock.at(CLOCK.now().plusSeconds(60));
+
+        p.fijarDia(45, later);
+
+        assertThat(p.diaPrograma()).isEqualTo(45);
+        assertThat(p.actualizadoEn()).isEqualTo(later.now());
+    }
+
+    @Test
+    void fijarDiaAceptaElPisoCero() {
+        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
+
+        p.fijarDia(0, CLOCK);
+
+        assertThat(p.diaPrograma()).isZero();
+    }
+
+    @Test
+    void fijarDiaAceptaElTopeNoventa() {
+        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
+
+        p.fijarDia(90, CLOCK);
+
+        assertThat(p.diaPrograma()).isEqualTo(90);
+    }
+
+    @Test
+    void fijarDiaRechazaValorNegativo() {
+        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
+
+        assertThatThrownBy(() -> p.fijarDia(-1, CLOCK)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void fijarDiaRechazaValorMayorANoventa() {
+        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
+
+        assertThatThrownBy(() -> p.fijarDia(91, CLOCK)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ─── renombrarRetoPersonal (hueco #1, U-05) ────────────────────────────
+
+    @Test
+    void nuevaParticipacionArrancaSinRetoPersonalNiTipoDeMeta() {
+        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
+
+        assertThat(p.nombreRetoPersonal()).isNull();
+        assertThat(p.tipoMeta()).isNull();
+        assertThat(p.programaCompletadoEn()).isNull();
+    }
+
+    @Test
+    void renombrarRetoPersonalCambiaElNombreYElTimestamp() {
+        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
+        FixedClock later = FixedClock.at(CLOCK.now().plusSeconds(60));
+
+        p.renombrarRetoPersonal("Correr una maraton", later);
+
+        assertThat(p.nombreRetoPersonal()).isEqualTo("Correr una maraton");
+        assertThat(p.actualizadoEn()).isEqualTo(later.now());
+    }
+
+    @Test
+    void rehydrateConLosTresCamposNuevosLosExponePorElGetter() {
+        ParticipacionPrograma p = ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null, null, 90,
+                FasePrograma.PHASE_4_ASCENSION, LocalDate.of(2026, 1, 1), CLOCK.now(), ZoneId.of("America/Lima"),
+                true, 5, CLOCK.now(), CLOCK.now(), TipoMeta.PHYSICAL, "Correr una maraton", CLOCK.now());
+
+        assertThat(p.tipoMeta()).isEqualTo(TipoMeta.PHYSICAL);
+        assertThat(p.nombreRetoPersonal()).isEqualTo("Correr una maraton");
+        assertThat(p.programaCompletadoEn()).isEqualTo(CLOCK.now());
+        assertThat(p.programaCompletado()).isTrue();
+        assertThat(p.diaPostPrograma()).isEqualTo(5);
+    }
 }
