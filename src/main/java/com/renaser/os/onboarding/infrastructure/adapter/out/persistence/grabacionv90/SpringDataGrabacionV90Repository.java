@@ -12,4 +12,6 @@ interface SpringDataGrabacionV90Repository extends JpaRepository<GrabacionV90Jpa
                                                                            Short indice);
 
     List<GrabacionV90JpaEntity> findByUsuarioId(UUID usuarioId);
+
+    long countByEstadoIa(EstadoIAv90Jpa estado);
 }

@@ -137,3 +137,31 @@ Base `/api/v1/onboarding`. Todos protegidos, todos con `@RequestHeader("X-Actor-
 - **Verificación de `./mvnw clean test` y `ArchitectureTest`** — no ejecutados por este agente (regla del encargo). El riesgo más probable de que algo falle es el mapeo `jsonb` (§2).
 - **Contrato de mentor/scope ampliado** — ver Q-O2.
 - **Atadura entre `MediaOnboarding` (clase FIRMA) y `HitoOnboarding.PACTO_FIRMADO`** — ver Q-O4.
+
+## 9. Dashboard admin (gap #8 de docs/PLAN_INTEGRACION_FRONTEND.md) — 2026-08-26
+
+`GET /api/v1/admin/onboarding/dashboard`: agregado de cuántos aprendices tienen onboarding
+iniciado/completado/con Pacto de Fase I firmado, más el desglose de grabaciones V90 por
+estado de validación IA (`PENDIENTE`/`PROCESANDO`/`REVISION_MANUAL`/`APROBADA`/`RECHAZADA`).
+
+- **Vive DENTRO de `onboarding`**, no en `users`: toda la agregación es sobre las tablas
+  propias del módulo (`estado_onboarding`, `grabaciones_v90`) — no hay razón para que otro
+  módulo la posea. Se agregaron dos métodos nuevos, ambos de solo lectura: `LoadEstadoOnboardingPort.contarResumen()`
+  y `LoadGrabacionV90Port.contarPorEstado(EstadoIAv90)`.
+- **El gate ADMIN/ALCHEMIST se resuelve contra `users.api.UserSummaryFinder` directo**, NO
+  contra `onboarding.application.ports.out.actor.ConsultarActorPort` (el puerto local que
+  ya usan los 5 servicios existentes de este módulo): ese puerto solo expone
+  `(id, suspendido)`, sin rol — agregarle `role` hoy habría tocado los 6 archivos que ya lo
+  consumen (5 servicios + su adaptador) sin necesidad, para un caso de uso que no comparte
+  la forma "self-service" del resto del módulo (D-O2: acá el actor SÍ actúa sobre datos que
+  no son suyos, es un panel admin).
+- **Total de aprendices activos**: `users.api.ParticipacionProgramaFinder.usuariosActivosConRol(Set.of(TRAINEE))`
+  — mismo puerto público que ya consumen otros módulos, sin query nativa propia.
+- **Sin caché**: es un agregado sobre counts (`COUNT(*)` indexado por PK/estado), no un
+  join costoso — no se vio necesidad de Caffeine para un endpoint de panel admin de baja
+  frecuencia (CLAUDE.MD §3: el objetivo de <1ms es para el hot path del aprendiz, no para
+  paneles operativos).
+- **No se construyó**: test `@WebMvcTest` del controller (cobertura de autorización a nivel
+  de servicio, ver `OnboardingDashboardServiceTest`); breakdown de onboarding "en curso" por
+  `flujoActual`/`seccionActual` (son strings libres del cliente, no un enum de dominio —
+  agruparlos sería inventar una taxonomía no confirmada, CLAUDE.MD §0.6).

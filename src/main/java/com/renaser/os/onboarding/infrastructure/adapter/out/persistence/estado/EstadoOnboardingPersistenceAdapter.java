@@ -31,6 +31,12 @@ class EstadoOnboardingPersistenceAdapter implements LoadEstadoOnboardingPort, Sa
     }
 
     @Override
+    public ResumenEstadosOnboarding contarResumen() {
+        return new ResumenEstadosOnboarding(repository.count(), repository.countByCompletadoTrue(),
+                repository.countByPactoFirmadoEnIsNotNull());
+    }
+
+    @Override
     public EstadoOnboarding guardar(EstadoOnboarding estado) {
         var saved = repository.saveAndFlush(mapper.toEntity(estado));
         return mapper.toDomain(saved);

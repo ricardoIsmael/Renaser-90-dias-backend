@@ -2,6 +2,7 @@ package com.renaser.os.onboarding.infrastructure.adapter.out.persistence.grabaci
 
 import com.renaser.os.onboarding.application.ports.out.grabacionv90.LoadGrabacionV90Port;
 import com.renaser.os.onboarding.application.ports.out.grabacionv90.SaveGrabacionV90Port;
+import com.renaser.os.onboarding.domain.model.grabacionv90.EstadoIAv90;
 import com.renaser.os.onboarding.domain.model.grabacionv90.GrabacionV90;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
@@ -35,6 +36,12 @@ class GrabacionV90PersistenceAdapter implements LoadGrabacionV90Port, SaveGrabac
     @Override
     public List<GrabacionV90> todasDeUsuario(UserId usuarioId) {
         return repository.findByUsuarioId(usuarioId.value()).stream().map(mapper::toDomain).toList();
+    }
+
+    /** Nombres identicos dominio<->JPA a proposito (ver EstadoIAv90Jpa) — {@code valueOf} directo, sin mapper. */
+    @Override
+    public long contarPorEstado(EstadoIAv90 estado) {
+        return repository.countByEstadoIa(EstadoIAv90Jpa.valueOf(estado.name()));
     }
 
     /**
