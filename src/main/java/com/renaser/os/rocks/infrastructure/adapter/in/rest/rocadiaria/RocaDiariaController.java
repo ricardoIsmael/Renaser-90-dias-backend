@@ -13,6 +13,7 @@ import com.renaser.os.rocks.domain.model.rocadiaria.TipoEvidenciaRoca;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,7 +21,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -48,42 +48,42 @@ public class RocaDiariaController {
     }
 
     @GetMapping("/today")
-    public List<RocaDiariaResponse> hoy(@RequestHeader("X-Actor-Id") String actorId) {
-        return hoyUseCase.hoy(UserId.of(actorId)).stream().map(RocaDiariaResponse::from).toList();
+    public List<RocaDiariaResponse> hoy(@ActorAutenticado UserId actor) {
+        return hoyUseCase.hoy(actor).stream().map(RocaDiariaResponse::from).toList();
     }
 
     @GetMapping("/tomorrow")
-    public List<RocaDiariaResponse> manana(@RequestHeader("X-Actor-Id") String actorId) {
-        return mananaUseCase.manana(UserId.of(actorId)).stream().map(RocaDiariaResponse::from).toList();
+    public List<RocaDiariaResponse> manana(@ActorAutenticado UserId actor) {
+        return mananaUseCase.manana(actor).stream().map(RocaDiariaResponse::from).toList();
     }
 
     @PostMapping("/plan")
-    public ResponseEntity<List<RocaDiariaResponse>> crear(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<List<RocaDiariaResponse>> crear(@ActorAutenticado UserId actor,
                                                             @Valid @RequestBody CrearPlanDiarioRequest request) {
         List<ItemRocaDiaria> items = request.rocas().stream()
                 .map(item -> new ItemRocaDiaria(EjeObjetivo.valueOf(item.eje()), item.posicion(), item.titulo(),
                         item.descripcion(), item.puntajeImpacto(), item.esDelegable(), item.horaInicio(),
                         item.horaFin()))
                 .toList();
-        var creadas = crearUseCase.crear(new CrearPlanDiarioCommand(UserId.of(actorId), request.fecha(), items));
+        var creadas = crearUseCase.crear(new CrearPlanDiarioCommand(actor, request.fecha(), items));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(creadas.stream().map(RocaDiariaResponse::from).toList());
     }
 
     @PostMapping("/{id}/evidence/upload-url")
-    public UrlAdjuntoResponse urlDeSubida(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
+    public UrlAdjuntoResponse urlDeSubida(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                            @Valid @RequestBody SolicitarUrlAdjuntoRequest request) {
-        var url = urlAdjuntoUseCase.solicitarUrl(new SolicitarUrlAdjuntoRocaCommand(UserId.of(actorId),
+        var url = urlAdjuntoUseCase.solicitarUrl(new SolicitarUrlAdjuntoRocaCommand(actor,
                 RocaDiariaId.of(id), request.tipoContenido()));
         return UrlAdjuntoResponse.from(url);
     }
 
     @PostMapping("/{id}/evidence")
-    public RocaDiariaResponse completar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
+    public RocaDiariaResponse completar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                          @Valid @RequestBody CompletarRocaDiariaRequest request) {
         boolean esPrincipal = request.esPrincipal() == null || request.esPrincipal();
         boolean publishedToWall = Boolean.TRUE.equals(request.publishedToWall());
-        var completada = completarUseCase.completar(new CompletarRocaDiariaCommand(UserId.of(actorId),
+        var completada = completarUseCase.completar(new CompletarRocaDiariaCommand(actor,
                 RocaDiariaId.of(id), TipoEvidenciaRoca.valueOf(request.tipo()), request.bucket(),
                 request.rutaStorage(), request.contenidoTexto(), request.timestampExif(), request.gpsLat(),
                 request.gpsLng(), esPrincipal, publishedToWall));

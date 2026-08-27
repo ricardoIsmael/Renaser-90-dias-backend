@@ -12,6 +12,7 @@ import com.renaser.os.community.application.ports.in.cohorte.EliminarCohorteUseC
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,7 +22,6 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,45 +50,45 @@ public class CohorteAdminController {
     }
 
     @GetMapping
-    public List<CohorteResponse> listar(@RequestHeader("X-Actor-Id") String actorId,
+    public List<CohorteResponse> listar(@ActorAutenticado UserId actorId,
                                          @RequestParam(required = false) String status) {
         EstadoCohorte filtro = status == null ? null : parseEstado(status);
-        return consultarUseCase.listar(UserId.of(actorId), filtro).stream().map(CohorteResponse::from).toList();
+        return consultarUseCase.listar(actorId, filtro).stream().map(CohorteResponse::from).toList();
     }
 
     @GetMapping("/{id}")
-    public CohorteResponse obtener(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id) {
-        return CohorteResponse.from(consultarUseCase.obtener(UserId.of(actorId), CohorteId.of(id)));
+    public CohorteResponse obtener(@ActorAutenticado UserId actorId, @PathVariable UUID id) {
+        return CohorteResponse.from(consultarUseCase.obtener(actorId, CohorteId.of(id)));
     }
 
     @PostMapping
-    public ResponseEntity<CohorteResponse> crear(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<CohorteResponse> crear(@ActorAutenticado UserId actorId,
                                                   @RequestBody @Valid CrearCohorteRequest request) {
-        var cohorte = crearUseCase.crear(new CrearCohorteCommand(UserId.of(actorId), request.name(),
+        var cohorte = crearUseCase.crear(new CrearCohorteCommand(actorId, request.name(),
                 request.startDate(), request.endDate()));
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(CohorteResponse.from(consultarUseCase.obtener(UserId.of(actorId), cohorte.id())));
+                .body(CohorteResponse.from(consultarUseCase.obtener(actorId, cohorte.id())));
     }
 
     @PatchMapping("/{id}")
-    public CohorteResponse actualizar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
+    public CohorteResponse actualizar(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                        @RequestBody ActualizarCohorteRequest request) {
-        actualizarUseCase.actualizar(new ActualizarCohorteCommand(UserId.of(actorId), CohorteId.of(id),
+        actualizarUseCase.actualizar(new ActualizarCohorteCommand(actorId, CohorteId.of(id),
                 request.name(), request.startDate(), request.endDate(), true));
-        return CohorteResponse.from(consultarUseCase.obtener(UserId.of(actorId), CohorteId.of(id)));
+        return CohorteResponse.from(consultarUseCase.obtener(actorId, CohorteId.of(id)));
     }
 
     @PatchMapping("/{id}/status")
-    public CohorteResponse cambiarEstado(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
+    public CohorteResponse cambiarEstado(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                           @RequestBody @Valid CambiarEstadoCohorteRequest request) {
-        cambiarEstadoUseCase.cambiarEstado(new CambiarEstadoCohorteCommand(UserId.of(actorId), CohorteId.of(id),
+        cambiarEstadoUseCase.cambiarEstado(new CambiarEstadoCohorteCommand(actorId, CohorteId.of(id),
                 parseEstado(request.status())));
-        return CohorteResponse.from(consultarUseCase.obtener(UserId.of(actorId), CohorteId.of(id)));
+        return CohorteResponse.from(consultarUseCase.obtener(actorId, CohorteId.of(id)));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id) {
-        eliminarUseCase.eliminar(new EliminarCohorteCommand(UserId.of(actorId), CohorteId.of(id)));
+    public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actorId, @PathVariable UUID id) {
+        eliminarUseCase.eliminar(new EliminarCohorteCommand(actorId, CohorteId.of(id)));
         return ResponseEntity.noContent().build();
     }
 

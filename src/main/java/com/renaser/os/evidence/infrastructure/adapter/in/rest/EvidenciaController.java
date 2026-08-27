@@ -7,9 +7,9 @@ import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUse
 import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase.TipoDestino;
 import com.renaser.os.evidence.domain.model.evidencia.EvidenciaId;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,8 +18,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Actor resuelto por header {@code X-Actor-Id} (temporal, D-29 de {@code users}, mismo
- * patrón que {@code points}/{@code phasecontracts}/{@code rocks}/{@code habits}).
+ * Actor resuelto con {@code @ActorAutenticado}: primero desde la sesion y, si no hay,
+ * desde el header {@code X-Actor-Id} como respaldo (el mecanismo temporal original,
+ * D-29 de {@code users}) — ver {@code ActorAutenticadoArgumentResolver}.
  * Autoservicio con excepción admin: el dueño ve su propia evidencia; cualquier otro
  * actor necesita ser ADMIN/ALCHEMIST (aplicado dentro de {@code EvidenciaService}). El
  * listado ({@code GET} sin id) suma un tercer caso, MENTOR con su aprendiz asignado —
@@ -38,8 +39,8 @@ public class EvidenciaController {
     }
 
     @GetMapping("/{id}")
-    public EvidenciaResponse porId(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id) {
-        var evidencia = consultarUseCase.porId(UserId.of(actorId), EvidenciaId.of(id));
+    public EvidenciaResponse porId(@ActorAutenticado UserId actor, @PathVariable UUID id) {
+        var evidencia = consultarUseCase.porId(actor, EvidenciaId.of(id));
         return EvidenciaResponse.from(evidencia);
     }
 
@@ -51,14 +52,14 @@ public class EvidenciaController {
      * (dueño / mentor asignado / admin) vive en {@code EvidenciaService}, no acá.
      */
     @GetMapping
-    public EvidenciaPageResponse listar(@RequestHeader("X-Actor-Id") String actorId,
+    public EvidenciaPageResponse listar(@ActorAutenticado UserId actor,
                                          @RequestParam(required = false) UUID participanteId,
                                          @RequestParam(required = false) String estado,
                                          @RequestParam(required = false) String tipoDestino,
                                          @RequestParam(required = false) String desde,
                                          @RequestParam(required = false) String hasta,
                                          @RequestParam(required = false) String cursor) {
-        var comando = new ListarEvidenciaComando(UserId.of(actorId),
+        var comando = new ListarEvidenciaComando(actor,
                 participanteId != null ? UserId.of(participanteId) : null,
                 estado != null ? EstadoValidacion.valueOf(estado) : null,
                 tipoDestino != null ? TipoDestino.valueOf(tipoDestino) : null,

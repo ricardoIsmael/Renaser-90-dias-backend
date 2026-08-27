@@ -10,12 +10,12 @@ import com.renaser.os.evidence.application.ports.in.evidencia.RevisarManualmente
 import com.renaser.os.evidence.application.ports.in.evidencia.RevisarManualmenteUseCase.RevisarManualmenteCommand;
 import com.renaser.os.evidence.domain.model.evidencia.EvidenciaId;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -48,14 +48,14 @@ public class EvidenciaAdminController {
      * gate es el rol (ver javadoc de {@link ListarEvidenciaAdminUseCase}).
      */
     @GetMapping
-    public EvidenciaPageResponse listar(@RequestHeader("X-Actor-Id") String actorId,
+    public EvidenciaPageResponse listar(@ActorAutenticado UserId actor,
                                          @RequestParam(required = false) UUID participanteId,
                                          @RequestParam(required = false) String estado,
                                          @RequestParam(required = false) String tipoDestino,
                                          @RequestParam(required = false) String desde,
                                          @RequestParam(required = false) String hasta,
                                          @RequestParam(required = false) String cursor) {
-        var comando = new ListarEvidenciaAdminComando(UserId.of(actorId),
+        var comando = new ListarEvidenciaAdminComando(actor,
                 participanteId != null ? UserId.of(participanteId) : null,
                 estado != null ? EstadoValidacion.valueOf(estado) : null,
                 tipoDestino != null ? TipoDestino.valueOf(tipoDestino) : null,
@@ -65,17 +65,17 @@ public class EvidenciaAdminController {
     }
 
     @PostMapping("/{id}/review")
-    public EvidenciaResponse revisar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
+    public EvidenciaResponse revisar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                       @Valid @RequestBody RevisarManualmenteRequest request) {
-        var evidencia = revisarUseCase.revisar(new RevisarManualmenteCommand(UserId.of(actorId), EvidenciaId.of(id),
+        var evidencia = revisarUseCase.revisar(new RevisarManualmenteCommand(actor, EvidenciaId.of(id),
                 request.aprobar(), request.notas()));
         return EvidenciaResponse.from(evidencia);
     }
 
     @PostMapping("/{id}/void")
-    public EvidenciaResponse anular(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
+    public EvidenciaResponse anular(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                      @Valid @RequestBody AnularVeredictoRequest request) {
-        var evidencia = anularUseCase.anular(new AnularVeredictoCommand(UserId.of(actorId), EvidenciaId.of(id),
+        var evidencia = anularUseCase.anular(new AnularVeredictoCommand(actor, EvidenciaId.of(id),
                 request.notas()));
         return EvidenciaResponse.from(evidencia);
     }

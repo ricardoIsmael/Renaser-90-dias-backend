@@ -2,8 +2,8 @@ package com.renaser.os.points.infrastructure.adapter.in.rest.home;
 
 import com.renaser.os.points.application.ports.in.home.ConsultarResumenHomeUseCase;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -18,7 +18,7 @@ public class HomeController {
     }
 
     @GetMapping
-    public ResumenHomeResponse consultar(@RequestHeader("X-Actor-Id") String actorId) {
-        return ResumenHomeResponse.from(consultarResumenHomeUseCase.consultar(UserId.of(actorId)));
+    public ResumenHomeResponse consultar(@ActorAutenticado UserId actor) {
+        return ResumenHomeResponse.from(consultarResumenHomeUseCase.consultar(actor));
     }
 }

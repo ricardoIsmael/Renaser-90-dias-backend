@@ -10,6 +10,7 @@ import com.renaser.os.community.application.ports.in.categoria.EliminarCategoria
 import com.renaser.os.community.application.ports.in.categoria.ReordenarCategoriasMuroUseCase;
 import com.renaser.os.community.application.ports.in.categoria.ReordenarCategoriasMuroUseCase.ReordenarCategoriasMuroCommand;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +20,6 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -52,38 +52,38 @@ public class WallCategoryAdminController {
     }
 
     @GetMapping
-    public List<WallCategoryAdminResponse> listar(@RequestHeader("X-Actor-Id") String actorId) {
-        return consultarUseCase.listarParaPanel(UserId.of(actorId)).stream().map(WallCategoryAdminResponse::from)
+    public List<WallCategoryAdminResponse> listar(@ActorAutenticado UserId actorId) {
+        return consultarUseCase.listarParaPanel(actorId).stream().map(WallCategoryAdminResponse::from)
                 .toList();
     }
 
     @PostMapping
-    public ResponseEntity<WallCategoryAdminResponse> crear(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<WallCategoryAdminResponse> crear(@ActorAutenticado UserId actorId,
                                                              @RequestBody @Valid CrearWallCategoryRequest request) {
-        var fila = crearUseCase.crear(new CrearCategoriaMuroCommand(UserId.of(actorId), request.key(),
+        var fila = crearUseCase.crear(new CrearCategoriaMuroCommand(actorId, request.key(),
                 request.label(), request.emoji()));
         return ResponseEntity.status(HttpStatus.CREATED).body(WallCategoryAdminResponse.from(fila));
     }
 
     @PatchMapping("/{key}")
-    public WallCategoryAdminResponse actualizar(@RequestHeader("X-Actor-Id") String actorId,
+    public WallCategoryAdminResponse actualizar(@ActorAutenticado UserId actorId,
                                                  @PathVariable String key,
                                                  @RequestBody ActualizarWallCategoryRequest request) {
-        var fila = actualizarUseCase.actualizar(new ActualizarCategoriaMuroCommand(UserId.of(actorId), key,
+        var fila = actualizarUseCase.actualizar(new ActualizarCategoriaMuroCommand(actorId, key,
                 request.label(), request.emoji(), request.isActive()));
         return WallCategoryAdminResponse.from(fila);
     }
 
     @DeleteMapping("/{key}")
-    public ResponseEntity<Void> eliminar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable String key) {
-        eliminarUseCase.eliminar(new EliminarCategoriaMuroCommand(UserId.of(actorId), key));
+    public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actorId, @PathVariable String key) {
+        eliminarUseCase.eliminar(new EliminarCategoriaMuroCommand(actorId, key));
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/reorder")
-    public ResponseEntity<Void> reordenar(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<Void> reordenar(@ActorAutenticado UserId actorId,
                                            @RequestBody @Valid ReordenarWallCategoriesRequest request) {
-        reordenarUseCase.reordenar(new ReordenarCategoriasMuroCommand(UserId.of(actorId), request.keys()));
+        reordenarUseCase.reordenar(new ReordenarCategoriasMuroCommand(actorId, request.keys()));
         return ResponseEntity.noContent().build();
     }
 }

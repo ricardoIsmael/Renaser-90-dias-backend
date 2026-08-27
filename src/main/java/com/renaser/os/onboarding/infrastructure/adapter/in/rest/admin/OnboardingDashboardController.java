@@ -2,15 +2,16 @@ package com.renaser.os.onboarding.infrastructure.adapter.in.rest.admin;
 
 import com.renaser.os.onboarding.application.ports.in.admin.OnboardingDashboardUseCase;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Dashboard admin de onboarding (gap #8 de docs/PLAN_INTEGRACION_FRONTEND.md). Solo
- * ADMIN/ALCHEMIST — gate DENTRO del servicio (CLAUDE.MD §5.4.6). X-Actor-Id: header
- * TEMPORAL, ver nota de AccountRequestController.
+ * ADMIN/ALCHEMIST — gate DENTRO del servicio (CLAUDE.MD §5.4.6). El actor se resuelve
+ * desde la sesion, con el header TEMPORAL X-Actor-Id como respaldo mientras dure la
+ * migracion — ver ActorAutenticadoArgumentResolver.
  */
 @RestController
 @RequestMapping("/api/v1/admin/onboarding")
@@ -23,7 +24,7 @@ public class OnboardingDashboardController {
     }
 
     @GetMapping("/dashboard")
-    public OnboardingDashboardResponse dashboard(@RequestHeader("X-Actor-Id") String actorId) {
-        return OnboardingDashboardResponse.from(dashboardUseCase.obtenerResumen(UserId.of(actorId)));
+    public OnboardingDashboardResponse dashboard(@ActorAutenticado UserId actor) {
+        return OnboardingDashboardResponse.from(dashboardUseCase.obtenerResumen(actor));
     }
 }

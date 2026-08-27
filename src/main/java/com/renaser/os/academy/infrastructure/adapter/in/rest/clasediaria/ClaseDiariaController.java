@@ -5,11 +5,11 @@ import com.renaser.os.academy.application.ports.in.clasediaria.CompletarClaseDia
 import com.renaser.os.academy.application.ports.in.clasediaria.ConsultarClaseDiariaUseCase;
 import com.renaser.os.academy.domain.model.curso.LeccionId;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -32,14 +32,14 @@ public class ClaseDiariaController {
     }
 
     @GetMapping
-    public ClaseDiariaResponse claseDeHoy(@RequestHeader("X-Actor-Id") String actorId) {
-        return ClaseDiariaResponse.from(claseDiariaUseCase.claseDeHoy(UserId.of(actorId)));
+    public ClaseDiariaResponse claseDeHoy(@ActorAutenticado UserId actorId) {
+        return ClaseDiariaResponse.from(claseDiariaUseCase.claseDeHoy(actorId));
     }
 
     @PostMapping
-    public CompletarClaseDiariaResponse completar(@RequestHeader("X-Actor-Id") String actorId,
+    public CompletarClaseDiariaResponse completar(@ActorAutenticado UserId actorId,
                                                     @Valid @RequestBody CompletarClaseDiariaRequest request) {
-        var comando = new CompletarClaseDiariaCommand(UserId.of(actorId), LeccionId.of(request.leccionId()),
+        var comando = new CompletarClaseDiariaCommand(actorId, LeccionId.of(request.leccionId()),
                 request.resumen());
         return CompletarClaseDiariaResponse.from(completarClaseDiariaUseCase.completar(comando));
     }

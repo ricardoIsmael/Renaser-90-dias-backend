@@ -4,17 +4,18 @@ import com.renaser.os.notifications.application.ports.in.tokenpush.RegistrarToke
 import com.renaser.os.notifications.application.ports.in.tokenpush.RegistrarTokenPushUseCase.RegistrarTokenPushCommand;
 import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Locale;
 
 /** Ruta fiel al contrato viejo: {@code POST /push-tokens} (`push-tokens/route.ts`, CHAT-07).
- * {@code usuarioId} sale siempre del actor resuelto (X-Actor-Id), nunca del body. */
+ * {@code usuarioId} sale siempre del actor resuelto por {@code @ActorAutenticado} — sesion, con
+ * respaldo por el header X-Actor-Id — nunca del body. */
 @RestController
 @RequestMapping("/api/v1/push-tokens")
 public class TokenPushController {
@@ -26,12 +27,12 @@ public class TokenPushController {
     }
 
     @PostMapping
-    public TokenPushResponse registrar(@RequestHeader("X-Actor-Id") String actorId,
+    public TokenPushResponse registrar(@ActorAutenticado UserId actor,
                                         @RequestBody @Valid RegistrarTokenPushRequest request) {
         PlataformaPush plataforma = request.platform() == null ? null
                 : PlataformaPush.valueOf(request.platform().toUpperCase(Locale.ROOT));
         var tokenPush = registrarTokenPushUseCase.registrar(
-                new RegistrarTokenPushCommand(UserId.of(actorId), request.token(), plataforma));
+                new RegistrarTokenPushCommand(actor, request.token(), plataforma));
         return TokenPushResponse.from(tokenPush);
     }
 }

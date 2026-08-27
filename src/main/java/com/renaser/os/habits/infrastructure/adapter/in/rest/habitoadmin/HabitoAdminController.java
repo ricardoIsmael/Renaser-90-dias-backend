@@ -11,6 +11,7 @@ import com.renaser.os.habits.application.ports.in.habitoadmin.EliminarHabitoUseC
 import com.renaser.os.habits.application.ports.in.habitoadmin.EliminarHabitoUseCase.EliminarHabitoCommand;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +20,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -29,10 +29,10 @@ import java.util.UUID;
 /**
  * Panel admin de catalogo de habitos (hueco #11, docs/PLAN_INTEGRACION_FRONTEND.md #11).
  * Rutas literales del contrato ya escrito por el cliente ({@code habitsAdmin.ts}). Solo
- * ADMIN/ALCHEMIST (gateado en el servicio, {@code HabitoAdminGuard}) — el actor viaja por
- * {@code X-Actor-Id}, mismo patron temporal que el resto del backend mientras B-2 (auth
- * real) sigue bloqueante; el cliente hoy manda {@code Authorization: Bearer} (JWT de
- * Supabase), que todavia no es lo que este backend valida — deuda ya conocida, no nueva.
+ * ADMIN/ALCHEMIST (gateado en el servicio, {@code HabitoAdminGuard}) — el actor lo resuelve
+ * {@code @ActorAutenticado} desde la sesion propia, con respaldo por el header temporal
+ * {@code X-Actor-Id} mientras dure la migracion; el cliente hoy manda {@code Authorization:
+ * Bearer} (JWT de Supabase), que este backend no valida — deuda ya conocida, no nueva.
  */
 @RestController
 @RequestMapping("/api/v1/admin/habits")
@@ -56,37 +56,37 @@ public class HabitoAdminController {
     }
 
     @GetMapping
-    public List<AdminHabitResponse> listar(@RequestHeader("X-Actor-Id") String actorId) {
-        return consultarUseCase.listar(UserId.of(actorId)).stream().map(AdminHabitResponse::from).toList();
+    public List<AdminHabitResponse> listar(@ActorAutenticado UserId actor) {
+        return consultarUseCase.listar(actor).stream().map(AdminHabitResponse::from).toList();
     }
 
     @PostMapping
-    public ResponseEntity<AdminHabitResponse> crear(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<AdminHabitResponse> crear(@ActorAutenticado UserId actor,
                                                       @RequestBody @Valid CreateHabitRequest request) {
-        var habito = crearUseCase.crear(new CrearHabitoCommand(UserId.of(actorId), request.title(),
+        var habito = crearUseCase.crear(new CrearHabitoCommand(actor, request.title(),
                 request.habitType().toDomain(), request.toDetalles()));
         return ResponseEntity.status(HttpStatus.CREATED).body(AdminHabitResponse.from(habito));
     }
 
     @PostMapping("/{id}")
-    public AdminHabitResponse actualizar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
+    public AdminHabitResponse actualizar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                           @RequestBody @Valid UpdateHabitRequest request) {
-        var habito = actualizarUseCase.actualizar(new ActualizarHabitoCommand(UserId.of(actorId), HabitoId.of(id),
+        var habito = actualizarUseCase.actualizar(new ActualizarHabitoCommand(actor, HabitoId.of(id),
                 request.toDetalles()));
         return AdminHabitResponse.from(habito);
     }
 
     @PostMapping("/{id}/toggle")
-    public AdminHabitResponse toggle(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
+    public AdminHabitResponse toggle(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                       @RequestBody ToggleHabitRequest request) {
-        var habito = cambiarActivoUseCase.cambiarActivo(new CambiarActivoHabitoCommand(UserId.of(actorId),
+        var habito = cambiarActivoUseCase.cambiarActivo(new CambiarActivoHabitoCommand(actor,
                 HabitoId.of(id), request.isActive()));
         return AdminHabitResponse.from(habito);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id) {
-        eliminarUseCase.eliminar(new EliminarHabitoCommand(UserId.of(actorId), HabitoId.of(id)));
+    public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actor, @PathVariable UUID id) {
+        eliminarUseCase.eliminar(new EliminarHabitoCommand(actor, HabitoId.of(id)));
         return ResponseEntity.noContent().build();
     }
 }

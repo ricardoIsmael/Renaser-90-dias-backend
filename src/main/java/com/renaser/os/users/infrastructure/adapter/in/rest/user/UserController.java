@@ -1,6 +1,7 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.user;
 
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.users.application.ports.in.user.CancelAccountDeletionUseCase;
 import com.renaser.os.users.application.ports.in.user.ConfirmarAvatarUseCase;
 import com.renaser.os.users.application.ports.in.user.ConfirmarAvatarUseCase.ConfirmarAvatarCommand;
@@ -25,13 +26,13 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-/** X-Actor-Id: ver nota de AccountRequestController — TEMPORAL, no usar en produccion. */
+/** Actor: ver nota de AccountRequestController — se resuelve desde la sesion, con respaldo
+ * temporal por el header {@code X-Actor-Id} mientras dura la migracion. */
 @RestController
 @RequestMapping("/api/v1/users")
 public class UserController {
@@ -66,31 +67,30 @@ public class UserController {
     }
 
     @PostMapping("/me")
-    public UserResponse me(@RequestHeader("X-Actor-Id") String actorId) {
-        return UserResponse.from(getMyFullProfileUseCase.getMyFullProfile(UserId.of(actorId)));
+    public UserResponse me(@ActorAutenticado UserId actor) {
+        return UserResponse.from(getMyFullProfileUseCase.getMyFullProfile(actor));
     }
 
     @PatchMapping("/me")
-    public ResponseEntity<Void> updateMe(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<Void> updateMe(@ActorAutenticado UserId actor,
                                           @RequestBody UpdateMyProfileRequest request) {
-        updateMyProfileUseCase.updateMyProfile(new UpdateMyProfileCommand(UserId.of(actorId), request.fullName(),
+        updateMyProfileUseCase.updateMyProfile(new UpdateMyProfileCommand(actor, request.fullName(),
                 request.avatarUrl(), request.bio(), request.department()));
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/invite")
-    public ResponseEntity<UserIdResponse> invite(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<UserIdResponse> invite(@ActorAutenticado UserId actor,
                                                   @RequestBody @Valid InviteUserRequest request) {
         UserId invited = inviteUseCase.invite(new InviteUserCommand(request.supabaseUserId(), request.email(),
-                request.fullName(), request.role(), UserId.of(actorId)));
+                request.fullName(), request.role(), actor));
         return ResponseEntity.status(HttpStatus.CREATED).body(new UserIdResponse(invited.value()));
     }
 
     @PatchMapping("/{id}/role")
-    public ResponseEntity<Void> updateRole(@PathVariable UUID id, @RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<Void> updateRole(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                             @RequestBody @Valid UpdateUserRoleRequest request) {
-        updateUserRoleUseCase.updateRole(new UpdateUserRoleCommand(UserId.of(id), request.newRole(),
-                UserId.of(actorId)));
+        updateUserRoleUseCase.updateRole(new UpdateUserRoleCommand(UserId.of(id), request.newRole(), actor));
         return ResponseEntity.noContent().build();
     }
 
@@ -98,18 +98,18 @@ public class UserController {
     // que ya usan `rocks`/`onboarding`/`calendar` (docs/PLAN_INTEGRACION_FRONTEND.md §2) ──
 
     @PostMapping("/me/avatar/upload-url")
-    public UrlAvatarResponse urlDeSubidaAvatar(@RequestHeader("X-Actor-Id") String actorId,
+    public UrlAvatarResponse urlDeSubidaAvatar(@ActorAutenticado UserId actor,
                                                 @RequestBody @Valid SolicitarUrlAvatarRequest request) {
         var url = solicitarUrlAvatarUseCase.solicitarUrl(
-                new SolicitarUrlAvatarCommand(UserId.of(actorId), request.tipoContenido()));
+                new SolicitarUrlAvatarCommand(actor, request.tipoContenido()));
         return UrlAvatarResponse.from(url);
     }
 
     @PatchMapping("/me/avatar")
-    public ResponseEntity<Void> confirmarAvatar(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<Void> confirmarAvatar(@ActorAutenticado UserId actor,
                                                  @RequestBody @Valid ConfirmarAvatarRequest request) {
         confirmarAvatarUseCase.confirmar(
-                new ConfirmarAvatarCommand(UserId.of(actorId), request.bucket(), request.ruta()));
+                new ConfirmarAvatarCommand(actor, request.bucket(), request.ruta()));
         return ResponseEntity.noContent().build();
     }
 
@@ -117,20 +117,20 @@ public class UserController {
     // que /api/v1/mentor/activate-tracking (D-34) ──────────────────────────────
 
     @GetMapping("/me/account-deletion")
-    public AccountDeletionStatusResponse estadoBajaCuenta(@RequestHeader("X-Actor-Id") String actorId) {
-        return AccountDeletionStatusResponse.from(getAccountDeletionStatusUseCase.status(UserId.of(actorId)));
+    public AccountDeletionStatusResponse estadoBajaCuenta(@ActorAutenticado UserId actor) {
+        return AccountDeletionStatusResponse.from(getAccountDeletionStatusUseCase.status(actor));
     }
 
     @PostMapping("/me/account-deletion")
-    public AccountDeletionStatusResponse solicitarBajaCuenta(@RequestHeader("X-Actor-Id") String actorId,
+    public AccountDeletionStatusResponse solicitarBajaCuenta(@ActorAutenticado UserId actor,
                                                               @RequestBody @Valid RequestAccountDeletionRequest request) {
         var estado = requestAccountDeletionUseCase.request(
-                new RequestAccountDeletionCommand(UserId.of(actorId), request.confirmacion()));
+                new RequestAccountDeletionCommand(actor, request.confirmacion()));
         return AccountDeletionStatusResponse.from(estado);
     }
 
     @DeleteMapping("/me/account-deletion")
-    public AccountDeletionStatusResponse cancelarBajaCuenta(@RequestHeader("X-Actor-Id") String actorId) {
-        return AccountDeletionStatusResponse.from(cancelAccountDeletionUseCase.cancel(UserId.of(actorId)));
+    public AccountDeletionStatusResponse cancelarBajaCuenta(@ActorAutenticado UserId actor) {
+        return AccountDeletionStatusResponse.from(cancelAccountDeletionUseCase.cancel(actor));
     }
 }

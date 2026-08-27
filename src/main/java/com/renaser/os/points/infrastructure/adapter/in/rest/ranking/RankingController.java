@@ -8,7 +8,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import com.renaser.os.shared.domain.UserId;
-import org.springframework.web.bind.annotation.RequestHeader;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -33,19 +33,19 @@ public class RankingController {
 
     /** Agregador de un solo llamado (gap #24) — ver javadoc de {@link ConsultarRankingAgregadoUseCase}. */
     @GetMapping
-    public RankingAgregadoResponse consultarAgregado(@RequestHeader("X-Actor-Id") String actorId,
+    public RankingAgregadoResponse consultarAgregado(@ActorAutenticado UserId actor,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
         LocalDate fechaConsultada = fecha != null ? fecha : clock.today();
         return RankingAgregadoResponse.from(
-                consultarRankingAgregadoUseCase.agregado(UserId.of(actorId), fechaConsultada));
+                consultarRankingAgregadoUseCase.agregado(actor, fechaConsultada));
     }
 
     @GetMapping("/{tipo}")
-    public List<EntradaRankingResponse> consultar(@RequestHeader("X-Actor-Id") String actorId,
+    public List<EntradaRankingResponse> consultar(@ActorAutenticado UserId actor,
             @PathVariable TipoRanking tipo,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
         LocalDate fechaConsultada = fecha != null ? fecha : clock.today();
-        return consultarRankingUseCase.consultar(UserId.of(actorId), tipo, fechaConsultada).stream()
+        return consultarRankingUseCase.consultar(actor, tipo, fechaConsultada).stream()
                 .map(EntradaRankingResponse::from)
                 .toList();
     }

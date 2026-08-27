@@ -5,11 +5,11 @@ import com.renaser.os.notifications.application.ports.in.preferencia.GestionarPr
 import com.renaser.os.notifications.application.ports.in.preferencia.GestionarPreferenciasUseCase.ItemPreferencia;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,18 +27,18 @@ public class PreferenciaNotificacionController {
     }
 
     @GetMapping
-    public PreferenciasResponse consultar(@RequestHeader("X-Actor-Id") String actorId) {
-        return PreferenciasResponse.from(gestionarPreferenciasUseCase.consultar(UserId.of(actorId)));
+    public PreferenciasResponse consultar(@ActorAutenticado UserId actor) {
+        return PreferenciasResponse.from(gestionarPreferenciasUseCase.consultar(actor));
     }
 
     @PatchMapping
-    public PreferenciasResponse actualizar(@RequestHeader("X-Actor-Id") String actorId,
+    public PreferenciasResponse actualizar(@ActorAutenticado UserId actor,
                                             @RequestBody @Valid ActualizarPreferenciasRequest request) {
         var items = request.preferences().stream()
                 .map(item -> new ItemPreferencia(TipoNotificacion.valueOf(item.type()), item.enabled()))
                 .toList();
         var actualizadas = gestionarPreferenciasUseCase.actualizar(
-                new ActualizarPreferenciasCommand(UserId.of(actorId), items));
+                new ActualizarPreferenciasCommand(actor, items));
         return PreferenciasResponse.from(actualizadas);
     }
 }

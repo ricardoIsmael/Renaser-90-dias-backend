@@ -4,9 +4,9 @@ import com.renaser.os.rag.application.ports.in.espejosombra.ListarInformesEspejo
 import com.renaser.os.rag.application.ports.in.espejosombra.ObtenerInformeEspejoSombraUseCase;
 import com.renaser.os.rag.domain.model.espejosombra.InformeEspejoSombraId;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -15,8 +15,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Actor resuelto por header {@code X-Actor-Id} (temporal, D-29 de {@code users},
- * mismo patrón que {@code evidence}/{@code rocks}/{@code support}). Sin
+ * Actor resuelto por {@code @ActorAutenticado}: primero desde la sesion y, si no hay,
+ * desde el header {@code X-Actor-Id} (respaldo temporal, D-29 de {@code users}, mismo
+ * patrón que {@code evidence}/{@code rocks}/{@code support}). Sin
  * {@code participanteId} en la query, lista los informes del propio actor; con
  * {@code participanteId}, los de ESE participante — visible solo si el actor es el
  * propio participante, su mentor asignado, o ADMIN/ALCHEMIST (D-47, verificado
@@ -39,10 +40,9 @@ public class EspejoSombraController {
     }
 
     @GetMapping
-    public List<InformeEspejoSombraResponse> listar(@RequestHeader("X-Actor-Id") String actorIdHeader,
+    public List<InformeEspejoSombraResponse> listar(@ActorAutenticado UserId actorId,
                                                       @RequestParam(name = "participanteId", required = false)
                                                       UUID participanteIdParam) {
-        UserId actorId = UserId.of(actorIdHeader);
         UserId participanteId = participanteIdParam != null ? UserId.of(participanteIdParam) : actorId;
         return listarUseCase.deParticipante(actorId, participanteId).stream()
                 .map(InformeEspejoSombraResponse::from)
@@ -50,9 +50,8 @@ public class EspejoSombraController {
     }
 
     @GetMapping("/{id}")
-    public InformeEspejoSombraResponse porId(@RequestHeader("X-Actor-Id") String actorIdHeader,
+    public InformeEspejoSombraResponse porId(@ActorAutenticado UserId actorId,
                                               @PathVariable UUID id) {
-        UserId actorId = UserId.of(actorIdHeader);
         var informe = obtenerUseCase.porId(actorId, InformeEspejoSombraId.of(id));
         return InformeEspejoSombraResponse.from(informe);
     }

@@ -2,8 +2,8 @@ package com.renaser.os.rocks.infrastructure.adapter.in.rest.rocamaestra;
 
 import com.renaser.os.rocks.application.ports.in.rocamaestra.ConsultarRocasMaestrasUseCase;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,8 +20,8 @@ public class RocaMaestraController {
     }
 
     @GetMapping
-    public List<RocaMaestraResponse> listar(@RequestHeader("X-Actor-Id") String actorId) {
-        return consultarUseCase.misRocasMaestras(UserId.of(actorId)).stream()
+    public List<RocaMaestraResponse> listar(@ActorAutenticado UserId actor) {
+        return consultarUseCase.misRocasMaestras(actor).stream()
                 .map(RocaMaestraResponse::from)
                 .toList();
     }

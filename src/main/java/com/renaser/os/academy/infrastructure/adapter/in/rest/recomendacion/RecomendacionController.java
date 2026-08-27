@@ -2,8 +2,8 @@ package com.renaser.os.academy.infrastructure.adapter.in.rest.recomendacion;
 
 import com.renaser.os.academy.application.ports.in.recomendacion.ConsultarRecomendacionDiariaUseCase;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -19,7 +19,7 @@ public class RecomendacionController {
     }
 
     @GetMapping
-    public RecomendacionResponse recomendacion(@RequestHeader("X-Actor-Id") String actorId) {
-        return RecomendacionResponse.from(recomendacionUseCase.recomendacion(UserId.of(actorId)));
+    public RecomendacionResponse recomendacion(@ActorAutenticado UserId actorId) {
+        return RecomendacionResponse.from(recomendacionUseCase.recomendacion(actorId));
     }
 }

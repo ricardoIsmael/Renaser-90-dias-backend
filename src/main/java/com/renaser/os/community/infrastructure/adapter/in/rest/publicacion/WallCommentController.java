@@ -10,6 +10,7 @@ import com.renaser.os.community.application.ports.in.publicacion.OcultarComentar
 import com.renaser.os.community.domain.model.publicacion.ComentarioId;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +20,6 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -65,10 +65,10 @@ public class WallCommentController {
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> crear(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<Map<String, Object>> crear(@ActorAutenticado UserId actorId,
                                                        @PathVariable UUID postId,
                                                        @RequestBody @Valid CreateWallCommentRequest request) {
-        var resultado = escribirUseCase.escribir(new EscribirComentarioCommand(UserId.of(actorId),
+        var resultado = escribirUseCase.escribir(new EscribirComentarioCommand(actorId,
                 PublicacionId.of(postId), request.text()));
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                 "comment", WallCommentResponse.from(resultado.comentario()),
@@ -76,17 +76,17 @@ public class WallCommentController {
     }
 
     @PatchMapping("/{commentId}")
-    public WallCommentResponse actualizar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID postId,
+    public WallCommentResponse actualizar(@ActorAutenticado UserId actorId, @PathVariable UUID postId,
                                            @PathVariable UUID commentId,
                                            @RequestBody @Valid UpdateWallCommentRequest request) {
         return WallCommentResponse.from(editarUseCase.editar(
-                new EditarComentarioCommand(UserId.of(actorId), ComentarioId.of(commentId), request.text())));
+                new EditarComentarioCommand(actorId, ComentarioId.of(commentId), request.text())));
     }
 
     @DeleteMapping("/{commentId}")
-    public Map<String, Integer> eliminar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID postId,
+    public Map<String, Integer> eliminar(@ActorAutenticado UserId actorId, @PathVariable UUID postId,
                                           @PathVariable UUID commentId) {
-        var resultado = ocultarUseCase.ocultar(new OcultarComentarioCommand(UserId.of(actorId),
+        var resultado = ocultarUseCase.ocultar(new OcultarComentarioCommand(actorId,
                 ComentarioId.of(commentId)));
         return Map.of("commentCount", resultado.cantidadComentarios());
     }

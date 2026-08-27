@@ -4,12 +4,12 @@ import com.renaser.os.rag.application.ports.in.conversacion.ObtenerHistorialUseC
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase.PreguntarRenasiaCommand;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,17 +36,17 @@ public class RenasiaController {
     }
 
     @PostMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> preguntar(@RequestHeader("X-Actor-Id") String actorId,
+    public Flux<String> preguntar(@ActorAutenticado UserId actorId,
                                    @RequestBody @Valid PreguntarRenasiaRequest request) {
-        return preguntarUseCase.preguntar(new PreguntarRenasiaCommand(UserId.of(actorId), request.question()));
+        return preguntarUseCase.preguntar(new PreguntarRenasiaCommand(actorId, request.question()));
     }
 
     @GetMapping
-    public HistorialRenasiaPageResponse historial(@RequestHeader("X-Actor-Id") String actorId,
+    public HistorialRenasiaPageResponse historial(@ActorAutenticado UserId actorId,
                                                     @RequestParam(required = false) String cursor,
                                                     @RequestParam(required = false, defaultValue = "30") int limit) {
         Instant cursorInstant = cursor != null ? Instant.parse(cursor) : null;
-        var pagina = obtenerHistorialUseCase.obtenerHistorial(UserId.of(actorId), cursorInstant, limit);
+        var pagina = obtenerHistorialUseCase.obtenerHistorial(actorId, cursorInstant, limit);
         return HistorialRenasiaPageResponse.from(pagina);
     }
 }

@@ -8,12 +8,12 @@ import com.renaser.os.onboarding.application.ports.in.estado.CompletarOnboarding
 import com.renaser.os.onboarding.application.ports.in.estado.CompletarOnboardingUseCase.CompletarOnboardingCommand;
 import com.renaser.os.onboarding.application.ports.in.estado.ObtenerEstadoOnboardingUseCase;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -37,28 +37,28 @@ public class EstadoOnboardingController {
     }
 
     @GetMapping("/state")
-    public EstadoOnboardingResponse obtener(@RequestHeader("X-Actor-Id") String actorId) {
-        return EstadoOnboardingResponse.from(obtenerUseCase.obtener(UserId.of(actorId)));
+    public EstadoOnboardingResponse obtener(@ActorAutenticado UserId actor) {
+        return EstadoOnboardingResponse.from(obtenerUseCase.obtener(actor));
     }
 
     @PutMapping("/state")
-    public EstadoOnboardingResponse avanzar(@RequestHeader("X-Actor-Id") String actorId,
+    public EstadoOnboardingResponse avanzar(@ActorAutenticado UserId actor,
                                              @Valid @RequestBody AvanzarEstadoRequest request) {
-        var comando = new AvanzarEstadoCommand(UserId.of(actorId), request.flow(), request.section(),
+        var comando = new AvanzarEstadoCommand(actor, request.flow(), request.section(),
                 request.step(), request.flowProgress());
         return EstadoOnboardingResponse.from(avanzarUseCase.avanzar(comando));
     }
 
     @PostMapping("/milestones")
-    public EstadoOnboardingResponse aceptar(@RequestHeader("X-Actor-Id") String actorId,
+    public EstadoOnboardingResponse aceptar(@ActorAutenticado UserId actor,
                                              @Valid @RequestBody AceptarHitoRequest request) {
-        var comando = new AceptarHitoCommand(UserId.of(actorId), request.milestone());
+        var comando = new AceptarHitoCommand(actor, request.milestone());
         return EstadoOnboardingResponse.from(aceptarUseCase.aceptar(comando));
     }
 
     @PostMapping("/complete")
-    public EstadoOnboardingResponse completar(@RequestHeader("X-Actor-Id") String actorId) {
-        var comando = new CompletarOnboardingCommand(UserId.of(actorId));
+    public EstadoOnboardingResponse completar(@ActorAutenticado UserId actor) {
+        var comando = new CompletarOnboardingCommand(actor);
         return EstadoOnboardingResponse.from(completarUseCase.completar(comando));
     }
 }

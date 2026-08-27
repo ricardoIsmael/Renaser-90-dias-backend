@@ -4,6 +4,7 @@ import com.renaser.os.points.application.ports.in.puntaje.AjustarPuntosManualmen
 import com.renaser.os.points.application.ports.in.puntaje.AjustarPuntosManualmenteUseCase.AjustarPuntosManualmenteCommand;
 import com.renaser.os.points.application.ports.in.puntaje.ConsultarPuntajeUseCase;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -11,7 +12,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -29,17 +29,17 @@ public class PuntajeController {
     }
 
     @GetMapping("/{participanteId}")
-    public PuntajeResponse consultar(@RequestHeader("X-Actor-Id") String actorId,
+    public PuntajeResponse consultar(@ActorAutenticado UserId actor,
                                      @PathVariable String participanteId) {
         return PuntajeResponse.from(
-                consultarPuntajeUseCase.consultar(UserId.of(actorId), UserId.of(participanteId)));
+                consultarPuntajeUseCase.consultar(actor, UserId.of(participanteId)));
     }
 
     @PostMapping("/adjustments")
-    public ResponseEntity<AjustePuntosResponse> ajustarManualmente(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<AjustePuntosResponse> ajustarManualmente(@ActorAutenticado UserId actor,
                                                                      @RequestBody @Valid AjustarPuntosManualRequest request) {
         var ajuste = ajustarPuntosManualmenteUseCase.ajustarManualmente(new AjustarPuntosManualmenteCommand(
-                UserId.of(request.participanteId()), request.delta(), request.nota(), UserId.of(actorId)));
+                UserId.of(request.participanteId()), request.delta(), request.nota(), actor));
         return ResponseEntity.status(HttpStatus.CREATED).body(AjustePuntosResponse.from(ajuste));
     }
 }

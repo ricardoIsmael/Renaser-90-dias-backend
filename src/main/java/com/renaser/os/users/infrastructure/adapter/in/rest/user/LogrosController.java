@@ -1,10 +1,10 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.user;
 
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.users.application.ports.in.user.GetLogrosUseCase;
 import com.renaser.os.users.application.ports.in.user.GetLogrosUseCase.GetLogrosQuery;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -12,7 +12,8 @@ import org.springframework.web.bind.annotation.RestController;
  * nuevo en `users` (mismo que el backend viejo), separado de {@link UserController} porque
  * ninguno de sus otros endpoints vive bajo {@code /profile}.
  *
- * <p>X-Actor-Id: ver nota de {@link UserController} — TEMPORAL, no usar en produccion. */
+ * <p>Actor: ver nota de {@link UserController} — sesion primero, header {@code X-Actor-Id}
+ * como respaldo temporal de la migracion. */
 @RestController
 @RequestMapping("/api/v1/profile")
 public class LogrosController {
@@ -24,7 +25,7 @@ public class LogrosController {
     }
 
     @GetMapping("/logros")
-    public LogrosResponse logros(@RequestHeader("X-Actor-Id") String actorId) {
-        return LogrosResponse.from(getLogrosUseCase.getLogros(new GetLogrosQuery(UserId.of(actorId))));
+    public LogrosResponse logros(@ActorAutenticado UserId actor) {
+        return LogrosResponse.from(getLogrosUseCase.getLogros(new GetLogrosQuery(actor)));
     }
 }

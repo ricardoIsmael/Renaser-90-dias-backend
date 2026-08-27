@@ -2,8 +2,8 @@ package com.renaser.os.chat.infrastructure.adapter.in.rest.miembro;
 
 import com.renaser.os.chat.application.ports.in.miembro.ListarDirectorioMiembrosUseCase;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,12 +22,12 @@ public class MiembroController {
     }
 
     @GetMapping
-    public MiembrosPageResponse listar(@RequestHeader("X-Actor-Id") String actorId,
+    public MiembrosPageResponse listar(@ActorAutenticado UserId actorId,
                                         @RequestParam(required = false) String cursor,
                                         @RequestParam(required = false) String q,
                                         @RequestParam(required = false, defaultValue = "30") int limit) {
         UserId cursorId = cursor != null && !cursor.isBlank() ? UserId.of(cursor) : null;
-        var pagina = listarUseCase.listar(UserId.of(actorId), q, cursorId, limit);
+        var pagina = listarUseCase.listar(actorId, q, cursorId, limit);
         return MiembrosPageResponse.from(pagina);
     }
 }

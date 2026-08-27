@@ -4,11 +4,11 @@ import com.renaser.os.habits.application.ports.in.diario.ConsultarBitacoraNoctur
 import com.renaser.os.habits.application.ports.in.diario.EscribirBitacoraNocturnaUseCase;
 import com.renaser.os.habits.application.ports.in.diario.EscribirBitacoraNocturnaUseCase.EscribirBitacoraNocturnaCommand;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -31,14 +31,14 @@ public class JournalTodayController {
     }
 
     @GetMapping
-    public JournalEntryResponse hoy(@RequestHeader("X-Actor-Id") String actorId) {
-        return JournalEntryResponse.from(consultarUseCase.consultarHoy(UserId.of(actorId)));
+    public JournalEntryResponse hoy(@ActorAutenticado UserId actor) {
+        return JournalEntryResponse.from(consultarUseCase.consultarHoy(actor));
     }
 
     @PutMapping
-    public JournalEntryResponse escribir(@RequestHeader("X-Actor-Id") String actorId,
+    public JournalEntryResponse escribir(@ActorAutenticado UserId actor,
                                           @RequestBody @Valid UpsertJournalEntryRequest request) {
-        var entrada = escribirUseCase.escribir(new EscribirBitacoraNocturnaCommand(UserId.of(actorId),
+        var entrada = escribirUseCase.escribir(new EscribirBitacoraNocturnaCommand(actor,
                 request.textContent(), request.audioBucket(), request.audioPath()));
         return JournalEntryResponse.from(entrada);
     }

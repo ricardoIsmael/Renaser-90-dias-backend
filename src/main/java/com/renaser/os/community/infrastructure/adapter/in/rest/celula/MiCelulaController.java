@@ -2,10 +2,10 @@ package com.renaser.os.community.infrastructure.adapter.in.rest.celula;
 
 import com.renaser.os.community.application.ports.in.celula.ConsultarMiCelulaUseCase;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,16 +27,14 @@ public class MiCelulaController {
     }
 
     @GetMapping
-    public ResponseEntity<?> miCelula(@RequestHeader("X-Actor-Id") String actorId) {
-        UserId traineeId = UserId.of(actorId);
+    public ResponseEntity<?> miCelula(@ActorAutenticado UserId traineeId) {
         return consultarUseCase.miCelula(traineeId)
                 .<ResponseEntity<?>>map(mc -> ResponseEntity.ok(MiCelulaResponse.from(mc)))
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("assigned", false)));
     }
 
     @GetMapping("/members")
-    public Map<String, List<CellMemberResponse>> miembros(@RequestHeader("X-Actor-Id") String actorId) {
-        UserId traineeId = UserId.of(actorId);
+    public Map<String, List<CellMemberResponse>> miembros(@ActorAutenticado UserId traineeId) {
         List<CellMemberResponse> miembros = consultarUseCase.misCompaneros(traineeId).stream()
                 .map(p -> CellMemberResponse.from(p, p.id().equals(traineeId)))
                 .toList();

@@ -11,6 +11,7 @@ import com.renaser.os.habits.application.ports.in.horarioadmin.EliminarHorarioHa
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +20,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -47,17 +47,17 @@ public class HorarioHabitoAdminController {
     }
 
     @GetMapping("/{habitId}/schedules")
-    public List<HabitScheduleResponse> listar(@RequestHeader("X-Actor-Id") String actorId,
+    public List<HabitScheduleResponse> listar(@ActorAutenticado UserId actor,
                                                @PathVariable UUID habitId) {
-        return consultarUseCase.listar(UserId.of(actorId), HabitoId.of(habitId)).stream()
+        return consultarUseCase.listar(actor, HabitoId.of(habitId)).stream()
                 .map(HabitScheduleResponse::from).toList();
     }
 
     @PostMapping("/{habitId}/schedules")
-    public ResponseEntity<HabitScheduleResponse> crear(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<HabitScheduleResponse> crear(@ActorAutenticado UserId actor,
                                                          @PathVariable UUID habitId,
                                                          @RequestBody @Valid CreateScheduleRequest request) {
-        var horario = crearUseCase.crear(new CrearHorarioHabitoCommand(UserId.of(actorId), HabitoId.of(habitId),
+        var horario = crearUseCase.crear(new CrearHorarioHabitoCommand(actor, HabitoId.of(habitId),
                 request.startDay(), request.endDay(), request.dayType().toDomain(), request.defaultTriggerTime(),
                 request.defaultLimitTime()));
         return ResponseEntity.status(HttpStatus.CREATED).body(HabitScheduleResponse.from(horario));
@@ -71,11 +71,11 @@ public class HorarioHabitoAdminController {
      * excepcion al mapeo a mano con DTOs tipados del resto de este controller.
      */
     @PostMapping("/schedules/{scheduleId}")
-    public HabitScheduleResponse actualizar(@RequestHeader("X-Actor-Id") String actorId,
+    public HabitScheduleResponse actualizar(@ActorAutenticado UserId actor,
                                              @PathVariable UUID scheduleId, @RequestBody JsonNode body) {
         var request = PartialUpdateScheduleRequest.from(body);
         var dayType = request.dayType() != null ? request.dayType().toDomain() : null;
-        var horario = actualizarUseCase.actualizar(new ActualizarHorarioHabitoCommand(UserId.of(actorId),
+        var horario = actualizarUseCase.actualizar(new ActualizarHorarioHabitoCommand(actor,
                 HorarioHabitoId.of(scheduleId), request.startDay(), request.endDay(), dayType,
                 request.defaultTriggerTime(), request.defaultLimitTime(), request.limpiarEndDay(),
                 request.limpiarHoraDisparo(), request.limpiarHoraLimite()));
@@ -83,8 +83,8 @@ public class HorarioHabitoAdminController {
     }
 
     @DeleteMapping("/schedules/{scheduleId}")
-    public ResponseEntity<Void> eliminar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID scheduleId) {
-        eliminarUseCase.eliminar(new EliminarHorarioHabitoCommand(UserId.of(actorId), HorarioHabitoId.of(scheduleId)));
+    public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actor, @PathVariable UUID scheduleId) {
+        eliminarUseCase.eliminar(new EliminarHorarioHabitoCommand(actor, HorarioHabitoId.of(scheduleId)));
         return ResponseEntity.noContent().build();
     }
 }

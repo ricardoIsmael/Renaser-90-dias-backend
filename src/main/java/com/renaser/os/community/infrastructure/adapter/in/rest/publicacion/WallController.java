@@ -18,6 +18,7 @@ import com.renaser.os.community.application.ports.in.publicacion.SolicitarUrlSub
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,7 +28,6 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -72,80 +72,80 @@ public class WallController {
     }
 
     @GetMapping
-    public WallFeedPageResponse feed(@RequestHeader("X-Actor-Id") String actorId,
+    public WallFeedPageResponse feed(@ActorAutenticado UserId actorId,
                                       @RequestParam(required = false) String cursor,
                                       @RequestParam(required = false) String category) {
         Instant cursorInstant = parseCursor(cursor);
-        return WallFeedPageResponse.from(consultarFeedUseCase.feed(UserId.of(actorId), cursorInstant, category));
+        return WallFeedPageResponse.from(consultarFeedUseCase.feed(actorId, cursorInstant, category));
     }
 
     @PostMapping
-    public ResponseEntity<WallPostResponse> publicar(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<WallPostResponse> publicar(@ActorAutenticado UserId actorId,
                                                        @RequestBody @Valid CreateWallPostRequest request) {
-        var vista = publicarUseCase.publicar(new PublicarCommand(UserId.of(actorId), request.text(),
+        var vista = publicarUseCase.publicar(new PublicarCommand(actorId, request.text(),
                 request.media().stream().map(MediaItemRequest::aArchivoEntrada).toList(), request.category()));
         return ResponseEntity.status(HttpStatus.CREATED).body(WallPostResponse.from(vista));
     }
 
     @PatchMapping("/{id}")
-    public WallPostResponse actualizar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
+    public WallPostResponse actualizar(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                         @RequestBody @Valid UpdateWallPostRequest request) {
-        var vista = editarUseCase.editar(new EditarPublicacionCommand(UserId.of(actorId), PublicacionId.of(id),
+        var vista = editarUseCase.editar(new EditarPublicacionCommand(actorId, PublicacionId.of(id),
                 request.text(), request.media().stream().map(MediaItemRequest::aArchivoEntrada).toList()));
         return WallPostResponse.from(vista);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, String>> ocultar(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<Map<String, String>> ocultar(@ActorAutenticado UserId actorId,
                                                          @PathVariable UUID id) {
-        ocultarUseCase.ocultar(new OcultarPublicacionCommand(UserId.of(actorId), PublicacionId.of(id)));
+        ocultarUseCase.ocultar(new OcultarPublicacionCommand(actorId, PublicacionId.of(id)));
         return ResponseEntity.ok(Map.of("id", id.toString()));
     }
 
     @PostMapping("/{id}/restore")
-    public ResponseEntity<Map<String, String>> restaurar(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<Map<String, String>> restaurar(@ActorAutenticado UserId actorId,
                                                            @PathVariable UUID id) {
-        restaurarUseCase.restaurar(new RestaurarPublicacionCommand(UserId.of(actorId), PublicacionId.of(id)));
+        restaurarUseCase.restaurar(new RestaurarPublicacionCommand(actorId, PublicacionId.of(id)));
         return ResponseEntity.ok(Map.of("id", id.toString()));
     }
 
     @DeleteMapping("/{id}/permanent")
-    public ResponseEntity<Map<String, String>> eliminarPermanente(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<Map<String, String>> eliminarPermanente(@ActorAutenticado UserId actorId,
                                                                     @PathVariable UUID id) {
-        eliminarUseCase.eliminarPermanente(new EliminarPublicacionCommand(UserId.of(actorId), PublicacionId.of(id)));
+        eliminarUseCase.eliminarPermanente(new EliminarPublicacionCommand(actorId, PublicacionId.of(id)));
         return ResponseEntity.ok(Map.of("id", id.toString()));
     }
 
     @GetMapping("/hidden")
-    public WallFeedPageResponse hidden(@RequestHeader("X-Actor-Id") String actorId,
+    public WallFeedPageResponse hidden(@ActorAutenticado UserId actorId,
                                         @RequestParam(required = false) String cursor) {
-        return WallFeedPageResponse.from(consultarFeedUseCase.feedOculto(UserId.of(actorId), parseCursor(cursor)));
+        return WallFeedPageResponse.from(consultarFeedUseCase.feedOculto(actorId, parseCursor(cursor)));
     }
 
     @GetMapping("/mine")
-    public Map<String, Integer> mine(@RequestHeader("X-Actor-Id") String actorId) {
-        return Map.of("count", consultarFeedUseCase.contarMisPublicaciones(UserId.of(actorId)));
+    public Map<String, Integer> mine(@ActorAutenticado UserId actorId) {
+        return Map.of("count", consultarFeedUseCase.contarMisPublicaciones(actorId));
     }
 
     @GetMapping("/latest-author")
-    public Map<String, String> latestAuthor(@RequestHeader("X-Actor-Id") String actorId) {
+    public Map<String, String> latestAuthor(@ActorAutenticado UserId actorId) {
         Map<String, String> body = new HashMap<>();
         body.put("authorName", consultarFeedUseCase.ultimoAutor().orElse(null));
         return body;
     }
 
     @PostMapping("/{id}/react")
-    public WallReactionToggleResponse reaccionar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID id,
+    public WallReactionToggleResponse reaccionar(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                                   @RequestBody @Valid ReactToWallPostRequest request) {
-        var resultado = reaccionarUseCase.reaccionar(new ReaccionarCommand(UserId.of(actorId), PublicacionId.of(id),
+        var resultado = reaccionarUseCase.reaccionar(new ReaccionarCommand(actorId, PublicacionId.of(id),
                 parseTipoReaccion(request.type())));
         return WallReactionToggleResponse.from(resultado);
     }
 
     @PostMapping("/media/upload-url")
-    public UrlSubidaMediaResponse urlDeSubida(@RequestHeader("X-Actor-Id") String actorId,
+    public UrlSubidaMediaResponse urlDeSubida(@ActorAutenticado UserId actorId,
                                                @RequestBody SolicitarUrlSubidaMediaRequest request) {
-        var url = solicitarUrlUseCase.solicitarUrl(new SolicitarUrlSubidaMediaCommand(UserId.of(actorId),
+        var url = solicitarUrlUseCase.solicitarUrl(new SolicitarUrlSubidaMediaCommand(actorId,
                 request.tipoContenido()));
         return UrlSubidaMediaResponse.from(url);
     }

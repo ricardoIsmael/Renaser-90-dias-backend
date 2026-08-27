@@ -4,11 +4,11 @@ import com.renaser.os.habits.application.ports.in.eleccion.ElegirDiaSemanalUseCa
 import com.renaser.os.habits.application.ports.in.eleccion.ElegirDiaSemanalUseCase.ElegirDiaSemanalCommand;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,9 +26,9 @@ public class WeeklyHabitDayController {
     }
 
     @PutMapping("/{habitId}")
-    public WeeklyHabitDayResponse elegir(@RequestHeader("X-Actor-Id") String actorId, @PathVariable UUID habitId,
+    public WeeklyHabitDayResponse elegir(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
                                           @RequestBody @Valid ChooseWeeklyHabitDayRequest request) {
-        var eleccion = elegirUseCase.elegir(new ElegirDiaSemanalCommand(UserId.of(actorId), HabitoId.of(habitId),
+        var eleccion = elegirUseCase.elegir(new ElegirDiaSemanalCommand(actor, HabitoId.of(habitId),
                 request.date()));
         return WeeklyHabitDayResponse.from(eleccion);
     }

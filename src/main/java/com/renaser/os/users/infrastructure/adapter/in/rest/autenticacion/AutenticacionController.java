@@ -32,8 +32,10 @@ import org.springframework.web.bind.annotation.RestController;
  * transporte (SecurityContext/HttpSession) para que estos metodos queden en la forma exacta de
  * CLAUDE.MD §5.4.6: deserializar, invocar UN colaborador, mapear salida.
  *
- * <p>Todavia NO reemplaza a {@code X-Actor-Id} en el resto de la API (fase 4, pendiente) —
- * este controller prueba que el mecanismo de sesion funciona de punta a punta, no migra nada.
+ * <p>Este controller prueba que el mecanismo de sesion funciona de punta a punta. El resto de
+ * la API ya no lee {@code X-Actor-Id} directo: usa {@code @ActorAutenticado}, que resuelve el
+ * actor contra esta misma sesion y solo cae al header como respaldo mientras dure la fase 4
+ * de la migracion (docs/MODULO_AUTH.md §8).
  */
 @RestController
 @RequestMapping("/api/v1/auth")

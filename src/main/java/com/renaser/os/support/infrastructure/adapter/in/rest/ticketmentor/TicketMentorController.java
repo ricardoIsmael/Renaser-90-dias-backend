@@ -1,6 +1,7 @@
 package com.renaser.os.support.infrastructure.adapter.in.rest.ticketmentor;
 
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.support.application.ports.in.ticketmentor.AbrirTicketMentorUseCase;
 import com.renaser.os.support.application.ports.in.ticketmentor.AbrirTicketMentorUseCase.AbrirTicketMentorCommand;
 import com.renaser.os.support.application.ports.in.ticketmentor.BuscarBibliotecaUseCase;
@@ -19,7 +20,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -48,39 +48,39 @@ public class TicketMentorController {
     }
 
     @PostMapping
-    public ResponseEntity<TicketMentorResponse> abrir(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<TicketMentorResponse> abrir(@ActorAutenticado UserId actor,
                                                         @RequestBody @Valid AbrirTicketMentorRequest request) {
-        TicketMentor ticket = abrirUseCase.abrir(new AbrirTicketMentorCommand(UserId.of(actorId),
+        TicketMentor ticket = abrirUseCase.abrir(new AbrirTicketMentorCommand(actor,
                 request.blockDescription(), request.attemptedSolutions(), request.smartGoalImpact()));
         return ResponseEntity.status(HttpStatus.CREATED).body(TicketMentorResponse.from(ticket));
     }
 
     @GetMapping
-    public TicketsMentorPageResponse propios(@RequestHeader("X-Actor-Id") String actorId,
+    public TicketsMentorPageResponse propios(@ActorAutenticado UserId actor,
                                               @RequestParam(required = false) String cursor) {
-        return TicketsMentorPageResponse.from(listarUseCase.propios(UserId.of(actorId), parseCursor(cursor)));
+        return TicketsMentorPageResponse.from(listarUseCase.propios(actor, parseCursor(cursor)));
     }
 
     @PostMapping("/{id}/answer")
-    public TicketMentorResponse responder(@PathVariable UUID id, @RequestHeader("X-Actor-Id") String actorId,
+    public TicketMentorResponse responder(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                            @RequestBody @Valid ResponderTicketMentorRequest request) {
         TicketMentor ticket = responderUseCase.responder(new ResponderTicketMentorCommand(TicketMentorId.of(id),
-                UserId.of(actorId), request.mentorAnswer()));
+                actor, request.mentorAnswer()));
         return TicketMentorResponse.from(ticket);
     }
 
     @PostMapping("/{id}/save-to-library")
     public TicketMentorResponse guardarEnBiblioteca(@PathVariable UUID id,
-                                                      @RequestHeader("X-Actor-Id") String actorId) {
+                                                      @ActorAutenticado UserId actor) {
         TicketMentor ticket = guardarUseCase.guardar(new GuardarEnBibliotecaCommand(TicketMentorId.of(id),
-                UserId.of(actorId)));
+                actor));
         return TicketMentorResponse.from(ticket);
     }
 
     @GetMapping("/library")
-    public BibliotecaSearchResponse buscarEnBiblioteca(@RequestHeader("X-Actor-Id") String actorId,
+    public BibliotecaSearchResponse buscarEnBiblioteca(@ActorAutenticado UserId actor,
                                                          @RequestParam String q) {
-        return new BibliotecaSearchResponse(buscarUseCase.buscar(new BuscarBibliotecaCommand(UserId.of(actorId), q)));
+        return new BibliotecaSearchResponse(buscarUseCase.buscar(new BuscarBibliotecaCommand(actor, q)));
     }
 
     /** cursor llega como ISO-8601 (mismo formato que el TicketsPageQuery viejo). */

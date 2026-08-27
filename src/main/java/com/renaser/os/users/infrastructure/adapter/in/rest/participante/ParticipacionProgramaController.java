@@ -1,6 +1,7 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.participante;
 
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase.ActivateSelfTrackingCommand;
 import com.renaser.os.users.application.ports.in.participante.AssignMentorToTraineeUseCase;
@@ -20,7 +21,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -37,7 +37,8 @@ import java.util.UUID;
  * DENTRO de {@code ParticipacionProgramaService} — el controller no decide nada de
  * negocio (CLAUDE.MD §5.4.6).
  *
- * <p>X-Actor-Id: TEMPORAL, ver nota de AccountRequestController — no usar en produccion.
+ * <p>Actor: resuelto desde la sesion, con respaldo temporal por el header {@code X-Actor-Id}
+ * — ver nota de AccountRequestController.
  */
 @RestController
 public class ParticipacionProgramaController {
@@ -61,20 +62,20 @@ public class ParticipacionProgramaController {
     }
 
     @GetMapping("/api/v1/mentor/activate-tracking")
-    public SelfTrackingStatusResponse status(@RequestHeader("X-Actor-Id") String actorId) {
-        boolean active = consultarUseCase.estaActivo(new ConsultarSelfTrackingQuery(UserId.of(actorId)));
+    public SelfTrackingStatusResponse status(@ActorAutenticado UserId actor) {
+        boolean active = consultarUseCase.estaActivo(new ConsultarSelfTrackingQuery(actor));
         return new SelfTrackingStatusResponse(active);
     }
 
     @PostMapping("/api/v1/mentor/activate-tracking")
-    public ActivateSelfTrackingResponse activate(@RequestHeader("X-Actor-Id") String actorId) {
-        var participacion = activateUseCase.activate(new ActivateSelfTrackingCommand(UserId.of(actorId)));
+    public ActivateSelfTrackingResponse activate(@ActorAutenticado UserId actor) {
+        var participacion = activateUseCase.activate(new ActivateSelfTrackingCommand(actor));
         return ActivateSelfTrackingResponse.from(participacion);
     }
 
     @DeleteMapping("/api/v1/mentor/activate-tracking")
-    public DeactivateSelfTrackingResponse deactivate(@RequestHeader("X-Actor-Id") String actorId) {
-        boolean deactivated = deactivateUseCase.deactivate(new DeactivateSelfTrackingCommand(UserId.of(actorId)));
+    public DeactivateSelfTrackingResponse deactivate(@ActorAutenticado UserId actor) {
+        boolean deactivated = deactivateUseCase.deactivate(new DeactivateSelfTrackingCommand(actor));
         return new DeactivateSelfTrackingResponse(deactivated);
     }
 
@@ -82,9 +83,9 @@ public class ParticipacionProgramaController {
      * salvo administrativo" (CLAUDE.MD) se extiende a la reasignacion de mentor. */
     @PutMapping("/api/v1/participants/{traineeId}/mentor")
     public ResponseEntity<Void> assignMentor(@PathVariable UUID traineeId,
-                                              @RequestHeader("X-Actor-Id") String actorId,
+                                              @ActorAutenticado UserId actor,
                                               @RequestBody @Valid AssignMentorRequest request) {
-        assignMentorUseCase.assignMentor(new AssignMentorCommand(UserId.of(actorId), UserId.of(traineeId),
+        assignMentorUseCase.assignMentor(new AssignMentorCommand(actor, UserId.of(traineeId),
                 UserId.of(request.mentorId())));
         return ResponseEntity.noContent().build();
     }
@@ -96,10 +97,10 @@ public class ParticipacionProgramaController {
      * `usuarios` — mismo criterio que el resto de este controller.
      */
     @PatchMapping("/api/v1/users/me/trainee-profile")
-    public TraineeProfileResponse updateTraineeProfile(@RequestHeader("X-Actor-Id") String actorId,
+    public TraineeProfileResponse updateTraineeProfile(@ActorAutenticado UserId actor,
                                                          @RequestBody UpdateTraineeProfileRequest request) {
         var participacion = updateTraineeProfileUseCase.updateMyTraineeProfile(
-                new UpdateTraineeProfileCommand(UserId.of(actorId), request.personalChallengeName()));
+                new UpdateTraineeProfileCommand(actor, request.personalChallengeName()));
         return TraineeProfileResponse.from(participacion);
     }
 }

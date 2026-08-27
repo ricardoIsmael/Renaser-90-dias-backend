@@ -4,16 +4,17 @@ import com.renaser.os.habits.application.ports.in.espiritu.ConsultarEstadoEspiri
 import com.renaser.os.habits.application.ports.in.espiritu.EntregarResumenEspirituUseCase;
 import com.renaser.os.habits.application.ports.in.espiritu.EntregarResumenEspirituUseCase.EntregarResumenEspirituCommand;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Actor por header `X-Actor-Id` (D-29, temporal). Rutas y forma del contrato tomadas
+ * Actor resuelto desde la sesion, con respaldo por el header temporal `X-Actor-Id`
+ * (D-29). Rutas y forma del contrato tomadas
  * literal del backend viejo ({@code /api/v1/spirit-audio/status}, {@code .../submit}) —
  * D-36. Autoservicio, exclusivo de TRAINEE (mismo criterio que `radar`, RD-3).
  */
@@ -31,14 +32,14 @@ public class EspirituController {
     }
 
     @GetMapping("/status")
-    public SpiritStatusResponse status(@RequestHeader("X-Actor-Id") String actorId) {
-        return SpiritStatusResponse.from(consultarUseCase.consultar(UserId.of(actorId)));
+    public SpiritStatusResponse status(@ActorAutenticado UserId actor) {
+        return SpiritStatusResponse.from(consultarUseCase.consultar(actor));
     }
 
     @PostMapping("/submit")
-    public SubmitSpiritSummaryResponse submit(@RequestHeader("X-Actor-Id") String actorId,
+    public SubmitSpiritSummaryResponse submit(@ActorAutenticado UserId actor,
                                                @RequestBody @Valid SubmitSpiritSummaryRequest request) {
-        var resultado = entregarUseCase.entregar(new EntregarResumenEspirituCommand(UserId.of(actorId), request.day(),
+        var resultado = entregarUseCase.entregar(new EntregarResumenEspirituCommand(actor, request.day(),
                 request.summaryText()));
         return SubmitSpiritSummaryResponse.from(resultado);
     }

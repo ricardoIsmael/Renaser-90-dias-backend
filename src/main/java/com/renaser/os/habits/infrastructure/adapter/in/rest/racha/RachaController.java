@@ -12,11 +12,11 @@ import com.renaser.os.habits.application.ports.in.santuario.SolicitarUrlAdjuntoR
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -46,36 +46,36 @@ public class RachaController {
     }
 
     @PostMapping("/{id}/phone-free/start")
-    public RachaSinCelularResponse iniciar(@RequestHeader("X-Actor-Id") String actorId, @PathVariable String id,
+    public RachaSinCelularResponse iniciar(@ActorAutenticado UserId actor, @PathVariable String id,
                                             @RequestBody @Valid IniciarRachaRequest request) {
-        var racha = iniciarUseCase.iniciar(new IniciarRachaCommand(UserId.of(actorId),
+        var racha = iniciarUseCase.iniciar(new IniciarRachaCommand(actor,
                 RegistroHabitoId.of(UUID.fromString(id)), request.horasObjetivo()));
         return RachaSinCelularResponse.from(racha, clock.now(), EXTENSION_DEFAULT_HORAS);
     }
 
     /** D-H13 (hueco #13): URL prefirmada para la evidencia con la que se cierra la racha. */
     @PostMapping("/phone-free/evidence/upload-url")
-    public UrlAdjuntoRachaResponse urlDeSubida(@RequestHeader("X-Actor-Id") String actorId,
+    public UrlAdjuntoRachaResponse urlDeSubida(@ActorAutenticado UserId actor,
                                                 @Valid @RequestBody SolicitarUrlAdjuntoRachaRequest request) {
         var url = urlAdjuntoUseCase.solicitarUrl(
-                new SolicitarUrlAdjuntoRachaCommand(UserId.of(actorId), request.tipoContenido()));
+                new SolicitarUrlAdjuntoRachaCommand(actor, request.tipoContenido()));
         return UrlAdjuntoRachaResponse.from(url);
     }
 
     @PostMapping("/phone-free/complete")
-    public RachaSinCelularResponse completar(@RequestHeader("X-Actor-Id") String actorId,
+    public RachaSinCelularResponse completar(@ActorAutenticado UserId actor,
                                               @RequestBody @Valid CompletarRachaRequest request) {
-        var racha = cerrarUseCase.cerrar(new CerrarRachaCommand(UserId.of(actorId),
+        var racha = cerrarUseCase.cerrar(new CerrarRachaCommand(actor,
                 TipoEvidencia.valueOf(request.tipo()), request.bucket(), request.rutaStorage(),
                 request.contenidoTexto(), request.timestampExif()));
         return RachaSinCelularResponse.from(racha, clock.now(), EXTENSION_DEFAULT_HORAS);
     }
 
     @PostMapping("/phone-free/break")
-    public RachaSinCelularResponse romper(@RequestHeader("X-Actor-Id") String actorId,
+    public RachaSinCelularResponse romper(@ActorAutenticado UserId actor,
                                            @RequestBody(required = false) RomperRachaRequest request) {
         String motivo = request != null ? request.motivo() : null;
-        var racha = romperUseCase.romper(new RomperRachaCommand(UserId.of(actorId), motivo));
+        var racha = romperUseCase.romper(new RomperRachaCommand(actor, motivo));
         return RachaSinCelularResponse.from(racha, clock.now(), EXTENSION_DEFAULT_HORAS);
     }
 }

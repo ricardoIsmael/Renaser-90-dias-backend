@@ -3,10 +3,10 @@ package com.renaser.os.onboarding.infrastructure.adapter.in.rest.metamaestra;
 import com.renaser.os.onboarding.application.ports.in.metamaestra.ValidarMetaMaestraUseCase;
 import com.renaser.os.onboarding.application.ports.in.metamaestra.ValidarMetaMaestraUseCase.ValidarMetaMaestraCommand;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -24,9 +24,9 @@ public class MetaMaestraController {
     }
 
     @PostMapping("/validation")
-    public ValidacionMetaMaestraResponse validar(@RequestHeader("X-Actor-Id") String actorId,
+    public ValidacionMetaMaestraResponse validar(@ActorAutenticado UserId actor,
                                                    @Valid @RequestBody ValidarMetaMaestraRequest request) {
-        var comando = new ValidarMetaMaestraCommand(UserId.of(actorId), request.text());
+        var comando = new ValidarMetaMaestraCommand(actor, request.text());
         return ValidacionMetaMaestraResponse.from(validarUseCase.validar(comando));
     }
 }

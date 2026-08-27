@@ -7,6 +7,7 @@ import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,7 +15,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,10 +35,10 @@ public class MensajeController {
     }
 
     @PostMapping
-    public ResponseEntity<MensajeResponse> enviar(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<MensajeResponse> enviar(@ActorAutenticado UserId actorId,
                                                     @PathVariable UUID conversationId,
                                                     @RequestBody @Valid EnviarMensajeRequest request) {
-        var mensaje = enviarUseCase.enviar(new EnviarMensajeCommand(UserId.of(actorId),
+        var mensaje = enviarUseCase.enviar(new EnviarMensajeCommand(actorId,
                 ConversacionId.of(conversationId), parseTipoMensaje(request.type()), request.text(),
                 request.mediaBucket(), request.mediaPath(), request.mediaMime(), request.mediaBytes(),
                 request.mediaDurationSeconds(),
@@ -47,12 +47,12 @@ public class MensajeController {
     }
 
     @GetMapping
-    public MensajesPageResponse listar(@RequestHeader("X-Actor-Id") String actorId,
+    public MensajesPageResponse listar(@ActorAutenticado UserId actorId,
                                         @PathVariable UUID conversationId,
                                         @RequestParam(required = false) String cursor,
                                         @RequestParam(required = false, defaultValue = "30") int limit) {
         Instant cursorInstant = cursor != null ? Instant.parse(cursor) : null;
-        var pagina = listarUseCase.listar(UserId.of(actorId), ConversacionId.of(conversationId), cursorInstant,
+        var pagina = listarUseCase.listar(actorId, ConversacionId.of(conversationId), cursorInstant,
                 limit);
         return MensajesPageResponse.from(pagina);
     }

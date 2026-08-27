@@ -7,9 +7,9 @@ import com.renaser.os.academy.application.ports.in.curso.ConsultarMotivoBloqueoC
 import com.renaser.os.academy.application.ports.in.curso.ConsultarSeccionesCursoUseCase;
 import com.renaser.os.academy.domain.model.curso.CursoId;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -17,7 +17,9 @@ import java.util.List;
 
 /**
  * Cursos — lado alumno. Espejo de `/api/v1/cursos/**` del repo viejo (`src/app/api/v1/cursos/**`).
- * Sin filtro JWT todavia: el actor llega por `X-Actor-Id` (bloqueante del usuario, ver CLAUDE.MD).
+ * El actor se resuelve con {@code @ActorAutenticado}: primero desde la sesion y, si no hay,
+ * desde el header `X-Actor-Id` (respaldo que se mantiene mientras dura la migracion, ver
+ * docs/MODULO_AUTH.md §8).
  */
 @RestController
 @RequestMapping("/api/v1/cursos")
@@ -41,8 +43,8 @@ public class CursoController {
     }
 
     @GetMapping
-    public List<MiCursoResponse> misCursos(@RequestHeader("X-Actor-Id") String actorId) {
-        return misCursosUseCase.misCursos(UserId.of(actorId)).stream().map(MiCursoResponse::from).toList();
+    public List<MiCursoResponse> misCursos(@ActorAutenticado UserId actorId) {
+        return misCursosUseCase.misCursos(actorId).stream().map(MiCursoResponse::from).toList();
     }
 
     /**
@@ -53,28 +55,28 @@ public class CursoController {
      * curso.
      */
     @GetMapping("/bloqueados")
-    public List<CursoBloqueadoResponse> bloqueados(@RequestHeader("X-Actor-Id") String actorId) {
-        return cursosBloqueadosUseCase.cursosBloqueados(UserId.of(actorId)).stream()
+    public List<CursoBloqueadoResponse> bloqueados(@ActorAutenticado UserId actorId) {
+        return cursosBloqueadosUseCase.cursosBloqueados(actorId).stream()
                 .map(CursoBloqueadoResponse::from)
                 .toList();
     }
 
     @GetMapping("/{id}")
-    public CursoDetalleResponse detalle(@RequestHeader("X-Actor-Id") String actorId, @PathVariable("id") String cursoId) {
-        return CursoDetalleResponse.from(detalleUseCase.detalle(UserId.of(actorId), CursoId.of(cursoId)));
+    public CursoDetalleResponse detalle(@ActorAutenticado UserId actorId, @PathVariable("id") String cursoId) {
+        return CursoDetalleResponse.from(detalleUseCase.detalle(actorId, CursoId.of(cursoId)));
     }
 
     @GetMapping("/{id}/secciones")
-    public List<SeccionConLeccionesResponse> secciones(@RequestHeader("X-Actor-Id") String actorId,
+    public List<SeccionConLeccionesResponse> secciones(@ActorAutenticado UserId actorId,
                                                          @PathVariable("id") String cursoId) {
-        return seccionesUseCase.secciones(UserId.of(actorId), CursoId.of(cursoId)).stream()
+        return seccionesUseCase.secciones(actorId, CursoId.of(cursoId)).stream()
                 .map(SeccionConLeccionesResponse::from)
                 .toList();
     }
 
     @GetMapping("/{id}/preview")
-    public MotivoBloqueoResponse preview(@RequestHeader("X-Actor-Id") String actorId,
+    public MotivoBloqueoResponse preview(@ActorAutenticado UserId actorId,
                                           @PathVariable("id") String cursoId) {
-        return MotivoBloqueoResponse.from(motivoBloqueoUseCase.motivo(UserId.of(actorId), CursoId.of(cursoId)));
+        return MotivoBloqueoResponse.from(motivoBloqueoUseCase.motivo(actorId, CursoId.of(cursoId)));
     }
 }

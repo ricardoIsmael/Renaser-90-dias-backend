@@ -7,11 +7,11 @@ import com.renaser.os.phasecontracts.application.ports.in.contrato.FirmarContrat
 import com.renaser.os.phasecontracts.application.ports.in.contrato.ObtenerUrlFirmaContratoUseCase;
 import com.renaser.os.phasecontracts.application.ports.in.contrato.ObtenerUrlFirmaContratoUseCase.ObtenerUrlFirmaContratoCommand;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -36,26 +36,26 @@ public class ContratoController {
     }
 
     @GetMapping
-    public List<ContratoFaseResponse> listar(@RequestHeader("X-Actor-Id") String actorId) {
-        return consultarUseCase.consultarDeParticipante(UserId.of(actorId)).stream()
+    public List<ContratoFaseResponse> listar(@ActorAutenticado UserId actor) {
+        return consultarUseCase.consultarDeParticipante(actor).stream()
                 .map(ContratoFaseResponse::deListado)
                 .toList();
     }
 
     @GetMapping("/pending")
-    public ContratoPendienteResponse pendiente(@RequestHeader("X-Actor-Id") String actorId) {
-        return ContratoPendienteResponse.from(pendientesUseCase.consultarPendiente(UserId.of(actorId)));
+    public ContratoPendienteResponse pendiente(@ActorAutenticado UserId actor) {
+        return ContratoPendienteResponse.from(pendientesUseCase.consultarPendiente(actor));
     }
 
     @PostMapping("/upload-url")
-    public ResponseEntity<UrlFirmaResponse> urlDeSubida(@RequestHeader("X-Actor-Id") String actorId) {
-        var url = urlFirmaUseCase.obtenerUrlSubida(new ObtenerUrlFirmaContratoCommand(UserId.of(actorId)));
+    public ResponseEntity<UrlFirmaResponse> urlDeSubida(@ActorAutenticado UserId actor) {
+        var url = urlFirmaUseCase.obtenerUrlSubida(new ObtenerUrlFirmaContratoCommand(actor));
         return ResponseEntity.ok(UrlFirmaResponse.from(url));
     }
 
     @PostMapping
-    public ResponseEntity<ContratoFaseResponse> firmar(@RequestHeader("X-Actor-Id") String actorId) {
-        var contrato = firmarUseCase.firmar(new FirmarContratoCommand(UserId.of(actorId)));
+    public ResponseEntity<ContratoFaseResponse> firmar(@ActorAutenticado UserId actor) {
+        var contrato = firmarUseCase.firmar(new FirmarContratoCommand(actor));
         return ResponseEntity.status(HttpStatus.CREATED).body(ContratoFaseResponse.deFirma(contrato));
     }
 }

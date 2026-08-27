@@ -7,12 +7,12 @@ import com.renaser.os.academy.application.ports.in.leccion.DescompletarLeccionUs
 import com.renaser.os.academy.domain.model.curso.LeccionId;
 import com.renaser.os.academy.infrastructure.adapter.in.rest.curso.MotivoBloqueoResponse;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,15 +38,15 @@ public class LeccionController {
     }
 
     @GetMapping("/{id}")
-    public LeccionDetalleResponse leccion(@RequestHeader("X-Actor-Id") String actorId,
+    public LeccionDetalleResponse leccion(@ActorAutenticado UserId actorId,
                                            @PathVariable("id") String leccionId) {
-        return LeccionDetalleResponse.from(leccionUseCase.leccion(UserId.of(actorId), LeccionId.of(leccionId)));
+        return LeccionDetalleResponse.from(leccionUseCase.leccion(actorId, LeccionId.of(leccionId)));
     }
 
     @GetMapping("/{id}/preview")
-    public MotivoBloqueoResponse preview(@RequestHeader("X-Actor-Id") String actorId,
+    public MotivoBloqueoResponse preview(@ActorAutenticado UserId actorId,
                                           @PathVariable("id") String leccionId) {
-        return MotivoBloqueoResponse.from(motivoBloqueoUseCase.motivo(UserId.of(actorId), LeccionId.of(leccionId)));
+        return MotivoBloqueoResponse.from(motivoBloqueoUseCase.motivo(actorId, LeccionId.of(leccionId)));
     }
 
     /**
@@ -55,9 +55,9 @@ public class LeccionController {
      * cambio de release coordinado, ver `docs/MODULO_ACADEMY.md` §6.
      */
     @PostMapping("/{id}/complete")
-    public CompletarLeccionResponse completar(@RequestHeader("X-Actor-Id") String actorId,
+    public CompletarLeccionResponse completar(@ActorAutenticado UserId actorId,
                                                @PathVariable("id") String leccionId) {
-        return CompletarLeccionResponse.from(completarUseCase.completar(UserId.of(actorId), LeccionId.of(leccionId)));
+        return CompletarLeccionResponse.from(completarUseCase.completar(actorId, LeccionId.of(leccionId)));
     }
 
     /**
@@ -67,8 +67,8 @@ public class LeccionController {
      */
     @DeleteMapping("/{id}/complete")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void descompletar(@RequestHeader("X-Actor-Id") String actorId,
+    public void descompletar(@ActorAutenticado UserId actorId,
                               @PathVariable("id") String leccionId) {
-        descompletarUseCase.descompletar(UserId.of(actorId), LeccionId.of(leccionId));
+        descompletarUseCase.descompletar(actorId, LeccionId.of(leccionId));
     }
 }

@@ -12,6 +12,7 @@ import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.infrastructure.adapter.in.rest.miembro.MiembrosPageResponse;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,7 +21,6 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -56,32 +56,32 @@ public class ConversacionController {
 
     @PostMapping("/direct")
     public ResponseEntity<ConversacionResponse> obtenerOCrearDirecta(
-            @RequestHeader("X-Actor-Id") String actorId,
+            @ActorAutenticado UserId actorId,
             @RequestBody @Valid CrearConversacionDirectaRequest request) {
         var conversacion = crearDirectaUseCase.obtenerOCrear(new CrearConversacionDirectaCommand(
-                UserId.of(actorId), UserId.of(request.otherUserId())));
+                actorId, UserId.of(request.otherUserId())));
         return ResponseEntity.status(HttpStatus.CREATED).body(ConversacionResponse.from(conversacion));
     }
 
     @GetMapping
-    public List<ConversacionResumenResponse> listar(@RequestHeader("X-Actor-Id") String actorId) {
-        return listarUseCase.listar(UserId.of(actorId)).stream().map(ConversacionResumenResponse::from).toList();
+    public List<ConversacionResumenResponse> listar(@ActorAutenticado UserId actorId) {
+        return listarUseCase.listar(actorId).stream().map(ConversacionResumenResponse::from).toList();
     }
 
     @PostMapping("/{id}/read")
-    public ResponseEntity<Map<String, String>> marcarLeido(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<Map<String, String>> marcarLeido(@ActorAutenticado UserId actorId,
                                                              @PathVariable UUID id) {
-        marcarLeidoUseCase.marcarLeido(new MarcarLeidoCommand(UserId.of(actorId), ConversacionId.of(id)));
+        marcarLeidoUseCase.marcarLeido(new MarcarLeidoCommand(actorId, ConversacionId.of(id)));
         return ResponseEntity.ok(Map.of("id", id.toString()));
     }
 
     /** Ficha del grupo GLOBAL (#28): todos sus miembros, los cinco roles. */
     @GetMapping("/global/members")
-    public MiembrosPageResponse listarMiembrosGlobal(@RequestHeader("X-Actor-Id") String actorId,
+    public MiembrosPageResponse listarMiembrosGlobal(@ActorAutenticado UserId actorId,
                                                        @RequestParam(required = false) String cursor,
                                                        @RequestParam(required = false, defaultValue = "30") int limit) {
         UserId cursorId = cursor != null && !cursor.isBlank() ? UserId.of(cursor) : null;
-        var pagina = listarMiembrosGlobalUseCase.listar(UserId.of(actorId), cursorId, limit);
+        var pagina = listarMiembrosGlobalUseCase.listar(actorId, cursorId, limit);
         return MiembrosPageResponse.from(pagina);
     }
 
@@ -89,10 +89,10 @@ public class ConversacionController {
      * con 403 a cualquier otro rol. */
     @PatchMapping("/global/name")
     public ResponseEntity<Map<String, String>> renombrarGlobal(
-            @RequestHeader("X-Actor-Id") String actorId,
+            @ActorAutenticado UserId actorId,
             @RequestBody @Valid RenombrarConversacionGlobalRequest request) {
         Conversacion global = renombrarConversacionGlobalUseCase.renombrar(
-                new RenombrarConversacionGlobalCommand(UserId.of(actorId), request.name()));
+                new RenombrarConversacionGlobalCommand(actorId, request.name()));
         return ResponseEntity.ok(Map.of("id", global.id().toString(), "name", global.nombre()));
     }
 }

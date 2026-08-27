@@ -3,8 +3,8 @@ package com.renaser.os.onboarding.infrastructure.adapter.in.rest.cuestionario;
 import com.renaser.os.onboarding.application.ports.in.cuestionario.ObtenerCuestionarioUseCase;
 import com.renaser.os.onboarding.application.ports.in.cuestionario.ObtenerCuestionarioUseCase.ObtenerCuestionarioQuery;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,9 +20,9 @@ public class CuestionarioController {
     }
 
     @GetMapping("/questionnaire")
-    public CuestionarioResponse obtener(@RequestHeader("X-Actor-Id") String actorId,
+    public CuestionarioResponse obtener(@ActorAutenticado UserId actor,
                                          @RequestParam("flow") String flow) {
-        var query = new ObtenerCuestionarioQuery(UserId.of(actorId), flow);
+        var query = new ObtenerCuestionarioQuery(actor, flow);
         return CuestionarioResponse.from(obtenerCuestionarioUseCase.obtener(query));
     }
 }

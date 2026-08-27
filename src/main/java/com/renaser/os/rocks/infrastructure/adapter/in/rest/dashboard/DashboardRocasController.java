@@ -2,8 +2,8 @@ package com.renaser.os.rocks.infrastructure.adapter.in.rest.dashboard;
 
 import com.renaser.os.rocks.application.ports.in.dashboard.ConsultarDashboardRocasUseCase;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -19,7 +19,7 @@ public class DashboardRocasController {
     }
 
     @GetMapping
-    public DashboardRocasResponse dashboard(@RequestHeader("X-Actor-Id") String actorId) {
-        return DashboardRocasResponse.from(dashboardUseCase.dashboard(UserId.of(actorId)));
+    public DashboardRocasResponse dashboard(@ActorAutenticado UserId actor) {
+        return DashboardRocasResponse.from(dashboardUseCase.dashboard(actor));
     }
 }

@@ -11,6 +11,7 @@ import com.renaser.os.habits.application.ports.in.guiaadmin.SolicitarUrlAdjuntoG
 import com.renaser.os.habits.domain.model.guia.AdjuntoGuiaId;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +19,6 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -51,28 +51,28 @@ public class GuiaAdjuntoAdminController {
     }
 
     @PostMapping("/{habitId}/guide-attachments")
-    public ResponseEntity<HabitGuideAttachmentResponse> crear(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<HabitGuideAttachmentResponse> crear(@ActorAutenticado UserId actor,
                                                                 @PathVariable UUID habitId,
                                                                 @RequestBody @Valid CreateGuideAttachmentRequest request) {
-        var adjunto = crearUseCase.crear(new CrearAdjuntoGuiaEnlaceCommand(UserId.of(actorId), HabitoId.of(habitId),
+        var adjunto = crearUseCase.crear(new CrearAdjuntoGuiaEnlaceCommand(actor, HabitoId.of(habitId),
                 request.startDay(), request.section().toDomain(), request.url(), request.title()));
         return ResponseEntity.status(HttpStatus.CREATED).body(HabitGuideAttachmentResponse.from(adjunto));
     }
 
     @PostMapping("/{habitId}/guide-attachments/upload-url")
-    public UrlAdjuntoGuiaResponse urlDeSubida(@RequestHeader("X-Actor-Id") String actorId,
+    public UrlAdjuntoGuiaResponse urlDeSubida(@ActorAutenticado UserId actor,
                                                @PathVariable UUID habitId,
                                                @RequestBody @Valid SolicitarUrlAdjuntoGuiaRequest request) {
-        var url = urlAdjuntoUseCase.solicitarUrl(new SolicitarUrlAdjuntoGuiaCommand(UserId.of(actorId),
+        var url = urlAdjuntoUseCase.solicitarUrl(new SolicitarUrlAdjuntoGuiaCommand(actor,
                 HabitoId.of(habitId), request.tipoContenido()));
         return UrlAdjuntoGuiaResponse.from(url);
     }
 
     @PostMapping("/{habitId}/guide-attachments/confirm")
-    public ResponseEntity<HabitGuideAttachmentResponse> confirmar(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<HabitGuideAttachmentResponse> confirmar(@ActorAutenticado UserId actor,
                                                                     @PathVariable UUID habitId,
                                                                     @RequestBody @Valid ConfirmarAdjuntoGuiaArchivoRequest request) {
-        var adjunto = confirmarUseCase.confirmar(new ConfirmarAdjuntoGuiaArchivoCommand(UserId.of(actorId),
+        var adjunto = confirmarUseCase.confirmar(new ConfirmarAdjuntoGuiaArchivoCommand(actor,
                 HabitoId.of(habitId), request.startDay(), request.section().toDomain(),
                 request.mediaType().toDomain(), request.bucket(), request.ruta(), request.mimeType(),
                 request.sizeBytes(), request.originalName(), request.title()));
@@ -80,9 +80,9 @@ public class GuiaAdjuntoAdminController {
     }
 
     @DeleteMapping("/guide-attachments/{attachmentId}")
-    public ResponseEntity<Void> eliminar(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actor,
                                           @PathVariable UUID attachmentId) {
-        eliminarUseCase.eliminar(new EliminarAdjuntoGuiaCommand(UserId.of(actorId), AdjuntoGuiaId.of(attachmentId)));
+        eliminarUseCase.eliminar(new EliminarAdjuntoGuiaCommand(actor, AdjuntoGuiaId.of(attachmentId)));
         return ResponseEntity.noContent().build();
     }
 }

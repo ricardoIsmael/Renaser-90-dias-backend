@@ -1,9 +1,9 @@
 package com.renaser.os.support.infrastructure.adapter.in.rest.ticketmentor;
 
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.support.application.ports.in.ticketmentor.ListarTicketsMentorUseCase;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,9 +21,9 @@ public class TicketMentorAdminController {
     }
 
     @GetMapping
-    public TicketsMentorPageResponse todos(@RequestHeader("X-Actor-Id") String actorId,
+    public TicketsMentorPageResponse todos(@ActorAutenticado UserId actor,
                                             @RequestParam(required = false) String cursor) {
-        return TicketsMentorPageResponse.from(listarUseCase.todos(UserId.of(actorId), parseCursor(cursor)));
+        return TicketsMentorPageResponse.from(listarUseCase.todos(actor, parseCursor(cursor)));
     }
 
     /** cursor llega como ISO-8601 (mismo formato que el TicketsPageQuery viejo). */

@@ -6,13 +6,13 @@ import com.renaser.os.rocks.application.ports.in.verdugo.RegistrarEventoVerdugoU
 import com.renaser.os.rocks.domain.model.verdugo.DestinoVerdugo;
 import com.renaser.os.rocks.domain.model.verdugo.ResultadoVerdugo;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -33,14 +33,14 @@ public class VerdugoController {
     }
 
     @GetMapping
-    public List<EventoVerdugoResponse> listar(@RequestHeader("X-Actor-Id") String actorId) {
-        return consultarUseCase.misEventos(UserId.of(actorId)).stream().map(EventoVerdugoResponse::from).toList();
+    public List<EventoVerdugoResponse> listar(@ActorAutenticado UserId actor) {
+        return consultarUseCase.misEventos(actor).stream().map(EventoVerdugoResponse::from).toList();
     }
 
     @PostMapping
-    public ResponseEntity<EventoVerdugoResponse> registrar(@RequestHeader("X-Actor-Id") String actorId,
+    public ResponseEntity<EventoVerdugoResponse> registrar(@ActorAutenticado UserId actor,
                                                              @Valid @RequestBody RegistrarEventoVerdugoRequest request) {
-        var evento = registrarUseCase.registrar(new RegistrarEventoVerdugoCommand(UserId.of(actorId),
+        var evento = registrarUseCase.registrar(new RegistrarEventoVerdugoCommand(actor,
                 DestinoVerdugo.valueOf(request.destinoTipo()), request.destinoId(), request.disparadoEn(),
                 ResultadoVerdugo.valueOf(request.resultado())));
         return ResponseEntity.status(HttpStatus.CREATED).body(EventoVerdugoResponse.from(evento));
