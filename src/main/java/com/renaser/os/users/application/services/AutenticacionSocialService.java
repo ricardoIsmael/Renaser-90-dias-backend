@@ -19,7 +19,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Login social (docs/MODULO_AUTH.md §6). Compone tres colaboradores: el adaptador del proveedor
@@ -78,8 +77,7 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
         String phone = requirePhoneParaAlta(command.phone());
         String fullName = nombreOFallback(identidad);
         AccountRequestId solicitudId = submitAccountRequestUseCase.submit(new SubmitAccountRequestCommand(
-                UUID.randomUUID().toString(), identidad.email(), fullName, phone, command.city(),
-                command.requestIp()));
+                identidad.email(), fullName, phone, command.city(), command.requestIp()));
         return new ResultadoLoginSocial.SolicitudCreada(solicitudId);
     }
 

@@ -24,9 +24,12 @@ public class NoOpEnviarEmailAdapter implements EnviarEmailPort {
      * inventa un dominio real aca. El link completo seria {@code <base>?token=<token>}.
      */
     private final String resetPasswordUrlBase;
+    private final String activateAccountUrlBase;
 
-    public NoOpEnviarEmailAdapter(@Value("${renaser.web.reset-password-url}") String resetPasswordUrlBase) {
+    public NoOpEnviarEmailAdapter(@Value("${renaser.web.reset-password-url}") String resetPasswordUrlBase,
+                                   @Value("${renaser.web.activate-account-url}") String activateAccountUrlBase) {
         this.resetPasswordUrlBase = resetPasswordUrlBase;
+        this.activateAccountUrlBase = activateAccountUrlBase;
     }
 
     @Override
@@ -47,5 +50,14 @@ public class NoOpEnviarEmailAdapter implements EnviarEmailPort {
         log.info("[users.NoOpEnviarEmailAdapter] email de invitacion de staff simulado "
                 + "(adaptador placeholder, sin proveedor real todavia; contrasena temporal de {} caracteres generada)",
                 temporaryPassword.length());
+    }
+
+    @Override
+    public void enviarActivacionCuenta(String destinatarioEmail, String token) {
+        // Mismo criterio de privacidad que enviarResetContrasena: ni email ni token en el log.
+        String link = activateAccountUrlBase + "?token=" + token;
+        log.info("[users.NoOpEnviarEmailAdapter] email de activacion de cuenta simulado "
+                + "(adaptador placeholder, sin proveedor real todavia; link de {} caracteres armado)",
+                link.length());
     }
 }

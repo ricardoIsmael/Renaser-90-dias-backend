@@ -70,7 +70,7 @@ public class AccountRequestController {
     public ResponseEntity<AccountRequestIdResponse> submit(@RequestBody @Valid SubmitAccountRequestRequest request,
                                                              HttpServletRequest httpRequest) {
         AccountRequestId id = submitUseCase.submit(new SubmitAccountRequestCommand(
-                request.supabaseUserId(), request.email(), request.fullName(), request.phone(),
+                request.email(), request.fullName(), request.phone(),
                 request.city(), httpRequest.getRemoteAddr()));
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(new AccountRequestIdResponse(id.value()));
     }

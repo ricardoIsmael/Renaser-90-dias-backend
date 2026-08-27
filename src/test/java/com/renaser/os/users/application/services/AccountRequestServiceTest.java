@@ -14,6 +14,8 @@ import com.renaser.os.users.application.ports.out.accountrequest.DeleteAccountRe
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SaveAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SupabaseAdminAuthPort;
+import com.renaser.os.users.application.ports.out.autenticacion.EnviarEmailPort;
+import com.renaser.os.users.application.ports.out.autenticacion.TokenResetContrasenaPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
@@ -36,6 +38,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -67,6 +70,10 @@ class AccountRequestServiceTest {
     @Mock
     private SaveParticipacionProgramaPort saveParticipacionProgramaPort;
     @Mock
+    private TokenResetContrasenaPort tokenResetContrasenaPort;
+    @Mock
+    private EnviarEmailPort enviarEmailPort;
+    @Mock
     private org.springframework.context.ApplicationEventPublisher events;
 
     private AccountRequestService service;
@@ -74,11 +81,13 @@ class AccountRequestServiceTest {
     @BeforeEach
     void setUp() {
         service = new AccountRequestService(loadAccountRequestPort, saveAccountRequestPort, deleteAccountRequestPort,
-                saveUserPort, supabaseAdminAuthPort, saveParticipacionProgramaPort,
-                new RequireActiveUserGuard(loadUserPort), new RequireAdminGuard(loadUserPort), events, CLOCK);
+                saveUserPort, supabaseAdminAuthPort, saveParticipacionProgramaPort, tokenResetContrasenaPort,
+                enviarEmailPort, new RequireActiveUserGuard(loadUserPort), new RequireAdminGuard(loadUserPort),
+                events, CLOCK);
         lenient().when(saveAccountRequestPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(tokenResetContrasenaPort.generar(any(), any())).thenReturn("token-activacion-test");
     }
 
     private static UserId id() {
@@ -129,6 +138,26 @@ class AccountRequestServiceTest {
 
         verify(saveUserPort).save(any());
         verify(saveAccountRequestPort).save(any());
+    }
+
+    @Test
+    @DisplayName("2026-08-27: aprobar genera un token de activacion y manda el correo, "
+            + "porque el nuevo usuario no tiene ninguna credencial todavia")
+    void approveGeneraTokenDeActivacionYEnviaElCorreo() {
+        AccountRequest request = pendiente();
+        UserId actorId = id();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+
+        service.approve(new ApproveAccountRequestCommand(request.id(), actorId));
+
+        var userIdCaptor = org.mockito.ArgumentCaptor.forClass(UserId.class);
+        verify(tokenResetContrasenaPort).generar(userIdCaptor.capture(), eq(AccountRequestService.VIGENCIA_TOKEN_ACTIVACION));
+        verify(enviarEmailPort).enviarActivacionCuenta(eq(request.email().value()), eq("token-activacion-test"));
+
+        var saveUserCaptor = org.mockito.ArgumentCaptor.forClass(User.class);
+        verify(saveUserPort).save(saveUserCaptor.capture());
+        assertThat(userIdCaptor.getValue()).isEqualTo(saveUserCaptor.getValue().id());
     }
 
     @Test

@@ -34,6 +34,7 @@ renaser:
       origenes: http://localhost:8081
     # Placeholder de test: ningun test manda un mail real (EnviarEmailPort es NoOp).
     reset-password-url: http://localhost:8081/reset-password
+    activate-account-url: http://localhost:8081/activate-account
   auth:
     # Vacios a proposito, igual que en main: los adaptadores OAuth fallan explicito al
     # INVOCARSE sin configurar, no al arrancar. Tienen que existir como propiedades igual,

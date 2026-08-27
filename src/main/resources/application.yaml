@@ -14,14 +14,8 @@ spring:
       port: ${REDIS_PORT:6379}
   session:
     timeout: 30d
-    # OJO con el prefijo: en Boot 4 es `spring.session.data.redis`, NO `spring.session.redis`
-    # (que era el de versiones anteriores). Con el prefijo viejo la propiedad se ignora EN
-    # SILENCIO: no hay error de arranque, simplemente nunca se crea el repositorio indexado.
     data:
       redis:
-        # indexed y no el default: sin esto Redis no mantiene el indice por usuario y no se
-        # puede cerrar todas las sesiones de alguien de un golpe — que es exactamente lo que
-        # necesitan la suspension de cuenta y el cambio de contrasena.
         repository-type: indexed
   security:
     oauth2:
@@ -34,11 +28,6 @@ spring:
       embedding: none
       vectorstore: none
   ai.google.genai.api-key: ${GOOGLE_GENAI_API_KEY:}
-  # D-51 (rag/conocimiento): text-embedding-004 da 768 dimensiones nativo, calza con
-  # `base_conocimiento.embedding vector(768)`. El default de Spring AI (gemini-embedding-001)
-  # da 3072 y rompería el CAST(? AS vector) en cada INSERT. Sin efecto hoy: la autoconfig de
-  # embeddings sigue excluida arriba hasta que haya credenciales (D-39); queda declarado para
-  # cuando se habilite.
   ai.google.genai.embedding.text.model: ${RENASIA_EMBEDDING_MODEL:text-embedding-004}
   autoconfigure:
     exclude:
@@ -53,11 +42,7 @@ renaser:
       bucket: ${AWS_S3_BUCKET:s3-renaser90dias}
       region: ${AWS_REGION:us-east-1}
   auth:
-    # Login social (docs/MODULO_AUTH.md §6). Vacios hasta que se den de alta las apps en cada
-    # proveedor — el adaptador correspondiente falla explicito (IllegalStateException) si se
-    # invoca sin configurar, en vez de fallar la app entera al arrancar.
     apple:
-      # Ruta al archivo AuthKey_XXXXXXXXXX.p8 descargado de Apple Developer.
       auth-key-path: ${APPLE_AUTH_KEY_PATH:}
       key-id: ${APPLE_KEY_ID:}
       team-id: ${APPLE_TEAM_ID:}
@@ -66,30 +51,15 @@ renaser:
       app-id: ${FACEBOOK_APP_ID:}
       app-secret: ${FACEBOOK_APP_SECRET:}
     google:
-      # Falta crear el OAuth client en Google Cloud Console (docs/MODULO_AUTH.md §6.3 — hoy no
-      # existe, google-services.json tiene oauth_client vacio). redirect_uri NO va aca: lo manda
-      # el cliente en cada llamada (tiene que coincidir con el que se uso al pedir el `code`).
       client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
       client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
   web:
     cors:
-      # Origenes del build web de Expo. En despliegue se sobreescribe con CORS_ORIGENES
-      # (lista separada por comas) — nunca usar `*`: con allowCredentials(true) el navegador
-      # lo rechaza, y ademas abriria la API a cualquier sitio.
       origenes: ${CORS_ORIGENES:http://localhost:8081,http://localhost:19006,http://localhost:3000}
-    # Placeholder: producto todavia no definio la pantalla de "nueva contrasena" del frontend
-    # (docs/MODULO_AUTH.md fase 7). El link de reset se arma como `<esta-url>?token=<token>`.
-    # NO se inventa un dominio real — sobreescribir con RESET_PASSWORD_URL antes de ir a prod.
     reset-password-url: ${RESET_PASSWORD_URL:https://TODO-frontend-no-definido.renaser.dev/reset-password}
+    activate-account-url: ${ACTIVATE_ACCOUNT_URL:https://TODO-frontend-no-definido.renaser.dev/activate-account}
   renasia:
-    # Tope diario de mensajes al chat de IA por aprendiz (D-48). Se cuenta en Redis, no en la
-    # BD (congelada, sin columna de contador). Al superarlo: 429. Ajustable sin recompilar.
     limite-diario: ${RENASIA_LIMITE_DIARIO:25}
   users:
     account-deletion:
-      # 14 dias: CONFIRMADO, no un supuesto — coincide el comentario de la columna
-      # `usuarios.baja_solicitada_en` en el baseline SQL ("cron purga a los 14 dias,
-      # politica actual") con `DIAS_DE_GRACIA` del backend viejo
-      # (features/account-deletion/plazo.ts). Ajustable sin recompilar si el producto
-      # decide cambiar el plazo.
       grace-period-days: ${ACCOUNT_DELETION_GRACE_DAYS:14}

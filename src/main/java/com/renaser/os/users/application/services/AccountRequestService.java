@@ -12,6 +12,8 @@ import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountReq
 import com.renaser.os.users.application.ports.out.accountrequest.DeleteAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SaveAccountRequestPort;
+import com.renaser.os.users.application.ports.out.autenticacion.EnviarEmailPort;
+import com.renaser.os.users.application.ports.out.autenticacion.TokenResetContrasenaPort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SupabaseAdminAuthPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
@@ -29,6 +31,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Duration;
 import java.util.NoSuchElementException;
+import java.util.UUID;
 
 /**
  * Casos de uso de AccountRequest (CLAUDE.MD §4.3). Una clase por agregado agrupando
@@ -44,12 +47,23 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
 
     private static final int RATE_LIMIT_PER_HOUR = 60;
 
+    /**
+     * Vigencia del link de activacion (2026-08-27) — mas larga que la del reset de contrasena
+     * (30 min, ResetContrasenaService.VIGENCIA_TOKEN): esa es para alguien que ya esta mirando
+     * la pantalla de "olvide mi contrasena" en el momento; esta es para alguien que se entera
+     * de la aprobacion por correo, posiblemente horas despues. Valor no confirmado por
+     * producto, asumido por analogia — documentado para que se ajuste si hace falta.
+     */
+    static final Duration VIGENCIA_TOKEN_ACTIVACION = Duration.ofHours(24);
+
     private final LoadAccountRequestPort loadAccountRequestPort;
     private final SaveAccountRequestPort saveAccountRequestPort;
     private final DeleteAccountRequestPort deleteAccountRequestPort;
     private final SaveUserPort saveUserPort;
     private final SupabaseAdminAuthPort supabaseAdminAuthPort;
     private final SaveParticipacionProgramaPort saveParticipacionProgramaPort;
+    private final TokenResetContrasenaPort tokenResetContrasenaPort;
+    private final EnviarEmailPort enviarEmailPort;
     private final RequireActiveUserGuard requireActiveUserGuard;
     private final RequireAdminGuard requireAdminGuard;
     private final ApplicationEventPublisher events;
@@ -60,6 +74,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
                                   DeleteAccountRequestPort deleteAccountRequestPort, SaveUserPort saveUserPort,
                                   SupabaseAdminAuthPort supabaseAdminAuthPort,
                                   SaveParticipacionProgramaPort saveParticipacionProgramaPort,
+                                  TokenResetContrasenaPort tokenResetContrasenaPort, EnviarEmailPort enviarEmailPort,
                                   RequireActiveUserGuard requireActiveUserGuard, RequireAdminGuard requireAdminGuard,
                                   ApplicationEventPublisher events, Clock clock) {
         this.loadAccountRequestPort = loadAccountRequestPort;
@@ -68,21 +83,29 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         this.saveUserPort = saveUserPort;
         this.supabaseAdminAuthPort = supabaseAdminAuthPort;
         this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
+        this.tokenResetContrasenaPort = tokenResetContrasenaPort;
+        this.enviarEmailPort = enviarEmailPort;
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.requireAdminGuard = requireAdminGuard;
         this.events = events;
         this.clock = clock;
     }
 
+    /**
+     * Genera el UUID del solicitante acá adentro (2026-08-27, D-49): hasta ahora este id lo
+     * creaba Supabase Auth del lado del cliente y viajaba en el request — desde que Renaser OS
+     * emite y valida su propia identidad de punta a punta, no hay ninguna razón para depender
+     * de un tercero para algo tan simple como un UUID nuevo. Mismo patrón que
+     * {@code AccountRequestId.newId()}/{@code CelulaId.newId()} en el resto del código.
+     */
     @Override
     @Transactional
     public AccountRequestId submit(SubmitAccountRequestCommand command) {
         rejectIfRateLimitExceeded(command.requestIp());
 
-        UserId supabaseUserId = UserId.of(command.supabaseUserId());
-        compensateSupabaseUserOnRollback(supabaseUserId);
+        UserId nuevoUserId = UserId.of(UUID.randomUUID());
 
-        AccountRequest request = AccountRequest.submit(supabaseUserId, new Email(command.email()),
+        AccountRequest request = AccountRequest.submit(nuevoUserId, new Email(command.email()),
                 command.fullName(), command.phone(), command.city(), command.requestIp(), clock);
         return saveAccountRequestPort.save(request).id();
     }
@@ -106,6 +129,14 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         saveParticipacionProgramaPort.save(ParticipacionPrograma.inscribirTraineeAprobado(newUser.id(), clock));
         request.approve(actor, newUser.id(), clock);
         saveAccountRequestPort.save(request);
+
+        // 2026-08-27: el aprendiz recien creado no tiene Credencial (el alta no captura
+        // contrasena) — reusa el MISMO mecanismo que ResetContrasenaService (token opaco en
+        // Redis, confirmar via ConfirmarResetContrasenaUseCase), asi que "activar cuenta" y
+        // "recuperar contrasena" comparten toda la infraestructura, solo cambia el correo.
+        String tokenActivacion = tokenResetContrasenaPort.generar(newUser.id(), VIGENCIA_TOKEN_ACTIVACION);
+        enviarEmailPort.enviarActivacionCuenta(newUser.email().value(), tokenActivacion);
+
         events.publishEvent(new UsuarioRegistradoEvent(newUser.id(), clock.now()));
     }
 

@@ -24,4 +24,14 @@ public interface EnviarEmailPort {
      * "nunca se loguea" que {@code enviarResetContrasena} (CLAUDE.MD §5.4.9).
      */
     void enviarInvitacionStaff(String destinatarioEmail, String temporaryPassword);
+
+    /**
+     * Activacion de cuenta tras aprobar una {@code AccountRequest} (2026-08-27): el aprendiz
+     * recien aprobado no tiene ninguna {@code Credencial} todavia (el alta no captura
+     * contrasena — ver javadoc de {@code SubmitAccountRequestUseCase}), asi que necesita fijar
+     * la suya antes del primer login. Mismo mecanismo que {@code enviarResetContrasena}
+     * (token de un solo uso, {@code ConfirmarResetContrasenaUseCase} de destino), copia de
+     * correo distinta ("activa tu cuenta" en vez de "recupera tu contrasena").
+     */
+    void enviarActivacionCuenta(String destinatarioEmail, String token);
 }
