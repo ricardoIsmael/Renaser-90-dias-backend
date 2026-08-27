@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -59,4 +60,13 @@ interface SpringDataRegistroHabitoRepository extends JpaRepository<RegistroHabit
                                                                            @Param("desde") LocalDate desde,
                                                                            @Param("hasta") LocalDate hasta,
                                                                            @Param("completado") EstadoRegistroJpa completado);
+
+    /** Para {@link com.renaser.os.users.api.HabitoLogrosFinder} — agregacion en SQL, nunca en memoria. */
+    long countByParticipanteIdAndEstado(UUID participanteId, EstadoRegistroJpa estado);
+
+    /** {@code null} (via {@code Optional} en el adaptador) si el participante nunca completo un habito. */
+    @Query("SELECT MIN(r.completadoEn) FROM RegistroHabitoJpaEntity r "
+            + "WHERE r.participanteId = :participanteId AND r.estado = :estado")
+    Instant minCompletadoEnPorParticipanteYEstado(@Param("participanteId") UUID participanteId,
+                                                   @Param("estado") EstadoRegistroJpa estado);
 }

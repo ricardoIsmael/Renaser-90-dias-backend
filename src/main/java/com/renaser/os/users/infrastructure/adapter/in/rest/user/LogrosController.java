@@ -1,0 +1,30 @@
+package com.renaser.os.users.infrastructure.adapter.in.rest.user;
+
+import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.application.ports.in.user.GetLogrosUseCase;
+import com.renaser.os.users.application.ports.in.user.GetLogrosUseCase.GetLogrosQuery;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/** Gap #22 (docs/PLAN_INTEGRACION_FRONTEND.md §5) — {@code /api/v1/profile} es un prefijo
+ * nuevo en `users` (mismo que el backend viejo), separado de {@link UserController} porque
+ * ninguno de sus otros endpoints vive bajo {@code /profile}.
+ *
+ * <p>X-Actor-Id: ver nota de {@link UserController} — TEMPORAL, no usar en produccion. */
+@RestController
+@RequestMapping("/api/v1/profile")
+public class LogrosController {
+
+    private final GetLogrosUseCase getLogrosUseCase;
+
+    public LogrosController(GetLogrosUseCase getLogrosUseCase) {
+        this.getLogrosUseCase = getLogrosUseCase;
+    }
+
+    @GetMapping("/logros")
+    public LogrosResponse logros(@RequestHeader("X-Actor-Id") String actorId) {
+        return LogrosResponse.from(getLogrosUseCase.getLogros(new GetLogrosQuery(UserId.of(actorId))));
+    }
+}

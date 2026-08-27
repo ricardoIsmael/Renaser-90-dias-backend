@@ -7,6 +7,7 @@ import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -37,6 +38,21 @@ class RocaDiariaPersistenceAdapter implements LoadRocaDiariaPort, SaveRocaDiaria
     @Override
     public int contarDeParticipanteYFecha(UserId participanteId, LocalDate fecha) {
         return repository.countByParticipanteIdAndFecha(participanteId.value(), fecha);
+    }
+
+    @Override
+    public int contarCompletadasDeParticipante(UserId participanteId) {
+        return repository.countByParticipanteIdAndCompletadaTrue(participanteId.value());
+    }
+
+    @Override
+    public Optional<Instant> primeraCompletadaEnDeParticipante(UserId participanteId) {
+        return repository.primeraCompletadaEnDeParticipante(participanteId.value());
+    }
+
+    @Override
+    public List<LocalDate> fechasCompletadasDeParticipante(UserId participanteId) {
+        return repository.fechasCompletadasDeParticipante(participanteId.value());
     }
 
     @Override

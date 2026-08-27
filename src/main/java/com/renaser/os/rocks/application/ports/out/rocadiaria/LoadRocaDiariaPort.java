@@ -4,6 +4,7 @@ import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
 import com.renaser.os.shared.domain.UserId;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -15,4 +16,17 @@ public interface LoadRocaDiariaPort {
     List<RocaDiaria> deParticipanteYFecha(UserId participanteId, LocalDate fecha);
 
     int contarDeParticipanteYFecha(UserId participanteId, LocalDate fecha);
+
+    /** Histórico completo, para {@code users.api.RocaLogrosFinder#totalRocksCompleted}. */
+    int contarCompletadasDeParticipante(UserId participanteId);
+
+    /** Para {@code users.api.RocaLogrosFinder#firstRockCompletedAt}. */
+    Optional<Instant> primeraCompletadaEnDeParticipante(UserId participanteId);
+
+    /**
+     * Una fecha por cada Roca Diaria completada (repetida si hubo más de una el mismo
+     * día) — insumo crudo de {@code RachaRocas#calcular}, para
+     * {@code users.api.RocaLogrosFinder#bestRocksStreakDays}.
+     */
+    List<LocalDate> fechasCompletadasDeParticipante(UserId participanteId);
 }

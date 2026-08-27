@@ -125,4 +125,39 @@ class RegistroHabitoPersistenceAdapterTest {
         assertThat(vencidos.get(0).fechaEjecucion()).isEqualTo(LocalDate.of(2026, 8, 20));
         assertThat(vencidos).noneMatch(r -> r.id().equals(hoy.id()));
     }
+
+    @Test
+    void totalHabitosCompletadosCuentaSoloLosCompletados() {
+        RegistroHabito completado = adapter.save(nuevoPendiente(LocalDate.of(2026, 8, 20)));
+        completado.completar(5, null, null, null, CLOCK.now());
+        adapter.save(completado);
+        adapter.save(nuevoPendiente(LocalDate.of(2026, 8, 21))); // sigue PENDIENTE, no cuenta
+
+        assertThat(adapter.totalHabitosCompletados(participanteId)).isEqualTo(1L);
+    }
+
+    @Test
+    void totalHabitosCompletadosEsCeroSinHistorial() {
+        assertThat(adapter.totalHabitosCompletados(participanteId)).isZero();
+    }
+
+    @Test
+    void primerHabitoCompletadoEnDevuelveElMasAntiguo() {
+        RegistroHabito primero = adapter.save(nuevoPendiente(LocalDate.of(2026, 8, 20)));
+        primero.completar(5, null, null, null, Instant.parse("2026-08-20T10:00:00Z"));
+        adapter.save(primero);
+        RegistroHabito segundo = adapter.save(nuevoPendiente(LocalDate.of(2026, 8, 22)));
+        segundo.completar(5, null, null, null, Instant.parse("2026-08-22T10:00:00Z"));
+        adapter.save(segundo);
+
+        assertThat(adapter.primerHabitoCompletadoEn(participanteId))
+                .contains(Instant.parse("2026-08-20T10:00:00Z"));
+    }
+
+    @Test
+    void primerHabitoCompletadoEnVacioSinCompletados() {
+        adapter.save(nuevoPendiente(LocalDate.of(2026, 8, 24))); // PENDIENTE, nunca completado
+
+        assertThat(adapter.primerHabitoCompletadoEn(participanteId)).isEmpty();
+    }
 }

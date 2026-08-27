@@ -1,5 +1,6 @@
 package com.renaser.os.habits.infrastructure.adapter.out.persistence.radar;
 
+import com.renaser.os.users.api.RadarLogrosFinder;
 import com.renaser.os.habits.application.ports.out.radar.LoadRegistroRadarPort;
 import com.renaser.os.habits.application.ports.out.radar.SaveRegistroRadarPort;
 import com.renaser.os.habits.domain.model.radar.RegistroRadar;
@@ -12,8 +13,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+/** Implementa ademas {@link RadarLogrosFinder}, el contrato PUBLICO hacia otros modulos —
+ * mismo patron que {@code EntradaDiarioPersistenceAdapter}. */
 @Component
-class RegistroRadarPersistenceAdapter implements LoadRegistroRadarPort, SaveRegistroRadarPort {
+class RegistroRadarPersistenceAdapter implements LoadRegistroRadarPort, SaveRegistroRadarPort, RadarLogrosFinder {
 
     private final SpringDataRegistroRadarRepository repository;
     private final RegistroRadarPersistenceMapper mapper;
@@ -42,5 +45,15 @@ class RegistroRadarPersistenceAdapter implements LoadRegistroRadarPort, SaveRegi
     @Override
     public RegistroRadar save(RegistroRadar registro) {
         return mapper.toDomain(repository.saveAndFlush(mapper.toEntity(registro)));
+    }
+
+    @Override
+    public long totalRegistrosRadar(UserId participanteId) {
+        return repository.countByParticipanteId(participanteId.value());
+    }
+
+    @Override
+    public Optional<Instant> primerRegistroRadarEn(UserId participanteId) {
+        return Optional.ofNullable(repository.minCreadoEnPorParticipante(participanteId.value()));
     }
 }

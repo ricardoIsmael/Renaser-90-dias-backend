@@ -134,4 +134,35 @@ class RegistroRadarPersistenceAdapterTest {
         assertThat(pagina).hasSize(1);
         assertThat(pagina.get(0).queHago()).isEqualTo("mio");
     }
+
+    @Test
+    void totalRegistrosRadarCuentaSoloLosDelParticipante() {
+        UserId otroParticipante = UserId.of(UUID.randomUUID());
+        seedParticipante(otroParticipante);
+        adapter.save(RegistroRadar.registrar(participanteId, "h1", "p", "s", 1, "e",
+                AHORA.minus(1, ChronoUnit.HOURS)));
+        adapter.save(RegistroRadar.registrar(participanteId, "h2", "p", "s", 2, "e", AHORA));
+        adapter.save(RegistroRadar.registrar(otroParticipante, "ajeno", "p", "s", 3, "e", AHORA));
+
+        assertThat(adapter.totalRegistrosRadar(participanteId)).isEqualTo(2L);
+    }
+
+    @Test
+    void totalRegistrosRadarEsCeroSinHistorial() {
+        assertThat(adapter.totalRegistrosRadar(participanteId)).isZero();
+    }
+
+    @Test
+    void primerRegistroRadarEnDevuelveElMasAntiguo() {
+        adapter.save(RegistroRadar.registrar(participanteId, "h1", "p", "s", 1, "e",
+                AHORA.minus(2, ChronoUnit.HOURS)));
+        adapter.save(RegistroRadar.registrar(participanteId, "h2", "p", "s", 2, "e", AHORA));
+
+        assertThat(adapter.primerRegistroRadarEn(participanteId)).contains(AHORA.minus(2, ChronoUnit.HOURS));
+    }
+
+    @Test
+    void primerRegistroRadarEnVacioSinHistorial() {
+        assertThat(adapter.primerRegistroRadarEn(participanteId)).isEmpty();
+    }
 }
