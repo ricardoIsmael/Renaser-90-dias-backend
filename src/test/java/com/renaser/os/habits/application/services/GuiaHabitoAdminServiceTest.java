@@ -1,8 +1,10 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.application.ports.in.guiaadmin.ConfirmarAdjuntoGuiaArchivoUseCase.ConfirmarAdjuntoGuiaArchivoCommand;
 import com.renaser.os.habits.application.ports.in.guiaadmin.CrearAdjuntoGuiaEnlaceUseCase.CrearAdjuntoGuiaEnlaceCommand;
 import com.renaser.os.habits.application.ports.in.guiaadmin.EliminarAdjuntoGuiaUseCase.EliminarAdjuntoGuiaCommand;
 import com.renaser.os.habits.application.ports.in.guiaadmin.EliminarGuiaHabitoUseCase.EliminarGuiaHabitoCommand;
+import com.renaser.os.habits.application.ports.in.guiaadmin.SolicitarUrlAdjuntoGuiaUseCase.SolicitarUrlAdjuntoGuiaCommand;
 import com.renaser.os.habits.application.ports.in.guiaadmin.UpsertGuiaHabitoUseCase.UpsertGuiaHabitoCommand;
 import com.renaser.os.habits.application.ports.out.adjunto.LoadAdjuntoGuiaPort;
 import com.renaser.os.habits.application.ports.out.adjunto.SaveAdjuntoGuiaPort;
@@ -15,11 +17,13 @@ import com.renaser.os.habits.domain.model.guia.ContenidoGuia;
 import com.renaser.os.habits.domain.model.guia.GuiaHabito;
 import com.renaser.os.habits.domain.model.guia.GuiaHabitoId;
 import com.renaser.os.habits.domain.model.guia.SeccionGuia;
+import com.renaser.os.habits.domain.model.guia.TipoMedioGuia;
 import com.renaser.os.habits.domain.model.habito.DetallesHabito;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
+import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -33,6 +37,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -42,6 +48,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -65,21 +72,26 @@ class GuiaHabitoAdminServiceTest {
     private SaveAdjuntoGuiaPort saveAdjuntoPort;
     @Mock
     private UserSummaryFinder userSummaryFinder;
+    @Mock
+    private AlmacenamientoPort almacenamientoPort;
 
     private GuiaHabitoAdminService service;
 
     private final UserId admin = UserId.of(UUID.randomUUID());
     private final UserId mentor = UserId.of(UUID.randomUUID());
+    private final UserId suspendedAdmin = UserId.of(UUID.randomUUID());
     private final HabitoId habitoId = HabitoId.newId();
 
     @BeforeEach
     void setUp() {
         service = new GuiaHabitoAdminService(loadHabitoPort, loadGuiaPort, saveGuiaPort, loadAdjuntoPort,
-                saveAdjuntoPort, new HabitoAdminGuard(userSummaryFinder), CLOCK);
+                saveAdjuntoPort, new HabitoAdminGuard(userSummaryFinder), almacenamientoPort, CLOCK);
         lenient().when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(mentor))
                 .thenReturn(Optional.of(new UserSummary(mentor, "Mentor", null, UserRole.MENTOR, UserStatus.ACTIVE)));
+        lenient().when(userSummaryFinder.findById(suspendedAdmin)).thenReturn(Optional.of(
+                new UserSummary(suspendedAdmin, "Admin suspendido", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
         lenient().when(loadHabitoPort.byId(habitoId)).thenReturn(Optional.of(Habito.crearDeSistema("Titulo",
                 TipoHabito.CHECKBOX, new DetallesHabito(null, "CUERPO", ExigenciaEvidencia.OPCIONAL, false, false),
                 CLOCK.now())));
@@ -197,5 +209,95 @@ class GuiaHabitoAdminServiceTest {
         assertThatThrownBy(() -> service.eliminar(new EliminarAdjuntoGuiaCommand(admin, id)))
                 .isInstanceOf(NoSuchElementException.class);
         verify(saveAdjuntoPort, never()).eliminar(any());
+    }
+
+    @Test
+    void solicitarUrlAdjuntoDevuelveBucketYRutaBajoElHabito() {
+        when(almacenamientoPort.firmarSubida(anyString(), anyString(), any(Duration.class)))
+                .thenReturn(URI.create("https://s3.example/guias-habito/" + habitoId));
+
+        var resultado = service.solicitarUrl(new SolicitarUrlAdjuntoGuiaCommand(admin, habitoId, "image/png"));
+
+        assertThat(resultado.bucket()).isEqualTo(GuiaHabitoAdminService.BUCKET_ADJUNTOS_GUIA);
+        assertThat(resultado.ruta()).startsWith("guias-habito/" + habitoId + "/");
+    }
+
+    @Test
+    void solicitarUrlAdjuntoComoMentorEsRechazado() {
+        assertThatThrownBy(() -> service.solicitarUrl(new SolicitarUrlAdjuntoGuiaCommand(mentor, habitoId, "image/png")))
+                .isInstanceOf(NotAuthorizedException.class);
+        verify(almacenamientoPort, never()).firmarSubida(anyString(), anyString(), any(Duration.class));
+    }
+
+    @Test
+    void solicitarUrlAdjuntoComoAdminSuspendidoEsRechazado() {
+        assertThatThrownBy(() -> service.solicitarUrl(
+                new SolicitarUrlAdjuntoGuiaCommand(suspendedAdmin, habitoId, "image/png")))
+                .isInstanceOf(NotAuthorizedException.class);
+        verify(almacenamientoPort, never()).firmarSubida(anyString(), anyString(), any(Duration.class));
+    }
+
+    @Test
+    void confirmarAdjuntoArchivoCreaLaGuiaSiNoExisteYGuardaRutaCruda() {
+        when(loadGuiaPort.porHabito(habitoId)).thenReturn(List.of());
+        var command = new ConfirmarAdjuntoGuiaArchivoCommand(admin, habitoId, 3, SeccionGuia.QUE_HACER,
+                TipoMedioGuia.IMAGEN, GuiaHabitoAdminService.BUCKET_ADJUNTOS_GUIA, "guias-habito/x/y", "image/png",
+                12345, "foto.png", "Titulo");
+
+        AdjuntoGuia adjunto = service.confirmar(command);
+
+        assertThat(adjunto.tipoMedio()).isEqualTo(TipoMedioGuia.IMAGEN);
+        assertThat(adjunto.rutaStorage()).isEqualTo("guias-habito/x/y");
+        assertThat(adjunto.url()).isNull();
+        assertThat(adjunto.orden()).isEqualTo(0);
+        verify(saveGuiaPort).save(any());
+        verify(almacenamientoPort, never()).firmarLectura(anyString(), any(Duration.class));
+    }
+
+    @Test
+    void confirmarAdjuntoArchivoUsaLaGuiaExistenteYSiguienteOrden() {
+        GuiaHabito existente = GuiaHabito.crear(habitoId, 3, CLOCK.now());
+        when(loadGuiaPort.porHabito(habitoId)).thenReturn(List.of(existente));
+        when(loadAdjuntoPort.porGuias(List.of(existente.id()))).thenReturn(
+                List.of(AdjuntoGuia.deEnlace(existente.id(), SeccionGuia.QUE_HACER, "https://a", null, 0, CLOCK.now())));
+        var command = new ConfirmarAdjuntoGuiaArchivoCommand(admin, habitoId, 3, SeccionGuia.CIENCIA,
+                TipoMedioGuia.AUDIO, GuiaHabitoAdminService.BUCKET_ADJUNTOS_GUIA, "guias-habito/x/z", "audio/mpeg",
+                999, "audio.mp3", null);
+
+        AdjuntoGuia adjunto = service.confirmar(command);
+
+        assertThat(adjunto.orden()).isEqualTo(1);
+        verify(saveGuiaPort, never()).save(any());
+    }
+
+    @Test
+    void confirmarAdjuntoArchivoComoMentorEsRechazado() {
+        var command = new ConfirmarAdjuntoGuiaArchivoCommand(mentor, habitoId, 3, SeccionGuia.QUE_HACER,
+                TipoMedioGuia.IMAGEN, GuiaHabitoAdminService.BUCKET_ADJUNTOS_GUIA, "guias-habito/x/y", "image/png",
+                123, "foto.png", null);
+
+        assertThatThrownBy(() -> service.confirmar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveAdjuntoPort, never()).save(any());
+    }
+
+    @Test
+    void confirmarAdjuntoArchivoComoAdminSuspendidoEsRechazado() {
+        var command = new ConfirmarAdjuntoGuiaArchivoCommand(suspendedAdmin, habitoId, 3, SeccionGuia.QUE_HACER,
+                TipoMedioGuia.IMAGEN, GuiaHabitoAdminService.BUCKET_ADJUNTOS_GUIA, "guias-habito/x/y", "image/png",
+                123, "foto.png", null);
+
+        assertThatThrownBy(() -> service.confirmar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveAdjuntoPort, never()).save(any());
+    }
+
+    @Test
+    void confirmarAdjuntoArchivoConTipoEnlaceEsRechazado() {
+        when(loadGuiaPort.porHabito(habitoId)).thenReturn(List.of());
+        var command = new ConfirmarAdjuntoGuiaArchivoCommand(admin, habitoId, 3, SeccionGuia.QUE_HACER,
+                TipoMedioGuia.ENLACE, GuiaHabitoAdminService.BUCKET_ADJUNTOS_GUIA, "guias-habito/x/y", "image/png",
+                123, "foto.png", null);
+
+        assertThatThrownBy(() -> service.confirmar(command)).isInstanceOf(IllegalArgumentException.class);
+        verify(saveAdjuntoPort, never()).save(any());
     }
 }

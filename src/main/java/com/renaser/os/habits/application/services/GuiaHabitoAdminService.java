@@ -1,10 +1,12 @@
 package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.application.ports.in.guiaadmin.CrearAdjuntoGuiaEnlaceUseCase;
+import com.renaser.os.habits.application.ports.in.guiaadmin.ConfirmarAdjuntoGuiaArchivoUseCase;
 import com.renaser.os.habits.application.ports.in.guiaadmin.ConsultarGuiasDeHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.guiaadmin.EliminarAdjuntoGuiaUseCase;
 import com.renaser.os.habits.application.ports.in.guiaadmin.EliminarGuiaHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.guiaadmin.GuiaConAdjuntos;
+import com.renaser.os.habits.application.ports.in.guiaadmin.SolicitarUrlAdjuntoGuiaUseCase;
 import com.renaser.os.habits.application.ports.in.guiaadmin.UpsertGuiaHabitoUseCase;
 import com.renaser.os.habits.application.ports.out.adjunto.LoadAdjuntoGuiaPort;
 import com.renaser.os.habits.application.ports.out.adjunto.SaveAdjuntoGuiaPort;
@@ -15,23 +17,33 @@ import com.renaser.os.habits.domain.model.guia.AdjuntoGuia;
 import com.renaser.os.habits.domain.model.guia.GuiaHabito;
 import com.renaser.os.habits.domain.model.guia.GuiaHabitoId;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /** Panel admin de guias y sus adjuntos (hueco #11). */
 @Service
 public class GuiaHabitoAdminService implements ConsultarGuiasDeHabitoUseCase, UpsertGuiaHabitoUseCase,
-        EliminarGuiaHabitoUseCase, CrearAdjuntoGuiaEnlaceUseCase, EliminarAdjuntoGuiaUseCase {
+        EliminarGuiaHabitoUseCase, CrearAdjuntoGuiaEnlaceUseCase, EliminarAdjuntoGuiaUseCase,
+        SolicitarUrlAdjuntoGuiaUseCase, ConfirmarAdjuntoGuiaArchivoUseCase {
+
+    /** Mismo bucket compartido que `rocks`/`habits`/`calendar`/`users` (D-34). */
+    static final String BUCKET_ADJUNTOS_GUIA = "renaser-files";
+    private static final String PREFIJO_RUTA_ADJUNTO = "guias-habito";
+    private static final Duration VALIDEZ_URL_SUBIDA = Duration.ofMinutes(10);
 
     private final LoadHabitoPort loadHabitoPort;
     private final LoadGuiaHabitoPort loadGuiaPort;
@@ -39,17 +51,20 @@ public class GuiaHabitoAdminService implements ConsultarGuiasDeHabitoUseCase, Up
     private final LoadAdjuntoGuiaPort loadAdjuntoPort;
     private final SaveAdjuntoGuiaPort saveAdjuntoPort;
     private final HabitoAdminGuard guard;
+    private final AlmacenamientoPort almacenamientoPort;
     private final Clock clock;
 
     public GuiaHabitoAdminService(LoadHabitoPort loadHabitoPort, LoadGuiaHabitoPort loadGuiaPort,
                                    SaveGuiaHabitoPort saveGuiaPort, LoadAdjuntoGuiaPort loadAdjuntoPort,
-                                   SaveAdjuntoGuiaPort saveAdjuntoPort, HabitoAdminGuard guard, Clock clock) {
+                                   SaveAdjuntoGuiaPort saveAdjuntoPort, HabitoAdminGuard guard,
+                                   AlmacenamientoPort almacenamientoPort, Clock clock) {
         this.loadHabitoPort = loadHabitoPort;
         this.loadGuiaPort = loadGuiaPort;
         this.saveGuiaPort = saveGuiaPort;
         this.loadAdjuntoPort = loadAdjuntoPort;
         this.saveAdjuntoPort = saveAdjuntoPort;
         this.guard = guard;
+        this.almacenamientoPort = almacenamientoPort;
         this.clock = clock;
     }
 
@@ -103,11 +118,9 @@ public class GuiaHabitoAdminService implements ConsultarGuiasDeHabitoUseCase, Up
         guard.requireAdmin(command.actorId());
         requireHabito(command.habitoId());
         Instant ahora = clock.now();
-        GuiaHabito guia = porHabitoYDia(command.habitoId(), command.diaInicio())
-                .orElseGet(() -> saveGuiaPort.save(GuiaHabito.crear(command.habitoId(), command.diaInicio(), ahora)));
-        int siguienteOrden = loadAdjuntoPort.porGuias(List.of(guia.id())).size();
+        GuiaHabito guia = guiaParaAdjunto(command.habitoId(), command.diaInicio(), ahora);
         AdjuntoGuia adjunto = AdjuntoGuia.deEnlace(guia.id(), command.seccion(), command.url(), command.titulo(),
-                siguienteOrden, ahora);
+                siguienteOrden(guia.id()), ahora);
         return saveAdjuntoPort.save(adjunto);
     }
 
@@ -118,6 +131,39 @@ public class GuiaHabitoAdminService implements ConsultarGuiasDeHabitoUseCase, Up
         loadAdjuntoPort.byId(command.adjuntoId())
                 .orElseThrow(() -> new NoSuchElementException("Adjunto no encontrado: " + command.adjuntoId()));
         saveAdjuntoPort.eliminar(command.adjuntoId());
+    }
+
+    @Override
+    public UrlAdjuntoGuia solicitarUrl(SolicitarUrlAdjuntoGuiaCommand command) {
+        guard.requireAdmin(command.actorId());
+        requireHabito(command.habitoId());
+        String ruta = PREFIJO_RUTA_ADJUNTO + "/" + command.habitoId() + "/" + UUID.randomUUID();
+        URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
+        return new UrlAdjuntoGuia(url, BUCKET_ADJUNTOS_GUIA, ruta);
+    }
+
+    @Override
+    @Transactional
+    public AdjuntoGuia confirmar(ConfirmarAdjuntoGuiaArchivoCommand command) {
+        guard.requireAdmin(command.actorId());
+        requireHabito(command.habitoId());
+        Instant ahora = clock.now();
+        GuiaHabito guia = guiaParaAdjunto(command.habitoId(), command.diaInicio(), ahora);
+        AdjuntoGuia adjunto = AdjuntoGuia.deArchivo(guia.id(), command.seccion(), command.tipoMedio(), command.ruta(),
+                command.mime(), command.tamanoBytes(), command.nombreOriginal(), command.titulo(),
+                siguienteOrden(guia.id()), ahora);
+        return saveAdjuntoPort.save(adjunto);
+    }
+
+    /** Guia del tramo pedido, o una nueva con textos vacios si todavia no existe — misma
+     * regla para adjuntos ENLACE y de archivo. */
+    private GuiaHabito guiaParaAdjunto(HabitoId habitoId, int diaInicio, Instant ahora) {
+        return porHabitoYDia(habitoId, diaInicio)
+                .orElseGet(() -> saveGuiaPort.save(GuiaHabito.crear(habitoId, diaInicio, ahora)));
+    }
+
+    private int siguienteOrden(GuiaHabitoId guiaId) {
+        return loadAdjuntoPort.porGuias(List.of(guiaId)).size();
     }
 
     /** Cierra, en dia-1, la guia abierta mas reciente que sea estrictamente anterior a la que se esta dando de alta. */

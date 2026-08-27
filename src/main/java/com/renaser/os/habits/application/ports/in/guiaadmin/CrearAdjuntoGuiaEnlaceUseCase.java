@@ -15,11 +15,9 @@ import jakarta.validation.constraints.NotNull;
  * (mismo comportamiento que el contrato viejo, `habitsAdmin.ts` javadoc de
  * {@code CreateGuideAttachmentInput}).
  *
- * <p>Deliberadamente NO cubre adjuntos IMAGEN/AUDIO (subida de archivo): eso requiere un
- * endpoint multipart y un puerto de almacenamiento que acepte bytes directos (el
- * {@code AlmacenamientoPort} de este backend solo firma URLs de subida/lectura, no recibe
- * el archivo), ninguno de los dos existe todavia en este backend — ver la pregunta abierta
- * en docs/MODULO_HABITS.md.
+ * <p>NO cubre adjuntos IMAGEN/AUDIO (subida de archivo real) — esos van por
+ * {@code SolicitarUrlAdjuntoGuiaUseCase} + {@code ConfirmarAdjuntoGuiaArchivoUseCase}
+ * (patron upload-url -> PUT -> confirmar, no multipart).
  */
 public interface CrearAdjuntoGuiaEnlaceUseCase {
 

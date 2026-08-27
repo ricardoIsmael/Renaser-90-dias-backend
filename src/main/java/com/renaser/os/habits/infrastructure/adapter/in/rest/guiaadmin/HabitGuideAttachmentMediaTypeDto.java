@@ -15,4 +15,14 @@ public enum HabitGuideAttachmentMediaTypeDto {
             case AUDIO -> AUDIO;
         };
     }
+
+    /** Usado por la confirmacion de adjunto por archivo — LINK no es un tipo valido ahi,
+     * lo rechaza {@link com.renaser.os.habits.domain.model.guia.AdjuntoGuia#deArchivo}. */
+    public TipoMedioGuia toDomain() {
+        return switch (this) {
+            case LINK -> TipoMedioGuia.ENLACE;
+            case IMAGE -> TipoMedioGuia.IMAGEN;
+            case AUDIO -> TipoMedioGuia.AUDIO;
+        };
+    }
 }

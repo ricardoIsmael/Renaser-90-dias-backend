@@ -5,11 +5,14 @@ import com.renaser.os.habits.domain.model.guia.TipoMedioGuia;
 
 /**
  * Espejo de {@code HabitGuideAttachment} (`habitsAdmin.ts`). Para ENLACE, {@code url} es
- * la que pego el alquimista. Para IMAGEN/AUDIO NO se firma una URL de lectura en esta
- * pasada — esta build solo crea adjuntos ENLACE (ver {@code CrearAdjuntoGuiaEnlaceUseCase}
- * javadoc); si algun dia existe una fila IMAGEN/AUDIO (cargada por otro camino), esta
- * respuesta devuelve cadena vacia, que el propio contrato del cliente ya define como
- * "la fila existe pero su archivo no esta disponible" — no es un dato incorrecto.
+ * la que pego el alquimista. Para IMAGEN/AUDIO esta respuesta TODAVIA devuelve cadena
+ * vacia: {@link AdjuntoGuia} guarda {@code rutaStorage} cruda a proposito (invariante
+ * "jamas una URL" para archivo, ver su javadoc) y resolverla a una URL de lectura firmada
+ * en este listado admin (`GET .../guides`) queda fuera de este hueco — ver el reporte de
+ * la tarea que agrego IMAGEN/AUDIO ({@code ConfirmarAdjuntoGuiaArchivoUseCase}). El propio
+ * contrato del cliente ya define cadena vacia como "la fila existe pero su archivo no esta
+ * disponible para previsualizar" — no es un dato incorrecto, es una previsualizacion que
+ * todavia no esta cableada.
  */
 public record HabitGuideAttachmentResponse(String id, HabitGuideSectionDto section, String url, String title,
                                             int displayOrder, HabitGuideAttachmentMediaTypeDto mediaType,
