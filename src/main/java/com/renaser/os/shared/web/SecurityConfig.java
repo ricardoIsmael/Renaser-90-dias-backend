@@ -10,6 +10,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.session.web.http.HeaderHttpSessionIdResolver;
+import org.springframework.session.web.http.HttpSessionIdResolver;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -56,6 +58,23 @@ public class SecurityConfig {
     }
 
     /**
+     * Sesion por HEADER en vez de cookie (2026-08-27) — la app movil (Expo/React Native) no
+     * maneja cookies como un browser (sin `credentials: 'include'` de por si, y el manejo de
+     * cookies de `fetch` en RN es poco confiable entre iOS/Android). Declarar este bean
+     * reemplaza el {@code CookieHttpSessionIdResolver} por defecto de Spring Session en TODO
+     * el filtro de sesion — {@link SesionWebAdapter} no cambia nada: sigue llamando
+     * {@code securityContextRepository.saveContext(...)}, es Spring Session quien decide
+     * ahora escribir el id en el header {@code X-Auth-Token} de la respuesta en vez de un
+     * `Set-Cookie`. El cliente lo guarda como si fuera un token (mismo nivel de sensibilidad,
+     * mismo storage seguro) y lo reenvia en cada request con ese mismo header — no es JWT, no
+     * cambia D-49 (sigue siendo un id de sesion opaco contra Redis).
+     */
+    @Bean
+    HttpSessionIdResolver httpSessionIdResolver() {
+        return HeaderHttpSessionIdResolver.xAuthToken();
+    }
+
+    /**
      * Sin {@code sessionCreationPolicy}: la sesion la administra Spring Session sobre Redis
      * (spring-session-data-redis, docs/MODULO_AUTH.md §4), no la {@code HttpSession} generica
      * del contenedor. Poner {@code STATELESS} aca apagaria justo lo que se quiere usar.
@@ -87,14 +106,19 @@ public class SecurityConfig {
      * <p>`X-Actor-Id` viaja en la lista de headers permitidos porque es, por ahora, el
      * mecanismo de identidad (temporal, ver nota de los controllers); `Authorization` ya
      * queda habilitado para cuando el JWT real lo reemplace, asi que ese cambio no obliga
-     * a tocar esta clase de nuevo.
+     * a tocar esta clase de nuevo. `X-Auth-Token` es el id de sesion por header
+     * ({@link #httpSessionIdResolver()}): va en {@code allowedHeaders} porque el build web
+     * lo MANDA en cada request, y en {@code exposedHeaders} porque despues de {@code /login}
+     * el JS del navegador necesita LEER ese header de la respuesta para poder guardarlo — sin
+     * exponerlo, `fetch` desde un origen cruzado lo esconde aunque el header viaje igual.
      */
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(origenesPermitidos);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Actor-Id"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Actor-Id", "X-Auth-Token"));
+        config.setExposedHeaders(List.of("X-Auth-Token"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
