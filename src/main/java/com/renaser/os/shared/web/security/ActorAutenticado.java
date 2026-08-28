@@ -15,4 +15,11 @@ import java.lang.annotation.Target;
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ActorAutenticado {
+
+    /**
+     * Si es {@code false}, un actor no resoluble (sin sesion y sin header) devuelve
+     * {@code null} en vez de fallar — para endpoints publicos que aceptan uso anonimo
+     * (ej. {@code TestimonioController}, formulario manual sin sesion).
+     */
+    boolean required() default true;
 }

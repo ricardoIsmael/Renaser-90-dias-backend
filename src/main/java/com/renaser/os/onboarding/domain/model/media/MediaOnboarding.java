@@ -53,6 +53,9 @@ public final class MediaOnboarding {
         if (rutaStorage == null || rutaStorage.isBlank()) {
             throw new IllegalArgumentException("rutaStorage es obligatoria");
         }
+        if (!rutaStorage.startsWith(prefijoDe(usuarioId))) {
+            throw new IllegalArgumentException("rutaStorage no corresponde al usuario autenticado");
+        }
         Instant ahora = clock.now();
         return new MediaOnboarding(null, usuarioId, flujo, clavePregunta, clase, bucket, rutaStorage, mime,
                 tamanoBytes, duracionSegundos, metadatos, ahora, ahora);
@@ -76,7 +79,17 @@ public final class MediaOnboarding {
     public static String rutaNueva(UserId usuarioId, ClaseMedia clase) {
         Objects.requireNonNull(usuarioId, "usuarioId es obligatorio");
         Objects.requireNonNull(clase, "clase es obligatoria");
-        return PREFIJO_RUTA + "/" + usuarioId + "/" + clase.name().toLowerCase() + "/" + UUID.randomUUID();
+        return prefijoDe(usuarioId) + clase.name().toLowerCase() + "/" + UUID.randomUUID();
+    }
+
+    /**
+     * Todo {@code rutaStorage} que un actor registre debe caer bajo su propio prefijo — evita
+     * que {@link #registrar} acepte una ruta con el UUID de otro usuario (no hay forma de
+     * verificar contra la URL prefirmada real sin guardar estado de la emision, pero esto cierra
+     * el caso concreto de suplantacion de {@code usuarioId} en la ruta).
+     */
+    private static String prefijoDe(UserId usuarioId) {
+        return PREFIJO_RUTA + "/" + usuarioId + "/";
     }
 
     @Override

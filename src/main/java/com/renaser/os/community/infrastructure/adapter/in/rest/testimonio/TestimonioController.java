@@ -8,12 +8,12 @@ import com.renaser.os.community.application.ports.in.testimonio.PromoverPublicac
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -47,25 +47,23 @@ public class TestimonioController {
 
     @PostMapping
     public ResponseEntity<TestimonioResponse> crear(
-            @RequestHeader(value = "X-Actor-Id", required = false) String actorId,
+            @ActorAutenticado(required = false) UserId actorId,
             @RequestBody CreateTestimonioRequest request) {
         int estrellas = request.estrellas() != null ? request.estrellas() : 5;
         if (request.wallPostId() != null && !request.wallPostId().isBlank()) {
-            UserId actor = requireActorId(actorId);
-            var vista = promoverUseCase.promover(new PromoverPublicacionCommand(actor,
+            var vista = promoverUseCase.promover(new PromoverPublicacionCommand(requireActorId(actorId),
                     PublicacionId.of(UUID.fromString(request.wallPostId())), estrellas));
             return ResponseEntity.status(HttpStatus.CREATED).body(TestimonioResponse.from(vista));
         }
-        UserId actor = (actorId == null || actorId.isBlank()) ? null : UserId.of(actorId);
-        var vista = crearUseCase.crear(new CrearTestimonioCommand(actor, request.nombre(), request.rol(),
+        var vista = crearUseCase.crear(new CrearTestimonioCommand(actorId, request.nombre(), request.rol(),
                 request.texto(), estrellas));
         return ResponseEntity.status(HttpStatus.CREATED).body(TestimonioResponse.from(vista));
     }
 
-    private static UserId requireActorId(String actorId) {
-        if (actorId == null || actorId.isBlank()) {
+    private static UserId requireActorId(UserId actorId) {
+        if (actorId == null) {
             throw new NotAuthorizedException("Se requiere sesion para promover");
         }
-        return UserId.of(actorId);
+        return actorId;
     }
 }

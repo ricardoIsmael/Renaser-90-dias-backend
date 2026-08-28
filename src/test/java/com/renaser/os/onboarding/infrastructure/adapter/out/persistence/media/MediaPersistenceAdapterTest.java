@@ -52,8 +52,8 @@ class MediaPersistenceAdapterTest {
     void guardaYRecuperaConMetadatosJsonb() {
         String metadatos = "{\"codec\":\"aac\",\"sampleRate\":44100}";
         MediaOnboarding media = MediaOnboarding.registrar(usuarioId, "v90", "clave-1", ClaseMedia.AUDIO,
-                MediaOnboarding.BUCKET_DEFAULT, "onboarding/x/audio/uuid-1", "audio/aac", 2048L, null, metadatos,
-                CLOCK);
+                MediaOnboarding.BUCKET_DEFAULT, "onboarding/" + usuarioId + "/audio/uuid-1", "audio/aac", 2048L, null,
+                metadatos, CLOCK);
 
         MediaOnboarding guardada = adapter.guardar(media);
         entityManager.flush();
@@ -79,8 +79,8 @@ class MediaPersistenceAdapterTest {
     @DisplayName("porIdYUsuario(): vacio si la media es de otro usuario (blindaje de ownership)")
     void porIdYUsuarioFiltraPorPropietario() {
         MediaOnboarding media = MediaOnboarding.registrar(usuarioId, "v90", "clave-1", ClaseMedia.FIRMA,
-                MediaOnboarding.BUCKET_DEFAULT, "onboarding/x/firma/uuid-2", "image/svg+xml", null, null, null,
-                CLOCK);
+                MediaOnboarding.BUCKET_DEFAULT, "onboarding/" + usuarioId + "/firma/uuid-2", "image/svg+xml", null,
+                null, null, CLOCK);
         MediaOnboarding guardada = adapter.guardar(media);
         entityManager.flush();
 

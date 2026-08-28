@@ -139,7 +139,7 @@ class GrabacionV90ServiceTest {
         actorActivo();
         MediaOnboarding media = MediaOnboarding.registrar(usuarioId, "v90", "v90_mente_0",
                 com.renaser.os.onboarding.domain.model.media.ClaseMedia.AUDIO, MediaOnboarding.BUCKET_DEFAULT,
-                "ruta", null, null, null, null, CLOCK);
+                "onboarding/" + usuarioId + "/audio/ruta", null, null, null, null, CLOCK);
         when(loadMediaPort.porIdYUsuario(1L, usuarioId)).thenReturn(Optional.of(media));
         when(loadGrabacionPort.porSlot(usuarioId, "FASE_1", "MENTE", (short) 0)).thenReturn(Optional.empty());
         when(saveGrabacionPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
