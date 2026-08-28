@@ -48,6 +48,10 @@ public class ActorAutenticadoArgumentResolver implements HandlerMethodArgumentRe
         HttpServletRequest request = webRequest.getNativeRequest(HttpServletRequest.class);
         String header = request == null ? null : request.getHeader(HEADER_ACTOR_ID);
         if (header == null || header.isBlank()) {
+            ActorAutenticado anotacion = parameter.getParameterAnnotation(ActorAutenticado.class);
+            if (anotacion != null && !anotacion.required()) {
+                return null;
+            }
             throw new IllegalArgumentException(
                     "No hay sesion activa ni header " + HEADER_ACTOR_ID + " — no se puede resolver el actor");
         }

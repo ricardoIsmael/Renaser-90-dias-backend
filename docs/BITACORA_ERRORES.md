@@ -969,3 +969,46 @@ invalid accessor method in record ...ResultadoVerificacionDominio
 **Cómo evitar que vuelva a pasar:** en un `record`, ningún método (ni de instancia ni estático, con o sin parámetros) puede llamarse igual que un componente. Con la convención de CLAUDE.MD §5.4.8 de nombrar por intención de negocio esto casi no aparece; surge justo cuando uno nombra el factory por el campo.
 
 **Lección:** el mensaje del compilador nombra el síntoma (`accessor`) y no la causa (colisión con un componente del record). Ante un `invalid accessor method`, buscar el **choque de nombres**, no un problema de tipos.
+
+---
+
+## E-47 — Flyway: `ERROR: VALUES lists must all be the same length` al escribir un INSERT multi-fila a mano
+
+- **Fecha:** 2026-08-28
+- **Dónde:** `src/main/resources/db/migration/V5__guias_audios_habitos_default.sql`, migración de datos del catálogo de hábitos (`docs/db/migracion/`)
+- **Síntoma:** `./mvnw test` falla en cascada (262 tests con error, todos por el mismo `ApplicationContext failure threshold (1) exceeded`) porque Flyway no aplica la migración al levantar el contexto de Spring:
+  ```
+  Caused by: org.postgresql.util.PSQLException: ERROR: VALUES lists must all be the same length
+    Position: 2228
+  Location   : db/migration/V5__guias_audios_habitos_default.sql
+  Line       : 61
+  Statement  : Run Flyway with -X option to see the actual statement causing the problem
+  ```
+  El `Line` que reporta Flyway es la línea del `INSERT INTO ... VALUES` completo, **no** la fila real con el problema — con un INSERT multi-fila de cientos de líneas, ese número no sirve para ubicar el error.
+- **Causa real:** una de las 17 filas de `guias_habito` tenía 15 valores en vez de 16 (faltaba un `NULL` entre dos columnas nullable consecutivas) — se perdió al transcribir a mano el SQL generado, no al extraer el dato de origen (el dato fuente, verificado aparte, tenía los 16 campos correctos).
+- **Solución:** en vez de leer el archivo línea por línea a ojo, se escribió un parser chico en Node (respeta comillas simples y `''` escapado) que cuenta las columnas de cada tupla del `VALUES` y compara contra el número esperado de la lista de columnas del `INSERT`. Encontró la fila exacta (`38d56b8e-...`) en segundos.
+- **Cómo evitarlo:** para cualquier `INSERT` de más de ~5 filas escrito a partir de datos migrados, generar el SQL programáticamente (script que arma cada tupla desde una lista de campos fija) en vez de transcribirlo a mano, y validar el conteo de columnas por fila **antes** de correr `mvnw test` — es más rápido que esperar el ciclo completo de Testcontainers para descubrir un error de transcripción.
+
+## E-48 — "No hay uso real" no se puede concluir revisando una sola tabla: `onboarding_answers` vacía no significaba que `las_90_variables` no se usara
+
+- **Fecha:** 2026-08-28
+- **Dónde:** análisis previo a `V10__catalogo_onboarding_default.sql` (migración del catálogo de onboarding, D-52)
+- **Síntoma:** ninguno técnico — fue una conclusión de análisis, no un fallo de build. Reporté que el flujo `las_90_variables` (90 de las 192 preguntas de onboarding) estaba "muerto"/sin lanzar, porque crucé sus `question_key` contra `onboarding_answers` del dump de producción y salieron cero respuestas para cualquiera de las 90 claves.
+- **Causa real:** ese flujo no guarda sus respuestas en `onboarding_answers` — tiene su **propia tabla dedicada**, `variables_90_recordings`, que no revisé antes de concluir. El dueño del proyecto lo señaló directamente ("busca todo completo estás seguro que no hay registros de los usuarios de estos audios? nd registro"). Al revisarla: 221 grabaciones reales de 17 usuarios distintos, cubriendo las 90 de 90 claves, con su propio pipeline de revisión por IA (`ia_status`). El flujo sí se usa — mucho — solo que en una tabla distinta a la que yo asumí.
+- **Solución:** se retractó la conclusión explícitamente y se corrigió la recomendación (de "migrar las 192 preguntas" a "excluir igual las_90_variables, pero por el motivo correcto": el catálogo de esas 90 preguntas no es lo que el cliente móvil lee — lee las grabaciones directo — no porque el flujo esté sin usar).
+- **Cómo evitarlo:** cuando la pregunta es "¿esto se usa?", revisar **todas las tablas donde la evidencia de uso podría vivir** antes de afirmar que no se usa — en un dominio con tablas específicas por tipo de dato (`onboarding_answers` genérica vs. `variables_90_recordings` específica de audio), una tabla vacía prueba que *esa* tabla no se usó, no que la *feature* no se usó. Un solo chequeo negativo nunca es prueba suficiente de no-uso; hace falta descartar cada ubicación plausible antes de concluir.
+
+## E-49 — `500 Internal Server Error` real en `POST /api/v1/admin/habits/schedules/{scheduleId}`: `@RequestBody JsonNode` del paquete viejo de Jackson, pero el conversor activo en runtime es Jackson 3
+
+- **Fecha:** 2026-08-28
+- **Dónde:** `HorarioHabitoAdminController.actualizar` (`src/main/java/com/renaser/os/habits/infrastructure/adapter/in/rest/horarioadmin/HorarioHabitoAdminController.java:75`) y `PartialUpdateScheduleRequest.from` (mismo paquete) — encontrado al probar el endpoint EN VIVO con `curl` real, no en `mvnw test` (los tests existentes no cubrían este endpoint con un `MockMvc`/JSON real que pasara por el `HttpMessageConverter` de Spring).
+- **Síntoma:** cualquier `POST /api/v1/admin/habits/schedules/{scheduleId}` con body JSON devuelve:
+  ```
+  500 Internal Server Error
+  "message": "Type definition error: [simple type, class com.fasterxml.jackson.databind.JsonNode]"
+  ...InvalidDefinitionException: Cannot construct instance of com.fasterxml.jackson.databind.JsonNode (no Creators, like default constructor, exist)...
+  ```
+- **Causa real:** el controller y `PartialUpdateScheduleRequest` importan `com.fasterxml.jackson.databind.JsonNode` (paquete de **Jackson 2**, usado ahí a propósito para distinguir "clave ausente" de "clave presente en `null`" — ver el javadoc del método). El `pom.xml` de este proyecto es Spring Boot 4.1, que trae **Jackson 3** (`tools.jackson.*`) como el Jackson real que arma el `HttpMessageConverter` de Spring MVC. Jackson 2 sigue presente en el `.m2` local (`com.fasterxml.jackson.core:jackson-databind:2.21.x`) porque alguna otra dependencia transitiva lo trae, así que **el código compila sin error** — pero en runtime, cuando Spring intenta deserializar el body a ese tipo, usa su `ObjectMapper` de Jackson 3, que no sabe instanciar una clase de la API de Jackson 2. Es el único lugar de todo el repo que usa `JsonNode` crudo como `@RequestBody` (documentado como "la única excepción" en el propio javadoc del controller) — por eso ningún otro endpoint tiene este problema.
+- **Solución:** cambiar el import en ambos archivos de `com.fasterxml.jackson.databind.JsonNode` a `tools.jackson.databind.JsonNode` (Jackson 3, ya en el classpath vía Spring Boot 4.1). La API de los métodos usados (`hasNonNull`, `get`, `has`, `isNull`, `asInt`, `asText`) es idéntica entre ambas versiones para este caso de uso, así que el cambio es solo de import.
+- **Cómo evitarlo:** en un proyecto que migró a Jackson 3 (Spring Boot 4.1+), **nunca usar `com.fasterxml.jackson.databind.*` a mano** en código nuevo, ni siquiera cuando compila — el IDE/autocompletado puede ofrecer la clase vieja porque ambas conviven en el `.m2`. Verificar el import cuando se declara un tipo de Jackson explícito (`JsonNode`, `ObjectMapper`, `ObjectNode`) es exactamente el tipo de detalle que un test unitario con mocks no agarra pero un `curl` real contra el endpoint sí — refuerza por qué probar endpoints en vivo, no solo con `MockMvc`/mocks, tiene valor real.
+- **Corregido el mismo día (2026-08-28):** cambiado el import a `tools.jackson.databind.JsonNode` en `HorarioHabitoAdminController.java` y `PartialUpdateScheduleRequest.java` — misma API (`get`/`has`/`hasNonNull`/`isNull`/`asInt`/`asText`, verificado con `javap` contra el jar 3.1.5 real antes de aplicar el cambio, no asumido). `./mvnw clean test`: 1665/1665 en verde. Reprobado en vivo contra el servidor corriendo: `POST /api/v1/admin/habits/schedules/{id}` con `{"endDay":96}` → `200` (antes 500), y con `{"endDay":null}` → `200` con `endDay:null` en la respuesta (el caso de "null explícito limpia el campo" que motivó usar `JsonNode` en primer lugar sigue funcionando igual).

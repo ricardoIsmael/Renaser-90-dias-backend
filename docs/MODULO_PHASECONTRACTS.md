@@ -184,3 +184,57 @@ Base: `/api/v1/phase-contracts`. Actor resuelto por header `X-Actor-Id` (tempora
 - [x] Contrato verificado contra el comportamiento real del repo viejo (no había `docs/API_CONTRACT.md` de esta feature — se verificó contra el código de rutas + el cliente de la app)
 
 **Honestidad de alcance:** todo lo pedido en la tarea está construido. Lo que falta es exclusivamente lo que dependía de correr Maven (que tenía prohibido) o de infraestructura que no existe todavía en `shared/`/`users/` (bloqueada, no inventada). El hallazgo de arquitectura de §2.1 no estaba anticipado en el encargo original y cambió el diseño del puerto de progreso del participante — se prefirió resolverlo de raíz (query propia, tipos locales) antes que forzar un import que rompería `ArchitectureTest`.
+
+---
+
+## Auditoría de arquitectura (2026-08-28) — agente automático
+
+Auditoría de solo lectura de `src/main/java/com/renaser/os/phasecontracts/` (22 archivos `.java` de producción, 7 de test) contra CLAUDE.md §5.1/§5.1.2/§5.3.4-5.3.5/§5.4.1-5.4.10. No se corrió `./mvnw`, no se modificó ningún `.java`.
+
+### 1. Autenticación de actor — sin violaciones, único controller del módulo ya migrado
+
+`ContratoController.java` es el único `@RestController` de `phasecontracts` (4 endpoints: `GET /`, `GET /pending`, `POST /upload-url`, `POST /`). Los cuatro reciben el actor con `@ActorAutenticado UserId actor` (líneas 39, 46, 51, 57; import línea 10, `com.renaser.os.shared.web.security.ActorAutenticado`). `grep` de `X-Actor-Id`/`@RequestHeader` sobre todo el módulo: **vacío**. No hay ningún caso del patrón inseguro descrito en el encargo (el que sí apareció en `community/TestimonioController`). Este es un resultado limpio, no una ausencia de búsqueda: se confirmó línea por línea contra el único controller del módulo.
+
+Nota de contexto: `docs/MODULO_PHASECONTRACTS.md` §4 todavía describe el actor como resuelto por "header `X-Actor-Id` (temporal, D-29)" — esa frase quedó desactualizada por el commit `b824c4b` (migración de los 64 controllers a `@ActorAutenticado`) y ya no refleja el código. Es un caso menor de la regla CLAUDE.md §0.4 ("los documentos no pueden contradecirse") que vale corregir la próxima vez que se toque este archivo.
+
+### 2. `domain/` — limpio, correctamente plano por agregado único
+
+`domain/model/contrato/` tiene 3 clases (`ContratoFase`, `ContratoFaseId`, `FasePrograma`), todas plano en una sola carpeta — correcto por §5.1.2: es un único agregado real (`ContratoFase`, su identidad `ContratoFaseId` y el enum `FasePrograma` que usa como value object) sin sentido unos sin otros, exactamente el caso `buckpal` (no el caso `dddsample-core` de agregados múltiples), así que no corresponde subdividir.
+
+- `grep` de `org.springframework.*`/`jakarta.persistence.*` sobre `domain/`: **vacío**.
+- `grep` de imports a `phasecontracts.application`/`phasecontracts.infrastructure` desde `domain/`: **vacío**. La única dependencia hacia afuera es `com.renaser.os.shared.domain.{Clock,UserId}`, que es shared-kernel, permitido.
+- `ContratoFase.firmar(participanteId, diaProgramaActual, clock)` recibe el reloj inyectado y nunca llama `Instant.now()`/`LocalDate.now()` crudo (`grep` sobre `domain/` y `application/`: vacío en ambos). El día de programa tampoco se recalcula del reloj — se recibe como parámetro ya resuelto por `ConsultarProgresoParticipantePort`, consistente con la regla documentada en §0.2 del propio doc del módulo ("la fase nunca se lee de una columna guardada, siempre se deriva de `dia_programa`").
+- `domain/` no loguea: sin `Logger`/`log.` en ningún archivo.
+
+### 3. Lombok — uso correcto, igual al patrón ya validado en `users`/`rocks`
+
+`ContratoFase.java:5-9,14-17`: `@Getter` + `@Accessors(fluent = true)` + `@AllArgsConstructor(access = AccessLevel.PRIVATE)` + `@EqualsAndHashCode(of = "id")`. Sin `@Data`/`@Setter`/`@NoArgsConstructor` público en `domain/`. `toString()` acotado a mano (línea 68-70: solo `id`, `participanteId`, `fase` — sin PII, sin `firmadoEn`/`bucket`/`rutaFirma`).
+
+`@Entity`/`@Data`/`@NoArgsConstructor` solo aparecen donde corresponde: `infrastructure/adapter/out/persistence/contrato/ContratoFaseJpaEntity.java:17-21`. Ningún otro archivo del módulo usa esas anotaciones.
+
+### 4. Controller — tonto, cumple la regla al pie de la letra
+
+`ContratoController.java` (61 líneas totales, 4 endpoints, ninguno pasa de 5 líneas de cuerpo): no inyecta ningún puerto `out` ni repositorio (los 4 campos son casos de uso `port/in`), sin `@Transactional`, sin `if` de negocio — cada método deserializa (nada que deserializar salvo el actor), invoca un único caso de uso y mapea la salida con un factory estático del DTO (`ContratoFaseResponse.deListado/deFirma`, `ContratoPendienteResponse.from`, `UrlFirmaResponse.from`). Constructor con 4 parámetros, dentro del techo de §5.4.8.
+
+### 5. Excepciones — el dominio no conoce HTTP, el `GlobalExceptionHandler` cubre las 3 que el módulo lanza
+
+`ContratoFase.requireFirmable` lanza `IllegalArgumentException` (sin código de estado). `ContratoService.requireProgreso` lanza `NotAuthorizedException` (rol sin permiso o cuenta suspendida) y `NoSuchElementException` (participante inexistente); `obtenerUrlSubida` lanza `IllegalStateException` cuando el pacto ya existe. Las tres están mapeadas en `shared/web/GlobalExceptionHandler.java`: `NotAuthorizedException`→403, `NoSuchElementException`→404, `IllegalArgumentException`→400, `IllegalStateException`→409. Ninguna excepción de `phasecontracts` referencia `HttpStatus`/`ResponseEntity` — confirmado por lectura completa de `ContratoFase.java` y `ContratoService.java`.
+
+### 6. Nombres, tamaños — sin violaciones
+
+- Sin `Util`/`Helper`/`Manager`/`Processor`/`Data`/`Info` sueltos en ningún nombre de clase del módulo.
+- `ContratoService.java` (130 líneas): implementa 5 interfaces (`FirmarContratoUseCase`, `ConsultarContratosPendientesUseCase`, `ConsultarContratosUseCase`, `ObtenerUrlFirmaContratoUseCase`, `ContratoFaseFinder`), 5 métodos públicos — dentro del techo de 300 líneas / 10 métodos públicos de §5.4.8, muy lejos del problema de tamaño que sí se encontró en `community.CelulaService` (417 líneas) o `rocks.RocaDiariaService` (350 líneas).
+- Método más largo del módulo: `firmar()` (líneas 58-72, ~15 líneas). Ningún método del módulo se acerca al techo de 40 líneas ni a 3 niveles de anidamiento.
+- Constructor de `ContratoService` con 5 parámetros — supera el "≤4" literal de §5.4.8, pero por el mismo motivo ya aceptado en la auditoría de `community` (agrupa los puertos que sus 5 casos de uso necesitan, no datos de negocio que debieran ir en un record); no se considera hallazgo grave.
+
+### 7. Frontera con otros módulos — respeta D-41, con una discrepancia real entre código y doc
+
+`ConsultarProgresoParticipantePersistenceAdapter` (único adaptador de este módulo que cruza a otro) delega en `com.renaser.os.users.api.ParticipacionProgramaFinder` — no hace ninguna query propia contra `participantes_programa`/`usuarios`. Es exactamente el patrón correcto de CLAUDE.md §4.3/§5.1 (un módulo solo llama a la API pública de otro).
+
+**Esto contradice lo que dice `docs/MODULO_PHASECONTRACTS.md` §2.2/§2.3/PC-3**, que describe (y da por vigente) un adaptador con **query SQL nativa propia vía `EntityManager.createNativeQuery`** contra `participantes_programa`+`usuarios`, presentando el consumo de `users.api` como un trabajo *futuro* pendiente de que `users` exponga esa proyección. El código ya no coincide con esa descripción: la migración a `users.api.ParticipacionProgramaFinder` (con el mismo comentario en el propio adaptador citando "D-41: ningún módulo lee la tabla de otro de frente") ya está hecha. El único commit del archivo en `git log` (`49a5a98`) ya contiene la versión que delega en `users.api`, así que el doc no describe ninguna versión real del código en ningún punto de su historia — quedó desalineado desde el principio, probablemente porque el diseño cambió después de redactar §2 pero antes de terminar la implementación, sin volver a corregir el texto. Es una violación concreta de CLAUDE.md §0.4 ("los documentos son fuente de verdad y no pueden contradecirse... si un cambio deja una sección vieja, se corrige en el momento") — en este caso el código terminó siendo *mejor* que lo documentado, pero el efecto práctico es el mismo: alguien que lea solo el doc diseñaría sobre una premisa falsa (que hay una query nativa frágil pendiente de migrar) cuando esa migración ya ocurrió y el `ConsultarProgresoParticipantePersistenceAdapterTest.java` actual (que sí usa `EntityManager` — pero solo para insertar fixtures de prueba, no en el adaptador) tampoco es evidencia de lo contrario si se lee rápido.
+
+`ContratoFaseFinder` (`api/ContratoFaseFinder.java`, único tipo del `@NamedInterface("api")` del módulo): `grep` de `phasecontracts.api` fuera del propio módulo devuelve **vacío** — ningún otro módulo lo consume todavía. Coincide con lo que ya declara el propio doc (§5: "nadie lo consume todavía"), no es un hallazgo nuevo.
+
+### 8. Resumen
+
+Módulo pequeño (22 archivos de producción) y el más limpio de los auditados hasta ahora contra las reglas de arquitectura: cero violaciones de dependencia, cero controllers con el patrón `X-Actor-Id` inseguro, cero excepciones HTTP-aware en dominio, cero infracciones de tamaño duras. El único hallazgo real es documental (punto 7): `docs/MODULO_PHASECONTRACTS.md` describe una deuda técnica (query nativa contra tablas ajenas) que el código ya resolvió, y el §4 del mismo doc describe una autenticación por header que el código también ya reemplazó por `@ActorAutenticado`. Ninguno de los dos es un riesgo de seguridad — ambos son el código *adelantándose* a su propia documentación — pero corresponde actualizar el doc para que vuelva a ser fuente de verdad.

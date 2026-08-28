@@ -254,3 +254,55 @@ A diferencia de `habits`→`points` y `rocks`→`points` (síncrono, misma trans
 - [ ] Bitácora de errores — no se encontró ningún error/bug real de entorno (ver cierre de §8)
 
 **Honestidad de alcance:** todo lo pedido en el encargo está construido — los 3 agregados completos (dominio/aplicación/persistencia/REST), los 4 listeners de eventos con el mecanismo de outbox probado de punta a punta contra 2 de los 4 eventos reales (más los 4 cubiertos a nivel unitario), el scheduler de retención, y el adapter de push placeholder. Lo que falta es exclusivamente lo que dependía de correr Maven (prohibido en este encargo) o de infraestructura que no existe todavía en `shared/`/`users/` (bloqueada, no inventada, igual que en el resto de módulos de este lote). La decisión de mayor impacto de negocio no confirmada es DN-1 (qué tipo de notificación le corresponde a cada uno de los 4 eventos, y si `HabitoCompletadoEvent` debería notificar en absoluto) — documentada como pregunta abierta §7.1, no asumida en silencio.
+
+## Auditoría de arquitectura (2026-08-28) — agente automático
+
+Auditoría de solo lectura del código real bajo `src/main/java/com/renaser/os/notifications/`, contra las reglas de CLAUDE.md §5.1/§5.1.2/§5.4. No se ejecutó `./mvnw` (fuera de alcance del encargo). Alcance: 63 archivos `.java`, 1776 líneas totales.
+
+**Resultado general: sin violaciones de arquitectura detectadas.** Es uno de los módulos más limpios auditados hasta ahora.
+
+### 1. `domain/` (3 agregados: `notificacion/`, `preferencia/`, `tokenpush/`)
+
+Correctamente organizado por agregado (regla §5.1.2 "subcarpeta por agregado, nunca por capa") — 3 agregados independientes, cada uno con su propia identidad y ciclo de vida:
+- `domain/model/notificacion/`: `Notificacion.java` (83 líneas), `TipoNotificacion.java` (enum, 23 líneas)
+- `domain/model/preferencia/`: `PreferenciaNotificacion.java` (record, 34 líneas)
+- `domain/model/tokenpush/`: `TokenPush.java` (64 líneas), `PlataformaPush.java` (enum, 7 líneas), `TokenPushId.java` (record, 25 líneas)
+
+Verificado: **cero imports** de `org.springframework.*` o `jakarta.persistence.*` en todo `domain/` (grep vacío). Lombok usado correctamente — solo `@Getter`/`@AllArgsConstructor(PRIVATE)`/`@EqualsAndHashCode(of="id")`/`@Accessors(fluent=true)` en `Notificacion.java` y `TokenPush.java`; nada de `@Data`/`@Setter`/`@NoArgsConstructor` público. `toString()` acotado sin PII (`Notificacion.java:80-82`, `TokenPush.java:61-63`) — cumple §5.4.5/§5.4.9. `domain/` no loguea (cero imports de `org.slf4j` ahí) — cumple §5.4.9.
+
+Factory methods con nombre de intención (`emitir`, `rehydrate`, `registrar`, `reasignar`, `marcarLeida`) en vez de setters públicos; validación de invariantes vía `requireNotBlank`/`Objects.requireNonNull` en los factory methods, no en constructores Lombok — patrón correcto descrito en CLAUDE.md §5.4.5.
+
+### 2. Listeners de evento (`infrastructure/adapter/in/event/`) — el foco del encargo
+
+Los 4 listeners (`HabitoCompletadoNotificationListener.java:28-42`, `RachaCompletadaNotificationListener.java:13-27`, `RocaCompletadaNotificationListener.java:13-26`, `SantuarioRotoNotificationListener.java:14-28`) son "adaptador tonto" de manual: cada uno usa `@ApplicationModuleListener`, reacciona a **un** evento con **una** llamada a `EmitirNotificacionUseCase.emitir(...)`, sin lógica de negocio embebida, sin `@Transactional` propio, sin orquestar más de un caso de uso. Ninguno supera 42 líneas.
+
+Nota de diseño (no defecto de código, ya documentada como DN-1 en §7.1 de este mismo doc): 3 de los 4 eventos mapean a `TipoNotificacion.LOGRO_DESBLOQUEADO`/`HITO_PROGRAMA` por aproximación, sin tipo dedicado confirmado por negocio — riesgo de producto, no de arquitectura.
+
+### 3. Adaptadores REST (`infrastructure/adapter/in/rest/`)
+
+Los 3 controllers (`NotificacionController.java`, `PreferenciaNotificacionController.java`, `TokenPushController.java`) cumplen la regla de "controller tonto": sin inyección de repositorios ni puertos `out`, sin `@Transactional`, sin `if` de negocio, cada método invoca un único caso de uso vía puerto `in`. `PreferenciaNotificacionController.actualizar` (líneas 34-43) hace un `.map()` de DTO→`ItemPreferencia`, que es mapeo de frontera web permitido a mano (regla 6), no lógica de negocio.
+
+DTOs de salida (`NotificacionResponse`, `PreferenciasResponse`, `TokenPushResponse`) son proyecciones explícitas escritas a mano, no serialización de entidad — cumple §5.4.1/§8.
+
+### 4. Persistencia (`infrastructure/adapter/out/persistence/`)
+
+Mapeo `JpaEntity ↔ dominio` escrito **a mano** (no MapStruct) en los 3 pares (`NotificacionPersistenceMapper`, `PreferenciaNotificacionPersistenceMapper`, `TokenPushPersistenceMapper`) — no es una violación (la regla dice "MapStruct SOLO ahí", no "MapStruct obligatorio ahí"), pero es una desviación de la guía de CLAUDE.md §5.4.5 que recomienda MapStruct justamente para este mapeo plano y repetitivo; los propios mappers documentan la razón (`PreferenciaNotificacionPersistenceMapper.java:9-10`: "traducción explícita caso a caso, nunca `valueOf` mágico"), así que parece deliberado, no un descuido.
+
+`@Entity` con `@Data`/`@NoArgsConstructor`/`@AllArgsConstructor` correctamente confinado a `*JpaEntity.java` en `adapter/out/persistence/`, nunca en `domain/` — cumple §5.4.5.
+
+`@Modifying @Query` en `SpringDataNotificacionRepository.java:25-37` (`marcarLeida`, `marcarTodasLeidas`, `deleteByCreadoEnBefore`) sin `clearAutomatically` — ya señalado como riesgo abierto por el propio doc (§8, DN-bullet sobre `@Modifying`), no es un hallazgo nuevo de esta auditoría.
+
+### 5. Nombres y tamaños
+
+- Sin nombres prohibidos: `grep -rniE "class .*(Util|Helper|Manager|Processor|Info)\b"` sobre todo el módulo → 0 resultados.
+- Puertos nombrados por intención de negocio (`LoadNotificacionPort`, `SaveNotificacionPort`, `PushPort`, `UpsertTokenPushPort`, `LoadTokenPushPort`), nunca por tecnología — cumple §5.4.8.
+- Archivo más grande: `NotificacionService.java` con 114 líneas (techo 300) y su método más largo, `emitir` (líneas 60-73), 14 líneas (techo 40). Ningún archivo ni método del módulo se acerca a los techos de CLAUDE.md §5.1.2/tabla de tamaños.
+- `ActorNotificacionesGuard` (42 líneas) está correctamente extraído como servicio compartido por los 3 servicios del módulo, evitando duplicar el guard de actor tres veces — buen ejemplo de SRP/DIP.
+
+### 6. Observación estructural (no defecto): convención `infrastructure/adapter/` vs. `adapter/`
+
+El árbol real usa `notifications/infrastructure/adapter/{in,out}/...`, un nivel más anidado que el árbol de ejemplo en CLAUDE.md §5.1 (`habits/adapter/{in,out}/...`, sin `infrastructure/` intermedio). Se verificó que **los 14 módulos del repo** siguen esta misma convención `infrastructure/adapter/` de forma consistente (incluido `users`, el módulo de referencia) — es una convención de proyecto ya asentada, no una desviación introducida por `notifications`. No se marca como hallazgo porque no rompe la regla de dependencia (`domain/` sigue sin saber de `adapter/`), solo difiere del diagrama ilustrativo del documento madre.
+
+### 7. `api/` — módulo sin paquete público propio
+
+`notifications` no tiene paquete `api/` (a diferencia de los otros 13 módulos). Verificado que es correcto para su rol: `notifications` es mayormente consumidor de eventos de otros módulos (no expone casos de uso para que otros los llamen síncronamente) — la única implementación "hacia afuera" es `NotificacionesNoLeidasService implements NotificacionesNoLeidasFinder`, donde la interfaz vive en `points.api` (Dependency Inversion: `points` define el puerto, `notifications` lo implementa, evitando que `points` dependa de `notifications`). Ningún otro módulo importa `com.renaser.os.notifications.*` — confirmado por grep sobre todo `src/main/java`. No hace falta `api/` mientras esto no cambie.

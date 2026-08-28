@@ -467,3 +467,65 @@ consultado, no reconstruido de memoria:
 |---|---|---|
 | R-8 | ¿Se quiere replicar el enmascaramiento "ALCHEMIST con `traineeProfile` → `role: TRAINEE`" del backend viejo en `POST /api/v1/users/me`? | ⬜ Abierto — no implementado a propósito, ver gap #1 arriba |
 | R-9 | ¿Hace falta baja de cuenta SIN gracia para el panel admin, y/o baja pública sin sesión por enlace de correo (exigida por Google Play para quien desinstaló la app)? | ⬜ Abierto — fuera del alcance literal de este encargo (autogestión) |
+
+## Auditoría de arquitectura (2026-08-28) — agente automático
+
+Auditoría de solo lectura de `src/main/java/com/renaser/os/users/`. No se corrió `./mvnw` (fuera de alcance del encargo). 9 controllers REST confirmados (`VerificacionEmailController`, `LogrosController`, `UserController`, `ParticipacionProgramaController`, `TraineeAdminController`, `StaffAdminController`, `MentorProfileController`, `AutenticacionController`, `AccountRequestController`), ~209 archivos `.java` en el módulo.
+
+### 1. Patrón de seguridad `@ActorAutenticado` vs `X-Actor-Id` — sin violaciones
+
+A diferencia de `community.TestimonioController` (corregido en esta misma sesión), **los 9 controllers de `users` usan `@ActorAutenticado UserId actor`** en todos los endpoints que necesitan un actor. `grep` de `@RequestHeader.*X-Actor-Id` sobre todo el módulo da 0 resultados de código real — las únicas apariciones de la cadena `X-Actor-Id` son comentarios Javadoc que documentan que `ActorAutenticadoArgumentResolver` (en `shared.web.security`) usa ese header como **respaldo interno** cuando no hay sesión, nunca como lectura directa en el controller. Esto es exactamente el mecanismo correcto (sesión primero, header como puente temporal de migración, docs/MODULO_AUTH.md §8), no el antipatrón.
+
+Los tres endpoints sin `@ActorAutenticado` son legítimamente públicos y están documentados como tales en el propio código:
+- `VerificacionEmailController` (`/send`, `/confirm`) — prueba de control de correo ANTES de tener cuenta, no hay actor posible.
+- `AccountRequestController.checkEmail/exists/verifyEmail/submit` — formulario de alta público.
+- `AccountRequestController.consultarEstado` (`GET /{id}/status`) — el solicitante todavía no tiene `User`; se resuelve por el `AccountRequestId` no adivinable, decisión documentada en D-… (gap #9).
+
+**Conclusión: sin hallazgos de seguridad en este patrón.**
+
+### 2. Pureza de `domain/`
+
+`grep` de `import org.springframework.*` / `import jakarta.persistence.*` sobre `src/main/java/com/renaser/os/users/domain/` da 0 resultados. `grep` de `import com.renaser.os.users.(application|infrastructure)` sobre el mismo árbol también da 0 resultados. Las 14 clases de dominio (`User`, `Email`, `Credencial`, `EstadoBajaCuenta`, `AccountRequest`+`Id`+`Status`, `MentorProfile`+`Level`+`OperationalStatus`, `ParticipacionPrograma`, `TipoMeta`, `IdentidadExterna`, `ProveedorIdentidad`) están limpias: sin Spring, sin JPA, sin setters públicos (Lombok `@Getter`/`@Accessors(fluent=true)`/`@AllArgsConstructor(PRIVATE)`/`@EqualsAndHashCode(of=id)` o `record` para value objects), validación en factory methods, `Clock` inyectado nunca `Instant.now()` directo.
+
+**Desviación real, no un bug pero sí una inconsistencia con lo documentado:** `User.java` (`domain/model/user/User.java:3-4`) y `ParticipacionPrograma.java` (`domain/model/participante/ParticipacionPrograma.java:5`) importan `com.renaser.os.users.api.UserRole`, `com.renaser.os.users.api.UserStatus` y `com.renaser.os.users.api.FasePrograma` — es decir, **`UserRole`/`UserStatus`/`FasePrograma` viven enteros en `users/api/`, no en `domain/model/user/`** como dice §4 de este mismo documento ("`domain/model/user/` (`User`, `Email`, `UserRole`, `UserStatus`)") y como muestra el árbol de ejemplo de CLAUDE.MD §5.1. El dominio termina dependiendo de su propia `api/` en vez de al revés (lo habitual es que `api/` exponga una proyección *derivada* del dominio, como sí hace `UserSummary`). No viola la regla dura de §5.1.2 (domain no importando Spring/JPA/adapters), y `ArchitectureTest` no lo prohíbe porque sigue siendo el mismo módulo — pero es inconsistente con el resto del propio módulo: `ProveedorIdentidad` (identidad externa) y `TipoMeta` (participante) sí están correctamente en `domain/`, mientras que `UserRole`/`UserStatus`/`FasePrograma` no. Vale una decisión explícita (¿se documenta como patrón intencional — "estos 3 enums son vocabulario compartido con otros módulos desde el día uno, por eso viven en `api/`" — o se corrige la tabla de §4 que hoy es fácticamente incorrecta?).
+
+### 3. Regla de subcarpeta por agregado (CLAUDE.MD §5.1.2)
+
+Correctamente aplicada. Carpetas de `domain/model/`: `user/` (agregado `User` + sus value objects `Email`/`Credencial`/`EstadoBajaCuenta`, todos sin sentido sin `User`), `accountrequest/` (agregado propio, su propia identidad `AccountRequestId`), `mentorprofile/` (agregado propio, único con tabla propia por D-25), `participante/` (agregado `ParticipacionPrograma` + su value object `TipoMeta`), `identidadexterna/` (agregado `IdentidadExterna`, 1:N real con `User`, identidad natural `(proveedor, sujeto)` — el propio Javadoc del archivo explica por qué es agregado propio y no parte de `User`). Cinco agregados reales, cinco carpetas — ninguna subdivide por capa dentro de `domain/`, tal como exige la regla.
+
+### 4. Controllers "tontos"
+
+Los 9 controllers son delgados: ningún `@Transactional`, ningún `if` de negocio, ninguna inyección de `Repository`/puerto `out`. Cada método deserializa, invoca **un** caso de uso vía su interfaz `in`, y mapea la salida. El endpoint más largo (`AutenticacionController.loginSocial`, con el `switch` sellado sobre `ResultadoLoginSocial`) tiene 10 líneas de cuerpo — el propio Javadoc explica por qué el `switch` vive ahí (es la única decisión de "¿corresponde sesión?", forzada por el compilador vía `sealed interface`) y no es lógica de negocio sino despacho de transporte.
+
+### 5. Excepciones de dominio sin HTTP
+
+`grep` de `@ResponseStatus`/`ResponseStatusException` sobre todo `users/` da 0 resultados. Las excepciones de negocio (`NotAuthorizedException`, `RateLimitExceededException`, `TokenVerificacionEmailInvalidoException`, `CredencialesInvalidasException`, `IdentidadProveedorInvalidaException`, etc.) viven en `shared.domain`, sin conocimiento de status codes. `shared.web.GlobalExceptionHandler` es el único traductor a HTTP (`FORBIDDEN`, `UNAUTHORIZED`, `BAD_REQUEST`, `TOO_MANY_REQUESTS`, `CONFLICT`, `NOT_FOUND`, según la excepción) — exactamente el diseño de §5.4.4.
+
+### 6. Lombok
+
+`@Data`/`@Setter`/`@NoArgsConstructor` aparecen únicamente en las 4 clases `@Entity` de persistencia (`UserJpaEntity`, `AccountRequestJpaEntity`, `MentorProfileJpaEntity`, `ParticipacionProgramaJpaEntity`) — cada una con javadoc explicando por qué `@Data` es seguro ahí (sin relaciones `@ManyToOne`/`@OneToMany` perezosas que romper). `domain/` usa el patrón fluent con constructor privado descrito en §5.4.5, o `record` para los value objects sin comportamiento posterior a la construcción (`Email`, `Credencial`, `IdentidadExterna`, `AccountRequestId`, `EstadoBajaCuenta`). Sin violaciones.
+
+### 7. Nombres prohibidos
+
+`grep` de clases `*Util`/`*Helper`/`*Manager`/`*Processor`/`*Data`/`*Info` sueltas sobre el módulo: sin resultados.
+
+### 8. Techos duros de tamaño (§5.4.8)
+
+La mayoría de las clases está dentro de rango. Dos excepciones reales:
+
+- **`application/services/ParticipacionProgramaService.java` — 300 líneas (justo en el techo) y ~19 métodos públicos** (contra el techo de 10 de §5.4.8). Implementa 11 interfaces de caso de uso a la vez (`ActivateSelfTrackingUseCase`, `DeactivateSelfTrackingUseCase`, `ConsultarSelfTrackingUseCase`, `AssignMentorToTraineeUseCase`, `ParticipacionProgramaFinder`, `ListTraineesUseCase`, `GetTraineeDetailUseCase`, `SetTraineeProgramDayUseCase`, `UpdateTraineeProfileUseCase`, `AssignTraineeCellUseCase`, `RemoveTraineeCellUseCase`, `AsignacionCelulaPort`). Es el patrón D-27 documentado ("una clase por agregado", no "una clase por caso de uso") y cada método sigue siendo corto y de una sola responsabilidad — pero el conteo de métodos públicos excede el techo explícito de §5.4.8 independientemente del patrón que lo justifique. Vale una decisión explícita: ¿el techo de 10 métodos públicos aplica también a las clases "una por agregado" de D-27, o D-27 es una excepción documentada a ese punto en particular?
+- **`infrastructure/adapter/out/persistence/participante/ConsultarResumenParticipacionPersistenceAdapter.java` — 304 líneas**, por encima del techo de 300. La densidad de complejidad real es baja (son 9 constantes de SQL nativo + sus métodos de mapeo fila→objeto), pero excede el límite literal. Candidato a partir en dos clases (ej. separar las queries de "resumen de un participante" de las de "panel admin de aprendices", que son casos de uso distintos) si se quiere cumplir la letra de la regla.
+
+Ningún método individual observado supera las 40 líneas, y no se encontraron niveles de anidamiento mayores a 2.
+
+### 9. Logging
+
+`grep` de `Logger`/`log\.` sobre `domain/` da 0 resultados — el dominio nunca loguea, consistente con §5.4.9. El logging de PII/credenciales está tratado con cuidado explícito, mejor que el mínimo exigido: `NoOpEnviarEmailAdapter` y `SmtpEnviarEmailAdapter` tienen comentarios línea por línea citando CLAUDE.MD §5.4.9 y loguean solo la **longitud** de un link/token/contraseña temporal, nunca su valor ni el email destinatario (ej. `NoOpEnviarEmailAdapter.java:48-50`, `SmtpEnviarEmailAdapter.java:92-94`). Los adaptadores OAuth (`GoogleIdentidadAdapter`, `AppleIdentidadAdapter`, `FacebookIdentidadAdapter`) solo loguean la excepción al fallar el intercambio de código, nunca el `code`/`id_token` en sí. `AccountDeletionService` loguea el `UserId` (UUID, no PII) al fallar una purga individual — aceptable.
+
+### 10. Otras observaciones
+
+- **Mitigación de ataque de temporización en login** (`AutenticacionService.java:23-24,43-52`): cuando el email no existe o la cuenta no tiene contraseña, se compara igual contra un hash BCrypt señuelo fijo, para que `passwordEncoder.matches` haga el mismo trabajo criptográfico siempre — evita que el tiempo de respuesta delate si un email está registrado. No estaba pedido explícitamente en el checklist de auditoría, pero es una buena práctica de seguridad que vale destacar.
+- **Orden E-42 (recurso antes que gate de admin) aplicado consistentemente**: verificado en `StaffAdminService`, `ParticipacionProgramaService.obtener/fijarDia/assign/remove` y `AccountRequestService.eliminar` — en todos, el recurso por id se carga primero (404 si no existe) y `RequireAdminGuard`/`RequireActiveUserGuard` se invoca después (403 si el actor no califica), evitando que el código de estado delate si el recurso existía.
+- **Frontera de módulo respetada**: `package-info.java` de `users` lleva `@ApplicationModule`; `users/api/package-info.java` lleva `@NamedInterface("api")`. `grep` de `import com.renaser.os.users.(domain|application|infrastructure)` sobre el resto del código (`com/renaser/os/**`, excluyendo el propio `users/`) da 0 resultados — ningún otro módulo importa los paquetes internos de `users`. `ArchitectureTest` cubre esta regla con `ApplicationModules.verify()`.
+- **Mapeo en la frontera de persistencia**: Two-Way Mapping a mano (no MapStruct) en los 4 agregados con tabla propia, documentado explícitamente como decisión (D-28) por la traducción de enums español↔inglés — consistente con §5.4.1/§5.4.5.
+- El enum `Permission` y `@RequiresPermission` siguen sin construirse (bloqueado por R-2, ya documentado en §3 de este archivo) — la autorización fina de este módulo se resuelve hoy con guard clauses dentro de los servicios (`RequireAdminGuard`, `RequireActiveUserGuard`, `User.canManageRoles()`), no con la anotación declarativa de CLAUDE.MD §5.3.4/§5.3.5. No es un hallazgo nuevo, pero se confirma que el mecanismo de reemplazo (guard clauses) está aplicado de forma consistente en los ~13 casos de uso que lo necesitan.

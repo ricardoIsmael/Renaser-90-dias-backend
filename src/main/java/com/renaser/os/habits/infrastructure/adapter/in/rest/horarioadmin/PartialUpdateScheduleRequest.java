@@ -1,6 +1,6 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.horarioadmin;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 
 import java.time.LocalTime;
 

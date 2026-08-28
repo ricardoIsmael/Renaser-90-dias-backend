@@ -515,3 +515,85 @@ inofensivo hoy porque la app **firma la portada del lado cliente** contra el buc
   token sea válido, test de reflexión de `@RequiresPermission`/`@PublicEndpoint` — no aplican todavía
   porque no hay filtro JWT ni sistema de permisos anotado (bloqueante general del proyecto, no de este
   módulo).
+
+## Auditoría de arquitectura (2026-08-28) — agente automático
+
+Alcance: `src/main/java/com/renaser/os/academy/` completo, solo lectura, sin correr `./mvnw`. 117
+archivos `.java`, 4243 líneas. Contraste contra las reglas de `CLAUDE.md` §5.1/§5.1.2/§5.4.6/§5.4.8.
+
+**Hallazgos**
+
+1. **`application/services/CatalogoAcademyService.java` supera el techo duro de 300 líneas** (341
+   líneas, técho de CLAUDE.MD §5.4.8). Es además la clase que implementa más interfaces de caso de uso
+   del módulo: 9 (`ConsultarMisCursosUseCase`, `ConsultarCursoDetalleUseCase`,
+   `ConsultarSeccionesCursoUseCase`, `ConsultarMotivoBloqueoCursoUseCase`, `ConsultarLeccionUseCase`,
+   `ConsultarMotivoBloqueoLeccionUseCase`, `CompletarLeccionUseCase`, `ConsultarCursosBloqueadosUseCase`,
+   `DescompletarLeccionUseCase`) con 9 métodos públicos (`misCursos`, `cursosBloqueados`, `detalle`,
+   `secciones`, `motivo(CursoId)`, `motivo(LeccionId)`, `leccion`, `completar`, `descompletar`) — en el
+   límite del techo de 10 métodos públicos/clase, no lo supera todavía. La clase documenta la decisión
+   en su propio Javadoc (`CatalogoAcademyService.java:44-51`): es un espejo deliberado de un único
+   archivo del repo Next.js (`cursos/service.ts`) que agrupaba los mismos casos de uso porque comparten
+   el cálculo de "qué ve este actor" (`requireProgreso`/`aUserRole`/`programDayDe`, líneas 306-329). Es
+   una decisión documentada y defendible, no un descuido — pero el conteo de líneas sí cruza el techo
+   duro de la regla de tamaño, así que corresponde señalarlo para que el equipo decida explícitamente
+   si extrae la lógica compartida (`requireProgreso`, `aUserRole`, `programDayDe`, `firmarPortada`) a
+   una clase colaboradora y así baja de 300 líneas sin romper la agrupación por caso de uso compartido.
+   Ningún método individual de esta clase supera las 40 líneas.
+
+2. **`domain/model/asignacion/` mezcla dos agregados independientes en una sola subcarpeta**, en tensión
+   con la regla de CLAUDE.MD §5.1.2 ("2+ raíces de agregado independientes → una subcarpeta por
+   agregado", verificada contra `dddsample-core`). Contiene:
+   - `AsignacionCurso`/`AsignacionCursoId` — raíz de agregado propia, con su propio ciclo de vida
+     (vigencia por fecha/revocación, `AsignacionCurso.java:22-129`) y su propio puerto
+     (`LoadAsignacionCursoPort`). No tiene relación de composición con `Grupo`: lo referencia solo por
+     `GrupoId` (arco exclusivo usuario⊕grupo, `AsignacionCurso.java:48-55`).
+   - `Grupo`/`GrupoId` + `MiembroGrupo` — un segundo agregado independiente (grupo de usuarios con sus
+     miembros, clave natural `(grupoId, usuarioId)` en `MiembroGrupo.java:9`), con su propio ciclo de
+     vida y sentido sin `AsignacionCurso`.
+
+   No es una violación de las reglas duras (no hay subcarpeta por capa, no hay import prohibido), y el
+   nombre `asignacion/` sí describe con precisión el caso de uso administrativo que agrupa ambas clases
+   (asignar un curso a un destino, sea usuario directo o grupo) — pero, aplicada la letra de la regla del
+   agregado, sería más consistente partir en `asignacioncurso/` y `grupo/`. Vale una decisión explícita
+   del equipo, no un cambio automático.
+
+   El resto de `domain/` sí sigue la regla con precisión: `curso/` (9 clases: `Curso`, `CursoId`,
+   `SeccionCurso`, `SeccionCursoId`, `Leccion`, `LeccionId`, `RecursoLeccion`, `AccesoCurso`,
+   `TipoVideoLeccion`) es un solo agregado curso-céntrico y lo documenta explícitamente en su propio
+   Javadoc (`Curso.java:10-14`, cita literal "CLAUDE.MD sec. 5.1.2, regla de agregado"). `recomendacion/`
+   tiene una sola clase. `progreso/` agrupa `ProgresoLeccion` (entidad, clave natural) con
+   `PorcentajeCursos` (calculadora de dominio puro sin identidad, constructor privado,
+   `PorcentajeCursos.java:39-49`) — esta última no es un agregado, así que no contradice la regla.
+
+3. **17 clases en `domain/`, ninguna importa `org.springframework.*`, `jakarta.persistence.*` ni nada de
+   `adapter/`/`application/`** — verificado con grep sobre todo el árbol `domain/`. Sí importan clases
+   `api` de otros módulos (`com.renaser.os.users.api.UserRole` en `Curso.java:3`,
+   `AsignacionCurso.java`, `SeccionCurso.java`), que es exactamente el canal permitido entre módulos.
+   Ninguna clase de dominio usa Lombok (todas con constructores/getters escritos a mano); no hay
+   setters públicos, `equals`/`hashCode`/`toString` acotados a los campos de identidad en todas las
+   clases revisadas.
+
+4. **Los 4 controllers muestreados (`CursoController`, `LeccionController`, `ClaseDiariaController`,
+   `RecomendacionController`) cumplen "controller tonto"**: solo inyectan casos de uso (puertos `in`,
+   nunca puertos `out` ni repositorios), no tienen `@Transactional`, no tienen `if` de negocio, y cada
+   endpoint es una línea de mapeo (bien por debajo del techo de 15 líneas/endpoint). Confirma lo que ya
+   documenta la sección "Pendiente" de este archivo (línea 514-517): ningún endpoint de `academy`
+   declara `@RequiresPermission` ni `@PublicEndpoint` — pero es el mismo bloqueante general del proyecto
+   (la anotación solo existe hoy en `AccountRequestController` de `users`), no una omisión específica
+   de este módulo.
+
+5. **Sin nombres prohibidos** (`Util`/`Helper`/`Manager`/`Processor`/`Data`/`Info` sueltos) en ninguna
+   clase del módulo — verificado con grep sobre los 117 archivos.
+
+6. **Archivos más grandes del módulo** (por líneas): `CatalogoAcademyService.java` (341, ver hallazgo 1),
+   `ClaseDiariaService.java` (192, un solo método supera ligeramente la complejidad recomendada —
+   `buscarClaseDiaria`, ~47 líneas incluyendo comentarios/línea en blanco, revisar si conviene extraer el
+   armado de `SeccionCandidata` — pero no cruza el techo duro de 40 líneas de código efectivo de forma
+   clara, es un caso límite), `Curso.java` (176), `AsignacionCurso.java` (129),
+   `PorcentajeCursosService.java` (124) / `Leccion.java` (124). Ninguno de estos cuatro últimos excede
+   ningún techo.
+
+**Conclusión:** el módulo está, en términos generales, bien alineado con las reglas hexagonales del
+proyecto (dominio puro, controllers tontos, puertos por intención, sin nombres prohibidos). Los dos
+puntos que ameritan decisión del equipo, no corrección automática, son el tamaño de
+`CatalogoAcademyService` (hallazgo 1) y el agrupamiento de dos agregados bajo `asignacion/` (hallazgo 2).

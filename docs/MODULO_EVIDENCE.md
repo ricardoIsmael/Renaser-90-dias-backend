@@ -233,4 +233,41 @@ Punto clave, verificado en el código: **`ANULADA_ADMIN` es un estado terminal.*
 
 **Lo que NO se construyó, deliberadamente, y sigue abierto:** quién aplica la penalización la PRIMERA vez (`MotivoPuntos.INVALID_EVIDENCE`, `-10`, disparado por `rechazarPorIa` según el backend viejo, solo para evidencia de HÁBITO) — eso depende de la integración real de IA, ver pregunta abierta #2 actualizada. Sin eso, `penalizacionAplicada` nunca se pone en `true` en producción hoy, así que la reversión que se acaba de construir queda correcta pero dormida — mismo patrón exacto que ya toleraba este módulo con el fallback a `REVISION_MANUAL` (§6): la lógica está completa y probada, el disparador real todavía no existe.
 
+## Auditoría de arquitectura (2026-08-28) — agente automático
+
+Alcance: solo lectura, `src/main/java/com/renaser/os/evidence/`. No se corrió `./mvnw`.
+
+**Mapa del módulo** (32 archivos, 1555 líneas):
+- `api/`: `DestinoEvidencia`, `EstadoValidacion`, `TipoEvidencia`, `RegistrarEvidenciaPort`, `package-info` — 5 archivos.
+- `domain/model/evidencia/`: `Evidencia` (205 líneas), `EvidenciaId` (26 líneas) — un solo agregado, carpeta plana. Correcto contra la regla de §5.1.2 (un agregado → sin subcarpetas por capa).
+- `application/ports/in/evidencia/`: 6 interfaces de caso de uso (`ConsultarEvidenciaUseCase`, `ListarEvidenciaUseCase`, `ListarEvidenciaAdminUseCase`, `RevisarManualmenteUseCase`, `AnularVeredictoUseCase`, `ProcesarColaValidacionUseCase`).
+- `application/ports/out/`: `evidencia/{LoadEvidenciaPort,SaveEvidenciaPort}`, `ia/{ValidacionIAPort,ResultadoValidacionIA}`.
+- `application/services/EvidenciaService.java` (258 líneas) — único servicio de aplicación.
+- `infrastructure/adapter/in/rest/`: 2 controllers + 4 DTOs. `infrastructure/adapter/in/scheduler/`: config + scheduler. `infrastructure/adapter/out/persistence/`: entidad JPA + mapper a mano + specifications + repo Spring Data + 2 enums JPA. `infrastructure/adapter/out/ia/`: `NoOpEvidenciaValidacionIAAdapter`.
+
+La convención `application/ports/{in,out}` + `infrastructure/adapter/{in,out}` (en vez de `port/`/`adapter/` sueltos al nivel del módulo, como muestra el árbol de CLAUDE.md §5.1) **no es una desviación de `evidence`**: se verificó contra `users` y `points` y es el patrón repetido en todo el repo — no se reporta como hallazgo.
+
+**1. Imports prohibidos en `domain/` — NINGUNO.** `grep` de `org.springframework.*`/`jakarta.persistence.*` sobre `domain/` no encontró coincidencias. `Evidencia.java` y `EvidenciaId.java` solo importan `evidence.api.*`, `shared.domain.{Clock,UserId}`, Lombok y JDK — cumple §5.1.1/§5.4.5.
+
+**2. Lombok en `domain/` — correcto contra la matriz permitida.** `Evidencia.java:25-28` usa exactamente el set permitido: `@Getter`, `@Accessors(fluent = true)`, `@AllArgsConstructor(access = AccessLevel.PRIVATE)`, `@EqualsAndHashCode(of = "id")`. Sin `@Data`/`@Setter`/`@NoArgsConstructor` público. Validación de invariantes vive en factory methods estáticos (`registrar`, líneas 69-83), no en el constructor — como exige §5.4.5.
+
+**3. `domain/` no loguea — correcto.** Ni `Evidencia.java` ni `EvidenciaId.java` importan `org.slf4j.*`. El único logger del módulo está en `infrastructure/adapter/in/scheduler/ProcesarColaValidacionScheduler.java:20`, en `adapter/in`, nivel `INFO` para un hito de negocio ("N evidencias procesadas") — capa correcta.
+
+**4. Nombres prohibidos — NINGUNO.** Sin `Util`/`Helper`/`Manager`/`Processor`/`Data`/`Info` sueltos en ningún nombre de clase del módulo.
+
+**5. Controllers — cumplen "controller tonto".**
+- `infrastructure/adapter/in/rest/EvidenciaController.java`: 2 endpoints (`GET /{id}`, `GET`), cada uno 2-6 líneas de cuerpo, solo arma el comando y delega a un caso de uso. Sin `@Transactional`, sin `if` de negocio, sin inyección de puertos `out`.
+- `infrastructure/adapter/in/rest/EvidenciaAdminController.java`: 3 endpoints (`GET`, `POST /{id}/review`, `POST /{id}/void`), mismo patrón, 4-6 líneas cada uno. El comentario de línea 26 documenta explícitamente que el gate de rol vive en `EvidenciaService`, no en el controller — coherente con §5.4.6.
+- Ninguno de los 5 endpoints excede el techo de ~15 líneas.
+
+**6. Tamaño de archivos — todos bajo el techo de 300 líneas/clase.** Los dos más grandes: `EvidenciaService.java` (258) y `Evidencia.java` (205). Ningún método individual supera ~30 líneas (el más largo es `Evidencia.registrar`, ~15 líneas incluyendo validaciones delegadas a métodos privados con nombre de intención).
+
+**7. Hallazgo real — `EvidenciaService` implementa 7 interfaces de caso de uso en una sola clase** (`application/services/EvidenciaService.java:47-48`: `RegistrarEvidenciaPort, ConsultarEvidenciaUseCase, RevisarManualmenteUseCase, AnularVeredictoUseCase, ProcesarColaValidacionUseCase, ListarEvidenciaUseCase, ListarEvidenciaAdminUseCase`). CLAUDE.md §5.4.8 (SRP) es explícito: *"una clase por caso de uso (`CompleteHabitUseCase`), no un `UserService` con 30 métodos"*. Con 7 métodos públicos, `EvidenciaService` está todavía dentro del techo duro (≤10) pero ya en el borde del objetivo (≤7), y mezcla en una sola clase responsabilidades bastante distintas: alta, consulta, revisión manual, anulación con reversión de puntos, y dos listados con reglas de autorización por rol distintas. No rompe ningún test de arquitectura hoy (no hay una regla ArchUnit que cuente interfaces implementadas), pero es la única desviación real de una regla explícita del documento encontrada en este módulo. Con 5 endpoints el costo actual es bajo; si el módulo crece (p. ej. al integrar IA real, ver pregunta abierta #2), separar en clases por caso de uso evitaría que esta clase seguiera acumulando responsabilidades.
+
+**8. Mapeo `JpaEntity ↔ dominio` — hecho a mano, no con MapStruct.** `infrastructure/adapter/out/persistence/EvidenciaPersistenceMapper.java` es una clase package-private escrita a mano (switch por enum, sin `@Mapper`). CLAUDE.md §5.4.5 asigna esa frontera específicamente a MapStruct ("Su caso de uso legítimo"). Se verificó que esto no es exclusivo de `evidence`: de los 14 módulos, solo `users`, `habits` (parcial) y `support` usan `@Mapper` de MapStruct; el resto (incluido `evidence`) mapea a mano. Es una inconsistencia real contra el documento, pero repo-wide, no algo que `evidence` introdujo por su cuenta — se deja constancia acá porque el alcance del encargo era este módulo, pero la corrección (si se decide aplicar) probablemente deba hacerse pareja en los demás módulos, no solo en `evidence`.
+
+**9. Puertos por intención de negocio — correcto.** `LoadEvidenciaPort`, `SaveEvidenciaPort`, `ValidacionIAPort`, `RegistrarEvidenciaPort`: ningún nombre delata tecnología. El adaptador sí la nombra (`EvidenciaPersistenceAdapter`, `NoOpEvidenciaValidacionIAAdapter`).
+
+**Conclusión:** el módulo cumple la arquitectura hexagonal documentada casi sin fisuras — el único hallazgo con peso real es el punto 7 (`EvidenciaService` como fachada de 7 casos de uso), y el punto 8 es una inconsistencia heredada del resto del repo, no propia de `evidence`. Ningún import prohibido, ningún nombre prohibido, ningún archivo ni método fuera de los techos de tamaño, controllers conformes.
+
 **Pruebas agregadas:** `EvidenciaTest.anularVeredictoEsIdempotente`, `anularVeredictoSenalaReversionDePenalizacionYLaApaga` (usa `Evidencia.rehydrate` para construir una evidencia con `penalizacionAplicada=true`, ya que ningún caso de uso la pone en `true` todavía), `anularVeredictoSinPenalizacionDevuelveFalse`; `EvidenciaServiceTest.traineeNoPuedeAnular`, `mentorNoPuedeAnular`, `anularEsIdempotente`, `anularRevierteLaPenalizacionCuandoEstabaAplicada`, `anularSinPenalizacionNoAjustaPuntos`.

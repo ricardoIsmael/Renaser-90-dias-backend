@@ -91,13 +91,28 @@ class MediaServiceTest {
         when(actorPort.deActor(usuarioId)).thenReturn(Optional.of(new ActorOnboarding(usuarioId, false)));
         when(saveMediaPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
 
+        String ruta = "onboarding/" + usuarioId + "/audio/uuid";
         var comando = new RegistrarMediaCommand(usuarioId, "v90", "clave-1", ClaseMedia.AUDIO,
-                MediaOnboarding.BUCKET_DEFAULT, "onboarding/x/audio/uuid", "audio/mpeg", 1024L, null, null);
+                MediaOnboarding.BUCKET_DEFAULT, ruta, "audio/mpeg", 1024L, null, null);
 
         MediaOnboarding resultado = service.registrar(comando);
 
         assertThat(resultado.usuarioId()).isEqualTo(usuarioId);
-        assertThat(resultado.rutaStorage()).isEqualTo("onboarding/x/audio/uuid");
+        assertThat(resultado.rutaStorage()).isEqualTo(ruta);
         verify(saveMediaPort).guardar(any());
+    }
+
+    @Test
+    @DisplayName("registrar(): rechaza una ruta que no cae bajo el prefijo del propio usuario")
+    void registrarRechazaRutaDeOtroUsuario() {
+        when(actorPort.deActor(usuarioId)).thenReturn(Optional.of(new ActorOnboarding(usuarioId, false)));
+        UserId otroUsuarioId = UserId.of(UUID.randomUUID());
+
+        var comando = new RegistrarMediaCommand(usuarioId, "v90", "clave-1", ClaseMedia.AUDIO,
+                MediaOnboarding.BUCKET_DEFAULT, "onboarding/" + otroUsuarioId + "/audio/uuid", "audio/mpeg", 1024L,
+                null, null);
+
+        assertThatThrownBy(() -> service.registrar(comando)).isInstanceOf(IllegalArgumentException.class);
+        verify(saveMediaPort, never()).guardar(any());
     }
 }

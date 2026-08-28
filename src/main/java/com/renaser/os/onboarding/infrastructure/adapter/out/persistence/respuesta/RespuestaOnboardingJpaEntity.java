@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -16,9 +17,13 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
+/** {@code valorTexto}/{@code valorJson} son respuestas de onboarding del aprendiz (CLAUDE.md
+ * §5.4.9: nunca loguear contenido de evidencia/respuestas de onboarding) — excluidos del
+ * {@code toString()} que {@code @Data} generaria por default. */
 @Entity
 @Table(name = "respuestas_onboarding", schema = "renaser")
 @Data
+@ToString(exclude = {"valorTexto", "valorJson"})
 @NoArgsConstructor
 @AllArgsConstructor
 public class RespuestaOnboardingJpaEntity {

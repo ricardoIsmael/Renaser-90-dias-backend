@@ -22,12 +22,27 @@ class MediaOnboardingTest {
     @Test
     @DisplayName("registrar() crea con id null (lo asigna Postgres)")
     void registrarCreaConIdNulo() {
-        MediaOnboarding m = MediaOnboarding.registrar(newUsuarioId(), "v90", "clave-1", ClaseMedia.AUDIO,
-                MediaOnboarding.BUCKET_DEFAULT, "onboarding/x/audio/uuid", "audio/mpeg", 1024L, null, null, CLOCK);
+        UserId usuarioId = newUsuarioId();
+        MediaOnboarding m = MediaOnboarding.registrar(usuarioId, "v90", "clave-1", ClaseMedia.AUDIO,
+                MediaOnboarding.BUCKET_DEFAULT, "onboarding/" + usuarioId + "/audio/uuid", "audio/mpeg", 1024L, null,
+                null, CLOCK);
 
         assertThat(m.id()).isNull();
         assertThat(m.clase()).isEqualTo(ClaseMedia.AUDIO);
         assertThat(m.creadoEn()).isEqualTo(CLOCK.now());
+    }
+
+    @Test
+    @DisplayName("registrar() rechaza una ruta que no cae bajo el prefijo del propio usuario")
+    void registrarRechazaRutaDeOtroUsuario() {
+        UserId usuarioId = newUsuarioId();
+        UserId otroUsuarioId = newUsuarioId();
+
+        assertThatThrownBy(() -> MediaOnboarding.registrar(usuarioId, "v90", "clave-1", ClaseMedia.AUDIO,
+                MediaOnboarding.BUCKET_DEFAULT, "onboarding/" + otroUsuarioId + "/audio/uuid", "audio/mpeg", 1024L,
+                null, null, CLOCK))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("no corresponde al usuario");
     }
 
     @Test

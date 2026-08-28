@@ -198,3 +198,72 @@ Esto se combina con el límite de D-48: **el límite protege del abuso, el cachi
 2. **Retención de conversaciones de Renasia.** El chat normal sí tiene política documentada (12 meses en GLOBAL); para Renasia no hay ninguna.
 3. **¿Notificar al aprendiz cuando su informe semanal está listo?** El enum `tipo_notificacion` ya tiene `RESUMEN_SEMANAL` sin dueño — encajaría, pero no está confirmado que deba dispararse.
 4. **Cadencia del scheduler:** ¿barrido semanal para todos los participantes activos, o por aniversario individual de cada aprendiz (día N de su programa)?
+
+---
+
+## Auditoría de arquitectura (2026-08-28) — agente automático
+
+Auditoría de solo lectura de `src/main/java/com/renaser/os/rag/`. No se corrió `./mvnw` (fuera de alcance del encargo). 3 controllers REST confirmados (`ConocimientoAdminController`, `RenasiaController`, `EspejoSombraController`) cubriendo 6 endpoints, más 1 `@Scheduled` (`GenerarInformesSemanalesScheduler`). No se reportan como hallazgo: D-45 (SQL nativo propio sobre `pgvector` en vez de `PgVectorStore`) ni que `base_conocimiento` arranque vacía — ambas son decisiones ya tomadas y documentadas en este archivo.
+
+**1. Seguridad — `@ActorAutenticado`: sin violaciones, grep vacío**
+
+Los 3 controllers usan `@ActorAutenticado UserId actorId` (`shared/web/security/ActorAutenticado.java`), nunca `@RequestHeader("X-Actor-Id", ...)` suelto:
+
+- `infrastructure/adapter/in/rest/ConocimientoAdminController.java:25`
+- `infrastructure/adapter/in/rest/conversacion/RenasiaController.java:39,45`
+- `infrastructure/adapter/in/rest/espejosombra/EspejoSombraController.java:43,53`
+
+`grep -rn "X-Actor-Id\|RequestHeader" src/main/java/com/renaser/os/rag` solo encuentra una mención en un comentario de `EspejoSombraController.java:19` que **documenta** el mecanismo de `ActorAutenticadoArgumentResolver` (sesión primero, header como respaldo interno de esa anotación) — no es un uso directo del header en el propio módulo. `rag` migró completo en el commit `b824c4b`.
+
+**2. Control de cuota diaria (`ControlCuotaRedisAdapter`, D-48) — sin forma de bypass por spoofing de actor**
+
+`infrastructure/adapter/out/redis/ControlCuotaRedisAdapter.java:40-52` incrementa una clave Redis `renasia:cuota:{actorId}:{fecha}` (TTL a medianoche UTC) recibiendo el `UserId` que `ConversacionRenasiaService.preguntar` (`application/services/ConversacionRenasiaService.java:88-90`) ya resolvió desde `@ActorAutenticado` en `RenasiaController.java:39` — nunca desde un header leído dentro del propio flujo de cuota. Como el actor viene de la sesión real (o del respaldo interno ya validado de `ActorAutenticadoArgumentResolver`, no de un header propio del módulo), no existe una ruta donde un cliente pueda escribir en la clave de cuota de otro usuario. El único camino "generoso" es `liberar()` (línea 55-57): decrementa la cuenta cuando el intercambio falla después de haberla consumido (búsqueda de contexto o streaming de IA fallan, `ConversacionRenasiaService.java:98-101,109-112`) — es una devolución legítima del propio flujo, no una vía de terceros.
+
+**3. Inconsistencia de logging — `participanteId` (= UserId = `sub` de Supabase) se loguea en `EspejoSombraService` y en el scheduler, pese a que el propio módulo documenta lo contrario**
+
+`ConversacionRenasiaService.java:162-163` deja explícito en un comentario: *"Tampoco el id del actor (es el `sub` de Supabase)"* — coherente con CLAUDE.md §5.4.9 ("Nunca loguear: ... ni el `sub` de Supabase"). Sin embargo, en el mismo módulo:
+
+- `application/services/EspejoSombraService.java:97-98, 104-106, 110-111, 116-117` — cuatro `log.debug/warn/info` que incluyen `participante={}` con el `UserId` completo.
+- `infrastructure/adapter/in/scheduler/GenerarInformesSemanalesScheduler.java:63-64` — `log.error(...)` con `participante={}`.
+
+`UserId` es, por diseño documentado en CLAUDE.md §5.3.1, el mismo UUID de Supabase Auth (`User.id`) — es decir, el mismo dato que `ConversacionRenasiaService` identifica como el `sub` a no loguear. No es un hallazgo catastrófico (es un UUID, no contenido de conversación ni el JWT en sí, y son logs de nivel `INFO`/`WARN`/`ERROR`/`DEBUG` sobre hitos de negocio del propio caso de uso, exactamente lo que CLAUDE.md §5.4.9 pide loguear en `application/`), pero es una inconsistencia real dentro del mismo módulo contra su propio criterio ya declarado, y técnicamente contradice la lista explícita de "nunca loguear" de §5.4.9. Comparado contra otros módulos ya auditados (`rocks.VerdugoService` solo loguea el id del *evento*, no de usuario; `habits/application` no tiene logging en absoluto), el patrón de loguear `UserId` no aparece en otro lado — es específico de `rag`.
+
+**4. `domain/` — cumple, subcarpetas correctas por agregado real**
+
+11 clases en `domain/model/`, repartidas en 3 subcarpetas, cada una un agregado independiente con identidad y ciclo de vida propios: `conocimiento/` (2: `ChunkConocimiento`, `ChunkConocimientoId`), `conversacion/` (5: `ConversacionRenasia`, `MensajeRenasia`, `MensajeRenasiaId`, `FuenteMensaje`, `RolMensaje` — `MensajeRenasia` no vive sin `ConversacionRenasia`, pero es su propia raíz con FK, no un value object suelto de ella), `espejosombra/` (4: `InformeEspejoSombra`, `InformeEspejoSombraId`, `DistribucionTemporal`, `PreguntaConfrontacion`). Ninguna subcarpeta se acerca al techo de ~10 clases. `grep` de `org.springframework.*`/`jakarta.persistence.*`/paquetes `application`/`infrastructure` sobre `domain/` no devolvió coincidencias — dominio limpio.
+
+Lombok en `domain/`: los 4 agregados usan exactamente el patrón permitido por CLAUDE.md §5.4.5 (`@Getter`, `@Accessors(fluent = true)`, `@AllArgsConstructor(access = AccessLevel.PRIVATE)`, `@EqualsAndHashCode(of = "id"/"usuarioId")`) — nunca `@Data`/`@Setter`/`@NoArgsConstructor` público. Construcción vía factory methods estáticos (`indexar`, `escribirDeUsuario`/`escribirDeAsistente`, `generar`, `iniciar`) + `rehydrate` separado para persistencia, con validación de invariantes en los factory methods, no en constructores (`MensajeRenasia.java:37-81`, `InformeEspejoSombra.java:56-112`, `ChunkConocimiento.java:59-98`). `toString()` acotado sin PII en las tres clases con datos sensibles (`MensajeRenasia.java:83-87`, `ConversacionRenasia.java:47-50`).
+
+**5. Controllers "tontos" — cumplido en los 3**
+
+`RenasiaController` (52 líneas, 2 casos de uso), `EspejoSombraController` (58 líneas, 2 casos de uso), `ConocimientoAdminController` (32 líneas, 1 caso de uso): cada endpoint deserializa, valida (`@Valid` donde aplica), invoca un único caso de uso y mapea a DTO de salida. Ninguno inyecta un puerto `out`, tiene `@Transactional` (`grep` de `@Transactional` sobre `infrastructure/adapter/in` no devolvió coincidencias) ni contiene un `if` de negocio — la única rama visible es `EspejoSombraController.java:46` (`participanteIdParam != null ? ... : actorId`), que es resolución de un parámetro opcional de query, no una regla de negocio (la regla real, D-47, vive en `EspejoSombraService.requireVisibilidad`, línea 167-179). El comentario de `ConocimientoAdminController.java:13` deja explícito que el gateo de rol vive en el servicio, no en el controller — correcto contra CLAUDE.md §5.4.6.
+
+**6. Autorización D-47/D-46/D-48 — resuelta en `application/`, nunca en el controller ni con anotaciones declarativas**
+
+`EspejoSombraService.requireVisibilidad` (línea 167-179) resuelve visibilidad de informes (propio participante, mentor **asignado** — no cualquier mentor, `esMentorAsignado` línea 181-186 consulta `ParticipacionProgramaFinder` — o ADMIN/ALCHEMIST) **antes** de tocar el informe puntual, de forma que un tercero sin relación recibe 403 y nunca 404 (evita filtrar existencia). `ConocimientoService.requireAdmin` (línea 47-56) exige ADMIN/ALCHEMIST y cuenta activa antes de indexar. `ConversacionRenasiaService.requireActivo`/`requireCuotaDisponible` (línea 148-160) verifican estado de cuenta y cuota antes de cualquier operación. Las tres verificaciones lanzan `NotAuthorizedException`/`RateLimitExceededException` (dominio compartido, `shared/domain/`) sin conocimiento de HTTP — el único traductor a status code es `shared/web/GlobalExceptionHandler.java` (maneja ambas excepciones, líneas 35-36 y 105-106). Ninguna excepción de `rag` construye un `ResponseEntity` ni conoce un código de estado.
+
+**7. Mapeo de persistencia — manual en los 3 agregados, no MapStruct (desviación menor de CLAUDE.md §5.4.5)**
+
+CLAUDE.md §5.4.5 recomienda MapStruct específicamente para la frontera `JpaEntity ↔ dominio` ("mapeo plano campo-a-campo, repetido en los 14 módulos... su caso de uso legítimo"). `rag` no usa `@Mapper`/`org.mapstruct` en ningún punto (`grep` vacío) — los 3 mappers (`MensajeRenasiaPersistenceMapper`, `InformeEspejoSombraPersistenceMapper`, `ConversacionRenasiaPersistenceMapper`) son clases `@Component` con métodos `toDomain`/`toEntity` escritos a mano. No es una violación de una regla dura (Two-Way Mapping en esa frontera es la estrategia correcta según §5.4.1, y el mapeo a mano es explícitamente válido — `buckpal` también mapea a mano), y en este caso concreto hay lógica que un mapper generado por convención no cubriría bien sin configuración adicional (conversión `int`↔`short`, `List<PreguntaConfrontacionEmbeddable>`↔`List<PreguntaConfrontacion>`, reconstrucción de `FuenteMensaje` a partir de una consulta separada). Se documenta como desviación del patrón preferido, no como defecto funcional.
+
+**8. Excepción a la regla de no-mapeo automático hacia el cliente — `IndexarConocimientoRequest`/`PreguntarRenasiaRequest` sin campos sensibles que blindar**
+
+A diferencia de `users` (blindaje de `role`), los DTOs de entrada de `rag` no tienen campos que el cliente no deba poder setear: `IndexarConocimientoRequest` (`infrastructure/adapter/in/rest/IndexarConocimientoRequest.java`) es de uso exclusivo admin y no incluye ningún campo de identidad; `PreguntarRenasiaRequest` es un único campo `question`. Full Mapping a mano igual, consistente con §5.4.1, pero no había superficie de mass-assignment real que corregir acá.
+
+**9. Tamaños — todo bajo los techos duros de §5.4.8**
+
+Archivo más grande del módulo: `application/services/EspejoSombraService.java` con 196 líneas (techo 300) y 3 interfaces `implements`/3 métodos públicos de caso de uso. Ningún método individual observado supera ~25 líneas. Sin nombres prohibidos (`Util`/`Helper`/`Manager`/`Processor`/`Data`/`Info` sueltos — `grep` vacío sobre el módulo completo).
+
+**10. Módulo `api/` deliberadamente vacío — documentado, no un olvido**
+
+`api/package-info.java` declara el `@NamedInterface("api")` sin contenido: `rag` es consumidor final de la cadena (lee de `habits.api.EntradaDiarioFinder` y `users.api.*` vía las fronteras públicas correctas, `infrastructure/adapter/out/habits/LeerEntradasDiarioAdapter.java:3-4`) y hoy nadie consume nada de `rag`. `grep` de imports cruzados confirma que todos los accesos a otros módulos pasan por sus paquetes `.api.*` — sin ningún import a `domain`/`application`/`infrastructure` interno de `users`/`habits`.
+
+**11. Los 5 archivos más grandes del módulo**
+
+1. `application/services/EspejoSombraService.java` — 196 líneas (hallazgo 3, logging)
+2. `application/services/ConversacionRenasiaService.java` — 167 líneas
+3. `domain/model/espejosombra/InformeEspejoSombra.java` — 113 líneas
+4. `infrastructure/adapter/out/vectorstore/PgVectorNativoAdapter.java` — 111 líneas
+5. `domain/model/conocimiento/ChunkConocimiento.java` — 99 líneas
+
+**Resumen:** `rag` es, de los módulos auditados hasta ahora, uno de los más limpios contra CLAUDE.md — cero violaciones de autenticación (hallazgo 1), cuota sin bypass (hallazgo 2), dominio puro con subcarpetas correctas por agregado (hallazgo 4), controllers tontos (hallazgo 5) y autorización resuelta enteramente en `application/` (hallazgo 6). Los únicos hallazgos son menores: una inconsistencia de logging de `UserId`/`sub` de Supabase contra el propio criterio que el módulo se fijó (hallazgo 3, el más accionable de la lista) y el uso de mapeo manual en vez de MapStruct en persistencia (hallazgo 7, estilo).

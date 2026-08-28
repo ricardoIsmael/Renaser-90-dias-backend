@@ -11,6 +11,7 @@ import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -18,9 +19,13 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
+/** {@code transcripcion}/{@code feedbackIa} son contenido de la grabacion V90 del aprendiz
+ * (CLAUDE.md §5.4.9: nunca loguear contenido de evidencia/respuestas de onboarding) — excluidos
+ * del {@code toString()} que {@code @Data} generaria por default. */
 @Entity
 @Table(name = "grabaciones_v90", schema = "renaser")
 @Data
+@ToString(exclude = {"transcripcion", "feedbackIa"})
 @NoArgsConstructor
 @AllArgsConstructor
 public class GrabacionV90JpaEntity {

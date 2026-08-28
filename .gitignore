@@ -5,6 +5,15 @@ target/
 !**/src/test/**/target/
 scratchpad/
 
+### Supabase CLI (cache de link local, sin secretos pero no es del repo) ###
+supabase/.temp/
+
+### Dumps de BD de origen (produccion, con PII sin filtrar) ###
+# Insumo temporal para escribir migraciones Flyway (docs/db/migracion/). NUNCA versionar:
+# tiene usuarios, mensajes, evidencias reales. Se borra o se guarda fuera del repo una vez
+# que la migracion correspondiente ya esta escrita y probada.
+docs/db/migracion/
+
 ### STS ###
 .apt_generated
 .classpath
