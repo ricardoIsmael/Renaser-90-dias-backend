@@ -373,3 +373,34 @@ Pruebas nuevas en `RocaDiariaServiceTest`: `publishedToWallConEvidenciaNoVisualE
   1. **Esquema:** `eventos_verdugo` tiene `CONSTRAINT verdugo_un_destino CHECK (num_nonnulls(registro_habito_id, roca_diaria_id) = 1)` — exactamente dos columnas de destino. Sumar `CODIGO_RENASER` necesita una tercera columna (`registro_radar_id uuid REFERENCES registros_radar(id)`) y reescribir ese CHECK. Es un cambio de esquema real contra una BD congelada (D-40), no una migración cosmética.
   2. **De fondo, y más importante:** el propio modelo de `EventoVerdugo` es "el aprendiz reacciona cuando se le vence el plazo de una roca diaria o un hábito" (javadoc de la clase, sin tocar). `registros_radar` (Código Renaser, `habits.domain.model.radar.RegistroRadar`) es un **log append-only sin ningún plazo de servidor**: `docs/MODULO_HABITS.md` §8.0 ya deja citado, contra el código real (`repository.ts` viejo y el baseline), que "no hay 'uno por día'" y que el gating de horario "es UX del cliente, nunca una restricción de servidor ni de base". No existe ningún estado "pendiente"/"vencido" para que Verdugo dispare sobre él. Inventar esa regla (¿qué cuenta como un Código Renaser "vencido"? ¿cuántos por día se esperan?) sin confirmación de negocio es exactamente lo que CLAUDE.MD prohíbe.
 - **Conclusión:** no se tocó `DestinoVerdugo` ni `eventos_verdugo`. Si en el futuro el negocio define un plazo real para el Código Renaser (ej. "debe hacerse antes de las 22:00, si no se pierde"), ese día tiene sentido volver a esta pregunta con la regla ya confirmada — hoy agregar el valor sería un enum muerto, sin ninguna regla que lo dispare.
+
+## Auditoría de arquitectura (2026-08-28) — agente automático
+
+Auditoría de solo lectura de `src/main/java/com/renaser/os/rocks/`, 105 archivos `.java`, contra las reglas de CLAUDE.md §5.1/§5.4. No se modificó código fuente.
+
+### `domain/` — bien subdividido, sin violaciones de dependencia
+
+`rocks/domain/model/` ya está partido en 6 subcarpetas por agregado independiente, no por capa: `rocadiaria/` (9 clases: `RocaDiaria`, `RocaDiariaId`, `ColorPareto`, `EscalaPuntosRoca`, `FasePremio`, `RachaRocas`, `ResultadoPremio`, `TipoEvidenciaRoca`, `VentanaPlanificacionDiaria`), `rocasemanal/` (6: `RocaSemanal`, `RocaSemanalId`, `AccionCritica`, `EstadoPlazo`, `SemanaPrograma`, `VentanaPlanificacionSemanal`), `rocamaestra/` (3: `RocaMaestra`, `RocaMaestraId`, `EjeObjetivo`), `verdugo/` (4: `EventoVerdugo`, `EventoVerdugoId`, `DestinoVerdugo`, `ResultadoVerdugo`), `dashboard/` (4: `BloqueoPlanificacion`, `DiaGrillaSemanal`, `EstadoRitmoRocas`, `ProgresoSemanal`) y `coherencia/` (2: `DiaRocas`, `PorcentajeRocas`). Estos son agregados reales con identidad, ciclo de vida y (potencial) repositorio propios — es exactamente el criterio de §5.1.2 (caso `dddsample-core`), no subdivisión "para ordenar". **No hace falta ninguna reorganización.**
+
+- Sin imports de `org.springframework.*` ni `jakarta.persistence.*` en `domain/` (`grep` limpio).
+- Sin imports de `rocks.application`/`rocks.infrastructure` desde `domain/` (`grep` limpio) — la dependencia apunta hacia adentro.
+- `domain/` no loguea (sin `Logger`/`log.` en ningún archivo de `domain/`).
+- Lombok usado correctamente en las 13 clases que lo llevan: `@Getter` + `@Accessors(fluent = true)` + `@AllArgsConstructor(access = AccessLevel.PRIVATE)` + `@EqualsAndHashCode(of = "id")`. Sin `@Data`/`@Setter`/`@NoArgsConstructor` público en ningún archivo del módulo. `toString()` acotado a mano donde existe (ej. `RocaSemanal.java:160-163`, `RocaDiaria`), sin PII.
+- Sin nombres prohibidos (`Util`/`Helper`/`Manager`/`Processor`/`Data`/`Info`) en ningún archivo del módulo.
+
+### Frontera entre módulos — respetada
+
+Todos los imports cruzados van por `.api`: `community.api.PublicarEnMuroPort` (`RocaDiariaService.java:3-4`), `evidence.api.*` (`RocaDiariaService.java:5-8`), `points.api.*` (`RocaDiariaService.java:9-13`, `PorcentajeRocasService.java:3`), `users.api.*` (`RocaLogrosService.java:3`, `ConsultarProgresoParticipanteRocksPersistenceAdapter.java:5-7`). Ningún import directo a `domain`/`application` interno de otro módulo. `rocks/api/RocaCompletadaEvent.java` expone `UUID` en vez del value object interno `RocaDiariaId` — mismo criterio que `HabitoCompletadoEvent`, documentado en el propio javadoc del evento (líneas 14-18).
+
+### Controllers — tontos, cumplen la regla
+
+`RocaDiariaController`, `RocaSemanalController`, `VerdugoController`, `RocaMaestraController`, `DashboardRocasController` (muestreados) no inyectan puertos `out` ni repos, no tienen `@Transactional`, no orquestan más de un caso de uso por endpoint. El único cómputo que hacen es mapeo DTO→Command (ej. `EjeObjetivo.valueOf(item.eje())` en `RocaDiariaController.java:64` y `RocaSemanalController.java:59`), que es transporte, no regla de negocio. Ningún endpoint supera ~15 líneas de cuerpo.
+
+### Hallazgos — 2 puntos a seguir
+
+1. **`RocaDiariaService.java` tiene 350 líneas — supera el techo de 300 de CLAUDE.md §5.4.8.** Implementa 6 interfaces de caso de uso a la vez (`CrearPlanDiarioUseCase`, `CompletarRocaDiariaUseCase`, `SolicitarUrlAdjuntoRocaUseCase`, `ConsultarRocasDeHoyUseCase`, `ConsultarRocasDeMananaUseCase`, `RocasDelDiaFinder`). Los métodos individuales están dentro de límite (el más largo, `completar()`, ~27 líneas), y las 6 responsabilidades son cohesivas (todas sobre el ciclo de vida de `RocaDiaria`), pero el techo de clase está para forzar a mirar si conviene partir en 2 servicios (ej. separar `solicitarUrl`/`hoy`/`manana`/`deHoy` — de solo lectura — de `crear`/`completar` — de escritura con efectos colaterales en `points`/`community`/`evidence`). No es una violación de dependencia ni de seguridad, es una señal de tamaño a revisar.
+2. **El guard `requireProgreso` (SUSPENDIDO→403, rol≠TRAINEE→403) está duplicado literalmente en 4 servicios** — `RocaDiariaService.java:339-349`, `DashboardRocasService.java:216-226`, `RocaSemanalService.java:169-179`, `RocaMaestraService.java:41-51` — y repetido con una variante menor (retorna `void` en vez de `ProgresoParticipanteRocks`) en `VerdugoService.java:105-114`. Las cinco copias son idénticas en la regla de negocio que aplican. Candidato a extraer a una clase compartida dentro del módulo (ej. `rocks/application/services/GuardParticipanteRocks`, package-private, no expuesta en `api/`) para que un cambio futuro en la regla (ej. agregar un rol que sí pueda operar) no obligue a tocar 5 archivos a mano — el mismo riesgo que CLAUDE.md §5.3.2 ya señaló para "cazar un rol nuevo en cada `if`".
+
+### Tamaños — el resto del módulo, dentro de límite
+
+Segundo archivo más grande: `DashboardRocasService.java` (234 líneas, dentro del techo de 300). Ningún otro archivo del módulo se acerca a 300 líneas. Clases de dominio más grandes (`RocaSemanal.java` 164, `RocaDiaria.java` 142) muy por debajo del techo.

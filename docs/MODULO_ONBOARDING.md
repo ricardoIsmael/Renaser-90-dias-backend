@@ -165,3 +165,227 @@ estado de validación IA (`PENDIENTE`/`PROCESANDO`/`REVISION_MANUAL`/`APROBADA`/
   de servicio, ver `OnboardingDashboardServiceTest`); breakdown de onboarding "en curso" por
   `flujoActual`/`seccionActual` (son strings libres del cliente, no un enum de dominio —
   agruparlos sería inventar una taxonomía no confirmada, CLAUDE.MD §0.6).
+
+## Auditoría de arquitectura (2026-08-28) — agente automático
+
+Alcance: `src/main/java/com/renaser/os/onboarding/` completo (39 clases de producción, 8 controllers), contra CLAUDE.MD §5.1, §5.1.2, §5.3.4/§5.3.5, §5.4.1-§5.4.10 y §7. Solo lectura — sin `./mvnw`, sin tocar `.java`.
+
+### 1. Autenticación del actor — sin violaciones, grep vacío
+
+Se revisaron los 8 controllers REST del módulo (`RespuestaController`, `EstadoOnboardingController`,
+`OnboardingDashboardController`, `CuestionarioController`, `GrabacionV90Controller`,
+`MetaMaestraController`, `MediaController`, más el dashboard admin). **Los 8 usan
+`@ActorAutenticado UserId actor`** (`com.renaser.os.shared.web.security.ActorAutenticado`,
+resuelto por `ActorAutenticadoArgumentResolver` — sesión real primero, header como respaldo).
+`grep -rn "X-Actor-Id"` sobre el módulo solo devuelve **comentarios de javadoc** que documentan
+el mecanismo (`EstadoOnboardingController`... no, ver detalle abajo — el único match real de texto
+es en `OnboardingDashboardController.java:13-14`, y es un comentario, no código: *"El actor se
+resuelve desde la sesion, con el header TEMPORAL X-Actor-Id como respaldo"*), **no hay ningún
+`@RequestHeader(value = "X-Actor-Id", ...)` suelto en ningún controller de `onboarding`**. Mismo
+patrón correcto que el resto de los módulos ya migrados en el commit `b824c4b`. **Sin hallazgo de
+seguridad en este punto** — a diferencia de `community/TestimonioController` (ya corregido en esta
+sesión), `onboarding` nunca tuvo el patrón viejo.
+
+Nota menor de higiene documental: `docs/MODULO_ONBOARDING.md` §5 (línea 84, sin tocar en esta
+auditoría salvo esta nota) todavía describe los endpoints como *"todos con `@RequestHeader("X-Actor-Id")`"*
+— esa frase quedó desactualizada respecto al código real (que ya usa `@ActorAutenticado`) y
+contradice CLAUDE.MD §0.4 ("los documentos son fuente de verdad y no pueden contradecirse"). No es
+un riesgo de seguridad (el código está bien), pero conviene corregir la línea 84 en el próximo
+cambio que toque este documento.
+
+### 2. `domain/` — sin imports prohibidos
+
+`grep` de `^import (org\.springframework|jakarta\.persistence|jakarta\.validation|jakarta\.servlet|com\.fasterxml\.jackson)`
+sobre `onboarding/domain/` → **0 resultados**. `grep` de imports hacia `onboarding.application`/
+`onboarding.infrastructure` desde `onboarding/domain/` → **0 resultados**. Los 5 agregados
+(`EstadoOnboarding`, `GrabacionV90`, `Respuesta`, `MediaOnboarding`, `Pregunta`/`Seccion`/
+`OpcionPregunta`) son Java plano: `Objects.requireNonNull`, factory methods estáticos
+(`crear`/`crearSlot`/`iniciar`/`rehydrate`), sin una sola anotación de framework más allá de
+Lombok (ver §6). Cumple CLAUDE.MD §5.1.1/§5.1.2 al pie de la letra.
+
+`application/` solo importa `org.springframework.stereotype.Service`,
+`org.springframework.transaction.annotation.Transactional` y (en `GrabacionV90Service`)
+`TransactionSynchronization`/`TransactionSynchronizationManager` para el patrón "despachar
+después del commit" — exactamente el mínimo que CLAUDE.MD §5.1.2 permite en esta capa
+("Sí, mínimo (`@Transactional`)"). Ningún `import` de `onboarding.infrastructure` desde
+`application/` (grep vacío).
+
+### 3. Subcarpetas de `domain/` — por agregado, no por capa
+
+`domain/model/` tiene cinco subcarpetas: `estado/`, `cuestionario/`, `respuesta/`, `media/`,
+`grabacionv90/`. Contra la regla corregida de CLAUDE.MD §5.1.2 ("subcarpeta por agregado real,
+nunca por capa"):
+
+- `estado/` → agregado `EstadoOnboarding` (PK = `usuario_id`) + su enum `HitoOnboarding`. Propio.
+- `respuesta/` → agregado `Respuesta` (EAV, PK propia, UNIQUE `(usuario_id, pregunta_id)`). Propio.
+- `media/` → agregado `MediaOnboarding` (PK propia) + `ClaseMedia`. Propio.
+- `grabacionv90/` → agregado `GrabacionV90` (PK propia, UNIQUE `(usuario_id, fase, eje, indice)`,
+  máquina de estados de IA propia) + `EstadoIAv90`. Propio.
+- `cuestionario/` → `Seccion`, `Pregunta`, `OpcionPregunta`, `TipoPreguntaOnboarding`: cuatro
+  clases que efectivamente cuentan una sola historia (el catálogo, solo lectura, sin repositorio
+  propio de escritura) — plano dentro de esa subcarpeta, correcto.
+
+Cada subcarpeta es una raíz de agregado independiente con su propia identidad/ciclo de vida/UNIQUE
+de base de datos — no hay ninguna subcarpeta que agrupe por capa (nada de `domain/entities/` ni
+`domain/valueobjects/`) ni "para ordenar". **Sin violaciones.**
+
+### 4. Controllers "tontos" — sin violaciones
+
+Los 8 controllers (`RespuestaController`, `EstadoOnboardingController`, `CuestionarioController`,
+`GrabacionV90Controller`, `MetaMaestraController`, `MediaController`, `OnboardingDashboardController`)
+cumplen las cinco reglas de CLAUDE.MD §5.4.6: deserializan (`@RequestBody`/`@RequestParam`),
+validan formato (`@Valid`), invocan un solo caso de uso `in`, mapean a DTO de salida. Ningún
+controller inyecta un puerto `out` ni un repositorio, ninguno tiene `@Transactional`, ninguno
+tiene un `if` de negocio. Método más largo: `MediaController.registrar` / `GrabacionV90Controller.registrar`,
+~6 líneas de cuerpo — muy por debajo del techo de ~15 líneas por endpoint.
+
+### 5. Excepciones — dominio sin conocimiento de HTTP
+
+El dominio lanza `IllegalArgumentException`/`IllegalStateException` (invariantes,
+`GrabacionV90.procesarIntentoDeValidacion`/`requireUnSoloValor`) y la aplicación lanza
+`NotAuthorizedException` (`shared.domain`)/`NoSuchElementException` — ninguna de estas conoce
+códigos HTTP. `shared/web/GlobalExceptionHandler.java` traduce las cuatro
+(`NotAuthorizedException`→403, `NoSuchElementException`→404, `IllegalArgumentException`/
+`ConstraintViolationException`→400, `IllegalStateException`→409) — es el único lugar del sistema
+que las conoce. Sin violaciones.
+
+### 6. Lombok/JPA — separación correcta
+
+`domain/`: `@Getter`, `@Accessors(fluent = true)`, `@AllArgsConstructor(access = PRIVATE)`,
+`@EqualsAndHashCode(of = "id"/"usuarioId")` — el patrón exacto que CLAUDE.MD §5.4.5 documenta
+contra `buckpal.Account`. **Cero** `@Data`/`@Setter`/`@NoArgsConstructor` público en `domain/`
+(grep confirmado). `@Entity`/`@NoArgsConstructor`/`@Data` aparecen únicamente en
+`infrastructure/adapter/out/persistence/**/*JpaEntity.java` (`EstadoOnboardingJpaEntity`,
+`GrabacionV90JpaEntity`, `RespuestaOnboardingJpaEntity`, `MediaOnboardingJpaEntity`,
+`PreguntaOnboardingJpaEntity`, etc.) — separación limpia.
+
+**Hallazgo de hardening (severidad baja, no una violación de la regla escrita):**
+`@Data` sobre `GrabacionV90JpaEntity` y `RespuestaOnboardingJpaEntity` genera un `toString()`
+automático que incluye `transcripcion` (texto de la transcripción de audio V90) y `valorTexto`/
+`valorJson` (contenido de respuestas libres del aprendiz) respectivamente — exactamente el tipo
+de dato que CLAUDE.MD §5.4.9 dice "nunca loguear" ("contenido de evidencia (audio, respuestas de
+onboarding V90)"). Hoy **no se encontró ningún log que efectivamente invoque ese `toString()`**
+(los `log.warn`/`log.error` del módulo solo interpolan IDs, ver §9 más abajo) así que no es una
+fuga activa, pero es una superficie latente: cualquier log futuro de la entidad completa (por
+ejemplo un `log.debug(entity)` agregado sin pensarlo, o una excepción de Hibernate que incluya el
+objeto en su mensaje) filtraría contenido personal a los logs. El dominio (`GrabacionV90.toString()`,
+`Respuesta.toString()`) ya hace esto bien — sobrescribe `toString()` a mano y deja afuera
+`transcripcion`/`valorTexto`/`valorJson` (líneas 175-179 de `GrabacionV90.java`, 178-181 de
+`Respuesta.java`) — la misma disciplina no se replicó en las dos `JpaEntity` señaladas. Sugerencia:
+`@ToString.Exclude` sobre esos dos campos, o un `toString()` a mano en la entidad, igual que ya
+se hizo en el dominio.
+
+**Corregido el mismo día (2026-08-28):** se agregó `@ToString(exclude = {...})` a ambas entidades
+(`transcripcion`/`feedbackIa` en `GrabacionV90JpaEntity`; `valorTexto`/`valorJson` en
+`RespuestaOnboardingJpaEntity`), la sugerencia de arriba. Se mantiene `@Data` para
+getters/setters/`equals`/`hashCode` (uso permitido en `JpaEntity`, CLAUDE.MD §5.4.5); Lombok
+prioriza el `@ToString` explícito sobre el que generaría `@Data` por default.
+
+### 7. Nombres prohibidos — grep vacío
+
+`grep -rn "class \w*(Util|Helper|Manager|Processor|Data|Info)\b"` sobre el módulo → **0 resultados**.
+
+### 8. Tamaño de clases/métodos — dentro de los techos
+
+Archivo más largo del módulo: `Respuesta.java` con 182 líneas (techo 300). Servicio más largo:
+`GrabacionV90Service.java` con 125 líneas / 6 métodos públicos (techo 300 líneas, 10 métodos
+públicos). Ningún método revisado supera ~25 líneas (techo 40) ni 2 niveles de anidamiento real
+(los `if` de guardas en `EstadoOnboarding.avanzar`/`GrabacionV90` son planos, sin anidar). Sin
+violaciones.
+
+### 9. Logging — sin PII/tokens/contenido de evidencia
+
+`grep` de `log\.(info|warn|error|debug)` sobre todo el módulo devuelve 4 sitios
+(`ProcesarValidacionV90Service.java:48`, `DespacharValidacionV90Adapter.java:34`,
+`NoOpV90ValidacionIAAdapter.java:21`, `NoOpMetaMaestraValidacionIAAdapter.java:21`). Los cuatro
+interpolan únicamente `grabacionId` (`long`) o texto fijo — **ninguno** interpola `transcripcion`,
+`valorTexto`/`valorJson`, `feedbackIa` ni el JWT/token del actor. `domain/` no tiene una sola
+sentencia de log (confirmado por grep, 0 resultados dentro de `onboarding/domain/`), cumpliendo
+CLAUDE.MD §5.4.9 al pie de la letra. Ver también el hallazgo de hardening del punto 6 (superficie
+latente vía `@Data.toString()`, no una fuga activa hoy).
+
+### 10. Límite de reintentos de validación IA — vive en `domain/`, correcto
+
+`GrabacionV90.MAX_INTENTOS = 3` (línea 42) y la máquina de estados completa
+(`procesarIntentoDeValidacion`/`registrarAprobacion`/`registrarRechazo`/`registrarSinResultado`,
+líneas 108-145) viven en `domain/model/grabacionv90/GrabacionV90.java` — el adaptador de IA
+(`NoOpV90ValidacionIAAdapter`) no sabe nada de reintentos, solo devuelve un veredicto puntual.
+La decisión "reintentar vs. caer a `REVISION_MANUAL`" (`registrarSinResultado`, línea 141-145)
+es una regla de dominio pura, tal como exige CLAUDE.MD §7. El guard contra doble-despacho
+concurrente (`requireEnProcesando`, documentado contra `docs/BITACORA_ERRORES.md` E-37) también
+vive en el dominio. Correcto.
+
+Adicionalmente, el contrato async de `ValidarV90UseCase` respeta CLAUDE.MD §7 al pie de la letra:
+`GrabacionV90Controller.solicitarValidacion` devuelve `202 Accepted` de inmediato
+(`ResponseEntity.accepted()`), el trabajo real (`ProcesarValidacionV90Service.procesar`) corre en
+`DespacharValidacionV90Adapter` vía `@Async`, y el despacho se registra explícitamente
+DESPUÉS del commit de la transacción que marca `PROCESANDO`
+(`GrabacionV90Service.despacharDespuesDelCommit`, usando `TransactionSynchronizationManager`) —
+evita el *lost update* bajo `READ_COMMITTED` que el propio código documenta como ya visto
+(E-37). `GET .../validation` (`consultarValidacion`) hace el polling. Ningún hilo de request
+bloquea esperando a la IA — hoy ni siquiera hay IA real conectada (`NoOpV90ValidacionIAAdapter`),
+así que el async corre pero termina en `REVISION_MANUAL` tras 3 intentos, comportamiento ya
+documentado en §4 de este mismo documento.
+
+### 11. Otras desviaciones encontradas
+
+- **Endpoint no documentado**: `MetaMaestraController` (`POST /api/v1/onboarding/master-goal/validation`,
+  caso de uso `ValidarMetaMaestraUseCase`) existe en el código pero **no aparece en la tabla de
+  endpoints de §5** de este documento (que lista 12 rutas y no incluye `master-goal`). Es un
+  endpoint real, con su propio servicio (`ValidarMetaMaestraService`), su propio puerto de IA
+  (`ValidacionMetaMaestraPort`/`NoOpMetaMaestraValidacionIAAdapter`) y su propio contrato —
+  deliberadamente **síncrono** (no 202+polling, con javadoc propio que explica por qué: el texto
+  se valida antes de persistirse, sin fila propia donde colgar un estado `PROCESANDO`). Esto es
+  una omisión de documentación (CLAUDE.MD §0.4: "todo avance se documenta en el mismo cambio"),
+  no un problema de código — pero contradice a la fuente de verdad tal como está escrita hoy.
+  Sugerencia: agregar la fila a la tabla de §5 en el próximo cambio sobre este documento.
+
+- **`MediaService.registrar` no verifica que `bucket`/`path` correspondan a una URL de subida
+  realmente emitida por `ObtenerUrlSubidaMediaUseCase`** (`MediaController.java:38-45`,
+  `RegistrarMediaRequest.java:9-11`, `MediaOnboarding.registrar`). El cliente puede llamar
+  `POST /media` directamente con cualquier `bucket`/`path` que pase las validaciones `@NotBlank`
+  de forma — no hay una tabla de "URLs prefirmadas pendientes de confirmar" ni una verificación
+  server-side de que el archivo referenciado exista en ese bucket/ruta, ni de que la ruta
+  pertenezca al propio usuario (`rutaNueva` genera `onboarding/{usuarioId}/...` pero nada impide
+  que el request declare una ruta con OTRO `usuarioId` en el prefijo). El propio javadoc de
+  `MediaOnboarding` describe el flujo esperado ("pide URL, sube directo a S3, y RECIÉN DESPUÉS
+  confirma") pero el código no ata un paso al otro. Es un patrón que probablemente se repite en
+  otros módulos con el mismo `AlmacenamientoPort` (ej. `phasecontracts.ContratoFase`, citado en
+  el propio javadoc como precedente) y puede ser una decisión de riesgo aceptado del equipo, pero
+  no está documentado como tal en este módulo — vale que alguien lo confirme explícitamente
+  (CLAUDE.MD §0.6: ante una duda que cambia el resultado, se pregunta).
+
+  **Corregido parcialmente el mismo día (2026-08-28):** `MediaOnboarding.registrar` ahora rechaza
+  con `IllegalArgumentException` cualquier `rutaStorage` que no caiga bajo el prefijo del propio
+  `usuarioId` (`onboarding/{usuarioId}/...`), cerrando el caso concreto señalado arriba —
+  suplantar el UUID de otro usuario en la ruta. **Lo que sigue sin resolver, a propósito:** esto
+  NO verifica que la ruta corresponda a una URL prefirmada realmente emitida (haría falta guardar
+  estado de la emisión — ej. una tabla o clave Redis de "URLs pendientes de confirmar", mismo
+  patrón que `ControlCuotaRedisAdapter` en `rag`), ni que el archivo exista en el bucket. Se dejó
+  fuera de esta corrección por ser un cambio de infraestructura más grande, no una validación de
+  dominio — queda como el gap real pendiente, ahora acotado a "un usuario activo puede registrar
+  cualquier ruta bajo su propio prefijo sin haber subido nada ahí" en vez de "cualquier ruta de
+  cualquier usuario".
+
+- **Mapeo hecho a mano en vez de MapStruct** en los cinco `*PersistenceMapper` del módulo
+  (`RespuestaPersistenceMapper`, `GrabacionV90PersistenceMapper`, `MediaPersistenceMapper`,
+  `CuestionarioPersistenceMapper`, `EstadoOnboardingPersistenceMapper`) — CLAUDE.MD §5.4.5
+  recomienda MapStruct específicamente para la frontera `JpaEntity ↔ dominio` por ser "mapeo
+  plano campo-a-campo, repetido en los 14 módulos", pero no lo exige como regla dura. Dado que el
+  dominio de este módulo se reconstruye vía factory methods estáticos (`rehydrate`/`crear`, no un
+  constructor público ni setters), un mapeo automático habría necesitado configuración adicional
+  de MapStruct de todos modos. No es una violación — es una nota de consistencia de estilo frente
+  al resto del repo, ya señalada como decisión propia en el árbol de §3 de este documento
+  ("mapper a mano").
+
+### Resumen
+
+Módulo `onboarding` limpio en los puntos estructurales duros: autenticación correcta en los 8
+controllers (sin el patrón `X-Actor-Id` inseguro), `domain/` sin imports prohibidos, subcarpetas
+por agregado real, controllers tontos, excepciones sin HTTP, Lombok/JPA bien separados, sin
+nombres prohibidos, tamaños dentro de los techos, logging sin PII activa, y el patrón async+polling
++ reintentos-en-dominio de CLAUDE.MD §7 implementado correctamente incluyendo el guard de
+concurrencia E-37. Los tres puntos a seguir (documentación de `master-goal` desactualizada,
+verificación de propiedad de `bucket`/`path` en `MediaService.registrar`, y `@Data.toString()`
+como superficie latente de PII en dos `JpaEntity`) son de severidad baja/media y no bloquean nada
+hoy, pero valen una línea en el próximo cambio que toque este módulo.

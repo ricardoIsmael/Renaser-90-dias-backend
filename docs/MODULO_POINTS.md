@@ -197,3 +197,84 @@ No se creó el agregado `participante` en `users` — está fuera del alcance de
 - Batch lookup de nombres en `RankingPersistenceAdapter.porTipoYFecha` — hoy es un `SELECT` por fila (documentado en el código como optimización futura si el volumen crece; el repo viejo documentaba ~30 aprendices activos).
 - `GET /api/v1/home`: `programDay`/`currentPhase`/`weekStatus`/`habitsToday`/`rocksToday`/`radarCheckinsToday` que espera el frontend real (`HomeSummaryResponse`, `C:\renaserPlayStore\src\types\home.ts`) — bloqueados por falta de finder en `habits.api`/`calendar.api`, paquete `api` inexistente en `notifications`, y `TraineeProfile` inexistente en `users` (gap #1). Documentado explícitamente en la propia respuesta (`bloqueos`), no inventado.
 - "Logros" (gap #22) — investigado con cita exacta del backend viejo, no construido: no es dominio de `points`. Ver `docs/PLAN_INTEGRACION_FRONTEND.md` gap #22 y la actualización 2026-08-26 de §3 de este documento.
+
+---
+
+## Auditoría de arquitectura (2026-08-28) — agente automático
+
+Alcance: `src/main/java/com/renaser/os/points/**` contra CLAUDE.MD §5.1, §5.1.2, §5.3.4/§5.3.5, §5.4.1–§5.4.10. Solo lectura — no se corrió `./mvnw`, no se modificó ningún `.java`. Método: lectura completa de los 62 archivos de producción del módulo + grep dirigido.
+
+### 1. Autenticación de actor en los controllers — sin violaciones
+
+`grep -rn "X-Actor-Id\|RequestHeader" src/main/java/com/renaser/os/points` no devuelve resultados. Los 3 `@RestController` del módulo usan `@ActorAutenticado UserId actor` correctamente:
+
+- `infrastructure/adapter/in/rest/puntaje/PuntajeController.java:32,39`
+- `infrastructure/adapter/in/rest/ranking/RankingController.java:36,44`
+- `infrastructure/adapter/in/rest/home/HomeController.java:21`
+
+Ninguno acepta el actor por header. `points` ya está migrado al patrón de sesión real (CLAUDE.MD, contexto de seguridad de esta auditoría) — no hay hallazgo que reportar acá.
+
+### 2. `domain/` — puro, sin fugas hacia Spring/JPA/adapters propios
+
+- `grep -rn "import org.springframework\|import jakarta.persistence" src/main/java/com/renaser/os/points/domain` → vacío.
+- `grep -rn "import com.renaser.os.points.(application|infrastructure)" src/main/java/com/renaser/os/points/domain` → vacío.
+- `domain/model/{puntaje,ajuste,ranking}/*.java` son 6 clases: `PuntajeParticipante` (Lombok `@Getter @Accessors(fluent=true) @AllArgsConstructor(PRIVATE) @EqualsAndHashCode(of="participanteId")`, sin setters), `AjustePuntos`/`ResultadoAjuste`/`PosicionRanking` (`record`, self-validating en el constructor compacto), `PuntajeGeneral` (clase estática pura, sin estado), `TipoRanking` (enum). Coincide 1:1 con el patrón de `buckpal`/`User` que CLAUDE.MD §5.4.5 pide.
+
+**Observación (no es violación de `ArchitectureTest` tal como está escrito hoy, pero sí una inversión de dirección respecto al modelo de §5.1.2):** `domain/model/ajuste/AjustePuntos.java:3` importa `com.renaser.os.points.api.MotivoPuntos` — el enum de motivo vive en `api/`, no en `domain/`, y es `domain/` quien depende de `api/`, no al revés. La propia clase lo documenta (`api/MotivoPuntos.java:1-17`): se movió a `api` a propósito para que los módulos llamadores (`rocks`, luego `habits`) no tengan que importar un tipo interno de `points` al invocar `AjustarPuntosPort`, evitando la fuga de tipos documentada para `users.api.UserSummary`/`UserRole`. Es una decisión ya tomada y replicada en `rocks` (ver `docs/MODULO_ROCKS.md` RK-1). `ArchitectureTest.domainDoesNotDependOnAdapters` (`src/test/java/com/renaser/os/ArchitectureTest.java:43-50`) solo prohíbe `domain → adapter`, no `domain → api` del propio módulo, así que esto pasa el build. Se deja documentado como desviación consciente del principio "las dependencias apuntan hacia adentro" (CLAUDE.MD §5.1.1) — el enum de motivo es, en los hechos, un concepto de dominio que ahora vive fuera de `domain/` para servir a la frontera pública. No se pide corregir (ya fue una decisión explícita de otro módulo hermano), solo se dokumenta para quien lo audite después.
+
+### 3. Subcarpetas de `domain/` — correctas según la regla de agregados (§5.1.2)
+
+`domain/model/` tiene tres subcarpetas: `puntaje/` (`PuntajeParticipante`, raíz de agregado), `ajuste/` (`AjustePuntos`/`ResultadoAjuste`/`MotivoPuntos` — un asiento de ledger, entidad con identidad propia e independiente del saldo) y `ranking/` (`PosicionRanking`/`PuntajeGeneral`/`TipoRanking` — una fila de ranking ya calculada, otro concepto con vida propia). Son tres agregados reales, no una subdivisión por capa ni "para ordenar" — coincide con el criterio de `dddsample-core` que CLAUDE.MD §5.1.2 exige para justificar subcarpetas. Sin violaciones.
+
+### 4. Controllers — tontos, sin lógica de negocio
+
+Los 3 controllers (`PuntajeController` 45 líneas, `RankingController` 52 líneas, `HomeController` 25 líneas) solo deserializan, validan (`@Valid`), invocan un caso de uso y mapean la respuesta. Cada endpoint es de 3 a 6 líneas de cuerpo. Ninguno tiene `@Transactional`, ningún `if` de negocio, y ninguno inyecta un `Repository`/puerto `out` — confirmado también por `ArchitectureTest.controllersDoNotTouchPersistence` (`src/test/java/com/renaser/os/ArchitectureTest.java:66-77`), que este módulo no viola (`grep` manual de imports de `adapter.in.rest..*` no encontró ningún import de `..ports.out..`/`..adapter.out..`).
+
+### 5. Excepciones de dominio — sin conocimiento de HTTP, con un hueco menor sin explotar hoy
+
+`NotAuthorizedException`, `NoSuchElementException`, `IllegalArgumentException` (usadas por `PuntajeParticipante`/`AjustePuntos`/`ResultadoAjuste` para invariantes) están todas mapeadas en `shared/web/GlobalExceptionHandler.java` (403/404/400 respectivamente) — ninguna excepción de `points` conoce un status code.
+
+**Hallazgo menor:** `RankingService.java:136,142` lanza `UnsupportedOperationException` cuando `TipoRanking.COHORT` llega a `generar(...)` (snapshot no implementado, D-P7). `GlobalExceptionHandler` no tiene un `@ExceptionHandler(UnsupportedOperationException.class)` — si esa excepción llegara a escapar sin capturar, caería al comportamiento por defecto de Spring Boot (500 genérico, posible fuga de stacktrace según el perfil). **Hoy no es explotable**: el único invocador de `GenerarSnapshotRankingUseCase.generar` es `SnapshotRankingScheduler` (`infrastructure/adapter/in/scheduler/SnapshotRankingScheduler.java:29`), que excluye `COHORT` explícitamente de su loop (`new TipoRanking[] {LEAGUE, CELL, GENERAL}`) — no hay ningún endpoint REST que exponga `generar()` directamente hoy. Queda como advertencia para el día que se agregue un endpoint admin de "regenerar snapshot", no como bug actual.
+
+### 6. Lombok / MapStruct / JPA — sin violaciones
+
+`grep -rn "@Data\|@Setter\|@NoArgsConstructor\|@ToString" src/main/java/com/renaser/os/points` solo encuentra `@Data`/`@NoArgsConstructor`/`@AllArgsConstructor` en las 4 `*JpaEntity`/`*Id` de `infrastructure/adapter/out/persistence/**` (`PuntajeParticipanteJpaEntity`, `AjustePuntosJpaEntity`, `RankingAprendizJpaEntity`, `HistorialCoherenciaJpaEntity`, más las `@IdClass` `RankingAprendizId`/`HistorialCoherenciaId`) — exactamente donde CLAUDE.MD §5.4.5 las permite. `domain/` solo usa `@Getter`/`@Accessors(fluent)`/`@AllArgsConstructor(PRIVATE)`/`@EqualsAndHashCode(of=...)`, igual que `buckpal`/`Account`. Mapeo `JpaEntity ↔ domain` es manual por clase (`PuntajeParticipantePersistenceMapper`, `AjustePuntosPersistenceMapper`, `RankingPersistenceMapper`) — MapStruct no se usa en `points` en absoluto (ni falta: el módulo es chico y el mapeo a mano ya es trivial), consistente con la asimetría de §5.4.5.
+
+### 7. Nombres prohibidos — sin violaciones
+
+`grep -rn "class \w+(Util|Utils|Helper|Manager|Processor)"` → vacío. Puertos nombrados por intención (`LoadPuntajePort`, `SavePuntajePort`, `VerificarActorAdministrativoPort`, no `JpaXxxRepository` ni nada que delate la tecnología); adaptadores sí nombran la tecnología (`*PersistenceAdapter`). Cumple la "conversación con propósito" de Cockburn citada en §5.1.1/§5.4.8.
+
+### 8. Tamaño de clases y métodos — dentro de los techos
+
+Archivo más grande del módulo: `PuntajeService.java` con 157 líneas (techo 300). Método más largo revisado a ojo: `HomeAgregadoService.consultar` (~10 líneas de cuerpo, con privados con nombre de intención extraídos: `habitosHoyDe`, `rocasHoyDe`, `proximoEventoDe`, `notificacionesNoLeidasDe`, `logWidgetDegradado`) y `RankingService.ordenarYNumerar` (~18 líneas) — ninguno cerca de 40 líneas. Ningún constructor pasa de 8 parámetros posicionales agrupables (los servicios con más dependencias, `PuntajeService`/`HomeAgregadoService`, inyectan 7-8 *puertos*, no parámetros de un método de negocio — el límite de §5.4.8 aplica a parámetros de método, no a colaboradores inyectados por constructor). Ningún método público por clase pasa de 5. Sin violaciones.
+
+### 9. Logging — sin violaciones
+
+`domain/` no tiene ningún `Logger`/`log.` (confirmado por grep). Los dos `Logger` del módulo viven en capas correctas: `application/services/HomeAgregadoService.java:60` (decisión de negocio: "este widget se degradó a null para este actor", con el nombre de la clase de excepción, no el mensaje ni el actorId) y `infrastructure/adapter/in/scheduler/SnapshotRankingScheduler.java:14` (fallo de un adaptador externo, con `tipo`/`fecha`/mensaje de excepción — sin PII). Ningún log imprime `participanteId`, tokens ni contenido de evidencia.
+
+### 10. Consumo de eventos de otros módulos (§4.4) — no aplica todavía, consistente con lo documentado
+
+No existe `infrastructure/adapter/in/event/` en `points` (confirmado por listado de archivos). Es coherente con Q-2/Q-4/Q-5 de §6 de este documento: nadie llama todavía a `AjustarPuntosPort`/`RegistrarCoherenciaDiariaUseCase` porque `habits`/`rocks` con eventos de dominio reales están fuera del alcance ya construido para ese lado. No es un hallazgo nuevo.
+
+### 11. Documentación desactualizada contra el código actual — 2 casos concretos
+
+El propio CLAUDE.MD §0.4 exige que "los documentos son fuente de verdad y no pueden contradecirse". Se encontraron dos puntos donde el código de `points` ya avanzó más allá de lo que dice este mismo documento, probablemente por un cambio hecho el 2026-08-26 (integración con `users.api`) que no se reflejó de vuelta en §4 y §8:
+
+- **D-P3 (§4) desactualizada.** El texto dice que el filtro de rol del ranking y `VerificarActorAdministrativoPort` resuelven "ambos vía SQL nativo contra `renaser.usuarios`, NO vía `users.api.UserSummaryFinder`", justificado porque en su momento `UserSummary.role()`/`.status()` exponían tipos internos de `users` fuera de su `@NamedInterface`. Eso ya no es así: hoy `users.api` expone `UserRole`/`UserStatus`/`UserSummary`/`UserSummaryFinder` directamente como parte de su interfaz pública, y el código real los usa sin ambigüedad:
+  - `infrastructure/adapter/out/persistence/ranking/RankingPersistenceAdapter.java:9-12,39,63` importa y usa `users.api.{UserRole,UserStatus,UserSummary,UserSummaryFinder}` para resolver `fullName`/rol/estado en lote (`userSummaryFinder.findByIds(...)`, líneas 63-76 y 95-96).
+  - `infrastructure/adapter/out/persistence/puntaje/ActorAdministrativoPersistenceAdapter.java` implementa `VerificarActorAdministrativoPort` enteramente sobre `UserSummaryFinder.findById(...)` (líneas 22-36), sin una sola línea de SQL nativo.
+  - El único SQL nativo (`JdbcTemplate`) que sobrevive en el módulo es `RankingPersistenceAdapter.java:30-33` (`SQL_PUNTAJES`), y ese SELECT toca **solo** la tabla propia `renaser.puntajes_participante` — ya no hace JOIN contra `renaser.usuarios` como el riesgo original de D-P3 describía.
+  
+  Esto no es un problema de arquitectura (usar el puerto público `UserSummaryFinder` en vez de SQL nativo contra la tabla de otro módulo es, si acaso, *más* alineado con CLAUDE.MD §4.3/§5.1 — respeta la frontera `@NamedInterface`, no la evita) — es la documentación la que quedó atrás de una mejora real que ya se hizo. Corregir D-P3 para reflejar que el riesgo que motivó el SQL nativo ya no existe, y que el módulo migró a `UserSummaryFinder` en ambos puntos.
+
+- **§8 ("Qué quedó explícitamente sin cubrir") desactualizada en el mismo punto.** La línea "Batch lookup de nombres en `RankingPersistenceAdapter.porTipoYFecha` — hoy es un `SELECT` por fila" ya no es cierta: el método actual (`RankingPersistenceAdapter.java:90-105`) hace exactamente lo contrario — una sola llamada en lote (`userSummaryFinder.findByIds(filas.stream().map(...).toList())`, línea 95-96) con un comentario explícito en el propio código ("Una sola consulta de nombres para todo el listado: antes habia una por fila (N+1)"). El N+1 que el documento sigue listando como deuda pendiente ya se resolvió.
+
+Ambos puntos describen el mismo cambio real (adopción de `UserSummaryFinder` en `RankingPersistenceAdapter`) documentado en un lugar (§3, "Actualización 2026-08-26") pero no propagado a las dos secciones más antiguas (§4 D-P3, §8) que seguían describiendo el estado anterior. No se corrigen acá (fuera del alcance de esta auditoría, que es solo agregar esta sección) — se deja señalado para que quien mantenga el documento actualice D-P3 y la línea de §8 correspondiente.
+
+### 12. Patrón DIP en `points.api` — observación de diseño, no violación
+
+`points.api` no solo expone lo que otros módulos consumen de `points` (`AjustarPuntosPort`, `MotivoPuntos`, `ResumenAjustePuntos`): también declara interfaces que **otros módulos implementan para alimentar a `points`** (`HabitosDelDiaFinder`, `RocasDelDiaFinder`, `ProximoEventoFinder`, `NotificacionesNoLeidasFinder`, `PorcentajeHabitosFinder`, `PorcentajeRocasFinder`, `PorcentajeCursosFinder`). Cada interfaz documenta por qué (evitar un ciclo de módulos: `habits`/`rocks`/`calendar`/`notifications` ya dependen de `points` en el sentido normal, así que `points` no puede depender de ellos para leer sus datos sin crear un ciclo que Spring Modulith rechaza — inversión de dependencia, el consumidor declara el contrato y el proveedor lo implementa). Es un uso legítimo y consistente de DIP dentro de las reglas de Modulith (`api/` sigue siendo el único paquete público, y el flujo de imports sigue siendo unidireccional: los módulos proveedores importan `points.api`, `points` nunca importa nada de ellos). No es una violación, se documenta para que quien audite otro módulo (`habits`, `rocks`, `calendar`, `notifications`) sepa reconocer el mismo patrón cuando aparezca del otro lado.
+
+### Resumen
+
+Sin hallazgos de seguridad — los 3 controllers ya usan `@ActorAutenticado`, sin rastro del patrón `X-Actor-Id`. Arquitectura limpia: `domain/` puro, controllers tontos, Lombok/JPA acotados a persistencia, sin nombres basurero, tamaños dentro de los techos, sin logging de PII. Un hallazgo estructural documentado sin ser bloqueante (`domain → api` en `AjustePuntos`, decisión ya tomada y replicada en `rocks`), un hueco menor sin explotar (`UnsupportedOperationException` sin handler, hoy inalcanzable por HTTP) y dos secciones de este mismo documento (D-P3 en §4, la línea de N+1 en §8) desactualizadas contra una mejora real ya aplicada en `RankingPersistenceAdapter`/`ActorAdministrativoPersistenceAdapter` (migración a `users.api.UserSummaryFinder` en lote).

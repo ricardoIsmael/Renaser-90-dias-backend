@@ -681,3 +681,38 @@ solo lectura.
   de qué cuenta como "Código Renaser vencido", implementar el valor del enum sería inventar la
   regla que CLAUDE.MD prohíbe. Queda como pregunta abierta para quien confirme esa regla, documentado
   también en `docs/PLAN_INTEGRACION_FRONTEND.md` #18.
+
+## 19. Hueco detectado — "hábitos por rol": no existe, análisis de reutilización antes de construir (2026-08-28)
+
+**Encargo:** el dueño del proyecto notó, probando el frontend, que falta algo de "hábitos por rol"
+y preguntó si ya existe el endpoint. Investigado antes de escribir una sola línea: **no existe, en
+ninguna de sus dos formas posibles**, y no hay ambigüedad de nombres con algo ya construido.
+
+### 19.1 Qué existe hoy, y qué no
+
+- **`habitos` no tiene ninguna noción de rol.** Ni columna en la tabla (`V1__baseline_renaser.sql`,
+  línea 385), ni campo en el dominio (`Habito.java`: `ambito`, `tipo`, `categoriaClave`, sin
+  `rolesPermitidos`), ni en las proyecciones REST del catálogo (`AdminHabitResponse`,
+  `CreateHabitRequest`).
+- **Lo único parecido a "rol" en este módulo es `HabitoAdminGuard`** (ADMIN/ALQUIMISTA) — autorización
+  de **quién administra el catálogo**, no de qué hábito ve o completa cada rol. No hay que confundirlos.
+- **Ya estaba anotado como pregunta abierta**, §5 punto 4 de este mismo documento: *"ningún endpoint
+  de este módulo valida rol todavía más allá de 'es el propio participante'"* — con la única
+  excepción ya construida, `radar` (RD-3), que restringe a TRAINEE porque el sistema viejo lo hacía
+  explícito.
+- **Sí existe el patrón equivalente en otros dos módulos**, y es la referencia real para no inventar
+  una forma nueva: `roles_permitidos_curso (curso_id, rol_id)` en `academy` y
+  `roles_destino_evento (evento_id, rol_id)` en `calendar` — ambas tablas junction chicas,
+  PK compuesta, con índice explícito sobre `rol_id` ("qué X ve tal rol"), referenciando la tabla
+  `roles` ya existente (D-21).
+
+### 19.2 Análisis de reutilización (pedido explícito: evitar tabla nueva si se puede)
+
+Depende de cuál de las dos cosas es "hábitos por rol" — son necesidades distintas, con costo distinto:
+
+| Necesidad real | ¿Hace falta tabla nueva? | Por qué |
+|---|---|---|
+| **(a) Catálogo de hábitos visible según el rol** (ej. un TRAINEE ve unos hábitos, un MENTOR ve otros) | **Sí, inevitable** — no hay ninguna tabla genérica/polimórfica que ya cubra esto. `roles_permitidos_curso`/`roles_destino_evento` son dos tablas ad-hoc idénticas en forma, no una tabla compartida — no hay un mecanismo genérico para "reutilizar" sin tocar esas dos tablas también. La opción de generalizarlas en una sola `roles_permitidos (entidad_tipo, entidad_id, rol_id)` polimórfica existe en teoría, pero **se descarta**: obligaría a migrar `academy` y `calendar`, que ya funcionan y están probados — exactamente el "romper lógica" que se pidió evitar. Lo que sí se reutiliza es la tabla `roles` (ya existe, D-21) y el patrón de forma — la tabla nueva sería `roles_permitidos_habito (habito_id, rol_id)`, mínima, sin tocar ninguna fila existente. |
+| **(b) Restricción de quién puede operar/ver sus propios tracks de hábito** (ej. solo TRAINEE completa hábitos, igual que ya pasa en `radar`) | **No, cero tablas nuevas.** Es agregar un guard de rol al servicio existente (mismo patrón que `HabitoAdminGuard` o el chequeo que ya usa `radar`), leyendo el rol que `ActorAutenticado`/`ConsultarProgresoParticipanteHabitsPort` ya resuelven. Puro cambio de código de aplicación. |
+
+**Conclusión de este paso:** no hay forma de evitar una tabla nueva si lo que hace falta es (a); sí se puede evitar por completo si es (b). Falta confirmar cuál de las dos es la necesidad real antes de tocar código — sigue como pregunta abierta de este documento hasta que se confirme.

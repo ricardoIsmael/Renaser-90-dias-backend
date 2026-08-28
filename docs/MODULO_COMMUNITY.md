@@ -231,3 +231,48 @@ Construido usando `users.api.ParticipacionProgramaFinder.usuariosActivosConRol`/
 | `RocaDiariaServiceTest` (módulo `rocks`) | `publishedToWallConEvidenciaNoVisualEsRechazado`, `publishedToWallLlamaAlPuertoDeCommunity`, `publishedToWallFalseNoLlamaANadie` |
 
 No se corrió `./mvnw clean test` (regla del encargo: lo corre el supervisor junto con otros agentes en paralelo). Riesgo concreto a vigilar: este mismo módulo (`community`) estaba siendo tocado en simultáneo por el agente de `points` (agregó `CelulaFinder.celulaDeParticipante` y el campo `participacionProgramaFinder` a `CelulaServiceTest` mientras este trabajo estaba en curso) — se verificó en vivo que ambos cambios conviven sin pisarse (mismo constructor de `CelulaService`, sin colisión de nombres), pero vale una relectura rápida de `CelulaService.java`/`CelulaServiceTest.java` si el build falla justo ahí.
+
+## Auditoría de arquitectura (2026-08-28) — agente automático
+
+Auditoría de solo lectura de `src/main/java/com/renaser/os/community/`. No se corrió `./mvnw` (fuera de alcance del encargo). 45 endpoints REST confirmados (`grep` de las 5 anotaciones `@*Mapping` en `infrastructure/adapter/in/rest/`).
+
+**1. Hallazgo de seguridad — `TestimonioController` no migró de `X-Actor-Id` a `@ActorAutenticado`**
+
+`src/main/java/com/renaser/os/community/infrastructure/adapter/in/rest/testimonio/TestimonioController.java:49-51` sigue leyendo el actor con:
+
+```java
+@RequestHeader(value = "X-Actor-Id", required = false) String actorId
+```
+
+Es el **único** controller de `community` que hace esto — los otros 10 (`WallController`, `WallCommentController`, `CelulaAdminController`, `MiCelulaController`, `WallCategoryAdminController`, `CohorteAdminController`, etc.) usan `@ActorAutenticado UserId actorId` (`src/main/java/com/renaser/os/shared/web/security/ActorAutenticado.java`), que resuelve primero la sesión y solo cae al header como respaldo (`ActorAutenticadoArgumentResolver.java:18,28`). El commit `b824c4b` ("Auth: los 64 controllers pasan de X-Actor-Id a la sesion propia") no alcanzó a este archivo. Efecto concreto: `POST /api/v1/testimonios` sin `wallPostId` acepta un `X-Actor-Id` arbitrario (o ninguno — `actorId` queda `null` y el testimonio se crea sin autor, ver línea 59) sin pasar por la sesión real; con `wallPostId` (rama de promoción, exige rol ADMIN/ALCHEMIST) el chequeo de rol se hace en `TestimonioService.requireAdmin` contra el `actorId` que vino del header, es decir, un header falsificado con el UUID de un admin real bypasea la sesión. Recomendado: cambiar a `@ActorAutenticado UserId actorId` (con `required=false` si el flujo anónimo de creación manual de testimonios es intencional) antes de dar el módulo por cerrado en seguridad.
+
+**2. Controller con lógica de despacho por `if` — mismo `TestimonioController`**
+
+`crear()` (líneas 48-63) decide, con un `if (request.wallPostId() != null && !request.wallPostId().isBlank())`, si invoca `promoverUseCase` o `crearUseCase` — dos casos de uso distintos elegidos por contenido del body. La regla del proyecto prohíbe explícitamente "orquestar varios casos de uso" y "`if` que decida reglas de negocio" en el controller (CLAUDE.md §5.4.6). No es catastrófico (la decisión es de enrutamiento, no de negocio de dominio), pero técnicamente el controller sabe algo que debería resolver un solo caso de uso o dos endpoints separados (`POST /testimonios` vs `POST /testimonios/from-post`).
+
+**3. Dos clases de `application/services/` superan el techo de 300 líneas / 10 métodos públicos**
+
+| Clase | Líneas | Interfaces `implements` | Métodos públicos |
+|---|---|---|---|
+| `CelulaService.java` | 417 | 12 (`CrearCelulaUseCase`, `ActualizarCelulaUseCase`, `AsignarMentorCelulaUseCase`, `QuitarMentorCelulaUseCase`, `ProgramarSesionCelulaUseCase`, `EliminarCelulaUseCase`, `ConsultarCelulasUseCase`, `ConsultarMiCelulaUseCase`, `ConsultarDashboardCelulasUseCase`, `ConsultarCandidatosCelulaUseCase`, `CelulaFinder`, `AsignarAprendizCelulaUseCase`, `QuitarAprendizCelulaUseCase`) | 18 (`crear`, `actualizar`, `asignar`×2, `quitar`×2, `programar`, `eliminar`, `listarPorCohorte`, `obtener`, `miCelula`, `misCompaneros`, `dashboard`, `mentoresDisponibles`, `mentores`, `aprendicesDisponibles`, `mentorDe`, `celulaDeParticipante`) |
+| `PublicacionMuroService.java` | 332 | 9 (`PublicarUseCase`, `EditarPublicacionUseCase`, `OcultarPublicacionUseCase`, `RestaurarPublicacionUseCase`, `EliminarPublicacionUseCase`, `ReaccionarUseCase`, `ConsultarFeedUseCase`, `SolicitarUrlSubidaMediaUseCase`, `PublicarEnMuroPort`) | 12 (`publicar`, `editar`, `ocultar`, `restaurar`, `eliminarPermanente`, `reaccionar`, `feed`, `feedOculto`, `contarMisPublicaciones`, `ultimoAutor`, `solicitarUrl`, `publicarDesdeEvidencia`) |
+
+Ambas violan el techo duro de CLAUDE.md §5.4.8 (clase ≤300 líneas, ≤10 métodos públicos por clase) y contradicen el principio de §5.4.8 SRP ("una clase por caso de uso... no un `UserService` con 30 métodos"). Cada método individual sigue siendo corto y legible (ninguno pasa de ~40 líneas), así que no es un problema de complejidad ciclomática — es que un solo `@Service` implementa demasiadas interfaces `port/in`. Nota: esto NO rompe `ArchitectureTest`/Spring Modulith (los límites de Modulith son por paquete, no por clase), así que un build en verde no lo habría detectado.
+
+**4. `domain/` — cumple, ya subdividido correctamente por agregado**
+
+15 clases en `domain/model/`, repartidas en 5 subcarpetas por agregado real (no por capa): `categoria/` (1: `CategoriaMuro`), `celula/` (2: `Celula`, `CelulaId`), `cohorte/` (3: `Cohorte`, `CohorteId`, `EstadoCohorte`), `publicacion/` (8: `Publicacion`, `PublicacionId`, `Comentario`, `ComentarioId`, `ReaccionMuro`, `MediaPublicacion`, `TipoPublicacion`, `TipoReaccion`), `testimonio/` (2: `Testimonio`, `TestimonioId`). Ninguna subcarpeta supera 10 clases. `Comentario`/`ReaccionMuro` conviven con `Publicacion` en la misma carpeta con criterio correcto: son entidades/value objects que no tienen sentido sin la publicación que referencian (`publicacionId` obligatorio en ambos constructores), no agregados independientes — no es el "por si acaso" que la regla prohíbe.
+
+Sin imports prohibidos: `grep` de `org.springframework.*`/`jakarta.persistence.*`/paquetes `adapter`/`infrastructure` sobre `domain/` no devolvió coincidencias. Sin nombres prohibidos (`Util`/`Helper`/`Manager`/`Processor`): ninguna clase de `community` los usa.
+
+**5. Controllers — muestra de 6 revisados, "controller tonto" cumplido salvo el hallazgo 2**
+
+`CelulaAdminController` (185 líneas, 11 casos de uso inyectados), `WallController` (171 líneas, 8 casos de uso), `WallCommentController`, `WallCategoryAdminController`, `CohorteAdminController`, `MiCelulaController`: cada endpoint deserializa, valida (`@Valid`), llama un único caso de uso y mapea a DTO de salida — ninguno inyecta un puerto `out`, tiene `@Transactional` ni contiene un `if` de negocio (los `switch` de `parseTipoReaccion`/`parseEstado` en `WallController`/`CohorteAdminController` son mapeo de formato HTTP→enum de dominio, no reglas de negocio). Observación menor: `CelulaAdminController` (11 parámetros de constructor) y `WallController` (8) exceden el techo de "≤4 parámetros" de CLAUDE.md §5.4.8 si se aplica literalmente a constructores — es consecuencia directa de que cada controller agrupa **todos** los casos de uso de su recurso HTTP, patrón consistente en todo el módulo y no exclusivo de `community`; se documenta pero no se considera un hallazgo grave por sí solo.
+
+**6. Los 5 archivos más grandes del módulo**
+
+1. `application/services/CelulaService.java` — 417 líneas (hallazgo 3)
+2. `application/services/PublicacionMuroService.java` — 332 líneas (hallazgo 3)
+3. `infrastructure/adapter/in/rest/celula/CelulaAdminController.java` — 185 líneas
+4. `infrastructure/adapter/in/rest/publicacion/WallController.java` — 171 líneas
+5. `infrastructure/adapter/out/persistence/publicacion/PublicacionPersistenceAdapter.java` — 164 líneas

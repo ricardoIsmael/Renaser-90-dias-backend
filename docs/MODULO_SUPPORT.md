@@ -194,3 +194,102 @@ No se tocaron (prohibido por el encargo), pero quedan anotados para quien contin
 
 - `users`: agregado `ParticipantePrograma` (para poder validar antes de escribir que el actor está inscripto, en vez de confiar en que la FK falle) y matriz de permisos (B-5, para el guard de célula real).
 - `pom.xml`: nada nuevo requerido — todas las dependencias usadas (`spring-data-jpa`, `spring-boot-starter-validation`, Testcontainers, `spring-modulith-*`) ya estaban.
+
+---
+
+## Auditoría de arquitectura (2026-08-28) — agente automático
+
+Alcance: `src/main/java/com/renaser/os/support/` completo (32 archivos de producción + 13 de test), contra `CLAUDE.md` §5.1, §5.1.2, §5.3.4, §5.3.5, §5.4.1–§5.4.10. Solo lectura — no se corrió `./mvnw`, no se modificó ningún `.java`. A diferencia de otros módulos auditados el mismo día, `support` llegó en muy buen estado: la mayoría de la deuda que el propio `docs/MODULO_SUPPORT.md` (§3, §4) ya documentaba resultó, al verificar contra el código actual, **ya resuelta** — el documento quedó desactualizado en esos puntos, no el código. Se señala explícitamente dónde.
+
+### 1. Autenticación del actor — sin violaciones, los 4 controllers migrados
+
+Búsqueda dirigida por el patrón de `community/TestimonioController` (header `X-Actor-Id` falsificable en vez de sesión real):
+
+```
+grep -rn "X-Actor-Id" src/main/java/com/renaser/os/support/   → 1 sola coincidencia, un COMENTARIO (TicketSoporteService.java:127), no código
+grep -rn "RequestHeader" src/main/java/com/renaser/os/support/ → vacío
+```
+
+Los 4 controllers REST del módulo resuelven el actor exclusivamente vía `@ActorAutenticado UserId actor` (sesión real primero, `ActorAutenticadoArgumentResolver`):
+
+- `TicketMentorController.java:51,59,65,73,81` (`abrir`, `propios`, `responder`, `guardarEnBiblioteca`, `buscarEnBiblioteca`)
+- `TicketMentorAdminController.java:24` (`todos`)
+- `TicketSoporteController.java:38,47,52` (`abrir`, `misTickets`, `solicitarUrlAdjunto`)
+- `TicketSoporteAdminController.java:35,42` (`todos`, `resolver`)
+
+**Nota sobre la documentación:** `docs/MODULO_SUPPORT.md` §4 (D-S9) todavía lista "`X-Actor-Id` como resolución de actor temporal ... Los 4 controllers" como deuda abierta, bloqueada por B-2. Eso ya no es así — el código migró (probablemente en el mismo commit `b824c4b` que migró los otros 63 controllers). D-S9 debería marcarse resuelta; la única traza que queda del patrón viejo es el comentario javadoc de `TicketSoporteService.java:127`, que describe un comportamiento (404 en vez de 409 ante un actor inexistente) que sigue siendo cierto independientemente de cómo se resuelva el actor, así que no hace falta tocar ese comentario.
+
+### 2. `domain/` — sin violaciones de pureza
+
+```
+grep -rl "org.springframework.\|jakarta.persistence." src/main/java/com/renaser/os/support/domain/   → vacío
+grep -rl "support.application\|support.infrastructure"  src/main/java/com/renaser/os/support/domain/  → vacío
+```
+
+`TicketMentor.java` y `TicketSoporte.java` (los dos agregados) son `final`, con constructor privado (`private final` fields, factory methods `abrir()`/`rehydrate()`), sin setters públicos — las transiciones de estado (`responder()`, `guardarEnBiblioteca()`, `resolver()`) son los únicos puntos de mutación y cada uno hace cumplir su propio invariante (§5.3.2, §5.4.5):
+
+- `TicketMentor.guardarEnBiblioteca()` (línea 60-65) exige `estado.estaRespondido()` — el mismo invariante que el `CHECK respondido_coherente` de la migración SQL, documentado como decisión deliberada de duplicar la regla en dominio y en base.
+- `TicketSoporte.resolver()` (línea 52-60) es idempotente por diseño (`if (estado.estaResuelto()) return;`), consistente con la regla de negocio documentada en §0.2 ("resolver un ticket ya RESOLVED es idempotente").
+
+Las excepciones de dominio son `IllegalArgumentException`/`IllegalStateException` planas, sin conocimiento de HTTP — coherente con §5.4.4. Ningún archivo de `domain/` loguea (`grep` de `log\.\|Logger\|slf4j` vacío) — coherente con §5.4.9.
+
+### 3. Regla de subcarpetas de `domain/` (§5.1.2) — correcta
+
+`domain/model/` tiene dos subcarpetas, `ticketmentor/` y `ticketsoporte/`. Aplicando la regla real (subcarpeta = agregado independiente, no capa, no "para ordenar"): son dos agregados genuinamente distintos — `TicketMentor` (mentoría, máquina ABIERTO→RESPONDIDO, con `TicketMentorId` propio) y `TicketSoporte` (soporte técnico, máquina ABIERTO→RESUELTO, con `TicketSoporteId` propio, con su propio value object `AdjuntoSoporte`) — sin relación entre sí, cada uno con su propio ciclo de vida y su propio repositorio. El propio `docs/MODULO_SUPPORT.md` §"Alcance" ya lo dice explícitamente: "Dos agregados independientes... sin relación entre sí salvo que ambos son 'alguien le escribe a alguien y espera una respuesta'". Es exactamente el caso `dddsample-core` (una carpeta por raíz de agregado), no el caso `buckpal` (una sola historia, plano) — la subcarpeta está bien puesta, no es sobre-ingeniería.
+
+Dentro de cada subcarpeta no hay sub-subcarpetas por capa (nada de `ticketmentor/entities/`, `ticketmentor/valueobjects/`) — cumple la prohibición dura de §5.1.2.
+
+### 4. Controllers "tontos" — sin violaciones
+
+Ningún controller de los 4 tiene `@Transactional` (`grep` de `@Transactional` en el módulo solo encuentra coincidencias en `application/services/`, nunca en `infrastructure/adapter/in/rest/`), ninguno inyecta un `Repository`/`Port out` (los 4 constructores solo reciben `UseCase` de `ports/in/`), y ninguno supera ~25 líneas por endpoint contando la desserialización de parámetros de ruta.
+
+El único patrón "con lógica" que aparece en los controllers es la traducción de enum wire↔dominio (`parseCategoria`/`parseEstado` en `TicketSoporteController`/`TicketSoporteAdminController`, `parseCursor` repetido en `TicketMentorController`/`TicketMentorAdminController`) — es mapeo de formato de transporte (§5.4.1, Full Mapping en la frontera web), no una regla de negocio: no decide nada sobre el dominio, solo traduce un string HTTP a un enum o una excepción de formato. Es el mismo criterio que ya usan `TicketMentorResponse`/`TicketSoporteResponse` en la dirección de salida.
+
+**Nota menor, no bloqueante:** `parseCursor` está duplicado literalmente (mismo cuerpo, mismo javadoc) en `TicketMentorController.java:87-96` y `TicketMentorAdminController.java:30-39`. No es una violación de ninguna regla de `CLAUDE.md` (no hay techo de "no duplicar 10 líneas"), pero es candidato natural a moverse a un método estático compartido si se quiere pulir — no se reporta como hallazgo de arquitectura, solo se anota.
+
+### 5. Lombok — correcto: nada de `@Data`/`@Setter`/`@NoArgsConstructor` público en `domain/`
+
+```
+grep -rn "@Data\b\|@Setter\b\|@NoArgsConstructor" src/main/java/com/renaser/os/support/
+  → TicketMentorJpaEntity.java:19-20  (@Data, @NoArgsConstructor)
+  → TicketSoporteJpaEntity.java:19-20 (@Data, @NoArgsConstructor)
+```
+
+Las dos únicas coincidencias están en `infrastructure/adapter/out/persistence/*/`, exactamente donde §5.4.5 las permite. `domain/` usa `@Getter @Accessors(fluent = true) @AllArgsConstructor(access = PRIVATE) @EqualsAndHashCode(of = "id")` en los dos agregados (`TicketMentor.java:14-17`, `TicketSoporte.java:14-17`) — el patrón exacto verificado contra `buckpal` en §5.4.5 de `CLAUDE.md`.
+
+### 6. Nombres prohibidos — sin coincidencias
+
+`grep` de clases `*Util`/`*Helper`/`*Manager`/`*Processor` sueltos: vacío. Los puertos siguen la convención de nombrar por intención de negocio, no por tecnología (§5.4.8): `LoadTicketMentorPort`, `SaveTicketMentorPort`, `BuscarBibliotecaPort` — ninguno delata que detrás hay JPA/Postgres. El adaptador sí nombra la tecnología donde corresponde (`TicketMentorPersistenceAdapter`, no un genérico `TicketMentorRepository` renombrado).
+
+### 7. Tamaño — dentro de los techos duros de §5.4.8
+
+Los dos archivos más grandes del módulo son las clases de aplicación: `TicketMentorService.java` (171 líneas) y `TicketSoporteService.java` (153 líneas) — ambas muy por debajo del techo de 300. Ningún método individual se acerca a 40 líneas; el método más largo (`TicketMentorService.responder`, 9 líneas efectivas) es representativo del resto. Los comandos con más de 3 parámetros (`AbrirTicketMentorCommand`, `AbrirTicketSoporteCommand`) ya están agrupados en `record` self-validating, tal como pide §5.4.3 — no hay ningún método público con más de 4 parámetros sueltos. Anidamiento: ningún método pasa de 2 niveles (`if` + `switch` como máximo), todos con guard clauses (`requireActor`, `requireTicket`, `requireRol`, `requireMentorAsignado`, `requireAdmin`, `requireActorExiste`, `requireActorActivo`) en vez de anidar.
+
+### 8. Validación en 3 niveles — implementada correctamente
+
+- **Sintáctica** (`adapter/in/rest/*/Request`): `@NotBlank`, `@Size` en los 4 `record` de entrada (`AbrirTicketMentorRequest`, `ResponderTicketMentorRequest`, `AbrirTicketSoporteRequest`, `SolicitarUrlAdjuntoRequest`, `ResolverTicketSoporteRequest`).
+- **Contrato del caso de uso** (self-validating): `AbrirTicketMentorCommand` (`AbrirTicketMentorUseCase.java:20-23`) y `AbrirTicketSoporteCommand` (`AbrirTicketSoporteUseCase.java:24-27`) llaman `SelfValidating.validateConstructorArgs(...)` en el constructor compacto — imposible construirlos mal vengan de HTTP, de un test o (a futuro) de un listener de evento, tal como exige §5.4.3.
+- **Semántica en `domain/`**: `TicketMentor.abrir`/`TicketSoporte.abrir` validan invariantes de negocio en código plano (`requireNotBlank`, `requireMensaje` con el mínimo de 10 caracteres) — nunca con anotaciones.
+
+Ningún `record` de entrada tiene un campo `role`, `estado` o similar que el actor no deba poder setear — coherente con el blindaje de mass-assignment de §5.3.3/§5.4.1.
+
+### 9. Excepciones — el único traductor a HTTP es `GlobalExceptionHandler`
+
+`domain/` y `application/` lanzan `IllegalArgumentException`, `IllegalStateException`, `NotAuthorizedException`, `NoSuchElementException` — ninguna con `@ResponseStatus`, ninguna construida con un código HTTP. `grep` de `ResponseStatus|HttpStatus|HttpServletRequest|ResponseEntity` en `domain/` y `application/` da vacío. `shared/web/GlobalExceptionHandler.java` ya tiene `@ExceptionHandler` para las cuatro (líneas 35, 90, 95, 100) — es el único punto del sistema que decide el status code, tal como exige §5.4.4.
+
+### 10. Mapeo — asimetría correcta (MapStruct hacia adentro, a mano hacia afuera)
+
+No hay ningún `@Mapper` de MapStruct en el módulo (`TicketMentorPersistenceMapper`/`TicketSoportePersistenceMapper` son clases planas con métodos `toDomain`/`toEntity` escritos a mano, `@Component` package-private). Esto **se aparta** del criterio por defecto de §5.4.5 ("MapStruct para `JpaEntity ↔ dominio`, su caso de uso legítimo") — el propio `TicketSoportePersistenceMapper.java:11` lo declara a propósito ("Traduccion a mano, no MapStruct — mismo criterio que TicketMentorPersistenceMapper"). No es una violación: §5.4.5 dice dónde MapStruct **puede** usarse, no que sea obligatorio, y con solo dos entidades chicas (10-12 campos cada una) el costo de un mapper a mano es bajo y evita el riesgo abierto que el propio `CLAUDE.md` señala sobre MapStruct 1.6.3/1.7.0-beta contra JDK 25. Se documenta como desviación consciente, no como hallazgo.
+
+Hacia la frontera web, el mapeo es a mano en ambas direcciones (`TicketMentorResponse.from`, `TicketSoporteResponse.from`, con traducción explícita español↔inglés de enums) — correcto según §5.4.1/§5.4.5.
+
+### 11. Guard de célula del mentor (E-38) — confirmado corregido, y una brecha real que sigue abierta
+
+Contexto pedido explícitamente: verificar que el patrón de E-38 (`docs/BITACORA_ERRORES.md`) siga bien implementado.
+
+- **`responder()` y `guardar()` SÍ están protegidos.** `TicketMentorService.requireMentorAsignado` (líneas 149-156) resuelve el mentor real asignado al aprendiz vía `users.api.ParticipacionProgramaFinder.deParticipante(...).map(ParticipacionPrograma::mentorId)` y compara contra el actor — ya no basta con `rol == MENTOR`. Este puerto (`users.api.ParticipacionProgramaFinder`) es nuevo desde que se escribió `docs/MODULO_SUPPORT.md` (§3 lo daba como bloqueante pendiente) y ya está resuelto: `users.api` expone `UserRole`/`UserStatus`/`ParticipacionProgramaFinder` como tipos públicos de primera clase, cerrando también la fuga de tipos internos que el documento señalaba en §3/D-S8. **`docs/MODULO_SUPPORT.md` §3 y D-S8 deberían marcarse resueltos** — quedaron desactualizados.
+- **Pero `propios()` (el listado, `GET /api/v1/tickets`) NO tiene el mismo scope.** `TicketMentorService.java:112-114`: si el actor es `MENTOR`, la rama llama `loadTicketMentorPort.todos(cursor, ...)` — es decir, un mentor autenticado ve en su bandeja **todos los tickets de mentoría de la plataforma**, no solo los de sus propios aprendices. Esto ya está documentado como deuda abierta en `docs/MODULO_SUPPORT.md` §4 (D-S1, D-S3, bloqueadas por B-5 — falta la matriz de permisos de `MENTOR_LEAD` y un puerto de célula), así que **no es un hallazgo nuevo**, pero vale remarcarlo con precisión ahora que se confirmó la corrección de E-38: la brecha de exposición real hoy no está en quién puede *responder* un ticket ajeno (eso ya cierra), sino en quién puede *leer* el contenido de tickets ajenos (`descripcionBloqueo`, `solucionesIntentadas`, `impactoMetaSmart` de aprendices de otras células) a través del listado. Dado que ya existe `ParticipacionProgramaFinder.miembrosActivosDeCelula`/`miembrosDeCelula` en `users.api`, cerrar D-S3 ya no está bloqueado por "falta de un puerto hacia `participantes_programa`" (como decía D-S1 originalmente) — el puerto ya existe, solo falta usarlo en `propios()`. Vale que quien retome B-5 lo sepa: la pieza que faltaba ya está disponible.
+
+### 12. Resumen
+
+Módulo limpio contra las reglas de `CLAUDE.md` revisadas: sin violaciones de autenticación, sin fugas de pureza de dominio, subcarpetas de agregado correctas, controllers tontos, Lombok bien acotado, sin nombres prohibidos, dentro de todos los techos de tamaño, validación en 3 niveles, excepciones sin conocimiento de HTTP. El hallazgo de mayor relevancia no es una violación de arquitectura sino documentación desactualizada: `docs/MODULO_SUPPORT.md` §3/§4 lista como abiertas tres deudas (D-S8 fuga de tipos, D-S9 `X-Actor-Id`, y parcialmente D-S1) que el código ya resolvió — y señala con precisión nueva la única pieza de D-S3 que sigue pendiente y ya no tiene bloqueante técnico real.
