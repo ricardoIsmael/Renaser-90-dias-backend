@@ -1,6 +1,5 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.horarioadmin;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.renaser.os.habits.application.ports.in.horarioadmin.ActualizarHorarioHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.horarioadmin.ActualizarHorarioHabitoUseCase.ActualizarHorarioHabitoCommand;
 import com.renaser.os.habits.application.ports.in.horarioadmin.ConsultarHorariosDeHabitoUseCase;
@@ -22,6 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 import java.util.UUID;
