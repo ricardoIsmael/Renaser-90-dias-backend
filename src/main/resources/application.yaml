@@ -32,11 +32,6 @@ spring:
     data:
       redis:
         repository-type: indexed
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: ${SUPABASE_JWKS_URL:https://apvnaigldsjqeloiolcu.supabase.co/auth/v1/.well-known/jwks.json}
   ai:
     model:
       chat: none
