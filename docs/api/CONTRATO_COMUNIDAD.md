@@ -121,12 +121,12 @@ curl -s -X POST "http://localhost:8080/api/v1/wall" \
 
 ### 1.8 `GET /api/v1/wall/mine` — cuántas publiqué
 
-**Quién puede:** cualquiera (no hay chequeo de actor activo en este método — `contarMisPublicaciones` llama directo al puerto, sin `requireActorActivo`). **Trampa:** un actor suspendido o inexistente igual recibe `200 {"count": 0}` en vez de un 403/404 — no hay validación de actor en este endpoint puntual.
+**Quién puede:** actor `ACTIVE` (`requireActorActivo`). **Corregido 2026-08-31 (E-50):** antes no había ningún chequeo de actor acá — un actor suspendido o inexistente recibía `200 {"count": 0}`. Ahora una cuenta suspendida recibe 403 y una inexistente 404, igual que en `GET /api/v1/wall`.
 **Respuesta:** `{"count": 3}`.
 
 ### 1.9 `GET /api/v1/wall/latest-author` — nombre del último que publicó
 
-**Quién puede:** cualquiera, **sin chequeo de actor en absoluto** (`ultimoAutor()` no recibe `actorId`). El header `X-Actor-Id` se exige por firma del controller pero el caso de uso ni lo mira.
+**Quién puede:** actor `ACTIVE` (`requireActorActivo`, mismo guard que el feed). **Corregido 2026-08-31 (E-50):** antes el caso de uso ni siquiera recibía el `actorId` que el controller ya tenía, así que cualquiera —incluida una cuenta suspendida— obtenía el nombre completo de la última persona que publicó.
 **Respuesta:** `{"authorName": "Juan Perez"}` o `{"authorName": null}` si no hay publicaciones visibles.
 
 ### 1.10 `POST /api/v1/wall/{id}/react` — reaccionar

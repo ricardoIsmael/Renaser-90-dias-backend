@@ -154,6 +154,8 @@ Todos los controllers reciben el actor por `X-Actor-Id` (temporal, sin JWT — b
 | CM-14 | `ActualizarCohorteRequest`/`ActualizarCelulaRequest` **simplifican** el `'campo' in body` del código viejo (que distinguía "omitido" de "`null` explícito" para poder borrar `endDate`/`videoCallUrl`): en esta primera pasada, el PATCH siempre aplica el valor recibido (incluido `null` para borrarlo). Documentado como simplificación menor, no confirmada con el dueño del producto. |
 | CM-15 | **La BD es inmutable en esta fase** (corrección del supervisor, tiene prioridad sobre el encargo original). No se creó `V4__community_seed_categorias_muro.sql` ni ninguna otra migración: `categorias_muro` se lee tal cual esté (incluso vacía) — el catálogo real (§1.2) queda documentado como referencia para la fase de migración de datos desde producción, que es posterior y separada de la construcción de módulos. Tampoco se agregaron columnas denormalizadas para los contadores de reacciones/comentarios (§1.1): se resuelven con agregación SQL en la consulta, no con esquema nuevo. |
 | CM-18 | `ConsultarMiembrosCelulaPersistenceAdapter` → **`ConsultarMiembrosCelulaCommunityPersistenceAdapter`** (renombrado por el supervisor, no revertir). Colisión de nombre de bean con una clase homónima creada en paralelo por el agente de `calendar` — Spring deriva el nombre del bean del nombre simple de la clase, y la colisión tumbaba el `ApplicationContext` de toda la suite (incluidos tests en verde de `habits`/`notifications`, no solo los de `community`). Convención ya usada en el repo: prefijo del módulo dueño en la clase (`ConsultarProgresoParticipanteRocksPersistenceAdapter`). |
+| CM-20 | **`ConsultarFeedUseCase.ultimoAutor()` pasó a `ultimoAutor(UserId actorId)` y exige cuenta activa**, igual que `feed()`. No tenía ningún guard: cualquiera (sin sesión válida, o con la cuenta suspendida) obtenía el **nombre completo** de la última persona que publicó en el Muro. `WallController.latestAuthor` ya recibía `@ActorAutenticado UserId actorId` y no lo usaba — el hueco era del servicio, no del transporte. Se eligió el guard de `feed()` (`requireActorActivo`) y no el de `solicitarUrl()` (`requireActorPuedePublicar`): es una **lectura** del Muro, no una publicación. En la misma pasada, `contarMisPublicaciones()` (que tampoco tenía guard, `GET /api/v1/wall/mine`) recibió el mismo `requireActorActivo` — misma clase de falla en la misma clase, criterio de la lección 2 de E-42. Ver **E-50**. |
+| CM-21 | **Las mutaciones de célula y cohorte devuelven la proyección de respuesta**, no la entidad: `CrearCelulaUseCase`/`ActualizarCelulaUseCase`/`AsignarMentorCelulaUseCase`/`QuitarMentorCelulaUseCase`/`ProgramarSesionCelulaUseCase`/`AsignarAprendizCelulaUseCase` devuelven `CelulaDetalle`, y `CrearCohorteUseCase`/`ActualizarCohorteUseCase`/`CambiarEstadoCohorteUseCase` devuelven `CohorteResumen` (los mismos records de `ConsultarCelulasUseCase`/`ConsultarCohortesUseCase`, sin duplicar la forma ni los mappers de respuesta). Motivo en §9.2. El caso de uso de consulta **no se retiró**: sigue sirviendo a `GET /admin/cells`, `GET /admin/cells/{id}`, `GET /admin/cohorts` y `GET /admin/cohorts/{id}`. |
 | CM-19 | **`esModerador()` (en `PublicacionMuroService` y `ComentarioMuroService`) pasó de lanzar `NoSuchElementException` a devolver `false`** cuando el actor no existe en `usuarios`. Hallazgo real de `./mvnw clean test` corrido por el supervisor: `ComentarioMuroServiceTest.ocultarUnComentarioAjenoSinModerarFalla` esperaba 403 y recibía 404 porque el actor de prueba (`otro`) no tenía `UserSummary` stubeado. Investigado antes de tocar nada (instrucción explícita del supervisor): no era solo un olvido del test — `esModerador` es un predicado (`esXxx`, deberia devolver `boolean`) que lanzaba una excepción, rompiendo su propio contrato, y el orden real de los checks en `ocultar()` (primero existencia del recurso, despues existencia+rol del actor) hacía que un actor inexistente devolviera 404 "Actor no encontrado" — un mensaje que solo se alcanza si el comentario/publicación YA se confirmó que existe, filtrando esa existencia a quien prueba con un actor falso. Se corrigió el predicado para fallar cerrado a "no autorizado" (403) en vez de "no encontrado" (404): un actor que no existe simplemente no es moderador, nunca es un error de recurso. Se agregaron pruebas de regresión explícitas (`ocultarConActorInexistenteEsRechazadoComo403NoComo404`) en ambos `*ServiceTest`, no solo se relajó el assert existente. `requireActorActivo`/`requireAdmin` (el actor PRINCIPAL de una acción, no el que modera contenido ajeno) siguen devolviendo 404 vía `NoSuchElementException` si no existen — mismo patrón que el resto del repo (`TicketSoporteService.requireAdmin`), no tocado: la distinción es que esos SÍ son el sujeto de la operación, no un tercero cuyo rol solo se está consultando. |
 
 ---
@@ -179,7 +181,7 @@ Todos los controllers reciben el actor por `X-Actor-Id` (temporal, sin JWT — b
 | Unitarias de `application/services` (Mockito) | `CohorteServiceTest`, `CelulaServiceTest`, `CategoriaMuroServiceTest`, `PublicacionMuroServiceTest`, `ComentarioMuroServiceTest`, `TestimonioServiceTest` — autorización negativa (no-admin → `NotAuthorizedException`, cuenta suspendida → `NotAuthorizedException`), reglas de negocio clave (transición de estado inválida, mentor sin perfil, categoría de sistema, toggle de reacción, moderación de publicaciones/comentarios ajenos). |
 | Integración con Testcontainers (Postgres real) | `PublicacionPersistenceAdapterTest` (`feed` en sus 4 combinaciones con/sin cursor x con/sin categoría, `feedOculto` con/sin cursor) y `ComentarioPersistenceAdapterTest` (`pagina` con/sin cursor) — agregados al arreglar E-31 (ver abajo). Cubren el camino que los tests con mocks no pueden: el `prepare` real de Postgres. |
 | Pendiente (otro agente) | Integración con Testcontainers contra Postgres real para lo que sigue sin cubrir: el `CAST(?  AS renaser.tipo_reaccion)` de `ReaccionMuroPersistenceAdapter`, el reemplazo transaccional de `medias_publicacion` en `PublicacionPersistenceAdapter.save()`, y las queries nativas cross-módulo (`participantes_programa`, `perfiles_mentor`, `usuarios`) contra el esquema real. |
-| Pendiente (otro agente) | Tests de seguridad: 403 para rol sin permiso, 403 para `SUSPENDED`, test de reflexión de `@RequiresPermission` (bloqueado, ver §6). |
+| Autorización negativa (§0.3) | **Cerrado 2026-08-31 — ver §9.1.** Cada método protegido de los 6 servicios tiene su prueba de 403 por rol sin permiso y su prueba de 403 por cuenta `SUSPENDED`. Sigue pendiente (bloqueado, ver §6) el test de reflexión de `@RequiresPermission`: el mecanismo todavía no existe en `shared/`. |
 
 ### 7.1 E-31 — `feed`/`feedOculto`/`pagina` en 500 contra Postgres real
 
@@ -267,7 +269,9 @@ Sin imports prohibidos: `grep` de `org.springframework.*`/`jakarta.persistence.*
 
 **5. Controllers — muestra de 6 revisados, "controller tonto" cumplido salvo el hallazgo 2**
 
-`CelulaAdminController` (185 líneas, 11 casos de uso inyectados), `WallController` (171 líneas, 8 casos de uso), `WallCommentController`, `WallCategoryAdminController`, `CohorteAdminController`, `MiCelulaController`: cada endpoint deserializa, valida (`@Valid`), llama un único caso de uso y mapea a DTO de salida — ninguno inyecta un puerto `out`, tiene `@Transactional` ni contiene un `if` de negocio (los `switch` de `parseTipoReaccion`/`parseEstado` en `WallController`/`CohorteAdminController` son mapeo de formato HTTP→enum de dominio, no reglas de negocio). Observación menor: `CelulaAdminController` (11 parámetros de constructor) y `WallController` (8) exceden el techo de "≤4 parámetros" de CLAUDE.md §5.4.8 si se aplica literalmente a constructores — es consecuencia directa de que cada controller agrupa **todos** los casos de uso de su recurso HTTP, patrón consistente en todo el módulo y no exclusivo de `community`; se documenta pero no se considera un hallazgo grave por sí solo.
+> **Corregido 2026-08-31.** Esta afirmación era **falsa** para 9 handlers y por eso el módulo figuraba como limpio: `CelulaAdminController` (`crear`, `actualizar`, `asignarMentor`, `quitarMentor`, `asignarAprendiz`, `programarSesion`) y `CohorteAdminController` (`crear`, `actualizar`, `cambiarEstado`) mutaban con un caso de uso y **después llamaban a un segundo** (`consultarUseCase.obtener(...)`) para armar la respuesta — exactamente lo que CLAUDE.MD §5.4.6 prohíbe ("si hacen falta dos, falta un caso de uso que los componga"), con el agravante de que las dos operaciones caían en **transacciones distintas** y la respuesta podía reflejar un estado ya cambiado por otro actor. Resuelto en §9.2: la mutación devuelve la proyección dentro de su propia transacción. La frase de abajo describe el estado **posterior** a esa corrección.
+
+`CelulaAdminController` (11 casos de uso inyectados), `WallController` (8 casos de uso), `WallCommentController`, `WallCategoryAdminController`, `CohorteAdminController`, `MiCelulaController`: cada endpoint deserializa, valida (`@Valid`), llama un único caso de uso y mapea a DTO de salida — ninguno inyecta un puerto `out`, tiene `@Transactional` ni contiene un `if` de negocio (los `switch` de `parseTipoReaccion`/`parseEstado` en `WallController`/`CohorteAdminController` son mapeo de formato HTTP→enum de dominio, no reglas de negocio). Observación menor: `CelulaAdminController` (11 parámetros de constructor) y `WallController` (8) exceden el techo de "≤4 parámetros" de CLAUDE.md §5.4.8 si se aplica literalmente a constructores — es consecuencia directa de que cada controller agrupa **todos** los casos de uso de su recurso HTTP, patrón consistente en todo el módulo y no exclusivo de `community`; se documenta pero no se considera un hallazgo grave por sí solo.
 
 **6. Los 5 archivos más grandes del módulo**
 
@@ -276,3 +280,59 @@ Sin imports prohibidos: `grep` de `org.springframework.*`/`jakarta.persistence.*
 3. `infrastructure/adapter/in/rest/celula/CelulaAdminController.java` — 185 líneas
 4. `infrastructure/adapter/in/rest/publicacion/WallController.java` — 171 líneas
 5. `infrastructure/adapter/out/persistence/publicacion/PublicacionPersistenceAdapter.java` — 164 líneas
+
+## 9. 2026-08-31 — Autorización negativa completa, `latest-author` cerrado y 9 handlers corregidos
+
+Tres trabajos, todos cerrados. `./mvnw clean test`: **`Tests run: 1729, Failures: 0, Errors: 0, Skipped: 0` — BUILD SUCCESS** (21:36 min, 251 clases). Son **59 pruebas nuevas** sobre las 1670 de la base del worktree, medido corriendo la suite completa ANTES de tocar nada (también en verde) y después.
+
+### 9.1 Autorización negativa: de 17/70 a 72/72
+
+CLAUDE.MD §0.3 pide, para **cada** endpoint protegido, una prueba de que un rol sin permiso recibe 403 y otra de que un actor `SUSPENDED` recibe 403 aunque su token sea válido. Se midió primero, método por método, en vez de asumir.
+
+**Unidad de medida:** cada método público de servicio que tiene guard, contado por los dos chequeos que exige §0.3. Cuando el método no distingue rol (guard `requireActorActivo` a secas, o todos los roles habilitados como en `publicar()`), cuenta **una** unidad en vez de dos.
+
+| Servicio | Métodos protegidos | Unidades | Cubiertas antes | Cubiertas después |
+|---|---|---|---|---|
+| `CategoriaMuroService` | 5 | 10 | 1 | 10 |
+| `CohorteService` | 6 | 12 | 2 | 12 |
+| `CelulaService` | 16 | 30 | 6 | 30 |
+| `PublicacionMuroService` | 10 → **12** (CM-20) | 13 → **15** | 4 | 15 |
+| `ComentarioMuroService` | 3 | 3 | 3 | 3 |
+| `TestimonioService` | 1 | 2 | 1 | 2 |
+| **Total** | **41 → 43** | **70 → 72** | **17 (24 %)** | **72 (100 %)** |
+
+El diagnóstico previo era correcto: **los guards ya estaban; lo que faltaba era verificarlos.** Se había probado un método representativo por servicio (`crear` en categorías y cohortes, `crear`/pickers en células) y no sus hermanos. Ninguna de las 59 pruebas nuevas encontró un guard faltante en esos métodos — el único hueco real de autorización apareció en los dos métodos que directamente no tenían guard (§9.2).
+
+Las pruebas viven **dentro del servicio** (`src/test/java/com/renaser/os/community/application/services/*ServiceTest.java`), no en el controller: es donde vive el guard, y es la forma que ya usan los módulos al 100 % (`points`, `phasecontracts`, `evidence`) — `@DisplayName` que nombra el método y el motivo, `assertThatThrownBy(...).isInstanceOf(NotAuthorizedException.class)` y un `verify(port, never())` que comprueba que el efecto no ocurrió.
+
+Detalle de por qué "cuenta SUSPENDIDA" no se prueba con un usuario cualquiera suspendido: donde el guard también mira el rol, el actor de la prueba es un **ADMIN suspendido** (`adminSuspendido`). Con un TRAINEE suspendido la prueba pasaría por el motivo equivocado (el rol) y no probaría nada sobre la suspensión.
+
+### 9.2 `GET /api/v1/wall/latest-author` no tenía ningún guard (E-50)
+
+`WallController.latestAuthor` recibía `@ActorAutenticado UserId actorId` y **nunca lo usaba**; `PublicacionMuroService.ultimoAutor()` ni siquiera lo pedía. Efecto real: cualquiera —incluida una cuenta suspendida— obtenía el **nombre completo** de la última persona que publicó en el Muro. No estaba documentado como decisión en ningún lado (a diferencia de `listarPublicas()` del catálogo de categorías o de `crear()` de testimonios, que sí son públicos **a propósito** y así está escrito).
+
+Se le puso el guard de sus hermanos y su prueba negativa — decisión completa en **CM-20**, síntoma y lección en **E-50** de `docs/BITACORA_ERRORES.md`. `contarMisPublicaciones()` (`GET /api/v1/wall/mine`) tenía el mismo hueco y se corrigió en la misma pasada.
+
+### 9.3 Los 9 handlers que orquestaban dos casos de uso
+
+`CelulaAdminController` (6) y `CohorteAdminController` (3) hacían:
+
+```java
+actualizarUseCase.actualizar(...);                                    // transacción 1
+return CelulaDetalleResponse.from(consultarUseCase.obtener(...));     // transacción 2
+```
+
+Dos problemas, no uno: CLAUDE.MD §5.4.6 lo prohíbe explícitamente ("si hacen falta dos, falta un caso de uso que los componga"), y **entre las dos transacciones la fila puede cambiar** — la respuesta podía describir un estado que ya no era el que la mutación produjo.
+
+**Arreglo:** la mutación devuelve lo que la respuesta necesita, armado dentro de su propia transacción (CM-21). Concretamente, `CelulaService.aDetalle(Celula)` y `CohorteService.aResumen(Cohorte)` son ahora métodos privados que usan tanto la consulta como las mutaciones — la forma de la respuesta es literalmente la misma, así que `CelulaDetalleResponse.from(...)`/`CohorteResponse.from(...)` no cambiaron y **el contrato REST que la app ya consume queda idéntico** (§8 de CLAUDE.MD).
+
+Los 9 handlers quedaron en una sola expresión con un solo caso de uso. `AsignarAprendizCelulaUseCase.asignar` pasó de `void` a `CelulaDetalle`: la lista de miembros que devuelve ya incluye al aprendiz recién asignado porque la lectura ocurre después de la escritura y dentro de la misma transacción.
+
+**Efecto colateral aceptado:** `CelulaService` sube de 417 a 426 líneas, con lo que sigue por encima del techo de 300 de CLAUDE.MD §5.4.8 — hallazgo 3 de la auditoría del 2026-08-28, que **no** se cerró acá (partir ese servicio es un trabajo aparte, y hacerlo en la misma pasada que un cambio de contrato de 9 endpoints habría mezclado dos riesgos distintos en un solo cambio).
+
+### 9.4 Lo que NO se hizo
+
+- **`ComentarioMuroService.pagina(publicacionId, cursor)` no recibe actor y no tiene guard de actor** (`GET /api/v1/wall/{id}/comments`). Solo comprueba que la publicación sea visible. No se tocó: cambiarlo es el mismo tipo de decisión que CM-20 pero sobre un endpoint del camino de lectura más caliente del Muro, y **no está claro si es deliberado** (el código viejo tampoco pedía sesión ahí). Queda como pregunta abierta para el dueño del producto, no como bug silencioso.
+- **Test de reflexión de `@RequiresPermission`/`@PublicEndpoint`** — sigue bloqueado: el mecanismo no existe en `shared/` (§6).
+- **`TestimonioController` sigue con `X-Actor-Id`** (hallazgo 1 de la auditoría del 2026-08-28). No entra en el alcance de este encargo; sigue abierto.
+- **Partir `CelulaService`/`PublicacionMuroService`** (hallazgo 3 de esa misma auditoría) — sigue abierto.

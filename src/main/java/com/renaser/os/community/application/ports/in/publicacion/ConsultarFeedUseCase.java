@@ -21,8 +21,10 @@ public interface ConsultarFeedUseCase {
     int contarMisPublicaciones(UserId actorId);
 
     /** Nombre de quien publico lo mas reciente visible — invitacion a Comunidad en Inicio
-     * (wall/service.ts:272-281). */
-    Optional<String> ultimoAutor();
+     * (wall/service.ts:272-281). Pide el actor porque devuelve el NOMBRE COMPLETO de otra
+     * persona: es una lectura del Muro y exige lo mismo que {@link #feed} (cuenta activa).
+     * Ver E-50 en docs/BITACORA_ERRORES.md. */
+    Optional<String> ultimoAutor(UserId actorId);
 
     record PaginaPublicaciones(List<PublicacionVista> publicaciones, Instant siguienteCursor) {
     }

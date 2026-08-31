@@ -1,6 +1,12 @@
 package com.renaser.os.community.application.services;
 
+import com.renaser.os.community.application.ports.in.celula.ActualizarCelulaUseCase.ActualizarCelulaCommand;
+import com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase.AsignarAprendizCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase.AsignarMentorCelulaCommand;
+import com.renaser.os.community.application.ports.in.celula.EliminarCelulaUseCase.EliminarCelulaCommand;
+import com.renaser.os.community.application.ports.in.celula.ProgramarSesionCelulaUseCase.ProgramarSesionCelulaCommand;
+import com.renaser.os.community.application.ports.in.celula.QuitarAprendizCelulaUseCase.QuitarAprendizCelulaCommand;
+import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUseCase.QuitarMentorCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.CrearCelulaUseCase.CrearCelulaCommand;
 import com.renaser.os.community.application.ports.out.celula.EliminarCelulaPort;
 import com.renaser.os.community.application.ports.out.celula.ExistePerfilMentorPort;
@@ -76,6 +82,7 @@ class CelulaServiceTest {
     private final UserId admin = UserId.of(UUID.randomUUID());
     private final UserId mentor = UserId.of(UUID.randomUUID());
     private final UserId trainee = UserId.of(UUID.randomUUID());
+    private final UserId adminSuspendido = UserId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
@@ -89,6 +96,8 @@ class CelulaServiceTest {
                 .thenReturn(Optional.of(new UserSummary(mentor, "Mentor", null, UserRole.MENTOR, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(trainee))
                 .thenReturn(Optional.of(new UserSummary(trainee, "Aprendiz", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        lenient().when(userSummaryFinder.findById(adminSuspendido)).thenReturn(Optional.of(new UserSummary(
+                adminSuspendido, "Admin suspendido", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
     }
 
     private Celula celulaExistente() {
@@ -140,15 +149,14 @@ class CelulaServiceTest {
         when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var command = new AsignarMentorCelulaCommand(admin, celula.id(), mentor);
-        Celula actualizada = service.asignar(command);
-        assertThat(actualizada.mentorId()).isEqualTo(mentor);
+        var detalle = service.asignar(command);
+        assertThat(detalle.celula().mentorId()).isEqualTo(mentor);
     }
 
     @Test
     void asignarAprendizComoMentorEsRechazado() {
         Celula celula = celulaExistente();
-        var command = new com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase.AsignarAprendizCelulaCommand(
-                mentor, celula.id(), trainee);
+        var command = new AsignarAprendizCelulaCommand(mentor, celula.id(), trainee);
         assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(asignacionCelulaPort, never()).asignarCelula(any(), any(), any());
     }
@@ -157,8 +165,7 @@ class CelulaServiceTest {
     void asignarUnMentorComoAprendizFalla() {
         Celula celula = celulaExistente();
         when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
-        var command = new com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase.AsignarAprendizCelulaCommand(
-                admin, celula.id(), mentor);
+        var command = new AsignarAprendizCelulaCommand(admin, celula.id(), mentor);
         assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(IllegalArgumentException.class);
         verify(asignacionCelulaPort, never()).asignarCelula(any(), any(), any());
     }
@@ -167,8 +174,7 @@ class CelulaServiceTest {
     void asignarAprendizElegibleDelegaEnUsers() {
         Celula celula = celulaExistente();
         when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
-        var command = new com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase.AsignarAprendizCelulaCommand(
-                admin, celula.id(), trainee);
+        var command = new AsignarAprendizCelulaCommand(admin, celula.id(), trainee);
 
         service.asignar(command);
 
@@ -177,16 +183,14 @@ class CelulaServiceTest {
 
     @Test
     void quitarAprendizComoMentorEsRechazado() {
-        var command = new com.renaser.os.community.application.ports.in.celula.QuitarAprendizCelulaUseCase.QuitarAprendizCelulaCommand(
-                mentor, trainee);
+        var command = new QuitarAprendizCelulaCommand(mentor, trainee);
         assertThatThrownBy(() -> service.quitar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(asignacionCelulaPort, never()).quitarCelula(any(), any());
     }
 
     @Test
     void quitarAprendizDelegaEnUsers() {
-        var command = new com.renaser.os.community.application.ports.in.celula.QuitarAprendizCelulaUseCase.QuitarAprendizCelulaCommand(
-                admin, trainee);
+        var command = new QuitarAprendizCelulaCommand(admin, trainee);
 
         service.quitar(command);
 
@@ -321,5 +325,198 @@ class CelulaServiceTest {
         assertThat(disponibles).hasSize(1);
         assertThat(disponibles.get(0).userId()).isEqualTo(aprendizLibre);
         assertThat(disponibles.get(0).nombreCompleto()).isEqualTo("Aprendiz Libre");
+    }
+
+    // ─── CLAUDE.MD sec. 0.3: 403 por rol y 403 por cuenta SUSPENDIDA, metodo por metodo ──
+    // `requireAdmin`/`requireActorActivo` ya estaban en los 16 metodos; faltaba probarlos
+    // en 25 de las 30 combinaciones (solo estaban cubiertos crear/asignar-aprendiz/
+    // quitar-aprendiz/dashboard/mentores-disponibles/aprendices-disponibles, y solo por rol).
+
+    @Test
+    @DisplayName("actualizar(): rol sin permiso (MENTOR) -> 403, nunca guarda")
+    void actualizarComoMentorEsRechazado() {
+        var command = new ActualizarCelulaCommand(mentor, CelulaId.newId(), "Otro", null, true);
+        assertThatThrownBy(() -> service.actualizar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveCelulaPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("asignar(mentor): rol sin permiso (MENTOR) -> 403, nunca guarda")
+    void asignarMentorComoMentorEsRechazado() {
+        var command = new AsignarMentorCelulaCommand(mentor, CelulaId.newId(), mentor);
+        assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveCelulaPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("quitar(mentor): rol sin permiso (MENTOR) -> 403, nunca guarda")
+    void quitarMentorComoMentorEsRechazado() {
+        var command = new QuitarMentorCelulaCommand(mentor, CelulaId.newId());
+        assertThatThrownBy(() -> service.quitar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveCelulaPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("programar(): rol sin permiso (MENTOR) -> 403, nunca guarda")
+    void programarSesionComoMentorEsRechazado() {
+        var command = new ProgramarSesionCelulaCommand(mentor, CelulaId.newId(), CLOCK.now());
+        assertThatThrownBy(() -> service.programar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveCelulaPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("eliminar(): rol sin permiso (MENTOR) -> 403, nunca borra")
+    void eliminarComoMentorEsRechazado() {
+        var command = new EliminarCelulaCommand(mentor, CelulaId.newId());
+        assertThatThrownBy(() -> service.eliminar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(eliminarCelulaPort, never()).eliminar(any());
+    }
+
+    @Test
+    @DisplayName("mentores(): rol sin permiso (MENTOR) -> 403")
+    void mentoresComoMentorEsRechazado() {
+        assertThatThrownBy(() -> service.mentores(mentor)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("listarPorCohorte(): rol sin permiso (TRAINEE) -> 403")
+    void listarPorCohorteComoTraineeEsRechazado() {
+        CohorteId cohorteId = CohorteId.newId();
+        assertThatThrownBy(() -> service.listarPorCohorte(trainee, cohorteId))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("obtener(): rol sin permiso (TRAINEE) -> 403")
+    void obtenerComoTraineeEsRechazado() {
+        Celula celula = celulaExistente();
+        when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
+        assertThatThrownBy(() -> service.obtener(trainee, celula.id())).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("obtener(): un MENTOR no accede a una celula que no lidera -> 403")
+    void obtenerCelulaAjenaComoMentorEsRechazado() {
+        Celula ajena = celulaExistente();
+        when(loadCelulaPort.porId(ajena.id())).thenReturn(Optional.of(ajena));
+        assertThatThrownBy(() -> service.obtener(mentor, ajena.id())).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("crear(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void crearConAdminSuspendidoFalla() {
+        var command = new CrearCelulaCommand(adminSuspendido, "Celula 1", CohorteId.newId(), null);
+        assertThatThrownBy(() -> service.crear(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveCelulaPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("actualizar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void actualizarConAdminSuspendidoFalla() {
+        var command = new ActualizarCelulaCommand(adminSuspendido, CelulaId.newId(), "Otro", null, true);
+        assertThatThrownBy(() -> service.actualizar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveCelulaPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("asignar(mentor): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void asignarMentorConAdminSuspendidoFalla() {
+        var command = new AsignarMentorCelulaCommand(adminSuspendido, CelulaId.newId(), mentor);
+        assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveCelulaPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("quitar(mentor): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void quitarMentorConAdminSuspendidoFalla() {
+        var command = new QuitarMentorCelulaCommand(adminSuspendido, CelulaId.newId());
+        assertThatThrownBy(() -> service.quitar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveCelulaPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("asignar(aprendiz): cuenta SUSPENDIDA -> 403, nunca delega en `users`")
+    void asignarAprendizConAdminSuspendidoFalla() {
+        var command = new AsignarAprendizCelulaCommand(adminSuspendido, CelulaId.newId(), trainee);
+        assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(asignacionCelulaPort, never()).asignarCelula(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("quitar(aprendiz): cuenta SUSPENDIDA -> 403, nunca delega en `users`")
+    void quitarAprendizConAdminSuspendidoFalla() {
+        var command = new QuitarAprendizCelulaCommand(adminSuspendido, trainee);
+        assertThatThrownBy(() -> service.quitar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(asignacionCelulaPort, never()).quitarCelula(any(), any());
+    }
+
+    @Test
+    @DisplayName("programar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void programarSesionConAdminSuspendidoFalla() {
+        var command = new ProgramarSesionCelulaCommand(adminSuspendido, CelulaId.newId(), CLOCK.now());
+        assertThatThrownBy(() -> service.programar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveCelulaPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("eliminar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void eliminarConAdminSuspendidoFalla() {
+        var command = new EliminarCelulaCommand(adminSuspendido, CelulaId.newId());
+        assertThatThrownBy(() -> service.eliminar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(eliminarCelulaPort, never()).eliminar(any());
+    }
+
+    @Test
+    @DisplayName("listarPorCohorte(): cuenta SUSPENDIDA -> 403")
+    void listarPorCohorteConAdminSuspendidoFalla() {
+        CohorteId cohorteId = CohorteId.newId();
+        assertThatThrownBy(() -> service.listarPorCohorte(adminSuspendido, cohorteId))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("obtener(): cuenta SUSPENDIDA -> 403")
+    void obtenerConAdminSuspendidoFalla() {
+        CelulaId celulaId = CelulaId.newId();
+        assertThatThrownBy(() -> service.obtener(adminSuspendido, celulaId))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("miCelula(): cuenta SUSPENDIDA -> 403")
+    void miCelulaConActorSuspendidoFalla() {
+        assertThatThrownBy(() -> service.miCelula(adminSuspendido)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("misCompaneros(): cuenta SUSPENDIDA -> 403")
+    void misCompanerosConActorSuspendidoFalla() {
+        assertThatThrownBy(() -> service.misCompaneros(adminSuspendido)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("dashboard(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void dashboardConAdminSuspendidoFalla() {
+        assertThatThrownBy(() -> service.dashboard(adminSuspendido)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("mentoresDisponibles(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void mentoresDisponiblesConAdminSuspendidoFalla() {
+        assertThatThrownBy(() -> service.mentoresDisponibles(adminSuspendido))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("mentores(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void mentoresConAdminSuspendidoFalla() {
+        assertThatThrownBy(() -> service.mentores(adminSuspendido)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("aprendicesDisponibles(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void aprendicesDisponiblesConAdminSuspendidoFalla() {
+        assertThatThrownBy(() -> service.aprendicesDisponibles(adminSuspendido))
+                .isInstanceOf(NotAuthorizedException.class);
     }
 }

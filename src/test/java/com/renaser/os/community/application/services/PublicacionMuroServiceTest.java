@@ -7,7 +7,10 @@ import com.renaser.os.community.application.ports.in.publicacion.EditarPublicaci
 import com.renaser.os.community.application.ports.in.publicacion.OcultarPublicacionUseCase.OcultarPublicacionCommand;
 import com.renaser.os.community.application.ports.in.publicacion.PublicarUseCase.ArchivoEntrada;
 import com.renaser.os.community.application.ports.in.publicacion.PublicarUseCase.PublicarCommand;
+import com.renaser.os.community.application.ports.in.publicacion.EliminarPublicacionUseCase.EliminarPublicacionCommand;
 import com.renaser.os.community.application.ports.in.publicacion.ReaccionarUseCase.ReaccionarCommand;
+import com.renaser.os.community.application.ports.in.publicacion.RestaurarPublicacionUseCase.RestaurarPublicacionCommand;
+import com.renaser.os.community.application.ports.in.publicacion.SolicitarUrlSubidaMediaUseCase.SolicitarUrlSubidaMediaCommand;
 import com.renaser.os.community.application.ports.out.publicacion.EliminarPublicacionPort;
 import com.renaser.os.community.application.ports.out.publicacion.LoadComentarioPort;
 import com.renaser.os.community.application.ports.out.publicacion.LoadPublicacionPort;
@@ -28,6 +31,7 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -44,6 +48,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -81,6 +86,7 @@ class PublicacionMuroServiceTest {
     private final UserId otro = UserId.of(UUID.randomUUID());
     private final UserId admin = UserId.of(UUID.randomUUID());
     private final UserId suspendido = UserId.of(UUID.randomUUID());
+    private final UserId adminSuspendido = UserId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
@@ -95,6 +101,8 @@ class PublicacionMuroServiceTest {
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(suspendido)).thenReturn(
                 Optional.of(new UserSummary(suspendido, "Suspendido", null, UserRole.TRAINEE, UserStatus.SUSPENDED)));
+        lenient().when(userSummaryFinder.findById(adminSuspendido)).thenReturn(Optional.of(new UserSummary(
+                adminSuspendido, "Admin suspendido", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
         lenient().when(consultarPerfilUsuarioPort.porId(any())).thenReturn(Optional.empty());
         lenient().when(reaccionMuroPort.contarPorTipo(any())).thenReturn(Map.of());
         lenient().when(loadComentarioPort.contar(any())).thenReturn(0);
@@ -248,5 +256,108 @@ class PublicacionMuroServiceTest {
 
         assertThatThrownBy(() -> service.publicarDesdeEvidencia(comando)).isInstanceOf(NotAuthorizedException.class);
         verify(savePublicacionPort, never()).save(any());
+    }
+
+    // ─── CLAUDE.MD sec. 0.3: 403 por rol y 403 por cuenta SUSPENDIDA, metodo por metodo ──
+    // Estaban probados ocultar/editar/reaccionar/publicarDesdeEvidencia; faltaban sus
+    // hermanos publicar/feed/feedOculto/restaurar/eliminarPermanente/solicitarUrl y los dos
+    // metodos que directamente no tenian guard (ultimoAutor/contarMisPublicaciones, E-50).
+
+    @Test
+    @DisplayName("publicar(): cuenta SUSPENDIDA -> 403, nunca guarda")
+    void publicarConActorSuspendidoFalla() {
+        var command = new PublicarCommand(suspendido, "hola comunidad", unaFoto(), null);
+        assertThatThrownBy(() -> service.publicar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePublicacionPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("feed(): cuenta SUSPENDIDA -> 403, nunca consulta el feed")
+    void feedConActorSuspendidoFalla() {
+        assertThatThrownBy(() -> service.feed(suspendido, null, null)).isInstanceOf(NotAuthorizedException.class);
+        verify(loadPublicacionPort, never()).feed(any(), anyInt(), any());
+    }
+
+    @Test
+    @DisplayName("feedOculto(): rol sin permiso (TRAINEE) -> 403 — la cola de moderacion es ADMIN/ALCHEMIST")
+    void feedOcultoComoNoModeradorEsRechazado() {
+        assertThatThrownBy(() -> service.feedOculto(otro, null)).isInstanceOf(NotAuthorizedException.class);
+        verify(loadPublicacionPort, never()).feedOculto(any(), anyInt());
+    }
+
+    @Test
+    @DisplayName("feedOculto(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void feedOcultoConAdminSuspendidoFalla() {
+        assertThatThrownBy(() -> service.feedOculto(adminSuspendido, null))
+                .isInstanceOf(NotAuthorizedException.class);
+        verify(loadPublicacionPort, never()).feedOculto(any(), anyInt());
+    }
+
+    @Test
+    @DisplayName("restaurar(): rol sin permiso (TRAINEE) -> 403, nunca guarda")
+    void restaurarComoNoModeradorEsRechazado() {
+        var command = new RestaurarPublicacionCommand(otro, PublicacionId.newId());
+        assertThatThrownBy(() -> service.restaurar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePublicacionPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("restaurar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void restaurarConAdminSuspendidoFalla() {
+        var command = new RestaurarPublicacionCommand(adminSuspendido, PublicacionId.newId());
+        assertThatThrownBy(() -> service.restaurar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePublicacionPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("eliminarPermanente(): rol sin permiso (TRAINEE) -> 403, nunca borra")
+    void eliminarPermanenteComoNoModeradorEsRechazado() {
+        var command = new EliminarPublicacionCommand(otro, PublicacionId.newId());
+        assertThatThrownBy(() -> service.eliminarPermanente(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(eliminarPublicacionPort, never()).eliminar(any());
+    }
+
+    @Test
+    @DisplayName("eliminarPermanente(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void eliminarPermanenteConAdminSuspendidoFalla() {
+        var command = new EliminarPublicacionCommand(adminSuspendido, PublicacionId.newId());
+        assertThatThrownBy(() -> service.eliminarPermanente(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(eliminarPublicacionPort, never()).eliminar(any());
+    }
+
+    @Test
+    @DisplayName("ocultar(): un moderador SUSPENDIDO no modera contenido ajeno -> 403")
+    void moderadorSuspendidoNoPuedeOcultarUnaAjena() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        var command = new OcultarPublicacionCommand(adminSuspendido, publicacion.id());
+        assertThatThrownBy(() -> service.ocultar(command)).isInstanceOf(NotAuthorizedException.class);
+        assertThat(publicacion.oculta()).isFalse();
+        verify(savePublicacionPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("solicitarUrl(): cuenta SUSPENDIDA -> 403")
+    void solicitarUrlConActorSuspendidoFalla() {
+        var command = new SolicitarUrlSubidaMediaCommand(suspendido, "image/jpeg");
+        assertThatThrownBy(() -> service.solicitarUrl(command)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    /** E-50: `ultimoAutor` devolvia el nombre completo del ultimo autor del Muro SIN
+     * ningun guard — el controller ya recibia el actor y no lo usaba. */
+    @Test
+    @DisplayName("ultimoAutor(): cuenta SUSPENDIDA -> 403, no filtra el nombre del ultimo autor")
+    void ultimoAutorConActorSuspendidoFalla() {
+        assertThatThrownBy(() -> service.ultimoAutor(suspendido)).isInstanceOf(NotAuthorizedException.class);
+        verify(loadPublicacionPort, never()).ultimaVisible();
+    }
+
+    @Test
+    @DisplayName("contarMisPublicaciones(): cuenta SUSPENDIDA -> 403")
+    void contarMisPublicacionesConActorSuspendidoFalla() {
+        assertThatThrownBy(() -> service.contarMisPublicaciones(suspendido))
+                .isInstanceOf(NotAuthorizedException.class);
+        verify(loadPublicacionPort, never()).contarPorAutor(any());
     }
 }

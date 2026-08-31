@@ -1,5 +1,6 @@
 package com.renaser.os.community.application.services;
 
+import com.renaser.os.community.application.ports.in.categoria.ActualizarCategoriaMuroUseCase.ActualizarCategoriaMuroCommand;
 import com.renaser.os.community.application.ports.in.categoria.CrearCategoriaMuroUseCase.CrearCategoriaMuroCommand;
 import com.renaser.os.community.application.ports.in.categoria.EliminarCategoriaMuroUseCase.EliminarCategoriaMuroCommand;
 import com.renaser.os.community.application.ports.in.categoria.ReordenarCategoriasMuroUseCase.ReordenarCategoriasMuroCommand;
@@ -15,6 +16,7 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -52,6 +54,7 @@ class CategoriaMuroServiceTest {
 
     private final UserId admin = UserId.of(UUID.randomUUID());
     private final UserId mentor = UserId.of(UUID.randomUUID());
+    private final UserId adminSuspendido = UserId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
@@ -60,6 +63,8 @@ class CategoriaMuroServiceTest {
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(mentor))
                 .thenReturn(Optional.of(new UserSummary(mentor, "Mentor", null, UserRole.MENTOR, UserStatus.ACTIVE)));
+        lenient().when(userSummaryFinder.findById(adminSuspendido)).thenReturn(Optional.of(new UserSummary(
+                adminSuspendido, "Admin suspendido", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
     }
 
     @Test
@@ -107,5 +112,78 @@ class CategoriaMuroServiceTest {
         when(loadPort.listarActivas()).thenReturn(List.of(
                 CategoriaMuro.rehydrate("LOGROS", "Logros", "🏆", 1, true, false, CLOCK.now(), CLOCK.now())));
         assertThat(service.listarPublicas()).hasSize(1);
+    }
+
+    // ─── CLAUDE.MD sec. 0.3: 403 por rol y 403 por cuenta SUSPENDIDA, metodo por metodo ──
+    // El guard (`requireAdmin`) ya existia; lo que faltaba era verificarlo en cada hermano,
+    // no solo en `crear` (el unico que estaba probado).
+
+    @Test
+    @DisplayName("actualizar(): rol sin permiso (MENTOR) -> 403, nunca guarda")
+    void actualizarComoMentorEsRechazado() {
+        var command = new ActualizarCategoriaMuroCommand(mentor, "LOGROS", "Logros", "x", true);
+        assertThatThrownBy(() -> service.actualizar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("eliminar(): rol sin permiso (MENTOR) -> 403, nunca borra")
+    void eliminarComoMentorEsRechazado() {
+        var command = new EliminarCategoriaMuroCommand(mentor, "LOGROS");
+        assertThatThrownBy(() -> service.eliminar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(eliminarPort, never()).eliminar(any());
+    }
+
+    @Test
+    @DisplayName("reordenar(): rol sin permiso (MENTOR) -> 403, nunca reordena")
+    void reordenarComoMentorEsRechazado() {
+        var command = new ReordenarCategoriasMuroCommand(mentor, List.of("LOGROS"));
+        assertThatThrownBy(() -> service.reordenar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePort, never()).reordenar(any());
+    }
+
+    @Test
+    @DisplayName("listarParaPanel(): rol sin permiso (MENTOR) -> 403")
+    void listarParaPanelComoMentorEsRechazado() {
+        assertThatThrownBy(() -> service.listarParaPanel(mentor)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("crear(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void crearConAdminSuspendidoFalla() {
+        var command = new CrearCategoriaMuroCommand(adminSuspendido, "LOGROS", "Logros", "x");
+        assertThatThrownBy(() -> service.crear(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("actualizar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void actualizarConAdminSuspendidoFalla() {
+        var command = new ActualizarCategoriaMuroCommand(adminSuspendido, "LOGROS", "Logros", "x", true);
+        assertThatThrownBy(() -> service.actualizar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("eliminar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void eliminarConAdminSuspendidoFalla() {
+        var command = new EliminarCategoriaMuroCommand(adminSuspendido, "LOGROS");
+        assertThatThrownBy(() -> service.eliminar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(eliminarPort, never()).eliminar(any());
+    }
+
+    @Test
+    @DisplayName("reordenar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void reordenarConAdminSuspendidoFalla() {
+        var command = new ReordenarCategoriasMuroCommand(adminSuspendido, List.of("LOGROS"));
+        assertThatThrownBy(() -> service.reordenar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePort, never()).reordenar(any());
+    }
+
+    @Test
+    @DisplayName("listarParaPanel(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void listarParaPanelConAdminSuspendidoFalla() {
+        assertThatThrownBy(() -> service.listarParaPanel(adminSuspendido))
+                .isInstanceOf(NotAuthorizedException.class);
     }
 }

@@ -1,6 +1,6 @@
 package com.renaser.os.community.application.ports.in.cohorte;
 
-import com.renaser.os.community.domain.model.cohorte.Cohorte;
+import com.renaser.os.community.application.ports.in.cohorte.ConsultarCohortesUseCase.CohorteResumen;
 import com.renaser.os.shared.application.SelfValidating;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.validation.constraints.NotBlank;
@@ -10,7 +10,9 @@ import java.time.LocalDate;
 
 public interface CrearCohorteUseCase {
 
-    Cohorte crear(CrearCohorteCommand command);
+    /** Devuelve la proyeccion que la API responde — armada dentro de la MISMA
+     * transaccion que crea la cohorte (CLAUDE.MD sec. 5.4.6). */
+    CohorteResumen crear(CrearCohorteCommand command);
 
     record CrearCohorteCommand(@NotNull UserId actorId, @NotBlank String nombre, @NotNull LocalDate fechaInicio,
                                 LocalDate fechaFin) {

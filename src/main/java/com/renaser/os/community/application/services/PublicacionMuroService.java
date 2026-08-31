@@ -189,11 +189,15 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
 
     @Override
     public int contarMisPublicaciones(UserId actorId) {
+        requireActorActivo(actorId);
         return loadPublicacionPort.contarPorAutor(actorId);
     }
 
+    /** Mismo guard que {@link #feed}: expone el nombre completo de otra persona, asi que
+     * una cuenta suspendida (o inexistente) no lo obtiene. Ver E-50. */
     @Override
-    public Optional<String> ultimoAutor() {
+    public Optional<String> ultimoAutor(UserId actorId) {
+        requireActorActivo(actorId);
         return loadPublicacionPort.ultimaVisible()
                 .flatMap(p -> consultarPerfilUsuarioPort.porId(p.autorId()))
                 .map(PerfilUsuario::nombreCompleto);

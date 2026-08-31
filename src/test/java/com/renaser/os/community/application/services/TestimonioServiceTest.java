@@ -21,6 +21,7 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -105,5 +106,17 @@ class TestimonioServiceTest {
         Testimonio testimonio = vista.testimonio();
         assertThat(testimonio.fotoEventoRuta()).isEqualTo("muro/x/1.jpg");
         assertThat(testimonio.texto()).isEqualTo("que gran dia");
+    }
+
+    @Test
+    @DisplayName("promover(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void promoverConAdminSuspendidoFalla() {
+        UserId adminSuspendido = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(adminSuspendido)).thenReturn(Optional.of(new UserSummary(
+                adminSuspendido, "Admin suspendido", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
+
+        var command = new PromoverPublicacionCommand(adminSuspendido, PublicacionId.newId(), 5);
+        assertThatThrownBy(() -> service.promover(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveTestimonioPort, never()).save(any());
     }
 }

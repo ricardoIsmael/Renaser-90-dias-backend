@@ -51,29 +51,29 @@ public class CohorteService implements CrearCohorteUseCase, ActualizarCohorteUse
 
     @Override
     @Transactional
-    public Cohorte crear(CrearCohorteCommand command) {
+    public CohorteResumen crear(CrearCohorteCommand command) {
         requireAdmin(command.actorId());
         Cohorte cohorte = Cohorte.crear(command.nombre(), command.fechaInicio(), command.fechaFin(), clock.now());
-        return saveCohortePort.save(cohorte);
+        return aResumen(saveCohortePort.save(cohorte));
     }
 
     @Override
     @Transactional
-    public Cohorte actualizar(ActualizarCohorteCommand command) {
+    public CohorteResumen actualizar(ActualizarCohorteCommand command) {
         requireAdmin(command.actorId());
         Cohorte cohorte = requireCohorte(command.cohorteId());
         cohorte.actualizarDatos(command.nombre(), command.fechaInicio(),
                 command.tocaFechaFin() ? command.fechaFin() : cohorte.fechaFin(), clock.now());
-        return saveCohortePort.save(cohorte);
+        return aResumen(saveCohortePort.save(cohorte));
     }
 
     @Override
     @Transactional
-    public Cohorte cambiarEstado(CambiarEstadoCohorteCommand command) {
+    public CohorteResumen cambiarEstado(CambiarEstadoCohorteCommand command) {
         requireAdmin(command.actorId());
         Cohorte cohorte = requireCohorte(command.cohorteId());
         cohorte.transicionarA(command.nuevoEstado(), clock.now());
-        return saveCohortePort.save(cohorte);
+        return aResumen(saveCohortePort.save(cohorte));
     }
 
     @Override
@@ -120,8 +120,14 @@ public class CohorteService implements CrearCohorteUseCase, ActualizarCohorteUse
     }
 
     private CohorteResumen aResumen(CohorteId id) {
-        Cohorte cohorte = requireCohorte(id);
-        return new CohorteResumen(cohorte, loadCohortePort.contarCelulas(id));
+        return aResumen(requireCohorte(id));
+    }
+
+    /** Proyeccion que la API devuelve al crear/actualizar/cambiar estado, armada DENTRO de
+     * la transaccion de la mutacion: el controller ya no encadena "muto y despues
+     * consulto" (dos transacciones, respuesta posiblemente desactualizada). */
+    private CohorteResumen aResumen(Cohorte cohorte) {
+        return new CohorteResumen(cohorte, loadCohortePort.contarCelulas(cohorte.id()));
     }
 
     private Cohorte requireCohorte(CohorteId id) {

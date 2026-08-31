@@ -121,32 +121,29 @@ public class CelulaAdminController {
     @PostMapping
     public ResponseEntity<CelulaDetalleResponse> crear(@ActorAutenticado UserId actorId,
                                                          @RequestBody @Valid CrearCelulaRequest request) {
-        var celula = crearUseCase.crear(new CrearCelulaCommand(actorId, request.name(),
+        var detalle = crearUseCase.crear(new CrearCelulaCommand(actorId, request.name(),
                 CohorteId.of(request.cohortId()), request.videoCallUrl()));
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(CelulaDetalleResponse.from(consultarUseCase.obtener(actorId, celula.id())));
+        return ResponseEntity.status(HttpStatus.CREATED).body(CelulaDetalleResponse.from(detalle));
     }
 
     @PatchMapping("/{id}")
     public CelulaDetalleResponse actualizar(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                              @RequestBody ActualizarCelulaRequest request) {
-        actualizarUseCase.actualizar(new ActualizarCelulaCommand(actorId, CelulaId.of(id), request.name(),
-                request.videoCallUrl(), true));
-        return CelulaDetalleResponse.from(consultarUseCase.obtener(actorId, CelulaId.of(id)));
+        return CelulaDetalleResponse.from(actualizarUseCase.actualizar(new ActualizarCelulaCommand(actorId,
+                CelulaId.of(id), request.name(), request.videoCallUrl(), true)));
     }
 
     @PutMapping("/{id}/mentor")
     public CelulaDetalleResponse asignarMentor(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                                 @RequestBody @Valid AsignarMentorRequest request) {
-        asignarMentorUseCase.asignar(new AsignarMentorCelulaCommand(actorId, CelulaId.of(id),
-                UserId.of(request.leaderUserId())));
-        return CelulaDetalleResponse.from(consultarUseCase.obtener(actorId, CelulaId.of(id)));
+        return CelulaDetalleResponse.from(asignarMentorUseCase.asignar(new AsignarMentorCelulaCommand(actorId,
+                CelulaId.of(id), UserId.of(request.leaderUserId()))));
     }
 
     @DeleteMapping("/{id}/mentor")
     public CelulaDetalleResponse quitarMentor(@ActorAutenticado UserId actorId, @PathVariable UUID id) {
-        quitarMentorUseCase.quitar(new QuitarMentorCelulaCommand(actorId, CelulaId.of(id)));
-        return CelulaDetalleResponse.from(consultarUseCase.obtener(actorId, CelulaId.of(id)));
+        return CelulaDetalleResponse.from(quitarMentorUseCase.quitar(new QuitarMentorCelulaCommand(actorId,
+                CelulaId.of(id))));
     }
 
     /** #25: asigna un aprendiz a esta celula (escribe `participantes_programa.celula_id`
@@ -154,9 +151,8 @@ public class CelulaAdminController {
     @PostMapping("/{id}/trainees")
     public CelulaDetalleResponse asignarAprendiz(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                                   @RequestBody @Valid AsignarAprendizRequest request) {
-        asignarAprendizUseCase.asignar(new AsignarAprendizCelulaCommand(actorId, CelulaId.of(id),
-                UserId.of(request.traineeId())));
-        return CelulaDetalleResponse.from(consultarUseCase.obtener(actorId, CelulaId.of(id)));
+        return CelulaDetalleResponse.from(asignarAprendizUseCase.asignar(new AsignarAprendizCelulaCommand(actorId,
+                CelulaId.of(id), UserId.of(request.traineeId()))));
     }
 
     /** #25: contraparte de {@link #asignarAprendiz}. {@code id} de celula no hace falta
@@ -172,9 +168,8 @@ public class CelulaAdminController {
     @PostMapping("/{id}/session")
     public CelulaDetalleResponse programarSesion(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                                   @RequestBody @Valid ProgramarSesionRequest request) {
-        programarSesionUseCase.programar(new ProgramarSesionCelulaCommand(actorId, CelulaId.of(id),
-                request.scheduledAt()));
-        return CelulaDetalleResponse.from(consultarUseCase.obtener(actorId, CelulaId.of(id)));
+        return CelulaDetalleResponse.from(programarSesionUseCase.programar(new ProgramarSesionCelulaCommand(actorId,
+                CelulaId.of(id), request.scheduledAt())));
     }
 
     @DeleteMapping("/{id}")

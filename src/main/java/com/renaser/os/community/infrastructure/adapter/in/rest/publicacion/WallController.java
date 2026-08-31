@@ -130,7 +130,7 @@ public class WallController {
     @GetMapping("/latest-author")
     public Map<String, String> latestAuthor(@ActorAutenticado UserId actorId) {
         Map<String, String> body = new HashMap<>();
-        body.put("authorName", consultarFeedUseCase.ultimoAutor().orElse(null));
+        body.put("authorName", consultarFeedUseCase.ultimoAutor(actorId).orElse(null));
         return body;
     }
 

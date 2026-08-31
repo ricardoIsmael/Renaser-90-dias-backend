@@ -1,6 +1,6 @@
 package com.renaser.os.community.application.ports.in.cohorte;
 
-import com.renaser.os.community.domain.model.cohorte.Cohorte;
+import com.renaser.os.community.application.ports.in.cohorte.ConsultarCohortesUseCase.CohorteResumen;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.shared.application.SelfValidating;
 import com.renaser.os.shared.domain.UserId;
@@ -10,7 +10,8 @@ import java.time.LocalDate;
 
 public interface ActualizarCohorteUseCase {
 
-    Cohorte actualizar(ActualizarCohorteCommand command);
+    /** Proyeccion de respuesta dentro de la misma transaccion (CLAUDE.MD sec. 5.4.6). */
+    CohorteResumen actualizar(ActualizarCohorteCommand command);
 
     /** {@code nombre}/{@code fechaInicio} null = no se tocan. {@code tocaFechaFin} distingue
      * "no vino en el body" de "vino explicitamente null para borrarla" (community/service.ts:165). */

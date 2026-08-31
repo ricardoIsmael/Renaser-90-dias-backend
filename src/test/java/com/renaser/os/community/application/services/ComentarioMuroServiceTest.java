@@ -21,6 +21,7 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -61,6 +62,7 @@ class ComentarioMuroServiceTest {
     private final UserId otro = UserId.of(UUID.randomUUID());
     private final UserId admin = UserId.of(UUID.randomUUID());
     private final UserId suspendido = UserId.of(UUID.randomUUID());
+    private final UserId adminSuspendido = UserId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
@@ -75,6 +77,8 @@ class ComentarioMuroServiceTest {
                 .thenReturn(Optional.of(new UserSummary(autor, "Autor", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(suspendido)).thenReturn(
                 Optional.of(new UserSummary(suspendido, "Suspendido", null, UserRole.TRAINEE, UserStatus.SUSPENDED)));
+        lenient().when(userSummaryFinder.findById(adminSuspendido)).thenReturn(Optional.of(new UserSummary(
+                adminSuspendido, "Admin suspendido", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
     }
 
     private Publicacion publicacionVisible() {
@@ -182,6 +186,19 @@ class ComentarioMuroServiceTest {
 
         var command = new OcultarComentarioCommand(suspendido, comentario.id());
         assertThatThrownBy(() -> service.ocultar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveComentarioPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("ocultar(): un moderador SUSPENDIDO no modera un comentario ajeno -> 403")
+    void moderadorSuspendidoNoPuedeOcultarUnComentarioAjeno() {
+        Publicacion publicacion = publicacionVisible();
+        Comentario comentario = comentarioDe(autor, publicacion.id());
+        when(loadComentarioPort.porId(comentario.id())).thenReturn(Optional.of(comentario));
+
+        var command = new OcultarComentarioCommand(adminSuspendido, comentario.id());
+        assertThatThrownBy(() -> service.ocultar(command)).isInstanceOf(NotAuthorizedException.class);
+        assertThat(comentario.oculto()).isFalse();
         verify(saveComentarioPort, never()).save(any());
     }
 }

@@ -64,26 +64,23 @@ public class CohorteAdminController {
     @PostMapping
     public ResponseEntity<CohorteResponse> crear(@ActorAutenticado UserId actorId,
                                                   @RequestBody @Valid CrearCohorteRequest request) {
-        var cohorte = crearUseCase.crear(new CrearCohorteCommand(actorId, request.name(),
+        var resumen = crearUseCase.crear(new CrearCohorteCommand(actorId, request.name(),
                 request.startDate(), request.endDate()));
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(CohorteResponse.from(consultarUseCase.obtener(actorId, cohorte.id())));
+        return ResponseEntity.status(HttpStatus.CREATED).body(CohorteResponse.from(resumen));
     }
 
     @PatchMapping("/{id}")
     public CohorteResponse actualizar(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                        @RequestBody ActualizarCohorteRequest request) {
-        actualizarUseCase.actualizar(new ActualizarCohorteCommand(actorId, CohorteId.of(id),
-                request.name(), request.startDate(), request.endDate(), true));
-        return CohorteResponse.from(consultarUseCase.obtener(actorId, CohorteId.of(id)));
+        return CohorteResponse.from(actualizarUseCase.actualizar(new ActualizarCohorteCommand(actorId,
+                CohorteId.of(id), request.name(), request.startDate(), request.endDate(), true)));
     }
 
     @PatchMapping("/{id}/status")
     public CohorteResponse cambiarEstado(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                           @RequestBody @Valid CambiarEstadoCohorteRequest request) {
-        cambiarEstadoUseCase.cambiarEstado(new CambiarEstadoCohorteCommand(actorId, CohorteId.of(id),
-                parseEstado(request.status())));
-        return CohorteResponse.from(consultarUseCase.obtener(actorId, CohorteId.of(id)));
+        return CohorteResponse.from(cambiarEstadoUseCase.cambiarEstado(new CambiarEstadoCohorteCommand(actorId,
+                CohorteId.of(id), parseEstado(request.status()))));
     }
 
     @DeleteMapping("/{id}")
