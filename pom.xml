@@ -30,6 +30,9 @@
 		<java.version>25</java.version>
 		<spring-ai.version>2.0.0</spring-ai.version>
 		<spring-modulith.version>2.1.0</spring-modulith.version>
+		<!-- SDK de AWS v2 para el adaptador real de S3 (AlmacenamientoPort). El artefacto
+		     `s3` ya trae el S3Presigner: en la v2 no es un modulo aparte como en la v1. -->
+		<aws-sdk.version>2.42.41</aws-sdk.version>
 		<mapstruct.version>1.6.3</mapstruct.version>
 		<!-- Obligatorio desde Lombok 1.18.16: hace que MapStruct espere a que Lombok
 		     genere getters/setters. Sin esto los mappers se generan vacios SIN fallar el build. -->
@@ -152,6 +155,35 @@
 			<artifactId>spring-modulith-starter-jpa</artifactId>
 		</dependency>
 
+		<!--
+			S3 para S3AlmacenamientoAdapter: los 9 servicios que firman lecturas
+			(audioterapia, portadas de cursos y eventos, media del muro, testimonios, firma
+			de contratos, adjuntos de tickets, avatares) devolvian `about:blank` hasta que
+			existio este adaptador. El S3Presigner viene DENTRO de este artefacto: en el SDK
+			v2 no es un modulo aparte como lo era en la v1. Version fijada por el BOM.
+			No se usa el starter de Spring Cloud AWS: los dos beans que hacen falta se crean
+			en AlmacenamientoS3Config en cinco lineas, y ese starter arrastra su propio ciclo
+			de versiones atado a una linea concreta de Spring Boot.
+		-->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+			<exclusions>
+				<!--
+					Cliente HTTP ASINCRONO del SDK, con su propio Netty. No se usa: el adaptador
+					crea un S3Client sincrono (solo para borrar) y un S3Presigner, que ni siquiera
+					abre una conexion — firma localmente. Excluirlo evita arrastrar una linea de
+					Netty distinta a la que ya gestiona Spring Boot, que es el tipo de choque de
+					versiones que solo se ve en runtime. El cliente sincrono (apache-client) sigue
+					viniendo por transitiva.
+				-->
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>netty-nio-client</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-devtools</artifactId>
@@ -263,6 +295,18 @@
 				<groupId>org.springframework.modulith</groupId>
 				<artifactId>spring-modulith-bom</artifactId>
 				<version>${spring-modulith.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<!--
+				BOM del SDK de AWS: alinea a una sola version las ~20 dependencias transitivas
+				de `s3` (auth, regions, http-client-spi, netty...). Sin el habria que fijar la
+				version de cada artefacto a mano.
+			-->
+			<dependency>
+				<groupId>software.amazon.awssdk</groupId>
+				<artifactId>bom</artifactId>
+				<version>${aws-sdk.version}</version>
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>

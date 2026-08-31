@@ -55,6 +55,12 @@ renaser:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}
   storage:
+    # Proveedor de almacenamiento: `s3` (S3AlmacenamientoAdapter, real) o `noop`
+    # (NoOpAlmacenamientoAdapter, devuelve about:blank). Por defecto `noop` para que el entorno
+    # local y los tests no necesiten credenciales. Para activarlo hacen falta LAS DOS cosas:
+    # STORAGE_PROVEEDOR=s3 y credenciales que el SDK pueda resolver por si mismo (variables de
+    # entorno AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, perfil ~/.aws, o rol IAM de la instancia).
+    proveedor: ${STORAGE_PROVEEDOR:noop}
     s3:
       bucket: ${AWS_S3_BUCKET:s3-renaser90dias}
       region: ${AWS_REGION:us-east-1}
