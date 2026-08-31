@@ -468,6 +468,50 @@ consultado, no reconstruido de memoria:
 | R-8 | ¿Se quiere replicar el enmascaramiento "ALCHEMIST con `traineeProfile` → `role: TRAINEE`" del backend viejo en `POST /api/v1/users/me`? | ⬜ Abierto — no implementado a propósito, ver gap #1 arriba |
 | R-9 | ¿Hace falta baja de cuenta SIN gracia para el panel admin, y/o baja pública sin sesión por enlace de correo (exigida por Google Play para quien desinstaló la app)? | ⬜ Abierto — fuera del alcance literal de este encargo (autogestión) |
 
+## 11. Vista vertical del panel: los hábitos de UN aprendiz (2026-08-31)
+
+**Dónde vive el código: en `habits`, no acá.** Se documenta en este archivo porque cierra un
+hueco del panel admin de aprendices descrito en §9 (gap #7), y porque es la pieza que le
+faltaba a `GET /api/v1/admin/trainees/{id}` para que un operador pueda abrir a una persona y
+ver algo más que su perfil.
+
+**El hueco, medido:** el admin de `habits` (`/api/v1/admin/habits`) es de **catálogo** — qué
+hábitos existen para todos. El admin de `users` (`/api/v1/admin/trainees`) muestra **perfil,
+rol y estado**. Nadie cruzaba las dos cosas: era imposible ver el horario real de un aprendiz,
+sus hábitos propios, su cuota de cambios gastada ni su plan de desbloqueo.
+
+**Qué se construyó:** `GET /api/v1/admin/trainees/{traineeId}/habits` — contrato completo en
+[`docs/api/CONTRATO_DIA_A_DIA.md`](api/CONTRATO_DIA_A_DIA.md) §1.7. Por cada hábito activo del
+aprendiz: identidad (título del catálogo + renombre propio si lo hay), ámbito
+(sistema/personal), horario vigente (su preferencia pisando al catálogo), cambio de horario
+programado con su fecha efectiva, recordatorio, día de desbloqueo (con si lo eligió la persona
+o el relleno automático), día semanal elegido, y la cuota semanal de reacomodos usados/restantes.
+
+**Por qué el código está en `habits` y no en `users`:** el dato es de hábitos (seis tablas de
+ese módulo) y la autorización de admin de hábitos ya vive ahí (`HabitoAdminGuard`, reusado tal
+cual). Ponerlo en `users` habría obligado a una llamada entre módulos para leer tablas ajenas.
+La ruta cuelga de `/admin/trainees/` porque es la pantalla del operador — Spring rutea por
+path, no por módulo, así que los dos controllers conviven sin conflicto.
+
+**Rendimiento — primer uso real de `JdbcClient` en el repo (CLAUDE.MD §11).** La grilla se lee
+por **proyección**, no por entidad: una sola consulta con dos `LATERAL` cruza `habitos`,
+`renombres_habito`, `horarios_habito`, `preferencias_horario`, `cambios_horario_pendientes`,
+`desbloqueos_habito` y `dias_semanales_habito`, trayendo exactamente las columnas de la
+respuesta. El endpoint hace **4 consultas fijas** en total (actor, participante, proyección,
+cuota), ninguna dentro de un bucle — un aprendiz con 40 hábitos cuesta lo mismo que uno con 3.
+Sin paginación a propósito: el tope de la colección son los hábitos activos de una persona, no
+crece con el uso (justificado en el javadoc de `LeerHabitosPersonalizadosPort`).
+
+**Reglas reusadas, no reinventadas:** la precedencia preferencia-sobre-catálogo es la de
+`RegistroService`/`TracksDelDiaProyeccionService`; la cuota se cuenta con el mismo
+`HistorialCambioHorarioPort` que la cobra en `PreferenciaHorarioService` (sin modificarlo); el
+ancla de semana de calendario es la de `EleccionDiaSemanalService`.
+
+**Autorización:** ADMIN/ALCHEMIST activos. Rol sin permiso → 403; actor `SUSPENDED` → 403
+aunque su token sea válido. El aprendiz mirado **sí** puede estar suspendido: un operador tiene
+que poder auditar justamente a quien acaba de suspender. Orden E-42 respetado (el aprendiz se
+carga primero, el gate de admin va después).
+
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 
 Auditoría de solo lectura de `src/main/java/com/renaser/os/users/`. No se corrió `./mvnw` (fuera de alcance del encargo). 9 controllers REST confirmados (`VerificacionEmailController`, `LogrosController`, `UserController`, `ParticipacionProgramaController`, `TraineeAdminController`, `StaffAdminController`, `MentorProfileController`, `AutenticacionController`, `AccountRequestController`), ~209 archivos `.java` en el módulo.

@@ -90,8 +90,14 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | POST | `/api/v1/radar` |
 | GET | `/api/v1/radar/latest` |
 | GET | `/api/v1/radar/history` |
+| GET | `/api/v1/habit-preferences` |
+| PATCH | `/api/v1/habit-preferences/{habitId}` |
 
 > `phone-free/complete` y `/break` **no llevan `{id}`** — el backend resuelve la racha activa por actor.
+> `habit-preferences`: horario personal de cada hábito, cuota semanal de cambios y cambios programados —
+> contrato completo en `docs/api/CONTRATO_DIA_A_DIA.md` §1.7. El resto del hueco #12
+> (`weekly-habit-days`, `habits/{id}/rename`, `habit-unlocks`) existe desde el 2026-08-26 y todavía no
+> está volcado a esta tabla — ver `docs/MODULO_HABITS.md` §12.
 
 ### `rocks` — rocas y Modo Verdugo
 
