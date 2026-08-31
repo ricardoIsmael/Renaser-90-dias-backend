@@ -200,12 +200,7 @@ Los enums de dominio/BD están en ESPAÑOL; los DTOs REST hablan el vocabulario 
 
 **Unitarias de `application/services`** (Mockito, sin Spring): `EventoServiceTest` (autorización por rol, célula forzada para MENTOR, borrado de portada, cancelación de ocurrencia), `ConfirmacionServiceTest` (RSVP, cancelación de recordatorios al confirmar ASISTE, validación de ocurrencia real), `RecordatorioServiceTest` (despacho publica el evento de dominio correcto, evento cancelado cancela en vez de despachar).
 
-**Pendiente (Testcontainers, otro agente):**
-
-- `EventoPersistenceAdapterTest`: el ensamblado/desensamblado del agregado multi-tabla (eventos + recurrencias_evento + dias_semana_recurrencia + roles_destino_evento + reglas_recordatorio_evento), especialmente el orden de borrado/reinserción respetando la FK `dias_semana_recurrencia → recurrencias_evento`.
-- `RecordatorioPersistenceAdapterTest`: **`FOR UPDATE SKIP LOCKED` contra Postgres real, con dos instancias simuladas del scheduler corriendo en paralelo** — verificar que nunca despachan la misma fila dos veces (la garantía central de la cola). También el `INSERT ... ON CONFLICT DO NOTHING` en batch (que el conteo de filas creadas sea correcto).
-- `RolesCatalogoCacheTest`: que los tipos que llegan de Postgres (uuid, enums nativos) se lean como se asume (String vs. objeto tipado, según la ruta real de Hibernate/pgjdbc — el mismo punto que otros módulos ya marcaron como "verificado en integración, no supuesto"). `ConsultarProgresoParticipanteCalendarPersistenceAdapterTest` ya está hecho — ver §7.2.
-- Tests de seguridad (403 por rol, 403 por SUSPENDIDO, test de reflexión de `@RequiresPermission`) — CLAUDE.MD §0.3, a cargo del agente de integración final.
+**Autorización negativa e integración con Testcontainers:** cerradas en la pasada del 2026-08-31 — ver §7.3 para la matriz completa y §7.4 para lo que quedó abierto.
 
 ### 7.1 Primeros dos fallos de `./mvnw clean test` (corridos por el supervisor) — diagnóstico
 
@@ -223,6 +218,63 @@ Otro agente levantó la app contra Postgres real y probó los endpoints en vivo 
 **Nota sobre `EventoControllerValidationTest`:** es el primer test `@WebMvcTest`/`MockMvc` de todo el repo (no solo de `calendar`) — no había convención previa para probar la capa web en aislamiento. Se usó `@WebMvcTest(EventoController.class)` + `@AutoConfigureMockMvc(addFilters = false)` (sin tocar el filtro de seguridad, que hoy permite todo bajo `/api/v1/**`) con los 9 casos de uso mockeados vía `@MockitoBean`. Es exactamente el nivel donde vivían los Defectos 1 y 2 — ninguna prueba con mocks del servicio (`EventoServiceTest`) podía haberlos visto, porque el servicio nunca ve un `@RequestBody` sin validar ni una deserialización JSON real.
 
 **Lo que NO cambió y no había que tocar:** `Evento.rehydrate()` ya tenía la guarda contra `EnumSet.copyOf` con colección vacía (arreglada en una pasada anterior) — se le sumó cobertura explícita (`EventoTest.rehydrateConRolesDestinoVacioNoRevienta` y dos variantes más) porque no tenía ningún test que ejercitara ese camino, que es el más común en producción (solo la audiencia `ROLES` llena `roles_destino_evento`).
+
+### 7.3 Cierre de la brecha de pruebas (2026-08-31)
+
+Una auditoría midió `calendar` como el módulo peor cubierto del repo en las dos reglas duras de CLAUDE.MD §0.2/§0.3: **autorización negativa al 38 %** y **9 de 10 adaptadores de persistencia sin prueba de integración**. El diagnóstico era exacto: los guards existían — lo que faltaba era verificarlos. Se había probado un método representativo por servicio y no sus hermanos.
+
+**No se encontró ningún guard genuinamente ausente.** Las 31 pruebas de autorización nuevas pasan contra el código de producción sin tocarlo: cada caso de uso ya rechazaba al rol sin permiso y al actor `SUSPENDIDO`. La única observación de seguridad que quedó abierta está en §7.4, y no es un guard faltante.
+
+Total: **76 pruebas nuevas** — 31 de autorización negativa, 37 de integración con Testcontainers y 8 unitarias de adaptadores que no tocan la base. El módulo pasó de 74 a 150 pruebas; la suite completa, de 1670 a 1746. Cero cambios en `src/main`.
+
+#### Autorización negativa — matriz completa
+
+`NotAuthorizedException` es lo que `GlobalExceptionHandler` traduce a **403**. El guard vive en el servicio (no en el controller), así que la prueba vive en el servicio.
+
+| Caso de uso | Guard | Rol sin permiso → 403 | Actor `SUSPENDIDO` → 403 |
+|---|---|---|---|
+| `ListarEventosParaVisorUseCase.listar` | `requireProgreso` + filtro de audiencia | ✅ omite el evento ajeno (nuevo) | ✅ nuevo |
+| `ObtenerEventoUseCase.obtener` | `requireProgreso` + `puedeAcceder` | ✅ audiencia y elegibilidad (nuevos) | ✅ nuevo |
+| `CrearEventoUseCase.crear` | `requireRolCreador` | ✅ ya existía (TRAINEE) + `MENTOR_LEAD` (nuevo) | ✅ nuevo |
+| `ActualizarEventoUseCase.actualizar` | `requireRolCreador` + `requirePropioSiMentor` | ✅ ya existía (mentor ajeno) + rol (nuevo) | ✅ nuevo |
+| `EliminarEventoUseCase.eliminar` | ídem | ✅ nuevos (rol + mentor ajeno) | ✅ nuevo |
+| `CancelarOcurrenciaUseCase.cancelar` | ídem | ✅ nuevos | ✅ nuevo |
+| `SolicitarUrlPortadaUseCase.solicitar` | ídem | ✅ nuevos | ✅ nuevo |
+| `ConfirmarPortadaUseCase.confirmar` | ídem | ✅ nuevos | ✅ nuevo |
+| `ConfirmarAsistenciaUseCase.confirmar` | `requireProgreso` + `puedeAcceder` | ✅ audiencia y elegibilidad (nuevos) | ✅ ya existía |
+| `points.api.ProximoEventoFinder.proximoEventoDe` | `requireProgreso` + `puedeAcceder` | ✅ nuevo | ✅ ya existía |
+
+`EventoServiceAutorizacionTest` (nuevo, 28 pruebas) recorre las 8 operaciones de `EventoService` con `@ParameterizedTest`, de modo que **un caso de uso nuevo no pueda quedarse sin las pruebas de sus hermanos**: se agrega una línea a la `@MethodSource` y las tres reglas (rol sin permiso, mentor sobre evento ajeno, actor suspendido) se le aplican solas. Vive aparte de `EventoServiceTest` — que sigue cubriendo el comportamiento funcional — para que ninguna de las dos clases pase el techo de 300 líneas de CLAUDE.MD §5.4.8.
+
+`MENTOR_LEAD` recibe 403 en las 6 operaciones administrativas. Es el comportamiento deliberado de la pregunta abierta #5 de §6 (no se le inventó alcance), ahora **fijado por una prueba**: si el negocio define su alcance, el test falla y obliga a revisitar la decisión en vez de dejarla derivar en silencio.
+
+#### Integración — los 10 adaptadores de `adapter/out`
+
+| Adaptador | Prueba | Qué verifica que un mock no puede |
+|---|---|---|
+| `EventoPersistenceAdapter` | `EventoPersistenceAdapterTest` (nuevo) | agregado multi-tabla completo; reemplazo de hijos al re-guardar, incluido el CASCADE `dias_semana_recurrencia → recurrencias_evento`; traducción `rol_id ↔ RolUsuario` contra `renaser.roles` (`RolesCatalogoCache`); convención de día de semana (ISO 1..7 en dominio, 0..6 en Postgres); filtros de `candidatosParaVisor`/`candidatosParaRecordatorios`, incluido el de `estado = 'PUBLICADO'`; CASCADE del baseline al eliminar |
+| `ExcepcionPersistenceAdapter` | `ExcepcionPersistenceAdapterTest` (nuevo) | el UNIQUE `(evento_id, inicio_ocurrencia)` y el upsert que lo respeta reutilizando el id ya guardado en vez de intentar una segunda fila |
+| `ConfirmacionPersistenceAdapter` | `ConfirmacionPersistenceAdapterTest` (nuevo) | upsert sobre la PK compuesta sin id propio (P-28), conservación de `creado_en`, y la clave `eventoId\|inicioOcurrencia` que `EventoService.listar` da por sentada |
+| `RecordatorioPersistenceAdapter` | `RecordatorioPersistenceAdapterTest` (nuevo) | `INSERT ... ON CONFLICT DO NOTHING` idempotente y su conteo real de filas creadas (batch de pgjdbc); alcance exacto de cada cancelación; `borrarPendientesFuturos` respetando lo que ya estaba por salir |
+| `NivelMembresiaPersistenceAdapter` | `NivelMembresiaPersistenceAdapterTest` (nuevo) | el orden por rango que `ProgresoNivel.resolverRango` da por sentado, y el mapeo de columnas (la tabla sigue sin seed, CL-2: el test siembra las suyas) |
+| `ConsultarMiembrosCelulaCalendarPersistenceAdapter` | `ConsultarMiembrosCelulaCalendarPersistenceAdapterTest` (nuevo) | que el MENTOR de la célula entre en la audiencia aunque NO tenga fila en `participantes_programa` — el motivo entero de que este adaptador componga dos contratos públicos |
+| `ResolverAudienciaMasivaPersistenceAdapter` | `ResolverAudienciaMasivaPersistenceAdapterTest` (nuevo) | la traducción de tres vocabularios (`RolUsuario` → `users.api.UserRole` → enum nativo `renaser.rol_usuario`), la misma clase de fallo que E-47 de `docs/BITACORA_ERRORES.md` |
+| `ConsultarProgresoParticipanteCalendarPersistenceAdapter` | ya existía | ver §7.2, defecto 3 |
+| `ResolverAudienciaCursoAdapter` | `ResolverAudienciaCursoAdapterTest` (nuevo, Mockito) | no toca la base — es un puente hacia `academy.api`; lo propio del adaptador es el filtrado en memoria de `filtrarConAcceso` |
+| `ElegibilidadEventoNoOpAdapter` | `ElegibilidadEventoNoOpAdapterTest` (nuevo, sin Spring) | fija el NoOp deliberado de la pregunta abierta #1 de §6: si algún día se implementa el cálculo real, este test debe FALLAR — es su recordatorio, no un contrato a preservar |
+
+**Trampa registrada, respetada:** las migraciones `V4`/`V6`/`V9`/`V10` siembran catálogo de producción, así que la base de un test **no está vacía**. Toda aserción sobre listados usa `contains`/`doesNotContain` filtrando por el id creado en el propio test — nunca por índice ni `containsExactly` sobre la lista entera.
+
+#### Lo que sigue pendiente
+
+- **`FOR UPDATE SKIP LOCKED` con dos instancias del scheduler en paralelo.** `RecordatorioPersistenceAdapterTest` cubre la cola (encolado idempotente, vencidos, marcado de enviados, las tres cancelaciones) pero **no** la concurrencia real: hace falta un test con dos hilos y dos transacciones simultáneas para probar que nunca se despacha la misma fila dos veces. Es la garantía central de la cola y sigue sin verificar.
+- **Test de reflexión de `@RequiresPermission`/`@PublicEndpoint`** (CLAUDE.MD §0.3, §12): sigue sin poder existir para este módulo — ver hallazgo 1 de la auditoría de arquitectura, más abajo. Los 9 endpoints de `EventoController` no declaran la anotación; la autorización es correcta como *mecanismo* (y ahora está probada) pero no es auditable a nivel de endpoint. Adoptar la anotación es un cambio de código de producción, fuera del alcance de una pasada de pruebas.
+
+### 7.4 Observación de seguridad abierta — NO es un guard faltante
+
+`ConfirmarPortadaUseCase.confirmar(actor, eventoId, ruta)` acepta la `ruta` tal como la manda el cliente y no verifica que corresponda al prefijo que `SolicitarUrlPortadaUseCase` acaba de generar (`calendar/{eventoId}/portada-*`). El guard de autorización SÍ está y ahora está probado (`requireRolCreador` + `requirePropioSiMentor`), pero un MENTOR — rol deliberadamente acotado a su propia célula — puede fijar como portada de su evento cualquier objeto del bucket `renaser-files` y después leerlo por la URL prefirmada que devuelve `EventoService.coverUrlDe`.
+
+**No se corrigió**, por dos razones. Primera: no es un olvido de `calendar`. Ningún módulo de los que usan `AlmacenamientoPort` valida el prefijo de la ruta confirmada — `community`, `habits`, `onboarding`, `phasecontracts`, `rocks`, `support` y `users` siguen el mismo patrón (búsqueda de validación de prefijo en `src/main/java`: sin resultados). Segunda: arreglarlo solo acá dejaría el resto igual, y es un cambio de producción fuera del alcance de esta tarea. Se reporta para que se decida una vez, para todos los módulos a la vez.
 
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 

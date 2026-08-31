@@ -18,6 +18,7 @@ import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -124,5 +125,39 @@ class ConfirmacionServiceTest {
 
         assertThatThrownBy(() -> service.confirmar(actorId, eventoId, INICIA_EN, EstadoConfirmacion.ASISTE))
                 .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("CLAUDE.MD §0.3: confirmar asistencia a un evento fuera de la audiencia del visor -> 403")
+    void eventoFueraDeLaAudienciaDelVisorNoSePuedeConfirmar() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(
+                new ProgresoParticipanteCalendar(10, ZoneId.of("America/Lima"), RolUsuario.TRAINEE, false, null)));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoSoloParaAdmins()));
+
+        assertThatThrownBy(() -> service.confirmar(actorId, eventoId, INICIA_EN, EstadoConfirmacion.ASISTE))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("CLAUDE.MD §0.3: un TRAINEE no elegible no confirma una MENTORIA_ALQUIMISTA -> 403")
+    void eventoQueExigeElegibilidadNoSePuedeConfirmarSinSerElegible() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(
+                new ProgresoParticipanteCalendar(10, ZoneId.of("America/Lima"), RolUsuario.TRAINEE, false, null)));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoMentoriaAlquimista()));
+
+        assertThatThrownBy(() -> service.confirmar(actorId, eventoId, INICIA_EN, EstadoConfirmacion.ASISTE))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    private Evento eventoSoloParaAdmins() {
+        return Evento.crear("Sesion", null, INICIA_EN, 60, ZoneId.of("America/Lima"), TipoUbicacion.MEET,
+                "https://meet.google.com/abc", TipoAudiencia.ROLES, null, null, null, TipoEvento.ESPONTANEO, false,
+                false, false, null, Set.of(RolUsuario.ADMIN), List.of(), actorId, CLOCK);
+    }
+
+    private Evento eventoMentoriaAlquimista() {
+        return Evento.crear("Mentoria", null, INICIA_EN, 60, ZoneId.of("America/Lima"), TipoUbicacion.MEET,
+                "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null,
+                TipoEvento.MENTORIA_ALQUIMISTA, false, false, false, null, Set.of(), List.of(), actorId, CLOCK);
     }
 }

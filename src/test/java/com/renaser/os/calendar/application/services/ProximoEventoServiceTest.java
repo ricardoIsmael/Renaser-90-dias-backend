@@ -116,4 +116,16 @@ class ProximoEventoServiceTest {
 
         assertThatThrownBy(() -> service.proximoEventoDe(actorId)).isInstanceOf(NotAuthorizedException.class);
     }
+
+    @Test
+    void unEventoFueraDeLaAudienciaDelVisorNoEsElProximo() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolUsuario.TRAINEE)));
+        Evento soloAdmins = Evento.crear("Solo admins", null, Instant.parse("2026-08-25T09:00:00Z"), 60,
+                ZoneId.of("America/Lima"), TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.ROLES,
+                null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(RolUsuario.ADMIN),
+                List.of(), actorId, CLOCK);
+        when(loadEventoPort.candidatosParaVisor(any(), any())).thenReturn(List.of(soloAdmins));
+
+        assertThat(service.proximoEventoDe(actorId)).isEmpty();
+    }
 }
