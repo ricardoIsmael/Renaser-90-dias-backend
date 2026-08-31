@@ -8,9 +8,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Utilities;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetUrlRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -46,12 +49,19 @@ public class S3AlmacenamientoAdapter implements AlmacenamientoPort {
     private final S3Presigner presigner;
     private final S3Client cliente;
     private final String bucket;
+    /** Compone URLs de objeto localmente (bucket + region + clave, con el escapado que
+     * corresponda). Instancia propia y no {@code cliente.utilities()} a proposito: no necesita
+     * credenciales ni el cliente, solo la region, y asi armar una URL publica no depende de que
+     * el S3Client este disponible. */
+    private final S3Utilities urls;
 
     public S3AlmacenamientoAdapter(S3Presigner presigner, S3Client cliente,
-                                    @Value("${renaser.storage.s3.bucket}") String bucket) {
+                                    @Value("${renaser.storage.s3.bucket}") String bucket,
+                                    @Value("${renaser.storage.s3.region}") String region) {
         this.presigner = presigner;
         this.cliente = cliente;
         this.bucket = bucket;
+        this.urls = S3Utilities.builder().region(Region.of(region)).build();
     }
 
     @Override
@@ -82,6 +92,17 @@ public class S3AlmacenamientoAdapter implements AlmacenamientoPort {
                 .signatureDuration(validez)
                 .getObjectRequest(objeto)
                 .build()).url().toString());
+    }
+
+    /**
+     * URL permanente del objeto, sin firma. <b>Requiere politica de bucket:</b> S3 bloquea el
+     * acceso publico por defecto, asi que sin una policy que permita {@code s3:GetObject}
+     * anonimo sobre el prefijo correspondiente esta URL es correcta pero responde 403. Ver D-55
+     * en docs/MODULOS_A_AVANZAR.md, junto a los permisos IAM minimos.
+     */
+    @Override
+    public URI urlPublica(String ruta) {
+        return URI.create(urls.getUrl(GetUrlRequest.builder().bucket(bucket).key(ruta).build()).toString());
     }
 
     @Override

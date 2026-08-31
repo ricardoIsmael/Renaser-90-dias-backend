@@ -43,9 +43,8 @@ public class UserJpaEntity {
 
     private String nombreCompleto;
 
-    /** `usuarios.avatar_ruta` — RUTA en el bucket privado, nunca una URL (P-03, E-57).
-     * Se llamaba `avatar_url` hasta la migracion V13. */
-    private String avatarRuta;
+    /** `usuarios.avatar_url` — URL PERMANENTE del objeto publico, nunca una prefirmada (E-57). */
+    private String avatarUrl;
 
     private String bio;
 

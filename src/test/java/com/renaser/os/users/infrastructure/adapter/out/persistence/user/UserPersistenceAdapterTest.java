@@ -35,7 +35,7 @@ class UserPersistenceAdapterTest {
         UserId id = UserId.of(UUID.randomUUID());
         User user = User.registerTrainee(id, new Email("aprendiz@renaser.com"), "Ana Aprendiz");
         user.updateBio("no deberia guardarse para TRAINEE pero el campo es libre");
-        user.changeAvatar("https://cdn.renaser.com/a.png");
+        user.changeAvatar("https://s3-renaser90dias.s3.us-east-1.amazonaws.com/avatares/" + id);
 
         adapter.save(user);
 
@@ -43,7 +43,8 @@ class UserPersistenceAdapterTest {
         assertThat(loaded.email()).isEqualTo(new Email("aprendiz@renaser.com"));
         assertThat(loaded.role()).isEqualTo(UserRole.TRAINEE);
         assertThat(loaded.fullName()).isEqualTo("Ana Aprendiz");
-        assertThat(loaded.avatarUrl()).isEqualTo("https://cdn.renaser.com/a.png");
+        assertThat(loaded.avatarUrl())
+                .isEqualTo("https://s3-renaser90dias.s3.us-east-1.amazonaws.com/avatares/" + id);
         assertThat(loaded.hasAccess()).isTrue();
     }
 

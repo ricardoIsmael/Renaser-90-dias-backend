@@ -285,7 +285,7 @@ mismo patrón que `RolUsuarioJpa`/`UserPersistenceMapper`.
 | D-35 | `AssignMentorToTraineeUseCase` NO escribe ningún contador en `perfiles_mentor` — `total_trainees_managed` fue eliminado del baseline (P-17, derivable via `COUNT`). Escribirlo sería inventar una columna | 2026-08-24 |
 | D-36 | `users.api.FasePrograma` usa vocabulario inglés (`PHASE_1_REBIRTH`...) igual que la app y el backend viejo; la columna Postgres `fase_programa` sigue en español — traducción explícita en el mapper, nunca en el dominio | 2026-08-24 |
 | D-52 | Hueco #1 no era "falta `TraineeProfile`": era falta de 3 columnas sin mapear en `ParticipacionPrograma` (`tipo_meta`/`nombre_reto_personal`/`programa_completado_en`) + 2 endpoints. `GetMyFullProfileUseCase` compone `User`+`ParticipacionPrograma` en la capa de aplicación (nunca en el controller) para no tocar `GetMyProfileUseCase`, que ya usa el flujo de login | 2026-08-26 |
-| D-53 | Avatar genérico (gap #4): mismo patrón upload-url→PUT→confirmar del resto del sistema, pero la confirmación resuelve y persiste una URL de LECTURA firmada (7 días) en vez de guardar solo la ruta — `usuarios.avatar_url` ya es consumido como URL directa por `community`/`chat`/`mentor` vía `UserSummary`, cambiar esa semántica los rompería | 2026-08-26 |
+| ~~D-53~~ | ~~Avatar genérico (gap #4): la confirmación resuelve y persiste una URL de LECTURA firmada (7 días) en vez de guardar solo la ruta~~ ❌ **Era un defecto, no una limitación — revertido 2026-08-31 por D-55 (`docs/MODULOS_A_AVANZAR.md`), ver E-57.** Una URL prefirmada vence: a los 7 días del último cambio de foto el avatar quedaba roto para siempre en todas las pantallas. Ahora el objeto es de lectura pública y la columna guarda su URL permanente | 2026-08-26, superado 2026-08-31 |
 | D-54 | Baja de cuenta (gap #5): 14 días de gracia CONFIRMADOS (comentario de `usuarios.baja_solicitada_en` en el baseline + `DIAS_DE_GRACIA` del backend viejo coinciden), configurable vía `renaser.users.account-deletion.grace-period-days`. Acceso se conserva durante la gracia a propósito (permite cancelar). Purga = un solo `DeleteUserPort.deleteById` — las FK del baseline hacen el resto (CASCADE/SET NULL) | 2026-08-26 |
 
 ## 9. Paneles admin — staff, aprendices, solicitudes de cuenta (gaps #6/#7/#9)
@@ -401,16 +401,59 @@ frontend real:
 (no `UserAccountService`: es un concepto distinto, sube y confirma un archivo). Mismo bucket
 compartido `renaser-files` que `rocks`/`habits`/`calendar` (D-34), ruta `avatares/{userId}`.
 
-**Limitación conocida y documentada, no un gap silencioso:** a diferencia de `calendar`
-(que guarda solo la `ruta` y resuelve una URL de lectura firmada EN CADA respuesta),
-`usuarios.avatar_url` es un string plano que `community`/`chat`/`mentor` ya consumen
-directo como URL servible vía `UserSummary` — cambiar esa semántica rompería esos
-consumidores (fuera del alcance de este encargo, que era solo `users`). La confirmación
-resuelve la URL de lectura UNA VEZ (validez 7 días, la más larga razonable) y la persiste
-tal cual. Como el sistema entero sigue con `NoOpAlmacenamientoAdapter` (D-34: sin
-credenciales AWS S3 reales), esto es hoy un placeholder consistente con el resto del
-sistema, no un gap nuevo — el día que exista un adaptador real, la vía correcta a largo
-plazo es un bucket de avatares público (URL permanente), no una URL firmada.
+#### Corregido 2026-08-31 — el avatar guarda una URL PERMANENTE (D-55, `docs/BITACORA_ERRORES.md` E-57)
+
+La versión original de este gap persistía una URL de lectura **prefirmada** (validez 7 días,
+el máximo que permite SigV4) en `usuarios.avatar_url`. Eso era un defecto, no una limitación:
+**a los 7 días del último cambio de foto la firma vence y nadie la vuelve a firmar nunca**, y
+el mismo string se sirve en el muro, los comentarios, el chat, los miembros de célula, los
+testimonios y el panel admin — todos lo reciben vía `users.api.UserSummary`. No se notaba
+porque el adaptador por defecto (`NoOpAlmacenamientoAdapter`) devuelve `about:blank`: estaba
+escrito para romperse el día que se activara S3, una semana después, sin ningún error en el log.
+
+**Qué hace ahora:**
+
+- El objeto del avatar es de **lectura pública** y la columna guarda su **URL permanente** — el
+  nombre `avatar_url` ahora es correcto. `AlmacenamientoPort` ganó `urlPublica(ruta)`, que
+  `S3AlmacenamientoAdapter` compone con `S3Utilities` (bucket + región, sin llamar a AWS).
+- La **subida no cambió**: sigue siendo una URL prefirmada de 10 minutos. Lo que hace público
+  al objeto es la política del bucket, no el código. Escribir en el bucket nunca es público.
+- `User.changeAvatar` **rechaza** cualquier valor con marcas de SigV4
+  (`X-Amz-Signature`/`X-Amz-Credential`/`X-Amz-Expires`), y `V13` agrega el `CHECK` equivalente
+  en `usuarios` y en `testimonios`. Persistir una prefirmada volvió a ser difícil, en las dos capas.
+- `confirmar` recalcula la ruta desde el actor y **no confía en la del body**: nadie puede
+  publicar como avatar propio un objeto ajeno del bucket.
+- **`chat` y `community` no cambiaron**: reciben la URL ya lista dentro de `UserSummary`.
+
+**Por qué URL pública y no "firmar al leer".** Firmar en cada respuesta también arregla el
+vencimiento, y es lo correcto para evidencia, contratos, adjuntos y audios — ahí el vencimiento
+*es* la medida de seguridad. Para el avatar no: la URL cambiaría en cada respuesta y eso invalida
+el caché de imagen del cliente, así que un muro con 20 avatares volvería a descargar las 20 fotos
+en cada pantallazo. El avatar es el activo de menor sensibilidad y el que más se repite por
+respuesta; es el patrón de GitHub/Slack. Decisión del dueño del proyecto, que aceptó
+explícitamente que la ruta sea adivinable.
+
+> ⚠️ **Requisito de infraestructura — sin esto la foto no se ve.** El bucket tiene que permitir
+> `s3:GetObject` **anónimo** sobre el prefijo `avatares/*`. S3 bloquea el acceso público por
+> defecto (*Block Public Access*), así que hay que desactivar esa opción para el bucket y agregar
+> la bucket policy correspondiente. Sin ese cambio la URL que devuelve el backend es correcta
+> pero responde **403**. Los permisos IAM del backend **no cambian**: siguen siendo `GetObject`,
+> `PutObject` y `DeleteObject` sobre el bucket (D-54). Ver D-55 en `docs/MODULOS_A_AVANZAR.md`.
+
+**Migración de datos (`V13__avatar_url_permanente.sql`).** No cambia la estructura, solo repara
+valores: corta la query string de las filas prefirmadas (`split_part(avatar_url, '?', 1)` — exacto
+y no heurístico, porque en SigV4 todo lo que caduca vive después del `?`) y pone `NULL` en las que
+tenían el marcador `about:blank#pendiente-s3/...` del `NoOp`, que no son reparables ni tienen un
+objeto detrás (cuando el `NoOp` estaba activo, la URL de subida también era un marcador, así que
+el cliente nunca llegó a subir nada). Las `NULL` no se tocan: siguen significando "no tiene avatar".
+Lo mismo para `testimonios.avatar_url`, que copia el avatar del autor al promover y heredaba el
+mismo vencimiento.
+
+**Verificado:** `./mvnw clean test` → **1747/1747 en verde** (2026-08-31). `V13` la aplica Flyway
+contra el Postgres real de Testcontainers en cada build, así que los `CHECK` nuevos y los `UPDATE`
+de reparación se ejecutan de verdad, no solo en el despliegue. **Lo que estas pruebas NO cubren, a
+propósito:** que el bucket esté efectivamente abierto para lectura anónima en `avatares/*` — eso
+exige la política de S3 del recuadro de arriba y se verifica en el despliegue, no acá.
 
 ### Gap #5 — baja de cuenta autogestionada
 

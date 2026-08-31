@@ -16,6 +16,15 @@ import java.time.Duration;
  * "upload-url -> PUT -> confirmar" ya establecido en `rocks`/`habits`/`onboarding`/`calendar`.
  * Clase propia (no {@code UserAccountService}) porque es un concepto separado del resto de
  * "mi perfil" — sube y confirma un archivo, no edita campos sueltos.
+ *
+ * <p><b>El avatar es el unico objeto de lectura PUBLICA del sistema (D-55).</b> La subida sigue
+ * siendo una URL prefirmada de 10 minutos — lo que hace publico al objeto es la politica del
+ * bucket, no este codigo —, pero la confirmacion guarda la URL PERMANENTE, sin firma ni
+ * vencimiento. Hasta el 2026-08-31 guardaba una URL de lectura prefirmada por 7 dias: a la
+ * semana del ultimo cambio de foto caducaba y no la firmaba nadie nunca mas, en el perfil y en
+ * todas las pantallas que muestran el avatar (E-57). Firmar en cada respuesta habria arreglado
+ * el vencimiento pero roto el cache de imagen del cliente — la URL cambiaria siempre —, y para
+ * un activo que se ve en cada fila del muro eso cuesta mas de lo que aporta.
  */
 @Service
 class AvatarService implements SolicitarUrlAvatarUseCase, ConfirmarAvatarUseCase {
@@ -23,14 +32,9 @@ class AvatarService implements SolicitarUrlAvatarUseCase, ConfirmarAvatarUseCase
     /** Mismo bucket compartido que `rocks`/`habits`/`calendar` (D-34) — ver
      * RocaDiariaService.BUCKET_ROCAS, RachaService.BUCKET_DIA_SIN_CELULAR, etc. */
     static final String BUCKET_AVATARES = "renaser-files";
-    private static final String PREFIJO_RUTA = "avatares";
+    /** Prefijo de lectura publica del bucket (D-55). Todo lo demas del bucket sigue privado. */
+    static final String PREFIJO_RUTA = "avatares";
     private static final Duration VALIDEZ_URL_SUBIDA = Duration.ofMinutes(10);
-    /**
-     * Limitacion conocida (ver javadoc de {@link ConfirmarAvatarUseCase}): sin un adaptador
-     * de storage con URL publica permanente, se resuelve una URL de lectura firmada con la
-     * validez mas larga razonable en vez de una URL que no vence nunca.
-     */
-    private static final Duration VALIDEZ_URL_LECTURA = Duration.ofDays(7);
 
     private final RequireActiveUserGuard requireActiveUserGuard;
     private final SaveUserPort saveUserPort;
@@ -43,20 +47,30 @@ class AvatarService implements SolicitarUrlAvatarUseCase, ConfirmarAvatarUseCase
         this.almacenamientoPort = almacenamientoPort;
     }
 
+    /** La SUBIDA sigue prefirmada y corta: escribir en el bucket nunca es publico. */
     @Override
     public UrlAvatar solicitarUrl(SolicitarUrlAvatarCommand command) {
         requireActiveUserGuard.of(command.actorId());
-        String ruta = PREFIJO_RUTA + "/" + command.actorId();
+        String ruta = rutaDe(command.actorId().toString());
         URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
         return new UrlAvatar(url, BUCKET_AVATARES, ruta);
     }
 
+    /**
+     * Guarda la URL PERMANENTE del objeto, no una prefirmada. La ruta se recalcula desde el
+     * actor y no se toma del body: asi el usuario solo puede publicar como avatar su propio
+     * objeto, aunque mande otra cosa en {@code ruta}.
+     */
     @Override
     @Transactional
     public void confirmar(ConfirmarAvatarCommand command) {
         User actor = requireActiveUserGuard.of(command.actorId());
-        URI url = almacenamientoPort.firmarLectura(command.ruta(), VALIDEZ_URL_LECTURA);
+        URI url = almacenamientoPort.urlPublica(rutaDe(command.actorId().toString()));
         actor.changeAvatar(url.toString());
         saveUserPort.save(actor);
+    }
+
+    private static String rutaDe(String actorId) {
+        return PREFIJO_RUTA + "/" + actorId;
     }
 }

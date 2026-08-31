@@ -1012,3 +1012,178 @@ invalid accessor method in record ...ResultadoVerificacionDominio
 - **Solución:** cambiar el import en ambos archivos de `com.fasterxml.jackson.databind.JsonNode` a `tools.jackson.databind.JsonNode` (Jackson 3, ya en el classpath vía Spring Boot 4.1). La API de los métodos usados (`hasNonNull`, `get`, `has`, `isNull`, `asInt`, `asText`) es idéntica entre ambas versiones para este caso de uso, así que el cambio es solo de import.
 - **Cómo evitarlo:** en un proyecto que migró a Jackson 3 (Spring Boot 4.1+), **nunca usar `com.fasterxml.jackson.databind.*` a mano** en código nuevo, ni siquiera cuando compila — el IDE/autocompletado puede ofrecer la clase vieja porque ambas conviven en el `.m2`. Verificar el import cuando se declara un tipo de Jackson explícito (`JsonNode`, `ObjectMapper`, `ObjectNode`) es exactamente el tipo de detalle que un test unitario con mocks no agarra pero un `curl` real contra el endpoint sí — refuerza por qué probar endpoints en vivo, no solo con `MockMvc`/mocks, tiene valor real.
 - **Corregido el mismo día (2026-08-28):** cambiado el import a `tools.jackson.databind.JsonNode` en `HorarioHabitoAdminController.java` y `PartialUpdateScheduleRequest.java` — misma API (`get`/`has`/`hasNonNull`/`isNull`/`asInt`/`asText`, verificado con `javap` contra el jar 3.1.5 real antes de aplicar el cambio, no asumido). `./mvnw clean test`: 1665/1665 en verde. Reprobado en vivo contra el servidor corriendo: `POST /api/v1/admin/habits/schedules/{id}` con `{"endDay":96}` → `200` (antes 500), y con `{"endDay":null}` → `200` con `endDay:null` en la respuesta (el caso de "null explícito limpia el campo" que motivó usar `JsonNode` en primer lugar sigue funcionando igual).
+
+## E-50 — El ER de la BD nueva se desfasó en silencio: `V2`, `V3` y `V8` cambiaron el esquema y nadie tocó el `.drawio`
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `docs/db/ER_BD_NUEVA.drawio` contra `src/main/resources/db/migration/`
+- **Síntoma:** ninguno. **Ese es el problema**: no hay mensaje de error, no falla ningún test, `ArchitectureTest` pasa, el build está verde. El diagrama simplemente describe una base que ya no es la que está corriendo. Se detectó recién al compararlo a mano contra las migraciones.
+- **Causa real:** el `.drawio` se dibujó el 2026-08-24, cuando el esquema eran las 90 tablas de `V1`. Después entraron tres migraciones que lo cambiaron y ninguna actualizó el dibujo:
+  - `V2__spring_modulith_event_publication.sql` → tabla `event_publication` (outbox de Modulith)
+  - `V3__auth_credenciales_e_identidades.sql` → tabla `identidades_externas` + columnas `usuarios.hash_contrasena` y `usuarios.contrasena_actualizada_en`
+  - `V8__audioterapias_duracion_configurable.sql` → columna `audioterapias.duracion_dias`
+
+  Cuatro divergencias sobre 92 tablas y 125 FK; el resto del ER era exacto. El daño no es el porcentaje: es que quien lea el ER para programar auth va a creer que el login social no tiene dónde guardarse.
+- **Solución:** se agregaron al `.drawio` las dos tablas, las tres columnas y la FK `identidades_externas → usuarios`, y se escribió `docs/db/verificar-er-vs-sql.mjs`, que compara tabla por tabla y columna por columna el diagrama contra las migraciones y sale con código 1 si divergen:
+  ```
+  node docs/db/verificar-er-vs-sql.mjs
+  ```
+- **Cómo evitarlo:** **correr ese script al agregar una migración**, en el mismo cambio que la agrega. Un diagrama sin chequeo automático se desfasa siempre; la pregunta no es si pasa sino cuándo se nota.
+- **Dos trampas del script, por si hay que tocarlo:**
+  1. El cierre de un `CREATE TABLE` **no siempre es `);`** — `V1` usa `) WITH (fillfactor = 70);` en las tablas calientes. Un regex que exija `\n\);` fusiona esa tabla con la siguiente y reporta divergencias falsas en cascada (pasó: 88 tablas "con diferencias" que en realidad estaban bien).
+  2. El ER marca las PK compuestas como `PK,FK  columna: tipo`, no como `PK  columna`. Un regex que solo saque el prefijo `PK` deja `,FK` pegado y reporta como faltante toda columna de toda tabla asociativa (pasó: 32 falsos positivos).
+
+## E-51 — `cannot find symbol` tras renombrar un campo con Lombok: el getter generado no aparece en un `grep` del nombre del campo
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `AccountRequestPersistenceMapper.java`, durante el renombre `supabaseUserId` → `usuarioId` (D-53)
+- **Síntoma:**
+  ```
+  [ERROR] .../AccountRequestPersistenceMapper.java:[16,28] cannot find symbol
+  [INFO] BUILD FAILURE
+  ```
+  El mensaje **no dice qué símbolo** falta. Antes de esto, un `grep -rn "supabaseUserId" src/` daba cero resultados en código — el renombre parecía completo.
+- **Causa real:** el campo estaba en una entidad con `@Data` de Lombok, así que el accesor generado es **`getSupabaseUserId()`, con `S` mayúscula**. `grep "supabaseUserId"` no lo encuentra: Lombok capitaliza la primera letra al armar el getter, y ese nombre no aparece escrito en ningún lado del código fuente — solo en el bytecode generado y en las llamadas que lo usan.
+- **Solución:** `grep -rn "SupabaseUserId" src/` (con mayúscula) encontró la única llamada, `e.getSupabaseUserId()` en el mapper. Cambiada a `e.getUsuarioId()`. `./mvnw clean test`: 1672/1672.
+- **Cómo evitarlo:** al renombrar un campo de una clase con Lombok, buscar **las dos formas**: el nombre del campo y el nombre capitalizado que usan `get`/`set`/`with`. En una sola pasada:
+  ```bash
+  grep -rniE "supabaseUserId" src/        # -i cubre campo, getter y setter de una vez
+  ```
+  El `-i` es la diferencia entre creer que el renombre está completo y que lo esté. Aplica igual a `@Getter`, `@Data` y `@Builder`.
+
+## E-52 — Un cambio de 1 línea aparece como 623 en `git diff`: Python reescribió el archivo con CRLF
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `docs/MODULOS_A_AVANZAR.md`, al insertar la decisión D-53 con un script de Python
+- **Síntoma:** no hay mensaje de error. `git diff --stat` reporta:
+  ```
+  docs/MODULOS_A_AVANZAR.md | 623 +++++++++++----------
+  1 file changed, 312 insertions(+), 311 deletions(-)
+  ```
+  cuando el cambio real era **una sola línea agregada**. La pista para confirmarlo:
+  ```bash
+  git diff --stat -w --ignore-cr-at-eol docs/MODULOS_A_AVANZAR.md   # -> 1 insertion(+)
+  ```
+- **Causa real:** dos cosas que se combinan y por separado no molestan:
+  1. `io.open(p, 'w', encoding='utf-8')` en Windows usa `newline=None`, que traduce cada `\n` a `\r\n`. Un script que lee, modifica y reescribe **convierte todo el archivo a CRLF sin avisar**.
+  2. Este repo tiene `core.autocrlf=true`, que normalmente absorbe eso — pero **git clasifica este archivo como binario** (`git ls-files --eol` devuelve `w/-text`), y a un binario no le aplica la conversión. Resultado: git compara byte a byte y ve las 311 líneas distintas. Por eso el resto de los archivos editados el mismo día salieron con diffs proporcionales y solo este explotó. No hay bytes NUL: es la heurística de git, y da igual el motivo — lo que importa es que a un archivo `-text` la red de seguridad de `autocrlf` **no lo cubre**.
+- **Solución:** reescribir el archivo con los finales de línea que ya tenía:
+  ```python
+  s = io.open(p, encoding='utf-8', newline='').read()   # newline='' = no traducir al leer
+  io.open(p, 'w', encoding='utf-8', newline='').write(s)  # ni al escribir
+  ```
+- **Cómo evitarlo:** **usar siempre `newline=''` en las dos puntas** cuando un script de Python edita un archivo existente del repo. Y ante un `--stat` desproporcionado, antes de investigar el contenido, comparar:
+  ```bash
+  git diff --stat <archivo>
+  git diff --stat -w --ignore-cr-at-eol <archivo>
+  ```
+  Si el segundo es mucho menor, el problema son los finales de línea, no el contenido.
+
+## E-53 — Un cambio de horario "programado para mañana" que no se aplicaba nunca: se escribía la fila y nadie la leía jamás
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `habits` — `PreferenciaHorarioService.aplicarEdicion` (`src/main/java/com/renaser/os/habits/application/services/PreferenciaHorarioService.java`), tabla `cambios_horario_pendientes`
+- **Síntoma:** ningún error, ninguna excepción, ningún log — **ese es el problema**. `PATCH /api/v1/habit-preferences/{habitId}` con la ventana del día ya arrancada responde `200` con:
+  ```json
+  { "habitId": "...", "triggerTime": "07:00", "limitTime": "09:00",
+    "deferred": true, "deferredEffectiveDate": "2026-09-01", "scheduleEdits": {...} }
+  ```
+  y al llegar el 2026-09-01 el horario del aprendiz sigue siendo el viejo. La fila de
+  `cambios_horario_pendientes` queda ahí para siempre, sin que nada la mire.
+- **Causa real:** la rama diferida solo hacía `saveCambioPendientePort.save(pendiente)`. **No había ningún lector del otro lado**, y eso se puede verificar de tres formas independientes, todas negativas:
+  1. `LoadCambioHorarioPendientePort` no lo inyectaba **ningún** servicio — solo lo implementaba su propio adaptador.
+  2. `CambioHorarioPendiente.rigeEn(LocalDate)` existía en el dominio y no lo llamaba nadie.
+  3. `TracksDelDiaProyeccionService`, que arma el día del aprendiz, inyecta `LoadHorarioHabitoPort` y `LoadPreferenciaHorarioPort` — no los pendientes.
+  Un puerto de salida escrito y nunca leído es exactamente una feature a medio cablear que pasa todos los tests: los del servicio verificaban `verify(saveCambioPendientePort).save(any())`, que es cierto y no dice nada sobre si alguien lo consume después.
+- **Solución:** caso de uso `PromoverCambiosHorarioProgramadosUseCase` + `PromocionCambioHorarioService` + `PromoverCambiosHorarioScheduler` (`@Scheduled(cron = "0 40 4 * * *", zone = "UTC")`, antes del barrido de las 05:00). El puerto suma `queYaRigenEn(fecha)` (`fecha_efectiva <= fecha`). Por cada vencido: escribe `preferencias_horario`, registra en `historial_cambios_horario` y borra el pendiente — borrarlo en la misma transacción es lo que hace la operación idempotente. Ver `docs/MODULO_HABITS.md` §20.1/§20.2 (incluida la decisión de que el diferido cobra cupo el día que rige, no al pedirlo).
+- **Cómo evitarlo:** **un puerto de salida sin ningún inyector es un bug, no una pieza "lista para cuando se use".** Es una comprobación de un comando, barata y mecánica, que hay que hacer al cerrar cualquier feature con estado diferido:
+  ```bash
+  grep -rl "LoadXxxPort" src/main/java | grep -v "ports/out\|adapter/out"   # vacío = nadie lo consume
+  ```
+  Lo mismo para un método de dominio que nadie llama (`rigeEn`). Y a nivel de test: un `verify(save...)` prueba que se guardó, nunca que se aplicará — para un flujo diferido hace falta un test del **consumidor**, que en este caso simplemente no existía porque el consumidor tampoco.
+- **Verificado:** `./mvnw clean test` → 1697/1697 en verde tras el arreglo (2026-08-31).
+
+## E-54 — `violates foreign key constraint "cambios_horario_pendientes_participante_id_habito_id_fkey"`: la rama diferida no creaba la fila padre
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `habits` — misma rama diferida de E-53; FK declarada en `src/main/resources/db/migration/V1__baseline_renaser.sql:501`
+- **Síntoma:** el primer cambio diferido de un hábito que el aprendiz nunca editó explota en el INSERT (SQLState **23503**, Spring lo traduce a `DataIntegrityViolationException` → `409`):
+  ```
+  ERROR: insert or update on table "cambios_horario_pendientes" violates foreign key constraint
+  "cambios_horario_pendientes_participante_id_habito_id_fkey"
+    Detail: Key (participante_id, habito_id)=(dd2e2af5-..., 5c4dfec6-...) is not present in table "preferencias_horario".
+  ```
+- **Causa real:** `cambios_horario_pendientes` tiene
+  `FOREIGN KEY (participante_id, habito_id) REFERENCES preferencias_horario (participante_id, habito_id) ON DELETE CASCADE`.
+  La rama **inmediata** siempre crea/actualiza `preferencias_horario` primero, así que nunca choca; la **diferida** iba directo al pendiente. O sea: el bug solo aparece en la combinación "hábito nunca editado" + "ventana de hoy ya arrancada" — el camino menos frecuente, y el único sin prueba de integración.
+- **Solución:** `PreferenciaHorarioService.asegurarPreferenciaVigente` crea la fila padre antes de guardar el pendiente, **con los valores vigentes hoy** (preferencia propia si existe — entonces no hay nada que crear —; si no, las horas del `horarios_habito` que aplica hoy; si el catálogo no tiene ninguno aplicable, `NULL`, que en esa tabla significa "sin override"). Nunca con las horas pedidas: el día en curso no se toca. Test que lo fija contra Postgres real: `CambioHorarioPendientePersistenceAdapterTest.sinFilaEnPreferenciasHorarioLaFkRechazaElPendiente`.
+- **Cómo evitarlo:** **una FK compuesta hacia otra tabla de negocio (no un simple `id`) es una precondición del caso de uso, no un detalle del esquema** — quien inserta el hijo tiene que garantizar el padre, en el mismo caso de uso. Y la comprobación que lo habría encontrado el primer día es la que `CLAUDE.MD` §0.2 ya exige y acá faltaba: **prueba de integración con Testcontainers para todo adaptador de persistencia**. La única prueba del camino diferido usaba mocks, y un mock de `SaveCambioHorarioPendientePort` acepta cualquier cosa: por construcción no puede ver una FK. Regla práctica: al escribir un `@Entity` nuevo, `grep` de su tabla en el baseline SQL y leer sus `FOREIGN KEY` antes de escribir el caso de uso.
+
+## E-55 — Un recurso con PATCH y sin GET: el cliente podía escribir su configuración pero no leerla
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `habits` — `HabitPreferenceController` (`/api/v1/habit-preferences`)
+- **Síntoma:** no es un error de runtime — es un agujero funcional que ninguna prueba puede fallar porque no hay nada que probar. El recurso `habit-preferences` exponía **solo** `PATCH /{habitId}`. Un aprendiz no tenía forma de consultar qué horario rige hoy en cada hábito, si le quedó algún cambio programado, ni cuánto cupo semanal le queda: solo podía mandar un cambio a ciegas y leer la respuesta de ese cambio puntual.
+- **Causa real:** el hueco #12 se portó guiado por la lista de rutas que el frontend **ya llamaba** (D-36), y el frontend viejo tampoco tenía esa pantalla. Portar por "lo que el cliente ya consume" es la estrategia correcta para no inventar contrato (CLAUDE.MD §8), pero deja ciegos los huecos que el cliente viejo también tenía. El síntoma agravante fue E-53: el único dato que el aprendiz recibía sobre un cambio programado (`deferredEffectiveDate`) venía de la respuesta del propio PATCH, y esa respuesta era mentira — sin GET, nada permitía notarlo desde la app.
+- **Solución:** `GET /api/v1/habit-preferences` (aditivo, no toca el PATCH) — `ConsultarPreferenciasHorarioUseCase`/`ConsultaPreferenciasHorarioService`. Devuelve por hábito activo el horario vigente, el cambio programado con su fecha efectiva y la cuota, reutilizando el mismo DTO de cuota del PATCH. Ver `docs/MODULO_HABITS.md` §20.4 y `docs/api/CONTRATO_DIA_A_DIA.md` §1.7.
+- **Cómo evitarlo:** al cerrar un recurso REST, chequear la simetría: **si hay un verbo de escritura sobre un recurso, tiene que haber forma de leer ese mismo estado.** Un `PATCH` sin `GET` deja al cliente sin manera de mostrar el estado actual ni de verificar que su escritura tuvo efecto — que es justamente lo que hizo invisible a E-53 durante toda su vida. Chequeo de un comando sobre el módulo terminado:
+  ```bash
+  grep -rhoE "@(Get|Post|Put|Patch|Delete)Mapping" src/main/java/com/renaser/os/<modulo> | sort | uniq -c
+  ```
+  Un recurso que aparece solo con verbos de escritura es la señal.
+
+## E-56 — Quien se registraba con Google no podía volver a entrar nunca: "Ya existe una cuenta, iniciá sesión con tu método actual"
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `users` — `AutenticacionSocialService`, `AccountRequestService.approve()`, tabla `solicitudes_cuenta`. Registrado como A-7 en `docs/MODULO_AUTH.md` §6.7/§6.8
+- **Síntoma:** el primer "Continuar con Google" funcionaba (abría la solicitud), un ADMIN la aprobaba, y **el segundo** "Continuar con Google" de la misma persona devolvía `409`:
+  ```json
+  { "error": "Ya existe una cuenta con ese correo. Iniciá sesión con tu método actual." }
+  ```
+  El mensaje es una trampa perfecta: esa persona **no tiene** un "método actual". El alta social deja `usuarios.hash_contrasena` en NULL a propósito, así que no hay contraseña que usar y "olvidé mi contraseña" tampoco lleva a ningún lado. La cuenta quedaba aprobada, activa y completamente inaccesible.
+- **Causa real:** el `sub` del proveedor se verificaba al iniciar el alta y **se perdía ahí mismo**, porque no había dónde guardarlo. El vínculo real vive en `identidades_externas`, y la FK de esa tabla exige que la fila de `usuarios` esté creada — cosa que solo pasa al aprobar, un día después. O sea: el dato existía en el único momento en que no se podía escribir, y ya no existía en el momento en que sí. Al no haber vínculo, el segundo login no encontraba `(proveedor, sujeto)`, caía al camino de alta, chocaba con el `User` ya existente y respondía el 409 de arriba.
+  **El agravante que lo hizo invisible:** los cuatro desenlaces posibles del login social colapsaban en el mismo 409 genérico, así que "todavía no te aprobaron", "ya existe una cuenta con ese correo" y "este bug" le llegaban a la app indistinguibles. No había forma de notar desde el cliente que uno de los tres era un defecto.
+- **Solución:** tres piezas, ninguna opcional (ver `docs/MODULO_AUTH.md` §6.8):
+  1. Migración `V12`: `solicitudes_cuenta` gana `proveedor`/`sujeto_proveedor` (nullable, con `CHECK` de que viajan juntos y `UNIQUE` parcial). La solicitud es el único registro que existe durante la espera entre el alta y la aprobación — es el lugar donde el `sub` puede sobrevivir.
+  2. `AccountRequestService.approve()` escribe la `IdentidadExterna` en la **misma transacción** que activa al usuario: si el vínculo falla, la aprobación se deshace entera.
+  3. `ResultadoLoginSocial` pasó de dos variantes a cuatro (`SesionIniciada`, `SolicitudCreada`, `SolicitudEnRevision`, `CuentaExistenteSinVinculo`), para que los estados normales del flujo dejen de disfrazarse de error.
+- **Cómo evitarlo:** dos reglas concretas, las dos verificables.
+  1. **Un dato que se verifica en el paso A y se usa en el paso B tiene que estar persistido en algún lado entre A y B.** Acá A y B estaban separados por la aprobación manual de un admin — potencialmente días. Cuando un flujo tiene una espera humana en el medio, todo lo que el paso posterior necesite hay que preguntarse dónde vive mientras tanto; si la respuesta es "en la request que ya terminó", falta una columna.
+  2. **Una prueba que arranca del estado que el bug impedía alcanzar no prueba nada.** La que existía (`identidadYaVinculadaDevuelveSesionIniciadaConElUsuarioCorrespondiente`) partía de un `LoadIdentidadExternaPort` mockeado que ya devolvía el vínculo — o sea daba por cierto exactamente lo que fallaba, y pasaba en verde con el defecto vivo. El reemplazo es `LoginSocialCicloCompletoIntegrationTest`, que recorre el ciclo entero (alta → aprobación → segundo login) contra Postgres real. Regla: **para un flujo con estado que cruza varias operaciones, la prueba tiene que recorrerlo entero desde cero**; mockear el estado intermedio es asumir la conclusión.
+  3. Corolario de mocks, el mismo de E-54: un mock no tiene FK, no tiene `UNIQUE` y no pierde columnas. Todo defecto cuya causa sea "ese dato no está en la base" es invisible para una prueba unitaria, por construcción.
+- **Verificado:** `./mvnw clean test` en verde con `LoginSocialCicloCompletoIntegrationTest` incluido (2026-08-31).
+
+## E-57 — El avatar se rompía solo a los 7 días: se persistía una URL prefirmada, que vence
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `users` — `AvatarService.confirmar()`, columna `usuarios.avatar_url`. Propagado a `testimonios.avatar_url` por `TestimonioService.promover`
+- **Síntoma:** no hay mensaje de error. La foto de perfil simplemente deja de cargar —a los 7 días exactos del último cambio de avatar— y no vuelve nunca. No solo en el perfil: el mismo string sale en el muro, los comentarios, el chat, los miembros de célula, los testimonios y el panel admin, porque todos lo reciben dentro de `users.api.UserSummary`. Con el adaptador por defecto (`NoOpAlmacenamientoAdapter`) tampoco se nota, porque devuelve `about:blank#pendiente-s3/...` para todo. O sea: **estaba escrito para romperse el día que se activara S3, una semana después de que alguien subiera una foto, sin ningún error en el log.**
+- **Causa real:** la confirmación firmaba una URL de LECTURA y la guardaba como texto:
+  ```java
+  private static final Duration VALIDEZ_URL_LECTURA = Duration.ofDays(7);
+  ...
+  URI url = almacenamientoPort.firmarLectura(command.ruta(), VALIDEZ_URL_LECTURA);
+  actor.changeAvatar(url.toString());   // se persiste la URL PREFIRMADA
+  ```
+  Una URL prefirmada de S3 **es una credencial con fecha de vencimiento**: lleva `X-Amz-Expires` y `X-Amz-Signature` en la query string y deja de servir cuando caduca. Persistirla convierte un dato con vida útil en un dato permanente, y no hay nadie del otro lado que la renueve — el único punto que firmaba era la confirmación, que solo corre cuando el usuario cambia la foto. Los 7 días eran, además, el máximo que SigV4 permite: el código ya había estirado la validez todo lo posible, que es la señal de que el diseño estaba peleando contra la herramienta.
+  **El esquema ya declaraba la regla que este caso violaba.** En `V1__baseline_renaser.sql` el resto de las tablas dicen textualmente `-- P-03: la URL se firma al LEER, jamás se persiste`, `-- JAMÁS una URL (regla de oro heredada)`, `-- P-03: ruta, no URL`. `usuarios.avatar_url` era la única excepción, y estaba documentada como "limitación conocida" en vez de tratada como defecto (D-53 original).
+- **Solución (D-55, decidida por el dueño del proyecto):** el objeto del avatar pasa a ser de **lectura pública** y la columna guarda su **URL permanente** — ahora el nombre `avatar_url` dice la verdad.
+  1. `AlmacenamientoPort` gana `urlPublica(ruta)`: URL del objeto sin firmar. En `S3AlmacenamientoAdapter` la compone `S3Utilities` a partir del bucket y la región; en el `NoOp`, el mismo marcador que sus otros métodos.
+  2. `AvatarService.confirmar()` guarda `urlPublica(...)`. `VALIDEZ_URL_LECTURA` y los 7 días desaparecen. La **subida** no cambia: sigue prefirmada a 10 minutos — escribir en el bucket nunca es público.
+  3. `User.changeAvatar` **rechaza** un valor que lleve marcas de SigV4 (`X-Amz-Signature`/`X-Amz-Credential`/`X-Amz-Expires`), y `V13` agrega el `CHECK` equivalente en `usuarios` y en `testimonios`.
+  4. `V13` repara los datos: corta la query string de las filas prefirmadas (`split_part(avatar_url, '?', 1)` — exacto, no heurístico: en SigV4 todo lo que caduca vive después del `?`) y pone `NULL` en las que quedaron con el marcador `about:blank` del NoOp.
+- **La alternativa que se descartó, y por qué:** firmar al leer (una URL nueva en cada respuesta) también arregla el vencimiento, y es lo correcto para evidencia, contratos, adjuntos y audios. Para el avatar no: la URL cambiaría en cada respuesta y eso **invalida el caché de imagen del cliente** — un muro con 20 avatares volvería a descargar las 20 fotos en cada pantallazo. El avatar es el activo de menor sensibilidad y el que más se repite por respuesta; es el patrón de GitHub/Slack. El dueño del proyecto aceptó explícitamente que la ruta sea adivinable.
+- **Requisito de infraestructura, que NO vive en el código:** el bucket tiene que permitir `s3:GetObject` anónimo sobre el prefijo `avatares/*`. S3 bloquea el acceso público por defecto (*Block Public Access*), así que **sin ese cambio de política la URL es correcta y devuelve 403**. Está escrito junto a los permisos IAM mínimos en `docs/MODULOS_A_AVANZAR.md` D-55 y en `docs/MODULO_USERS.md` §10.
+- **Cómo evitarlo:** tres reglas, todas verificables.
+  1. **Una URL prefirmada es una credencial, no un dato. Nunca se persiste.** Si aparece en un `INSERT`/`UPDATE`, es un bug. Lo que se guarda es la ruta (y se firma al leer) o una URL permanente (y el objeto es público) — no hay tercera opción. Chequeo de un comando sobre cualquier módulo:
+     ```bash
+     grep -rn "firmarLectura" src/main/java | grep -iE "change|set|save|persist|crear|actualizar"
+     ```
+  2. **Estirar una validez hasta el máximo que permite la herramienta es una señal de diseño equivocado, no una solución.** Los 7 días eran el techo de SigV4; el código estaba pidiendo a gritos que el problema no era la duración.
+  3. **Un defecto que tarda N días en manifestarse no lo encuentra ninguna prueba que corra en un segundo.** La prueba vieja (`confirmarPersisteLaUrlResuelta`) verificaba que se guardaba lo que devolvía `firmarLectura` — o sea, afirmaba el bug y pasaba en verde. La prueba correcta no mira el valor, mira la **propiedad**: que lo guardado no tenga query string de firma, y que dos lecturas del mismo avatar den exactamente la misma URL. Regla general: **cuando un valor tiene vida útil, la prueba tiene que ser sobre su permanencia, no sobre su contenido.**
+- **Efecto colateral que también se limpió:** `testimonios.avatar_url` copia el avatar del autor al promover una publicación. El snapshot es intencional (un testimonio es una foto de un momento), pero mientras `usuarios.avatar_url` guardó una prefirmada, esa copia heredaba el vencimiento. `V13` la repara con la misma regla.
+- **Verificado:** `./mvnw clean test` → **1747/1747 en verde** (2026-08-31), con `V13` aplicada por Flyway contra el Postgres real de Testcontainers — los `CHECK` nuevos y los `UPDATE` de reparación corren de verdad en cada build, no solo en el despliegue. Pruebas que fijan el arreglo: `AvatarServiceTest.confirmarPersisteUnaUrlPermanente` (lo guardado no tiene query string de firma y nunca se llama a `firmarLectura`), `AvatarServiceTest.dosLecturasDelMismoAvatarDevuelvenLaMismaUrl` (la URL es estable — es la que mata el defecto), `UserTest.changeAvatarRechazaUnaUrlPrefirmada` y `S3AlmacenamientoAdapterTest.laUrlPublicaEsPermanenteYNoLlevaFirma`.
+- **Barrido del resto del sistema:** se revisaron los **9 servicios** que llaman a `firmarLectura` (`academy`, `calendar`, `community` ×2, `habits`, `phasecontracts`, `support`, `users`). Todos los demás firman dentro de un método de proyección (`aVista`/`conUrlLectura`/mapeo a DTO) y devuelven la URL en la respuesta sin guardarla: `users` era el único que persistía. `testimonios.avatar_url` no es un segundo sitio de código con el mismo error — copia lo que hubiera en `usuarios.avatar_url`, así que heredaba el defecto por datos y se repara en la misma migración. Comando del barrido:
+  ```bash
+  grep -rn "firmarLectura" src/main/java | grep -v "ports/out\|infrastructure/storage"
+  ```

@@ -32,6 +32,12 @@ public class NoOpAlmacenamientoAdapter implements AlmacenamientoPort {
     }
 
     @Override
+    public URI urlPublica(String ruta) {
+        log.warn("AlmacenamientoPort.urlPublica({}) placeholder: faltan credenciales AWS S3 (D-34).", ruta);
+        return URI.create("about:blank#pendiente-s3/" + ruta);
+    }
+
+    @Override
     public void borrar(String ruta) {
         log.warn("AlmacenamientoPort.borrar({}) NO ejecutado de verdad: faltan credenciales AWS S3 (D-34).", ruta);
     }

@@ -206,6 +206,12 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
                 .collect(Collectors.toMap(User::id, UserAccountService::aResumen));
     }
 
+    /**
+     * El avatar viaja como URL PERMANENTE (D-55): `chat`, `community`, `support` y `rag` la
+     * reciben lista para mostrar y no necesitan enterarse de que existe un bucket. Es tambien
+     * lo que deja que el cliente la cachee — una prefirmada cambiaria en cada respuesta y
+     * obligaria a redescargar todos los avatares del muro cada vez (E-57).
+     */
     private static UserSummary aResumen(User user) {
         return new UserSummary(user.id(), user.fullName(), user.avatarUrl(), user.role(), user.status());
     }

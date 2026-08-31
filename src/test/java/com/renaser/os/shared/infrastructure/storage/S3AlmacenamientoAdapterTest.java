@@ -56,7 +56,8 @@ class S3AlmacenamientoAdapterTest {
     }
 
     private S3AlmacenamientoAdapter adapter() {
-        return new S3AlmacenamientoAdapter(presignerConCredencialesDeMentira(), s3Client, BUCKET);
+        return new S3AlmacenamientoAdapter(presignerConCredencialesDeMentira(), s3Client, BUCKET,
+                REGION.id());
     }
 
     @Test
@@ -96,6 +97,32 @@ class S3AlmacenamientoAdapterTest {
         // una imagen y subir otra cosa con ella.
         assertThat(url.getQuery()).contains("X-Amz-SignedHeaders=");
         assertThat(url.getQuery()).contains("content-type");
+    }
+
+    /**
+     * D-55: el avatar guarda esta URL tal cual en {@code usuarios.avatar_url}. Que NO tenga query
+     * string es la propiedad que importa — es lo que la hace permanente y cacheable, y lo que
+     * evita el E-57 (una prefirmada guardada vence y nadie la vuelve a firmar).
+     */
+    @Test
+    void laUrlPublicaEsPermanenteYNoLlevaFirma() {
+        URI url = adapter().urlPublica("avatares/11111111-1111-1111-1111-111111111111");
+
+        assertThat(url.getHost()).contains(BUCKET);
+        assertThat(url.getPath()).isEqualTo("/avatares/11111111-1111-1111-1111-111111111111");
+        assertThat(url.getQuery()).isNull();
+        assertThat(url.toString()).doesNotContain("about:blank");
+        // No habla con AWS: componer la URL de un objeto es aritmetica de strings sobre la region
+        // y el bucket, igual que firmar es HMAC local. Por eso esta prueba corre sin red.
+        verifyNoMoreInteractions(s3Client);
+    }
+
+    /** La misma ruta da siempre la misma URL: es lo que permite que el cliente cachee la imagen. */
+    @Test
+    void laUrlPublicaEsEstableEntreLlamadas() {
+        S3AlmacenamientoAdapter adapter = adapter();
+
+        assertThat(adapter.urlPublica("avatares/ana")).isEqualTo(adapter.urlPublica("avatares/ana"));
     }
 
     @Test
