@@ -75,9 +75,9 @@ Se registra **aunque el error haya sido de configuración, del entorno o "una to
 
 ## 2. Diagnóstico del estado actual
 
-Repo `renaserlab/RenaserBack` (revisado en vivo):
+Repo `renaserlab/RenaserBack` (revisado en vivo). **Esta tabla describe el sistema de origen del que se migra, no el que estamos construyendo**: la base de datos nueva ya no usa Supabase (§11).
 
-| Capa | Hoy |
+| Capa | Sistema de origen (Next.js) |
 |---|---|
 | Framework | Next.js 15 (App Router, API routes) |
 | Lenguaje | TypeScript, React 19 |
@@ -820,7 +820,7 @@ Confirmado contra los releases reales a la fecha (agosto 2026):
 | Java | **25 (LTS)** | Virtual Threads sin *pinning* en secciones sincronizadas, Structured Concurrency (JEP 505, 5ª preview), Scoped Values finalizados (JEP 506) |
 | Spring Boot | **4.1** (GA jun-2026) | Sobre Spring Framework 7.0.8; grpc auto-config, `spring.datasource.connection-fetch=lazy`, OTel toggle nativo |
 | Spring AI | **2.0** (GA jun-2026) | Baseline Boot 4.x, tool-calling unificado entre providers, MCP con transporte movido al propio Spring AI (Streamable HTTP por defecto) |
-| Persistencia | Spring Data JPA + **Flyway** | Reemplaza `prisma migrate`. Las migraciones no dependen del proveedor: hoy corren sobre Docker local y donde vive la base en produccion sigue sin decidirse (§11) |
+| Persistencia | Spring Data JPA + **Flyway** | Reemplaza `prisma migrate`. **La base es propia: Supabase quedó descartado (§11).** Hoy corre sobre Docker local; falta elegir dónde se hostea en produccion, y las migraciones son independientes de esa elección |
 | Caché local | **Caffeine** | Para el hot path de <1 ms real (§3) |
 | Caché distribuida / rate limit | Redis | Solo para lo que debe ser compartido entre instancias |
 | Auth | **Identidad propia**: sesión como token opaco en Redis + cookie `HttpOnly`, credenciales con `DelegatingPasswordEncoder`, y OIDC contra Google/Apple/Facebook resuelto por el backend | Decisión del dueño del proyecto (2026-08-26), tomada sobre la recomendación contraria. Sin proveedor externo de identidad. Ver [`docs/MODULO_AUTH.md`](docs/MODULO_AUTH.md) |
@@ -919,7 +919,7 @@ Dos formas de organizar la Saga: **coreografía** (cada servicio escucha eventos
 | Auth | Identidad propia en Spring Security | Validar JWT de Supabase (Resource Server) | **A — resuelto 2026-08-26.** Esta tabla recomendaba **B**; el dueño del proyecto eligió **A** y esa es la decisión vigente. Se deja la recomendación original a la vista para que quede claro que fue una decisión informada contra el consejo, no un descuido |
 | Storage de binarios | S3 | Google Drive | **S3, ya hecho a medias (D-50).** Los 37 objetos de cursos y los 13 mp3 de audioterapias estan subidos a `s3-renaser90dias`, y las rutas guardadas en la BD apuntan ahi. **Falta el adaptador**: `AlmacenamientoPort` solo tiene `NoOpAlmacenamientoAdapter`, asi que la app todavia no sirve ni un archivo. Google Drive **nunca se integro** — `AudioCatalogPort` solo tiene `NoOpAudioCatalogAdapter`, y los audios de Espiritu siguen sin fuente real |
 | ORM | JPA/Hibernate | jOOQ / JDBC Client puro | JPA para CRUD de dominio; **JDBC Client** (nuevo en Spring 6.1+, ideal con virtual threads) para las queries de reporting/ranking que son lectura pura y sensibles a latencia |
-| Base de datos | Instancia propia | Supabase Postgres | **Sin decidir.** Hoy corre en Docker local (`pgvector/pgvector:pg16`, puerto 5433) y no hay entorno desplegado. Los datos de origen se extrajeron de Supabase y las migraciones Flyway son independientes del proveedor, asi que la decision sigue abierta y no bloquea nada |
+| Base de datos | Instancia propia | Supabase Postgres | **A — resuelto 2026-08-31.** **Supabase queda descartado**: la base del producto final es propia y la define nuestro esquema Flyway (schema `renaser`, 92 tablas), no un proyecto de Supabase. Hoy corre en Docker local (`pgvector/pgvector:pg16`, puerto 5433) y no hay entorno desplegado. De Supabase solo quedan **datos de origen ya extraidos**; ninguna pieza del backend le habla. Lo unico abierto es **donde se hostea** esa instancia propia (RDS / Cloud SQL / VPS), que es infraestructura y no bloquea nada |
 | Empaquetado | JVM tradicional | GraalVM Native Image | JVM tradicional al inicio (mejor tooling, throughput mejor en cargas sostenidas); Native Image si más adelante hay requisito de cold-start (serverless/escala-a-cero) |
 
 ---
@@ -941,7 +941,7 @@ Estado real al **2026-08-22**. El plan detallado por módulo está en [`docs/MOD
 **Bloqueado**
 
 - [x] ~~**Confirmar que Supabase use claves JWT asimétricas (RS256) + JWKS**~~ — **cerrado por irrelevancia (2026-08-26):** ya no dependemos de tokens de Supabase. Se verificó igual, por si alguna vez se revierte: el proyecto sí tiene claves asimétricas, algoritmo **ES256** (`docs/MODULO_AUTH.md`, bloqueante B-2).
-- [ ] **Auditar la RLS de `INSERT` en `public.users`** — si existe policy para `authenticated`, hay escalada de privilegios.
+- [x] ~~**Auditar la RLS de `INSERT` en `public.users`**~~ — **cerrado por irrelevancia (2026-08-31):** ya no hay Supabase ni RLS. La base del producto final es propia (§11) y el alta pasa obligatoriamente por `ApproveAccountRequestUseCase` / `InviteAndCreateUserUseCase`; lo que queda por verificar es el `GRANT` sobre `renaser.usuarios` del carril de escritura (§5.3.6), no una policy externa.
 - [ ] **Definir los permisos de `MENTOR_LEAD`** y los valores reales de `TraineePhase`.
 
 **Pendiente**
