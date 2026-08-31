@@ -3,7 +3,7 @@
 **Fecha:** 2026-08-21
 **Alcance:** recomendación de arquitectura para migrar el backend de *Renaser OS* (hoy Next.js 15 + Prisma 6 + Supabase) a Java 25 + Spring Boot 4.1 + Spring AI 2.0, consumido por una app **React Native** (RenaserPlayStore), con requisito de latencia muy baja.
 
-> **Documento hermano:** [`docs/MODULOS_A_AVANZAR.md`](docs/MODULOS_A_AVANZAR.md) — **qué** construir y en qué orden (olas, estado de cada módulo, bloqueantes, decisión de auth Supabase vs Keycloak).
+> **Documento hermano:** [`docs/MODULOS_A_AVANZAR.md`](docs/MODULOS_A_AVANZAR.md) — **qué** construir y en qué orden (olas, estado de cada módulo, bloqueantes). El diseño de autenticación vive en [`docs/MODULO_AUTH.md`](docs/MODULO_AUTH.md): identidad propia, sin proveedor externo.
 > Este documento responde **cómo** construirlo. Si sos nuevo en el repo: leé **§0** (reglas de trabajo) y **§5.1.2** (qué es cada carpeta) antes que nada.
 
 ---
@@ -68,7 +68,7 @@ Se registra **aunque el error haya sido de configuración, del entorno o "una to
 - **Arquitectura recomendada: Monolito Modular con Hexagonal por módulo**, usando **Spring Modulith**, desplegado como un único proceso JVM. No microservicios, salvo para el subsistema de IA si su perfil de carga diverge (ver §9).
 - Es la opción que mejor sirve al objetivo de latencia: dentro de un mismo proceso una llamada entre módulos cuesta nanosegundos; entre microservicios cuesta milisegundos de red aunque estén en el mismo clúster. Partir el sistema en servicios *añade* latencia, no la reduce.
 - El objetivo literal de **"<1 ms"** no es alcanzable de punta a punta para un cliente móvil sobre HTTP (la vuelta de red sola ya son varios ms). Es alcanzable, y es donde hay que apuntar, para el **tiempo de procesamiento dentro del servidor** en operaciones cacheadas o de cómputo puro. Ver el desglose realista en §3.
-- Java 25 (LTS) + Virtual Threads/Structured Concurrency maduros son el motivo técnico real para migrar desde Node/Next si el driver es rendimiento bajo alta concurrencia I/O-bound (llamadas a Postgres, Gemini, Resend, Drive) — no la sintaxis ni el tipado.
+- Java 25 (LTS) + Virtual Threads/Structured Concurrency maduros son el motivo técnico real para migrar desde Node/Next si el driver es rendimiento bajo alta concurrencia I/O-bound (llamadas a Postgres, Redis, S3, SMTP y los proveedores OIDC) — no la sintaxis ni el tipado.
 - El dominio actual (Users, Habits, Rocks, Community, Academy, Chat, Calendar, Notifications, Onboarding+IA, RAG, Renasia, Support/Tickets, Phase Contracts, Points/Ranking) mapea de forma natural a **14 módulos** hexagonales. Ver §5.
 
 ---
@@ -401,7 +401,7 @@ Analogía: un módulo es un **restaurante**.
 | `port/in/` | El **menú** — lo que se puede pedir | Interfaces que exponen los casos de uso | No |
 | `port/out/` | El **pedido al proveedor** — "necesito tomates", sin decir a qué proveedor | Interfaces de lo que el caso de uso necesita del exterior | No |
 | `adapter/in/` | El **mozo** que toma tu pedido | Traduce HTTP / WebSocket / scheduler → caso de uso | Sí |
-| `adapter/out/` | El **proveedor concreto** que trae los tomates | Implementa `port/out/` con Postgres, Gemini, Drive… | Sí |
+| `adapter/out/` | El **proveedor concreto** que trae los tomates | Implementa `port/out/` con Postgres, Redis, S3, SMTP… | Sí |
 | `api/` | La **ventana** hacia otros módulos | Lo único que otros módulos pueden importar | Sí |
 | `shared/` | Lo que **todo el restaurante** comparte | `UserId`, `Clock`, tipos transversales | Sí, mínimo |
 
@@ -492,8 +492,9 @@ Bajado a un caso real, contra lo que el repo ya implementa hoy (`docs/FEATURE_US
 - **Los 5 roles y sus perfiles**: `ALCHEMIST`/`AlchemistProfile`, `ADMIN`/`AdminProfile`, `MENTOR_LEAD`/(perfil por definir), `MENTOR`/`MentorProfile`, `TRAINEE`/`TraineeProfile`.
   > **Corregido 2026-08-22.** Esta línea decía "los 4 roles" y omitía `MENTOR_LEAD`, contradiciendo la tabla de §5 que sí lo lista. Son **cinco**: Aprendiz, Mentor, Líder de Mentores, Administrador/Operación y Alquimista. Ver `docs/MODULOS_A_AVANZAR.md` §4.1 para el modelo de roles y la pregunta abierta sobre el perfil de `MENTOR_LEAD`.
 
-  `User.id` sigue siendo el UUID de Supabase Auth (nunca autogenerado por el repositorio) — Java respeta esto: el `id` viaja desde el adapter de auth hasta el `UserRepositoryPort.save`, el dominio nunca genera identidad propia.
-- **Auth se queda en Supabase.** No hay razón de negocio para tocarlo (ya lo dijimos en §11). Spring Security actúa como *Resource Server* validando el JWT que Supabase ya emite.
+  `User.id` no lo genera nunca el repositorio: viaja desde el adaptador de autenticación hasta `UserRepositoryPort.save`, y el dominio no inventa identidad propia. Esa regla no cambió; lo que cambió es de dónde sale el UUID.
+- **Auth NO se queda en Supabase.** Renaser OS emite y valida su propia identidad: sesión como **token opaco en Redis** transportado en cookie `HttpOnly`, credenciales propias (`usuarios.hash_contrasena`, `V3`) y login social resuelto por el backend contra Google/Apple/Facebook (`identidades_externas`, `V3`). No hay proveedor externo de identidad. El diseño completo está en [`docs/MODULO_AUTH.md`](docs/MODULO_AUTH.md).
+  > **Corregido 2026-08-31.** Esta línea decía *"Auth se queda en Supabase (…) Spring Security actúa como Resource Server validando el JWT que Supabase ya emite"*, y contradecía de frente a `docs/MODULO_AUTH.md`, que registra la decisión contraria del dueño del proyecto del **2026-08-26** — tomada sobre la recomendación opuesta y sostenida después de exponerle el costo. Como `CLAUDE.md` se lee en cada sesión y `MODULO_AUTH.md` no, la contradicción se propagaba hacia adelante. Manda `MODULO_AUTH.md`. Ver también §6, §10, §11 y §12, corregidas en el mismo cambio.
 - **El flujo de alta con dos caminos** (autoregistro vía `AccountRequest` + aprobación, o invitación directa por admin) se preserva tal cual — es lógica de dominio ya peleada contra un problema real (el correo no funciona), no un detalle de framework.
 
 ### 5.3.2 Modelo de dominio (paquete `users/domain`)
@@ -501,7 +502,7 @@ Bajado a un caso real, contra lo que el repo ya implementa hoy (`docs/FEATURE_US
 ```java
 // users/domain/User.java — sin una sola anotación de Spring/JPA
 public final class User {
-    private final UserId id;                 // = Supabase Auth UUID, nunca generado acá
+    private final UserId id;                 // UUID propio, generado al dar de alta; nunca por el repositorio
     private final Email email;                // value object: valida formato, unicidad la garantiza el repo
     private UserRole role;                    // TRAINEE por defecto; solo ADMIN/ALCHEMIST lo cambian
     private UserStatus status;                // ACTIVE por defecto
@@ -530,8 +531,8 @@ public final class User {
 | Caso de uso | Reemplaza (Next.js) | Nota de migración |
 |---|---|---|
 | `SubmitAccountRequestUseCase` | `POST /api/v1/account-requests` | DTO de entrada **sin campo `role`** — el mismo blindaje que ya identificaron como "el punto más importante": el rol nunca viaja desde el cliente público, se fuerza `TRAINEE` en el use case, ni siquiera llega como opción al mapper |
-| `ApproveAccountRequestUseCase` | Aprobar en panel admin (`adminCreateUser` + `createTraineeDirect`) | Transacción única: crea `User` + perfil correspondiente + marca `AccountRequest.APPROVED` — si algo falla, rollback incluye `SupabaseAdminAuthPort.deleteUser` (el mismo patrón de compensación que ya usan en `inviteAndCreateUser`) |
-| `RejectAccountRequestUseCase` | Rechazar en panel | Incluye el `deleteUser` en Supabase para liberar el correo (punto 3 de `PROPOSAL_ACCOUNT_REQUESTS.md`) |
+| `ApproveAccountRequestUseCase` | Aprobar en panel admin (`adminCreateUser` + `createTraineeDirect`) | Transacción única: crea `User` + perfil correspondiente + marca `AccountRequest.APPROVED`. Con identidad propia el rollback es la propia `@Transactional` de Postgres (§9.1): ya no hay un sistema externo al que compensar |
+| `RejectAccountRequestUseCase` | Rechazar en panel | Debe liberar el correo para que no quede *squatteado* (punto 3 de `PROPOSAL_ACCOUNT_REQUESTS.md`). Con identidad propia el borrado es local, dentro de la misma transacción |
 | `InviteAndCreateUserUseCase` | `inviteAndCreateUser` | Sigue siendo la vía para MENTOR/ADMIN/ALCHEMIST y cohortes a mitad de programa — no se retira |
 | `GetMyProfileUseCase` / `UpdateMyProfileUseCase` | U-02, U-03 | |
 | `UpdateTraineeProfileUseCase` | U-05 | Rechaza explícitamente `programDay`, `coherenceScore`, `leaguePoints`, `currentPhase` si vienen en el request — estos campos ni siquiera existen en el DTO de entrada, así el compilador los excluye en vez de un `if` en runtime |
@@ -567,14 +568,15 @@ Se usan como *guard clauses* al principio de cada `@RestController`, exactamente
 
 ### 5.3.5 El filtro de autenticación — dónde vive el `<1 ms` real de §3
 
-`verifyJwt` corre en **cada una de las requests autenticadas del sistema** (29 endpoints hoy, todos los que existan mañana). Es, con diferencia, el hot path más transitado de todo el backend — el lugar exacto donde el objetivo de "<1 ms de procesamiento" de §3 importa de verdad:
+La resolución de la sesión corre en **cada una de las requests autenticadas del sistema**. Es, con diferencia, el hot path más transitado de todo el backend — el lugar exacto donde el objetivo de "<1 ms de procesamiento" de §3 importa de verdad:
 
 ```java
-// users/adapter/in/web/security/SupabaseJwtAuthenticationFilter.java
-// 1. Verifica firma/expiración del JWT (Spring Security Resource Server, JWKS de Supabase cacheado)
-// 2. Extrae el UUID (sub claim)
-// 3. Carga { role, status } del User — ACÁ es donde importa el caché
+// 1. Lee la cookie HttpOnly y busca el token opaco en Redis (sesión propia, ver docs/MODULO_AUTH.md)
+// 2. Obtiene el UUID del usuario dueño de esa sesión
+// 3. Carga { rol, estado } del User — ACÁ es donde importa el caché
 ```
+
+> **Corregido 2026-08-31.** Antes esto describía un `SupabaseJwtAuthenticationFilter` que validaba un JWT de Supabase contra su JWKS. Ese filtro no existe ni va a existir: la sesión es un token opaco en Redis (decisión del 2026-08-26). El razonamiento de caché de abajo **no cambia** — sigue siendo una lectura por clave en cada request, que es lo que esta sección explica.
 
 El paso 3 es una lectura por clave primaria idéntica en cada request — candidato perfecto para Caffeine (§3, §6): `Caffeine.newBuilder().maximumSize(50_000).expireAfterWrite(Duration.ofSeconds(30))`, invalidado además por evento cuando `UpdateUserRoleUseCase`/`UpdateUserStatusUseCase` cambian algo (así un `SUSPENDED` no tarda 30s en tomar efecto — se invalida al toque, el TTL es solo la red de seguridad). Con esto, verificar rol+estado pasa de una query Postgres (~0.3–3 ms) a una lectura de mapa en memoria (~microsegundos) en el >99% de las requests. `SUSPENDED` sigue devolviendo 403 antes de tocar el caso de uso, igual que hoy.
 
@@ -582,10 +584,10 @@ El paso 3 es una lectura por clave primaria idéntica en cada request — candid
 
 Estos son hallazgos de seguridad que el propio equipo dejó documentados como abiertos — no se resuelven solos por cambiar de framework, hay que llevarlos explícitamente al checklist de la migración de este módulo:
 
-- **RLS de `public.users` en Supabase**: no debe existir ninguna policy de `INSERT` para `authenticated` — si existe, un solicitante pendiente podría crear su propia fila y auto-aprobarse saltándose todo `AccountRequest`. Esto es infraestructura de Supabase, no cambia con la migración a Java — verificarlo sigue siendo un paso manual obligatorio.
+- **Alta de usuarios solo por caso de uso**: nadie debe poder insertar una fila en `usuarios` sin pasar por `ApproveAccountRequestUseCase` o `InviteAndCreateUserUseCase` — si puede, un solicitante pendiente se auto-aprueba y se salta todo `AccountRequest`. Con identidad propia esto deja de ser una policy RLS de Supabase que hay que auditar a mano y pasa a ser una consecuencia del acceso a la base: **ninguna credencial que use la app móvil puede tener `INSERT` sobre `usuarios`**. Verificar los `GRANT` del carril de lectura/escritura de `V1`, no una policy externa.
 - **Rate limit de `POST /api/v1/account-requests`** (60/hora por IP, hoy vía `COUNT` en Postgres porque Vercel no sostiene memoria entre invocaciones): en Java, con un proceso *siempre-arriba* (no serverless), esto se puede simplificar a un limitador en memoria (Bucket4j o Resilience4j `RateLimiter`) — más rápido que la query a Postgres — pero solo si el despliegue deja de ser serverless. Si se mantiene detrás de un autoscaler con múltiples instancias, seguir centralizando el contador (Postgres o Redis) para que el límite sea real entre instancias.
-- **Squatting de correos**: rechazar una solicitud debe seguir disparando `deleteUser` en Supabase para liberar el email — es lógica de aplicación (`RejectAccountRequestUseCase`), se porta 1:1.
-- **Rollback si `admin.createUser` de Supabase funciona pero el INSERT de `AccountRequest` falla**: en Java esto se resuelve mejor que en Next.js — una `@Transactional` de Spring alrededor del caso de uso, con un `TransactionSynchronization.afterCompletion` que dispara `deleteUser` si el commit no llegó a pasar, es más robusto que el manejo manual actual.
+- **Squatting de correos**: rechazar una solicitud tiene que liberar el email, si no el correo queda tomado para siempre por una cuenta que nunca existió. Sigue siendo lógica de aplicación (`RejectAccountRequestUseCase`); con identidad propia el borrado ocurre en la misma transacción, sin llamada externa que pueda fallar a medias.
+- **Rollback del alta**: el problema original era que `admin.createUser` de Supabase podía funcionar y el INSERT de `AccountRequest` fallar después, dejando un usuario huérfano en un sistema externo. **Con identidad propia ese problema desaparece**: usuario y solicitud viven en el mismo Postgres, así que una sola `@Transactional` lo cubre y Postgres deshace todo solo (§9.1). Es el ejemplo más concreto de lo que se ganó al no depender de un proveedor externo.
 
 ---
 
@@ -771,7 +773,7 @@ Cada `private` de esos nombra un concepto que antes estaba implícito. **Ese es 
 **Nombres:**
 - Casos de uso: verbo + sustantivo + `UseCase` (`ApproveAccountRequestUseCase`).
 - Puertos: por **intención de negocio**, no por tecnología — la *"conversación con propósito"* de Cockburn (§5.1.1). `LoadUserPort`, no `JpaUserFinder`. El puerto no debe delatar quién lo implementa.
-- Adaptadores: sí nombran la tecnología (`UserPersistenceAdapter`, `GeminiEvidenceValidationAdapter`).
+- Adaptadores: sí nombran la tecnología (`UserPersistenceAdapter`, `SmtpEnviarEmailAdapter`, `PgVectorNativoAdapter`).
 - Booleanos: `isX` / `hasX` / `canX` (`canManageRoles()` en §5.3.2).
 - **Prohibidos**: `Util`, `Helper`, `Manager`, `Processor`, `Data`, `Info` sueltos. Son nombres que no dicen nada y se vuelven basureros.
 - Sin abreviaturas inventadas (`usrRepo`, `calcPts`). El nombre completo lo escribe el IDE.
@@ -785,12 +787,12 @@ Cada `private` de esos nombra un concepto que antes estaba implícito. **Ese es 
 | `domain/` | **No** | — |
 | `application/` (casos de uso) | **Sí** | Decisiones de negocio: *"solicitud X aprobada por admin Y"*, *"validación IA falló, intento 3/3 → pending_review"*. Es el rastro auditable de §5.3.6 |
 | `adapter/in/web` | Poco | Ya lo cubre Micrometer/OTel (§6); loguear cada request a mano es ruido duplicado |
-| `adapter/out/*` | **Sí** | Latencia y fallos de lo externo: Gemini, Supabase, Drive, Resend. Es donde se diagnostican los p99 de §3 |
+| `adapter/out/*` | **Sí** | Latencia y fallos de lo externo: Google GenAI, los proveedores OIDC (Google/Apple/Facebook), S3, SMTP. Es donde se diagnostican los p99 de §3 |
 
 **Reglas:**
 - **Niveles:** `ERROR` = requiere acción humana. `WARN` = degradación recuperada (reintento de Gemini). `INFO` = hito de negocio. `DEBUG` = diagnóstico. Nunca `INFO` dentro de un bucle.
 - **`traceId` en MDC** desde el filtro de autenticación (§5.3.5), **propagado a los `@Async`** de validación IA (§7). Sin esto, un flujo async + polling es imposible de correlacionar. Es la regla más importante de esta subsección.
-- **Nunca loguear**: el JWT o cualquier token, contraseñas, el `sub` de Supabase, emails completos, ni contenido de evidencia (audio, respuestas de onboarding V90). Son datos personales de aprendices. El punto de fuga clásico es el `GlobalExceptionHandler` volcando el request entero en un 500 — auditarlo explícitamente.
+- **Nunca loguear**: el token opaco de sesión, el `id_token` de un proveedor OIDC, hashes de contraseña, emails completos, ni contenido de evidencia (audio, respuestas de onboarding V90). Son datos personales de aprendices. El punto de fuga clásico es el `GlobalExceptionHandler` volcando el request entero en un 500 — auditarlo explícitamente.
 - **Logs estructurados (JSON)** en `prod`, texto plano en `local`.
 - `spring-modulith-observability` (ya en el `pom.xml`) genera **spans por invocación de módulo** automáticamente: se ve *"esta request pasó por habits → points → notifications"* sin instrumentar a mano. Es la observabilidad del §4.4 que el documento describía pero no explicaba cómo mirar.
 
@@ -818,14 +820,14 @@ Confirmado contra los releases reales a la fecha (agosto 2026):
 | Java | **25 (LTS)** | Virtual Threads sin *pinning* en secciones sincronizadas, Structured Concurrency (JEP 505, 5ª preview), Scoped Values finalizados (JEP 506) |
 | Spring Boot | **4.1** (GA jun-2026) | Sobre Spring Framework 7.0.8; grpc auto-config, `spring.datasource.connection-fetch=lazy`, OTel toggle nativo |
 | Spring AI | **2.0** (GA jun-2026) | Baseline Boot 4.x, tool-calling unificado entre providers, MCP con transporte movido al propio Spring AI (Streamable HTTP por defecto) |
-| Persistencia | Spring Data JPA + **Flyway** | Reemplaza `prisma migrate`; mantener el mismo Postgres (Supabase-hosted o migrar a RDS/Cloud SQL más adelante, decisión independiente) |
+| Persistencia | Spring Data JPA + **Flyway** | Reemplaza `prisma migrate`. Las migraciones no dependen del proveedor: hoy corren sobre Docker local y donde vive la base en produccion sigue sin decidirse (§11) |
 | Caché local | **Caffeine** | Para el hot path de <1 ms real (§3) |
 | Caché distribuida / rate limit | Redis | Solo para lo que debe ser compartido entre instancias |
-| Auth | Spring Security **OAuth2 Resource Server** validando JWT de **Supabase Auth** | No reescribir auth: Spring valida el JWT que Supabase ya emite. Reduce drásticamente el riesgo de la migración |
+| Auth | **Identidad propia**: sesión como token opaco en Redis + cookie `HttpOnly`, credenciales con `DelegatingPasswordEncoder`, y OIDC contra Google/Apple/Facebook resuelto por el backend | Decisión del dueño del proyecto (2026-08-26), tomada sobre la recomendación contraria. Sin proveedor externo de identidad. Ver [`docs/MODULO_AUTH.md`](docs/MODULO_AUTH.md) |
 | Vector store (RAG) | `pgvector` sobre el mismo Postgres, vía Spring AI `VectorStore` | Evita sumar una base de datos nueva |
-| IA generativa | Spring AI `ChatClient` sobre **Vertex AI Gemini** (o Google GenAI starter) | Mismo modelo (Gemini) que ya usan, ahora con retry/observabilidad de Spring AI |
+| IA generativa | Spring AI 2.0 con el starter de **Google GenAI**, declarado y **apagado** | `spring.ai.model.chat`, `embedding` y `vectorstore` estan en `none`, las autoconfiguraciones estan excluidas y `GOOGLE_GENAI_API_KEY` viene vacia. **Los 7 adaptadores de IA del repo son `NoOp`**: ningun modelo se llamo nunca desde este backend |
 | Mensajería interna | Spring Modulith Events (outbox JPA) | No hace falta Kafka/RabbitMQ para el volumen de este dominio; si aparece, se agrega sin tocar el dominio (está detrás de un puerto) |
-| Concurrencia | **Virtual Threads** (`spring.threads.virtual.enabled=true`) | Tomcat/Netty con un hilo virtual por request; ideal para I/O-bound (Postgres, Gemini, Resend, Drive) |
+| Concurrencia | **Virtual Threads** (`spring.threads.virtual.enabled=true`) | Tomcat/Netty con un hilo virtual por request; ideal para I/O-bound (Postgres, Redis, S3, SMTP) |
 | Observabilidad | Micrometer + OpenTelemetry (nativo en Boot 4.1) | Medir p50/p99 reales en vez de asumir |
 | Testing | JUnit 5 + Testcontainers (Postgres real) + `spring-modulith-test` (verifica que los módulos no se acoplen) + ArchUnit opcional | |
 | Mapeo objeto-objeto | **MapStruct 1.6.3** | **Solo** en `adapter/out/persistence` (JpaEntity ↔ dominio). A mano en la frontera web (§5.4.5). Riesgo abierto: 1.6.3 no fue testeado contra JDK 25 |
@@ -837,7 +839,19 @@ Confirmado contra los releases reales a la fecha (agosto 2026):
 
 ## 7. IA con Spring AI 2.0 (RAG, validación de evidencia, Renasia)
 
-El repo actual ya resolvió el patrón difícil (async + polling + reintentos acotados + fallback a revisión humana). En Spring AI 2.0 se traduce así:
+> **Estado real al 2026-08-31 — leer antes que el resto de la sección.** Nada de lo que sigue está
+> conectado todavía. Los 7 adaptadores de IA del repo (`evidence`, `onboarding` ×2, `rag` ×3,
+> `academy`) son **`NoOp`**: loguean y devuelven vacío. `spring.ai.model.chat`, `embedding` y
+> `vectorstore` están en `none` y las autoconfiguraciones de Google GenAI están excluidas en
+> `application.yaml`. **Este backend nunca llamó a un modelo.** Lo que sí está construido y
+> probado es el andamiaje alrededor: el contrato async, la cola, el conteo de reintentos y el
+> fallback a revisión manual — todo eso funciona hoy contra adaptadores que no piensan.
+>
+> Consecuencia práctica: **la primera vez que se enchufe un proveedor real es la primera vez que
+> se prueba de verdad.** Presupuestar esa integración como trabajo con riesgo, no como cambiar
+> una línea de configuración.
+
+El repo viejo ya resolvió el patrón difícil (async + polling + reintentos acotados + fallback a revisión humana). En Spring AI 2.0 se traduce así:
 
 - **`ChatClient`** encapsula la llamada a Gemini; se configura con `retry`, `timeout` (los 45 s que ya calibraron para audio) y `ToolExecutionEligibilityChecker` si en el futuro Renasia necesita tool-calling (MCP ya viene integrado en 2.0).
 - El endpoint de validación sigue el mismo contrato que hoy: `POST /validate` responde `202 {status:"processing"}` de inmediato (encola en un `@Async` sobre virtual thread), y `GET /validate?recordingId=X` consulta estado — esto **no cambia**, solo cambia la implementación interna.
@@ -869,7 +883,7 @@ Como cada módulo ya es un hexágono con puertos definidos, extraerlo el día qu
 
 Esto es el motivo técnico de fondo, no solo de estilo, para no separar en microservicios sin necesidad — y responde directo a por qué §5.3.3 puede confiar en una `@Transactional` simple para `ApproveAccountRequestUseCase`, mientras que la misma operación repartida en servicios necesitaría infraestructura adicional.
 
-**En el monolito, el rollback es gratis porque hay una sola base de datos y una sola transacción ACID.** `ApproveAccountRequestUseCase` crea el `User`, crea el perfil (`TraineeProfile`/`MentorProfile`/etc.) y marca el `AccountRequest` como `APPROVED` dentro de la **misma transacción de Postgres**. Si el paso 2 falla, Postgres deshace el paso 1 solo — es una propiedad del motor de base de datos (atomicidad), no algo que el código tenga que programar. Por eso en §5.3.3 el rollback ante fallo de Supabase se resuelve con un simple `TransactionSynchronization.afterCompletion`.
+**En el monolito, el rollback es gratis porque hay una sola base de datos y una sola transacción ACID.** `ApproveAccountRequestUseCase` crea el `User`, crea el perfil (`TraineeProfile`/`MentorProfile`/etc.) y marca el `AccountRequest` como `APPROVED` dentro de la **misma transacción de Postgres**. Si el paso 2 falla, Postgres deshace el paso 1 solo — es una propiedad del motor de base de datos (atomicidad), no algo que el código tenga que programar. Por eso, desde que la identidad es propia (§5.3.1), ese rollback no necesita ninguna compensación: usuario, perfil y solicitud viven en el mismo Postgres y los cubre la misma transacción.
 
 **En microservicios, esa garantía desaparece por diseño.** La razón de ser de un microservicio es tener *su propia base de datos*, que nadie más toca directamente — si `users-service` y `notifications-service` son servicios separados, no existe una transacción que abarque las dos bases a la vez. No es una limitación técnica que "todavía no se resolvió": es la consecuencia directa de la independencia que se buscó al separarlos. Intentar forzar una transacción distribuida clásica (2PC/XA) es posible en papel, pero en la práctica casi nadie lo hace — ni Kafka ni la mayoría de brokers modernos lo soportan, y bloquea recursos en todos los servicios a la vez mientras dura, matando la disponibilidad que se estaba buscando al separar servicios.
 
@@ -890,7 +904,7 @@ Dos formas de organizar la Saga: **coreografía** (cada servicio escucha eventos
 
 ## 10. Estrategia de migración (Strangler Fig, no big-bang)
 
-1. **Fase 0 — Base:** proyecto Spring Boot 4.1 nuevo, Flyway apuntando al mismo Postgres (schema ya existe, no hay migración de datos todavía), Spring Security validando JWT de Supabase, `users` como primer módulo (bajo riesgo, alto apalancamiento — todo lo demás depende de él).
+1. **Fase 0 — Base:** proyecto Spring Boot 4.1 nuevo, Flyway apuntando al mismo Postgres (schema ya existe, no hay migración de datos todavía), autenticación propia de `users` (§5.3.1), `users` como primer módulo (bajo riesgo, alto apalancamiento — todo lo demás depende de él).
 2. **Fase 1 — Gateway de transición:** poner un proxy inverso (o el propio Next.js) delante, ruteando por prefijo: `/api/v1/users/**` → Spring, el resto sigue en Next.js. El cliente RN no ve el cambio.
 3. **Fase 2 — Migrar módulo por módulo** en orden de menor a mayor acoplamiento con IA/async: `points` → `phasecontracts` → `habits` → `rocks` → `academy`/`community`/`calendar`/`support` → `onboarding`/`evidence`/`rag` al final (son los que más se benefician de Spring AI, pero también los de mayor superficie de riesgo).
 4. **Fase 3 — Retirar Next.js del rol de backend**, dejándolo (si aplica) solo como frontend admin web, o migrarlo también a un cliente puro sobre la API de Spring.
@@ -902,10 +916,10 @@ Dos formas de organizar la Saga: **coreografía** (cada servicio escucha eventos
 
 | Decisión | Opción A | Opción B | Recomendación |
 |---|---|---|---|
-| Auth | Reescribir en Spring Security propio | Validar JWT de Supabase (Resource Server) | **B** — no hay razón de negocio para tocar auth ahora |
-| Storage de audios | Migrar de Google Drive a S3/Supabase Storage | Mantener Drive vía puerto | **B** por ahora, aislado detrás de `AudioCatalogPort` para migrar después sin tocar dominio |
+| Auth | Identidad propia en Spring Security | Validar JWT de Supabase (Resource Server) | **A — resuelto 2026-08-26.** Esta tabla recomendaba **B**; el dueño del proyecto eligió **A** y esa es la decisión vigente. Se deja la recomendación original a la vista para que quede claro que fue una decisión informada contra el consejo, no un descuido |
+| Storage de binarios | S3 | Google Drive | **S3, ya hecho a medias (D-50).** Los 37 objetos de cursos y los 13 mp3 de audioterapias estan subidos a `s3-renaser90dias`, y las rutas guardadas en la BD apuntan ahi. **Falta el adaptador**: `AlmacenamientoPort` solo tiene `NoOpAlmacenamientoAdapter`, asi que la app todavia no sirve ni un archivo. Google Drive **nunca se integro** — `AudioCatalogPort` solo tiene `NoOpAudioCatalogAdapter`, y los audios de Espiritu siguen sin fuente real |
 | ORM | JPA/Hibernate | jOOQ / JDBC Client puro | JPA para CRUD de dominio; **JDBC Client** (nuevo en Spring 6.1+, ideal con virtual threads) para las queries de reporting/ranking que son lectura pura y sensibles a latencia |
-| Base de datos | Mantener Supabase Postgres | Migrar a instancia propia | Mantener — no es un problema de arquitectura, es infraestructura ya resuelta |
+| Base de datos | Instancia propia | Supabase Postgres | **Sin decidir.** Hoy corre en Docker local (`pgvector/pgvector:pg16`, puerto 5433) y no hay entorno desplegado. Los datos de origen se extrajeron de Supabase y las migraciones Flyway son independientes del proveedor, asi que la decision sigue abierta y no bloquea nada |
 | Empaquetado | JVM tradicional | GraalVM Native Image | JVM tradicional al inicio (mejor tooling, throughput mejor en cargas sostenidas); Native Image si más adelante hay requisito de cold-start (serverless/escala-a-cero) |
 
 ---
@@ -926,7 +940,7 @@ Estado real al **2026-08-22**. El plan detallado por módulo está en [`docs/MOD
 
 **Bloqueado**
 
-- [ ] **Confirmar que Supabase use claves JWT asimétricas (RS256) + JWKS**, no el secreto legacy HS256. Bloquea el Resource Server y el filtro de autenticación.
+- [x] ~~**Confirmar que Supabase use claves JWT asimétricas (RS256) + JWKS**~~ — **cerrado por irrelevancia (2026-08-26):** ya no dependemos de tokens de Supabase. Se verificó igual, por si alguna vez se revierte: el proyecto sí tiene claves asimétricas, algoritmo **ES256** (`docs/MODULO_AUTH.md`, bloqueante B-2).
 - [ ] **Auditar la RLS de `INSERT` en `public.users`** — si existe policy para `authenticated`, hay escalada de privilegios.
 - [ ] **Definir los permisos de `MENTOR_LEAD`** y los valores reales de `TraineePhase`.
 
