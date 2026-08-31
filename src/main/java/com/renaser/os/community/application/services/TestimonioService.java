@@ -81,6 +81,10 @@ public class TestimonioService implements CrearTestimonioUseCase, PromoverPublic
                 .min((a, b) -> Integer.compare(a.orden(), b.orden()));
         String fotoEventoRuta = portada.map(MediaPublicacion::ruta).orElse(null);
 
+        // El avatar se congela a proposito: un testimonio es una foto de un momento. Vale ahora
+        // que `usuarios.avatar_url` guarda una URL PERMANENTE; cuando guardaba una prefirmada,
+        // esta copia heredaba el vencimiento y quedaba rota igual (E-57 — la migracion V13
+        // limpia las filas que quedaron con una firma congelada aca).
         Testimonio testimonio = Testimonio.crear(publicacion.autorId(), publicacion.id(), autor.nombreCompleto(),
                 resumenAutor.role().name(), autor.avatarUrl(), fotoEventoRuta, publicacion.texto(),
                 command.estrellas(), clock.now());

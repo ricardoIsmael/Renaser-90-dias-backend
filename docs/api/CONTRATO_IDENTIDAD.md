@@ -59,6 +59,10 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
     "bio": "string|null", "department": "string|null"
   }
   ```
+  `avatarUrl` es una **URL permanente y sin firmar** (D-55): no vence, no cambia entre
+  respuestas y el cliente puede cachear la imagen. `null` = sin foto de perfil. Hasta el
+  2026-08-31 era una URL prefirmada que caducaba a los 7 días — ver `docs/BITACORA_ERRORES.md`
+  E-57.
 - **Código de éxito:** 200 (sin `@ResponseStatus`, valor de retorno directo).
 - **Quién puede llamarlo:** cualquier usuario activo, sobre sí mismo. `GetMyProfileUseCase.getMyProfile` solo llama a `RequireActiveUserGuard.of(actorId)` — no hay chequeo de rol.
 - **Errores:** 404 si `X-Actor-Id` no existe (`"Usuario no encontrado: <id>"`); 403 si está `SUSPENDED` (`"Cuenta suspendida"`); 400 si falta el header o el UUID es inválido (`"UserId no es un UUID valido: ..."`).
