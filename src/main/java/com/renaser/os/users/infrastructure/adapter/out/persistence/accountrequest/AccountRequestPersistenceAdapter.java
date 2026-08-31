@@ -6,6 +6,7 @@ import com.renaser.os.users.application.ports.out.accountrequest.SaveAccountRequ
 import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestStatus;
+import com.renaser.os.users.domain.model.accountrequest.OrigenSocial;
 import com.renaser.os.users.domain.model.user.Email;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -37,6 +38,12 @@ class AccountRequestPersistenceAdapter implements LoadAccountRequestPort, SaveAc
     public boolean existePorEmail(Email email) {
         // Email ya normaliza a minusculas en su constructor, que es como se guarda la columna.
         return repository.existsByEmail(email.value());
+    }
+
+    @Override
+    public Optional<AccountRequest> porOrigenSocial(OrigenSocial origenSocial) {
+        return repository.findByProveedorAndSujetoProveedor(origenSocial.proveedor().name(),
+                origenSocial.sujetoProveedor()).map(mapper::toDomain);
     }
 
     @Override

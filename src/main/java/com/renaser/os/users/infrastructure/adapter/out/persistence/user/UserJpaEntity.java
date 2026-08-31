@@ -43,7 +43,9 @@ public class UserJpaEntity {
 
     private String nombreCompleto;
 
-    private String avatarUrl;
+    /** `usuarios.avatar_ruta` — RUTA en el bucket privado, nunca una URL (P-03, E-57).
+     * Se llamaba `avatar_url` hasta la migracion V13. */
+    private String avatarRuta;
 
     private String bio;
 

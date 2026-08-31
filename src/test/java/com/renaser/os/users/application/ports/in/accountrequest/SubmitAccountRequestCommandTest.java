@@ -9,7 +9,7 @@ class SubmitAccountRequestCommandTest {
 
     @Test
     void construyeUnComandoConDatosValidosSinExplotar() {
-        var command = new SubmitAccountRequestUseCase.SubmitAccountRequestCommand(
+        var command = SubmitAccountRequestUseCase.SubmitAccountRequestCommand.porFormulario(
                 "valido@renaser.com", "Ana", "+51999999999", "Lima", "token-verificacion",
                 "una-contrasena-de-12", "127.0.0.1");
 
@@ -18,7 +18,7 @@ class SubmitAccountRequestCommandTest {
 
     @Test
     void aceptaContrasenaNullParaElAltaPorProveedorSocial() {
-        var command = new SubmitAccountRequestUseCase.SubmitAccountRequestCommand(
+        var command = SubmitAccountRequestUseCase.SubmitAccountRequestCommand.porFormulario(
                 "valido@renaser.com", "Ana", "+51999999999", "Lima", "token-verificacion",
                 null, "127.0.0.1");
 
@@ -27,7 +27,7 @@ class SubmitAccountRequestCommandTest {
 
     @Test
     void rechazaUnaContrasenaMasCortaQueElMinimo() {
-        assertThatThrownBy(() -> new SubmitAccountRequestUseCase.SubmitAccountRequestCommand(
+        assertThatThrownBy(() -> SubmitAccountRequestUseCase.SubmitAccountRequestCommand.porFormulario(
                 "valido@renaser.com", "Ana", "+51999999999", "Lima", "token-verificacion",
                 "corta", "127.0.0.1"))
                 .isInstanceOf(jakarta.validation.ConstraintViolationException.class);
@@ -35,7 +35,7 @@ class SubmitAccountRequestCommandTest {
 
     @Test
     void noFiltraLaContrasenaNiElTokenEnElToString() {
-        var command = new SubmitAccountRequestUseCase.SubmitAccountRequestCommand(
+        var command = SubmitAccountRequestUseCase.SubmitAccountRequestCommand.porFormulario(
                 "valido@renaser.com", "Ana", "+51999999999", "Lima", "token-secreto",
                 "una-contrasena-de-12", "127.0.0.1");
 

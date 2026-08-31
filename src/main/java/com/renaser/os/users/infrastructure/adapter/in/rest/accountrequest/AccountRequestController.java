@@ -106,7 +106,7 @@ public class AccountRequestController {
     @PostMapping
     public ResponseEntity<AccountRequestIdResponse> submit(@RequestBody @Valid SubmitAccountRequestRequest request,
                                                              HttpServletRequest httpRequest) {
-        AccountRequestId id = submitUseCase.submit(new SubmitAccountRequestCommand(
+        AccountRequestId id = submitUseCase.submit(SubmitAccountRequestCommand.porFormulario(
                 request.email(), request.fullName(), request.phone(),
                 request.city(), request.verificationToken(), request.contrasena(),
                 httpRequest.getRemoteAddr()));

@@ -39,11 +39,13 @@ import java.util.Objects;
 public final class AccountRequest {
 
     private final AccountRequestId id;
-    private final UserId supabaseUserId;
+    private final UserId usuarioId;
     private final Email email;
     private final String fullName;
     private final String phone;
     private final String city;
+    /** null = alta por formulario. No null = alta abierta por un proveedor social (ver {@link OrigenSocial}). */
+    private final OrigenSocial origenSocial;
     private AccountRequestStatus status;
     private String rejectionReason;
     private UserId reviewedBy;
@@ -53,25 +55,34 @@ public final class AccountRequest {
     private final Instant createdAt;
     private Instant updatedAt;
 
-    /** Alta publica. Sin campo role: ver javadoc de la clase. */
-    public static AccountRequest submit(UserId supabaseUserId, Email email, String fullName,
-                                         String phone, String city, String requestIp, Clock clock) {
+    /**
+     * Alta publica. Sin campo role: ver javadoc de la clase.
+     *
+     * <p>{@code origenSocial} es null en el alta por formulario y no null cuando la abrio un
+     * proveedor social. Guardarlo aca es lo que permite que {@link #approve} cree la
+     * {@code IdentidadExterna}: el {@code sub} se verifica antes de esta llamada y no vuelve a
+     * existir en ningun otro lado (A-7, docs/MODULO_AUTH.md §6.7).
+     */
+    public static AccountRequest submit(UserId usuarioId, Email email, String fullName,
+                                         String phone, String city, String requestIp,
+                                         OrigenSocial origenSocial, Clock clock) {
         Instant now = clock.now();
-        return new AccountRequest(AccountRequestId.newId(), Objects.requireNonNull(supabaseUserId,
-                "supabaseUserId es obligatorio"), Objects.requireNonNull(email, "email es obligatorio"),
+        return new AccountRequest(AccountRequestId.newId(), Objects.requireNonNull(usuarioId,
+                "usuarioId es obligatorio"), Objects.requireNonNull(email, "email es obligatorio"),
                 requireNotBlank(fullName, "El nombre no puede ser vacio"),
-                requireNotBlank(phone, "El telefono no puede ser vacio"), city,
+                requireNotBlank(phone, "El telefono no puede ser vacio"), city, origenSocial,
                 AccountRequestStatus.PENDING, null, null, null, null, requestIp, now, now);
     }
 
     /** Solo para el adaptador de persistencia: reconstruye una solicitud ya existente. */
-    public static AccountRequest rehydrate(AccountRequestId id, UserId supabaseUserId, Email email,
+    public static AccountRequest rehydrate(AccountRequestId id, UserId usuarioId, Email email,
                                             String fullName, String phone, String city,
-                                            AccountRequestStatus status, String rejectionReason,
-                                            UserId reviewedBy, Instant reviewedAt, UserId createdUserId,
-                                            String requestIp, Instant createdAt, Instant updatedAt) {
-        return new AccountRequest(id, supabaseUserId, email, fullName, phone, city, status, rejectionReason,
-                reviewedBy, reviewedAt, createdUserId, requestIp, createdAt, updatedAt);
+                                            OrigenSocial origenSocial, AccountRequestStatus status,
+                                            String rejectionReason, UserId reviewedBy, Instant reviewedAt,
+                                            UserId createdUserId, String requestIp, Instant createdAt,
+                                            Instant updatedAt) {
+        return new AccountRequest(id, usuarioId, email, fullName, phone, city, origenSocial, status,
+                rejectionReason, reviewedBy, reviewedAt, createdUserId, requestIp, createdAt, updatedAt);
     }
 
     public void approve(User actor, UserId createdUserId, Clock clock) {

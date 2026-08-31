@@ -4,8 +4,9 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-/** Sin campo role a proposito: CLAUDE.MD §5.3.3. Sin supabaseUserId desde 2026-08-27: el
- * backend genera el id internamente (D-49). {@code verificationToken} sale de
+/** Sin campo role a proposito: CLAUDE.MD §5.3.3. Tampoco lleva id de usuario: desde el
+ * 2026-08-27 lo genera el backend internamente (D-49); el campo que el cliente mandaba antes
+ * se llamaba supabaseUserId y ya no existe. {@code verificationToken} sale de
  * {@code POST /api/v1/auth/email-verification/confirm}.
  *
  * <p>{@code contrasena} (2026-08-27): la persona elige su clave al registrarse. El minimo de 12

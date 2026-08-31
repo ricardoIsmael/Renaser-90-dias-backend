@@ -11,6 +11,7 @@ import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionUseC
 import com.renaser.os.users.application.ports.in.autenticacion.SolicitarResetContrasenaUseCase;
 import com.renaser.os.users.application.ports.in.user.GetMyProfileUseCase;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
+import com.renaser.os.users.domain.model.identidadexterna.ProveedorIdentidad;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
 import com.renaser.os.users.infrastructure.adapter.in.web.security.SesionWebAdapter;
@@ -85,7 +86,43 @@ class LoginSocialControllerTest {
 
         mockMvc.perform(post("/api/v1/auth/social").contentType(MediaType.APPLICATION_JSON).content(CUERPO))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.accountRequestId").value(solicitudId.value().toString()));
+                .andExpect(jsonPath("$.accountRequestId").value(solicitudId.value().toString()))
+                .andExpect(jsonPath("$.estado").value("CREADA"));
+
+        verifyNoInteractions(sesionWeb);
+    }
+
+    /**
+     * A-7: "tu solicitud sigue en revision" NO es un error. Antes caia en el mismo 409 generico
+     * que todo lo que no fuera sesion, y la app no tenia forma de mostrarle a la persona que ya
+     * estaba registrada y solo faltaba que la aprobaran.
+     */
+    @Test
+    void solicitudPendienteDevuelve202EnRevisionYNoUnError() throws Exception {
+        AccountRequestId solicitudId = AccountRequestId.newId();
+        when(iniciarSesionConProveedorUseCase.iniciarSesion(any()))
+                .thenReturn(new ResultadoLoginSocial.SolicitudEnRevision(solicitudId));
+
+        mockMvc.perform(post("/api/v1/auth/social").contentType(MediaType.APPLICATION_JSON).content(CUERPO))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.accountRequestId").value(solicitudId.value().toString()))
+                .andExpect(jsonPath("$.estado").value("EN_REVISION"));
+
+        verifyNoInteractions(sesionWeb);
+    }
+
+    /**
+     * Un correo que ya tiene cuenta pero sin vinculo social: 409 y, sobre todo, <b>sin sesion</b>.
+     * Vincular por coincidencia de correo es como alguien se apodera de una cuenta ajena (§6.4).
+     */
+    @Test
+    void cuentaExistenteSinVinculoDevuelve409YNoEstableceSesion() throws Exception {
+        when(iniciarSesionConProveedorUseCase.iniciarSesion(any()))
+                .thenReturn(new ResultadoLoginSocial.CuentaExistenteSinVinculo(ProveedorIdentidad.GOOGLE));
+
+        mockMvc.perform(post("/api/v1/auth/social").contentType(MediaType.APPLICATION_JSON).content(CUERPO))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").exists());
 
         verifyNoInteractions(sesionWeb);
     }

@@ -82,7 +82,7 @@ public class UserController {
     @PostMapping("/invite")
     public ResponseEntity<UserIdResponse> invite(@ActorAutenticado UserId actor,
                                                   @RequestBody @Valid InviteUserRequest request) {
-        UserId invited = inviteUseCase.invite(new InviteUserCommand(request.supabaseUserId(), request.email(),
+        UserId invited = inviteUseCase.invite(new InviteUserCommand(request.usuarioId(), request.email(),
                 request.fullName(), request.role(), actor));
         return ResponseEntity.status(HttpStatus.CREATED).body(new UserIdResponse(invited.value()));
     }

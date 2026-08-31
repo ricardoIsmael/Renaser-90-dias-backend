@@ -54,16 +54,42 @@ public interface IniciarSesionConProveedorUseCase {
 
     /**
      * Sellada a proposito (mismo criterio que {@code DecisionPolitica}/{@code AccessDecision},
-     * CLAUDE.MD §5.4.7): el conjunto de resultados es cerrado, y el controller debe cubrir ambos
-     * casos — uno establece sesion, el otro no.
+     * CLAUDE.MD §5.4.7): el conjunto de resultados es cerrado, y el compilador obliga al
+     * controller a cubrirlos todos — uno establece sesion, los otros tres no.
+     *
+     * <p>Las tres variantes que no son sesion son <b>estados normales del flujo, no errores</b>,
+     * y por eso son valores de retorno y no excepciones: "tu solicitud sigue en revision" es una
+     * respuesta legitima que la app tiene que poder mostrar como tal. Antes las tres colapsaban
+     * en el mismo {@code IllegalStateException} generico (A-7).
      */
     sealed interface ResultadoLoginSocial permits ResultadoLoginSocial.SesionIniciada,
-            ResultadoLoginSocial.SolicitudCreada {
+            ResultadoLoginSocial.SolicitudCreada, ResultadoLoginSocial.SolicitudEnRevision,
+            ResultadoLoginSocial.CuentaExistenteSinVinculo {
 
+        /** La identidad ya estaba vinculada: se abre sesion. */
         record SesionIniciada(User usuario) implements ResultadoLoginSocial {
         }
 
+        /** Primera vez que se ve esta identidad: se abrio una solicitud, la aprueba un ADMIN. */
         record SolicitudCreada(AccountRequestId solicitudId) implements ResultadoLoginSocial {
+        }
+
+        /**
+         * Esta identidad ya abrio una solicitud y sigue PENDIENTE. Volver a tocar "Continuar con
+         * Google" mientras un admin no decida no crea otra solicitud ni es un error: la persona
+         * simplemente todavia no fue aprobada.
+         */
+        record SolicitudEnRevision(AccountRequestId solicitudId) implements ResultadoLoginSocial {
+        }
+
+        /**
+         * Existe un usuario con ese correo, pero esta identidad social no esta vinculada a el.
+         * <b>No se vincula automaticamente</b>: hacerlo por coincidencia de correo es exactamente
+         * el camino por el que alguien se apodera de una cuenta ajena (docs/MODULO_AUTH.md §6.4).
+         * La salida es que la persona pruebe que es la dueña por otro canal — entrar con su
+         * contrasena, o recuperarla por correo.
+         */
+        record CuentaExistenteSinVinculo(ProveedorIdentidad proveedor) implements ResultadoLoginSocial {
         }
     }
 }

@@ -4,6 +4,8 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestStatus;
+import com.renaser.os.users.domain.model.accountrequest.OrigenSocial;
+import com.renaser.os.users.domain.model.identidadexterna.ProveedorIdentidad;
 import com.renaser.os.users.domain.model.user.Email;
 import org.springframework.stereotype.Component;
 
@@ -13,11 +15,12 @@ class AccountRequestPersistenceMapper {
     AccountRequest toDomain(AccountRequestJpaEntity e) {
         return AccountRequest.rehydrate(
                 AccountRequestId.of(e.getId()),
-                UserId.of(e.getSupabaseUserId()),
+                UserId.of(e.getUsuarioId()),
                 new Email(e.getEmail()),
                 e.getNombreCompleto(),
                 e.getTelefono(),
                 e.getCiudad(),
+                toDomainOrigenSocial(e),
                 toDomainStatus(e.getEstado()),
                 e.getMotivoRechazo(),
                 e.getRevisadaPor() == null ? null : UserId.of(e.getRevisadaPor()),
@@ -31,11 +34,13 @@ class AccountRequestPersistenceMapper {
     AccountRequestJpaEntity toEntity(AccountRequest r) {
         return new AccountRequestJpaEntity(
                 r.id().value(),
-                r.supabaseUserId().value(),
+                r.usuarioId().value(),
                 r.email().value(),
                 r.fullName(),
                 r.phone(),
                 r.city(),
+                r.origenSocial() == null ? null : r.origenSocial().proveedor().name(),
+                r.origenSocial() == null ? null : r.origenSocial().sujetoProveedor(),
                 toJpaStatus(r.status()),
                 r.rejectionReason(),
                 r.reviewedBy() == null ? null : r.reviewedBy().value(),
@@ -44,6 +49,15 @@ class AccountRequestPersistenceMapper {
                 r.requestIp(),
                 r.createdAt(),
                 r.updatedAt());
+    }
+
+    /**
+     * Las dos columnas viajan juntas o ninguna (CHECK de la migracion V12), asi que alcanza
+     * con mirar una: si el proveedor es NULL, esta solicitud entro por el formulario.
+     */
+    private OrigenSocial toDomainOrigenSocial(AccountRequestJpaEntity e) {
+        return e.getProveedor() == null ? null
+                : new OrigenSocial(ProveedorIdentidad.valueOf(e.getProveedor()), e.getSujetoProveedor());
     }
 
     /** Version no-privada de {@link #toJpaStatus}, para que el adaptador traduzca filtros de busqueda. */

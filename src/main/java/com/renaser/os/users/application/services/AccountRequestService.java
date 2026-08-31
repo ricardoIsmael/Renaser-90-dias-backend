@@ -14,14 +14,16 @@ import com.renaser.os.users.application.ports.out.accountrequest.DeleteAccountRe
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SaveAccountRequestPort;
 import com.renaser.os.users.application.ports.out.autenticacion.SaveCredencialPort;
+import com.renaser.os.users.application.ports.out.autenticacion.SaveIdentidadExternaPort;
 import com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort;
 import com.renaser.os.users.application.ports.out.user.DeleteUserPort;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
-import com.renaser.os.users.application.ports.out.accountrequest.SupabaseAdminAuthPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
+import com.renaser.os.users.domain.model.accountrequest.OrigenSocial;
+import com.renaser.os.users.domain.model.identidadexterna.IdentidadExterna;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.api.UsuarioRegistradoEvent;
 import com.renaser.os.users.domain.model.user.Credencial;
@@ -31,8 +33,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.util.NoSuchElementException;
@@ -63,8 +63,8 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
     private final SaveUserPort saveUserPort;
     private final DeleteUserPort deleteUserPort;
     private final SaveCredencialPort saveCredencialPort;
+    private final SaveIdentidadExternaPort saveIdentidadExternaPort;
     private final PasswordEncoder passwordEncoder;
-    private final SupabaseAdminAuthPort supabaseAdminAuthPort;
     private final SaveParticipacionProgramaPort saveParticipacionProgramaPort;
     private final TokenVerificacionEmailPort tokenVerificacionEmailPort;
     private final RequireActiveUserGuard requireActiveUserGuard;
@@ -77,8 +77,8 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
                                   DeleteAccountRequestPort deleteAccountRequestPort,
                                   LoadUserPort loadUserPort, SaveUserPort saveUserPort,
                                   DeleteUserPort deleteUserPort, SaveCredencialPort saveCredencialPort,
+                                  SaveIdentidadExternaPort saveIdentidadExternaPort,
                                   PasswordEncoder passwordEncoder,
-                                  SupabaseAdminAuthPort supabaseAdminAuthPort,
                                   SaveParticipacionProgramaPort saveParticipacionProgramaPort,
                                   TokenVerificacionEmailPort tokenVerificacionEmailPort,
                                   RequireActiveUserGuard requireActiveUserGuard, RequireAdminGuard requireAdminGuard,
@@ -90,8 +90,8 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         this.saveUserPort = saveUserPort;
         this.deleteUserPort = deleteUserPort;
         this.saveCredencialPort = saveCredencialPort;
+        this.saveIdentidadExternaPort = saveIdentidadExternaPort;
         this.passwordEncoder = passwordEncoder;
-        this.supabaseAdminAuthPort = supabaseAdminAuthPort;
         this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
         this.tokenVerificacionEmailPort = tokenVerificacionEmailPort;
         this.requireActiveUserGuard = requireActiveUserGuard;
@@ -125,8 +125,19 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         guardarCredencialSiEligioContrasena(usuario, command.contrasena());
 
         AccountRequest request = AccountRequest.submit(usuario.id(), email,
-                command.fullName(), command.phone(), command.city(), command.requestIp(), clock);
+                command.fullName(), command.phone(), command.city(), command.requestIp(),
+                origenSocialDe(command), clock);
         return saveAccountRequestPort.save(request).id();
+    }
+
+    /**
+     * El alta por formulario no tiene origen social (null); la que abre el login social lleva la
+     * identidad ya verificada contra el proveedor. El comando garantiza que los dos campos vienen
+     * juntos o ninguno, asi que aca alcanza con mirar uno.
+     */
+    private static OrigenSocial origenSocialDe(SubmitAccountRequestCommand command) {
+        return command.proveedor() == null ? null
+                : new OrigenSocial(command.proveedor(), command.sujetoProveedor());
     }
 
     /**
@@ -162,11 +173,12 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         // (ver SubmitAccountRequestUseCase): aprobar solo le da acceso. Antes se creaba aca,
         // lo que obligaba a un segundo correo de activacion para que fijara su clave — dos
         // envios en el camino critico y nadie sabia por que no llegaba el segundo.
-        User usuario = loadUserPort.byId(request.supabaseUserId())
+        User usuario = loadUserPort.byId(request.usuarioId())
                 .orElseThrow(() -> new IllegalStateException(
-                        "La solicitud no tiene usuario asociado: " + request.supabaseUserId()));
+                        "La solicitud no tiene usuario asociado: " + request.usuarioId()));
         usuario.aprobar();
         saveUserPort.save(usuario);
+        vincularIdentidadSocialSiCorresponde(request);
 
         // Invariante de participantes_programa (baseline V1, comentario de la tabla): el
         // programa de 90 dias es obligatorio para TRAINEE y la fila se crea al aprobar la
@@ -179,6 +191,26 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         saveAccountRequestPort.save(request);
 
         events.publishEvent(new UsuarioRegistradoEvent(usuario.id(), clock.now()));
+    }
+
+    /**
+     * Cierra el circulo de A-7 (docs/MODULO_AUTH.md §6.7): si el alta la abrio un proveedor
+     * social, aca — y recien aca, porque la FK de {@code identidades_externas.usuario_id} exige
+     * que la fila de {@code usuarios} exista — se escribe el vinculo
+     * {@code (proveedor, sujeto) -> usuarioId}. En la MISMA transaccion que activa al usuario:
+     * si el vinculo falla, la aprobacion entera se deshace, y nunca queda un usuario aprobado
+     * que no pueda volver a entrar por donde entro.
+     *
+     * <p>{@code emailProveedor} se guarda solo como dato informativo para mostrar en pantalla
+     * "vinculada a juan@..." — nunca se usa para resolver identidad (§2.2).
+     */
+    private void vincularIdentidadSocialSiCorresponde(AccountRequest request) {
+        OrigenSocial origen = request.origenSocial();
+        if (origen == null) {
+            return;
+        }
+        saveIdentidadExternaPort.guardar(IdentidadExterna.vincular(origen.proveedor(),
+                origen.sujetoProveedor(), request.usuarioId(), request.email().value(), clock));
     }
 
     @Override
@@ -196,8 +228,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         // de alguien que no es usuario. Es el mismo squatting de correos que el repo viejo
         // resolvia con `deleteUser` en Supabase (PROPOSAL_ACCOUNT_REQUESTS.md punto 3), ahora
         // sobre nuestra propia tabla. Idempotente: si no existe, no falla (E-44).
-        deleteUserPort.deleteById(request.supabaseUserId());
-        deleteSupabaseUserAfterCommit(request.supabaseUserId());
+        deleteUserPort.deleteById(request.usuarioId());
     }
 
     private void rejectIfRateLimitExceeded(String requestIp) {
@@ -222,19 +253,12 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
     // falla, el rollback deshace usuario, credencial y solicitud junto, sin compensacion manual
     // (CLAUDE.MD §9.1: el rollback gratis es justamente lo que da el monolito).
 
-    /** §5.3.6: rechazar SIEMPRE libera el email, solo una vez que el rechazo quedo durable. */
-    private void deleteSupabaseUserAfterCommit(UserId supabaseUserId) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            supabaseAdminAuthPort.deleteUser(supabaseUserId);
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                supabaseAdminAuthPort.deleteUser(supabaseUserId);
-            }
-        });
-    }
+    // Se elimino deleteSupabaseUserAfterCommit (2026-08-31): registraba un afterCommit que
+    // llamaba a SupabaseAdminAuthPort.deleteUser para liberar el correo en Supabase Auth.
+    // Desde que la identidad es propia (docs/MODULO_AUTH.md, 2026-08-26) no hay ningun sistema
+    // externo que compensar: el borrado real es el deleteUserPort.deleteById de arriba, contra
+    // nuestro Postgres y dentro de la misma transaccion. El puerto quedaba servido por un
+    // adaptador NoOp que solo loguea, asi que retirarlo no cambia ningun comportamiento.
 
     /** Panel admin de solicitudes de cuenta (gap #9). Listado, sin un recurso previo por
      * id que proteger: el gate de admin va primero. */

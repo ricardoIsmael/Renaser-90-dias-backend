@@ -94,7 +94,7 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
 - **Request body** (`InviteUserRequest`, con `@Valid`):
   ```json
   {
-    "supabaseUserId": "uuid (string, @NotBlank)",
+    "usuarioId": "uuid (string, @NotBlank)",
     "email": "string (@NotBlank @Email)",
     "fullName": "string (@NotBlank)",
     "role": "ALCHEMIST|ADMIN|MENTOR_LEAD|MENTOR|TRAINEE (@NotNull)"
@@ -103,7 +103,9 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
 - **Response body** (`UserIdResponse`): `{ "userId": "uuid" }`
 - **Código de éxito:** 201 Created (`HttpStatus.CREATED` explícito).
 - **Quién puede llamarlo:** solo `actor.canManageRoles()` = ADMIN o ALCHEMIST (`User.invite` → `requireRoleManager`). El actor además debe estar activo (`RequireActiveUserGuard` corre primero).
-- **Errores:** 403 `"Solo ADMIN/ALCHEMIST cambian roles"` si el actor no es ADMIN/ALCHEMIST; 403 `"Cuenta suspendida"`; 404 actor inexistente; 400 si `supabaseUserId` no es un UUID válido o falta algún campo `@NotBlank`.
+- **Errores:** 403 `"Solo ADMIN/ALCHEMIST cambian roles"` si el actor no es ADMIN/ALCHEMIST; 403 `"Cuenta suspendida"`; 404 actor inexistente; 400 si `usuarioId` no es un UUID válido o falta algún campo `@NotBlank`.
+
+  > **Cambio ROMPEDOR 2026-08-31.** Este campo se llamaba `supabaseUserId`. Se renombró a `usuarioId` al sacar el último rastro de Supabase Auth del backend (`docs/MODULO_AUTH.md`): la identidad es propia desde el 2026-08-26 y ese UUID no viene de ningún proveedor externo. **Un cliente que siga mandando `supabaseUserId` recibe 400.** El único endpoint afectado es este; `POST /api/v1/account-requests` ya no llevaba el campo.
 - **Efecto colateral:** si `role == MENTOR`, crea automáticamente un `MentorProfile` vacío (nivel N0, estado GREEN).
 - **curl:**
   ```bash
@@ -111,7 +113,7 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
     -H "X-Actor-Id: <uuid-admin-o-alchemist>" \
     -H "Content-Type: application/json" \
     -d '{
-      "supabaseUserId": "22222222-2222-2222-2222-222222222222",
+      "usuarioId": "22222222-2222-2222-2222-222222222222",
       "email": "nuevo.mentor@renaser.com",
       "fullName": "Carlos Mentor",
       "role": "MENTOR"
@@ -146,29 +148,33 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
 - **Request body** (`SubmitAccountRequestRequest`, con `@Valid`):
   ```json
   {
-    "supabaseUserId": "uuid (string, @NotBlank)",
     "email": "string (@NotBlank @Email)",
     "fullName": "string (@NotBlank)",
     "phone": "string (@NotBlank)",
-    "city": "string|null"
+    "city": "string|null",
+    "verificationToken": "string (@NotBlank)",
+    "contrasena": "string (@NotBlank, 12..200)"
   }
   ```
-  **Trampa:** sin campo `role` a propósito (blindaje anti mass-assignment). `supabaseUserId` viaja como `String` pero **debe ser un UUID válido**: `AccountRequestService.submit` hace `UserId.of(command.supabaseUserId())`, que parsea con `UUID.fromString` y tira `IllegalArgumentException` (400) si no lo es.
+  **Trampa:** sin campo `role` a propósito (blindaje anti mass-assignment). **Tampoco lleva `supabaseUserId`**: el backend genera el id internamente desde el 2026-08-27 (D-49). `verificationToken` sale de `POST /api/v1/auth/email-verification/confirm`; sin él la solicitud no se acepta. `contrasena` es la clave que la persona elige al registrarse, mínimo 12 caracteres — el `toString()` del DTO la oculta para que ningún log la filtre.
+
+  > **Corregido 2026-08-31.** Este bloque pedía `supabaseUserId` (campo que ya no existe) y omitía `verificationToken` y `contrasena` (obligatorios desde el 2026-08-27). Un cliente que siguiera este contrato recibía **400** en los tres campos. La fuente es `SubmitAccountRequestRequest`.
 - **Response body** (`AccountRequestIdResponse`): `{ "accountRequestId": "uuid" }`
 - **Código de éxito:** **202 Accepted** (no 201, aunque crea el recurso — así está en el código).
 - **Quién puede llamarlo:** cualquiera, sin autenticar.
 - **Errores:** 429 `"Limite de solicitudes por hora excedido para IP <ip>"` — 60 solicitudes/hora por IP (`RATE_LIMIT_PER_HOUR = 60`, contado en Postgres vía `countSubmittedFromIpSince`); 400 por validación de campos.
-- **Detalle interno útil para depurar:** el servicio registra una compensación transaccional — si la fila de `AccountRequest` no llega a persistirse, se intenta borrar el usuario ya creado en Supabase Auth (`SupabaseAdminAuthPort.deleteUser`). Hoy ese puerto es un **adaptador NoOp** (`NoOpSupabaseAdminAuthAdapter`, sin credenciales de Supabase Admin API) — solo loguea un `WARN`, no borra nada de verdad.
+- **Detalle interno útil para depurar:** queda en el código una compensación transaccional heredada (`SupabaseAdminAuthPort.deleteUser`, servida por `NoOpSupabaseAdminAuthAdapter`, que solo loguea un `WARN`). **Ya no tiene función:** existía para borrar el usuario en Supabase Auth si la fila de `AccountRequest` no llegaba a persistirse, y desde que la identidad es propia (2026-08-26) usuario y solicitud viven en el mismo Postgres, así que la `@Transactional` los deshace juntos. Es residuo pendiente de retirar, no un mecanismo activo.
 - **curl:**
   ```bash
   curl -X POST http://localhost:8080/api/v1/account-requests \
     -H "Content-Type: application/json" \
     -d '{
-      "supabaseUserId": "33333333-3333-3333-3333-333333333333",
       "email": "aprendiz.nuevo@renaser.com",
       "fullName": "Sofia Aprendiz",
       "phone": "+51987654321",
-      "city": "Lima"
+      "city": "Lima",
+      "verificationToken": "<el que devuelve POST /api/v1/auth/email-verification/confirm>",
+      "contrasena": "unaClaveDe12OMas"
     }'
   ```
 
@@ -636,12 +642,14 @@ el `X-Actor-Id` del header **es** siempre `participanteId`.
    curl -X POST http://localhost:8080/api/v1/account-requests \
      -H "Content-Type: application/json" \
      -d '{
-       "supabaseUserId": "a0000000-0000-0000-0000-000000000001",
        "email": "flujo.a@renaser.com", "fullName": "Flujo A Test",
-       "phone": "+51999999999", "city": "Lima"
+       "phone": "+51999999999", "city": "Lima",
+       "verificationToken": "<el que devuelve POST /api/v1/auth/email-verification/confirm>",
+       "contrasena": "unaClaveDe12OMas"
      }'
    ```
    → 202, response `{ "accountRequestId": "<REQ_ID>" }`. Guardar `REQ_ID`.
+   El id del usuario **lo genera el backend**: no se manda ni se elige desde el cliente.
 
 2. **Aprobar** (header `X-Actor-Id` = un usuario ADMIN o ALCHEMIST **ya existente** en la
    tabla `usuarios`, cargado por otra vía — este flujo no crea admins):
@@ -649,11 +657,11 @@ el `X-Actor-Id` del header **es** siempre `participanteId`.
    curl -X POST http://localhost:8080/api/v1/account-requests/<REQ_ID>/approve \
      -H "X-Actor-Id: <ADMIN_ID>"
    ```
-   → 204. Esto crea el `User` con id **igual al `supabaseUserId` del paso 1**
-   (`a0000000-0000-0000-0000-000000000001`), rol `TRAINEE`, y su fila de
-   `ParticipacionPrograma` (día 0, sin activar).
+   → 204. Esto crea el `User` con el id que el backend generó en el paso 1 (queda
+   guardado en la solicitud), rol `TRAINEE`, y su fila de `ParticipacionPrograma`
+   (día 0, sin activar). Para el paso 3 hace falta ese id: se lee de la solicitud.
 
-3. **Primer login** (el propio aprendiz, mismo id que `supabaseUserId`):
+3. **Primer login** (el propio aprendiz, con el id que quedó en la solicitud):
    ```bash
    curl -X POST http://localhost:8080/api/v1/users/me \
      -H "X-Actor-Id: a0000000-0000-0000-0000-000000000001"

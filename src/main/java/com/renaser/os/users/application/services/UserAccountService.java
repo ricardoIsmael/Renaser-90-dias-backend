@@ -87,7 +87,7 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
     @Transactional
     public UserId invite(InviteUserCommand command) {
         User actor = requireActiveUserGuard.of(command.actorId());
-        User invited = User.invite(UserId.of(command.supabaseUserId()), new Email(command.email()),
+        User invited = User.invite(UserId.of(command.usuarioId()), new Email(command.email()),
                 command.fullName(), command.role(), actor);
         User saved = saveUserPort.save(invited);
         ensureMentorProfileIfNeeded(saved);

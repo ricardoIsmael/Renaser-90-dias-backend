@@ -26,7 +26,14 @@ public final class User {
     private UserRole role;
     private UserStatus status;
     private String fullName;
-    private String avatarUrl;
+    /**
+     * RUTA dentro del bucket privado ({@code avatares/{id}}), JAMAS una URL — misma regla
+     * P-03 que el resto del esquema ({@code ruta_storage}, {@code ruta_firma},
+     * {@code adjunto_ruta}...). La URL de lectura se firma AL LEER, en cada respuesta, y
+     * no se persiste nunca: una URL firmada guardada vence y no vuelve a firmarse jamas
+     * (E-57). {@link #changeAvatar} rechaza cualquier otro valor.
+     */
+    private String avatarRuta;
     /** Solo tiene sentido si role == ALCHEMIST. Sin tabla propia: decisión 2026-08-24, ver D-25. */
     private String bio;
     /** Solo tiene sentido si role == ADMIN. Sin tabla propia: decisión 2026-08-24, ver D-25. */
@@ -91,15 +98,15 @@ public final class User {
      * todos los llamadores existentes (produccion y ~15 archivos de test) a agregar un
      * campo que la mayoria no necesita rehidratar. */
     public static User rehydrate(UserId id, Email email, UserRole role, UserStatus status,
-                                 String fullName, String avatarUrl, String bio, String department,
+                                 String fullName, String avatarRuta, String bio, String department,
                                  Instant lastActiveAt) {
-        return rehydrate(id, email, role, status, fullName, avatarUrl, bio, department, lastActiveAt, null);
+        return rehydrate(id, email, role, status, fullName, avatarRuta, bio, department, lastActiveAt, null);
     }
 
     public static User rehydrate(UserId id, Email email, UserRole role, UserStatus status,
-                                 String fullName, String avatarUrl, String bio, String department,
+                                 String fullName, String avatarRuta, String bio, String department,
                                  Instant lastActiveAt, Instant bajaSolicitadaEn) {
-        return new User(id, email, role, status, fullName, avatarUrl, bio, department, lastActiveAt,
+        return new User(id, email, role, status, fullName, avatarRuta, bio, department, lastActiveAt,
                 bajaSolicitadaEn);
     }
 
@@ -120,8 +127,38 @@ public final class User {
         this.fullName = requireName(newFullName);
     }
 
-    public void changeAvatar(String newAvatarUrl) {
-        this.avatarUrl = newAvatarUrl;
+    /**
+     * Guarda la RUTA del avatar, no su URL. Rechazar cualquier otra cosa es lo que impide
+     * que vuelva a colarse una URL firmada en la columna (E-57): sin este chequeo, un
+     * {@code PATCH} con {@code "https://..."} — o con la ruta de OTRO usuario — quedaria
+     * persistido y despues se firmaria como lectura valida del bucket privado.
+     *
+     * @param nuevaRutaAvatar {@link #rutaAvatarDe} de este mismo usuario; {@code null} o
+     *                        vacio quita el avatar.
+     */
+    public void changeAvatar(String nuevaRutaAvatar) {
+        this.avatarRuta = requireRutaAvatarPropia(nuevaRutaAvatar);
+    }
+
+    /**
+     * Ruta determinista del avatar dentro del bucket privado. Es determinista a proposito:
+     * permite recomputarla desde el id (asi la migracion V13 pudo reparar las filas que
+     * tenian una URL firmada congelada) y deja una sola ruta posible por usuario.
+     */
+    public static String rutaAvatarDe(UserId id) {
+        return "avatares/" + requireId(id);
+    }
+
+    private String requireRutaAvatarPropia(String ruta) {
+        if (ruta == null || ruta.isBlank()) {
+            return null;
+        }
+        String propia = rutaAvatarDe(id);
+        if (!propia.equals(ruta.trim())) {
+            throw new IllegalArgumentException(
+                    "El avatar se guarda como la ruta de storage propia del usuario, nunca una URL ni una ruta ajena");
+        }
+        return propia;
     }
 
     public void updateBio(String newBio) {

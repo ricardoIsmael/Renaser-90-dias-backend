@@ -5,13 +5,16 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand;
 import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionConProveedorUseCase;
+import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.autenticacion.CanjeCodigoCommand;
 import com.renaser.os.users.application.ports.out.autenticacion.IdentidadVerificada;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadIdentidadExternaPort;
 import com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort;
 import com.renaser.os.users.application.ports.out.autenticacion.VerificadorIdentidadProveedor;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
+import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
+import com.renaser.os.users.domain.model.accountrequest.OrigenSocial;
 import com.renaser.os.users.domain.model.identidadexterna.IdentidadExterna;
 import com.renaser.os.users.domain.model.identidadexterna.ProveedorIdentidad;
 import com.renaser.os.users.domain.model.user.Email;
@@ -33,34 +36,52 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
 
     private final RegistroVerificadoresIdentidad verificadores;
     private final LoadIdentidadExternaPort loadIdentidadExternaPort;
+    private final LoadAccountRequestPort loadAccountRequestPort;
     private final LoadUserPort loadUserPort;
     private final SubmitAccountRequestUseCase submitAccountRequestUseCase;
     private final TokenVerificacionEmailPort tokenVerificacionEmailPort;
 
     public AutenticacionSocialService(List<VerificadorIdentidadProveedor> verificadores,
-                                       LoadIdentidadExternaPort loadIdentidadExternaPort, LoadUserPort loadUserPort,
+                                       LoadIdentidadExternaPort loadIdentidadExternaPort,
+                                       LoadAccountRequestPort loadAccountRequestPort, LoadUserPort loadUserPort,
                                        SubmitAccountRequestUseCase submitAccountRequestUseCase,
                                        TokenVerificacionEmailPort tokenVerificacionEmailPort) {
         this.verificadores = new RegistroVerificadoresIdentidad(verificadores);
         this.loadIdentidadExternaPort = loadIdentidadExternaPort;
+        this.loadAccountRequestPort = loadAccountRequestPort;
         this.loadUserPort = loadUserPort;
         this.submitAccountRequestUseCase = submitAccountRequestUseCase;
         this.tokenVerificacionEmailPort = tokenVerificacionEmailPort;
     }
 
+    /**
+     * Cuatro caminos, no dos (2026-08-31, cierre de A-7): antes solo se distinguia "ya vinculado"
+     * de "todo lo demas", y "todo lo demas" terminaba siempre en el mismo 409 generico. El orden
+     * de los chequeos es la parte importante: la identidad se resuelve SIEMPRE por
+     * {@code (proveedor, sujeto)} — vinculo primero, solicitud previa despues —, y el correo se
+     * mira al final y solo para explicar por que no se puede seguir, nunca para autenticar.
+     */
     @Override
     public ResultadoLoginSocial iniciarSesion(IniciarSesionConProveedorCommand command) {
         VerificadorIdentidadProveedor verificador = verificadores.para(command.proveedor());
         IdentidadVerificada identidad = verificador.verificar(
                 new CanjeCodigoCommand(command.code(), command.codeVerifier(), command.redirectUri()));
         requireEmailVerificado(identidad, command.proveedor());
+        OrigenSocial origen = new OrigenSocial(command.proveedor(), identidad.sujeto());
 
-        Optional<IdentidadExterna> vinculo = loadIdentidadExternaPort.porProveedorYSujeto(command.proveedor(),
-                identidad.sujeto());
+        Optional<IdentidadExterna> vinculo = loadIdentidadExternaPort.porProveedorYSujeto(origen.proveedor(),
+                origen.sujetoProveedor());
         if (vinculo.isPresent()) {
             return new ResultadoLoginSocial.SesionIniciada(cargarUsuarioVinculado(vinculo.get().usuarioId()));
         }
-        return crearSolicitudDeAlta(command, identidad);
+        Optional<AccountRequest> solicitudPrevia = loadAccountRequestPort.porOrigenSocial(origen);
+        if (solicitudPrevia.filter(solicitud -> solicitud.status().isPending()).isPresent()) {
+            return new ResultadoLoginSocial.SolicitudEnRevision(solicitudPrevia.get().id());
+        }
+        if (loadUserPort.byEmail(new Email(identidad.email())).isPresent()) {
+            return new ResultadoLoginSocial.CuentaExistenteSinVinculo(command.proveedor());
+        }
+        return crearSolicitudDeAlta(command, identidad, origen);
     }
 
     private User cargarUsuarioVinculado(UserId usuarioId) {
@@ -79,8 +100,7 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
      * token directo (mismo puerto, mismo mecanismo, se salta el paso del codigo).
      */
     private ResultadoLoginSocial crearSolicitudDeAlta(IniciarSesionConProveedorCommand command,
-                                                        IdentidadVerificada identidad) {
-        rejectIfEmailYaRegistrado(identidad.email());
+                                                        IdentidadVerificada identidad, OrigenSocial origen) {
         String phone = requirePhoneParaAlta(command.phone());
         String fullName = nombreOFallback(identidad);
         String verificationToken = tokenVerificacionEmailPort.generar(identidad.email(),
@@ -88,23 +108,14 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
         // Sin contrasena (null): esta cuenta entra por el proveedor, no por clave propia. Es el
         // caso para el que `usuarios.hash_contrasena` ya era nullable. Si mas adelante quiere
         // una, la fija por "olvide mi contrasena" como cualquiera.
-        AccountRequestId solicitudId = submitAccountRequestUseCase.submit(new SubmitAccountRequestCommand(
-                identidad.email(), fullName, phone, command.city(), verificationToken, null,
-                command.requestIp()));
+        // El (proveedor, sujeto) viaja DENTRO del comando de aplicacion, servidor a servidor: no
+        // pasa por HTTP ni por el cliente en ningun momento. Es lo que permite que approve()
+        // escriba la IdentidadExterna sin volver a pedirle nada a nadie (A-7).
+        AccountRequestId solicitudId = submitAccountRequestUseCase.submit(
+                SubmitAccountRequestCommand.porProveedorSocial(identidad.email(), fullName, phone,
+                        command.city(), verificationToken, command.requestIp(),
+                        origen.proveedor(), origen.sujetoProveedor()));
         return new ResultadoLoginSocial.SolicitudCreada(solicitudId);
-    }
-
-    /**
-     * §6.4: un email que coincide con un usuario ya existente NO vincula automaticamente — eso
-     * requeriria que el dueño de la cuenta lo confirme estando ya autenticado, una funcionalidad
-     * que todavia no existe (ver docs/MODULO_AUTH.md §10). Mientras tanto, se rechaza en vez de
-     * crear una AccountRequest duplicada para un email que ya tiene cuenta.
-     */
-    private void rejectIfEmailYaRegistrado(String email) {
-        if (loadUserPort.byEmail(new Email(email)).isPresent()) {
-            throw new IllegalStateException("Ya existe una cuenta con este email. Inicia sesion con tu metodo "
-                    + "actual; vincular una cuenta social a un usuario existente todavia no esta disponible.");
-        }
     }
 
     private static String requirePhoneParaAlta(String phone) {
