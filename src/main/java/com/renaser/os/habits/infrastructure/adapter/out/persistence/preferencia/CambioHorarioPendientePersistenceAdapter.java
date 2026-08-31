@@ -7,6 +7,8 @@ import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 @Component
@@ -26,6 +28,17 @@ class CambioHorarioPendientePersistenceAdapter
     public Optional<CambioHorarioPendiente> porParticipanteYHabito(UserId participanteId, HabitoId habitoId) {
         return repository.findByParticipanteIdAndHabitoId(participanteId.value(), habitoId.value())
                 .map(mapper::toDomain);
+    }
+
+    @Override
+    public List<CambioHorarioPendiente> deParticipante(UserId participanteId) {
+        return repository.findByParticipanteId(participanteId.value()).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public List<CambioHorarioPendiente> queYaRigenEn(LocalDate fecha) {
+        return repository.findByFechaEfectivaLessThanEqualOrderByParticipanteIdAscHabitoIdAsc(fecha).stream()
+                .map(mapper::toDomain).toList();
     }
 
     @Override

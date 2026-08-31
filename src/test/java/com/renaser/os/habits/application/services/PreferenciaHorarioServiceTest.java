@@ -17,6 +17,7 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
+import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.shared.domain.FixedClock;
@@ -25,6 +26,7 @@ import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -183,6 +185,39 @@ class PreferenciaHorarioServiceTest {
         assertThat(resultado.fechaEfectivaDiferido()).isEqualTo(LocalDate.of(2026, 8, 25));
         verify(saveCambioPendientePort).save(any());
         verify(savePreferenciaPort, never()).save(any());
+        verify(historialPort, never()).registrar(any(), any(), any(), any(), any(), any());
+    }
+
+    /**
+     * E-54: sin fila en `preferencias_horario` el INSERT del pendiente viola la FK compuesta.
+     * La fila padre se crea con lo VIGENTE HOY (el default del catalogo), no con lo pedido — el
+     * dia en curso no se toca; las horas pedidas las escribe la promocion nocturna.
+     */
+    @Test
+    void elPrimerCambioDiferidoDeUnHabitoNuncaEditadoCreaLaFilaPadreConLoVigenteHoy() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        RegistroHabito registroDeHoy = RegistroHabito.generar(actor, habito.id(), LocalDate.of(2026, 8, 24), 3,
+                TipoDia.DISCIPLINA, false, CLOCK.now());
+        when(loadRegistroPort.porParticipanteHabitoYFecha(actor, habito.id(), LocalDate.of(2026, 8, 24)))
+                .thenReturn(Optional.of(registroDeHoy));
+        when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
+        // catalogo: dispara 08:00, y son las 09:00 -> la ventana de hoy ya arranco
+        when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of(HorarioHabito.crear(habito.id(), 1, null,
+                TipoDia.TODOS, LocalTime.of(8, 0), LocalTime.of(10, 0), CLOCK.now())));
+
+        ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
+                LocalTime.of(7, 0), LocalTime.of(9, 0), true, null));
+
+        assertThat(resultado.diferido()).isTrue();
+        ArgumentCaptor<PreferenciaHorario> padre = ArgumentCaptor.forClass(PreferenciaHorario.class);
+        verify(savePreferenciaPort).save(padre.capture());
+        assertThat(padre.getValue().horaDisparo()).isEqualTo(LocalTime.of(8, 0));
+        assertThat(padre.getValue().horaLimite()).isEqualTo(LocalTime.of(10, 0));
+        verify(saveCambioPendientePort).save(any());
         verify(historialPort, never()).registrar(any(), any(), any(), any(), any(), any());
     }
 }

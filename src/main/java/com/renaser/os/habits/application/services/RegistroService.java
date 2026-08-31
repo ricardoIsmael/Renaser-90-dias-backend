@@ -35,7 +35,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -168,10 +167,9 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         return vencidos.size();
     }
 
-    /** DOMINGO por dia de calendario; DISCIPLINA en cualquier otro caso. INTOXICACION (ciclos fijos del
-     * repo viejo) NO esta implementado en esta version — ver docs/MODULO_HABITS.md "que quedo simplificado". */
+    /** La regla vive en {@link TipoDia#delDia(LocalDate)} — la comparte la lectura de horarios vigentes. */
     private TipoDia resolverTipoDia(LocalDate fecha) {
-        return fecha.getDayOfWeek() == DayOfWeek.SUNDAY ? TipoDia.DOMINGO : TipoDia.DISCIPLINA;
+        return TipoDia.delDia(fecha);
     }
 
     /** preferencia -&gt; horario del catalogo vigente para el dia de programa del registro. */

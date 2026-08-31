@@ -1,11 +1,13 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia;
 
+import com.renaser.os.habits.application.ports.in.preferencia.ConsultarPreferenciasHorarioUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase.EditarPreferenciaHorarioCommand;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,7 +18,8 @@ import java.util.UUID;
 
 /**
  * Hueco #12 — horario personal de un habito. Ruta literal del contrato viejo (D-36):
- * {@code PATCH /api/v1/habit-preferences/{habitId}}. Actor resuelto desde la sesion, con
+ * {@code PATCH /api/v1/habit-preferences/{habitId}}, mas el {@code GET /api/v1/habit-preferences}
+ * que faltaba para poder leer la configuracion vigente (E-55). Actor resuelto desde la sesion, con
  * respaldo por el header temporal {@code X-Actor-Id} (D-29).
  */
 @RestController
@@ -24,9 +27,17 @@ import java.util.UUID;
 public class HabitPreferenceController {
 
     private final EditarPreferenciaHorarioUseCase editarUseCase;
+    private final ConsultarPreferenciasHorarioUseCase consultarUseCase;
 
-    public HabitPreferenceController(EditarPreferenciaHorarioUseCase editarUseCase) {
+    public HabitPreferenceController(EditarPreferenciaHorarioUseCase editarUseCase,
+                                      ConsultarPreferenciasHorarioUseCase consultarUseCase) {
         this.editarUseCase = editarUseCase;
+        this.consultarUseCase = consultarUseCase;
+    }
+
+    @GetMapping
+    public HabitPreferencesResponse consultar(@ActorAutenticado UserId actor) {
+        return HabitPreferencesResponse.from(consultarUseCase.consultar(actor));
     }
 
     @PatchMapping("/{habitId}")
