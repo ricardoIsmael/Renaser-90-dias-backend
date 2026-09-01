@@ -57,7 +57,7 @@ class ConfirmacionServiceTest {
 
     private ConfirmacionService service;
     private final UserId actorId = UserId.of(UUID.randomUUID());
-    private final EventoId eventoId = EventoId.newId();
+    private final EventoId eventoId = EventoId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
@@ -78,9 +78,9 @@ class ConfirmacionServiceTest {
     }
 
     private Evento eventoTodos(UserId creador) {
-        return Evento.crear("Sesion", null, INICIA_EN, 60, ZoneId.of("America/Lima"), TipoUbicacion.MEET,
-                "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO, false,
-                false, false, null, Set.of(), List.of(), creador, CLOCK);
+        return Evento.crear(eventoId, "Sesion", null, INICIA_EN, 60, ZoneId.of("America/Lima"),
+                TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null,
+                TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(), creador, CLOCK);
     }
 
     @Test
@@ -150,14 +150,15 @@ class ConfirmacionServiceTest {
     }
 
     private Evento eventoSoloParaAdmins() {
-        return Evento.crear("Sesion", null, INICIA_EN, 60, ZoneId.of("America/Lima"), TipoUbicacion.MEET,
-                "https://meet.google.com/abc", TipoAudiencia.ROLES, null, null, null, TipoEvento.ESPONTANEO, false,
-                false, false, null, Set.of(RolUsuario.ADMIN), List.of(), actorId, CLOCK);
+        return Evento.crear(eventoId, "Sesion", null, INICIA_EN, 60, ZoneId.of("America/Lima"),
+                TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.ROLES, null, null, null,
+                TipoEvento.ESPONTANEO, false, false, false, null, Set.of(RolUsuario.ADMIN), List.of(), actorId,
+                CLOCK);
     }
 
     private Evento eventoMentoriaAlquimista() {
-        return Evento.crear("Mentoria", null, INICIA_EN, 60, ZoneId.of("America/Lima"), TipoUbicacion.MEET,
-                "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null,
+        return Evento.crear(eventoId, "Mentoria", null, INICIA_EN, 60, ZoneId.of("America/Lima"),
+                TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null,
                 TipoEvento.MENTORIA_ALQUIMISTA, false, false, false, null, Set.of(), List.of(), actorId, CLOCK);
     }
 }

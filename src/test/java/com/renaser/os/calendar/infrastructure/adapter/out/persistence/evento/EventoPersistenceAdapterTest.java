@@ -178,7 +178,7 @@ class EventoPersistenceAdapterTest {
 
     @Test
     void byIdDevuelveVacioParaUnEventoQueNoExiste() {
-        assertThat(adapter.byId(EventoId.newId())).isEmpty();
+        assertThat(adapter.byId(EventoId.of(UUID.randomUUID()))).isEmpty();
     }
 
     // ─── Fixtures ───────────────────────────────────────────────────────────────
@@ -198,16 +198,16 @@ class EventoPersistenceAdapterTest {
     }
 
     private Evento eventoSuelto(UserId creador, Instant iniciaEn) {
-        return Evento.crear("Sesion", null, iniciaEn, 60, ZONA, TipoUbicacion.MEET, "https://meet.google.com/abc",
-                TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(),
-                List.of(), creador, CLOCK);
+        return Evento.crear(EventoId.of(UUID.randomUUID()), "Sesion", null, iniciaEn, 60, ZONA,
+                TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null,
+                TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(), creador, CLOCK);
     }
 
     private Evento eventoCompleto(UserId creador, Recurrencia recurrencia, Set<RolUsuario> roles,
                                    List<ReglaRecordatorio> reglas) {
-        return Evento.crear("Sesion", "Descripcion", INICIA_EN, 60, ZONA, TipoUbicacion.MEET,
-                "https://meet.google.com/abc", TipoAudiencia.ROLES, null, null, null, TipoEvento.ESPONTANEO, false,
-                true, true, recurrencia, roles, reglas, creador, CLOCK);
+        return Evento.crear(EventoId.of(UUID.randomUUID()), "Sesion", "Descripcion", INICIA_EN, 60, ZONA,
+                TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.ROLES, null, null, null,
+                TipoEvento.ESPONTANEO, false, true, true, recurrencia, roles, reglas, creador, CLOCK);
     }
 
     private long contarHijas(String tabla, EventoId eventoId) {

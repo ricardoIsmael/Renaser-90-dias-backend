@@ -62,15 +62,23 @@ public final class Evento {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    public static Evento crear(String titulo, String descripcion, Instant iniciaEn, Integer duracionMinutos,
-                                ZoneId timezone, TipoUbicacion tipoUbicacion, String valorUbicacion,
-                                TipoAudiencia tipoAudiencia, Integer nivelMinimoId, String cursoId,
-                                UUID celulaDestinoId, TipoEvento tipoEvento, boolean notificarAlCrear,
-                                boolean recordarPorEmail, boolean recordatoriosPersonalizados,
-                                Recurrencia recurrencia, Set<RolUsuario> rolesDestino,
-                                List<ReglaRecordatorio> reglasRecordatorio, UserId creadoPor, Clock clock) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code EventoService.crear}). Asi
+     * {@code crear} es referencialmente transparente y un test puede fijar el id que espera,
+     * en vez de tener que caer a {@link #rehydrate} para lograrlo.
+     */
+    public static Evento crear(EventoId id, String titulo, String descripcion, Instant iniciaEn,
+                                Integer duracionMinutos, ZoneId timezone, TipoUbicacion tipoUbicacion,
+                                String valorUbicacion, TipoAudiencia tipoAudiencia, Integer nivelMinimoId,
+                                String cursoId, UUID celulaDestinoId, TipoEvento tipoEvento,
+                                boolean notificarAlCrear, boolean recordarPorEmail,
+                                boolean recordatoriosPersonalizados, Recurrencia recurrencia,
+                                Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
+                                UserId creadoPor, Clock clock) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Instant ahora = clock.now();
-        Evento evento = new Evento(EventoId.newId(), null, null, null, null, null, null, null, null, null,
+        Evento evento = new Evento(id, null, null, null, null, null, null, null, null, null,
                 null, null, null, EstadoEvento.PUBLICADO, requireNonNullEvento(tipoEvento), false, false,
                 false, null, Set.<RolUsuario>of(), List.<ReglaRecordatorio>of(), creadoPor, ahora, ahora);
         evento.aplicarCambios(titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion, valorUbicacion,

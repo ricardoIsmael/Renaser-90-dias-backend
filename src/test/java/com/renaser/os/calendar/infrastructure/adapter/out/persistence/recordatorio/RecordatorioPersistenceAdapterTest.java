@@ -138,7 +138,7 @@ class RecordatorioPersistenceAdapterTest {
     }
 
     private EventoId crearEvento() {
-        EventoId id = EventoId.newId();
+        EventoId id = EventoId.of(UUID.randomUUID());
         entityManager.createNativeQuery("""
                         INSERT INTO renaser.eventos (id, titulo, inicia_en, duracion_minutos, timezone,
                                                      tipo_ubicacion, tipo_audiencia, tipo_evento, estado)

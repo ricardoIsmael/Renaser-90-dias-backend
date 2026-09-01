@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -38,7 +39,7 @@ class ExcepcionPersistenceAdapterTest {
     void upsertGuardaLaExcepcionYPorEventoLaDevuelve() {
         EventoId eventoId = crearEvento();
 
-        Excepcion guardada = adapter.upsert(Excepcion.cancelar(eventoId, INICIA_EN));
+        Excepcion guardada = adapter.upsert(Excepcion.cancelar(UUID.randomUUID(), eventoId, INICIA_EN));
 
         assertThat(guardada.cancelada()).isTrue();
         assertThat(adapter.porEvento(eventoId)).singleElement()
@@ -48,7 +49,7 @@ class ExcepcionPersistenceAdapterTest {
     @Test
     void upsertSobreLaMismaOcurrenciaReemplazaLaFilaEnVezDeDuplicarla() {
         EventoId eventoId = crearEvento();
-        Excepcion cancelada = adapter.upsert(Excepcion.cancelar(eventoId, INICIA_EN));
+        Excepcion cancelada = adapter.upsert(Excepcion.cancelar(UUID.randomUUID(), eventoId, INICIA_EN));
 
         Excepcion reprogramada = adapter.upsert(new Excepcion(cancelada.id(), eventoId, INICIA_EN, false,
                 INICIA_EN.plusSeconds(3600), 45, "Titulo nuevo"));
@@ -68,9 +69,9 @@ class ExcepcionPersistenceAdapterTest {
     @Test
     void upsertConIdNuevoSobreUnaOcurrenciaYaExcepcionadaNoRompeElUnique() {
         EventoId eventoId = crearEvento();
-        Excepcion primera = adapter.upsert(Excepcion.cancelar(eventoId, INICIA_EN));
+        Excepcion primera = adapter.upsert(Excepcion.cancelar(UUID.randomUUID(), eventoId, INICIA_EN));
 
-        Excepcion segunda = adapter.upsert(Excepcion.cancelar(eventoId, INICIA_EN));
+        Excepcion segunda = adapter.upsert(Excepcion.cancelar(UUID.randomUUID(), eventoId, INICIA_EN));
         entityManager.flush();
 
         assertThat(segunda.id()).isEqualTo(primera.id());
@@ -81,8 +82,8 @@ class ExcepcionPersistenceAdapterTest {
     void porEventosAgrupaLasExcepcionesPorSuEvento() {
         EventoId unEvento = crearEvento();
         EventoId otroEvento = crearEvento();
-        adapter.upsert(Excepcion.cancelar(unEvento, INICIA_EN));
-        adapter.upsert(Excepcion.cancelar(otroEvento, INICIA_EN.plusSeconds(86_400)));
+        adapter.upsert(Excepcion.cancelar(UUID.randomUUID(), unEvento, INICIA_EN));
+        adapter.upsert(Excepcion.cancelar(UUID.randomUUID(), otroEvento, INICIA_EN.plusSeconds(86_400)));
 
         var porEvento = adapter.porEventos(Set.of(unEvento, otroEvento));
 
@@ -102,7 +103,7 @@ class ExcepcionPersistenceAdapterTest {
     }
 
     private EventoId crearEvento() {
-        EventoId id = EventoId.newId();
+        EventoId id = EventoId.of(UUID.randomUUID());
         entityManager.createNativeQuery("""
                         INSERT INTO renaser.eventos (id, titulo, inicia_en, duracion_minutos, timezone,
                                                      tipo_ubicacion, tipo_audiencia, tipo_evento, estado)

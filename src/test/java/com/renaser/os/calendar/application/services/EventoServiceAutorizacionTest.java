@@ -20,6 +20,7 @@ import com.renaser.os.calendar.domain.model.evento.TipoEvento;
 import com.renaser.os.calendar.domain.model.evento.TipoUbicacion;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,7 +67,9 @@ class EventoServiceAutorizacionTest {
     private static final ZoneId ZONA = ZoneId.of("America/Lima");
     private static final UserId ACTOR_ID = UserId.of(UUID.randomUUID());
     private static final UserId OTRO_CREADOR = UserId.of(UUID.randomUUID());
-    private static final EventoId EVENTO_ID = EventoId.newId();
+    private static final EventoId EVENTO_ID = EventoId.of(UUID.randomUUID());
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, crear() ya no sortea el EventoId. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000002");
 
     @Mock
     private LoadEventoPort loadEventoPort;
@@ -86,6 +89,8 @@ class EventoServiceAutorizacionTest {
     private AlmacenamientoPort almacenamientoPort;
     @Mock
     private ConsultarProgresoParticipanteCalendarPort progresoPort;
+    @Mock
+    private IdGenerator idGenerator;
 
     private EventoService service;
 
@@ -93,8 +98,10 @@ class EventoServiceAutorizacionTest {
     void setUp() {
         var acceso = new AccesoEventoService(progresoPort, nivelPort, cursoSinAcceso(), (usuario, tipo) -> false);
         service = new EventoService(loadEventoPort, saveEventoPort, loadExcepcionPort, saveExcepcionPort,
-                loadConfirmacionPort, saveRecordatorioPort, nivelPort, almacenamientoPort, acceso, CLOCK);
+                loadConfirmacionPort, saveRecordatorioPort, nivelPort, almacenamientoPort, acceso, CLOCK,
+                idGenerator);
         lenient().when(nivelPort.listar()).thenReturn(List.of());
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(loadEventoPort.byId(EVENTO_ID))
                 .thenReturn(Optional.of(evento(OTRO_CREADOR, TipoAudiencia.TODOS, Set.of(), TipoEvento.ESPONTANEO)));
     }
@@ -205,8 +212,9 @@ class EventoServiceAutorizacionTest {
     }
 
     private static Evento evento(UserId creador, TipoAudiencia audiencia, Set<RolUsuario> roles, TipoEvento tipo) {
-        return Evento.crear("Sesion", null, INICIA_EN, 60, ZONA, TipoUbicacion.MEET, "https://meet.google.com/abc",
-                audiencia, null, null, null, tipo, false, false, false, null, roles, List.of(), creador, CLOCK);
+        return Evento.crear(EVENTO_ID, "Sesion", null, INICIA_EN, 60, ZONA, TipoUbicacion.MEET,
+                "https://meet.google.com/abc", audiencia, null, null, null, tipo, false, false, false, null, roles,
+                List.of(), creador, CLOCK);
     }
 
     private static CrearEventoCommand comandoCrear() {

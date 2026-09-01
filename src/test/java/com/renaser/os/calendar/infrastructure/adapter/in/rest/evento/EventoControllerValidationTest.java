@@ -12,6 +12,7 @@ import com.renaser.os.calendar.application.ports.in.evento.ListarEventosParaViso
 import com.renaser.os.calendar.application.ports.in.evento.ObtenerEventoUseCase;
 import com.renaser.os.calendar.application.ports.in.evento.SolicitarUrlPortadaUseCase;
 import com.renaser.os.calendar.domain.model.evento.Evento;
+import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.evento.TipoAudiencia;
 import com.renaser.os.calendar.domain.model.evento.TipoEvento;
 import com.renaser.os.calendar.domain.model.evento.TipoUbicacion;
@@ -115,8 +116,9 @@ class EventoControllerValidationTest {
     @Test
     void crearEventoSinNotifyOnCreateNiRemindByEmailUsaDefaultFalse() throws Exception {
         UserId actorId = UserId.of(UUID.randomUUID());
-        Evento respuesta = Evento.crear("Sesion", null, Instant.parse("2026-09-01T19:00:00Z"), 60,
-                ZoneId.of("America/Lima"), TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS,
+        Evento respuesta = Evento.crear(EventoId.of(UUID.randomUUID()), "Sesion", null,
+                Instant.parse("2026-09-01T19:00:00Z"), 60, ZoneId.of("America/Lima"), TipoUbicacion.MEET,
+                "https://meet.google.com/abc", TipoAudiencia.TODOS,
                 null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(), actorId,
                 CLOCK);
         when(crearUseCase.crear(any())).thenReturn(new EventoVista(respuesta, null));
