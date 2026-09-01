@@ -64,10 +64,7 @@ public class MiembroService implements ListarDirectorioMiembrosUseCase, ListarMi
         requireActivo(actorId);
         Conversacion global = requireGlobal();
 
-        List<MiembroResumen> candidatos = resolverParticipantesDe(global).stream()
-                .filter(u -> u.status() == UserStatus.ACTIVE)  // SUSPENDED no sirve como destino de un DM nuevo
-                .filter(u -> !u.id().equals(actorId))           // nunca mandarse un DM a uno mismo
-                .map(MiembroService::aResumen)
+        List<MiembroResumen> candidatos = destinatariosPosiblesDeUnDmNuevo(global, actorId).stream()
                 .filter(m -> coincideConLaBusqueda(m, query))
                 .sorted(POR_NOMBRE)
                 .toList();
@@ -87,6 +84,18 @@ public class MiembroService implements ListarDirectorioMiembrosUseCase, ListarMi
                 .sorted(POR_NOMBRE)
                 .toList();
         return paginar(miembros, cursor, limite);
+    }
+
+    /** Quienes pueden ser el otro lado de un DM que {@code actorId} abre hoy: miembros de
+     * GLOBAL que siguen habilitados para recibirlo, ya proyectados a {@link MiembroResumen}.
+     * Es la regla de "a quien se le puede escribir" y nada mas — la busqueda por nombre, el
+     * orden y la paginacion son del caso de uso, no de esta regla. */
+    private List<MiembroResumen> destinatariosPosiblesDeUnDmNuevo(Conversacion global, UserId actorId) {
+        return resolverParticipantesDe(global).stream()
+                .filter(u -> u.status() == UserStatus.ACTIVE)  // SUSPENDED no sirve como destino de un DM nuevo
+                .filter(u -> !u.id().equals(actorId))           // nunca mandarse un DM a uno mismo
+                .map(MiembroService::aResumen)
+                .toList();
     }
 
     /** Todos los participantes de GLOBAL, resueltos en, como mucho, dos consultas EN

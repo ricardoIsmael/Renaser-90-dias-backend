@@ -1,5 +1,7 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.application.ports.in.audioterapia.ConsultarAudioterapiaSemanalUseCase.AudioDeLaSemana;
+import com.renaser.os.habits.application.ports.in.audioterapia.ConsultarAudioterapiaSemanalUseCase.EsperandoContenido;
 import com.renaser.os.habits.application.ports.in.audioterapia.ConsultarAudioterapiaSemanalUseCase.EstadoAudioterapia;
 import com.renaser.os.habits.application.ports.out.audioterapia.AudioterapiaCatalogPort;
 import com.renaser.os.habits.application.ports.out.audioterapia.AudioterapiaCatalogPort.Audioterapia;
@@ -80,8 +82,7 @@ class AudioterapiaServiceTest {
 
         EstadoAudioterapia estado = service.consultar(trainee);
 
-        assertThat(estado.semanaActual()).isEmpty();
-        assertThat(estado.audio()).isEmpty();
+        assertThat(estado).isInstanceOf(EsperandoContenido.class);
     }
 
     @Test
@@ -92,11 +93,12 @@ class AudioterapiaServiceTest {
 
         EstadoAudioterapia estado = service.consultar(trainee);
 
-        assertThat(estado.semanaActual()).contains(1);
-        assertThat(estado.audio()).isPresent();
-        assertThat(estado.audio().get().titulo()).isEqualTo("Semana 1");
-        assertThat(estado.audio().get().url()).isEqualTo("https://firmada");
-        assertThat(estado.audio().get().diaSiguienteCambio()).isEqualTo(18); // 11 + 7 dias
+        assertThat(estado).isInstanceOfSatisfying(AudioDeLaSemana.class, audio -> {
+            assertThat(audio.semanaActual()).isEqualTo(1);
+            assertThat(audio.titulo()).isEqualTo("Semana 1");
+            assertThat(audio.url()).isEqualTo("https://firmada");
+            assertThat(audio.diaSiguienteCambio()).isEqualTo(18); // 11 + 7 dias
+        });
     }
 
     @Test
@@ -109,8 +111,10 @@ class AudioterapiaServiceTest {
 
         EstadoAudioterapia estado = service.consultar(trainee);
 
-        assertThat(estado.semanaActual()).contains(2);
-        assertThat(estado.audio().get().titulo()).isEqualTo("Semana 2");
+        assertThat(estado).isInstanceOfSatisfying(AudioDeLaSemana.class, audio -> {
+            assertThat(audio.semanaActual()).isEqualTo(2);
+            assertThat(audio.titulo()).isEqualTo("Semana 2");
+        });
     }
 
     @Test
@@ -121,8 +125,7 @@ class AudioterapiaServiceTest {
 
         EstadoAudioterapia estado = service.consultar(trainee);
 
-        assertThat(estado.semanaActual()).isEmpty();
-        assertThat(estado.audio()).isEmpty();
+        assertThat(estado).isInstanceOf(EsperandoContenido.class);
     }
 
     @Test

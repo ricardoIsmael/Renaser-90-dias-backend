@@ -19,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Optional;
 
 /**
  * Resolver de solo lectura: dado el día de programa del aprendiz, ubica qué audioterapia
@@ -66,7 +65,7 @@ public class AudioterapiaService implements ConsultarAudioterapiaSemanalUseCase 
         int diaInicio = diaInicioDelHabito();
 
         if (progreso.diaPrograma() < diaInicio) {
-            return new EstadoAudioterapia(Optional.empty(), Optional.empty());
+            return new EsperandoContenido();
         }
 
         List<Audioterapia> catalogo = catalogoPort.todasOrdenadas();
@@ -76,15 +75,14 @@ public class AudioterapiaService implements ConsultarAudioterapiaSemanalUseCase 
             if (progreso.diaPrograma() <= diaFinVentana) {
                 int diaSiguienteCambio = diaFinVentana + 1;
                 String url = firmarAudio(audioterapia.rutaStorage());
-                return new EstadoAudioterapia(Optional.of(audioterapia.semana()),
-                        Optional.of(new EstadoAudioterapia.AudioResuelto(audioterapia.titulo(), url,
-                                diaSiguienteCambio)));
+                return new AudioDeLaSemana(audioterapia.semana(), audioterapia.titulo(), url,
+                        diaSiguienteCambio);
             }
             diaAcumulado = diaFinVentana + 1;
         }
         // dia de programa mas alla de la ultima semana cargada: el aprendiz queda al dia,
         // esperando contenido -- mismo criterio que AudioCatalogPort/EspirituService.
-        return new EstadoAudioterapia(Optional.empty(), Optional.empty());
+        return new EsperandoContenido();
     }
 
     private int diaInicioDelHabito() {
