@@ -4,6 +4,7 @@ import com.renaser.os.evidence.api.DestinoEvidencia;
 import com.renaser.os.evidence.api.TipoEvidencia;
 import com.renaser.os.evidence.application.ports.out.ia.ResultadoValidacionIA;
 import com.renaser.os.evidence.domain.model.evidencia.Evidencia;
+import com.renaser.os.evidence.domain.model.evidencia.EvidenciaId;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.Test;
@@ -18,7 +19,7 @@ class NoOpEvidenciaValidacionIAAdapterTest {
     @Test
     void siempreDevuelveNoDisponible() {
         FixedClock clock = FixedClock.at(Instant.parse("2026-08-25T12:00:00Z"));
-        Evidencia evidencia = Evidencia.registrar(UserId.of(UUID.randomUUID()),
+        Evidencia evidencia = Evidencia.registrar(EvidenciaId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
                 new DestinoEvidencia.RegistroHabito(UUID.randomUUID()), TipoEvidencia.TEXTO, null, null, "hecho",
                 null, null, null, false, clock.now(), clock);
 

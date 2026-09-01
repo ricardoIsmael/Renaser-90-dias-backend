@@ -65,11 +65,17 @@ public final class Evidencia {
      * Revalida las mismas invariantes que ya fallan rápido en
      * {@code RegistrarEvidenciaPort.RegistrarEvidenciaComando} (CLAUDE.MD §5.4.3, nivel
      * 3: la regla de negocio vive en el dominio, no solo en el comando de entrada).
+     *
+     * <p>El {@code id} entra por parámetro, no se genera acá: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code EvidenciaService.registrar}).
+     * Así {@code registrar} es referencialmente transparente y un test puede fijar el id que
+     * espera, en vez de tener que caer a {@link #rehydrate} para lograrlo.
      */
-    public static Evidencia registrar(UserId participanteId, DestinoEvidencia destino, TipoEvidencia tipo,
-                                       String bucket, String rutaStorage, String contenidoTexto,
+    public static Evidencia registrar(EvidenciaId id, UserId participanteId, DestinoEvidencia destino,
+                                       TipoEvidencia tipo, String bucket, String rutaStorage, String contenidoTexto,
                                        Instant timestampExif, Double gpsLat, Double gpsLng, boolean esPrincipal,
                                        Instant subidaEn, Clock clock) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Objects.requireNonNull(destino, "destino es obligatorio");
         Objects.requireNonNull(tipo, "tipo es obligatorio");
@@ -77,7 +83,7 @@ public final class Evidencia {
         requireMediaOTexto(tipo, bucket, rutaStorage, contenidoTexto);
         requireGpsCoherente(gpsLat, gpsLng);
         requirePrincipalSoloEnRoca(esPrincipal, destino);
-        return new Evidencia(EvidenciaId.newId(), participanteId, destino, tipo, bucket, rutaStorage, contenidoTexto,
+        return new Evidencia(id, participanteId, destino, tipo, bucket, rutaStorage, contenidoTexto,
                 timestampExif, subidaEn, gpsLat, gpsLng, esPrincipal, EstadoValidacion.PENDIENTE, null, 0, false,
                 false, clock.now());
     }

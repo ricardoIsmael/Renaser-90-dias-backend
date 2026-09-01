@@ -22,6 +22,7 @@ import com.renaser.os.evidence.domain.model.evidencia.EvidenciaId;
 import com.renaser.os.points.api.AjustarPuntosPort;
 import com.renaser.os.points.api.MotivoPuntos;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.ParticipacionPrograma;
@@ -57,11 +58,12 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
     private final ParticipacionProgramaFinder participacionFinder;
     private final AjustarPuntosPort ajustarPuntosPort;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public EvidenciaService(LoadEvidenciaPort loadEvidenciaPort, SaveEvidenciaPort saveEvidenciaPort,
                              ValidacionIAPort validacionIAPort, UserSummaryFinder userSummaryFinder,
                              ParticipacionProgramaFinder participacionFinder, AjustarPuntosPort ajustarPuntosPort,
-                             Clock clock) {
+                             Clock clock, IdGenerator idGenerator) {
         this.loadEvidenciaPort = loadEvidenciaPort;
         this.saveEvidenciaPort = saveEvidenciaPort;
         this.validacionIAPort = validacionIAPort;
@@ -69,6 +71,7 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
         this.participacionFinder = participacionFinder;
         this.ajustarPuntosPort = ajustarPuntosPort;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     /**
@@ -80,9 +83,11 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
     @Transactional
     public EvidenciaRegistrada registrar(RegistrarEvidenciaComando comando) {
         requireActivo(comando.participanteId());
-        Evidencia evidencia = Evidencia.registrar(comando.participanteId(), comando.destino(), comando.tipo(),
-                comando.bucket(), comando.rutaStorage(), comando.contenidoTexto(), comando.timestampExif(),
-                comando.gpsLat(), comando.gpsLng(), comando.esPrincipal(), comando.subidaEn(), clock);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
+        Evidencia evidencia = Evidencia.registrar(EvidenciaId.of(idGenerator.newId()), comando.participanteId(),
+                comando.destino(), comando.tipo(), comando.bucket(), comando.rutaStorage(), comando.contenidoTexto(),
+                comando.timestampExif(), comando.gpsLat(), comando.gpsLng(), comando.esPrincipal(),
+                comando.subidaEn(), clock);
         Evidencia guardada = saveEvidenciaPort.save(evidencia);
         return new EvidenciaRegistrada(guardada.id().value(), guardada.estadoValidacion());
     }
