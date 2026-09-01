@@ -14,13 +14,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class TicketMentorTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    private static final TicketMentorId ID = TicketMentorId.of(
+            UUID.fromString("11111111-1111-1111-1111-111111111111"));
 
     private static UserId nuevoParticipante() {
         return UserId.of(UUID.randomUUID());
     }
 
     private static TicketMentor ticketAbierto() {
-        return TicketMentor.abrir(nuevoParticipante(), "No puedo mantener la racha de Santuario",
+        return TicketMentor.abrir(ID, nuevoParticipante(), "No puedo mantener la racha de Santuario",
                 "Probe apagar notificaciones", "Atrasa mi meta de 90 dias sin celular", CLOCK);
     }
 
@@ -29,6 +31,7 @@ class TicketMentorTest {
     void abrirNaceAbierto() {
         TicketMentor ticket = ticketAbierto();
 
+        assertThat(ticket.id()).isEqualTo(ID);
         assertThat(ticket.estado()).isEqualTo(EstadoTicketMentor.ABIERTO);
         assertThat(ticket.respuestaMentor()).isNull();
         assertThat(ticket.respondidoEn()).isNull();
@@ -41,11 +44,11 @@ class TicketMentorTest {
     void losTresCamposSonObligatorios() {
         UserId participante = nuevoParticipante();
 
-        assertThatThrownBy(() -> TicketMentor.abrir(participante, "  ", "algo", "algo", CLOCK))
+        assertThatThrownBy(() -> TicketMentor.abrir(ID, participante, "  ", "algo", "algo", CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> TicketMentor.abrir(participante, "algo", null, "algo", CLOCK))
+        assertThatThrownBy(() -> TicketMentor.abrir(ID, participante, "algo", null, "algo", CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> TicketMentor.abrir(participante, "algo", "algo", "", CLOCK))
+        assertThatThrownBy(() -> TicketMentor.abrir(ID, participante, "algo", "algo", "", CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -103,7 +106,7 @@ class TicketMentorTest {
     @Test
     @DisplayName("rehydrate() reconstruye un ticket ya existente tal cual (para el adaptador de persistencia)")
     void rehydrateReconstruyeSinValidar() {
-        TicketMentorId id = TicketMentorId.newId();
+        TicketMentorId id = TicketMentorId.of(UUID.randomUUID());
         UserId participante = nuevoParticipante();
 
         TicketMentor ticket = TicketMentor.rehydrate(id, participante, "bloqueo", "soluciones", "impacto",

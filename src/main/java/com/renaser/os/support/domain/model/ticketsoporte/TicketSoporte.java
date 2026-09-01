@@ -30,10 +30,16 @@ public final class TicketSoporte {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    public static TicketSoporte abrir(UserId usuarioId, CategoriaSoporte categoria, String asunto, String mensaje,
-                                       String logCliente, AdjuntoSoporte adjunto, Clock clock) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso. Asi la factoria es referencialmente
+     * transparente y un test puede fijar el id que espera (CLAUDE.MD §5.4.7).
+     */
+    public static TicketSoporte abrir(TicketSoporteId id, UserId usuarioId, CategoriaSoporte categoria,
+                                       String asunto, String mensaje, String logCliente, AdjuntoSoporte adjunto,
+                                       Clock clock) {
         Instant now = clock.now();
-        return new TicketSoporte(TicketSoporteId.newId(),
+        return new TicketSoporte(Objects.requireNonNull(id, "id es obligatorio"),
                 Objects.requireNonNull(usuarioId, "usuarioId es obligatorio"),
                 Objects.requireNonNull(categoria, "categoria es obligatoria"),
                 requireNotBlank(asunto, "El asunto es obligatorio"), requireMensaje(mensaje), logCliente, adjunto,

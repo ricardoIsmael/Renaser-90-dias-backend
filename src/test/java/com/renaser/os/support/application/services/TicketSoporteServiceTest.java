@@ -1,6 +1,7 @@
 package com.renaser.os.support.application.services;
 
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.infrastructure.storage.NoOpAlmacenamientoAdapter;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.NoSuchElementException;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,12 +42,23 @@ class TicketSoporteServiceTest {
     void setUp() {
         port = new InMemoryTicketSoportePort();
         actores = new FakeUserSummaryFinder();
-        service = new TicketSoporteService(port, port, actores, new NoOpAlmacenamientoAdapter(), CLOCK);
+        service = new TicketSoporteService(port, port, actores, new NoOpAlmacenamientoAdapter(), CLOCK,
+                idsSecuenciales());
 
         trainee = UserId.of(UUID.randomUUID());
         admin = UserId.of(UUID.randomUUID());
         mentor = UserId.of(UUID.randomUUID());
         actores.conActor(trainee, UserRole.TRAINEE).conActor(admin, UserRole.ADMIN).conActor(mentor, UserRole.MENTOR);
+    }
+
+    /**
+     * Identidad determinista: con el id entrando por el puerto {@code IdGenerator}, la factoria
+     * del agregado ya no lo sortea. Es <b>secuencial</b>, no fijo, porque hay tests que abren mas
+     * de un ticket y el fake en memoria los indexa por id — un id fijo los colapsaria en uno solo.
+     */
+    private static IdGenerator idsSecuenciales() {
+        AtomicInteger contador = new AtomicInteger();
+        return () -> UUID.fromString("00000000-0000-4000-8000-%012d".formatted(contador.incrementAndGet()));
     }
 
     @Test
@@ -144,8 +157,9 @@ class TicketSoporteServiceTest {
     @Test
     @DisplayName("resolver() sobre un ticket inexistente lanza NoSuchElementException")
     void resolverTicketInexistente() {
-        assertThatThrownBy(() -> service.resolver(new ResolverTicketSoporteCommand(TicketSoporteId.newId(), admin,
-                "notas"))).isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> service.resolver(new ResolverTicketSoporteCommand(
+                TicketSoporteId.of(UUID.randomUUID()), admin, "notas")))
+                .isInstanceOf(NoSuchElementException.class);
     }
 
     @Test

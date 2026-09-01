@@ -28,10 +28,16 @@ public final class TicketMentor {
     private boolean guardadoEnBiblioteca;
     private final Instant creadoEn;
 
-    /** Abre un ticket nuevo, siempre ABIERTO, nunca guardado en biblioteca. */
-    public static TicketMentor abrir(UserId participanteId, String descripcionBloqueo,
+    /**
+     * Abre un ticket nuevo, siempre ABIERTO, nunca guardado en biblioteca.
+     *
+     * <p>El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso. Asi la factoria es referencialmente
+     * transparente y un test puede fijar el id que espera (CLAUDE.MD §5.4.7).
+     */
+    public static TicketMentor abrir(TicketMentorId id, UserId participanteId, String descripcionBloqueo,
                                       String solucionesIntentadas, String impactoMetaSmart, Clock clock) {
-        return new TicketMentor(TicketMentorId.newId(),
+        return new TicketMentor(Objects.requireNonNull(id, "id es obligatorio"),
                 Objects.requireNonNull(participanteId, "participanteId es obligatorio"),
                 requireNotBlank(descripcionBloqueo, "La descripcion del bloqueo es obligatoria"),
                 requireNotBlank(solucionesIntentadas, "Las soluciones intentadas son obligatorias"),
