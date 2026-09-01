@@ -29,8 +29,10 @@ class GestionSesionesService implements CerrarTodasLasSesionesUseCase {
 
     @Override
     public void cerrarTodas(UserId usuarioId) {
-        sessionRepository.findByPrincipalName(usuarioId.value().toString())
-                .keySet()
-                .forEach(sessionRepository::deleteById);
+        // Bucle explicito, no forEach: borrar es un efecto y §5.4.7 los quiere a la vista
+        // en el caso de uso, no escondidos dentro de una lambda.
+        for (String sesionId : sessionRepository.findByPrincipalName(usuarioId.value().toString()).keySet()) {
+            sessionRepository.deleteById(sesionId);
+        }
     }
 }

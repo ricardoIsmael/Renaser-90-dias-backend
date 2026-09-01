@@ -15,7 +15,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Objects;
 import java.util.Map;
 import java.util.UUID;
 
@@ -63,17 +62,22 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
         Map<UserId, UserSummary> resumenes = userSummaryFinder.findByIds(
                 puntajes.stream().map(PuntajeCrudo::participanteId).toList());
         return puntajes.stream()
-                .map(puntaje -> {
-                    UserSummary resumen = resumenes.get(puntaje.participanteId());
-                    if (resumen == null || resumen.role() != UserRole.TRAINEE
-                            || resumen.status() != UserStatus.ACTIVE) {
-                        return null;
-                    }
-                    return new CandidatoRanking(puntaje.participanteId(), resumen.fullName(),
-                            puntaje.puntosLiga(), puntaje.coherencia());
-                })
-                .filter(Objects::nonNull)
+                .filter(puntaje -> compiteEnElRanking(resumenes.get(puntaje.participanteId())))
+                .map(puntaje -> aCandidato(puntaje, resumenes.get(puntaje.participanteId())))
                 .toList();
+    }
+
+    /**
+     * Solo el aprendiz activo compite: el staff no entra al ranking, y una cuenta suspendida
+     * deja de figurar. {@code null} = el puntaje quedo huerfano (el usuario ya no existe).
+     */
+    private static boolean compiteEnElRanking(UserSummary resumen) {
+        return resumen != null && resumen.role() == UserRole.TRAINEE && resumen.status() == UserStatus.ACTIVE;
+    }
+
+    private static CandidatoRanking aCandidato(PuntajeCrudo puntaje, UserSummary resumen) {
+        return new CandidatoRanking(puntaje.participanteId(), resumen.fullName(),
+                puntaje.puntosLiga(), puntaje.coherencia());
     }
 
     private record PuntajeCrudo(UserId participanteId, int puntosLiga, java.math.BigDecimal coherencia) {
