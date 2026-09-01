@@ -14,6 +14,7 @@ import com.renaser.os.community.domain.model.cohorte.Cohorte;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -44,6 +45,8 @@ import static org.mockito.Mockito.when;
 class CohorteServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, la factoria del agregado ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadCohortePort loadCohortePort;
@@ -55,6 +58,8 @@ class CohorteServiceTest {
     private LoadCelulaPort loadCelulaPort;
     @Mock
     private UserSummaryFinder userSummaryFinder;
+    @Mock
+    private IdGenerator idGenerator;
 
     private CohorteService service;
 
@@ -66,7 +71,8 @@ class CohorteServiceTest {
     @BeforeEach
     void setUp() {
         service = new CohorteService(loadCohortePort, saveCohortePort, eliminarCohortePort, loadCelulaPort,
-                userSummaryFinder, CLOCK);
+                userSummaryFinder, CLOCK, idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(trainee))
@@ -104,16 +110,19 @@ class CohorteServiceTest {
     @Test
     void eliminarConCelulasAsociadasFalla() {
         when(loadCohortePort.contarCelulas(any())).thenReturn(2);
-        var command = new EliminarCohorteCommand(admin, CohorteId.newId());
+        var command = new EliminarCohorteCommand(admin, CohorteId.of(UUID.randomUUID()));
         assertThatThrownBy(() -> service.eliminar(command)).isInstanceOf(IllegalStateException.class);
         verify(eliminarCohortePort, never()).eliminar(any());
     }
 
     @Test
     void cambiarEstadoSaltandoUnPasoFalla() {
-        CohorteId id = CohorteId.newId();
-        when(loadCohortePort.porId(id)).thenReturn(Optional.of(Cohorte.rehydrate(id, "Cohorte", LocalDate.now(),
-                null, EstadoCohorte.PLANIFICADA, CLOCK.now(), CLOCK.now())));
+        CohorteId id = CohorteId.of(UUID.randomUUID());
+        // crear(), no rehydrate(): desde que el id entra por parametro, la factoria real devuelve
+        // una Cohorte cuyo id() es EXACTAMENTE el que consulta el mock, y de paso vuelven a correr
+        // las validaciones que rehydrate se saltea.
+        when(loadCohortePort.porId(id))
+                .thenReturn(Optional.of(Cohorte.crear(id, "Cohorte", LocalDate.now(), null, CLOCK.now())));
         var command = new CambiarEstadoCohorteCommand(admin, id, EstadoCohorte.COMPLETADA);
         assertThatThrownBy(() -> service.cambiarEstado(command)).isInstanceOf(IllegalArgumentException.class);
     }
@@ -123,7 +132,8 @@ class CohorteServiceTest {
     @Test
     @DisplayName("actualizar(): rol sin permiso (TRAINEE) -> 403, nunca guarda")
     void actualizarComoTraineeEsRechazado() {
-        var command = new ActualizarCohorteCommand(trainee, CohorteId.newId(), "Otro", null, null, false);
+        var command = new ActualizarCohorteCommand(trainee, CohorteId.of(UUID.randomUUID()), "Otro", null, null,
+                false);
         assertThatThrownBy(() -> service.actualizar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveCohortePort, never()).save(any());
     }
@@ -131,7 +141,8 @@ class CohorteServiceTest {
     @Test
     @DisplayName("cambiarEstado(): rol sin permiso (TRAINEE) -> 403, nunca guarda")
     void cambiarEstadoComoTraineeEsRechazado() {
-        var command = new CambiarEstadoCohorteCommand(trainee, CohorteId.newId(), EstadoCohorte.ACTIVA);
+        var command = new CambiarEstadoCohorteCommand(trainee, CohorteId.of(UUID.randomUUID()),
+                EstadoCohorte.ACTIVA);
         assertThatThrownBy(() -> service.cambiarEstado(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveCohortePort, never()).save(any());
     }
@@ -139,7 +150,7 @@ class CohorteServiceTest {
     @Test
     @DisplayName("eliminar(): rol sin permiso (TRAINEE) -> 403, nunca borra")
     void eliminarComoTraineeEsRechazado() {
-        var command = new EliminarCohorteCommand(trainee, CohorteId.newId());
+        var command = new EliminarCohorteCommand(trainee, CohorteId.of(UUID.randomUUID()));
         assertThatThrownBy(() -> service.eliminar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(eliminarCohortePort, never()).eliminar(any());
     }
@@ -153,25 +164,26 @@ class CohorteServiceTest {
     @Test
     @DisplayName("obtener(): rol sin permiso (TRAINEE) -> 403")
     void obtenerComoTraineeEsRechazado() {
-        CohorteId id = CohorteId.newId();
+        CohorteId id = CohorteId.of(UUID.randomUUID());
         assertThatThrownBy(() -> service.obtener(trainee, id)).isInstanceOf(NotAuthorizedException.class);
     }
 
     @Test
     @DisplayName("obtener(): un MENTOR no accede a una cohorte que no es la de su celula -> 403")
     void obtenerComoMentorDeOtraCohorteEsRechazado() {
-        Celula propia = Celula.rehydrate(CelulaId.newId(), "Celula 1", mentor, CohorteId.newId(), null, null,
-                CLOCK.now(), CLOCK.now());
+        Celula propia = Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Celula 1", mentor,
+                CohorteId.of(UUID.randomUUID()), null, null, CLOCK.now(), CLOCK.now());
         when(loadCelulaPort.porMentor(mentor)).thenReturn(Optional.of(propia));
 
-        CohorteId ajena = CohorteId.newId();
+        CohorteId ajena = CohorteId.of(UUID.randomUUID());
         assertThatThrownBy(() -> service.obtener(mentor, ajena)).isInstanceOf(NotAuthorizedException.class);
     }
 
     @Test
     @DisplayName("actualizar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
     void actualizarConAdminSuspendidoFalla() {
-        var command = new ActualizarCohorteCommand(adminSuspendido, CohorteId.newId(), "Otro", null, null, false);
+        var command = new ActualizarCohorteCommand(adminSuspendido, CohorteId.of(UUID.randomUUID()), "Otro", null,
+                null, false);
         assertThatThrownBy(() -> service.actualizar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveCohortePort, never()).save(any());
     }
@@ -179,7 +191,8 @@ class CohorteServiceTest {
     @Test
     @DisplayName("cambiarEstado(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
     void cambiarEstadoConAdminSuspendidoFalla() {
-        var command = new CambiarEstadoCohorteCommand(adminSuspendido, CohorteId.newId(), EstadoCohorte.ACTIVA);
+        var command = new CambiarEstadoCohorteCommand(adminSuspendido, CohorteId.of(UUID.randomUUID()),
+                EstadoCohorte.ACTIVA);
         assertThatThrownBy(() -> service.cambiarEstado(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveCohortePort, never()).save(any());
     }
@@ -187,7 +200,7 @@ class CohorteServiceTest {
     @Test
     @DisplayName("eliminar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
     void eliminarConAdminSuspendidoFalla() {
-        var command = new EliminarCohorteCommand(adminSuspendido, CohorteId.newId());
+        var command = new EliminarCohorteCommand(adminSuspendido, CohorteId.of(UUID.randomUUID()));
         assertThatThrownBy(() -> service.eliminar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(eliminarCohortePort, never()).eliminar(any());
     }
@@ -201,7 +214,7 @@ class CohorteServiceTest {
     @Test
     @DisplayName("obtener(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
     void obtenerConAdminSuspendidoFalla() {
-        CohorteId id = CohorteId.newId();
+        CohorteId id = CohorteId.of(UUID.randomUUID());
         assertThatThrownBy(() -> service.obtener(adminSuspendido, id)).isInstanceOf(NotAuthorizedException.class);
     }
 }

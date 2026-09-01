@@ -7,6 +7,7 @@ import com.renaser.os.community.application.ports.in.testimonio.PromoverPublicac
 import com.renaser.os.community.application.ports.in.testimonio.PromoverPublicacionATestimonioUseCase.PromoverPublicacionCommand;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.community.domain.model.testimonio.Testimonio;
+import com.renaser.os.community.domain.model.testimonio.TestimonioId;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -57,8 +58,8 @@ class TestimonioControllerTest {
     }
 
     private static Testimonio testimonio(UserId autor) {
-        return Testimonio.crear(autor, null, "Ana", "Aprendiz", null, null, "Cambio mi vida, en serio", 5,
-                Instant.parse("2026-08-28T10:00:00Z"));
+        return Testimonio.crear(TestimonioId.of(UUID.randomUUID()), autor, null, "Ana", "Aprendiz", null, null,
+                "Cambio mi vida, en serio", 5, Instant.parse("2026-08-28T10:00:00Z"));
     }
 
     @Test

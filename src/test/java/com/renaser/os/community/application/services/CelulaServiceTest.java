@@ -20,6 +20,7 @@ import com.renaser.os.community.domain.model.celula.Celula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.AsignacionCelulaPort;
@@ -51,6 +52,8 @@ import static org.mockito.Mockito.when;
 class CelulaServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, la factoria del agregado ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadCelulaPort loadCelulaPort;
@@ -76,6 +79,8 @@ class CelulaServiceTest {
     private AsignacionCelulaPort asignacionCelulaPort;
     @Mock
     private org.springframework.context.ApplicationEventPublisher events;
+    @Mock
+    private IdGenerator idGenerator;
 
     private CelulaService service;
 
@@ -89,7 +94,8 @@ class CelulaServiceTest {
         service = new CelulaService(loadCelulaPort, saveCelulaPort, eliminarCelulaPort, loadCohortePort,
                 existePerfilMentorPort, consultarMiembrosCelulaPort, consultarCelulaDeParticipantePort,
                 consultarPerfilUsuarioPort, userSummaryFinder, participacionProgramaFinder, asignacionCelulaPort,
-                events, CLOCK);
+                events, CLOCK, idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(mentor))
@@ -101,13 +107,13 @@ class CelulaServiceTest {
     }
 
     private Celula celulaExistente() {
-        return Celula.rehydrate(CelulaId.newId(), "Celula 1", null, CohorteId.newId(), null, null, CLOCK.now(),
-                CLOCK.now());
+        return Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Celula 1", null,
+                CohorteId.of(UUID.randomUUID()), null, null, CLOCK.now(), CLOCK.now());
     }
 
     @Test
     void crearComoMentorEsRechazado() {
-        var command = new CrearCelulaCommand(mentor, "Celula 1", CohorteId.newId(), null);
+        var command = new CrearCelulaCommand(mentor, "Celula 1", CohorteId.of(UUID.randomUUID()), null);
         assertThatThrownBy(() -> service.crear(command)).isInstanceOf(NotAuthorizedException.class);
     }
 
@@ -212,8 +218,8 @@ class CelulaServiceTest {
     @Test
     void celulaDeParticipanteProyectaNombreDeCohorteYMentor() {
         Celula celula = celulaExistente();
-        Celula otraCelulaMismoCohorte = Celula.rehydrate(CelulaId.newId(), "Celula 2", null, celula.cohorteId(),
-                null, null, CLOCK.now(), CLOCK.now());
+        Celula otraCelulaMismoCohorte = Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Celula 2", null,
+                celula.cohorteId(), null, null, CLOCK.now(), CLOCK.now());
         celula.asignarMentor(mentor, CLOCK.now());
         var cohorte = com.renaser.os.community.domain.model.cohorte.Cohorte.rehydrate(celula.cohorteId(),
                 "Cohorte Agosto", java.time.LocalDate.now(), null,
@@ -335,7 +341,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("actualizar(): rol sin permiso (MENTOR) -> 403, nunca guarda")
     void actualizarComoMentorEsRechazado() {
-        var command = new ActualizarCelulaCommand(mentor, CelulaId.newId(), "Otro", null, true);
+        var command = new ActualizarCelulaCommand(mentor, CelulaId.of(UUID.randomUUID()), "Otro", null, true);
         assertThatThrownBy(() -> service.actualizar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveCelulaPort, never()).save(any());
     }
@@ -343,7 +349,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("asignar(mentor): rol sin permiso (MENTOR) -> 403, nunca guarda")
     void asignarMentorComoMentorEsRechazado() {
-        var command = new AsignarMentorCelulaCommand(mentor, CelulaId.newId(), mentor);
+        var command = new AsignarMentorCelulaCommand(mentor, CelulaId.of(UUID.randomUUID()), mentor);
         assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveCelulaPort, never()).save(any());
     }
@@ -351,7 +357,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("quitar(mentor): rol sin permiso (MENTOR) -> 403, nunca guarda")
     void quitarMentorComoMentorEsRechazado() {
-        var command = new QuitarMentorCelulaCommand(mentor, CelulaId.newId());
+        var command = new QuitarMentorCelulaCommand(mentor, CelulaId.of(UUID.randomUUID()));
         assertThatThrownBy(() -> service.quitar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveCelulaPort, never()).save(any());
     }
@@ -359,7 +365,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("programar(): rol sin permiso (MENTOR) -> 403, nunca guarda")
     void programarSesionComoMentorEsRechazado() {
-        var command = new ProgramarSesionCelulaCommand(mentor, CelulaId.newId(), CLOCK.now());
+        var command = new ProgramarSesionCelulaCommand(mentor, CelulaId.of(UUID.randomUUID()), CLOCK.now());
         assertThatThrownBy(() -> service.programar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveCelulaPort, never()).save(any());
     }
@@ -367,7 +373,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("eliminar(): rol sin permiso (MENTOR) -> 403, nunca borra")
     void eliminarComoMentorEsRechazado() {
-        var command = new EliminarCelulaCommand(mentor, CelulaId.newId());
+        var command = new EliminarCelulaCommand(mentor, CelulaId.of(UUID.randomUUID()));
         assertThatThrownBy(() -> service.eliminar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(eliminarCelulaPort, never()).eliminar(any());
     }
@@ -381,7 +387,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("listarPorCohorte(): rol sin permiso (TRAINEE) -> 403")
     void listarPorCohorteComoTraineeEsRechazado() {
-        CohorteId cohorteId = CohorteId.newId();
+        CohorteId cohorteId = CohorteId.of(UUID.randomUUID());
         assertThatThrownBy(() -> service.listarPorCohorte(trainee, cohorteId))
                 .isInstanceOf(NotAuthorizedException.class);
     }
@@ -405,7 +411,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("crear(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
     void crearConAdminSuspendidoFalla() {
-        var command = new CrearCelulaCommand(adminSuspendido, "Celula 1", CohorteId.newId(), null);
+        var command = new CrearCelulaCommand(adminSuspendido, "Celula 1", CohorteId.of(UUID.randomUUID()), null);
         assertThatThrownBy(() -> service.crear(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveCelulaPort, never()).save(any());
     }
@@ -413,7 +419,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("actualizar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
     void actualizarConAdminSuspendidoFalla() {
-        var command = new ActualizarCelulaCommand(adminSuspendido, CelulaId.newId(), "Otro", null, true);
+        var command = new ActualizarCelulaCommand(adminSuspendido, CelulaId.of(UUID.randomUUID()), "Otro", null, true);
         assertThatThrownBy(() -> service.actualizar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveCelulaPort, never()).save(any());
     }
@@ -421,7 +427,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("asignar(mentor): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
     void asignarMentorConAdminSuspendidoFalla() {
-        var command = new AsignarMentorCelulaCommand(adminSuspendido, CelulaId.newId(), mentor);
+        var command = new AsignarMentorCelulaCommand(adminSuspendido, CelulaId.of(UUID.randomUUID()), mentor);
         assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveCelulaPort, never()).save(any());
     }
@@ -429,7 +435,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("quitar(mentor): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
     void quitarMentorConAdminSuspendidoFalla() {
-        var command = new QuitarMentorCelulaCommand(adminSuspendido, CelulaId.newId());
+        var command = new QuitarMentorCelulaCommand(adminSuspendido, CelulaId.of(UUID.randomUUID()));
         assertThatThrownBy(() -> service.quitar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveCelulaPort, never()).save(any());
     }
@@ -437,7 +443,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("asignar(aprendiz): cuenta SUSPENDIDA -> 403, nunca delega en `users`")
     void asignarAprendizConAdminSuspendidoFalla() {
-        var command = new AsignarAprendizCelulaCommand(adminSuspendido, CelulaId.newId(), trainee);
+        var command = new AsignarAprendizCelulaCommand(adminSuspendido, CelulaId.of(UUID.randomUUID()), trainee);
         assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(asignacionCelulaPort, never()).asignarCelula(any(), any(), any());
     }
@@ -453,7 +459,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("programar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
     void programarSesionConAdminSuspendidoFalla() {
-        var command = new ProgramarSesionCelulaCommand(adminSuspendido, CelulaId.newId(), CLOCK.now());
+        var command = new ProgramarSesionCelulaCommand(adminSuspendido, CelulaId.of(UUID.randomUUID()), CLOCK.now());
         assertThatThrownBy(() -> service.programar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveCelulaPort, never()).save(any());
     }
@@ -461,7 +467,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("eliminar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
     void eliminarConAdminSuspendidoFalla() {
-        var command = new EliminarCelulaCommand(adminSuspendido, CelulaId.newId());
+        var command = new EliminarCelulaCommand(adminSuspendido, CelulaId.of(UUID.randomUUID()));
         assertThatThrownBy(() -> service.eliminar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(eliminarCelulaPort, never()).eliminar(any());
     }
@@ -469,7 +475,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("listarPorCohorte(): cuenta SUSPENDIDA -> 403")
     void listarPorCohorteConAdminSuspendidoFalla() {
-        CohorteId cohorteId = CohorteId.newId();
+        CohorteId cohorteId = CohorteId.of(UUID.randomUUID());
         assertThatThrownBy(() -> service.listarPorCohorte(adminSuspendido, cohorteId))
                 .isInstanceOf(NotAuthorizedException.class);
     }
@@ -477,7 +483,7 @@ class CelulaServiceTest {
     @Test
     @DisplayName("obtener(): cuenta SUSPENDIDA -> 403")
     void obtenerConAdminSuspendidoFalla() {
-        CelulaId celulaId = CelulaId.newId();
+        CelulaId celulaId = CelulaId.of(UUID.randomUUID());
         assertThatThrownBy(() -> service.obtener(adminSuspendido, celulaId))
                 .isInstanceOf(NotAuthorizedException.class);
     }

@@ -102,7 +102,6 @@ class ArchitectureTest {
      */
     private static final String[] MODULOS_SIN_MIGRAR_A_IDGENERATOR = {
             "com.renaser.os.habits..",
-            "com.renaser.os.community..",
             "com.renaser.os.rag..",
             "com.renaser.os.support..",
             "com.renaser.os.chat..",

@@ -30,6 +30,7 @@ import com.renaser.os.community.domain.model.cohorte.Cohorte;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.AsignacionCelulaPort;
@@ -70,6 +71,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     private final AsignacionCelulaPort asignacionCelulaPort;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public CelulaService(LoadCelulaPort loadCelulaPort, SaveCelulaPort saveCelulaPort,
                           EliminarCelulaPort eliminarCelulaPort, LoadCohortePort loadCohortePort,
@@ -79,7 +81,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
                           ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort, UserSummaryFinder userSummaryFinder,
                           ParticipacionProgramaFinder participacionProgramaFinder,
                           AsignacionCelulaPort asignacionCelulaPort, ApplicationEventPublisher events,
-                          Clock clock) {
+                          Clock clock, IdGenerator idGenerator) {
         this.loadCelulaPort = loadCelulaPort;
         this.saveCelulaPort = saveCelulaPort;
         this.eliminarCelulaPort = eliminarCelulaPort;
@@ -93,6 +95,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         this.asignacionCelulaPort = asignacionCelulaPort;
         this.events = events;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -100,7 +103,9 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     public CelulaDetalle crear(CrearCelulaCommand command) {
         requireAdmin(command.actorId());
         requireCohorte(command.cohorteId());
-        Celula celula = Celula.crear(command.nombre(), command.cohorteId(), command.urlVideollamada(), clock.now());
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        Celula celula = Celula.crear(CelulaId.of(idGenerator.newId()), command.nombre(), command.cohorteId(),
+                command.urlVideollamada(), clock.now());
         Celula guardada = saveCelulaPort.save(celula);
         events.publishEvent(new CelulaCreadaEvent(guardada.id().value(), clock.now()));
         return aDetalle(guardada);

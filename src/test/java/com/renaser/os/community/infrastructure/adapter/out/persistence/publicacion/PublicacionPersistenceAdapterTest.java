@@ -3,6 +3,7 @@ package com.renaser.os.community.infrastructure.adapter.out.persistence.publicac
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.community.domain.model.publicacion.MediaPublicacion;
 import com.renaser.os.community.domain.model.publicacion.Publicacion;
+import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,7 +64,8 @@ class PublicacionPersistenceAdapterTest {
     }
 
     private Publicacion crearPublicacion(String categoriaClave, Instant creadoEn) {
-        Publicacion publicacion = Publicacion.publicar(autorId, "texto de prueba",
+        Publicacion publicacion = Publicacion.publicar(PublicacionId.of(UUID.randomUUID()), autorId,
+                "texto de prueba",
                 List.of(new MediaPublicacion(MediaPublicacion.BUCKET_DEFAULT, "ruta/1.jpg", "image/jpeg", 0)),
                 categoriaClave, creadoEn);
         return adapter.save(publicacion);

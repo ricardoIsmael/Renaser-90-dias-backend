@@ -13,35 +13,38 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class TestimonioTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** El id ya no lo sortea la factoria: entra por parametro, generado por el puerto IdGenerator. */
+    private static final TestimonioId ID = TestimonioId.of(UUID.randomUUID());
 
     @Test
     void crearSiempreNaceDestacado() {
-        Testimonio t = Testimonio.crear(UserId.of(UUID.randomUUID()), null, "Ana", null, null, null,
+        Testimonio t = Testimonio.crear(ID, UserId.of(UUID.randomUUID()), null, "Ana", null, null, null,
                 "Cambio mi vida", 5, CLOCK.now());
+        assertThat(t.id()).isEqualTo(ID);
         assertThat(t.destacado()).isTrue();
     }
 
     @Test
     void rolVacioCaeAlDefault() {
-        Testimonio t = Testimonio.crear(null, null, "Ana", "  ", null, null, "Cambio mi vida", 5, CLOCK.now());
+        Testimonio t = Testimonio.crear(ID, null, null, "Ana", "  ", null, null, "Cambio mi vida", 5, CLOCK.now());
         assertThat(t.rolTexto()).isEqualTo("Miembro de la comunidad");
     }
 
     @Test
     void nombreCortoEsInvalido() {
-        assertThatThrownBy(() -> Testimonio.crear(null, null, "A", null, null, null, "Cambio mi vida", 5,
+        assertThatThrownBy(() -> Testimonio.crear(ID, null, null, "A", null, null, null, "Cambio mi vida", 5,
                 CLOCK.now())).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void estrellasFueraDeRangoEsInvalido() {
-        assertThatThrownBy(() -> Testimonio.crear(null, null, "Ana", null, null, null, "Cambio mi vida", 6,
+        assertThatThrownBy(() -> Testimonio.crear(ID, null, null, "Ana", null, null, null, "Cambio mi vida", 6,
                 CLOCK.now())).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void retirarYDestacarCambianElFlag() {
-        Testimonio t = Testimonio.crear(null, null, "Ana", null, null, null, "Cambio mi vida", 5, CLOCK.now());
+        Testimonio t = Testimonio.crear(ID, null, null, "Ana", null, null, null, "Cambio mi vida", 5, CLOCK.now());
         t.retirar();
         assertThat(t.destacado()).isFalse();
         t.destacar();

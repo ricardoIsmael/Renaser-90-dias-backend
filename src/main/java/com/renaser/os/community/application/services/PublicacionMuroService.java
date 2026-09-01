@@ -28,6 +28,7 @@ import com.renaser.os.community.domain.model.publicacion.ReaccionMuro.Reaccionar
 import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -68,6 +69,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     private final UserSummaryFinder userSummaryFinder;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public PublicacionMuroService(LoadPublicacionPort loadPublicacionPort, SavePublicacionPort savePublicacionPort,
                                    EliminarPublicacionPort eliminarPublicacionPort,
@@ -75,7 +77,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
                                    ConsultarCategoriasMuroUseCase categoriasUseCase,
                                    ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort,
                                    AlmacenamientoPort almacenamientoPort, UserSummaryFinder userSummaryFinder,
-                                   ApplicationEventPublisher events, Clock clock) {
+                                   ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator) {
         this.loadPublicacionPort = loadPublicacionPort;
         this.savePublicacionPort = savePublicacionPort;
         this.eliminarPublicacionPort = eliminarPublicacionPort;
@@ -87,6 +89,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         this.userSummaryFinder = userSummaryFinder;
         this.events = events;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -97,8 +100,9 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
             throw new IllegalArgumentException("Categoria desconocida: " + command.categoriaClave());
         }
         List<MediaPublicacion> media = aMedia(command.media());
-        Publicacion publicacion = Publicacion.publicar(command.autorId(), command.texto(), media,
-                command.categoriaClave(), clock.now());
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        Publicacion publicacion = Publicacion.publicar(PublicacionId.of(idGenerator.newId()), command.autorId(),
+                command.texto(), media, command.categoriaClave(), clock.now());
         Publicacion guardada = savePublicacionPort.save(publicacion);
         events.publishEvent(new PublicacionCreadaEvent(guardada.id().value(), guardada.autorId(),
                 guardada.categoriaClave(), clock.now()));
@@ -220,8 +224,9 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     public UUID publicarDesdeEvidencia(PublicarDesdeEvidenciaComando comando) {
         requireActorPuedePublicar(comando.autorId());
         MediaPublicacion media = new MediaPublicacion(comando.bucket(), comando.ruta(), comando.mime(), 0);
-        Publicacion publicacion = Publicacion.publicarAutomatica(comando.autorId(), comando.texto(), List.of(media),
-                clock.now());
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        Publicacion publicacion = Publicacion.publicarAutomatica(PublicacionId.of(idGenerator.newId()),
+                comando.autorId(), comando.texto(), List.of(media), clock.now());
         Publicacion guardada = savePublicacionPort.save(publicacion);
         events.publishEvent(new PublicacionCreadaEvent(guardada.id().value(), guardada.autorId(),
                 guardada.categoriaClave(), clock.now()));

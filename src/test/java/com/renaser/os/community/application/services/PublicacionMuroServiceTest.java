@@ -23,6 +23,7 @@ import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.community.domain.model.publicacion.TipoPublicacion;
 import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.infrastructure.storage.NoOpAlmacenamientoAdapter;
@@ -60,6 +61,8 @@ import static org.mockito.Mockito.when;
 class PublicacionMuroServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, la factoria del agregado ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadPublicacionPort loadPublicacionPort;
@@ -79,6 +82,8 @@ class PublicacionMuroServiceTest {
     private UserSummaryFinder userSummaryFinder;
     @Mock
     private ApplicationEventPublisher events;
+    @Mock
+    private IdGenerator idGenerator;
 
     private PublicacionMuroService service;
 
@@ -92,7 +97,8 @@ class PublicacionMuroServiceTest {
     void setUp() {
         service = new PublicacionMuroService(loadPublicacionPort, savePublicacionPort, eliminarPublicacionPort,
                 loadComentarioPort, reaccionMuroPort, categoriasUseCase, consultarPerfilUsuarioPort,
-                new NoOpAlmacenamientoAdapter(), userSummaryFinder, events, CLOCK);
+                new NoOpAlmacenamientoAdapter(), userSummaryFinder, events, CLOCK, idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(autor))
                 .thenReturn(Optional.of(new UserSummary(autor, "Autor", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(otro))
@@ -114,7 +120,7 @@ class PublicacionMuroServiceTest {
     }
 
     private Publicacion publicacionVisible(UserId autorId) {
-        return Publicacion.rehydrate(PublicacionId.newId(), autorId,
+        return Publicacion.rehydrate(PublicacionId.of(UUID.randomUUID()), autorId,
                 com.renaser.os.community.domain.model.publicacion.TipoPublicacion.MANUAL, null, "hola",
                 List.of(new MediaPublicacion("wall", "muro/x/1.jpg", "image/jpeg", 0)), false, CLOCK.now(),
                 CLOCK.now());
@@ -296,7 +302,7 @@ class PublicacionMuroServiceTest {
     @Test
     @DisplayName("restaurar(): rol sin permiso (TRAINEE) -> 403, nunca guarda")
     void restaurarComoNoModeradorEsRechazado() {
-        var command = new RestaurarPublicacionCommand(otro, PublicacionId.newId());
+        var command = new RestaurarPublicacionCommand(otro, PublicacionId.of(UUID.randomUUID()));
         assertThatThrownBy(() -> service.restaurar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(savePublicacionPort, never()).save(any());
     }
@@ -304,7 +310,7 @@ class PublicacionMuroServiceTest {
     @Test
     @DisplayName("restaurar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
     void restaurarConAdminSuspendidoFalla() {
-        var command = new RestaurarPublicacionCommand(adminSuspendido, PublicacionId.newId());
+        var command = new RestaurarPublicacionCommand(adminSuspendido, PublicacionId.of(UUID.randomUUID()));
         assertThatThrownBy(() -> service.restaurar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(savePublicacionPort, never()).save(any());
     }
@@ -312,7 +318,7 @@ class PublicacionMuroServiceTest {
     @Test
     @DisplayName("eliminarPermanente(): rol sin permiso (TRAINEE) -> 403, nunca borra")
     void eliminarPermanenteComoNoModeradorEsRechazado() {
-        var command = new EliminarPublicacionCommand(otro, PublicacionId.newId());
+        var command = new EliminarPublicacionCommand(otro, PublicacionId.of(UUID.randomUUID()));
         assertThatThrownBy(() -> service.eliminarPermanente(command)).isInstanceOf(NotAuthorizedException.class);
         verify(eliminarPublicacionPort, never()).eliminar(any());
     }
@@ -320,7 +326,7 @@ class PublicacionMuroServiceTest {
     @Test
     @DisplayName("eliminarPermanente(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
     void eliminarPermanenteConAdminSuspendidoFalla() {
-        var command = new EliminarPublicacionCommand(adminSuspendido, PublicacionId.newId());
+        var command = new EliminarPublicacionCommand(adminSuspendido, PublicacionId.of(UUID.randomUUID()));
         assertThatThrownBy(() -> service.eliminarPermanente(command)).isInstanceOf(NotAuthorizedException.class);
         verify(eliminarPublicacionPort, never()).eliminar(any());
     }

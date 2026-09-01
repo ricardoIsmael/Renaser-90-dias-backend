@@ -37,10 +37,18 @@ public final class Celula {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    public static Celula crear(String nombre, CohorteId cohorteId, String urlVideollamada, Instant ahora) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code CelulaService.crear}). Asi la
+     * factoria es referencialmente transparente y un test puede fijar el id que espera, en
+     * vez de tener que caer a {@link #rehydrate} para lograrlo.
+     */
+    public static Celula crear(CelulaId id, String nombre, CohorteId cohorteId, String urlVideollamada,
+                                Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         requireNombreValido(nombre);
         Objects.requireNonNull(cohorteId, "cohorteId es obligatorio");
-        return new Celula(CelulaId.newId(), nombre, null, cohorteId, urlVideollamada, null, ahora, ahora);
+        return new Celula(id, nombre, null, cohorteId, urlVideollamada, null, ahora, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */
