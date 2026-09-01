@@ -38,6 +38,7 @@ import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
 import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.context.ApplicationEventPublisher;
@@ -79,13 +80,14 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
     private final PublicarEnMuroPort publicarEnMuroPort;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public RocaDiariaService(LoadRocaMaestraPort loadRocaMaestraPort, LoadRocaSemanalPort loadRocaSemanalPort,
                               LoadRocaDiariaPort loadRocaDiariaPort, SaveRocaDiariaPort saveRocaDiariaPort,
                               RegistrarEvidenciaPort registrarEvidenciaPort,
                               ConsultarProgresoParticipanteRocksPort progresoPort, AlmacenamientoPort almacenamientoPort,
                               AjustarPuntosPort ajustarPuntosPort, PublicarEnMuroPort publicarEnMuroPort,
-                              ApplicationEventPublisher events, Clock clock) {
+                              ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator) {
         this.loadRocaMaestraPort = loadRocaMaestraPort;
         this.loadRocaSemanalPort = loadRocaSemanalPort;
         this.loadRocaDiariaPort = loadRocaDiariaPort;
@@ -97,6 +99,7 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         this.publicarEnMuroPort = publicarEnMuroPort;
         this.events = events;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -229,9 +232,10 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         RocaSemanal rocaSemanal = loadRocaSemanalPort.deMaestraYSemana(maestra.id(), numeroSemana)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "NO_WEEKLY_ROCK: no hay plan semanal activo para el eje " + item.eje()));
-        return RocaDiaria.planificar(actorId, fecha, item.posicion(), item.titulo(), item.descripcion(),
-                item.puntajeImpacto(), item.esDelegable(), item.eje(), rocaSemanal.id(), item.horaInicio(),
-                item.horaFin(), clock);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
+        return RocaDiaria.planificar(RocaDiariaId.of(idGenerator.newId()), actorId, fecha, item.posicion(),
+                item.titulo(), item.descripcion(), item.puntajeImpacto(), item.esDelegable(), item.eje(),
+                rocaSemanal.id(), item.horaInicio(), item.horaFin(), clock);
     }
 
     /**

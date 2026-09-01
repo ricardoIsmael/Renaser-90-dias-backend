@@ -23,6 +23,7 @@ import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -80,6 +81,8 @@ class RocaDiariaServiceTest {
     private PublicarEnMuroPort publicarEnMuroPort;
     @Mock
     private ApplicationEventPublisher events;
+    @Mock
+    private IdGenerator idGenerator;
 
     private RocaDiariaService service;
     private UserId actorId;
@@ -88,7 +91,7 @@ class RocaDiariaServiceTest {
     void setUp() {
         service = new RocaDiariaService(loadRocaMaestraPort, loadRocaSemanalPort, loadRocaDiariaPort,
                 saveRocaDiariaPort, registrarEvidenciaPort, progresoPort, almacenamientoPort, ajustarPuntosPort,
-                publicarEnMuroPort, events, CLOCK);
+                publicarEnMuroPort, events, CLOCK, idGenerator);
         actorId = UserId.of(UUID.randomUUID());
         lenient().when(saveRocaDiariaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(registrarEvidenciaPort.registrar(any()))
@@ -100,12 +103,14 @@ class RocaDiariaServiceTest {
     }
 
     private RocaDiaria rocaVerde(LocalTime horaFin) {
-        return RocaDiaria.planificar(actorId, LocalDate.of(2026, 8, 24), 1, "verde", null, 5, false,
+        return RocaDiaria.planificar(RocaDiariaId.of(UUID.randomUUID()), actorId,
+                LocalDate.of(2026, 8, 24), 1, "verde", null, 5, false,
                 EjeObjetivo.CUERPO, null, null, horaFin, CLOCK);
     }
 
     private RocaDiaria rocaAmarilla() {
-        return RocaDiaria.planificar(actorId, LocalDate.of(2026, 8, 24), 2, "amarilla", null, 5, false,
+        return RocaDiaria.planificar(RocaDiariaId.of(UUID.randomUUID()), actorId,
+                LocalDate.of(2026, 8, 24), 2, "amarilla", null, 5, false,
                 EjeObjetivo.CUERPO, null, null, null, CLOCK);
     }
 
@@ -119,7 +124,7 @@ class RocaDiariaServiceTest {
     void rolSinPermisoRechazado() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.MENTOR, false)));
 
-        assertThatThrownBy(() -> service.completar(comandoTexto(RocaDiariaId.newId())))
+        assertThatThrownBy(() -> service.completar(comandoTexto(RocaDiariaId.of(UUID.randomUUID()))))
                 .isInstanceOf(NotAuthorizedException.class);
     }
 
@@ -128,7 +133,7 @@ class RocaDiariaServiceTest {
     void actorSuspendidoRechazado() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, true)));
 
-        assertThatThrownBy(() -> service.completar(comandoTexto(RocaDiariaId.newId())))
+        assertThatThrownBy(() -> service.completar(comandoTexto(RocaDiariaId.of(UUID.randomUUID()))))
                 .isInstanceOf(NotAuthorizedException.class);
     }
 
@@ -224,7 +229,7 @@ class RocaDiariaServiceTest {
     @Test
     @DisplayName("Hueco #17: publishedToWall solo aplica a evidencia visual (FOTO/VIDEO/CAPTURA)")
     void publishedToWallConEvidenciaNoVisualEsRechazado() {
-        assertThatThrownBy(() -> new CompletarRocaDiariaCommand(actorId, RocaDiariaId.newId(),
+        assertThatThrownBy(() -> new CompletarRocaDiariaCommand(actorId, RocaDiariaId.of(UUID.randomUUID()),
                 TipoEvidenciaRoca.TEXTO, null, null, "hecho", null, null, null, true, true))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("publishedToWall");

@@ -69,9 +69,14 @@ class EventoVerdugoPersistenceAdapterTest {
                 .executeUpdate();
     }
 
+    /** El id ya no lo sortea la factoria: entra por parametro (puerto IdGenerator). */
+    private static com.renaser.os.rocks.domain.model.verdugo.EventoVerdugoId unId() {
+        return com.renaser.os.rocks.domain.model.verdugo.EventoVerdugoId.of(UUID.randomUUID());
+    }
+
     @Test
     void guardaYRecuperaUnEventoResueltoPorElCliente() {
-        EventoVerdugo evento = EventoVerdugo.registrar(participanteId, DestinoVerdugo.ROCA_DIARIA,
+        EventoVerdugo evento = EventoVerdugo.registrar(unId(), participanteId, DestinoVerdugo.ROCA_DIARIA,
                 rocaDiariaId, CLOCK.now(), ResultadoVerdugo.COMPLETADO, CLOCK);
 
         adapter.save(evento);
@@ -84,11 +89,10 @@ class EventoVerdugoPersistenceAdapterTest {
 
     @Test
     void pendientesDeFechaEncuentraSoloLosSinResolverDeEseDia() {
-        EventoVerdugo pendiente = EventoVerdugo.rehydrate(
-                com.renaser.os.rocks.domain.model.verdugo.EventoVerdugoId.newId(), participanteId,
+        EventoVerdugo pendiente = EventoVerdugo.rehydrate(unId(), participanteId,
                 DestinoVerdugo.ROCA_DIARIA, rocaDiariaId, CLOCK.now(), null, null, CLOCK.now(), CLOCK.now());
         adapter.save(pendiente);
-        adapter.save(EventoVerdugo.registrar(participanteId, DestinoVerdugo.ROCA_DIARIA, rocaDiariaId,
+        adapter.save(EventoVerdugo.registrar(unId(), participanteId, DestinoVerdugo.ROCA_DIARIA, rocaDiariaId,
                 CLOCK.now(), ResultadoVerdugo.COMPLETADO, CLOCK));
 
         LocalDate hoy = LocalDate.of(2026, 8, 24);

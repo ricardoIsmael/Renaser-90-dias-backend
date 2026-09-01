@@ -79,8 +79,8 @@ class RocaMaestraServiceTest {
         service = new RocaMaestraService(loadRocaMaestraPort, progresoPort);
         UserId id = actor();
         when(progresoPort.deParticipante(id)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
-        RocaMaestra maestra = RocaMaestra.rehydrate(RocaMaestraId.newId(), id, EjeObjetivo.CUERPO, "objetivo",
-                Instant.now());
+        RocaMaestra maestra = RocaMaestra.rehydrate(RocaMaestraId.of(UUID.randomUUID()), id,
+                EjeObjetivo.CUERPO, "objetivo", Instant.now());
         when(loadRocaMaestraPort.deParticipante(id)).thenReturn(List.of(maestra));
 
         var resultado = service.misRocasMaestras(id);

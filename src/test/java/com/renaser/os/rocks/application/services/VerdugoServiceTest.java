@@ -13,6 +13,7 @@ import com.renaser.os.rocks.domain.model.verdugo.EventoVerdugo;
 import com.renaser.os.rocks.domain.model.verdugo.EventoVerdugoId;
 import com.renaser.os.rocks.domain.model.verdugo.ResultadoVerdugo;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -40,6 +42,8 @@ import static org.mockito.Mockito.when;
 class VerdugoServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T21:00:00Z"));
+    /** Id fijo que devuelve el IdGenerator mockeado, mismo espiritu que el FixedClock de arriba. */
+    private static final UUID ID_GENERADO = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
     @Mock
     private LoadEventoVerdugoPort loadEventoVerdugoPort;
@@ -51,6 +55,8 @@ class VerdugoServiceTest {
     private LoadRocaDiariaPort loadRocaDiariaPort;
     @Mock
     private VerificarDestinoVerdugoPort verificarDestinoPort;
+    @Mock
+    private IdGenerator idGenerator;
 
     private VerdugoService service;
     private UserId actorId;
@@ -58,14 +64,17 @@ class VerdugoServiceTest {
     @BeforeEach
     void setUp() {
         service = new VerdugoService(loadEventoVerdugoPort, saveEventoVerdugoPort, progresoPort, loadRocaDiariaPort,
-                verificarDestinoPort, CLOCK);
+                verificarDestinoPort, CLOCK, idGenerator);
         actorId = UserId.of(UUID.randomUUID());
+        // lenient: varios casos cortan antes de generar id (autorizacion, destino ajeno, barrido).
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
     }
 
     /** Roca del propio actor, para los casos donde la pertenencia no es lo que se prueba. */
     private com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria rocaDe(UserId dueno) {
-        return com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria.planificar(dueno, CLOCK.today(), 1,
-                "Roca de prueba", null, 5, false,
+        return com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria.planificar(
+                com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId.of(UUID.randomUUID()), dueno,
+                CLOCK.today(), 1, "Roca de prueba", null, 5, false,
                 com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo.CUERPO, null, null, null, CLOCK);
     }
 
@@ -164,9 +173,9 @@ class VerdugoServiceTest {
     @Test
     @DisplayName("el barrido nocturno resuelve pendientes como IGNORADO y no tumba el resto si uno falla")
     void barridoNocturnoResuelvePendientesComoIgnorado() {
-        EventoVerdugo pendiente1 = EventoVerdugo.rehydrate(EventoVerdugoId.newId(), actorId,
+        EventoVerdugo pendiente1 = EventoVerdugo.rehydrate(EventoVerdugoId.of(UUID.randomUUID()), actorId,
                 DestinoVerdugo.ROCA_DIARIA, UUID.randomUUID(), CLOCK.now(), null, null, CLOCK.now(), CLOCK.now());
-        EventoVerdugo pendiente2 = EventoVerdugo.rehydrate(EventoVerdugoId.newId(), actorId,
+        EventoVerdugo pendiente2 = EventoVerdugo.rehydrate(EventoVerdugoId.of(UUID.randomUUID()), actorId,
                 DestinoVerdugo.ROCA_DIARIA, UUID.randomUUID(), CLOCK.now(), null, null, CLOCK.now(), CLOCK.now());
         when(loadEventoVerdugoPort.pendientesDeFecha(CLOCK.today())).thenReturn(List.of(pendiente1, pendiente2));
         when(saveEventoVerdugoPort.save(pendiente1)).thenThrow(new RuntimeException("fallo simulado"));

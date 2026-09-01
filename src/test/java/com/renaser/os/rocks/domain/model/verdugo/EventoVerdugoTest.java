@@ -20,24 +20,26 @@ class EventoVerdugoTest {
 
     @Test
     void registrarConResultadoDeClienteFunciona() {
-        EventoVerdugo evento = EventoVerdugo.registrar(participante(), DestinoVerdugo.ROCA_DIARIA, UUID.randomUUID(),
-                CLOCK.now(), ResultadoVerdugo.COMPLETADO, CLOCK);
+        EventoVerdugoId id = EventoVerdugoId.of(UUID.randomUUID());
+        EventoVerdugo evento = EventoVerdugo.registrar(id, participante(), DestinoVerdugo.ROCA_DIARIA,
+                UUID.randomUUID(), CLOCK.now(), ResultadoVerdugo.COMPLETADO, CLOCK);
 
+        assertThat(evento.id()).isEqualTo(id);
         assertThat(evento.resultado()).isEqualTo(ResultadoVerdugo.COMPLETADO);
         assertThat(evento.pendiente()).isFalse();
     }
 
     @Test
     void rechazaIgnoradoDesdeElCliente() {
-        assertThatThrownBy(() -> EventoVerdugo.registrar(participante(), DestinoVerdugo.ROCA_DIARIA,
-                UUID.randomUUID(), CLOCK.now(), ResultadoVerdugo.IGNORADO, CLOCK))
+        assertThatThrownBy(() -> EventoVerdugo.registrar(EventoVerdugoId.of(UUID.randomUUID()), participante(),
+                DestinoVerdugo.ROCA_DIARIA, UUID.randomUUID(), CLOCK.now(), ResultadoVerdugo.IGNORADO, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void resolverComoIgnoradoDejaElEventoResuelto() {
         // rehydrate simula un evento pendiente (resultado null) tal como lo dejaria un futuro disparador server-side
-        EventoVerdugo pendiente = EventoVerdugo.rehydrate(EventoVerdugoId.newId(), participante(),
+        EventoVerdugo pendiente = EventoVerdugo.rehydrate(EventoVerdugoId.of(UUID.randomUUID()), participante(),
                 DestinoVerdugo.ROCA_DIARIA, UUID.randomUUID(), CLOCK.now(), null, null, CLOCK.now(), CLOCK.now());
         assertThat(pendiente.pendiente()).isTrue();
 
@@ -50,7 +52,7 @@ class EventoVerdugoTest {
 
     @Test
     void noSePuedeResolverComoIgnoradoDosVeces() {
-        EventoVerdugo pendiente = EventoVerdugo.rehydrate(EventoVerdugoId.newId(), participante(),
+        EventoVerdugo pendiente = EventoVerdugo.rehydrate(EventoVerdugoId.of(UUID.randomUUID()), participante(),
                 DestinoVerdugo.ROCA_DIARIA, UUID.randomUUID(), CLOCK.now(), null, null, CLOCK.now(), CLOCK.now());
         pendiente.resolverComoIgnorado(CLOCK);
 

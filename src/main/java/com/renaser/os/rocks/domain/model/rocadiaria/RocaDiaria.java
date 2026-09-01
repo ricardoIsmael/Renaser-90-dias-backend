@@ -49,18 +49,27 @@ public final class RocaDiaria {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    /** Planifica una Roca Diaria nueva (R-04). El color se deriva de la posición, nunca se recibe suelto. */
-    public static RocaDiaria planificar(UserId participanteId, LocalDate fecha, int posicion, String titulo,
-                                         String descripcion, int puntajeImpacto, boolean esDelegable,
-                                         EjeObjetivo eje, RocaSemanalId rocaSemanalId, LocalTime horaInicio,
+    /**
+     * Planifica una Roca Diaria nueva (R-04). El color se deriva de la posición, nunca se recibe suelto.
+     *
+     * <p>El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code RocaDiariaService.crear}). Asi la
+     * factoria es referencialmente transparente y un test puede fijar el id que espera, en
+     * vez de tener que caer a {@link #rehydrate} para lograrlo (CLAUDE.MD §5.4.7).
+     */
+    public static RocaDiaria planificar(RocaDiariaId id, UserId participanteId, LocalDate fecha,
+                                         int posicion, String titulo, String descripcion,
+                                         int puntajeImpacto, boolean esDelegable, EjeObjetivo eje,
+                                         RocaSemanalId rocaSemanalId, LocalTime horaInicio,
                                          LocalTime horaFin, Clock clock) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Objects.requireNonNull(fecha, "fecha es obligatoria");
         Objects.requireNonNull(eje, "eje es obligatorio");
         ColorPareto color = ColorPareto.paraPosicion(posicion);
         requireImpacto(puntajeImpacto);
         Instant ahora = clock.now();
-        return new RocaDiaria(RocaDiariaId.newId(), participanteId, fecha, posicion, requireTitulo(titulo),
+        return new RocaDiaria(id, participanteId, fecha, posicion, requireTitulo(titulo),
                 requireDescripcion(descripcion), color, puntajeImpacto, esDelegable, eje, rocaSemanalId, horaInicio,
                 horaFin, false, null, 0, ahora, ahora);
     }

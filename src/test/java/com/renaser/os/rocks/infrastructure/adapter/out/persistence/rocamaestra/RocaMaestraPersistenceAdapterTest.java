@@ -52,7 +52,8 @@ class RocaMaestraPersistenceAdapterTest {
     }
 
     private RocaMaestra maestra(EjeObjetivo eje) {
-        return RocaMaestra.rehydrate(RocaMaestraId.newId(), participanteId, eje, "objetivo " + eje, Instant.now());
+        return RocaMaestra.rehydrate(RocaMaestraId.of(UUID.randomUUID()), participanteId, eje,
+                "objetivo " + eje, Instant.now());
     }
 
     @Test
