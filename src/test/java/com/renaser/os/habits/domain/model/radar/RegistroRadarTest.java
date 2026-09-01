@@ -75,7 +75,8 @@ class RegistroRadarTest {
 
     @Test
     void registrarRechazaCampoDeTextoNulo() {
-        assertThatThrownBy(() -> RegistroRadar.registrar(PARTICIPANTE, "h", "p", null, 5, "e", AHORA))
+        assertThatThrownBy(() -> RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), PARTICIPANTE, "h", "p",
+                null, 5, "e", AHORA))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("queSiento");
     }
@@ -101,7 +102,8 @@ class RegistroRadarTest {
 
     @Test
     void registrarRechazaParticipanteNulo() {
-        assertThatThrownBy(() -> RegistroRadar.registrar(null, "h", "p", "s", 5, "e", AHORA))
+        assertThatThrownBy(() -> RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), null, "h", "p", "s", 5,
+                "e", AHORA))
                 .isInstanceOf(NullPointerException.class);
     }
 
@@ -116,7 +118,7 @@ class RegistroRadarTest {
 
     @Test
     void rehydrateNoRevalidaRangosNiRecorta() {
-        RegistroRadarId id = RegistroRadarId.newId();
+        RegistroRadarId id = RegistroRadarId.of(UUID.randomUUID());
 
         RegistroRadar registro = RegistroRadar.rehydrate(id, PARTICIPANTE, "  h  ", "p", "s", 5, "e", AHORA);
 
@@ -126,6 +128,7 @@ class RegistroRadarTest {
 
     private static RegistroRadar registrar(String queHago, String quePienso, String queSiento, int nivelEnergia,
                                             String queEvito) {
-        return RegistroRadar.registrar(PARTICIPANTE, queHago, quePienso, queSiento, nivelEnergia, queEvito, AHORA);
+        return RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), PARTICIPANTE, queHago, quePienso,
+                queSiento, nivelEnergia, queEvito, AHORA);
     }
 }

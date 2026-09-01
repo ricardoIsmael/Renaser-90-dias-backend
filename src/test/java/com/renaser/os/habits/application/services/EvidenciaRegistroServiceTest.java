@@ -14,6 +14,7 @@ import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPo
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
+import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -62,8 +63,8 @@ class EvidenciaRegistroServiceTest {
     }
 
     private RegistroHabito registroDe(UserId participanteId) {
-        return RegistroHabito.generar(participanteId, HabitoId.newId(), LocalDate.of(2026, 8, 25), 5,
-                TipoDia.DISCIPLINA, false, CLOCK.now());
+        return RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participanteId,
+                HabitoId.of(UUID.randomUUID()), LocalDate.of(2026, 8, 25), 5, TipoDia.DISCIPLINA, false, CLOCK.now());
     }
 
     private static ProgresoParticipanteHabits progreso(boolean suspendido) {
@@ -98,7 +99,7 @@ class EvidenciaRegistroServiceTest {
 
     @Test
     void registroInexistenteLanzaNoSuchElement() {
-        var registroId = com.renaser.os.habits.domain.model.registro.RegistroHabitoId.newId();
+        var registroId = com.renaser.os.habits.domain.model.registro.RegistroHabitoId.of(UUID.randomUUID());
         when(loadRegistroPort.byId(registroId)).thenReturn(Optional.empty());
 
         var command = new SubirEvidenciaRegistroCommand(actorId, registroId, TipoEvidencia.TEXTO, null, null,

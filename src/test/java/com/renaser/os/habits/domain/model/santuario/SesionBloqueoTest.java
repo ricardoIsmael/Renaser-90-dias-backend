@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -16,7 +17,7 @@ class SesionBloqueoTest {
     private static final Instant INICIO = Instant.parse("2026-08-24T20:00:00Z");
 
     private static SesionBloqueo nuevaActiva(Instant inicio) {
-        return SesionBloqueo.iniciar(RegistroHabitoId.newId(), inicio);
+        return SesionBloqueo.iniciar(RegistroHabitoId.of(UUID.randomUUID()), inicio);
     }
 
     @Test

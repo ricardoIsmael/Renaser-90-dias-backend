@@ -8,7 +8,9 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.radar.LoadRegistroRadarPort;
 import com.renaser.os.habits.application.ports.out.radar.SaveRegistroRadarPort;
 import com.renaser.os.habits.domain.model.radar.RegistroRadar;
+import com.renaser.os.habits.domain.model.radar.RegistroRadarId;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +38,8 @@ import static org.mockito.Mockito.when;
 class RadarServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T14:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, registrar() ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadRegistroRadarPort loadPort;
@@ -43,12 +47,15 @@ class RadarServiceTest {
     private SaveRegistroRadarPort savePort;
     @Mock
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
+    @Mock
+    private IdGenerator idGenerator;
 
     private RadarService service;
 
     @BeforeEach
     void setUp() {
-        service = new RadarService(loadPort, savePort, progresoPort, CLOCK);
+        service = new RadarService(loadPort, savePort, progresoPort, CLOCK, idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(savePort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -141,7 +148,8 @@ class RadarServiceTest {
     @Test
     void ultimoDevuelveElRegistroMasReciente() {
         UserId dueno = UserId.of(UUID.randomUUID());
-        RegistroRadar ultimo = RegistroRadar.registrar(dueno, "h", "p", "s", 5, "e", CLOCK.now());
+        RegistroRadar ultimo = RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), dueno, "h", "p", "s", 5,
+                "e", CLOCK.now());
         when(progresoPort.deParticipante(dueno)).thenReturn(Optional.of(trainee()));
         when(loadPort.ultimoDeParticipante(dueno)).thenReturn(Optional.of(ultimo));
 
@@ -162,7 +170,8 @@ class RadarServiceTest {
     void historialSinSiguienteCursorCuandoLaPaginaNoEstaLlena() {
         UserId dueno = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(dueno)).thenReturn(Optional.of(trainee()));
-        List<RegistroRadar> pagina = List.of(RegistroRadar.registrar(dueno, "h", "p", "s", 5, "e", CLOCK.now()));
+        List<RegistroRadar> pagina = List.of(RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), dueno, "h",
+                "p", "s", 5, "e", CLOCK.now()));
         when(loadPort.historialDeParticipante(dueno, null, 20)).thenReturn(pagina);
 
         HistorialRadarPage resultado = service.historial(dueno, dueno, null, 20);
@@ -178,8 +187,9 @@ class RadarServiceTest {
         Instant t1 = CLOCK.now().minusSeconds(120);
         Instant t2 = CLOCK.now().minusSeconds(60);
         List<RegistroRadar> pagina = List.of(
-                RegistroRadar.registrar(dueno, "h", "p", "s", 5, "e", t2),
-                RegistroRadar.registrar(dueno, "h", "p", "s", 5, "e", t1));
+                RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), dueno, "h", "p", "s", 5, "e",
+                        t2), RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), dueno, "h", "p", "s", 5,
+                        "e", t1));
         when(loadPort.historialDeParticipante(dueno, null, 2)).thenReturn(pagina);
 
         HistorialRadarPage resultado = service.historial(dueno, dueno, null, 2);

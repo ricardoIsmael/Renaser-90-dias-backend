@@ -18,7 +18,7 @@ class EleccionDiaSemanalTest {
     @Test
     void fechaDentroDeLaSemanaElegidaEsValida() {
         UserId participante = UserId.of(UUID.randomUUID());
-        HabitoId habito = HabitoId.newId();
+        HabitoId habito = HabitoId.of(UUID.randomUUID());
         LocalDate lunes = LocalDate.of(2026, 8, 24);
 
         EleccionDiaSemanal eleccion = EleccionDiaSemanal.elegir(participante, habito, lunes.plusDays(2), lunes,
@@ -31,7 +31,7 @@ class EleccionDiaSemanalTest {
     @Test
     void fechaFueraDeLaSemanaElegidaRechazada() {
         UserId participante = UserId.of(UUID.randomUUID());
-        HabitoId habito = HabitoId.newId();
+        HabitoId habito = HabitoId.of(UUID.randomUUID());
         LocalDate lunes = LocalDate.of(2026, 8, 24);
 
         assertThatThrownBy(() -> EleccionDiaSemanal.elegir(participante, habito, lunes.plusDays(7), lunes, AHORA))

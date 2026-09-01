@@ -1,5 +1,7 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.points.api.HabitoDelDiaResumen;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
@@ -45,7 +47,8 @@ class HabitosDelDiaFinderServiceTest {
     }
 
     private static Habito habito(String titulo) {
-        return Habito.crearDeSistema(titulo, TipoHabito.CHECKBOX, "MENTE", ExigenciaEvidencia.OPCIONAL, AHORA);
+        return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), titulo, TipoHabito.CHECKBOX, "MENTE",
+                ExigenciaEvidencia.OPCIONAL, AHORA);
     }
 
     @Test
@@ -73,8 +76,8 @@ class HabitosDelDiaFinderServiceTest {
     void resuelveTituloYEstadoConUnaSolaConsultaDeCatalogo() {
         UserId participante = UserId.of(UUID.randomUUID());
         Habito habito = habito("Meditar");
-        RegistroHabito registro = RegistroHabito.generar(participante, habito.id(), FECHA, 5, TipoDia.DISCIPLINA,
-                false, AHORA);
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante,
+                habito.id(), FECHA, 5, TipoDia.DISCIPLINA, false, AHORA);
 
         when(consultarTracksUseCase.consultar(participante, participante, FECHA)).thenReturn(List.of(registro));
         when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));

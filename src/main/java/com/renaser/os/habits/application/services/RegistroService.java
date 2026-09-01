@@ -29,6 +29,7 @@ import com.renaser.os.habits.domain.model.registro.VentanaEntrega;
 import com.renaser.os.points.api.AjustarPuntosPort;
 import com.renaser.os.points.api.MotivoPuntos;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.context.ApplicationEventPublisher;
@@ -63,13 +64,15 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     private final AjustarPuntosPort ajustarPuntosPort;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final IdGenerator idGenerator;
     private final RegistroPoliticasHabito politicas;
 
     public RegistroService(LoadRegistroHabitoPort loadRegistroPort, SaveRegistroHabitoPort saveRegistroPort,
                             LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
                             LoadPreferenciaHorarioPort loadPreferenciaPort,
                             ConsultarProgresoParticipanteHabitsPort progresoPort, AjustarPuntosPort ajustarPuntosPort,
-                            ApplicationEventPublisher events, Clock clock, List<PoliticaHabito> politicas) {
+                            ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator,
+                            List<PoliticaHabito> politicas) {
         this.loadRegistroPort = loadRegistroPort;
         this.saveRegistroPort = saveRegistroPort;
         this.loadHabitoPort = loadHabitoPort;
@@ -79,6 +82,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         this.ajustarPuntosPort = ajustarPuntosPort;
         this.events = events;
         this.clock = clock;
+        this.idGenerator = idGenerator;
         // Se indexa UNA vez, en el arranque: en `completar` la resolucion es un lookup de
         // mapa, sin streams ni asignaciones (CLAUDE.MD §5.4.7, hot path).
         this.politicas = new RegistroPoliticasHabito(politicas);
@@ -110,8 +114,9 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
             if (!aplicaHoy) {
                 continue;
             }
-            RegistroHabito registro = RegistroHabito.generar(participanteId, habito.id(), fecha,
-                    progreso.diaPrograma(), tipoDia, habito.esOpcional(), ahora);
+            // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
+            RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(idGenerator.newId()), participanteId,
+                    habito.id(), fecha, progreso.diaPrograma(), tipoDia, habito.esOpcional(), ahora);
             generados.add(saveRegistroPort.save(registro));
         }
         return generados;

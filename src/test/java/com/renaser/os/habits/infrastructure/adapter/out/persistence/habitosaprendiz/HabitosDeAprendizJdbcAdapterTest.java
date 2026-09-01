@@ -178,7 +178,7 @@ class HabitosDeAprendizJdbcAdapterTest {
     }
 
     private HabitoId nuevoHabitoDeSistema(String titulo, int orden, boolean activo, boolean eleccionSemanal) {
-        HabitoId id = HabitoId.newId();
+        HabitoId id = HabitoId.of(UUID.randomUUID());
         entityManager.createNativeQuery("""
                         INSERT INTO renaser.habitos (id, ambito, titulo, tipo, categoria_clave, orden, activo,
                                                      eleccion_dia_semanal)
@@ -190,7 +190,7 @@ class HabitosDeAprendizJdbcAdapterTest {
     }
 
     private HabitoId nuevoHabitoPersonal(UserId duenio, String titulo, int orden, boolean eleccionSemanal) {
-        HabitoId id = HabitoId.newId();
+        HabitoId id = HabitoId.of(UUID.randomUUID());
         entityManager.createNativeQuery("""
                         INSERT INTO renaser.habitos (id, ambito, participante_id, titulo, tipo, categoria_clave,
                                                      orden, activo, eleccion_dia_semanal)

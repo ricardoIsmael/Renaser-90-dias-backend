@@ -53,14 +53,19 @@ public final class RachaSinCelular {
         return HITOS.contains(horas);
     }
 
-    public static RachaSinCelular iniciar(UserId participanteId, RegistroHabitoId registroHabitoId, int horasObjetivo,
-                                           Instant ahora) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code RachaService.iniciar}).
+     */
+    public static RachaSinCelular iniciar(RachaSinCelularId id, UserId participanteId,
+                                           RegistroHabitoId registroHabitoId, int horasObjetivo, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Objects.requireNonNull(registroHabitoId, "registroHabitoId es obligatorio");
         if (!esHorasObjetivoValida(horasObjetivo)) {
             throw new IllegalArgumentException("La meta debe ser un multiplo de 3 hasta 24: " + horasObjetivo);
         }
-        return new RachaSinCelular(RachaSinCelularId.newId(), participanteId, registroHabitoId, ahora, null,
+        return new RachaSinCelular(id, participanteId, registroHabitoId, ahora, null,
                 horasObjetivo, EstadoRacha.ACTIVA, null, null, ahora, ahora);
     }
 

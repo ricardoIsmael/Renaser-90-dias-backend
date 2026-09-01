@@ -10,7 +10,9 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
 import com.renaser.os.habits.domain.model.espiritu.RegistroEspiritu;
+import com.renaser.os.habits.domain.model.espiritu.RegistroEspirituId;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +39,8 @@ class EspirituServiceTest {
 
     /** 09:00 UTC — despues de las 07:00 de desbloqueo. */
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T09:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, desbloquear() ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadRegistroEspirituPort loadPort;
@@ -46,12 +50,15 @@ class EspirituServiceTest {
     private AudioCatalogPort audioCatalogPort;
     @Mock
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
+    @Mock
+    private IdGenerator idGenerator;
 
     private EspirituService service;
 
     @BeforeEach
     void setUp() {
-        service = new EspirituService(loadPort, savePort, audioCatalogPort, progresoPort, CLOCK);
+        service = new EspirituService(loadPort, savePort, audioCatalogPort, progresoPort, CLOCK, idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(savePort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -134,8 +141,8 @@ class EspirituServiceTest {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false)));
-        RegistroEspiritu registro = RegistroEspiritu.desbloquear(actor, 1, CLOCK.now(),
-                CLOCK.now().plusSeconds(3600), CLOCK.now());
+        RegistroEspiritu registro = RegistroEspiritu.desbloquear(RegistroEspirituId.of(UUID.randomUUID()), actor, 1,
+                CLOCK.now(), CLOCK.now().plusSeconds(3600), CLOCK.now());
         when(loadPort.ultimoDe(actor)).thenReturn(Optional.of(registro));
         when(loadPort.porParticipanteYDia(actor, 1)).thenReturn(Optional.of(registro));
 

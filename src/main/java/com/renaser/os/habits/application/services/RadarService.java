@@ -9,7 +9,9 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.radar.LoadRegistroRadarPort;
 import com.renaser.os.habits.application.ports.out.radar.SaveRegistroRadarPort;
 import com.renaser.os.habits.domain.model.radar.RegistroRadar;
+import com.renaser.os.habits.domain.model.radar.RegistroRadarId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -40,13 +42,16 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
     private final SaveRegistroRadarPort savePort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public RadarService(LoadRegistroRadarPort loadPort, SaveRegistroRadarPort savePort,
-                         ConsultarProgresoParticipanteHabitsPort progresoPort, Clock clock) {
+                         ConsultarProgresoParticipanteHabitsPort progresoPort, Clock clock,
+                         IdGenerator idGenerator) {
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.progresoPort = progresoPort;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -54,8 +59,10 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
     public RegistroRadar registrar(RegistrarCheckInRadarCommand command) {
         requireSelf(command.actorId(), command.participanteId());
         requireParticipanteHabilitado(command.participanteId());
-        RegistroRadar registro = RegistroRadar.registrar(command.participanteId(), command.queHago(),
-                command.quePienso(), command.queSiento(), command.nivelEnergia(), command.queEvito(), clock.now());
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
+        RegistroRadar registro = RegistroRadar.registrar(RegistroRadarId.of(idGenerator.newId()),
+                command.participanteId(), command.queHago(), command.quePienso(), command.queSiento(),
+                command.nivelEnergia(), command.queEvito(), clock.now());
         return savePort.save(registro);
     }
 

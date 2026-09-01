@@ -11,7 +11,9 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
 import com.renaser.os.habits.domain.model.espiritu.EstadoRegistroEspiritu;
 import com.renaser.os.habits.domain.model.espiritu.RegistroEspiritu;
+import com.renaser.os.habits.domain.model.espiritu.RegistroEspirituId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -67,15 +69,17 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
     private final AudioCatalogPort audioCatalogPort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public EspirituService(LoadRegistroEspirituPort loadPort, SaveRegistroEspirituPort savePort,
                             AudioCatalogPort audioCatalogPort, ConsultarProgresoParticipanteHabitsPort progresoPort,
-                            Clock clock) {
+                            Clock clock, IdGenerator idGenerator) {
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.audioCatalogPort = audioCatalogPort;
         this.progresoPort = progresoPort;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -154,7 +158,8 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
             return; // catalogo no tiene ese dia todavia: el aprendiz queda al dia, esperando contenido
         }
         Instant fechaLimite = ahora.atZone(zona).toLocalDate().atTime(HORA_LIMITE).atZone(zona).toInstant();
-        RegistroEspiritu nuevo = RegistroEspiritu.desbloquear(participanteId, diaAudio, ahora, fechaLimite, ahora);
+        RegistroEspiritu nuevo = RegistroEspiritu.desbloquear(RegistroEspirituId.of(idGenerator.newId()),
+                participanteId, diaAudio, ahora, fechaLimite, ahora);
         savePort.save(nuevo);
     }
 

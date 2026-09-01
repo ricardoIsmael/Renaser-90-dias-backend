@@ -64,7 +64,7 @@ class HabitosDeAprendizAdminServiceTest {
     private final UserId mentor = UserId.of(UUID.randomUUID());
     private final UserId adminSuspendido = UserId.of(UUID.randomUUID());
     private final UserId aprendiz = UserId.of(UUID.randomUUID());
-    private final HabitoId habitoId = HabitoId.newId();
+    private final HabitoId habitoId = HabitoId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
@@ -181,7 +181,7 @@ class HabitosDeAprendizAdminServiceTest {
     @Test
     void laCuotaSemanalSeCuentaConElHistorial() {
         when(historialPort.distintosHabitosCambiadosDesde(eq(aprendiz), any()))
-                .thenReturn(List.of(HabitoId.newId(), HabitoId.newId()));
+                .thenReturn(List.of(HabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID())));
 
         VistaHabitosDeAprendiz vista = service.consultar(new ConsultarHabitosDeAprendizCommand(admin, aprendiz));
 

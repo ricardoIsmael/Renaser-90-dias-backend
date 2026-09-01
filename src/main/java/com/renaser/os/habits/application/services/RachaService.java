@@ -21,10 +21,12 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.habits.domain.model.santuario.RachaSinCelular;
+import com.renaser.os.habits.domain.model.santuario.RachaSinCelularId;
 import com.renaser.os.points.api.AjustarPuntosPort;
 import com.renaser.os.points.api.MotivoPuntos;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.context.ApplicationEventPublisher;
@@ -73,12 +75,14 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
     private final AlmacenamientoPort almacenamientoPort;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public RachaService(LoadRachaSinCelularPort loadRachaPort, SaveRachaSinCelularPort saveRachaPort,
                          LoadRegistroHabitoPort loadRegistroPort, SaveRegistroHabitoPort saveRegistroPort,
                          LoadHabitoPort loadHabitoPort, ConsultarProgresoParticipanteHabitsPort progresoPort,
                          AjustarPuntosPort ajustarPuntosPort, RegistrarEvidenciaPort registrarEvidenciaPort,
-                         AlmacenamientoPort almacenamientoPort, ApplicationEventPublisher events, Clock clock) {
+                         AlmacenamientoPort almacenamientoPort, ApplicationEventPublisher events, Clock clock,
+                         IdGenerator idGenerator) {
         this.loadRachaPort = loadRachaPort;
         this.saveRachaPort = saveRachaPort;
         this.loadRegistroPort = loadRegistroPort;
@@ -90,6 +94,7 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
         this.almacenamientoPort = almacenamientoPort;
         this.events = events;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -111,8 +116,9 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
         registro.iniciar(ahora);
         saveRegistroPort.save(registro);
 
-        RachaSinCelular racha = RachaSinCelular.iniciar(registro.participanteId(), registro.id(),
-                command.horasObjetivo(), ahora);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
+        RachaSinCelular racha = RachaSinCelular.iniciar(RachaSinCelularId.of(idGenerator.newId()),
+                registro.participanteId(), registro.id(), command.horasObjetivo(), ahora);
         return saveRachaPort.save(racha);
     }
 

@@ -19,6 +19,7 @@ import com.renaser.os.habits.application.ports.out.santuario.LoadRachaSinCelular
 import com.renaser.os.habits.application.ports.out.santuario.SaveRachaSinCelularPort;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
+import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
@@ -26,11 +27,13 @@ import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.habits.domain.model.santuario.EstadoRacha;
 import com.renaser.os.habits.domain.model.santuario.RachaSinCelular;
+import com.renaser.os.habits.domain.model.santuario.RachaSinCelularId;
 import com.renaser.os.points.api.AjustarPuntosPort;
 import com.renaser.os.points.api.MotivoPuntos;
 import com.renaser.os.points.api.ResumenAjustePuntos;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,6 +63,8 @@ import static org.mockito.Mockito.when;
 class RachaServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T09:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, iniciar() ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadRachaSinCelularPort loadRachaPort;
@@ -81,13 +86,17 @@ class RachaServiceTest {
     private AlmacenamientoPort almacenamientoPort;
     @Mock
     private org.springframework.context.ApplicationEventPublisher events;
+    @Mock
+    private IdGenerator idGenerator;
 
     private RachaService service;
 
     @BeforeEach
     void setUp() {
         service = new RachaService(loadRachaPort, saveRachaPort, loadRegistroPort, saveRegistroPort, loadHabitoPort,
-                progresoPort, ajustarPuntosPort, registrarEvidenciaPort, almacenamientoPort, events, CLOCK);
+                progresoPort, ajustarPuntosPort, registrarEvidenciaPort, almacenamientoPort, events, CLOCK,
+                idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveRachaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(registrarEvidenciaPort.registrar(any()))
@@ -95,8 +104,8 @@ class RachaServiceTest {
     }
 
     private static Habito habitoSinCelular() {
-        return Habito.crearDeSistema("Dia sin celular", TipoHabito.CHECKBOX, "MENTE", ExigenciaEvidencia.OPCIONAL,
-                CLOCK.now());
+        return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Dia sin celular", TipoHabito.CHECKBOX, "MENTE",
+                ExigenciaEvidencia.OPCIONAL, CLOCK.now());
         // claveSistema no se puede fijar por el factory publico (no expone ese setter) — se usa
         // reflexion minima via rehydrate en el test que lo necesita.
     }
@@ -117,8 +126,8 @@ class RachaServiceTest {
     void iniciarRechazaHabitoQueNoEsDiaSinCelular() {
         UserId participante = UserId.of(UUID.randomUUID());
         Habito otroHabito = habitoSinCelular(); // sin claveSistema
-        RegistroHabito registro = RegistroHabito.generar(participante, otroHabito.id(), LocalDate.of(2026, 8, 24), 5,
-                TipoDia.DISCIPLINA, false, CLOCK.now());
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante,
+                otroHabito.id(), LocalDate.of(2026, 8, 24), 5, TipoDia.DISCIPLINA, false, CLOCK.now());
         when(loadRegistroPort.byId(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(otroHabito.id())).thenReturn(Optional.of(otroHabito));
 
@@ -130,14 +139,15 @@ class RachaServiceTest {
     void iniciarRechazaSiYaHayUnaRachaActiva() {
         UserId participante = UserId.of(UUID.randomUUID());
         Habito habito = habitoSinCelularConClave();
-        RegistroHabito registro = RegistroHabito.generar(participante, habito.id(), LocalDate.of(2026, 8, 24), 5,
-                TipoDia.DISCIPLINA, false, CLOCK.now());
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante,
+                habito.id(), LocalDate.of(2026, 8, 24), 5, TipoDia.DISCIPLINA, false, CLOCK.now());
         when(loadRegistroPort.byId(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(progresoPort.deParticipante(participante)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
         when(loadRachaPort.activaDe(participante)).thenReturn(Optional.of(
-                RachaSinCelular.iniciar(participante, registro.id(), 24, CLOCK.now())));
+                RachaSinCelular.iniciar(RachaSinCelularId.of(UUID.randomUUID()), participante, registro.id(), 24,
+                        CLOCK.now())));
 
         assertThatThrownBy(() -> service.iniciar(new IniciarRachaCommand(participante, registro.id(), 24)))
                 .isInstanceOf(IllegalStateException.class);
@@ -168,11 +178,11 @@ class RachaServiceTest {
     void cerrarConCicloCompletoOtorgaDiezPuntosYCompletaElRegistro() {
         UserId participante = UserId.of(UUID.randomUUID());
         Habito habito = habitoSinCelularConClave();
-        RegistroHabito registro = RegistroHabito.generar(participante, habito.id(), LocalDate.of(2026, 8, 24), 5,
-                TipoDia.DISCIPLINA, false, CLOCK.now());
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante,
+                habito.id(), LocalDate.of(2026, 8, 24), 5, TipoDia.DISCIPLINA, false, CLOCK.now());
         registro.iniciar(CLOCK.now());
-        RachaSinCelular racha = RachaSinCelular.iniciar(participante, registro.id(), 24,
-                CLOCK.now().minus(Duration.ofHours(24)));
+        RachaSinCelular racha = RachaSinCelular.iniciar(RachaSinCelularId.of(UUID.randomUUID()), participante,
+                registro.id(), 24, CLOCK.now().minus(Duration.ofHours(24)));
 
         when(progresoPort.deParticipante(participante)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
@@ -192,10 +202,11 @@ class RachaServiceTest {
     void cerrarRegistraLaEvidenciaColgadaDelRegistroQueArrancoLaRacha() {
         UserId participante = UserId.of(UUID.randomUUID());
         Habito habito = habitoSinCelularConClave();
-        RegistroHabito registro = RegistroHabito.generar(participante, habito.id(), LocalDate.of(2026, 8, 24), 5,
-                TipoDia.DISCIPLINA, false, CLOCK.now());
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante,
+                habito.id(), LocalDate.of(2026, 8, 24), 5, TipoDia.DISCIPLINA, false, CLOCK.now());
         registro.iniciar(CLOCK.now());
-        RachaSinCelular racha = RachaSinCelular.iniciar(participante, registro.id(), 24,
+        RachaSinCelular racha = RachaSinCelular.iniciar(RachaSinCelularId.of(UUID.randomUUID()), participante,
+                registro.id(), 24,
                 CLOCK.now().minus(Duration.ofHours(4))); // hito parcial, no ciclo completo
 
         when(progresoPort.deParticipante(participante)).thenReturn(
@@ -214,7 +225,8 @@ class RachaServiceTest {
     @Test
     void solicitarUrlDevuelveUrlFirmadaParaLaRachaActiva() {
         UserId participante = UserId.of(UUID.randomUUID());
-        RachaSinCelular racha = RachaSinCelular.iniciar(participante, RegistroHabitoId.newId(), 24, CLOCK.now());
+        RachaSinCelular racha = RachaSinCelular.iniciar(RachaSinCelularId.of(UUID.randomUUID()), participante,
+                RegistroHabitoId.of(UUID.randomUUID()), 24, CLOCK.now());
         when(progresoPort.deParticipante(participante)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
         when(loadRachaPort.activaDe(participante)).thenReturn(Optional.of(racha));
@@ -242,11 +254,11 @@ class RachaServiceTest {
     void romperNuncaPenalizaPuntos() {
         UserId participante = UserId.of(UUID.randomUUID());
         Habito habito = habitoSinCelularConClave();
-        RegistroHabito registro = RegistroHabito.generar(participante, habito.id(), LocalDate.of(2026, 8, 24), 5,
-                TipoDia.DISCIPLINA, false, CLOCK.now());
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante,
+                habito.id(), LocalDate.of(2026, 8, 24), 5, TipoDia.DISCIPLINA, false, CLOCK.now());
         registro.iniciar(CLOCK.now());
-        RachaSinCelular racha = RachaSinCelular.iniciar(participante, registro.id(), 24,
-                CLOCK.now().minus(Duration.ofHours(2)));
+        RachaSinCelular racha = RachaSinCelular.iniciar(RachaSinCelularId.of(UUID.randomUUID()), participante,
+                registro.id(), 24, CLOCK.now().minus(Duration.ofHours(2)));
 
         when(progresoPort.deParticipante(participante)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));

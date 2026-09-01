@@ -879,3 +879,45 @@ Esta pasada suma **27 tests** (6 + 7 + 8 + 5 + 1). `./mvnw clean test` — **169
   pasada, sigue abierto.
 - **El GET no devuelve `originalTitle` ni aplica el renombre** (§12.3): expone `Habito.titulo` tal cual,
   igual que la proyección del hueco #10. Mismo pendiente de siempre, no uno nuevo.
+
+---
+
+## 21. Identidad por el puerto `IdGenerator` — `habits` migrado (D-59) — 2026-08-31
+
+`domain/` debe ser puro y determinista (CLAUDE.MD §5.4.7: "sin I/O, sin reloj del sistema, sin
+aleatoriedad"). El reloj ya estaba resuelto con el puerto `Clock`; la identidad no. `habits` era el
+módulo más grande de la migración: **9 value objects de identidad** sorteaban su propio UUID.
+
+**Qué cambió, mismo patrón que el piloto de `calendar` (commit `bb01bc1`):**
+
+- Los 9 VOs — `HabitoId`, `HorarioHabitoId`, `GuiaHabitoId`, `AdjuntoGuiaId`, `RegistroHabitoId`,
+  `RachaSinCelularId`, `RegistroRadarId`, `EntradaDiarioId`, `RegistroEspirituId` — **pierden
+  `newId()`**; `of(UUID)` y su validación no se tocan.
+- Las factorías de los agregados reciben el id como **primer parámetro**, con
+  `Objects.requireNonNull(id, "id es obligatorio")`: `Habito.crearDeSistema` (las dos sobrecargas),
+  `Habito.crearPersonal`, `HorarioHabito.crear`, `GuiaHabito.crear`, `AdjuntoGuia.deEnlace`/`deArchivo`,
+  `RegistroHabito.generar`, `RachaSinCelular.iniciar`, `RegistroRadar.registrar`,
+  `EntradaDiario.escribir`, `RegistroEspiritu.desbloquear`.
+- Ocho casos de uso inyectan el puerto: `HabitoAdminService`, `HorarioHabitoAdminService`,
+  `GuiaHabitoAdminService`, `RegistroService`, `RachaService`, `RadarService`,
+  `BitacoraNocturnaService`, `EspirituService`. **El dominio no importa `IdGenerator`**: lo inyecta el
+  caso de uso, nunca la entidad.
+- **Los upserts no se tocaron**: `BitacoraNocturnaService.escribir` y `GuiaHabitoAdminService.upsert`
+  /`guiaParaAdjunto` piden identidad nueva solo dentro del `orElseGet`, es decir solo en el camino de
+  alta — la entrada o la guía que ya existe conserva su id.
+
+**Beneficio concreto, no teórico:** en `GuiaHabitoAdminServiceTest` el mock
+`loadHabitoPort.byId(habitoId)` devolvía un `Habito` con un id **distinto** al consultado, porque la
+factoría lo sorteaba. Ahora devuelve uno con ese mismo id, como haría el adaptador de persistencia real.
+
+**Queda dicho, no arreglado (§5.4.8, techo de 4 parámetros):** las factorías de este módulo ya estaban
+por encima del techo antes del cambio y ahora suman uno más — `AdjuntoGuia.deArchivo` 10→11,
+`Habito.crearPersonal` 7→8, `HorarioHabito.crear` 7→8, `RegistroHabito.generar` 7→8,
+`AdjuntoGuia.deEnlace` 6→7, `Habito.crearDeSistema(String,…)` 5→6, `EntradaDiario.escribir` 5→6,
+`RegistroEspiritu.desbloquear` 5→6, `RegistroRadar.registrar` 7→8, `RachaSinCelular.iniciar` 4→5 y
+`Habito.crearDeSistema(…, DetallesHabito, …)` 4→5 (estas dos últimas cruzan el techo **con** este
+cambio). Convertirlas a un `record` de comando es trabajo aparte, con su propia decisión.
+
+**Pendiente que no es de este cambio:** `ArchitectureTest.MODULOS_SIN_MIGRAR_A_IDGENERATOR` todavía
+lista `com.renaser.os.habits..`; sacarlo de esa lista corresponde a quien cierre la migración de los
+módulos restantes (el archivo no se toca por módulo, para no pisar el trabajo en paralelo).

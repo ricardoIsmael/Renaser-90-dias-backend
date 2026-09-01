@@ -13,9 +13,11 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.domain.model.habito.DetallesHabito;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
+import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -62,10 +64,12 @@ class AudioterapiaServiceTest {
     void setUp() {
         service = new AudioterapiaService(loadHabitoPort, loadHorarioPort, catalogoPort, progresoPort,
                 almacenamientoPort);
-        Habito habito = Habito.crearDeSistema("AUDIOTERAPIA SEMANAL", TipoHabito.JOURNALING,
-                new DetallesHabito(null, "ESPIRITU", ExigenciaEvidencia.OPCIONAL, false, false), AHORA);
+        Habito habito = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "AUDIOTERAPIA SEMANAL",
+                TipoHabito.JOURNALING, new DetallesHabito(null, "ESPIRITU", ExigenciaEvidencia.OPCIONAL, false, false),
+                AHORA);
         lenient().when(loadHabitoPort.porClaveSistema("AUDIO_THERAPY_WEEKLY")).thenReturn(Optional.of(habito));
-        HorarioHabito horario = HorarioHabito.crear(habito.id(), 11, 90, TipoDia.TODOS, null, null, AHORA);
+        HorarioHabito horario = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 11, 90,
+                TipoDia.TODOS, null, null, AHORA);
         lenient().when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of(horario));
         lenient().when(almacenamientoPort.firmarLectura(any(), any())).thenReturn(URI.create("https://firmada"));
     }

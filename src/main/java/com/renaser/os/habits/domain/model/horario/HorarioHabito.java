@@ -35,8 +35,13 @@ public final class HorarioHabito {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    public static HorarioHabito crear(HabitoId habitoId, int diaInicio, Integer diaFin, TipoDia tipoDia,
-                                       LocalTime horaDisparo, LocalTime horaLimite, Instant ahora) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code HorarioHabitoAdminService.crear}).
+     */
+    public static HorarioHabito crear(HorarioHabitoId id, HabitoId habitoId, int diaInicio, Integer diaFin,
+                                       TipoDia tipoDia, LocalTime horaDisparo, LocalTime horaLimite, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(habitoId, "habitoId es obligatorio");
         Objects.requireNonNull(tipoDia, "tipoDia es obligatorio");
         if (diaInicio < 1 || diaInicio > 90) {
@@ -45,7 +50,7 @@ public final class HorarioHabito {
         if (diaFin != null && diaFin < diaInicio) {
             throw new IllegalArgumentException("diaFin no puede ser anterior a diaInicio");
         }
-        return new HorarioHabito(HorarioHabitoId.newId(), habitoId, diaInicio, diaFin, tipoDia, horaDisparo,
+        return new HorarioHabito(id, habitoId, diaInicio, diaFin, tipoDia, horaDisparo,
                 horaLimite, ahora, ahora);
     }
 

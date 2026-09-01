@@ -34,12 +34,17 @@ public final class GuiaHabito {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    public static GuiaHabito crear(HabitoId habitoId, int diaInicio, Instant ahora) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code GuiaHabitoAdminService}).
+     */
+    public static GuiaHabito crear(GuiaHabitoId id, HabitoId habitoId, int diaInicio, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(habitoId, "habitoId es obligatorio");
         if (diaInicio < 1 || diaInicio > 90) {
             throw new IllegalArgumentException("diaInicio fuera de rango 1..90: " + diaInicio);
         }
-        return new GuiaHabito(GuiaHabitoId.newId(), habitoId, diaInicio, null, null, null, null, null, null, null,
+        return new GuiaHabito(id, habitoId, diaInicio, null, null, null, null, null, null, null,
                 null, null, null, null, ahora, ahora);
     }
 

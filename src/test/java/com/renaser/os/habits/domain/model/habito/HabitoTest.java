@@ -3,6 +3,7 @@ package com.renaser.os.habits.domain.model.habito;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -17,8 +18,9 @@ class HabitoTest {
 
     @Test
     void crearDeSistemaConDetallesFijaTodosLosCamposDelAlta() {
-        Habito habito = Habito.crearDeSistema("Agua tibia con limon", TipoHabito.CHECKBOX,
-                new DetallesHabito("Toma agua", "CUERPO", ExigenciaEvidencia.OBLIGATORIA, true, true), AHORA);
+        Habito habito = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Agua tibia con limon",
+                TipoHabito.CHECKBOX, new DetallesHabito("Toma agua", "CUERPO", ExigenciaEvidencia.OBLIGATORIA, true,
+                true), AHORA);
 
         assertThat(habito.titulo()).isEqualTo("Agua tibia con limon");
         assertThat(habito.descripcion()).isEqualTo("Toma agua");
@@ -33,7 +35,7 @@ class HabitoTest {
 
     @Test
     void categoriaSeNormalizaAMayusculasYRecortada() {
-        Habito habito = Habito.crearDeSistema("Titulo", TipoHabito.CHECKBOX,
+        Habito habito = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Titulo", TipoHabito.CHECKBOX,
                 new DetallesHabito(null, "  cuerpo  ", ExigenciaEvidencia.OPCIONAL, false, false), AHORA);
 
         assertThat(habito.categoriaClave()).isEqualTo("CUERPO");
@@ -53,7 +55,8 @@ class HabitoTest {
 
     @Test
     void activarReactivaUnHabitoDadoDeBaja() {
-        Habito habito = Habito.crearDeSistema("Titulo", TipoHabito.CHECKBOX, detalles(), AHORA);
+        Habito habito = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Titulo", TipoHabito.CHECKBOX, detalles(),
+                AHORA);
         habito.desactivar(AHORA);
         assertThat(habito.activo()).isFalse();
 
@@ -66,7 +69,8 @@ class HabitoTest {
 
     @Test
     void actualizarDetallesReemplazaDescripcionCategoriaExigenciaYBanderas() {
-        Habito habito = Habito.crearDeSistema("Titulo", TipoHabito.CHECKBOX, detalles(), AHORA);
+        Habito habito = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Titulo", TipoHabito.CHECKBOX, detalles(),
+                AHORA);
         Instant despues = AHORA.plusSeconds(60);
 
         habito.actualizarDetalles(new DetallesHabito("Nueva descripcion", "MENTE", ExigenciaEvidencia.OBLIGATORIA,
@@ -89,7 +93,8 @@ class HabitoTest {
      */
     @Test
     void tipoYClaveSistemaNoTienenNingunMetodoMutadorPublico() {
-        Habito habito = Habito.crearDeSistema("Titulo", TipoHabito.CHECKBOX, detalles(), AHORA);
+        Habito habito = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Titulo", TipoHabito.CHECKBOX, detalles(),
+                AHORA);
         TipoHabito tipoOriginal = habito.tipo();
         String claveOriginal = habito.claveSistema();
 

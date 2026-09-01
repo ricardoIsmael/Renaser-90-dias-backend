@@ -49,33 +49,48 @@ public final class Habito {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    public static Habito crearDeSistema(String titulo, TipoHabito tipo, String categoriaClave,
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso. Asi la factoria es referencialmente
+     * transparente y un test puede fijar el id que espera, en vez de tener que caer a
+     * {@link #rehydrate} para lograrlo.
+     */
+    public static Habito crearDeSistema(HabitoId id, String titulo, TipoHabito tipo, String categoriaClave,
                                          ExigenciaEvidencia exigenciaEvidencia, Instant ahora) {
-        return new Habito(HabitoId.newId(), AmbitoHabito.SISTEMA, null, requireTitulo(titulo), null, tipo,
+        Objects.requireNonNull(id, "id es obligatorio");
+        return new Habito(id, AmbitoHabito.SISTEMA, null, requireTitulo(titulo), null, tipo,
                 requireCategoria(categoriaClave), null, null, exigenciaEvidencia, false, false, false, null, null,
                 null, null, true, ahora, ahora);
     }
 
     /**
      * Alta desde el panel admin (hueco #11, docs/PLAN_INTEGRACION_FRONTEND.md #11):
-     * variante de {@link #crearDeSistema(String, TipoHabito, String, ExigenciaEvidencia, Instant)}
+     * variante de {@link #crearDeSistema(HabitoId, String, TipoHabito, String, ExigenciaEvidencia, Instant)}
      * que además fija descripcion/opcionalidad desde el alta, en vez de dejarlas en su
      * default y forzar un segundo PATCH. {@code claveSistema} queda null a proposito — el
      * panel admin no crea claves funcionales (esas las siembra la migracion baseline).
+     *
+     * <p>El {@code id} entra por parametro: lo genera el caso de uso con el puerto
+     * {@code IdGenerator} ({@code HabitoAdminService.crear}).
      */
-    public static Habito crearDeSistema(String titulo, TipoHabito tipo, DetallesHabito detalles, Instant ahora) {
+    public static Habito crearDeSistema(HabitoId id, String titulo, TipoHabito tipo, DetallesHabito detalles,
+                                         Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(detalles, "detalles es obligatorio");
         Objects.requireNonNull(tipo, "tipo es obligatorio");
-        return new Habito(HabitoId.newId(), AmbitoHabito.SISTEMA, null, requireTitulo(titulo), detalles.descripcion(),
+        return new Habito(id, AmbitoHabito.SISTEMA, null, requireTitulo(titulo), detalles.descripcion(),
                 tipo, requireCategoria(detalles.categoriaClave()), null, null, detalles.exigenciaEvidencia(),
                 detalles.esOpcional(), detalles.obligatorioEnIntoxicacion(), false, null, null, null, null, true,
                 ahora, ahora);
     }
 
-    public static Habito crearPersonal(UserId participanteId, String titulo, TipoHabito tipo, String categoriaClave,
-                                        PlantillaHabitoPersonal plantilla, String etiquetaMeta, Instant ahora) {
+    /** El {@code id} entra por parametro: lo genera el caso de uso con el puerto {@code IdGenerator}. */
+    public static Habito crearPersonal(HabitoId id, UserId participanteId, String titulo, TipoHabito tipo,
+                                        String categoriaClave, PlantillaHabitoPersonal plantilla, String etiquetaMeta,
+                                        Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio para un habito PERSONAL");
-        return new Habito(HabitoId.newId(), AmbitoHabito.PERSONAL, participanteId, requireTitulo(titulo), null, tipo,
+        return new Habito(id, AmbitoHabito.PERSONAL, participanteId, requireTitulo(titulo), null, tipo,
                 requireCategoria(categoriaClave), null, null, ExigenciaEvidencia.OPCIONAL, false, false, false, null,
                 null, plantilla, etiquetaMeta, true, ahora, ahora);
     }

@@ -4,6 +4,7 @@ import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.domain.model.habito.DetallesHabito;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
+import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.PlantillaHabitoPersonal;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.shared.domain.UserId;
@@ -31,10 +32,10 @@ class MisHabitosServiceTest {
 
     @Test
     void combinaCatalogoActivoConLosPersonalesDelActor() {
-        Habito sistema = Habito.crearDeSistema("Meditar", TipoHabito.CHECKBOX,
+        Habito sistema = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Meditar", TipoHabito.CHECKBOX,
                 new DetallesHabito("desc", "MENTE", ExigenciaEvidencia.OPCIONAL, false, false), AHORA);
-        Habito personal = Habito.crearPersonal(actor, "Mi reto", TipoHabito.CHECKBOX, "CUERPO",
-                PlantillaHabitoPersonal.OTRO, "etiqueta", AHORA);
+        Habito personal = Habito.crearPersonal(HabitoId.of(UUID.randomUUID()), actor, "Mi reto", TipoHabito.CHECKBOX,
+                "CUERPO", PlantillaHabitoPersonal.OTRO, "etiqueta", AHORA);
         when(loadPort.catalogoActivo()).thenReturn(List.of(sistema));
         when(loadPort.personalesActivosDe(actor)).thenReturn(List.of(personal));
 
@@ -46,7 +47,7 @@ class MisHabitosServiceTest {
 
     @Test
     void sinHabitosPersonalesDevuelveSoloElCatalogo() {
-        Habito sistema = Habito.crearDeSistema("Meditar", TipoHabito.CHECKBOX,
+        Habito sistema = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Meditar", TipoHabito.CHECKBOX,
                 new DetallesHabito("desc", "MENTE", ExigenciaEvidencia.OPCIONAL, false, false), AHORA);
         when(loadPort.catalogoActivo()).thenReturn(List.of(sistema));
         when(loadPort.personalesActivosDe(actor)).thenReturn(List.of());

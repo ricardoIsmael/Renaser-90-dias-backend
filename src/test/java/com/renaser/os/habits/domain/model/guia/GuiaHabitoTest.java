@@ -1,9 +1,11 @@
 package com.renaser.os.habits.domain.model.guia;
 
+import com.renaser.os.habits.domain.model.guia.GuiaHabitoId;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -19,7 +21,8 @@ class GuiaHabitoTest {
 
     @Test
     void actualizarContenidoCompletoFijaTextosMantraYFuente() {
-        GuiaHabito guia = GuiaHabito.crear(HabitoId.newId(), 1, AHORA);
+        GuiaHabito guia = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()), 1,
+                AHORA);
         Instant despues = AHORA.plusSeconds(60);
 
         guia.actualizarContenidoCompleto(contenido(), despues);
@@ -39,7 +42,8 @@ class GuiaHabitoTest {
 
     @Test
     void cerrarEnFijaDiaFin() {
-        GuiaHabito guia = GuiaHabito.crear(HabitoId.newId(), 10, AHORA);
+        GuiaHabito guia = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()), 10,
+                AHORA);
 
         guia.cerrarEn(20, AHORA.plusSeconds(1));
 
@@ -50,14 +54,16 @@ class GuiaHabitoTest {
 
     @Test
     void cerrarEnAntesDeDiaInicioFalla() {
-        GuiaHabito guia = GuiaHabito.crear(HabitoId.newId(), 10, AHORA);
+        GuiaHabito guia = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()), 10,
+                AHORA);
 
         assertThatThrownBy(() -> guia.cerrarEn(5, AHORA)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void establecerDiaFinAceptaNullParaDejarlaAbierta() {
-        GuiaHabito guia = GuiaHabito.crear(HabitoId.newId(), 10, AHORA);
+        GuiaHabito guia = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()), 10,
+                AHORA);
         guia.cerrarEn(20, AHORA);
 
         guia.establecerDiaFin(null, AHORA.plusSeconds(1));
@@ -68,7 +74,8 @@ class GuiaHabitoTest {
 
     @Test
     void establecerDiaFinAnteriorADiaInicioFalla() {
-        GuiaHabito guia = GuiaHabito.crear(HabitoId.newId(), 10, AHORA);
+        GuiaHabito guia = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()), 10,
+                AHORA);
 
         assertThatThrownBy(() -> guia.establecerDiaFin(5, AHORA)).isInstanceOf(IllegalArgumentException.class);
     }

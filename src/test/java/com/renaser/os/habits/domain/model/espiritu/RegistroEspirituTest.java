@@ -1,5 +1,6 @@
 package com.renaser.os.habits.domain.model.espiritu;
 
+import com.renaser.os.habits.domain.model.espiritu.RegistroEspirituId;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.Test;
 
@@ -17,7 +18,8 @@ class RegistroEspirituTest {
     private static final Instant LIMITE = Instant.parse("2026-08-24T12:00:00Z");
 
     private static RegistroEspiritu nuevo() {
-        return RegistroEspiritu.desbloquear(UserId.of(UUID.randomUUID()), 1, DESBLOQUEO, LIMITE, DESBLOQUEO);
+        return RegistroEspiritu.desbloquear(RegistroEspirituId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()), 1,
+                DESBLOQUEO, LIMITE, DESBLOQUEO);
     }
 
     @Test
@@ -93,9 +95,11 @@ class RegistroEspirituTest {
     @Test
     void diaFueraDeRangoRechazado() {
         UserId participante = UserId.of(UUID.randomUUID());
-        assertThatThrownBy(() -> RegistroEspiritu.desbloquear(participante, 0, DESBLOQUEO, LIMITE, DESBLOQUEO))
+        assertThatThrownBy(() -> RegistroEspiritu.desbloquear(RegistroEspirituId.of(UUID.randomUUID()), participante, 0,
+                DESBLOQUEO, LIMITE, DESBLOQUEO))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> RegistroEspiritu.desbloquear(participante, 91, DESBLOQUEO, LIMITE, DESBLOQUEO))
+        assertThatThrownBy(() -> RegistroEspiritu.desbloquear(RegistroEspirituId.of(UUID.randomUUID()), participante,
+                91, DESBLOQUEO, LIMITE, DESBLOQUEO))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

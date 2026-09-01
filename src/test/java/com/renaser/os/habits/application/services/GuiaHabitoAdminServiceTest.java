@@ -25,6 +25,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -59,6 +60,8 @@ import static org.mockito.Mockito.when;
 class GuiaHabitoAdminServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-26T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, las factorias ya no lo sortean. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadHabitoPort loadHabitoPort;
@@ -74,25 +77,30 @@ class GuiaHabitoAdminServiceTest {
     private UserSummaryFinder userSummaryFinder;
     @Mock
     private AlmacenamientoPort almacenamientoPort;
+    @Mock
+    private IdGenerator idGenerator;
 
     private GuiaHabitoAdminService service;
 
     private final UserId admin = UserId.of(UUID.randomUUID());
     private final UserId mentor = UserId.of(UUID.randomUUID());
     private final UserId suspendedAdmin = UserId.of(UUID.randomUUID());
-    private final HabitoId habitoId = HabitoId.newId();
+    private final HabitoId habitoId = HabitoId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
         service = new GuiaHabitoAdminService(loadHabitoPort, loadGuiaPort, saveGuiaPort, loadAdjuntoPort,
-                saveAdjuntoPort, new HabitoAdminGuard(userSummaryFinder), almacenamientoPort, CLOCK);
+                saveAdjuntoPort, new HabitoAdminGuard(userSummaryFinder), almacenamientoPort, CLOCK, idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(mentor))
                 .thenReturn(Optional.of(new UserSummary(mentor, "Mentor", null, UserRole.MENTOR, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(suspendedAdmin)).thenReturn(Optional.of(
                 new UserSummary(suspendedAdmin, "Admin suspendido", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
-        lenient().when(loadHabitoPort.byId(habitoId)).thenReturn(Optional.of(Habito.crearDeSistema("Titulo",
+        // El habito que devuelve el mock lleva el mismo id que se consulta, como pasaria contra
+        // el adaptador de persistencia real: ahora que el id entra por parametro se puede fijar.
+        lenient().when(loadHabitoPort.byId(habitoId)).thenReturn(Optional.of(Habito.crearDeSistema(habitoId, "Titulo",
                 TipoHabito.CHECKBOX, new DetallesHabito(null, "CUERPO", ExigenciaEvidencia.OPCIONAL, false, false),
                 CLOCK.now())));
         lenient().when(saveGuiaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -125,7 +133,7 @@ class GuiaHabitoAdminServiceTest {
 
     @Test
     void upsertConGuiaExistenteEnEseDiaLaEdita() {
-        GuiaHabito existente = GuiaHabito.crear(habitoId, 5, CLOCK.now());
+        GuiaHabito existente = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habitoId, 5, CLOCK.now());
         when(loadGuiaPort.porHabito(habitoId)).thenReturn(List.of(existente));
         var command = new UpsertGuiaHabitoCommand(admin, habitoId, 5, 20, contenido(), false);
 
@@ -138,7 +146,7 @@ class GuiaHabitoAdminServiceTest {
 
     @Test
     void upsertConClosePreviousCierraLaGuiaAbiertaAnterior() {
-        GuiaHabito previa = GuiaHabito.crear(habitoId, 1, CLOCK.now());
+        GuiaHabito previa = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habitoId, 1, CLOCK.now());
         when(loadGuiaPort.masRecienteAbierta(habitoId)).thenReturn(Optional.of(previa));
         when(loadGuiaPort.porHabito(habitoId)).thenReturn(List.of(previa));
         var command = new UpsertGuiaHabitoCommand(admin, habitoId, 10, null, contenido(), true);
@@ -151,7 +159,7 @@ class GuiaHabitoAdminServiceTest {
 
     @Test
     void upsertConClosePreviousNoSeCierraASiMisma() {
-        GuiaHabito existente = GuiaHabito.crear(habitoId, 10, CLOCK.now());
+        GuiaHabito existente = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habitoId, 10, CLOCK.now());
         when(loadGuiaPort.masRecienteAbierta(habitoId)).thenReturn(Optional.of(existente));
         when(loadGuiaPort.porHabito(habitoId)).thenReturn(List.of(existente));
         var command = new UpsertGuiaHabitoCommand(admin, habitoId, 10, null, contenido(), true);
@@ -164,7 +172,7 @@ class GuiaHabitoAdminServiceTest {
 
     @Test
     void eliminarGuiaInexistenteFalla404() {
-        GuiaHabitoId id = GuiaHabitoId.newId();
+        GuiaHabitoId id = GuiaHabitoId.of(UUID.randomUUID());
         when(loadGuiaPort.byId(id)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.eliminar(new EliminarGuiaHabitoCommand(admin, id)))
@@ -189,10 +197,11 @@ class GuiaHabitoAdminServiceTest {
 
     @Test
     void crearAdjuntoEnlaceUsaLaGuiaExistenteYSiguienteOrden() {
-        GuiaHabito existente = GuiaHabito.crear(habitoId, 3, CLOCK.now());
+        GuiaHabito existente = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habitoId, 3, CLOCK.now());
         when(loadGuiaPort.porHabito(habitoId)).thenReturn(List.of(existente));
         when(loadAdjuntoPort.porGuias(List.of(existente.id()))).thenReturn(
-                List.of(AdjuntoGuia.deEnlace(existente.id(), SeccionGuia.QUE_HACER, "https://a", null, 0, CLOCK.now())));
+                List.of(AdjuntoGuia.deEnlace(AdjuntoGuiaId.of(UUID.randomUUID()), existente.id(), SeccionGuia.QUE_HACER,
+                        "https://a", null, 0, CLOCK.now())));
         var command = new CrearAdjuntoGuiaEnlaceCommand(admin, habitoId, 3, SeccionGuia.CIENCIA, "https://b", null);
 
         AdjuntoGuia adjunto = service.crear(command);
@@ -203,7 +212,7 @@ class GuiaHabitoAdminServiceTest {
 
     @Test
     void eliminarAdjuntoInexistenteFalla404() {
-        AdjuntoGuiaId id = AdjuntoGuiaId.newId();
+        AdjuntoGuiaId id = AdjuntoGuiaId.of(UUID.randomUUID());
         when(loadAdjuntoPort.byId(id)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.eliminar(new EliminarAdjuntoGuiaCommand(admin, id)))
@@ -256,10 +265,11 @@ class GuiaHabitoAdminServiceTest {
 
     @Test
     void confirmarAdjuntoArchivoUsaLaGuiaExistenteYSiguienteOrden() {
-        GuiaHabito existente = GuiaHabito.crear(habitoId, 3, CLOCK.now());
+        GuiaHabito existente = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habitoId, 3, CLOCK.now());
         when(loadGuiaPort.porHabito(habitoId)).thenReturn(List.of(existente));
         when(loadAdjuntoPort.porGuias(List.of(existente.id()))).thenReturn(
-                List.of(AdjuntoGuia.deEnlace(existente.id(), SeccionGuia.QUE_HACER, "https://a", null, 0, CLOCK.now())));
+                List.of(AdjuntoGuia.deEnlace(AdjuntoGuiaId.of(UUID.randomUUID()), existente.id(), SeccionGuia.QUE_HACER,
+                        "https://a", null, 0, CLOCK.now())));
         var command = new ConfirmarAdjuntoGuiaArchivoCommand(admin, habitoId, 3, SeccionGuia.CIENCIA,
                 TipoMedioGuia.AUDIO, GuiaHabitoAdminService.BUCKET_ADJUNTOS_GUIA, "guias-habito/x/z", "audio/mpeg",
                 999, "audio.mp3", null);

@@ -35,20 +35,28 @@ public final class AdjuntoGuia {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    public static AdjuntoGuia deEnlace(GuiaHabitoId guiaId, SeccionGuia seccion, String url, String titulo,
-                                        int orden, Instant ahora) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code GuiaHabitoAdminService}).
+     */
+    public static AdjuntoGuia deEnlace(AdjuntoGuiaId id, GuiaHabitoId guiaId, SeccionGuia seccion, String url,
+                                        String titulo, int orden, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(guiaId, "guiaId es obligatorio");
         Objects.requireNonNull(seccion, "seccion es obligatoria");
         if (url == null || url.isBlank()) {
             throw new IllegalArgumentException("url es obligatoria para un adjunto ENLACE");
         }
-        return new AdjuntoGuia(AdjuntoGuiaId.newId(), guiaId, seccion, TipoMedioGuia.ENLACE, url, null, null, null,
+        return new AdjuntoGuia(id, guiaId, seccion, TipoMedioGuia.ENLACE, url, null, null, null,
                 null, titulo, orden, ahora, ahora);
     }
 
-    public static AdjuntoGuia deArchivo(GuiaHabitoId guiaId, SeccionGuia seccion, TipoMedioGuia tipoMedio,
-                                         String rutaStorage, String mime, Integer tamanoBytes, String nombreOriginal,
-                                         String titulo, int orden, Instant ahora) {
+    /** El {@code id} entra por parametro: lo genera el caso de uso con el puerto {@code IdGenerator}. */
+    public static AdjuntoGuia deArchivo(AdjuntoGuiaId id, GuiaHabitoId guiaId, SeccionGuia seccion,
+                                         TipoMedioGuia tipoMedio, String rutaStorage, String mime,
+                                         Integer tamanoBytes, String nombreOriginal, String titulo, int orden,
+                                         Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(guiaId, "guiaId es obligatorio");
         Objects.requireNonNull(seccion, "seccion es obligatoria");
         if (tipoMedio == TipoMedioGuia.ENLACE) {
@@ -57,7 +65,7 @@ public final class AdjuntoGuia {
         if (rutaStorage == null || rutaStorage.isBlank()) {
             throw new IllegalArgumentException("rutaStorage es obligatoria para un adjunto " + tipoMedio);
         }
-        return new AdjuntoGuia(AdjuntoGuiaId.newId(), guiaId, seccion, tipoMedio, null, rutaStorage, mime,
+        return new AdjuntoGuia(id, guiaId, seccion, tipoMedio, null, rutaStorage, mime,
                 tamanoBytes, nombreOriginal, titulo, orden, ahora, ahora);
     }
 

@@ -7,13 +7,17 @@ import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.domain.model.guia.GuiaHabito;
+import com.renaser.os.habits.domain.model.guia.GuiaHabitoId;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
+import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
+import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,7 +62,8 @@ class TracksDelDiaProyeccionServiceTest {
     }
 
     private static Habito habito(String titulo) {
-        return Habito.crearDeSistema(titulo, TipoHabito.CHECKBOX, "MENTE", ExigenciaEvidencia.OPCIONAL, AHORA);
+        return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), titulo, TipoHabito.CHECKBOX, "MENTE",
+                ExigenciaEvidencia.OPCIONAL, AHORA);
     }
 
     @Test
@@ -76,13 +81,13 @@ class TracksDelDiaProyeccionServiceTest {
     void resuelveTituloTipoGuiaYHorarioConUnaSolaConsultaPorTabla() {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito("Jugo verde");
-        RegistroHabito registro = RegistroHabito.generar(actor, habito.id(), LocalDate.of(2026, 8, 24), 10,
-                TipoDia.DISCIPLINA, false, AHORA);
-        HorarioHabito horario = HorarioHabito.crear(habito.id(), 1, null, TipoDia.TODOS, LocalTime.of(7, 0),
-                LocalTime.of(9, 0), AHORA);
-        GuiaHabito guiaTemprana = GuiaHabito.crear(habito.id(), 1, AHORA);
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), actor, habito.id(),
+                LocalDate.of(2026, 8, 24), 10, TipoDia.DISCIPLINA, false, AHORA);
+        HorarioHabito horario = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null,
+                TipoDia.TODOS, LocalTime.of(7, 0), LocalTime.of(9, 0), AHORA);
+        GuiaHabito guiaTemprana = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habito.id(), 1, AHORA);
         guiaTemprana.actualizarContenido("hacer esto", "asi", null, null, null, null, AHORA);
-        GuiaHabito guiaTardia = GuiaHabito.crear(habito.id(), 8, AHORA);
+        GuiaHabito guiaTardia = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habito.id(), 8, AHORA);
         guiaTardia.actualizarContenido("hacer lo nuevo", "asi de nuevo", null, null, null, null, AHORA);
 
         when(consultarTracksUseCase.consultar(actor, actor, registro.fechaEjecucion())).thenReturn(List.of(registro));
@@ -110,10 +115,10 @@ class TracksDelDiaProyeccionServiceTest {
     void laPreferenciaDelParticipanteGanaAlHorarioDelCatalogo() {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito("Meditacion");
-        RegistroHabito registro = RegistroHabito.generar(actor, habito.id(), LocalDate.of(2026, 8, 24), 10,
-                TipoDia.DISCIPLINA, false, AHORA);
-        HorarioHabito horario = HorarioHabito.crear(habito.id(), 1, null, TipoDia.TODOS, LocalTime.of(7, 0),
-                LocalTime.of(9, 0), AHORA);
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), actor, habito.id(),
+                LocalDate.of(2026, 8, 24), 10, TipoDia.DISCIPLINA, false, AHORA);
+        HorarioHabito horario = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null,
+                TipoDia.TODOS, LocalTime.of(7, 0), LocalTime.of(9, 0), AHORA);
         PreferenciaHorario preferencia = PreferenciaHorario.crear(actor, habito.id(), LocalTime.of(6, 30), null,
                 AHORA);
 

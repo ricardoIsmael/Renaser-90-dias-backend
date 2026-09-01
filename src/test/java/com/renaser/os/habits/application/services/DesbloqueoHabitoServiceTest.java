@@ -66,7 +66,7 @@ class DesbloqueoHabitoServiceTest {
     @Test
     void conDesbloqueosDevuelveEnabledVerdaderoYLosItems() {
         UserId actor = UserId.of(UUID.randomUUID());
-        HabitoId habito = HabitoId.newId();
+        HabitoId habito = HabitoId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(actor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
         when(loadPort.deParticipante(actor)).thenReturn(

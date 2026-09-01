@@ -2,6 +2,7 @@ package com.renaser.os.habits.infrastructure.adapter.out.persistence.guia;
 
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.domain.model.guia.AdjuntoGuia;
+import com.renaser.os.habits.domain.model.guia.AdjuntoGuiaId;
 import com.renaser.os.habits.domain.model.guia.GuiaHabito;
 import com.renaser.os.habits.domain.model.guia.GuiaHabitoId;
 import com.renaser.os.habits.domain.model.guia.SeccionGuia;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -38,20 +40,20 @@ class AdjuntoGuiaPersistenceAdapterTest {
 
     @BeforeEach
     void seedGuia() {
-        HabitoId habitoId = HabitoId.newId();
+        HabitoId habitoId = HabitoId.of(UUID.randomUUID());
         entityManager.createNativeQuery("""
                         INSERT INTO renaser.habitos (id, ambito, titulo, tipo, categoria_clave)
                         VALUES (:id, 'SISTEMA', 'Meditar', 'CHECKBOX', 'MENTE')
                         """)
                 .setParameter("id", habitoId.value())
                 .executeUpdate();
-        guiaId = guiaAdapter.save(GuiaHabito.crear(habitoId, 1, AHORA)).id();
+        guiaId = guiaAdapter.save(GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habitoId, 1, AHORA)).id();
     }
 
     @Test
     void guardaYRecuperaUnAdjuntoDeEnlacePorId() {
-        AdjuntoGuia adjunto = AdjuntoGuia.deEnlace(guiaId, SeccionGuia.QUE_HACER, "https://youtube.com/x", "Titulo",
-                0, AHORA);
+        AdjuntoGuia adjunto = AdjuntoGuia.deEnlace(AdjuntoGuiaId.of(UUID.randomUUID()), guiaId, SeccionGuia.QUE_HACER,
+                "https://youtube.com/x", "Titulo", 0, AHORA);
 
         AdjuntoGuia guardado = adapter.save(adjunto);
         Optional<AdjuntoGuia> recuperado = adapter.byId(guardado.id());
@@ -64,8 +66,10 @@ class AdjuntoGuiaPersistenceAdapterTest {
 
     @Test
     void porGuiasTraeTodosLosAdjuntosDeVariasGuiasEnUnaSolaConsulta() {
-        adapter.save(AdjuntoGuia.deEnlace(guiaId, SeccionGuia.QUE_HACER, "https://a", null, 0, AHORA));
-        adapter.save(AdjuntoGuia.deEnlace(guiaId, SeccionGuia.CIENCIA, "https://b", null, 1, AHORA));
+        adapter.save(AdjuntoGuia.deEnlace(AdjuntoGuiaId.of(UUID.randomUUID()), guiaId, SeccionGuia.QUE_HACER,
+                "https://a", null, 0, AHORA));
+        adapter.save(AdjuntoGuia.deEnlace(AdjuntoGuiaId.of(UUID.randomUUID()), guiaId, SeccionGuia.CIENCIA, "https://b",
+                null, 1, AHORA));
 
         List<AdjuntoGuia> adjuntos = adapter.porGuias(List.of(guiaId));
 
@@ -75,7 +79,8 @@ class AdjuntoGuiaPersistenceAdapterTest {
     @Test
     void eliminarBorraElAdjunto() {
         AdjuntoGuia guardado = adapter.save(
-                AdjuntoGuia.deEnlace(guiaId, SeccionGuia.QUE_HACER, "https://a", null, 0, AHORA));
+                AdjuntoGuia.deEnlace(AdjuntoGuiaId.of(UUID.randomUUID()), guiaId, SeccionGuia.QUE_HACER, "https://a",
+                        null, 0, AHORA));
 
         adapter.eliminar(guardado.id());
 
@@ -84,7 +89,8 @@ class AdjuntoGuiaPersistenceAdapterTest {
 
     @Test
     void eliminarLaGuiaBorraEnCascadaSusAdjuntos() {
-        adapter.save(AdjuntoGuia.deEnlace(guiaId, SeccionGuia.QUE_HACER, "https://a", null, 0, AHORA));
+        adapter.save(AdjuntoGuia.deEnlace(AdjuntoGuiaId.of(UUID.randomUUID()), guiaId, SeccionGuia.QUE_HACER,
+                "https://a", null, 0, AHORA));
 
         guiaAdapter.eliminar(guiaId);
         entityManager.flush();

@@ -57,7 +57,7 @@ class PromocionCambioHorarioServiceTest {
         service = new PromocionCambioHorarioService(loadCambioPendientePort, saveCambioPendientePort,
                 loadPreferenciaPort, savePreferenciaPort, historialPort, CLOCK);
         participanteId = UserId.of(UUID.randomUUID());
-        habitoId = HabitoId.newId();
+        habitoId = HabitoId.of(UUID.randomUUID());
         lenient().when(savePreferenciaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 

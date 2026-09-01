@@ -11,9 +11,11 @@ import com.renaser.os.habits.application.ports.out.preferencia.LoadCambioHorario
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
+import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.shared.domain.FixedClock;
@@ -71,7 +73,8 @@ class ConsultaPreferenciasHorarioServiceTest {
     }
 
     private static Habito habito(String titulo) {
-        return Habito.crearDeSistema(titulo, TipoHabito.CHECKBOX, "MENTE", ExigenciaEvidencia.OPCIONAL, CLOCK.now());
+        return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), titulo, TipoHabito.CHECKBOX, "MENTE",
+                ExigenciaEvidencia.OPCIONAL, CLOCK.now());
     }
 
     private void conProgreso(int diaPrograma, boolean suspendido) {
@@ -104,8 +107,9 @@ class ConsultaPreferenciasHorarioServiceTest {
         conProgreso(3, false);
         Habito habito = habito("Meditar");
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
-        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(HorarioHabito.crear(habito.id(), 1, null,
-                TipoDia.TODOS, LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now())));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null, TipoDia.TODOS,
+                        LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now())));
         when(loadPreferenciaPort.porParticipanteYHabitos(any(), any())).thenReturn(List.of());
         when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
 
@@ -123,8 +127,9 @@ class ConsultaPreferenciasHorarioServiceTest {
         conProgreso(3, false);
         Habito habito = habito("Meditar");
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
-        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(HorarioHabito.crear(habito.id(), 1, null,
-                TipoDia.TODOS, LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now())));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null, TipoDia.TODOS,
+                        LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now())));
         when(loadPreferenciaPort.porParticipanteYHabitos(any(), any())).thenReturn(
                 List.of(PreferenciaHorario.crear(actor, habito.id(), LocalTime.of(7, 30), LocalTime.of(9, 30),
                         CLOCK.now())));

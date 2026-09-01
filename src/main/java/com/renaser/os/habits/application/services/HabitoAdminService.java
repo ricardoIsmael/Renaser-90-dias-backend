@@ -10,6 +10,7 @@ import com.renaser.os.habits.application.ports.out.habito.SaveHabitoPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,12 +27,15 @@ public class HabitoAdminService implements ConsultarCatalogoAdminUseCase, CrearH
     private final SaveHabitoPort savePort;
     private final HabitoAdminGuard guard;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
-    public HabitoAdminService(LoadHabitoPort loadPort, SaveHabitoPort savePort, HabitoAdminGuard guard, Clock clock) {
+    public HabitoAdminService(LoadHabitoPort loadPort, SaveHabitoPort savePort, HabitoAdminGuard guard, Clock clock,
+                               IdGenerator idGenerator) {
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.guard = guard;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -44,7 +48,9 @@ public class HabitoAdminService implements ConsultarCatalogoAdminUseCase, CrearH
     @Transactional
     public Habito crear(CrearHabitoCommand command) {
         guard.requireAdmin(command.actorId());
-        Habito habito = Habito.crearDeSistema(command.titulo(), command.tipo(), command.detalles(), clock.now());
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
+        Habito habito = Habito.crearDeSistema(HabitoId.of(idGenerator.newId()), command.titulo(), command.tipo(),
+                command.detalles(), clock.now());
         return savePort.save(habito);
     }
 

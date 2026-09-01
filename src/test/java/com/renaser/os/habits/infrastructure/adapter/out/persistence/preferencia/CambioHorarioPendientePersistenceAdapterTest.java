@@ -164,7 +164,7 @@ class CambioHorarioPendientePersistenceAdapterTest {
     }
 
     private HabitoId nuevoHabito(String titulo) {
-        HabitoId id = HabitoId.newId();
+        HabitoId id = HabitoId.of(UUID.randomUUID());
         entityManager.createNativeQuery("""
                         INSERT INTO renaser.habitos (id, ambito, titulo, tipo, categoria_clave)
                         VALUES (:id, 'SISTEMA', :titulo, 'CHECKBOX', 'MENTE')

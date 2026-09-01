@@ -18,8 +18,10 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
+import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -78,8 +80,8 @@ class PreferenciaHorarioServiceTest {
     }
 
     private static Habito habito() {
-        return Habito.crearDeSistema("Jugo verde", TipoHabito.CHECKBOX, "MENTE", ExigenciaEvidencia.OPCIONAL,
-                CLOCK.now());
+        return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Jugo verde", TipoHabito.CHECKBOX, "MENTE",
+                ExigenciaEvidencia.OPCIONAL, CLOCK.now());
     }
 
     @Test
@@ -88,8 +90,9 @@ class PreferenciaHorarioServiceTest {
         when(progresoPort.deParticipante(actor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, true)));
 
-        assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, HabitoId.newId(),
-                LocalTime.of(7, 0), LocalTime.of(9, 0), true, null))).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor,
+                HabitoId.of(UUID.randomUUID()), LocalTime.of(7, 0), LocalTime.of(9,
+                        0), true, null))).isInstanceOf(NotAuthorizedException.class);
     }
 
     @Test
@@ -136,7 +139,7 @@ class PreferenciaHorarioServiceTest {
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFecha(any(), any(), any())).thenReturn(Optional.empty());
         when(historialPort.distintosHabitosCambiadosDesde(any(), any())).thenReturn(
-                List.of(HabitoId.newId(), HabitoId.newId(), habitoYaTocado.id()));
+                List.of(HabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()), habitoYaTocado.id()));
 
         assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
                 LocalTime.of(7, 0), LocalTime.of(9, 0), true, null))).isInstanceOf(IllegalStateException.class);
@@ -153,7 +156,8 @@ class PreferenciaHorarioServiceTest {
         when(loadRegistroPort.porParticipanteHabitoYFecha(any(), any(), any())).thenReturn(Optional.empty());
         when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
         when(historialPort.distintosHabitosCambiadosDesde(any(), any())).thenReturn(
-                List.of(HabitoId.newId(), HabitoId.newId(), habito.id())); // ya tocado, cupo "lleno" pero es el mismo
+                List.of(HabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()),
+                        habito.id())); // ya tocado, cupo "lleno" pero es el mismo
 
         ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
                 LocalTime.of(7, 0), LocalTime.of(9, 0), true, null));
@@ -169,8 +173,8 @@ class PreferenciaHorarioServiceTest {
         when(progresoPort.deParticipante(actor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
-        RegistroHabito registroDeHoy = RegistroHabito.generar(actor, habito.id(), LocalDate.of(2026, 8, 24), 3,
-                TipoDia.DISCIPLINA, false, CLOCK.now());
+        RegistroHabito registroDeHoy = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), actor,
+                habito.id(), LocalDate.of(2026, 8, 24), 3, TipoDia.DISCIPLINA, false, CLOCK.now());
         when(loadRegistroPort.porParticipanteHabitoYFecha(actor, habito.id(), LocalDate.of(2026, 8, 24)))
                 .thenReturn(Optional.of(registroDeHoy));
         // preferencia actual: dispara a las 08:00, y son las 09:00 -> la ventana de hoy ya arranco
@@ -200,14 +204,15 @@ class PreferenciaHorarioServiceTest {
         when(progresoPort.deParticipante(actor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
-        RegistroHabito registroDeHoy = RegistroHabito.generar(actor, habito.id(), LocalDate.of(2026, 8, 24), 3,
-                TipoDia.DISCIPLINA, false, CLOCK.now());
+        RegistroHabito registroDeHoy = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), actor,
+                habito.id(), LocalDate.of(2026, 8, 24), 3, TipoDia.DISCIPLINA, false, CLOCK.now());
         when(loadRegistroPort.porParticipanteHabitoYFecha(actor, habito.id(), LocalDate.of(2026, 8, 24)))
                 .thenReturn(Optional.of(registroDeHoy));
         when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
         // catalogo: dispara 08:00, y son las 09:00 -> la ventana de hoy ya arranco
-        when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of(HorarioHabito.crear(habito.id(), 1, null,
-                TipoDia.TODOS, LocalTime.of(8, 0), LocalTime.of(10, 0), CLOCK.now())));
+        when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null, TipoDia.TODOS,
+                        LocalTime.of(8, 0), LocalTime.of(10, 0), CLOCK.now())));
 
         ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
                 LocalTime.of(7, 0), LocalTime.of(9, 0), true, null));
