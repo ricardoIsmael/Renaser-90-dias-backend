@@ -722,7 +722,12 @@ Simétricamente: **el caso de uso no conoce HTTP.** Nada de `HttpServletRequest`
 Se prioriza el estilo funcional **en el dominio**, que es donde paga:
 
 **Sí:**
-- **Inmutabilidad por defecto.** `record` para value objects (`UserId`, `Email`, comandos, DTOs). Campos `final`. Métodos que "cambian" devuelven una instancia nueva.
+- **Inmutabilidad por defecto — para value objects y comandos.** `record` para value objects (`UserId`, `Email`, comandos, DTOs). Campos `final`. Métodos que "cambian" devuelven una instancia nueva.
+  > **Acotado 2026-08-31.** Antes esta línea no distinguía y decía, para *todo* el dominio, *"Campos `final`. Métodos que 'cambian' devuelven una instancia nueva"* — lo que **contradecía de frente a §5.3.2**, que prescribe el patrón opuesto como ejemplo normativo (`public void suspend() { this.status = SUSPENDED; }`, sobre campos no-`final`). Con las dos reglas vivas a la vez el punto era **inauditable**: una auditoría contra §5.4.7 marca 216 campos en 36 agregados, y la misma auditoría contra §5.3.2 no marca ninguno.
+  >
+  > **La regla vigente, decidida por el dueño del proyecto:** la inmutabilidad estricta aplica a **value objects, comandos y DTOs**. Las **raíces de agregado** (`User`, `Evento`, `Celula`, `PuntajeParticipante`…) **sí mutan su estado**, pero **solo a través de métodos con nombre de intención** (`suspend()`, `asignarMentor()`, `advanceProgramDay()`), nunca por setters. Es lo que el documento ya decía en otros dos lugares —§5.3.2 y §5.4.5, que prohíbe *"cualquier cosa que abra una forma de mutar el estado **sin pasar por un método con nombre de intención**"*— y lo que ya está registrado como decisión en `docs/MODULO_POINTS.md` D-P2.
+  >
+  > **Lo que sigue prohibido, sin cambios:** `@Data`, `@Setter`, `@NoArgsConstructor` público y cualquier `public void setX(...)` en `domain/` (§5.4.5). Hoy hay **0** de los tres en los 214 archivos de dominio, y esa es la parte de la regla que de verdad protege los invariantes. Que un agregado sea inmutable de punta a punta (como `Conversacion.renombrada(...)` o `ConversacionRenasia`) sigue siendo válido y preferible cuando el agregado es chico; lo que deja de ser obligatorio es forzarlo en los 36.
 - **Funciones puras en `domain/`.** Sin I/O, sin reloj del sistema, sin aleatoriedad — el reloj entra por el puerto `Clock` (§5). Esto es lo que hace posible `HabitStatusTest` con un `new HabitTrack(...)` plano.
 - **`Optional` como tipo de retorno** de puertos de lectura (`Optional<User> findById(...)`), en vez de devolver `null`.
 - **Streams para transformar colecciones**, con lambdas cortas y con nombre cuando crecen.
