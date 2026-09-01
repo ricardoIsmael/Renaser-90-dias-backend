@@ -9,6 +9,7 @@ import com.renaser.os.onboarding.domain.model.media.ClaseMedia;
 import com.renaser.os.onboarding.domain.model.media.MediaOnboarding;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -37,6 +39,8 @@ import static org.mockito.Mockito.when;
 class MediaServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** Discriminador fijo de subida: con el UUID entrando por el puerto, rutaNueva() ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private SaveMediaPort saveMediaPort;
@@ -44,14 +48,17 @@ class MediaServiceTest {
     private AlmacenamientoPort almacenamientoPort;
     @Mock
     private ConsultarActorPort actorPort;
+    @Mock
+    private IdGenerator idGenerator;
 
     private MediaService service;
     private UserId usuarioId;
 
     @BeforeEach
     void setUp() {
-        service = new MediaService(saveMediaPort, almacenamientoPort, actorPort, CLOCK);
+        service = new MediaService(saveMediaPort, almacenamientoPort, actorPort, CLOCK, idGenerator);
         usuarioId = UserId.of(UUID.randomUUID());
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
     }
 
     @Test

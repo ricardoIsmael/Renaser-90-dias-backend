@@ -7,6 +7,7 @@ import com.renaser.os.onboarding.application.ports.out.media.SaveMediaPort;
 import com.renaser.os.onboarding.domain.model.media.MediaOnboarding;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -25,19 +26,23 @@ public class MediaService implements ObtenerUrlSubidaMediaUseCase, RegistrarMedi
     private final AlmacenamientoPort almacenamientoPort;
     private final ConsultarActorPort actorPort;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public MediaService(SaveMediaPort saveMediaPort, AlmacenamientoPort almacenamientoPort,
-                         ConsultarActorPort actorPort, Clock clock) {
+                         ConsultarActorPort actorPort, Clock clock, IdGenerator idGenerator) {
         this.saveMediaPort = saveMediaPort;
         this.almacenamientoPort = almacenamientoPort;
         this.actorPort = actorPort;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
     public UrlSubidaMedia obtener(ObtenerUrlSubidaMediaCommand command) {
         requireActorActivo(command.usuarioId());
-        String ruta = MediaOnboarding.rutaNueva(command.usuarioId(), command.clase());
+        // El discriminador por subida entra por el puerto IdGenerator, no lo sortea el dominio
+        // (CLAUDE.MD 5.4.7). No es identidad de fila: el id de medias_onboarding lo asigna la base.
+        String ruta = MediaOnboarding.rutaNueva(idGenerator.newId(), command.usuarioId(), command.clase());
         URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
         return new UrlSubidaMedia(url, MediaOnboarding.BUCKET_DEFAULT, ruta);
     }
