@@ -4,8 +4,10 @@ import com.renaser.os.habits.application.ports.in.preferencia.ConsultarPreferenc
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase.EditarPreferenciaHorarioCommand;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -35,11 +37,13 @@ public class HabitPreferenceController {
         this.consultarUseCase = consultarUseCase;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping
     public HabitPreferencesResponse consultar(@ActorAutenticado UserId actor) {
         return HabitPreferencesResponse.from(consultarUseCase.consultar(actor));
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @PatchMapping("/{habitId}")
     public HabitPreferenceResponse editar(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
                                            @RequestBody @Valid UpdateHabitPreferenceRequest request) {

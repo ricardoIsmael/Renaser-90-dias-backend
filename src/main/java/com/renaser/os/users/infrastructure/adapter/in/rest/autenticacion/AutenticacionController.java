@@ -1,5 +1,8 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.autenticacion;
 
+import com.renaser.os.shared.domain.Permission;
+import com.renaser.os.shared.web.security.PublicEndpoint;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.autenticacion.ConfirmarResetContrasenaUseCase;
 import com.renaser.os.users.application.ports.in.autenticacion.ConfirmarResetContrasenaUseCase.ConfirmarResetContrasenaCommand;
 import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionConProveedorUseCase;
@@ -61,6 +64,7 @@ public class AutenticacionController {
         this.iniciarSesionConProveedorUseCase = iniciarSesionConProveedorUseCase;
     }
 
+    @PublicEndpoint("Es el login: pedir una sesion para poder iniciar sesion no cierra.")
     @PostMapping("/login")
     public UserResponse login(@RequestBody @Valid LoginRequest request, HttpServletRequest servletRequest,
                                HttpServletResponse servletResponse) {
@@ -70,12 +74,14 @@ public class AutenticacionController {
         return UserResponse.from(actor);
     }
 
+    @PublicEndpoint("Cerrar una sesion que no existe es idempotente; exigir cuenta solo agregaria un 403 sin efecto.")
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(HttpServletRequest servletRequest) {
         sesionWeb.cerrar(servletRequest);
         return ResponseEntity.noContent().build();
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "unico endpoint que exige sesion real: no acepta el respaldo de X-Actor-Id")
     @GetMapping("/me")
     public UserResponse me() {
         return UserResponse.from(getMyProfileUseCase.getMyProfile(sesionWeb.actorActual()));
@@ -85,6 +91,7 @@ public class AutenticacionController {
      * Responde 202 SIEMPRE, exista o no una cuenta con ese email — {@link SolicitarResetContrasenaUseCase}
      * ya garantiza que el comportamiento observable es identico en ambos casos (no-enumeracion).
      */
+    @PublicEndpoint("Se pide justamente cuando no se puede iniciar sesion. Responde 202 siempre, para no revelar si el correo existe.")
     @PostMapping("/password/reset-request")
     public ResponseEntity<Void> solicitarResetContrasena(@RequestBody @Valid SolicitarResetContrasenaRequest request,
                                                            HttpServletRequest servletRequest) {
@@ -93,6 +100,7 @@ public class AutenticacionController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).build();
     }
 
+    @PublicEndpoint("La credencial es el token de reset, no la sesion: quien lo usa todavia no puede entrar.")
     @PostMapping("/password/reset-confirm")
     public ResponseEntity<Void> confirmarResetContrasena(@RequestBody @Valid ConfirmarResetContrasenaRequest request) {
         confirmarResetContrasenaUseCase.confirmar(
@@ -123,6 +131,7 @@ public class AutenticacionController {
      *       contrato no cambia.</li>
      * </ul>
      */
+    @PublicEndpoint("Es el login por Google/Apple/Facebook: la credencial es el token del proveedor.")
     @PostMapping("/social")
     public ResponseEntity<?> loginSocial(@RequestBody @Valid LoginSocialRequest request,
                                           HttpServletRequest servletRequest, HttpServletResponse servletResponse) {

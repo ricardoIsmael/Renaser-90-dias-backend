@@ -9,8 +9,10 @@ import com.renaser.os.community.application.ports.in.categoria.EliminarCategoria
 import com.renaser.os.community.application.ports.in.categoria.EliminarCategoriaMuroUseCase.EliminarCategoriaMuroCommand;
 import com.renaser.os.community.application.ports.in.categoria.ReordenarCategoriasMuroUseCase;
 import com.renaser.os.community.application.ports.in.categoria.ReordenarCategoriasMuroUseCase.ReordenarCategoriasMuroCommand;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -51,12 +53,14 @@ public class WallCategoryAdminController {
         this.consultarUseCase = consultarUseCase;
     }
 
+    @RequiresPermission(Permission.MANAGE_WALL_CATEGORIES)
     @GetMapping
     public List<WallCategoryAdminResponse> listar(@ActorAutenticado UserId actorId) {
         return consultarUseCase.listarParaPanel(actorId).stream().map(WallCategoryAdminResponse::from)
                 .toList();
     }
 
+    @RequiresPermission(Permission.MANAGE_WALL_CATEGORIES)
     @PostMapping
     public ResponseEntity<WallCategoryAdminResponse> crear(@ActorAutenticado UserId actorId,
                                                              @RequestBody @Valid CrearWallCategoryRequest request) {
@@ -65,6 +69,7 @@ public class WallCategoryAdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(WallCategoryAdminResponse.from(fila));
     }
 
+    @RequiresPermission(Permission.MANAGE_WALL_CATEGORIES)
     @PatchMapping("/{key}")
     public WallCategoryAdminResponse actualizar(@ActorAutenticado UserId actorId,
                                                  @PathVariable String key,
@@ -74,12 +79,14 @@ public class WallCategoryAdminController {
         return WallCategoryAdminResponse.from(fila);
     }
 
+    @RequiresPermission(Permission.MANAGE_WALL_CATEGORIES)
     @DeleteMapping("/{key}")
     public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actorId, @PathVariable String key) {
         eliminarUseCase.eliminar(new EliminarCategoriaMuroCommand(actorId, key));
         return ResponseEntity.noContent().build();
     }
 
+    @RequiresPermission(Permission.MANAGE_WALL_CATEGORIES)
     @PostMapping("/reorder")
     public ResponseEntity<Void> reordenar(@ActorAutenticado UserId actorId,
                                            @RequestBody @Valid ReordenarWallCategoriesRequest request) {

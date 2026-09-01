@@ -17,8 +17,10 @@ import com.renaser.os.community.application.ports.in.publicacion.SolicitarUrlSub
 import com.renaser.os.community.application.ports.in.publicacion.SolicitarUrlSubidaMediaUseCase.SolicitarUrlSubidaMediaCommand;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -71,6 +73,7 @@ public class WallController {
         this.solicitarUrlUseCase = solicitarUrlUseCase;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping
     public WallFeedPageResponse feed(@ActorAutenticado UserId actorId,
                                       @RequestParam(required = false) String cursor,
@@ -79,6 +82,7 @@ public class WallController {
         return WallFeedPageResponse.from(consultarFeedUseCase.feed(actorId, cursorInstant, category));
     }
 
+    @RequiresPermission(Permission.PUBLISH_ON_WALL)
     @PostMapping
     public ResponseEntity<WallPostResponse> publicar(@ActorAutenticado UserId actorId,
                                                        @RequestBody @Valid CreateWallPostRequest request) {
@@ -87,6 +91,7 @@ public class WallController {
         return ResponseEntity.status(HttpStatus.CREATED).body(WallPostResponse.from(vista));
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "solo el autor de la publicacion")
     @PatchMapping("/{id}")
     public WallPostResponse actualizar(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                         @RequestBody @Valid UpdateWallPostRequest request) {
@@ -95,6 +100,7 @@ public class WallController {
         return WallPostResponse.from(vista);
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el autor de la publicacion, o quien tenga MODERATE_WALL")
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String, String>> ocultar(@ActorAutenticado UserId actorId,
                                                          @PathVariable UUID id) {
@@ -102,6 +108,7 @@ public class WallController {
         return ResponseEntity.ok(Map.of("id", id.toString()));
     }
 
+    @RequiresPermission(Permission.MODERATE_WALL)
     @PostMapping("/{id}/restore")
     public ResponseEntity<Map<String, String>> restaurar(@ActorAutenticado UserId actorId,
                                                            @PathVariable UUID id) {
@@ -109,6 +116,7 @@ public class WallController {
         return ResponseEntity.ok(Map.of("id", id.toString()));
     }
 
+    @RequiresPermission(Permission.MODERATE_WALL)
     @DeleteMapping("/{id}/permanent")
     public ResponseEntity<Map<String, String>> eliminarPermanente(@ActorAutenticado UserId actorId,
                                                                     @PathVariable UUID id) {
@@ -116,17 +124,20 @@ public class WallController {
         return ResponseEntity.ok(Map.of("id", id.toString()));
     }
 
+    @RequiresPermission(Permission.MODERATE_WALL)
     @GetMapping("/hidden")
     public WallFeedPageResponse hidden(@ActorAutenticado UserId actorId,
                                         @RequestParam(required = false) String cursor) {
         return WallFeedPageResponse.from(consultarFeedUseCase.feedOculto(actorId, parseCursor(cursor)));
     }
 
+    // TODO(auth fase 4): sin clasificar. Recibe actor pero contarMisPublicaciones no ejecuta ningun guard: con el respaldo de X-Actor-Id devuelve el conteo de cualquier userId que el cliente declare. NO marcar publico por defecto.
     @GetMapping("/mine")
     public Map<String, Integer> mine(@ActorAutenticado UserId actorId) {
         return Map.of("count", consultarFeedUseCase.contarMisPublicaciones(actorId));
     }
 
+    // TODO(auth fase 4): sin clasificar. Declara actor pero ultimoAutor() ni lo recibe: el parametro se ignora, asi que hoy es publico de hecho sin que nadie lo haya decidido. NO marcar publico por defecto.
     @GetMapping("/latest-author")
     public Map<String, String> latestAuthor(@ActorAutenticado UserId actorId) {
         Map<String, String> body = new HashMap<>();
@@ -134,6 +145,7 @@ public class WallController {
         return body;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @PostMapping("/{id}/react")
     public WallReactionToggleResponse reaccionar(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                                   @RequestBody @Valid ReactToWallPostRequest request) {
@@ -142,6 +154,7 @@ public class WallController {
         return WallReactionToggleResponse.from(resultado);
     }
 
+    @RequiresPermission(Permission.PUBLISH_ON_WALL)
     @PostMapping("/media/upload-url")
     public UrlSubidaMediaResponse urlDeSubida(@ActorAutenticado UserId actorId,
                                                @RequestBody SolicitarUrlSubidaMediaRequest request) {

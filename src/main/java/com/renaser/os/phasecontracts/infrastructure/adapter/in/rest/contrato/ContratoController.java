@@ -6,8 +6,10 @@ import com.renaser.os.phasecontracts.application.ports.in.contrato.FirmarContrat
 import com.renaser.os.phasecontracts.application.ports.in.contrato.FirmarContratoUseCase.FirmarContratoCommand;
 import com.renaser.os.phasecontracts.application.ports.in.contrato.ObtenerUrlFirmaContratoUseCase;
 import com.renaser.os.phasecontracts.application.ports.in.contrato.ObtenerUrlFirmaContratoUseCase.ObtenerUrlFirmaContratoCommand;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,6 +37,7 @@ public class ContratoController {
         this.urlFirmaUseCase = urlFirmaUseCase;
     }
 
+    @RequiresPermission(Permission.VIEW_OWN_PHASE_CONTRACTS)
     @GetMapping
     public List<ContratoFaseResponse> listar(@ActorAutenticado UserId actor) {
         return consultarUseCase.consultarDeParticipante(actor).stream()
@@ -42,17 +45,20 @@ public class ContratoController {
                 .toList();
     }
 
+    @RequiresPermission(Permission.VIEW_OWN_PHASE_CONTRACTS)
     @GetMapping("/pending")
     public ContratoPendienteResponse pendiente(@ActorAutenticado UserId actor) {
         return ContratoPendienteResponse.from(pendientesUseCase.consultarPendiente(actor));
     }
 
+    @RequiresPermission(Permission.SIGN_PHASE_CONTRACT)
     @PostMapping("/upload-url")
     public ResponseEntity<UrlFirmaResponse> urlDeSubida(@ActorAutenticado UserId actor) {
         var url = urlFirmaUseCase.obtenerUrlSubida(new ObtenerUrlFirmaContratoCommand(actor));
         return ResponseEntity.ok(UrlFirmaResponse.from(url));
     }
 
+    @RequiresPermission(Permission.SIGN_PHASE_CONTRACT)
     @PostMapping
     public ResponseEntity<ContratoFaseResponse> firmar(@ActorAutenticado UserId actor) {
         var contrato = firmarUseCase.firmar(new FirmarContratoCommand(actor));

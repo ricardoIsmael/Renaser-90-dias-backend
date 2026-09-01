@@ -2,8 +2,10 @@ package com.renaser.os.habits.infrastructure.adapter.in.rest.audioterapiaadmin;
 
 import com.renaser.os.habits.application.ports.in.audioterapiaadmin.ActualizarDuracionAudioterapiaUseCase;
 import com.renaser.os.habits.application.ports.in.audioterapiaadmin.ActualizarDuracionAudioterapiaUseCase.ActualizarDuracionAudioterapiaCommand;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,6 +24,7 @@ public class AudioTherapyAdminController {
         this.actualizarUseCase = actualizarUseCase;
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @PatchMapping("/{week}")
     public AudioTherapyResponse actualizarDuracion(@ActorAutenticado UserId actor, @PathVariable int week,
                                                      @RequestBody @Valid UpdateAudioTherapyDurationRequest request) {

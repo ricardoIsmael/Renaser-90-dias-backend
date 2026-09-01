@@ -3,8 +3,10 @@ package com.renaser.os.rag.infrastructure.adapter.in.rest.espejosombra;
 import com.renaser.os.rag.application.ports.in.espejosombra.ListarInformesEspejoSombraUseCase;
 import com.renaser.os.rag.application.ports.in.espejosombra.ObtenerInformeEspejoSombraUseCase;
 import com.renaser.os.rag.domain.model.espejosombra.InformeEspejoSombraId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -39,6 +41,7 @@ public class EspejoSombraController {
         this.obtenerUseCase = obtenerUseCase;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el propio participante, su mentor asignado o ADMIN/ALCHEMIST")
     @GetMapping
     public List<InformeEspejoSombraResponse> listar(@ActorAutenticado UserId actorId,
                                                       @RequestParam(name = "participanteId", required = false)
@@ -49,6 +52,7 @@ public class EspejoSombraController {
                 .toList();
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el propio participante, su mentor asignado o ADMIN/ALCHEMIST")
     @GetMapping("/{id}")
     public InformeEspejoSombraResponse porId(@ActorAutenticado UserId actorId,
                                               @PathVariable UUID id) {

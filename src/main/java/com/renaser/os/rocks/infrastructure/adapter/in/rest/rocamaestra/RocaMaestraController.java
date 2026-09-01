@@ -1,8 +1,10 @@
 package com.renaser.os.rocks.infrastructure.adapter.in.rest.rocamaestra;
 
 import com.renaser.os.rocks.application.ports.in.rocamaestra.ConsultarRocasMaestrasUseCase;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,6 +21,7 @@ public class RocaMaestraController {
         this.consultarUseCase = consultarUseCase;
     }
 
+    @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @GetMapping
     public List<RocaMaestraResponse> listar(@ActorAutenticado UserId actor) {
         return consultarUseCase.misRocasMaestras(actor).stream()

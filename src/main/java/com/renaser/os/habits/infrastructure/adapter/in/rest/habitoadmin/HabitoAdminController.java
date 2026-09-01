@@ -10,8 +10,10 @@ import com.renaser.os.habits.application.ports.in.habitoadmin.CrearHabitoUseCase
 import com.renaser.os.habits.application.ports.in.habitoadmin.EliminarHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.habitoadmin.EliminarHabitoUseCase.EliminarHabitoCommand;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -55,11 +57,13 @@ public class HabitoAdminController {
         this.eliminarUseCase = eliminarUseCase;
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @GetMapping
     public List<AdminHabitResponse> listar(@ActorAutenticado UserId actor) {
         return consultarUseCase.listar(actor).stream().map(AdminHabitResponse::from).toList();
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @PostMapping
     public ResponseEntity<AdminHabitResponse> crear(@ActorAutenticado UserId actor,
                                                       @RequestBody @Valid CreateHabitRequest request) {
@@ -68,6 +72,7 @@ public class HabitoAdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(AdminHabitResponse.from(habito));
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @PostMapping("/{id}")
     public AdminHabitResponse actualizar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                           @RequestBody @Valid UpdateHabitRequest request) {
@@ -76,6 +81,7 @@ public class HabitoAdminController {
         return AdminHabitResponse.from(habito);
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @PostMapping("/{id}/toggle")
     public AdminHabitResponse toggle(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                       @RequestBody ToggleHabitRequest request) {
@@ -84,6 +90,7 @@ public class HabitoAdminController {
         return AdminHabitResponse.from(habito);
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actor, @PathVariable UUID id) {
         eliminarUseCase.eliminar(new EliminarHabitoCommand(actor, HabitoId.of(id)));

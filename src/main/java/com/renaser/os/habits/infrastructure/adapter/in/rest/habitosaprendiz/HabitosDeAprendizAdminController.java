@@ -2,7 +2,9 @@ package com.renaser.os.habits.infrastructure.adapter.in.rest.habitosaprendiz;
 
 import com.renaser.os.habits.application.ports.in.habitosaprendiz.ConsultarHabitosDeAprendizUseCase;
 import com.renaser.os.habits.application.ports.in.habitosaprendiz.ConsultarHabitosDeAprendizUseCase.ConsultarHabitosDeAprendizCommand;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,6 +37,8 @@ public class HabitosDeAprendizAdminController {
         this.consultarUseCase = consultarUseCase;
     }
 
+    @RequiresPermission(value = Permission.MANAGE_HABIT_CATALOG,
+            scope = "Lee los habitos de OTRO usuario: el guard exige ADMIN/ALQUIMISTA activo")
     @GetMapping("/{traineeId}/habits")
     public TraineeHabitsResponse habitosDe(@ActorAutenticado UserId actor, @PathVariable UUID traineeId) {
         var vista = consultarUseCase.consultar(new ConsultarHabitosDeAprendizCommand(actor, UserId.of(traineeId)));

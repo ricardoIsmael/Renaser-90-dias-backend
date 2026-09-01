@@ -1,8 +1,10 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.audioterapia;
 
 import com.renaser.os.habits.application.ports.in.audioterapia.ConsultarAudioterapiaSemanalUseCase;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,6 +20,7 @@ public class AudioTherapyController {
         this.consultarUseCase = consultarUseCase;
     }
 
+    @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @GetMapping("/status")
     public AudioTherapyStatusResponse status(@ActorAutenticado UserId actor) {
         return AudioTherapyStatusResponse.from(consultarUseCase.consultar(actor));

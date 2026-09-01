@@ -3,8 +3,10 @@ package com.renaser.os.points.infrastructure.adapter.in.rest.puntaje;
 import com.renaser.os.points.application.ports.in.puntaje.AjustarPuntosManualmenteUseCase;
 import com.renaser.os.points.application.ports.in.puntaje.AjustarPuntosManualmenteUseCase.AjustarPuntosManualmenteCommand;
 import com.renaser.os.points.application.ports.in.puntaje.ConsultarPuntajeUseCase;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +30,7 @@ public class PuntajeController {
         this.ajustarPuntosManualmenteUseCase = ajustarPuntosManualmenteUseCase;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el propio participante; para ver el puntaje de otro hace falta ser ADMIN/ALCHEMIST activo")
     @GetMapping("/{participanteId}")
     public PuntajeResponse consultar(@ActorAutenticado UserId actor,
                                      @PathVariable String participanteId) {
@@ -35,6 +38,7 @@ public class PuntajeController {
                 consultarPuntajeUseCase.consultar(actor, UserId.of(participanteId)));
     }
 
+    @RequiresPermission(Permission.ADJUST_POINTS)
     @PostMapping("/adjustments")
     public ResponseEntity<AjustePuntosResponse> ajustarManualmente(@ActorAutenticado UserId actor,
                                                                      @RequestBody @Valid AjustarPuntosManualRequest request) {

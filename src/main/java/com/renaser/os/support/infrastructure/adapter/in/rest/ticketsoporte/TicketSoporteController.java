@@ -1,7 +1,9 @@
 package com.renaser.os.support.infrastructure.adapter.in.rest.ticketsoporte;
 
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.support.application.ports.in.ticketsoporte.AbrirTicketSoporteUseCase;
 import com.renaser.os.support.application.ports.in.ticketsoporte.AbrirTicketSoporteUseCase.AbrirTicketSoporteCommand;
 import com.renaser.os.support.application.ports.in.ticketsoporte.ListarTicketsSoporteUseCase;
@@ -34,6 +36,7 @@ public class TicketSoporteController {
         this.solicitarUrlUseCase = solicitarUrlUseCase;
     }
 
+    @RequiresPermission(Permission.OPEN_SUPPORT_TICKET)
     @PostMapping
     public ResponseEntity<TicketSoporteResponse> abrir(@ActorAutenticado UserId actor,
                                                          @RequestBody @Valid AbrirTicketSoporteRequest request) {
@@ -43,11 +46,13 @@ public class TicketSoporteController {
         return ResponseEntity.status(HttpStatus.CREATED).body(TicketSoporteResponse.from(abrirUseCase.abrir(command)));
     }
 
+    @RequiresPermission(value = Permission.OPEN_SUPPORT_TICKET, scope = "solo los tickets del propio actor")
     @GetMapping
     public List<TicketSoporteResponse> misTickets(@ActorAutenticado UserId actor) {
         return listarUseCase.misTickets(actor).stream().map(TicketSoporteResponse::from).toList();
     }
 
+    @RequiresPermission(Permission.OPEN_SUPPORT_TICKET)
     @PostMapping("/attachments/upload-url")
     public UrlAdjuntoResponse solicitarUrlAdjunto(@ActorAutenticado UserId actor,
                                                     @RequestBody @Valid SolicitarUrlAdjuntoRequest request) {

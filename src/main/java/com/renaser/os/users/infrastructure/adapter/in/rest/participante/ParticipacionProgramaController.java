@@ -1,7 +1,9 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.participante;
 
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase.ActivateSelfTrackingCommand;
 import com.renaser.os.users.application.ports.in.participante.AssignMentorToTraineeUseCase;
@@ -61,18 +63,21 @@ public class ParticipacionProgramaController {
         this.updateTraineeProfileUseCase = updateTraineeProfileUseCase;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "a proposito sin guard de rol staff, para que la app pueda consultar el estado antes de ofrecer la activacion")
     @GetMapping("/api/v1/mentor/activate-tracking")
     public SelfTrackingStatusResponse status(@ActorAutenticado UserId actor) {
         boolean active = consultarUseCase.estaActivo(new ConsultarSelfTrackingQuery(actor));
         return new SelfTrackingStatusResponse(active);
     }
 
+    @RequiresPermission(Permission.TRACK_PROGRAM_AS_STAFF)
     @PostMapping("/api/v1/mentor/activate-tracking")
     public ActivateSelfTrackingResponse activate(@ActorAutenticado UserId actor) {
         var participacion = activateUseCase.activate(new ActivateSelfTrackingCommand(actor));
         return ActivateSelfTrackingResponse.from(participacion);
     }
 
+    @RequiresPermission(Permission.TRACK_PROGRAM_AS_STAFF)
     @DeleteMapping("/api/v1/mentor/activate-tracking")
     public DeactivateSelfTrackingResponse deactivate(@ActorAutenticado UserId actor) {
         boolean deactivated = deactivateUseCase.deactivate(new DeactivateSelfTrackingCommand(actor));
@@ -81,6 +86,7 @@ public class ParticipacionProgramaController {
 
     /** Administrativo (ADMIN/ALCHEMIST) — "nadie activa/desactiva el programa de otro
      * salvo administrativo" (CLAUDE.MD) se extiende a la reasignacion de mentor. */
+    @RequiresPermission(Permission.ASSIGN_MENTOR)
     @PutMapping("/api/v1/participants/{traineeId}/mentor")
     public ResponseEntity<Void> assignMentor(@PathVariable UUID traineeId,
                                               @ActorAutenticado UserId actor,
@@ -96,6 +102,7 @@ public class ParticipacionProgramaController {
      * porque el campo pertenece al 4to agregado de `users` (`participantes_programa`), no a
      * `usuarios` — mismo criterio que el resto de este controller.
      */
+    @RequiresPermission(value = Permission.USE_APP, scope = "self por construccion: el endpoint no recibe traineeId")
     @PatchMapping("/api/v1/users/me/trainee-profile")
     public TraineeProfileResponse updateTraineeProfile(@ActorAutenticado UserId actor,
                                                          @RequestBody UpdateTraineeProfileRequest request) {

@@ -10,8 +10,10 @@ import com.renaser.os.rocks.application.ports.in.rocasemanal.EditarDentroDe48hUs
 import com.renaser.os.rocks.application.ports.in.rocasemanal.EditarDentroDe48hUseCase.EditarRocaSemanalCommand;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanalId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,6 +46,7 @@ public class RocaSemanalController {
         this.consultarUseCase = consultarUseCase;
     }
 
+    @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @GetMapping
     public List<RocaSemanalResponse> listar(@ActorAutenticado UserId actor,
                                              @RequestParam(required = false) Integer semana) {
@@ -52,6 +55,7 @@ public class RocaSemanalController {
                 .toList();
     }
 
+    @RequiresPermission(value = Permission.FOLLOW_OWN_PROGRAM, scope = "exige tener las rocas maestras completas (ROCKS_LOCKED)")
     @PostMapping
     public ResponseEntity<List<RocaSemanalResponse>> crear(@ActorAutenticado UserId actor,
                                                              @Valid @RequestBody CrearPlanSemanalRequest request) {
@@ -65,6 +69,7 @@ public class RocaSemanalController {
                 .body(creadas.stream().map(RocaSemanalResponse::from).toList());
     }
 
+    @RequiresPermission(value = Permission.FOLLOW_OWN_PROGRAM, scope = "dueno de la roca semanal, y dentro de la ventana de edicion")
     @PatchMapping("/{id}")
     public RocaSemanalResponse editar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                        @Valid @RequestBody EditarRocaSemanalRequest request) {
@@ -74,6 +79,7 @@ public class RocaSemanalController {
         return RocaSemanalResponse.from(editada);
     }
 
+    @RequiresPermission(value = Permission.FOLLOW_OWN_PROGRAM, scope = "dueno de la roca semanal")
     @PatchMapping("/{id}/review")
     public RocaSemanalResponse cerrar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                        @Valid @RequestBody CerrarSemanaRequest request) {

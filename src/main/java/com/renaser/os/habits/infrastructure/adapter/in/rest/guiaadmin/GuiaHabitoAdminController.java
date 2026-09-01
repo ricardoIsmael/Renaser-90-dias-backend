@@ -7,8 +7,10 @@ import com.renaser.os.habits.application.ports.in.guiaadmin.UpsertGuiaHabitoUseC
 import com.renaser.os.habits.application.ports.in.guiaadmin.UpsertGuiaHabitoUseCase.UpsertGuiaHabitoCommand;
 import com.renaser.os.habits.domain.model.guia.GuiaHabitoId;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -39,12 +41,14 @@ public class GuiaHabitoAdminController {
         this.eliminarUseCase = eliminarUseCase;
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @GetMapping("/{habitId}/guides")
     public List<HabitGuideResponse> listar(@ActorAutenticado UserId actor, @PathVariable UUID habitId) {
         return consultarUseCase.listar(actor, HabitoId.of(habitId)).stream()
                 .map(HabitGuideResponse::from).toList();
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @PostMapping("/{habitId}/guides")
     public ResponseEntity<HabitGuideResponse> upsert(@ActorAutenticado UserId actor,
                                                        @PathVariable UUID habitId,
@@ -54,6 +58,7 @@ public class GuiaHabitoAdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(HabitGuideResponse.from(conAdjuntos));
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @DeleteMapping("/guides/{guideId}")
     public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actor, @PathVariable UUID guideId) {
         eliminarUseCase.eliminar(new EliminarGuiaHabitoCommand(actor, GuiaHabitoId.of(guideId)));

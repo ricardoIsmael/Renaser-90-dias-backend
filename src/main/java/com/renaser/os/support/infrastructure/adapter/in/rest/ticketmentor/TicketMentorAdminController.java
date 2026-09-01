@@ -1,7 +1,9 @@
 package com.renaser.os.support.infrastructure.adapter.in.rest.ticketmentor;
 
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.support.application.ports.in.ticketmentor.ListarTicketsMentorUseCase;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,6 +22,7 @@ public class TicketMentorAdminController {
         this.listarUseCase = listarUseCase;
     }
 
+    @RequiresPermission(Permission.VIEW_ALL_MENTOR_TICKETS)
     @GetMapping
     public TicketsMentorPageResponse todos(@ActorAutenticado UserId actor,
                                             @RequestParam(required = false) String cursor) {

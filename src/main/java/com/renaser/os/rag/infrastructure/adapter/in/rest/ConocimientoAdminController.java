@@ -2,8 +2,10 @@ package com.renaser.os.rag.infrastructure.adapter.in.rest;
 
 import com.renaser.os.rag.application.ports.in.conocimiento.IndexarConocimientoUseCase;
 import com.renaser.os.rag.application.ports.in.conocimiento.IndexarConocimientoUseCase.IndexarConocimientoCommand;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -21,6 +23,7 @@ public class ConocimientoAdminController {
         this.indexarConocimientoUseCase = indexarConocimientoUseCase;
     }
 
+    @RequiresPermission(Permission.MANAGE_KNOWLEDGE_BASE)
     @PostMapping
     public ChunkIndexadoResponse indexar(@ActorAutenticado UserId actorId,
                                           @Valid @RequestBody IndexarConocimientoRequest request) {

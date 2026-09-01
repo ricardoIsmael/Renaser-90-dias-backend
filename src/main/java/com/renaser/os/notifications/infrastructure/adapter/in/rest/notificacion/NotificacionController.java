@@ -3,8 +3,10 @@ package com.renaser.os.notifications.infrastructure.adapter.in.rest.notificacion
 import com.renaser.os.notifications.application.ports.in.notificacion.ListarNotificacionesUseCase;
 import com.renaser.os.notifications.application.ports.in.notificacion.MarcarLeidaUseCase;
 import com.renaser.os.notifications.application.ports.in.notificacion.MarcarTodasLeidasUseCase;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -33,16 +35,19 @@ public class NotificacionController {
         this.marcarTodasLeidasUseCase = marcarTodasLeidasUseCase;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping
     public NotificacionesBandejaResponse listar(@ActorAutenticado UserId actor) {
         return NotificacionesBandejaResponse.from(listarNotificacionesUseCase.listar(actor));
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "solo notificaciones propias: el update filtra por actorId")
     @PutMapping("/{id}/read")
     public MarcarLeidaResponse marcarLeida(@ActorAutenticado UserId actor, @PathVariable Long id) {
         return MarcarLeidaResponse.from(marcarLeidaUseCase.marcarLeida(actor, id));
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "solo notificaciones propias")
     @PutMapping("/read-all")
     public MarcarTodasLeidasResponse marcarTodasLeidas(@ActorAutenticado UserId actor) {
         return new MarcarTodasLeidasResponse(marcarTodasLeidasUseCase.marcarTodas(actor));

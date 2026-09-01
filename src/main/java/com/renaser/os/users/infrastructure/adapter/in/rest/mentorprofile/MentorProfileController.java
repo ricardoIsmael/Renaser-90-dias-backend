@@ -1,7 +1,9 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.mentorprofile;
 
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.mentorprofile.UpdateMentorProfileUseCase;
 import com.renaser.os.users.application.ports.in.mentorprofile.UpdateMentorProfileUseCase.UpdateMentorProfileCommand;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +27,7 @@ public class MentorProfileController {
         this.updateMentorProfileUseCase = updateMentorProfileUseCase;
     }
 
+    @RequiresPermission(value = Permission.MANAGE_MENTOR_PROFILE, scope = "editar SOLO la bio tambien lo puede el propio mentor; nivel y estado operativo no")
     @PatchMapping
     public ResponseEntity<Void> update(@PathVariable UUID mentorId, @ActorAutenticado UserId actor,
                                         @RequestBody UpdateMentorProfileRequest request) {

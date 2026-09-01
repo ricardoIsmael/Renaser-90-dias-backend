@@ -1,8 +1,10 @@
 package com.renaser.os.community.infrastructure.adapter.in.rest.celula;
 
 import com.renaser.os.community.application.ports.in.celula.ConsultarMiCelulaUseCase;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +28,7 @@ public class MiCelulaController {
         this.consultarUseCase = consultarUseCase;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el javadoc dice TRAINEE pero no hay guard de rol: quien no es participante recibe lista vacia, no 403")
     @GetMapping
     public ResponseEntity<?> miCelula(@ActorAutenticado UserId traineeId) {
         return consultarUseCase.miCelula(traineeId)
@@ -33,6 +36,7 @@ public class MiCelulaController {
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("assigned", false)));
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el javadoc dice TRAINEE pero no hay guard de rol: quien no es participante recibe lista vacia, no 403")
     @GetMapping("/members")
     public Map<String, List<CellMemberResponse>> miembros(@ActorAutenticado UserId traineeId) {
         List<CellMemberResponse> miembros = consultarUseCase.misCompaneros(traineeId).stream()

@@ -6,8 +6,10 @@ import com.renaser.os.onboarding.application.ports.in.grabacionv90.RegistrarGrab
 import com.renaser.os.onboarding.application.ports.in.grabacionv90.ValidarV90UseCase;
 import com.renaser.os.onboarding.application.ports.in.grabacionv90.ValidarV90UseCase.ConsultarEstadoV90Query;
 import com.renaser.os.onboarding.application.ports.in.grabacionv90.ValidarV90UseCase.SolicitarValidacionV90Command;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +37,7 @@ public class GrabacionV90Controller {
         this.validarUseCase = validarUseCase;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "la media referenciada tiene que ser del propio actor")
     @PostMapping
     public ResponseEntity<GrabacionV90Response> registrar(@ActorAutenticado UserId actor,
                                                             @Valid @RequestBody RegistrarGrabacionV90Request request) {
@@ -45,12 +48,14 @@ public class GrabacionV90Controller {
         return ResponseEntity.status(HttpStatus.CREATED).body(GrabacionV90Response.from(grabacion));
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping
     public List<GrabacionV90Response> listar(@ActorAutenticado UserId actor) {
         return listarUseCase.listar(actor).stream().map(GrabacionV90Response::from).toList();
     }
 
     /** 202 de inmediato: el trabajo real corre async (CLAUDE.MD §7). */
+    @RequiresPermission(value = Permission.USE_APP, scope = "dueno de la grabacion")
     @PostMapping("/{id}/validation")
     public ResponseEntity<ValidacionV90Response> solicitarValidacion(@ActorAutenticado UserId actor,
                                                                        @PathVariable("id") Long id) {
@@ -59,6 +64,7 @@ public class GrabacionV90Controller {
     }
 
     /** GET de polling. */
+    @RequiresPermission(value = Permission.USE_APP, scope = "dueno de la grabacion")
     @GetMapping("/{id}/validation")
     public ValidacionV90Response consultarValidacion(@ActorAutenticado UserId actor,
                                                        @PathVariable("id") Long id) {

@@ -1,8 +1,10 @@
 package com.renaser.os.chat.infrastructure.adapter.in.rest.miembro;
 
 import com.renaser.os.chat.application.ports.in.miembro.ListarDirectorioMiembrosUseCase;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -21,6 +23,7 @@ public class MiembroController {
         this.listarUseCase = listarUseCase;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "hoy NO exige ser participante del grupo GLOBAL, a diferencia de /chat/conversations/global/members que lee el mismo roster")
     @GetMapping
     public MiembrosPageResponse listar(@ActorAutenticado UserId actorId,
                                         @RequestParam(required = false) String cursor,

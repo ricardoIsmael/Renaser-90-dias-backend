@@ -1,8 +1,10 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.desbloqueo;
 
 import com.renaser.os.habits.application.ports.in.desbloqueo.ConsultarDesbloqueosHabitoUseCase;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,6 +20,7 @@ public class HabitUnlockController {
         this.consultarUseCase = consultarUseCase;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping
     public HabitUnlockPlanResponse consultar(@ActorAutenticado UserId actor) {
         return HabitUnlockPlanResponse.from(consultarUseCase.consultar(actor));

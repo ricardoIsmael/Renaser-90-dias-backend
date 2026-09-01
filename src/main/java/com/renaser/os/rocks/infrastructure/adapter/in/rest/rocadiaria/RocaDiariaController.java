@@ -12,8 +12,10 @@ import com.renaser.os.rocks.application.ports.in.rocadiaria.SolicitarUrlAdjuntoR
 import com.renaser.os.rocks.domain.model.rocadiaria.TipoEvidenciaRoca;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,16 +49,19 @@ public class RocaDiariaController {
         this.mananaUseCase = mananaUseCase;
     }
 
+    @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @GetMapping("/today")
     public List<RocaDiariaResponse> hoy(@ActorAutenticado UserId actor) {
         return hoyUseCase.hoy(actor).stream().map(RocaDiariaResponse::from).toList();
     }
 
+    @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @GetMapping("/tomorrow")
     public List<RocaDiariaResponse> manana(@ActorAutenticado UserId actor) {
         return mananaUseCase.manana(actor).stream().map(RocaDiariaResponse::from).toList();
     }
 
+    @RequiresPermission(value = Permission.FOLLOW_OWN_PROGRAM, scope = "exige tener las rocas maestras completas (ROCKS_LOCKED)")
     @PostMapping("/plan")
     public ResponseEntity<List<RocaDiariaResponse>> crear(@ActorAutenticado UserId actor,
                                                             @Valid @RequestBody CrearPlanDiarioRequest request) {
@@ -70,6 +75,7 @@ public class RocaDiariaController {
                 .body(creadas.stream().map(RocaDiariaResponse::from).toList());
     }
 
+    @RequiresPermission(value = Permission.FOLLOW_OWN_PROGRAM, scope = "dueno de la roca diaria")
     @PostMapping("/{id}/evidence/upload-url")
     public UrlAdjuntoResponse urlDeSubida(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                            @Valid @RequestBody SolicitarUrlAdjuntoRequest request) {
@@ -78,6 +84,7 @@ public class RocaDiariaController {
         return UrlAdjuntoResponse.from(url);
     }
 
+    @RequiresPermission(value = Permission.FOLLOW_OWN_PROGRAM, scope = "dueno de la roca diaria, y la roca VERDE del eje primero (Pareto)")
     @PostMapping("/{id}/evidence")
     public RocaDiariaResponse completar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                          @Valid @RequestBody CompletarRocaDiariaRequest request) {

@@ -11,8 +11,10 @@ import com.renaser.os.habits.application.ports.in.santuario.SolicitarUrlAdjuntoR
 import com.renaser.os.habits.application.ports.in.santuario.SolicitarUrlAdjuntoRachaUseCase.SolicitarUrlAdjuntoRachaCommand;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -45,6 +47,7 @@ public class RachaController {
         this.clock = clock;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "dueno del registro de habito")
     @PostMapping("/{id}/phone-free/start")
     public RachaSinCelularResponse iniciar(@ActorAutenticado UserId actor, @PathVariable String id,
                                             @RequestBody @Valid IniciarRachaRequest request) {
@@ -54,6 +57,7 @@ public class RachaController {
     }
 
     /** D-H13 (hueco #13): URL prefirmada para la evidencia con la que se cierra la racha. */
+    @RequiresPermission(value = Permission.USE_APP, scope = "opera la racha del propio actor: no recibe id")
     @PostMapping("/phone-free/evidence/upload-url")
     public UrlAdjuntoRachaResponse urlDeSubida(@ActorAutenticado UserId actor,
                                                 @Valid @RequestBody SolicitarUrlAdjuntoRachaRequest request) {
@@ -62,6 +66,7 @@ public class RachaController {
         return UrlAdjuntoRachaResponse.from(url);
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "opera la racha del propio actor: no recibe id")
     @PostMapping("/phone-free/complete")
     public RachaSinCelularResponse completar(@ActorAutenticado UserId actor,
                                               @RequestBody @Valid CompletarRachaRequest request) {
@@ -71,6 +76,7 @@ public class RachaController {
         return RachaSinCelularResponse.from(racha, clock.now(), EXTENSION_DEFAULT_HORAS);
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "opera la racha del propio actor: no recibe id")
     @PostMapping("/phone-free/break")
     public RachaSinCelularResponse romper(@ActorAutenticado UserId actor,
                                            @RequestBody(required = false) RomperRachaRequest request) {

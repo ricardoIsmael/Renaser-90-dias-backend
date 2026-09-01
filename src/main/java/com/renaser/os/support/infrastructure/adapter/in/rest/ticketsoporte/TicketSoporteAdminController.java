@@ -1,7 +1,9 @@
 package com.renaser.os.support.infrastructure.adapter.in.rest.ticketsoporte;
 
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.support.application.ports.in.ticketsoporte.ListarTicketsSoporteUseCase;
 import com.renaser.os.support.application.ports.in.ticketsoporte.ResolverTicketSoporteUseCase;
 import com.renaser.os.support.application.ports.in.ticketsoporte.ResolverTicketSoporteUseCase.ResolverTicketSoporteCommand;
@@ -31,6 +33,7 @@ public class TicketSoporteAdminController {
         this.resolverUseCase = resolverUseCase;
     }
 
+    @RequiresPermission(Permission.MANAGE_SUPPORT_TICKETS)
     @GetMapping
     public List<TicketSoporteResponse> todos(@ActorAutenticado UserId actor,
                                               @RequestParam(required = false) String status) {
@@ -38,6 +41,7 @@ public class TicketSoporteAdminController {
                 .map(TicketSoporteResponse::from).toList();
     }
 
+    @RequiresPermission(Permission.MANAGE_SUPPORT_TICKETS)
     @PostMapping("/{id}/resolve")
     public TicketSoporteResponse resolver(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                            @RequestBody(required = false) ResolverTicketSoporteRequest request) {

@@ -9,8 +9,10 @@ import com.renaser.os.habits.application.ports.in.horarioadmin.EliminarHorarioHa
 import com.renaser.os.habits.application.ports.in.horarioadmin.EliminarHorarioHabitoUseCase.EliminarHorarioHabitoCommand;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +48,7 @@ public class HorarioHabitoAdminController {
         this.eliminarUseCase = eliminarUseCase;
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @GetMapping("/{habitId}/schedules")
     public List<HabitScheduleResponse> listar(@ActorAutenticado UserId actor,
                                                @PathVariable UUID habitId) {
@@ -53,6 +56,7 @@ public class HorarioHabitoAdminController {
                 .map(HabitScheduleResponse::from).toList();
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @PostMapping("/{habitId}/schedules")
     public ResponseEntity<HabitScheduleResponse> crear(@ActorAutenticado UserId actor,
                                                          @PathVariable UUID habitId,
@@ -70,6 +74,7 @@ public class HorarioHabitoAdminController {
      * "null explicito" — por eso el body se lee como {@link JsonNode} y esta es la UNICA
      * excepcion al mapeo a mano con DTOs tipados del resto de este controller.
      */
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @PostMapping("/schedules/{scheduleId}")
     public HabitScheduleResponse actualizar(@ActorAutenticado UserId actor,
                                              @PathVariable UUID scheduleId, @RequestBody JsonNode body) {
@@ -82,6 +87,7 @@ public class HorarioHabitoAdminController {
         return HabitScheduleResponse.from(horario);
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @DeleteMapping("/schedules/{scheduleId}")
     public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actor, @PathVariable UUID scheduleId) {
         eliminarUseCase.eliminar(new EliminarHorarioHabitoCommand(actor, HorarioHabitoId.of(scheduleId)));

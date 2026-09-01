@@ -4,8 +4,10 @@ import com.renaser.os.onboarding.application.ports.in.media.ObtenerUrlSubidaMedi
 import com.renaser.os.onboarding.application.ports.in.media.ObtenerUrlSubidaMediaUseCase.ObtenerUrlSubidaMediaCommand;
 import com.renaser.os.onboarding.application.ports.in.media.RegistrarMediaUseCase;
 import com.renaser.os.onboarding.application.ports.in.media.RegistrarMediaUseCase.RegistrarMediaCommand;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +28,7 @@ public class MediaController {
         this.registrarMediaUseCase = registrarMediaUseCase;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @PostMapping("/upload-url")
     public ResponseEntity<UrlSubidaMediaResponse> urlDeSubida(@ActorAutenticado UserId actor,
                                                                 @Valid @RequestBody UrlSubidaMediaRequest request) {
@@ -34,6 +37,7 @@ public class MediaController {
         return ResponseEntity.ok(UrlSubidaMediaResponse.from(urlSubidaUseCase.obtener(comando)));
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @PostMapping
     public ResponseEntity<MediaResponse> registrar(@ActorAutenticado UserId actor,
                                                      @Valid @RequestBody RegistrarMediaRequest request) {

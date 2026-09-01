@@ -424,6 +424,91 @@ Orden: `users` primero (es donde vive el login), después el resto por tamaño a
 
 ---
 
+## 8.1 Inventario de autorización por endpoint — hecho 2026-08-31
+
+**Antes de migrar `X-Actor-Id` hacía falta saber qué exige cada endpoint, y no estaba escrito en ningún lado.** La autorización real vivía (y sigue viviendo) dentro de los servicios, en guards como `requireAdminActivo`, `requireActorPuedePublicar`, `HabitoAdminGuard` o `RequireActiveUserGuard`. Desde el controller no se veía nada: los 218 handlers eran indistinguibles entre sí.
+
+Ahora **cada endpoint declara qué permiso va a exigir**, y el build lo verifica.
+
+### Qué se agregó
+
+| Pieza | Dónde | Qué hace |
+|---|---|---|
+| `Permission` | `shared/domain/` | 30 permisos, cada uno derivado de un guard que ya existía. El javadoc de cada valor cita el mensaje literal del `NotAuthorizedException` que hoy lo hace cumplir y los roles que hoy lo satisfacen |
+| `@RequiresPermission(value, scope)` | `shared/web/security/` | Declara el permiso. `scope` documenta la restricción de **relación** que el permiso no puede expresar (dueño del recurso, mentor asignado, líder de célula, participante de la conversación) |
+| `@PublicEndpoint(razón)` | `shared/web/security/` | Declara que el endpoint se sirve sin cuenta, **con la justificación obligatoria** |
+| `EndpointAuthorizationDeclarationTest` | `src/test/java/com/renaser/os/` | El test de reflexión que exige CLAUDE.MD §0.3. Rompe el build si un handler no declara nada, si declara las dos anotaciones a la vez, o si un `@PublicEndpoint` no explica por qué |
+
+**Declaran, no ejecutan.** No hay filtro ni interceptor detrás de las anotaciones, y `SecurityConfig` sigue en `permitAll()`: el comportamiento de la app no cambió en absoluto. Lo que existe hoy es el **inventario**, que es el insumo de la fase 4.
+
+### El inventario: 218 endpoints
+
+| | Cantidad |
+|---|---|
+| Con permiso declarado | **201** |
+| Públicos (`@PublicEndpoint`) | **12** |
+| Sin clasificar (TODO explícito) | **5** |
+
+**Los 12 públicos están todos en `users`**, y todos por la misma razón: ocurren *antes* de que exista la cuenta o la sesión.
+
+- `POST /api/v1/account-requests` (el alta), `.../check-email`, `.../exists`, `.../verify-email`, `GET /api/v1/account-requests/{id}/status`
+- `POST /api/v1/auth/login`, `/logout`, `/social`, `/password/reset-request`, `/password/reset-confirm`
+- `POST /api/v1/auth/email-verification/send`, `/confirm`
+
+`AccountRequestController` es **mixto** y ahora lo dice endpoint por endpoint: el alta y sus pasos previos son públicos, la bandeja (`listar`, `approve`, `reject`, `eliminar`) exige `APPROVE_ACCOUNT_REQUEST`.
+
+Reparto por permiso, de mayor a menor:
+
+| Permiso | Endpoints | Quién lo satisface hoy |
+|---|---|---|
+| `USE_APP` | 87 | Cualquier rol con cuenta activa |
+| `FOLLOW_OWN_PROGRAM` | 22 | TRAINEE |
+| `MANAGE_HABIT_CATALOG` | 17 | ADMIN, ALCHEMIST |
+| `MANAGE_CELLS` | 14 | ADMIN, ALCHEMIST (un MENTOR pasa en 2 de ellos, acotado a su célula) |
+| `MANAGE_CALENDAR` | 6 | ADMIN, ALCHEMIST, MENTOR — **no MENTOR_LEAD** |
+| `MANAGE_COHORTS` | 6 | ADMIN, ALCHEMIST (ídem MENTOR en 2) |
+| `MANAGE_WALL_CATEGORIES` | 5 | ADMIN, ALCHEMIST |
+| `APPROVE_ACCOUNT_REQUEST` | 4 | ADMIN, ALCHEMIST |
+| `MANAGE_EVIDENCE`, `MANAGE_ROLES`, `MANAGE_STAFF`, `MANAGE_TRAINEES`, `MODERATE_WALL`, `OPEN_SUPPORT_TICKET` | 3 c/u | Ver el javadoc de cada valor |
+| `ANSWER_MENTOR_TICKET`, `MANAGE_SUPPORT_TICKETS`, `PUBLISH_ON_WALL`, `SIGN_PHASE_CONTRACT`, `TRACK_PROGRAM_AS_STAFF`, `USE_MENTOR_TICKETS`, `VIEW_OWN_PHASE_CONTRACTS` | 2 c/u | Ídem |
+| `ADJUST_POINTS`, `ASSIGN_MENTOR`, `MANAGE_KNOWLEDGE_BASE`, `MANAGE_MENTOR_PROFILE`, `OPEN_MENTOR_TICKET`, `RENAME_GLOBAL_CHAT`, `VIEW_ALL_MENTOR_TICKETS`, `VIEW_ONBOARDING_DASHBOARD` | 1 c/u | Ídem |
+
+Por módulo: `community` 45, `habits` 40, `users` 40, `onboarding` 15, `rocks` 13, `academy` 12, `support` 11, `calendar` 9, `chat` 8, `notifications` 6, `evidence` 5, `points` 5, `rag` 5, `phasecontracts` 4.
+
+### Los 5 que NO se pudieron clasificar
+
+**Ninguno se marcó público.** Un `@PublicEndpoint` puesto por comodidad es un agujero permanente: cuando `SecurityConfig` pase a `authenticated()`, esa anotación *es* la lista de excepciones. Los 5 llevan un TODO en su controller y entran en `HANDLERS_SIN_CLASIFICAR` del test, que los aísla sin dejarlos pasar por default.
+
+| Endpoint | Por qué no se puede decidir desde el código |
+|---|---|
+| `GET /api/v1/wall/{postId}/comments` (`WallCommentController#listar`) | No recibe actor ni ejecuta guard, mientras el feed del Muro sí exige cuenta activa. No se sabe si es deliberado o una omisión |
+| `GET /api/v1/wall/mine` (`WallController#mine`) | Recibe actor y `contarMisPublicaciones` no lo valida. Con el respaldo de `X-Actor-Id`, devuelve el conteo de cualquier `userId` que el cliente declare |
+| `GET /api/v1/wall/latest-author` (`WallController#latestAuthor`) | Declara actor y `ultimoAutor()` ni lo recibe: el parámetro se ignora. Hoy es público de hecho, sin que nadie lo haya decidido |
+| `GET /api/v1/testimonios` (`TestimonioController#listar`) | Sin actor y sin guard. Podría ser contenido público de marketing, pero el código no lo dice en ningún lado |
+| `POST /api/v1/testimonios` (`TestimonioController#crear`) | Un solo handler con **dos** autorizaciones según el body: sin `wallPostId` acepta actor `null` y no valida nada; con `wallPostId` exige `PROMOTE_TESTIMONIAL`. No es declarable hasta partirlo en dos endpoints |
+
+### Hallazgos del recorrido, para la fase 4
+
+Ninguno se corrigió acá — cambiarlos altera comportamiento y son decisiones de producto, no de refactor:
+
+- **`MANAGE_CALENDAR` no incluye `MENTOR_LEAD`.** `EventoService.requireRolCreador` acepta ADMIN, ALCHEMIST y MENTOR. Es exactamente la omisión que el vocabulario de permisos existe para no repetir.
+- **`PUBLISH_ON_WALL` tiene un guard que hoy no puede fallar.** `requireActorPuedePublicar` enumera *en negativo* los 5 roles, así que cualquier cuenta activa pasa. Recién morderá cuando exista un rol nuevo, y lo hará en silencio: nadie habrá decidido que ese rol no publica. Se le dio un permiso propio en vez de colapsarlo en `USE_APP` justamente para que la decisión sea explícita en la matriz.
+- **`GET /api/v1/evidence/{id}` deja leer a una cuenta suspendida** si es la suya: `requireDuenoOAdmin` retorna sin chequear estado cuando el actor es el dueño. Es el único endpoint del sistema con esa forma.
+- **`GET /api/v1/chat/members` no exige ser participante del grupo GLOBAL**, mientras `/chat/conversations/global/members` sí — y leen el mismo roster.
+- **`OPEN_SUPPORT_TICKET` no exige cuenta activa, a propósito.** `TicketSoporteService.requireActorExiste` solo verifica que el actor exista. Tiene sentido (alguien suspendido tiene que poder reclamar su suspensión) y por eso es un permiso aparte: colapsarlo en `USE_APP` le cerraría la puerta sin que nadie lo note.
+- **`MiCelulaController` dice TRAINEE en el javadoc pero no tiene guard de rol.** El efecto "solo aprendiz" es incidental: quien no es participante recibe lista vacía, no 403.
+- **`requireSelf` inerte en `RadarController` y `HabitTrackController#hoy`**: el controller pasa el mismo actor como actor y como participante, así que la comparación nunca puede fallar. La restricción real la aporta el otro guard de la cadena.
+
+### Qué falta para pasar de `permitAll()` a `authenticated()`
+
+1. **Definir la matriz rol → permiso** — el único insumo que faltaba ya está: cada valor de `Permission` documenta qué roles lo satisfacen hoy. Va como `UserRole.can(Permission)`, en un solo archivo (CLAUDE.MD §5.3.2). Sigue abierto qué permisos tiene `MENTOR_LEAD` (R-2).
+2. **Resolver los 5 sin clasificar**, y partir `POST /api/v1/testimonios` en dos endpoints.
+3. **Terminar la migración de `X-Actor-Id`** (§8): mientras el actor lo declare el cliente por header, ningún permiso es exigible de verdad — se estaría autorizando una identidad auto-declarada.
+4. **Conectar la anotación**: un `HandlerInterceptor` que lea `@RequiresPermission` y consulte la matriz, con el caché de rol/estado de CLAUDE.MD §5.3.5. Recién ahí `SecurityConfig` puede pasar a `.anyRequest().authenticated()` con los 12 `@PublicEndpoint` como excepción.
+5. **Tests de autorización negativa** (§0.3): rol sin permiso → 403, `SUSPENDED` → 403. No se pueden escribir antes del paso 4, porque hoy no hay nada que devuelva 403 a nivel HTTP.
+
+---
+
 ## 9. Fases
 
 | Fase | Qué entra | Estado |
@@ -431,7 +516,7 @@ Orden: `users` primero (es donde vive el login), después el resto por tamaño a
 | **1** | `Credencial` + bean `PasswordEncoder` + Spring Session en el `pom` | ✅ Hecho |
 | **2** | Migraciones (`V2` columnas, `V3` tabla) + `CredencialJpaEntity` + puertos | En curso |
 | **3** | Cadena de Spring Security + login/logout por contraseña + CSRF | |
-| **4** | Migración de `X-Actor-Id`, módulo por módulo (§8) | |
+| **4** | Migración de `X-Actor-Id`, módulo por módulo (§8) | Inventario de autorización por endpoint ✅ hecho (§8.1): los 218 endpoints declaran qué permiso exigen y el build lo verifica. Falta la matriz rol → permiso, la migración del header y el filtro que aplique la anotación |
 | **5** | Google | ✅ Hecho, ver §6.7. Falta crear el OAuth client en Google Cloud Console (A-9) |
 | **6** | Apple + Facebook | Adaptadores hechos (§6.5); caso de uso compositor, `IdentidadExterna` y controller ahora también hechos (§6.7, compartidos por los tres proveedores). Falta lo de §6.6 (altas en Apple Developer/Meta, revisión de negocio de Meta) |
 | **7** | Reset de contraseña (Redis + envío de correo) | ✅ Hecho, ver §7.5. Envío de correo es `NoOpEnviarEmailAdapter` (sin proveedor real todavía) |

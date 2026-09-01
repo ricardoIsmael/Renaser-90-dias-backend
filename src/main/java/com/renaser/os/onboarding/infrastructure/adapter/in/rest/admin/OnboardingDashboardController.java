@@ -1,8 +1,10 @@
 package com.renaser.os.onboarding.infrastructure.adapter.in.rest.admin;
 
 import com.renaser.os.onboarding.application.ports.in.admin.OnboardingDashboardUseCase;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,6 +25,7 @@ public class OnboardingDashboardController {
         this.dashboardUseCase = dashboardUseCase;
     }
 
+    @RequiresPermission(Permission.VIEW_ONBOARDING_DASHBOARD)
     @GetMapping("/dashboard")
     public OnboardingDashboardResponse dashboard(@ActorAutenticado UserId actor) {
         return OnboardingDashboardResponse.from(dashboardUseCase.obtenerResumen(actor));

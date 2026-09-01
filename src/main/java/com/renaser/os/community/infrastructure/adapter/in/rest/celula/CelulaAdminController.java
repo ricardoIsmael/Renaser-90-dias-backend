@@ -21,8 +21,10 @@ import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUs
 import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUseCase.QuitarMentorCelulaCommand;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -81,12 +83,14 @@ public class CelulaAdminController {
     /** #25: panel admin cross-cohorte — ruta propia (no {@code GET /admin/cells} a
      * secas) para no romper el contrato ya vigente de {@link #listarPorCohorte}, que
      * exige {@code cohortId}. */
+    @RequiresPermission(Permission.MANAGE_CELLS)
     @GetMapping("/dashboard")
     public List<CelulaDashboardResponse> dashboard(@ActorAutenticado UserId actorId) {
         return dashboardUseCase.dashboard(actorId).stream().map(CelulaDashboardResponse::from).toList();
     }
 
     /** #25: mentores ACTIVOS sin celula — candidatos del selector "Asignar mentor". */
+    @RequiresPermission(Permission.MANAGE_CELLS)
     @GetMapping("/mentores-disponibles")
     public List<MentorCandidatoResponse> mentoresDisponibles(@ActorAutenticado UserId actorId) {
         return candidatosUseCase.mentoresDisponibles(actorId).stream().map(MentorCandidatoResponse::from)
@@ -94,18 +98,21 @@ public class CelulaAdminController {
     }
 
     /** #25: TODOS los mentores ACTIVOS, marcando con {@code cellId} a quien ya lidera una. */
+    @RequiresPermission(Permission.MANAGE_CELLS)
     @GetMapping("/mentores")
     public List<MentorCandidatoResponse> mentores(@ActorAutenticado UserId actorId) {
         return candidatosUseCase.mentores(actorId).stream().map(MentorCandidatoResponse::from).toList();
     }
 
     /** #25: aprendices ACTIVOS sin celula (alcance global, ver javadoc del caso de uso). */
+    @RequiresPermission(Permission.MANAGE_CELLS)
     @GetMapping("/aprendices-disponibles")
     public List<AprendizCandidatoResponse> aprendicesDisponibles(@ActorAutenticado UserId actorId) {
         return candidatosUseCase.aprendicesDisponibles(actorId).stream()
                 .map(AprendizCandidatoResponse::from).toList();
     }
 
+    @RequiresPermission(value = Permission.MANAGE_CELLS, scope = "un MENTOR pasa igual pero solo ve la celula que lidera")
     @GetMapping
     public List<CelulaResponse> listarPorCohorte(@ActorAutenticado UserId actorId,
                                                   @RequestParam UUID cohortId) {
@@ -113,11 +120,13 @@ public class CelulaAdminController {
                 .map(CelulaResponse::from).toList();
     }
 
+    @RequiresPermission(value = Permission.MANAGE_CELLS, scope = "un MENTOR pasa igual, pero solo sobre la celula que lidera")
     @GetMapping("/{id}")
     public CelulaDetalleResponse obtener(@ActorAutenticado UserId actorId, @PathVariable UUID id) {
         return CelulaDetalleResponse.from(consultarUseCase.obtener(actorId, CelulaId.of(id)));
     }
 
+    @RequiresPermission(Permission.MANAGE_CELLS)
     @PostMapping
     public ResponseEntity<CelulaDetalleResponse> crear(@ActorAutenticado UserId actorId,
                                                          @RequestBody @Valid CrearCelulaRequest request) {
@@ -126,6 +135,7 @@ public class CelulaAdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(CelulaDetalleResponse.from(detalle));
     }
 
+    @RequiresPermission(value = Permission.MANAGE_CELLS, scope = "la cohorte no puede estar completada")
     @PatchMapping("/{id}")
     public CelulaDetalleResponse actualizar(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                              @RequestBody ActualizarCelulaRequest request) {
@@ -133,6 +143,7 @@ public class CelulaAdminController {
                 CelulaId.of(id), request.name(), request.videoCallUrl(), true)));
     }
 
+    @RequiresPermission(Permission.MANAGE_CELLS)
     @PutMapping("/{id}/mentor")
     public CelulaDetalleResponse asignarMentor(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                                 @RequestBody @Valid AsignarMentorRequest request) {
@@ -140,6 +151,7 @@ public class CelulaAdminController {
                 CelulaId.of(id), UserId.of(request.leaderUserId()))));
     }
 
+    @RequiresPermission(Permission.MANAGE_CELLS)
     @DeleteMapping("/{id}/mentor")
     public CelulaDetalleResponse quitarMentor(@ActorAutenticado UserId actorId, @PathVariable UUID id) {
         return CelulaDetalleResponse.from(quitarMentorUseCase.quitar(new QuitarMentorCelulaCommand(actorId,
@@ -148,6 +160,7 @@ public class CelulaAdminController {
 
     /** #25: asigna un aprendiz a esta celula (escribe `participantes_programa.celula_id`
      * via `users.api.AsignacionCelulaPort` — ver javadoc de {@code CelulaService.asignar}). */
+    @RequiresPermission(Permission.MANAGE_CELLS)
     @PostMapping("/{id}/trainees")
     public CelulaDetalleResponse asignarAprendiz(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                                   @RequestBody @Valid AsignarAprendizRequest request) {
@@ -158,6 +171,7 @@ public class CelulaAdminController {
     /** #25: contraparte de {@link #asignarAprendiz}. {@code id} de celula no hace falta
      * para la escritura (la columna se limpia por `traineeId`), se mantiene en la ruta
      * por consistencia con el resto de este controller (todo cuelga de `/cells/{id}`). */
+    @RequiresPermission(Permission.MANAGE_CELLS)
     @DeleteMapping("/{id}/trainees/{traineeId}")
     public ResponseEntity<Void> quitarAprendiz(@ActorAutenticado UserId actorId,
                                                 @PathVariable UUID id, @PathVariable UUID traineeId) {
@@ -165,6 +179,7 @@ public class CelulaAdminController {
         return ResponseEntity.noContent().build();
     }
 
+    @RequiresPermission(Permission.MANAGE_CELLS)
     @PostMapping("/{id}/session")
     public CelulaDetalleResponse programarSesion(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                                   @RequestBody @Valid ProgramarSesionRequest request) {
@@ -172,6 +187,7 @@ public class CelulaAdminController {
                 CelulaId.of(id), request.scheduledAt())));
     }
 
+    @RequiresPermission(Permission.MANAGE_CELLS)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actorId, @PathVariable UUID id) {
         eliminarUseCase.eliminar(new EliminarCelulaCommand(actorId, CelulaId.of(id)));

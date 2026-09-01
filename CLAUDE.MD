@@ -952,7 +952,7 @@ Estado real al **2026-08-22**. El plan detallado por módulo está en [`docs/MOD
 - [ ] Puertos, casos de uso, adaptadores de `users` (orden en `MODULOS_A_AVANZAR.md` §4.4).
 - [ ] Flyway apuntando al Postgres existente en modo *baseline* (no recrear schema).
 - [ ] `spring-modulith-docs` generando el diagrama de módulos en CI, para que el mapa de §5 no se desactualice.
-- [ ] Test de reflexión que falle si un endpoint no declara `@RequiresPermission` ni `@PublicEndpoint`.
+- [x] **Test de reflexión que falla si un endpoint no declara `@RequiresPermission` ni `@PublicEndpoint`** — `EndpointAuthorizationDeclarationTest`, con los 218 endpoints declarados (12 públicos, 201 por permiso, 5 con TODO explícito). El enum `Permission` vive en `shared/domain/`. Inventario completo en [`docs/MODULO_AUTH.md`](docs/MODULO_AUTH.md) §8.1. **Falta la matriz rol → permiso** (`UserRole.can(Permission)`) y el filtro que aplique la anotación: hoy declara, no ejecuta.
 - [ ] Dashboard de Micrometer/OTel con p50/p99 por endpoint desde el primer módulo desplegado — para validar los SLO de §3 con datos reales, no supuestos.
 - [ ] Gateway/proxy de transición ruteando `/api/v1/users/**` a Spring, resto a Next.js.
 

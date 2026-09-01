@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.autenticacion;
 
+import com.renaser.os.shared.web.security.PublicEndpoint;
 import com.renaser.os.users.application.ports.in.autenticacion.ConfirmarCodigoVerificacionEmailUseCase;
 import com.renaser.os.users.application.ports.in.autenticacion.ConfirmarCodigoVerificacionEmailUseCase.ConfirmarCodigoVerificacionEmailCommand;
 import com.renaser.os.users.application.ports.in.autenticacion.EnviarCodigoVerificacionEmailUseCase;
@@ -31,6 +32,7 @@ public class VerificacionEmailController {
         this.confirmarUseCase = confirmarUseCase;
     }
 
+    @PublicEndpoint("El correo se verifica antes de tener cuenta. Protegido por rate limit por IP, no por autorizacion.")
     @PostMapping("/send")
     public ResponseEntity<Void> enviar(@RequestBody @Valid EnviarCodigoVerificacionEmailRequest request,
                                         HttpServletRequest servletRequest) {
@@ -39,6 +41,7 @@ public class VerificacionEmailController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).build();
     }
 
+    @PublicEndpoint("La credencial es el codigo enviado al correo; quien lo confirma todavia no tiene cuenta.")
     @PostMapping("/confirm")
     public VerificacionEmailResponse confirmar(@RequestBody @Valid ConfirmarCodigoVerificacionEmailRequest request) {
         var resultado = confirmarUseCase.confirmar(

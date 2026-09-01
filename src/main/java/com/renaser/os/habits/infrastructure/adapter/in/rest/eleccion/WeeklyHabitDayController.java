@@ -3,8 +3,10 @@ package com.renaser.os.habits.infrastructure.adapter.in.rest.eleccion;
 import com.renaser.os.habits.application.ports.in.eleccion.ElegirDiaSemanalUseCase;
 import com.renaser.os.habits.application.ports.in.eleccion.ElegirDiaSemanalUseCase.ElegirDiaSemanalCommand;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -25,6 +27,7 @@ public class WeeklyHabitDayController {
         this.elegirUseCase = elegirUseCase;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @PutMapping("/{habitId}")
     public WeeklyHabitDayResponse elegir(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
                                           @RequestBody @Valid ChooseWeeklyHabitDayRequest request) {
