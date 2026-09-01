@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -14,6 +15,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ChunkConocimientoTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-25T10:00:00Z"));
+    /** El id ya no lo sortea el agregado: entra por parametro, lo arma el caso de uso (IdGenerator). */
+    private static final ChunkConocimientoId ID = ChunkConocimientoId.of(
+            UUID.fromString("11111111-1111-1111-1111-111111111111"));
 
     private static List<Float> vectorValido() {
         return Collections.nCopies(ChunkConocimiento.DIMENSION_EMBEDDING, 0.1f);
@@ -21,7 +25,7 @@ class ChunkConocimientoTest {
 
     @Test
     void indexaUnChunkConDatosValidos() {
-        ChunkConocimiento chunk = ChunkConocimiento.indexar("LECCION", "texto", "doc-1", "leccion-1",
+        ChunkConocimiento chunk = ChunkConocimiento.indexar(ID, "LECCION", "texto", "doc-1", "leccion-1",
                 "contenido de prueba", vectorValido(), Map.of("origen", "manual"), CLOCK);
 
         assertThat(chunk.id()).isNotNull();
@@ -36,7 +40,7 @@ class ChunkConocimientoTest {
 
     @Test
     void rechazaContenidoVacio() {
-        assertThatThrownBy(() -> ChunkConocimiento.indexar("LECCION", null, null, null, "   ", vectorValido(),
+        assertThatThrownBy(() -> ChunkConocimiento.indexar(ID, "LECCION", null, null, null, "   ", vectorValido(),
                 Map.of(), CLOCK))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("contenido");
@@ -44,7 +48,7 @@ class ChunkConocimientoTest {
 
     @Test
     void rechazaTipoFuenteVacio() {
-        assertThatThrownBy(() -> ChunkConocimiento.indexar(" ", null, null, null, "contenido", vectorValido(),
+        assertThatThrownBy(() -> ChunkConocimiento.indexar(ID, " ", null, null, null, "contenido", vectorValido(),
                 Map.of(), CLOCK))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("tipoFuente");
@@ -52,7 +56,7 @@ class ChunkConocimientoTest {
 
     @Test
     void rechazaEmbeddingConDimensionIncorrecta() {
-        assertThatThrownBy(() -> ChunkConocimiento.indexar("LECCION", null, null, null, "contenido",
+        assertThatThrownBy(() -> ChunkConocimiento.indexar(ID, "LECCION", null, null, null, "contenido",
                 List.of(0.1f, 0.2f), Map.of(), CLOCK))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("768");
@@ -60,15 +64,15 @@ class ChunkConocimientoTest {
 
     @Test
     void metadatosNuloSeConvierteEnMapaVacio() {
-        ChunkConocimiento chunk = ChunkConocimiento.indexar("LECCION", null, null, null, "contenido", vectorValido(),
-                null, CLOCK);
+        ChunkConocimiento chunk = ChunkConocimiento.indexar(ID, "LECCION", null, null, null, "contenido",
+                vectorValido(), null, CLOCK);
 
         assertThat(chunk.metadatos()).isEmpty();
     }
 
     @Test
     void rehydrateNoRevalidaInvariantesDeCreacion() {
-        ChunkConocimientoId id = ChunkConocimientoId.newId();
+        ChunkConocimientoId id = ChunkConocimientoId.of(UUID.randomUUID());
 
         ChunkConocimiento chunk = ChunkConocimiento.rehydrate(id, "LECCION", null, null, null, "contenido",
                 vectorValido(), null, CLOCK.now());

@@ -5,6 +5,7 @@ import com.renaser.os.rag.application.ports.out.conocimiento.SaveChunkConocimien
 import com.renaser.os.rag.application.ports.out.ia.EmbeddingPort;
 import com.renaser.os.rag.domain.model.conocimiento.ChunkConocimiento;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -28,6 +29,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,6 +38,8 @@ import static org.mockito.Mockito.when;
 class ConocimientoServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-25T10:00:00Z"));
+    /** Id fijo que devuelve el IdGenerator mockeado, mismo espiritu que el FixedClock de arriba. */
+    private static final UUID ID_GENERADO = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     @Mock
     private SaveChunkConocimientoPort saveChunkConocimientoPort;
@@ -43,6 +47,8 @@ class ConocimientoServiceTest {
     private EmbeddingPort embeddingPort;
     @Mock
     private UserSummaryFinder userSummaryFinder;
+    @Mock
+    private IdGenerator idGenerator;
 
     private ConocimientoService service;
     private UserId adminId;
@@ -50,9 +56,12 @@ class ConocimientoServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ConocimientoService(saveChunkConocimientoPort, embeddingPort, userSummaryFinder, CLOCK);
+        service = new ConocimientoService(saveChunkConocimientoPort, embeddingPort, userSummaryFinder, CLOCK,
+                idGenerator);
         adminId = UserId.of(UUID.randomUUID());
         traineeId = UserId.of(UUID.randomUUID());
+        // lenient: no todos los casos llegan a generar un id (varios cortan antes, en autorizacion).
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
     }
 
     private static List<Float> vector() {

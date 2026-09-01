@@ -13,7 +13,9 @@ import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
 import com.renaser.os.rag.domain.model.conversacion.FuenteMensaje;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
+import com.renaser.os.rag.domain.model.conversacion.MensajeRenasiaId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.UserId;
@@ -64,6 +66,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     private final VectorStorePort vectorStorePort;
     private final ChatIAPort chatIAPort;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public ConversacionRenasiaService(UserSummaryFinder userSummaryFinder,
                                        ControlCuotaRenasiaPort controlCuotaRenasiaPort,
@@ -71,7 +74,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                                        SaveConversacionRenasiaPort saveConversacionRenasiaPort,
                                        LoadMensajeRenasiaPort loadMensajeRenasiaPort,
                                        SaveMensajeRenasiaPort saveMensajeRenasiaPort, VectorStorePort vectorStorePort,
-                                       ChatIAPort chatIAPort, Clock clock) {
+                                       ChatIAPort chatIAPort, Clock clock, IdGenerator idGenerator) {
         this.userSummaryFinder = userSummaryFinder;
         this.controlCuotaRenasiaPort = controlCuotaRenasiaPort;
         this.loadConversacionRenasiaPort = loadConversacionRenasiaPort;
@@ -81,6 +84,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         this.vectorStorePort = vectorStorePort;
         this.chatIAPort = chatIAPort;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -92,8 +96,9 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         List<FragmentoRelevante> fragmentos;
         try {
             buscarOCrearConversacion(command.actorId());
-            saveMensajeRenasiaPort.save(
-                    MensajeRenasia.escribirDeUsuario(command.actorId(), command.pregunta(), clock.now()));
+            // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+            saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeUsuario(
+                    MensajeRenasiaId.of(idGenerator.newId()), command.actorId(), command.pregunta(), clock.now()));
             fragmentos = vectorStorePort.buscarSimilares(command.pregunta(), TOP_K);
         } catch (RuntimeException e) {
             controlCuotaRenasiaPort.liberar(command.actorId());
@@ -137,7 +142,8 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                 .filter(Objects::nonNull)
                 .map(FuenteMensaje::of)
                 .toList();
-        saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeAsistente(actorId, contenido, fuentes, clock.now()));
+        saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeAsistente(MensajeRenasiaId.of(idGenerator.newId()),
+                actorId, contenido, fuentes, clock.now()));
     }
 
     private ConversacionRenasia buscarOCrearConversacion(UserId actorId) {

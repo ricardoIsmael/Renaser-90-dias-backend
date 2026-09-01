@@ -55,17 +55,23 @@ public final class ChunkConocimiento {
      * y {@code contenido} son obligatorios, y el embedding debe calzar exacto con
      * {@link #DIMENSION_EMBEDDING} — si no, algo aguas arriba (adaptador de embeddings
      * mal configurado) está mal, y es mejor fallar acá que en el INSERT a Postgres.
+     *
+     * <p>El {@code id} entra por parámetro, no se genera acá: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code ConocimientoService.indexar}).
+     * Así {@code indexar} es referencialmente transparente y un test puede fijar el id que
+     * espera, en vez de tener que caer a {@link #rehydrate} para lograrlo.
      */
-    public static ChunkConocimiento indexar(String tipoFuente, String clase, String documentoId, String leccionId,
-                                             String contenido, List<Float> embedding, Map<String, String> metadatos,
-                                             Clock clock) {
+    public static ChunkConocimiento indexar(ChunkConocimientoId id, String tipoFuente, String clase,
+                                             String documentoId, String leccionId, String contenido,
+                                             List<Float> embedding, Map<String, String> metadatos, Clock clock) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(tipoFuente, "tipoFuente es obligatorio");
         Objects.requireNonNull(contenido, "contenido es obligatorio");
         Objects.requireNonNull(embedding, "embedding es obligatorio");
         requireTipoFuenteNoVacio(tipoFuente);
         requireContenidoNoVacio(contenido);
         requireDimensionCorrecta(embedding);
-        return new ChunkConocimiento(ChunkConocimientoId.newId(), tipoFuente, clase, documentoId, leccionId,
+        return new ChunkConocimiento(id, tipoFuente, clase, documentoId, leccionId,
                 contenido, List.copyOf(embedding), metadatos == null ? Map.of() : Map.copyOf(metadatos), clock.now());
     }
 

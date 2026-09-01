@@ -11,6 +11,7 @@ import com.renaser.os.rag.domain.model.espejosombra.InformeEspejoSombra;
 import com.renaser.os.rag.domain.model.espejosombra.InformeEspejoSombraId;
 import com.renaser.os.rag.domain.model.espejosombra.PreguntaConfrontacion;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -33,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,6 +44,8 @@ class EspejoSombraServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
     private static final LocalDate SEMANA_INICIO = LocalDate.of(2026, 8, 17);
+    /** Id fijo que devuelve el IdGenerator mockeado, mismo espiritu que el FixedClock de arriba. */
+    private static final UUID ID_GENERADO = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     @Mock
     private LoadInformeEspejoSombraPort loadInformePort;
@@ -51,6 +55,8 @@ class EspejoSombraServiceTest {
     private LeerEntradasDiarioPort leerEntradasPort;
     @Mock
     private GenerarInsightSemanalPort generarInsightPort;
+    @Mock
+    private IdGenerator idGenerator;
 
     private FakeUserSummaryFinder actores;
     private FakeParticipacionProgramaFinder participaciones;
@@ -66,7 +72,9 @@ class EspejoSombraServiceTest {
         actores = new FakeUserSummaryFinder();
         participaciones = new FakeParticipacionProgramaFinder();
         service = new EspejoSombraService(loadInformePort, saveInformePort, leerEntradasPort, generarInsightPort,
-                actores, participaciones, CLOCK);
+                actores, participaciones, CLOCK, idGenerator);
+        // lenient: la mayoria de los casos no llega a generar un informe (idempotencia, semana vacia, consultas).
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
 
         trainee = UserId.of(UUID.randomUUID());
         mentorAsignado = UserId.of(UUID.randomUUID());
@@ -202,7 +210,7 @@ class EspejoSombraServiceTest {
 
     @Test
     void unInformeInexistenteLanzaNoSuchElement() {
-        InformeEspejoSombraId id = InformeEspejoSombraId.newId();
+        InformeEspejoSombraId id = InformeEspejoSombraId.of(UUID.randomUUID());
         when(loadInformePort.byId(id)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.porId(admin, id)).isInstanceOf(NoSuchElementException.class);
@@ -218,7 +226,8 @@ class EspejoSombraServiceTest {
     }
 
     private InformeEspejoSombra informeDePrueba() {
-        return InformeEspejoSombra.generar(trainee, SEMANA_INICIO, 3, "Evitacion",
+        return InformeEspejoSombra.generar(InformeEspejoSombraId.of(UUID.randomUUID()), trainee, SEMANA_INICIO, 3,
+                "Evitacion",
                 new DistribucionTemporal(30, 50, 20), "insight de prueba",
                 List.of(new PreguntaConfrontacion(1, "pregunta uno")), CLOCK);
     }

@@ -14,6 +14,7 @@ import com.renaser.os.rag.domain.model.espejosombra.InformeEspejoSombra;
 import com.renaser.os.rag.domain.model.espejosombra.InformeEspejoSombraId;
 import com.renaser.os.rag.domain.model.espejosombra.PreguntaConfrontacion;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.ParticipacionPrograma;
@@ -54,6 +55,7 @@ public class EspejoSombraService implements GenerarInformeEspejoSombraUseCase, O
     private final UserSummaryFinder userSummaryFinder;
     private final ParticipacionProgramaFinder participacionFinder;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public EspejoSombraService(LoadInformeEspejoSombraPort loadInformePort,
                                 SaveInformeEspejoSombraPort saveInformePort,
@@ -61,7 +63,7 @@ public class EspejoSombraService implements GenerarInformeEspejoSombraUseCase, O
                                 GenerarInsightSemanalPort generarInsightPort,
                                 UserSummaryFinder userSummaryFinder,
                                 ParticipacionProgramaFinder participacionFinder,
-                                Clock clock) {
+                                Clock clock, IdGenerator idGenerator) {
         this.loadInformePort = loadInformePort;
         this.saveInformePort = saveInformePort;
         this.leerEntradasPort = leerEntradasPort;
@@ -69,6 +71,7 @@ public class EspejoSombraService implements GenerarInformeEspejoSombraUseCase, O
         this.userSummaryFinder = userSummaryFinder;
         this.participacionFinder = participacionFinder;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     /**
@@ -130,8 +133,10 @@ public class EspejoSombraService implements GenerarInformeEspejoSombraUseCase, O
         DistribucionTemporal distribucion = new DistribucionTemporal(insight.pctPasado(), insight.pctPresente(),
                 insight.pctFuturo());
         List<PreguntaConfrontacion> preguntas = aPreguntas(insight.preguntasConfrontacion());
-        return InformeEspejoSombra.generar(participanteId, semanaInicio, cantidadEntradas, insight.patronDominante(),
-                distribucion, insight.insight(), preguntas, clock);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        return InformeEspejoSombra.generar(InformeEspejoSombraId.of(idGenerator.newId()), participanteId,
+                semanaInicio, cantidadEntradas, insight.patronDominante(), distribucion, insight.insight(),
+                preguntas, clock);
     }
 
     /** Toma como mucho {@link InformeEspejoSombra#MAX_PREGUNTAS} preguntas de la IA, numeradas 1..N. */

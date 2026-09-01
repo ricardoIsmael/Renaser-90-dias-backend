@@ -4,7 +4,9 @@ import com.renaser.os.rag.application.ports.in.conocimiento.IndexarConocimientoU
 import com.renaser.os.rag.application.ports.out.conocimiento.SaveChunkConocimientoPort;
 import com.renaser.os.rag.application.ports.out.ia.EmbeddingPort;
 import com.renaser.os.rag.domain.model.conocimiento.ChunkConocimiento;
+import com.renaser.os.rag.domain.model.conocimiento.ChunkConocimientoId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -24,13 +26,15 @@ public class ConocimientoService implements IndexarConocimientoUseCase {
     private final EmbeddingPort embeddingPort;
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public ConocimientoService(SaveChunkConocimientoPort saveChunkConocimientoPort, EmbeddingPort embeddingPort,
-                                UserSummaryFinder userSummaryFinder, Clock clock) {
+                                UserSummaryFinder userSummaryFinder, Clock clock, IdGenerator idGenerator) {
         this.saveChunkConocimientoPort = saveChunkConocimientoPort;
         this.embeddingPort = embeddingPort;
         this.userSummaryFinder = userSummaryFinder;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -38,8 +42,10 @@ public class ConocimientoService implements IndexarConocimientoUseCase {
     public ChunkIndexado indexar(IndexarConocimientoCommand command) {
         requireAdmin(command.actorId());
         var embedding = embeddingPort.generar(command.contenido());
-        var chunk = ChunkConocimiento.indexar(command.tipoFuente(), command.clase(), command.documentoId(),
-                command.leccionId(), command.contenido(), embedding, command.metadatos(), clock);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        var chunk = ChunkConocimiento.indexar(ChunkConocimientoId.of(idGenerator.newId()), command.tipoFuente(),
+                command.clase(), command.documentoId(), command.leccionId(), command.contenido(), embedding,
+                command.metadatos(), clock);
         var guardado = saveChunkConocimientoPort.save(chunk);
         return new ChunkIndexado(guardado.id().value());
     }
