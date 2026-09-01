@@ -47,19 +47,10 @@ spring:
       - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
 
 renaser:
-  # Proveedor de correo transaccional: `smtp` (SmtpEnviarEmailAdapter, real) o `noop`
-  # (NoOpEnviarEmailAdapter, solo loguea). Por defecto `noop` para que el entorno local y los
-  # tests no necesiten un servidor SMTP. Para activar el envio real hacen falta LAS DOS cosas:
-  # EMAIL_PROVEEDOR=smtp y las credenciales de `spring.mail.*` de mas abajo.
   email:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}
   storage:
-    # Proveedor de almacenamiento: `s3` (S3AlmacenamientoAdapter, real) o `noop`
-    # (NoOpAlmacenamientoAdapter, devuelve about:blank). Por defecto `noop` para que el entorno
-    # local y los tests no necesiten credenciales. Para activarlo hacen falta LAS DOS cosas:
-    # STORAGE_PROVEEDOR=s3 y credenciales que el SDK pueda resolver por si mismo (variables de
-    # entorno AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, perfil ~/.aws, o rol IAM de la instancia).
     proveedor: ${STORAGE_PROVEEDOR:noop}
     s3:
       bucket: ${AWS_S3_BUCKET:s3-renaser90dias}

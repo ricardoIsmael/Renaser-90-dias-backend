@@ -9,13 +9,14 @@ import jakarta.validation.constraints.NotNull;
 
 /**
  * Login social (Google/Apple/Facebook), docs/MODULO_AUTH.md §6. Resuelve la identidad via
- * {@code VerificadorIdentidadProveedor} y decide entre dos caminos SIN crear un usuario en
+ * {@code VerificadorIdentidadProveedor} y decide entre varios caminos SIN crear un usuario en
  * silencio (§6.4):
  *
  * <ul>
  *   <li>La identidad ya esta vinculada a un {@code User} → sesion.</li>
- *   <li>Es la primera vez que se ve esa identidad → se abre una {@code AccountRequest}, igual que
- *       el autoregistro por formulario; un ADMIN la aprueba despues.</li>
+ *   <li>Es la primera vez que se ve esa identidad → se retiene en Redis (§6.10, D-65) y la app
+ *       muestra un formulario de confirmacion; recien cuando se confirma
+ *       ({@code CompletarRegistroSocialUseCase}) se abre la {@code AccountRequest}.</li>
  * </ul>
  */
 public interface IniciarSesionConProveedorUseCase {
@@ -23,25 +24,21 @@ public interface IniciarSesionConProveedorUseCase {
     ResultadoLoginSocial iniciarSesion(IniciarSesionConProveedorCommand command);
 
     /**
-     * {@code phone}/{@code city} son OPCIONALES a proposito: solo hacen falta en el camino de alta
-     * (la identidad es nueva). Si son necesarios y faltan, el caso de uso rechaza con un mensaje
-     * explicito — no se inventa un telefono. Ver la decision de diseño documentada en
-     * docs/MODULO_AUTH.md §10 (A-8): Google no devuelve telefono, y
-     * {@code SubmitAccountRequestCommand.phone} es {@code @NotBlank}, asi que este dato tiene que
-     * viajar desde el cliente en algun punto del flujo social — hoy, en esta misma llamada.
+     * Desde D-65 (2026-09-01) este comando SOLO verifica la identidad — ya no lleva
+     * {@code phone}/{@code city}: esos datos se piden en {@code CompletarRegistroSocialCommand},
+     * el paso siguiente, porque el alta ya no ocurre en esta misma llamada (ver el javadoc de
+     * {@link ResultadoLoginSocial.RegistroPendiente}).
      */
     record IniciarSesionConProveedorCommand(
             @NotNull ProveedorIdentidad proveedor,
             @NotBlank String code,
             @NotBlank String codeVerifier,
             @NotBlank String redirectUri,
-            String phone,
-            String city,
             String requestIp) {
 
         public IniciarSesionConProveedorCommand {
             SelfValidating.validateConstructorArgs(IniciarSesionConProveedorCommand.class, proveedor, code,
-                    codeVerifier, redirectUri, phone, city, requestIp);
+                    codeVerifier, redirectUri, requestIp);
         }
 
         /** El `code` y el `code_verifier` son credenciales de un solo uso: nunca al log. */
@@ -58,25 +55,36 @@ public interface IniciarSesionConProveedorUseCase {
      * controller a cubrirlos todos — uno establece sesion, los otros tres no.
      *
      * <p>Las tres variantes que no son sesion son <b>estados normales del flujo, no errores</b>,
-     * y por eso son valores de retorno y no excepciones: "tu solicitud sigue en revision" es una
-     * respuesta legitima que la app tiene que poder mostrar como tal. Antes las tres colapsaban
-     * en el mismo {@code IllegalStateException} generico (A-7).
+     * y por eso son valores de retorno y no excepciones.
      */
     sealed interface ResultadoLoginSocial permits ResultadoLoginSocial.SesionIniciada,
-            ResultadoLoginSocial.SolicitudCreada, ResultadoLoginSocial.SolicitudEnRevision,
+            ResultadoLoginSocial.RegistroPendiente, ResultadoLoginSocial.SolicitudEnRevision,
             ResultadoLoginSocial.CuentaExistenteSinVinculo {
 
         /** La identidad ya estaba vinculada: se abre sesion. */
         record SesionIniciada(User usuario) implements ResultadoLoginSocial {
         }
 
-        /** Primera vez que se ve esta identidad: se abrio una solicitud, la aprueba un ADMIN. */
-        record SolicitudCreada(AccountRequestId solicitudId) implements ResultadoLoginSocial {
+        /**
+         * Primera vez que se ve esta identidad: TODAVIA no se abrio ninguna {@code
+         * AccountRequest} (docs/MODULO_AUTH.md §6.10, D-65, 2026-09-01). {@code token} es el
+         * registro de continuacion (opaco, de un solo uso, vence a los 10 minutos — igual que el
+         * OTP de alta) que la app tiene que reenviar a {@code POST /auth/social/complete} junto
+         * con lo que la persona confirme en el formulario. {@code email}/{@code fullName} son
+         * los datos que devolvio el proveedor, para prellenar ese formulario.
+         *
+         * <p>El motivo de este paso intermedio: el {@code code} de OAuth es de un solo uso y la
+         * app no conoce el correo/nombre hasta que el backend lo canjea, asi que abrir la
+         * solicitud en la misma llamada que verifica la identidad nunca le daba a la app la
+         * oportunidad de mostrar un formulario de confirmacion — para cuando el backend conocia
+         * esos datos, ya habia decidido que hacer con ellos.
+         */
+        record RegistroPendiente(String token, String email, String fullName) implements ResultadoLoginSocial {
         }
 
         /**
          * Esta identidad ya abrio una solicitud y sigue PENDIENTE. Volver a tocar "Continuar con
-         * Google" mientras un admin no decida no crea otra solicitud ni es un error: la persona
+         * Google" mientras un admin no decide no crea otra solicitud ni es un error: la persona
          * simplemente todavia no fue aprobada.
          */
         record SolicitudEnRevision(AccountRequestId solicitudId) implements ResultadoLoginSocial {

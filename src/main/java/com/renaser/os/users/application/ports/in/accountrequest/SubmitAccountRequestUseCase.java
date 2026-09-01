@@ -39,7 +39,15 @@ public interface SubmitAccountRequestUseCase {
     record SubmitAccountRequestCommand(
             @NotBlank @Email String email,
             @NotBlank String fullName,
-            @NotBlank String phone,
+            /**
+             * OPCIONAL desde el 2026-09-01 (D-61). Era {@code @NotBlank}: el alta exigia telefono
+             * y eso rompia dos flujos a la vez — el formulario, porque el frontend ya habia dejado
+             * de mandarlo (400 en cada registro), y el alta por proveedor social, porque
+             * Google/Apple/Facebook no devuelven telefono y el {@code code} de OAuth es de un solo
+             * uso, asi que el intento fallido lo consumia igual. El dato se pide ahora en la Ficha
+             * Inicial del onboarding, donde se recogen los datos completos. Si viene, se guarda.
+             */
+            String phone,
             String city,
             @NotBlank String verificationToken,
             /**

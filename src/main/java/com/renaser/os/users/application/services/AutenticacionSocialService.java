@@ -1,72 +1,74 @@
 package com.renaser.os.users.application.services;
 
-import com.renaser.os.shared.domain.IdentidadProveedorInvalidaException;
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase;
-import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand;
 import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionConProveedorUseCase;
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.autenticacion.CanjeCodigoCommand;
 import com.renaser.os.users.application.ports.out.autenticacion.IdentidadVerificada;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadIdentidadExternaPort;
-import com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort;
+import com.renaser.os.users.application.ports.out.autenticacion.RegistroPendienteSocial;
+import com.renaser.os.users.application.ports.out.autenticacion.TokenRegistroPendienteSocialPort;
 import com.renaser.os.users.application.ports.out.autenticacion.VerificadorIdentidadProveedor;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
-import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.accountrequest.OrigenSocial;
 import com.renaser.os.users.domain.model.identidadexterna.IdentidadExterna;
-import com.renaser.os.users.domain.model.identidadexterna.ProveedorIdentidad;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Login social (docs/MODULO_AUTH.md §6). Compone tres colaboradores: el adaptador del proveedor
- * (via {@link RegistroVerificadoresIdentidad}), el puerto que resuelve {@code (proveedor, sujeto)}
- * y, cuando la identidad es nueva, el mismo {@link SubmitAccountRequestUseCase} que ya usa el
- * autoregistro por formulario — el alta social NO es un camino paralelo, es el mismo camino con
- * el email pre-verificado por el proveedor en vez de por el usuario tipeandolo.
+ * Login social (docs/MODULO_AUTH.md §6). Compone dos colaboradores: el adaptador del proveedor
+ * (via {@link RegistroVerificadoresIdentidad}) y el puerto que resuelve {@code (proveedor,
+ * sujeto)}. Desde D-65 (2026-09-01, §6.10) YA NO abre la {@code AccountRequest} directamente
+ * cuando la identidad es nueva: la retiene en Redis (via {@link TokenRegistroPendienteSocialPort})
+ * y devuelve un token de continuacion — abrir la solicitud es responsabilidad de
+ * {@link CompletarRegistroSocialService}, el segundo paso.
  */
 @Service
 public class AutenticacionSocialService implements IniciarSesionConProveedorUseCase {
+
+    /**
+     * TTL del registro pendiente: igual al del OTP de alta ({@link VerificacionEmailService#VIGENCIA_CODIGO},
+     * 10 minutos) — es el mismo orden de magnitud que le toma a una persona mirar el formulario
+     * de confirmacion ya prellenado y mandarlo, y no deja la identidad verificada viva en Redis
+     * mas tiempo del necesario.
+     */
+    static final Duration VIGENCIA_REGISTRO_PENDIENTE = VerificacionEmailService.VIGENCIA_CODIGO;
 
     private final RegistroVerificadoresIdentidad verificadores;
     private final LoadIdentidadExternaPort loadIdentidadExternaPort;
     private final LoadAccountRequestPort loadAccountRequestPort;
     private final LoadUserPort loadUserPort;
-    private final SubmitAccountRequestUseCase submitAccountRequestUseCase;
-    private final TokenVerificacionEmailPort tokenVerificacionEmailPort;
+    private final TokenRegistroPendienteSocialPort tokenRegistroPendienteSocialPort;
 
     public AutenticacionSocialService(List<VerificadorIdentidadProveedor> verificadores,
                                        LoadIdentidadExternaPort loadIdentidadExternaPort,
                                        LoadAccountRequestPort loadAccountRequestPort, LoadUserPort loadUserPort,
-                                       SubmitAccountRequestUseCase submitAccountRequestUseCase,
-                                       TokenVerificacionEmailPort tokenVerificacionEmailPort) {
+                                       TokenRegistroPendienteSocialPort tokenRegistroPendienteSocialPort) {
         this.verificadores = new RegistroVerificadoresIdentidad(verificadores);
         this.loadIdentidadExternaPort = loadIdentidadExternaPort;
         this.loadAccountRequestPort = loadAccountRequestPort;
         this.loadUserPort = loadUserPort;
-        this.submitAccountRequestUseCase = submitAccountRequestUseCase;
-        this.tokenVerificacionEmailPort = tokenVerificacionEmailPort;
+        this.tokenRegistroPendienteSocialPort = tokenRegistroPendienteSocialPort;
     }
 
     /**
-     * Cuatro caminos, no dos (2026-08-31, cierre de A-7): antes solo se distinguia "ya vinculado"
-     * de "todo lo demas", y "todo lo demas" terminaba siempre en el mismo 409 generico. El orden
-     * de los chequeos es la parte importante: la identidad se resuelve SIEMPRE por
-     * {@code (proveedor, sujeto)} — vinculo primero, solicitud previa despues —, y el correo se
-     * mira al final y solo para explicar por que no se puede seguir, nunca para autenticar.
+     * Cuatro caminos (D-65 mantiene el numero, cambia el tercero): el orden de los chequeos es
+     * la parte importante, la identidad se resuelve SIEMPRE por {@code (proveedor, sujeto)} —
+     * vinculo primero, solicitud previa despues —, y el correo se mira al final y solo para
+     * explicar por que no se puede seguir, nunca para autenticar.
      */
     @Override
     public ResultadoLoginSocial iniciarSesion(IniciarSesionConProveedorCommand command) {
         VerificadorIdentidadProveedor verificador = verificadores.para(command.proveedor());
         IdentidadVerificada identidad = verificador.verificar(
                 new CanjeCodigoCommand(command.code(), command.codeVerifier(), command.redirectUri()));
-        requireEmailVerificado(identidad, command.proveedor());
+        identidad.exigirEmailVerificado(command.proveedor());
         OrigenSocial origen = new OrigenSocial(command.proveedor(), identidad.sujeto());
 
         Optional<IdentidadExterna> vinculo = loadIdentidadExternaPort.porProveedorYSujeto(origen.proveedor(),
@@ -81,7 +83,7 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
         if (loadUserPort.byEmail(new Email(identidad.email())).isPresent()) {
             return new ResultadoLoginSocial.CuentaExistenteSinVinculo(command.proveedor());
         }
-        return crearSolicitudDeAlta(command, identidad, origen);
+        return retenerIdentidadPendiente(identidad, origen);
     }
 
     private User cargarUsuarioVinculado(UserId usuarioId) {
@@ -91,54 +93,21 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
     }
 
     /**
-     * §6.4: "no se crea el usuario en silencio" — misma AccountRequest que el autoregistro.
-     * {@link SubmitAccountRequestCommand} exige un {@code verificationToken} (2026-08-27,
-     * ver {@code ConfirmarCodigoVerificacionEmailUseCase}) que normalmente sale de tipear un
-     * codigo de 6 digitos — pero {@code requireEmailVerificado} ya confirmo que el PROVEEDOR
-     * (Google/Apple) responde por este email, una garantia mas fuerte que nuestro propio
-     * codigo. En vez de forzar al usuario a verificar dos veces el mismo correo, se genera el
-     * token directo (mismo puerto, mismo mecanismo, se salta el paso del codigo).
+     * Identidad nueva: NO se abre la {@code AccountRequest} en esta misma llamada (D-65,
+     * docs/MODULO_AUTH.md §6.10). Se retiene la identidad ya verificada con un token de un solo
+     * uso, y la app tiene que mostrarle a la persona un formulario con {@code email}/{@code
+     * fullName} ya prellenados antes de confirmar el alta.
      */
-    private ResultadoLoginSocial crearSolicitudDeAlta(IniciarSesionConProveedorCommand command,
-                                                        IdentidadVerificada identidad, OrigenSocial origen) {
-        String phone = requirePhoneParaAlta(command.phone());
+    private ResultadoLoginSocial retenerIdentidadPendiente(IdentidadVerificada identidad, OrigenSocial origen) {
         String fullName = nombreOFallback(identidad);
-        String verificationToken = tokenVerificacionEmailPort.generar(identidad.email(),
-                VerificacionEmailService.VIGENCIA_TOKEN_VERIFICACION);
-        // Sin contrasena (null): esta cuenta entra por el proveedor, no por clave propia. Es el
-        // caso para el que `usuarios.hash_contrasena` ya era nullable. Si mas adelante quiere
-        // una, la fija por "olvide mi contrasena" como cualquiera.
-        // El (proveedor, sujeto) viaja DENTRO del comando de aplicacion, servidor a servidor: no
-        // pasa por HTTP ni por el cliente en ningun momento. Es lo que permite que approve()
-        // escriba la IdentidadExterna sin volver a pedirle nada a nadie (A-7).
-        AccountRequestId solicitudId = submitAccountRequestUseCase.submit(
-                SubmitAccountRequestCommand.porProveedorSocial(identidad.email(), fullName, phone,
-                        command.city(), verificationToken, command.requestIp(),
-                        origen.proveedor(), origen.sujetoProveedor()));
-        return new ResultadoLoginSocial.SolicitudCreada(solicitudId);
-    }
-
-    private static String requirePhoneParaAlta(String phone) {
-        if (phone == null || phone.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Se requiere un telefono para completar el registro con este proveedor");
-        }
-        return phone;
+        String token = tokenRegistroPendienteSocialPort.generar(
+                new RegistroPendienteSocial(origen.proveedor(), origen.sujetoProveedor(), identidad.email(),
+                        fullName),
+                VIGENCIA_REGISTRO_PENDIENTE);
+        return new ResultadoLoginSocial.RegistroPendiente(token, identidad.email(), fullName);
     }
 
     private static String nombreOFallback(IdentidadVerificada identidad) {
         return identidad.nombre() != null && !identidad.nombre().isBlank() ? identidad.nombre() : identidad.email();
-    }
-
-    /**
-     * Defensa adicional, no pedida explicitamente por el diseño pero consistente con su postura
-     * de seguridad (§6.4): un {@code email_verified=false} significa que el proveedor no responde
-     * por ese correo, y §6.4 se apoya en que "el email llega pre-verificado" para saltear la
-     * verificacion propia — si el proveedor no lo confirma, esa premisa no se cumple.
-     */
-    private static void requireEmailVerificado(IdentidadVerificada identidad, ProveedorIdentidad proveedor) {
-        if (!identidad.emailVerificado()) {
-            throw new IdentidadProveedorInvalidaException(proveedor.name());
-        }
     }
 }

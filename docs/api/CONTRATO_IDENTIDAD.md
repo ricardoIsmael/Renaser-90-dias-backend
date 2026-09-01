@@ -154,13 +154,13 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
   {
     "email": "string (@NotBlank @Email)",
     "fullName": "string (@NotBlank)",
-    "phone": "string (@NotBlank)",
+    "phone": "string|null",
     "city": "string|null",
     "verificationToken": "string (@NotBlank)",
     "contrasena": "string (@NotBlank, 12..200)"
   }
   ```
-  **Trampa:** sin campo `role` a propósito (blindaje anti mass-assignment). **Tampoco lleva `supabaseUserId`**: el backend genera el id internamente desde el 2026-08-27 (D-49). `verificationToken` sale de `POST /api/v1/auth/email-verification/confirm`; sin él la solicitud no se acepta. `contrasena` es la clave que la persona elige al registrarse, mínimo 12 caracteres — el `toString()` del DTO la oculta para que ningún log la filtre.
+  **Trampa:** sin campo `role` a propósito (blindaje anti mass-assignment). `phone` es **opcional desde el 2026-09-01 (D-61)**: el alta pide lo mínimo y el teléfono se recoge en la Ficha Inicial del onboarding. Si viene, se guarda; si viene vacío o no viene, `solicitudes_cuenta.telefono` queda `NULL` (migración V14). Antes era `@NotBlank` y el frontend, que ya había dejado de mandarlo, recibía 400 en cada registro. **Tampoco lleva `supabaseUserId`**: el backend genera el id internamente desde el 2026-08-27 (D-49). `verificationToken` sale de `POST /api/v1/auth/email-verification/confirm`; sin él la solicitud no se acepta. `contrasena` es la clave que la persona elige al registrarse, mínimo 12 caracteres — el `toString()` del DTO la oculta para que ningún log la filtre.
 
   > **Corregido 2026-08-31.** Este bloque pedía `supabaseUserId` (campo que ya no existe) y omitía `verificationToken` y `contrasena` (obligatorios desde el 2026-08-27). Un cliente que siguiera este contrato recibía **400** en los tres campos. La fuente es `SubmitAccountRequestRequest`.
 - **Response body** (`AccountRequestIdResponse`): `{ "accountRequestId": "uuid" }`
@@ -175,7 +175,6 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
     -d '{
       "email": "aprendiz.nuevo@renaser.com",
       "fullName": "Sofia Aprendiz",
-      "phone": "+51987654321",
       "city": "Lima",
       "verificationToken": "<el que devuelve POST /api/v1/auth/email-verification/confirm>",
       "contrasena": "unaClaveDe12OMas"
@@ -301,6 +300,80 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
     -H "X-Actor-Id: <uuid-admin-o-alchemist>" \
     -H "Content-Type: application/json" \
     -d '{"mentorId": "<mentorId-con-perfil>"}'
+  ```
+
+---
+
+### 12.bis `POST /api/v1/auth/social` y `POST /api/v1/auth/social/complete` — login/registro social (Google/Apple/Facebook)
+
+> **Nota de alcance:** estos dos endpoints son los ÚNICOS de este documento que no siguen el
+> modelo `X-Actor-Id` descrito arriba — son **públicos** (`@PublicEndpoint`), la sesión que
+> establecen es la sesión propia por cookie (`docs/MODULO_AUTH.md` §4/§7, no Supabase), y el
+> resto del contrato de autenticación (login por contraseña, reset, vincular identidad) vive
+> documentado en detalle en `docs/MODULO_AUTH.md` §6-§7, no acá. Esta entrada cubre solo el
+> contrato de estos dos endpoints puntuales, agregado el 2026-09-01 (D-65).
+
+**El flujo tiene DOS pasos cuando la identidad es nueva** (`docs/MODULO_AUTH.md` §6.10) — y esto
+es lo que cambió respecto de versiones anteriores de este contrato: antes, `POST /auth/social`
+creaba la `AccountRequest` en la misma llamada que verificaba la identidad; la app nunca llegaba
+a mostrar un formulario de confirmación con los datos prellenados. El motivo del cambio: el
+`code` de OAuth es de un solo uso, así que no hay forma de prellenar un formulario sin retener la
+identidad ya verificada en algún lado antes de gastarlo.
+
+#### `POST /api/v1/auth/social`
+
+- **Headers:** ninguno obligatorio (público).
+- **Request body** (`LoginSocialRequest`, con `@Valid`):
+  ```json
+  {
+    "proveedor": "GOOGLE|APPLE|FACEBOOK (@NotNull)",
+    "code": "string (@NotBlank)",
+    "codeVerifier": "string (@NotBlank)",
+    "redirectUri": "string (@NotBlank)"
+  }
+  ```
+  **Trampa:** ya NO lleva `phone`/`city` (los llevaba hasta el 2026-09-01) — esos datos se piden
+  en el segundo paso, si la identidad resulta ser nueva.
+- **Cuatro salidas posibles**, según cómo resuelva la identidad del lado del backend:
+
+  | Código | Cuerpo | Cuándo |
+  |---|---|---|
+  | **200** | `UserResponse` + cookie de sesión | La identidad `(proveedor, sujeto)` ya estaba vinculada a un usuario |
+  | **202** | `{ "registroPendienteToken": "...", "email": "...", "fullName": "..." }` | Identidad nueva: TODAVÍA no existe ninguna `AccountRequest`. Reenviar `registroPendienteToken` a `/auth/social/complete` dentro de los 10 minutos |
+  | **202** | `{ "accountRequestId": "uuid", "estado": "EN_REVISION" }` | Ya había una solicitud abierta por esta misma identidad y sigue pendiente de aprobación |
+  | **409** | `ApiErrorResponse` | El correo del proveedor ya tiene una cuenta, pero esta identidad social no está vinculada a ella — no se vincula automáticamente (evita apropiación de cuenta, `docs/MODULO_AUTH.md` §6.4/D-60) |
+
+- **Errores:** 401 (`IdentidadProveedorInvalidaException`) si el proveedor rechaza el `code` o no confirma el correo; 400 por validación de campos.
+
+#### `POST /api/v1/auth/social/complete`
+
+- **Headers:** ninguno obligatorio (público — quien llama todavía no tiene cuenta).
+- **Request body** (`CompletarRegistroSocialRequest`, con `@Valid`):
+  ```json
+  {
+    "registroPendienteToken": "string (@NotBlank)",
+    "fullName": "string (@NotBlank)",
+    "phone": "string|null",
+    "city": "string|null"
+  }
+  ```
+  **Trampa de seguridad, a propósito:** este DTO NO tiene campo de correo ni de proveedor — el
+  correo y el `sujeto` del proveedor salen SIEMPRE del registro que quedó retenido en Redis desde
+  el primer paso, nunca de este cuerpo. Si el cliente pudiera mandar el correo acá, cualquiera
+  completaría un registro con el correo de otra persona. `fullName` sí se puede corregir respecto
+  de lo que devolvió el proveedor; `phone`/`city` son opcionales (D-61).
+- **Response body** (`AccountRequestIdResponse`): `{ "accountRequestId": "uuid" }` — mismo formato que `POST /api/v1/account-requests`.
+- **Código de éxito:** 202 Accepted.
+- **Errores:** **400** (`RegistroPendienteSocialInvalidoException`) si el token no existe, ya venció (10 minutos), o ya se usó — hay que rehacer el flujo del proveedor desde el principio, porque el `code` de OAuth original ya está gastado.
+- **curl (flujo completo, con un token ya obtenido de `/auth/social`):**
+  ```bash
+  curl -X POST http://localhost:8080/api/v1/auth/social/complete \
+    -H "Content-Type: application/json" \
+    -d '{
+      "registroPendienteToken": "<el que devolvio POST /auth/social>",
+      "fullName": "Sofia Aprendiz",
+      "city": "Lima"
+    }'
   ```
 
 ---
@@ -647,7 +720,7 @@ el `X-Actor-Id` del header **es** siempre `participanteId`.
      -H "Content-Type: application/json" \
      -d '{
        "email": "flujo.a@renaser.com", "fullName": "Flujo A Test",
-       "phone": "+51999999999", "city": "Lima",
+       "city": "Lima",
        "verificationToken": "<el que devuelve POST /api/v1/auth/email-verification/confirm>",
        "contrasena": "unaClaveDe12OMas"
      }'

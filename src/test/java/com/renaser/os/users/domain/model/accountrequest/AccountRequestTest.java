@@ -98,6 +98,43 @@ class AccountRequestTest {
         assertThat(request.rejectionReason()).isEqualTo("Datos incompletos");
     }
 
+    /**
+     * D-61 (2026-09-01). Antes de esta fecha el invariante era el contrario — {@code submit}
+     * exigia telefono y explotaba con "El telefono no puede ser vacio" — y por eso el alta con
+     * {@code phone: null}, que es lo que el frontend manda hoy, terminaba en 400. El dato pasa a
+     * pedirse en la Ficha Inicial del onboarding.
+     */
+    @Test
+    @DisplayName("D-61: una solicitud sin telefono es valida y queda con telefono null")
+    void submitAceptaTelefonoNull() {
+        AccountRequest request = AccountRequest.submit(newRequestId(), newUserId(),
+                new Email("sintelefono@renaser.com"), "Ana Sin Telefono",
+                null, "Lima", "203.0.113.5", null, CLOCK);
+
+        assertThat(request.phone()).isNull();
+        assertThat(request.status()).isEqualTo(AccountRequestStatus.PENDING);
+    }
+
+    /**
+     * "No lo dio" tiene que ser UN solo valor en la columna. Si un telefono en blanco se guardara
+     * como {@code ""}, cada consulta futura tendria que preguntar por null y por vacio.
+     */
+    @Test
+    @DisplayName("D-61: un telefono en blanco se normaliza a null, no se guarda como cadena vacia")
+    void submitNormalizaTelefonoEnBlancoANull() {
+        AccountRequest request = AccountRequest.submit(newRequestId(), newUserId(),
+                new Email("blanco@renaser.com"), "Ana Blanco",
+                "   ", "Lima", "203.0.113.5", null, CLOCK);
+
+        assertThat(request.phone()).isNull();
+    }
+
+    @Test
+    @DisplayName("D-61: si el telefono viene, se sigue guardando (solo dejo de ser obligatorio)")
+    void submitConservaElTelefonoCuandoViene() {
+        assertThat(pendingRequest().phone()).isEqualTo("+51999999999");
+    }
+
     @Test
     @DisplayName("A-7: una solicitud por formulario no tiene origen social, y eso es valido")
     void unaSolicitudPorFormularioNoTieneOrigenSocial() {

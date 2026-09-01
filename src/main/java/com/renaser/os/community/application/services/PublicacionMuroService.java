@@ -210,9 +210,33 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Override
     public UrlSubidaMedia solicitarUrl(SolicitarUrlSubidaMediaCommand command) {
         requireActorPuedePublicar(command.actorId());
-        String ruta = "muro/" + command.actorId() + "/" + UUID.randomUUID();
+        String ruta = rutaDeMedia(command.tipoContenido(), command.actorId());
         URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
         return new UrlSubidaMedia(url, MediaPublicacion.BUCKET_DEFAULT, ruta);
+    }
+
+    /**
+     * Fotos y videos van a prefijos separados dentro de {@code muro/}. No es orden: en S3 el
+     * prefijo es lo unico que permite aplicar reglas distintas por tipo de archivo — ciclo de
+     * vida, clase de almacenamiento, o un permiso de lectura que valga para las fotos y no para
+     * los videos. Mezclarlos en una sola carpeta obliga a mirar la extension de cada objeto para
+     * decidir cualquiera de esas cosas.
+     *
+     * <p>El tipo se rechaza aca ademas de en {@link MediaPublicacion}: esta URL se firma ANTES de
+     * que exista la publicacion, asi que si no se valida en este punto se firma una subida para
+     * un archivo que el dominio va a rechazar despues, y el objeto queda huerfano en el bucket.
+     */
+    private static String rutaDeMedia(String tipoContenido, UserId autorId) {
+        String carpeta;
+        if (tipoContenido.startsWith("image/")) {
+            carpeta = "fotos";
+        } else if (tipoContenido.startsWith("video/")) {
+            carpeta = "videos";
+        } else {
+            throw new IllegalArgumentException(
+                    "tipoContenido debe empezar con image/ o video/: " + tipoContenido);
+        }
+        return "muro/" + carpeta + "/" + autorId + "/" + UUID.randomUUID();
     }
 
     /** Hueco #17 (docs/MODULO_ROCKS.md sec. 11.2): entrada publica para que OTRO modulo

@@ -350,6 +350,35 @@ class PublicacionMuroServiceTest {
         assertThatThrownBy(() -> service.solicitarUrl(command)).isInstanceOf(NotAuthorizedException.class);
     }
 
+    // ─── Prefijos separados por tipo de archivo dentro de muro/ ───────────────────────────
+    // No se afirma la ruta completa: el UUID final es aleatorio y afirmarlo entero volveria
+    // la prueba fragil sin verificar nada mas. Lo que importa es en que carpeta cae.
+
+    @Test
+    @DisplayName("solicitarUrl(): una imagen va al prefijo muro/fotos/")
+    void solicitarUrlDeImagenVaAlPrefijoDeFotos() {
+        var command = new SolicitarUrlSubidaMediaCommand(autor, "image/jpeg");
+        assertThat(service.solicitarUrl(command).ruta()).startsWith("muro/fotos/" + autor);
+    }
+
+    @Test
+    @DisplayName("solicitarUrl(): un video va al prefijo muro/videos/")
+    void solicitarUrlDeVideoVaAlPrefijoDeVideos() {
+        var command = new SolicitarUrlSubidaMediaCommand(autor, "video/mp4");
+        assertThat(service.solicitarUrl(command).ruta()).startsWith("muro/videos/" + autor);
+    }
+
+    @Test
+    @DisplayName("solicitarUrl(): un tipo que no es imagen ni video se rechaza ANTES de firmar")
+    void solicitarUrlRechazaUnTipoQueNoEsImagenNiVideo() {
+        // Firmar una subida que el dominio va a rechazar despues deja un objeto huerfano
+        // en el bucket: por eso el corte tiene que ocurrir en este punto, no mas adelante.
+        var command = new SolicitarUrlSubidaMediaCommand(autor, "application/pdf");
+        assertThatThrownBy(() -> service.solicitarUrl(command))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("image/ o video/");
+    }
+
     /** E-50: `ultimoAutor` devolvia el nombre completo del ultimo autor del Muro SIN
      * ningun guard — el controller ya recibia el actor y no lo usaba. */
     @Test

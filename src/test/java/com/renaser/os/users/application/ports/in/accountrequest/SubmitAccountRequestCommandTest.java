@@ -25,6 +25,32 @@ class SubmitAccountRequestCommandTest {
         assertThat(command.contrasena()).isNull();
     }
 
+    /**
+     * D-61 (2026-09-01): el telefono dejo de ser {@code @NotBlank}. Antes, este mismo comando con
+     * {@code phone: null} explotaba con {@code ConstraintViolationException} — que es el 400 que
+     * recibia el frontend, que ya habia dejado de mandar el campo.
+     */
+    @Test
+    void aceptaTelefonoNullPorqueSePideEnLaFichaInicialDelOnboarding() {
+        var command = SubmitAccountRequestUseCase.SubmitAccountRequestCommand.porFormulario(
+                "valido@renaser.com", "Ana", null, "Lima", "token-verificacion",
+                "una-contrasena-de-12", "127.0.0.1");
+
+        assertThat(command.phone()).isNull();
+    }
+
+    /** Mismo motivo, por la otra puerta: el alta social nunca trae telefono (Google no lo da). */
+    @Test
+    void aceptaTelefonoNullTambienEnElAltaPorProveedorSocial() {
+        var command = SubmitAccountRequestUseCase.SubmitAccountRequestCommand.porProveedorSocial(
+                "social@renaser.com", "Sofia Social", null, null, "token-verificacion",
+                "127.0.0.1", com.renaser.os.users.domain.model.identidadexterna.ProveedorIdentidad.GOOGLE,
+                "google-sub-1");
+
+        assertThat(command.phone()).isNull();
+        assertThat(command.contrasena()).isNull();
+    }
+
     @Test
     void rechazaUnaContrasenaMasCortaQueElMinimo() {
         assertThatThrownBy(() -> SubmitAccountRequestUseCase.SubmitAccountRequestCommand.porFormulario(

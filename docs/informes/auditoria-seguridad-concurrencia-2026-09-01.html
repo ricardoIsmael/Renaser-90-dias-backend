@@ -1,0 +1,880 @@
+<title>Auditoría Renaser Backend</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Identidad de la serie de informes del proyecto: porcelana fría / pizarra,
+   verdigrís #1F6F63, cobre #A85E28 (advertencia), oxblood #94262B (crítico),
+   Georgia en títulos, monoespaciada en etiquetas y datos. */
+:root{
+  --bg:#f3f5f6; --surface:#ffffff; --surface-2:#eaeef0; --line:#d5dbdf;
+  --text:#1c242a; --muted:#5b6770; --accent:#1F6F63; --accent-soft:#dcece8;
+  --crit:#94262B; --crit-soft:#f5e0e1; --alta:#A85E28; --alta-soft:#f7e6da;
+  --media:#8f6a00; --media-soft:#f7ecc9; --baja:#4c5a66; --baja-soft:#e2e7ea;
+  --ok:#1F6F63; --ok-soft:#dcece8; --code-bg:#eef2f4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131a1e; --surface:#1a2328; --surface-2:#212c32; --line:#2f3c43;
+    --text:#e3e9ec; --muted:#98a5ad; --accent:#4fb3a3; --accent-soft:#183b36;
+    --crit:#e4756f; --crit-soft:#3d1d1f; --alta:#e39a62; --alta-soft:#3d2716;
+    --media:#dcb64a; --media-soft:#3a300f; --baja:#a9b5bd; --baja-soft:#27323a;
+    --ok:#4fb3a3; --ok-soft:#183b36; --code-bg:#0e1417;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131a1e; --surface:#1a2328; --surface-2:#212c32; --line:#2f3c43;
+  --text:#e3e9ec; --muted:#98a5ad; --accent:#4fb3a3; --accent-soft:#183b36;
+  --crit:#e4756f; --crit-soft:#3d1d1f; --alta:#e39a62; --alta-soft:#3d2716;
+  --media:#dcb64a; --media-soft:#3a300f; --baja:#a9b5bd; --baja-soft:#27323a;
+  --ok:#4fb3a3; --ok-soft:#183b36; --code-bg:#0e1417;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px;line-height:1.55}
+a{color:var(--accent)}
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.86em}
+h1,h2,h3,h4{font-family:Georgia,"Times New Roman",serif;text-wrap:balance;margin:0;line-height:1.2;font-weight:400}
+h1{font-size:2.4rem;letter-spacing:-.005em}
+h2{font-size:1.7rem;margin-bottom:.35rem}
+h3{font-size:1.12rem}
+.f .head h3{font-family:"IBM Plex Sans",system-ui,sans-serif;font-weight:600;font-size:1.02rem}
+p{margin:0}
+.wrap{display:grid;grid-template-columns:220px minmax(0,1fr);gap:2.5rem;max-width:1180px;margin:0 auto;padding:2.5rem 1.5rem 5rem}
+@media (max-width:900px){.wrap{grid-template-columns:1fr;gap:1.5rem}nav.side{position:static}}
+nav.side{position:sticky;top:1.5rem;align-self:start;font-size:.9rem}
+nav.side ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.15rem}
+nav.side a{display:block;padding:.35rem .6rem;border-radius:4px;color:var(--text);text-decoration:none;border-left:2px solid transparent}
+nav.side a:hover,nav.side a:focus-visible{background:var(--surface-2);border-left-color:var(--accent);outline:none}
+nav.side .eyebrow{margin:1.2rem 0 .4rem}
+.eyebrow{font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+main{display:flex;flex-direction:column;gap:3.2rem;min-width:0}
+header.top{display:flex;flex-direction:column;gap:1rem}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem 1.5rem;padding:1rem 1.2rem;background:var(--surface);border:1px solid var(--line);border-radius:6px;font-size:.88rem}
+.meta div span{display:block;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:.15rem}
+.lead{font-size:1.05rem;max-width:68ch}
+section{display:flex;flex-direction:column;gap:1.1rem;scroll-margin-top:1rem}
+.prose{max-width:70ch;display:flex;flex-direction:column;gap:.8rem}
+.grid-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.9rem}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:1rem 1.1rem}
+.card h3{margin-bottom:.5rem}
+.counts{display:flex;gap:.4rem;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.chip{display:inline-flex;align-items:center;gap:.3rem;padding:.12rem .5rem;border-radius:999px;font-size:.74rem;font-weight:600;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+.chip.crit{background:var(--crit-soft);color:var(--crit)}
+.chip.alta{background:var(--alta-soft);color:var(--alta)}
+.chip.media{background:var(--media-soft);color:var(--media)}
+.chip.baja{background:var(--baja-soft);color:var(--baja)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.est{background:var(--accent-soft);color:var(--accent)}
+table{border-collapse:collapse;width:100%;font-size:.9rem;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.74rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+td.n{text-align:right}
+.tbl{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px}
+ol.top{margin:0;padding:0;list-style:none;counter-reset:top;display:flex;flex-direction:column;gap:.5rem}
+ol.top li{counter-increment:top;display:grid;grid-template-columns:2.2rem minmax(0,1fr);gap:.6rem;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:.75rem .9rem}
+ol.top li::before{content:counter(top);font-family:Georgia,serif;font-size:1.5rem;color:var(--accent);line-height:1}
+ol.top li strong{display:block;margin-bottom:.15rem}
+ol.top li .refs{margin-top:.25rem}
+.filters{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;font-size:.85rem;color:var(--muted)}
+.filters button{font:inherit;font-size:.78rem;font-weight:600;padding:.28rem .7rem;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--text);cursor:pointer}
+.filters button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.filters button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.f{display:grid;grid-template-columns:5px minmax(0,1fr);background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.f .stripe{background:var(--baja)}
+.f[data-sev="crit"] .stripe{background:var(--crit)}
+.f[data-sev="alta"] .stripe{background:var(--alta)}
+.f[data-sev="media"] .stripe{background:var(--media)}
+.f .body{padding:.9rem 1.1rem 1rem;display:flex;flex-direction:column;gap:.55rem;min-width:0}
+.f .head{display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap}
+.f .id{font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--muted);font-weight:500}
+.f .refs{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted);word-break:break-all;line-height:1.5}
+.f .refs b{color:var(--text);font-weight:500}
+.f dl{display:grid;grid-template-columns:5.5rem minmax(0,1fr);gap:.35rem .8rem;margin:0}
+.f dt{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;padding-top:.15rem}
+.f dd{margin:0;max-width:75ch}
+pre{margin:0;background:var(--code-bg);border:1px solid var(--line);border-radius:4px;padding:.6rem .8rem;overflow-x:auto;font-size:.8rem;line-height:1.5}
+.hidden-by-filter{display:none}
+.axis-head{display:flex;flex-direction:column;gap:.4rem}
+.axis-head .sub{color:var(--muted);max-width:70ch}
+ul.plain{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.35rem;max-width:75ch}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem}
+.note{border-left:3px solid var(--accent);padding:.6rem .9rem;background:var(--surface);border-radius:0 6px 6px 0;max-width:75ch}
+.count-empty{color:var(--muted);font-style:italic;padding:.5rem 0}
+@media (prefers-reduced-motion:no-preference){nav.side a{transition:background .15s}}
+</style>
+
+<div class="wrap">
+<nav class="side" aria-label="Secciones">
+  <p class="eyebrow">Informe</p>
+  <ul>
+    <li><a href="#resumen">Resumen</a></li>
+    <li><a href="#prioridad">Qué atacar primero</a></li>
+  </ul>
+  <p class="eyebrow">Ejes</p>
+  <ul>
+    <li><a href="#seguridad">Seguridad</a></li>
+    <li><a href="#concurrencia">Concurrencia</a></li>
+    <li><a href="#escalabilidad">Escalabilidad</a></li>
+    <li><a href="#disponibilidad">Disponibilidad</a></li>
+  </ul>
+  <p class="eyebrow">Cierre</p>
+  <ul>
+    <li><a href="#bien">Lo que está bien</a></li>
+    <li><a href="#no-verificado">No verificado</a></li>
+    <li><a href="#metodo">Método</a></li>
+  </ul>
+</nav>
+
+<main>
+<header class="top">
+  <p class="eyebrow">Renaser OS · backend Java</p>
+  <h1>Auditoría de seguridad, concurrencia, escalabilidad y disponibilidad</h1>
+  <p class="lead">Lectura completa del monolito modular (Spring Boot 4.1 / Java 25 / Spring Modulith) tal como está en la rama de trabajo. Cada hallazgo fue verificado contra el archivo real antes de entrar acá; los que ya están reconocidos en la documentación del proyecto se marcan como tales, porque igual pesan.</p>
+  <div class="meta">
+    <div><span>Fecha</span>2026-09-01</div>
+    <div><span>Rama</span><code>feature/migracion-catalogo-y-audioterapia</code></div>
+    <div><span>Último commit</span><code>341c2cf</code> (D-59, IdGenerator)</div>
+    <div><span>Alcance</span>1.563 archivos en <code>main</code>, 290 en <code>test</code>, 14 migraciones Flyway</div>
+    <div><span>Cambios al código</span>Ninguno. Solo lectura.</div>
+    <div><span>Suite de tests</span>No se ejecutó (no aplica a una auditoría de lectura)</div>
+  </div>
+</header>
+
+<section id="resumen">
+  <div class="axis-head">
+    <h2>Resumen</h2>
+    <p class="sub">62 hallazgos. Cinco son críticos y comparten una raíz: el sistema todavía confía en datos que el cliente puede fabricar, y depende de servicios externos sin límite de espera.</p>
+  </div>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Eje</th><th class="n">Crítica</th><th class="n">Alta</th><th class="n">Media</th><th class="n">Baja</th><th class="n">Total</th></tr></thead>
+      <tbody>
+        <tr><td><a href="#seguridad">Seguridad</a></td><td class="n">2</td><td class="n">4</td><td class="n">8</td><td class="n">8</td><td class="n">22</td></tr>
+        <tr><td><a href="#concurrencia">Concurrencia</a></td><td class="n">1</td><td class="n">3</td><td class="n">10</td><td class="n">4</td><td class="n">18</td></tr>
+        <tr><td><a href="#escalabilidad">Escalabilidad</a></td><td class="n">0</td><td class="n">4</td><td class="n">4</td><td class="n">1</td><td class="n">9</td></tr>
+        <tr><td><a href="#disponibilidad">Disponibilidad</a></td><td class="n">2</td><td class="n">3</td><td class="n">7</td><td class="n">1</td><td class="n">13</td></tr>
+        <tr><th>Total</th><td class="n"><b>5</b></td><td class="n"><b>14</b></td><td class="n"><b>29</b></td><td class="n"><b>14</b></td><td class="n"><b>62</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="grid-sum">
+    <div class="card">
+      <h3>Seguridad</h3>
+      <p>La identidad se toma del header <code>X-Actor-Id</code> en 220 puntos y toda la API es <code>permitAll()</code>. Cualquier cliente puede actuar como cualquier usuario, incluido un administrador. La criptografía, OIDC y las consultas SQL están bien resueltas; el problema es quién dice ser quién.</p>
+    </div>
+    <div class="card">
+      <h3>Concurrencia</h3>
+      <p><code>habits</code> y <code>points</code> bloquean filas correctamente. <code>rocks</code>, <code>onboarding</code> y <code>evidence</code> no, y los tres tocan puntos o IA. Ninguno de los 11 schedulers tiene lock distribuido y no existe un solo test de concurrencia.</p>
+    </div>
+    <div class="card">
+      <h3>Escalabilidad</h3>
+      <p>Paginación keyset e índices están casi en todas partes. Los tres huecos grandes son el feed del Muro (80 consultas por página), el ranking (tabla completa en memoria) y la ausencia de la caché de rol/estado que la arquitectura exige en el hot path.</p>
+    </div>
+    <div class="card">
+      <h3>Disponibilidad</h3>
+      <p>Redis es punto único de fallo con 60 segundos de espera por defecto y condiciona el arranque. No hay backups de la base propia, ni timeouts hacia Google/Apple/Facebook, ni métricas exportadas. Una columna del outbox está a 20 caracteres de romper "completar hábito".</p>
+    </div>
+  </div>
+  <div class="note">
+    <p><b>Contexto que baja o sube severidades.</b> Los siete adaptadores de IA son <code>NoOp</code>, así que todo lo que involucra llamadas a un modelo dentro de una transacción es latente hoy y se activa el día que se conecte Gemini. Y varios huecos de autenticación están registrados como "fase 4" en <code>docs/MODULO_AUTH.md</code> y <code>docs/ENDPOINTS_FALTANTES.md</code>: no son olvidos, pero siguen siendo la mayor exposición del sistema y por eso encabezan este informe.</p>
+  </div>
+</section>
+
+<section id="prioridad">
+  <div class="axis-head">
+    <h2>Qué atacar primero</h2>
+    <p class="sub">Orden por relación entre riesgo y esfuerzo. Los primeros cuatro cierran los cinco críticos. La etiqueta de esfuerzo es una estimación de tamaño del cambio, no de horas.</p>
+  </div>
+  <ol class="top">
+    <li><strong>Retirar el respaldo <code>X-Actor-Id</code> y pasar a <code>authenticated()</code></strong>Cierra S-1 y S-2 de una vez. Requiere antes resolver A-2 de <code>ENDPOINTS_FALTANTES.md</code> (los ADMIN no tienen contraseña) para no quedarse sin forma de administrar. <span class="chip est">Esfuerzo medio</span><div class="refs mono">SecurityConfig.java · ActorAutenticadoArgumentResolver.java · ActorHandshakeInterceptor.java</div></li>
+    <li><strong>Timeouts y fail-fast hacia Redis</strong>Dos propiedades y un customizer de Lettuce. Sin esto, cuando el respaldo por header desaparezca, Redis caído es API caída durante 60 segundos por request. <span class="chip est">Esfuerzo chico</span><div class="refs mono">application.yaml · D-1</div></li>
+    <li><strong>Sacar la IA de las transacciones y ponerle tope al <code>@Async</code></strong>Hacerlo antes de enchufar Gemini, no después. Hoy no duele porque los adaptadores no piensan. <span class="chip est">Esfuerzo medio</span><div class="refs mono">ProcesarValidacionV90Service · EvidenciaService.procesarLote · C-1, C-4</div></li>
+    <li><strong>Migración V15 del outbox</strong><code>serialized_event</code> a <code>TEXT</code>, índices parciales, <code>completion-mode=DELETE</code> y republicación al reiniciar. <span class="chip est">Esfuerzo chico</span><div class="refs mono">V2__spring_modulith_event_publication.sql · D-4, C-7, E-4</div></li>
+    <li><strong>Lectura con bloqueo en Roca Diaria, V90 y anulación de evidencia</strong>Copiar el patrón <code>byIdParaEscritura</code> que <code>habits</code> ya tiene. Es el mismo bug tres veces y todas tocan puntos. <span class="chip est">Esfuerzo chico</span><div class="refs mono">C-2, C-3, C-13</div></li>
+    <li><strong>Suspensión efectiva para los cinco roles</strong>La matriz de MENTOR/ADMIN es regla de negocio pendiente, pero que un ADMIN suspendido siga operando no lo es. <span class="chip est">Esfuerzo chico</span><div class="refs mono">PermissionEnforcementInterceptor.java · S-3</div></li>
+    <li><strong>Rate limit en login y orden correcto en el OTP</strong>El limitador Redis ya existe; falta usarlo en <code>iniciarSesion</code> y contar el intento antes de comparar el código. <span class="chip est">Esfuerzo chico</span><div class="refs mono">AutenticacionService · CodigoVerificacionEmailRedisAdapter · S-5, S-14</div></li>
+    <li><strong>Backups y ensayo de restauración</strong>La base dejó de ser de Supabase y nadie la respalda. Flyway no tiene undo: el único rollback real es restaurar. <span class="chip est">Esfuerzo medio</span><div class="refs mono">D-2</div></li>
+    <li><strong>Caché de rol/estado y feed del Muro en lote</strong>Los dos hot paths más transitados. La caché está diseñada en CLAUDE.md §5.3.5 y no existe; el feed deshace el trabajo en lote que su propio adaptador ya hace. <span class="chip est">Esfuerzo medio</span><div class="refs mono">E-1, E-2</div></li>
+    <li><strong>ShedLock en los schedulers y expiración por <code>UPDATE</code> masivo</strong>Requisito previo de la ola "N instancias" que la documentación ya planifica. <span class="chip est">Esfuerzo medio</span><div class="refs mono">C-5, C-6</div></li>
+  </ol>
+  <p class="prose">Después de estos diez: bloquear SEND en STOMP (S-4), timeouts hacia OIDC (D-3), probes de liveness/readiness (D-5), dimensionar Hikari y desactivar open-in-view (E-7), y exportar métricas con traceId (E-8).</p>
+</section>
+
+<div class="filters" role="group" aria-label="Filtrar por severidad">
+  <span>Mostrar:</span>
+  <button type="button" data-filter="all" aria-pressed="true">Todo</button>
+  <button type="button" data-filter="crit" aria-pressed="false">Crítica</button>
+  <button type="button" data-filter="alta" aria-pressed="false">Alta</button>
+  <button type="button" data-filter="media" aria-pressed="false">Media</button>
+  <button type="button" data-filter="baja" aria-pressed="false">Baja</button>
+</div>
+
+<!-- ================= SEGURIDAD ================= -->
+<section id="seguridad">
+  <div class="axis-head">
+    <h2>Seguridad</h2>
+    <p class="sub">Lo que está bien acá es mucho: BCrypt delegado, hash señuelo en login, tokens de 256 bits con GETDEL, OIDC con PKCE y JWKS, consultas parametrizadas sin excepción. Lo que falla es anterior a todo eso: la identidad del actor.</p>
+    <div class="counts"><span class="chip crit">2 críticas</span><span class="chip alta">4 altas</span><span class="chip media">8 medias</span><span class="chip baja">8 bajas</span></div>
+  </div>
+
+  <article class="f" data-sev="crit"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-1</span><h3>Suplantación total de identidad por header, con toda la API en permitAll</h3><span class="chip crit">Crítica</span></div>
+    <div class="refs"><b>shared/web/SecurityConfig.java:90-98</b> · shared/web/security/ActorAutenticadoArgumentResolver.java:48-58 · users/.../security/PermissionEnforcementInterceptor.java:148-153</div>
+    <pre>http.securityMatcher("/api/v1/**")
+    .csrf(csrf -> csrf.disable())
+    .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());</pre>
+    <dl>
+      <dt>Evidencia</dt><dd>218 parámetros <code>@ActorAutenticado</code> y 2 <code>@RequestHeader("X-Actor-Id")</code> caen al header cuando no hay sesión. Solo <code>GET /auth/me</code> y <code>POST /auth/social/link</code> exigen sesión real. Los UUID de usuario se exponen en respuestas normales (autores del muro, ranking, tickets).</dd>
+      <dt>Impacto</dt><dd>Cualquier cliente sin autenticar, mandando el UUID de un administrador, aprueba solicitudes, cambia roles, suspende cuentas, ajusta puntos o borra contenido. Todos los guards de servicio reciben ese <code>actorId</code> y lo creen.</dd>
+      <dt>Estado</dt><dd>Reconocido como "fase 4" en <code>docs/MODULO_AUTH.md</code> §8. Sigue siendo la exposición más grande del sistema.</dd>
+      <dt>Corrección</dt><dd><code>anyRequest().authenticated()</code> con excepción explícita de las rutas <code>@PublicEndpoint</code>; quitar el respaldo por header o dejarlo solo bajo perfil <code>local</code>; test de integración que pruebe que <code>X-Actor-Id</code> sin sesión da 401. Antes: resolver que los ADMIN no tienen contraseña (A-2 en <code>ENDPOINTS_FALTANTES.md</code>).</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="crit"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-2</span><h3>El handshake WebSocket se autentica solo por X-Actor-Id, fuera de toda cadena de seguridad</h3><span class="chip crit">Crítica</span></div>
+    <div class="refs"><b>chat/.../websocket/ActorHandshakeInterceptor.java:27-33</b> · WebSocketConfig.java:35</div>
+    <dl>
+      <dt>Evidencia</dt><dd><code>/ws</code> queda fuera del <code>securityMatcher("/api/v1/**")</code>. El interceptor de SUBSCRIBE verifica pertenencia del UUID declarado, no de una identidad autenticada.</dd>
+      <dt>Impacto</dt><dd>Quien conozca el UUID de un participante lee en vivo cualquier conversación, incluidas las directas.</dd>
+      <dt>Corrección</dt><dd>Resolver el actor en el handshake desde Spring Session (leer <code>X-Auth-Token</code> y consultar el <code>SessionRepository</code>) y rechazar sin sesión válida.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-3</span><h3>La matriz de permisos falla abierta para 4 de 5 roles, y ni la suspensión se verifica para ellos</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>users/api/UserRole.java:56-61</b> · PermissionEnforcementInterceptor.java:101-103</div>
+    <pre>case TRAINEE -> PERMISOS_TRAINEE.contains(permission);
+case MENTOR, MENTOR_LEAD, ADMIN, ALCHEMIST -> true;</pre>
+    <dl>
+      <dt>Impacto</dt><dd>Un MENTOR pasa el interceptor para <code>MANAGE_ROLES</code>, <code>MODERATE_WALL</code> o <code>ADJUST_POINTS</code> y depende de que cada servicio tenga guard propio. Un ADMIN suspendido sigue operando. Donde el servicio no tiene guard (los 6 handlers de <code>HANDLERS_SIN_CLASIFICAR</code>) no hay nada.</dd>
+      <dt>Estado</dt><dd>Documentado como decisión deliberada (D-64, A-1). La matriz de los 4 roles es regla de negocio pendiente. El chequeo de <code>SUSPENDED</code> no lo es: CLAUDE.md §0.3 lo exige para todo rol.</dd>
+      <dt>Corrección</dt><dd>Aplicar <code>SUSPENDED → 403</code> para todos los roles ya; definir la matriz con el dueño del proyecto y reemplazar el <code>true</code>.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-4</span><h3>Cualquier cliente STOMP puede publicar directo a /topic/conversaciones/{id}</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>chat/.../websocket/SubscripcionAutorizadaInterceptor.java:45-48</b> · WebSocketConfig.java:40</div>
+    <dl>
+      <dt>Evidencia</dt><dd>El interceptor solo inspecciona <code>SUBSCRIBE</code>. No existe ningún <code>@MessageMapping</code>. Con el broker simple, un frame <code>SEND</code> a un destino <code>/topic/...</code> llega a todos los suscriptores sin pasar por el servicio ni persistirse.</dd>
+      <dt>Impacto</dt><dd>Un usuario conectado inyecta JSON arbitrario que los clientes de una conversación ajena muestran como mensaje real.</dd>
+      <dt>Corrección</dt><dd>Rechazar <code>StompCommand.SEND</code> desde el cliente en el mismo interceptor. Los mensajes entran solo por REST.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-5</span><h3>Login sin rate limit ni bloqueo de cuenta</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>users/application/services/AutenticacionService.java:44-55</b></div>
+    <dl>
+      <dt>Evidencia</dt><dd>No invoca ningún limitador. El limitador Redis existe y se usa en reset, verificación de email y check-email, pero no acá. BCrypt con coste 10 por defecto.</dd>
+      <dt>Impacto</dt><dd>Credential stuffing contra <code>POST /auth/login</code> a la velocidad que aguante BCrypt.</dd>
+      <dt>Corrección</dt><dd>Reutilizar <code>LimitarSolicitudesResetPort</code> con claves por email y por IP; responder 429 uniforme.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-6</span><h3>WebSocket acepta cualquier origen</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>chat/.../websocket/WebSocketConfig.java:35</b> · <code>setAllowedOriginPatterns("*")</code></div>
+    <dl>
+      <dt>Impacto</dt><dd>Hoy lo salva que el handshake exige un header custom que un navegador no puede fijar. Cuando S-2 se corrija con sesión, esto se convierte en cross-site WebSocket hijacking directo.</dd>
+      <dt>Corrección</dt><dd>Usar la misma lista <code>renaser.web.cors.origenes</code>.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-7</span><h3>El id de sesión no se rota al autenticar</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>users/.../security/SesionWebAdapter.java:36-43</b></div>
+    <dl>
+      <dt>Evidencia</dt><dd><code>establecer()</code> guarda el contexto sobre la sesión existente. El login corre fuera de los filtros de autenticación de Spring Security, así que la estrategia de migración de sesión no se ejecuta.</dd>
+      <dt>Impacto</dt><dd>Un <code>X-Auth-Token</code> previo (dispositivo compartido sin logout, token capturado) pasa a ser del nuevo usuario.</dd>
+      <dt>Corrección</dt><dd>Invalidar la sesión anterior y crear una nueva antes de <code>saveContext</code>.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-8</span><h3>Sesiones de 30 días con renovación deslizante y sin vencimiento absoluto</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>application.yaml:30-31</b> · <code>session.timeout: 30d</code></div>
+    <dl>
+      <dt>Impacto</dt><dd>Un token usado cada 29 días vive para siempre, y vive en el almacenamiento del cliente, no en una cookie HttpOnly.</dd>
+      <dt>Corrección</dt><dd>Inactividad de 7 a 14 días y un vencimiento absoluto guardado como atributo de sesión.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-9</span><h3>La documentación describe cookie HttpOnly con CSRF; el código usa header con CSRF apagado</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>SecurityConfig.java:74-75, 96</b> · CLAUDE.md §5.3.1 y §6 · docs/MODULO_AUTH.md</div>
+    <dl>
+      <dt>Impacto</dt><dd>Con transporte por header, CSRF apagado es aceptable. El riesgo es que alguien "alinee el código con la doc", pase a cookie y no reactive CSRF: todos los POST/PUT/DELETE quedarían vulnerables.</dd>
+      <dt>Corrección</dt><dd>Corregir los documentos y dejar un test que falle si el resolver deja de ser por header mientras CSRF esté deshabilitado.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-10</span><h3>Mensajes internos llegan al cliente verbatim; no hay catch-all para Exception</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>shared/web/GlobalExceptionHandler.java:106-114</b> · AppleIdentidadAdapter.java:209 · GoogleIdentidadAdapter.java:128 · RolesCatalogoCache.java:52</div>
+    <dl>
+      <dt>Evidencia</dt><dd>Toda <code>IllegalArgumentException</code> e <code>IllegalStateException</code> devuelve su <code>getMessage()</code>. Salen al cliente rutas del filesystem, nombres de variables de entorno y de tablas, y el mecanismo <code>X-Actor-Id</code>. Sin handler para <code>Exception</code>, lo no previsto cae al error por defecto de Boot con otro formato; con devtools activo, con stacktrace.</dd>
+      <dt>Corrección</dt><dd>Mensajes genéricos para excepciones no de dominio, handler explícito de <code>Exception</code> a 500 sin detalle, y excepciones de infraestructura a 503 (ver D-6).</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-11</span><h3>Enumeración de correos por diseño, y envío SMTP síncrono en el reset</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>AccountRequestController.java:88-101</b> · ResetContrasenaService.java:96-99</div>
+    <dl>
+      <dt>Evidencia</dt><dd><code>check-email</code> y <code>exists</code> responden si un correo está registrado (120/h por IP). El reset envía el correo dentro del request solo cuando el email existe: diferencia de tiempo, y 503 solo para correos reales si SMTP falla.</dd>
+      <dt>Corrección</dt><dd>Si <code>exists</code> es requisito de producto, límite más agresivo y por email. Envío de reset en <code>@Async</code> sin alterar la respuesta.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-12</span><h3>Sesión serializada con JDK en Redis, y Redis sin contraseña</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>application.yaml:12-14</b> · sin bean <code>springSessionDefaultRedisSerializer</code></div>
+    <dl>
+      <dt>Impacto</dt><dd>Si Redis es alcanzable, además del secuestro de sesión, la deserialización JDK abre un vector de gadget-chain.</dd>
+      <dt>Corrección</dt><dd>Serializador JSON con el módulo de Spring Security, <code>requirepass</code> o ACL, TLS y red privada.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-13</span><h3>Testimonios anónimos sin rate limit</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>TestimonioController#crear</b> · TestimonioService.java:64-71</div>
+    <dl>
+      <dt>Impacto</dt><dd>Cualquier cliente sin cuenta inserta filas con nombre, rol y texto arbitrarios sin límite.</dd>
+      <dt>Corrección</dt><dd>Exigir sesión para crear, o rate limit por IP si debe quedar público.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-14</span><h3>El código de verificación se compara antes de contar el intento</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>users/.../redis/CodigoVerificacionEmailRedisAdapter.java:44-57</b> · VerificacionEmailService.confirmar:79-88</div>
+    <dl>
+      <dt>Evidencia</dt><dd><code>GET código</code>, <code>equals</code>, y recién si falla <code>INCR intentos</code>. <code>confirmar</code> no tiene rate limit por IP.</dd>
+      <dt>Impacto</dt><dd>Miles de <code>POST confirmar</code> en paralelo leen el código antes de que el quinto intento lo borre. El tope de 5 no se cumple.</dd>
+      <dt>Corrección</dt><dd><code>INCR</code> primero y rechazar si supera el máximo antes de comparar; idealmente un script Lua; rate limit por IP también en confirmar.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-15</span><h3>/actuator, /ws y /error sin cadena de seguridad</h3><span class="chip baja">Baja</span></div>
+    <div class="refs"><b>SecurityConfig.java:89</b></div>
+    <dl><dt>Impacto</dt><dd>Al declarar una cadena propia, la de Boot se retira. Hoy solo <code>health</code> está expuesto, pero cualquier <code>exposure.include</code> futuro queda público.</dd><dt>Corrección</dt><dd>Segunda cadena para <code>/actuator/**</code> que permita health y exija autenticación para el resto.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-16</span><h3>avatarUrl acepta cualquier esquema y host</h3><span class="chip baja">Baja</span></div>
+    <div class="refs"><b>UserController.java:79-82</b> · User.java:140-159 · sin <code>@Valid</code> en el body</div>
+    <dl><dt>Corrección</dt><dd>Restringir a <code>https://</code> y al host del bucket.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-17</span><h3>Extensión y tipo de contenido de adjuntos sin whitelist</h3><span class="chip baja">Baja</span></div>
+    <div class="refs"><b>TicketSoporteService.java:108-110, 153-156</b> · EventoService.java:257-263</div>
+    <dl><dt>Impacto</dt><dd>Un nombre como <code>x.png/../../otro</code> produce una clave S3 controlada por el cliente. Solo el muro valida <code>contentType</code>.</dd><dt>Corrección</dt><dd>Extensión <code>[a-z0-9]{1,5}</code> y lista cerrada de MIME en los tres lugares.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-18</span><h3>Credenciales por defecto y arranque con secretos vacíos</h3><span class="chip baja">Baja</span></div>
+    <div class="refs"><b>application.yaml:8-10</b> (<code>postgres/postgres</code>) · docker-compose.yml:7-9</div>
+    <dl><dt>Corrección</dt><dd>Perfil <code>prod</code> con placeholders sin default para que el arranque falle si falta algo (ver D-11).</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-19</span><h3>Sin análisis de dependencias vulnerables; devtools en el pom</h3><span class="chip baja">Baja</span></div>
+    <div class="refs"><b>pom.xml:170-175</b></div>
+    <dl><dt>Impacto</dt><dd>CLAUDE.md §0.3 pide revisar dependencias antes de cada release y no hay herramienta. Devtools fuerza stacktraces si producción se lanza con <code>spring-boot:run</code>.</dd><dt>Corrección</dt><dd><code>dependency-check-maven</code> o Dependabot; asegurar que producción usa el jar empaquetado.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-20</span><h3>Facebook: secreto en query string y email_verified asumido</h3><span class="chip baja">Baja</span></div>
+    <div class="refs"><b>FacebookIdentidadAdapter.java:73-81, 119-124</b></div>
+    <dl><dt>Corrección</dt><dd>POST con body form-urlencoded (Meta lo acepta); confirmar el supuesto de email verificado.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-21</span><h3>Seis handlers sin ninguna autorización declarada</h3><span class="chip baja">Baja</span></div>
+    <div class="refs"><b>EndpointAuthorizationDeclarationTest.java:58-69</b> · incluye WallController#mine y #latestAuthor</div>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">S-22</span><h3>InviteUserRequest.usuarioId lo elige el cliente</h3><span class="chip baja">Baja</span></div>
+    <div class="refs"><b>UserAccountService.java:90-92</b></div>
+    <dl><dt>Impacto</dt><dd>Solo admin, pero contradice D-59 (<code>IdGenerator</code>) y permite colisiones deliberadas.</dd></dl>
+  </div></article>
+</section>
+
+<!-- ================= CONCURRENCIA ================= -->
+<section id="concurrencia">
+  <div class="axis-head">
+    <h2>Concurrencia</h2>
+    <p class="sub">Virtual threads activados, sin <code>synchronized</code> en hot path, colas con <code>SKIP LOCKED</code>, unicidad respaldada en Flyway. Los huecos están en los agregados que no copiaron el patrón de bloqueo de <code>habits</code> y en todo lo que rodea a la IA.</p>
+    <div class="counts"><span class="chip crit">1 crítica</span><span class="chip alta">3 altas</span><span class="chip media">10 medias</span><span class="chip baja">4 bajas</span></div>
+  </div>
+
+  <article class="f" data-sev="crit"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-1</span><h3>IA dentro de @Transactional, @Async sin tope y pool Hikari de 10: agotamiento del pool al conectar Gemini</h3><span class="chip crit">Crítica</span></div>
+    <div class="refs"><b>onboarding/.../ProcesarValidacionV90Service.java:44-60</b> · OnboardingAsyncConfig.java:13 · EspejoSombraService.java:96-121 · ConocimientoService.java:40-51 · RecomendacionService.java:61-82 · application.yaml (sin <code>hikari.*</code> ni <code>concurrency-limit</code>)</div>
+    <pre>@Override @Transactional
+public void procesar(UserId usuarioId, long grabacionId) {
+    GrabacionV90 grabacion = loadGrabacionPort.porId(grabacionId).orElse(null);
+    ResultadoValidacionV90 resultado = validacionIAPort.validar(...);  // IA dentro de la tx
+    saveGrabacionPort.guardar(grabacion);
+}</pre>
+    <dl>
+      <dt>Evidencia</dt><dd>Con virtual threads, el executor de <code>@Async</code> es <code>SimpleAsyncTaskExecutor</code> sin cola ni límite salvo <code>spring.task.execution.simple.concurrency-limit</code>, que no está fijado. Cada hilo retiene una conexión de Postgres mientras espera a la IA.</dd>
+      <dt>Escenario</dt><dd>Diez aprendices piden validación V90 en el mismo minuto con un Gemini real de hasta 45 segundos. Las diez conexiones se ocupan y toda la API (login, hábitos, chat) espera 30 segundos y devuelve 500. Los hilos virtuales no ayudan: el recurso escaso es la conexión.</dd>
+      <dt>Estado</dt><dd>Latente. Los adaptadores <code>NoOp</code> responden en microsegundos.</dd>
+      <dt>Corrección</dt><dd>Leer y commitear, llamar a la IA sin transacción, abrir una transacción corta para persistir el veredicto. Fijar <code>concurrency-limit</code> o un executor acotado. Dimensionar Hikari (ver E-7).</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-2</span><h3>Doble completado de Roca Diaria sin bloqueo: premio duplicado, evidencia duplicada, evento duplicado</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>rocks/.../RocaDiariaService.java:134-163</b> · SpringDataRocaDiariaRepository.java (sin <code>@Lock</code>)</div>
+    <dl>
+      <dt>Evidencia</dt><dd><code>requireRocaPropia</code> usa <code>findById</code> plano; el <code>if (roca.completada())</code> es en memoria. <code>points</code> sí bloquea la fila de puntaje, pero eso serializa las dos sumas, no evita la segunda.</dd>
+      <dt>Escenario</dt><dd>Doble tap o reintento por timeout: ambas requests leen <code>completada=false</code>, ambas registran evidencia, ambas suman el premio, se emiten dos <code>RocaCompletadaEvent</code> y, si se publica al muro, dos publicaciones.</dd>
+      <dt>Contraste</dt><dd><code>habits</code> lo hace bien: <code>byIdParaEscritura</code> con <code>PESSIMISTIC_WRITE</code> en <code>SpringDataRegistroHabitoRepository.java:28</code>.</dd>
+      <dt>Corrección</dt><dd>Mismo patrón, o <code>UPDATE ... WHERE id=? AND completada=false</code> abortando si no afectó filas.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-3</span><h3>Doble validate V90 arranca dos llamadas a IA, y un fallo deja la grabación en PROCESANDO para siempre</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>GrabacionV90Service.java:73-80, 109-116</b> · GrabacionV90PersistenceAdapter.java:26-28 · DespacharValidacionV90Adapter.java:31-36 · GrabacionV90.java:115-117</div>
+    <dl>
+      <dt>Evidencia</dt><dd>La mitigación de E-37 en la bitácora es un guard de estado en memoria; no hay lock ni <code>@Version</code>. Si la IA lanza, <code>procesar</code> hace rollback y el <code>PROCESANDO</code> ya commiteado queda. El <code>catch</code> del adapter solo loguea. No hay barrido de huérfanos, y un reinicio descarta el <code>@Async</code> en vuelo.</dd>
+      <dt>Escenario</dt><dd>Dos requests pasan el guard, ambas escriben <code>PROCESANDO/intentos=1</code> (contador perdido), dos Gemini por la misma grabación. Con cualquier fallo, el aprendiz recibe 409 "ya hay un intento en curso" para siempre y no puede avanzar en el onboarding. El fallback a revisión manual nunca se activa.</dd>
+      <dt>Corrección</dt><dd>Lectura con <code>PESSIMISTIC_WRITE</code>; registrar el fallo en <code>REQUIRES_NEW</code> desde el catch; barrido que devuelva a <code>PENDIENTE</code> lo que lleve más de N minutos; <code>spring.task.execution.shutdown.await-termination=true</code>. Mejor: mover V90 al modelo de cola durable que ya tiene <code>evidence</code>.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-4</span><h3>Lote de evidencias todo-o-nada: 25 llamadas a IA en una transacción y un poison pill al frente de la cola</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>evidence/.../EvidenciaService.java:142-160</b> · SpringDataEvidenciaRepository.java:37-42 · ProcesarColaValidacionScheduler.java:28</div>
+    <pre>@Transactional
+public int procesarLote() {
+    List&lt;Evidencia&gt; pendientes = loadEvidenciaPort.pendientesLote(clock.now(), TAMANO_LOTE); // FOR UPDATE SKIP LOCKED
+    for (Evidencia evidencia : pendientes) { procesarUna(evidencia); }   // sin try/catch
+</pre>
+    <dl>
+      <dt>Escenario</dt><dd>Con IA real la transacción vive hasta 19 minutos reteniendo conexión y 25 row locks. Si la evidencia 12 lanza una excepción de red, las 11 ya validadas se revierten, se paga la IA de nuevo, y como el orden es <code>subida_en ASC</code> son siempre las mismas 25: la cola no avanza nunca y nada llega a revisión manual. <code>registrarIntentoFallido()</code> solo corre ante <code>NO_DISPONIBLE</code>, no ante excepción.</dd>
+      <dt>Corrección</dt><dd>Transacción corta por evidencia (tomar y marcar, IA fuera, persistir en otra), <code>try/catch</code> por ítem que cuente el intento fallido, timeout explícito en el adaptador real.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-5</span><h3>Once schedulers sin lock distribuido; cuatro no son seguros con N instancias</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>*/infrastructure/adapter/in/scheduler/*.java</b> · pom.xml sin ShedLock</div>
+    <dl>
+      <dt>Seguros</dt><dd>Despachar recordatorios y cola de evidencias (<code>SKIP LOCKED</code>), generar recordatorios (<code>ON CONFLICT DO NOTHING</code>), purga de notificaciones, verdugo.</dd>
+      <dt>No seguros</dt><dd><code>PromoverCambiosHorario</code> (historial duplicado y doble aplicación), <code>GenerarInformesSemanales</code> (IA dos veces por participante; la UNIQUE salva la fila), <code>SnapshotRanking</code> (delete + insert en dos instancias chocan con la PK cada noche), <code>ExpirarRegistros</code> y <code>PurgarCuentasBaja</code> (doble trabajo).</dd>
+      <dt>Agravante</dt><dd>Con virtual threads el scheduler es <code>SimpleAsyncTaskScheduler</code>: un cron que dura más que su intervalo se solapa consigo mismo en la misma JVM.</dd>
+      <dt>Corrección</dt><dd>ShedLock con proveedor JDBC (mismo Postgres) o <code>pg_try_advisory_xact_lock</code>; <code>lockAtLeastFor</code> resuelve el solapamiento también. Registrarlo como bloqueante de la ola "N instancias" en <code>MODULOS_A_AVANZAR.md</code>.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-6</span><h3>Barridos nocturnos todo-o-nada y fila a fila</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>habits/.../RegistroService.java:163-173</b> · RachaService.java:187-202 · PromocionCambioHorarioService.java:61-71</div>
+    <dl>
+      <dt>Evidencia</dt><dd><code>expirarPendientesAnterioresA</code> carga todas las filas <code>PENDIENTE</code> anteriores a hoy a memoria y hace <code>saveAndFlush</code> una por una en una sola transacción, sin <code>try/catch</code>.</dd>
+      <dt>Escenario</dt><dd>Una fila corrupta en la posición 400 revierte las 399 anteriores; a la noche siguiente pasa igual y los registros nunca expiran. Con miles de aprendices son decenas de miles de entidades en heap y otros tantos <code>UPDATE</code> a las 05:00.</dd>
+      <dt>Corrección</dt><dd>Un solo <code>@Modifying UPDATE ... SET estado='EXPIRADO' WHERE estado='PENDIENTE' AND fecha_ejecucion &lt; :hoy</code> (la transición ya vive en el dominio; documentar la equivalencia). Lo que necesite lógica, en páginas con transacción por página.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-7</span><h3>Outbox sin republicación al reiniciar, sin limpieza y con listeners no idempotentes</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>application.yaml</b> (ninguna clave <code>spring.modulith.*</code>) · notifications/.../event/*Listener.java · tabla <code>notificaciones</code> sin clave de deduplicación</div>
+    <dl>
+      <dt>Escenario</dt><dd>Se completa un hábito, commit, la JVM muere antes de que el listener termine: la fila queda incompleta y nadie la reintenta. El día que se active el republish, <code>NotificacionService.emitir</code> inserta una notificación nueva por cada entrega. Y con <code>completion-mode</code> por defecto, cada evento completado queda para siempre.</dd>
+      <dt>Corrección</dt><dd><code>republish-outstanding-events-on-restart=true</code>, <code>completion-mode=DELETE</code>, y <code>evento_id UNIQUE</code> o <code>ON CONFLICT DO NOTHING</code> en notificaciones. Ver también D-4 y E-4.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-8</span><h3>INCR y EXPIRE no atómicos en los tres limitadores: una clave sin TTL bloquea para siempre</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>LimitarSolicitudesResetRedisAdapter.java:28-35</b> · ControlCuotaRedisAdapter.java:42-51, 56 · CodigoVerificacionEmailRedisAdapter.java:61-70</div>
+    <dl>
+      <dt>Escenario</dt><dd>Si el proceso muere entre <code>INCR</code> y <code>EXPIRE</code> en la primera llamada, ese correo nunca más puede pedir reseteo. Solo el primer <code>INCR</code> fija TTL, así que no se autorrepara. <code>liberar</code> hace <code>DECR</code> sobre una clave que pudo expirar y crea <code>-1</code> sin TTL.</dd>
+      <dt>Corrección</dt><dd>Script Lua (<code>INCR</code> más <code>EXPIRE</code> si TTL es -1), o <code>SET NX EX</code> seguido de <code>INCR</code>; <code>DECR</code> solo si la clave existe.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-9</span><h3>"Expirar y lanzar" revierte la expiración que acaba de guardar</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>RegistroService.java:135-139</b> · RachaService.java:134-139</div>
+    <pre>registro.expirar(ahora);
+saveRegistroPort.save(registro);
+throw new IllegalStateException("El habito expiro — no se puede completar");  // rollback del save</pre>
+    <dl>
+      <dt>Escenario</dt><dd>El registro sigue <code>PENDIENTE</code>, el aprendiz reintenta y vuelve a recibir 409 hasta el cron de las 05:00. En <code>RachaService.cerrar</code> además se revierte <code>liberarRegistro</code>, y el índice <code>rachas_viva_uk</code> impide iniciar otra racha.</dd>
+      <dt>Corrección</dt><dd><code>@Transactional(noRollbackFor = IllegalStateException.class)</code> en esos dos métodos, o expirar en una transacción propia antes de lanzar.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-10</span><h3>GET que escribe con check-then-act: dos lecturas simultáneas producen un 409</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>habits/.../EspirituService.java:85-92</b> · ConversacionService.java:70-92 · TokenPushPersistenceAdapter.java:23-35 · academy/.../RecomendacionService.java:61-82</div>
+    <dl>
+      <dt>Escenario</dt><dd>La app dispara el GET de estado de Espíritu y un pull-to-refresh casi a la vez: ambos insertan el día siguiente y uno recibe 409 en un GET. En Recomendación además son dos llamadas a IA.</dd>
+      <dt>Corrección</dt><dd><code>INSERT ... ON CONFLICT DO NOTHING</code> y releer, o separar la mutación del GET.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-11</span><h3>SMTP dentro de @Transactional en la invitación de staff</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>UserAccountService.java:103-121</b></div>
+    <dl>
+      <dt>Escenario</dt><dd>SMTP que no responde retiene una conexión de Postgres 15 segundos (3 timeouts de 5). Un admin cargando una cohorte frena la API. Reset y verificación ya envían fuera de transacción, correcto.</dd>
+      <dt>Corrección</dt><dd>Enviar en <code>afterCommit</code>, como hace <code>MensajeService</code>, o por evento.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-12</span><h3>La primera fila de puntaje de un participante no está protegida: 409 en el primer hábito</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>points/.../PuntajeService.java:136-142</b></div>
+    <dl>
+      <dt>Escenario</dt><dd><code>FOR UPDATE</code> sobre una fila que no existe no bloquea nada. Dos completados simultáneos crean <code>PuntajeParticipante.inicial</code>, el segundo viola la PK y revierte todo el completado. Pasa una vez por aprendiz, en el primer uso.</dd>
+      <dt>Corrección</dt><dd>Crear la fila al inscribir, o <code>INSERT ... ON CONFLICT DO NOTHING</code> antes del <code>SELECT FOR UPDATE</code>.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-13</span><h3>Anular una evidencia puede devolver la penalización dos veces</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>EvidenciaService.java:119-134</b></div>
+    <dl><dt>Escenario</dt><dd>Dos admins o un doble clic: ambos leen <code>penalizacionAplicada=true</code> y ambos suman +10.</dd><dt>Corrección</dt><dd><code>PESSIMISTIC_WRITE</code> en la lectura de escritura.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-14</span><h3>Los tests no corren con hilos virtuales y no existe ningún test de concurrencia</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>src/test/resources/application.yaml</b> (reemplaza al de main sin <code>threads.virtual.enabled</code>)</div>
+    <dl>
+      <dt>Evidencia</dt><dd>Los 66 <code>@SpringBootTest</code> ejercitan <code>ThreadPoolTaskExecutor</code>, no lo que corre en producción. Cero usos de <code>CountDownLatch</code>, <code>ExecutorService</code> o <code>CyclicBarrier</code> en test. Los <code>PESSIMISTIC_WRITE</code> nunca fueron probados bajo contención.</dd>
+      <dt>Corrección</dt><dd>Espejar la propiedad; tres tests con Testcontainers: doble completado de roca (C-2), doble validate V90 (C-3), doble completado de hábito (debe seguir pasando).</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-15</span><h3>Excepción tragada dentro de una transacción marcada rollback-only</h3><span class="chip baja">Baja</span></div>
+    <div class="refs"><b>calendar/.../ConfirmacionService.java:78-86</b></div>
+    <dl><dt>Impacto</dt><dd>El <code>catch</code> loguea warn y el commit revienta después con <code>UnexpectedRollbackException</code>: 500 engañoso.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-16</span><h3>Rate limit de alta por COUNT en Postgres y token consumido antes del INSERT</h3><span class="chip baja">Baja</span></div>
+    <div class="refs"><b>AccountRequestService.java:237-246</b></div>
+    <dl><dt>Impacto</dt><dd>Check-then-act que admite ráfagas por encima de 60/h. Si el correo ya existe, el usuario debe reverificar.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-17</span><h3>Primer login social duplicado recibe 409 en vez de "solicitud en revisión"</h3><span class="chip baja">Baja</span></div>
+    <div class="refs"><b>AutenticacionSocialService.java:62-83</b></div>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">C-18</span><h3>Solo 8 de 146 @Transactional son readOnly; open-in-view sigue activo</h3><span class="chip baja">Baja</span></div>
+    <dl><dt>Impacto</dt><dd>Las lecturas multi-consulta no tienen snapshot consistente ni las optimizaciones read-only de Hibernate.</dd></dl>
+  </div></article>
+</section>
+
+<!-- ================= ESCALABILIDAD ================= -->
+<section id="escalabilidad">
+  <div class="axis-head">
+    <h2>Escalabilidad</h2>
+    <p class="sub">Sin base con volumen ni entorno desplegado, las conclusiones sobre índices salen del DDL y del texto de las consultas, no del planner. La cobertura de índices es muy buena; los problemas están en el código que los ignora.</p>
+    <div class="counts"><span class="chip alta">4 altas</span><span class="chip media">4 medias</span><span class="chip baja">1 baja</span></div>
+  </div>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">E-1</span><h3>El hot path de autorización va a Postgres dos veces por request; la caché de rol/estado no existe</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>PermissionEnforcementInterceptor.java:93</b> · UserAccountService.java:199-200 · UserPersistenceAdapter.java:34 · CacheConfig.java:20 (único consumidor: ranking)</div>
+    <dl>
+      <dt>Evidencia</dt><dd>El interceptor hace <code>findById</code> sin caché; después el guard de cada servicio repite el mismo SELECT. Con sesión, Spring Session en modo <code>indexed</code> suma 3 a 5 operaciones Redis por request.</dd>
+      <dt>Impacto</dt><dd>Es el tramo donde CLAUDE.md §3 pide menos de 1 ms de CPU y hoy cuesta dos round-trips a Postgres contra un pool de 10.</dd>
+      <dt>Corrección</dt><dd>Caffeine <code>usuarios-resumen</code> (TTL 30 s, 50k entradas) sobre <code>UserSummaryFinder.findById</code>, invalidada por evento y propagada por Redis Pub/Sub; que los guards consuman ese mismo finder.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">E-2</span><h3>Feed del Muro con N+1: cuatro consultas por publicación, 80 por página</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>community/.../PublicacionMuroService.java:263, 269-273</b></div>
+    <pre>PerfilUsuario autor = consultarPerfilUsuarioPort.porId(publicacion.autorId()).orElse(null);
+Map&lt;TipoReaccion, Integer&gt; conteo = reaccionMuroPort.contarPorTipo(publicacion.id());
+TipoReaccion miReaccion = reaccionMuroPort.deUsuario(publicacion.id(), viewerId).orElse(null);
+int comentarios = loadComentarioPort.contar(publicacion.id());</pre>
+    <dl>
+      <dt>Evidencia</dt><dd>El adaptador hidrata media en lote y el servicio deshace el trabajo. Es el endpoint social más leído.</dd>
+      <dt>Corrección</dt><dd><code>findByIds</code> para autores (ya existe), <code>GROUP BY publicacion_id, tipo</code> para reacciones, <code>deUsuario(ids, viewer)</code> en una consulta, <code>countBy... GROUP BY</code> para comentarios; o contadores desnormalizados.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">E-3</span><h3>Ranking: tabla completa a memoria, ordenado en Java, sin batch, y el endpoint devuelve todo</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>RankingPersistenceAdapter.java:38-41, 71-72, 105-106</b> · RankingService.java:96-98, 115 · RankingController.java:48-56</div>
+    <dl>
+      <dt>Evidencia</dt><dd><code>SELECT ... FROM puntajes_participante</code> sin WHERE ni LIMIT; nombres con un <code>IN</code> de N UUIDs; orden con <code>Comparator</code> en memoria (el índice <code>puntajes_liga_idx</code> queda sin usar); snapshot con un INSERT por fila.</dd>
+      <dt>Impacto</dt><dd>Con 10k aprendices, <code>/ranking</code> son unos 10k registros de JSON hacia un celular en 4G, tres veces en el agregado. Caffeine ahorra la consulta, no la serialización. PgJDBC rompe el <code>IN</code> a partir de 32.767 parámetros.</dd>
+      <dt>Corrección</dt><dd>Top-N más posición propia con paginación keyset; snapshot en SQL con <code>ROW_NUMBER() OVER (ORDER BY puntos_liga DESC)</code>; batching (E-7); lock del scheduler (C-5).</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">E-4</span><h3>Outbox sin índices y creciendo sin límite: cada completación es un seq scan por texto</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>V2__spring_modulith_event_publication.sql:7-18</b> (solo PK)</div>
+    <dl>
+      <dt>Evidencia</dt><dd>Modulith completa con <code>UPDATE ... WHERE serialized_event = ? AND listener_id = ? AND completion_date IS NULL</code>. Sin índice y sin limpieza, la tabla crece unas 200k filas al día con 10k usuarios y la completación se vuelve más lenta cada día.</dd>
+      <dt>Corrección</dt><dd>Índice parcial <code>(listener_id, serialized_event) WHERE completion_date IS NULL</code> e índice en <code>completion_date</code>, que es lo que trae el esquema JDBC oficial. Junto con D-4 y C-7 en una sola migración.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">E-5</span><h3>Listados sin paginar o con paginación en memoria</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>SpringDataTicketSoporteRepository.java:10-14</b> · MiembroService.java:72-88, 104-131 · AccountRequestController.java:147 · StaffAdminController.java:63 · TraineeAdminController.java:50 · CelulaService.java:276-284, 320-328</div>
+    <dl>
+      <dt>Evidencia</dt><dd>Tickets de soporte sin <code>Limit</code> y ordenados por una columna cuyo índice compuesto no sirve. El directorio de miembros del chat GLOBAL carga a todos los participantes, filtra con <code>contains</code> y pagina con <code>subList</code> en cada request. Los <code>page/size</code> de admin no tienen tope: <code>?size=100000</code> vuelca la tabla.</dd>
+      <dt>Corrección</dt><dd>Keyset por <code>creado_en</code> en tickets con índice; miembros por SQL con <code>pg_trgm</code> o nombre normalizado; <code>Math.min(size, 100)</code> en los tres admin.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">E-6</span><h3>Evidencias ordenadas y paginadas por creado_en, columna sin índice en la tabla más grande</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>EvidenciaPersistenceAdapter.java:53</b> · EvidenciaSpecifications.java · V1:785-795 (todos los índices son sobre <code>subida_en</code>)</div>
+    <dl><dt>Corrección</dt><dd>Usar <code>subida_en</code> como cursor (misma semántica, ya indexada) o crear <code>(estado_validacion, creado_en DESC)</code>.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">E-7</span><h3>Sin configuración de pool, batch JPA, open-in-view, statement timeout, Redis timeout ni JVM</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>application.yaml</b> · sin Dockerfile en el repo</div>
+    <dl>
+      <dt>Impacto</dt><dd>Con virtual threads el único limitador real de concurrencia son las 10 conexiones por defecto. Sin <code>statement_timeout</code> una consulta colgada retiene la conexión indefinidamente. Sin batch, E-3 y C-6 son N round-trips. CLAUDE.md §6 menciona <code>connection-fetch=lazy</code> y no está.</dd>
+      <dt>Corrección</dt><dd><code>hikari.maximum-pool-size</code> 20 a 30 por instancia con <code>max_connections</code> dimensionado, <code>connection-timeout</code> 2 a 5 s, <code>open-in-view: false</code>, <code>hibernate.jdbc.batch_size: 50</code> con <code>order_inserts/order_updates</code>, <code>statement_timeout</code> en la URL, <code>spring.data.redis.timeout: 1s</code>, contenedor con <code>-XX:MaxRAMPercentage=75</code>.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">E-8</span><h3>Sin métricas exportadas, sin tracing, sin traceId, sin logs estructurados</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>pom.xml</b> (actuator y modulith-observability sin registry ni bridge) · application.yaml sin <code>management.*</code> · cero usos de MDC en main</div>
+    <dl>
+      <dt>Impacto</dt><dd>No se pueden validar los SLO p50/p99 de CLAUDE.md §3, ni alertar por <code>hikaricp.connections.pending</code>, ni correlacionar el flujo async de V90. §5.4.9 llama a esto "la regla más importante" y no está. Los spans de Modulith no salen a ningún lado.</dd>
+      <dt>Corrección</dt><dd><code>micrometer-registry-prometheus</code> u OTLP, <code>micrometer-tracing-bridge-otel</code> (Boot agrega traceId al MDC solo), <code>logging.structured.format.console=ecs</code> en prod. Boot 4.1 ya registra el <code>ContextPropagatingTaskDecorator</code> en el executor de <code>@Async</code>, así que el traceId se propagará sin código extra.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">E-9</span><h3>Menores: EAGER en dos ElementCollection, catálogos sin caché, índices secundarios</h3><span class="chip baja">Baja</span></div>
+    <div class="refs">RocaSemanalJpaEntity.java:36 · InformeEspejoSombraJpaEntity.java:57 · ClaseDiariaService.java:145-150 · CategoriaMuroPersistenceAdapter.java:47 · tickets_mentor y notificaciones por <code>creado_en</code></div>
+    <dl><dt>Corrección</dt><dd><code>@BatchSize</code>, Caffeine para catálogos estáticos, <code>porCursos(ids)</code> en clase del día.</dd></dl>
+  </div></article>
+</section>
+
+<!-- ================= DISPONIBILIDAD ================= -->
+<section id="disponibilidad">
+  <div class="axis-head">
+    <h2>Disponibilidad</h2>
+    <p class="sub">Lo mejor resuelto: timeouts SMTP obligatorios y comentados, DNS con timeout y fail-open, fanout de chat tolerante a Redis, Flyway fail-fast. Lo peor: todo lo que rodea a Redis y a las llamadas HTTP salientes.</p>
+    <div class="counts"><span class="chip crit">2 críticas</span><span class="chip alta">3 altas</span><span class="chip media">7 medias</span><span class="chip baja">1 baja</span></div>
+  </div>
+
+  <article class="f" data-sev="crit"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">D-1</span><h3>Redis es punto único de fallo con 60 segundos de espera y condiciona el arranque</h3><span class="chip crit">Crítica</span></div>
+    <div class="refs"><b>application.yaml:11-14, 30-34</b> · SecurityConfig.java:72-75 · los 5 adaptadores Redis de users y rag · RedisChatSubscriberConfig.java:26-32</div>
+    <dl>
+      <dt>Evidencia</dt><dd>Sin <code>spring.data.redis.timeout</code> ni <code>connect-timeout</code>: Lettuce queda con 60 s de command timeout y encola comandos mientras reconecta. <code>repository-type: indexed</code> ejecuta <code>CONFIG SET notify-keyspace-events</code> al arrancar. Los adaptadores solo chequean <code>null</code>, no <code>RedisConnectionFailureException</code>.</dd>
+      <dt>Escenario</dt><dd>Redis cae cinco minutos. Todo request con <code>X-Auth-Token</code> se cuelga 60 s y termina en 500 sin formato. Registro, verificación, reset, Renasia y logout devuelven 500. Si el orquestador reinicia el proceso, no vuelve a arrancar hasta que Redis vuelva. El health check también bloquea 60 s. Hoy el respaldo por header mantiene viva casi toda la API; cuando se retire (S-1), Redis caído es caída total. En un Redis administrado que deshabilita <code>CONFIG</code> (ElastiCache, Azure, Upstash), el arranque falla siempre.</dd>
+      <dt>Corrección</dt><dd><code>timeout=2s</code>, <code>connect-timeout=2s</code>; <code>LettuceClientConfigurationBuilderCustomizer</code> con <code>disconnectedBehavior(REJECT_COMMANDS)</code>; <code>ConfigureRedisAction.NO_OP</code> y habilitar las notificaciones del lado del servidor; fail-open en los limitadores ante <code>DataAccessException</code>; mapear fallos de Redis a 503 (D-6); Redis con persistencia y <code>maxmemory-policy</code> que no evicte sesiones.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="crit"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">D-2</span><h3>No existe estrategia de backup ni PITR para la base que ahora es propia</h3><span class="chip crit">Crítica</span></div>
+    <div class="refs"><b>docker-compose.yml:12-13, 34-36</b> (volumen nombrado, nada más) · única mención: docs/db/AUDITORIA_REDISENO_BD.md:1154, que remite a Supabase</div>
+    <dl>
+      <dt>Escenario</dt><dd>Pérdida del volumen, borrado accidental, o una migración equivocada aplicada en producción: no hay a qué volver. Flyway Community no tiene undo.</dd>
+      <dt>Corrección</dt><dd>Definir RPO/RTO y documentarlo; <code>pg_dump -Fc</code> diario más archivado de WAL (pgBackRest o wal-g), o instancia administrada con PITR; snapshot antes de cada migrate en prod; ensayar una restauración en staging.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">D-3</span><h3>Sin timeouts hacia Google, Apple y Facebook ni hacia los JWKS; sin retries ni circuit breakers en todo el repo</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>GoogleIdentidadAdapter.java:51</b> · AppleIdentidadAdapter.java:88 · FacebookIdentidadAdapter.java:54 · GoogleJwtDecoderConfig.java:23 · AppleJwtDecoderConfig.java:47 · application.yaml sin <code>spring.http.client.*</code></div>
+    <dl>
+      <dt>Escenario</dt><dd>El endpoint de token de Google deja de responder sin cerrar la conexión. Cada login social queda colgado indefinidamente; los reintentos del cliente acumulan sockets. A favor: <code>iniciarSesion</code> social no es transaccional, así que no retiene Postgres.</dd>
+      <dt>Corrección</dt><dd><code>spring.http.client.connect-timeout=3s</code> y <code>read-timeout=5s</code>; <code>NimbusJwtDecoder...restOperations(conTimeouts)</code>; opcional un circuit breaker de Resilience4j.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">D-4</span><h3>serialized_event VARCHAR(255): el outbox se escribe en la transacción del negocio y hay 20 caracteres de margen</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>V2__spring_modulith_event_publication.sql:15</b> · habits/api/HabitoCompletadoEvent.java · calendar/api/RecordatorioEventoDebidoEvent.java</div>
+    <pre>serialized_event VARCHAR(255) NOT NULL</pre>
+    <dl>
+      <dt>Evidencia</dt><dd>La entidad de Modulith declara la columna sin <code>length</code>, por eso el DDL generado quedó en 255. <code>HabitoCompletadoEvent</code> serializa a unos 235 caracteres (<code>UserId</code> va como objeto, <code>Instant</code> con nanos). El esquema JDBC oficial de Modulith usa <code>TEXT</code>.</dd>
+      <dt>Escenario</dt><dd>Alguien agrega un campo al evento: <code>value too long</code>, <code>DataIntegrityViolationException</code>, y todos los completados de hábito devuelven 409 en producción. Ningún test publica ese evento por el outbox real. Si <code>RecordatorioEventoDebidoEvent</code> gana un listener, cualquier título largo envenena el despacho cada minuto.</dd>
+      <dt>Corrección</dt><dd>Migración V15: <code>ALTER COLUMN serialized_event TYPE TEXT</code>. Test que publique el evento más grande del sistema por el outbox real.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="alta"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">D-5</span><h3>Health check único, sin probes, con mail y redis adentro, y sin seguridad en /actuator</h3><span class="chip alta">Alta</span></div>
+    <div class="refs"><b>application.yaml</b> (sin <code>management.*</code>) · SecurityConfig.java:89</div>
+    <dl>
+      <dt>Escenario</dt><dd>SMTP cae, el <code>MailHealthIndicator</code> reporta DOWN y el balanceador saca de servicio una app perfectamente funcional. Redis cae, el health bloquea 60 s, el probe expira, reinicio, y la app no arranca sin Redis: bucle.</dd>
+      <dt>Corrección</dt><dd><code>probes.enabled=true</code>; liveness solo <code>ping</code>; readiness <code>db,redis</code>; <code>management.health.mail.enabled=false</code>; <code>show-details=when-authorized</code>; segunda cadena de seguridad para <code>/actuator/**</code>.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">D-6</span><h3>Fallos de infraestructura salen como 500 sin formato; configuración faltante sale como 409</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>GlobalExceptionHandler.java:111-114</b> · GoogleIdentidadAdapter.java:128 · RolesCatalogoCache.java:52</div>
+    <dl>
+      <dt>Evidencia</dt><dd>Sin handlers para <code>DataAccessResourceFailureException</code>, <code>QueryTimeoutException</code>, <code>CannotCreateTransactionException</code> ni <code>RedisConnectionFailureException</code>. Toda <code>IllegalStateException</code> es 409, incluida "faltan GOOGLE_OAUTH_CLIENT_ID".</dd>
+      <dt>Corrección</dt><dd>Infraestructura a 503 con <code>Retry-After</code>; excepción propia <code>ProveedorNoConfiguradoException</code> a 503; catch-all de <code>Exception</code> a 500 genérico con log completo.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">D-7</span><h3>Apagado sin esperar tareas async ni schedulers; graceful shutdown no explícito</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>application.yaml</b> (sin <code>spring.task.execution.shutdown.*</code>, <code>spring.task.scheduling.shutdown.*</code>, <code>server.shutdown</code>, <code>spring.lifecycle.timeout-per-shutdown-phase</code>)</div>
+    <dl>
+      <dt>Escenario</dt><dd>Un deploy corta el barrido nocturno a mitad sin aviso y descarta la validación V90 en vuelo (ver C-3).</dd>
+      <dt>Corrección</dt><dd><code>await-termination=true</code> y <code>await-termination-period=30s</code> en execution y scheduling; dejar <code>server.shutdown=graceful</code> explícito.</dd>
+    </dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">D-8</span><h3>ddl-auto no está en validate</h3><span class="chip media">Media</span></div>
+    <dl><dt>Impacto</dt><dd>Un desfase entidad/esquema aparece en la primera consulta en runtime, no al arrancar. No reemplaza a D-4: <code>validate</code> compara el tipo, no el largo.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">D-9</span><h3>Streaming SSE de Renasia sin timeout async configurado</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>RenasiaController.java:40-45</b> · ConversacionRenasiaService.java:91</div>
+    <dl><dt>Corrección</dt><dd><code>spring.mvc.async.request-timeout=60s</code> y <code>.timeout(Duration)</code> sobre el <code>Flux</code> cuando exista el adaptador real.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">D-10</span><h3>Sin límite de tamaño para JSON ni heartbeat en WebSocket</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>WebSocketConfig.java:33-47</b></div>
+    <dl><dt>Corrección</dt><dd>Límite de body en el proxy o un filtro que responda 413; <code>setHeartbeatValue</code> con un <code>TaskScheduler</code> para que los sockets muertos no persistan.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">D-11</span><h3>Arranca con placeholders TODO y sin validar la configuración</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>application.yaml:52, 73-74</b> (<code>TODO-frontend-no-definido</code>) · sin <code>@ConfigurationProperties @Validated</code> ni perfil prod</div>
+    <dl><dt>Escenario</dt><dd>Se activa SMTP y se olvida <code>RESET_PASSWORD_URL</code>: correos reales con links rotos y nadie lo nota al arrancar.</dd><dt>Corrección</dt><dd>Propiedades validadas por proveedor; perfil prod con placeholders sin default.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="media"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">D-12</span><h3>Cuatro eventos sin ningún consumidor: recordatorios marcados como enviados sin entrega</h3><span class="chip media">Media</span></div>
+    <div class="refs"><b>RecordatorioService.java:261-267</b> · RecordatorioEventoDebidoEvent · PublicacionCreadaEvent · TicketMentorAbiertoEvent · TicketMentorRespondidoEvent</div>
+    <dl><dt>Impacto</dt><dd>Los recordatorios de calendario se marcan <code>enviado_en</code> cada minuto y nunca llegan a <code>notifications</code>; ningún log lo delata.</dd><dt>Corrección</dt><dd>Listener en <code>notifications</code>, o no marcar como enviado hasta que exista.</dd></dl>
+  </div></article>
+
+  <article class="f" data-sev="baja"><div class="stripe"></div><div class="body">
+    <div class="head"><span class="id">D-13</span><h3>Menores: S3 con timeouts del SDK, compose sin la app, Redis sin persistencia, 4xx a WARN, cero tests de resiliencia</h3><span class="chip baja">Baja</span></div>
+    <div class="refs">AlmacenamientoS3Config.java:52-58 · docker-compose.yml · GlobalExceptionHandler.java:217-219</div>
+    <dl><dt>Detalle</dt><dd>Redis sin <code>appendonly</code> ni <code>maxmemory-policy</code>: una evicción por memoria cierra sesiones de 30 días al azar. Cada 400/404 del móvil se loguea como WARN y tapa los reales. No hay test que simule Redis o Postgres caídos ni timeout de IA.</dd></dl>
+  </div></article>
+</section>
+
+<!-- ================= BIEN ================= -->
+<section id="bien">
+  <div class="axis-head">
+    <h2>Lo que está bien hecho</h2>
+    <p class="sub">Verificado en el código, no asumido. Vale tenerlo a la vista para no rehacer lo que ya funciona.</p>
+  </div>
+  <div class="two">
+    <div class="card"><h3>Seguridad</h3><ul class="plain">
+      <li>Login con hash señuelo y mensaje único: sin enumeración ni diferencia de tiempo.</li>
+      <li>Tokens de reset y verificación de 256 bits con SecureRandom, TTL en Redis, un solo uso con GETDEL.</li>
+      <li>Reset de contraseña y suspensión revocan todas las sesiones.</li>
+      <li>OIDC como corresponde: canje de code con PKCE en el servidor, JWKS, iss/aud/sub/email_verified verificados, identidad por (proveedor, sujeto) y nunca por email, 409 en vez de auto-link.</li>
+      <li>El DTO de alta no tiene campo role y el dominio fuerza TRAINEE.</li>
+      <li>Todas las consultas parametrizadas, Sort fijo, sin LIKE. Sin vectores de inyección.</li>
+      <li>CORS con lista explícita y sin comodín. Presigned URLs con Content-Type firmado y rutas derivadas del actor.</li>
+      <li>El código documenta sus huecos en vez de esconderlos.</li>
+    </ul></div>
+    <div class="card"><h3>Concurrencia</h3><ul class="plain">
+      <li>habits blindado: PESSIMISTIC_WRITE, guards de estado y UNIQUE por día. Racha viva única por índice parcial.</li>
+      <li>points bloquea toda escritura de saldo; el contador de aprendices por mentor se calcula, no se guarda.</li>
+      <li>Colas de evidencia y recordatorios con FOR UPDATE SKIP LOCKED; recordatorios con ON CONFLICT DO NOTHING.</li>
+      <li>Reacciones del muro con ON CONFLICT DO UPDATE.</li>
+      <li>Todos los listeners son @ApplicationModuleListener (post-commit, async, transacción propia). Sin cascadas.</li>
+      <li>Disparos post-commit correctos en chat y V90, con el @Async en un bean distinto.</li>
+      <li>Unicidad respaldada en Flyway para casi todos los check-then-act.</li>
+      <li>IdGenerator sobre UUID v4 con SecureRandom compartido: correcto.</li>
+    </ul></div>
+    <div class="card"><h3>Escalabilidad</h3><ul class="plain">
+      <li>Rate limits centralizados (Postgres indexado, Redis con TTL). Nada en memoria de proceso.</li>
+      <li>Chat multi-instancia resuelto: mensaje persistido primero, fanout por Redis Pub/Sub tras commit.</li>
+      <li>Keyset pagination con limit+1 en feed, comentarios, chat, Renasia, radar, evidencias, notificaciones.</li>
+      <li>/today hidratado en cinco consultas en lote; nombres del ranking, conversaciones y calendario también en lote.</li>
+      <li>Índices únicos, compuestos y parciales para los hot paths; HNSW para vectores; GIN/FTS en tickets; toda FK indexada.</li>
+      <li>Binarios nunca pasan por la JVM. Virtual threads activados.</li>
+      <li>DTOs de salida como proyecciones, controllers delgados.</li>
+    </ul></div>
+    <div class="card"><h3>Disponibilidad</h3><ul class="plain">
+      <li>Timeouts SMTP obligatorios y comentados; fallo del proveedor a 503, probado.</li>
+      <li>DNS MX con timeout, un reintento y resultado fail-open.</li>
+      <li>Fanout de chat fire-and-forget con catch; el mensaje ya está en Postgres.</li>
+      <li>try/catch por ítem en snapshot de ranking, informes semanales, verdugo y purga de cuentas.</li>
+      <li>Push best-effort y liberación de cuota Renasia ante fallo.</li>
+      <li>Flyway fail-fast, sin DDL destructivo. Todos los jobs son cron, ninguno corre al arranque.</li>
+      <li>DataIntegrityViolation a 409 sin filtrar nombres de constraints.</li>
+      <li>Testcontainers con Postgres y Redis reales; test de outbox con timeout.</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ================= NO VERIFICADO ================= -->
+<section id="no-verificado">
+  <div class="axis-head">
+    <h2>Lo que no se pudo verificar</h2>
+  </div>
+  <ul class="plain">
+    <li><b>Comportamiento bajo carga.</b> No se ejecutaron tests ni pruebas de carga. Los escenarios de agotamiento de pool y solapamiento de crons salen del bytecode de Boot 4.1.1 y Spring 7.0.7, no de mediciones.</li>
+    <li><b>Planes de ejecución.</b> Sin base con volumen, las conclusiones sobre índices son por DDL y texto de consulta.</li>
+    <li><b>Longitud exacta del JSON de los eventos</b> en el outbox: estimación manual de unos 235 caracteres para <code>HabitoCompletadoEvent</code>. Un test que lo publique cierra la duda en minutos.</li>
+    <li><b>CVEs de las versiones resueltas</b> (Boot 4.1.1, Security 7.1, Tomcat 11.0.24, nimbus-jose-jwt 10.9.1, AWS SDK 2.42.41): sin acceso a bases de vulnerabilidades.</li>
+    <li><b>BCrypt de Spring Security 7.1 con contraseñas de más de 72 bytes</b> (el DTO admite hasta 200): truncado silencioso o excepción.</li>
+    <li><b>Fuera del repo:</b> políticas del bucket S3, GRANTs de Postgres, plataforma de despliegue, tipo de Redis (administrado o propio), y si producción usa el jar o <code>spring-boot:run</code>.</li>
+    <li><b>Adaptadores reales de IA, push y catálogo de audio:</b> no existen. Timeouts, reintentos y errores de red de esas integraciones son terreno sin auditar.</li>
+    <li><b>Logs multilínea</b> que pudieran incluir email o token: la búsqueda cubrió llamadas de log en una línea.</li>
+  </ul>
+</section>
+
+<!-- ================= METODO ================= -->
+<section id="metodo">
+  <div class="axis-head"><h2>Método</h2></div>
+  <div class="prose">
+    <p>Cuatro revisiones independientes en paralelo, una por eje, cada una con un cuestionario cerrado (autenticación, autorización, inyección, archivos, WebSocket, transacciones, carreras, schedulers, outbox, Redis, N+1, paginación, índices, pool, timeouts, health, shutdown, backups). Cada revisión leyó el código real y, cuando hizo falta, el bytecode de las dependencias con <code>javap</code>.</p>
+    <p>Después, los hallazgos de mayor peso de cada eje se volvieron a verificar contra el archivo citado antes de entrar al informe: configuración de seguridad y sesión, matriz de roles, login, STOMP, columna del outbox, lote de evidencias, catch del async V90, feed del Muro, ranking, miembros del chat, repositorio de Roca Diaria, "expirar y lanzar" y orden del OTP. Los hallazgos duplicados entre ejes se fusionaron y se referencian entre sí.</p>
+    <p>Severidad: <b>crítica</b> es explotable hoy sin precondiciones o deja el sistema abajo; <b>alta</b> produce daño real (puntos, datos, disponibilidad) con una precondición común (doble tap, IA conectada, N instancias); <b>media</b> degrada o es una deuda que muerde en un escenario específico; <b>baja</b> es higiene.</p>
+  </div>
+</section>
+</main>
+</div>
+
+<script>
+(function(){
+  var buttons=document.querySelectorAll('.filters button');
+  var cards=document.querySelectorAll('article.f');
+  var sections=document.querySelectorAll('section[id="seguridad"],section[id="concurrencia"],section[id="escalabilidad"],section[id="disponibilidad"]');
+  function apply(f){
+    cards.forEach(function(c){c.classList.toggle('hidden-by-filter', f!=='all' && c.getAttribute('data-sev')!==f);});
+    sections.forEach(function(s){
+      var vis=s.querySelectorAll('article.f:not(.hidden-by-filter)').length;
+      var e=s.querySelector('.count-empty');
+      if(vis===0){ if(!e){e=document.createElement('p');e.className='count-empty';e.textContent='Sin hallazgos de esta severidad en este eje.';s.appendChild(e);} }
+      else if(e){e.remove();}
+    });
+    buttons.forEach(function(b){b.setAttribute('aria-pressed', b.getAttribute('data-filter')===f ? 'true':'false');});
+    try{localStorage.setItem('auditoria-filtro',f);}catch(err){}
+  }
+  buttons.forEach(function(b){b.addEventListener('click',function(){apply(b.getAttribute('data-filter'));});});
+  var saved='all';
+  try{saved=localStorage.getItem('auditoria-filtro')||'all';}catch(err){}
+  if(saved!=='all') apply(saved);
+})();
+</script>

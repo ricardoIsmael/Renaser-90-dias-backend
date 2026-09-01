@@ -273,6 +273,8 @@ Se conserva lo ya resuelto en D-18/R-5: **no se crea el usuario en silencio.** S
 
 **La regla de seguridad que no se negocia:** la identidad se resuelve **siempre por `(proveedor, sujeto)`, nunca por email.** Vincular por email permitiría que quien registre una cuenta social con el correo de un aprendiz existente se apodere de su cuenta. Un email que coincide con un usuario ya existente **no vincula automáticamente**: requiere que el dueño de la cuenta lo confirme estando ya autenticado.
 
+> Esa confirmación autenticada **ya existe** desde el 2026-09-01: `POST /api/v1/auth/social/link`, ver §6.9.
+
 ### 6.5 Apple y Facebook — hecho 2026-08-26
 
 Construidos como `@Component` que implementan `VerificadorIdentidadProveedor` (el puerto y el enum `ProveedorIdentidad` **no existían todavía** cuando se arrancó esta tarea, así que se crearon con la forma exacta encargada — ver §6.2 — para que el trabajo en paralelo de Google los reuse sin tocarlos). También se creó `CanjeCodigoCommand` (no estaba especificado en el puerto, hacía falta como entrada de `verificar`): self-validating, con `code`/`codeVerifier`/`redirectUri`, ninguno se loguea.
@@ -309,14 +311,14 @@ Controller: se agregó `POST /api/v1/auth/social` a `AutenticacionController` (y
 **Tres decisiones de diseño que no estaban 100% especificadas, documentadas para revisión:**
 
 1. **`email_verified=false` rechaza el login** (`IdentidadProveedorInvalidaException`), no pedido explícitamente pero consistente con la premisa de §6.4 ("el email llega pre-verificado, no se pide verificación aparte") — si el proveedor no lo confirma, esa premisa no se sostiene.
-2. **Un email que ya tiene cuenta activa rechaza el login social con 409**, en vez de crear una segunda `AccountRequest` para el mismo email. Es la aplicación literal de §6.4 ("no vincula automáticamente, requiere confirmación autenticada") — esa confirmación todavía no existe como funcionalidad, así que hoy el camino correcto es rechazar, no crear una solicitud duplicada.
-3. **`SubmitAccountRequestCommand.phone` es `@NotBlank`** (comando existente, no tocado) y Google/Apple/Facebook no devuelven teléfono. Se resolvió agregando `phone`/`city` como campos **opcionales** en `IniciarSesionConProveedorCommand`/`POST /api/v1/auth/social`: si la identidad es nueva y falta el teléfono, se rechaza con 400 explícito en vez de inventar un valor. Esto implica que, tal como quedó, la app tiene que conocer/pedir el teléfono **antes** de (o en la misma llamada que) el primer intento de login social — y como el `code` de OAuth es de un solo uso, un primer intento sin teléfono lo consume igual y el segundo intento necesita un `code` nuevo (reiniciar el flujo del navegador). No es un bug, es una limitación de diseño real que conviene resolver del lado de producto/UX, no inventada acá.
+2. **Un email que ya tiene cuenta activa rechaza el login social con 409**, en vez de crear una segunda `AccountRequest` para el mismo email. Es la aplicación literal de §6.4 ("no vincula automáticamente, requiere confirmación autenticada"). ~~Esa confirmación todavía no existe como funcionalidad~~ — **existe desde el 2026-09-01** (§6.9): el 409 sigue siendo el camino correcto, pero ahora tiene salida (entrar con la contraseña y vincular desde el perfil), y el mensaje del 409 lo dice.
+3. ~~**`SubmitAccountRequestCommand.phone` es `@NotBlank`**~~ — **corregido el 2026-09-01 (D-61): el teléfono dejó de ser obligatorio en el alta.** Este punto describía como "limitación de diseño" algo que en la práctica **dejaba muerto el registro por Google**: `phone`/`city` eran opcionales en `IniciarSesionConProveedorCommand`, pero si la identidad era nueva y faltaba el teléfono el caso de uso rechazaba con 400 — y Google/Apple/Facebook no devuelven teléfono, así que *ninguna cuenta nueva por login social podía registrarse*. Peor: como el `code` de OAuth es de un solo uso, ese intento fallido lo consumía igual y reintentar exigía reiniciar el flujo del navegador. La decisión del dueño del proyecto fue mover el teléfono a la **Ficha Inicial del onboarding** (donde se piden los datos completos) y dejar el alta con lo mínimo — correo, nombre y contraseña. Se bajó el `@NotBlank` en `SubmitAccountRequestRequest` y en `SubmitAccountRequestCommand`, se quitó el `requireNotBlank` del agregado `AccountRequest` (un teléfono en blanco se normaliza a `NULL`), se eliminó `AutenticacionSocialService.requirePhoneParaAlta` y la migración **V14** hizo `solicitudes_cuenta.telefono` nullable. **El teléfono se sigue guardando si viene**: solo dejó de ser obligatorio.
 
 **Lo que quedó pendiente de esta tanda — resuelto después (A-7 cerrado, A-8 sigue abierto):**
 
 - ~~**`SaveIdentidadExternaPort.guardar` nunca se invoca todavía.**~~ **Cerrado el 2026-08-31 (A-7).** El hueco era real y no cosmético: la FK de `identidades_externas.usuario_id` exige que la fila de `usuarios` exista, así que el vínculo solo puede escribirse al aprobar — y en el medio, entre el alta y la aprobación, el `sub` del proveedor no tenía dónde sobrevivir y se perdía. Quien se registraba por Google no podía volver a entrar nunca: su segundo intento no encontraba `(proveedor, sujeto)`, intentaba abrir otra `AccountRequest`, chocaba con el `User` ya existente y recibía "iniciá sesión con tu método actual" — un método que no tenía, porque el alta social deja `usuarios.hash_contrasena` en NULL a propósito. Ver §6.8 para cómo se cerró.
 - ~~El puerto y el adaptador de `IdentidadExterna` esperan a que se resuelva el punto anterior.~~ Ya están enchufados: `AccountRequestService.approve()` llama a `guardar()` en la misma transacción que activa al usuario.
-- **A-8 sigue abierto**: cuándo/cómo se le pide el teléfono a quien se da de alta por login social es una decisión de producto, no de backend. Ver §10.
+- ~~**A-8 sigue abierto**~~ — **cerrado el 2026-09-01 (D-61)**: la respuesta a "cuándo se le pide el teléfono a quien se da de alta por login social" es **en la Ficha Inicial del onboarding**, no en el alta. El backend ya no lo exige en ningún punto del flujo social. Ver §10.
 
 ### 6.8 Cierre de A-7: el `(proveedor, sujeto)` sobrevive hasta la aprobación — hecho 2026-08-31
 
@@ -329,6 +331,107 @@ Tres piezas, ninguna opcional:
 El `(proveedor, sujeto)` viaja **dentro de `SubmitAccountRequestCommand`, servidor a servidor** — nunca por HTTP. Los dos campos no existen en `SubmitAccountRequestRequest`, el DTO del alta pública, y no pueden existir: si el cliente pudiera mandar un `sujetoProveedor`, cualquiera reclamaría la identidad social de otro con solo conocer su `sub`. Mismo blindaje por compilador que el `role` ausente de CLAUDE.MD §5.3.3.
 
 **Prueba de que el defecto murió:** `LoginSocialCicloCompletoIntegrationTest`, de integración contra Postgres real (Testcontainers) porque las tres piezas viven en la base: alta social → segundo toque mientras está pendiente devuelve `SolicitudEnRevision` → aprobación por un ADMIN → **el segundo toque del mismo proveedor con el mismo `sub` devuelve `SesionIniciada`**. La prueba unitaria que ya existía (`identidadYaVinculadaDevuelveSesionIniciadaConElUsuarioCorrespondiente`) no cubre esto: parte de un vínculo ya existente en un mock, o sea da por cierto exactamente lo que el defecto impedía que ocurriera. Lo único simulado es el verificador del proveedor — canjear el `code` contra Google exige red y un OAuth client (A-9).
+
+### 6.9 Vincular una identidad social a una cuenta que ya existe — hecho 2026-09-01
+
+**El hueco que cierra.** §6.4 prohíbe vincular por coincidencia de correo, y §6.8 convirtió ese caso en la variante `ResultadoLoginSocial.CuentaExistenteSinVinculo` → **409**. El mensaje decía "iniciá sesión con tu contraseña"… y ahí terminaba todo: **no existía ninguna forma de conectar Google después**. Quien ya tenía cuenta quedaba condenado a la contraseña para siempre, y quien había entrado por Google antes de tener contraseña ni siquiera tenía esa salida.
+
+**La decisión (dueño del proyecto, 2026-09-01): vínculo explícito, no auto-vínculo por correo verificado.** La alternativa considerada era vincular automáticamente cuando el correo del proveedor viene verificado y coincide con el de una cuenta existente. Se descartó: el costo del camino explícito es **una pantalla**, y el riesgo que cubre es **apropiación de cuenta**. Es lo que recomiendan Auth0 y Clerk — autenticar **las dos** identidades antes de unirlas: la nuestra con la sesión, la del proveedor con el `code`.
+
+#### El contrato
+
+```
+POST /api/v1/auth/social/link
+{ "proveedor": "GOOGLE", "code": "...", "codeVerifier": "...", "redirectUri": "..." }
+```
+
+Mismos campos que `POST /auth/social` **menos** `phone`/`city` — acá la cuenta ya existe, no hay alta que completar. Y ningún campo que identifique al usuario: **quién vincula sale de la sesión, nunca del cuerpo**, mismo blindaje por compilador que el `role` ausente del alta pública (CLAUDE.MD §5.3.3).
+
+| Código | Cuándo |
+|---|---|
+| **204** | Vinculada. También si ya estaba vinculada a **esta misma** cuenta — el caso de uso es idempotente, el doble tap del cliente móvil no es un error y no reescribe la fila |
+| **409** | Esa identidad `(proveedor, sujeto)` ya pertenece a **otro** usuario (`IdentidadYaVinculadaException`) |
+| **401** | Sin sesión (`SesionNoIniciadaException`), o el proveedor rechazó el `code` (`IdentidadProveedorInvalidaException`) |
+| **403** | La cuenta está suspendida |
+| **400** | Falta `code`/`codeVerifier`/`redirectUri`/`proveedor` |
+
+#### Las cuatro reglas de seguridad, y por qué cada una
+
+1. **Sesión real obligatoria.** `@RequiresPermission(USE_APP)` + `sesionWeb.actorActual()`, igual que `GET /auth/me` — y es el **segundo** endpoint del sistema que **no acepta el respaldo de `X-Actor-Id`** de la fase 4 (§8). Con un header que cualquiera escribe, cualquiera colgaría su cuenta de Google del usuario de otro: sería exactamente el agujero que este endpoint viene a cerrar. Es la prueba más importante del cambio (`headerXActorIdSoloNoAlcanzaParaVincular`).
+2. **Si `(proveedor, sujeto)` ya pertenece a otro usuario → 409.** Es el vector de apropiación **inverso** al de §6.4: quien consiga un `code` de la cuenta social ajena podría colgarla de su propio usuario y entrar como esa persona. El mensaje del 409 es genérico a propósito — nunca dice de quién es la identidad, o el endpoint sería un oráculo.
+3. **`email_verified` obligatorio**, igual que el login social. La lógica **se reusó, no se duplicó**: pasó de un `private static` de `AutenticacionSocialService` a `IdentidadVerificada.exigirEmailVerificado(proveedor)`, en el propio puerto — así un flujo social nuevo no puede olvidarse de hacerlo.
+4. **NO se exige que el correo del proveedor coincida** con el de la cuenta. Vincular un Google personal a una cuenta con correo de trabajo es legítimo y Auth0/Clerk lo permiten. Lo que impide que una misma cuenta del proveedor sirva a dos usuarios no es una comparación de correos: es la `UNIQUE (proveedor, sujeto_proveedor)` de `identidades_externas`, con el chequeo del punto 2 anticipándola con un 409 entendible.
+
+**El orden de los pasos del caso de uso tampoco es casual:** el actor se carga y se rechaza si está suspendido **antes** de tocar al proveedor. El `code` de OAuth es de un solo uso — quemarlo en una petición que igual iba a terminar en 403 obligaría a la persona a reiniciar el flujo del navegador para nada.
+
+#### Dónde vive
+
+| Pieza | Archivo |
+|---|---|
+| Caso de uso (puerto `in`) | `users/application/ports/in/autenticacion/VincularIdentidadSocialUseCase.java` |
+| Servicio | `users/application/services/VinculacionIdentidadSocialService.java` |
+| DTO web | `users/infrastructure/adapter/in/rest/autenticacion/VincularIdentidadSocialRequest.java` |
+| Endpoint | `AutenticacionController#vincularIdentidadSocial` |
+| Excepción + handler | `shared/domain/IdentidadYaVinculadaException.java` → 409 en `GlobalExceptionHandler` |
+
+**Clase propia y no un método más de `AutenticacionSocialService`** (CLAUDE.MD §5.4.8, una clase por caso de uso): aquel **establece** identidad para quien todavía no la tiene; éste **agrega una forma de entrar** a quien ya probó quién es. Lo que sí comparten —resolver el verificador (`RegistroVerificadoresIdentidad`) y exigir el correo verificado— se reusa, no se copia. No hizo falta migración: la tabla `identidades_externas` (V3) ya soporta 1:N y su PK ya es la frontera correcta.
+
+#### Lo que quedó sin cubrir, dicho explícitamente
+
+- **Desvincular** (`DELETE /auth/social/link`) no existe. Hace falta antes de exponer esto en una pantalla de "cuentas conectadas", y tiene una regla de negocio propia que **no está confirmada**: si el usuario entró por Google y no tiene `hash_contrasena`, desvincular lo dejaría sin ninguna forma de entrar. Eso es una decisión de producto, no se inventó acá.
+- **Sigue sin probarse contra un proveedor real** (A-9): el verificador es lo único simulado en las pruebas, canjear el `code` contra Google exige red y un OAuth client.
+
+### 6.10 Registro social en dos pasos: identidad pendiente antes de crear la solicitud — hecho 2026-09-01
+
+**El hueco que cierra (D-65).** Hasta ahora, cuando `POST /api/v1/auth/social` encontraba una identidad nueva, abría la `AccountRequest` **en la misma llamada** que verificaba esa identidad contra el proveedor (§6.7). La app nunca llegaba a mostrarle a la persona un formulario de confirmación con su correo y su nombre ya prellenados — como manejan las redes sociales — porque para cuando el backend conocía esos datos, ya había decidido qué hacer con ellos.
+
+**El obstáculo técnico que obliga al diseño en dos pasos:** el `code` de OAuth es **de un solo uso**. La app no conoce el correo ni el nombre hasta que el backend canjea ese `code` contra el proveedor, así que no hay forma de prellenar un formulario sin retener la identidad ya verificada en algún lado **antes** de gastar el `code` en crear la solicitud. La única salida correcta es que el backend retenga la identidad ya verificada y le devuelva a la app un token de continuación.
+
+#### El flujo nuevo
+
+```
+POST /api/v1/auth/social  (identidad nueva)
+  → verifica contra el proveedor (§6.1)
+  → guarda la identidad YA VERIFICADA en Redis, TTL 10 min (igual al OTP de alta)
+  → 202 { registroPendienteToken, email, fullName }   ← la app prellena el formulario con esto
+
+POST /api/v1/auth/social/complete
+  { registroPendienteToken, fullName, phone?, city? }
+  → consume el token (GETDEL: un solo uso)
+  → arma la AccountRequest con el email/proveedor/sujeto DEL REGISTRO, nunca del body
+  → 202 { accountRequestId }   ← igual que el alta por formulario
+```
+
+Las otras tres salidas de `POST /auth/social` (200 sesión, 202 `EN_REVISION`, 409 correo ya registrado) **no cambian** — sólo cambió el camino de identidad nueva.
+
+#### Dónde vive la identidad retenida
+
+Mismo patrón que `TokenResetContrasenaPort`/`CodigoVerificacionEmailPort` (§2.2): token opaco de 256 bits, TTL nativo de Redis (sin cron de purga), `GETDEL` atómico para que "un solo uso" sea real y no un `GET` seguido de un `DEL` con ventana de carrera.
+
+- **Puerto:** `TokenRegistroPendienteSocialPort` (`users/application/ports/out/autenticacion/`) — `generar(RegistroPendienteSocial, Duration)` / `consumir(String) → Optional<RegistroPendienteSocial>`.
+- **Valor retenido:** `RegistroPendienteSocial(proveedor, sujetoProveedor, email, fullName)` — un `record` inmutable, sin comportamiento.
+- **Adaptador:** `TokenRegistroPendienteSocialRedisAdapter`, clave `registro-pendiente-social:{token}`. Los 4 campos se serializan en un único string con un separador de control (`U+0001`) en vez de sumar Jackson: ningún otro adaptador de este paquete serializa un objeto compuesto todavía, y el separador no puede aparecer por accidente en un enum de proveedor, en un `sub` opaco de OAuth, ni en texto que una persona tipea en un formulario (verificado con nombres con tildes y apóstrofes en el test de integración).
+- **TTL: 10 minutos**, igual al `VIGENCIA_CODIGO` del OTP de alta (`VerificacionEmailService`) — el mismo orden de magnitud que le toma a una persona mirar un formulario ya prellenado y confirmar.
+
+#### La regla de seguridad innegociable
+
+**El correo y el `sujeto` del proveedor se leen SIEMPRE del registro que devuelve `consumir()`, NUNCA del cuerpo de `POST /auth/social/complete`.** `CompletarRegistroSocialRequest`/`CompletarRegistroSocialCommand` ni siquiera tienen un campo para mandarlos — no es un `if` que los ignore, es que el compilador no deja construir el comando con ellos. Si el correo viajara por HTTP en este paso, cualquiera podría completar un registro con el correo de otra persona: es exactamente el agujero de apropiación de cuenta que D-60 y §6.4 vienen evitando, aplicado ahora al paso de confirmación en vez de al de vinculación.
+
+`fullName` **sí** viaja del cliente (la persona puede corregir cómo se escribe su nombre respecto de lo que devolvió el proveedor). `phone`/`city` siguen opcionales (D-61) — si no vienen, la solicitud queda con esos campos `NULL` y se piden después, en la Ficha Inicial del onboarding.
+
+#### Qué cambió en el código existente
+
+- `IniciarSesionConProveedorUseCase.IniciarSesionConProveedorCommand` perdió `phone`/`city`: ese paso ya no arma ninguna solicitud, esos datos ahora sólo tienen sentido en el comando del paso 2.
+- `ResultadoLoginSocial` sigue teniendo cuatro variantes, pero la de identidad nueva cambió de forma: `SolicitudCreada(AccountRequestId)` → `RegistroPendiente(String token, String email, String fullName)`. El sellado (`sealed interface`) obliga a que el compilador marque cada lugar que todavía manejaba la variante vieja.
+- `AutenticacionSocialService` ya NO depende de `SubmitAccountRequestUseCase` ni de `TokenVerificacionEmailPort` — esas dos dependencias se mudaron a la clase nueva, `CompletarRegistroSocialService`, que es quien ahora arma el `SubmitAccountRequestCommand.porProveedorSocial(...)` con el mismo camino que ya usaba el paso único anterior (genera el `verificationToken` directo, sin pedirle a la persona el código de 6 dígitos, porque el proveedor ya confirmó el correo — la misma razón que documentaba §6.7 antes de este cambio).
+- `SolicitudSocialResponse.EstadoSolicitudSocial` perdió la variante `CREADA` — ya no se produce desde `/auth/social`. Sólo queda `EN_REVISION`. La identidad nueva ahora responde con un cuerpo distinto, `RegistroPendienteSocialResponse{registroPendienteToken, email, fullName}`.
+- Clase nueva por caso de uso (CLAUDE.MD §5.4.8): `CompletarRegistroSocialUseCase`/`CompletarRegistroSocialService` no es un método más de `AutenticacionSocialService` — aquel verifica una identidad y decide qué camino sigue; éste sólo sabe convertir un registro pendiente ya verificado en una `AccountRequest`.
+
+#### Pruebas
+
+`LoginSocialCicloCompletoIntegrationTest` se reescribió al ciclo de tres toques (primer toque → `RegistroPendiente` → `completar()` → `AccountRequest` creada → segundo toque mientras pendiente → `SolicitudEnRevision` → aprobación de un ADMIN → tercer toque → sesión), contra Postgres y Redis reales (Testcontainers), incluida la variante sin teléfono de D-61. `AutenticacionSocialServiceTest` se reescribió (ya no mockea `SubmitAccountRequestUseCase`/`TokenVerificacionEmailPort`, ahora `TokenRegistroPendienteSocialPort`). Se agregó `CompletarRegistroSocialServiceTest` — la prueba central de seguridad es que mandar un correo distinto en el comando no tiene ningún efecto observable, porque no existe un parámetro por donde mandarlo — y `TokenRegistroPendienteSocialRedisAdapterTest` (Testcontainers: `GETDEL` atómico, TTL real, ida y vuelta con nombres con tildes/apóstrofes). Los controllers tienen su propia cobertura en `CompletarRegistroSocialControllerTest` (nuevo) y `LoginSocialControllerTest` (actualizado).
+
+**Lo que queda sin cubrir, dicho explícitamente:** el token de continuación no tiene límite de reintentos ni rate limiting propio más allá del que ya aplica `AccountRequestService.submit` (60/hora por IP, se ejecuta igual porque `/complete` termina llamando al mismo caso de uso). Tampoco se agregó protección contra que alguien complete el mismo registro pendiente dos veces en paralelo antes de que el primero termine de escribir en Postgres — el `GETDEL` de Redis evita que el TOKEN se use dos veces, pero no hay una segunda capa contra una carrera a nivel de la `AccountRequest` en sí; si aparece, la cubre la misma `UNIQUE (proveedor, sujeto_proveedor)` parcial de la migración V12 que ya protege el camino anterior, devolviendo 409 vía `DataIntegrityViolationException`.
 
 ---
 
@@ -426,7 +529,7 @@ Orden: `users` primero (es donde vive el login), después el resto por tamaño a
 
 ## 8.1 Inventario de autorización por endpoint — hecho 2026-08-31
 
-**Antes de migrar `X-Actor-Id` hacía falta saber qué exige cada endpoint, y no estaba escrito en ningún lado.** La autorización real vivía (y sigue viviendo) dentro de los servicios, en guards como `requireAdminActivo`, `requireActorPuedePublicar`, `HabitoAdminGuard` o `RequireActiveUserGuard`. Desde el controller no se veía nada: los 218 handlers eran indistinguibles entre sí.
+**Antes de migrar `X-Actor-Id` hacía falta saber qué exige cada endpoint, y no estaba escrito en ningún lado.** La autorización real vivía (y sigue viviendo) dentro de los servicios, en guards como `requireAdminActivo`, `requireActorPuedePublicar`, `HabitoAdminGuard` o `RequireActiveUserGuard`. Desde el controller no se veía nada: los 218 handlers de entonces eran indistinguibles entre sí.
 
 Ahora **cada endpoint declara qué permiso va a exigir**, y el build lo verifica.
 
@@ -439,13 +542,15 @@ Ahora **cada endpoint declara qué permiso va a exigir**, y el build lo verifica
 | `@PublicEndpoint(razón)` | `shared/web/security/` | Declara que el endpoint se sirve sin cuenta, **con la justificación obligatoria** |
 | `EndpointAuthorizationDeclarationTest` | `src/test/java/com/renaser/os/` | El test de reflexión que exige CLAUDE.MD §0.3. Rompe el build si un handler no declara nada, si declara las dos anotaciones a la vez, o si un `@PublicEndpoint` no explica por qué |
 
-**Declaran, no ejecutan.** No hay filtro ni interceptor detrás de las anotaciones, y `SecurityConfig` sigue en `permitAll()`: el comportamiento de la app no cambió en absoluto. Lo que existe hoy es el **inventario**, que es el insumo de la fase 4.
+**Declaran, no ejecutan — actualizado 2026-09-01 (D-64, cierra A-1 parcialmente).** Esto describe el estado hasta el 2026-08-31. Desde D-64, `@RequiresPermission` **sí se ejecuta**, pero solo para el rol TRAINEE: `PermissionEnforcementInterceptor` (`users/infrastructure/adapter/in/web/security`) corta con 403 antes del controller si un TRAINEE no tiene el permiso o si la cuenta está `SUSPENDED`. Para MENTOR, MENTOR_LEAD, ADMIN y ALCHEMIST el interceptor sigue sin hacer nada — la matriz de esos 4 roles no está definida (regla de negocio pendiente del dueño del proyecto) y `SecurityConfig` sigue en `permitAll()`: nada de esto depende de la sesión todavía, sigue funcionando sobre el respaldo `X-Actor-Id`. Detalle completo en `docs/MODULOS_A_AVANZAR.md` D-64 y `docs/ENDPOINTS_FALTANTES.md` A-1. Lo que sigue de esta sección (§8.1) describe el **inventario** tal como se armó el 2026-08-31; sigue siendo el insumo correcto, la matriz real de TRAINEE ya lo usó tal cual.
 
-### El inventario: 218 endpoints
+### El inventario: 219 endpoints
+
+> **Actualizado 2026-09-01.** Eran 218; entró `POST /api/v1/auth/social/link` (§6.9), que declara `USE_APP`.
 
 | | Cantidad |
 |---|---|
-| Con permiso declarado | **201** |
+| Con permiso declarado | **202** |
 | Públicos (`@PublicEndpoint`) | **12** |
 | Sin clasificar (TODO explícito) | **5** |
 
@@ -461,7 +566,7 @@ Reparto por permiso, de mayor a menor:
 
 | Permiso | Endpoints | Quién lo satisface hoy |
 |---|---|---|
-| `USE_APP` | 87 | Cualquier rol con cuenta activa |
+| `USE_APP` | 88 | Cualquier rol con cuenta activa |
 | `FOLLOW_OWN_PROGRAM` | 22 | TRAINEE |
 | `MANAGE_HABIT_CATALOG` | 17 | ADMIN, ALCHEMIST |
 | `MANAGE_CELLS` | 14 | ADMIN, ALCHEMIST (un MENTOR pasa en 2 de ellos, acotado a su célula) |
@@ -501,11 +606,11 @@ Ninguno se corrigió acá — cambiarlos altera comportamiento y son decisiones 
 
 ### Qué falta para pasar de `permitAll()` a `authenticated()`
 
-1. **Definir la matriz rol → permiso** — el único insumo que faltaba ya está: cada valor de `Permission` documenta qué roles lo satisfacen hoy. Va como `UserRole.can(Permission)`, en un solo archivo (CLAUDE.MD §5.3.2). Sigue abierto qué permisos tiene `MENTOR_LEAD` (R-2).
-2. **Resolver los 5 sin clasificar**, y partir `POST /api/v1/testimonios` en dos endpoints.
-3. **Terminar la migración de `X-Actor-Id`** (§8): mientras el actor lo declare el cliente por header, ningún permiso es exigible de verdad — se estaría autorizando una identidad auto-declarada.
-4. **Conectar la anotación**: un `HandlerInterceptor` que lea `@RequiresPermission` y consulte la matriz, con el caché de rol/estado de CLAUDE.MD §5.3.5. Recién ahí `SecurityConfig` puede pasar a `.anyRequest().authenticated()` con los 12 `@PublicEndpoint` como excepción.
-5. **Tests de autorización negativa** (§0.3): rol sin permiso → 403, `SUSPENDED` → 403. No se pueden escribir antes del paso 4, porque hoy no hay nada que devuelva 403 a nivel HTTP.
+1. ~~**Definir la matriz rol → permiso**~~ — **hecho parcialmente 2026-09-01 (D-64).** `UserRole.can(Permission)` existe, en un solo archivo (CLAUDE.MD §5.3.2), pero **solo para TRAINEE** (8 permisos, ver D-64). MENTOR, MENTOR_LEAD, ADMIN y ALCHEMIST siguen sin matriz (`can()` devuelve `true` para cualquier permiso) — sigue abierto qué permisos tiene cada uno, `MENTOR_LEAD` incluido (R-2), y es una decisión del dueño del proyecto, no algo que se infiera del código.
+2. **Resolver los 5 sin clasificar**, y partir `POST /api/v1/testimonios` en dos endpoints. Sin cambios: `PermissionEnforcementInterceptor` tampoco decide por ellos (no tienen `@RequiresPermission` ni `@PublicEndpoint`, así que el interceptor los deja pasar tal cual pasaban antes).
+3. **Terminar la migración de `X-Actor-Id`** (§8): sigue abierto. El interceptor de D-64 verifica el permiso de quien el header/la sesión dice ser, pero mientras el respaldo por header exista, esa identidad sigue siendo auto-declarable — es la misma limitación que tenía la app antes de D-64, no algo nuevo que D-64 introduzca ni resuelva.
+4. ~~**Conectar la anotación**~~ — **hecho parcialmente 2026-09-01 (D-64).** `PermissionEnforcementInterceptor` (`HandlerInterceptor`, registrado via `WebMvcConfigurer` en `users`) lee `@RequiresPermission`/`@PublicEndpoint` y consulta `UserRole.can(Permission)`, pero solo actúa cuando el actor resuelto es TRAINEE — para los otros 4 roles no hace nada (ver punto 1). **No hay todavía caché de rol/estado** (CLAUDE.MD §5.3.5, TTL 30s): la consulta es la misma que ya hacía `RequireActiveUserGuard` por request (una lectura indexada por PK), no una nueva; construir la caché queda pendiente y declarado, no hecho por decisión unilateral. `SecurityConfig` sigue en `permitAll()`: falta cerrar los puntos 1 (los 4 roles) y 3 (retirar el respaldo de header) antes de poder pasar a `.anyRequest().authenticated()`.
+5. ~~**Tests de autorización negativa**~~ — **hechos para TRAINEE, 2026-09-01 (D-64).** `PermissionEnforcementInterceptorTest` y `WallControllerAuthorizationTest` cubren TRAINEE sin permiso → 403, `SUSPENDED` → 403 (con la excepción de `OPEN_SUPPORT_TICKET`), `@PublicEndpoint` → pasa, y el rol sin matriz (ADMIN) → pasa, marcado explícitamente como temporal. Faltan los mismos tests para MENTOR/MENTOR_LEAD/ALCHEMIST el día que tengan matriz real.
 
 ---
 
@@ -516,8 +621,9 @@ Ninguno se corrigió acá — cambiarlos altera comportamiento y son decisiones 
 | **1** | `Credencial` + bean `PasswordEncoder` + Spring Session en el `pom` | ✅ Hecho |
 | **2** | Migraciones (`V2` columnas, `V3` tabla) + `CredencialJpaEntity` + puertos | En curso |
 | **3** | Cadena de Spring Security + login/logout por contraseña + CSRF | |
-| **4** | Migración de `X-Actor-Id`, módulo por módulo (§8) | Inventario de autorización por endpoint ✅ hecho (§8.1): los 218 endpoints declaran qué permiso exigen y el build lo verifica. Falta la matriz rol → permiso, la migración del header y el filtro que aplique la anotación |
+| **4** | Migración de `X-Actor-Id`, módulo por módulo (§8) | Inventario de autorización por endpoint ✅ hecho (§8.1): los 219 endpoints declaran qué permiso exigen y el build lo verifica. **Matriz rol → permiso y el filtro que la aplica ✅ hechos PARCIALMENTE 2026-09-01 (D-64): solo TRAINEE se verifica de verdad.** MENTOR/MENTOR_LEAD/ADMIN/ALCHEMIST siguen sin matriz (falla-abierto deliberado) y falta migrar el header `X-Actor-Id` |
 | **5** | Google | ✅ Hecho, ver §6.7. Falta crear el OAuth client en Google Cloud Console (A-9) |
+| **5.bis** | Vincular una identidad social a una cuenta ya existente (`POST /auth/social/link`) | ✅ Hecho 2026-09-01, ver §6.9. Falta **desvincular**, que depende de una regla de producto sin confirmar |
 | **6** | Apple + Facebook | Adaptadores hechos (§6.5); caso de uso compositor, `IdentidadExterna` y controller ahora también hechos (§6.7, compartidos por los tres proveedores). Falta lo de §6.6 (altas en Apple Developer/Meta, revisión de negocio de Meta) |
 | **7** | Reset de contraseña (Redis + envío de correo) | ✅ Hecho, ver §7.5. Envío de correo es `NoOpEnviarEmailAdapter` (sin proveedor real todavía) |
 
@@ -536,5 +642,5 @@ Fuera de alcance por ahora, y anotado para no perderlo: MFA/TOTP para roles admi
 | A-5 | Umbrales de rate limit de reset de contraseña (§7.5): se asumieron 5/hora por email y 20/hora por IP sin confirmar con producto | Nada hoy, son ajustables sin recompilar el patron (constantes en `ResetContrasenaService`) |
 | A-6 | `EnviarEmailPort` (§7.5): ¿se generaliza a `shared` cuando otro módulo necesite mandar mail, o se queda en `users`? | Nada hoy |
 | ~~A-7~~ | ✅ **RESUELTO 2026-08-31.** `IdentidadExterna` ya se vincula al aprobar la `AccountRequest`. Lo cerraron tres cosas: la migración `V12` (`solicitudes_cuenta.proveedor`/`.sujeto_proveedor`, que es donde el `sub` sobrevive la espera entre el alta y la aprobación), la llamada a `SaveIdentidadExternaPort.guardar` desde `AccountRequestService.approve()` en la misma transacción que activa al usuario, y las cuatro variantes de `ResultadoLoginSocial` que reemplazaron al 409 genérico. Probado de punta a punta contra Postgres real en `LoginSocialCicloCompletoIntegrationTest`. Ver §6.8 | Nada — ya no bloquea |
-| A-8 | ¿Cuándo/cómo se pide el teléfono para un alta por login social? (§6.7, punto 3) `phone` quedó como campo opcional de `POST /api/v1/auth/social`, pero el `code` de OAuth es de un solo uso — un primer intento sin teléfono lo consume y el segundo intento necesita reiniciar el flujo del navegador. Es una decisión de UX de la app, no del backend | Fase 3/5 del lado de la app (pantalla de alta social) |
+| ~~A-8~~ | ✅ **RESUELTO 2026-09-01 (D-61).** El teléfono **se pide en la Ficha Inicial del onboarding**, no en el alta — decisión del dueño del proyecto. El backend dejó de exigirlo en los cinco puntos donde lo hacía: el DTO web, el comando de aplicación, el invariante del agregado `AccountRequest`, `AutenticacionSocialService.requirePhoneParaAlta` y el `NOT NULL` de `solicitudes_cuenta.telefono` (migración **V14**). Efecto directo: **el alta por Google quedó desbloqueada** — antes ninguna cuenta nueva por login social podía registrarse. Probado en `LoginSocialCicloCompletoIntegrationTest#altaSocialPorGoogleSinTelefonoSeCompletaYSeAprueba` | Nada — ya no bloquea |
 | A-9 | Crear el OAuth client de Google en Google Cloud Console y cargar `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` (hoy vacíos en `application.yaml`) — mismo estado que Apple/Facebook en A-6.6 | Probar el login con Google contra el proveedor real |

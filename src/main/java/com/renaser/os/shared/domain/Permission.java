@@ -265,5 +265,21 @@ public enum Permission {
      * ({@code UserRole.canManageRoles()}). Es el unico permiso que CLAUDE.MD §5.3.2 ya
      * nombraba antes de esta enum.
      */
-    MANAGE_ROLES
+    MANAGE_ROLES;
+
+    /**
+     * Si una cuenta SUSPENDIDA sigue teniendo este permiso. Por defecto, no — una cuenta
+     * suspendida corta antes de llegar a cualquier regla de negocio (defensa en profundidad,
+     * CLAUDE.MD §5.3.4/D-11). La unica excepcion hoy es {@link #OPEN_SUPPORT_TICKET}: su
+     * propio javadoc documenta que {@code TicketSoporteService.requireActorExiste} NO exige
+     * cuenta activa a proposito — alguien suspendido tiene que poder reclamar su suspension.
+     *
+     * <p>Usado por el interceptor que ejecuta {@code @RequiresPermission} (A-1,
+     * {@code docs/ENDPOINTS_FALTANTES.md}): sin este metodo, activar la verificacion
+     * bloquearia a un aprendiz suspendido justo en el unico canal que le queda para escribirle
+     * a soporte.
+     */
+    public boolean toleraCuentaSuspendida() {
+        return this == OPEN_SUPPORT_TICKET;
+    }
 }

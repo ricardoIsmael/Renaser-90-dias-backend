@@ -1,7 +1,5 @@
 package com.renaser.os.academy.infrastructure.adapter.in.rest.curso;
 
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.renaser.os.academy.domain.model.curso.AccesoCurso;
 import com.renaser.os.academy.domain.model.curso.Curso;
 import com.renaser.os.users.api.UserRole;
@@ -19,7 +17,16 @@ import java.util.List;
  * aunque el enum de Postgres nuevo sea `ABIERTO`/`RESTRINGIDO` — la
  * traduccion vive SOLO aca, nunca en dominio ni persistencia.
  */
-@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+/*
+ * SIN @JsonNaming a proposito (2026-09-01). Estos DTOs declaraban
+ * `@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)` importado de
+ * `com.fasterxml.jackson.databind.annotation` — o sea de JACKSON 2. Spring Boot 4 serializa con
+ * JACKSON 3, que vive en `tools.jackson.*`, y esa anotacion la ignora en silencio: no falla, no
+ * avisa, simplemente no la aplica. Resultado: los 10 DTOs de academy declaraban snake_case y
+ * mandaban camelCase, y el frontend que confio en la anotacion no pudo leer ni un curso.
+ * Se quitan en vez de corregir el import porque el resto de la API ya es camelCase: dejar
+ * academy en snake_case lo volveria la unica excepcion. Ver E-65 en docs/BITACORA_ERRORES.md.
+ */
 public record CursoResponse(String id, String slug, String titulo, String descripcion, String portadaUrl, int orden,
                              boolean publicado, String acceso, String origen, Integer diaDesbloqueo,
                              List<String> rolesPermitidos, Instant creadoEn, Instant actualizadoEn) {

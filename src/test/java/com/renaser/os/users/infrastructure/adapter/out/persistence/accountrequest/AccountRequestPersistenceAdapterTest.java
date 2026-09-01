@@ -48,6 +48,26 @@ class AccountRequestPersistenceAdapterTest {
         assertThat(loaded.phone()).isEqualTo("+51999999999");
     }
 
+    /**
+     * D-61 + migracion V14: la prueba de que el INSERT con {@code telefono} NULL <b>llega a
+     * Postgres</b>. Sin la migracion esto falla en la base, no en Java — {@code solicitudes_cuenta
+     * .telefono} era {@code NOT NULL} desde el baseline V1, asi que aunque el dominio y el comando
+     * acepten el null, la fila no entraria. Por eso es de integracion y no unitaria: lo que se
+     * verifica es que la restriccion de la columna se levanto de verdad.
+     */
+    @Test
+    void guardaUnaSolicitudSinTelefono() {
+        AccountRequest request = AccountRequest.submit(nuevoId(), UserId.of(UUID.randomUUID()),
+                new Email("sintelefono@renaser.com"), "Ana Sin Telefono", null, "Lima",
+                "203.0.113.6", null, CLOCK);
+
+        adapter.save(request);
+
+        AccountRequest loaded = adapter.byId(request.id()).orElseThrow();
+        assertThat(loaded.phone()).isNull();
+        assertThat(loaded.status()).isEqualTo(AccountRequestStatus.PENDING);
+    }
+
     @Test
     void traduceLosTresEstadosEnAmbasDirecciones() {
         UserId adminId = UserId.of(UUID.randomUUID());

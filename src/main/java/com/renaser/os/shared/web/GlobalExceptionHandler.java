@@ -4,8 +4,10 @@ import com.renaser.os.shared.domain.CodigoVerificacionInvalidoException;
 import com.renaser.os.shared.domain.CredencialesInvalidasException;
 import com.renaser.os.shared.domain.EnvioEmailFallidoException;
 import com.renaser.os.shared.domain.IdentidadProveedorInvalidaException;
+import com.renaser.os.shared.domain.IdentidadYaVinculadaException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
+import com.renaser.os.shared.domain.RegistroPendienteSocialInvalidoException;
 import com.renaser.os.shared.domain.SesionNoIniciadaException;
 import com.renaser.os.shared.domain.TokenResetInvalidoException;
 import com.renaser.os.shared.domain.TokenVerificacionEmailInvalidoException;
@@ -66,6 +68,17 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Segundo paso del alta social (docs/MODULO_AUTH.md §6.10): el token de continuacion no
+     * existe, ya vencio, o ya se uso. 400, no 401 — no hay ninguna identidad que autorizar, el
+     * request en si es invalido y la unica salida es rehacer el flujo del proveedor.
+     */
+    @ExceptionHandler(RegistroPendienteSocialInvalidoException.class)
+    public ResponseEntity<ApiErrorResponse> handleRegistroPendienteSocialInvalido(
+            RegistroPendienteSocialInvalidoException ex) {
+        return respond(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    /**
      * El proveedor de correo no respondio o rechazo el envio: 503, no 500. Es una dependencia
      * externa caida y el reintento tiene sentido — el cliente puede volver a pedir el codigo.
      * El detalle del fallo ya quedo en el log del adaptador, nunca viaja al cliente.
@@ -85,6 +98,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleIdentidadProveedorInvalida(IdentidadProveedorInvalidaException ex) {
         log.warn("401 -> login social rechazado", ex);
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiErrorResponse.of(ex.getMessage()));
+    }
+
+    /**
+     * Vincular una identidad social que ya pertenece a otro usuario: 409, no 403. El actor esta
+     * perfectamente autorizado a vincular identidades — lo que falla es el estado del recurso,
+     * que ya tiene dueño. El mensaje nunca dice de quien es (ver la excepcion).
+     */
+    @ExceptionHandler(IdentidadYaVinculadaException.class)
+    public ResponseEntity<ApiErrorResponse> handleIdentidadYaVinculada(IdentidadYaVinculadaException ex) {
+        return respond(HttpStatus.CONFLICT, ex.getMessage());
     }
 
     @ExceptionHandler(NoSuchElementException.class)

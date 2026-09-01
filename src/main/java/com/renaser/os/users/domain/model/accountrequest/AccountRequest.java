@@ -62,6 +62,11 @@ public final class AccountRequest {
      * proveedor social. Guardarlo aca es lo que permite que {@link #approve} cree la
      * {@code IdentidadExterna}: el {@code sub} se verifica antes de esta llamada y no vuelve a
      * existir en ningun otro lado (A-7, docs/MODULO_AUTH.md §6.7).
+     *
+     * <p>{@code phone} es OPCIONAL desde el 2026-09-01 (D-61): el alta pide lo minimo y el
+     * telefono se recoge en la Ficha Inicial del onboarding. Un telefono vacio se normaliza a
+     * null en vez de guardarse como cadena en blanco — "todavia no lo dio" tiene que ser un solo
+     * valor en la base, si no cada consulta necesita preguntar por los dos.
      */
     public static AccountRequest submit(AccountRequestId id, UserId usuarioId, Email email, String fullName,
                                          String phone, String city, String requestIp,
@@ -71,7 +76,7 @@ public final class AccountRequest {
                 Objects.requireNonNull(usuarioId, "usuarioId es obligatorio"),
                 Objects.requireNonNull(email, "email es obligatorio"),
                 requireNotBlank(fullName, "El nombre no puede ser vacio"),
-                requireNotBlank(phone, "El telefono no puede ser vacio"), city, origenSocial,
+                normalizarOpcional(phone), city, origenSocial,
                 AccountRequestStatus.PENDING, null, null, null, null, requestIp, now, now);
     }
 
@@ -118,6 +123,14 @@ public final class AccountRequest {
         if (!actor.canManageRoles()) {
             throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST deciden solicitudes de alta");
         }
+    }
+
+    /**
+     * Dato opcional: ausente y vacio son lo mismo, y lo mismo se guarda como NULL. Evita que
+     * convivan en la columna un null y un "" que significan identicamente "no lo dio" (D-61).
+     */
+    private static String normalizarOpcional(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private static String requireNotBlank(String value, String message) {

@@ -11,11 +11,17 @@ import jakarta.validation.constraints.Size;
  *
  * <p>{@code contrasena} (2026-08-27): la persona elige su clave al registrarse. El minimo de 12
  * es el mismo de todo el modulo de auth. {@link #toString()} la oculta — un log de este DTO no
- * puede filtrar una credencial en claro (CLAUDE.MD §5.4.9). */
+ * puede filtrar una credencial en claro (CLAUDE.MD §5.4.9).
+ *
+ * <p>{@code phone} es OPCIONAL desde el 2026-09-01 (D-61), igual que {@code city}: el alta pide
+ * lo minimo — correo, nombre y contrasena — y el telefono se recoge despues, en la Ficha Inicial
+ * del onboarding, junto con el resto de los datos completos. Si viene, se guarda igual; lo que
+ * dejo de existir es la obligacion. Antes era {@code @NotBlank} y el frontend, que ya habia
+ * dejado de mandarlo, recibia 400 en cada registro. */
 public record SubmitAccountRequestRequest(
         @NotBlank @Email String email,
         @NotBlank String fullName,
-        @NotBlank String phone,
+        String phone,
         String city,
         @NotBlank String verificationToken,
         @NotBlank @Size(min = 12, max = 200) String contrasena) {

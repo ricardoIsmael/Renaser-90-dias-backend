@@ -1229,3 +1229,113 @@ invalid accessor method in record ...ResultadoVerificacionDominio
   **Regla de lectura:** ante una avalancha de errores en tests que no se tocaron, y sobre todo si los nombres
   llevan `$N`, la primera hipótesis es el entorno (build pisado, `target/` a medias), **no** el código. Un
   cambio real rompe pocos tests y relacionados entre sí; un `target/` corrupto rompe cientos sin patrón.
+
+
+## E-61 — Un 409 sin salida: "inicia sesion con tu contrasena para vincular Google", y despues no existia ninguna forma de vincular Google
+
+- **Fecha:** 2026-09-01
+- **Donde:** `AutenticacionController#loginSocial` (`POST /api/v1/auth/social`), variante `ResultadoLoginSocial.CuentaExistenteSinVinculo`.
+- **Sintoma:** el correo del proveedor ya tenia cuenta pero esa identidad social no estaba vinculada, y el backend respondia:
+  ```
+  409 {"message":"Ya existe una cuenta con este correo y no esta vinculada a GOOGLE. Inicia sesion con tu contrasena para entrar."}
+  ```
+  El mensaje es correcto y la respuesta tambien. **El problema era lo que venia despues: nada.** La persona iniciaba sesion con su contrasena, entraba... y no habia ningun endpoint para conectar su Google. El 409 era un callejon sin salida permanente.
+- **Causa real:** no fue un descuido. §6.4 de `docs/MODULO_AUTH.md` prohibe —con razon— vincular por coincidencia de correo, y §6.7 (decision 2) dejo anotado, textual, que la confirmacion autenticada *"todavia no existe como funcionalidad, asi que hoy el camino correcto es rechazar"*. El rechazo se construyo; **la funcionalidad que le daba salida quedo pendiente y nadie la cerro**. Es la misma familia que **E-56** (quien se registraba con Google no podia volver a entrar): una regla de seguridad correcta que, sin su contrapartida, deja a la persona sin ninguna via.
+- **Solucion:** `POST /api/v1/auth/social/link` — vinculo **explicito** desde una sesion ya establecida (204 / 409 si la identidad ya es de otro usuario / 401 sin sesion). Ver `docs/MODULO_AUTH.md` §6.9 y la decision D-60. El mensaje del 409 ahora ademas dice a donde ir: *"Una vez adentro, podes vincular GOOGLE a tu cuenta desde tu perfil."*
+- **Como evitar que vuelva a pasar:** **cuando una regla de seguridad rechaza algo, la pregunta obligatoria de la revision es "¿y que hace la persona ahora?".** Si la respuesta es "todavia nada, queda pendiente", eso no es una nota al pie: es un **callejon sin salida en produccion** y va a la lista de bloqueantes, no al final de una seccion de diseño. Los dos casos de esta familia (E-56 y este) se detectaron leyendo el mensaje de error desde el lugar del usuario, no leyendo el codigo.
+
+## E-62 — Un CR suelto adentro de una linea: reescribir un .md con Python en modo texto parte la linea en dos
+
+- **Fecha:** 2026-09-01
+- **Donde:** `docs/MODULOS_A_AVANZAR.md`, filas D-53 y D-56 del registro de decisiones, al insertar la fila D-60 con un script de Python.
+- **Sintoma:** `git diff --stat` mostraba **7 lineas cambiadas** para una insercion de **1**. En el diff, dos filas de la tabla aparecian cortadas al medio:
+  ```
+  -| D-53 | ... la ruta `C:[CR]enaserPlayStore\src\lib\supabase.ts` sigue existiendo ...
+  +| D-53 | ... la ruta `C:
+  +enaserPlayStore\src\lib\supabase.ts` sigue existiendo ...
+  ```
+- **Causa real:** esas dos filas tenian un **CR suelto** (`0x0D`, sin `0x0A` detras) en el medio de la linea — un artefacto viejo de haber pegado una ruta de Windows. Al leer el archivo en modo texto (`io.open(p, encoding='utf-8')`), Python usa *universal newlines*: **traduce a salto de linea los tres finales posibles, incluido el CR solo**. Ese CR interno se volvio un salto real y partio la fila en dos; el `.split()` posterior ni se entera, para el ya eran dos lineas.
+- **Segundo sintoma, el mismo dia y el mismo archivo de bitacora:** reescribir `docs/BITACORA_ERRORES.md` en modo texto lo paso entero de LF a CRLF — `1298 insertions(+), 1231 deletions(-)` para agregar 20 lineas. Es **E-52** otra vez, en la misma sesion.
+- **Solucion:** `git checkout -- <archivo>` y rehacer la edicion **en modo binario**, sin decodificar ni tocar los finales de linea:
+  ```python
+  datos = open(p, 'rb').read()
+  i = datos.index(b'| D-59 |')
+  fin = datos.index(b'
+', i)                                  # primer LF real despues de la marca
+  salto = b'
+' if datos[fin-1:fin] == b'' else b'
+'
+  open(p, 'wb').write(datos[:fin+1] + fila_nueva + salto + datos[fin+1:])
+  ```
+  Resultado: `1 file changed, 1 insertion(+)`, que es lo que la tarea pedia.
+- **Reincidencia el mismo dia (2026-09-01), en la tarea D-61:** volvio a pasar exactamente igual, sobre los mismos `docs/MODULOS_A_AVANZAR.md` (las mismas filas D-53 y D-56 partidas en dos), `docs/MODULO_AUTH.md` y `docs/api/CONTRATO_IDENTIDAD.md`, los tres pasados enteros de LF a CRLF. **Lo que lo detecto fue el `git diff --stat` de esta misma entrada** (`70 insertions` para tres lineas cambiadas), y la reparacion no pudo ser `git checkout --` porque los archivos tenian cambios previos sin commitear: hubo que rehacerla en binario -- convertir CRLF a LF en todo el archivo y restaurar a mano los 2 CR sueltos (`C:` + CR + `enaserPlayStore`). **Moraleja reforzada: la regla no es "acordarse", es correr `git diff --numstat` despues de CADA script que toque un `.md`** -- si las deletions no son 0 cuando solo se inserto, esta pasando esto.
+- **Como evitarlo:** **para editar un archivo existente con un script, modo binario (`'rb'`/`'wb'`) siempre** — el modo texto de Python reescribe los finales de linea de TODO el archivo aunque se toque una sola linea, y ademas convierte los CR sueltos que hubiera adentro. Hermano directo de **E-52**. **La senal de alarma es la misma y cuesta un comando: `git diff --stat` despues de cada script.** Si el numero de lineas cambiadas no coincide con lo que se quiso cambiar, revertir y rehacer en binario — nunca seguir adelante ni "arreglar" el diff a mano. Para cambios chicos, la herramienta `Edit` no tiene este problema.
+
+## E-63 - El registro devolvia 400 para todo el mundo: el backend seguia exigiendo un telefono que el frontend ya no manda
+
+- **Fecha:** 2026-09-01
+- **Donde:** `POST /api/v1/account-requests` (alta por formulario) y `POST /api/v1/auth/social` (alta por Google), modulo `users`.
+- **Sintoma:** el alta publica respondia
+  ```
+  400 {"message":"phone: must not be blank"}
+  ```
+  para **cualquier** registro, porque el cliente ya habia dejado de enviar el campo (`phone: null`). El alta por Google fallaba antes incluso de eso, con:
+  ```
+  400 {"message":"Se requiere un telefono para completar el registro con este proveedor"}
+  ```
+- **Causa real:** el requisito estaba escrito en **cinco capas distintas**, y bajarlo en una sola no cambiaba nada: (1) `solicitudes_cuenta.telefono NOT NULL` en Postgres desde el baseline V1; (2) `@NotBlank` en `SubmitAccountRequestRequest`; (3) `@NotBlank` en `SubmitAccountRequestCommand`; (4) `requireNotBlank(phone, ...)` dentro del agregado `AccountRequest`; (5) `AutenticacionSocialService.requirePhoneParaAlta`. Es lo que la arquitectura busca a proposito -- validacion sintactica en el borde, semantica en el dominio, restriccion en la base -- pero implica que **un cambio de obligatoriedad se toca en cinco lugares o no se toca en ninguno**.
+- **El agravante que casi pasa desapercibido:** el punto (5) hacia que **ninguna cuenta nueva por login social pudiera registrarse**, porque Google/Apple/Facebook no devuelven telefono. Y como el `code` de OAuth es de un solo uso, el intento fallido lo consumia igual: reintentar exigia reiniciar el flujo del navegador. Estaba documentado en `docs/MODULO_AUTH.md` §6.7 punto 3 como "limitacion de diseño", no como defecto -- y por eso nadie lo trataba como urgente.
+- **Solucion:** decision del dueño del proyecto (D-61): el telefono se pide en la **Ficha Inicial del onboarding**, no en el alta. Se bajo la exigencia en las cinco capas, con la migracion `V14__solicitudes_cuenta_telefono_opcional.sql` para la base. El telefono se sigue guardando si viene; un valor en blanco se normaliza a NULL en el agregado.
+- **Como evitar que vuelva a pasar:** dos cosas concretas. **(a) Cuando un campo cambia de obligatorio a opcional (o al reves), la busqueda es por el nombre del campo en las cinco capas** -- migraciones, DTO web, comando de aplicacion, agregado y servicios que lo exijan a mano -- y no solo en la anotacion que salto en el error. La constraint de la base es la que no avisa hasta que el INSERT llega. **(b) Una limitacion de diseño que deja un flujo entero sin poder completarse no es una limitacion: es un defecto.** Misma familia que E-56 y E-61 -- una regla correcta que, sin su contrapartida, deja a la persona sin ninguna via. La pregunta de revision sigue siendo la misma: *"¿y que hace la persona ahora?"*.
+
+## E-64 — `@Autowired` de la clase concreta del adaptador empieza a fallar apenas se agrega el primer `@Cacheable` del proyecto
+
+- **Fecha:** 2026-09-01
+- **Donde:** `RankingPersistenceAdapterTest` (test de integracion existente), modulo `points`, al agregar cache Caffeine a `RankingPersistenceAdapter` (D-63).
+- **Sintoma:**
+  ```
+  UnsatisfiedDependencyException: ... Unsatisfied dependency expressed through field 'adapter':
+  Bean named 'rankingPersistenceAdapter' is expected to be of type
+  'com.renaser.os.points.infrastructure.adapter.out.persistence.ranking.RankingPersistenceAdapter'
+  but was actually of type 'jdk.proxy2.$Proxy118'
+  ```
+  en un test que hasta ese commit pasaba sin problema, sin haber tocado el test.
+- **Causa real:** `@EnableCaching` con `proxy-target-class` en su valor por defecto (`false`) envuelve cualquier bean que tenga **algun** metodo `@Cacheable`/`@CacheEvict` en un **proxy JDK dinamico**, que solo implementa las interfaces publicas del bean (`LoadRankingPort`, `SaveRankingSnapshotPort`, `LoadRankingCandidatosPort`), no la clase concreta. Antes de este cambio el proyecto no tenia ningun `@Cacheable` en todo el codebase, asi que **ningun bean estaba proxiado** y `@Autowired` de la clase concreta funcionaba por pura casualidad — el primer `@Cacheable` del repo fue el primero en exponer el problema.
+- **Solucion:** en los tests, autowirear por **interfaz** (el puerto), nunca por la clase del adaptador — que es ademas la forma correcta segun `CLAUDE.MD` §5.1.1 (los consumidores dependen del puerto, no de la implementacion). `RankingPersistenceAdapterTest` y `RankingPersistenceAdapterCacheTest` quedaron con `@Autowired LoadRankingPort`/`SaveRankingSnapshotPort`/`LoadRankingCandidatosPort` en vez de `@Autowired RankingPersistenceAdapter`.
+- **Como evitar que vuelva a pasar:** si un adaptador nuevo va a llevar `@Cacheable`/`@CacheEvict` (o cualquier otra anotacion que dispare un proxy AOP: `@Transactional` en un bean sin interfaz tiene el problema inverso), sus tests de integracion deben autowirear el puerto, no la clase — es ademas una señal de que el test estaba haciendo trampa contra la regla de hexagonal. Un test que SI necesita la clase concreta (para verificar algo que no esta en el puerto) es una señal de diseño a revisar, no un caso a resolver con `proxy-target-class=true`.
+
+## E-65 — `@JsonNaming` importado de Jackson 2 lo ignora Jackson 3 en silencio: 10 DTOs declaraban snake_case y mandaban camelCase
+
+- **Fecha:** 2026-09-01
+- **Dónde:** los 10 DTOs de `academy/infrastructure/adapter/in/rest/` (`CursoResponse`, `MiCursoResponse`, `LeccionResponse`, `ProgresoCursoResponse`, `SeccionConLeccionesResponse`, `LeccionLiteResponse`, `CursoBloqueadoResponse`, `RecursoLeccionResponse`, y dos más que solo lo mencionaban en javadoc).
+- **Síntoma:** la app mostraba *"No pudimos cargar los cursos. Revisá tu conexión e intentá de nuevo."* — un mensaje de red, con el backend respondiendo **200 y datos correctos**. `curl` al mismo endpoint devolvía los 25 cursos sin problema.
+- **Causa real:** los DTOs declaraban `@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)` con el import `com.fasterxml.jackson.databind.annotation.JsonNaming`, o sea **la anotación de Jackson 2**. **Spring Boot 4 serializa con Jackson 3**, que vive en `tools.jackson.*`:
+  ```
+  tools.jackson.core:jackson-databind:3.1.5            <- el que Spring Boot 4 usa de verdad
+  com.fasterxml.jackson.core:jackson-databind:2.21.5   <- de donde salia la anotacion
+  ```
+  Jackson 3 **no reconoce esa anotación y la ignora sin error ni warning**. Los DTOs declaraban un contrato y servían otro. Como el frontend se escribió leyendo las anotaciones del Java (que es lo correcto: son la fuente de verdad), los esquemas de validación quedaron en snake_case y **rechazaron todas las respuestas**.
+- **Por qué el mensaje engañaba:** el helper `mensajeDeError(error, porDefecto)` del frontend devuelve el texto por defecto para cualquier error que **no** sea un `ApiError`. Un fallo de validación de zod no es `ApiError`, así que salía el mensaje genérico de conexión — apuntando a la red cuando el problema era el contrato.
+- **Solución:** se quitaron las 10 anotaciones (no se corrigió el import) y se pasó el frontend a camelCase. **El cable no cambió**: nunca hicieron nada. Se eligió camelCase porque el resto de la API (`wall`, `chat`, `auth`) ya lo es — dejar `academy` en snake_case lo volvería la única excepción, y esas anotaciones venían de imitar el contrato viejo de Supabase, que ya se decidió no preservar. Cada archivo quedó con un comentario explicando el porqué, para que nadie las "restaure". `./mvnw test -Dtest='com.renaser.os.academy.**'`: **88/88 en verde**.
+- **Cómo evitarlo:** tres reglas.
+  1. **En Spring Boot 4, cualquier anotación de `com.fasterxml.jackson.databind.*` es sospechosa.** Jackson 3 movió `databind` a `tools.jackson.databind`. Las **anotaciones** de `com.fasterxml.jackson.annotation.*` (`@JsonProperty`, `@JsonUnwrapped`, `@JsonIgnore`) **sí siguen funcionando** — el artefacto `jackson-annotations` no cambió de paquete. Las de `databind` (`@JsonNaming`, `@JsonSerialize`, `@JsonDeserialize`) **no**. Chequeo de un comando:
+     ```bash
+     grep -rn "import com.fasterxml.jackson.databind" src/main/java --include=*.java
+     ```
+  2. **El contrato se verifica contra el cable, no contra el código.** Una anotación es una intención; lo único que prueba qué se manda es pedirlo:
+     ```bash
+     curl -s "$API/api/v1/cursos" -H "X-Auth-Token: $TOK" | python -c "import sys,json;print(list(json.load(sys.stdin)[0]))"
+     ```
+     Hacerlo **antes** de escribir el cliente cuesta treinta segundos y habría evitado todo esto.
+  3. **Un mensaje de error por defecto que dice "revisá tu conexión" oculta la causa.** Cuando el helper no reconoce el error, conviene que el texto sea neutro ("no pudimos cargar los cursos") y que el detalle real vaya al log, en vez de afirmar una causa que puede ser falsa. Relacionado con **E-60** y el error de Caffeine de hoy: los tres son fallas donde **el mensaje apuntaba a un lugar y la causa estaba en otro**.
+
+
+## E-66 — Lanzar `./mvnw test` sin esperar el resultado del propio chequeo de "¿hay otro build vivo?"
+
+- **Fecha:** 2026-09-01
+- **Dónde:** implementando D-65 (registro social en dos pasos), antes de correr la suite completa.
+- **Síntoma:** ninguno todavía — se evitó a tiempo, pero el riesgo era el mismo de **E-59** (dos `mvnw` sobre el mismo `target/`, `NoClassDefFoundError` masivo con clases `$1`/`$2`). Además se descubrió, por la vía difícil, que **hay otra sesión/agente trabajando en este mismo repo al mismo tiempo** (corriendo `mvn test -Dtest=com.renaser.os.academy.**` y editando este mismo archivo — su entrada quedó como **E-65**, con el mismo número que se había elegido acá independientemente).
+- **Causa real, y es distinta de E-59 aunque el riesgo final sea el mismo:** el chequeo recomendado por E-59 (`Get-CimInstance Win32_Process -Filter "name='java.exe'" | Select ProcessId,CommandLine`) es el correcto, pero es **lento en este entorno** — tardó más de 120 s y el propio tooling lo mandó a segundo plano. En vez de **esperar su resultado antes de seguir**, se lanzó `./mvnw -o test` igual, confiando en un chequeo previo más barato (`tasklist | grep -ci java.exe`, que solo cuenta procesos sin decir qué son). Cuando el chequeo lento por fin devolvió resultado, ya había **dos** `mvn test` corriendo a la vez sobre el mismo `target/`: uno preexistente y ajeno (arrancado antes de cualquiera de los chequeos propios) y el propio, recién lanzado.
+- **La lección concreta:** el conteo simple de `java.exe` **no sustituye** al chequeo por línea de comandos — puede devolver el mismo número "2 = normal" tanto si esos dos procesos son de verdad solo el IDE y la app, como si uno de ellos es en realidad un Maven ajeno que arrancó hace un minuto y todavía no generó su `surefirebooter`. Un chequeo que se manda a segundo plano por lento **hay que esperarlo y leer su resultado antes de lanzar el build** — lanzar "mientras tanto" el mismo tipo de comando que el chequeo está tratando de descartar anula el propósito del chequeo. **En un repo donde puede haber más de una sesión de trabajo activa, "no hay otro build vivo" nunca es un supuesto seguro — hay que verificarlo cada vez, no asumirlo de una corrida a la otra.**
+- **Qué se hizo al notarlo:** se intentó parar la tarea en segundo plano (para el wrapper de shell) y luego matar los procesos Java huérfanos que quedaron corriendo solos (`Stop-Process`/`taskkill`) — **ambos bloqueados por el clasificador de modo automático del harness** (no deja terminar procesos por su cuenta). Sin forma de matarlos, la única salida segura fue **esperar a que los dos builds terminaran solos** (monitoreando `tasklist` cada 15 s) y recién ahí correr la suite una sola vez, limpia, para tener un resultado confiable.
+- **Cómo evitarlo la próxima vez:** si el chequeo de "¿hay otro build vivo?" se manda a segundo plano por tardar más de lo esperado, **no lanzar nada que toque `target/` hasta leer su resultado** — ni siquiera algo aparentemente inocuo como `test-compile`. Si de todas formas se termina con dos builds superpuestos y no se puede matar el proceso ajeno, no hay atajo: esperar a que ambos terminen y volver a correr una vez sola. Y al editar un documento compartido como este (`docs/BITACORA_ERRORES.md`), asumir que puede haber otro escritor concurrente: releer antes de cada edición en vez de confiar en una lectura vieja.
