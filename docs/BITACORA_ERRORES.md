@@ -1196,3 +1196,36 @@ invalid accessor method in record ...ResultadoVerificacionDominio
 - **Causa real:** el handler declaraba `@ActorAutenticado UserId actorId` **y no lo pasaba a ningún lado**; el caso de uso, `ConsultarFeedUseCase.ultimoAutor()`, ni siquiera tenía un parámetro donde recibirlo. El parámetro del controller daba la apariencia de un endpoint autenticado (y por eso ninguna revisión lo marcó: firma idéntica a la de sus hermanos `feed`/`hidden`/`mine`), pero el guard vive en el servicio, y ahí no había nada. El método de al lado, `solicitarUrl()`, sí llama a `requireActorPuedePublicar` — la asimetría estaba a diez líneas de distancia.
 - **Solución:** `ultimoAutor()` → `ultimoAutor(UserId actorId)`, con `requireActorActivo(actorId)` como primera línea (el guard de `feed()`, porque es una lectura del Muro, no una publicación). El controller pasa el actor que ya tenía. Se agregó la prueba negativa dentro del servicio (`ultimoAutorConActorSuspendidoFalla`, que además verifica con `verify(loadPublicacionPort, never()).ultimaVisible()` que ni siquiera se consulta la base). En la misma pasada se encontró y corrigió el mismo hueco en `contarMisPublicaciones()` (`GET /api/v1/wall/mine`), aplicando la lección 2 de **E-42**: cuando a un método le falta un guard que sus hermanos sí tienen, se revisan **todos** los métodos de la clase, no solo el reportado.
 - **Cómo evitarlo:** **un parámetro de handler que se recibe y no se usa es un hallazgo de seguridad, no un warning de estilo.** Es el único síntoma visible cuando el guard vive una capa más adentro: la firma del controller miente sobre la protección real del endpoint. Dos formas concretas de agarrarlo antes: (1) activar/leer el aviso de "parámetro no usado" del IDE sobre los handlers REST — en un controller tonto (CLAUDE.MD §5.4.6) **todo** parámetro tiene que terminar dentro del comando del caso de uso; (2) al medir cobertura de autorización, listar los métodos del **servicio** y no los endpoints del controller — la firma del controller no dice nada sobre si hay guard, y este endpoint aparecía como "protegido" en cualquier conteo hecho desde el controller. Relacionado con **E-42** (mismo módulo, misma clase de falla: métodos hermanos sin el guard que sus vecinos sí tienen) y con **E-30** (fallar-cerrado es lo que evita que un chequeo ausente pase por chequeo presente).
+
+## E-59 — 535 `NoClassDefFoundError` en tests que estaban bien: dos `mvnw` corriendo a la vez sobre el mismo `target/`
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `./mvnw clean test` en `renaser-backend`, con otra sesión compilando el mismo directorio
+- **Síntoma:** el build falla con cientos de errores en tests que no se tocaron, todos sobre **clases anónimas**:
+  ```
+  [ERROR] RegistroPoliticasHabitoTest.resuelvePorClaveSistema:61->politica:35
+      NoClassDefFound com/renaser/os/habits/domain/model/politica/RegistroPoliticasHabitoTest$1
+  [ERROR] Tests run: 1834, Failures: 23, Errors: 535, Skipped: 0
+  [INFO] BUILD FAILURE
+  ```
+  El detalle que delata el caso: **el nombre de la clase que falta termina en `$1`, `$2`…** — son clases
+  anónimas, que se cargan **tarde**, recién cuando el test las ejecuta. Las clases normales ya estaban
+  cargadas en memoria y no fallan.
+- **Causa real:** dos procesos de Maven sobre el **mismo `target/`**. El segundo `clean` borra
+  `target/test-classes` mientras el surefire del primero todavía corre. Lo ya cargado en la JVM sigue
+  funcionando; lo que se carga de forma diferida (clases anónimas, lambdas) ya no encuentra su `.class` en
+  disco. **No hay ninguna regresión de código:** el mismo commit, corrido solo, dio **1886/1886** en verde.
+- **Solución:** esperar a que la otra compilación termine y repetir:
+  ```bash
+  tasklist | grep -ci java.exe      # 0 = no hay build corriendo
+  ./mvnw clean test
+  ```
+- **Cómo evitarlo:** **antes de correr `./mvnw clean test`, verificar que no haya otro build vivo** — es un
+  reflejo barato y evita media hora persiguiendo un fantasma. Para saber qué es cada `java.exe`:
+  ```powershell
+  Get-CimInstance Win32_Process -Filter "name='java.exe'" | Select ProcessId,CommandLine
+  ```
+  Un `surefirebooter-*.jar` en la línea de comandos = hay tests corriendo ahora mismo.
+  **Regla de lectura:** ante una avalancha de errores en tests que no se tocaron, y sobre todo si los nombres
+  llevan `$N`, la primera hipótesis es el entorno (build pisado, `target/` a medias), **no** el código. Un
+  cambio real rompe pocos tests y relacionados entre sí; un `target/` corrupto rompe cientos sin patrón.
