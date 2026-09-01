@@ -11,9 +11,11 @@ import com.renaser.os.phasecontracts.application.ports.out.contrato.ConsultarPro
 import com.renaser.os.phasecontracts.application.ports.out.contrato.LoadContratoPort;
 import com.renaser.os.phasecontracts.application.ports.out.contrato.SaveContratoPort;
 import com.renaser.os.phasecontracts.domain.model.contrato.ContratoFase;
+import com.renaser.os.phasecontracts.domain.model.contrato.ContratoFaseId;
 import com.renaser.os.phasecontracts.domain.model.contrato.FasePrograma;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -43,15 +45,17 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
     private final ConsultarProgresoParticipantePort progresoPort;
     private final AlmacenamientoPort almacenamientoPort;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public ContratoService(LoadContratoPort loadContratoPort, SaveContratoPort saveContratoPort,
                             ConsultarProgresoParticipantePort progresoPort, AlmacenamientoPort almacenamientoPort,
-                            Clock clock) {
+                            Clock clock, IdGenerator idGenerator) {
         this.loadContratoPort = loadContratoPort;
         this.saveContratoPort = saveContratoPort;
         this.progresoPort = progresoPort;
         this.almacenamientoPort = almacenamientoPort;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -67,7 +71,9 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
             }
         }
 
-        ContratoFase firmado = ContratoFase.firmar(command.participanteId(), progreso.diaPrograma(), clock);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
+        ContratoFase firmado = ContratoFase.firmar(ContratoFaseId.of(idGenerator.newId()),
+                command.participanteId(), progreso.diaPrograma(), clock);
         return saveContratoPort.save(firmado);
     }
 

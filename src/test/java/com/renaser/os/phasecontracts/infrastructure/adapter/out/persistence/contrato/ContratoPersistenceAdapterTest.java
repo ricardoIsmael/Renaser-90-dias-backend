@@ -2,6 +2,7 @@ package com.renaser.os.phasecontracts.infrastructure.adapter.out.persistence.con
 
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.phasecontracts.domain.model.contrato.ContratoFase;
+import com.renaser.os.phasecontracts.domain.model.contrato.ContratoFaseId;
 import com.renaser.os.phasecontracts.domain.model.contrato.FasePrograma;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
@@ -68,7 +69,7 @@ class ContratoPersistenceAdapterTest {
 
     @Test
     void guardaYRecuperaUnContratoPorParticipanteYFase() {
-        ContratoFase contrato = ContratoFase.firmar(participanteId, 30, CLOCK);
+        ContratoFase contrato = ContratoFase.firmar(ContratoFaseId.of(UUID.randomUUID()), participanteId, 30, CLOCK);
 
         adapter.save(contrato);
 
@@ -89,9 +90,9 @@ class ContratoPersistenceAdapterTest {
     @Test
     void listaTodosLosContratosDeUnParticipanteOrdenadosPorFirma() {
         // dos fixtures propias, dias distintos, misma persona, dos fases.
-        adapter.save(ContratoFase.firmar(participanteId, 20, CLOCK));
+        adapter.save(ContratoFase.firmar(ContratoFaseId.of(UUID.randomUUID()), participanteId, 20, CLOCK));
         FixedClock clockMasTarde = FixedClock.at(CLOCK.now().plusSeconds(3600));
-        adapter.save(ContratoFase.firmar(participanteId, 40, clockMasTarde));
+        adapter.save(ContratoFase.firmar(ContratoFaseId.of(UUID.randomUUID()), participanteId, 40, clockMasTarde));
 
         List<ContratoFase> contratos = adapter.todosDeParticipante(participanteId);
 
@@ -103,7 +104,7 @@ class ContratoPersistenceAdapterTest {
     @Test
     @DisplayName("UNIQUE (participante_id, fase) del baseline: dos contratos para el mismo participante y fase colisionan en Postgres")
     void dosContratosParaElMismoParticipanteYFaseColisionanEnLaBaseDeDatos() {
-        adapter.save(ContratoFase.firmar(participanteId, 20, CLOCK));
+        adapter.save(ContratoFase.firmar(ContratoFaseId.of(UUID.randomUUID()), participanteId, 20, CLOCK));
         entityManager.flush();
 
         // segundo contrato para la MISMA fase, saltando la verificacion de idempotencia que
@@ -111,7 +112,7 @@ class ContratoPersistenceAdapterTest {
         // ContratoPersistenceAdapter.save() usa repository.save() sin flush -- la violacion solo
         // se ve al forzar el flush explicitamente.
         assertThatThrownBy(() -> {
-            adapter.save(ContratoFase.firmar(participanteId, 25, CLOCK));
+            adapter.save(ContratoFase.firmar(ContratoFaseId.of(UUID.randomUUID()), participanteId, 25, CLOCK));
             entityManager.flush();
         }).isInstanceOf(DataIntegrityViolationException.class);
     }
@@ -122,7 +123,7 @@ class ContratoPersistenceAdapterTest {
         insertarUsuario(otro, "APRENDIZ");
         insertarParticipante(otro, 70);
 
-        adapter.save(ContratoFase.firmar(otro, 70, CLOCK)); // Fase IV
+        adapter.save(ContratoFase.firmar(ContratoFaseId.of(UUID.randomUUID()), otro, 70, CLOCK)); // Fase IV
 
         assertThat(adapter.porParticipanteYFase(otro, FasePrograma.FASE_4_ASCENSION)).isPresent();
         assertThat(adapter.porParticipanteYFase(otro, FasePrograma.FASE_2_DESARROLLO)).isEmpty();
