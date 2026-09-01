@@ -14,18 +14,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ConversacionTest {
 
     private static final Instant AHORA = Instant.parse("2026-08-25T10:00:00Z");
+    private static final ConversacionId ID = ConversacionId.of(
+            UUID.fromString("33333333-3333-3333-3333-333333333333"));
 
     @Test
     void crearCelulaExigeCelulaId() {
-        assertThatThrownBy(() -> Conversacion.crearCelula(null, AHORA))
+        assertThatThrownBy(() -> Conversacion.crearCelula(ID, null, AHORA))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void crearCelulaProduceUnaConversacionCoherente() {
         UUID celulaId = UUID.randomUUID();
-        Conversacion c = Conversacion.crearCelula(celulaId, AHORA);
+        Conversacion c = Conversacion.crearCelula(ID, celulaId, AHORA);
 
+        assertThat(c.id()).isEqualTo(ID);
         assertThat(c.tipo()).isEqualTo(TipoConversacion.CELULA);
         assertThat(c.celulaId()).isEqualTo(celulaId);
         assertThat(c.claveDirecta()).isNull();
@@ -33,15 +36,15 @@ class ConversacionTest {
 
     @Test
     void crearDirectaExigeClaveDirecta() {
-        assertThatThrownBy(() -> Conversacion.crearDirecta(null, AHORA))
+        assertThatThrownBy(() -> Conversacion.crearDirecta(ID, null, AHORA))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> Conversacion.crearDirecta("  ", AHORA))
+        assertThatThrownBy(() -> Conversacion.crearDirecta(ID, "  ", AHORA))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void crearDirectaProduceUnaConversacionCoherente() {
-        Conversacion c = Conversacion.crearDirecta("a_b", AHORA);
+        Conversacion c = Conversacion.crearDirecta(ID, "a_b", AHORA);
 
         assertThat(c.tipo()).isEqualTo(TipoConversacion.DIRECTA);
         assertThat(c.claveDirecta()).isEqualTo("a_b");
@@ -50,7 +53,7 @@ class ConversacionTest {
 
     @Test
     void crearGlobalNoLlevaCelulaNiClave() {
-        Conversacion c = Conversacion.crearGlobal(AHORA);
+        Conversacion c = Conversacion.crearGlobal(ID, AHORA);
 
         assertThat(c.tipo()).isEqualTo(TipoConversacion.GLOBAL);
         assertThat(c.celulaId()).isNull();
@@ -59,37 +62,37 @@ class ConversacionTest {
 
     @Test
     void rehydrateRechazaUnaCelulaSinCelulaId() {
-        assertThatThrownBy(() -> Conversacion.rehydrate(ConversacionId.newId(), TipoConversacion.CELULA, null, null,
-                null, AHORA))
+        assertThatThrownBy(() -> Conversacion.rehydrate(ConversacionId.of(UUID.randomUUID()),
+                TipoConversacion.CELULA, null, null, null, AHORA))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rehydrateRechazaUnaCelulaConClaveDirecta() {
-        assertThatThrownBy(() -> Conversacion.rehydrate(ConversacionId.newId(), TipoConversacion.CELULA,
-                UUID.randomUUID(), "a_b", null, AHORA))
+        assertThatThrownBy(() -> Conversacion.rehydrate(ConversacionId.of(UUID.randomUUID()),
+                TipoConversacion.CELULA, UUID.randomUUID(), "a_b", null, AHORA))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rehydrateRechazaUnaDirectaSinClave() {
-        assertThatThrownBy(() -> Conversacion.rehydrate(ConversacionId.newId(), TipoConversacion.DIRECTA, null, null,
-                null, AHORA))
+        assertThatThrownBy(() -> Conversacion.rehydrate(ConversacionId.of(UUID.randomUUID()),
+                TipoConversacion.DIRECTA, null, null, null, AHORA))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rehydrateRechazaUnaGlobalConCelulaId() {
-        assertThatThrownBy(() -> Conversacion.rehydrate(ConversacionId.newId(), TipoConversacion.GLOBAL,
-                UUID.randomUUID(), null, null, AHORA))
+        assertThatThrownBy(() -> Conversacion.rehydrate(ConversacionId.of(UUID.randomUUID()),
+                TipoConversacion.GLOBAL, UUID.randomUUID(), null, null, AHORA))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rehydrateAceptaUnaConversacionCoherente() {
         UUID celulaId = UUID.randomUUID();
-        Conversacion c = Conversacion.rehydrate(ConversacionId.newId(), TipoConversacion.CELULA, celulaId, null,
-                null, AHORA);
+        Conversacion c = Conversacion.rehydrate(ConversacionId.of(UUID.randomUUID()),
+                TipoConversacion.CELULA, celulaId, null, null, AHORA);
 
         assertThat(c.celulaId()).isEqualTo(celulaId);
     }
@@ -104,7 +107,7 @@ class ConversacionTest {
 
     @Test
     void renombradaCambiaElNombreDeUnaGlobal() {
-        Conversacion global = Conversacion.crearGlobal(AHORA);
+        Conversacion global = Conversacion.crearGlobal(ID, AHORA);
 
         Conversacion renombrada = global.renombrada("  Comunidad Renaser  ");
 
@@ -116,7 +119,7 @@ class ConversacionTest {
 
     @Test
     void renombradaRechazaUnNombreVacio() {
-        Conversacion global = Conversacion.crearGlobal(AHORA);
+        Conversacion global = Conversacion.crearGlobal(ID, AHORA);
 
         assertThatThrownBy(() -> global.renombrada("   ")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> global.renombrada(null)).isInstanceOf(IllegalArgumentException.class);
@@ -124,8 +127,8 @@ class ConversacionTest {
 
     @Test
     void renombradaRechazaUnaConversacionQueNoEsGlobal() {
-        Conversacion celula = Conversacion.crearCelula(UUID.randomUUID(), AHORA);
-        Conversacion directa = Conversacion.crearDirecta("a_b", AHORA);
+        Conversacion celula = Conversacion.crearCelula(ID, UUID.randomUUID(), AHORA);
+        Conversacion directa = Conversacion.crearDirecta(ID, "a_b", AHORA);
 
         assertThatThrownBy(() -> celula.renombrada("Nuevo nombre")).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> directa.renombrada("Nuevo nombre")).isInstanceOf(IllegalStateException.class);

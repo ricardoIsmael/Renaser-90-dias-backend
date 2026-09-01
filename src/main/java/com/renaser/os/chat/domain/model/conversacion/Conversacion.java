@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.experimental.Accessors;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -33,22 +34,31 @@ public final class Conversacion {
     private final String nombre;
     private final Instant creadoEn;
 
-    public static Conversacion crearCelula(UUID celulaId, Instant ahora) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code ConversacionService}). Asi la
+     * factoria es referencialmente transparente y un test puede fijar el id que espera
+     * (CLAUDE.MD §5.4.7). Vale igual para {@link #crearDirecta} y {@link #crearGlobal}.
+     */
+    public static Conversacion crearCelula(ConversacionId id, UUID celulaId, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         if (celulaId == null) {
             throw new IllegalArgumentException("celulaId es obligatorio para una conversacion de celula");
         }
-        return new Conversacion(ConversacionId.newId(), TipoConversacion.CELULA, celulaId, null, null, ahora);
+        return new Conversacion(id, TipoConversacion.CELULA, celulaId, null, null, ahora);
     }
 
-    public static Conversacion crearDirecta(String claveDirecta, Instant ahora) {
+    public static Conversacion crearDirecta(ConversacionId id, String claveDirecta, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         if (claveDirecta == null || claveDirecta.isBlank()) {
             throw new IllegalArgumentException("claveDirecta es obligatoria para una conversacion directa");
         }
-        return new Conversacion(ConversacionId.newId(), TipoConversacion.DIRECTA, null, claveDirecta, null, ahora);
+        return new Conversacion(id, TipoConversacion.DIRECTA, null, claveDirecta, null, ahora);
     }
 
-    public static Conversacion crearGlobal(Instant ahora) {
-        return new Conversacion(ConversacionId.newId(), TipoConversacion.GLOBAL, null, null, "Global", ahora);
+    public static Conversacion crearGlobal(ConversacionId id, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
+        return new Conversacion(id, TipoConversacion.GLOBAL, null, null, "Global", ahora);
     }
 
     /**

@@ -14,6 +14,7 @@ import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -46,6 +47,8 @@ import static org.mockito.Mockito.when;
 class ConversacionServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-25T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, la factoria del agregado ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadConversacionPort loadConversacionPort;
@@ -63,6 +66,8 @@ class ConversacionServiceTest {
     private LoadMensajePort loadMensajePort;
     @Mock
     private UserSummaryFinder userSummaryFinder;
+    @Mock
+    private IdGenerator idGenerator;
 
     private ConversacionService service;
 
@@ -74,7 +79,9 @@ class ConversacionServiceTest {
     @BeforeEach
     void setUp() {
         service = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
-                esParticipantePort, marcarLeidoPort, contarNoLeidosPort, loadMensajePort, userSummaryFinder, CLOCK);
+                esParticipantePort, marcarLeidoPort, contarNoLeidosPort, loadMensajePort, userSummaryFinder,
+                CLOCK, idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
                 Optional.of(new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(otroActivo)).thenReturn(
@@ -103,7 +110,8 @@ class ConversacionServiceTest {
     @Test
     void obtenerOCrearEsIdempotenteSiYaExisteLaClaveDirecta() {
         String clave = Conversacion.claveDirectaDe(activo, otroActivo);
-        Conversacion existente = Conversacion.crearDirecta(clave, CLOCK.now());
+        Conversacion existente = Conversacion.crearDirecta(ConversacionId.of(UUID.randomUUID()), clave,
+                CLOCK.now());
         when(loadConversacionPort.porClaveDirecta(clave)).thenReturn(Optional.of(existente));
 
         Conversacion resultado = service.obtenerOCrear(new CrearConversacionDirectaCommand(activo, otroActivo));
@@ -125,7 +133,7 @@ class ConversacionServiceTest {
 
     @Test
     void listarResuelveElUltimoMensajeYElConteoDeNoLeidosEnUnaSolaLlamadaCadaUno() {
-        Conversacion c1 = Conversacion.crearGlobal(CLOCK.now());
+        Conversacion c1 = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
         when(loadConversacionPort.misConversaciones(activo)).thenReturn(List.of(c1));
         when(loadMensajePort.ultimosPorConversacion(any())).thenReturn(Map.of());
         when(contarNoLeidosPort.contarNoLeidos(eq(activo), any())).thenReturn(Map.of(c1.id(), 3L));
@@ -146,9 +154,9 @@ class ConversacionServiceTest {
 
     @Test
     void marcarLeidoRechazaAQuienNoEsParticipante() {
-        ConversacionId conversacionId = ConversacionId.newId();
+        ConversacionId conversacionId = ConversacionId.of(UUID.randomUUID());
         when(loadConversacionPort.porId(conversacionId))
-                .thenReturn(Optional.of(Conversacion.crearGlobal(CLOCK.now())));
+                .thenReturn(Optional.of(Conversacion.crearGlobal(conversacionId, CLOCK.now())));
         when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(false);
 
         assertThatThrownBy(() -> service.marcarLeido(new MarcarLeidoCommand(activo, conversacionId)))
@@ -159,9 +167,9 @@ class ConversacionServiceTest {
 
     @Test
     void marcarLeidoFuncionaParaUnParticipante() {
-        ConversacionId conversacionId = ConversacionId.newId();
+        ConversacionId conversacionId = ConversacionId.of(UUID.randomUUID());
         when(loadConversacionPort.porId(conversacionId))
-                .thenReturn(Optional.of(Conversacion.crearGlobal(CLOCK.now())));
+                .thenReturn(Optional.of(Conversacion.crearGlobal(conversacionId, CLOCK.now())));
         when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
 
         service.marcarLeido(new MarcarLeidoCommand(activo, conversacionId));
@@ -182,7 +190,7 @@ class ConversacionServiceTest {
 
     @Test
     void unirseEsIdempotenteSiYaEsParticipante() {
-        Conversacion global = Conversacion.crearGlobal(CLOCK.now());
+        Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
         when(loadConversacionPort.global()).thenReturn(Optional.of(global));
         when(esParticipantePort.esParticipante(global.id(), activo)).thenReturn(true);
 
@@ -195,7 +203,8 @@ class ConversacionServiceTest {
     void crearParaCelulaEsIdempotenteSiYaExisteLaConversacion() {
         UUID celulaId = UUID.randomUUID();
         when(loadConversacionPort.porCelulaId(celulaId))
-                .thenReturn(Optional.of(Conversacion.crearCelula(celulaId, CLOCK.now())));
+                .thenReturn(Optional.of(Conversacion.crearCelula(ConversacionId.of(UUID.randomUUID()), celulaId,
+                        CLOCK.now())));
 
         service.crearParaCelula(celulaId);
 
@@ -214,7 +223,7 @@ class ConversacionServiceTest {
 
     @Test
     void renombrarFuncionaParaUnAdmin() {
-        Conversacion global = Conversacion.crearGlobal(CLOCK.now());
+        Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
         when(loadConversacionPort.global()).thenReturn(Optional.of(global));
 
         Conversacion renombrada = service.renombrar(new RenombrarConversacionGlobalCommand(admin, "Comunidad Renaser"));
@@ -225,7 +234,7 @@ class ConversacionServiceTest {
 
     @Test
     void renombrarRechazaAQuienNoEsAdminNiAlquimista() {
-        Conversacion global = Conversacion.crearGlobal(CLOCK.now());
+        Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
         lenient().when(loadConversacionPort.global()).thenReturn(Optional.of(global));
 
         assertThatThrownBy(() -> service.renombrar(new RenombrarConversacionGlobalCommand(activo, "Otro nombre")))

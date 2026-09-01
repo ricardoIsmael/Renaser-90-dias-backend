@@ -14,6 +14,7 @@ import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserStatus;
@@ -46,11 +47,12 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     private final PublicarMensajeFanoutPort publicarMensajeFanoutPort;
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public MensajeService(LoadConversacionPort loadConversacionPort, EsParticipantePort esParticipantePort,
                            MarcarLeidoPort marcarLeidoPort, SaveMensajePort saveMensajePort,
                            LoadMensajePort loadMensajePort, PublicarMensajeFanoutPort publicarMensajeFanoutPort,
-                           UserSummaryFinder userSummaryFinder, Clock clock) {
+                           UserSummaryFinder userSummaryFinder, Clock clock, IdGenerator idGenerator) {
         this.loadConversacionPort = loadConversacionPort;
         this.esParticipantePort = esParticipantePort;
         this.marcarLeidoPort = marcarLeidoPort;
@@ -59,6 +61,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         this.publicarMensajeFanoutPort = publicarMensajeFanoutPort;
         this.userSummaryFinder = userSummaryFinder;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -72,9 +75,11 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         }
 
         Instant ahora = clock.now();
-        Mensaje mensaje = Mensaje.escribir(command.conversacionId(), command.actorId(), command.tipo(),
-                command.texto(), command.mediaBucket(), command.mediaRuta(), command.mediaMime(),
-                command.mediaBytes(), command.mediaDuracionS(), command.respuestaAId(), ahora);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
+        Mensaje mensaje = Mensaje.escribir(MensajeId.of(idGenerator.newId()), command.conversacionId(),
+                command.actorId(), command.tipo(), command.texto(), command.mediaBucket(), command.mediaRuta(),
+                command.mediaMime(), command.mediaBytes(), command.mediaDuracionS(), command.respuestaAId(),
+                ahora);
         Mensaje guardado = saveMensajePort.save(mensaje);
         // El emisor "ya leyo" hasta el mensaje que acaba de escribir.
         marcarLeidoPort.marcarLeido(command.conversacionId(), command.actorId(), ahora);
