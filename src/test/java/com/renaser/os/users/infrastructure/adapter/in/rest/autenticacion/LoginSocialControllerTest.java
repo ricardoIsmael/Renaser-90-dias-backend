@@ -80,7 +80,7 @@ class LoginSocialControllerTest {
 
     @Test
     void identidadNuevaDevuelve202ConLaSolicitudYNoEstableceSesion() throws Exception {
-        AccountRequestId solicitudId = AccountRequestId.newId();
+        AccountRequestId solicitudId = AccountRequestId.of(UUID.randomUUID());
         when(iniciarSesionConProveedorUseCase.iniciarSesion(any()))
                 .thenReturn(new ResultadoLoginSocial.SolicitudCreada(solicitudId));
 
@@ -99,7 +99,7 @@ class LoginSocialControllerTest {
      */
     @Test
     void solicitudPendienteDevuelve202EnRevisionYNoUnError() throws Exception {
-        AccountRequestId solicitudId = AccountRequestId.newId();
+        AccountRequestId solicitudId = AccountRequestId.of(UUID.randomUUID());
         when(iniciarSesionConProveedorUseCase.iniciarSesion(any()))
                 .thenReturn(new ResultadoLoginSocial.SolicitudEnRevision(solicitudId));
 

@@ -22,7 +22,8 @@ class AccountRequestTest {
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
 
     private static AccountRequest pendingRequest() {
-        return AccountRequest.submit(newUserId(), new Email("aspirante@renaser.com"), "Ana Aspirante",
+        return AccountRequest.submit(newRequestId(), newUserId(), new Email("aspirante@renaser.com"),
+                "Ana Aspirante",
                 "+51999999999", "Lima", "203.0.113.5", null, CLOCK);
     }
 
@@ -37,6 +38,10 @@ class AccountRequestTest {
 
     private static UserId newUserId() {
         return UserId.of(UUID.randomUUID());
+    }
+
+    private static AccountRequestId newRequestId() {
+        return AccountRequestId.of(UUID.randomUUID());
     }
 
     @Test
@@ -104,7 +109,8 @@ class AccountRequestTest {
             + "usa para crear la IdentidadExterna")
     void elOrigenSocialSobreviveHastaLaAprobacion() {
         OrigenSocial origen = new OrigenSocial(ProveedorIdentidad.GOOGLE, "google-sub-1");
-        AccountRequest request = AccountRequest.submit(newUserId(), new Email("social@renaser.com"),
+        AccountRequest request = AccountRequest.submit(newRequestId(), newUserId(),
+                new Email("social@renaser.com"),
                 "Sofia Social", "+51999999999", "Lima", "203.0.113.5", origen, CLOCK);
 
         request.approve(adminActor(), newUserId(), CLOCK);

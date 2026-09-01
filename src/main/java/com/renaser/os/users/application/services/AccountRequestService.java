@@ -1,6 +1,7 @@
 package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.TokenVerificacionEmailInvalidoException;
 import com.renaser.os.shared.domain.UserId;
@@ -36,7 +37,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.NoSuchElementException;
-import java.util.UUID;
 
 /**
  * Casos de uso de AccountRequest (CLAUDE.MD §4.3). Una clase por agregado agrupando
@@ -71,6 +71,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
     private final RequireAdminGuard requireAdminGuard;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public AccountRequestService(LoadAccountRequestPort loadAccountRequestPort,
                                   SaveAccountRequestPort saveAccountRequestPort,
@@ -82,7 +83,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
                                   SaveParticipacionProgramaPort saveParticipacionProgramaPort,
                                   TokenVerificacionEmailPort tokenVerificacionEmailPort,
                                   RequireActiveUserGuard requireActiveUserGuard, RequireAdminGuard requireAdminGuard,
-                                  ApplicationEventPublisher events, Clock clock) {
+                                  ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator) {
         this.loadAccountRequestPort = loadAccountRequestPort;
         this.saveAccountRequestPort = saveAccountRequestPort;
         this.deleteAccountRequestPort = deleteAccountRequestPort;
@@ -98,14 +99,16 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         this.requireAdminGuard = requireAdminGuard;
         this.events = events;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     /**
      * Genera el UUID del solicitante acá adentro (2026-08-27, D-49): hasta ahora este id lo
      * creaba Supabase Auth del lado del cliente y viajaba en el request — desde que Renaser OS
      * emite y valida su propia identidad de punta a punta, no hay ninguna razón para depender
-     * de un tercero para algo tan simple como un UUID nuevo. Mismo patrón que
-     * {@code AccountRequestId.newId()}/{@code CelulaId.newId()} en el resto del código.
+     * de un tercero para algo tan simple como un UUID nuevo. Ese UUID sale del puerto
+     * {@link com.renaser.os.shared.domain.IdGenerator} (D-59), el mismo camino que el id de la
+     * solicitud: {@code domain/} no sortea identidad, la recibe ya armada (CLAUDE.MD §5.4.7).
      *
      * <p>Exige y consume {@code verificationToken} (2026-08-27): el reemplazo propio del email
      * de un solo uso que antes emitia Supabase Auth. Se valida ANTES de tocar nada mas — si el
@@ -119,13 +122,13 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         requireEmailVerificado(command.email(), command.verificationToken());
 
         Email email = new Email(command.email());
-        User usuario = User.registrarPendienteAprobacion(UserId.of(UUID.randomUUID()), email,
+        User usuario = User.registrarPendienteAprobacion(UserId.of(idGenerator.newId()), email,
                 command.fullName());
         saveUserPort.save(usuario);
         guardarCredencialSiEligioContrasena(usuario, command.contrasena());
 
-        AccountRequest request = AccountRequest.submit(usuario.id(), email,
-                command.fullName(), command.phone(), command.city(), command.requestIp(),
+        AccountRequest request = AccountRequest.submit(AccountRequestId.of(idGenerator.newId()), usuario.id(),
+                email, command.fullName(), command.phone(), command.city(), command.requestIp(),
                 origenSocialDe(command), clock);
         return saveAccountRequestPort.save(request).id();
     }

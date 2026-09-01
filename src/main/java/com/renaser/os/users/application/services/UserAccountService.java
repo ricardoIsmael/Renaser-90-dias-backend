@@ -1,6 +1,7 @@
 package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -34,7 +35,6 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Casos de uso de User que no son alta/aprobacion (eso vive en AccountRequestService).
@@ -62,6 +62,7 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public UserAccountService(LoadUserPort loadUserPort, SaveUserPort saveUserPort,
                                LoadMentorProfilePort loadMentorProfilePort,
@@ -69,7 +70,7 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
                                LoadParticipacionProgramaPort loadParticipacionProgramaPort,
                                RequireActiveUserGuard requireActiveUserGuard, SaveCredencialPort saveCredencialPort,
                                EnviarEmailPort enviarEmailPort, PasswordEncoder passwordEncoder,
-                               ApplicationEventPublisher events, Clock clock) {
+                               ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator) {
         this.loadUserPort = loadUserPort;
         this.saveUserPort = saveUserPort;
         this.loadMentorProfilePort = loadMentorProfilePort;
@@ -81,6 +82,7 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
         this.passwordEncoder = passwordEncoder;
         this.events = events;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -100,7 +102,8 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
     @Transactional
     public UserId inviteStaff(InviteStaffCommand command) {
         User actor = requireActiveUserGuard.of(command.actorId());
-        UserId newId = UserId.of(UUID.randomUUID());
+        // La identidad entra por el puerto IdGenerator, no se sortea aca (CLAUDE.MD 5.4.7, D-59).
+        UserId newId = UserId.of(idGenerator.newId());
         User invited = User.invite(newId, new Email(command.email()), command.fullName(), command.role(), actor);
         User saved = saveUserPort.save(invited);
         ensureMentorProfileIfNeeded(saved);

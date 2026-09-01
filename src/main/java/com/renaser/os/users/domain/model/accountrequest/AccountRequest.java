@@ -63,12 +63,13 @@ public final class AccountRequest {
      * {@code IdentidadExterna}: el {@code sub} se verifica antes de esta llamada y no vuelve a
      * existir en ningun otro lado (A-7, docs/MODULO_AUTH.md §6.7).
      */
-    public static AccountRequest submit(UserId usuarioId, Email email, String fullName,
+    public static AccountRequest submit(AccountRequestId id, UserId usuarioId, Email email, String fullName,
                                          String phone, String city, String requestIp,
                                          OrigenSocial origenSocial, Clock clock) {
         Instant now = clock.now();
-        return new AccountRequest(AccountRequestId.newId(), Objects.requireNonNull(usuarioId,
-                "usuarioId es obligatorio"), Objects.requireNonNull(email, "email es obligatorio"),
+        return new AccountRequest(Objects.requireNonNull(id, "id es obligatorio"),
+                Objects.requireNonNull(usuarioId, "usuarioId es obligatorio"),
+                Objects.requireNonNull(email, "email es obligatorio"),
                 requireNotBlank(fullName, "El nombre no puede ser vacio"),
                 requireNotBlank(phone, "El telefono no puede ser vacio"), city, origenSocial,
                 AccountRequestStatus.PENDING, null, null, null, null, requestIp, now, now);

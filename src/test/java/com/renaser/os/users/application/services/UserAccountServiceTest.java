@@ -2,6 +2,7 @@ package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -52,6 +53,8 @@ import static org.mockito.Mockito.when;
 class UserAccountServiceTest {
 
     private static final Clock CLOCK = FixedClock.at(Instant.parse("2026-08-25T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, inviteStaff() ya no la sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadUserPort loadUserPort;
@@ -71,6 +74,8 @@ class UserAccountServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private org.springframework.context.ApplicationEventPublisher events;
+    @Mock
+    private IdGenerator idGenerator;
 
     private UserAccountService service;
 
@@ -78,9 +83,10 @@ class UserAccountServiceTest {
     void setUp() {
         service = new UserAccountService(loadUserPort, saveUserPort, loadMentorProfilePort, saveMentorProfilePort,
                 loadParticipacionProgramaPort, new RequireActiveUserGuard(loadUserPort), saveCredencialPort,
-                enviarEmailPort, passwordEncoder, events, CLOCK);
+                enviarEmailPort, passwordEncoder, events, CLOCK, idGenerator);
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(passwordEncoder.encode(org.mockito.ArgumentMatchers.anyString())).thenReturn("{bcrypt}hash");
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
     }
 
     private static UserId id() {

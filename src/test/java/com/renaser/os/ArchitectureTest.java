@@ -91,32 +91,12 @@ class ArchitectureTest {
                 .check(CLASSES);
     }
 
-    /**
-     * Modulos cuyo {@code domain/} todavia genera identidad por su cuenta. <b>Esta lista se vacia,
-     * nunca crece</b>: cada modulo migrado al puerto {@code IdGenerator} sale de aca, y cuando quede
-     * vacia se borra junto con el {@code resideOutsideOfPackages}. Si alguien agrega un modulo nuevo
-     * a esta lista en vez de usar el puerto, el diff lo deja a la vista en la revision.
-     *
-     * <p>Origen: D-59. Al abrirla habia 32 archivos de {@code domain/} llamando a
-     * {@code UUID.randomUUID()}.
-     */
-    private static final String[] MODULOS_SIN_MIGRAR_A_IDGENERATOR = {
-            "com.renaser.os.rag..",
-            "com.renaser.os.support..",
-            "com.renaser.os.chat..",
-            "com.renaser.os.users..",
-            "com.renaser.os.phasecontracts..",
-            "com.renaser.os.onboarding..",
-            "com.renaser.os.notifications..",
-            "com.renaser.os.evidence..",
-    };
 
     @Test
     @DisplayName("domain/ no genera identidad: el id entra por el puerto IdGenerator")
     void domainDoesNotGenerateItsOwnIdentity() {
         noClasses()
                 .that().resideInAPackage("..domain..")
-                .and().resideOutsideOfPackages(MODULOS_SIN_MIGRAR_A_IDGENERATOR)
                 .should().callMethod(UUID.class, "randomUUID")
                 .because("domain/ es puro y determinista: sin I/O, sin reloj, sin aleatoriedad "
                         + "(CLAUDE.MD sec. 5.4.7). La identidad entra por IdGenerator, igual que la "

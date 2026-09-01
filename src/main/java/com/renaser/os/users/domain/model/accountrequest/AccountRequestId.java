@@ -7,6 +7,11 @@ import java.util.UUID;
  *
  * Distinta de UserId: una AccountRequest tiene su propio id, y ademas guarda el
  * UserId de Supabase Auth que tendra el usuario si se aprueba (ver AccountRequest).
+ *
+ * <p>Valida y envuelve un UUID, pero <b>no lo genera</b>: la generacion vive fuera de
+ * {@code domain/}, detras del puerto {@link com.renaser.os.shared.domain.IdGenerator}, y el
+ * caso de uso arma el id con {@code AccountRequestId.of(idGenerator.newId())} antes de invocar
+ * la factoria del agregado (CLAUDE.MD §5.4.7: {@code domain/} sin aleatoriedad).
  */
 public record AccountRequestId(UUID value) {
 
@@ -18,10 +23,6 @@ public record AccountRequestId(UUID value) {
 
     public static AccountRequestId of(UUID value) {
         return new AccountRequestId(value);
-    }
-
-    public static AccountRequestId newId() {
-        return new AccountRequestId(UUID.randomUUID());
     }
 
     @Override

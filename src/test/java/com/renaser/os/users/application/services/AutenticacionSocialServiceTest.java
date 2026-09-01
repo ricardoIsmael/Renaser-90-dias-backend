@@ -83,7 +83,8 @@ class AutenticacionSocialServiceTest {
 
     /** Una solicitud abierta por Google, tal cual la deja el alta social. */
     private static AccountRequest solicitudSocialPendiente(String sujeto, String email) {
-        return AccountRequest.submit(UserId.of(UUID.randomUUID()), new Email(email), "Alguien",
+        return AccountRequest.submit(AccountRequestId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                new Email(email), "Alguien",
                 "+54 341 1234567", "Rosario", "127.0.0.1",
                 new OrigenSocial(ProveedorIdentidad.GOOGLE, sujeto), RELOJ);
     }
@@ -112,7 +113,7 @@ class AutenticacionSocialServiceTest {
         when(loadIdentidadExternaPort.porProveedorYSujeto(ProveedorIdentidad.GOOGLE, "google-sub-nuevo"))
                 .thenReturn(Optional.empty());
         when(loadUserPort.byEmail(new Email("nuevo@renaser.dev"))).thenReturn(Optional.empty());
-        AccountRequestId solicitudId = AccountRequestId.newId();
+        AccountRequestId solicitudId = AccountRequestId.of(UUID.randomUUID());
         when(submitAccountRequestUseCase.submit(any())).thenReturn(solicitudId);
         when(tokenVerificacionEmailPort.generar(eq("nuevo@renaser.dev"), any()))
                 .thenReturn("token-verificacion-social");
@@ -141,7 +142,7 @@ class AutenticacionSocialServiceTest {
                 .thenReturn(new IdentidadVerificada("google-sub-directo", "directo@renaser.dev", true, "Directo"));
         when(loadIdentidadExternaPort.porProveedorYSujeto(any(), any())).thenReturn(Optional.empty());
         when(loadUserPort.byEmail(any())).thenReturn(Optional.empty());
-        when(submitAccountRequestUseCase.submit(any())).thenReturn(AccountRequestId.newId());
+        when(submitAccountRequestUseCase.submit(any())).thenReturn(AccountRequestId.of(UUID.randomUUID()));
         when(tokenVerificacionEmailPort.generar(eq("directo@renaser.dev"), any())).thenReturn("otro-token");
 
         service().iniciarSesion(command("+54 341 1234567"));
@@ -156,7 +157,7 @@ class AutenticacionSocialServiceTest {
                 .thenReturn(new IdentidadVerificada("google-sub-sin-nombre", "sinnombre@renaser.dev", true, null));
         when(loadIdentidadExternaPort.porProveedorYSujeto(any(), any())).thenReturn(Optional.empty());
         when(loadUserPort.byEmail(any())).thenReturn(Optional.empty());
-        when(submitAccountRequestUseCase.submit(any())).thenReturn(AccountRequestId.newId());
+        when(submitAccountRequestUseCase.submit(any())).thenReturn(AccountRequestId.of(UUID.randomUUID()));
         when(tokenVerificacionEmailPort.generar(any(), any())).thenReturn("token-verificacion-sin-nombre");
 
         service().iniciarSesion(command("+54 341 1234567"));
@@ -238,7 +239,7 @@ class AutenticacionSocialServiceTest {
         when(loadIdentidadExternaPort.porProveedorYSujeto(any(), any())).thenReturn(Optional.empty());
         when(loadAccountRequestPort.porOrigenSocial(any())).thenReturn(Optional.of(rechazada));
         when(loadUserPort.byEmail(any())).thenReturn(Optional.empty());
-        when(submitAccountRequestUseCase.submit(any())).thenReturn(AccountRequestId.newId());
+        when(submitAccountRequestUseCase.submit(any())).thenReturn(AccountRequestId.of(UUID.randomUUID()));
         when(tokenVerificacionEmailPort.generar(any(), any())).thenReturn("token-reintento");
 
         ResultadoLoginSocial resultado = service().iniciarSesion(command("+54 341 1234567"));
@@ -257,7 +258,7 @@ class AutenticacionSocialServiceTest {
                 .thenReturn(new IdentidadVerificada("google-sub-vincula", "vincula@renaser.dev", true, "Vincula"));
         when(loadIdentidadExternaPort.porProveedorYSujeto(any(), any())).thenReturn(Optional.empty());
         when(loadUserPort.byEmail(any())).thenReturn(Optional.empty());
-        when(submitAccountRequestUseCase.submit(any())).thenReturn(AccountRequestId.newId());
+        when(submitAccountRequestUseCase.submit(any())).thenReturn(AccountRequestId.of(UUID.randomUUID()));
         when(tokenVerificacionEmailPort.generar(any(), any())).thenReturn("token-vincula");
 
         service().iniciarSesion(command("+54 341 1234567"));

@@ -2,6 +2,7 @@ package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -54,6 +55,9 @@ import static org.mockito.Mockito.when;
 class AccountRequestServiceTest {
 
     private static final Clock CLOCK = FixedClock.at(Instant.parse("2026-08-25T10:00:00Z"));
+    /** Identidades fijas: con el id entrando por el puerto IdGenerator, submit() ya no las sortea. */
+    private static final UUID ID_USUARIO_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
+    private static final UUID ID_SOLICITUD_GENERADA = UUID.fromString("00000000-0000-4000-8000-000000000002");
 
     @Mock
     private LoadAccountRequestPort loadAccountRequestPort;
@@ -79,6 +83,8 @@ class AccountRequestServiceTest {
     private com.renaser.os.users.application.ports.out.autenticacion.SaveIdentidadExternaPort saveIdentidadExternaPort;
     @Mock
     private org.springframework.context.ApplicationEventPublisher events;
+    @Mock
+    private IdGenerator idGenerator;
 
     private AccountRequestService service;
 
@@ -87,11 +93,14 @@ class AccountRequestServiceTest {
         service = new AccountRequestService(loadAccountRequestPort, saveAccountRequestPort, deleteAccountRequestPort,
                 loadUserPort, saveUserPort, deleteUserPort, saveCredencialPort, saveIdentidadExternaPort,
                 passwordEncoder, saveParticipacionProgramaPort, tokenVerificacionEmailPort,
-                new RequireActiveUserGuard(loadUserPort), new RequireAdminGuard(loadUserPort), events, CLOCK);
+                new RequireActiveUserGuard(loadUserPort), new RequireAdminGuard(loadUserPort), events, CLOCK,
+                idGenerator);
         lenient().when(saveAccountRequestPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(passwordEncoder.encode(any())).thenReturn("hash-de-prueba");
+        // submit() pide dos ids al puerto: el del usuario y el de la solicitud, en ese orden.
+        lenient().when(idGenerator.newId()).thenReturn(ID_USUARIO_GENERADO, ID_SOLICITUD_GENERADA);
     }
 
     private static UserId id() {
@@ -110,7 +119,8 @@ class AccountRequestServiceTest {
     }
 
     private static AccountRequest pendiente() {
-        return AccountRequest.submit(UserId.of(UUID.randomUUID()), new Email("solicitante@renaser.dev"),
+        return AccountRequest.submit(AccountRequestId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                new Email("solicitante@renaser.dev"),
                 "Solicitante", "555-0000", "Lima", null, null, CLOCK);
     }
 
@@ -191,7 +201,8 @@ class AccountRequestServiceTest {
 
     /** Una solicitud abierta por Google, tal cual la deja {@code AutenticacionSocialService}. */
     private static AccountRequest pendienteSocial() {
-        return AccountRequest.submit(UserId.of(UUID.randomUUID()), new Email("social@renaser.dev"),
+        return AccountRequest.submit(AccountRequestId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                new Email("social@renaser.dev"),
                 "Sofia Social", "555-0001", "Lima", null,
                 new com.renaser.os.users.domain.model.accountrequest.OrigenSocial(
                         com.renaser.os.users.domain.model.identidadexterna.ProveedorIdentidad.GOOGLE,
@@ -398,7 +409,7 @@ class AccountRequestServiceTest {
     @DisplayName("eliminar: una solicitud inexistente da 404 sin importar si el actor es valido")
     void eliminarRechazaSolicitudInexistenteAntesDeChequearElActor() {
         UserId actorId = id();
-        AccountRequestId requestId = AccountRequestId.newId();
+        AccountRequestId requestId = AccountRequestId.of(UUID.randomUUID());
         when(loadAccountRequestPort.byId(requestId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.eliminar(new DeleteAccountRequestCommand(actorId, requestId)))
@@ -437,7 +448,7 @@ class AccountRequestServiceTest {
     @Test
     @DisplayName("consultar: PUBLIC_ENDPOINT, sin actor — una solicitud inexistente da 404")
     void consultarRechazaSolicitudInexistente() {
-        AccountRequestId requestId = AccountRequestId.newId();
+        AccountRequestId requestId = AccountRequestId.of(UUID.randomUUID());
         when(loadAccountRequestPort.byId(requestId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.consultar(requestId)).isInstanceOf(java.util.NoSuchElementException.class);

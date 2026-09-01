@@ -4,6 +4,7 @@ import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
+import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestStatus;
 import com.renaser.os.users.domain.model.accountrequest.OrigenSocial;
 import com.renaser.os.users.domain.model.identidadexterna.ProveedorIdentidad;
@@ -29,10 +30,14 @@ class AccountRequestPersistenceAdapterTest {
     @Autowired
     private AccountRequestPersistenceAdapter adapter;
 
+    private static AccountRequestId nuevoId() {
+        return AccountRequestId.of(UUID.randomUUID());
+    }
+
     @Test
     void guardaYRecuperaUnaSolicitudPendiente() {
         UserId usuarioId = UserId.of(UUID.randomUUID());
-        AccountRequest request = AccountRequest.submit(usuarioId, new Email("aspirante@renaser.com"),
+        AccountRequest request = AccountRequest.submit(nuevoId(), usuarioId, new Email("aspirante@renaser.com"),
                 "Ana Aspirante", "+51999999999", "Lima", "203.0.113.5", null, CLOCK);
 
         var saved = adapter.save(request);
@@ -51,13 +56,13 @@ class AccountRequestPersistenceAdapterTest {
                         com.renaser.os.users.api.UserRole.ADMIN,
                         com.renaser.os.users.api.UserStatus.ACTIVE, "Admin", null, null, null, null);
 
-        AccountRequest approved = AccountRequest.submit(UserId.of(UUID.randomUUID()),
+        AccountRequest approved = AccountRequest.submit(nuevoId(), UserId.of(UUID.randomUUID()),
                 new Email("a@renaser.com"), "A", "+51900000001", null, null, null, CLOCK);
         approved.approve(admin, UserId.of(UUID.randomUUID()), CLOCK);
         adapter.save(approved);
         assertThat(adapter.byId(approved.id()).orElseThrow().status()).isEqualTo(AccountRequestStatus.APPROVED);
 
-        AccountRequest rejected = AccountRequest.submit(UserId.of(UUID.randomUUID()),
+        AccountRequest rejected = AccountRequest.submit(nuevoId(), UserId.of(UUID.randomUUID()),
                 new Email("b@renaser.com"), "B", "+51900000002", null, null, null, CLOCK);
         rejected.reject(admin, "Datos incompletos", CLOCK);
         adapter.save(rejected);
@@ -75,7 +80,7 @@ class AccountRequestPersistenceAdapterTest {
     @Test
     void guardaYRecuperaElOrigenSocialDeUnaSolicitud() {
         OrigenSocial origen = new OrigenSocial(ProveedorIdentidad.GOOGLE, "google-sub-persistido");
-        AccountRequest request = AccountRequest.submit(UserId.of(UUID.randomUUID()),
+        AccountRequest request = AccountRequest.submit(nuevoId(), UserId.of(UUID.randomUUID()),
                 new Email("social@renaser.com"), "Sofia Social", "+51900000010", "Lima", null, origen, CLOCK);
 
         adapter.save(request);
@@ -88,7 +93,7 @@ class AccountRequestPersistenceAdapterTest {
     @Test
     void encuentraLaSolicitudPorOrigenSocial() {
         OrigenSocial origen = new OrigenSocial(ProveedorIdentidad.APPLE, "apple-sub-buscado");
-        AccountRequest request = AccountRequest.submit(UserId.of(UUID.randomUUID()),
+        AccountRequest request = AccountRequest.submit(nuevoId(), UserId.of(UUID.randomUUID()),
                 new Email("buscada@renaser.com"), "Bruno Buscado", "+51900000011", null, null, origen, CLOCK);
         adapter.save(request);
 
@@ -99,7 +104,7 @@ class AccountRequestPersistenceAdapterTest {
     @Test
     void elMismoSujetoEnOtroProveedorNoEncuentraLaSolicitud() {
         String mismoSujeto = "sujeto-repetido-entre-proveedores";
-        adapter.save(AccountRequest.submit(UserId.of(UUID.randomUUID()), new Email("g@renaser.com"), "G",
+        adapter.save(AccountRequest.submit(nuevoId(), UserId.of(UUID.randomUUID()), new Email("g@renaser.com"), "G",
                 "+51900000012", null, null, new OrigenSocial(ProveedorIdentidad.GOOGLE, mismoSujeto), CLOCK));
 
         assertThat(adapter.porOrigenSocial(new OrigenSocial(ProveedorIdentidad.APPLE, mismoSujeto))).isEmpty();
@@ -108,7 +113,7 @@ class AccountRequestPersistenceAdapterTest {
     /** Un alta por formulario no tiene origen social, y eso es un estado valido, no un dato faltante. */
     @Test
     void unaSolicitudPorFormularioVuelveSinOrigenSocial() {
-        AccountRequest request = AccountRequest.submit(UserId.of(UUID.randomUUID()),
+        AccountRequest request = AccountRequest.submit(nuevoId(), UserId.of(UUID.randomUUID()),
                 new Email("formulario@renaser.com"), "Fabi Formulario", "+51900000013", null, null, null, CLOCK);
 
         adapter.save(request);
@@ -119,9 +124,9 @@ class AccountRequestPersistenceAdapterTest {
     @Test
     void cuentaSolicitudesRecientesPorIpParaElRateLimit() {
         String ip = "198.51.100.7";
-        adapter.save(AccountRequest.submit(UserId.of(UUID.randomUUID()), new Email("uno@renaser.com"), "Uno",
+        adapter.save(AccountRequest.submit(nuevoId(), UserId.of(UUID.randomUUID()), new Email("uno@renaser.com"), "Uno",
                 "+51900000003", null, ip, null, CLOCK));
-        adapter.save(AccountRequest.submit(UserId.of(UUID.randomUUID()), new Email("dos@renaser.com"), "Dos",
+        adapter.save(AccountRequest.submit(nuevoId(), UserId.of(UUID.randomUUID()), new Email("dos@renaser.com"), "Dos",
                 "+51900000004", null, ip, null, CLOCK));
 
         long count = adapter.countSubmittedFromIpSince(ip, CLOCK.now().minusSeconds(3600));
