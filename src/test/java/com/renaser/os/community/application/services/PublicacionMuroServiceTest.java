@@ -20,6 +20,7 @@ import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsu
 import com.renaser.os.community.domain.model.publicacion.MediaPublicacion;
 import com.renaser.os.community.domain.model.publicacion.Publicacion;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
+import com.renaser.os.community.domain.model.publicacion.ReaccionMuro;
 import com.renaser.os.community.domain.model.publicacion.TipoPublicacion;
 import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
 import com.renaser.os.shared.domain.FixedClock;
@@ -109,9 +110,14 @@ class PublicacionMuroServiceTest {
                 Optional.of(new UserSummary(suspendido, "Suspendido", null, UserRole.TRAINEE, UserStatus.SUSPENDED)));
         lenient().when(userSummaryFinder.findById(adminSuspendido)).thenReturn(Optional.of(new UserSummary(
                 adminSuspendido, "Admin suspendido", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
-        lenient().when(consultarPerfilUsuarioPort.porId(any())).thenReturn(Optional.empty());
-        lenient().when(reaccionMuroPort.contarPorTipo(any())).thenReturn(Map.of());
-        lenient().when(loadComentarioPort.contar(any())).thenReturn(0);
+        // La proyeccion del feed va SIEMPRE por los metodos en lote (E-80). Los hermanos de a una
+        // (`porId`/`contarPorTipo`/`contar`) siguen existiendo para otros usos, pero esta clase ya
+        // no debe llamarlos al armar una vista — de eso se ocupa
+        // `laProyeccionNoConsultaUnaVezPorPublicacion`.
+        lenient().when(consultarPerfilUsuarioPort.porIds(any())).thenReturn(Map.of());
+        lenient().when(reaccionMuroPort.contarPorTipoDeVarias(any())).thenReturn(Map.of());
+        lenient().when(reaccionMuroPort.deUsuarioEnVarias(any(), any())).thenReturn(Map.of());
+        lenient().when(loadComentarioPort.contarDeVarias(any())).thenReturn(Map.of());
         lenient().when(savePublicacionPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -124,6 +130,46 @@ class PublicacionMuroServiceTest {
                 com.renaser.os.community.domain.model.publicacion.TipoPublicacion.MANUAL, null, "hola",
                 List.of(new MediaPublicacion("wall", "muro/x/1.jpg", "image/jpeg", 0)), false, CLOCK.now(),
                 CLOCK.now());
+    }
+
+    /**
+     * Fija E-80. La prueba mira la <b>propiedad</b> — "el costo no depende del tamano de la
+     * pagina" — y no un numero de consultas concreto: sigue matando el defecto aunque manana se
+     * agregue otro dato a la vista, mientras ese dato tambien se pida en lote.
+     *
+     * <p>Un `verify(..., times(20))` seria la prueba equivocada: pasaria en verde justo cuando el
+     * defecto vuelve. Por eso se verifica que los metodos de a UNA <b>nunca</b> se llamen.
+     */
+    @Test
+    @DisplayName("feed(): la proyeccion no consulta una vez por publicacion, por grande que sea la pagina")
+    void laProyeccionNoConsultaUnaVezPorPublicacion() {
+        List<Publicacion> veinte = java.util.stream.IntStream.range(0, 20)
+                .mapToObj(i -> publicacionVisible(autor)).toList();
+        when(loadPublicacionPort.feed(any(), anyInt(), any())).thenReturn(veinte);
+
+        var pagina = service.feed(autor, null, null);
+
+        assertThat(pagina.publicaciones()).hasSize(20);
+        verify(consultarPerfilUsuarioPort, never()).porId(any());
+        verify(reaccionMuroPort, never()).contarPorTipo(any());
+        verify(reaccionMuroPort, never()).deUsuario(any(), any());
+        verify(loadComentarioPort, never()).contar(any());
+        // Una sola pasada por cada dato, sin importar que sean 20 publicaciones.
+        verify(consultarPerfilUsuarioPort, times(1)).porIds(any());
+        verify(reaccionMuroPort, times(1)).contarPorTipoDeVarias(any());
+        verify(reaccionMuroPort, times(1)).deUsuarioEnVarias(any(), any());
+        verify(loadComentarioPort, times(1)).contarDeVarias(any());
+    }
+
+    @Test
+    @DisplayName("feed() vacio: no se consulta nada en lote — un IN () vacio no es SQL valido")
+    void feedVacioNoConsultaEnLote() {
+        when(loadPublicacionPort.feed(any(), anyInt(), any())).thenReturn(List.of());
+
+        assertThat(service.feed(autor, null, null).publicaciones()).isEmpty();
+
+        verify(reaccionMuroPort, never()).contarPorTipoDeVarias(any());
+        verify(loadComentarioPort, never()).contarDeVarias(any());
     }
 
     @Test
@@ -262,6 +308,84 @@ class PublicacionMuroServiceTest {
 
         assertThatThrownBy(() -> service.publicarDesdeEvidencia(comando)).isInstanceOf(NotAuthorizedException.class);
         verify(savePublicacionPort, never()).save(any());
+    }
+
+    // ─── reacciones(): quien reacciono al post (modal "Reacciones del post") ──────────────
+
+    @Test
+    @DisplayName("reacciones(): resuelve nombre/avatar/rol de cada reactor en UNA sola consulta en lote, nunca una por reactor")
+    void reaccionesResuelveDatosDeUsuarioEnLote() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        when(reaccionMuroPort.listarDe(publicacion.id())).thenReturn(List.of(
+                new ReaccionMuro(publicacion.id(), otro, TipoReaccion.ME_GUSTA),
+                new ReaccionMuro(publicacion.id(), admin, TipoReaccion.NO_ME_GUSTA)));
+        // Se compara el CONTENIDO, no el tipo de coleccion ni el orden. El puerto recibe un
+        // Collection y el servicio le pasa una List armada con un stream: ese orden es incidental,
+        // y un Set nunca es igual a una List, asi que fijar cualquiera de los dos aca hace fallar
+        // el test por un detalle que no es una regla de negocio.
+        when(userSummaryFinder.findByIds(argThat(ids -> ids != null && Set.copyOf(ids).equals(Set.of(otro, admin)))))
+                .thenReturn(Map.of(
+                        otro, new UserSummary(otro, "Otro", null, UserRole.TRAINEE, UserStatus.ACTIVE),
+                        admin, new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
+
+        var vistas = service.reacciones(autor, publicacion.id());
+
+        assertThat(vistas).hasSize(2);
+        assertThat(vistas).anySatisfy(v -> {
+            assertThat(v.usuarioId()).isEqualTo(otro);
+            assertThat(v.nombre()).isEqualTo("Otro");
+            assertThat(v.rol()).isEqualTo(UserRole.TRAINEE);
+            assertThat(v.tipo()).isEqualTo(TipoReaccion.ME_GUSTA);
+        });
+        verify(userSummaryFinder, times(1)).findByIds(any());
+        verify(userSummaryFinder, never()).findById(otro);
+        verify(userSummaryFinder, never()).findById(admin);
+    }
+
+    @Test
+    @DisplayName("reacciones(): publicacion sin ninguna reaccion devuelve lista vacia, no consulta usuarios")
+    void reaccionesDePublicacionSinReaccionesEsVacia() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        when(reaccionMuroPort.listarDe(publicacion.id())).thenReturn(List.of());
+
+        assertThat(service.reacciones(autor, publicacion.id())).isEmpty();
+        verify(userSummaryFinder, never()).findByIds(any());
+    }
+
+    @Test
+    @DisplayName("reacciones(): publicacion oculta o inexistente -> 404, no 403")
+    void reaccionesDePublicacionNoVisibleEsNoEncontrada() {
+        UUID idInexistente = UUID.randomUUID();
+        when(loadPublicacionPort.porId(PublicacionId.of(idInexistente))).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.reacciones(autor, PublicacionId.of(idInexistente)))
+                .isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
+    @Test
+    @DisplayName("reacciones(): cuenta SUSPENDIDA -> 403, nunca lista quien reacciono")
+    void reaccionesConActorSuspendidoFalla() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        assertThatThrownBy(() -> service.reacciones(suspendido, publicacion.id()))
+                .isInstanceOf(NotAuthorizedException.class);
+        verify(reaccionMuroPort, never()).listarDe(any());
+    }
+
+    @Test
+    @DisplayName("reacciones(): actor inexistente -> 403, no 404 (no delata si la publicacion existe)")
+    void reaccionesConActorInexistenteEsRechazadoComo403NoComo404() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        UserId fantasma = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(fantasma)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.reacciones(fantasma, publicacion.id()))
+                .isInstanceOf(NotAuthorizedException.class);
+        verify(reaccionMuroPort, never()).listarDe(any());
     }
 
     // ─── CLAUDE.MD sec. 0.3: 403 por rol y 403 por cuenta SUSPENDIDA, metodo por metodo ──

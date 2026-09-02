@@ -1,6 +1,7 @@
 package com.renaser.os.community.infrastructure.adapter.in.rest.publicacion;
 
 import com.renaser.os.community.application.ports.in.publicacion.ConsultarFeedUseCase;
+import com.renaser.os.community.application.ports.in.publicacion.ConsultarReaccionesUseCase;
 import com.renaser.os.community.application.ports.in.publicacion.EditarPublicacionUseCase;
 import com.renaser.os.community.application.ports.in.publicacion.EditarPublicacionUseCase.EditarPublicacionCommand;
 import com.renaser.os.community.application.ports.in.publicacion.EliminarPublicacionUseCase;
@@ -57,12 +58,14 @@ public class WallController {
     private final RestaurarPublicacionUseCase restaurarUseCase;
     private final EliminarPublicacionUseCase eliminarUseCase;
     private final ReaccionarUseCase reaccionarUseCase;
+    private final ConsultarReaccionesUseCase consultarReaccionesUseCase;
     private final SolicitarUrlSubidaMediaUseCase solicitarUrlUseCase;
 
     public WallController(ConsultarFeedUseCase consultarFeedUseCase, PublicarUseCase publicarUseCase,
                            EditarPublicacionUseCase editarUseCase, OcultarPublicacionUseCase ocultarUseCase,
                            RestaurarPublicacionUseCase restaurarUseCase, EliminarPublicacionUseCase eliminarUseCase,
-                           ReaccionarUseCase reaccionarUseCase, SolicitarUrlSubidaMediaUseCase solicitarUrlUseCase) {
+                           ReaccionarUseCase reaccionarUseCase, ConsultarReaccionesUseCase consultarReaccionesUseCase,
+                           SolicitarUrlSubidaMediaUseCase solicitarUrlUseCase) {
         this.consultarFeedUseCase = consultarFeedUseCase;
         this.publicarUseCase = publicarUseCase;
         this.editarUseCase = editarUseCase;
@@ -70,6 +73,7 @@ public class WallController {
         this.restaurarUseCase = restaurarUseCase;
         this.eliminarUseCase = eliminarUseCase;
         this.reaccionarUseCase = reaccionarUseCase;
+        this.consultarReaccionesUseCase = consultarReaccionesUseCase;
         this.solicitarUrlUseCase = solicitarUrlUseCase;
     }
 
@@ -152,6 +156,16 @@ public class WallController {
         var resultado = reaccionarUseCase.reaccionar(new ReaccionarCommand(actorId, PublicacionId.of(id),
                 parseTipoReaccion(request.type())));
         return WallReactionToggleResponse.from(resultado);
+    }
+
+    /** Quien puede ver la publicacion puede ver sus reacciones — mismo permiso que
+     * {@link #feed} y {@link #reaccionar}, no el criterio "sin clasificar" de
+     * {@code WallCommentController#listar} (TODO auth fase 4, ese es un hueco declarado, no
+     * un patron a copiar). */
+    @RequiresPermission(Permission.USE_APP)
+    @GetMapping("/{id}/reactions")
+    public WallReactionsResponse reacciones(@ActorAutenticado UserId actorId, @PathVariable UUID id) {
+        return WallReactionsResponse.from(consultarReaccionesUseCase.reacciones(actorId, PublicacionId.of(id)));
     }
 
     @RequiresPermission(Permission.PUBLISH_ON_WALL)

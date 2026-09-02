@@ -2,7 +2,9 @@ package com.renaser.os.community.infrastructure.adapter.in.rest.publicacion;
 
 import com.renaser.os.community.application.ports.in.publicacion.ConsultarFeedUseCase;
 import com.renaser.os.community.application.ports.in.publicacion.ConsultarFeedUseCase.PaginaPublicaciones;
+import com.renaser.os.community.application.ports.in.publicacion.ConsultarReaccionesUseCase;
 import com.renaser.os.community.application.ports.in.publicacion.EditarPublicacionUseCase;
+import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.community.application.ports.in.publicacion.EliminarPublicacionUseCase;
 import com.renaser.os.community.application.ports.in.publicacion.OcultarPublicacionUseCase;
 import com.renaser.os.community.application.ports.in.publicacion.PublicarUseCase;
@@ -72,6 +74,8 @@ class WallControllerAuthorizationTest {
     @MockitoBean
     private ReaccionarUseCase reaccionarUseCase;
     @MockitoBean
+    private ConsultarReaccionesUseCase consultarReaccionesUseCase;
+    @MockitoBean
     private SolicitarUrlSubidaMediaUseCase solicitarUrlUseCase;
 
     @AfterEach
@@ -130,5 +134,35 @@ class WallControllerAuthorizationTest {
         mockMvc.perform(post("/api/v1/wall/{id}/restore", UUID.randomUUID())
                         .header("X-Actor-Id", actorId.toString()))
                 .andExpect(status().isOk());
+    }
+
+    // ─── GET /api/v1/wall/{id}/reactions — modal "Reacciones del post" (CLAUDE.MD §0.3) ───
+
+    @Test
+    @DisplayName("TRAINEE activo puede leer quien reacciono (USE_APP, mismo permiso que el feed)")
+    void traineeActivoLeeLasReacciones() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        UUID postId = UUID.randomUUID();
+        mockActor(actorId, UserRole.TRAINEE, UserStatus.ACTIVE);
+        when(consultarReaccionesUseCase.reacciones(UserId.of(actorId), PublicacionId.of(postId)))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/wall/{id}/reactions", postId)
+                        .header("X-Actor-Id", actorId.toString()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("autorizacion negativa: un TRAINEE SUSPENDIDO recibe 403 al pedir quien reacciono, aunque el token sea valido")
+    void traineeSuspendidoNoPuedeLeerLasReacciones() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        UUID postId = UUID.randomUUID();
+        mockActor(actorId, UserRole.TRAINEE, UserStatus.SUSPENDED);
+
+        mockMvc.perform(get("/api/v1/wall/{id}/reactions", postId)
+                        .header("X-Actor-Id", actorId.toString()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(consultarReaccionesUseCase);
     }
 }
