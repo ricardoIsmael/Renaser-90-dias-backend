@@ -119,8 +119,8 @@ class RachaServiceTest {
     private static Habito habitoSinCelularConClave() {
         Habito h = habitoSinCelular();
         return Habito.rehydrate(h.id(), h.ambito(), null, h.titulo(), null, h.tipo(), h.categoriaClave(), null,
-                RachaService.CLAVE_SISTEMA_SIN_CELULAR, h.exigenciaEvidencia(), false, false, false, null, null,
-                null, null, true, CLOCK.now(), CLOCK.now());
+                RachaService.CLAVE_SISTEMA_SIN_CELULAR, h.exigenciaEvidencia(), false, false, true, false, null,
+                null, null, null, true, CLOCK.now(), CLOCK.now());
     }
 
     /** Evidencia minima valida (TEXTO) para cerrar — el cierre va siempre con evidencia (Hueco #13). */

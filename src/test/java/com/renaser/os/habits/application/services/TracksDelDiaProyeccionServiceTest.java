@@ -2,6 +2,7 @@ package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.TrackDelDiaConCatalogo;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
+import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.guia.LoadGuiaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
@@ -47,6 +48,8 @@ class TracksDelDiaProyeccionServiceTest {
     @Mock
     private LoadHabitoPort loadHabitoPort;
     @Mock
+    private GenerarTracksDelDiaUseCase generarTracksUseCase;
+    @Mock
     private LoadHorarioHabitoPort loadHorarioPort;
     @Mock
     private LoadPreferenciaHorarioPort loadPreferenciaPort;
@@ -57,8 +60,8 @@ class TracksDelDiaProyeccionServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TracksDelDiaProyeccionService(consultarTracksUseCase, loadHabitoPort, loadHorarioPort,
-                loadPreferenciaPort, loadGuiaPort);
+        service = new TracksDelDiaProyeccionService(consultarTracksUseCase, generarTracksUseCase, loadHabitoPort,
+                loadHorarioPort, loadPreferenciaPort, loadGuiaPort);
     }
 
     private static Habito habito(String titulo) {

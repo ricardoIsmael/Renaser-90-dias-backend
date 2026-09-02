@@ -117,6 +117,34 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     @Override
     @Transactional
     public List<RegistroHabito> generar(UserId participanteId, LocalDate fecha) {
+        return generarInterno(participanteId, fecha, null);
+    }
+
+    /** Ver javadoc del puerto: descarta lo que ya no se puede completar a esta hora. */
+    @Override
+    @Transactional
+    public List<RegistroHabito> generarDisponiblesAhora(UserId participanteId) {
+        ProgresoParticipanteHabits progreso = requireProgreso(participanteId);
+        ZoneId zona = ZoneId.of(progreso.timezone());
+        var ahoraEnSuZona = clock.now().atZone(zona);
+        return generarInterno(participanteId, ahoraEnSuZona.toLocalDate(), ahoraEnSuZona.toLocalTime());
+    }
+
+    /** Ver javadoc del puerto: jornada completa (sin corte de hora) para HOY en la zona del participante. */
+    @Override
+    @Transactional
+    public List<RegistroHabito> generarDiaCompletoEnSuZona(UserId participanteId) {
+        ProgresoParticipanteHabits progreso = requireProgreso(participanteId);
+        ZoneId zona = ZoneId.of(progreso.timezone());
+        LocalDate hoyEnSuZona = clock.now().atZone(zona).toLocalDate();
+        return generarInterno(participanteId, hoyEnSuZona, null);
+    }
+
+    /**
+     * {@code horaDeCorte} nulo = generar el dia completo (uso del barrido nocturno, que corre
+     * cuando el dia todavia no empezo). No nulo = solo lo que sigue siendo alcanzable.
+     */
+    private List<RegistroHabito> generarInterno(UserId participanteId, LocalDate fecha, LocalTime horaDeCorte) {
         ProgresoParticipanteHabits progreso = requireProgreso(participanteId);
         TipoDia tipoDia = resolverTipoDia(fecha);
         Instant ahora = clock.now();
@@ -130,7 +158,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
                 continue; // idempotente: ya existe (UNIQUE participante+habito+fecha)
             }
             boolean aplicaHoy = loadHorarioPort.porHabito(habito.id()).stream()
-                    .anyMatch(h -> h.aplicaEnDia(progreso.diaPrograma(), tipoDia));
+                    .filter(h -> h.aplicaEnDia(progreso.diaPrograma(), tipoDia))
+                    .anyMatch(h -> sigueAlcanzable(h, horaDeCorte));
             if (!aplicaHoy) {
                 continue;
             }
@@ -140,6 +169,16 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
             generados.add(saveRegistroPort.save(registro));
         }
         return generados;
+    }
+
+    /**
+     * Un horario sigue alcanzable si no tiene hora de cierre (el habito no vence dentro del
+     * dia) o si esa hora todavia no paso. Con {@code horaDeCorte} nulo no se filtra nada:
+     * es el caso del barrido nocturno, que genera el dia entero por adelantado.
+     */
+    private boolean sigueAlcanzable(HorarioHabito horario, LocalTime horaDeCorte) {
+        return horaDeCorte == null || horario.horaLimite() == null
+                || horario.horaLimite().isAfter(horaDeCorte);
     }
 
     @Override

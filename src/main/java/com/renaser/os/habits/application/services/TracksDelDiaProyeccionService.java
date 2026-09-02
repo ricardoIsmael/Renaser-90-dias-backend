@@ -2,6 +2,7 @@ package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
+import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.guia.LoadGuiaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
@@ -39,16 +40,19 @@ import java.util.stream.Collectors;
 public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCatalogoUseCase {
 
     private final ConsultarTracksDelDiaUseCase consultarTracksUseCase;
+    private final GenerarTracksDelDiaUseCase generarTracksUseCase;
     private final LoadHabitoPort loadHabitoPort;
     private final LoadHorarioHabitoPort loadHorarioPort;
     private final LoadPreferenciaHorarioPort loadPreferenciaPort;
     private final LoadGuiaHabitoPort loadGuiaPort;
 
     public TracksDelDiaProyeccionService(ConsultarTracksDelDiaUseCase consultarTracksUseCase,
+                                          GenerarTracksDelDiaUseCase generarTracksUseCase,
                                           LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
                                           LoadPreferenciaHorarioPort loadPreferenciaPort,
                                           LoadGuiaHabitoPort loadGuiaPort) {
         this.consultarTracksUseCase = consultarTracksUseCase;
+        this.generarTracksUseCase = generarTracksUseCase;
         this.loadHabitoPort = loadHabitoPort;
         this.loadHorarioPort = loadHorarioPort;
         this.loadPreferenciaPort = loadPreferenciaPort;
@@ -58,6 +62,16 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     @Override
     public List<TrackDelDiaConCatalogo> consultar(UserId actorId, UserId participanteId, LocalDate fecha) {
         List<RegistroHabito> registros = consultarTracksUseCase.consultar(actorId, participanteId, fecha);
+        if (registros.isEmpty() && actorId.equals(participanteId)) {
+            // Red de seguridad: el barrido nocturno es la via normal, pero alguien que activa
+            // su programa hoy mismo -o a quien la corrida de anoche no alcanzo- no tendria
+            // NINGUN habito hasta manana. Se generan solo los que todavia puede completar a
+            // esta hora (ver GenerarTracksDelDiaUseCase.generarDisponiblesAhora).
+            // Solo para el propio actor: un mentor mirando los habitos de su aprendiz no debe
+            // provocarle escrituras.
+            generarTracksUseCase.generarDisponiblesAhora(participanteId);
+            registros = consultarTracksUseCase.consultar(actorId, participanteId, fecha);
+        }
         if (registros.isEmpty()) {
             return List.of();
         }
