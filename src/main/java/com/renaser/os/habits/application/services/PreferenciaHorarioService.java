@@ -201,7 +201,11 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         return dePreferencia != null ? dePreferencia : deCatalogo;
     }
 
+    /** Sin hora de cierre no hay orden que validar: el habito no vence dentro del dia. */
     private static void requireOrdenHorario(LocalTime horaDisparo, LocalTime horaLimite) {
+        if (horaLimite == null) {
+            return;
+        }
         if (!horaDisparo.isBefore(horaLimite)) {
             throw new IllegalArgumentException("horaLimite debe ser posterior a horaDisparo");
         }

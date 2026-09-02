@@ -42,6 +42,9 @@ import java.util.stream.Collectors;
 @Service
 public class ConsultaPreferenciasHorarioService implements ConsultarPreferenciasHorarioUseCase {
 
+    /** El programa arranca en el dia 1; el dia 0 es "todavia no activo". */
+    private static final int PRIMER_DIA_DEL_PROGRAMA = 1;
+
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final LoadHabitoPort loadHabitoPort;
     private final LoadHorarioHabitoPort loadHorarioPort;
@@ -115,8 +118,17 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
                 cambio);
     }
 
+    /**
+     * Un participante que todavia no activo su programa esta en dia 0, y NINGUN horario del
+     * catalogo aplica ahi: todos arrancan en el dia 1. Sin este ajuste, Plan le mostraba los 22
+     * habitos sin hora, amontonados en un solo bloque del dia — no podia planificar nada
+     * justo cuando mas lo necesita, que es antes de empezar. Se le muestra el horario que va a
+     * regir su PRIMER dia; en cuanto el programa arranca, {@code diaPrograma} ya es real y esto
+     * no interviene.
+     */
     private static HorarioHabito vigenteDeCatalogo(List<HorarioHabito> horarios, int diaPrograma, TipoDia tipoDia) {
-        return horarios.stream().filter(h -> h.aplicaEnDia(diaPrograma, tipoDia)).findFirst().orElse(null);
+        int diaAConsultar = Math.max(diaPrograma, PRIMER_DIA_DEL_PROGRAMA);
+        return horarios.stream().filter(h -> h.aplicaEnDia(diaAConsultar, tipoDia)).findFirst().orElse(null);
     }
 
     /** Preferencia del participante gana si esta seteada; si no, el default del catalogo. */
