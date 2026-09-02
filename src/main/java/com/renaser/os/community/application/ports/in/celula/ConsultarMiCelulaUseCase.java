@@ -13,7 +13,9 @@ import java.util.Optional;
  * — a diferencia del ranking, este endpoint viejo nunca tuvo rama para MENTOR.
  *
  * <p>Sin celula NO es un error (misma app/api/v1/me/cell/route.ts:32-34): {@link Optional#empty()}
- * y el controller responde 404 {@code {assigned:false}}, no una excepcion.
+ * y el controller responde 200 {@code {assigned:false}} (corregido 2026-09-02: antes era 404,
+ * indistinguible de un error real para el cliente — ver comunidad-mentor-y-tribu.md), no una
+ * excepcion.
  */
 public interface ConsultarMiCelulaUseCase {
 
