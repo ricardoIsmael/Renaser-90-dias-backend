@@ -26,7 +26,6 @@ import com.renaser.os.users.api.UserSummaryFinder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -92,9 +91,16 @@ public class EspejoSombraService implements GenerarInformeEspejoSombraUseCase, O
      *   persiste nada y solo deja un WARN. Nunca se inventa un informe con datos
      *   falsos (CLAUDE.MD §0.6).</li>
      * </ol>
+     *
+     * <p><b>C-1 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html):</b> este
+     * método YA NO es {@code @Transactional}. Antes envolvía en una sola transacción la
+     * lectura de entradas, la llamada a {@link GenerarInsightSemanalPort} (IA, puede tardar
+     * segundos con un proveedor real) y el guardado — reteniendo una conexión de Hikari todo
+     * ese tiempo. Las lecturas y el guardado ya corren en su propia transacción corta gracias
+     * a Spring Data JPA ({@code InformeEspejoSombraPersistenceAdapter}); la IA queda afuera
+     * de cualquier transacción.
      */
     @Override
-    @Transactional
     public void generar(UserId participanteId, LocalDate semanaInicio) {
         if (loadInformePort.porParticipanteYSemana(participanteId, semanaInicio).isPresent()) {
             log.debug("[rag.EspejoSombraService] informe ya existe, se omite. participante={} semana={}",

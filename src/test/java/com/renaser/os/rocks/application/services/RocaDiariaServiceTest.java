@@ -142,7 +142,7 @@ class RocaDiariaServiceTest {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         RocaDiaria completada = rocaVerde(null);
         completada.completar(CLOCK.now(), CLOCK);
-        when(loadRocaDiariaPort.byId(completada.id())).thenReturn(Optional.of(completada));
+        when(loadRocaDiariaPort.byIdParaEscritura(completada.id())).thenReturn(Optional.of(completada));
 
         assertThatThrownBy(() -> service.completar(comandoTexto(completada.id())))
                 .isInstanceOf(IllegalStateException.class);
@@ -154,7 +154,7 @@ class RocaDiariaServiceTest {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         RocaDiaria amarilla = rocaAmarilla();
         RocaDiaria verdeSinCompletar = rocaVerde(null);
-        when(loadRocaDiariaPort.byId(amarilla.id())).thenReturn(Optional.of(amarilla));
+        when(loadRocaDiariaPort.byIdParaEscritura(amarilla.id())).thenReturn(Optional.of(amarilla));
         when(loadRocaDiariaPort.deParticipanteYFecha(actorId, amarilla.fecha()))
                 .thenReturn(List.of(amarilla, verdeSinCompletar));
 
@@ -168,7 +168,7 @@ class RocaDiariaServiceTest {
     void exifFueraDeMargenRechazado() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         RocaDiaria verde = rocaVerde(null);
-        when(loadRocaDiariaPort.byId(verde.id())).thenReturn(Optional.of(verde));
+        when(loadRocaDiariaPort.byIdParaEscritura(verde.id())).thenReturn(Optional.of(verde));
 
         Instant exifMuyViejo = CLOCK.now().minus(Duration.ofMinutes(20));
         var command = new CompletarRocaDiariaCommand(actorId, verde.id(), TipoEvidenciaRoca.FOTO, "bucket", "ruta",
@@ -183,7 +183,7 @@ class RocaDiariaServiceTest {
     void completarATiempoPagaRockCompleted() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         RocaDiaria verde = rocaVerde(LocalTime.of(21, 0)); // 21:00 UTC, completando a las 20:05 -> a tiempo
-        when(loadRocaDiariaPort.byId(verde.id())).thenReturn(Optional.of(verde));
+        when(loadRocaDiariaPort.byIdParaEscritura(verde.id())).thenReturn(Optional.of(verde));
         when(ajustarPuntosPort.ajustar(eq(actorId), eq(MotivoPuntos.ROCK_COMPLETED), eq(10), anyString()))
                 .thenReturn(new ResumenAjustePuntos(actorId, 10, 110));
 
@@ -205,7 +205,7 @@ class RocaDiariaServiceTest {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         RocaDiaria verde = rocaVerde(null);
         verde.otorgarPuntos(10); // simula que un intento anterior ya pago (defensivo, no deberia pasar con completada=false)
-        when(loadRocaDiariaPort.byId(verde.id())).thenReturn(Optional.of(verde));
+        when(loadRocaDiariaPort.byIdParaEscritura(verde.id())).thenReturn(Optional.of(verde));
 
         service.completar(comandoTexto(verde.id()));
 
@@ -217,7 +217,7 @@ class RocaDiariaServiceTest {
     void esPrincipalViajaAlComandoDeEvidencia() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         RocaDiaria verde = rocaVerde(null);
-        when(loadRocaDiariaPort.byId(verde.id())).thenReturn(Optional.of(verde));
+        when(loadRocaDiariaPort.byIdParaEscritura(verde.id())).thenReturn(Optional.of(verde));
         var command = new CompletarRocaDiariaCommand(actorId, verde.id(), TipoEvidenciaRoca.TEXTO, null, null,
                 "hecho", null, null, null, false, false);
 
@@ -240,7 +240,7 @@ class RocaDiariaServiceTest {
     void publishedToWallLlamaAlPuertoDeCommunity() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         RocaDiaria verde = rocaVerde(null);
-        when(loadRocaDiariaPort.byId(verde.id())).thenReturn(Optional.of(verde));
+        when(loadRocaDiariaPort.byIdParaEscritura(verde.id())).thenReturn(Optional.of(verde));
         var command = new CompletarRocaDiariaCommand(actorId, verde.id(), TipoEvidenciaRoca.FOTO, "renaser-files",
                 "rocas/x/y", null, CLOCK.now(), null, null, true, true);
 
@@ -256,7 +256,7 @@ class RocaDiariaServiceTest {
     void publishedToWallFalseNoLlamaANadie() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         RocaDiaria verde = rocaVerde(null);
-        when(loadRocaDiariaPort.byId(verde.id())).thenReturn(Optional.of(verde));
+        when(loadRocaDiariaPort.byIdParaEscritura(verde.id())).thenReturn(Optional.of(verde));
 
         service.completar(comandoTexto(verde.id()));
 

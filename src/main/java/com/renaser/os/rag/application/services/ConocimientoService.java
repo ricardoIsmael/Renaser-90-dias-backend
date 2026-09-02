@@ -14,7 +14,6 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.NoSuchElementException;
 
@@ -37,8 +36,15 @@ public class ConocimientoService implements IndexarConocimientoUseCase {
         this.idGenerator = idGenerator;
     }
 
+    /**
+     * <b>C-1 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html):</b> este
+     * método YA NO es {@code @Transactional}. Antes envolvía en una sola transacción la
+     * llamada a {@link EmbeddingPort} (IA) y el guardado, reteniendo una conexión de Hikari
+     * mientras esperaba a la IA. {@code saveChunkConocimientoPort.save} ya abre su propia
+     * transacción corta ({@code PgVectorNativoAdapter.save}, {@code @Transactional} propio);
+     * la llamada a la IA queda afuera de cualquier transacción.
+     */
     @Override
-    @Transactional
     public ChunkIndexado indexar(IndexarConocimientoCommand command) {
         requireAdmin(command.actorId());
         var embedding = embeddingPort.generar(command.contenido());

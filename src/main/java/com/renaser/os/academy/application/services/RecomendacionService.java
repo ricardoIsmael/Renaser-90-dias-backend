@@ -17,7 +17,6 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -58,8 +57,17 @@ public class RecomendacionService implements ConsultarRecomendacionDiariaUseCase
         this.clock = clock;
     }
 
+    /**
+     * <b>C-1 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html):</b> este
+     * método YA NO es {@code @Transactional}. Antes envolvía en una sola transacción la
+     * llamada a {@link RecomendarClasePort} (IA) y el guardado de la recomendación,
+     * reteniendo una conexión de Hikari mientras esperaba a la IA — con varios aprendices
+     * pidiendo su recomendación diaria a la vez (el disparador más directo de los cuatro:
+     * este método lo llama un hilo de request HTTP, no un scheduler ni un @Async acotado),
+     * agotaba el pool para toda la API. Los puertos de lectura/escritura ya abren su propia
+     * transacción corta vía Spring Data JPA; la llamada a la IA queda afuera de cualquiera.
+     */
     @Override
-    @Transactional
     public RecomendacionDiaria recomendacion(UserId actorId) {
         ProgresoParticipanteAcademy progreso = requireProgresoTrainee(actorId);
         ZoneId zona = progreso.zona() == null ? ZONA_POR_DEFECTO : progreso.zona();

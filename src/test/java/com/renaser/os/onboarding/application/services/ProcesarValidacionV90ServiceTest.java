@@ -99,4 +99,28 @@ class ProcesarValidacionV90ServiceTest {
         verify(saveGrabacionPort, never()).guardar(any());
         verify(validacionIAPort, never()).validar(any());
     }
+
+    /**
+     * C-1/C-3 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): con Gemini
+     * real, {@link ValidacionIAPort#validar} puede lanzar (timeout, error de red) — a
+     * diferencia del {@code NoOpValidacionIAAdapter} de hoy, que nunca lanza. Antes de este
+     * cambio, {@code procesar()} no capturaba esa excepcion: se propagaba sin llegar nunca a
+     * {@code saveGrabacionPort.guardar}, y la grabacion quedaba en PROCESANDO para siempre.
+     * Ahora se trata igual que NO_DISPONIBLE.
+     */
+    @Test
+    @DisplayName("procesar(): la IA lanza -> se trata como NO_DISPONIBLE, el registro no queda atrapado en PROCESANDO")
+    void procesarSiLaIaLanzaNoDejaElRegistroAtrapado() {
+        GrabacionV90 g = grabacionGrabadaDe(usuarioId);
+        g.procesarIntentoDeValidacion(CLOCK);
+        when(loadGrabacionPort.porId(9L)).thenReturn(Optional.of(g));
+        when(validacionIAPort.validar(any())).thenThrow(new RuntimeException("timeout simulado de Gemini"));
+        when(saveGrabacionPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.procesar(usuarioId, 9L);
+
+        assertThat(g.estadoIa()).isNotEqualTo(EstadoIAv90.PROCESANDO);
+        assertThat(g.estadoIa()).isEqualTo(EstadoIAv90.PENDIENTE);
+        verify(saveGrabacionPort).guardar(g);
+    }
 }

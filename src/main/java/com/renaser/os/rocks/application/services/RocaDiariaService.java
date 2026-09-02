@@ -135,7 +135,7 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
     @Transactional
     public RocaDiaria completar(CompletarRocaDiariaCommand command) {
         ProgresoParticipanteRocks progreso = requireProgreso(command.actorId());
-        RocaDiaria roca = requireRocaPropia(command.actorId(), command.rocaDiariaId());
+        RocaDiaria roca = requireRocaPropiaParaEscritura(command.actorId(), command.rocaDiariaId());
         if (roca.completada()) {
             throw new IllegalStateException("ALREADY_COMPLETED: esta roca ya tiene evidencia");
         }
@@ -332,6 +332,21 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
 
     private RocaDiaria requireRocaPropia(UserId actorId, RocaDiariaId id) {
         RocaDiaria roca = loadRocaDiariaPort.byId(id)
+                .orElseThrow(() -> new NoSuchElementException("Roca diaria no encontrada: " + id));
+        if (!roca.participanteId().equals(actorId)) {
+            throw new NotAuthorizedException("Esta roca diaria no pertenece al actor");
+        }
+        return roca;
+    }
+
+    /**
+     * Igual que {@link #requireRocaPropia} pero con bloqueo pesimista (C-2): se usa
+     * exclusivamente en el camino que MUTA la roca ({@link #completar}). El resto de los
+     * hermanos de esta clase ({@link #solicitarUrl}, {@code hoy}, {@code deHoy}, {@code manana})
+     * son de solo lectura y no arriesgan un doble efecto — no necesitan el bloqueo.
+     */
+    private RocaDiaria requireRocaPropiaParaEscritura(UserId actorId, RocaDiariaId id) {
+        RocaDiaria roca = loadRocaDiariaPort.byIdParaEscritura(id)
                 .orElseThrow(() -> new NoSuchElementException("Roca diaria no encontrada: " + id));
         if (!roca.participanteId().equals(actorId)) {
             throw new NotAuthorizedException("Esta roca diaria no pertenece al actor");
