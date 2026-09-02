@@ -326,10 +326,10 @@ Solo `ADMIN`/`ALCHEMIST`. `204`.
 
 Servicio: `CelulaService` (métodos `miCelula`/`misCompaneros`).
 
-**Trampa de autorización real vs. javadoc:** el comentario del controller dice *"solo TRAINEE"*, pero el código de `CelulaService.miCelula`/`misCompaneros` **solo llama `requireActorActivo`** — no hay ningún chequeo de `rol == TRAINEE`. En la práctica, un `MENTOR` o `ADMIN` activo que mande su propio `X-Actor-Id` también recibe una respuesta (probablemente 404 `assigned:false` porque no está en `participantes_celula`, pero no un 403). Si vas a escribir un test de autorización negativa para este endpoint, el código real no lo bloquea por rol — solo por estado de cuenta.
+**Trampa de autorización real vs. javadoc:** el comentario del controller dice *"solo TRAINEE"*, pero el código de `CelulaService.miCelula`/`misCompaneros` **solo llama `requireActorActivo`** — no hay ningún chequeo de `rol == TRAINEE`. En la práctica, un `MENTOR` o `ADMIN` activo que mande su propio `X-Actor-Id` también recibe una respuesta (probablemente 200 `assigned:false` porque no está en `participantes_celula`, pero no un 403). Si vas a escribir un test de autorización negativa para este endpoint, el código real no lo bloquea por rol — solo por estado de cuenta.
 
 ### 6.1 `GET /api/v1/me/cell`
-**Confirmado — 404 que NO es un error real:** si el actor no tiene célula asignada, la respuesta es `404 Not Found` con body `{"assigned": false}` — **no** el `ApiErrorResponse` estándar (`{message, timestamp}`). Un cliente que solo mira el código HTTP para decidir "hubo un error" va a tratar esto como fallo; hay que mirar el body.
+**Corregido (comunidad-mentor-y-tribu, 2026-09-02):** si el actor no tiene célula asignada, la respuesta es `200 OK` con body `{"assigned": false}` — antes era `404 Not Found` con el mismo body, lo que un cliente no podía distinguir de un error real de red/ruta. `GET /api/v1/me/cell/members` (§6.2) ya usaba 200 para el mismo caso; este cambio alinea ambos endpoints al mismo criterio.
 **Si tiene célula, 200:**
 ```json
 { "cellId":"...", "cellName":"...", "cohortName":"...", "cohortStatus":"ACTIVE", "mentorName":"...", "mentorAvatarUrl":"...",

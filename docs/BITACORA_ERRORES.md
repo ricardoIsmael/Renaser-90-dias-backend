@@ -1604,3 +1604,186 @@ el incremento (`== 1`) — lo segundo no autorrepara nada si la clave ya estaba 
 - **Un segundo detalle del mismo caso, que también costó tiempo:** el `AudioCatalogPort` real es `NoOpAudioCatalogAdapter` y siempre devuelve vacío (Google Drive nunca se integró — CLAUDE.MD §11), así que sin un doble el camino de escritura tampoco se alcanzaría nunca. Acá el agente sí lo había previsto con un `@Primary` en una `@TestConfiguration`; se menciona porque es la otra mitad de la misma trampa: **en este repo hay adaptadores `NoOp` en producción, y una prueba de integración que dependa de uno de ellos no prueba nada.**
 - **Solución:** el reloj entra por el puerto `Clock` — que existe exactamente para esto (CLAUDE.MD §5) — con un `@Bean @Primary` que devuelve `FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"))`. Se dejó el motivo escrito en el javadoc de la clase para que nadie lo "simplifique" de vuelta al reloj del sistema.
 - **Cómo evitarlo:** ninguna prueba puede leer la hora real. Si el código bajo prueba consulta el reloj —aunque sea indirectamente, tres llamadas más abajo— la prueba fija el `Clock` por el puerto. La señal de alarma es cualquier prueba que dependa de una ventana horaria, un vencimiento, un "día de hoy" o un `LocalDate.now()`. Y antes de dar por buena una prueba de integración nueva, verificar que **todos** los puertos que su camino atraviesa tengan un adaptador real o un doble explícito: un `NoOp` en el medio hace que la prueba pase por el camino equivocado sin fallar. Junto con **E-74**, las dos entradas cubren el mismo aprendizaje: las pruebas de integración de esta auditoría fallaron más veces por su andamiaje (semilla, esquema, reloj, dobles) que por el código que venían a verificar.
+
+## E-79 — La foto del Muro se subía bien y se veía rota: se guardaba la URL absoluta donde va la clave de S3
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `MediaItemRequest.aArchivoEntrada()` (`community`, adaptador REST) + `wallApi.urlPermanenteDesdeSubida` (app RN).
+- **Síntoma:** una publicación con foto aparecía en el Muro con el recuadro gris y el texto `📷 Foto 1` en vez de la imagen. Sin error en pantalla, sin nada en los logs del backend: la publicación se creaba con `201`, la foto llegaba a S3, y el feed devolvía un `media[0].url` con pinta de URL firmada válida. Pedirla daba **404**.
+- **Causa real:** la app subía los bytes con la URL prefirmada y después mandaba en `POST /api/v1/wall` la **URL absoluta** del objeto (`https://s3-renaser90dias.s3.amazonaws.com/muro/fotos/<autorId>/<uuid>`), descartando la `ruta` que el propio backend le había devuelto. `MediaItemRequest.aArchivoEntrada()` metía esa URL entera en el campo `ruta` — su javadoc **prometía** traducirla a bucket+ruta, pero la traducción no estaba escrita. Al leer el feed, `PublicacionMuroService.aVista()` pasa esa `ruta` a `AlmacenamientoPort.firmarLectura`, que la trata como **clave de objeto**, así que el presigner firmaba una URL anidada sobre sí misma:
+
+  ```
+  https://s3-renaser90dias.s3.us-east-1.amazonaws.com/https%3A//s3-renaser90dias.s3.amazonaws.com/muro/fotos/...
+  ```
+
+  Esa clave no existe → 404 → `FotoMuro.onError` esconde el `<Image>` y queda a la vista el recuadro con el texto de siempre. **Por eso no parecía un error:** la app estaba diseñada para degradar en silencio, y el defecto se veía igual que "todavía no hay foto".
+- **Solución:** `aClaveDeObjeto()` en `MediaItemRequest` normaliza cualquier forma que mande el cliente (clave limpia, URL virtual-hosted, URL path-style, URL prefirmada) a la clave de S3, anclándose en el prefijo `muro/` — mismo truco que `AbrirTicketSoporteRequest.rutaDesdeUrl` en `support`, que sí lo hacía bien. `V17__medias_publicacion_ruta_no_url.sql` repara las filas ya guardadas con la misma regla en SQL y agrega un `CHECK` que prohíbe volver a guardar algo que empiece con `http`. Del lado de la app se eliminó `urlPermanenteDesdeSubida` (la función que fabricaba la URL) y ahora se manda `urlSubida.ruta` tal cual.
+- **Por qué el barrido de E-57 no lo encontró:** E-57 era el mismo defecto **al revés** — persistía una URL *firmada* donde iba una clave — y su barrido buscó exactamente eso: "¿alguien guarda lo que devuelve `firmarLectura`?". `community` no lo hacía, así que pasó limpio. Lo que nadie chequeó fue la pregunta complementaria: **"¿lo que sí se guarda es una clave válida?"**.
+- **Cómo evitar que vuelva a pasar:** cuando un valor persistido alimenta a `firmarLectura`, no alcanza con verificar que *no* sea una URL firmada — hay que verificar que **sea una clave**, y el `CHECK` en la columna es la forma barata de que la base lo sostenga sola. Y la regla más general, que es la que de verdad falló acá: **un javadoc que describe una traducción no es la traducción.** Si un comentario dice "esto se traduce acá", tiene que haber una prueba que lo demuestre; `MediaItemRequestTest` es esa prueba. La segunda señal ignorada fue el `onError` que esconde la imagen: **una degradación silenciosa en el cliente convierte un bug del servidor en algo invisible** — cuando exista, tiene que quedar registrado en algún lado, aunque no se le muestre a la persona.
+
+## E-80 — El feed del Muro hacía 4 consultas por publicación: ~84 por carga, cada una con su propia conexión
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `PublicacionMuroService.aVista()` / `aPagina()` (`community`).
+- **Síntoma:** ninguno visible en local — y ese es el punto. Con el Postgres en Docker en la misma máquina, las 81 consultas de una página de 20 publicaciones se resuelven en ~82 ms medidos, así que en desarrollo el Muro se siente instantáneo y no hay nada que investigar.
+- **Causa real:** `aPagina` llamaba a `aVista` en un bucle, y `aVista` hacía **cuatro consultas por publicación** (perfil del autor, conteo de reacciones, mi reacción, conteo de comentarios). Con `TAMANO_PAGINA = 20` eso son ~84 consultas por carga del Muro. Agravado por dos cosas: `feed()` no tenía `@Transactional`, así que cada consulta pedía y devolvía **su propia conexión** del pool de Hikari (tamaño 20) — ~84 tomas por request en vez de 1; y el método en lote que evitaba todo esto **ya existía y nadie lo usaba** (`ConsultarPerfilUsuarioPort.porIds`, con el comentario "Evita N+1" escrito encima).
+- **Por qué importa igual:** contra una base administrada en otra zona, cada viaje cuesta 0,5–2 ms, así que el mismo patrón pasa a 40–170 ms de pura espera **por usuario y por carga**. Y hasta este cambio el Muro se recargaba entero después de cada publicación, así que publicar pagaba ese costo dos veces.
+- **Solución:** `aVistas(List<Publicacion>, viewer)` enriquece la página entera con **cuatro consultas fijas**, sin importar el tamaño de la página, usando `porIds` + los nuevos `contarPorTipoDeVarias`, `deUsuarioEnVarias` y `contarDeVarias`. `feed()`/`feedOculto()` pasaron a `@Transactional(readOnly = true)` para que todo comparta una conexión. Firmar las URLs adentro de la transacción es seguro y no contradice CLAUDE.MD §7: el presigner de S3 calcula la firma **localmente**, sin llamar a AWS.
+- **Cómo evitar que vuelva a pasar:** la prueba que lo fija (`laProyeccionNoConsultaUnaVezPorPublicacion`) verifica que los métodos de a una **nunca** se llamen, no que se llamen N veces. Un `verify(..., times(20))` sería la prueba equivocada: se pondría verde justo cuando el defecto vuelve. Y la lección de fondo: **el Postgres local miente sobre la latencia.** Un N+1 es invisible sobre un socket local y caro sobre la red; la señal a buscar en revisión es "¿cuántas consultas hace esto si la lista tiene 20 elementos?", nunca el tiempo del reloj en desarrollo. Cuando un puerto ya expone un método en lote, usarlo no es optimización prematura — es el uso previsto.
+
+
+## E-81 — C-4 corrigió un problema de concurrencia y sin querer ensanchó otro (C-5)
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `evidence/infrastructure/adapter/in/scheduler/ProcesarColaValidacionScheduler.java`,
+  `EvidenciaService.procesarLote` (el método que C-4 ya había tocado).
+- **Síntoma:** ninguno reportado todavía en producción — encontrado por auditoría estática al
+  reclasificar C-5. Con N instancias desplegadas, el mismo lote de 25 evidencias "PENDIENTE"
+  puede procesarse dos veces en paralelo.
+- **Causa real:** C-4 acortó a propósito la transacción que sostiene el
+  `FOR UPDATE SKIP LOCKED` de `pendientesLote` (para no retener una conexión de Hikari 19
+  minutos con IA real) — correcto para el problema que resolvía. Efecto no buscado: el lock de
+  fila ahora se libera casi al instante (apenas termina el SELECT), mucho antes de que termine
+  el procesamiento real. Antes de C-4 el lock viejo duraba todo el procesamiento y tapaba, sin
+  querer, la falta de coordinación entre instancias que describe C-5.
+- **Solución:** `@SchedulerLock` (ShedLock, tabla `renaser.shedlock`) sobre el scheduler que
+  llama a `procesarLote()` — coordina a nivel de "quién puede correr el barrido completo", no a
+  nivel de fila, así que sigue siendo válido aunque el lock de fila dure microsegundos.
+- **Cómo evitar que vuelva a pasar:** cuando se acorta o se elimina una transacción larga por
+  un motivo (agotamiento de pool, timeout), preguntarse explícitamente si esa transacción larga
+  estaba, de rebote, sirviendo de mecanismo de coordinación entre instancias para algo más. Un
+  lock de fila (`FOR UPDATE`) solo coordina mientras la transacción que lo sostiene sigue
+  abierta — si se acorta esa transacción sin agregar otra forma de coordinación, cualquier
+  barrido que dependía de esa duración larga queda expuesto.
+
+## E-82 — El outbox de Modulith no tenía ninguna clave `spring.modulith.*`: sin republicación al reiniciar, sin límite de crecimiento, y 4 listeners que duplicaban su efecto ante una redelivery (C-7)
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `application.yaml` (sin ninguna clave `spring.modulith.*`),
+  `notifications/application/services/NotificacionService.java`,
+  `notifications/infrastructure/adapter/in/event/*NotificationListener.java` (los 4),
+  `notifications/domain/model/notificacion/Notificacion.java`.
+- **Síntoma:** ninguno visible todavía en producción (el outbox nunca se probó bajo una caída
+  real ni bajo un reintento). El riesgo era latente: si el proceso muriera entre el commit de
+  un evento y que su listener terminara, esa publicación quedaba incompleta para siempre (nadie
+  la reentregaba); y el día que se activara la reentrega, cada redelivery de
+  `HabitoCompletado`/`RachaCompletada`/`SantuarioRoto`/`RocaCompletada` iba a crear una fila
+  nueva en `notificaciones` (bandeja duplicada) y reenviar un push duplicado, porque
+  `EmitirNotificacionUseCase.emitir` no tenía ninguna clave de deduplicación.
+- **Causa real:** at-least-once (la garantía real de cualquier outbox transaccional, incluido
+  el de Modulith) significa que un listener PUEDE recibir el mismo evento más de una vez. Los
+  4 listeners de `notifications` traducían el evento a un `INSERT` incondicional; nada los
+  hacía tolerantes a una segunda entrega.
+- **Solución:** `republish-outstanding-events-on-restart=true` + `completion-mode=DELETE`
+  (config) + un scheduler que además reintenta publicaciones incompletas sin esperar a un
+  restart (`shared/infrastructure/event/EventPublicationMaintenanceScheduler`); del lado de
+  `notifications`, cada evento de dominio ya trae un id propio
+  (`registroId`/`rachaId`/`rocaId`) que ahora viaja como `Notificacion.origenEventoId`, con un
+  índice único parcial (`notificaciones_origen_evento_uk`, V16) que hace que una segunda
+  entrega choque contra la restricción en vez de crear una fila nueva —
+  `NotificacionService.emitir` la atrapa en su propia transacción (`REQUIRES_NEW`, mismo
+  patrón que C-10) y la trata como éxito idempotente.
+- **Cómo evitarlo:** cualquier listener que consuma eventos de Modulith (o de cualquier outbox
+  transaccional) tiene que asumir at-least-once desde el diseño, no agregarlo después. La
+  pregunta a hacerse al escribir un `@ApplicationModuleListener` nuevo: "¿qué pasa si esto se
+  ejecuta dos veces con el mismo evento?" — si la respuesta es "se duplica un efecto visible"
+  (una fila, un mensaje enviado, un contador que sube), hace falta una clave de deduplicación
+  desde el primer commit, no como parche posterior. Los eventos de este repo ya traen esa clave
+  natural (`registroId`/`rachaId`/`rocaId`/etc.) porque `habits.api`/`rocks.api` los diseñaron
+  con un id de dominio propio — aprovechar esa clave existente es más simple que inventar una
+  nueva.
+
+## E-83 — C-18: revisados los 113 `@Transactional` sin `readOnly` fuera de `habits`, ninguno era seguro de marcar; open-in-view apagado
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `docs/informes/auditoria-fixes/C-18.md` (análisis completo),
+  `src/main/resources/application.yaml`, `src/test/resources/application.yaml`
+  (`spring.jpa.open-in-view: false`).
+- **Síntoma:** ninguno — es el cierre de un hallazgo de auditoría (C-18, baja), no un bug
+  reportado.
+- **Causa real:** no era un bug, era una pregunta abierta ("¿cuáles de los 146 `@Transactional`
+  son en realidad de solo lectura?"). Respuesta, tras revisar los 113 que quedaban fuera de
+  `habits` método por método: ninguno. El patrón de este repo es que los casos de uso de
+  lectura pura (`listar`/`buscar`/`misX`) no llevan `@Transactional` en absoluto (se apoyan en
+  la transacción por-método que ya aplica Spring Data JPA), así que todo `@Transactional`
+  "pelado" que sobrevivió a esa convención es, sin excepción encontrada, un caso de uso que
+  escribe — directo, delegado a otro puerto, o via un lock `PESSIMISTIC_WRITE` tomado para
+  escribir después.
+- **Solución:** no se marcó ningún método nuevo como `readOnly=true` (habría sido un cambio sin
+  ningún método al que aplicarlo). Se apagó `open-in-view` (antes activo por default, sin
+  ninguna clave que lo declarara) porque se pudo demostrar que es seguro en este repo
+  específico: cero relaciones JPA reales (`@OneToMany`/`@ManyToOne`/`@OneToOne`/`@ManyToMany`)
+  en las 74 entidades del sistema, cero `@Basic(fetch=LAZY)`/`@Lob`, los dos únicos
+  `@ElementCollection` son `EAGER`, y ninguna entidad JPA cruza la frontera hexagonal hacia
+  fuera de su adaptador de persistencia.
+- **Cómo evitarlo (en realidad: cómo no perder este análisis):** si en el futuro alguien agrega
+  una relación `@OneToMany`/`@ManyToOne` perezosa a una entidad, tiene que revisar si algún DTO
+  de salida se arma fuera del método de servicio que la carga — con `open-in-view=false` ya
+  apagado (en main y en test), cualquier violación de eso va a fallar con
+  `LazyInitializationException`, en test antes que en producción. No hace falta volver a este
+  documento para eso: el propio fallo del test es la señal.
+
+## E-84 — `GET /api/v1/me/cell` devolvia 404 para decir "todavia no tenes celula", y la app no podia distinguirlo de un error real
+
+- **Síntoma:** `GET /api/v1/me/cell` respondía `404 Not Found` con cuerpo `{"assigned":false}`
+  cuando el aprendiz no tenía célula asignada. El cuerpo era correcto; el status code no.
+- **Causa real:** decisión de diseño heredada literal del Next.js de origen
+  (`app/api/v1/me/cell/route.ts:32-34`), portada tal cual sin notar que en Java, con un cliente
+  que usa un wrapper `fetch` que lanza en cualquier `!response.ok` (como `apiFetch` de la app RN),
+  ese 404 es indistinguible de un error real.
+- **Solución:** cambiar `ResponseEntity.status(HttpStatus.NOT_FOUND)` por `ResponseEntity.ok(...)`
+  en `MiCelulaController.miCelula`, alineando con el endpoint hermano `/members`, que ya usaba
+  200 para el mismo caso.
+- **Cómo evitar que vuelva a pasar:** cuando "esto no es un error" se traduce del Next.js de
+  origen, el status code se decide por lo que espera el **cliente real** (la app RN, no el
+  Next.js viejo), no por copiar el código HTTP tal cual estaba. Si dos endpoints del mismo
+  controller resuelven el mismo caso de negocio ("sin dato asociado") con status codes distintos,
+  eso es señal de un defecto, no de una decisión — revisar el hermano antes de asumir que un 404
+  "raro" es intencional.
+
+## E-85 — Sin barrido nocturno, quien nunca abre la app no genera tracks: sin tracks no hay fallos, y su coherencia queda intacta
+
+- **Síntoma:** ninguno todavía en producción — este cambio cierra un hueco encontrado por
+  inspección de código (`RegistroService.generarDisponiblesAhora` existía y se usaba al
+  consultar, pero nada llamaba a la generación completa del día por lote; un aprendiz que
+  nunca abre la app nunca tendría tracks, nunca expiraría nada, y su coherencia quedaría en
+  100 indefinidamente).
+- **Causa real:** el caso de uso de generación por lote (`GenerarTracksDelDiaUseCase.generar`)
+  siempre existió y compilaba, pero ningún `@Scheduled` lo invocaba — el barrido nocturno
+  nunca se construyó en la primera pasada del módulo (documentado como deuda explícita en el
+  javadoc viejo de `ExpirarRegistrosScheduler`, que decía literalmente "NI la generación
+  masiva de tracks del día siguiente... queda para un caso de uso separado").
+- **Solución aplicada:** `GenerarTracksDelDiaScheduler` nuevo, con `@SchedulerLock`, corriendo
+  a las 05:02 UTC, aislando fallos por participante.
+- **Cómo evitar que vuelva a pasar:** cuando se agregue un caso de uso `in` nuevo que
+  represente un efecto de negocio recurrente (no solo on-demand), verificar explícitamente
+  si necesita también un disparador por lote (`@Scheduled`) — el patrón "existe el caso de
+  uso pero nadie lo llama" no lo detecta ningún test si no hay un test que verifique que el
+  endpoint HTTP O el scheduler lo invocan.
+
+## E-86 — Flyway se niega a arrancar: se edito una migracion que ya estaba aplicada
+
+- **Fecha:** 2026-09-02
+- **Dónde:** arranque del backend, tras un día con varios agentes escribiendo migraciones.
+- **Síntoma exacto:**
+  ```
+  Validate failed: Migrations have failed validation
+  Migration checksum mismatch for migration version 17
+  -> Applied to database : -440407064
+  -> Resolved locally    : -817047180
+  ```
+  El contexto de Spring no levanta: `flywayInitializer` falla y arrastra a `entityManagerFactory`.
+- **Causa real:** alguien **editó `V17__medias_publicacion_ruta_no_url.sql` después de que ya se hubiera aplicado** a la base (a las 15:21 del mismo día). Flyway guarda una huella de cada migración aplicada justamente para detectar esto: es su protección para que nadie reescriba la historia del esquema. **No hubo daño en la base** — el efecto de la migración estaba aplicado; lo que no coincidía era el archivo.
+- **Solución:** `repair` — actualizar la huella guardada para que coincida con el archivo actual, sin volver a ejecutar nada. Como el proyecto no tiene el plugin de Flyway, se hizo con un `UPDATE` sobre `public.flyway_schema_history` fijando el checksum resuelto localmente, que es exactamente lo que hace `flyway repair`.
+- **Lo que hay que verificar ANTES de reparar, y es la parte importante de esta entrada:** `repair` marca la migración como buena **sin ejecutarla**. Si la edición hubiera **agregado sentencias nuevas**, repararlo las habría salteado en silencio y la base quedaría incompleta sin que nadie se entere. Antes de reparar hay que confirmar que el efecto completo del archivo actual ya está en la base. En este caso se comprobó que la restricción `medias_publicacion_ruta_no_es_url` **existía** (y no podría haberse creado si los `UPDATE` previos no hubieran corrido) y que **cero filas** violaban la condición.
+- **Cómo evitar que vuelva a pasar:** **una migración aplicada no se toca nunca más** — ni para corregir un comentario. Si hay algo que cambiar, se crea una migración nueva. Y cuando hay varios agentes trabajando en paralelo, hay que **asignarles números de migración distintos por adelantado** y prohibirles tocar los archivos ajenos: en esta misma jornada dos agentes eligieron `V15` por su cuenta y otros dos eligieron el mismo número de entrada de bitácora (`E-75`) y de decisión (`D-66`).
+
+## E-87 — El backend rechazaba el cambio de horario del 86% de los habitos por exigir un campo que la mayoria no tiene
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `UpdateHabitPreferenceRequest.java` y `PreferenciaHorarioService.requireOrdenHorario`.
+- **Síntoma:** el dueño del proyecto reportó *"la parte de editar el horario no funciona"*. Desde la app, cambiar la hora de casi cualquier hábito devolvía **400** y el cambio se revertía.
+- **Causa real:** el DTO declaraba `@NotNull LocalTime limitTime`, pero **19 de los 22 hábitos del catálogo real no tienen hora de cierre** (`limitTime: null`) porque no vencen dentro del día. El frontend hacía lo correcto —reenviar el `limitTime` existente para no borrarlo, ver la corrección de ese bug en el mismo cambio— pero cuando ese valor es `null`, la validación del DTO cortaba la petición antes de llegar al servicio. Y aunque hubiera pasado, `requireOrdenHorario` hacía `horaDisparo.isBefore(horaLimite)` sin proteger el nulo.
+- **Por qué estaba así:** el DTO llevaba escrito *"contrato HTTP viejo literal (D-36)"*. Se copió del contrato anterior sin verificar que el catálogo real lo cumpliera. **El contrato viejo describía un cliente que siempre mandaba ambos campos; el catálogo de hoy no.**
+- **Solución:** `limitTime` pasa a ser opcional, y la validación de orden solo se aplica cuando hay hora de cierre. `triggerTime` sigue siendo obligatoria: sin hora de disparo el hábito no se puede ubicar en la jornada.
+- **Cómo evitar que vuelva a pasar:** cuando un DTO se copia de un contrato anterior, **hay que contrastar cada campo obligatorio contra los datos reales** antes de darlo por bueno. Un `@NotNull` heredado sin verificar convierte un endpoint en inútil para la mayoría de los casos, y el síntoma —"no funciona"— aparece lejos de la causa. Es la misma familia que **E-65** (una anotación de Jackson 2 ignorada en silencio por Jackson 3) y **E-60**: *el mensaje apuntaba a un lugar y la causa estaba en otro*.

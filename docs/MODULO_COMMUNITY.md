@@ -55,7 +55,7 @@ Repo Next.js clonado en `C:\Users\Usuario\Documents\Backend90dias\RenaserBack`. 
 - Transición de estado de cohorte: solo hacia adelante y de a un paso, `PLANNED → ACTIVE → COMPLETED` (`community/service.ts:69-72`).
 - Borrar una célula NO exige vaciarla primero — los aprendices quedan sin célula (antes SÍ exigía, se relajó — `community/service.ts:466-489`, comentario "por qué ya no hay guardia").
 - MENTOR ve solo su propia cohorte/célula (la que lidera); ADMIN/ALCHEMIST ven todo (`community/service.ts:97-121`, `:221-249`).
-- CM-01 (tag del código viejo, no confundir con las decisiones `CM-N` de este documento): `GET /api/v1/me/cell` es **TRAINEE-únicamente**, nunca tuvo rama MENTOR (`app/api/v1/me/cell/route.ts:26`). Sin célula no es error: 404 `{assigned:false}` (`:32-34`).
+- CM-01 (tag del código viejo, no confundir con las decisiones `CM-N` de este documento): `GET /api/v1/me/cell` es **TRAINEE-únicamente**, nunca tuvo rama MENTOR (`app/api/v1/me/cell/route.ts:26`). Sin célula no es error — el Next.js de origen respondía 404 `{assigned:false}` (`:32-34`); **corregido en la migración (comunidad-mentor-y-tribu, 2026-09-02) a 200 `{assigned:false}`**, porque un cliente no puede distinguir un 404 semántico de un error real de red/ruta. Ver `docs/api/CONTRATO_COMUNIDAD.md` §6.1.
 - El ranking (`community/service.ts:658-867`, `getRanking`) combina `coherenceScore`/`leaguePoints` (tablas de `points`) con una función SQL (`general_ranking_scores()`) que suma hábitos+rocas+cursos — fuera de alcance de este módulo (ver CM-1).
 
 ### 1.4 Testimonios (`features/testimonios/**`)
