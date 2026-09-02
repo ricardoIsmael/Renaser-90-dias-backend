@@ -1489,3 +1489,118 @@ invalid accessor method in record ...ResultadoVerificacionDominio
 - **Causa real, una por una:** (1) el `EntityManager` compartido exige transacción activa para `executeUpdate`, y `@BeforeEach` no la trae. (2) `solicitudes_cuenta.ip_solicitud` es de tipo **`inet`** en Postgres: un identificador inventado como IP única por test revienta el INSERT antes de que el limitador entre en juego. (3) el hábito de sistema "día sin celular" **ya viene sembrado** por `V4__catalogo_habitos_default.sql` y su `clave_sistema` es UNIQUE — la prueba insertaba uno propio.
 - **Solución:** (1) la semilla se envuelve en un `TransactionTemplate`, que además es lo correcto: los datos deben estar **commiteados** antes de que corra el caso de uso. (2) IP del rango de documentación `2001:db8::/32` (RFC 3849), que es `inet` válido y deja espacio de sobra para una por test. (3) se toma el hábito del catálogo con un `SELECT ... WHERE clave_sistema = ?` y **no se borra** en el `@AfterEach` — borrarlo habría eliminado una fila de catálogo compartida con el resto de la suite.
 - **Cómo evitarlo:** antes de escribir la semilla de una prueba de integración, mirar **el esquema y las migraciones**, no solo el código de producción: el tipo real de la columna (`inet`, `citext`, enums) y qué filas ya siembra Flyway. Y cuando una prueba de integración falla, leer **dónde** falla antes de sospechar del arreglo: `seedFixtures` en el stack trace significa que el caso de uso ni siquiera llegó a ejecutarse. Relacionado con la lección repetida de E-60/E-65/E-66: **el mensaje apuntaba a un lugar y la causa estaba en otro.**
+
+## E-75 — La primera fila de puntaje de un participante no está protegida: 409 en el primer hábito (C-12)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `points/application/services/PuntajeService.java` (`cargarOInicializar`,
+  antes líneas 136-142)
+- **Síntoma:** un aprendiz recién inscrito que completa dos hábitos (o una roca y un
+  hábito) casi al mismo tiempo el día 1 del programa puede recibir un 409 en uno de los
+  dos, con ese punto perdido en vez de solo demorado.
+- **Causa real:** `SELECT ... FOR UPDATE` (`PESSIMISTIC_WRITE`) no puede bloquear una fila
+  que todavía no existe. Cuando `puntajes_participante` no tiene fila para el
+  participante, dos ajustes concurrentes reciben `Optional.empty()` los dos, construyen su
+  propio `PuntajeParticipante.inicial(...)` en memoria y los dos terminan en un `INSERT`
+  (vía `merge()` de Spring Data JPA sobre una entidad con `@Id` asignado a mano). El
+  segundo `INSERT` viola la PK, su transacción entera hace rollback (incluido su asiento
+  en el ledger), y el ajuste se pierde.
+- **Solución:** `INSERT ... ON CONFLICT (participante_id) DO NOTHING` antes de la
+  relectura con `PESSIMISTIC_WRITE` de siempre. Postgres serializa el `INSERT` concurrente
+  contra la restricción UNIQUE (el segundo espera a que el primero resuelva, nunca hay dos
+  inserts exitosos ni uno que viole la PK); quien pierde la carrera de creación
+  simplemente relee la fila ya creada, la bloquea y aplica su ajuste arriba — ningún punto
+  se pierde.
+- **Cómo evitarlo:** `PESSIMISTIC_WRITE`/`FOR UPDATE` protege una fila que YA existe; no
+  protege su creación. Cualquier `cargarOInicializar`/`findOrCreate` sobre una tabla con PK
+  propia (no autogenerada) que pueda ejecutarse concurrentemente para la MISMA clave por
+  primera vez necesita `INSERT ... ON CONFLICT DO NOTHING` (o crear la fila en el momento
+  del alta, si el dominio lo permite) antes de cualquier lock — el lock solo entra en
+  juego después de que la existencia de la fila esté garantizada. Antes de asumir que un
+  `byIdParaEscritura` alcanza, preguntar: "¿puede esta ser la primera vez que se toca esta
+  fila?" — si la respuesta es sí, el lock solo no basta (patrón ya visto, en su variante
+  "check-then-act sobre fila existente", en C-2/C-3/C-13; C-12 es la misma familia mirando
+  la fila que directamente no existe todavía).
+
+## E-76 — 409 en operaciones de "creá si no existe" bajo concurrencia, y UnexpectedRollbackException oculto en confirmar asistencia (C-10/C-15)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `habits/application/services/EspirituService.java`,
+  `chat/application/services/ConversacionService.java`,
+  `notifications/infrastructure/adapter/out/persistence/tokenpush/TokenPushPersistenceAdapter.java`,
+  `calendar/application/services/ConfirmacionService.java`.
+- **Síntoma:** (C-10) un `GET`/`POST` idempotente ("traeme X, y si no existe creálo") le
+  devuelve 409 al segundo de dos llamadores casi simultáneos del mismo recurso, aunque
+  ambos deberían terminar viendo lo mismo. (C-15) un efecto secundario best-effort que
+  falla dentro de una `@Transactional` puede hacer explotar el COMMIT con
+  `UnexpectedRollbackException` en vez de dejar ver la causa real, aunque el código tenga
+  un `try/catch` alrededor del fallo.
+- **Causa real:** (C-10) check-then-act clásico contra una columna `UNIQUE`: "leer si
+  existe" y "crear si no" no son atómicos, y dos lecturas casi simultáneas pueden pasar
+  las dos por el camino de creación. (C-15) cualquier método con `@Transactional` propio
+  (incluidos los `@Modifying` de Spring Data JPA — Spring los envuelve con
+  `@Transactional` automáticamente) que PARTICIPA de una transacción ya abierta, si lanza,
+  marca esa transacción COMPARTIDA como rollback-only ANTES de que el `catch` del llamador
+  la atrape — atraparla no revierte esa marca.
+- **Solución:** (C-10) según el contexto transaccional: si la creación y la relectura
+  posterior viven en la MISMA `@Transactional` (no se puede "atrapar y releer" ahí mismo:
+  Postgres deja la transacción abortada apenas el INSERT falla), aislar la creación en su
+  propia transacción con `TransactionTemplate`/`Propagation.REQUIRES_NEW` (mismo patrón ya
+  usado en `RegistroService`/`RachaService`/`PromocionCambioHorarioService`). Si es un
+  UPSERT real sin lectura posterior en la misma llamada, preferir
+  `INSERT ... ON CONFLICT ... DO UPDATE/DO NOTHING` atómico en la base (mismo patrón que
+  `ReaccionMuroPersistenceAdapter`/`RecordatorioPersistenceAdapter`) — nunca lanza por una
+  carrera, así que no hace falta ni `catch` ni transacción aislada. (C-15) aislar en
+  `REQUIRES_NEW` cualquier efecto secundario best-effort (avisos, notificaciones) que no
+  deba poder tumbar la operación principal si falla.
+- **Cómo evitarlo:** ante un "buscá X, y si no existe creálo" dentro de un método
+  `@Transactional`, preguntarse primero si el llamador necesita releer algo DESPUÉS de que
+  la creación pueda fallar por una carrera — si sí, la creación tiene que vivir en su
+  propia transacción (REQUIRES_NEW), nunca "catch y seguir" en la misma. Ante cualquier
+  `try/catch` alrededor de una llamada a un puerto/repositorio dentro de un método
+  `@Transactional` cuya intención es "si esto falla, no me importa, seguí igual", verificar
+  que esa llamada esté aislada en su propia transacción — si no lo está, el catch es
+  cosmético: la transacción de afuera ya puede estar condenada al momento en que se
+  ejecuta el catch, y el síntoma (`UnexpectedRollbackException`) aparece lejos, en el
+  commit, no en el punto real del problema.
+
+## E-77 — INCR y EXPIRE en comandos Redis separados dejaban claves sin TTL — bloqueo permanente en los tres limitadores de tasa (C-8)
+
+**Síntoma:** en teoría (nadie lo reportó todavía en producción), si el proceso moría justo entre
+un INCR y su EXPIRE siguiente en cualquiera de los tres adaptadores Redis de limitación
+(`LimitarSolicitudesResetRedisAdapter`, `ControlCuotaRedisAdapter`,
+`CodigoVerificacionEmailRedisAdapter`), la clave del contador quedaba sin vencimiento. A partir de
+ahí, esa IP/email/actor quedaba bloqueado para siempre (o, en `ControlCuotaRedisAdapter.liberar`,
+un DECR sobre una clave ya vencida creaba una clave nueva en -1 sin TTL, huérfana pero inofensiva).
+Desde C-16/E-72, el mismo defecto en `LimitarSolicitudesResetRedisAdapter` puede bloquear
+permanentemente el ALTA de cuentas nuevas de una IP, no solo el reseteo de contraseña.
+
+**Causa real:** los tres adaptadores hacían `INCR` (o `INCR` + lectura de otro TTL, en el caso del
+código de verificación) y DESPUÉS `EXPIRE`/`PEXPIRE` como comandos Redis separados, sin nada que
+los uniera atómicamente. El chequeo de "¿es la primera vez?" (`intentos == 1`) además no
+autorreparaba una clave ya envenenada: solo intenta fijar TTL una vez en la vida de la clave.
+
+**Solución:** los tres adaptadores ahora envuelven incremento + TTL en un único script Lua
+(`DefaultRedisScript` + `RedisTemplate.execute`), que Redis ejecuta de punta a punta sin permitir
+que otro comando se intercale. El chequeo pasó de "¿es la primera vez?" a "¿esta clave tiene TTL
+AHORA MISMO?" (`TTL == -1`): eso hace que cualquier clave envenenada (por el código viejo, o por
+cualquier causa futura) se autorepare en la SIGUIENTE llamada que la toque, sin limpieza manual.
+`ControlCuotaRedisAdapter.liberar` además pasó a chequear `EXISTS` antes de `DECR`, dentro del
+mismo script, para no crear una clave huérfana sobre una que ya venció.
+
+**Cómo evitar que vuelva a pasar:** cualquier contador en Redis que combine "incrementar" +
+"fijar TTL si hace falta" tiene que hacerlo en un único script Lua (`DefaultRedisScript`), nunca en
+dos llamadas separadas al `RedisTemplate` — ni siquiera si la primera parece "atómica por sí sola"
+(`INCR` lo es, pero la SECUENCIA de INCR-y-después-EXPIRE no). El chequeo de "hace falta fijar TTL"
+debe ser sobre el ESTADO ACTUAL de la clave (`TTL == -1`), no sobre el valor que acaba de devolver
+el incremento (`== 1`) — lo segundo no autorrepara nada si la clave ya estaba mal por otro motivo.
+
+## E-78 — Una prueba de integración que pasaba o fallaba según la hora del día en que se corriera
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `EspirituConcurrenciaTest` (prueba nueva escrita al aplicar C-10).
+- **Síntoma:** `AssertionFailedError: [una sola fila desbloqueada pese a 6 lecturas concurrentes] expected: 1L but was: 0L`. Ninguna de las seis llamadas concurrentes lanzó excepción — simplemente **no se creó ninguna fila**. El código de producción estaba correcto.
+- **Causa real:** `EspirituService.asegurarAvance` retorna sin hacer nada antes de `HORA_DESBLOQUEO` (07:00 en la zona del participante). La prueba sembraba `timezone = 'UTC'` y usaba **el reloj del sistema**; se corrió a las 00:35 de Perú, o sea **05:35 UTC**, antes de las siete. La misma prueba, sin tocar una línea, habría pasado a media mañana. Es una prueba intermitente cuyo resultado depende de a qué hora se corra el build — y de las peores, porque en horario de oficina se ve verde siempre y solo falla de madrugada o en un CI en otro huso horario.
+- **Un segundo detalle del mismo caso, que también costó tiempo:** el `AudioCatalogPort` real es `NoOpAudioCatalogAdapter` y siempre devuelve vacío (Google Drive nunca se integró — CLAUDE.MD §11), así que sin un doble el camino de escritura tampoco se alcanzaría nunca. Acá el agente sí lo había previsto con un `@Primary` en una `@TestConfiguration`; se menciona porque es la otra mitad de la misma trampa: **en este repo hay adaptadores `NoOp` en producción, y una prueba de integración que dependa de uno de ellos no prueba nada.**
+- **Solución:** el reloj entra por el puerto `Clock` — que existe exactamente para esto (CLAUDE.MD §5) — con un `@Bean @Primary` que devuelve `FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"))`. Se dejó el motivo escrito en el javadoc de la clase para que nadie lo "simplifique" de vuelta al reloj del sistema.
+- **Cómo evitarlo:** ninguna prueba puede leer la hora real. Si el código bajo prueba consulta el reloj —aunque sea indirectamente, tres llamadas más abajo— la prueba fija el `Clock` por el puerto. La señal de alarma es cualquier prueba que dependa de una ventana horaria, un vencimiento, un "día de hoy" o un `LocalDate.now()`. Y antes de dar por buena una prueba de integración nueva, verificar que **todos** los puertos que su camino atraviesa tengan un adaptador real o un doble explícito: un `NoOp` en el medio hace que la prueba pase por el camino equivocado sin fallar. Junto con **E-74**, las dos entradas cubren el mismo aprendizaje: las pruebas de integración de esta auditoría fallaron más veces por su andamiaje (semilla, esquema, reloj, dobles) que por el código que venían a verificar.

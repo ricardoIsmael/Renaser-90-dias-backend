@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -31,6 +33,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -54,6 +57,10 @@ class ConfirmacionServiceTest {
     private ConsultarProgresoParticipanteCalendarPort progresoPort;
     @Mock
     private LoadNivelMembresiaPort nivelPort;
+    /** No necesita stubbing: TransactionTemplate.execute con getTransaction()==null solo
+     * corre el callback directo, mismo criterio que PromocionCambioHorarioServiceTest. */
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private ConfirmacionService service;
     private final UserId actorId = UserId.of(UUID.randomUUID());
@@ -74,7 +81,7 @@ class ConfirmacionServiceTest {
                     }
                 }, (u, t) -> false);
         service = new ConfirmacionService(loadEventoPort, saveConfirmacionPort, saveRecordatorioPort,
-                accesoEventoService, CLOCK);
+                accesoEventoService, CLOCK, transactionManager);
     }
 
     private Evento eventoTodos(UserId creador) {
@@ -93,6 +100,21 @@ class ConfirmacionServiceTest {
 
         verify(saveConfirmacionPort).upsert(any());
         verify(saveRecordatorioPort).cancelarPorAsistencia(actorId, eventoId, INICIA_EN, RecordatorioEvento.MOTIVO_ASISTIRA);
+    }
+
+    @Test
+    @DisplayName("C-15: si cancelar los avisos falla, confirmar() no explota -- la confirmacion ya quedo guardada")
+    void confirmarNoPropagaUnFalloAlCancelarAvisos() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(
+                new ProgresoParticipanteCalendar(10, ZoneId.of("America/Lima"), RolUsuario.TRAINEE, false, null)));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoTodos(actorId)));
+        when(saveRecordatorioPort.cancelarPorAsistencia(any(), any(), any(), any()))
+                .thenThrow(new DataIntegrityViolationException("fallo simulado de C-15"));
+
+        assertThatCode(() -> service.confirmar(actorId, eventoId, INICIA_EN, EstadoConfirmacion.ASISTE))
+                .doesNotThrowAnyException();
+
+        verify(saveConfirmacionPort).upsert(any());
     }
 
     @Test

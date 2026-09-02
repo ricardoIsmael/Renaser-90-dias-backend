@@ -2,17 +2,28 @@ package com.renaser.os.users.infrastructure.adapter.out.redis;
 
 import com.renaser.os.users.application.ports.out.autenticacion.CodigoVerificacionEmailPort;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
 
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.util.List;
 
 /**
- * Codigo + contador de intentos en dos claves separadas que se mantienen sincronizadas a mano
- * (sin script Lua: el codebase no usa scripting de Redis en ningun otro lado y el riesgo de una
- * carrera aca es, como mucho, dejar pasar un intento de mas bajo concurrencia extrema — no
- * filtrar el codigo). {@code intentos} nunca sobrevive a {@code codigo}: se borra explicito al
- * generar uno nuevo, y su TTL se iguala al que le queda a {@code codigo} en el primer fallo.
+ * Codigo + contador de intentos en dos claves separadas. {@code intentos} nunca sobrevive a
+ * {@code codigo}: se borra explicito al generar uno nuevo, y su TTL se iguala al que le
+ * queda a {@code codigo} en el primer fallo.
+ *
+ * <p><b>Corregido (C-8, docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html):</b>
+ * la version anterior de este adaptador evitaba a proposito un script Lua para este caso
+ * ("el riesgo es, como mucho, dejar pasar un intento de mas") — pero el hallazgo C-8 mostro
+ * que el riesgo real no era ese: {@code registrarIntentoFallido} hacia {@code INCR} y
+ * DESPUES leia+copiaba el TTL de {@code codigo} en comandos separados; si el proceso moria
+ * (o el segundo comando fallaba) entre uno y otro, la clave de intentos quedaba SIN TTL.
+ * Ahora ambos pasos corren dentro de un unico script Lua ({@code INCR} + copiar el TTL de
+ * {@code codigo} SOLO si {@code intentos} todavia no tiene uno propio), atomico de punta a
+ * punta y con auto-reparacion si una clave ya quedo envenenada por el codigo viejo.
  */
 @Component
 class CodigoVerificacionEmailRedisAdapter implements CodigoVerificacionEmailPort {
@@ -22,6 +33,24 @@ class CodigoVerificacionEmailRedisAdapter implements CodigoVerificacionEmailPort
 
     /** 6 digitos, cero-rellenado — mismo formato que espera la pantalla de la app (un solo uso). */
     private static final int DIGITOS = 6;
+
+    /**
+     * {@code KEYS[1]}: la clave del codigo. {@code KEYS[2]}: la clave de intentos.
+     * Incrementa {@code intentos} de forma atomica y, SOLO si esa clave todavia no tiene
+     * TTL, le copia el TTL restante de {@code codigo} (si {@code codigo} ya no tiene uno
+     * vivo — no deberia pasar, porque el llamador ya confirmo que existe antes de invocar
+     * esto — no se fija nada, para no dejar un TTL inventado).
+     */
+    private static final RedisScript<Long> INCREMENTAR_INTENTOS_CON_TTL_DEL_CODIGO = new DefaultRedisScript<>(
+            "local actual = redis.call('INCR', KEYS[2]) "
+                    + "if redis.call('TTL', KEYS[2]) == -1 then "
+                    + "local ttlCodigo = redis.call('TTL', KEYS[1]) "
+                    + "if ttlCodigo > 0 then "
+                    + "redis.call('EXPIRE', KEYS[2], ttlCodigo) "
+                    + "end "
+                    + "end "
+                    + "return actual",
+            Long.class);
 
     private final StringRedisTemplate redisTemplate;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -58,15 +87,10 @@ class CodigoVerificacionEmailRedisAdapter implements CodigoVerificacionEmailPort
 
     private void registrarIntentoFallido(String email, String claveCodigo, int maxIntentos) {
         String claveIntentos = claveIntentos(email);
-        Long intentos = redisTemplate.opsForValue().increment(claveIntentos);
+        Long intentos = redisTemplate.execute(INCREMENTAR_INTENTOS_CON_TTL_DEL_CODIGO,
+                List.of(claveCodigo, claveIntentos));
         if (intentos == null) {
             return;
-        }
-        if (intentos == 1L) {
-            Long ttlCodigoSegundos = redisTemplate.getExpire(claveCodigo);
-            if (ttlCodigoSegundos != null && ttlCodigoSegundos > 0) {
-                redisTemplate.expire(claveIntentos, Duration.ofSeconds(ttlCodigoSegundos));
-            }
         }
         if (intentos >= maxIntentos) {
             // Se agotaron los intentos: se invalida el codigo entero (no solo se deja de

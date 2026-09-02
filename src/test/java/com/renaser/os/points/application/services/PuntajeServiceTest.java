@@ -101,11 +101,16 @@ class PuntajeServiceTest {
     @DisplayName("P-06: ajustar() guarda el saldo Y el asiento del ledger, con el mismo deltaAplicado")
     void ajustarGuardaSaldoYAsientoConsistentes() {
         UserId id = participante();
-        when(loadPuntajePort.byParticipanteIdParaEscritura(id)).thenReturn(Optional.empty());
+        // C-12: cargarOInicializar() relee byParticipanteIdParaEscritura despues de asegurar la
+        // fila (crearFilaInicialSiFalta) — primera llamada vacia (no hay fila todavia), segunda
+        // ya con la fila recien creada (o la de quien haya ganado la carrera de creacion).
+        when(loadPuntajePort.byParticipanteIdParaEscritura(id))
+                .thenReturn(Optional.empty(), Optional.of(PuntajeParticipante.inicial(id, CLOCK)));
 
         AjustePuntos ajuste = service.ajustar(new AjustarPuntosCommand(id, MotivoPuntos.HABIT_COMPLETED, 10, "ok"));
 
         ArgumentCaptor<PuntajeParticipante> puntajeCaptor = ArgumentCaptor.forClass(PuntajeParticipante.class);
+        verify(savePuntajePort).crearFilaInicialSiFalta(any());
         verify(savePuntajePort).save(puntajeCaptor.capture());
         verify(saveAjustePort).save(any());
 
@@ -118,7 +123,8 @@ class PuntajeServiceTest {
     @DisplayName("un participante sin fila previa arranca en 100 antes de aplicar el delta (lazy-init)")
     void lazyInitAntesDelPrimerAjuste() {
         UserId id = participante();
-        when(loadPuntajePort.byParticipanteIdParaEscritura(id)).thenReturn(Optional.empty());
+        when(loadPuntajePort.byParticipanteIdParaEscritura(id))
+                .thenReturn(Optional.empty(), Optional.of(PuntajeParticipante.inicial(id, CLOCK)));
 
         AjustePuntos ajuste = service.ajustar(new AjustarPuntosCommand(id, MotivoPuntos.MISSED_HABIT, -1000, null));
 
@@ -162,7 +168,8 @@ class PuntajeServiceTest {
         UserId participanteId = participante();
         UserId actorId = participante();
         when(verificarActorAdministrativoPort.esAdministrativoActivo(actorId)).thenReturn(true);
-        when(loadPuntajePort.byParticipanteIdParaEscritura(participanteId)).thenReturn(Optional.empty());
+        when(loadPuntajePort.byParticipanteIdParaEscritura(participanteId))
+                .thenReturn(Optional.empty(), Optional.of(PuntajeParticipante.inicial(participanteId, CLOCK)));
 
         service.ajustarManualmente(new AjustarPuntosManualmenteCommand(participanteId, -5, "correccion", actorId));
 
@@ -271,5 +278,8 @@ class PuntajeServiceTest {
                 .isInstanceOf(NoSuchElementException.class);
 
         verify(savePuntajePort, never()).save(any());
+        // C-12: requireInscrito() sigue corriendo ANTES de asegurar la fila inicial — no se
+        // crea una fila de puntaje para alguien sin participacion solo porque perdio la carrera.
+        verify(savePuntajePort, never()).crearFilaInicialSiFalta(any());
     }
 }

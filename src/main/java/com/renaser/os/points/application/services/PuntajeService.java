@@ -135,10 +135,26 @@ public class PuntajeService implements AjustarPuntosUseCase, AjustarPuntosManual
 
     private PuntajeParticipante cargarOInicializar(UserId participanteId) {
         return loadPuntajePort.byParticipanteIdParaEscritura(participanteId)
-                .orElseGet(() -> {
-                    requireInscrito(participanteId);
-                    return PuntajeParticipante.inicial(participanteId, clock);
-                });
+                .orElseGet(() -> crearFilaYCargarParaEscritura(participanteId));
+    }
+
+    /**
+     * C-12: {@code FOR UPDATE} no bloquea una fila que todavia no existe, asi que dos
+     * ajustes concurrentes sobre un participante recien inscrito (ej. sus dos primeros
+     * habitos completados casi a la vez) llegaban aca los dos, cada uno con un
+     * {@code PuntajeParticipante.inicial(...)} en memoria, y el segundo {@code save()}
+     * (merge) violaba la PK de {@code puntajes_participante} -> 409 en el primer habito
+     * del programa. Se resuelve con INSERT ... ON CONFLICT DO NOTHING (idempotente, nunca
+     * lanza) y una relectura con el mismo bloqueo pesimista de siempre: quien pierde la
+     * carrera de creacion simplemente ve la fila que ya gano, la bloquea y aplica su ajuste
+     * arriba — ningun punto se pierde, solo se serializa.
+     */
+    private PuntajeParticipante crearFilaYCargarParaEscritura(UserId participanteId) {
+        requireInscrito(participanteId);
+        savePuntajePort.crearFilaInicialSiFalta(PuntajeParticipante.inicial(participanteId, clock));
+        return loadPuntajePort.byParticipanteIdParaEscritura(participanteId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Fila de puntaje no encontrada tras asegurar su existencia: " + participanteId));
     }
 
     /**

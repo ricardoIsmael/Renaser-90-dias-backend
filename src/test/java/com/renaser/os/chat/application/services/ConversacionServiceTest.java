@@ -22,10 +22,13 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.util.List;
@@ -68,6 +71,10 @@ class ConversacionServiceTest {
     private UserSummaryFinder userSummaryFinder;
     @Mock
     private IdGenerator idGenerator;
+    /** No necesita stubbing: TransactionTemplate.execute con getTransaction()==null solo
+     * corre el callback directo, mismo criterio que PromocionCambioHorarioServiceTest. */
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private ConversacionService service;
 
@@ -80,7 +87,7 @@ class ConversacionServiceTest {
     void setUp() {
         service = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
                 esParticipantePort, marcarLeidoPort, contarNoLeidosPort, loadMensajePort, userSummaryFinder,
-                CLOCK, idGenerator);
+                CLOCK, idGenerator, transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
                 Optional.of(new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
@@ -129,6 +136,23 @@ class ConversacionServiceTest {
 
         verify(saveConversacionPort).save(any());
         verify(agregarParticipantePort, times(2)).agregar(any());
+    }
+
+    @Test
+    @DisplayName("C-10: si el INSERT choca con el UNIQUE(clave_directa) por una carrera, se "
+            + "devuelve la conversacion ganadora en vez de explotar")
+    void obtenerOCrearRecuperaLaConversacionGanadoraDeUnaCreacionConcurrente() {
+        String clave = Conversacion.claveDirectaDe(activo, otroActivo);
+        Conversacion ganadora = Conversacion.crearDirecta(ConversacionId.of(UUID.randomUUID()), clave, CLOCK.now());
+        // La primera lectura no ve nada (todavia no gano nadie); la segunda (dentro del catch,
+        // tras perder la carrera) ya ve la fila que la otra llamada concurrente comprometio.
+        when(loadConversacionPort.porClaveDirecta(clave)).thenReturn(Optional.empty(), Optional.of(ganadora));
+        when(saveConversacionPort.save(any())).thenThrow(new DataIntegrityViolationException("unique_violation simulado"));
+
+        Conversacion resultado = service.obtenerOCrear(new CrearConversacionDirectaCommand(activo, otroActivo));
+
+        assertThat(resultado).isEqualTo(ganadora);
+        verify(agregarParticipantePort, never()).agregar(any());
     }
 
     @Test
