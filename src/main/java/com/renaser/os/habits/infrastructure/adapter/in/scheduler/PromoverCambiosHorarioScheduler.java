@@ -2,6 +2,7 @@ package com.renaser.os.habits.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.habits.application.ports.in.preferencia.PromoverCambiosHorarioProgramadosUseCase;
 import com.renaser.os.shared.domain.Clock;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -27,6 +28,16 @@ import org.springframework.stereotype.Component;
  * adelanta el cambio unos 20 minutos (23:40 hora local del dia anterior) — una franja en la que
  * ninguna ventana de habito esta viva. Un participante en una zona por delante de UTC recibe el
  * cambio dentro del mismo dia efectivo, nunca antes de su vispera.
+ *
+ * <p><b>C-5 (docs/informes/auditoria-fixes/C-5.md): {@code @SchedulerLock}, no opcional.</b>
+ * {@code PromocionCambioHorarioService.promoverLosQueRigenEn} lee los pendientes
+ * ({@code queYaRigenEn}) SIN {@code FOR UPDATE}, y {@code aplicarAhora}/{@code registrar}
+ * (historial) son INSERT puros, sin guarda de dominio contra re-aplicar el mismo pendiente
+ * — a diferencia de {@code RegistroHabito.expirar()}/{@code RachaSinCelular.expirar()} (que
+ * son no-op o lanzan si ya no corresponde), acá dos instancias que lean el mismo pendiente
+ * antes de que cualquiera lo borre APLICAN el cambio dos veces y, peor, INSERTAN dos filas en
+ * {@code historial_cambios_horario} — la tabla que cobra el cupo semanal de cambios de
+ * horario (ver javadoc de la clase): un aprendiz pierde cupo que nunca gastó.
  */
 @Component
 class PromoverCambiosHorarioScheduler {
@@ -41,8 +52,18 @@ class PromoverCambiosHorarioScheduler {
         this.clock = clock;
     }
 
+    /**
+     * {@code lockAtMostFor} por defecto 15 minutos: cada pendiente se promueve en su propia
+     * transacción corta (solo escrituras a Postgres, sin IA ni llamada externa), así que aun
+     * con miles de cambios pendientes el barrido real tarda segundos-a-pocos-minutos: 15 min
+     * es margen generoso sin dejar el lock preso casi un día completo (el próximo intento
+     * de este cron es recién mañana a la misma hora) si el proceso muere a mitad de barrido.
+     */
     @Scheduled(cron = "0 40 4 * * *", zone = "UTC")
-    void ejecutar() {
+    @SchedulerLock(name = "habits-promover-cambios-horario",
+            lockAtMostFor = "${renaser.scheduling.shedlock.habits-promover-cambios-horario.lock-at-most-for:PT15M}",
+            lockAtLeastFor = "${renaser.scheduling.shedlock.habits-promover-cambios-horario.lock-at-least-for:PT10S}")
+    public void ejecutar() {
         int promovidos = promoverUseCase.promoverLosQueRigenEn(clock.today());
         log.info("[habits.PromoverCambiosHorarioScheduler] {} cambio(s) de horario programados pasaron a regir",
                 promovidos);

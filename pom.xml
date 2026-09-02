@@ -264,6 +264,19 @@
 			<version>2.2.4</version>
 			<scope>test</scope>
 		</dependency>
+		<!-- ShedLock: lock distribuido para los @Scheduled que NO son seguros con N instancias.
+		     Solo 3 de los 10 schedulers lo llevan; la clasificacion caso por caso, y por que los
+		     otros 7 no lo necesitan, esta en docs/informes/auditoria-fixes/C-5.md (hallazgo C-5). -->
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-spring</artifactId>
+			<version>7.9.0</version>
+		</dependency>
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-provider-jdbc-template</artifactId>
+			<version>7.9.0</version>
+		</dependency>
 	</dependencies>
 	<dependencyManagement>
 		<dependencies>

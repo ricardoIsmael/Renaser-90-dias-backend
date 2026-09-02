@@ -1,4 +1,19 @@
 spring:
+  # C-14 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): espeja el bloque
+  # de main -- sin esto, TODA la suite corria con hilos de plataforma (el default de Tomcat/
+  # el pool de @Async) mientras produccion corre con hilos virtuales, asi que las pruebas no
+  # ejercitaban el mismo modelo de concurrencia que el sistema real.
+  threads:
+    virtual:
+      enabled: true
+  # Mismo motivo que arriba: en main este limite (fijado al resolver C-1) acota a cuantos
+  # @Async concurrentes se despachan a la vez (hoy solo onboarding, la validacion V90). Sin
+  # espejarlo, un test que dispare varias validaciones a la vez veria un comportamiento de
+  # throttling distinto al de produccion.
+  task:
+    execution:
+      simple:
+        concurrency-limit: 20
   # Espeja el bloque de main: sin esto, Spring Session no registra su repositorio Redis y
   # GestionSesionesService (que inyecta FindByIndexNameSessionRepository para cerrar todas
   # las sesiones de un usuario) rompe el contexto de TODO test @SpringBootTest. El contenedor
@@ -13,6 +28,13 @@ spring:
       chat: none
       embedding: none
       vectorstore: none
+  # C-18 (docs/informes/auditoria-fixes/C-18.md): espeja el bloque de main -- sin esto, los
+  # tests seguirian ejercitando open-in-view=true (el default de Boot) mientras produccion
+  # corre con false, y un futuro @OneToMany/@ManyToOne perezoso que rompiera un DTO armado
+  # fuera del servicio recien se notaria en produccion, no en la suite. Mismo criterio que
+  # el espejo de hilos virtuales de C-14, arriba.
+  jpa:
+    open-in-view: false
   autoconfigure:
     exclude:
       # Sin credenciales de Gemini/Vertex en este entorno de test — los tests no llaman

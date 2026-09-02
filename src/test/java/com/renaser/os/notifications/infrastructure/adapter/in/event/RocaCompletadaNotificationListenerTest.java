@@ -27,7 +27,8 @@ class RocaCompletadaNotificationListenerTest {
     void traduceElEventoAUnaNotificacionDeHito() {
         var listener = new RocaCompletadaNotificationListener(emitirNotificacionUseCase);
         UserId participante = UserId.of(UUID.randomUUID());
-        var event = new RocaCompletadaEvent(UUID.randomUUID(), participante, Instant.now());
+        UUID rocaId = UUID.randomUUID();
+        var event = new RocaCompletadaEvent(rocaId, participante, Instant.now());
 
         listener.on(event);
 
@@ -35,5 +36,7 @@ class RocaCompletadaNotificationListenerTest {
         verify(emitirNotificacionUseCase).emitir(captor.capture());
         assertThat(captor.getValue().usuarioId()).isEqualTo(participante);
         assertThat(captor.getValue().tipo()).isEqualTo(TipoNotificacion.HITO_PROGRAMA);
+        // C-7: rocaId viaja como origenEventoId -- es la clave que deduplica una redelivery.
+        assertThat(captor.getValue().origenEventoId()).isEqualTo(rocaId);
     }
 }

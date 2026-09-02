@@ -27,7 +27,8 @@ class SantuarioRotoNotificationListenerTest {
     void traduceElEventoAlTipoSantuarioRotoExacto() {
         var listener = new SantuarioRotoNotificationListener(emitirNotificacionUseCase);
         UserId participante = UserId.of(UUID.randomUUID());
-        var event = new SantuarioRotoEvent(UUID.randomUUID(), participante, Instant.now());
+        UUID registroId = UUID.randomUUID();
+        var event = new SantuarioRotoEvent(registroId, participante, Instant.now());
 
         listener.on(event);
 
@@ -35,5 +36,7 @@ class SantuarioRotoNotificationListenerTest {
         verify(emitirNotificacionUseCase).emitir(captor.capture());
         assertThat(captor.getValue().usuarioId()).isEqualTo(participante);
         assertThat(captor.getValue().tipo()).isEqualTo(TipoNotificacion.SANTUARIO_ROTO);
+        // C-7: registroId viaja como origenEventoId -- es la clave que deduplica una redelivery.
+        assertThat(captor.getValue().origenEventoId()).isEqualTo(registroId);
     }
 }

@@ -20,7 +20,9 @@ class RocaCompletadaNotificationListener {
 
     @ApplicationModuleListener
     void on(RocaCompletadaEvent event) {
+        // C-7: rocaId es la clave de deduplicacion si el outbox reentrega este evento.
         emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(event.participanteId(),
-                TipoNotificacion.HITO_PROGRAMA, "Roca completada", "Completaste una Roca Diaria.", null));
+                TipoNotificacion.HITO_PROGRAMA, "Roca completada", "Completaste una Roca Diaria.", null,
+                event.rocaId()));
     }
 }

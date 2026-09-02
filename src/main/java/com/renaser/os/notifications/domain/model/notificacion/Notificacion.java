@@ -10,6 +10,7 @@ import lombok.experimental.Accessors;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * Una fila de la bandeja de la campana (tabla {@code notificaciones}, log de alto
@@ -39,19 +40,42 @@ public final class Notificacion {
     private final String rutaApp;
     private Instant leidaEn;
     private final Instant creadoEn;
+    /** C-7: id de dominio del evento que origino esta notificacion (registroId/rachaId/rocaId),
+     * usado solo para deduplicar entregas repetidas del outbox de Modulith -- ver
+     * {@code notificaciones_origen_evento_uk} (V16). NULL cuando no hay un evento de dominio
+     * identificable detras (mismo criterio que antes de C-7, retrocompatible). */
+    private final UUID origenEventoId;
 
-    /** Emision de una notificacion nueva. {@code id} lo asigna Postgres (IDENTITY) al guardar. */
+    /** Emision de una notificacion nueva sin origen de evento rastreable. {@code id} lo asigna
+     * Postgres (IDENTITY) al guardar. */
     public static Notificacion emitir(UserId usuarioId, TipoNotificacion tipo, String titulo, String cuerpo,
                                        String rutaApp, Clock clock) {
-        return new Notificacion(null, Objects.requireNonNull(usuarioId, "usuarioId es obligatorio"),
-                Objects.requireNonNull(tipo, "tipo es obligatorio"), requireNotBlank(titulo), requireNotBlank(cuerpo),
-                rutaApp, null, clock.now());
+        return emitir(usuarioId, tipo, titulo, cuerpo, rutaApp, null, clock);
     }
 
-    /** Solo para el adaptador de persistencia: reconstruye una fila ya existente. */
+    /** Emision de una notificacion nueva a partir de un evento de dominio con id propio
+     * (C-7) -- {@code origenEventoId} es la clave de deduplicacion ante una redelivery del
+     * outbox. {@code id} lo asigna Postgres (IDENTITY) al guardar. */
+    public static Notificacion emitir(UserId usuarioId, TipoNotificacion tipo, String titulo, String cuerpo,
+                                       String rutaApp, UUID origenEventoId, Clock clock) {
+        return new Notificacion(null, Objects.requireNonNull(usuarioId, "usuarioId es obligatorio"),
+                Objects.requireNonNull(tipo, "tipo es obligatorio"), requireNotBlank(titulo), requireNotBlank(cuerpo),
+                rutaApp, null, clock.now(), origenEventoId);
+    }
+
+    /** Solo para el adaptador de persistencia: reconstruye una fila ya existente sin
+     * origen de evento (retrocompatible con el esquema anterior a C-7/V16). */
     public static Notificacion rehydrate(Long id, UserId usuarioId, TipoNotificacion tipo, String titulo,
                                           String cuerpo, String rutaApp, Instant leidaEn, Instant creadoEn) {
-        return new Notificacion(id, usuarioId, tipo, titulo, cuerpo, rutaApp, leidaEn, creadoEn);
+        return rehydrate(id, usuarioId, tipo, titulo, cuerpo, rutaApp, leidaEn, creadoEn, null);
+    }
+
+    /** Solo para el adaptador de persistencia: reconstruye una fila ya existente, incluido su
+     * {@code origenEventoId} (C-7). */
+    public static Notificacion rehydrate(Long id, UserId usuarioId, TipoNotificacion tipo, String titulo,
+                                          String cuerpo, String rutaApp, Instant leidaEn, Instant creadoEn,
+                                          UUID origenEventoId) {
+        return new Notificacion(id, usuarioId, tipo, titulo, cuerpo, rutaApp, leidaEn, creadoEn, origenEventoId);
     }
 
     /** Idempotente: repetirlo sobre una ya leida no mueve {@code leidaEn} (mismo criterio que el repo viejo). */
