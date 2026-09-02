@@ -25,6 +25,13 @@ public interface ConsultarCursosBloqueadosUseCase {
 
     List<CursoBloqueado> cursosBloqueados(UserId actorId);
 
-    record CursoBloqueado(Curso curso, int diaDesbloqueo, int programDayActual) {
+    /**
+     * {@code portadaFirmada} es una URL de lectura ya firmada, igual que la de los cursos
+     * accesibles. Antes este caso de uso devolvia solo la ruta cruda del objeto, apoyandose en que
+     * el cliente movil resolvia las URLs por su cuenta ('resolverMediaUrls' del frontend
+     * anterior). Ese supuesto dejo de valer cuando cambio la app: el bucket es privado, asi que
+     * una ruta sin firmar no carga nunca y los cursos bloqueados se veian sin portada.
+     */
+    record CursoBloqueado(Curso curso, int diaDesbloqueo, int programDayActual, String portadaFirmada) {
     }
 }

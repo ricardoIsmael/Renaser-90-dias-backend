@@ -20,11 +20,12 @@ import com.renaser.os.academy.application.ports.in.curso.ConsultarCursosBloquead
  * Se quitan en vez de corregir el import porque el resto de la API ya es camelCase: dejar
  * academy en snake_case lo volveria la unica excepcion. Ver E-65 en docs/BITACORA_ERRORES.md.
  */
-public record CursoBloqueadoResponse(String id, String titulo, String portadaUrl, int orden, int diaDesbloqueo,
-                                      int programDayActual) {
+public record CursoBloqueadoResponse(String id, String titulo, String portadaUrl, String portadaFirmada, int orden,
+                                      int diaDesbloqueo, int programDayActual) {
 
     public static CursoBloqueadoResponse from(CursoBloqueado item) {
         return new CursoBloqueadoResponse(item.curso().id().value(), item.curso().titulo(),
-                item.curso().portadaRuta(), item.curso().orden(), item.diaDesbloqueo(), item.programDayActual());
+                item.curso().portadaRuta(), item.portadaFirmada(), item.curso().orden(), item.diaDesbloqueo(),
+                item.programDayActual());
     }
 }

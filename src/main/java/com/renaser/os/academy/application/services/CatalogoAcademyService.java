@@ -125,7 +125,7 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
 
         return loadCursoPort.listarTodos().stream()
                 .filter(c -> c.bloqueadoPorDiaPara(rol, programDay))
-                .map(c -> new CursoBloqueado(c, c.diaDesbloqueo(), actual))
+                .map(c -> new CursoBloqueado(c, c.diaDesbloqueo(), actual, firmarPortada(c.portadaRuta())))
                 .toList();
     }
 
