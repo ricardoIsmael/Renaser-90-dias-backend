@@ -81,6 +81,7 @@ El backend expone **13 endpoints**; la app consume **2**.
 | ON-5 | **Grabaciones V90 sin conectar** | Frontend | `POST /v90-recordings`, `GET`, y los dos de `/validation` existen y no se usan. Es el flujo async con reintentos y caída a revisión manual que `CLAUDE.MD` §7 describe como ya resuelto del lado del servidor |
 | ON-6 | **Media del onboarding sin conectar** | Frontend | `POST /onboarding/media/upload-url` y `POST /onboarding/media` existen y no se usan. Mismo patrón de dos pasos que ya funciona en el Muro |
 | ON-7 | **Validación de la meta maestra por IA** | Frontend + IA | `POST /onboarding/master-goal/validation` existe. Recordar que **los 7 adaptadores de IA son `NoOp`** (`CLAUDE.MD` §7): aunque se conecte, hoy no piensa nada |
+| ON-8 | ~~`POST`/`GET /api/v1/onboarding/activate-program` no existían~~ **HECHO 2026-09-01 (D-67)** | Backend | Cerraba `docs/GAPS_FRONTEND_BACKEND.md` §7. El aprendiz ahora puede elegir su Día 1 (mañana, +2 o +3 en su propia zona horaria — nunca hoy) y un cron nocturno (`AvanzarDiaProgramaScheduler`, `users`) avanza `dia_programa`/recalcula `fase` cada madrugada. **Diferencia de contrato contra lo que el cliente móvil real ya llama:** `startDate` es obligatorio (sin default de "mañana") y reactivar con una fecha *distinta* a la ya guardada devuelve 409 en vez de un 200 idempotente — verificar contra el cliente antes de conectarlo. `PATCH /api/v1/onboarding/start-date` (corregir la fecha antes de que llegue) sigue sin existir, fuera del alcance de D-66 |
 
 ---
 
@@ -124,6 +125,7 @@ Y de la app entera: `Hoy`, `Plan`, `Training`, `Yo`.
 
 ## Registro de cambios
 
+- **2026-09-01** — ON-8 cerrado: `GET`/`POST /api/v1/onboarding/activate-program` (elegir Día 1 tras Términos) y el cron `AvanzarDiaProgramaScheduler` (avanza `dia_programa` y recalcula `fase` cada madrugada). Ver D-67 en `MODULOS_A_AVANZAR.md` §8.
 - **2026-09-01** — A-1 cerrado PARCIALMENTE: `@RequiresPermission` ya se ejecuta (`PermissionEnforcementInterceptor`), pero solo para TRAINEE (8 permisos con evidencia en el código). MENTOR/MENTOR_LEAD/ADMIN/ALCHEMIST siguen sin matriz definida y pasan sin verificación — hueco deliberado y documentado, no un olvido. Ver D-64 en `MODULOS_A_AVANZAR.md` §8.
 - **2026-09-01** — R-1 cerrado: caché Caffeine en `RankingPersistenceAdapter` (TTL 20s, clave `tipo+fecha`, sin actor). Ver D-63 en `MODULOS_A_AVANZAR.md` §8.
 - **2026-09-01** — Relevado `onboarding`: sección 2.quater con ON-1..ON-7. **La Ficha Inicial no persiste nada**; 13 endpoints disponibles, 2 consumidos.

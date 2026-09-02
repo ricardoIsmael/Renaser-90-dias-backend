@@ -169,8 +169,8 @@ Además:
 
 | Frontend | Problema |
 |---|---|
-| `POST /api/v1/onboarding/activate-program` | No existe. |
-| `PATCH /api/v1/onboarding/start-date` | No existe. |
+| `POST /api/v1/onboarding/activate-program` | ~~No existe~~ **HECHO 2026-09-01 (D-67).** Existe, pero con dos diferencias de contrato deliberadas contra lo que este cliente ya llama: `startDate` es obligatorio (el cliente lo manda opcional, esperando que el servidor calcule "mañana" por default — esa regla ya no existe, hay que elegir explícito) y la ventana válida es **[hoy+1, hoy+3]**, no las 4 opciones (hoy incluido) que se evaluaron a mitad de la tarea — se descartó "hoy" a favor de lo que `inicioPrograma.ts` de este mismo cliente ya documentaba (decisión de producto 2026-08-10: el reloj avanza a medianoche, firmar tarde y elegir "hoy" dejaría un Día 1 de pocas horas). Reactivar con la fecha ya guardada es 200 idempotente (sin cambios); reactivar con una fecha *distinta* es 409, no el 200 con `activated:false` que este archivo esperaba — revisar `activateProgramAfterTerms` antes de conectar. Ver `docs/MODULOS_A_AVANZAR.md` D-66. |
+| `PATCH /api/v1/onboarding/start-date` | Sigue sin existir — fuera del alcance de D-66 (que cerró solo la activación inicial y el cron de avance, no la corrección posterior de la fecha elegida). |
 | `POST /api/v1/onboarding/smart/validate` | No existe. |
 | `POST /api/v1/onboarding/v90/validate` + poll `GET .../v90/validate?recordingId=` | El backend real es `POST /api/v1/onboarding/v90-recordings/{id}/validation` (202, async) y `GET /api/v1/onboarding/v90-recordings/{id}/validation` — el id va en el path, no en query string, y el segmento es distinto (`v90-recordings`, no `v90`). |
 | `GET /api/v1/admin/onboarding` (dashboard admin) | No existe. |

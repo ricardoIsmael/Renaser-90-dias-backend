@@ -45,7 +45,11 @@ Blueprint (`1/23/46/68`) **descartado**: no aparece en ningún lado del código,
 
 > *"This is the single source of truth for 'what phase is this trainee in' — always compute it from programDay at read time, never trust a stored currentPhase column (see TraineeProfile.currentPhase: it's written once at profile creation and never recomputed as programDay advances daily via the cron, so it silently drifts for any trainee who progresses past their starting phase)."*
 
-La base nueva (`V1__baseline_renaser.sql:266`) **sí tiene** una columna `participantes_programa.fase` (`fase_programa NOT NULL DEFAULT 'FASE_1_RENACER'`). Nada en el baseline garantiza que un cron la recalcule al avanzar `dia_programa` — ese cron todavía no existe (es del futuro módulo `habits`/cierre de `users`). Para no repetir el bug que el propio repo viejo señala:
+La base nueva (`V1__baseline_renaser.sql:266`) **sí tiene** una columna `participantes_programa.fase` (`fase_programa NOT NULL DEFAULT 'FASE_1_RENACER'`).
+
+> **Corregido 2026-09-01 (D-67).** Esta sección decía que "ese cron todavía no existe" — ya no es cierto: `AvanzarDiaProgramaScheduler` (`users/infrastructure/adapter/in/scheduler`) corre cada madrugada, avanza `dia_programa` de los participantes con el reloj activado y **recalcula `fase` en el mismo movimiento** vía `com.renaser.os.users.api.FasePrograma.paraDiaPrograma(int)` — la copia en inglés de este mismo enum, con los mismos cortes 1-7/8-34/35-64/65-90, duplicada a propósito por el límite de módulo (D-21; ver javadoc de `ParticipacionPrograma.avanzarDiaDelPrograma`). El bug que describe el párrafo de abajo (fase vieja conviviendo con un día nuevo) ya tenía una instancia real en los datos antes de este cambio — dos filas en día 17 con fases distintas — causada también por `fijarDia` (ajuste manual del panel admin), que D-66 corrigió para que también recalcule la fase. Este módulo (`phasecontracts`) sigue sin depender de esa columna ni del cron de `users` — la regla de abajo ("nunca lee `participantes_programa.fase`") sigue vigente tal cual, es una garantía adicional, no una que dependa de que el cron de `users` funcione bien.
+
+Para no repetir el bug que el propio repo viejo señala:
 
 **Este módulo NUNCA lee `participantes_programa.fase`.** Deriva la fase siempre de `dia_programa`, vía `FasePrograma.paraDiaPrograma(int)` (dominio puro, ver §2). Documentado también en el javadoc de `FasePrograma`.
 
