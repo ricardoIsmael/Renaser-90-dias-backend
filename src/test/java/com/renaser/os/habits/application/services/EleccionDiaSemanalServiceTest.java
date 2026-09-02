@@ -57,8 +57,8 @@ class EleccionDiaSemanalServiceTest {
         Habito base = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Dia sin celular", TipoHabito.CHECKBOX,
                 "MENTE", ExigenciaEvidencia.OPCIONAL, CLOCK.now());
         return Habito.rehydrate(base.id(), base.ambito(), null, base.titulo(), null, base.tipo(),
-                base.categoriaClave(), null, "PHONE_FREE_DAY", base.exigenciaEvidencia(), false, false, true, null,
-                null, null, null, true, CLOCK.now(), CLOCK.now());
+                base.categoriaClave(), null, "PHONE_FREE_DAY", base.exigenciaEvidencia(), false, false, true, true,
+                null, null, null, null, true, CLOCK.now(), CLOCK.now());
     }
 
     @Test

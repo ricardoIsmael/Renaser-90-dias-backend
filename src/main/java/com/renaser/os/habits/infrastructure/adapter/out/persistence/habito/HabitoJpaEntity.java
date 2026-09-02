@@ -62,6 +62,8 @@ public class HabitoJpaEntity {
 
     private boolean obligatorioEnIntoxicacion;
 
+    private boolean desactivable;
+
     private boolean eleccionDiaSemanal;
 
     private Short horasExtraEvidencia;

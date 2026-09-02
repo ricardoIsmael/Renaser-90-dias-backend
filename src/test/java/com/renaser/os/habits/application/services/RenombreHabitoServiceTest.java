@@ -59,8 +59,8 @@ class RenombreHabitoServiceTest {
         Habito base = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Jugo verde", TipoHabito.CHECKBOX,
                 "NUTRICION", ExigenciaEvidencia.OPCIONAL, CLOCK.now());
         return Habito.rehydrate(base.id(), base.ambito(), null, base.titulo(), null, base.tipo(),
-                base.categoriaClave(), null, claveSistema, base.exigenciaEvidencia(), false, false, false, null,
-                null, null, null, true, CLOCK.now(), CLOCK.now());
+                base.categoriaClave(), null, claveSistema, base.exigenciaEvidencia(), false, false, true, false,
+                null, null, null, null, true, CLOCK.now(), CLOCK.now());
     }
 
     @Test

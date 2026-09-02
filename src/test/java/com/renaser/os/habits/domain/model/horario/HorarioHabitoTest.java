@@ -80,4 +80,43 @@ class HorarioHabitoTest {
         assertThat(horario.horaDisparo()).isNull();
         assertThat(horario.horaLimite()).isNull();
     }
+
+    // ---- invariante horaLimite posterior a horaDisparo (habits-personal-con-horario) ----
+
+    @Test
+    void crearConHoraLimiteAnteriorAHoraDisparoFalla() {
+        assertThatThrownBy(() -> HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), 1, null, TipoDia.TODOS, LocalTime.of(22, 0), LocalTime.of(6, 0),
+                AHORA)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("horaLimite");
+    }
+
+    @Test
+    void crearConHoraLimiteIgualAHoraDisparoFalla() {
+        LocalTime misma = LocalTime.of(8, 0);
+        assertThatThrownBy(() -> HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), 1, null, TipoDia.TODOS, misma, misma, AHORA))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void crearConSoloHoraDisparoNoFalla() {
+        HorarioHabito horario = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), 1, null, TipoDia.TODOS, LocalTime.of(6, 0), null, AHORA);
+
+        assertThat(horario.horaDisparo()).isEqualTo(LocalTime.of(6, 0));
+        assertThat(horario.horaLimite()).isNull();
+    }
+
+    @Test
+    void actualizarHorasConHoraLimiteAnteriorAHoraDisparoFalla() {
+        HorarioHabito horario = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), 1, null, TipoDia.DISCIPLINA, LocalTime.of(6, 0), LocalTime.of(9, 0),
+                AHORA);
+
+        assertThatThrownBy(() -> horario.actualizarHoras(LocalTime.of(20, 0), LocalTime.of(5, 0),
+                AHORA.plusSeconds(1))).isInstanceOf(IllegalArgumentException.class);
+        // El estado previo no debe quedar mutado a mitad de camino por el intento fallido.
+        assertThat(horario.horaDisparo()).isEqualTo(LocalTime.of(6, 0));
+        assertThat(horario.horaLimite()).isEqualTo(LocalTime.of(9, 0));
+    }
 }

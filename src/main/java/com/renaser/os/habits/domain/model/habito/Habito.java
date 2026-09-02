@@ -40,6 +40,7 @@ public final class Habito {
     private ExigenciaEvidencia exigenciaEvidencia;
     private boolean esOpcional;
     private boolean obligatorioEnIntoxicacion;
+    private final boolean desactivable; // false SOLO en los 4 habitos que el aprendiz no puede sacar de su plan
     private boolean eleccionDiaSemanal;
     private Integer horasExtraEvidencia; // null = usar el default global (VentanaEntrega)
     private Integer diaLimiteEdicionLibre; // null = usar el default global FREE_SCHEDULE_EDITS_UNTIL_DAY=7 (hueco #12)
@@ -59,8 +60,8 @@ public final class Habito {
                                          ExigenciaEvidencia exigenciaEvidencia, Instant ahora) {
         Objects.requireNonNull(id, "id es obligatorio");
         return new Habito(id, AmbitoHabito.SISTEMA, null, requireTitulo(titulo), null, tipo,
-                requireCategoria(categoriaClave), null, null, exigenciaEvidencia, false, false, false, null, null,
-                null, null, true, ahora, ahora);
+                requireCategoria(categoriaClave), null, null, exigenciaEvidencia, false, false, true, false, null,
+                null, null, null, true, ahora, ahora);
     }
 
     /**
@@ -80,8 +81,8 @@ public final class Habito {
         Objects.requireNonNull(tipo, "tipo es obligatorio");
         return new Habito(id, AmbitoHabito.SISTEMA, null, requireTitulo(titulo), detalles.descripcion(),
                 tipo, requireCategoria(detalles.categoriaClave()), null, null, detalles.exigenciaEvidencia(),
-                detalles.esOpcional(), detalles.obligatorioEnIntoxicacion(), false, null, null, null, null, true,
-                ahora, ahora);
+                detalles.esOpcional(), detalles.obligatorioEnIntoxicacion(), true, false, null, null, null, null,
+                true, ahora, ahora);
     }
 
     /** El {@code id} entra por parametro: lo genera el caso de uso con el puerto {@code IdGenerator}. */
@@ -90,23 +91,26 @@ public final class Habito {
                                         Instant ahora) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio para un habito PERSONAL");
+        // desactivable = true: un habito propio SIEMPRE lo puede quitar su dueno. Los unicos no
+        // desactivables son los cuatro del catalogo que marca V18__habitos_desactivable.sql.
+        // diaLimiteEdicionLibre = null: no aplica a un habito personal (es del catalogo de sistema).
         return new Habito(id, AmbitoHabito.PERSONAL, participanteId, requireTitulo(titulo), null, tipo,
-                requireCategoria(categoriaClave), null, null, ExigenciaEvidencia.OPCIONAL, false, false, false, null,
-                null, plantilla, etiquetaMeta, true, ahora, ahora);
+                requireCategoria(categoriaClave), null, null, ExigenciaEvidencia.OPCIONAL, false, false, true, false,
+                null, null, plantilla, etiquetaMeta, true, ahora, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */
     public static Habito rehydrate(HabitoId id, AmbitoHabito ambito, UserId participanteId, String titulo,
                                     String descripcion, TipoHabito tipo, String categoriaClave, String iconoClave,
                                     String claveSistema, ExigenciaEvidencia exigenciaEvidencia, boolean esOpcional,
-                                    boolean obligatorioEnIntoxicacion, boolean eleccionDiaSemanal,
+                                    boolean obligatorioEnIntoxicacion, boolean desactivable, boolean eleccionDiaSemanal,
                                     Integer horasExtraEvidencia, Integer diaLimiteEdicionLibre,
                                     PlantillaHabitoPersonal plantillaClave, String etiquetaMeta, boolean activo,
                                     Instant creadoEn, Instant actualizadoEn) {
         return new Habito(id, ambito, participanteId, titulo, descripcion, tipo, categoriaClave, iconoClave,
-                claveSistema, exigenciaEvidencia, esOpcional, obligatorioEnIntoxicacion, eleccionDiaSemanal,
-                horasExtraEvidencia, diaLimiteEdicionLibre, plantillaClave, etiquetaMeta, activo, creadoEn,
-                actualizadoEn);
+                claveSistema, exigenciaEvidencia, esOpcional, obligatorioEnIntoxicacion, desactivable,
+                eleccionDiaSemanal, horasExtraEvidencia, diaLimiteEdicionLibre, plantillaClave, etiquetaMeta, activo,
+                creadoEn, actualizadoEn);
     }
 
     public void renombrar(String nuevoTitulo, Instant ahora) {
