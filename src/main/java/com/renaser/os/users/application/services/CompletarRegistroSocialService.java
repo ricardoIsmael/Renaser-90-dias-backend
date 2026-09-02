@@ -4,10 +4,16 @@ import com.renaser.os.shared.domain.RegistroPendienteSocialInvalidoException;
 import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand;
 import com.renaser.os.users.application.ports.in.autenticacion.CompletarRegistroSocialUseCase;
+import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.autenticacion.RegistroPendienteSocial;
 import com.renaser.os.users.application.ports.out.autenticacion.TokenRegistroPendienteSocialPort;
 import com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort;
+import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
+import com.renaser.os.users.domain.model.accountrequest.OrigenSocial;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -19,16 +25,21 @@ import org.springframework.stereotype.Service;
 @Service
 public class CompletarRegistroSocialService implements CompletarRegistroSocialUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(CompletarRegistroSocialService.class);
+
     private final TokenRegistroPendienteSocialPort tokenRegistroPendienteSocialPort;
     private final SubmitAccountRequestUseCase submitAccountRequestUseCase;
     private final TokenVerificacionEmailPort tokenVerificacionEmailPort;
+    private final LoadAccountRequestPort loadAccountRequestPort;
 
     public CompletarRegistroSocialService(TokenRegistroPendienteSocialPort tokenRegistroPendienteSocialPort,
                                            SubmitAccountRequestUseCase submitAccountRequestUseCase,
-                                           TokenVerificacionEmailPort tokenVerificacionEmailPort) {
+                                           TokenVerificacionEmailPort tokenVerificacionEmailPort,
+                                           LoadAccountRequestPort loadAccountRequestPort) {
         this.tokenRegistroPendienteSocialPort = tokenRegistroPendienteSocialPort;
         this.submitAccountRequestUseCase = submitAccountRequestUseCase;
         this.tokenVerificacionEmailPort = tokenVerificacionEmailPort;
+        this.loadAccountRequestPort = loadAccountRequestPort;
     }
 
     /**
@@ -50,8 +61,49 @@ public class CompletarRegistroSocialService implements CompletarRegistroSocialUs
         String verificationToken = tokenVerificacionEmailPort.generar(registro.email(),
                 VerificacionEmailService.VIGENCIA_TOKEN_VERIFICACION);
 
-        return submitAccountRequestUseCase.submit(SubmitAccountRequestCommand.porProveedorSocial(registro.email(),
-                command.fullName(), command.phone(), command.city(), verificationToken, command.requestIp(),
-                registro.proveedor(), registro.sujetoProveedor()));
+        try {
+            return submitAccountRequestUseCase.submit(SubmitAccountRequestCommand.porProveedorSocial(
+                    registro.email(), command.fullName(), command.phone(), command.city(), verificationToken,
+                    command.requestIp(), registro.proveedor(), registro.sujetoProveedor()));
+        } catch (DataIntegrityViolationException carreraDeAltaConcurrente) {
+            return solicitudYaCreadaPorOtraLlamada(registro, carreraDeAltaConcurrente);
+        }
+    }
+
+    /**
+     * C-17 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): dos pestañas, un
+     * reintento de red del celular, o un doble tap sobre "confirmar" pueden generar DOS tokens
+     * de registro pendiente independientes para la MISMA identidad social
+     * ({@link AutenticacionSocialService#retenerIdentidadPendiente} arma uno nuevo en cada login,
+     * sin acordarse del anterior) y las dos confirmaciones llegar casi juntas a este metodo. La
+     * primera crea el {@code User} y la {@code AccountRequest} y hace commit; la segunda pierde
+     * la carrera contra el UNIQUE de {@code usuarios.email}/{@code solicitudes_cuenta.email} — sin
+     * este catch, esa segunda llamada terminaba en el 409 generico de
+     * {@code GlobalExceptionHandler#handleIntegridad} ("la operacion entra en conflicto con datos
+     * que ya existen") en vez del mismo "tu solicitud ya esta en revision" que ya recibe quien
+     * toca "Continuar con Google" una TERCERA vez ({@code SolicitudEnRevision} en
+     * {@code AutenticacionSocialService}). Mismo criterio que ya aplica
+     * {@code vincularIdentidadSocial} en este modulo: "el doble tap del cliente movil no es un
+     * error".
+     *
+     * <p>Solo se recupera la carrera si la solicitud que gano es, efectivamente, de esta MISMA
+     * identidad social ({@code porOrigenSocial}, nunca por correo — docs/MODULO_AUTH.md §6.4): si
+     * el conflicto de UNIQUE vino de otro lado (alguien mando un alta por formulario con el mismo
+     * correo casi al mismo tiempo), no hay nada que recuperar y se relanza la excepcion original
+     * para que el cliente siga viendo el 409 generico — mejor eso que devolverle el id de una
+     * solicitud ajena.
+     */
+    private AccountRequestId solicitudYaCreadaPorOtraLlamada(RegistroPendienteSocial registro,
+                                                              DataIntegrityViolationException original) {
+        OrigenSocial origen = new OrigenSocial(registro.proveedor(), registro.sujetoProveedor());
+        return loadAccountRequestPort.porOrigenSocial(origen)
+                .filter(solicitud -> solicitud.status().isPending())
+                .map(solicitud -> {
+                    log.info("[users.CompletarRegistroSocialService] completar: dos confirmaciones concurrentes "
+                            + "de la misma identidad social ({}) -- se devuelve la solicitud {} que ya gano la "
+                            + "carrera, en vez del 409 generico", registro.proveedor(), solicitud.id());
+                    return solicitud.id();
+                })
+                .orElseThrow(() -> original);
     }
 }

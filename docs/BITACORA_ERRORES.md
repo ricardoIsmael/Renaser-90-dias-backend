@@ -1354,3 +1354,138 @@ invalid accessor method in record ...ResultadoVerificacionDominio
   grep -rn "@Transactional" src/main/java --include=*.java -A 15 | grep -B 15 "IAPort\|ChatClient\|embeddingPort\|generarInsightPort\|recomendarClasePort"
   ```
   Si un método `@Transactional` contiene una llamada a un puerto cuyo adaptador real hace I/O de red de duración variable (una IA, un proveedor OAuth, SMTP — ver también **C-11**, SMTP dentro de `@Transactional` en la invitación de staff, mismo informe, todavía sin corregir), separar: leer y guardar apoyándose en las transacciones cortas que Spring Data JPA ya da por método de repositorio, y dejar la llamada externa completamente afuera de cualquier `@Transactional` propio. Y si esa llamada puede fallar dejando un estado intermedio ya persistido (un flag tipo `PROCESANDO`), capturar el fallo ahí mismo y resolverlo con la misma máquina de estados que ya maneja "la IA no está disponible" — no dejar que la excepción se lleve puesto el guardado del veredicto.
+
+
+## E-68 — Lote de IA todo-o-nada y anulación con doble reversión de puntos (C-4/C-13)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `evidence/application/services/EvidenciaService.java`
+- **Síntoma:** no hay un mensaje de error único — son dos defectos de diseño encontrados
+  en auditoría, no una excepción en runtime observada todavía (los adaptadores de IA son
+  `NoOp`, así que en producción hoy no se manifiestan). Si se manifestaran: (C-4) con IA
+  real, una evidencia que falla en el medio del lote de 25 revierte las demás ya validadas
+  y la cola de validación no avanza nunca (siempre las mismas 25, por `subida_en ASC`).
+  (C-13) dos admins anulando la misma evidencia case-a-caso devolverían la penalización de
+  puntos dos veces.
+- **Causa real:** (C-4) `procesarLote()` envolvía en una sola `@Transactional` tanto la
+  lectura con `FOR UPDATE SKIP LOCKED` como hasta 25 llamadas a IA, sin `try/catch` por
+  ítem — mismo defecto que C-1 (ya corregido en `onboarding`/`rag`/`academy`), no detectado
+  acá porque el `NoOpValidacionIAAdapter` nunca lanza ni tarda. (C-13) `anular()` leía la
+  evidencia con un `byId` sin bloqueo (`requireEvidencia`) antes de decidir si revertir la
+  penalización — check-then-act, mismo patrón que C-2 en `rocks`.
+- **Solución:** (C-4) sacar la IA de la transacción (transacción corta y propia solo para
+  el `SELECT` del lote, cada evidencia procesada y guardada por separado, con
+  `try/catch` que aísla el fallo de una evidencia del resto). (C-13) `byIdParaEscritura`
+  con `PESSIMISTIC_WRITE`, mismo patrón que `LoadRocaDiariaPort.byIdParaEscritura` (C-2).
+- **Cómo evitarlo:** cuando un caso de uso hace un `for` sobre varias entidades y alguna
+  de las operaciones dentro del loop puede tardar o fallar por una causa externa (IA, red,
+  I/O), nunca envolver el loop completo en una única transacción ni dejar el loop sin
+  `try/catch` por ítem — es el mismo defecto de C-1/C-4, y va a repetirse en cualquier
+  scheduler de lote nuevo si no se revisa a propósito. Cuando un caso de uso lee una
+  entidad para decidir si aplicar un efecto en OTRO módulo (puntos, notificaciones) basado
+  en un flag de esa entidad, la lectura tiene que ser con `PESSIMISTIC_WRITE` si dos
+  llamadas concurrentes pueden ver el mismo flag antes de que ninguna escriba — patrón ya
+  repetido 3 veces (C-2, C-3, C-13), buscar `byIdParaEscritura` en el repo antes de asumir
+  que un `byId` simple alcanza.
+
+## E-69 — Expirar-y-lanzar revierte su propio guardado; barridos nocturnos todo-o-nada (C-6/C-9)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `habits/application/services/RegistroService.java`,
+  `habits/application/services/RachaService.java`,
+  `habits/application/services/PromocionCambioHorarioService.java`
+- **Síntoma:** no hay un mensaje de error único observado en producción (es un hallazgo de
+  auditoría, no un incidente reportado). Si se manifestara: un aprendiz que intenta
+  completar un hábito o cerrar una racha "Día sin celular" después de que venció su
+  ventana recibe 409 una y otra vez en cada reintento, porque el registro/racha nunca
+  queda de verdad `EXPIRADO`/`EXPIRADA` en la base — el `throw` revertía el `save` que lo
+  precedía, dentro de la misma transacción. Además, para la racha, `rachas_viva_uk` (a lo
+  sumo una racha `ACTIVA` por aprendiz) le impedía iniciar una nueva mientras la vieja
+  "seguía activa" por el mismo motivo. Por separado, el barrido nocturno que debería
+  limpiar esto (`ExpirarRegistrosScheduler`, 05:00 UTC) procesaba todas las filas
+  candidatas en una única transacción sin `try/catch`: una fila corrupta revertía TODAS
+  las expiraciones de esa noche, no solo la suya, y el barrido de la noche siguiente
+  volvía a fallar en el mismo punto.
+- **Causa real:** (C-9) `registro.expirar(ahora); saveRegistroPort.save(registro); throw
+  new IllegalStateException(...)` — las tres líneas corren en la misma
+  `@Transactional` del método (declarada directamente ahí, no heredada de la interfaz);
+  lanzar una `RuntimeException` marca la transacción para rollback por defecto, deshaciendo
+  el `save` junto con el `throw`. (C-6) el `for` de los tres barridos nocturnos no tenía
+  `try/catch` por fila y corría dentro de una única `@Transactional` de método —
+  cualquier excepción en cualquier fila abortaba el lote completo.
+- **Solución:** (C-9) un tipo de excepción propio y puntual por cada sitio
+  (`RegistroExpiradoException`, `RachaVencidaException`, ambas `extends
+  IllegalStateException` para no tocar el contrato HTTP) con
+  `@Transactional(noRollbackFor = <ese tipo>)` — deliberadamente NO sobre
+  `IllegalStateException` en general, porque eso habría enmascarado otros guard clauses de
+  dominio que sí deben revertir su escritura si fallan (ver el informe completo,
+  `docs/informes/auditoria-fixes/C-6-C-9.md`, para el análisis fila por fila). Se descartó
+  `REQUIRES_NEW` para este punto puntual porque el registro/racha ya viene bajo bloqueo
+  pesimista de la misma transacción — abrir una segunda transacción sobre la fila
+  bloqueada por la primera, sin liberarla, es un auto-interbloqueo entre dos conexiones del
+  mismo pool. (C-6) cada fila del barrido se procesa en su propia transacción
+  `REQUIRES_NEW` (segura acá porque cada fila toma y libera su lock antes de pasar a la
+  siguiente, sin ninguna transacción externa sosteniéndolo), envuelta en `try/catch` que
+  cuenta y loguea (`WARN` por fila fallida, `INFO` de resumen al final, nunca `INFO` dentro
+  del loop) sin abortar el resto.
+- **Cómo evitarlo:** cuando un caso de uso hace "mutar y guardar, y si cierta condición se
+  cumple lanzar de todos modos" dentro de la MISMA transacción, el `throw` revierte el
+  guardado salvo que se marque `noRollbackFor` — y ese `noRollbackFor` tiene que apuntar a
+  un tipo de excepción tan específico como el punto de lanzamiento, nunca a la superclase
+  genérica (`IllegalStateException`, `RuntimeException`) si el método tiene más de un lugar
+  donde puede lanzar ese mismo tipo. Cuando un barrido nocturno hace un `for` sobre muchas
+  filas con un `@Transactional` de método envolviendo todo el loop, sin `try/catch` por
+  fila, es el mismo patrón de C-1/C-4 (ya corregidos en otros módulos) — buscar ese patrón
+  (`@Transactional` + `for` sin `try/catch` en el cuerpo) antes de dar por buena la
+  implementación de cualquier `@Scheduled` nuevo.
+
+## E-70 — Doble `POST /validation` sobre la misma grabación V90 dispara dos llamadas a la IA, y un fallo al guardar la deja en `PROCESANDO` para siempre (C-3)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `onboarding/application/services/GrabacionV90Service.java`, `ProcesarValidacionV90Service.java`
+- **Síntoma:** dos requests concurrentes a `POST /api/v1/onboarding/v90-recordings/{id}/validation` sobre la MISMA grabación devuelven ambas `202 {"status":"processing"}` pero disparan **dos** llamadas independientes a `ValidacionIAPort.validar` para el mismo `grabacionId` — doble costo de IA. Por separado: si el guardado del veredicto falla (corte de conexión a Postgres), la grabación queda en `estado_ia = 'PROCESANDO'` para siempre; ningún reintento del cliente la saca de ahí, porque `GrabacionV90.procesarIntentoDeValidacion` rechaza la reentrada mientras siga `PROCESANDO`, y no existe barrido de fondo para V90.
+- **Causa real:** `solicitarValidacion` leía con `loadGrabacionPort.porId` (sin bloqueo) antes de transicionar a `PROCESANDO`. **El guard de dominio agregado para E-37 no alcanza**: protege el objeto ya leído en memoria, no impide que dos transacciones lean la misma fila en `PENDIENTE` antes de que cualquiera escriba. Y `procesar()` no tenía manejo de fallo para el guardado final — entre el fallo y una grabación atrapada solo quedaba el `catch` genérico del adaptador `@Async`, que únicamente loguea.
+- **Solución:** `LoadGrabacionV90Port.porIdParaEscritura` con `@Lock(PESSIMISTIC_WRITE)` (mismo patrón que C-2 en `rocks`); si al leer con el lock ya está `PROCESANDO`, se retorna el mismo 202 idempotente sin relanzar la validación. Y `procesar()` envuelve switch+guardado en un `try/catch` que relee el estado real y, si sigue `PROCESANDO`, fuerza `registrarSinResultado()` — la misma máquina de estados de "IA no disponible", sin inventar un estado nuevo.
+- **Cómo evitarlo:** todo caso de uso que **lea, transicione y guarde** un agregado compartido entre requests concurrentes (un "arrancar algo" que pasa a "en curso") necesita bloqueo pesimista en la lectura, o un `UPDATE ... WHERE estado = 'X'` que devuelva filas afectadas. Un guard en memoria dentro del objeto de dominio **nunca alcanza solo**, por más que ya exista: no existe hasta que alguien ya leyó la fila. Y todo método que persiste el resultado de un paso async largo necesita su propio manejo de fallo en el guardado final — un `catch` genérico río abajo que solo loguea no es una red de recuperación, es donde el bug se vuelve invisible.
+
+## E-71 — `afterCommit()` NO libera la conexión: diferir un envío SMTP ahí no lo saca de la transacción (C-11)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `users/application/services/UserAccountService.inviteStaff`
+- **Síntoma original:** un admin invitando staff recibía 503 ("No pudimos enviar el correo") y el usuario invitado **no quedaba creado** — rollback completo — aunque el alta en sí no tenía nada malo. Con un SMTP lento, además, una conexión de Hikari quedaba retenida hasta 15s por intento (3 reintentos del cliente de mail), con riesgo de agotar el pool para toda la API.
+- **Causa real:** `inviteStaff` llamaba a `EnviarEmailPort.enviarInvitacionStaff` —una llamada de red a un servidor SMTP— dentro del método `@Transactional`.
+- **El primer arreglo NO funcionó, y esta es la parte que hay que recordar:** se difirió el envío a un `TransactionSynchronization.afterCommit()`, copiando el patrón de `MensajeService.publicarDespuesDelCommit` (`chat`). **Spring ejecuta los callbacks de `afterCommit` y `afterCompletion` ANTES de `cleanupAfterCompletion`**, que es donde se desliga el `EntityManager` y la conexión vuelve al pool — así que el envío seguía corriendo con la conexión tomada. El patrón sirve en `chat` porque ahí lo diferido es publicar en memoria (instantáneo); con un servidor SMTP que puede no responder, no.
+- **Solución definitiva:** `inviteStaff` deja de ser `@Transactional`. Lo que necesita atomicidad —usuario, perfil de mentor, credencial temporal y evento— corre dentro de un `TransactionTemplate`, y el envío ocurre después, con la transacción cerrada. Si el correo falla, se loguea en ERROR y no se propaga: el invitado ya tiene credencial real y puede entrar por "olvidé mi contraseña".
+- **Cómo evitarlo:** para sacar una llamada externa lenta de una transacción, **`afterCommit` no es equivalente a "fuera de la transacción"** — solo garantiza "después del commit", que no es lo mismo que "después de soltar la conexión". Si lo que se quiere es liberar la conexión, hay que cerrar la transacción de verdad (método no transaccional + `TransactionTemplate` para la parte atómica). La forma de comprobarlo, y la única que sirve, es medir `TransactionSynchronizationManager.isActualTransactionActive()` **desde adentro** de la llamada diferida, en un test de integración contra Postgres real: las tres pruebas unitarias de este mismo arreglo pasaban con el arreglo roto.
+
+## E-72 — Rate limit de alta por `COUNT` (check-then-act) y token de verificación consumido antes del INSERT (C-16)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `users/application/services/AccountRequestService.java`
+- **Síntoma:** ráfagas concurrentes desde la misma IP podían superar el límite documentado de 60/hora. Y quien reintentaba un alta con un correo que ya tenía cuenta se quedaba sin poder reintentar con **otro** correo sin volver a verificar su casilla de cero: el token de verificación, de un solo uso, ya se había consumido en el intento fallido.
+- **Causa real:** `rejectIfRateLimitExceeded` hacía `SELECT COUNT` y **después** insertaba — dos sentencias sin atomicidad entre ellas. Y `submit()` consumía el `verificationToken` (GETDEL en Redis) **antes** de intentar el INSERT, así que cualquier fallo posterior (típicamente el `UNIQUE` de `usuarios.email`) perdía el token sin haber servido para nada.
+- **Solución:** el límite por IP pasó a `LimitarSolicitudesResetPort.registrarIntento` (Redis, `INCR` atómico), el mismo puerto que ya usan `VerificacionEmailService` y `ConsultaEmailService`. Y se agregó un chequeo explícito de "¿el correo ya existe?" **antes** de consumir el token.
+- **Dependencia que esto creó, y que hay que mirar junto:** el límite de altas ahora se apoya en el mismo adaptador Redis que el hallazgo **C-8** denuncia (`INCR` y `EXPIRE` no atómicos: una clave que queda sin TTL bloquea para siempre). Antes ese defecto solo podía trabar el reseteo de contraseña; ahora puede **bloquear permanentemente las altas de cuentas nuevas**. C-16 y C-8 no deben separarse.
+- **Cómo evitarlo:** todo límite de tasa nuevo en `users` se apoya en `LimitarSolicitudesResetPort` desde el principio, no en un `COUNT` de Postgres — ya hay tres usos del mismo puerto como referencia. Para recursos de un solo uso (tokens, códigos): validar lo más posible **antes** de consumir, y consumir lo más tarde posible del flujo.
+
+## E-73 — Doble confirmación de alta social recibía un 409 genérico en vez de tratarse como éxito idempotente (C-17)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `users/application/services/CompletarRegistroSocialService.java`
+- **Síntoma:** dos llamadas casi simultáneas a `POST /auth/social/complete` para la MISMA identidad de Google/Apple/Facebook (dos pestañas, un reintento de red, un doble tap en "Confirmar") hacían que la segunda recibiera un 409 genérico ("La operacion entra en conflicto con datos que ya existen") en vez de la misma respuesta de éxito que recibe la primera.
+- **Causa real:** desde D-65 cada llamada a `POST /auth/social` para una identidad nueva genera un token de continuación **independiente** — no hay memoria de tokens anteriores para la misma identidad. Si dos se confirman casi a la vez, ambos intentan crear la misma `AccountRequest`/`User`; el segundo choca contra el `UNIQUE` de `usuarios.email` y esa `DataIntegrityViolationException` no estaba capturada.
+- **Solución:** se captura la `DataIntegrityViolationException` alrededor de `submit()` y, si existe una `AccountRequest` pendiente para la MISMA identidad social, se devuelve su id en vez de dejar escapar el error — mismo criterio que ya aplica `vincularIdentidadSocial` ("el doble tap del cliente móvil no es un error"). Si el conflicto no es de la misma identidad, se relanza el original.
+- **Impacto en el cliente, a tener presente:** en esa ventana de carrera la app React Native pasa a recibir **202 en vez de 409**. Es el comportamiento correcto, pero es un cambio observable del contrato y el frontend debe contemplarlo.
+- **Cómo evitarlo:** todo caso de uso que pueda recibirse dos veces por la misma "cosa lógica" desde flujos separados por un paso intermedio en Redis (token de continuación, OTP) tiene que decidir explícitamente qué hacer con el segundo, no asumir que "nunca va a pasar". Criterio del módulo: si hay una forma barata de detectar "esto ya se hizo", tratar el segundo intento como éxito idempotente.
+
+## E-74 — Tres pruebas de integración que fallaban en la semilla, no en el código que decían probar
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `CompletarRegistroExpiracionTransaccionIT`, `CerrarRachaExpiracionTransaccionIT`, `AccountRequestRateLimitConcurrenciaTest` — pruebas nuevas escritas al aplicar la auditoría.
+- **Síntoma:** tres mensajes distintos, ninguno relacionado con el hallazgo que la prueba venía a verificar:
+  1. `jakarta.persistence.TransactionRequiredException: No active transaction for update or delete query` — en `seedFixtures`, no en el caso de uso.
+  2. `ERROR: invalid input syntax for type inet: "rl-test-fa0ff0f8-..."`
+  3. `duplicate key value violates unique constraint "habitos_clave_sistema_key" — Key (clave_sistema)=(PHONE_FREE_DAY) already exists`
+- **Causa real, una por una:** (1) el `EntityManager` compartido exige transacción activa para `executeUpdate`, y `@BeforeEach` no la trae. (2) `solicitudes_cuenta.ip_solicitud` es de tipo **`inet`** en Postgres: un identificador inventado como IP única por test revienta el INSERT antes de que el limitador entre en juego. (3) el hábito de sistema "día sin celular" **ya viene sembrado** por `V4__catalogo_habitos_default.sql` y su `clave_sistema` es UNIQUE — la prueba insertaba uno propio.
+- **Solución:** (1) la semilla se envuelve en un `TransactionTemplate`, que además es lo correcto: los datos deben estar **commiteados** antes de que corra el caso de uso. (2) IP del rango de documentación `2001:db8::/32` (RFC 3849), que es `inet` válido y deja espacio de sobra para una por test. (3) se toma el hábito del catálogo con un `SELECT ... WHERE clave_sistema = ?` y **no se borra** en el `@AfterEach` — borrarlo habría eliminado una fila de catálogo compartida con el resto de la suite.
+- **Cómo evitarlo:** antes de escribir la semilla de una prueba de integración, mirar **el esquema y las migraciones**, no solo el código de producción: el tipo real de la columna (`inet`, `citext`, enums) y qué filas ya siembra Flyway. Y cuando una prueba de integración falla, leer **dónde** falla antes de sospechar del arreglo: `seedFixtures` en el stack trace significa que el caso de uso ni siquiera llegó a ejecutarse. Relacionado con la lección repetida de E-60/E-65/E-66: **el mensaje apuntaba a un lugar y la causa estaba en otro.**

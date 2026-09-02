@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -73,6 +74,14 @@ class RegistroServiceTest {
     private org.springframework.context.ApplicationEventPublisher events;
     @Mock
     private IdGenerator idGenerator;
+    /**
+     * Sin stubbing: {@code TransactionTemplate} funciona igual con un mock "vacio"
+     * (getTransaction/commit/rollback no hacen nada) porque estos tests no ejercitan
+     * transacciones reales — lo que importa aca es que el callback de
+     * {@code transaccionPropia.executeWithoutResult(...)} se siga ejecutando (ver C-6).
+     */
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private RegistroService service;
 
@@ -83,7 +92,7 @@ class RegistroServiceTest {
         // BLOQUEO que antes estaba hardcodeado en el servicio ahora lo aporta esta).
         service = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, events, CLOCK, idGenerator,
-                List.of(new PoliticaSantuario()));
+                List.of(new PoliticaSantuario()), transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -212,5 +221,33 @@ class RegistroServiceTest {
         assertThat(expirados).isEqualTo(2);
         assertThat(r1.estado()).isEqualTo(EstadoRegistro.EXPIRADO);
         assertThat(r2.estado()).isEqualTo(EstadoRegistro.EXPIRADO);
+    }
+
+    /**
+     * C-6 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): antes, una fila
+     * que fallaba al guardar revertia el barrido completo de la noche, dejando a TODOS los
+     * registros vencidos (incluso los que hubieran guardado bien) sin expirar. Cada fila
+     * ahora se procesa en su propia transaccion: r2 fallando no debe impedir que r1 y r3
+     * queden EXPIRADO, y el conteo devuelto debe reflejar solo los que si se guardaron.
+     */
+    @Test
+    @DisplayName("expirarPendientesAnterioresA(): una fila que falla al guardar no tumba el barrido de las demas")
+    void expirarPendientesAnterioresAAislaLaFilaQueFalla() {
+        RegistroHabito r1 = registroPendiente(participante(), HabitoId.of(UUID.randomUUID()));
+        RegistroHabito r2 = registroPendiente(participante(), HabitoId.of(UUID.randomUUID()));
+        RegistroHabito r3 = registroPendiente(participante(), HabitoId.of(UUID.randomUUID()));
+        when(loadRegistroPort.enEstadoConFechaAnteriorA(EstadoRegistro.PENDIENTE, LocalDate.of(2026, 8, 24)))
+                .thenReturn(List.of(r1, r2, r3));
+        // saveRegistroPort.save ya tiene un stub lenient generico (setUp); lo sobre-escribimos
+        // solo para r2, que simula la fila corrupta del hallazgo.
+        when(saveRegistroPort.save(r2)).thenThrow(new IllegalStateException("fila corrupta simulada"));
+
+        int expirados = service.expirarPendientesAnterioresA(LocalDate.of(2026, 8, 24));
+
+        assertThat(expirados).as("solo r1 y r3 se guardaron bien").isEqualTo(2);
+        assertThat(r1.estado()).isEqualTo(EstadoRegistro.EXPIRADO);
+        assertThat(r3.estado()).isEqualTo(EstadoRegistro.EXPIRADO);
+        // r2 igual queda mutada en memoria (el dominio no sabe que el save fallo), pero eso
+        // no importa: nunca se persistio, asi que el proximo barrido la vuelve a intentar.
     }
 }

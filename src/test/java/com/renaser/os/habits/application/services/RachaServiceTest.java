@@ -37,15 +37,18 @@ import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -88,6 +91,9 @@ class RachaServiceTest {
     private org.springframework.context.ApplicationEventPublisher events;
     @Mock
     private IdGenerator idGenerator;
+    /** Ver comentario equivalente en RegistroServiceTest: no necesita stubbing. */
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private RachaService service;
 
@@ -95,7 +101,7 @@ class RachaServiceTest {
     void setUp() {
         service = new RachaService(loadRachaPort, saveRachaPort, loadRegistroPort, saveRegistroPort, loadHabitoPort,
                 progresoPort, ajustarPuntosPort, registrarEvidenciaPort, almacenamientoPort, events, CLOCK,
-                idGenerator);
+                idGenerator, transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveRachaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -271,5 +277,59 @@ class RachaServiceTest {
         assertThat(racha.estado()).isEqualTo(EstadoRacha.ROTA);
         assertThat(registro.estado()).isEqualTo(EstadoRegistro.PENDIENTE); // liberado, es de hoy
         verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
+    }
+
+    /**
+     * C-6 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): la racha 2 falla
+     * al guardar (fila corrupta simulada); eso no debe impedir que las rachas 1 y 3, vencidas
+     * en el mismo barrido, terminen EXPIRADA con su registro liberado.
+     */
+    @Test
+    @DisplayName("expirarVencidas(): una racha que falla al guardar no tumba el barrido de las demas")
+    void expirarVencidasAislaLaRachaQueFalla() {
+        UserId p1 = UserId.of(UUID.randomUUID());
+        UserId p2 = UserId.of(UUID.randomUUID());
+        UserId p3 = UserId.of(UUID.randomUUID());
+        Habito habito = habitoSinCelularConClave();
+        RegistroHabito registro1 = registroEnCursoDe(p1, habito.id());
+        RegistroHabito registro2 = registroEnCursoDe(p2, habito.id());
+        RegistroHabito registro3 = registroEnCursoDe(p3, habito.id());
+        RachaSinCelular racha1 = rachaVencidaDe(p1, registro1.id());
+        RachaSinCelular racha2 = rachaVencidaDe(p2, registro2.id());
+        RachaSinCelular racha3 = rachaVencidaDe(p3, registro3.id());
+
+        when(loadRachaPort.activasDe(List.of(p1, p2, p3))).thenReturn(List.of(racha1, racha2, racha3));
+        // lenient: la racha que falla (racha2) revienta ANTES de llegar a liberarRegistro, asi
+        // que su progresoPort/loadRegistroPort nunca se invocan — no es un descuido del test,
+        // es justamente lo que C-6 aisla (esa fila queda a medio camino, sin tocar las demas).
+        for (UserId p : List.of(p1, p2, p3)) {
+            lenient().when(progresoPort.deParticipante(p)).thenReturn(
+                    Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+        }
+        lenient().when(loadRegistroPort.byId(registro1.id())).thenReturn(Optional.of(registro1));
+        lenient().when(loadRegistroPort.byId(registro2.id())).thenReturn(Optional.of(registro2));
+        lenient().when(loadRegistroPort.byId(registro3.id())).thenReturn(Optional.of(registro3));
+        when(saveRachaPort.save(racha2)).thenThrow(new IllegalStateException("fila corrupta simulada"));
+
+        int expiradas = service.expirarVencidas(List.of(p1, p2, p3));
+
+        assertThat(expiradas).as("solo racha1 y racha3 se guardaron bien").isEqualTo(2);
+        assertThat(racha1.estado()).isEqualTo(EstadoRacha.EXPIRADA);
+        assertThat(racha3.estado()).isEqualTo(EstadoRacha.EXPIRADA);
+        assertThat(registro1.estado()).isEqualTo(EstadoRegistro.EXPIRADO); // no es de hoy (CLOCK)
+        assertThat(registro3.estado()).isEqualTo(EstadoRegistro.EXPIRADO);
+    }
+
+    private RegistroHabito registroEnCursoDe(UserId participante, HabitoId habitoId) {
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante,
+                habitoId, LocalDate.of(2026, 8, 22), 5, TipoDia.DISCIPLINA, false, CLOCK.now());
+        registro.iniciar(CLOCK.now());
+        return registro;
+    }
+
+    /** Vencida hace rato: iniciada 48h atras, muy por encima de las 24h+3h de plazo. */
+    private static RachaSinCelular rachaVencidaDe(UserId participante, RegistroHabitoId registroId) {
+        return RachaSinCelular.iniciar(RachaSinCelularId.of(UUID.randomUUID()), participante, registroId, 24,
+                CLOCK.now().minus(Duration.ofHours(48)));
     }
 }

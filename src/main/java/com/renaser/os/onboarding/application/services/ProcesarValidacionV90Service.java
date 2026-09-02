@@ -6,6 +6,7 @@ import com.renaser.os.onboarding.application.ports.out.grabacionv90.SaveGrabacio
 import com.renaser.os.onboarding.application.ports.out.grabacionv90.ValidacionIAPort;
 import com.renaser.os.onboarding.application.ports.out.grabacionv90.ValidacionIAPort.ResultadoValidacionV90;
 import com.renaser.os.onboarding.application.ports.out.grabacionv90.ValidacionIAPort.SolicitudValidacionV90;
+import com.renaser.os.onboarding.domain.model.grabacionv90.EstadoIAv90;
 import com.renaser.os.onboarding.domain.model.grabacionv90.GrabacionV90;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
@@ -61,12 +62,48 @@ class ProcesarValidacionV90Service implements ProcesarValidacionV90UseCase {
             return;
         }
         ResultadoValidacionV90 resultado = validarSinDejarAtrapada(usuarioId, grabacionId, grabacion);
+        try {
+            aplicarResultadoYGuardar(grabacion, resultado);
+        } catch (RuntimeException e) {
+            log.error("[onboarding.ProcesarValidacionV90Service] fallo aplicando/guardando el veredicto de la "
+                    + "grabacion {}: {}", grabacionId, e.getMessage(), e);
+            rescatarDeProcesandoEterno(grabacionId);
+        }
+    }
+
+    private void aplicarResultadoYGuardar(GrabacionV90 grabacion, ResultadoValidacionV90 resultado) {
         switch (resultado.estado()) {
             case APROBADA -> grabacion.registrarAprobacion(resultado.feedbackJson(), clock);
             case RECHAZADA -> grabacion.registrarRechazo(resultado.feedbackJson(), clock);
             case NO_DISPONIBLE -> grabacion.registrarSinResultado(clock);
         }
         saveGrabacionPort.guardar(grabacion);
+    }
+
+    /**
+     * C-3 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): si aplicar el
+     * veredicto o guardarlo falla (ej. Postgres se cae justo en ese momento, o el guard de
+     * dominio rechaza un estado inesperado), el objeto en memoria ya mutó pero ese cambio
+     * puede no haber llegado a Postgres — hay que releer lo que hay REALMENTE comprometido en
+     * base, no reusar el objeto en memoria (que ya no refleja con certeza lo persistido).
+     * Solo se fuerza a {@code PENDIENTE}/{@code REVISION_MANUAL} si la base todavia ve
+     * {@code PROCESANDO}: si por el contrario el guardado si llego a buen puerto y lo que
+     * fallo fue algo posterior, no hay nada que rescatar y no se pisa un veredicto valido.
+     * Se trata igual que "IA no disponible": la maquina de estados de {@link GrabacionV90} ya
+     * sabe reintentar o caer a revision manual, no hace falta un estado nuevo.
+     */
+    private void rescatarDeProcesandoEterno(long grabacionId) {
+        try {
+            loadGrabacionPort.porId(grabacionId).ifPresent(actual -> {
+                if (actual.estadoIa() == EstadoIAv90.PROCESANDO) {
+                    actual.registrarSinResultado(clock);
+                    saveGrabacionPort.guardar(actual);
+                }
+            });
+        } catch (RuntimeException e) {
+            log.error("[onboarding.ProcesarValidacionV90Service] no se pudo rescatar la grabacion {} de "
+                    + "PROCESANDO tras un fallo previo: {}", grabacionId, e.getMessage(), e);
+        }
     }
 
     /**

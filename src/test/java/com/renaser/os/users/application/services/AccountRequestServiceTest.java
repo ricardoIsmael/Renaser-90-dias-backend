@@ -39,6 +39,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -80,6 +81,8 @@ class AccountRequestServiceTest {
     @Mock
     private com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort tokenVerificacionEmailPort;
     @Mock
+    private com.renaser.os.users.application.ports.out.autenticacion.LimitarSolicitudesResetPort limitarSolicitudesResetPort;
+    @Mock
     private com.renaser.os.users.application.ports.out.autenticacion.SaveIdentidadExternaPort saveIdentidadExternaPort;
     @Mock
     private org.springframework.context.ApplicationEventPublisher events;
@@ -93,12 +96,15 @@ class AccountRequestServiceTest {
         service = new AccountRequestService(loadAccountRequestPort, saveAccountRequestPort, deleteAccountRequestPort,
                 loadUserPort, saveUserPort, deleteUserPort, saveCredencialPort, saveIdentidadExternaPort,
                 passwordEncoder, saveParticipacionProgramaPort, tokenVerificacionEmailPort,
-                new RequireActiveUserGuard(loadUserPort), new RequireAdminGuard(loadUserPort), events, CLOCK,
-                idGenerator);
+                limitarSolicitudesResetPort, new RequireActiveUserGuard(loadUserPort),
+                new RequireAdminGuard(loadUserPort), events, CLOCK, idGenerator);
         lenient().when(saveAccountRequestPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(passwordEncoder.encode(any())).thenReturn("hash-de-prueba");
+        // C-16: registrarIntento (Redis) reemplazo el COUNT de Postgres para el limite por IP;
+        // por defecto "queda margen" para no forzar a cada test existente a stubearlo.
+        lenient().when(limitarSolicitudesResetPort.registrarIntento(any(), any(), anyInt())).thenReturn(true);
         // submit() pide dos ids al puerto: el del usuario y el de la solicitud, en ese orden.
         lenient().when(idGenerator.newId()).thenReturn(ID_USUARIO_GENERADO, ID_SOLICITUD_GENERADA);
     }
@@ -196,6 +202,49 @@ class AccountRequestServiceTest {
                 .isInstanceOf(com.renaser.os.shared.domain.TokenVerificacionEmailInvalidoException.class);
 
         verify(saveAccountRequestPort, never()).save(any());
+        verify(saveUserPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("C-16: si el limite de solicitudes por IP ya se agoto (Redis), submit no consume "
+            + "el token de verificacion ni llega a guardar nada")
+    void submitRechazaPorLimiteDeIpSinConsumirElToken() {
+        when(limitarSolicitudesResetPort.registrarIntento(eq("account-request:ip:127.0.0.1"), any(), eq(60)))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> service.submit(comandoDeAlta("token-valido")))
+                .isInstanceOf(com.renaser.os.shared.domain.RateLimitExceededException.class);
+
+        verify(tokenVerificacionEmailPort, never()).consumir(any());
+        verify(saveUserPort, never()).save(any());
+        verify(saveAccountRequestPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("C-16: si el correo ya tiene una cuenta, submit rechaza ANTES de consumir el token "
+            + "de verificacion — antes lo consumia igual y despues chocaba con el UNIQUE de Postgres")
+    void submitRechazaUnCorreoConCuentaExistenteSinConsumirElToken() {
+        when(loadUserPort.byEmail(new Email("solicitante@renaser.dev")))
+                .thenReturn(Optional.of(activo(id(), UserRole.TRAINEE)));
+
+        assertThatThrownBy(() -> service.submit(comandoDeAlta("token-valido")))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(tokenVerificacionEmailPort, never()).consumir(any());
+        verify(saveUserPort, never()).save(any());
+        verify(saveAccountRequestPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("C-16: si el correo ya tiene una solicitud (pendiente o decidida), submit rechaza "
+            + "ANTES de consumir el token de verificacion")
+    void submitRechazaUnCorreoConSolicitudExistenteSinConsumirElToken() {
+        when(loadAccountRequestPort.existePorEmail(new Email("solicitante@renaser.dev"))).thenReturn(true);
+
+        assertThatThrownBy(() -> service.submit(comandoDeAlta("token-valido")))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(tokenVerificacionEmailPort, never()).consumir(any());
         verify(saveUserPort, never()).save(any());
     }
 

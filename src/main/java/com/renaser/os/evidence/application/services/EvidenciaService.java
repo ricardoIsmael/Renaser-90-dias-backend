@@ -31,6 +31,8 @@ import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +49,8 @@ import java.util.NoSuchElementException;
 @Service
 public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEvidenciaUseCase, RevisarManualmenteUseCase,
         AnularVeredictoUseCase, ProcesarColaValidacionUseCase, ListarEvidenciaUseCase, ListarEvidenciaAdminUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(EvidenciaService.class);
 
     private static final int TAMANO_LOTE = 25;
     private static final int TAMANO_PAGINA = 20;
@@ -115,12 +119,24 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
      * penalización de puntos si la evidencia tenía una aplicada. {@code evidence} nunca
      * importa nada interno de {@code points}: solo {@link AjustarPuntosPort}, su API
      * pública.
+     *
+     * <p><b>C-13 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html), MEDIO:</b>
+     * el {@code if (estadoValidacion == ANULADA_ADMIN) return} de arriba solo hace
+     * idempotente la llamada SECUENCIAL (una vez que la primera ya hizo commit). Dos
+     * admins (o un doble clic) que leen la MISMA fila al mismo tiempo ven ambos
+     * {@code penalizacionAplicada=true} ANTES de que ninguno escriba — es un
+     * check-then-act, el mismo bug que C-2 en {@code rocks}. Por eso la lectura acá es
+     * con {@code PESSIMISTIC_WRITE} ({@link LoadEvidenciaPort#byIdParaEscritura}): el
+     * segundo llamador espera a que el primero haga commit y entonces lee el estado YA
+     * actualizado ({@code ANULADA_ADMIN}), así que su propio {@code anularVeredicto}
+     * devuelve {@code false} y no vuelve a pedirle a {@code points} que revierta la
+     * penalización.
      */
     @Override
     @Transactional
     public Evidencia anular(AnularVeredictoCommand command) {
         requireAdmin(command.actorId());
-        Evidencia evidencia = requireEvidencia(command.evidenciaId());
+        Evidencia evidencia = requireEvidenciaParaEscritura(command.evidenciaId());
         if (evidencia.estadoValidacion() == EstadoValidacion.ANULADA_ADMIN) {
             return evidencia;
         }
@@ -138,25 +154,72 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
      * {@code NO_DISPONIBLE} ({@code NoOpValidacionIAAdapter}), así que cada corrida
      * incrementa {@code intentosIa} hasta el fallback a {@code REVISION_MANUAL} — ver
      * javadoc de {@link ProcesarColaValidacionUseCase}.
+     *
+     * <p><b>C-4 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html), ALTO:</b>
+     * este método YA NO es {@code @Transactional}. La versión vieja envolvía en una sola
+     * transacción la lectura con {@code FOR UPDATE SKIP LOCKED} Y hasta 25 llamadas a la
+     * IA — con un proveedor real (45s calibrados para audio, CLAUDE.MD §7) eso retiene
+     * una conexión de Hikari hasta 19 minutos, agotando el pool para TODA la API (mismo
+     * defecto que C-1, ya corregido en {@code onboarding}/{@code rag}/{@code academy}).
+     * Ahora: la lectura del lote corre en su propia transacción corta y explícita
+     * ({@link com.renaser.os.evidence.infrastructure.adapter.out.persistence.EvidenciaPersistenceAdapter#pendientesLote},
+     * necesaria porque el {@code FOR UPDATE} no puede correr en la transacción de solo
+     * lectura que Spring Data aplicaría por defecto a un método de consulta sin
+     * anotación propia); cada evidencia se procesa y persiste por separado
+     * ({@link #procesarUnaAislada}), con la IA completamente afuera de cualquier
+     * transacción.
      */
     @Override
-    @Transactional
     public int procesarLote() {
         List<Evidencia> pendientes = loadEvidenciaPort.pendientesLote(clock.now(), TAMANO_LOTE);
         for (Evidencia evidencia : pendientes) {
-            procesarUna(evidencia);
+            procesarUnaAislada(evidencia);
         }
         return pendientes.size();
     }
 
-    private void procesarUna(Evidencia evidencia) {
-        ResultadoValidacionIA resultado = validacionIAPort.validar(evidencia);
-        switch (resultado) {
-            case APROBADA -> evidencia.aprobarPorIa();
-            case RECHAZADA -> evidencia.rechazarPorIa("Rechazada por validacion IA");
-            case NO_DISPONIBLE -> evidencia.registrarIntentoFallido();
+    /**
+     * Aísla cada evidencia del resto del lote (C-4, "poison pill"): antes, si la
+     * evidencia 12 lanzaba una excepción (de red, por ejemplo), la transacción entera
+     * revertía las 11 ya validadas y, como el orden es {@code subida_en ASC}, siempre
+     * eran las mismas 25 — la cola no avanzaba nunca. Ahora un fallo aislado (de la IA o
+     * al persistir) no se propaga: se loguea y el resto del lote sigue su curso. El
+     * fallo de IA además cuenta como un intento fallido más (misma máquina de reintentos
+     * + fallback a {@code REVISION_MANUAL} que ya tiene el dominio,
+     * {@link Evidencia#registrarIntentoFallido()}) — antes {@code registrarIntentoFallido}
+     * solo corría ante {@code NO_DISPONIBLE}, nunca ante una excepción.
+     */
+    private void procesarUnaAislada(Evidencia evidencia) {
+        try {
+            ResultadoValidacionIA resultado = validarSinDejarAtrapada(evidencia);
+            switch (resultado) {
+                case APROBADA -> evidencia.aprobarPorIa();
+                case RECHAZADA -> evidencia.rechazarPorIa("Rechazada por validacion IA");
+                case NO_DISPONIBLE -> evidencia.registrarIntentoFallido();
+            }
+            saveEvidenciaPort.save(evidencia);
+        } catch (RuntimeException e) {
+            log.warn("[evidence.EvidenciaService] fallo aislado procesando la evidencia {}, no afecta al resto "
+                    + "del lote: {}", evidencia.id(), e.getMessage(), e);
         }
-        saveEvidenciaPort.save(evidencia);
+    }
+
+    /**
+     * Con el {@code NoOpValidacionIAAdapter} de hoy {@link ValidacionIAPort#validar}
+     * nunca lanza. Con un proveedor real sí puede (timeout, error de red) — se trata
+     * igual que {@code NO_DISPONIBLE}: la máquina de estados de {@link Evidencia} ya
+     * sabe reintentar o caer a {@code REVISION_MANUAL} (CLAUDE.MD §7), no hay que
+     * inventar un camino nuevo. Mismo criterio que
+     * {@code onboarding.ProcesarValidacionV90Service.validarSinDejarAtrapada}.
+     */
+    private ResultadoValidacionIA validarSinDejarAtrapada(Evidencia evidencia) {
+        try {
+            return validacionIAPort.validar(evidencia);
+        } catch (RuntimeException e) {
+            log.warn("[evidence.EvidenciaService] la IA fallo validando la evidencia {}: {}", evidencia.id(),
+                    e.getMessage(), e);
+            return ResultadoValidacionIA.NO_DISPONIBLE;
+        }
     }
 
     /**
@@ -227,6 +290,19 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
 
     private Evidencia requireEvidencia(EvidenciaId id) {
         return loadEvidenciaPort.byId(id)
+                .orElseThrow(() -> new NoSuchElementException("Evidencia no encontrada: " + id));
+    }
+
+    /**
+     * Igual que {@link #requireEvidencia} pero con bloqueo pesimista (C-2 en {@code rocks},
+     * C-13 acá): se usa exclusivamente en el camino que MUTA la evidencia ya resuelta
+     * ({@link #anular}). El resto de los hermanos de esta clase ({@link #porId},
+     * {@link #revisar}) no arriesgan un doble efecto de la misma forma — {@code revisar}
+     * solo aplica sobre {@code REVISION_MANUAL} y no está en el alcance de C-13 (ver
+     * {@code docs/informes/auditoria-fixes/C-4-C-13.md}).
+     */
+    private Evidencia requireEvidenciaParaEscritura(EvidenciaId id) {
+        return loadEvidenciaPort.byIdParaEscritura(id)
                 .orElseThrow(() -> new NoSuchElementException("Evidencia no encontrada: " + id));
     }
 

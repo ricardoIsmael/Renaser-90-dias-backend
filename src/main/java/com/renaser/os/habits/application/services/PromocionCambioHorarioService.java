@@ -12,7 +12,9 @@ import com.renaser.os.shared.domain.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -44,33 +46,52 @@ public class PromocionCambioHorarioService implements PromoverCambiosHorarioProg
     private final SavePreferenciaHorarioPort savePreferenciaPort;
     private final HistorialCambioHorarioPort historialPort;
     private final Clock clock;
+    /**
+     * Transaccion PROPIA (REQUIRES_NEW) para el barrido nocturno: cada pendiente se promueve
+     * en su propia transaccion, aislada de las demas (C-6, docs/informes/
+     * auditoria-seguridad-concurrencia-2026-09-01.html) — antes todo el barrido era una
+     * unica transaccion y un pendiente corrupto revertia los ya promovidos esa noche.
+     */
+    private final TransactionTemplate transaccionPropia;
 
     public PromocionCambioHorarioService(LoadCambioHorarioPendientePort loadCambioPendientePort,
                                           SaveCambioHorarioPendientePort saveCambioPendientePort,
                                           LoadPreferenciaHorarioPort loadPreferenciaPort,
                                           SavePreferenciaHorarioPort savePreferenciaPort,
-                                          HistorialCambioHorarioPort historialPort, Clock clock) {
+                                          HistorialCambioHorarioPort historialPort, Clock clock,
+                                          PlatformTransactionManager transactionManager) {
         this.loadCambioPendientePort = loadCambioPendientePort;
         this.saveCambioPendientePort = saveCambioPendientePort;
         this.loadPreferenciaPort = loadPreferenciaPort;
         this.savePreferenciaPort = savePreferenciaPort;
         this.historialPort = historialPort;
         this.clock = clock;
+        this.transaccionPropia = new TransactionTemplate(transactionManager);
+        this.transaccionPropia.setPropagationBehavior(Propagation.REQUIRES_NEW.value());
     }
 
     @Override
-    @Transactional
     public int promoverLosQueRigenEn(LocalDate fecha) {
         List<CambioHorarioPendiente> vencidos = loadCambioPendientePort.queYaRigenEn(fecha);
         Instant ahora = clock.now();
+        int promovidos = 0;
+        int fallidos = 0;
         for (CambioHorarioPendiente pendiente : vencidos) {
-            promover(pendiente, ahora);
+            try {
+                transaccionPropia.executeWithoutResult(status -> promover(pendiente, ahora));
+                promovidos++;
+            } catch (RuntimeException ex) {
+                fallidos++;
+                log.warn("[habits] no se pudo promover el cambio de horario pendiente de {} para el habito {}: {}",
+                        pendiente.participanteId(), pendiente.habitoId(), ex.toString());
+            }
         }
         if (!vencidos.isEmpty()) {
-            log.info("[habits] promovidos {} cambio(s) de horario programados con fecha efectiva <= {}",
-                    vencidos.size(), fecha);
+            log.info(
+                    "[habits] promocion de cambios de horario con fecha efectiva <= {}: {} promovido(s), {} fallido(s) de {} candidato(s)",
+                    fecha, promovidos, fallidos, vencidos.size());
         }
-        return vencidos.size();
+        return promovidos;
     }
 
     private void promover(CambioHorarioPendiente pendiente, Instant ahora) {

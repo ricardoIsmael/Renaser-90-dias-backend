@@ -15,6 +15,16 @@ public interface LoadEvidenciaPort {
     Optional<Evidencia> byId(EvidenciaId id);
 
     /**
+     * Versión con bloqueo para el camino de escritura (anular veredicto): evita que dos
+     * admins concurrentes (o un doble clic) lean la misma evidencia con
+     * {@code penalizacionAplicada=true} antes de que ninguno escriba y ambos le pidan a
+     * {@code points} que revierta la penalización dos veces — mismo patrón que
+     * {@code rocks.LoadRocaDiariaPort.byIdParaEscritura} (C-2/C-13,
+     * docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html).
+     */
+    Optional<Evidencia> byIdParaEscritura(EvidenciaId id);
+
+    /**
      * Lote de evidencias {@code PENDIENTE} con {@code subida_en <= hasta}, ordenadas por
      * {@code subida_en} ascendente, con {@code FOR UPDATE SKIP LOCKED} sobre
      * {@code evidencias_cola_ia_idx} — seguro con múltiples instancias del scheduler

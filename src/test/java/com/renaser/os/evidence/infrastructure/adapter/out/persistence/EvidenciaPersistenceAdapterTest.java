@@ -123,6 +123,22 @@ class EvidenciaPersistenceAdapterTest {
     }
 
     @Test
+    @DisplayName("C-13: byIdParaEscritura trae la misma fila que byId (el lock no cambia el resultado)")
+    void byIdParaEscrituraDevuelveLaMismaEvidenciaQueById() {
+        Evidencia guardada = adapter.save(evidenciaRocaTexto(true));
+
+        Optional<Evidencia> recuperada = adapter.byIdParaEscritura(guardada.id());
+
+        assertThat(recuperada).isPresent();
+        assertThat(recuperada.get().id()).isEqualTo(guardada.id());
+    }
+
+    @Test
+    void byIdParaEscrituraDeIdInexistenteDevuelveVacio() {
+        assertThat(adapter.byIdParaEscritura(EvidenciaId.of(UUID.randomUUID()))).isEmpty();
+    }
+
+    @Test
     @DisplayName("indice unico evidencias_principal_uk: dos evidencias 'esPrincipal' para la misma roca -> conflicto")
     void indiceUnicoDeEsPrincipalRechazaDosPrincipalesParaLaMismaRoca() {
         adapter.save(evidenciaRocaTexto(true));

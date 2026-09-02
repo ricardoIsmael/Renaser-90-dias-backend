@@ -11,11 +11,13 @@ import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -47,6 +49,9 @@ class PromocionCambioHorarioServiceTest {
     private SavePreferenciaHorarioPort savePreferenciaPort;
     @Mock
     private HistorialCambioHorarioPort historialPort;
+    /** Ver comentario equivalente en RegistroServiceTest: no necesita stubbing. */
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private PromocionCambioHorarioService service;
     private UserId participanteId;
@@ -55,7 +60,7 @@ class PromocionCambioHorarioServiceTest {
     @BeforeEach
     void setUp() {
         service = new PromocionCambioHorarioService(loadCambioPendientePort, saveCambioPendientePort,
-                loadPreferenciaPort, savePreferenciaPort, historialPort, CLOCK);
+                loadPreferenciaPort, savePreferenciaPort, historialPort, CLOCK, transactionManager);
         participanteId = UserId.of(UUID.randomUUID());
         habitoId = HabitoId.of(UUID.randomUUID());
         lenient().when(savePreferenciaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -159,5 +164,39 @@ class PromocionCambioHorarioServiceTest {
         verify(savePreferenciaPort).save(creada.capture());
         assertThat(creada.getValue().horaDisparo()).isEqualTo(LocalTime.of(6, 0));
         assertThat(creada.getValue().horaLimite()).isEqualTo(LocalTime.of(8, 0));
+    }
+
+    /**
+     * C-6 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): un pendiente que
+     * falla al guardar su preferencia no debe impedir que el otro pendiente, vencido en el
+     * mismo barrido, se promueva igual.
+     */
+    @Test
+    @DisplayName("promoverLosQueRigenEn(): un pendiente que falla al guardar no tumba el barrido de los demas")
+    void promoverAislaElPendienteQueFalla() {
+        UserId otroParticipante = UserId.of(UUID.randomUUID());
+        HabitoId otroHabito = HabitoId.of(UUID.randomUUID());
+        CambioHorarioPendiente fallido = CambioHorarioPendiente.programar(participanteId, habitoId,
+                LocalTime.of(6, 0), LocalTime.of(8, 0), null, null, HOY, CLOCK.now());
+        CambioHorarioPendiente exitoso = CambioHorarioPendiente.programar(otroParticipante, otroHabito,
+                LocalTime.of(7, 0), LocalTime.of(9, 0), null, null, HOY, CLOCK.now());
+        PreferenciaHorario vigenteFallida = PreferenciaHorario.crear(participanteId, habitoId, null, null,
+                CLOCK.now());
+        PreferenciaHorario vigenteExitosa = PreferenciaHorario.crear(otroParticipante, otroHabito, null, null,
+                CLOCK.now());
+
+        when(loadCambioPendientePort.queYaRigenEn(HOY)).thenReturn(List.of(fallido, exitoso));
+        when(loadPreferenciaPort.porParticipanteYHabito(participanteId, habitoId))
+                .thenReturn(Optional.of(vigenteFallida));
+        when(loadPreferenciaPort.porParticipanteYHabito(otroParticipante, otroHabito))
+                .thenReturn(Optional.of(vigenteExitosa));
+        when(savePreferenciaPort.save(vigenteFallida)).thenThrow(new IllegalStateException("fila corrupta simulada"));
+        when(savePreferenciaPort.save(vigenteExitosa)).thenAnswer(inv -> inv.getArgument(0));
+
+        int promovidos = service.promoverLosQueRigenEn(HOY);
+
+        assertThat(promovidos).as("solo el pendiente exitoso se promovio").isEqualTo(1);
+        verify(saveCambioPendientePort).borrar(otroParticipante, otroHabito);
+        verify(saveCambioPendientePort, never()).borrar(participanteId, habitoId);
     }
 }

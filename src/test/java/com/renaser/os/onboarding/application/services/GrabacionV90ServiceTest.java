@@ -90,12 +90,46 @@ class GrabacionV90ServiceTest {
         actorActivo();
         UserId otro = UserId.of(UUID.randomUUID());
         GrabacionV90 deOtro = grabacionGrabadaDe(otro);
-        when(loadGrabacionPort.porId(5L)).thenReturn(Optional.of(deOtro));
+        when(loadGrabacionPort.porIdParaEscritura(5L)).thenReturn(Optional.of(deOtro));
 
         assertThatThrownBy(() -> service.solicitarValidacion(new SolicitarValidacionV90Command(usuarioId, 5L)))
                 .isInstanceOf(NotAuthorizedException.class);
         verify(despacharPort, never()).despachar(any(), org.mockito.ArgumentMatchers.anyLong());
         verify(saveGrabacionPort, never()).guardar(any());
+    }
+
+    // ── C-3: doble arranque de validacion (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html) ──
+
+    @Test
+    @DisplayName("solicitarValidacion(): PENDIENTE -> transiciona a PROCESANDO, guarda y despacha (camino normal)")
+    void solicitarValidacionEnPendienteDespachaUnaSolaVez() {
+        actorActivo();
+        GrabacionV90 g = grabacionGrabadaDe(usuarioId);
+        when(loadGrabacionPort.porIdParaEscritura(5L)).thenReturn(Optional.of(g));
+        when(saveGrabacionPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.solicitarValidacion(new SolicitarValidacionV90Command(usuarioId, 5L));
+
+        assertThat(g.estadoIa()).isEqualTo(EstadoIAv90.PROCESANDO);
+        verify(saveGrabacionPort).guardar(g);
+        verify(despacharPort).despachar(usuarioId, 5L);
+    }
+
+    @Test
+    @DisplayName("solicitarValidacion(): ya PROCESANDO (carrera ganada por otra transaccion) -> no relanza la "
+            + "IA, responde idempotente (202) sin volver a guardar ni despachar")
+    void solicitarValidacionYaProcesandoEsIdempotente() {
+        actorActivo();
+        GrabacionV90 g = grabacionGrabadaDe(usuarioId);
+        g.procesarIntentoDeValidacion(CLOCK);
+        when(loadGrabacionPort.porIdParaEscritura(5L)).thenReturn(Optional.of(g));
+
+        service.solicitarValidacion(new SolicitarValidacionV90Command(usuarioId, 5L));
+
+        assertThat(g.estadoIa()).isEqualTo(EstadoIAv90.PROCESANDO);
+        assertThat(g.intentosIa()).isEqualTo((short) 1);
+        verify(saveGrabacionPort, never()).guardar(any());
+        verify(despacharPort, never()).despachar(any(), org.mockito.ArgumentMatchers.anyLong());
     }
 
     @Test

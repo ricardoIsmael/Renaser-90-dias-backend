@@ -32,9 +32,14 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -55,6 +60,8 @@ import java.util.Optional;
 public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTracksDelDiaUseCase,
         CompletarRegistroUseCase, ExpirarRegistrosVencidosUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(RegistroService.class);
+
     private final LoadRegistroHabitoPort loadRegistroPort;
     private final SaveRegistroHabitoPort saveRegistroPort;
     private final LoadHabitoPort loadHabitoPort;
@@ -66,13 +73,24 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     private final Clock clock;
     private final IdGenerator idGenerator;
     private final RegistroPoliticasHabito politicas;
+    /**
+     * Transaccion PROPIA (REQUIRES_NEW) para el barrido nocturno de {@link #expirarPendientesAnterioresA}:
+     * cada fila se guarda en su propia transaccion, aislada de las demas (C-6). No se usa
+     * para nada mas — {@link #completar} resuelve C-9 con {@code noRollbackFor}, no con esto,
+     * porque acá el registro ya viene bajo bloqueo pesimista de la MISMA transaccion en curso
+     * (ver javadoc de {@link #requireRegistro}): abrir una segunda transaccion sobre la fila
+     * bloqueada por la primera, sin haberla liberado, es un auto-interbloqueo entre dos
+     * conexiones del mismo pool — nunca REQUIRES_NEW sobre una fila ya bloqueada por la
+     * transaccion en curso.
+     */
+    private final TransactionTemplate transaccionPropia;
 
     public RegistroService(LoadRegistroHabitoPort loadRegistroPort, SaveRegistroHabitoPort saveRegistroPort,
                             LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
                             LoadPreferenciaHorarioPort loadPreferenciaPort,
                             ConsultarProgresoParticipanteHabitsPort progresoPort, AjustarPuntosPort ajustarPuntosPort,
                             ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator,
-                            List<PoliticaHabito> politicas) {
+                            List<PoliticaHabito> politicas, PlatformTransactionManager transactionManager) {
         this.loadRegistroPort = loadRegistroPort;
         this.saveRegistroPort = saveRegistroPort;
         this.loadHabitoPort = loadHabitoPort;
@@ -86,6 +104,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         // Se indexa UNA vez, en el arranque: en `completar` la resolucion es un lookup de
         // mapa, sin streams ni asignaciones (CLAUDE.MD §5.4.7, hot path).
         this.politicas = new RegistroPoliticasHabito(politicas);
+        this.transaccionPropia = new TransactionTemplate(transactionManager);
+        this.transaccionPropia.setPropagationBehavior(Propagation.REQUIRES_NEW.value());
     }
 
     @Override
@@ -123,7 +143,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = RegistroExpiradoException.class)
     public RegistroHabito completar(CompletarRegistroCommand command) {
         RegistroHabito registro = requireRegistro(command.registroId());
         requireSelf(command.actorId(), registro.participanteId());
@@ -133,9 +153,15 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         Instant ahora = clock.now();
         VentanaEntrega ventana = resolverVentana(registro, habito);
         if (ventana != null && ventana.vencida(ahora)) {
+            // C-9: sin el noRollbackFor de arriba, este throw revierte el save de la linea
+            // anterior y el registro queda PENDIENTE para siempre (el aprendiz reintenta y
+            // vuelve a chocar con el mismo 409 hasta el cron de las 05:00). El tipo propio
+            // (en vez de IllegalStateException a secas) acota el noRollbackFor a ESTE punto
+            // exacto — no a los otros guard clauses de RegistroHabito.completar(), que si
+            // deben revertir su escritura si fallan (ver javadoc de RegistroExpiradoException).
             registro.expirar(ahora);
             saveRegistroPort.save(registro);
-            throw new IllegalStateException("El habito expiro — no se puede completar");
+            throw new RegistroExpiradoException("El habito expiro — no se puede completar");
         }
 
         int puntos = 0;
@@ -160,16 +186,43 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         return guardado;
     }
 
+    /**
+     * C-6: antes, todo el barrido corria en una unica transaccion — una fila corrupta en
+     * la posicion 400 revertia las 399 anteriores, y a la noche siguiente pasaba lo mismo
+     * (los registros nunca llegaban a expirar). Ahora cada fila se guarda en su propia
+     * transaccion ({@link #transaccionPropia}, REQUIRES_NEW): si una falla, la excepcion
+     * se atrapa aca, esa fila queda pendiente para el proximo barrido, y las demas siguen
+     * su curso normal.
+     */
     @Override
-    @Transactional
     public int expirarPendientesAnterioresA(LocalDate hoy) {
         List<RegistroHabito> vencidos = loadRegistroPort.enEstadoConFechaAnteriorA(EstadoRegistro.PENDIENTE, hoy);
         Instant ahora = clock.now();
+        int expirados = 0;
+        int fallidos = 0;
         for (RegistroHabito registro : vencidos) {
+            try {
+                expirarUnoEnTransaccionPropia(registro, ahora);
+                expirados++;
+            } catch (RuntimeException ex) {
+                fallidos++;
+                log.warn("[habits] no se pudo expirar el registro {} en el barrido de {}: {}", registro.id(), hoy,
+                        ex.toString());
+            }
+        }
+        if (!vencidos.isEmpty()) {
+            log.info(
+                    "[habits] barrido de expiracion de registros ({}): {} expirado(s), {} fallido(s) de {} candidato(s)",
+                    hoy, expirados, fallidos, vencidos.size());
+        }
+        return expirados;
+    }
+
+    private void expirarUnoEnTransaccionPropia(RegistroHabito registro, Instant ahora) {
+        transaccionPropia.executeWithoutResult(status -> {
             registro.expirar(ahora);
             saveRegistroPort.save(registro);
-        }
-        return vencidos.size();
+        });
     }
 
     /** La regla vive en {@link TipoDia#delDia(LocalDate)} — la comparte la lectura de horarios vigentes. */
