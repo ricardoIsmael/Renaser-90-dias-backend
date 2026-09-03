@@ -210,6 +210,7 @@ en el programa habría recibido 404 al pedir el catálogo — comportamiento inc
 | `ConsultarRecomendacionDiariaUseCase` | `GET /api/v1/academia/recomendacion` | `RecomendacionService` |
 | `AccesoCursoFinder` (api) | (sin REST — consumido por `calendar`) | `AccesoCursoService` |
 | `PorcentajeCursosFinder` (api) | (sin REST — consumido por `points`) | `PorcentajeCursosService` |
+| `LeccionesVisiblesFinder` (api) | (sin REST — consumido por `rag`) | `LeccionesVisiblesAcademyService` |
 
 Todos los endpoints reciben el actor por header `X-Actor-Id` (no hay filtro JWT todavía, bloqueante
 del usuario) y devuelven 403 vía `NotAuthorizedException` → `GlobalExceptionHandler` cuando el actor
@@ -273,6 +274,24 @@ en `academy/domain/model/progreso/PorcentajeCursos.java` — sin Spring, sin SQL
 cursos accesibles → 100". `PorcentajeCursosService` solo trae los crudos (reusando
 `Curso.visibleEnCatalogoPara`, el MISMO gate del catálogo, AC-01) y arma el conjunto de cursos
 accesibles por participante antes de sumar.
+
+### 4.1ter `LeccionesVisiblesFinder` (api pública de `academy`) — cierre D-81 de `rag`
+
+Contrato nuevo (`academy/api/LeccionesVisiblesFinder.java`), implementado en
+`LeccionesVisiblesAcademyService`: `Set<String> leccionesVisiblesPara(UserId actorId)`, la unión de
+ids de lecciones visibles HOY para ese actor en TODO el catálogo. Encargo de `rag`: la búsqueda
+vectorial de Renasia (`PgVectorNativoAdapter.buscarSimilares`) podía citarle a un aprendiz contenido
+de una lección que su propio gate de programa todavía tiene bloqueada — bug real de fuga de
+contenido, ver `docs/MODULO_RAG.md` D-81.
+
+Reusa exactamente la misma regla de dos niveles que `CatalogoAcademyService` (`Curso.visibleEnCatalogoPara`
++, dentro del curso, `SeccionCurso.visibleEnCatalogoPara`) pero resuelta para todo el catálogo de una
+sola pasada — **AC-18**: 3 consultas en total (`LoadCursoPort.listarTodos()`, la nueva
+`LoadSeccionCursoPort.listarTodas()` y la nueva proyección liviana `LoadLeccionPort.listarIdentificadores()`,
+que trae `(id, cursoId, seccionId)` sin `cuerpoHtml`/`cuerpoMd`), nunca una consulta por curso ni por
+lección — mismo criterio anti N+1 de AC-17/D-43. Actor inexistente, suspendido, o sin ningún curso
+accesible → conjunto vacío, nunca error ni excepción — mismo criterio que el resto de los finders de
+`academy` (AC-17 punto 1).
 
 ### 4.2 `users.api.UserRole`/`UserStatus`
 
@@ -393,6 +412,13 @@ inofensivo hoy porque la app **firma la portada del lado cliente** contra el buc
        función tampoco lo hace, a propósito, para no cambiar de comportamiento"*) — mismo criterio que
        ya regía `listarMisCursosAlumno`/`GET /api/v1/cursos` (§1.4). El comentario SQL y el código
        coinciden en este punto, no hubo contradicción que resolver.
+- **AC-18** — `LeccionesVisiblesFinder`/`LeccionesVisiblesAcademyService` (cierre D-81 de `rag`, ver
+  §4.1ter). A diferencia de `AccesoCursoFinder` (asignación administrativa) SÍ es la misma pregunta
+  de "puede este actor ver esto en su catálogo" que AC-01 — pero a nivel de LECCIÓN, no de curso, y
+  para TODO el catálogo de una sola vez en vez de un curso puntual. Requirió dos ports nuevos,
+  `LoadSeccionCursoPort.listarTodas()` y `LoadLeccionPort.listarIdentificadores()` (proyección sin
+  `cuerpoHtml`/`cuerpoMd`), ambos de solo lectura y en una sola consulta cada uno — ningún cambio a
+  `CatalogoAcademyService` ni a las reglas de dominio existentes (`Curso`/`SeccionCurso` no cambiaron).
 
 ---
 

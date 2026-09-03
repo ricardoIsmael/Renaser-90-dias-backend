@@ -101,6 +101,24 @@ public interface EntradaDiarioFinder {
 ```
 Mismo patrón que `users.api.UserSummaryFinder` y `academy.api.AccesoCursoFinder`: un finder de solo lectura con DTO propio del `api`, nunca la entidad interna.
 
+### D-81 — La búsqueda vectorial ignoraba el bloqueo de contenido de `academy` (bug real, cerrado 2026-09-03)
+
+**El problema:** `PgVectorNativoAdapter.buscarSimilares` hacía `SELECT` sobre toda `base_conocimiento` ordenada por distancia coseno, sin `WHERE`. `academy` sí bloquea contenido por día de programa (`Curso.visibleEnCatalogoPara`/`bloqueadoPorDiaPara`, y a nivel de sección `SeccionCurso.visibleEnCatalogoPara`), pero Renasia podía citarle a un aprendiz en el día 3 el contenido de una lección del día 60 que su propio módulo de academia todavía tiene bloqueada — fuga de contenido, no solo un problema de UX.
+
+**La solución, mismo patrón que D-50 (`habits` → `rag`):** `academy/api/` gana `LeccionesVisiblesFinder.leccionesVisiblesPara(UserId actorId)`, que devuelve la unión de ids de lecciones visibles HOY para ese actor (resuelto en 3 consultas en lote — `LoadCursoPort.listarTodos()`, la nueva `LoadSeccionCursoPort.listarTodas()` y la nueva `LoadLeccionPort.listarIdentificadores()` — nunca una consulta por curso ni por lección, mismo criterio anti N+1 que `ContarRegistrosDiariosHabitsPort`). `rag` consume esto detrás de su propio puerto, `ConsultarLeccionesVisiblesPort` (`ports/out/conversacion/`), implementado por `LeerLeccionesVisiblesAdapter` (`adapter/out/academy/`) — nunca importa tipos de `academy` fuera de `academy.api`.
+
+**Dónde vive el filtro:** `VectorStorePort.buscarSimilares` ganó un tercer parámetro, `FiltroLecciones` (`SinFiltro` | `SoloVisibles(Set<String> leccionIds)`). Va en el WHERE de `PgVectorNativoAdapter` (`leccion_id IS NULL OR leccion_id = ANY(...)`), antes del `ORDER BY ... LIMIT` — filtrar en Java después de traer `topK` filas devolvería menos de `topK` fragmentos cuando hay candidatos bloqueados de por medio. `ConversacionRenasiaService` resuelve el conjunto visible (vía `ConsultarLeccionesVisiblesPort`) y arma el filtro; `PgVectorNativoAdapter` no sabe nada de reglas de `academy`, solo aplica el WHERE. Los chunks con `leccion_id IS NULL` (material general) nunca se filtran. `ConocimientoService` (indexación admin) no llama a `buscarSimilares` hoy — si algún día necesita buscar, usa `FiltroLecciones.sinFiltro()`.
+
+**Consecuencia para el contrato compartido:** es el segundo cambio de firma de `VectorStorePort` (antes "firma congelada" salvo para cerrar bugs reales) — `ConversacionRenasiaServiceTest`/`PgVectorNativoAdapterTest` ya están al día.
+
+### D-82 — Puerto y adaptador vacío del clasificador de riesgo (solo estructura, sin conectar)
+
+Ya existían `NivelRiesgo`/`Severidad`/`EvaluacionRiesgo` en `rag/domain/model/seguridad/`. Se agregó `EvaluarRiesgoMensajePort` (`application/ports/out/seguridad/`) y su placeholder `NoOpEvaluacionRiesgoAdapter` (`infrastructure/adapter/out/seguridad/`, mismo molde que `NoOpEmbeddingAdapter`): loguea que es un placeholder y devuelve `EvaluacionRiesgo.sinSenales()`, nunca `null`.
+
+**Deliberadamente NO incluido:** el mapeo de `EvaluacionRiesgo` a modo de respuesta (qué apaga herramientas, qué escala a mentor, qué entra en crisis) y los criterios de detección en sí — ambos son reglas sin confirmar (CLAUDE.MD §0.6) que tiene que firmar el dueño del producto y un profesional con licencia, respectivamente. Este puerto **no está conectado** a `ConversacionRenasiaService` ni a ningún caso de uso todavía.
+
+**Por qué el `NoOp` devuelve `sinSenales()` y no un nivel alto "por las dudas":** `NivelRiesgo.CRITICO` dispara modo crisis siempre, sin importar la severidad — usarlo como default de un adaptador que nunca leyó el mensaje convertiría, el día que alguien lo conecte sin releer el javadoc, TODA conversación con Renasia en una falsa alarma de crisis permanente. `sinSenales()` es el mismo criterio que el resto de los `NoOp` del módulo: un placeholder inerte, no una mentira sobre haber evaluado algo. Queda pendiente, documentado en el javadoc de la clase: si hace falta un tercer estado "indeterminado" en `NivelRiesgo` (pregunta que el propio enum deja abierta) y, después, el mapeo completo a modo de respuesta — ninguna de las dos cosas se resuelve acá.
+
 ---
 
 ## 4. Estructura del módulo
@@ -122,21 +140,24 @@ rag/
 │   │   ├── espejosombra/                 GenerarInformeUseCase (solo scheduler), ObtenerInformeUseCase, ListarInformesUseCase
 │   │   └── conocimiento/                 IndexarConocimientoUseCase (admin, D-46)
 │   ├── ports/out/
-│   │   ├── conversacion/                 Load/Save de conversación y mensajes
+│   │   ├── conversacion/                 Load/Save de conversación y mensajes, ConsultarLeccionesVisiblesPort (→ academy.api, D-81)
 │   │   ├── espejosombra/                 Load/Save informes + LeerEntradasDiarioPort (→ habits.api, D-50)
-│   │   ├── conocimiento/                 VectorStorePort (D-45), SaveChunkPort
+│   │   ├── conocimiento/                 VectorStorePort (D-45, FiltroLecciones desde D-81), SaveChunkPort
 │   │   ├── ia/                           ChatIAPort (streaming), GenerarInsightSemanalPort, EmbeddingPort
-│   │   └── cuota/                        ControlCuotaRenasiaPort (→ Redis, D-48)
+│   │   ├── cuota/                        ControlCuotaRenasiaPort (→ Redis, D-48)
+│   │   └── seguridad/                    EvaluarRiesgoMensajePort (D-82, estructura sin conectar)
 │   └── services/                         ConversacionRenasiaService, EspejoSombraService, ConocimientoService
 └── infrastructure/adapter/
     ├── in/rest/                          RenasiaController (streaming), EspejoSombraController, ConocimientoAdminController
     ├── in/scheduler/                     GenerarInformesSemanalesScheduler
     └── out/
         ├── persistence/{conversacion,espejosombra,conocimiento}/
-        ├── vectorstore/                  PgVectorNativoAdapter (SQL con `<=>`, D-45)
+        ├── vectorstore/                  PgVectorNativoAdapter (SQL con `<=>`, D-45; filtro por lección, D-81)
         ├── ia/                           NoOp* mientras no haya credenciales (mismo patrón que evidence/onboarding)
         ├── redis/                        ControlCuotaRedisAdapter (D-48)
-        └── habits/                       LeerEntradasDiarioAdapter (llama a habits.api, D-50)
+        ├── habits/                       LeerEntradasDiarioAdapter (llama a habits.api, D-50)
+        ├── academy/                      LeerLeccionesVisiblesAdapter (llama a academy.api, D-81)
+        └── seguridad/                    NoOpEvaluacionRiesgoAdapter (placeholder, D-82)
 ```
 
 ---
@@ -162,7 +183,9 @@ Opciones reales verificadas:
 - `text-embedding-004` → 768 nativo, calza exacto con la columna.
 - `gemini-embedding-001` con `.dimensions(768)` → trunca vía Matryoshka Representation Learning.
 
-**Decisión: `text-embedding-004`**, por ser el que coincide de forma nativa con el esquema ya congelado, sin truncado de por medio. Queda como configuración explícita, nunca implícita.
+**Decisión original: `text-embedding-004`**, por ser el que coincide de forma nativa con el esquema ya congelado, sin truncado de por medio.
+
+> **D-51 quedó obsoleta (2026-09-03).** Google retiró `text-embedding-004` el 2026-01-14 — ese modelo ya no existe, así que la decisión original habría hecho fallar la primera indexación con credenciales reales. **Decisión vigente:** `gemini-embedding-001` (el default de Spring AI) con `spring.ai.google.genai.embedding.text.dimensions=768` fijado explícitamente en `application.yaml` — el truncado Matryoshka nativo del modelo, no un recorte casero. Ya cableado en `GoogleGenAiClientesConfig`/`GoogleGenAiEmbeddingAdapter`; este último falla con `IllegalStateException` (no trunca en silencio) si el modelo alguna vez devolviera una cantidad de dimensiones distinta a la esperada.
 
 ### El "Modular RAG" de la propuesta NO existe en 2.0.0
 
@@ -187,8 +210,9 @@ Esto se combina con el límite de D-48: **el límite protege del abuso, el cachi
 
 | Bloqueo | Efecto |
 |---|---|
-| **Credenciales de Gemini** (D-39) | Los adaptadores de IA quedan `NoOp` como en `evidence`/`onboarding`. Todo el resto (persistencia, cuota, permisos, búsqueda vectorial) se construye y se prueba igual |
+| **Credenciales de Gemini** (D-39) | **Parcialmente resuelto (2026-09-03).** Los adaptadores reales (`GoogleGenAiRenasiaChatAdapter`, `GoogleGenAiEmbeddingAdapter`) y su `@Configuration` (`GoogleGenAiClientesConfig`) ya están escritos, detrás de `renaser.ia.proveedor=google`. Sin `GOOGLE_GENAI_API_KEY` real, el default (`renaser.ia.proveedor=noop`) sigue activando los `NoOp*`. Lo que falta: probar el camino `google` con una API key real (nadie corrió `./mvnw` contra Gemini de verdad) y que Producto defina el prompt de sistema definitivo (hoy es un placeholder explícito en `prompts/renasia-sistema.st`) |
 | **Sin datos en `base_conocimiento`** | Es esperable: la ingesta es admin (D-46) y el contenido llega en la fase de migración de datos |
+| **Clasificador de riesgo real** (D-82) | Existe la estructura (`EvaluarRiesgoMensajePort` + `NoOpEvaluacionRiesgoAdapter`), sin conectar. Falta: (1) confirmar si `NivelRiesgo` necesita un tercer estado "indeterminado", (2) el mapeo completo de `EvaluacionRiesgo` a modo de respuesta (firmado por el dueño del producto) y (3) los criterios de detección en sí (firmados por un profesional con licencia). Depende además de D-80 (edad/país confiables) para el camino de crisis |
 
 ---
 
