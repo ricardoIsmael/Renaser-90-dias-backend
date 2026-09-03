@@ -79,9 +79,20 @@ public class SecurityConfig {
      * (spring-session-data-redis, docs/MODULO_AUTH.md §4), no la {@code HttpSession} generica
      * del contenedor. Poner {@code STATELESS} aca apagaria justo lo que se quiere usar.
      *
-     * <p>Todavia sin {@code .authorizeHttpRequests(anyRequest().authenticated())}: eso es la
-     * fase 4 (migrar los 162 usos de {@code X-Actor-Id} en 54 controllers). Activarlo ahora
-     * dejaria a toda la API existente respondiendo 401 de golpe.
+     * <p>Todavia sin {@code anyRequest().authenticated()} para el resto de la API: eso es la
+     * fase 4 (migrar los 162 usos de {@code X-Actor-Id} en 54 controllers). Activarlo entero
+     * ahora dejaria a toda la API existente respondiendo 401 de golpe.
+     *
+     * <p><b>Renasia es la excepcion, y es deliberada (2026-09-03).</b> Sus rutas SI exigen sesion
+     * real. El motivo no es de estilo: fuera de esas rutas, cuando no hay sesion el actor se
+     * resuelve del header {@code X-Actor-Id}, que lo escribe el propio cliente. Sobre un agente
+     * conversacional eso significa que cualquiera puede hablarle como si fuera otra persona, leer
+     * su progreso a traves de las herramientas del agente y gastarle la cuota diaria. La regla de
+     * que ninguna herramienta reciba un id de usuario por parametro protege contra que lo elija el
+     * modelo; no protege contra que lo falsee el cliente. Esto ultimo si.
+     *
+     * <p>Se hace acotado a propósito: exigir sesion en dos rutas no obliga a migrar los otros 54
+     * controllers, asi que la fase 4 sigue pendiente igual y nada mas cambia de comportamiento.
      */
     @Bean
     SecurityFilterChain apiFilterChain(HttpSecurity http, SecurityContextRepository securityContextRepository)
@@ -94,7 +105,11 @@ public class SecurityConfig {
                 // documentado (docs/MODULO_AUTH.md §5.2, D-31) — no se activa a medias.
                 .csrf(csrf -> csrf.disable())
                 .securityContext(ctx -> ctx.securityContextRepository(securityContextRepository))
-                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+                .authorizeHttpRequests(auth -> auth
+                        // Renasia exige sesion real: sin ella no hay forma de saber de quien es la
+                        // conversacion, y el header de actor lo escribe el cliente. Ver el javadoc.
+                        .requestMatchers("/api/v1/renasia/**").authenticated()
+                        .anyRequest().permitAll());
         return http.build();
     }
 
