@@ -27,7 +27,7 @@ public interface EditarPreferenciaHorarioUseCase {
     ResultadoEdicionPreferencia editar(EditarPreferenciaHorarioCommand command);
 
     record EditarPreferenciaHorarioCommand(@NotNull UserId actorId, @NotNull HabitoId habitoId,
-                                            @NotNull LocalTime horaDisparo, @NotNull LocalTime horaLimite,
+                                            @NotNull LocalTime horaDisparo, LocalTime horaLimite,
                                             boolean recordatorioActivo, Integer minutosRecordatorio) {
         public EditarPreferenciaHorarioCommand {
             SelfValidating.validateConstructorArgs(EditarPreferenciaHorarioCommand.class, actorId, habitoId,
