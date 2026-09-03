@@ -2,7 +2,9 @@ package com.renaser.os.rag.application.services;
 
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase.PreguntarRenasiaCommand;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort;
+import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FiltroLecciones;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FragmentoRelevante;
+import com.renaser.os.rag.application.ports.out.conversacion.ConsultarLeccionesVisiblesPort;
 import com.renaser.os.rag.application.ports.out.conversacion.LoadConversacionRenasiaPort;
 import com.renaser.os.rag.application.ports.out.conversacion.LoadMensajeRenasiaPort;
 import com.renaser.os.rag.application.ports.out.conversacion.SaveConversacionRenasiaPort;
@@ -10,6 +12,7 @@ import com.renaser.os.rag.application.ports.out.conversacion.SaveMensajeRenasiaP
 import com.renaser.os.rag.application.ports.out.cuota.ControlCuotaRenasiaPort;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
+import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasiaId;
 import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
@@ -33,6 +36,7 @@ import reactor.core.publisher.Flux;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,6 +79,8 @@ class ConversacionRenasiaServiceTest {
     @Mock
     private VectorStorePort vectorStorePort;
     @Mock
+    private ConsultarLeccionesVisiblesPort consultarLeccionesVisiblesPort;
+    @Mock
     private ChatIAPort chatIAPort;
     @Mock
     private IdGenerator idGenerator;
@@ -88,9 +94,11 @@ class ConversacionRenasiaServiceTest {
     void setUp() {
         service = new ConversacionRenasiaService(userSummaryFinder, controlCuotaRenasiaPort,
                 loadConversacionRenasiaPort, saveConversacionRenasiaPort, loadMensajeRenasiaPort,
-                saveMensajeRenasiaPort, vectorStorePort, chatIAPort, CLOCK, idGenerator);
+                saveMensajeRenasiaPort, vectorStorePort, consultarLeccionesVisiblesPort, chatIAPort, CLOCK,
+                idGenerator);
         // lenient: no todos los casos llegan a generar un id (varios cortan antes, en autorizacion o cuota).
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
+        lenient().when(consultarLeccionesVisiblesPort.visiblesParaActor(any())).thenReturn(Set.of());
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
                 Optional.of(new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(suspendido)).thenReturn(
@@ -124,7 +132,7 @@ class ConversacionRenasiaServiceTest {
     @Test
     void preguntarLiberaLaCuotaSiFallaLaBusquedaDeContexto() {
         when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
-        when(vectorStorePort.buscarSimilares(anyString(), eq(5)))
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any()))
                 .thenThrow(new RuntimeException("pgvector no disponible"));
 
         assertThatThrownBy(() -> service.preguntar(pregunta(activo))).isInstanceOf(RuntimeException.class);
@@ -135,7 +143,7 @@ class ConversacionRenasiaServiceTest {
     @Test
     void preguntarLiberaLaCuotaSiElStreamDeIaFalla() {
         when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
-        when(vectorStorePort.buscarSimilares(anyString(), eq(5))).thenReturn(List.of());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
         when(chatIAPort.responder(anyString(), anyList()))
                 .thenReturn(Flux.error(new RuntimeException("Gemini no responde")));
 
@@ -145,11 +153,16 @@ class ConversacionRenasiaServiceTest {
         verify(controlCuotaRenasiaPort).liberar(activo);
     }
 
+    /** Un stream mínimo y válido para los tests a los que no les importa el contenido de la respuesta. */
+    private static Flux<EventoRenasia> streamOk() {
+        return Flux.just(new EventoRenasia.Texto("ok"), new EventoRenasia.Fin());
+    }
+
     @Test
     void preguntarNoLiberaLaCuotaCuandoElStreamTerminaBien() {
         when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
-        when(vectorStorePort.buscarSimilares(anyString(), eq(5))).thenReturn(List.of());
-        when(chatIAPort.responder(anyString(), anyList())).thenReturn(Flux.just("ok"));
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
+        when(chatIAPort.responder(anyString(), anyList())).thenReturn(streamOk());
 
         service.preguntar(pregunta(activo)).collectList().block();
 
@@ -159,8 +172,8 @@ class ConversacionRenasiaServiceTest {
     @Test
     void preguntarCreaLaConversacionCuandoElActorNuncaHablóConRenasia() {
         when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
-        when(chatIAPort.responder(anyString(), anyList())).thenReturn(Flux.just("ok"));
-        when(vectorStorePort.buscarSimilares(anyString(), eq(5))).thenReturn(List.of());
+        when(chatIAPort.responder(anyString(), anyList())).thenReturn(streamOk());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
 
         service.preguntar(pregunta(activo)).collectList().block();
 
@@ -171,8 +184,8 @@ class ConversacionRenasiaServiceTest {
     void preguntarReusaLaConversacionExistenteSinCrearOtra() {
         when(loadConversacionRenasiaPort.porUsuarioId(activo))
                 .thenReturn(Optional.of(ConversacionRenasia.iniciar(activo, CLOCK.now())));
-        when(chatIAPort.responder(anyString(), anyList())).thenReturn(Flux.just("ok"));
-        when(vectorStorePort.buscarSimilares(anyString(), eq(5))).thenReturn(List.of());
+        when(chatIAPort.responder(anyString(), anyList())).thenReturn(streamOk());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
 
         service.preguntar(pregunta(activo)).collectList().block();
 
@@ -182,8 +195,8 @@ class ConversacionRenasiaServiceTest {
     @Test
     void preguntarGuardaLaPreguntaDelUsuarioAntesDeConsumirElStream() {
         when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
-        when(chatIAPort.responder(anyString(), anyList())).thenReturn(Flux.just("ok"));
-        when(vectorStorePort.buscarSimilares(anyString(), eq(5))).thenReturn(List.of());
+        when(chatIAPort.responder(anyString(), anyList())).thenReturn(streamOk());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
 
         // El armado del Flux (sin suscribirse todavia) ya debe haber guardado la pregunta:
         // es una llamada sincrona dentro del cuerpo de preguntar(), no parte del stream.
@@ -197,26 +210,48 @@ class ConversacionRenasiaServiceTest {
     @Test
     void preguntarNoPersisteLaRespuestaDelAsistenteHastaQueElStreamTermina() {
         when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
-        when(chatIAPort.responder(anyString(), anyList())).thenReturn(Flux.just("Hola", " mundo"));
-        when(vectorStorePort.buscarSimilares(anyString(), eq(5))).thenReturn(List.of(
+        when(chatIAPort.responder(anyString(), anyList())).thenReturn(Flux.just(
+                new EventoRenasia.Texto("Hola"), new EventoRenasia.Texto(" mundo"), new EventoRenasia.Fin()));
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of(
                 new FragmentoRelevante("contexto de la leccion 1", "leccion-1", 0.12),
                 new FragmentoRelevante("fragmento sin leccion asociada", null, 0.30)));
 
-        Flux<String> resultado = service.preguntar(pregunta(activo));
+        Flux<EventoRenasia> resultado = service.preguntar(pregunta(activo));
 
         // Todavia no se suscribio nadie al Flux: la respuesta del asistente NO esta guardada.
         verify(saveMensajeRenasiaPort, never()).save(
                 org.mockito.ArgumentMatchers.argThat(m -> m.rol() == RolMensaje.ASISTENTE));
 
-        List<String> chunks = resultado.collectList().block();
+        List<EventoRenasia> eventos = resultado.collectList().block();
 
-        assertThat(chunks).containsExactly("Hola", " mundo");
+        // La fuente se inyecta antes del Fin que emitio el puerto (contrato SSE: a lo sumo una vez).
+        assertThat(eventos).containsExactly(
+                new EventoRenasia.Texto("Hola"),
+                new EventoRenasia.Texto(" mundo"),
+                new EventoRenasia.Fuentes(List.of("leccion-1")),
+                new EventoRenasia.Fin());
         ArgumentCaptor<MensajeRenasia> captor = ArgumentCaptor.forClass(MensajeRenasia.class);
         verify(saveMensajeRenasiaPort, times(2)).save(captor.capture());
         MensajeRenasia respuestaAsistente = captor.getAllValues().stream()
                 .filter(m -> m.rol() == RolMensaje.ASISTENTE).findFirst().orElseThrow();
         assertThat(respuestaAsistente.contenido()).isEqualTo("Hola mundo");
         assertThat(respuestaAsistente.fuentes()).extracting("leccionId").containsExactly("leccion-1");
+    }
+
+    @Test
+    void preguntarFiltraElContextoPorLasLeccionesVisiblesDelActor() {
+        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
+        when(chatIAPort.responder(anyString(), anyList())).thenReturn(streamOk());
+        when(consultarLeccionesVisiblesPort.visiblesParaActor(activo)).thenReturn(Set.of("leccion-visible"));
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        // El conjunto que academy resolvio para ESTE actor es el que llega, envuelto, a
+        // VectorStorePort — no uno vacio ni "sin filtro": el bug que esto cierra es
+        // exactamente que la busqueda no respetaba el gate de programa de academy.
+        verify(vectorStorePort).buscarSimilares(eq("que es Renasia?"), eq(5),
+                eq(FiltroLecciones.soloVisibles(Set.of("leccion-visible"))));
     }
 
     @Test

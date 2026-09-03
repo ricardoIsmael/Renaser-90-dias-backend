@@ -8,15 +8,20 @@ import java.util.List;
  * vector antes de buscar en {@code PgVectorNativoAdapter} (D-45: {@code VectorStorePort}
  * recibe texto, no vector; el adaptador de vectorstore llama a este puerto internamente).
  *
- * <p>D-51 (verificado contra el bytecode del JAR): la implementación real DEBE fijar
- * {@code spring.ai.google.genai.embedding.text.model=text-embedding-004} — el modelo
- * por defecto de Spring AI ({@code gemini-embedding-001}) da 3072 dimensiones, no las
- * 768 de la columna {@code vector(768)}.
+ * <p><b>D-51 quedó obsoleta (2026-09-03).</b> La decisión original fijaba
+ * {@code text-embedding-004} por dar 768 dimensiones nativas, pero Google lo retiró el
+ * 2026-01-14. La configuración vigente usa {@code gemini-embedding-001} (el default de
+ * Spring AI) con {@code spring.ai.google.genai.embedding.text.dimensions=768} explícito —
+ * el modelo trunca vía Matryoshka Representation Learning, no es un recorte casero. Sin esa
+ * propiedad, el modelo devuelve 3072 dimensiones, que no calzan con la columna
+ * {@code vector(768)}.
  *
- * <p><b>SIN IA en este alcance</b>: la única implementación es
- * {@code NoOpEmbeddingAdapter}, que devuelve un vector de ceros de
+ * <p>Implementaciones: {@code NoOpEmbeddingAdapter} (activa mientras
+ * {@code renaser.ia.proveedor=noop}, su default), que devuelve un vector de ceros de
  * {@value com.renaser.os.rag.domain.model.conocimiento.ChunkConocimiento#DIMENSION_EMBEDDING}
- * posiciones.
+ * posiciones, y {@code GoogleGenAiEmbeddingAdapter} (activa con
+ * {@code renaser.ia.proveedor=google}), que falla explícitamente si el modelo devuelve una
+ * cantidad de dimensiones distinta a la esperada en vez de truncar en silencio.
  */
 public interface EmbeddingPort {
 

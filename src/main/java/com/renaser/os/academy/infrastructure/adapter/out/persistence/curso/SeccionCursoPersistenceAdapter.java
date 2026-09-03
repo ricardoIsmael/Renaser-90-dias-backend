@@ -29,4 +29,9 @@ class SeccionCursoPersistenceAdapter implements LoadSeccionCursoPort {
     public List<SeccionCurso> porCurso(CursoId cursoId) {
         return repository.findByCursoIdOrderByOrdenAsc(cursoId.value()).stream().map(mapper::toDomain).toList();
     }
+
+    @Override
+    public List<SeccionCurso> listarTodas() {
+        return repository.findAll().stream().map(mapper::toDomain).toList();
+    }
 }

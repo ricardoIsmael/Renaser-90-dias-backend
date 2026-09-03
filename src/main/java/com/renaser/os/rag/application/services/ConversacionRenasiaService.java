@@ -3,7 +3,9 @@ package com.renaser.os.rag.application.services;
 import com.renaser.os.rag.application.ports.in.conversacion.ObtenerHistorialUseCase;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort;
+import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FiltroLecciones;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FragmentoRelevante;
+import com.renaser.os.rag.application.ports.out.conversacion.ConsultarLeccionesVisiblesPort;
 import com.renaser.os.rag.application.ports.out.conversacion.LoadConversacionRenasiaPort;
 import com.renaser.os.rag.application.ports.out.conversacion.LoadMensajeRenasiaPort;
 import com.renaser.os.rag.application.ports.out.conversacion.SaveConversacionRenasiaPort;
@@ -11,6 +13,7 @@ import com.renaser.os.rag.application.ports.out.conversacion.SaveMensajeRenasiaP
 import com.renaser.os.rag.application.ports.out.cuota.ControlCuotaRenasiaPort;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
+import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.FuenteMensaje;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasiaId;
@@ -25,7 +28,6 @@ import com.renaser.os.users.api.UserSummaryFinder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 
 import java.time.Instant;
@@ -39,14 +41,32 @@ import java.util.Objects;
  * buscar contexto en la base de conocimiento, preguntarle al modelo en streaming y, al
  * completar el stream, guardar la respuesta del asistente con sus fuentes.
  *
- * <p><b>Limite de la transaccion:</b> {@link #preguntar} arma y devuelve un {@code Flux}
- * sin suscribirse — Spring cierra la transaccion declarativa de este metodo apenas el
- * metodo retorna, es decir, apenas se construye el {@code Flux} (no cuando termina de
- * emitir). Eso alcanza para que "verificar actor + consumir cuota + buscar-o-crear
- * conversacion + guardar la pregunta" sea atomico (son llamadas sincronas dentro del
- * cuerpo del metodo). El guardado del mensaje del ASISTENTE ocurre despues, cuando el
- * stream se completa — fuera de esa transaccion, en su propia transaccion implicita (cada
- * metodo de un {@code JpaRepository} ya es transaccional por si solo).
+ * <p><b>Sin transaccion envolvente, a proposito (C-1/C-4).</b> {@link #preguntar} tenia
+ * {@code @Transactional}, y adentro llamaba a {@code buscarSimilares}, que a su vez llama al
+ * puerto de embeddings. Con un proveedor real eso significa retener una conexion de Hikari
+ * durante toda una llamada de red, sumada al alta de conversacion y al guardado de la
+ * pregunta: el mismo agotamiento de pool que la auditoria de concurrencia del 2026-09-01
+ * corrigio en {@code onboarding} y {@code evidence}. Hoy no se nota porque el adaptador de
+ * embeddings responde en microsegundos; se notaria el primer dia con credenciales reales.
+ *
+ * <p>Lo que se pierde al sacarla es la atomicidad entre "crear la conversacion" y "guardar la
+ * pregunta". Es un precio barato y acotado: la conversacion es una fila 1:1 sin contenido
+ * propio, asi que en el peor caso queda vacia y la siguiente pregunta la reutiliza. Cada
+ * puerto corre igual en su propia transaccion corta (cada metodo de un {@code JpaRepository}
+ * ya es transaccional por si solo), que es el mismo criterio que dejo la auditoria.
+ *
+ * <p>El guardado del mensaje del ASISTENTE ocurre cuando el stream se completa, mas tarde y
+ * en su propia transaccion — eso no cambia.
+ *
+ * <p><b>La busqueda de contexto se filtra por lo que el actor puede ver HOY.</b> Antes de
+ * llamar a {@code vectorStorePort.buscarSimilares}, este caso de uso resuelve el conjunto de
+ * lecciones visibles para {@code actorId} via {@link ConsultarLeccionesVisiblesPort} (que
+ * delega en el gate de programa real de {@code academy}) y lo pasa como
+ * {@link FiltroLecciones#soloVisibles}. Sin esto, Renasia podia citarle a un aprendiz en el
+ * dia 3 del programa el contenido de una leccion del dia 60 que su propio modulo de academia
+ * todavia tiene bloqueada — un bug real de fuga de contenido, no solo de UX. La resolucion de
+ * QUE es visible vive en {@code academy} (via el finder), y DONDE se aplica el filtro vive en
+ * el adaptador de {@code VectorStorePort} (ver su javadoc para el porque).
  */
 @Service
 public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, ObtenerHistorialUseCase {
@@ -64,6 +84,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     private final LoadMensajeRenasiaPort loadMensajeRenasiaPort;
     private final SaveMensajeRenasiaPort saveMensajeRenasiaPort;
     private final VectorStorePort vectorStorePort;
+    private final ConsultarLeccionesVisiblesPort consultarLeccionesVisiblesPort;
     private final ChatIAPort chatIAPort;
     private final Clock clock;
     private final IdGenerator idGenerator;
@@ -74,6 +95,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                                        SaveConversacionRenasiaPort saveConversacionRenasiaPort,
                                        LoadMensajeRenasiaPort loadMensajeRenasiaPort,
                                        SaveMensajeRenasiaPort saveMensajeRenasiaPort, VectorStorePort vectorStorePort,
+                                       ConsultarLeccionesVisiblesPort consultarLeccionesVisiblesPort,
                                        ChatIAPort chatIAPort, Clock clock, IdGenerator idGenerator) {
         this.userSummaryFinder = userSummaryFinder;
         this.controlCuotaRenasiaPort = controlCuotaRenasiaPort;
@@ -82,14 +104,14 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         this.loadMensajeRenasiaPort = loadMensajeRenasiaPort;
         this.saveMensajeRenasiaPort = saveMensajeRenasiaPort;
         this.vectorStorePort = vectorStorePort;
+        this.consultarLeccionesVisiblesPort = consultarLeccionesVisiblesPort;
         this.chatIAPort = chatIAPort;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
 
     @Override
-    @Transactional
-    public Flux<String> preguntar(PreguntarRenasiaCommand command) {
+    public Flux<EventoRenasia> preguntar(PreguntarRenasiaCommand command) {
         requireActivo(command.actorId());
         requireCuotaDisponible(command.actorId());
 
@@ -99,7 +121,9 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
             // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
             saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeUsuario(
                     MensajeRenasiaId.of(idGenerator.newId()), command.actorId(), command.pregunta(), clock.now()));
-            fragmentos = vectorStorePort.buscarSimilares(command.pregunta(), TOP_K);
+            FiltroLecciones filtro = FiltroLecciones
+                    .soloVisibles(consultarLeccionesVisiblesPort.visiblesParaActor(command.actorId()));
+            fragmentos = vectorStorePort.buscarSimilares(command.pregunta(), TOP_K, filtro);
         } catch (RuntimeException e) {
             controlCuotaRenasiaPort.liberar(command.actorId());
             throw e;
@@ -108,13 +132,41 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
 
         StringBuilder respuestaCompleta = new StringBuilder();
         return chatIAPort.responder(command.pregunta(), contexto)
-                .doOnNext(respuestaCompleta::append)
+                .doOnNext(evento -> acumularTexto(evento, respuestaCompleta))
+                .concatMap(evento -> agregarFuentesAntesDeFin(evento, fragmentos))
                 .doOnComplete(() -> persistirRespuestaAsistente(command.actorId(), respuestaCompleta.toString(),
                         fragmentos))
                 .doOnError(error -> {
                     logFalloDeStreaming(error);
                     controlCuotaRenasiaPort.liberar(command.actorId());
                 });
+    }
+
+    /** Solo acumula {@link EventoRenasia.Texto}: {@code Fuentes}/{@code Fin} no aportan contenido. */
+    private static void acumularTexto(EventoRenasia evento, StringBuilder respuestaCompleta) {
+        if (evento instanceof EventoRenasia.Texto texto) {
+            respuestaCompleta.append(texto.fragmento());
+        }
+    }
+
+    /**
+     * {@link ChatIAPort} solo conoce texto de contexto, no que lección lo originó — por eso
+     * las fuentes las arma este caso de uso, no el adaptador de IA, a partir de lo que
+     * {@link VectorStorePort} ya recuperó. Se inyectan justo antes del {@link EventoRenasia.Fin}
+     * que emite el puerto, y solo si hubo al menos una lección citable (contrato SSE: "fuentes"
+     * aparece a lo sumo una vez).
+     */
+    private static Flux<EventoRenasia> agregarFuentesAntesDeFin(EventoRenasia evento,
+            List<FragmentoRelevante> fragmentos) {
+        if (!(evento instanceof EventoRenasia.Fin)) {
+            return Flux.just(evento);
+        }
+        List<String> leccionIds = fragmentos.stream()
+                .map(FragmentoRelevante::leccionId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        return leccionIds.isEmpty() ? Flux.just(evento) : Flux.just(new EventoRenasia.Fuentes(leccionIds), evento);
     }
 
     @Override

@@ -4,6 +4,7 @@ import com.renaser.os.academy.application.ports.out.curso.LoadLeccionPort;
 import com.renaser.os.academy.domain.model.curso.CursoId;
 import com.renaser.os.academy.domain.model.curso.Leccion;
 import com.renaser.os.academy.domain.model.curso.LeccionId;
+import com.renaser.os.academy.domain.model.curso.SeccionCursoId;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -39,5 +40,13 @@ class LeccionPersistenceAdapter implements LoadLeccionPort {
             resultado.put(CursoId.of((String) fila[0]), ((Number) fila[1]).intValue());
         }
         return resultado;
+    }
+
+    @Override
+    public List<LeccionCatalogo> listarIdentificadores() {
+        return repository.listarIdentificadores().stream()
+                .map(fila -> new LeccionCatalogo(LeccionId.of((String) fila[0]), CursoId.of((String) fila[1]),
+                        fila[2] == null ? null : SeccionCursoId.of((String) fila[2])))
+                .toList();
     }
 }

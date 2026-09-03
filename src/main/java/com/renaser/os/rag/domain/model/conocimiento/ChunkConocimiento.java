@@ -31,10 +31,18 @@ import java.util.Objects;
 public final class ChunkConocimiento {
 
     /**
-     * Espejo de {@code embedding vector(768)}. D-51 (verificado contra el bytecode del
-     * JAR): el modelo por defecto de Spring AI ({@code gemini-embedding-001}) da 3072
-     * dimensiones — el adaptador de embeddings DEBE fijar {@code text-embedding-004}
-     * (768 nativo) para que esta invariante no reviente en cada indexación.
+     * Espejo de {@code embedding vector(768)}.
+     *
+     * <p><b>D-51 quedó obsoleta (2026-09-03).</b> Aquella decisión mandaba fijar
+     * {@code text-embedding-004} porque daba 768 dimensiones nativas. Google lo retiró el
+     * 2026-01-14, así que ese modelo ya no existe: apuntar ahí habría hecho fallar la primera
+     * indexación con credenciales reales.
+     *
+     * <p>El reemplazo es {@code gemini-embedding-001}, que devuelve 3072 por defecto y se trunca
+     * a 768 con {@code spring.ai.google.genai.embedding.text.dimensions} — truncado nativo del
+     * modelo, no un recorte casero. Si algún día se cambia de modelo, no alcanza con que el
+     * nuevo mida 768: los vectores de dos modelos distintos no son comparables entre sí, así que
+     * hay que reindexar todo {@code base_conocimiento}.
      */
     public static final int DIMENSION_EMBEDDING = 768;
 

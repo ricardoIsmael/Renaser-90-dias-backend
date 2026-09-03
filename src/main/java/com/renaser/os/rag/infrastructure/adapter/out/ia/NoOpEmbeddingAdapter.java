@@ -4,6 +4,7 @@ import com.renaser.os.rag.application.ports.out.ia.EmbeddingPort;
 import com.renaser.os.rag.domain.model.conocimiento.ChunkConocimiento;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
@@ -16,16 +17,15 @@ import java.util.List;
  * {@link ChunkConocimiento#DIMENSION_EMBEDDING} posiciones, nunca {@code null}, para que
  * el resto del flujo (persistencia, búsqueda) funcione de punta a punta sin IA real.
  *
- * <p><b>Cómo cablear el real (cuando lleguen las credenciales):</b> un
- * {@code GoogleGenAiEmbeddingAdapter} sobre {@code org.springframework.ai.embedding.EmbeddingModel},
- * activo solo cuando exista ese bean ({@code @ConditionalOnBean(EmbeddingModel.class)}, o
- * simplemente quitando las exclusiones de autoconfig de embeddings del {@code application.yaml}
- * una vez cargado {@code GOOGLE_GENAI_API_KEY}). D-51 (verificado contra el bytecode del
- * JAR): el modelo por defecto ({@code gemini-embedding-001}) da 3072 dimensiones y NO
- * calza con la columna {@code vector(768)} — hay que fijar explícitamente
- * {@code spring.ai.google.genai.embedding.text.model=text-embedding-004} (768 nativo,
- * ya declarado en {@code application.yaml} aunque la autoconfig siga excluida).
+ * <p>El adaptador real es {@code GoogleGenAiEmbeddingAdapter} (activo con
+ * {@code renaser.ia.proveedor=google}), sobre {@code org.springframework.ai.embedding.EmbeddingModel}.
+ * D-51 quedó obsoleta (2026-01-14, Google retiró {@code text-embedding-004}): la
+ * configuración vigente usa el default {@code gemini-embedding-001} con
+ * {@code spring.ai.google.genai.embedding.text.dimensions=768} explícito (truncado
+ * Matryoshka), ya declarado en {@code application.yaml}.
  */
+/** Activo mientras `renaser.ia.proveedor` sea `noop` (su default). Ver application.yaml. */
+@ConditionalOnProperty(name = "renaser.ia.proveedor", havingValue = "noop", matchIfMissing = true)
 @Component
 public class NoOpEmbeddingAdapter implements EmbeddingPort {
 

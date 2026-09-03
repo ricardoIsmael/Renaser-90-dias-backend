@@ -13,4 +13,12 @@ public interface LoadSeccionCursoPort {
 
     /** Secciones del curso, ordenadas por `orden`. */
     List<SeccionCurso> porCurso(CursoId cursoId);
+
+    /**
+     * TODAS las secciones del catálogo, de todos los cursos, en una sola consulta — insumo
+     * de {@code LeccionesVisiblesAcademyService} para calcular la visibilidad de catálogo en
+     * lote sin pedir secciones curso por curso (anti N+1, mismo criterio que
+     * {@code ContarRegistrosDiariosHabitsPort}).
+     */
+    List<SeccionCurso> listarTodas();
 }
