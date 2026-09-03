@@ -236,8 +236,11 @@ class NotificacionServiceTest {
         UUID origenEventoId = UUID.randomUUID();
         when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.HITO_PROGRAMA))
                 .thenReturn(Optional.of(true));
-        when(saveNotificacionPort.guardar(any()))
-                .thenThrow(new DataIntegrityViolationException("notificaciones_origen_evento_uk"));
+        // doThrow y no when(...).thenThrow: `when(mock.guardar(any()))` INVOCA el metodo, y setUp ya
+        // lo dejo con un thenAnswer — esa invocacion corria la respuesta con argumento nulo y
+        // reventaba antes de empezar el test. doThrow no invoca nada.
+        doThrow(new DataIntegrityViolationException("notificaciones_origen_evento_uk"))
+                .when(saveNotificacionPort).guardar(any());
 
         Optional<Notificacion> resultado = service.emitir(
                 new EmitirNotificacionCommand(usuario, TipoNotificacion.HITO_PROGRAMA, "T", "C", null,

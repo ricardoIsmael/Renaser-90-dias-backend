@@ -2,7 +2,6 @@ package com.renaser.os.habits.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
-import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -78,7 +77,7 @@ class GenerarTracksDelDiaSchedulerTest {
                 .thenThrow(new IllegalStateException("zona horaria invalida"));
         when(generarTracksUseCase.generarDiaCompletoEnSuZona(eq(ok1))).thenReturn(List.of());
         when(generarTracksUseCase.generarDiaCompletoEnSuZona(eq(ok2)))
-                .thenReturn(List.of((RegistroHabito) null));
+                .thenReturn(List.of());
 
         scheduler.ejecutar();
 
