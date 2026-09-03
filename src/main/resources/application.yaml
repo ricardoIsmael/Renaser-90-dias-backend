@@ -1,4 +1,10 @@
 spring:
+  # Hace que un .env en la raiz del repo se lea de verdad. Sin esto, Spring Boot NO lee
+  # archivos .env (a diferencia de Node o Expo), asi que poner la clave ahi no hace nada y
+  # el sintoma es un 401 del proveedor que parece de credencial invalida y en realidad es
+  # de credencial vacia. `optional:` deja arrancar sin el archivo, que es el caso de CI.
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: renaser-backend
   threads:
@@ -80,7 +86,26 @@ spring:
       embedding: none
       vectorstore: none
   ai.google.genai.api-key: ${GOOGLE_GENAI_API_KEY:}
-  ai.google.genai.embedding.text.model: ${RENASIA_EMBEDDING_MODEL:text-embedding-004}
+  # Modelo de embeddings (D-51 quedo obsoleta): text-embedding-004 fue retirado por Google
+  # el 2026-01-14, asi que el default anterior apuntaba a un modelo inexistente y la primera
+  # indexacion con credenciales reales habria fallado. gemini-embedding-001 devuelve 3072
+  # dimensiones por defecto y hay que truncarlo a 768 para que calce con la columna
+  # vector(768) de base_conocimiento — es truncado nativo del modelo (Matryoshka), no un
+  # recorte casero, y 768 es una de las medidas que Google recomienda.
+  #
+  # OJO: los vectores de dos modelos distintos no son comparables aunque midan igual. Todo
+  # lo que se indexe con este modelo hay que reindexarlo si algun dia se cambia.
+  ai.google.genai.embedding.text.model: ${RENASIA_EMBEDDING_MODEL:gemini-embedding-001}
+  ai.google.genai.embedding.text.dimensions: ${RENASIA_EMBEDDING_DIMENSIONS:768}
+  # Limitacion conocida: el tipo de tarea es uno solo para todo, pero indexar un documento y
+  # buscar una pregunta necesitan tipos distintos. Arreglarlo pide que EmbeddingPort lleve el
+  # dato; mientras tanto la recuperacion es peor de lo que podria ser.
+  ai.google.genai.embedding.text.task-type: ${RENASIA_EMBEDDING_TASK_TYPE:RETRIEVAL_DOCUMENT}
+  # Modelo de chat: nadie lo habia elegido. gemini-3.1-flash-lite es el mas barato de la serie
+  # vigente y su precio no es promocional. La serie 2.5 quedo en fin de vida (retiro anunciado
+  # para octubre de 2026), asi que no se usa. Para el Espejo de la Sombra conviene subir a
+  # gemini-3.8-flash, que corre una vez por semana y produce el texto mas delicado.
+  ai.google.genai.chat.model: ${RENASIA_CHAT_MODEL:gemini-3.1-flash-lite}
   # C-7: el outbox de Spring Modulith (event_publication, V2) no tenia ninguna configuracion
   # propia. Analisis completo en docs/informes/auditoria-fixes/C-7.md.
   modulith:
@@ -144,6 +169,31 @@ renaser:
       habits-generar-tracks-del-dia:
         lock-at-most-for: PT30M
         lock-at-least-for: PT30S
+  # Que proveedor de IA se usa. `noop` (el default) mantiene los adaptadores vacios: la app
+  # arranca sin credenciales y responde con placeholders, que es una propiedad valiosa de este
+  # repo y conviene no perder. `google` los reemplaza por los adaptadores reales de Gemini.
+  #
+  # Mismo mecanismo que ya usan renaser.email.proveedor y renaser.storage.proveedor; no se
+  # invento uno nuevo. Sin esto, agregar un adaptador real tumbaba el arranque por ambiguedad:
+  # dos beans para el mismo puerto y ninguna condicion que los separe.
+  #
+  # OJO: ponerlo en google antes de que existan los adaptadores reales deja puertos sin
+  # implementacion y el arranque falla. Falla fuerte y claro, que es lo correcto, pero conviene
+  # saberlo antes de tocarlo.
+  #
+  # Solo gobierna los puertos que HOY tienen dos implementaciones: el chat de Renasia y los
+  # embeddings. Un puerto con una sola implementacion no lleva interruptor — apagarle el unico
+  # adaptador que tiene deja el arranque sin bean y la app no levanta.
+  #
+  # Sin interruptor, entonces: el insight semanal del Espejo y la recomendacion de clase (todavia
+  # no tienen adaptador real), y las validaciones de evidencia y V90, que salieron del alcance
+  # (D-76) y cuyo comportamiento vacio ya no es un placeholder sino la conducta definitiva.
+  #
+  # CUANDO SE AGREGUE un adaptador real para el Espejo o para la recomendacion, hay que ponerle
+  # la condicion a su NoOp en el mismo commit. Si no, quedan dos beans para el mismo puerto y el
+  # arranque falla por ambiguedad.
+  ia:
+    proveedor: ${IA_PROVEEDOR:noop}
   email:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}
@@ -171,6 +221,12 @@ renaser:
     activate-account-url: ${ACTIVATE_ACCOUNT_URL:https://TODO-frontend-no-definido.renaser.dev/activate-account}
   renasia:
     limite-diario: ${RENASIA_LIMITE_DIARIO:25}
+  # V90 fuera de alcance (2026-09-03): sin esto en true, GrabacionV90Controller no se crea
+  # y las cuatro rutas de /v90-recordings dejan de existir. Los 23 archivos y la tabla
+  # quedan intactos — el dia que vuelva, se prende la propiedad y nada hay que rehacer.
+  onboarding:
+    v90:
+      habilitado: ${ONBOARDING_V90_HABILITADO:false}
   users:
     account-deletion:
       grace-period-days: ${ACCOUNT_DELETION_GRACE_DAYS:14}

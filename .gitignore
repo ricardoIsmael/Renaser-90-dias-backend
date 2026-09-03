@@ -48,3 +48,17 @@ build/
 # porque es el que documenta que el artefacto contuvo a 1440x900.
 docs/arquitectura/*.visual-check.*.png
 docs/arquitectura/*.visual-check.html
+
+### Grafo de conocimiento de graphify (graphify-out/) ###
+# Artefactos derivados: graph.json del backend pesa ~23 MB y se reconstruye solo
+# via el hook post-commit (`graphify update .`, solo AST, sin coste de API).
+# Cada maquina genera el suyo; no se versiona.
+graphify-out/
+.claude/settings.json.graphify-bak
+
+### Variables de entorno (credenciales de IA, SMTP, S3) ###
+# El .env nunca se versiona: la clave de Gemini y el resto de secretos viven ahi.
+# El .env.example si, porque documenta que variables hacen falta sin traer valores.
+.env
+.env.*
+!.env.example
