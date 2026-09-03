@@ -1,11 +1,8 @@
 package com.renaser.os.onboarding.application.services;
 
-import com.renaser.os.onboarding.application.ports.in.metamaestra.ValidarMetaMaestraUseCase.ResultadoMetaMaestra.Veredicto;
 import com.renaser.os.onboarding.application.ports.in.metamaestra.ValidarMetaMaestraUseCase.ValidarMetaMaestraCommand;
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort;
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort.ActorOnboarding;
-import com.renaser.os.onboarding.application.ports.out.metamaestra.ValidacionMetaMaestraPort;
-import com.renaser.os.onboarding.application.ports.out.metamaestra.ValidacionMetaMaestraPort.ResultadoValidacionMetaMaestra;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,23 +12,22 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * Con el veredicto de IA fuera del alcance (2026-09-03), lo unico que este servicio decide es
+ * si el actor puede mandar su meta. El texto ya no se juzga, asi que no hay caso de aprobada
+ * ni de rechazada que probar.
+ */
 @ExtendWith(MockitoExtension.class)
 class ValidarMetaMaestraServiceTest {
 
-    @Mock
-    private ValidacionMetaMaestraPort validacionPort;
     @Mock
     private ConsultarActorPort actorPort;
 
@@ -40,23 +36,18 @@ class ValidarMetaMaestraServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ValidarMetaMaestraService(validacionPort, actorPort);
+        service = new ValidarMetaMaestraService(actorPort);
         actorId = UserId.of(UUID.randomUUID());
     }
 
-    private void actorActivo() {
-        when(actorPort.deActor(actorId)).thenReturn(Optional.of(new ActorOnboarding(actorId, false)));
-    }
-
     @Test
-    @DisplayName("actor suspendido -> NotAuthorizedException, nunca llama al puerto de IA (mismo criterio que E-33)")
-    void actorSuspendidoNuncaLlamaAlPuerto() {
+    @DisplayName("actor suspendido -> NotAuthorizedException")
+    void actorSuspendidoRechazado() {
         when(actorPort.deActor(actorId)).thenReturn(Optional.of(new ActorOnboarding(actorId, true)));
 
         var command = new ValidarMetaMaestraCommand(actorId, "meta maestra");
 
-        assertThatThrownBy(() -> service.validar(command)).isInstanceOf(NotAuthorizedException.class);
-        verify(validacionPort, never()).validar(any());
+        assertThatThrownBy(() -> service.aceptar(command)).isInstanceOf(NotAuthorizedException.class);
     }
 
     @Test
@@ -66,48 +57,16 @@ class ValidarMetaMaestraServiceTest {
 
         var command = new ValidarMetaMaestraCommand(actorId, "meta maestra");
 
-        assertThatThrownBy(() -> service.validar(command)).isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> service.aceptar(command)).isInstanceOf(NoSuchElementException.class);
     }
 
     @Test
-    @DisplayName("puerto APROBADA -> Veredicto.APROBADA con el feedback tal cual")
-    void puertoAprobadaMapeaAVeredictoAprobada() {
-        actorActivo();
-        when(validacionPort.validar("meta completa")).thenReturn(
-                new ResultadoValidacionMetaMaestra(ResultadoValidacionMetaMaestra.Estado.APROBADA, List.of(),
-                        "Excelente, cubriste las 6 Ps."));
+    @DisplayName("actor activo -> la meta pasa, sin que nada la evalue")
+    void actorActivoPasa() {
+        when(actorPort.deActor(actorId)).thenReturn(Optional.of(new ActorOnboarding(actorId, false)));
 
-        var resultado = service.validar(new ValidarMetaMaestraCommand(actorId, "meta completa"));
+        var command = new ValidarMetaMaestraCommand(actorId, "cualquier texto, nadie lo juzga");
 
-        assertThat(resultado.veredicto()).isEqualTo(Veredicto.APROBADA);
-        assertThat(resultado.feedback()).isEqualTo("Excelente, cubriste las 6 Ps.");
-        assertThat(resultado.pesFaltantes()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("puerto RECHAZADA -> Veredicto.RECHAZADA con las Ps faltantes y el feedback")
-    void puertoRechazadaMapeaAVeredictoRechazada() {
-        actorActivo();
-        when(validacionPort.validar("meta vaga")).thenReturn(
-                new ResultadoValidacionMetaMaestra(ResultadoValidacionMetaMaestra.Estado.RECHAZADA,
-                        List.of("CUANDO", "QUE_GANO"), "Te falta profundidad."));
-
-        var resultado = service.validar(new ValidarMetaMaestraCommand(actorId, "meta vaga"));
-
-        assertThat(resultado.veredicto()).isEqualTo(Veredicto.RECHAZADA);
-        assertThat(resultado.pesFaltantes()).containsExactly("CUANDO", "QUE_GANO");
-        assertThat(resultado.feedback()).isEqualTo("Te falta profundidad.");
-    }
-
-    @Test
-    @DisplayName("puerto NO_DISPONIBLE (fallo tecnico) -> PENDIENTE_DE_REVISION, fail-open, nunca bloquea al aprendiz")
-    void puertoNoDisponibleCaeAPendienteDeRevisionFailOpen() {
-        actorActivo();
-        when(validacionPort.validar("meta maestra")).thenReturn(ResultadoValidacionMetaMaestra.noDisponible());
-
-        var resultado = service.validar(new ValidarMetaMaestraCommand(actorId, "meta maestra"));
-
-        assertThat(resultado.veredicto()).isEqualTo(Veredicto.PENDIENTE_DE_REVISION);
-        assertThat(resultado.pesFaltantes()).isEmpty();
+        assertThatCode(() -> service.aceptar(command)).doesNotThrowAnyException();
     }
 }

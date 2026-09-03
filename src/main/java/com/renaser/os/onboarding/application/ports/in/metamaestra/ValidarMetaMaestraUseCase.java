@@ -6,44 +6,36 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-import java.util.List;
-
 /**
- * Filtro de las 6 Ps sobre la Meta Maestra escrita (Diseno de Destino), unico paso de
- * onboarding que evalua un TEXTO libre en vez de una grabacion. Contrato SINCRONO,
- * deliberadamente distinto del contrato async+polling de {@code ValidarV90UseCase} — ver
- * javadoc de {@code ValidacionMetaMaestraPort} para el porque completo. Resumen: el texto
- * se valida ANTES de persistirse como respuesta (el aprendiz puede reintentar en el mismo
- * borrador tantas veces como quiera mientras escribe), asi que no hay una fila propia
- * donde colgar un estado {@code PROCESANDO} contra el que hacer polling sin violar D-40
- * (BD congelada, sin tablas nuevas).
+ * Recibe la Meta Maestra escrita (Diseno de Destino) y la acepta.
  *
- * <p>Limite de 3000 caracteres y no-vacio: mismo contrato que el backend viejo
- * ({@code ValidateSmartTextInput} en RenaserBack/src/features/onboarding/schema.ts).
+ * <p><b>Ya no hay veredicto de IA (decision del dueno, 2026-09-03).</b> Este paso era el
+ * "filtro de las 6 Ps": mandaba el texto a un modelo y devolvia aprobada o rechazada con la
+ * lista de lo que faltaba. Se saco junto con las demas validaciones automaticas sobre el
+ * trabajo de una persona, hasta que exista una via de aprendizaje automatico que las
+ * sostenga. El texto pasa: nadie lo juzga.
+ *
+ * <p>Queda entonces un unico control, y no es de IA: que el actor exista y no este
+ * suspendido. El limite de 3000 caracteres y el no-vacio siguen siendo del comando, que se
+ * valida solo — mismo contrato que el backend viejo ({@code ValidateSmartTextInput} en
+ * RenaserBack/src/features/onboarding/schema.ts).
+ *
+ * <p>El endpoint se conserva, y su forma de respuesta tambien, porque hay un cliente que ya
+ * la consume ({@code SixPsValidation}). Desde afuera se ve igual: siempre aceptada, sin Ps
+ * faltantes y sin revision pendiente.
  */
 public interface ValidarMetaMaestraUseCase {
 
-    ResultadoMetaMaestra validar(ValidarMetaMaestraCommand command);
+    /**
+     * Acepta la meta. No devuelve nada porque no hay nada que dictaminar: si el actor esta
+     * habilitado y el texto cumple el largo, el paso esta cumplido.
+     */
+    void aceptar(ValidarMetaMaestraCommand command);
 
     record ValidarMetaMaestraCommand(@NotNull UserId actorId, @NotBlank @Size(max = 3000) String texto) {
 
         public ValidarMetaMaestraCommand {
             SelfValidating.validateConstructorArgs(ValidarMetaMaestraCommand.class, actorId, texto);
-        }
-    }
-
-    record ResultadoMetaMaestra(Veredicto veredicto, List<String> pesFaltantes, String feedback) {
-
-        public enum Veredicto {
-            APROBADA,
-            RECHAZADA,
-            /**
-             * Falla tecnica del proveedor de IA (o, en este alcance, el placeholder NoOp):
-             * NUNCA bloquea al aprendiz — mismo criterio "fail-open" documentado y probado en
-             * el backend viejo ({@code validateSmartText.test.ts}: "never blocks the trainee
-             * on a technical AI failure — accepts with pendingReview").
-             */
-            PENDIENTE_DE_REVISION
         }
     }
 }

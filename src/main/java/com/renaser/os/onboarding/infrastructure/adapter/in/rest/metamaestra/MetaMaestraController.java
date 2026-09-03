@@ -29,7 +29,7 @@ public class MetaMaestraController {
     @PostMapping("/validation")
     public ValidacionMetaMaestraResponse validar(@ActorAutenticado UserId actor,
                                                    @Valid @RequestBody ValidarMetaMaestraRequest request) {
-        var comando = new ValidarMetaMaestraCommand(actor, request.text());
-        return ValidacionMetaMaestraResponse.from(validarUseCase.validar(comando));
+        validarUseCase.aceptar(new ValidarMetaMaestraCommand(actor, request.text()));
+        return ValidacionMetaMaestraResponse.aceptada();
     }
 }

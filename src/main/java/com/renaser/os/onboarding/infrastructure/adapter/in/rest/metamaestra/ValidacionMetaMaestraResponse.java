@@ -1,24 +1,26 @@
 package com.renaser.os.onboarding.infrastructure.adapter.in.rest.metamaestra;
 
-import com.renaser.os.onboarding.application.ports.in.metamaestra.ValidarMetaMaestraUseCase.ResultadoMetaMaestra;
-
 import java.util.List;
 
 /**
  * Shape identico al que ya espera el frontend real ({@code SixPsValidation} en
  * {@code C:\renaserPlayStore\src\services\onboarding.ts}): {@code accepted}/{@code
- * missingPs}/{@code feedback}, mas {@code pendingReview} cuando la IA no respondio.
+ * missingPs}/{@code feedback}/{@code pendingReview}.
+ *
+ * <p>Los cuatro campos se conservan a proposito aunque hoy solo tengan un valor posible: el
+ * cliente ya los lee, y cambiar la forma lo romperia sin darle nada a cambio. Con el
+ * veredicto de IA fuera del alcance (2026-09-03), la respuesta es siempre la misma —
+ * aceptada, sin Ps faltantes y sin revision pendiente.
  */
 public record ValidacionMetaMaestraResponse(boolean accepted, List<String> missingPs, String feedback,
                                              boolean pendingReview) {
 
-    public static ValidacionMetaMaestraResponse from(ResultadoMetaMaestra resultado) {
-        return switch (resultado.veredicto()) {
-            case APROBADA -> new ValidacionMetaMaestraResponse(true, resultado.pesFaltantes(),
-                    resultado.feedback(), false);
-            case RECHAZADA -> new ValidacionMetaMaestraResponse(false, resultado.pesFaltantes(),
-                    resultado.feedback(), false);
-            case PENDIENTE_DE_REVISION -> new ValidacionMetaMaestraResponse(true, List.of(), "", true);
-        };
+    /**
+     * La unica respuesta posible. {@code pendingReview} va en {@code false}, no en
+     * {@code true}: no hay nada pendiente de revisar. Decir lo contrario le prometeria al
+     * aprendiz una revision que nadie va a hacer.
+     */
+    public static ValidacionMetaMaestraResponse aceptada() {
+        return new ValidacionMetaMaestraResponse(true, List.of(), "", false);
     }
 }
