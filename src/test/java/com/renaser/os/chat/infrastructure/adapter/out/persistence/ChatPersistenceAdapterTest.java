@@ -86,10 +86,20 @@ class ChatPersistenceAdapterTest {
         }
     }
 
+    /** Cada agregado nuevo llega con su id: la factoria ya no lo sortea, entra por el puerto IdGenerator. */
+    private static ConversacionId nuevaConversacionId() {
+        return ConversacionId.of(UUID.randomUUID());
+    }
+
+    private static MensajeId nuevoMensajeId() {
+        return MensajeId.of(UUID.randomUUID());
+    }
+
     @Test
     void guardaYRecuperaUnaConversacionDirectaConSusParticipantes() {
         String clave = Conversacion.claveDirectaDe(usuarioA, usuarioB);
-        Conversacion guardada = saveConversacionPort.save(Conversacion.crearDirecta(clave, Instant.now()));
+        Conversacion guardada = saveConversacionPort.save(
+                Conversacion.crearDirecta(nuevaConversacionId(), clave, Instant.now()));
         agregarParticipantePort.agregar(Participante.unirse(guardada.id(), usuarioA, Instant.now()));
         agregarParticipantePort.agregar(Participante.unirse(guardada.id(), usuarioB, Instant.now()));
 
@@ -104,20 +114,22 @@ class ChatPersistenceAdapterTest {
 
     @Test
     void soloPuedeExistirUnaConversacionGlobal() {
-        saveConversacionPort.save(Conversacion.crearGlobal(Instant.now()));
+        saveConversacionPort.save(Conversacion.crearGlobal(nuevaConversacionId(), Instant.now()));
 
-        assertThatThrownBy(() -> saveConversacionPort.save(Conversacion.crearGlobal(Instant.now())))
+        assertThatThrownBy(() -> saveConversacionPort.save(
+                Conversacion.crearGlobal(nuevaConversacionId(), Instant.now())))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     void agregarEsIdempotenteYNoPisaElUltimoLeidoYaRegistrado() {
-        Conversacion global = saveConversacionPort.save(Conversacion.crearGlobal(Instant.now()));
+        Conversacion global = saveConversacionPort.save(
+                Conversacion.crearGlobal(nuevaConversacionId(), Instant.now()));
         Instant primeraVez = Instant.parse("2026-08-20T10:00:00Z");
         Instant delMensaje = Instant.parse("2026-08-20T12:00:00Z");
         agregarParticipantePort.agregar(Participante.unirse(global.id(), usuarioA, primeraVez));
-        saveMensajePort.save(Mensaje.escribir(global.id(), usuarioB, TipoMensaje.TEXTO, "hola", null, null, null,
-                null, null, null, delMensaje));
+        saveMensajePort.save(Mensaje.escribir(nuevoMensajeId(), global.id(), usuarioB, TipoMensaje.TEXTO,
+                "hola", null, null, null, null, null, null, delMensaje));
 
         // Un segundo "unirse" (ej. reintento del listener), MUCHO despues del mensaje, no
         // debe pisar el ultimo_leido_en original — si lo hiciera, el mensaje de arriba
@@ -131,14 +143,15 @@ class ChatPersistenceAdapterTest {
     @Test
     void contarNoLeidosEnLoteContraPostgresReal() {
         Conversacion c1 = saveConversacionPort.save(
-                Conversacion.crearDirecta(Conversacion.claveDirectaDe(usuarioA, usuarioB), Instant.now()));
+                Conversacion.crearDirecta(nuevaConversacionId(),
+                        Conversacion.claveDirectaDe(usuarioA, usuarioB), Instant.now()));
         agregarParticipantePort.agregar(Participante.unirse(c1.id(), usuarioA, Instant.parse("2026-08-20T10:00:00Z")));
         agregarParticipantePort.agregar(Participante.unirse(c1.id(), usuarioB, Instant.parse("2026-08-20T10:00:00Z")));
 
-        saveMensajePort.save(Mensaje.escribir(c1.id(), usuarioB, TipoMensaje.TEXTO, "hola", null, null, null, null,
-                null, null, Instant.parse("2026-08-21T10:00:00Z")));
-        saveMensajePort.save(Mensaje.escribir(c1.id(), usuarioB, TipoMensaje.TEXTO, "como va", null, null, null,
-                null, null, null, Instant.parse("2026-08-21T11:00:00Z")));
+        saveMensajePort.save(Mensaje.escribir(nuevoMensajeId(), c1.id(), usuarioB, TipoMensaje.TEXTO, "hola",
+                null, null, null, null, null, null, Instant.parse("2026-08-21T10:00:00Z")));
+        saveMensajePort.save(Mensaje.escribir(nuevoMensajeId(), c1.id(), usuarioB, TipoMensaje.TEXTO, "como va",
+                null, null, null, null, null, null, Instant.parse("2026-08-21T11:00:00Z")));
 
         Map<ConversacionId, Long> conteo = contarNoLeidosPort.contarNoLeidos(usuarioA, List.of(c1.id()));
 
@@ -148,12 +161,13 @@ class ChatPersistenceAdapterTest {
     @Test
     void marcarLeidoBajaElConteoDeNoLeidos() {
         Conversacion c1 = saveConversacionPort.save(
-                Conversacion.crearDirecta(Conversacion.claveDirectaDe(usuarioA, usuarioB), Instant.now()));
+                Conversacion.crearDirecta(nuevaConversacionId(),
+                        Conversacion.claveDirectaDe(usuarioA, usuarioB), Instant.now()));
         agregarParticipantePort.agregar(Participante.unirse(c1.id(), usuarioA, Instant.parse("2026-08-20T10:00:00Z")));
         agregarParticipantePort.agregar(Participante.unirse(c1.id(), usuarioB, Instant.parse("2026-08-20T10:00:00Z")));
         Instant delMensaje = Instant.parse("2026-08-21T10:00:00Z");
-        saveMensajePort.save(Mensaje.escribir(c1.id(), usuarioB, TipoMensaje.TEXTO, "hola", null, null, null, null,
-                null, null, delMensaje));
+        saveMensajePort.save(Mensaje.escribir(nuevoMensajeId(), c1.id(), usuarioB, TipoMensaje.TEXTO, "hola",
+                null, null, null, null, null, null, delMensaje));
 
         marcarLeidoPort.marcarLeido(c1.id(), usuarioA, delMensaje.plusSeconds(1));
 
@@ -164,15 +178,19 @@ class ChatPersistenceAdapterTest {
     @Test
     void ultimosPorConversacionEnLoteContraPostgresReal() {
         Conversacion c1 = saveConversacionPort.save(
-                Conversacion.crearDirecta(Conversacion.claveDirectaDe(usuarioA, usuarioB), Instant.now()));
-        Conversacion c2 = saveConversacionPort.save(Conversacion.crearGlobal(Instant.now()));
+                Conversacion.crearDirecta(nuevaConversacionId(),
+                        Conversacion.claveDirectaDe(usuarioA, usuarioB), Instant.now()));
+        Conversacion c2 = saveConversacionPort.save(
+                Conversacion.crearGlobal(nuevaConversacionId(), Instant.now()));
 
-        saveMensajePort.save(Mensaje.escribir(c1.id(), usuarioA, TipoMensaje.TEXTO, "primero", null, null, null,
-                null, null, null, Instant.parse("2026-08-21T10:00:00Z")));
-        Mensaje ultimoC1 = saveMensajePort.save(Mensaje.escribir(c1.id(), usuarioB, TipoMensaje.TEXTO, "ultimo",
-                null, null, null, null, null, null, Instant.parse("2026-08-21T11:00:00Z")));
-        Mensaje ultimoC2 = saveMensajePort.save(Mensaje.escribir(c2.id(), usuarioA, TipoMensaje.TEXTO, "en global",
-                null, null, null, null, null, null, Instant.parse("2026-08-21T09:00:00Z")));
+        saveMensajePort.save(Mensaje.escribir(nuevoMensajeId(), c1.id(), usuarioA, TipoMensaje.TEXTO, "primero",
+                null, null, null, null, null, null, Instant.parse("2026-08-21T10:00:00Z")));
+        Mensaje ultimoC1 = saveMensajePort.save(Mensaje.escribir(nuevoMensajeId(), c1.id(), usuarioB,
+                TipoMensaje.TEXTO, "ultimo", null, null, null, null, null, null,
+                Instant.parse("2026-08-21T11:00:00Z")));
+        Mensaje ultimoC2 = saveMensajePort.save(Mensaje.escribir(nuevoMensajeId(), c2.id(), usuarioA,
+                TipoMensaje.TEXTO, "en global", null, null, null, null, null, null,
+                Instant.parse("2026-08-21T09:00:00Z")));
 
         Map<ConversacionId, Mensaje> ultimos = loadMensajePort.ultimosPorConversacion(List.of(c1.id(), c2.id()));
 
@@ -182,10 +200,12 @@ class ChatPersistenceAdapterTest {
 
     @Test
     void paginacionKeysetDeMensajesNuncaUsaOffset() {
-        Conversacion c1 = saveConversacionPort.save(Conversacion.crearGlobal(Instant.now()));
+        Conversacion c1 = saveConversacionPort.save(
+                Conversacion.crearGlobal(nuevaConversacionId(), Instant.now()));
         for (int i = 0; i < 5; i++) {
-            saveMensajePort.save(Mensaje.escribir(c1.id(), usuarioA, TipoMensaje.TEXTO, "mensaje " + i, null, null,
-                    null, null, null, null, Instant.parse("2026-08-21T10:0" + i + ":00Z")));
+            saveMensajePort.save(Mensaje.escribir(nuevoMensajeId(), c1.id(), usuarioA, TipoMensaje.TEXTO,
+                    "mensaje " + i, null, null, null, null, null, null,
+                    Instant.parse("2026-08-21T10:0" + i + ":00Z")));
         }
 
         List<Mensaje> primeraPagina = loadMensajePort.pagina(c1.id(), null, 2);
@@ -199,7 +219,8 @@ class ChatPersistenceAdapterTest {
 
     @Test
     void usuariosDeDevuelveTodosLosParticipantesDeUnaConversacion() {
-        Conversacion global = saveConversacionPort.save(Conversacion.crearGlobal(Instant.now()));
+        Conversacion global = saveConversacionPort.save(
+                Conversacion.crearGlobal(nuevaConversacionId(), Instant.now()));
         agregarParticipantePort.agregar(Participante.unirse(global.id(), usuarioA, Instant.now()));
         agregarParticipantePort.agregar(Participante.unirse(global.id(), usuarioB, Instant.now()));
 
@@ -210,11 +231,14 @@ class ChatPersistenceAdapterTest {
 
     @Test
     void porIdsResuelveVariosMensajesEnUnaSolaConsulta() {
-        Conversacion global = saveConversacionPort.save(Conversacion.crearGlobal(Instant.now()));
-        Mensaje m1 = saveMensajePort.save(Mensaje.escribir(global.id(), usuarioA, TipoMensaje.TEXTO, "uno", null,
-                null, null, null, null, null, Instant.parse("2026-08-21T10:00:00Z")));
-        Mensaje m2 = saveMensajePort.save(Mensaje.escribir(global.id(), usuarioB, TipoMensaje.TEXTO, "dos", null,
-                null, null, null, null, null, Instant.parse("2026-08-21T10:01:00Z")));
+        Conversacion global = saveConversacionPort.save(
+                Conversacion.crearGlobal(nuevaConversacionId(), Instant.now()));
+        Mensaje m1 = saveMensajePort.save(Mensaje.escribir(nuevoMensajeId(), global.id(), usuarioA,
+                TipoMensaje.TEXTO, "uno", null, null, null, null, null, null,
+                Instant.parse("2026-08-21T10:00:00Z")));
+        Mensaje m2 = saveMensajePort.save(Mensaje.escribir(nuevoMensajeId(), global.id(), usuarioB,
+                TipoMensaje.TEXTO, "dos", null, null, null, null, null, null,
+                Instant.parse("2026-08-21T10:01:00Z")));
 
         Map<MensajeId, Mensaje> resueltos = loadMensajePort.porIds(List.of(m1.id(), m2.id()));
 

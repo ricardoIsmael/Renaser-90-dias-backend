@@ -13,6 +13,12 @@ public interface LoadRocaDiariaPort {
 
     Optional<RocaDiaria> byId(RocaDiariaId id);
 
+    /** Version con bloqueo para el camino de escritura (completar): evita que dos requests
+     * concurrentes (doble toque, reintento por timeout) completen la misma roca y otorguen el
+     * premio dos veces — mismo patron que {@code LoadRegistroHabitoPort.byIdParaEscritura}
+     * en `habits` (C-2, docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html). */
+    Optional<RocaDiaria> byIdParaEscritura(RocaDiariaId id);
+
     List<RocaDiaria> deParticipanteYFecha(UserId participanteId, LocalDate fecha);
 
     int contarDeParticipanteYFecha(UserId participanteId, LocalDate fecha);

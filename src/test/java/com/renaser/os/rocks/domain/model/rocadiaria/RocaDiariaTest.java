@@ -21,7 +21,8 @@ class RocaDiariaTest {
     }
 
     private static RocaDiaria roca(int posicion) {
-        return RocaDiaria.planificar(participante(), LocalDate.of(2026, 8, 25), posicion, "titulo", null, 5, false,
+        return RocaDiaria.planificar(RocaDiariaId.of(UUID.randomUUID()), participante(),
+                LocalDate.of(2026, 8, 25), posicion, "titulo", null, 5, false,
                 EjeObjetivo.CUERPO, null, null, null, CLOCK);
     }
 
@@ -88,7 +89,8 @@ class RocaDiariaTest {
 
     @Test
     void puntajeImpactoFueraDeRangoEsInvalido() {
-        assertThatThrownBy(() -> RocaDiaria.planificar(participante(), LocalDate.now(), 1, "t", null, 11, false,
+        assertThatThrownBy(() -> RocaDiaria.planificar(RocaDiariaId.of(UUID.randomUUID()), participante(),
+                LocalDate.now(), 1, "t", null, 11, false,
                 EjeObjetivo.CUERPO, null, null, null, CLOCK)).isInstanceOf(IllegalArgumentException.class);
     }
 }

@@ -11,8 +11,10 @@ import com.renaser.os.rag.application.ports.out.cuota.ControlCuotaRenasiaPort;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
+import com.renaser.os.rag.domain.model.conversacion.MensajeRenasiaId;
 import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.UserId;
@@ -55,6 +57,8 @@ import static org.mockito.Mockito.when;
 class ConversacionRenasiaServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-25T10:00:00Z"));
+    /** Id fijo que devuelve el IdGenerator mockeado, mismo espiritu que el FixedClock de arriba. */
+    private static final UUID ID_GENERADO = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     @Mock
     private UserSummaryFinder userSummaryFinder;
@@ -72,6 +76,8 @@ class ConversacionRenasiaServiceTest {
     private VectorStorePort vectorStorePort;
     @Mock
     private ChatIAPort chatIAPort;
+    @Mock
+    private IdGenerator idGenerator;
 
     private ConversacionRenasiaService service;
 
@@ -82,7 +88,9 @@ class ConversacionRenasiaServiceTest {
     void setUp() {
         service = new ConversacionRenasiaService(userSummaryFinder, controlCuotaRenasiaPort,
                 loadConversacionRenasiaPort, saveConversacionRenasiaPort, loadMensajeRenasiaPort,
-                saveMensajeRenasiaPort, vectorStorePort, chatIAPort, CLOCK);
+                saveMensajeRenasiaPort, vectorStorePort, chatIAPort, CLOCK, idGenerator);
+        // lenient: no todos los casos llegan a generar un id (varios cortan antes, en autorizacion o cuota).
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
                 Optional.of(new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(suspendido)).thenReturn(
@@ -219,8 +227,10 @@ class ConversacionRenasiaServiceTest {
 
     @Test
     void obtenerHistorialIndicaHayMasCuandoLaPaginaExcedeElLimite() {
-        MensajeRenasia m1 = MensajeRenasia.escribirDeUsuario(activo, "1", CLOCK.now());
-        MensajeRenasia m2 = MensajeRenasia.escribirDeUsuario(activo, "2", CLOCK.now());
+        MensajeRenasia m1 = MensajeRenasia.escribirDeUsuario(MensajeRenasiaId.of(UUID.randomUUID()), activo, "1",
+                CLOCK.now());
+        MensajeRenasia m2 = MensajeRenasia.escribirDeUsuario(MensajeRenasiaId.of(UUID.randomUUID()), activo, "2",
+                CLOCK.now());
         when(loadMensajeRenasiaPort.pagina(activo, null, 2)).thenReturn(List.of(m1, m2));
 
         var pagina = service.obtenerHistorial(activo, null, 1);

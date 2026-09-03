@@ -50,8 +50,8 @@ class MediaOnboardingTest {
     void rutaNuevaNoEsDeterministica() {
         UserId usuarioId = newUsuarioId();
 
-        String rutaUno = MediaOnboarding.rutaNueva(usuarioId, ClaseMedia.AUDIO);
-        String rutaDos = MediaOnboarding.rutaNueva(usuarioId, ClaseMedia.AUDIO);
+        String rutaUno = MediaOnboarding.rutaNueva(UUID.randomUUID(), usuarioId, ClaseMedia.AUDIO);
+        String rutaDos = MediaOnboarding.rutaNueva(UUID.randomUUID(), usuarioId, ClaseMedia.AUDIO);
 
         assertThat(rutaUno).isNotEqualTo(rutaDos);
         assertThat(rutaUno).startsWith("onboarding/" + usuarioId + "/audio/");

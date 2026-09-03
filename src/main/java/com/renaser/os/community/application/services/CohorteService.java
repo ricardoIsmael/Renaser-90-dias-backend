@@ -14,6 +14,7 @@ import com.renaser.os.community.domain.model.cohorte.Cohorte;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -37,43 +38,47 @@ public class CohorteService implements CrearCohorteUseCase, ActualizarCohorteUse
     private final LoadCelulaPort loadCelulaPort;
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public CohorteService(LoadCohortePort loadCohortePort, SaveCohortePort saveCohortePort,
                            EliminarCohortePort eliminarCohortePort, LoadCelulaPort loadCelulaPort,
-                           UserSummaryFinder userSummaryFinder, Clock clock) {
+                           UserSummaryFinder userSummaryFinder, Clock clock, IdGenerator idGenerator) {
         this.loadCohortePort = loadCohortePort;
         this.saveCohortePort = saveCohortePort;
         this.eliminarCohortePort = eliminarCohortePort;
         this.loadCelulaPort = loadCelulaPort;
         this.userSummaryFinder = userSummaryFinder;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
     @Transactional
-    public Cohorte crear(CrearCohorteCommand command) {
+    public CohorteResumen crear(CrearCohorteCommand command) {
         requireAdmin(command.actorId());
-        Cohorte cohorte = Cohorte.crear(command.nombre(), command.fechaInicio(), command.fechaFin(), clock.now());
-        return saveCohortePort.save(cohorte);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        Cohorte cohorte = Cohorte.crear(CohorteId.of(idGenerator.newId()), command.nombre(),
+                command.fechaInicio(), command.fechaFin(), clock.now());
+        return aResumen(saveCohortePort.save(cohorte));
     }
 
     @Override
     @Transactional
-    public Cohorte actualizar(ActualizarCohorteCommand command) {
+    public CohorteResumen actualizar(ActualizarCohorteCommand command) {
         requireAdmin(command.actorId());
         Cohorte cohorte = requireCohorte(command.cohorteId());
         cohorte.actualizarDatos(command.nombre(), command.fechaInicio(),
                 command.tocaFechaFin() ? command.fechaFin() : cohorte.fechaFin(), clock.now());
-        return saveCohortePort.save(cohorte);
+        return aResumen(saveCohortePort.save(cohorte));
     }
 
     @Override
     @Transactional
-    public Cohorte cambiarEstado(CambiarEstadoCohorteCommand command) {
+    public CohorteResumen cambiarEstado(CambiarEstadoCohorteCommand command) {
         requireAdmin(command.actorId());
         Cohorte cohorte = requireCohorte(command.cohorteId());
         cohorte.transicionarA(command.nuevoEstado(), clock.now());
-        return saveCohortePort.save(cohorte);
+        return aResumen(saveCohortePort.save(cohorte));
     }
 
     @Override
@@ -120,8 +125,14 @@ public class CohorteService implements CrearCohorteUseCase, ActualizarCohorteUse
     }
 
     private CohorteResumen aResumen(CohorteId id) {
-        Cohorte cohorte = requireCohorte(id);
-        return new CohorteResumen(cohorte, loadCohortePort.contarCelulas(id));
+        return aResumen(requireCohorte(id));
+    }
+
+    /** Proyeccion que la API devuelve al crear/actualizar/cambiar estado, armada DENTRO de
+     * la transaccion de la mutacion: el controller ya no encadena "muto y despues
+     * consulto" (dos transacciones, respuesta posiblemente desactualizada). */
+    private CohorteResumen aResumen(Cohorte cohorte) {
+        return new CohorteResumen(cohorte, loadCohortePort.contarCelulas(cohorte.id()));
     }
 
     private Cohorte requireCohorte(CohorteId id) {

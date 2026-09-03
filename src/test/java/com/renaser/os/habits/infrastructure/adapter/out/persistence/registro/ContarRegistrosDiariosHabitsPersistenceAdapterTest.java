@@ -5,6 +5,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.registro.ConteoDiarioHabitos;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
+import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.persistence.EntityManager;
@@ -71,8 +72,8 @@ class ContarRegistrosDiariosHabitsPersistenceAdapterTest {
     void seedFixtures() {
         participante1 = UserId.of(UUID.randomUUID());
         participante2 = UserId.of(UUID.randomUUID());
-        habitoObligatorio = HabitoId.newId();
-        habitoOpcional = HabitoId.newId();
+        habitoObligatorio = HabitoId.of(UUID.randomUUID());
+        habitoOpcional = HabitoId.of(UUID.randomUUID());
 
         seedParticipante(participante1);
         seedParticipante(participante2);
@@ -81,23 +82,23 @@ class ContarRegistrosDiariosHabitsPersistenceAdapterTest {
 
         // participante1, HASTA: 1 obligatorio COMPLETADO + 1 opcional SIN completar
         // -> calificables = 1 (el opcional no cuenta), completados = 1 -> 100%.
-        RegistroHabito obligatorioP1 = RegistroHabito.generar(participante1, habitoObligatorio, HASTA, 5,
-                TipoDia.DISCIPLINA, false, CLOCK.now());
+        RegistroHabito obligatorioP1 = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante1,
+                habitoObligatorio, HASTA, 5, TipoDia.DISCIPLINA, false, CLOCK.now());
         obligatorioP1.completar(10, null, null, null, CLOCK.now());
         registroAdapter.save(obligatorioP1);
 
-        RegistroHabito opcionalP1 = RegistroHabito.generar(participante1, habitoOpcional, HASTA, 5,
-                TipoDia.DISCIPLINA, true, CLOCK.now());
+        RegistroHabito opcionalP1 = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante1,
+                habitoOpcional, HASTA, 5, TipoDia.DISCIPLINA, true, CLOCK.now());
         registroAdapter.save(opcionalP1);
 
         // participante1, fuera de la ventana pedida: no debe aparecer en el resultado.
-        RegistroHabito fueraDeVentana = RegistroHabito.generar(participante1, habitoObligatorio, FUERA_DE_VENTANA, 4,
-                TipoDia.DISCIPLINA, false, CLOCK.now());
+        RegistroHabito fueraDeVentana = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante1,
+                habitoObligatorio, FUERA_DE_VENTANA, 4, TipoDia.DISCIPLINA, false, CLOCK.now());
         registroAdapter.save(fueraDeVentana);
 
         // participante2, HASTA: 1 obligatorio COMPLETADO -> 100%, sin opcionales.
-        RegistroHabito obligatorioP2 = RegistroHabito.generar(participante2, habitoObligatorio, HASTA, 5,
-                TipoDia.DISCIPLINA, false, CLOCK.now());
+        RegistroHabito obligatorioP2 = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante2,
+                habitoObligatorio, HASTA, 5, TipoDia.DISCIPLINA, false, CLOCK.now());
         obligatorioP2.completar(10, null, null, null, CLOCK.now());
         registroAdapter.save(obligatorioP2);
 

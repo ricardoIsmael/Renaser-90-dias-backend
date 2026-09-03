@@ -44,4 +44,8 @@ public class NotificacionJpaEntity {
     private Instant leidaEn;
 
     private Instant creadoEn;
+
+    /** C-7 / V16: id de dominio del evento que origino la notificacion, para deduplicar
+     * entregas repetidas del outbox de Modulith. NULL cuando no hay evento identificable. */
+    private UUID origenEventoId;
 }

@@ -11,8 +11,10 @@ import com.renaser.os.community.application.ports.in.cohorte.EliminarCohorteUseC
 import com.renaser.os.community.application.ports.in.cohorte.EliminarCohorteUseCase.EliminarCohorteCommand;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -49,6 +51,7 @@ public class CohorteAdminController {
         this.consultarUseCase = consultarUseCase;
     }
 
+    @RequiresPermission(value = Permission.MANAGE_COHORTS, scope = "un MENTOR pasa igual pero solo ve su cohorte")
     @GetMapping
     public List<CohorteResponse> listar(@ActorAutenticado UserId actorId,
                                          @RequestParam(required = false) String status) {
@@ -56,36 +59,38 @@ public class CohorteAdminController {
         return consultarUseCase.listar(actorId, filtro).stream().map(CohorteResponse::from).toList();
     }
 
+    @RequiresPermission(value = Permission.MANAGE_COHORTS, scope = "un MENTOR pasa igual, pero solo sobre la cohorte de la celula que lidera")
     @GetMapping("/{id}")
     public CohorteResponse obtener(@ActorAutenticado UserId actorId, @PathVariable UUID id) {
         return CohorteResponse.from(consultarUseCase.obtener(actorId, CohorteId.of(id)));
     }
 
+    @RequiresPermission(Permission.MANAGE_COHORTS)
     @PostMapping
     public ResponseEntity<CohorteResponse> crear(@ActorAutenticado UserId actorId,
                                                   @RequestBody @Valid CrearCohorteRequest request) {
-        var cohorte = crearUseCase.crear(new CrearCohorteCommand(actorId, request.name(),
+        var resumen = crearUseCase.crear(new CrearCohorteCommand(actorId, request.name(),
                 request.startDate(), request.endDate()));
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(CohorteResponse.from(consultarUseCase.obtener(actorId, cohorte.id())));
+        return ResponseEntity.status(HttpStatus.CREATED).body(CohorteResponse.from(resumen));
     }
 
+    @RequiresPermission(Permission.MANAGE_COHORTS)
     @PatchMapping("/{id}")
     public CohorteResponse actualizar(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                        @RequestBody ActualizarCohorteRequest request) {
-        actualizarUseCase.actualizar(new ActualizarCohorteCommand(actorId, CohorteId.of(id),
-                request.name(), request.startDate(), request.endDate(), true));
-        return CohorteResponse.from(consultarUseCase.obtener(actorId, CohorteId.of(id)));
+        return CohorteResponse.from(actualizarUseCase.actualizar(new ActualizarCohorteCommand(actorId,
+                CohorteId.of(id), request.name(), request.startDate(), request.endDate(), true)));
     }
 
+    @RequiresPermission(Permission.MANAGE_COHORTS)
     @PatchMapping("/{id}/status")
     public CohorteResponse cambiarEstado(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                           @RequestBody @Valid CambiarEstadoCohorteRequest request) {
-        cambiarEstadoUseCase.cambiarEstado(new CambiarEstadoCohorteCommand(actorId, CohorteId.of(id),
-                parseEstado(request.status())));
-        return CohorteResponse.from(consultarUseCase.obtener(actorId, CohorteId.of(id)));
+        return CohorteResponse.from(cambiarEstadoUseCase.cambiarEstado(new CambiarEstadoCohorteCommand(actorId,
+                CohorteId.of(id), parseEstado(request.status()))));
     }
 
+    @RequiresPermission(Permission.MANAGE_COHORTS)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actorId, @PathVariable UUID id) {
         eliminarUseCase.eliminar(new EliminarCohorteCommand(actorId, CohorteId.of(id)));

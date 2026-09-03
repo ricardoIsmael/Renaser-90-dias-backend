@@ -8,6 +8,7 @@ import com.renaser.os.rag.application.ports.out.conversacion.SaveMensajeRenasiaP
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
 import com.renaser.os.rag.domain.model.conversacion.FuenteMensaje;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
+import com.renaser.os.rag.domain.model.conversacion.MensajeRenasiaId;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,6 +69,11 @@ class RenasiaConversacionPersistenceAdapterTest {
                         """).executeUpdate();
     }
 
+    /** Un id cualquiera, distinto por mensaje: la identidad ya no la sortea el agregado. */
+    private static MensajeRenasiaId nuevoId() {
+        return MensajeRenasiaId.of(UUID.randomUUID());
+    }
+
     @Test
     void unUsuarioTieneComoMaximoUnaConversacion() {
         assertThat(loadConversacionRenasiaPort.porUsuarioId(usuarioId)).isEmpty();
@@ -85,7 +91,7 @@ class RenasiaConversacionPersistenceAdapterTest {
         saveConversacionRenasiaPort.save(ConversacionRenasia.iniciar(usuarioId, Instant.now()));
 
         MensajeRenasia guardado = saveMensajeRenasiaPort.save(
-                MensajeRenasia.escribirDeUsuario(usuarioId, "que es Renasia?", Instant.now()));
+                MensajeRenasia.escribirDeUsuario(nuevoId(), usuarioId, "que es Renasia?", Instant.now()));
 
         List<MensajeRenasia> pagina = loadMensajeRenasiaPort.pagina(usuarioId, null, 10);
         assertThat(pagina).hasSize(1);
@@ -99,7 +105,7 @@ class RenasiaConversacionPersistenceAdapterTest {
         saveConversacionRenasiaPort.save(ConversacionRenasia.iniciar(usuarioId, Instant.now()));
 
         MensajeRenasia guardado = saveMensajeRenasiaPort.save(
-                MensajeRenasia.escribirDeAsistente(usuarioId, "la respuesta con contexto",
+                MensajeRenasia.escribirDeAsistente(nuevoId(), usuarioId, "la respuesta con contexto",
                         List.of(FuenteMensaje.of("leccion-1")), Instant.now()));
 
         List<MensajeRenasia> pagina = loadMensajeRenasiaPort.pagina(usuarioId, null, 10);
@@ -114,9 +120,9 @@ class RenasiaConversacionPersistenceAdapterTest {
         Instant t1 = Instant.now();
         Instant t2 = t1.plusSeconds(10);
         Instant t3 = t2.plusSeconds(10);
-        saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeUsuario(usuarioId, "primero", t1));
-        saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeUsuario(usuarioId, "segundo", t2));
-        saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeUsuario(usuarioId, "tercero", t3));
+        saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeUsuario(nuevoId(), usuarioId, "primero", t1));
+        saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeUsuario(nuevoId(), usuarioId, "segundo", t2));
+        saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeUsuario(nuevoId(), usuarioId, "tercero", t3));
 
         List<MensajeRenasia> primeraPagina = loadMensajeRenasiaPort.pagina(usuarioId, null, 2);
         assertThat(primeraPagina).extracting(MensajeRenasia::contenido).containsExactly("tercero", "segundo");

@@ -15,8 +15,12 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -37,10 +41,22 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
     private final PushPort pushPort;
     private final ActorNotificacionesGuard actorGuard;
     private final Clock clock;
+    /**
+     * C-7: transaccion PROPIA (REQUIRES_NEW) para el {@code guardar} de {@link #emitir}. Mismo
+     * criterio que {@code ConversacionService.crearDirectaConAmbosParticipantes} (C-10): si la
+     * violacion del indice unico {@code notificaciones_origen_evento_uk} (V16, redelivery del
+     * MISMO evento) se atrapara dentro de la transaccion de {@code emitir} (que es
+     * {@code @Transactional}), Postgres ya la dejo abortada en cuanto el INSERT fallo, y
+     * cualquier operacion posterior en esa misma transaccion explotaria con "current
+     * transaction is aborted". Aislando el guardado, si pierde la carrera de deduplicacion solo
+     * se deshace ESA transaccion chica.
+     */
+    private final TransactionTemplate transaccionPropia;
 
     public NotificacionService(LoadNotificacionPort loadNotificacionPort, SaveNotificacionPort saveNotificacionPort,
                                 LoadPreferenciasPort loadPreferenciasPort, LoadTokenPushPort loadTokenPushPort,
-                                PushPort pushPort, ActorNotificacionesGuard actorGuard, Clock clock) {
+                                PushPort pushPort, ActorNotificacionesGuard actorGuard, Clock clock,
+                                PlatformTransactionManager transactionManager) {
         this.loadNotificacionPort = loadNotificacionPort;
         this.saveNotificacionPort = saveNotificacionPort;
         this.loadPreferenciasPort = loadPreferenciasPort;
@@ -48,6 +64,8 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
         this.pushPort = pushPort;
         this.actorGuard = actorGuard;
         this.clock = clock;
+        this.transaccionPropia = new TransactionTemplate(transactionManager);
+        this.transaccionPropia.setPropagationBehavior(Propagation.REQUIRES_NEW.value());
     }
 
     /**
@@ -66,10 +84,29 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
             return Optional.empty();
         }
         Notificacion notificacion = Notificacion.emitir(command.usuarioId(), command.tipo(), command.titulo(),
-                command.cuerpo(), command.rutaApp(), clock);
-        Notificacion guardada = saveNotificacionPort.guardar(notificacion);
+                command.cuerpo(), command.rutaApp(), command.origenEventoId(), clock);
+        Optional<Notificacion> guardada = guardarIdempotente(notificacion);
+        if (guardada.isEmpty()) {
+            // C-7: ya existia una notificacion para el mismo (usuario, tipo, origenEventoId) --
+            // el outbox reentrego un evento que ya procesamos. Ni la fila ni el push se repiten.
+            log.debug("[notifications.NotificacionService] emision duplicada ignorada (origenEventoId={}, tipo={})",
+                    command.origenEventoId(), command.tipo());
+            return Optional.empty();
+        }
         intentarPush(command);
-        return Optional.of(guardada);
+        return guardada;
+    }
+
+    /** Aisla el INSERT en su propia transaccion (ver javadoc de {@link #transaccionPropia}) para
+     * poder atrapar la violacion de {@code notificaciones_origen_evento_uk} sin abortar la
+     * transaccion de {@link #emitir}. Solo puede chocar cuando {@code origenEventoId} no es
+     * null -- el indice es parcial (C-7/V16). */
+    private Optional<Notificacion> guardarIdempotente(Notificacion notificacion) {
+        try {
+            return Optional.of(transaccionPropia.execute(status -> saveNotificacionPort.guardar(notificacion)));
+        } catch (DataIntegrityViolationException redeliveryDelMismoEvento) {
+            return Optional.empty();
+        }
     }
 
     /** Best-effort, nunca tumba la emision: el registro en la bandeja (arriba) es el contrato

@@ -3,6 +3,7 @@ package com.renaser.os.habits.infrastructure.adapter.out.persistence.guia;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.domain.model.guia.ContenidoGuia;
 import com.renaser.os.habits.domain.model.guia.GuiaHabito;
+import com.renaser.os.habits.domain.model.guia.GuiaHabitoId;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -34,7 +36,7 @@ class GuiaHabitoPersistenceAdapterTest {
 
     @BeforeEach
     void seedHabito() {
-        habitoId = HabitoId.newId();
+        habitoId = HabitoId.of(UUID.randomUUID());
         entityManager.createNativeQuery("""
                         INSERT INTO renaser.habitos (id, ambito, titulo, tipo, categoria_clave)
                         VALUES (:id, 'SISTEMA', 'Meditar', 'CHECKBOX', 'MENTE')
@@ -45,7 +47,7 @@ class GuiaHabitoPersistenceAdapterTest {
 
     @Test
     void guardaYRecuperaUnaGuiaPorId() {
-        GuiaHabito guia = GuiaHabito.crear(habitoId, 1, AHORA);
+        GuiaHabito guia = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habitoId, 1, AHORA);
         guia.actualizarContenidoCompleto(
                 new ContenidoGuia("hacer", "como", "ciencia", "renaser", "alquimia", "resultados", "titulo", "intro",
                         "cuerpo", "fuente"),
@@ -62,8 +64,8 @@ class GuiaHabitoPersistenceAdapterTest {
 
     @Test
     void porHabitoTraeTodasLasGuiasDelHabito() {
-        adapter.save(GuiaHabito.crear(habitoId, 1, AHORA));
-        adapter.save(GuiaHabito.crear(habitoId, 30, AHORA));
+        adapter.save(GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habitoId, 1, AHORA));
+        adapter.save(GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habitoId, 30, AHORA));
 
         List<GuiaHabito> guias = adapter.porHabito(habitoId);
 
@@ -72,10 +74,10 @@ class GuiaHabitoPersistenceAdapterTest {
 
     @Test
     void masRecienteAbiertaIgnoraLasQueYaTienenDiaFin() {
-        GuiaHabito cerrada = GuiaHabito.crear(habitoId, 1, AHORA);
+        GuiaHabito cerrada = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habitoId, 1, AHORA);
         cerrada.cerrarEn(10, AHORA);
         adapter.save(cerrada);
-        GuiaHabito abierta = GuiaHabito.crear(habitoId, 11, AHORA);
+        GuiaHabito abierta = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habitoId, 11, AHORA);
         adapter.save(abierta);
 
         Optional<GuiaHabito> resultado = adapter.masRecienteAbierta(habitoId);
@@ -86,7 +88,7 @@ class GuiaHabitoPersistenceAdapterTest {
 
     @Test
     void masRecienteAbiertaVaciaSiNingunaEstaAbierta() {
-        GuiaHabito cerrada = GuiaHabito.crear(habitoId, 1, AHORA);
+        GuiaHabito cerrada = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habitoId, 1, AHORA);
         cerrada.cerrarEn(10, AHORA);
         adapter.save(cerrada);
 
@@ -95,7 +97,7 @@ class GuiaHabitoPersistenceAdapterTest {
 
     @Test
     void eliminarBorraLaGuia() {
-        GuiaHabito guia = adapter.save(GuiaHabito.crear(habitoId, 1, AHORA));
+        GuiaHabito guia = adapter.save(GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habitoId, 1, AHORA));
 
         adapter.eliminar(guia.id());
 

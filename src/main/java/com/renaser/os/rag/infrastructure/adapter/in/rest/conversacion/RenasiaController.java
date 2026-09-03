@@ -3,8 +3,10 @@ package com.renaser.os.rag.infrastructure.adapter.in.rest.conversacion;
 import com.renaser.os.rag.application.ports.in.conversacion.ObtenerHistorialUseCase;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase.PreguntarRenasiaCommand;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,12 +37,14 @@ public class RenasiaController {
         this.obtenerHistorialUseCase = obtenerHistorialUseCase;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @PostMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> preguntar(@ActorAutenticado UserId actorId,
                                    @RequestBody @Valid PreguntarRenasiaRequest request) {
         return preguntarUseCase.preguntar(new PreguntarRenasiaCommand(actorId, request.question()));
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping
     public HistorialRenasiaPageResponse historial(@ActorAutenticado UserId actorId,
                                                     @RequestParam(required = false) String cursor,

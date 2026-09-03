@@ -73,13 +73,23 @@ public final class MediaOnboarding {
     /**
      * Ruta nueva, no deterministica a proposito (a diferencia de {@code ContratoFase.rutaFirma}):
      * un aprendiz puede subir varias media para la misma pregunta (reintentos de audio, por
-     * ejemplo), asi que cada subida necesita su propio nombre de archivo. El UUID lo genera el
-     * dominio, mismo criterio que {@code ContratoFaseId.newId()}.
+     * ejemplo), asi que cada subida necesita su propio nombre de archivo.
+     *
+     * <p>Ese discriminador por subida entra como parametro, no lo sortea el dominio: el metodo
+     * es el gemelo de {@link #registrar} —{@code registrar} valida contra {@link #prefijoDe} la
+     * misma ruta que este construye—, asi que la forma de la ruta se queda aca, en un solo lugar,
+     * y lo unico que se va afuera es el azar. Lo genera el caso de uso con el puerto
+     * {@link com.renaser.os.shared.domain.IdGenerator}, igual que la identidad de cualquier otro
+     * agregado (CLAUDE.MD §5.4.7: {@code domain/} sin aleatoriedad). No es identidad de fila —
+     * el id de {@code medias_onboarding} lo asigna la base y es un {@code Long}— pero la razon
+     * para sacarlo es la misma: sin esto, dos llamadas con los mismos argumentos devuelven
+     * resultados distintos.
      */
-    public static String rutaNueva(UserId usuarioId, ClaseMedia clase) {
+    public static String rutaNueva(UUID identificadorSubida, UserId usuarioId, ClaseMedia clase) {
+        Objects.requireNonNull(identificadorSubida, "identificadorSubida es obligatorio");
         Objects.requireNonNull(usuarioId, "usuarioId es obligatorio");
         Objects.requireNonNull(clase, "clase es obligatoria");
-        return prefijoDe(usuarioId) + clase.name().toLowerCase() + "/" + UUID.randomUUID();
+        return prefijoDe(usuarioId) + clase.name().toLowerCase() + "/" + identificadorSubida;
     }
 
     /**

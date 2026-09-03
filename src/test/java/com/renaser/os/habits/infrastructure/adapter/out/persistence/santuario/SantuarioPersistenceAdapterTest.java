@@ -5,10 +5,12 @@ import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPo
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
+import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.habits.domain.model.santuario.EstadoRacha;
 import com.renaser.os.habits.domain.model.santuario.EstadoSesionBloqueo;
 import com.renaser.os.habits.domain.model.santuario.MotivoSalidaBloqueo;
 import com.renaser.os.habits.domain.model.santuario.RachaSinCelular;
+import com.renaser.os.habits.domain.model.santuario.RachaSinCelularId;
 import com.renaser.os.habits.domain.model.santuario.SesionBloqueo;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
@@ -50,7 +52,7 @@ class SantuarioPersistenceAdapterTest {
     @BeforeEach
     void seedFixtures() {
         participanteId = UserId.of(UUID.randomUUID());
-        HabitoId habitoId = HabitoId.newId();
+        HabitoId habitoId = HabitoId.of(UUID.randomUUID());
 
         entityManager.createNativeQuery("""
                         INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
@@ -72,8 +74,8 @@ class SantuarioPersistenceAdapterTest {
                 .setParameter("id", habitoId.value())
                 .executeUpdate();
 
-        registro = registroAdapter.save(RegistroHabito.generar(participanteId, habitoId,
-                LocalDate.of(2026, 8, 24), 5, TipoDia.DISCIPLINA, false, CLOCK.now()));
+        registro = registroAdapter.save(RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participanteId,
+                habitoId, LocalDate.of(2026, 8, 24), 5, TipoDia.DISCIPLINA, false, CLOCK.now()));
     }
 
     @Test
@@ -105,7 +107,8 @@ class SantuarioPersistenceAdapterTest {
     @Test
     void guardaYRecuperaLaRachaActivaDeUnParticipante() {
         RachaSinCelular racha = rachaAdapter.save(
-                RachaSinCelular.iniciar(participanteId, registro.id(), 24, CLOCK.now()));
+                RachaSinCelular.iniciar(RachaSinCelularId.of(UUID.randomUUID()), participanteId, registro.id(), 24,
+                        CLOCK.now()));
 
         var activa = rachaAdapter.activaDe(participanteId);
 
@@ -117,8 +120,8 @@ class SantuarioPersistenceAdapterTest {
 
     @Test
     void unaRachaCompletadaYaNoApareceComoActiva() {
-        RachaSinCelular racha = RachaSinCelular.iniciar(participanteId, registro.id(), 24,
-                CLOCK.now().minus(Duration.ofHours(24)));
+        RachaSinCelular racha = RachaSinCelular.iniciar(RachaSinCelularId.of(UUID.randomUUID()), participanteId,
+                registro.id(), 24, CLOCK.now().minus(Duration.ofHours(24)));
         racha.cerrar(CLOCK.now());
         rachaAdapter.save(racha);
 
@@ -127,7 +130,8 @@ class SantuarioPersistenceAdapterTest {
 
     @Test
     void activasDeFiltraSoloLosParticipantesConRachaViva() {
-        rachaAdapter.save(RachaSinCelular.iniciar(participanteId, registro.id(), 24, CLOCK.now()));
+        rachaAdapter.save(RachaSinCelular.iniciar(RachaSinCelularId.of(UUID.randomUUID()), participanteId,
+                registro.id(), 24, CLOCK.now()));
         UserId otroSinRacha = UserId.of(UUID.randomUUID());
 
         List<RachaSinCelular> activas = rachaAdapter.activasDe(List.of(participanteId, otroSinRacha));

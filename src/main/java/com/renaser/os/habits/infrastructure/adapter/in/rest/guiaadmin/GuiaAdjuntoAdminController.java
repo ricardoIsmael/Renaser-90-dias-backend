@@ -10,8 +10,10 @@ import com.renaser.os.habits.application.ports.in.guiaadmin.SolicitarUrlAdjuntoG
 import com.renaser.os.habits.application.ports.in.guiaadmin.SolicitarUrlAdjuntoGuiaUseCase.SolicitarUrlAdjuntoGuiaCommand;
 import com.renaser.os.habits.domain.model.guia.AdjuntoGuiaId;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -50,6 +52,7 @@ public class GuiaAdjuntoAdminController {
         this.confirmarUseCase = confirmarUseCase;
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @PostMapping("/{habitId}/guide-attachments")
     public ResponseEntity<HabitGuideAttachmentResponse> crear(@ActorAutenticado UserId actor,
                                                                 @PathVariable UUID habitId,
@@ -59,6 +62,7 @@ public class GuiaAdjuntoAdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(HabitGuideAttachmentResponse.from(adjunto));
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @PostMapping("/{habitId}/guide-attachments/upload-url")
     public UrlAdjuntoGuiaResponse urlDeSubida(@ActorAutenticado UserId actor,
                                                @PathVariable UUID habitId,
@@ -68,6 +72,7 @@ public class GuiaAdjuntoAdminController {
         return UrlAdjuntoGuiaResponse.from(url);
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @PostMapping("/{habitId}/guide-attachments/confirm")
     public ResponseEntity<HabitGuideAttachmentResponse> confirmar(@ActorAutenticado UserId actor,
                                                                     @PathVariable UUID habitId,
@@ -79,6 +84,7 @@ public class GuiaAdjuntoAdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(HabitGuideAttachmentResponse.from(adjunto));
     }
 
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @DeleteMapping("/guide-attachments/{attachmentId}")
     public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actor,
                                           @PathVariable UUID attachmentId) {

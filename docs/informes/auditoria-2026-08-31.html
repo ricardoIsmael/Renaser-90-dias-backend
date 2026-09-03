@@ -1,0 +1,664 @@
+<title>Estado de RenaserBack</title>
+<style>
+  :root {
+    --ground:        #F1F4F4;
+    --surface:       #FBFCFC;
+    --surface-sunk:  #E7ECEC;
+    --line:          #CFD8D8;
+    --line-soft:     #DFE6E6;
+    --text:          #1A2426;
+    --text-soft:     #55686B;
+    --text-faint:    #7C8D90;
+    --accent:        #1F6F63;
+    --accent-soft:   #DCEBE8;
+    --warn:          #A85E28;
+    --warn-soft:     #F6E9DE;
+    --crit:          #94262B;
+    --crit-soft:     #F6E2E3;
+    --ok:            #2E7D6B;
+    --shadow:        0 1px 2px rgba(26,36,38,.06), 0 8px 24px -12px rgba(26,36,38,.18);
+    --display: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+    --body: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:       #101719;
+      --surface:      #172023;
+      --surface-sunk: #0C1214;
+      --line:         #2C393C;
+      --line-soft:    #232E31;
+      --text:         #E4EBEB;
+      --text-soft:    #9DAFB1;
+      --text-faint:   #74878A;
+      --accent:       #4FB3A1;
+      --accent-soft:  #16302D;
+      --warn:         #D89A62;
+      --warn-soft:    #2E2318;
+      --crit:         #E0767B;
+      --crit-soft:    #301A1C;
+      --ok:           #58B79F;
+      --shadow:       0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:       #101719;
+    --surface:      #172023;
+    --surface-sunk: #0C1214;
+    --line:         #2C393C;
+    --line-soft:    #232E31;
+    --text:         #E4EBEB;
+    --text-soft:    #9DAFB1;
+    --text-faint:   #74878A;
+    --accent:       #4FB3A1;
+    --accent-soft:  #16302D;
+    --warn:         #D89A62;
+    --warn-soft:    #2E2318;
+    --crit:         #E0767B;
+    --crit-soft:    #301A1C;
+    --ok:           #58B79F;
+    --shadow:       0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
+  }
+
+  /* ── Navegación ─────────────────────────────────────────── */
+  nav {
+    position: sticky;
+    top: 0;
+    padding: 48px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border-right: 1px solid var(--line-soft);
+    margin-right: -32px;
+    padding-right: 24px;
+  }
+  nav .navlabel {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 12px;
+  }
+  nav a {
+    color: var(--text-soft);
+    text-decoration: none;
+    font-size: 13.5px;
+    padding: 5px 0 5px 12px;
+    border-left: 2px solid transparent;
+    transition: color .15s, border-color .15s;
+  }
+  nav a:hover, nav a:focus-visible { color: var(--accent); border-left-color: var(--accent); }
+  nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+  nav a.crit { color: var(--crit); font-weight: 600; }
+
+  main { padding: 48px 0 0; min-width: 0; }
+
+  /* ── Cabecera ───────────────────────────────────────────── */
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(34px, 5vw, 52px);
+    line-height: 1.08;
+    letter-spacing: -.015em;
+    margin: 14px 0 0;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--text-soft);
+    max-width: 62ch;
+    margin: 18px 0 0;
+  }
+  .meta {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-faint);
+    margin-top: 22px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line-soft);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+  }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 27px;
+    letter-spacing: -.01em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  section { margin-top: 60px; scroll-margin-top: 24px; }
+  .lede { color: var(--text-soft); max-width: 66ch; margin: 0 0 26px; }
+  p { max-width: 68ch; }
+
+  /* ── Marcador de veredicto ──────────────────────────────── */
+  .verdict {
+    margin-top: 40px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .verdict-top {
+    padding: 22px 26px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .verdict-top strong {
+    font-family: var(--display);
+    font-size: 21px;
+    font-weight: 400;
+  }
+  .scores {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+  .score {
+    padding: 20px 26px;
+    border-right: 1px solid var(--line-soft);
+  }
+  .score:last-child { border-right: 0; }
+  .score .n {
+    font-family: var(--display);
+    font-size: 30px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    display: block;
+  }
+  .score .k {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-top: 9px;
+    display: block;
+    line-height: 1.45;
+  }
+  .n.good { color: var(--ok); }
+  .n.bad  { color: var(--crit); }
+
+  /* ── Hallazgos ──────────────────────────────────────────── */
+  .finding {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-top: 2px solid var(--line);
+    border-radius: 3px;
+    padding: 22px 26px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+  .finding.critical { border-top-color: var(--crit); }
+  .finding.warning  { border-top-color: var(--warn); }
+  .finding.note     { border-top-color: var(--accent); }
+
+  .fhead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .fhead h3 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 19.5px;
+    margin: 0;
+    letter-spacing: -.005em;
+  }
+  .pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .pill.critical { background: var(--crit-soft); color: var(--crit); }
+  .pill.warning  { background: var(--warn-soft); color: var(--warn); }
+  .pill.note     { background: var(--accent-soft); color: var(--accent); }
+  .finding p { margin: 0 0 12px; }
+  .finding p:last-child { margin-bottom: 0; }
+  .rule-ref {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-faint);
+  }
+
+  pre {
+    background: var(--surface-sunk);
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.65;
+    margin: 0 0 14px;
+    color: var(--text);
+  }
+  code { font-family: var(--mono); font-size: .9em; }
+  p code, li code, td code {
+    background: var(--surface-sunk);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  th {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    font-weight: 400;
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: 0; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+  ul.plain { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 13px; }
+  ul.plain li { padding-left: 20px; position: relative; max-width: 68ch; }
+  ul.plain li::before {
+    content: "";
+    position: absolute;
+    left: 2px; top: .62em;
+    width: 6px; height: 6px;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+  }
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 16px; }
+  ol.steps li { counter-increment: s; padding-left: 42px; position: relative; max-width: 66ch; }
+  ol.steps li::before {
+    content: counter(s);
+    position: absolute; left: 0; top: -1px;
+    font-family: var(--mono); font-size: 12px;
+    width: 26px; height: 26px;
+    display: grid; place-items: center;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 50%;
+  }
+  strong { font-weight: 650; }
+  .quiet { color: var(--text-soft); }
+
+  footer {
+    margin-top: 72px;
+    padding-top: 22px;
+    border-top: 1px solid var(--line-soft);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-faint);
+    line-height: 1.75;
+  }
+
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; gap: 0; padding: 0 20px 72px; }
+    nav {
+      position: static;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 6px 16px;
+      border-right: 0;
+      border-bottom: 1px solid var(--line-soft);
+      margin-right: 0;
+      padding: 28px 0 18px;
+    }
+    nav .navlabel { width: 100%; margin-bottom: 4px; }
+    nav a { border-left: 0; padding: 2px 0; }
+    nav a:hover { border-left: 0; }
+    main { padding-top: 34px; }
+    .score { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+  }
+</style>
+
+<div class="shell">
+  <nav>
+    <span class="navlabel">Contenido</span>
+    <a href="#veredicto">Veredicto</a>
+    <a href="#auth" class="crit">Auth abierta</a>
+    <a href="#permisos">Permisos sin declarar</a>
+    <a href="#docs">Documentos que mienten</a>
+    <a href="#pii">El dump de producción</a>
+    <a href="#defectos">Defectos funcionales</a>
+    <a href="#bien">Lo que está bien</a>
+    <a href="#orden">Por dónde empezar</a>
+    <a href="#metodo">Cómo se midió</a>
+  </nav>
+
+  <main>
+    <header>
+      <span class="eyebrow">Auditoría interna · 31 agosto 2026</span>
+      <h1>Estado de RenaserBack</h1>
+      <p class="standfirst">
+        Los 14 módulos están construidos y las pruebas pasan. La disciplina de trabajo es
+        mejor que la de la mayoría de los proyectos de este tamaño. Y hay una sola cosa
+        abierta que, si el backend está desplegado, vuelve irrelevante a todo lo demás.
+      </p>
+      <div class="meta">
+        <span>Rama <code>feature/migracion-catalogo-y-audioterapia</code></span>
+        <span>Commit d8220fa</span>
+        <span>Auditado contra CLAUDE.MD §0</span>
+      </div>
+    </header>
+
+    <section id="veredicto">
+      <div class="verdict">
+        <div class="verdict-top">
+          <strong>Vas bien.</strong>
+          <span class="quiet">La excepción grande resultó no ser una emergencia: el backend está solo en local.</span>
+        </div>
+        <div class="scores">
+          <div class="score"><span class="n good">1672</span><span class="k">pruebas en verde<br>0 fallos</span></div>
+          <div class="score"><span class="n good">71</span><span class="k">archivos con pruebas<br>de autorización negativa</span></div>
+          <div class="score"><span class="n good">52</span><span class="k">entradas de bitácora<br>de errores</span></div>
+          <div class="score"><span class="n bad">0<span style="font-size:19px"> / 219</span></span><span class="k">endpoints que declaran<br>su permiso</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="auth">
+      <h2>1 · La autenticación está abierta de par en par</h2>
+      <p class="lede">Es el hallazgo que ordena todos los demás. Sin esto resuelto, ninguna otra medida de seguridad del backend tiene efecto.</p>
+
+      <div class="finding critical">
+        <div class="fhead">
+          <span class="pill critical">Crítico</span>
+          <h3>Cualquiera puede actuar como cualquier usuario</h3>
+        </div>
+        <p>La cadena de filtros deja pasar todo, y la identidad del actor sale de un encabezado que escribe el propio cliente:</p>
+<pre>// SecurityConfig.java:97
+.authorizeHttpRequests(auth -&gt; auth.anyRequest().permitAll());
+
+// ActorAutenticadoArgumentResolver.java:48
+String header = request.getHeader("X-Actor-Id");
+return UserId.of(header);</pre>
+        <p>
+          Mandando <code>X-Actor-Id: &lt;uuid-de-un-admin&gt;</code> se actúa como ese admin. En los 219 endpoints.
+          CSRF está deshabilitado. No hace falta ninguna credencial.
+        </p>
+        <p>
+          <strong>Ahora, la parte justa:</strong> esto está documentado y es deliberado. El javadoc del
+          resolver lo explica y dice que la fase 4 de <code>MODULO_AUTH.md</code> lo cierra. No es un
+          bug escondido ni una omisión.
+        </p>
+        <p>
+          <strong>La pregunta que decidía si esto era “plan” o “incidente”</strong> era si el backend
+          está desplegado en algún lugar alcanzable. <strong>Respondida el 31 de agosto por el dueño
+          del proyecto: no. Corre solo en local, en entorno de desarrollo</strong> — Postgres y Redis
+          en Docker, sin ningún entorno publicado.
+        </p>
+        <p>
+          Con eso, esto <strong>deja de ser un incidente y vuelve a ser lo que estaba planificado</strong>:
+          la fase 4 de <code>MODULO_AUTH.md</code>, pendiente a propósito mientras se termina el
+          backend. La decisión de terminar todo antes de tocar el frontend es coherente con dejarla
+          para el final.
+        </p>
+        <p>
+          Lo que sigue en pie, y conviene tenerlo escrito: <strong>esta es la única cosa del proyecto
+          que no puede sobrevivir al primer despliegue.</strong> El día que exista un entorno
+          alcanzable —aunque sea de pruebas, aunque sea con datos de mentira— cerrar auth pasa de
+          tarea planificada a bloqueante absoluto. Y el panel administrativo, que lista aprendices
+          con sus datos personales, no debería construirse contra una API que acepta un
+          <code>X-Actor-Id</code> inventado ni siquiera en local.
+        </p>
+      </div>
+    </section>
+
+    <section id="permisos">
+      <h2>2 · Ningún endpoint declara qué permiso necesita</h2>
+      <p class="lede">Tu §0.3 lo exige y tu §5.3.4 lo diseñó. No existe.</p>
+
+      <div class="finding warning">
+        <div class="fhead">
+          <span class="pill warning">Incumple §0.3</span>
+          <h3>0 de 219, y el test que debía impedirlo tampoco está</h3>
+        </div>
+        <div class="tablewrap" style="margin-bottom:16px">
+          <table>
+            <thead><tr><th>Qué</th><th class="num">Cuántos</th><th>Estado</th></tr></thead>
+            <tbody>
+              <tr><td>Controllers REST</td><td class="num">73</td><td class="quiet">—</td></tr>
+              <tr><td>Métodos con <code>@…Mapping</code></td><td class="num">219</td><td class="quiet">—</td></tr>
+              <tr><td>Con <code>@RequiresPermission</code></td><td class="num">0</td><td>La anotación no existe</td></tr>
+              <tr><td>Con <code>@PublicEndpoint</code></td><td class="num">0</td><td>La anotación no existe</td></tr>
+              <tr><td>Test de reflexión que lo exige</td><td class="num">0</td><td>Pendiente desde el 22 ago</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          La única aparición de <code>@RequiresPermission</code> en todo el repositorio es un comentario
+          en <code>AccountRequestController</code> diciendo que todavía no se usa.
+        </p>
+        <p>
+          <strong>No estás desprotegido por esto:</strong> la autorización sí ocurre, dentro de los casos
+          de uso, con guardas como <code>requireAdminGuard</code>. Lo que falta es que sea
+          <em>auditable de un vistazo</em> — que era exactamente el motivo por el que elegiste tres
+          funciones simples en vez de un motor de reglas.
+        </p>
+        <p class="rule-ref">
+          Consecuencia práctica: cerrar la fase 4 de auth obliga a revisar los 219 endpoints a mano,
+          uno por uno, sin una lista que el compilador pueda verificar.
+        </p>
+      </div>
+    </section>
+
+    <section id="docs">
+      <h2>3 · Los documentos se contradicen entre sí</h2>
+      <p class="lede">Tu §0.4 dice que son fuente de verdad y no pueden contradecirse. En un solo día de revisión aparecieron tres contradicciones, ninguna detectada por nadie.</p>
+
+      <div class="finding warning">
+        <div class="fhead">
+          <span class="pill warning">Incumple §0.4</span>
+          <h3>Tres desfases, cinco días sin que nadie los viera</h3>
+        </div>
+        <div class="tablewrap" style="margin-bottom:16px">
+          <table>
+            <thead><tr><th>Documento</th><th>Qué decía</th><th>Consecuencia</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>CLAUDE.MD</code></td>
+                <td>“Auth se queda en Supabase”, y describía un <code>SupabaseJwtAuthenticationFilter</code> inexistente</td>
+                <td>Contradecía a <code>MODULO_AUTH.md</code> desde el 26 ago. Y es el archivo que se carga en cada sesión de trabajo</td>
+              </tr>
+              <tr>
+                <td><code>CONTRATO_IDENTIDAD.md</code></td>
+                <td>El alta pública pedía <code>supabaseUserId</code> y omitía <code>verificationToken</code> y <code>contrasena</code></td>
+                <td>Quien siguiera el contrato recibía <strong>400</strong> en los tres campos</td>
+              </tr>
+              <tr>
+                <td><code>ER_BD_NUEVA.drawio</code></td>
+                <td>Le faltaban 2 tablas y 3 columnas de las migraciones V2, V3 y V8</td>
+                <td>Quien leyera el ER para programar auth creería que el login social no tiene dónde guardarse</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Los tres ya están corregidos. Pero el patrón importa más que los casos:
+          <strong>la regla existe y el mecanismo que la hace cumplir, no.</strong>
+          Un documento sin chequeo automático se desfasa siempre; la pregunta nunca es si pasa,
+          sino cuándo se nota.
+        </p>
+        <p>
+          Por eso el ER es hoy el único que ya no puede desfasarse en silencio:
+          <code>node docs/db/verificar-er-vs-sql.mjs</code> lo compara tabla por tabla y columna por
+          columna contra las migraciones, y sale con error si divergen. Falta el equivalente para el
+          contrato de API — que es el documento cuyo desfase le pega directo al frontend.
+        </p>
+      </div>
+
+      <div class="finding note">
+        <div class="fhead">
+          <span class="pill note">Sin resolver</span>
+          <h3>Un cuarto documento sigue desfasado, y no lo toqué</h3>
+        </div>
+        <p>
+          <code>docs/db/sql/BD_NUEVA_V1.sql</code> tiene 93 tablas: incluye
+          <code>perfiles_alquimista</code>, <code>perfiles_admin</code> y
+          <code>perfiles_lider_mentores</code>, que se eliminaron por decisión del 24 ago, y a su
+          <code>usuarios</code> le faltan <code>bio</code> y <code>departamento</code>.
+        </p>
+        <p>
+          Es coherente consigo mismo — es una foto del diseño <em>anterior</em> — pero se presenta
+          como el modelo objetivo y contradice a <code>V1</code> y al ER. No lo edité porque borrar
+          tres tablas de un documento de diseño es una decisión tuya, no mía.
+        </p>
+      </div>
+    </section>
+
+    <section id="pii">
+      <h2>4 · Tu propia regla del dump de producción</h2>
+
+      <div class="finding warning">
+        <div class="fhead">
+          <span class="pill warning">Incumple tu .gitignore</span>
+          <h3>8,7 MB de datos personales reales, tres días después de la fecha en que debían borrarse</h3>
+        </div>
+<pre>docs/db/migracion/datos_origen/dump_completo.sql    8 684 432 bytes    28 ago</pre>
+        <p>
+          Tu propio <code>.gitignore</code> dice, textual: <em>“NUNCA versionar: tiene usuarios,
+          mensajes, evidencias reales. Se borra o se guarda fuera del repo una vez que la migración
+          correspondiente ya está escrita y probada.”</em>
+        </p>
+        <p>
+          Las migraciones V4, V6 y V10 están escritas y probadas desde el 28 de agosto. El archivo
+          sigue ahí.
+        </p>
+        <p>
+          <strong>Verifiqué lo importante y la noticia es buena:</strong> nunca se commiteó, no está
+          en el historial de git. Es un archivo con datos personales en tu disco, no una fuga. Pero
+          la regla la escribiste vos y no se está cumpliendo.
+        </p>
+      </div>
+    </section>
+
+    <section id="defectos">
+      <h2>5 · Dos defectos funcionales</h2>
+      <p class="lede">No son de seguridad ni de proceso. Son cosas que, para un usuario real, simplemente no funcionan.</p>
+
+      <div class="finding critical">
+        <div class="fhead">
+          <span class="pill critical">Rompe al usuario</span>
+          <h3>Quien se registra por Google no puede volver a entrar por Google</h3>
+        </div>
+        <p>
+          <code>AccountRequestService.approve()</code> nunca guarda la <code>IdentidadExterna</code>,
+          así que el segundo intento de login social choca contra
+          <code>rejectIfEmailYaRegistrado</code>. La cuenta existe y no abre.
+        </p>
+        <p class="rule-ref">
+          Está registrado como A-7 en <code>MODULO_AUTH.md</code>, pero como pregunta abierta, no como
+          bloqueante. Para el aprendiz es una cuenta rota.
+        </p>
+      </div>
+
+      <div class="finding critical">
+        <div class="fhead">
+          <span class="pill critical">Rompe al usuario</span>
+          <h3>Los cambios de horario diferidos nunca llegan a aplicarse</h3>
+        </div>
+        <p>
+          Cuando el aprendiz cambia el horario de un hábito cuya ventana de hoy ya empezó, el sistema
+          responde <em>“programado para mañana”</em> y guarda una fila en
+          <code>cambios_horario_pendientes</code>. Mañana no pasa nada: la fila se queda ahí para siempre.
+        </p>
+        <p>
+          <code>LoadCambioHorarioPendientePort</code> existe y no lo inyecta ningún servicio. El método
+          de dominio <code>CambioHorarioPendiente.rigeEn(fecha)</code> está escrito y no lo llama nadie.
+          <code>TracksDelDiaProyeccionService</code>, que arma el día del aprendiz, lee
+          <code>horarios_habito</code> y <code>preferencias_horario</code> — y no los cambios pendientes.
+        </p>
+        <p class="rule-ref">
+          Encontrado el 31 ago al analizar el pedido del cliente sobre control de horarios. Se detalla
+          en el plan de horarios, porque es exactamente la funcionalidad que el cliente quiere ampliar.
+        </p>
+      </div>
+    </section>
+
+    <section id="bien">
+      <h2>Lo que está bien, y no es poco</h2>
+      <p class="lede">Una auditoría que solo lista problemas miente por omisión. Esto es lo que medí y salió sólido.</p>
+      <ul class="plain">
+        <li><strong>1672 pruebas en verde</strong>, <code>ArchitectureTest</code> incluido. Ningún módulo sin pruebas — el más chico, <code>evidence</code>, tiene 4 archivos de test para 35 clases; <code>habits</code> y <code>users</code> tienen 43 cada uno.</li>
+        <li><strong>La parte más difícil de tu §0.3 sí se cumple.</strong> 71 archivos de test verifican autorización negativa y hay 86 comprobaciones de estado <code>SUSPENDED</code>. Eso es trabajo real que casi nadie hace.</li>
+        <li><strong>52 entradas de bitácora de errores</strong>, con el mensaje literal, la causa real y cómo evitarlo. Es la práctica más valiosa del proyecto y la más rara de sostener.</li>
+        <li><strong>Las decisiones quedan registradas con su porqué</strong> — incluidas las que tomaste <em>contra</em> la recomendación técnica, marcadas como tales. Eso es lo que permitió corregir <code>CLAUDE.MD</code> sin tener que adivinar nada.</li>
+        <li><strong>La arquitectura hexagonal se respeta de verdad</strong>, no solo en el papel: el dominio no importa Spring ni JPA, y hay un test que rompe el build si alguien lo intenta.</li>
+      </ul>
+    </section>
+
+    <section id="orden">
+      <h2>Por dónde empezar</h2>
+      <p class="lede">Actualizado el 31 de agosto, ya con la respuesta de que no hay nada desplegado.</p>
+      <ol class="steps">
+        <li><strong>Los cambios de horario diferidos y su clave foránea.</strong> En curso. Es corrección de bajo riesgo y es exactamente la funcionalidad que el cliente pidió ampliar.</li>
+        <li><strong>La vertical por aprendiz del panel.</strong> En curso, en paralelo. Abre el primer endpoint que cruza perfil y hábitos personalizados.</li>
+        <li><strong>A-7: el login social roto.</strong> Es funcional y le pega a un usuario real: quien se registra por Google no puede volver a entrar. Se arregla guardando la <code>IdentidadExterna</code> en la misma transacción que aprueba la solicitud.</li>
+        <li><strong><code>@RequiresPermission</code> más el test de reflexión.</strong> Antes de cerrar auth, no después. Sin eso, la fase 4 se hace a ojo sobre 219 endpoints; con eso, el build te dice cuáles faltan.</li>
+        <li><strong>Cerrar auth (fase 4).</strong> Deja de ser opcional el día que exista cualquier entorno desplegado, incluido uno de pruebas.</li>
+        <li><strong>Borrar el dump de producción.</strong> Dos minutos.</li>
+      </ol>
+    </section>
+
+    <section id="metodo">
+      <h2>Cómo se midió</h2>
+      <p class="lede">Para que puedas reproducir o desmentir cualquier número de esta página.</p>
+<pre>./mvnw clean test                      # 1672 pruebas, 0 fallos, 0 errores
+grep -rhoE '@(Get|Post|Put|Patch|Delete)Mapping' src/main/java | wc -l    # 219
+grep -rhoE '@RequiresPermission' src/main/java | wc -l                    # 1 (un comentario)
+grep -rl "isForbidden\|NotAuthorizedException\|403" src/test/java | wc -l  # 71
+git check-ignore -v docs/db/migracion/datos_origen/dump_completo.sql
+git log --all -- docs/db/migracion/                # vacío: nunca commiteado
+node docs/db/verificar-er-vs-sql.mjs               # ER contra migraciones</pre>
+      <p>
+        Los hallazgos de auth salen de leer <code>SecurityConfig.java</code> y
+        <code>ActorAutenticadoArgumentResolver.java</code> completos. Los defectos funcionales, de
+        rastrear qué servicio inyecta cada puerto de salida.
+      </p>
+    </section>
+
+    <footer>
+      Auditoría sobre el commit d8220fa · rama feature/migracion-catalogo-y-audioterapia<br>
+      Contrastada contra las reglas de trabajo de CLAUDE.MD §0.1 a §0.6<br>
+      Los números son reproducibles con los comandos de la sección anterior
+    </footer>
+  </main>
+</div>

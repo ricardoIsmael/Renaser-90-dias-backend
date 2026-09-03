@@ -30,8 +30,8 @@ class HabitoCompletadoNotificationListenerTest {
     void traduceElEventoAUnaNotificacionDeLogroConLosPuntosOtorgados() {
         var listener = new HabitoCompletadoNotificationListener(emitirNotificacionUseCase);
         UserId participante = UserId.of(UUID.randomUUID());
-        var event = new HabitoCompletadoEvent(UUID.randomUUID(), participante, UUID.randomUUID(), 10,
-                Instant.now());
+        UUID registroId = UUID.randomUUID();
+        var event = new HabitoCompletadoEvent(registroId, participante, UUID.randomUUID(), 10, Instant.now());
 
         listener.on(event);
 
@@ -40,5 +40,7 @@ class HabitoCompletadoNotificationListenerTest {
         assertThat(captor.getValue().usuarioId()).isEqualTo(participante);
         assertThat(captor.getValue().tipo()).isEqualTo(TipoNotificacion.LOGRO_DESBLOQUEADO);
         assertThat(captor.getValue().cuerpo()).contains("10");
+        // C-7: registroId viaja como origenEventoId -- es la clave que deduplica una redelivery.
+        assertThat(captor.getValue().origenEventoId()).isEqualTo(registroId);
     }
 }

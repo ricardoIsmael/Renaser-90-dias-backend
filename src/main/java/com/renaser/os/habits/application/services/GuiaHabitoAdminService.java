@@ -14,11 +14,13 @@ import com.renaser.os.habits.application.ports.out.guia.LoadGuiaHabitoPort;
 import com.renaser.os.habits.application.ports.out.guia.SaveGuiaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.domain.model.guia.AdjuntoGuia;
+import com.renaser.os.habits.domain.model.guia.AdjuntoGuiaId;
 import com.renaser.os.habits.domain.model.guia.GuiaHabito;
 import com.renaser.os.habits.domain.model.guia.GuiaHabitoId;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,11 +55,12 @@ public class GuiaHabitoAdminService implements ConsultarGuiasDeHabitoUseCase, Up
     private final HabitoAdminGuard guard;
     private final AlmacenamientoPort almacenamientoPort;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public GuiaHabitoAdminService(LoadHabitoPort loadHabitoPort, LoadGuiaHabitoPort loadGuiaPort,
                                    SaveGuiaHabitoPort saveGuiaPort, LoadAdjuntoGuiaPort loadAdjuntoPort,
                                    SaveAdjuntoGuiaPort saveAdjuntoPort, HabitoAdminGuard guard,
-                                   AlmacenamientoPort almacenamientoPort, Clock clock) {
+                                   AlmacenamientoPort almacenamientoPort, Clock clock, IdGenerator idGenerator) {
         this.loadHabitoPort = loadHabitoPort;
         this.loadGuiaPort = loadGuiaPort;
         this.saveGuiaPort = saveGuiaPort;
@@ -66,6 +69,7 @@ public class GuiaHabitoAdminService implements ConsultarGuiasDeHabitoUseCase, Up
         this.guard = guard;
         this.almacenamientoPort = almacenamientoPort;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -94,8 +98,10 @@ public class GuiaHabitoAdminService implements ConsultarGuiasDeHabitoUseCase, Up
             cerrarGuiaAnteriorAbierta(command.habitoId(), command.diaInicio(), ahora);
         }
 
+        // Upsert: solo el camino de alta pide identidad nueva, la guia existente conserva la suya.
         GuiaHabito guia = porHabitoYDia(command.habitoId(), command.diaInicio())
-                .orElseGet(() -> GuiaHabito.crear(command.habitoId(), command.diaInicio(), ahora));
+                .orElseGet(() -> GuiaHabito.crear(GuiaHabitoId.of(idGenerator.newId()), command.habitoId(),
+                        command.diaInicio(), ahora));
         guia.actualizarContenidoCompleto(command.contenido(), ahora);
         guia.establecerDiaFin(command.diaFin(), ahora);
         GuiaHabito guardada = saveGuiaPort.save(guia);
@@ -119,8 +125,8 @@ public class GuiaHabitoAdminService implements ConsultarGuiasDeHabitoUseCase, Up
         requireHabito(command.habitoId());
         Instant ahora = clock.now();
         GuiaHabito guia = guiaParaAdjunto(command.habitoId(), command.diaInicio(), ahora);
-        AdjuntoGuia adjunto = AdjuntoGuia.deEnlace(guia.id(), command.seccion(), command.url(), command.titulo(),
-                siguienteOrden(guia.id()), ahora);
+        AdjuntoGuia adjunto = AdjuntoGuia.deEnlace(AdjuntoGuiaId.of(idGenerator.newId()), guia.id(),
+                command.seccion(), command.url(), command.titulo(), siguienteOrden(guia.id()), ahora);
         return saveAdjuntoPort.save(adjunto);
     }
 
@@ -149,9 +155,9 @@ public class GuiaHabitoAdminService implements ConsultarGuiasDeHabitoUseCase, Up
         requireHabito(command.habitoId());
         Instant ahora = clock.now();
         GuiaHabito guia = guiaParaAdjunto(command.habitoId(), command.diaInicio(), ahora);
-        AdjuntoGuia adjunto = AdjuntoGuia.deArchivo(guia.id(), command.seccion(), command.tipoMedio(), command.ruta(),
-                command.mime(), command.tamanoBytes(), command.nombreOriginal(), command.titulo(),
-                siguienteOrden(guia.id()), ahora);
+        AdjuntoGuia adjunto = AdjuntoGuia.deArchivo(AdjuntoGuiaId.of(idGenerator.newId()), guia.id(),
+                command.seccion(), command.tipoMedio(), command.ruta(), command.mime(), command.tamanoBytes(),
+                command.nombreOriginal(), command.titulo(), siguienteOrden(guia.id()), ahora);
         return saveAdjuntoPort.save(adjunto);
     }
 
@@ -159,7 +165,8 @@ public class GuiaHabitoAdminService implements ConsultarGuiasDeHabitoUseCase, Up
      * regla para adjuntos ENLACE y de archivo. */
     private GuiaHabito guiaParaAdjunto(HabitoId habitoId, int diaInicio, Instant ahora) {
         return porHabitoYDia(habitoId, diaInicio)
-                .orElseGet(() -> saveGuiaPort.save(GuiaHabito.crear(habitoId, diaInicio, ahora)));
+                .orElseGet(() -> saveGuiaPort.save(GuiaHabito.crear(GuiaHabitoId.of(idGenerator.newId()), habitoId,
+                        diaInicio, ahora)));
     }
 
     private int siguienteOrden(GuiaHabitoId guiaId) {

@@ -18,10 +18,13 @@ import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -30,6 +33,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -53,10 +57,14 @@ class ConfirmacionServiceTest {
     private ConsultarProgresoParticipanteCalendarPort progresoPort;
     @Mock
     private LoadNivelMembresiaPort nivelPort;
+    /** No necesita stubbing: TransactionTemplate.execute con getTransaction()==null solo
+     * corre el callback directo, mismo criterio que PromocionCambioHorarioServiceTest. */
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private ConfirmacionService service;
     private final UserId actorId = UserId.of(UUID.randomUUID());
-    private final EventoId eventoId = EventoId.newId();
+    private final EventoId eventoId = EventoId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
@@ -73,13 +81,13 @@ class ConfirmacionServiceTest {
                     }
                 }, (u, t) -> false);
         service = new ConfirmacionService(loadEventoPort, saveConfirmacionPort, saveRecordatorioPort,
-                accesoEventoService, CLOCK);
+                accesoEventoService, CLOCK, transactionManager);
     }
 
     private Evento eventoTodos(UserId creador) {
-        return Evento.crear("Sesion", null, INICIA_EN, 60, ZoneId.of("America/Lima"), TipoUbicacion.MEET,
-                "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO, false,
-                false, false, null, Set.of(), List.of(), creador, CLOCK);
+        return Evento.crear(eventoId, "Sesion", null, INICIA_EN, 60, ZoneId.of("America/Lima"),
+                TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null,
+                TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(), creador, CLOCK);
     }
 
     @Test
@@ -92,6 +100,21 @@ class ConfirmacionServiceTest {
 
         verify(saveConfirmacionPort).upsert(any());
         verify(saveRecordatorioPort).cancelarPorAsistencia(actorId, eventoId, INICIA_EN, RecordatorioEvento.MOTIVO_ASISTIRA);
+    }
+
+    @Test
+    @DisplayName("C-15: si cancelar los avisos falla, confirmar() no explota -- la confirmacion ya quedo guardada")
+    void confirmarNoPropagaUnFalloAlCancelarAvisos() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(
+                new ProgresoParticipanteCalendar(10, ZoneId.of("America/Lima"), RolUsuario.TRAINEE, false, null)));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoTodos(actorId)));
+        when(saveRecordatorioPort.cancelarPorAsistencia(any(), any(), any(), any()))
+                .thenThrow(new DataIntegrityViolationException("fallo simulado de C-15"));
+
+        assertThatCode(() -> service.confirmar(actorId, eventoId, INICIA_EN, EstadoConfirmacion.ASISTE))
+                .doesNotThrowAnyException();
+
+        verify(saveConfirmacionPort).upsert(any());
     }
 
     @Test
@@ -124,5 +147,40 @@ class ConfirmacionServiceTest {
 
         assertThatThrownBy(() -> service.confirmar(actorId, eventoId, INICIA_EN, EstadoConfirmacion.ASISTE))
                 .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("CLAUDE.MD §0.3: confirmar asistencia a un evento fuera de la audiencia del visor -> 403")
+    void eventoFueraDeLaAudienciaDelVisorNoSePuedeConfirmar() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(
+                new ProgresoParticipanteCalendar(10, ZoneId.of("America/Lima"), RolUsuario.TRAINEE, false, null)));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoSoloParaAdmins()));
+
+        assertThatThrownBy(() -> service.confirmar(actorId, eventoId, INICIA_EN, EstadoConfirmacion.ASISTE))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("CLAUDE.MD §0.3: un TRAINEE no elegible no confirma una MENTORIA_ALQUIMISTA -> 403")
+    void eventoQueExigeElegibilidadNoSePuedeConfirmarSinSerElegible() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(
+                new ProgresoParticipanteCalendar(10, ZoneId.of("America/Lima"), RolUsuario.TRAINEE, false, null)));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoMentoriaAlquimista()));
+
+        assertThatThrownBy(() -> service.confirmar(actorId, eventoId, INICIA_EN, EstadoConfirmacion.ASISTE))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    private Evento eventoSoloParaAdmins() {
+        return Evento.crear(eventoId, "Sesion", null, INICIA_EN, 60, ZoneId.of("America/Lima"),
+                TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.ROLES, null, null, null,
+                TipoEvento.ESPONTANEO, false, false, false, null, Set.of(RolUsuario.ADMIN), List.of(), actorId,
+                CLOCK);
+    }
+
+    private Evento eventoMentoriaAlquimista() {
+        return Evento.crear(eventoId, "Mentoria", null, INICIA_EN, 60, ZoneId.of("America/Lima"),
+                TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null,
+                TipoEvento.MENTORIA_ALQUIMISTA, false, false, false, null, Set.of(), List.of(), actorId, CLOCK);
     }
 }

@@ -29,6 +29,11 @@ class RocaDiariaPersistenceAdapter implements LoadRocaDiariaPort, SaveRocaDiaria
     }
 
     @Override
+    public Optional<RocaDiaria> byIdParaEscritura(RocaDiariaId id) {
+        return repository.findByIdParaEscritura(id.value()).map(mapper::toDomain);
+    }
+
+    @Override
     public List<RocaDiaria> deParticipanteYFecha(UserId participanteId, LocalDate fecha) {
         return repository.findByParticipanteIdAndFecha(participanteId.value(), fecha).stream()
                 .map(mapper::toDomain)

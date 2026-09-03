@@ -12,7 +12,9 @@ import com.renaser.os.rocks.application.ports.out.verdugo.VerificarDestinoVerdug
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
 import com.renaser.os.rocks.domain.model.verdugo.EventoVerdugo;
+import com.renaser.os.rocks.domain.model.verdugo.EventoVerdugoId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
@@ -36,17 +38,20 @@ public class VerdugoService implements RegistrarEventoVerdugoUseCase, ConsultarE
     private final LoadRocaDiariaPort loadRocaDiariaPort;
     private final VerificarDestinoVerdugoPort verificarDestinoPort;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public VerdugoService(LoadEventoVerdugoPort loadEventoVerdugoPort, SaveEventoVerdugoPort saveEventoVerdugoPort,
                            ConsultarProgresoParticipanteRocksPort progresoPort,
                            LoadRocaDiariaPort loadRocaDiariaPort,
-                           VerificarDestinoVerdugoPort verificarDestinoPort, Clock clock) {
+                           VerificarDestinoVerdugoPort verificarDestinoPort, Clock clock,
+                           IdGenerator idGenerator) {
         this.loadEventoVerdugoPort = loadEventoVerdugoPort;
         this.saveEventoVerdugoPort = saveEventoVerdugoPort;
         this.progresoPort = progresoPort;
         this.loadRocaDiariaPort = loadRocaDiariaPort;
         this.verificarDestinoPort = verificarDestinoPort;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -54,8 +59,10 @@ public class VerdugoService implements RegistrarEventoVerdugoUseCase, ConsultarE
     public EventoVerdugo registrar(RegistrarEventoVerdugoCommand command) {
         requireProgreso(command.actorId());
         requireDestinoPropio(command);
-        EventoVerdugo evento = EventoVerdugo.registrar(command.actorId(), command.destinoTipo(),
-                command.destinoId(), command.disparadoEn(), command.resultado(), clock);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
+        EventoVerdugo evento = EventoVerdugo.registrar(EventoVerdugoId.of(idGenerator.newId()),
+                command.actorId(), command.destinoTipo(), command.destinoId(), command.disparadoEn(),
+                command.resultado(), clock);
         return saveEventoVerdugoPort.save(evento);
     }
 

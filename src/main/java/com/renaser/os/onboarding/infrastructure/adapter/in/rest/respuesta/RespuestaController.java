@@ -4,8 +4,10 @@ import com.renaser.os.onboarding.application.ports.in.respuesta.GuardarRespuesta
 import com.renaser.os.onboarding.application.ports.in.respuesta.GuardarRespuestaUseCase.GuardarRespuestaCommand;
 import com.renaser.os.onboarding.application.ports.in.respuesta.ObtenerRespuestasUseCase;
 import com.renaser.os.onboarding.application.ports.in.respuesta.ObtenerRespuestasUseCase.ObtenerRespuestasQuery;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +31,7 @@ public class RespuestaController {
         this.obtenerRespuestasUseCase = obtenerRespuestasUseCase;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @PostMapping("/answers")
     public ResponseEntity<RespuestaResponse> guardar(@ActorAutenticado UserId actor,
                                                        @Valid @RequestBody GuardarRespuestaRequest request) {
@@ -40,6 +43,7 @@ public class RespuestaController {
     }
 
     /** Respuestas ya guardadas del actor para el flujo pedido, agrupadas por seccion (hidratar onboarding a medio terminar). */
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping("/answers")
     public RespuestasAgrupadasResponse obtener(@ActorAutenticado UserId actor,
                                                  @RequestParam("flow") String flow) {

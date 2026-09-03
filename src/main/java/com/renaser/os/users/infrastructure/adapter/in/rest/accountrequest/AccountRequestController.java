@@ -1,7 +1,10 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.accountrequest;
 
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.PublicEndpoint;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.accountrequest.ApproveAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.ApproveAccountRequestUseCase.ApproveAccountRequestCommand;
 import com.renaser.os.users.application.ports.in.accountrequest.CheckAccountRequestStatusUseCase;
@@ -33,11 +36,14 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 
 /**
- * PUBLIC_ENDPOINT: POST /account-requests (autoregistro, sin autenticar).
- * Los otros dos ({approve}, {reject}) requieren ADMIN/ALCHEMIST — hoy verificado
- * DENTRO del caso de uso (User.canManageRoles(), via AccountRequest.approve/reject),
- * NO todavia con @RequiresPermission + AccessGuard de CLAUDE.MD §0.bis: ese mecanismo
- * necesita el enum Permission, bloqueado por R-2 (que permisos tiene MENTOR_LEAD).
+ * Controller MIXTO: el alta y los pasos previos al alta son publicos ({@code submit},
+ * {@code checkEmail}, {@code exists}, {@code verifyEmail}, {@code consultarEstado}); la
+ * bandeja de solicitudes no ({@code listar}, {@code approve}, {@code reject},
+ * {@code eliminar} exigen APPROVE_ACCOUNT_REQUEST). Cada handler lo declara.
+ *
+ * <p>La autorizacion la sigue APLICANDO el caso de uso (User.canManageRoles(), via
+ * AccountRequest.approve/reject): {@code @RequiresPermission} declara, todavia no
+ * ejecuta — conectarlo a un filtro es la fase 4 de docs/MODULO_AUTH.md §9.
  *
  * Actor: {@code @ActorAutenticado UserId} lo resuelve desde la sesion propia (D-49,
  * docs/MODULO_AUTH.md), con respaldo por el header TEMPORAL {@code X-Actor-Id} mientras
@@ -79,6 +85,7 @@ public class AccountRequestController {
      * PUBLIC_ENDPOINT. ¿Se puede registrar con este correo? Lo consulta el formulario mientras
      * se escribe, para no descubrir al final que el correo ya existe.
      */
+    @PublicEndpoint("Paso del alta: se consulta el correo antes de que exista la cuenta. Protegido por rate limit por IP, no por autorizacion.")
     @PostMapping("/check-email")
     public DisponibilidadEmailResponse checkEmail(@RequestBody @Valid ConsultarEmailRequest request,
                                                    HttpServletRequest httpRequest) {
@@ -90,6 +97,7 @@ public class AccountRequestController {
      * PUBLIC_ENDPOINT. La pregunta inversa de {@link #checkEmail}, para "olvide mi contrasena".
      * Misma consulta, distinto nombre de la respuesta — ver {@link ExistenciaCuentaResponse}.
      */
+    @PublicEndpoint("Paso del alta: se consulta el correo antes de que exista la cuenta. Protegido por rate limit por IP, no por autorizacion.")
     @PostMapping("/exists")
     public ExistenciaCuentaResponse exists(@RequestBody @Valid ConsultarEmailRequest request,
                                             HttpServletRequest httpRequest) {
@@ -98,27 +106,31 @@ public class AccountRequestController {
     }
 
     /** PUBLIC_ENDPOINT. ¿El dominio del correo puede recibir correo? Aviso, nunca un bloqueo. */
+    @PublicEndpoint("Paso del alta: valida el dominio del correo antes de que exista la cuenta.")
     @PostMapping("/verify-email")
     public VerificacionDominioResponse verifyEmail(@RequestBody @Valid ConsultarEmailRequest request) {
         return VerificacionDominioResponse.from(verificarDominioEmailUseCase.verificar(request.email()));
     }
 
+    @PublicEndpoint("Es el alta: no puede exigir una cuenta que todavia no existe. El rol nunca llega desde el cliente, lo fuerza el caso de uso.")
     @PostMapping
     public ResponseEntity<AccountRequestIdResponse> submit(@RequestBody @Valid SubmitAccountRequestRequest request,
                                                              HttpServletRequest httpRequest) {
-        AccountRequestId id = submitUseCase.submit(new SubmitAccountRequestCommand(
+        AccountRequestId id = submitUseCase.submit(SubmitAccountRequestCommand.porFormulario(
                 request.email(), request.fullName(), request.phone(),
                 request.city(), request.verificationToken(), request.contrasena(),
                 httpRequest.getRemoteAddr()));
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(new AccountRequestIdResponse(id.value()));
     }
 
+    @RequiresPermission(Permission.APPROVE_ACCOUNT_REQUEST)
     @PostMapping("/{id}/approve")
     public ResponseEntity<Void> approve(@PathVariable UUID id, @ActorAutenticado UserId actor) {
         approveUseCase.approve(new ApproveAccountRequestCommand(AccountRequestId.of(id), actor));
         return ResponseEntity.noContent().build();
     }
 
+    @RequiresPermission(Permission.APPROVE_ACCOUNT_REQUEST)
     @PostMapping("/{id}/reject")
     public ResponseEntity<Void> reject(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                         @RequestBody @Valid RejectAccountRequestRequest request) {
@@ -128,6 +140,7 @@ public class AccountRequestController {
     }
 
     /** Panel admin (gap #9): ADMIN/ALCHEMIST — gate DENTRO del servicio (CLAUDE.MD §5.4.6). */
+    @RequiresPermission(Permission.APPROVE_ACCOUNT_REQUEST)
     @GetMapping
     public AccountRequestPageResponse listar(@ActorAutenticado UserId actor,
                                               @RequestParam(required = false) AccountRequestStatus status,
@@ -138,6 +151,7 @@ public class AccountRequestController {
     }
 
     /** Panel admin (gap #9): borrar una solicitud (cualquier estado, ver javadoc de {@link DeleteAccountRequestUseCase}). */
+    @RequiresPermission(Permission.APPROVE_ACCOUNT_REQUEST)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(@PathVariable UUID id, @ActorAutenticado UserId actor) {
         deleteUseCase.eliminar(new DeleteAccountRequestCommand(actor, AccountRequestId.of(id)));
@@ -149,6 +163,7 @@ public class AccountRequestController {
      * asi que no hay actor posible: se resuelve por el id que ya guardo del 202 de {@code submit}
      * (ver javadoc de {@link CheckAccountRequestStatusUseCase}).
      */
+    @PublicEndpoint("El solicitante consulta su propia solicitud antes de tener cuenta; la credencial es la posesion del UUID, que no es adivinable.")
     @GetMapping("/{id}/status")
     public AccountRequestStatusResponse consultarEstado(@PathVariable UUID id) {
         var vista = checkStatusUseCase.consultar(AccountRequestId.of(id));

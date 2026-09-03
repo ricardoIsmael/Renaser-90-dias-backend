@@ -2,6 +2,7 @@ package com.renaser.os.habits.application.ports.out.participante;
 
 import com.renaser.os.shared.domain.UserId;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -16,6 +17,12 @@ import java.util.Optional;
 public interface ConsultarProgresoParticipanteHabitsPort {
 
     Optional<ProgresoParticipanteHabits> deParticipante(UserId participanteId);
+
+    /**
+     * Padron para el barrido nocturno que genera los tracks del dia. En lote a proposito:
+     * llamar a {@link #deParticipante} en un bucle seria un N+1.
+     */
+    List<UserId> participantesInscritosActivos();
 
     /** diaPrograma/timezone: participantes_programa. rol/suspendido: usuarios. */
     record ProgresoParticipanteHabits(int diaPrograma, String timezone, RolParticipante rol, boolean suspendido) {

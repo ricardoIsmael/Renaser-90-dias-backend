@@ -38,16 +38,23 @@ public final class EventoVerdugo {
      * `POST /api/v1/enforcer-events` del repo viejo: el cliente siempre manda
      * el resultado, nunca queda pendiente). {@code IGNORADO} se rechaza —
      * es exclusivo del barrido nocturno.
+     *
+     * <p>El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code VerdugoService.registrar}). Asi la
+     * factoria es referencialmente transparente y un test puede fijar el id que espera, en
+     * vez de tener que caer a {@link #rehydrate} para lograrlo (CLAUDE.MD §5.4.7).
      */
-    public static EventoVerdugo registrar(UserId participanteId, DestinoVerdugo destinoTipo, UUID destinoId,
-                                           Instant disparadoEn, ResultadoVerdugo resultado, Clock clock) {
+    public static EventoVerdugo registrar(EventoVerdugoId id, UserId participanteId,
+                                           DestinoVerdugo destinoTipo, UUID destinoId, Instant disparadoEn,
+                                           ResultadoVerdugo resultado, Clock clock) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Objects.requireNonNull(destinoTipo, "destinoTipo es obligatorio");
         Objects.requireNonNull(destinoId, "destinoId es obligatorio");
         Objects.requireNonNull(disparadoEn, "disparadoEn es obligatorio");
         requireResultadoDeCliente(resultado);
         Instant ahora = clock.now();
-        return new EventoVerdugo(EventoVerdugoId.newId(), participanteId, destinoTipo, destinoId, disparadoEn,
+        return new EventoVerdugo(id, participanteId, destinoTipo, destinoId, disparadoEn,
                 resultado, ahora, ahora, ahora);
     }
 

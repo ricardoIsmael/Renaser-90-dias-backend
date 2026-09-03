@@ -19,15 +19,22 @@ class RocaSemanalTest {
         return RocaMaestraId.of(UUID.randomUUID());
     }
 
+    /** El id ya no lo sortea la factoria: entra por parametro (puerto IdGenerator). */
+    private static RocaSemanalId unId() {
+        return RocaSemanalId.of(UUID.randomUUID());
+    }
+
     private static List<AccionCritica> tresAcciones() {
         return List.of(new AccionCritica(1, "uno"), new AccionCritica(2, "dos"), new AccionCritica(3, "tres"));
     }
 
     @Test
     void planificarConTresAccionesCreaLaRocaAbiertaSinRevision() {
-        RocaSemanal roca = RocaSemanal.planificar(maestra(), 3, "Titulo", tresAcciones(), "obstaculo",
+        RocaSemanalId id = unId();
+        RocaSemanal roca = RocaSemanal.planificar(id, maestra(), 3, "Titulo", tresAcciones(), "obstaculo",
                 "contingencia", 7, CLOCK);
 
+        assertThat(roca.id()).isEqualTo(id);
         assertThat(roca.numeroSemana()).isEqualTo(3);
         assertThat(roca.acciones()).hasSize(3);
         assertThat(roca.autoevaluacionFin()).isNull();
@@ -38,7 +45,7 @@ class RocaSemanalTest {
     @Test
     void rechazaMenosDeTresAcciones() {
         List<AccionCritica> dos = List.of(new AccionCritica(1, "uno"), new AccionCritica(2, "dos"));
-        assertThatThrownBy(() -> RocaSemanal.planificar(maestra(), 1, "T", dos, null, null, null, CLOCK))
+        assertThatThrownBy(() -> RocaSemanal.planificar(unId(), maestra(), 1, "T", dos, null, null, null, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -46,21 +53,24 @@ class RocaSemanalTest {
     void rechazaOrdenesRepetidos() {
         List<AccionCritica> repetidas = List.of(new AccionCritica(1, "a"), new AccionCritica(1, "b"),
                 new AccionCritica(3, "c"));
-        assertThatThrownBy(() -> RocaSemanal.planificar(maestra(), 1, "T", repetidas, null, null, null, CLOCK))
+        assertThatThrownBy(() -> RocaSemanal.planificar(unId(), maestra(), 1, "T", repetidas, null, null, null, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void numeroSemanaFueraDeRangoEsInvalido() {
-        assertThatThrownBy(() -> RocaSemanal.planificar(maestra(), 14, "T", tresAcciones(), null, null, null, CLOCK))
+        assertThatThrownBy(() -> RocaSemanal.planificar(unId(), maestra(), 14, "T", tresAcciones(), null, null,
+                null, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> RocaSemanal.planificar(maestra(), 0, "T", tresAcciones(), null, null, null, CLOCK))
+        assertThatThrownBy(() -> RocaSemanal.planificar(unId(), maestra(), 0, "T", tresAcciones(), null, null,
+                null, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void actualizarPlanificacionSoloTocaLosCamposNoNulos() {
-        RocaSemanal roca = RocaSemanal.planificar(maestra(), 1, "Original", tresAcciones(), "obs", "cont", 5, CLOCK);
+        RocaSemanal roca = RocaSemanal.planificar(unId(), maestra(), 1, "Original", tresAcciones(), "obs",
+                "cont", 5, CLOCK);
 
         roca.actualizarPlanificacion("Nuevo titulo", null, null, null, null, CLOCK);
 
@@ -72,7 +82,7 @@ class RocaSemanalTest {
 
     @Test
     void registrarRevisionEsIdempotenteYSobreescribe() {
-        RocaSemanal roca = RocaSemanal.planificar(maestra(), 1, "T", tresAcciones(), null, null, null, CLOCK);
+        RocaSemanal roca = RocaSemanal.planificar(unId(), maestra(), 1, "T", tresAcciones(), null, null, null, CLOCK);
 
         roca.registrarRevision(8, "bloqueo original", "correccion original", CLOCK);
         roca.registrarRevision(9, "bloqueo nuevo", "correccion nueva", CLOCK);
@@ -84,7 +94,7 @@ class RocaSemanalTest {
 
     @Test
     void autoevaluacionFueraDeRangoEsInvalida() {
-        RocaSemanal roca = RocaSemanal.planificar(maestra(), 1, "T", tresAcciones(), null, null, null, CLOCK);
+        RocaSemanal roca = RocaSemanal.planificar(unId(), maestra(), 1, "T", tresAcciones(), null, null, null, CLOCK);
         assertThatThrownBy(() -> roca.registrarRevision(11, "b", "c", CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }

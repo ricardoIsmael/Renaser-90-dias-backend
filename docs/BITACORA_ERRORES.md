@@ -1012,3 +1012,778 @@ invalid accessor method in record ...ResultadoVerificacionDominio
 - **Solución:** cambiar el import en ambos archivos de `com.fasterxml.jackson.databind.JsonNode` a `tools.jackson.databind.JsonNode` (Jackson 3, ya en el classpath vía Spring Boot 4.1). La API de los métodos usados (`hasNonNull`, `get`, `has`, `isNull`, `asInt`, `asText`) es idéntica entre ambas versiones para este caso de uso, así que el cambio es solo de import.
 - **Cómo evitarlo:** en un proyecto que migró a Jackson 3 (Spring Boot 4.1+), **nunca usar `com.fasterxml.jackson.databind.*` a mano** en código nuevo, ni siquiera cuando compila — el IDE/autocompletado puede ofrecer la clase vieja porque ambas conviven en el `.m2`. Verificar el import cuando se declara un tipo de Jackson explícito (`JsonNode`, `ObjectMapper`, `ObjectNode`) es exactamente el tipo de detalle que un test unitario con mocks no agarra pero un `curl` real contra el endpoint sí — refuerza por qué probar endpoints en vivo, no solo con `MockMvc`/mocks, tiene valor real.
 - **Corregido el mismo día (2026-08-28):** cambiado el import a `tools.jackson.databind.JsonNode` en `HorarioHabitoAdminController.java` y `PartialUpdateScheduleRequest.java` — misma API (`get`/`has`/`hasNonNull`/`isNull`/`asInt`/`asText`, verificado con `javap` contra el jar 3.1.5 real antes de aplicar el cambio, no asumido). `./mvnw clean test`: 1665/1665 en verde. Reprobado en vivo contra el servidor corriendo: `POST /api/v1/admin/habits/schedules/{id}` con `{"endDay":96}` → `200` (antes 500), y con `{"endDay":null}` → `200` con `endDay:null` en la respuesta (el caso de "null explícito limpia el campo" que motivó usar `JsonNode` en primer lugar sigue funcionando igual).
+
+## E-50 — El ER de la BD nueva se desfasó en silencio: `V2`, `V3` y `V8` cambiaron el esquema y nadie tocó el `.drawio`
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `docs/db/ER_BD_NUEVA.drawio` contra `src/main/resources/db/migration/`
+- **Síntoma:** ninguno. **Ese es el problema**: no hay mensaje de error, no falla ningún test, `ArchitectureTest` pasa, el build está verde. El diagrama simplemente describe una base que ya no es la que está corriendo. Se detectó recién al compararlo a mano contra las migraciones.
+- **Causa real:** el `.drawio` se dibujó el 2026-08-24, cuando el esquema eran las 90 tablas de `V1`. Después entraron tres migraciones que lo cambiaron y ninguna actualizó el dibujo:
+  - `V2__spring_modulith_event_publication.sql` → tabla `event_publication` (outbox de Modulith)
+  - `V3__auth_credenciales_e_identidades.sql` → tabla `identidades_externas` + columnas `usuarios.hash_contrasena` y `usuarios.contrasena_actualizada_en`
+  - `V8__audioterapias_duracion_configurable.sql` → columna `audioterapias.duracion_dias`
+
+  Cuatro divergencias sobre 92 tablas y 125 FK; el resto del ER era exacto. El daño no es el porcentaje: es que quien lea el ER para programar auth va a creer que el login social no tiene dónde guardarse.
+- **Solución:** se agregaron al `.drawio` las dos tablas, las tres columnas y la FK `identidades_externas → usuarios`, y se escribió `docs/db/verificar-er-vs-sql.mjs`, que compara tabla por tabla y columna por columna el diagrama contra las migraciones y sale con código 1 si divergen:
+  ```
+  node docs/db/verificar-er-vs-sql.mjs
+  ```
+- **Cómo evitarlo:** **correr ese script al agregar una migración**, en el mismo cambio que la agrega. Un diagrama sin chequeo automático se desfasa siempre; la pregunta no es si pasa sino cuándo se nota.
+- **Dos trampas del script, por si hay que tocarlo:**
+  1. El cierre de un `CREATE TABLE` **no siempre es `);`** — `V1` usa `) WITH (fillfactor = 70);` en las tablas calientes. Un regex que exija `\n\);` fusiona esa tabla con la siguiente y reporta divergencias falsas en cascada (pasó: 88 tablas "con diferencias" que en realidad estaban bien).
+  2. El ER marca las PK compuestas como `PK,FK  columna: tipo`, no como `PK  columna`. Un regex que solo saque el prefijo `PK` deja `,FK` pegado y reporta como faltante toda columna de toda tabla asociativa (pasó: 32 falsos positivos).
+
+## E-51 — `cannot find symbol` tras renombrar un campo con Lombok: el getter generado no aparece en un `grep` del nombre del campo
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `AccountRequestPersistenceMapper.java`, durante el renombre `supabaseUserId` → `usuarioId` (D-53)
+- **Síntoma:**
+  ```
+  [ERROR] .../AccountRequestPersistenceMapper.java:[16,28] cannot find symbol
+  [INFO] BUILD FAILURE
+  ```
+  El mensaje **no dice qué símbolo** falta. Antes de esto, un `grep -rn "supabaseUserId" src/` daba cero resultados en código — el renombre parecía completo.
+- **Causa real:** el campo estaba en una entidad con `@Data` de Lombok, así que el accesor generado es **`getSupabaseUserId()`, con `S` mayúscula**. `grep "supabaseUserId"` no lo encuentra: Lombok capitaliza la primera letra al armar el getter, y ese nombre no aparece escrito en ningún lado del código fuente — solo en el bytecode generado y en las llamadas que lo usan.
+- **Solución:** `grep -rn "SupabaseUserId" src/` (con mayúscula) encontró la única llamada, `e.getSupabaseUserId()` en el mapper. Cambiada a `e.getUsuarioId()`. `./mvnw clean test`: 1672/1672.
+- **Cómo evitarlo:** al renombrar un campo de una clase con Lombok, buscar **las dos formas**: el nombre del campo y el nombre capitalizado que usan `get`/`set`/`with`. En una sola pasada:
+  ```bash
+  grep -rniE "supabaseUserId" src/        # -i cubre campo, getter y setter de una vez
+  ```
+  El `-i` es la diferencia entre creer que el renombre está completo y que lo esté. Aplica igual a `@Getter`, `@Data` y `@Builder`.
+
+## E-52 — Un cambio de 1 línea aparece como 623 en `git diff`: Python reescribió el archivo con CRLF
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `docs/MODULOS_A_AVANZAR.md`, al insertar la decisión D-53 con un script de Python
+- **Síntoma:** no hay mensaje de error. `git diff --stat` reporta:
+  ```
+  docs/MODULOS_A_AVANZAR.md | 623 +++++++++++----------
+  1 file changed, 312 insertions(+), 311 deletions(-)
+  ```
+  cuando el cambio real era **una sola línea agregada**. La pista para confirmarlo:
+  ```bash
+  git diff --stat -w --ignore-cr-at-eol docs/MODULOS_A_AVANZAR.md   # -> 1 insertion(+)
+  ```
+- **Causa real:** dos cosas que se combinan y por separado no molestan:
+  1. `io.open(p, 'w', encoding='utf-8')` en Windows usa `newline=None`, que traduce cada `\n` a `\r\n`. Un script que lee, modifica y reescribe **convierte todo el archivo a CRLF sin avisar**.
+  2. Este repo tiene `core.autocrlf=true`, que normalmente absorbe eso — pero **git clasifica este archivo como binario** (`git ls-files --eol` devuelve `w/-text`), y a un binario no le aplica la conversión. Resultado: git compara byte a byte y ve las 311 líneas distintas. Por eso el resto de los archivos editados el mismo día salieron con diffs proporcionales y solo este explotó. No hay bytes NUL: es la heurística de git, y da igual el motivo — lo que importa es que a un archivo `-text` la red de seguridad de `autocrlf` **no lo cubre**.
+- **Solución:** reescribir el archivo con los finales de línea que ya tenía:
+  ```python
+  s = io.open(p, encoding='utf-8', newline='').read()   # newline='' = no traducir al leer
+  io.open(p, 'w', encoding='utf-8', newline='').write(s)  # ni al escribir
+  ```
+- **Cómo evitarlo:** **usar siempre `newline=''` en las dos puntas** cuando un script de Python edita un archivo existente del repo. Y ante un `--stat` desproporcionado, antes de investigar el contenido, comparar:
+  ```bash
+  git diff --stat <archivo>
+  git diff --stat -w --ignore-cr-at-eol <archivo>
+  ```
+  Si el segundo es mucho menor, el problema son los finales de línea, no el contenido.
+
+## E-53 — Un cambio de horario "programado para mañana" que no se aplicaba nunca: se escribía la fila y nadie la leía jamás
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `habits` — `PreferenciaHorarioService.aplicarEdicion` (`src/main/java/com/renaser/os/habits/application/services/PreferenciaHorarioService.java`), tabla `cambios_horario_pendientes`
+- **Síntoma:** ningún error, ninguna excepción, ningún log — **ese es el problema**. `PATCH /api/v1/habit-preferences/{habitId}` con la ventana del día ya arrancada responde `200` con:
+  ```json
+  { "habitId": "...", "triggerTime": "07:00", "limitTime": "09:00",
+    "deferred": true, "deferredEffectiveDate": "2026-09-01", "scheduleEdits": {...} }
+  ```
+  y al llegar el 2026-09-01 el horario del aprendiz sigue siendo el viejo. La fila de
+  `cambios_horario_pendientes` queda ahí para siempre, sin que nada la mire.
+- **Causa real:** la rama diferida solo hacía `saveCambioPendientePort.save(pendiente)`. **No había ningún lector del otro lado**, y eso se puede verificar de tres formas independientes, todas negativas:
+  1. `LoadCambioHorarioPendientePort` no lo inyectaba **ningún** servicio — solo lo implementaba su propio adaptador.
+  2. `CambioHorarioPendiente.rigeEn(LocalDate)` existía en el dominio y no lo llamaba nadie.
+  3. `TracksDelDiaProyeccionService`, que arma el día del aprendiz, inyecta `LoadHorarioHabitoPort` y `LoadPreferenciaHorarioPort` — no los pendientes.
+  Un puerto de salida escrito y nunca leído es exactamente una feature a medio cablear que pasa todos los tests: los del servicio verificaban `verify(saveCambioPendientePort).save(any())`, que es cierto y no dice nada sobre si alguien lo consume después.
+- **Solución:** caso de uso `PromoverCambiosHorarioProgramadosUseCase` + `PromocionCambioHorarioService` + `PromoverCambiosHorarioScheduler` (`@Scheduled(cron = "0 40 4 * * *", zone = "UTC")`, antes del barrido de las 05:00). El puerto suma `queYaRigenEn(fecha)` (`fecha_efectiva <= fecha`). Por cada vencido: escribe `preferencias_horario`, registra en `historial_cambios_horario` y borra el pendiente — borrarlo en la misma transacción es lo que hace la operación idempotente. Ver `docs/MODULO_HABITS.md` §20.1/§20.2 (incluida la decisión de que el diferido cobra cupo el día que rige, no al pedirlo).
+- **Cómo evitarlo:** **un puerto de salida sin ningún inyector es un bug, no una pieza "lista para cuando se use".** Es una comprobación de un comando, barata y mecánica, que hay que hacer al cerrar cualquier feature con estado diferido:
+  ```bash
+  grep -rl "LoadXxxPort" src/main/java | grep -v "ports/out\|adapter/out"   # vacío = nadie lo consume
+  ```
+  Lo mismo para un método de dominio que nadie llama (`rigeEn`). Y a nivel de test: un `verify(save...)` prueba que se guardó, nunca que se aplicará — para un flujo diferido hace falta un test del **consumidor**, que en este caso simplemente no existía porque el consumidor tampoco.
+- **Verificado:** `./mvnw clean test` → 1697/1697 en verde tras el arreglo (2026-08-31).
+
+## E-54 — `violates foreign key constraint "cambios_horario_pendientes_participante_id_habito_id_fkey"`: la rama diferida no creaba la fila padre
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `habits` — misma rama diferida de E-53; FK declarada en `src/main/resources/db/migration/V1__baseline_renaser.sql:501`
+- **Síntoma:** el primer cambio diferido de un hábito que el aprendiz nunca editó explota en el INSERT (SQLState **23503**, Spring lo traduce a `DataIntegrityViolationException` → `409`):
+  ```
+  ERROR: insert or update on table "cambios_horario_pendientes" violates foreign key constraint
+  "cambios_horario_pendientes_participante_id_habito_id_fkey"
+    Detail: Key (participante_id, habito_id)=(dd2e2af5-..., 5c4dfec6-...) is not present in table "preferencias_horario".
+  ```
+- **Causa real:** `cambios_horario_pendientes` tiene
+  `FOREIGN KEY (participante_id, habito_id) REFERENCES preferencias_horario (participante_id, habito_id) ON DELETE CASCADE`.
+  La rama **inmediata** siempre crea/actualiza `preferencias_horario` primero, así que nunca choca; la **diferida** iba directo al pendiente. O sea: el bug solo aparece en la combinación "hábito nunca editado" + "ventana de hoy ya arrancada" — el camino menos frecuente, y el único sin prueba de integración.
+- **Solución:** `PreferenciaHorarioService.asegurarPreferenciaVigente` crea la fila padre antes de guardar el pendiente, **con los valores vigentes hoy** (preferencia propia si existe — entonces no hay nada que crear —; si no, las horas del `horarios_habito` que aplica hoy; si el catálogo no tiene ninguno aplicable, `NULL`, que en esa tabla significa "sin override"). Nunca con las horas pedidas: el día en curso no se toca. Test que lo fija contra Postgres real: `CambioHorarioPendientePersistenceAdapterTest.sinFilaEnPreferenciasHorarioLaFkRechazaElPendiente`.
+- **Cómo evitarlo:** **una FK compuesta hacia otra tabla de negocio (no un simple `id`) es una precondición del caso de uso, no un detalle del esquema** — quien inserta el hijo tiene que garantizar el padre, en el mismo caso de uso. Y la comprobación que lo habría encontrado el primer día es la que `CLAUDE.MD` §0.2 ya exige y acá faltaba: **prueba de integración con Testcontainers para todo adaptador de persistencia**. La única prueba del camino diferido usaba mocks, y un mock de `SaveCambioHorarioPendientePort` acepta cualquier cosa: por construcción no puede ver una FK. Regla práctica: al escribir un `@Entity` nuevo, `grep` de su tabla en el baseline SQL y leer sus `FOREIGN KEY` antes de escribir el caso de uso.
+
+## E-55 — Un recurso con PATCH y sin GET: el cliente podía escribir su configuración pero no leerla
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `habits` — `HabitPreferenceController` (`/api/v1/habit-preferences`)
+- **Síntoma:** no es un error de runtime — es un agujero funcional que ninguna prueba puede fallar porque no hay nada que probar. El recurso `habit-preferences` exponía **solo** `PATCH /{habitId}`. Un aprendiz no tenía forma de consultar qué horario rige hoy en cada hábito, si le quedó algún cambio programado, ni cuánto cupo semanal le queda: solo podía mandar un cambio a ciegas y leer la respuesta de ese cambio puntual.
+- **Causa real:** el hueco #12 se portó guiado por la lista de rutas que el frontend **ya llamaba** (D-36), y el frontend viejo tampoco tenía esa pantalla. Portar por "lo que el cliente ya consume" es la estrategia correcta para no inventar contrato (CLAUDE.MD §8), pero deja ciegos los huecos que el cliente viejo también tenía. El síntoma agravante fue E-53: el único dato que el aprendiz recibía sobre un cambio programado (`deferredEffectiveDate`) venía de la respuesta del propio PATCH, y esa respuesta era mentira — sin GET, nada permitía notarlo desde la app.
+- **Solución:** `GET /api/v1/habit-preferences` (aditivo, no toca el PATCH) — `ConsultarPreferenciasHorarioUseCase`/`ConsultaPreferenciasHorarioService`. Devuelve por hábito activo el horario vigente, el cambio programado con su fecha efectiva y la cuota, reutilizando el mismo DTO de cuota del PATCH. Ver `docs/MODULO_HABITS.md` §20.4 y `docs/api/CONTRATO_DIA_A_DIA.md` §1.7.
+- **Cómo evitarlo:** al cerrar un recurso REST, chequear la simetría: **si hay un verbo de escritura sobre un recurso, tiene que haber forma de leer ese mismo estado.** Un `PATCH` sin `GET` deja al cliente sin manera de mostrar el estado actual ni de verificar que su escritura tuvo efecto — que es justamente lo que hizo invisible a E-53 durante toda su vida. Chequeo de un comando sobre el módulo terminado:
+  ```bash
+  grep -rhoE "@(Get|Post|Put|Patch|Delete)Mapping" src/main/java/com/renaser/os/<modulo> | sort | uniq -c
+  ```
+  Un recurso que aparece solo con verbos de escritura es la señal.
+
+## E-56 — Quien se registraba con Google no podía volver a entrar nunca: "Ya existe una cuenta, iniciá sesión con tu método actual"
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `users` — `AutenticacionSocialService`, `AccountRequestService.approve()`, tabla `solicitudes_cuenta`. Registrado como A-7 en `docs/MODULO_AUTH.md` §6.7/§6.8
+- **Síntoma:** el primer "Continuar con Google" funcionaba (abría la solicitud), un ADMIN la aprobaba, y **el segundo** "Continuar con Google" de la misma persona devolvía `409`:
+  ```json
+  { "error": "Ya existe una cuenta con ese correo. Iniciá sesión con tu método actual." }
+  ```
+  El mensaje es una trampa perfecta: esa persona **no tiene** un "método actual". El alta social deja `usuarios.hash_contrasena` en NULL a propósito, así que no hay contraseña que usar y "olvidé mi contraseña" tampoco lleva a ningún lado. La cuenta quedaba aprobada, activa y completamente inaccesible.
+- **Causa real:** el `sub` del proveedor se verificaba al iniciar el alta y **se perdía ahí mismo**, porque no había dónde guardarlo. El vínculo real vive en `identidades_externas`, y la FK de esa tabla exige que la fila de `usuarios` esté creada — cosa que solo pasa al aprobar, un día después. O sea: el dato existía en el único momento en que no se podía escribir, y ya no existía en el momento en que sí. Al no haber vínculo, el segundo login no encontraba `(proveedor, sujeto)`, caía al camino de alta, chocaba con el `User` ya existente y respondía el 409 de arriba.
+  **El agravante que lo hizo invisible:** los cuatro desenlaces posibles del login social colapsaban en el mismo 409 genérico, así que "todavía no te aprobaron", "ya existe una cuenta con ese correo" y "este bug" le llegaban a la app indistinguibles. No había forma de notar desde el cliente que uno de los tres era un defecto.
+- **Solución:** tres piezas, ninguna opcional (ver `docs/MODULO_AUTH.md` §6.8):
+  1. Migración `V12`: `solicitudes_cuenta` gana `proveedor`/`sujeto_proveedor` (nullable, con `CHECK` de que viajan juntos y `UNIQUE` parcial). La solicitud es el único registro que existe durante la espera entre el alta y la aprobación — es el lugar donde el `sub` puede sobrevivir.
+  2. `AccountRequestService.approve()` escribe la `IdentidadExterna` en la **misma transacción** que activa al usuario: si el vínculo falla, la aprobación se deshace entera.
+  3. `ResultadoLoginSocial` pasó de dos variantes a cuatro (`SesionIniciada`, `SolicitudCreada`, `SolicitudEnRevision`, `CuentaExistenteSinVinculo`), para que los estados normales del flujo dejen de disfrazarse de error.
+- **Cómo evitarlo:** dos reglas concretas, las dos verificables.
+  1. **Un dato que se verifica en el paso A y se usa en el paso B tiene que estar persistido en algún lado entre A y B.** Acá A y B estaban separados por la aprobación manual de un admin — potencialmente días. Cuando un flujo tiene una espera humana en el medio, todo lo que el paso posterior necesite hay que preguntarse dónde vive mientras tanto; si la respuesta es "en la request que ya terminó", falta una columna.
+  2. **Una prueba que arranca del estado que el bug impedía alcanzar no prueba nada.** La que existía (`identidadYaVinculadaDevuelveSesionIniciadaConElUsuarioCorrespondiente`) partía de un `LoadIdentidadExternaPort` mockeado que ya devolvía el vínculo — o sea daba por cierto exactamente lo que fallaba, y pasaba en verde con el defecto vivo. El reemplazo es `LoginSocialCicloCompletoIntegrationTest`, que recorre el ciclo entero (alta → aprobación → segundo login) contra Postgres real. Regla: **para un flujo con estado que cruza varias operaciones, la prueba tiene que recorrerlo entero desde cero**; mockear el estado intermedio es asumir la conclusión.
+  3. Corolario de mocks, el mismo de E-54: un mock no tiene FK, no tiene `UNIQUE` y no pierde columnas. Todo defecto cuya causa sea "ese dato no está en la base" es invisible para una prueba unitaria, por construcción.
+- **Verificado:** `./mvnw clean test` en verde con `LoginSocialCicloCompletoIntegrationTest` incluido (2026-08-31).
+
+## E-57 — El avatar se rompía solo a los 7 días: se persistía una URL prefirmada, que vence
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `users` — `AvatarService.confirmar()`, columna `usuarios.avatar_url`. Propagado a `testimonios.avatar_url` por `TestimonioService.promover`
+- **Síntoma:** no hay mensaje de error. La foto de perfil simplemente deja de cargar —a los 7 días exactos del último cambio de avatar— y no vuelve nunca. No solo en el perfil: el mismo string sale en el muro, los comentarios, el chat, los miembros de célula, los testimonios y el panel admin, porque todos lo reciben dentro de `users.api.UserSummary`. Con el adaptador por defecto (`NoOpAlmacenamientoAdapter`) tampoco se nota, porque devuelve `about:blank#pendiente-s3/...` para todo. O sea: **estaba escrito para romperse el día que se activara S3, una semana después de que alguien subiera una foto, sin ningún error en el log.**
+- **Causa real:** la confirmación firmaba una URL de LECTURA y la guardaba como texto:
+  ```java
+  private static final Duration VALIDEZ_URL_LECTURA = Duration.ofDays(7);
+  ...
+  URI url = almacenamientoPort.firmarLectura(command.ruta(), VALIDEZ_URL_LECTURA);
+  actor.changeAvatar(url.toString());   // se persiste la URL PREFIRMADA
+  ```
+  Una URL prefirmada de S3 **es una credencial con fecha de vencimiento**: lleva `X-Amz-Expires` y `X-Amz-Signature` en la query string y deja de servir cuando caduca. Persistirla convierte un dato con vida útil en un dato permanente, y no hay nadie del otro lado que la renueve — el único punto que firmaba era la confirmación, que solo corre cuando el usuario cambia la foto. Los 7 días eran, además, el máximo que SigV4 permite: el código ya había estirado la validez todo lo posible, que es la señal de que el diseño estaba peleando contra la herramienta.
+  **El esquema ya declaraba la regla que este caso violaba.** En `V1__baseline_renaser.sql` el resto de las tablas dicen textualmente `-- P-03: la URL se firma al LEER, jamás se persiste`, `-- JAMÁS una URL (regla de oro heredada)`, `-- P-03: ruta, no URL`. `usuarios.avatar_url` era la única excepción, y estaba documentada como "limitación conocida" en vez de tratada como defecto (D-53 original).
+- **Solución (D-55, decidida por el dueño del proyecto):** el objeto del avatar pasa a ser de **lectura pública** y la columna guarda su **URL permanente** — ahora el nombre `avatar_url` dice la verdad.
+  1. `AlmacenamientoPort` gana `urlPublica(ruta)`: URL del objeto sin firmar. En `S3AlmacenamientoAdapter` la compone `S3Utilities` a partir del bucket y la región; en el `NoOp`, el mismo marcador que sus otros métodos.
+  2. `AvatarService.confirmar()` guarda `urlPublica(...)`. `VALIDEZ_URL_LECTURA` y los 7 días desaparecen. La **subida** no cambia: sigue prefirmada a 10 minutos — escribir en el bucket nunca es público.
+  3. `User.changeAvatar` **rechaza** un valor que lleve marcas de SigV4 (`X-Amz-Signature`/`X-Amz-Credential`/`X-Amz-Expires`), y `V13` agrega el `CHECK` equivalente en `usuarios` y en `testimonios`.
+  4. `V13` repara los datos: corta la query string de las filas prefirmadas (`split_part(avatar_url, '?', 1)` — exacto, no heurístico: en SigV4 todo lo que caduca vive después del `?`) y pone `NULL` en las que quedaron con el marcador `about:blank` del NoOp.
+- **La alternativa que se descartó, y por qué:** firmar al leer (una URL nueva en cada respuesta) también arregla el vencimiento, y es lo correcto para evidencia, contratos, adjuntos y audios. Para el avatar no: la URL cambiaría en cada respuesta y eso **invalida el caché de imagen del cliente** — un muro con 20 avatares volvería a descargar las 20 fotos en cada pantallazo. El avatar es el activo de menor sensibilidad y el que más se repite por respuesta; es el patrón de GitHub/Slack. El dueño del proyecto aceptó explícitamente que la ruta sea adivinable.
+- **Requisito de infraestructura, que NO vive en el código:** el bucket tiene que permitir `s3:GetObject` anónimo sobre el prefijo `avatares/*`. S3 bloquea el acceso público por defecto (*Block Public Access*), así que **sin ese cambio de política la URL es correcta y devuelve 403**. Está escrito junto a los permisos IAM mínimos en `docs/MODULOS_A_AVANZAR.md` D-55 y en `docs/MODULO_USERS.md` §10.
+- **Cómo evitarlo:** tres reglas, todas verificables.
+  1. **Una URL prefirmada es una credencial, no un dato. Nunca se persiste.** Si aparece en un `INSERT`/`UPDATE`, es un bug. Lo que se guarda es la ruta (y se firma al leer) o una URL permanente (y el objeto es público) — no hay tercera opción. Chequeo de un comando sobre cualquier módulo:
+     ```bash
+     grep -rn "firmarLectura" src/main/java | grep -iE "change|set|save|persist|crear|actualizar"
+     ```
+  2. **Estirar una validez hasta el máximo que permite la herramienta es una señal de diseño equivocado, no una solución.** Los 7 días eran el techo de SigV4; el código estaba pidiendo a gritos que el problema no era la duración.
+  3. **Un defecto que tarda N días en manifestarse no lo encuentra ninguna prueba que corra en un segundo.** La prueba vieja (`confirmarPersisteLaUrlResuelta`) verificaba que se guardaba lo que devolvía `firmarLectura` — o sea, afirmaba el bug y pasaba en verde. La prueba correcta no mira el valor, mira la **propiedad**: que lo guardado no tenga query string de firma, y que dos lecturas del mismo avatar den exactamente la misma URL. Regla general: **cuando un valor tiene vida útil, la prueba tiene que ser sobre su permanencia, no sobre su contenido.**
+- **Efecto colateral que también se limpió:** `testimonios.avatar_url` copia el avatar del autor al promover una publicación. El snapshot es intencional (un testimonio es una foto de un momento), pero mientras `usuarios.avatar_url` guardó una prefirmada, esa copia heredaba el vencimiento. `V13` la repara con la misma regla.
+- **Verificado:** `./mvnw clean test` → **1747/1747 en verde** (2026-08-31), con `V13` aplicada por Flyway contra el Postgres real de Testcontainers — los `CHECK` nuevos y los `UPDATE` de reparación corren de verdad en cada build, no solo en el despliegue. Pruebas que fijan el arreglo: `AvatarServiceTest.confirmarPersisteUnaUrlPermanente` (lo guardado no tiene query string de firma y nunca se llama a `firmarLectura`), `AvatarServiceTest.dosLecturasDelMismoAvatarDevuelvenLaMismaUrl` (la URL es estable — es la que mata el defecto), `UserTest.changeAvatarRechazaUnaUrlPrefirmada` y `S3AlmacenamientoAdapterTest.laUrlPublicaEsPermanenteYNoLlevaFirma`.
+- **Barrido del resto del sistema:** se revisaron los **9 servicios** que llaman a `firmarLectura` (`academy`, `calendar`, `community` ×2, `habits`, `phasecontracts`, `support`, `users`). Todos los demás firman dentro de un método de proyección (`aVista`/`conUrlLectura`/mapeo a DTO) y devuelven la URL en la respuesta sin guardarla: `users` era el único que persistía. `testimonios.avatar_url` no es un segundo sitio de código con el mismo error — copia lo que hubiera en `usuarios.avatar_url`, así que heredaba el defecto por datos y se repara en la misma migración. Comando del barrido:
+  ```bash
+  grep -rn "firmarLectura" src/main/java | grep -v "ports/out\|infrastructure/storage"
+  ```
+
+## E-58 — Un parámetro de controller que se recibe y no se usa: `latest-author` filtraba el nombre completo del último autor del Muro a cualquiera
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `WallController.latestAuthor` (`src/main/java/com/renaser/os/community/infrastructure/adapter/in/rest/publicacion/WallController.java:131`) y `PublicacionMuroService.ultimoAutor()` (`src/main/java/com/renaser/os/community/application/services/PublicacionMuroService.java`). Encontrado leyendo el archivo completo para medir la cobertura de autorización negativa del módulo, no por un test en rojo ni por un `curl`.
+- **Síntoma:** `GET /api/v1/wall/latest-author` responde `200 {"authorName":"Nombre Apellido"}` para **cualquier** actor, incluido uno `SUSPENDED` — mientras que `GET /api/v1/wall` (el feed, mismo controller, mismo servicio) devuelve 403 al mismo actor. No hay excepción, no hay log, no hay nada raro: el endpoint simplemente contesta.
+- **Causa real:** el handler declaraba `@ActorAutenticado UserId actorId` **y no lo pasaba a ningún lado**; el caso de uso, `ConsultarFeedUseCase.ultimoAutor()`, ni siquiera tenía un parámetro donde recibirlo. El parámetro del controller daba la apariencia de un endpoint autenticado (y por eso ninguna revisión lo marcó: firma idéntica a la de sus hermanos `feed`/`hidden`/`mine`), pero el guard vive en el servicio, y ahí no había nada. El método de al lado, `solicitarUrl()`, sí llama a `requireActorPuedePublicar` — la asimetría estaba a diez líneas de distancia.
+- **Solución:** `ultimoAutor()` → `ultimoAutor(UserId actorId)`, con `requireActorActivo(actorId)` como primera línea (el guard de `feed()`, porque es una lectura del Muro, no una publicación). El controller pasa el actor que ya tenía. Se agregó la prueba negativa dentro del servicio (`ultimoAutorConActorSuspendidoFalla`, que además verifica con `verify(loadPublicacionPort, never()).ultimaVisible()` que ni siquiera se consulta la base). En la misma pasada se encontró y corrigió el mismo hueco en `contarMisPublicaciones()` (`GET /api/v1/wall/mine`), aplicando la lección 2 de **E-42**: cuando a un método le falta un guard que sus hermanos sí tienen, se revisan **todos** los métodos de la clase, no solo el reportado.
+- **Cómo evitarlo:** **un parámetro de handler que se recibe y no se usa es un hallazgo de seguridad, no un warning de estilo.** Es el único síntoma visible cuando el guard vive una capa más adentro: la firma del controller miente sobre la protección real del endpoint. Dos formas concretas de agarrarlo antes: (1) activar/leer el aviso de "parámetro no usado" del IDE sobre los handlers REST — en un controller tonto (CLAUDE.MD §5.4.6) **todo** parámetro tiene que terminar dentro del comando del caso de uso; (2) al medir cobertura de autorización, listar los métodos del **servicio** y no los endpoints del controller — la firma del controller no dice nada sobre si hay guard, y este endpoint aparecía como "protegido" en cualquier conteo hecho desde el controller. Relacionado con **E-42** (mismo módulo, misma clase de falla: métodos hermanos sin el guard que sus vecinos sí tienen) y con **E-30** (fallar-cerrado es lo que evita que un chequeo ausente pase por chequeo presente).
+
+## E-59 — 535 `NoClassDefFoundError` en tests que estaban bien: dos `mvnw` corriendo a la vez sobre el mismo `target/`
+
+- **Fecha:** 2026-08-31
+- **Dónde:** `./mvnw clean test` en `renaser-backend`, con otra sesión compilando el mismo directorio
+- **Síntoma:** el build falla con cientos de errores en tests que no se tocaron, todos sobre **clases anónimas**:
+  ```
+  [ERROR] RegistroPoliticasHabitoTest.resuelvePorClaveSistema:61->politica:35
+      NoClassDefFound com/renaser/os/habits/domain/model/politica/RegistroPoliticasHabitoTest$1
+  [ERROR] Tests run: 1834, Failures: 23, Errors: 535, Skipped: 0
+  [INFO] BUILD FAILURE
+  ```
+  El detalle que delata el caso: **el nombre de la clase que falta termina en `$1`, `$2`…** — son clases
+  anónimas, que se cargan **tarde**, recién cuando el test las ejecuta. Las clases normales ya estaban
+  cargadas en memoria y no fallan.
+- **Causa real:** dos procesos de Maven sobre el **mismo `target/`**. El segundo `clean` borra
+  `target/test-classes` mientras el surefire del primero todavía corre. Lo ya cargado en la JVM sigue
+  funcionando; lo que se carga de forma diferida (clases anónimas, lambdas) ya no encuentra su `.class` en
+  disco. **No hay ninguna regresión de código:** el mismo commit, corrido solo, dio **1886/1886** en verde.
+- **Solución:** esperar a que la otra compilación termine y repetir:
+  ```bash
+  tasklist | grep -ci java.exe      # 0 = no hay build corriendo
+  ./mvnw clean test
+  ```
+- **Cómo evitarlo:** **antes de correr `./mvnw clean test`, verificar que no haya otro build vivo** — es un
+  reflejo barato y evita media hora persiguiendo un fantasma. Para saber qué es cada `java.exe`:
+  ```powershell
+  Get-CimInstance Win32_Process -Filter "name='java.exe'" | Select ProcessId,CommandLine
+  ```
+  Un `surefirebooter-*.jar` en la línea de comandos = hay tests corriendo ahora mismo.
+  **Regla de lectura:** ante una avalancha de errores en tests que no se tocaron, y sobre todo si los nombres
+  llevan `$N`, la primera hipótesis es el entorno (build pisado, `target/` a medias), **no** el código. Un
+  cambio real rompe pocos tests y relacionados entre sí; un `target/` corrupto rompe cientos sin patrón.
+
+
+## E-61 — Un 409 sin salida: "inicia sesion con tu contrasena para vincular Google", y despues no existia ninguna forma de vincular Google
+
+- **Fecha:** 2026-09-01
+- **Donde:** `AutenticacionController#loginSocial` (`POST /api/v1/auth/social`), variante `ResultadoLoginSocial.CuentaExistenteSinVinculo`.
+- **Sintoma:** el correo del proveedor ya tenia cuenta pero esa identidad social no estaba vinculada, y el backend respondia:
+  ```
+  409 {"message":"Ya existe una cuenta con este correo y no esta vinculada a GOOGLE. Inicia sesion con tu contrasena para entrar."}
+  ```
+  El mensaje es correcto y la respuesta tambien. **El problema era lo que venia despues: nada.** La persona iniciaba sesion con su contrasena, entraba... y no habia ningun endpoint para conectar su Google. El 409 era un callejon sin salida permanente.
+- **Causa real:** no fue un descuido. §6.4 de `docs/MODULO_AUTH.md` prohibe —con razon— vincular por coincidencia de correo, y §6.7 (decision 2) dejo anotado, textual, que la confirmacion autenticada *"todavia no existe como funcionalidad, asi que hoy el camino correcto es rechazar"*. El rechazo se construyo; **la funcionalidad que le daba salida quedo pendiente y nadie la cerro**. Es la misma familia que **E-56** (quien se registraba con Google no podia volver a entrar): una regla de seguridad correcta que, sin su contrapartida, deja a la persona sin ninguna via.
+- **Solucion:** `POST /api/v1/auth/social/link` — vinculo **explicito** desde una sesion ya establecida (204 / 409 si la identidad ya es de otro usuario / 401 sin sesion). Ver `docs/MODULO_AUTH.md` §6.9 y la decision D-60. El mensaje del 409 ahora ademas dice a donde ir: *"Una vez adentro, podes vincular GOOGLE a tu cuenta desde tu perfil."*
+- **Como evitar que vuelva a pasar:** **cuando una regla de seguridad rechaza algo, la pregunta obligatoria de la revision es "¿y que hace la persona ahora?".** Si la respuesta es "todavia nada, queda pendiente", eso no es una nota al pie: es un **callejon sin salida en produccion** y va a la lista de bloqueantes, no al final de una seccion de diseño. Los dos casos de esta familia (E-56 y este) se detectaron leyendo el mensaje de error desde el lugar del usuario, no leyendo el codigo.
+
+## E-62 — Un CR suelto adentro de una linea: reescribir un .md con Python en modo texto parte la linea en dos
+
+- **Fecha:** 2026-09-01
+- **Donde:** `docs/MODULOS_A_AVANZAR.md`, filas D-53 y D-56 del registro de decisiones, al insertar la fila D-60 con un script de Python.
+- **Sintoma:** `git diff --stat` mostraba **7 lineas cambiadas** para una insercion de **1**. En el diff, dos filas de la tabla aparecian cortadas al medio:
+  ```
+  -| D-53 | ... la ruta `C:[CR]enaserPlayStore\src\lib\supabase.ts` sigue existiendo ...
+  +| D-53 | ... la ruta `C:
+  +enaserPlayStore\src\lib\supabase.ts` sigue existiendo ...
+  ```
+- **Causa real:** esas dos filas tenian un **CR suelto** (`0x0D`, sin `0x0A` detras) en el medio de la linea — un artefacto viejo de haber pegado una ruta de Windows. Al leer el archivo en modo texto (`io.open(p, encoding='utf-8')`), Python usa *universal newlines*: **traduce a salto de linea los tres finales posibles, incluido el CR solo**. Ese CR interno se volvio un salto real y partio la fila en dos; el `.split()` posterior ni se entera, para el ya eran dos lineas.
+- **Segundo sintoma, el mismo dia y el mismo archivo de bitacora:** reescribir `docs/BITACORA_ERRORES.md` en modo texto lo paso entero de LF a CRLF — `1298 insertions(+), 1231 deletions(-)` para agregar 20 lineas. Es **E-52** otra vez, en la misma sesion.
+- **Solucion:** `git checkout -- <archivo>` y rehacer la edicion **en modo binario**, sin decodificar ni tocar los finales de linea:
+  ```python
+  datos = open(p, 'rb').read()
+  i = datos.index(b'| D-59 |')
+  fin = datos.index(b'
+', i)                                  # primer LF real despues de la marca
+  salto = b'
+' if datos[fin-1:fin] == b'' else b'
+'
+  open(p, 'wb').write(datos[:fin+1] + fila_nueva + salto + datos[fin+1:])
+  ```
+  Resultado: `1 file changed, 1 insertion(+)`, que es lo que la tarea pedia.
+- **Reincidencia el mismo dia (2026-09-01), en la tarea D-61:** volvio a pasar exactamente igual, sobre los mismos `docs/MODULOS_A_AVANZAR.md` (las mismas filas D-53 y D-56 partidas en dos), `docs/MODULO_AUTH.md` y `docs/api/CONTRATO_IDENTIDAD.md`, los tres pasados enteros de LF a CRLF. **Lo que lo detecto fue el `git diff --stat` de esta misma entrada** (`70 insertions` para tres lineas cambiadas), y la reparacion no pudo ser `git checkout --` porque los archivos tenian cambios previos sin commitear: hubo que rehacerla en binario -- convertir CRLF a LF en todo el archivo y restaurar a mano los 2 CR sueltos (`C:` + CR + `enaserPlayStore`). **Moraleja reforzada: la regla no es "acordarse", es correr `git diff --numstat` despues de CADA script que toque un `.md`** -- si las deletions no son 0 cuando solo se inserto, esta pasando esto.
+- **Como evitarlo:** **para editar un archivo existente con un script, modo binario (`'rb'`/`'wb'`) siempre** — el modo texto de Python reescribe los finales de linea de TODO el archivo aunque se toque una sola linea, y ademas convierte los CR sueltos que hubiera adentro. Hermano directo de **E-52**. **La senal de alarma es la misma y cuesta un comando: `git diff --stat` despues de cada script.** Si el numero de lineas cambiadas no coincide con lo que se quiso cambiar, revertir y rehacer en binario — nunca seguir adelante ni "arreglar" el diff a mano. Para cambios chicos, la herramienta `Edit` no tiene este problema.
+
+## E-63 - El registro devolvia 400 para todo el mundo: el backend seguia exigiendo un telefono que el frontend ya no manda
+
+- **Fecha:** 2026-09-01
+- **Donde:** `POST /api/v1/account-requests` (alta por formulario) y `POST /api/v1/auth/social` (alta por Google), modulo `users`.
+- **Sintoma:** el alta publica respondia
+  ```
+  400 {"message":"phone: must not be blank"}
+  ```
+  para **cualquier** registro, porque el cliente ya habia dejado de enviar el campo (`phone: null`). El alta por Google fallaba antes incluso de eso, con:
+  ```
+  400 {"message":"Se requiere un telefono para completar el registro con este proveedor"}
+  ```
+- **Causa real:** el requisito estaba escrito en **cinco capas distintas**, y bajarlo en una sola no cambiaba nada: (1) `solicitudes_cuenta.telefono NOT NULL` en Postgres desde el baseline V1; (2) `@NotBlank` en `SubmitAccountRequestRequest`; (3) `@NotBlank` en `SubmitAccountRequestCommand`; (4) `requireNotBlank(phone, ...)` dentro del agregado `AccountRequest`; (5) `AutenticacionSocialService.requirePhoneParaAlta`. Es lo que la arquitectura busca a proposito -- validacion sintactica en el borde, semantica en el dominio, restriccion en la base -- pero implica que **un cambio de obligatoriedad se toca en cinco lugares o no se toca en ninguno**.
+- **El agravante que casi pasa desapercibido:** el punto (5) hacia que **ninguna cuenta nueva por login social pudiera registrarse**, porque Google/Apple/Facebook no devuelven telefono. Y como el `code` de OAuth es de un solo uso, el intento fallido lo consumia igual: reintentar exigia reiniciar el flujo del navegador. Estaba documentado en `docs/MODULO_AUTH.md` §6.7 punto 3 como "limitacion de diseño", no como defecto -- y por eso nadie lo trataba como urgente.
+- **Solucion:** decision del dueño del proyecto (D-61): el telefono se pide en la **Ficha Inicial del onboarding**, no en el alta. Se bajo la exigencia en las cinco capas, con la migracion `V14__solicitudes_cuenta_telefono_opcional.sql` para la base. El telefono se sigue guardando si viene; un valor en blanco se normaliza a NULL en el agregado.
+- **Como evitar que vuelva a pasar:** dos cosas concretas. **(a) Cuando un campo cambia de obligatorio a opcional (o al reves), la busqueda es por el nombre del campo en las cinco capas** -- migraciones, DTO web, comando de aplicacion, agregado y servicios que lo exijan a mano -- y no solo en la anotacion que salto en el error. La constraint de la base es la que no avisa hasta que el INSERT llega. **(b) Una limitacion de diseño que deja un flujo entero sin poder completarse no es una limitacion: es un defecto.** Misma familia que E-56 y E-61 -- una regla correcta que, sin su contrapartida, deja a la persona sin ninguna via. La pregunta de revision sigue siendo la misma: *"¿y que hace la persona ahora?"*.
+
+## E-64 — `@Autowired` de la clase concreta del adaptador empieza a fallar apenas se agrega el primer `@Cacheable` del proyecto
+
+- **Fecha:** 2026-09-01
+- **Donde:** `RankingPersistenceAdapterTest` (test de integracion existente), modulo `points`, al agregar cache Caffeine a `RankingPersistenceAdapter` (D-63).
+- **Sintoma:**
+  ```
+  UnsatisfiedDependencyException: ... Unsatisfied dependency expressed through field 'adapter':
+  Bean named 'rankingPersistenceAdapter' is expected to be of type
+  'com.renaser.os.points.infrastructure.adapter.out.persistence.ranking.RankingPersistenceAdapter'
+  but was actually of type 'jdk.proxy2.$Proxy118'
+  ```
+  en un test que hasta ese commit pasaba sin problema, sin haber tocado el test.
+- **Causa real:** `@EnableCaching` con `proxy-target-class` en su valor por defecto (`false`) envuelve cualquier bean que tenga **algun** metodo `@Cacheable`/`@CacheEvict` en un **proxy JDK dinamico**, que solo implementa las interfaces publicas del bean (`LoadRankingPort`, `SaveRankingSnapshotPort`, `LoadRankingCandidatosPort`), no la clase concreta. Antes de este cambio el proyecto no tenia ningun `@Cacheable` en todo el codebase, asi que **ningun bean estaba proxiado** y `@Autowired` de la clase concreta funcionaba por pura casualidad — el primer `@Cacheable` del repo fue el primero en exponer el problema.
+- **Solucion:** en los tests, autowirear por **interfaz** (el puerto), nunca por la clase del adaptador — que es ademas la forma correcta segun `CLAUDE.MD` §5.1.1 (los consumidores dependen del puerto, no de la implementacion). `RankingPersistenceAdapterTest` y `RankingPersistenceAdapterCacheTest` quedaron con `@Autowired LoadRankingPort`/`SaveRankingSnapshotPort`/`LoadRankingCandidatosPort` en vez de `@Autowired RankingPersistenceAdapter`.
+- **Como evitar que vuelva a pasar:** si un adaptador nuevo va a llevar `@Cacheable`/`@CacheEvict` (o cualquier otra anotacion que dispare un proxy AOP: `@Transactional` en un bean sin interfaz tiene el problema inverso), sus tests de integracion deben autowirear el puerto, no la clase — es ademas una señal de que el test estaba haciendo trampa contra la regla de hexagonal. Un test que SI necesita la clase concreta (para verificar algo que no esta en el puerto) es una señal de diseño a revisar, no un caso a resolver con `proxy-target-class=true`.
+
+## E-65 — `@JsonNaming` importado de Jackson 2 lo ignora Jackson 3 en silencio: 10 DTOs declaraban snake_case y mandaban camelCase
+
+- **Fecha:** 2026-09-01
+- **Dónde:** los 10 DTOs de `academy/infrastructure/adapter/in/rest/` (`CursoResponse`, `MiCursoResponse`, `LeccionResponse`, `ProgresoCursoResponse`, `SeccionConLeccionesResponse`, `LeccionLiteResponse`, `CursoBloqueadoResponse`, `RecursoLeccionResponse`, y dos más que solo lo mencionaban en javadoc).
+- **Síntoma:** la app mostraba *"No pudimos cargar los cursos. Revisá tu conexión e intentá de nuevo."* — un mensaje de red, con el backend respondiendo **200 y datos correctos**. `curl` al mismo endpoint devolvía los 25 cursos sin problema.
+- **Causa real:** los DTOs declaraban `@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)` con el import `com.fasterxml.jackson.databind.annotation.JsonNaming`, o sea **la anotación de Jackson 2**. **Spring Boot 4 serializa con Jackson 3**, que vive en `tools.jackson.*`:
+  ```
+  tools.jackson.core:jackson-databind:3.1.5            <- el que Spring Boot 4 usa de verdad
+  com.fasterxml.jackson.core:jackson-databind:2.21.5   <- de donde salia la anotacion
+  ```
+  Jackson 3 **no reconoce esa anotación y la ignora sin error ni warning**. Los DTOs declaraban un contrato y servían otro. Como el frontend se escribió leyendo las anotaciones del Java (que es lo correcto: son la fuente de verdad), los esquemas de validación quedaron en snake_case y **rechazaron todas las respuestas**.
+- **Por qué el mensaje engañaba:** el helper `mensajeDeError(error, porDefecto)` del frontend devuelve el texto por defecto para cualquier error que **no** sea un `ApiError`. Un fallo de validación de zod no es `ApiError`, así que salía el mensaje genérico de conexión — apuntando a la red cuando el problema era el contrato.
+- **Solución:** se quitaron las 10 anotaciones (no se corrigió el import) y se pasó el frontend a camelCase. **El cable no cambió**: nunca hicieron nada. Se eligió camelCase porque el resto de la API (`wall`, `chat`, `auth`) ya lo es — dejar `academy` en snake_case lo volvería la única excepción, y esas anotaciones venían de imitar el contrato viejo de Supabase, que ya se decidió no preservar. Cada archivo quedó con un comentario explicando el porqué, para que nadie las "restaure". `./mvnw test -Dtest='com.renaser.os.academy.**'`: **88/88 en verde**.
+- **Cómo evitarlo:** tres reglas.
+  1. **En Spring Boot 4, cualquier anotación de `com.fasterxml.jackson.databind.*` es sospechosa.** Jackson 3 movió `databind` a `tools.jackson.databind`. Las **anotaciones** de `com.fasterxml.jackson.annotation.*` (`@JsonProperty`, `@JsonUnwrapped`, `@JsonIgnore`) **sí siguen funcionando** — el artefacto `jackson-annotations` no cambió de paquete. Las de `databind` (`@JsonNaming`, `@JsonSerialize`, `@JsonDeserialize`) **no**. Chequeo de un comando:
+     ```bash
+     grep -rn "import com.fasterxml.jackson.databind" src/main/java --include=*.java
+     ```
+  2. **El contrato se verifica contra el cable, no contra el código.** Una anotación es una intención; lo único que prueba qué se manda es pedirlo:
+     ```bash
+     curl -s "$API/api/v1/cursos" -H "X-Auth-Token: $TOK" | python -c "import sys,json;print(list(json.load(sys.stdin)[0]))"
+     ```
+     Hacerlo **antes** de escribir el cliente cuesta treinta segundos y habría evitado todo esto.
+  3. **Un mensaje de error por defecto que dice "revisá tu conexión" oculta la causa.** Cuando el helper no reconoce el error, conviene que el texto sea neutro ("no pudimos cargar los cursos") y que el detalle real vaya al log, en vez de afirmar una causa que puede ser falsa. Relacionado con **E-60** y el error de Caffeine de hoy: los tres son fallas donde **el mensaje apuntaba a un lugar y la causa estaba en otro**.
+
+
+## E-66 — Lanzar `./mvnw test` sin esperar el resultado del propio chequeo de "¿hay otro build vivo?"
+
+- **Fecha:** 2026-09-01
+- **Dónde:** implementando D-65 (registro social en dos pasos), antes de correr la suite completa.
+- **Síntoma:** ninguno todavía — se evitó a tiempo, pero el riesgo era el mismo de **E-59** (dos `mvnw` sobre el mismo `target/`, `NoClassDefFoundError` masivo con clases `$1`/`$2`). Además se descubrió, por la vía difícil, que **hay otra sesión/agente trabajando en este mismo repo al mismo tiempo** (corriendo `mvn test -Dtest=com.renaser.os.academy.**` y editando este mismo archivo — su entrada quedó como **E-65**, con el mismo número que se había elegido acá independientemente).
+- **Causa real, y es distinta de E-59 aunque el riesgo final sea el mismo:** el chequeo recomendado por E-59 (`Get-CimInstance Win32_Process -Filter "name='java.exe'" | Select ProcessId,CommandLine`) es el correcto, pero es **lento en este entorno** — tardó más de 120 s y el propio tooling lo mandó a segundo plano. En vez de **esperar su resultado antes de seguir**, se lanzó `./mvnw -o test` igual, confiando en un chequeo previo más barato (`tasklist | grep -ci java.exe`, que solo cuenta procesos sin decir qué son). Cuando el chequeo lento por fin devolvió resultado, ya había **dos** `mvn test` corriendo a la vez sobre el mismo `target/`: uno preexistente y ajeno (arrancado antes de cualquiera de los chequeos propios) y el propio, recién lanzado.
+- **La lección concreta:** el conteo simple de `java.exe` **no sustituye** al chequeo por línea de comandos — puede devolver el mismo número "2 = normal" tanto si esos dos procesos son de verdad solo el IDE y la app, como si uno de ellos es en realidad un Maven ajeno que arrancó hace un minuto y todavía no generó su `surefirebooter`. Un chequeo que se manda a segundo plano por lento **hay que esperarlo y leer su resultado antes de lanzar el build** — lanzar "mientras tanto" el mismo tipo de comando que el chequeo está tratando de descartar anula el propósito del chequeo. **En un repo donde puede haber más de una sesión de trabajo activa, "no hay otro build vivo" nunca es un supuesto seguro — hay que verificarlo cada vez, no asumirlo de una corrida a la otra.**
+- **Qué se hizo al notarlo:** se intentó parar la tarea en segundo plano (para el wrapper de shell) y luego matar los procesos Java huérfanos que quedaron corriendo solos (`Stop-Process`/`taskkill`) — **ambos bloqueados por el clasificador de modo automático del harness** (no deja terminar procesos por su cuenta). Sin forma de matarlos, la única salida segura fue **esperar a que los dos builds terminaran solos** (monitoreando `tasklist` cada 15 s) y recién ahí correr la suite una sola vez, limpia, para tener un resultado confiable.
+- **Cómo evitarlo la próxima vez:** si el chequeo de "¿hay otro build vivo?" se manda a segundo plano por tardar más de lo esperado, **no lanzar nada que toque `target/` hasta leer su resultado** — ni siquiera algo aparentemente inocuo como `test-compile`. Si de todas formas se termina con dos builds superpuestos y no se puede matar el proceso ajeno, no hay atajo: esperar a que ambos terminen y volver a correr una vez sola. Y al editar un documento compartido como este (`docs/BITACORA_ERRORES.md`), asumir que puede haber otro escritor concurrente: releer antes de cada edición en vez de confiar en una lectura vieja.
+
+## E-67 — Llamar a la IA dentro de `@Transactional` con `@Async` sin tope: el pool de Postgres se agota apenas conecta un proveedor real
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `ProcesarValidacionV90Service.procesar` (`onboarding`), `EspejoSombraService.generar` (`rag`), `ConocimientoService.indexar` (`rag`), `RecomendacionService.recomendacion` (`academy`) — hallazgo **C-1** (crítico) de `docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html`.
+- **Síntoma:** ninguno todavía en este entorno — **latente**, porque los 4 puertos de IA que estos servicios llaman son `NoOp` (responden en microsegundos). El síntoma real, el día que se conecte Gemini/otro proveedor: diez aprendices pidiendo validación V90 en el mismo minuto, con una IA de hasta 45s, dejan las diez conexiones de Hikari ocupadas — el pool completo — y **toda la API** (login, hábitos, chat, cualquier endpoint que necesite Postgres) empieza a devolver 500 después de esperar el `connection-timeout`. Los hilos virtuales no evitan nada de esto: el recurso que se agota es la conexión de base, no el hilo.
+- **Causa real:** los cuatro métodos tenían la misma forma — `@Transactional` envolviendo lectura + llamada a la IA + guardado en una sola transacción. Mientras la IA no responde, la transacción sigue abierta y la conexión de Postgres que la sostiene queda retenida, sin usarse para nada, todo ese tiempo. A esto se sumaba que `spring.threads.virtual.enabled=true` hace que Spring Boot arme el executor de `@Async` (usado por el despacho de validación V90) como `SimpleAsyncTaskExecutor` **sin ningún tope** salvo que se fije `spring.task.execution.simple.concurrency-limit` — que no estaba fijado —, así que no había ningún límite superior a cuántas de estas transacciones largas podían solaparse. Y el pool de Hikari nunca tuvo un tamaño propio: corría con el default sin documentar (10 conexiones).
+- **Por qué no dolía hasta ahora:** con los adaptadores `NoOp`, la "llamada a la IA" tarda microsegundos — la transacción se abre y cierra tan rápido que jamás compite por una conexión con nada más. El bug es invisible mientras nadie conecta un proveedor real, y por eso una auditoría de código (no de producción, sin incidente que lo disparara) fue lo que lo encontró.
+- **Solución:** en los cuatro servicios se sacó `@Transactional` del método que envolvía todo. La lectura y la escritura ya corren cada una en su propia transacción corta porque **Spring Data JPA anota `@Transactional` en sus propios repositorios** (`SimpleJpaRepository`) — llamar a un puerto respaldado por un repositorio Spring Data, desde un método sin `@Transactional` propio, ya alcanza para que esa llamada puntual tenga su propia transacción de milisegundos. No hizo falta declarar una transacción nueva en ningún lado: alcanzó con dejar de envolver de más. La llamada a la IA quedó en el medio, sin ninguna transacción abierta durante toda su duración. Además se fijó `spring.task.execution.simple.concurrency-limit=20` (application.yaml) para acotar cuántas validaciones V90 corren a la vez, y se dimensionó Hikari explícitamente (`maximum-pool-size=20`, `minimum-idle=5`, `connection-timeout=5000`) en vez de dejarlo en el default implícito.
+- **El riesgo aparte que esto reveló, y que quedó sin resolver a propósito:** en `ProcesarValidacionV90Service`, la grabación V90 ya queda marcada `PROCESANDO` (persistido) ANTES de llamar a la IA (lo hace `GrabacionV90Service.solicitarValidacion`, en su propia transacción, antes del despacho `@Async`). Si la IA real lanza una excepción (timeout, error de red — el `NoOp` nunca lo hace), sin capturarla el método viejo se cortaba antes de llegar a `saveGrabacionPort.guardar`, y la grabación quedaba en `PROCESANDO` **para siempre** — el aprendiz no podía reintentar. Se agregó un `try/catch` alrededor de la llamada a la IA en ese único servicio (los otros tres no tienen un estado intermedio persistido que pueda quedar atrapado: si la IA falla ahí, simplemente no se escribe nada, y el llamador puede reintentar limpio) que trata cualquier excepción igual que `NO_DISPONIBLE` — la máquina de estados de `GrabacionV90` ya sabe reintentar o caer a `REVISION_MANUAL`. **Lo que NO se tocó, y sigue abierto:** el resto de C-3 del mismo informe (double-dispatch sin `PESSIMISTIC_WRITE`, barrido de `PROCESANDO` huérfanos tras un reinicio del proceso, `spring.task.execution.shutdown.await-termination`) y C-4 (`EvidenciaService.procesarLote`, que procesa 25 evidencias en una sola transacción — mismo bug de fondo, en un archivo fuera del alcance de esta tarea) y `PgVectorNativoAdapter.buscarSimilares` (otra instancia de IA-dentro-de-`@Transactional`, en `rag`, tampoco tocada porque no estaba en la lista de archivos del encargo).
+- **Cómo evitar que vuelva a pasar:** el chequeo es mecánico y vale la pena correrlo cada vez que se agrega un `@Service` que llama a un puerto de IA/HTTP externo:
+  ```bash
+  grep -rn "@Transactional" src/main/java --include=*.java -A 15 | grep -B 15 "IAPort\|ChatClient\|embeddingPort\|generarInsightPort\|recomendarClasePort"
+  ```
+  Si un método `@Transactional` contiene una llamada a un puerto cuyo adaptador real hace I/O de red de duración variable (una IA, un proveedor OAuth, SMTP — ver también **C-11**, SMTP dentro de `@Transactional` en la invitación de staff, mismo informe, todavía sin corregir), separar: leer y guardar apoyándose en las transacciones cortas que Spring Data JPA ya da por método de repositorio, y dejar la llamada externa completamente afuera de cualquier `@Transactional` propio. Y si esa llamada puede fallar dejando un estado intermedio ya persistido (un flag tipo `PROCESANDO`), capturar el fallo ahí mismo y resolverlo con la misma máquina de estados que ya maneja "la IA no está disponible" — no dejar que la excepción se lleve puesto el guardado del veredicto.
+
+
+## E-68 — Lote de IA todo-o-nada y anulación con doble reversión de puntos (C-4/C-13)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `evidence/application/services/EvidenciaService.java`
+- **Síntoma:** no hay un mensaje de error único — son dos defectos de diseño encontrados
+  en auditoría, no una excepción en runtime observada todavía (los adaptadores de IA son
+  `NoOp`, así que en producción hoy no se manifiestan). Si se manifestaran: (C-4) con IA
+  real, una evidencia que falla en el medio del lote de 25 revierte las demás ya validadas
+  y la cola de validación no avanza nunca (siempre las mismas 25, por `subida_en ASC`).
+  (C-13) dos admins anulando la misma evidencia case-a-caso devolverían la penalización de
+  puntos dos veces.
+- **Causa real:** (C-4) `procesarLote()` envolvía en una sola `@Transactional` tanto la
+  lectura con `FOR UPDATE SKIP LOCKED` como hasta 25 llamadas a IA, sin `try/catch` por
+  ítem — mismo defecto que C-1 (ya corregido en `onboarding`/`rag`/`academy`), no detectado
+  acá porque el `NoOpValidacionIAAdapter` nunca lanza ni tarda. (C-13) `anular()` leía la
+  evidencia con un `byId` sin bloqueo (`requireEvidencia`) antes de decidir si revertir la
+  penalización — check-then-act, mismo patrón que C-2 en `rocks`.
+- **Solución:** (C-4) sacar la IA de la transacción (transacción corta y propia solo para
+  el `SELECT` del lote, cada evidencia procesada y guardada por separado, con
+  `try/catch` que aísla el fallo de una evidencia del resto). (C-13) `byIdParaEscritura`
+  con `PESSIMISTIC_WRITE`, mismo patrón que `LoadRocaDiariaPort.byIdParaEscritura` (C-2).
+- **Cómo evitarlo:** cuando un caso de uso hace un `for` sobre varias entidades y alguna
+  de las operaciones dentro del loop puede tardar o fallar por una causa externa (IA, red,
+  I/O), nunca envolver el loop completo en una única transacción ni dejar el loop sin
+  `try/catch` por ítem — es el mismo defecto de C-1/C-4, y va a repetirse en cualquier
+  scheduler de lote nuevo si no se revisa a propósito. Cuando un caso de uso lee una
+  entidad para decidir si aplicar un efecto en OTRO módulo (puntos, notificaciones) basado
+  en un flag de esa entidad, la lectura tiene que ser con `PESSIMISTIC_WRITE` si dos
+  llamadas concurrentes pueden ver el mismo flag antes de que ninguna escriba — patrón ya
+  repetido 3 veces (C-2, C-3, C-13), buscar `byIdParaEscritura` en el repo antes de asumir
+  que un `byId` simple alcanza.
+
+## E-69 — Expirar-y-lanzar revierte su propio guardado; barridos nocturnos todo-o-nada (C-6/C-9)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `habits/application/services/RegistroService.java`,
+  `habits/application/services/RachaService.java`,
+  `habits/application/services/PromocionCambioHorarioService.java`
+- **Síntoma:** no hay un mensaje de error único observado en producción (es un hallazgo de
+  auditoría, no un incidente reportado). Si se manifestara: un aprendiz que intenta
+  completar un hábito o cerrar una racha "Día sin celular" después de que venció su
+  ventana recibe 409 una y otra vez en cada reintento, porque el registro/racha nunca
+  queda de verdad `EXPIRADO`/`EXPIRADA` en la base — el `throw` revertía el `save` que lo
+  precedía, dentro de la misma transacción. Además, para la racha, `rachas_viva_uk` (a lo
+  sumo una racha `ACTIVA` por aprendiz) le impedía iniciar una nueva mientras la vieja
+  "seguía activa" por el mismo motivo. Por separado, el barrido nocturno que debería
+  limpiar esto (`ExpirarRegistrosScheduler`, 05:00 UTC) procesaba todas las filas
+  candidatas en una única transacción sin `try/catch`: una fila corrupta revertía TODAS
+  las expiraciones de esa noche, no solo la suya, y el barrido de la noche siguiente
+  volvía a fallar en el mismo punto.
+- **Causa real:** (C-9) `registro.expirar(ahora); saveRegistroPort.save(registro); throw
+  new IllegalStateException(...)` — las tres líneas corren en la misma
+  `@Transactional` del método (declarada directamente ahí, no heredada de la interfaz);
+  lanzar una `RuntimeException` marca la transacción para rollback por defecto, deshaciendo
+  el `save` junto con el `throw`. (C-6) el `for` de los tres barridos nocturnos no tenía
+  `try/catch` por fila y corría dentro de una única `@Transactional` de método —
+  cualquier excepción en cualquier fila abortaba el lote completo.
+- **Solución:** (C-9) un tipo de excepción propio y puntual por cada sitio
+  (`RegistroExpiradoException`, `RachaVencidaException`, ambas `extends
+  IllegalStateException` para no tocar el contrato HTTP) con
+  `@Transactional(noRollbackFor = <ese tipo>)` — deliberadamente NO sobre
+  `IllegalStateException` en general, porque eso habría enmascarado otros guard clauses de
+  dominio que sí deben revertir su escritura si fallan (ver el informe completo,
+  `docs/informes/auditoria-fixes/C-6-C-9.md`, para el análisis fila por fila). Se descartó
+  `REQUIRES_NEW` para este punto puntual porque el registro/racha ya viene bajo bloqueo
+  pesimista de la misma transacción — abrir una segunda transacción sobre la fila
+  bloqueada por la primera, sin liberarla, es un auto-interbloqueo entre dos conexiones del
+  mismo pool. (C-6) cada fila del barrido se procesa en su propia transacción
+  `REQUIRES_NEW` (segura acá porque cada fila toma y libera su lock antes de pasar a la
+  siguiente, sin ninguna transacción externa sosteniéndolo), envuelta en `try/catch` que
+  cuenta y loguea (`WARN` por fila fallida, `INFO` de resumen al final, nunca `INFO` dentro
+  del loop) sin abortar el resto.
+- **Cómo evitarlo:** cuando un caso de uso hace "mutar y guardar, y si cierta condición se
+  cumple lanzar de todos modos" dentro de la MISMA transacción, el `throw` revierte el
+  guardado salvo que se marque `noRollbackFor` — y ese `noRollbackFor` tiene que apuntar a
+  un tipo de excepción tan específico como el punto de lanzamiento, nunca a la superclase
+  genérica (`IllegalStateException`, `RuntimeException`) si el método tiene más de un lugar
+  donde puede lanzar ese mismo tipo. Cuando un barrido nocturno hace un `for` sobre muchas
+  filas con un `@Transactional` de método envolviendo todo el loop, sin `try/catch` por
+  fila, es el mismo patrón de C-1/C-4 (ya corregidos en otros módulos) — buscar ese patrón
+  (`@Transactional` + `for` sin `try/catch` en el cuerpo) antes de dar por buena la
+  implementación de cualquier `@Scheduled` nuevo.
+
+## E-70 — Doble `POST /validation` sobre la misma grabación V90 dispara dos llamadas a la IA, y un fallo al guardar la deja en `PROCESANDO` para siempre (C-3)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `onboarding/application/services/GrabacionV90Service.java`, `ProcesarValidacionV90Service.java`
+- **Síntoma:** dos requests concurrentes a `POST /api/v1/onboarding/v90-recordings/{id}/validation` sobre la MISMA grabación devuelven ambas `202 {"status":"processing"}` pero disparan **dos** llamadas independientes a `ValidacionIAPort.validar` para el mismo `grabacionId` — doble costo de IA. Por separado: si el guardado del veredicto falla (corte de conexión a Postgres), la grabación queda en `estado_ia = 'PROCESANDO'` para siempre; ningún reintento del cliente la saca de ahí, porque `GrabacionV90.procesarIntentoDeValidacion` rechaza la reentrada mientras siga `PROCESANDO`, y no existe barrido de fondo para V90.
+- **Causa real:** `solicitarValidacion` leía con `loadGrabacionPort.porId` (sin bloqueo) antes de transicionar a `PROCESANDO`. **El guard de dominio agregado para E-37 no alcanza**: protege el objeto ya leído en memoria, no impide que dos transacciones lean la misma fila en `PENDIENTE` antes de que cualquiera escriba. Y `procesar()` no tenía manejo de fallo para el guardado final — entre el fallo y una grabación atrapada solo quedaba el `catch` genérico del adaptador `@Async`, que únicamente loguea.
+- **Solución:** `LoadGrabacionV90Port.porIdParaEscritura` con `@Lock(PESSIMISTIC_WRITE)` (mismo patrón que C-2 en `rocks`); si al leer con el lock ya está `PROCESANDO`, se retorna el mismo 202 idempotente sin relanzar la validación. Y `procesar()` envuelve switch+guardado en un `try/catch` que relee el estado real y, si sigue `PROCESANDO`, fuerza `registrarSinResultado()` — la misma máquina de estados de "IA no disponible", sin inventar un estado nuevo.
+- **Cómo evitarlo:** todo caso de uso que **lea, transicione y guarde** un agregado compartido entre requests concurrentes (un "arrancar algo" que pasa a "en curso") necesita bloqueo pesimista en la lectura, o un `UPDATE ... WHERE estado = 'X'` que devuelva filas afectadas. Un guard en memoria dentro del objeto de dominio **nunca alcanza solo**, por más que ya exista: no existe hasta que alguien ya leyó la fila. Y todo método que persiste el resultado de un paso async largo necesita su propio manejo de fallo en el guardado final — un `catch` genérico río abajo que solo loguea no es una red de recuperación, es donde el bug se vuelve invisible.
+
+## E-71 — `afterCommit()` NO libera la conexión: diferir un envío SMTP ahí no lo saca de la transacción (C-11)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `users/application/services/UserAccountService.inviteStaff`
+- **Síntoma original:** un admin invitando staff recibía 503 ("No pudimos enviar el correo") y el usuario invitado **no quedaba creado** — rollback completo — aunque el alta en sí no tenía nada malo. Con un SMTP lento, además, una conexión de Hikari quedaba retenida hasta 15s por intento (3 reintentos del cliente de mail), con riesgo de agotar el pool para toda la API.
+- **Causa real:** `inviteStaff` llamaba a `EnviarEmailPort.enviarInvitacionStaff` —una llamada de red a un servidor SMTP— dentro del método `@Transactional`.
+- **El primer arreglo NO funcionó, y esta es la parte que hay que recordar:** se difirió el envío a un `TransactionSynchronization.afterCommit()`, copiando el patrón de `MensajeService.publicarDespuesDelCommit` (`chat`). **Spring ejecuta los callbacks de `afterCommit` y `afterCompletion` ANTES de `cleanupAfterCompletion`**, que es donde se desliga el `EntityManager` y la conexión vuelve al pool — así que el envío seguía corriendo con la conexión tomada. El patrón sirve en `chat` porque ahí lo diferido es publicar en memoria (instantáneo); con un servidor SMTP que puede no responder, no.
+- **Solución definitiva:** `inviteStaff` deja de ser `@Transactional`. Lo que necesita atomicidad —usuario, perfil de mentor, credencial temporal y evento— corre dentro de un `TransactionTemplate`, y el envío ocurre después, con la transacción cerrada. Si el correo falla, se loguea en ERROR y no se propaga: el invitado ya tiene credencial real y puede entrar por "olvidé mi contraseña".
+- **Cómo evitarlo:** para sacar una llamada externa lenta de una transacción, **`afterCommit` no es equivalente a "fuera de la transacción"** — solo garantiza "después del commit", que no es lo mismo que "después de soltar la conexión". Si lo que se quiere es liberar la conexión, hay que cerrar la transacción de verdad (método no transaccional + `TransactionTemplate` para la parte atómica). La forma de comprobarlo, y la única que sirve, es medir `TransactionSynchronizationManager.isActualTransactionActive()` **desde adentro** de la llamada diferida, en un test de integración contra Postgres real: las tres pruebas unitarias de este mismo arreglo pasaban con el arreglo roto.
+
+## E-72 — Rate limit de alta por `COUNT` (check-then-act) y token de verificación consumido antes del INSERT (C-16)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `users/application/services/AccountRequestService.java`
+- **Síntoma:** ráfagas concurrentes desde la misma IP podían superar el límite documentado de 60/hora. Y quien reintentaba un alta con un correo que ya tenía cuenta se quedaba sin poder reintentar con **otro** correo sin volver a verificar su casilla de cero: el token de verificación, de un solo uso, ya se había consumido en el intento fallido.
+- **Causa real:** `rejectIfRateLimitExceeded` hacía `SELECT COUNT` y **después** insertaba — dos sentencias sin atomicidad entre ellas. Y `submit()` consumía el `verificationToken` (GETDEL en Redis) **antes** de intentar el INSERT, así que cualquier fallo posterior (típicamente el `UNIQUE` de `usuarios.email`) perdía el token sin haber servido para nada.
+- **Solución:** el límite por IP pasó a `LimitarSolicitudesResetPort.registrarIntento` (Redis, `INCR` atómico), el mismo puerto que ya usan `VerificacionEmailService` y `ConsultaEmailService`. Y se agregó un chequeo explícito de "¿el correo ya existe?" **antes** de consumir el token.
+- **Dependencia que esto creó, y que hay que mirar junto:** el límite de altas ahora se apoya en el mismo adaptador Redis que el hallazgo **C-8** denuncia (`INCR` y `EXPIRE` no atómicos: una clave que queda sin TTL bloquea para siempre). Antes ese defecto solo podía trabar el reseteo de contraseña; ahora puede **bloquear permanentemente las altas de cuentas nuevas**. C-16 y C-8 no deben separarse.
+- **Cómo evitarlo:** todo límite de tasa nuevo en `users` se apoya en `LimitarSolicitudesResetPort` desde el principio, no en un `COUNT` de Postgres — ya hay tres usos del mismo puerto como referencia. Para recursos de un solo uso (tokens, códigos): validar lo más posible **antes** de consumir, y consumir lo más tarde posible del flujo.
+
+## E-73 — Doble confirmación de alta social recibía un 409 genérico en vez de tratarse como éxito idempotente (C-17)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `users/application/services/CompletarRegistroSocialService.java`
+- **Síntoma:** dos llamadas casi simultáneas a `POST /auth/social/complete` para la MISMA identidad de Google/Apple/Facebook (dos pestañas, un reintento de red, un doble tap en "Confirmar") hacían que la segunda recibiera un 409 genérico ("La operacion entra en conflicto con datos que ya existen") en vez de la misma respuesta de éxito que recibe la primera.
+- **Causa real:** desde D-65 cada llamada a `POST /auth/social` para una identidad nueva genera un token de continuación **independiente** — no hay memoria de tokens anteriores para la misma identidad. Si dos se confirman casi a la vez, ambos intentan crear la misma `AccountRequest`/`User`; el segundo choca contra el `UNIQUE` de `usuarios.email` y esa `DataIntegrityViolationException` no estaba capturada.
+- **Solución:** se captura la `DataIntegrityViolationException` alrededor de `submit()` y, si existe una `AccountRequest` pendiente para la MISMA identidad social, se devuelve su id en vez de dejar escapar el error — mismo criterio que ya aplica `vincularIdentidadSocial` ("el doble tap del cliente móvil no es un error"). Si el conflicto no es de la misma identidad, se relanza el original.
+- **Impacto en el cliente, a tener presente:** en esa ventana de carrera la app React Native pasa a recibir **202 en vez de 409**. Es el comportamiento correcto, pero es un cambio observable del contrato y el frontend debe contemplarlo.
+- **Cómo evitarlo:** todo caso de uso que pueda recibirse dos veces por la misma "cosa lógica" desde flujos separados por un paso intermedio en Redis (token de continuación, OTP) tiene que decidir explícitamente qué hacer con el segundo, no asumir que "nunca va a pasar". Criterio del módulo: si hay una forma barata de detectar "esto ya se hizo", tratar el segundo intento como éxito idempotente.
+
+## E-74 — Tres pruebas de integración que fallaban en la semilla, no en el código que decían probar
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `CompletarRegistroExpiracionTransaccionIT`, `CerrarRachaExpiracionTransaccionIT`, `AccountRequestRateLimitConcurrenciaTest` — pruebas nuevas escritas al aplicar la auditoría.
+- **Síntoma:** tres mensajes distintos, ninguno relacionado con el hallazgo que la prueba venía a verificar:
+  1. `jakarta.persistence.TransactionRequiredException: No active transaction for update or delete query` — en `seedFixtures`, no en el caso de uso.
+  2. `ERROR: invalid input syntax for type inet: "rl-test-fa0ff0f8-..."`
+  3. `duplicate key value violates unique constraint "habitos_clave_sistema_key" — Key (clave_sistema)=(PHONE_FREE_DAY) already exists`
+- **Causa real, una por una:** (1) el `EntityManager` compartido exige transacción activa para `executeUpdate`, y `@BeforeEach` no la trae. (2) `solicitudes_cuenta.ip_solicitud` es de tipo **`inet`** en Postgres: un identificador inventado como IP única por test revienta el INSERT antes de que el limitador entre en juego. (3) el hábito de sistema "día sin celular" **ya viene sembrado** por `V4__catalogo_habitos_default.sql` y su `clave_sistema` es UNIQUE — la prueba insertaba uno propio.
+- **Solución:** (1) la semilla se envuelve en un `TransactionTemplate`, que además es lo correcto: los datos deben estar **commiteados** antes de que corra el caso de uso. (2) IP del rango de documentación `2001:db8::/32` (RFC 3849), que es `inet` válido y deja espacio de sobra para una por test. (3) se toma el hábito del catálogo con un `SELECT ... WHERE clave_sistema = ?` y **no se borra** en el `@AfterEach` — borrarlo habría eliminado una fila de catálogo compartida con el resto de la suite.
+- **Cómo evitarlo:** antes de escribir la semilla de una prueba de integración, mirar **el esquema y las migraciones**, no solo el código de producción: el tipo real de la columna (`inet`, `citext`, enums) y qué filas ya siembra Flyway. Y cuando una prueba de integración falla, leer **dónde** falla antes de sospechar del arreglo: `seedFixtures` en el stack trace significa que el caso de uso ni siquiera llegó a ejecutarse. Relacionado con la lección repetida de E-60/E-65/E-66: **el mensaje apuntaba a un lugar y la causa estaba en otro.**
+
+## E-75 — La primera fila de puntaje de un participante no está protegida: 409 en el primer hábito (C-12)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `points/application/services/PuntajeService.java` (`cargarOInicializar`,
+  antes líneas 136-142)
+- **Síntoma:** un aprendiz recién inscrito que completa dos hábitos (o una roca y un
+  hábito) casi al mismo tiempo el día 1 del programa puede recibir un 409 en uno de los
+  dos, con ese punto perdido en vez de solo demorado.
+- **Causa real:** `SELECT ... FOR UPDATE` (`PESSIMISTIC_WRITE`) no puede bloquear una fila
+  que todavía no existe. Cuando `puntajes_participante` no tiene fila para el
+  participante, dos ajustes concurrentes reciben `Optional.empty()` los dos, construyen su
+  propio `PuntajeParticipante.inicial(...)` en memoria y los dos terminan en un `INSERT`
+  (vía `merge()` de Spring Data JPA sobre una entidad con `@Id` asignado a mano). El
+  segundo `INSERT` viola la PK, su transacción entera hace rollback (incluido su asiento
+  en el ledger), y el ajuste se pierde.
+- **Solución:** `INSERT ... ON CONFLICT (participante_id) DO NOTHING` antes de la
+  relectura con `PESSIMISTIC_WRITE` de siempre. Postgres serializa el `INSERT` concurrente
+  contra la restricción UNIQUE (el segundo espera a que el primero resuelva, nunca hay dos
+  inserts exitosos ni uno que viole la PK); quien pierde la carrera de creación
+  simplemente relee la fila ya creada, la bloquea y aplica su ajuste arriba — ningún punto
+  se pierde.
+- **Cómo evitarlo:** `PESSIMISTIC_WRITE`/`FOR UPDATE` protege una fila que YA existe; no
+  protege su creación. Cualquier `cargarOInicializar`/`findOrCreate` sobre una tabla con PK
+  propia (no autogenerada) que pueda ejecutarse concurrentemente para la MISMA clave por
+  primera vez necesita `INSERT ... ON CONFLICT DO NOTHING` (o crear la fila en el momento
+  del alta, si el dominio lo permite) antes de cualquier lock — el lock solo entra en
+  juego después de que la existencia de la fila esté garantizada. Antes de asumir que un
+  `byIdParaEscritura` alcanza, preguntar: "¿puede esta ser la primera vez que se toca esta
+  fila?" — si la respuesta es sí, el lock solo no basta (patrón ya visto, en su variante
+  "check-then-act sobre fila existente", en C-2/C-3/C-13; C-12 es la misma familia mirando
+  la fila que directamente no existe todavía).
+
+## E-76 — 409 en operaciones de "creá si no existe" bajo concurrencia, y UnexpectedRollbackException oculto en confirmar asistencia (C-10/C-15)
+
+- **Fecha:** 2026-09-01
+- **Dónde:** `habits/application/services/EspirituService.java`,
+  `chat/application/services/ConversacionService.java`,
+  `notifications/infrastructure/adapter/out/persistence/tokenpush/TokenPushPersistenceAdapter.java`,
+  `calendar/application/services/ConfirmacionService.java`.
+- **Síntoma:** (C-10) un `GET`/`POST` idempotente ("traeme X, y si no existe creálo") le
+  devuelve 409 al segundo de dos llamadores casi simultáneos del mismo recurso, aunque
+  ambos deberían terminar viendo lo mismo. (C-15) un efecto secundario best-effort que
+  falla dentro de una `@Transactional` puede hacer explotar el COMMIT con
+  `UnexpectedRollbackException` en vez de dejar ver la causa real, aunque el código tenga
+  un `try/catch` alrededor del fallo.
+- **Causa real:** (C-10) check-then-act clásico contra una columna `UNIQUE`: "leer si
+  existe" y "crear si no" no son atómicos, y dos lecturas casi simultáneas pueden pasar
+  las dos por el camino de creación. (C-15) cualquier método con `@Transactional` propio
+  (incluidos los `@Modifying` de Spring Data JPA — Spring los envuelve con
+  `@Transactional` automáticamente) que PARTICIPA de una transacción ya abierta, si lanza,
+  marca esa transacción COMPARTIDA como rollback-only ANTES de que el `catch` del llamador
+  la atrape — atraparla no revierte esa marca.
+- **Solución:** (C-10) según el contexto transaccional: si la creación y la relectura
+  posterior viven en la MISMA `@Transactional` (no se puede "atrapar y releer" ahí mismo:
+  Postgres deja la transacción abortada apenas el INSERT falla), aislar la creación en su
+  propia transacción con `TransactionTemplate`/`Propagation.REQUIRES_NEW` (mismo patrón ya
+  usado en `RegistroService`/`RachaService`/`PromocionCambioHorarioService`). Si es un
+  UPSERT real sin lectura posterior en la misma llamada, preferir
+  `INSERT ... ON CONFLICT ... DO UPDATE/DO NOTHING` atómico en la base (mismo patrón que
+  `ReaccionMuroPersistenceAdapter`/`RecordatorioPersistenceAdapter`) — nunca lanza por una
+  carrera, así que no hace falta ni `catch` ni transacción aislada. (C-15) aislar en
+  `REQUIRES_NEW` cualquier efecto secundario best-effort (avisos, notificaciones) que no
+  deba poder tumbar la operación principal si falla.
+- **Cómo evitarlo:** ante un "buscá X, y si no existe creálo" dentro de un método
+  `@Transactional`, preguntarse primero si el llamador necesita releer algo DESPUÉS de que
+  la creación pueda fallar por una carrera — si sí, la creación tiene que vivir en su
+  propia transacción (REQUIRES_NEW), nunca "catch y seguir" en la misma. Ante cualquier
+  `try/catch` alrededor de una llamada a un puerto/repositorio dentro de un método
+  `@Transactional` cuya intención es "si esto falla, no me importa, seguí igual", verificar
+  que esa llamada esté aislada en su propia transacción — si no lo está, el catch es
+  cosmético: la transacción de afuera ya puede estar condenada al momento en que se
+  ejecuta el catch, y el síntoma (`UnexpectedRollbackException`) aparece lejos, en el
+  commit, no en el punto real del problema.
+
+## E-77 — INCR y EXPIRE en comandos Redis separados dejaban claves sin TTL — bloqueo permanente en los tres limitadores de tasa (C-8)
+
+**Síntoma:** en teoría (nadie lo reportó todavía en producción), si el proceso moría justo entre
+un INCR y su EXPIRE siguiente en cualquiera de los tres adaptadores Redis de limitación
+(`LimitarSolicitudesResetRedisAdapter`, `ControlCuotaRedisAdapter`,
+`CodigoVerificacionEmailRedisAdapter`), la clave del contador quedaba sin vencimiento. A partir de
+ahí, esa IP/email/actor quedaba bloqueado para siempre (o, en `ControlCuotaRedisAdapter.liberar`,
+un DECR sobre una clave ya vencida creaba una clave nueva en -1 sin TTL, huérfana pero inofensiva).
+Desde C-16/E-72, el mismo defecto en `LimitarSolicitudesResetRedisAdapter` puede bloquear
+permanentemente el ALTA de cuentas nuevas de una IP, no solo el reseteo de contraseña.
+
+**Causa real:** los tres adaptadores hacían `INCR` (o `INCR` + lectura de otro TTL, en el caso del
+código de verificación) y DESPUÉS `EXPIRE`/`PEXPIRE` como comandos Redis separados, sin nada que
+los uniera atómicamente. El chequeo de "¿es la primera vez?" (`intentos == 1`) además no
+autorreparaba una clave ya envenenada: solo intenta fijar TTL una vez en la vida de la clave.
+
+**Solución:** los tres adaptadores ahora envuelven incremento + TTL en un único script Lua
+(`DefaultRedisScript` + `RedisTemplate.execute`), que Redis ejecuta de punta a punta sin permitir
+que otro comando se intercale. El chequeo pasó de "¿es la primera vez?" a "¿esta clave tiene TTL
+AHORA MISMO?" (`TTL == -1`): eso hace que cualquier clave envenenada (por el código viejo, o por
+cualquier causa futura) se autorepare en la SIGUIENTE llamada que la toque, sin limpieza manual.
+`ControlCuotaRedisAdapter.liberar` además pasó a chequear `EXISTS` antes de `DECR`, dentro del
+mismo script, para no crear una clave huérfana sobre una que ya venció.
+
+**Cómo evitar que vuelva a pasar:** cualquier contador en Redis que combine "incrementar" +
+"fijar TTL si hace falta" tiene que hacerlo en un único script Lua (`DefaultRedisScript`), nunca en
+dos llamadas separadas al `RedisTemplate` — ni siquiera si la primera parece "atómica por sí sola"
+(`INCR` lo es, pero la SECUENCIA de INCR-y-después-EXPIRE no). El chequeo de "hace falta fijar TTL"
+debe ser sobre el ESTADO ACTUAL de la clave (`TTL == -1`), no sobre el valor que acaba de devolver
+el incremento (`== 1`) — lo segundo no autorrepara nada si la clave ya estaba mal por otro motivo.
+
+## E-78 — Una prueba de integración que pasaba o fallaba según la hora del día en que se corriera
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `EspirituConcurrenciaTest` (prueba nueva escrita al aplicar C-10).
+- **Síntoma:** `AssertionFailedError: [una sola fila desbloqueada pese a 6 lecturas concurrentes] expected: 1L but was: 0L`. Ninguna de las seis llamadas concurrentes lanzó excepción — simplemente **no se creó ninguna fila**. El código de producción estaba correcto.
+- **Causa real:** `EspirituService.asegurarAvance` retorna sin hacer nada antes de `HORA_DESBLOQUEO` (07:00 en la zona del participante). La prueba sembraba `timezone = 'UTC'` y usaba **el reloj del sistema**; se corrió a las 00:35 de Perú, o sea **05:35 UTC**, antes de las siete. La misma prueba, sin tocar una línea, habría pasado a media mañana. Es una prueba intermitente cuyo resultado depende de a qué hora se corra el build — y de las peores, porque en horario de oficina se ve verde siempre y solo falla de madrugada o en un CI en otro huso horario.
+- **Un segundo detalle del mismo caso, que también costó tiempo:** el `AudioCatalogPort` real es `NoOpAudioCatalogAdapter` y siempre devuelve vacío (Google Drive nunca se integró — CLAUDE.MD §11), así que sin un doble el camino de escritura tampoco se alcanzaría nunca. Acá el agente sí lo había previsto con un `@Primary` en una `@TestConfiguration`; se menciona porque es la otra mitad de la misma trampa: **en este repo hay adaptadores `NoOp` en producción, y una prueba de integración que dependa de uno de ellos no prueba nada.**
+- **Solución:** el reloj entra por el puerto `Clock` — que existe exactamente para esto (CLAUDE.MD §5) — con un `@Bean @Primary` que devuelve `FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"))`. Se dejó el motivo escrito en el javadoc de la clase para que nadie lo "simplifique" de vuelta al reloj del sistema.
+- **Cómo evitarlo:** ninguna prueba puede leer la hora real. Si el código bajo prueba consulta el reloj —aunque sea indirectamente, tres llamadas más abajo— la prueba fija el `Clock` por el puerto. La señal de alarma es cualquier prueba que dependa de una ventana horaria, un vencimiento, un "día de hoy" o un `LocalDate.now()`. Y antes de dar por buena una prueba de integración nueva, verificar que **todos** los puertos que su camino atraviesa tengan un adaptador real o un doble explícito: un `NoOp` en el medio hace que la prueba pase por el camino equivocado sin fallar. Junto con **E-74**, las dos entradas cubren el mismo aprendizaje: las pruebas de integración de esta auditoría fallaron más veces por su andamiaje (semilla, esquema, reloj, dobles) que por el código que venían a verificar.
+
+## E-79 — La foto del Muro se subía bien y se veía rota: se guardaba la URL absoluta donde va la clave de S3
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `MediaItemRequest.aArchivoEntrada()` (`community`, adaptador REST) + `wallApi.urlPermanenteDesdeSubida` (app RN).
+- **Síntoma:** una publicación con foto aparecía en el Muro con el recuadro gris y el texto `📷 Foto 1` en vez de la imagen. Sin error en pantalla, sin nada en los logs del backend: la publicación se creaba con `201`, la foto llegaba a S3, y el feed devolvía un `media[0].url` con pinta de URL firmada válida. Pedirla daba **404**.
+- **Causa real:** la app subía los bytes con la URL prefirmada y después mandaba en `POST /api/v1/wall` la **URL absoluta** del objeto (`https://s3-renaser90dias.s3.amazonaws.com/muro/fotos/<autorId>/<uuid>`), descartando la `ruta` que el propio backend le había devuelto. `MediaItemRequest.aArchivoEntrada()` metía esa URL entera en el campo `ruta` — su javadoc **prometía** traducirla a bucket+ruta, pero la traducción no estaba escrita. Al leer el feed, `PublicacionMuroService.aVista()` pasa esa `ruta` a `AlmacenamientoPort.firmarLectura`, que la trata como **clave de objeto**, así que el presigner firmaba una URL anidada sobre sí misma:
+
+  ```
+  https://s3-renaser90dias.s3.us-east-1.amazonaws.com/https%3A//s3-renaser90dias.s3.amazonaws.com/muro/fotos/...
+  ```
+
+  Esa clave no existe → 404 → `FotoMuro.onError` esconde el `<Image>` y queda a la vista el recuadro con el texto de siempre. **Por eso no parecía un error:** la app estaba diseñada para degradar en silencio, y el defecto se veía igual que "todavía no hay foto".
+- **Solución:** `aClaveDeObjeto()` en `MediaItemRequest` normaliza cualquier forma que mande el cliente (clave limpia, URL virtual-hosted, URL path-style, URL prefirmada) a la clave de S3, anclándose en el prefijo `muro/` — mismo truco que `AbrirTicketSoporteRequest.rutaDesdeUrl` en `support`, que sí lo hacía bien. `V17__medias_publicacion_ruta_no_url.sql` repara las filas ya guardadas con la misma regla en SQL y agrega un `CHECK` que prohíbe volver a guardar algo que empiece con `http`. Del lado de la app se eliminó `urlPermanenteDesdeSubida` (la función que fabricaba la URL) y ahora se manda `urlSubida.ruta` tal cual.
+- **Por qué el barrido de E-57 no lo encontró:** E-57 era el mismo defecto **al revés** — persistía una URL *firmada* donde iba una clave — y su barrido buscó exactamente eso: "¿alguien guarda lo que devuelve `firmarLectura`?". `community` no lo hacía, así que pasó limpio. Lo que nadie chequeó fue la pregunta complementaria: **"¿lo que sí se guarda es una clave válida?"**.
+- **Cómo evitar que vuelva a pasar:** cuando un valor persistido alimenta a `firmarLectura`, no alcanza con verificar que *no* sea una URL firmada — hay que verificar que **sea una clave**, y el `CHECK` en la columna es la forma barata de que la base lo sostenga sola. Y la regla más general, que es la que de verdad falló acá: **un javadoc que describe una traducción no es la traducción.** Si un comentario dice "esto se traduce acá", tiene que haber una prueba que lo demuestre; `MediaItemRequestTest` es esa prueba. La segunda señal ignorada fue el `onError` que esconde la imagen: **una degradación silenciosa en el cliente convierte un bug del servidor en algo invisible** — cuando exista, tiene que quedar registrado en algún lado, aunque no se le muestre a la persona.
+
+## E-80 — El feed del Muro hacía 4 consultas por publicación: ~84 por carga, cada una con su propia conexión
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `PublicacionMuroService.aVista()` / `aPagina()` (`community`).
+- **Síntoma:** ninguno visible en local — y ese es el punto. Con el Postgres en Docker en la misma máquina, las 81 consultas de una página de 20 publicaciones se resuelven en ~82 ms medidos, así que en desarrollo el Muro se siente instantáneo y no hay nada que investigar.
+- **Causa real:** `aPagina` llamaba a `aVista` en un bucle, y `aVista` hacía **cuatro consultas por publicación** (perfil del autor, conteo de reacciones, mi reacción, conteo de comentarios). Con `TAMANO_PAGINA = 20` eso son ~84 consultas por carga del Muro. Agravado por dos cosas: `feed()` no tenía `@Transactional`, así que cada consulta pedía y devolvía **su propia conexión** del pool de Hikari (tamaño 20) — ~84 tomas por request en vez de 1; y el método en lote que evitaba todo esto **ya existía y nadie lo usaba** (`ConsultarPerfilUsuarioPort.porIds`, con el comentario "Evita N+1" escrito encima).
+- **Por qué importa igual:** contra una base administrada en otra zona, cada viaje cuesta 0,5–2 ms, así que el mismo patrón pasa a 40–170 ms de pura espera **por usuario y por carga**. Y hasta este cambio el Muro se recargaba entero después de cada publicación, así que publicar pagaba ese costo dos veces.
+- **Solución:** `aVistas(List<Publicacion>, viewer)` enriquece la página entera con **cuatro consultas fijas**, sin importar el tamaño de la página, usando `porIds` + los nuevos `contarPorTipoDeVarias`, `deUsuarioEnVarias` y `contarDeVarias`. `feed()`/`feedOculto()` pasaron a `@Transactional(readOnly = true)` para que todo comparta una conexión. Firmar las URLs adentro de la transacción es seguro y no contradice CLAUDE.MD §7: el presigner de S3 calcula la firma **localmente**, sin llamar a AWS.
+- **Cómo evitar que vuelva a pasar:** la prueba que lo fija (`laProyeccionNoConsultaUnaVezPorPublicacion`) verifica que los métodos de a una **nunca** se llamen, no que se llamen N veces. Un `verify(..., times(20))` sería la prueba equivocada: se pondría verde justo cuando el defecto vuelve. Y la lección de fondo: **el Postgres local miente sobre la latencia.** Un N+1 es invisible sobre un socket local y caro sobre la red; la señal a buscar en revisión es "¿cuántas consultas hace esto si la lista tiene 20 elementos?", nunca el tiempo del reloj en desarrollo. Cuando un puerto ya expone un método en lote, usarlo no es optimización prematura — es el uso previsto.
+
+
+## E-81 — C-4 corrigió un problema de concurrencia y sin querer ensanchó otro (C-5)
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `evidence/infrastructure/adapter/in/scheduler/ProcesarColaValidacionScheduler.java`,
+  `EvidenciaService.procesarLote` (el método que C-4 ya había tocado).
+- **Síntoma:** ninguno reportado todavía en producción — encontrado por auditoría estática al
+  reclasificar C-5. Con N instancias desplegadas, el mismo lote de 25 evidencias "PENDIENTE"
+  puede procesarse dos veces en paralelo.
+- **Causa real:** C-4 acortó a propósito la transacción que sostiene el
+  `FOR UPDATE SKIP LOCKED` de `pendientesLote` (para no retener una conexión de Hikari 19
+  minutos con IA real) — correcto para el problema que resolvía. Efecto no buscado: el lock de
+  fila ahora se libera casi al instante (apenas termina el SELECT), mucho antes de que termine
+  el procesamiento real. Antes de C-4 el lock viejo duraba todo el procesamiento y tapaba, sin
+  querer, la falta de coordinación entre instancias que describe C-5.
+- **Solución:** `@SchedulerLock` (ShedLock, tabla `renaser.shedlock`) sobre el scheduler que
+  llama a `procesarLote()` — coordina a nivel de "quién puede correr el barrido completo", no a
+  nivel de fila, así que sigue siendo válido aunque el lock de fila dure microsegundos.
+- **Cómo evitar que vuelva a pasar:** cuando se acorta o se elimina una transacción larga por
+  un motivo (agotamiento de pool, timeout), preguntarse explícitamente si esa transacción larga
+  estaba, de rebote, sirviendo de mecanismo de coordinación entre instancias para algo más. Un
+  lock de fila (`FOR UPDATE`) solo coordina mientras la transacción que lo sostiene sigue
+  abierta — si se acorta esa transacción sin agregar otra forma de coordinación, cualquier
+  barrido que dependía de esa duración larga queda expuesto.
+
+## E-82 — El outbox de Modulith no tenía ninguna clave `spring.modulith.*`: sin republicación al reiniciar, sin límite de crecimiento, y 4 listeners que duplicaban su efecto ante una redelivery (C-7)
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `application.yaml` (sin ninguna clave `spring.modulith.*`),
+  `notifications/application/services/NotificacionService.java`,
+  `notifications/infrastructure/adapter/in/event/*NotificationListener.java` (los 4),
+  `notifications/domain/model/notificacion/Notificacion.java`.
+- **Síntoma:** ninguno visible todavía en producción (el outbox nunca se probó bajo una caída
+  real ni bajo un reintento). El riesgo era latente: si el proceso muriera entre el commit de
+  un evento y que su listener terminara, esa publicación quedaba incompleta para siempre (nadie
+  la reentregaba); y el día que se activara la reentrega, cada redelivery de
+  `HabitoCompletado`/`RachaCompletada`/`SantuarioRoto`/`RocaCompletada` iba a crear una fila
+  nueva en `notificaciones` (bandeja duplicada) y reenviar un push duplicado, porque
+  `EmitirNotificacionUseCase.emitir` no tenía ninguna clave de deduplicación.
+- **Causa real:** at-least-once (la garantía real de cualquier outbox transaccional, incluido
+  el de Modulith) significa que un listener PUEDE recibir el mismo evento más de una vez. Los
+  4 listeners de `notifications` traducían el evento a un `INSERT` incondicional; nada los
+  hacía tolerantes a una segunda entrega.
+- **Solución:** `republish-outstanding-events-on-restart=true` + `completion-mode=DELETE`
+  (config) + un scheduler que además reintenta publicaciones incompletas sin esperar a un
+  restart (`shared/infrastructure/event/EventPublicationMaintenanceScheduler`); del lado de
+  `notifications`, cada evento de dominio ya trae un id propio
+  (`registroId`/`rachaId`/`rocaId`) que ahora viaja como `Notificacion.origenEventoId`, con un
+  índice único parcial (`notificaciones_origen_evento_uk`, V16) que hace que una segunda
+  entrega choque contra la restricción en vez de crear una fila nueva —
+  `NotificacionService.emitir` la atrapa en su propia transacción (`REQUIRES_NEW`, mismo
+  patrón que C-10) y la trata como éxito idempotente.
+- **Cómo evitarlo:** cualquier listener que consuma eventos de Modulith (o de cualquier outbox
+  transaccional) tiene que asumir at-least-once desde el diseño, no agregarlo después. La
+  pregunta a hacerse al escribir un `@ApplicationModuleListener` nuevo: "¿qué pasa si esto se
+  ejecuta dos veces con el mismo evento?" — si la respuesta es "se duplica un efecto visible"
+  (una fila, un mensaje enviado, un contador que sube), hace falta una clave de deduplicación
+  desde el primer commit, no como parche posterior. Los eventos de este repo ya traen esa clave
+  natural (`registroId`/`rachaId`/`rocaId`/etc.) porque `habits.api`/`rocks.api` los diseñaron
+  con un id de dominio propio — aprovechar esa clave existente es más simple que inventar una
+  nueva.
+
+## E-83 — C-18: revisados los 113 `@Transactional` sin `readOnly` fuera de `habits`, ninguno era seguro de marcar; open-in-view apagado
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `docs/informes/auditoria-fixes/C-18.md` (análisis completo),
+  `src/main/resources/application.yaml`, `src/test/resources/application.yaml`
+  (`spring.jpa.open-in-view: false`).
+- **Síntoma:** ninguno — es el cierre de un hallazgo de auditoría (C-18, baja), no un bug
+  reportado.
+- **Causa real:** no era un bug, era una pregunta abierta ("¿cuáles de los 146 `@Transactional`
+  son en realidad de solo lectura?"). Respuesta, tras revisar los 113 que quedaban fuera de
+  `habits` método por método: ninguno. El patrón de este repo es que los casos de uso de
+  lectura pura (`listar`/`buscar`/`misX`) no llevan `@Transactional` en absoluto (se apoyan en
+  la transacción por-método que ya aplica Spring Data JPA), así que todo `@Transactional`
+  "pelado" que sobrevivió a esa convención es, sin excepción encontrada, un caso de uso que
+  escribe — directo, delegado a otro puerto, o via un lock `PESSIMISTIC_WRITE` tomado para
+  escribir después.
+- **Solución:** no se marcó ningún método nuevo como `readOnly=true` (habría sido un cambio sin
+  ningún método al que aplicarlo). Se apagó `open-in-view` (antes activo por default, sin
+  ninguna clave que lo declarara) porque se pudo demostrar que es seguro en este repo
+  específico: cero relaciones JPA reales (`@OneToMany`/`@ManyToOne`/`@OneToOne`/`@ManyToMany`)
+  en las 74 entidades del sistema, cero `@Basic(fetch=LAZY)`/`@Lob`, los dos únicos
+  `@ElementCollection` son `EAGER`, y ninguna entidad JPA cruza la frontera hexagonal hacia
+  fuera de su adaptador de persistencia.
+- **Cómo evitarlo (en realidad: cómo no perder este análisis):** si en el futuro alguien agrega
+  una relación `@OneToMany`/`@ManyToOne` perezosa a una entidad, tiene que revisar si algún DTO
+  de salida se arma fuera del método de servicio que la carga — con `open-in-view=false` ya
+  apagado (en main y en test), cualquier violación de eso va a fallar con
+  `LazyInitializationException`, en test antes que en producción. No hace falta volver a este
+  documento para eso: el propio fallo del test es la señal.
+
+## E-84 — `GET /api/v1/me/cell` devolvia 404 para decir "todavia no tenes celula", y la app no podia distinguirlo de un error real
+
+- **Síntoma:** `GET /api/v1/me/cell` respondía `404 Not Found` con cuerpo `{"assigned":false}`
+  cuando el aprendiz no tenía célula asignada. El cuerpo era correcto; el status code no.
+- **Causa real:** decisión de diseño heredada literal del Next.js de origen
+  (`app/api/v1/me/cell/route.ts:32-34`), portada tal cual sin notar que en Java, con un cliente
+  que usa un wrapper `fetch` que lanza en cualquier `!response.ok` (como `apiFetch` de la app RN),
+  ese 404 es indistinguible de un error real.
+- **Solución:** cambiar `ResponseEntity.status(HttpStatus.NOT_FOUND)` por `ResponseEntity.ok(...)`
+  en `MiCelulaController.miCelula`, alineando con el endpoint hermano `/members`, que ya usaba
+  200 para el mismo caso.
+- **Cómo evitar que vuelva a pasar:** cuando "esto no es un error" se traduce del Next.js de
+  origen, el status code se decide por lo que espera el **cliente real** (la app RN, no el
+  Next.js viejo), no por copiar el código HTTP tal cual estaba. Si dos endpoints del mismo
+  controller resuelven el mismo caso de negocio ("sin dato asociado") con status codes distintos,
+  eso es señal de un defecto, no de una decisión — revisar el hermano antes de asumir que un 404
+  "raro" es intencional.
+
+## E-85 — Sin barrido nocturno, quien nunca abre la app no genera tracks: sin tracks no hay fallos, y su coherencia queda intacta
+
+- **Síntoma:** ninguno todavía en producción — este cambio cierra un hueco encontrado por
+  inspección de código (`RegistroService.generarDisponiblesAhora` existía y se usaba al
+  consultar, pero nada llamaba a la generación completa del día por lote; un aprendiz que
+  nunca abre la app nunca tendría tracks, nunca expiraría nada, y su coherencia quedaría en
+  100 indefinidamente).
+- **Causa real:** el caso de uso de generación por lote (`GenerarTracksDelDiaUseCase.generar`)
+  siempre existió y compilaba, pero ningún `@Scheduled` lo invocaba — el barrido nocturno
+  nunca se construyó en la primera pasada del módulo (documentado como deuda explícita en el
+  javadoc viejo de `ExpirarRegistrosScheduler`, que decía literalmente "NI la generación
+  masiva de tracks del día siguiente... queda para un caso de uso separado").
+- **Solución aplicada:** `GenerarTracksDelDiaScheduler` nuevo, con `@SchedulerLock`, corriendo
+  a las 05:02 UTC, aislando fallos por participante.
+- **Cómo evitar que vuelva a pasar:** cuando se agregue un caso de uso `in` nuevo que
+  represente un efecto de negocio recurrente (no solo on-demand), verificar explícitamente
+  si necesita también un disparador por lote (`@Scheduled`) — el patrón "existe el caso de
+  uso pero nadie lo llama" no lo detecta ningún test si no hay un test que verifique que el
+  endpoint HTTP O el scheduler lo invocan.
+
+## E-86 — Flyway se niega a arrancar: se edito una migracion que ya estaba aplicada
+
+- **Fecha:** 2026-09-02
+- **Dónde:** arranque del backend, tras un día con varios agentes escribiendo migraciones.
+- **Síntoma exacto:**
+  ```
+  Validate failed: Migrations have failed validation
+  Migration checksum mismatch for migration version 17
+  -> Applied to database : -440407064
+  -> Resolved locally    : -817047180
+  ```
+  El contexto de Spring no levanta: `flywayInitializer` falla y arrastra a `entityManagerFactory`.
+- **Causa real:** alguien **editó `V17__medias_publicacion_ruta_no_url.sql` después de que ya se hubiera aplicado** a la base (a las 15:21 del mismo día). Flyway guarda una huella de cada migración aplicada justamente para detectar esto: es su protección para que nadie reescriba la historia del esquema. **No hubo daño en la base** — el efecto de la migración estaba aplicado; lo que no coincidía era el archivo.
+- **Solución:** `repair` — actualizar la huella guardada para que coincida con el archivo actual, sin volver a ejecutar nada. Como el proyecto no tiene el plugin de Flyway, se hizo con un `UPDATE` sobre `public.flyway_schema_history` fijando el checksum resuelto localmente, que es exactamente lo que hace `flyway repair`.
+- **Lo que hay que verificar ANTES de reparar, y es la parte importante de esta entrada:** `repair` marca la migración como buena **sin ejecutarla**. Si la edición hubiera **agregado sentencias nuevas**, repararlo las habría salteado en silencio y la base quedaría incompleta sin que nadie se entere. Antes de reparar hay que confirmar que el efecto completo del archivo actual ya está en la base. En este caso se comprobó que la restricción `medias_publicacion_ruta_no_es_url` **existía** (y no podría haberse creado si los `UPDATE` previos no hubieran corrido) y que **cero filas** violaban la condición.
+- **Cómo evitar que vuelva a pasar:** **una migración aplicada no se toca nunca más** — ni para corregir un comentario. Si hay algo que cambiar, se crea una migración nueva. Y cuando hay varios agentes trabajando en paralelo, hay que **asignarles números de migración distintos por adelantado** y prohibirles tocar los archivos ajenos: en esta misma jornada dos agentes eligieron `V15` por su cuenta y otros dos eligieron el mismo número de entrada de bitácora (`E-75`) y de decisión (`D-66`).
+
+## E-87 — El backend rechazaba el cambio de horario del 86% de los habitos por exigir un campo que la mayoria no tiene
+
+- **Fecha:** 2026-09-02
+- **Dónde:** `UpdateHabitPreferenceRequest.java` y `PreferenciaHorarioService.requireOrdenHorario`.
+- **Síntoma:** el dueño del proyecto reportó *"la parte de editar el horario no funciona"*. Desde la app, cambiar la hora de casi cualquier hábito devolvía **400** y el cambio se revertía.
+- **Causa real:** el DTO declaraba `@NotNull LocalTime limitTime`, pero **19 de los 22 hábitos del catálogo real no tienen hora de cierre** (`limitTime: null`) porque no vencen dentro del día. El frontend hacía lo correcto —reenviar el `limitTime` existente para no borrarlo, ver la corrección de ese bug en el mismo cambio— pero cuando ese valor es `null`, la validación del DTO cortaba la petición antes de llegar al servicio. Y aunque hubiera pasado, `requireOrdenHorario` hacía `horaDisparo.isBefore(horaLimite)` sin proteger el nulo.
+- **Por qué estaba así:** el DTO llevaba escrito *"contrato HTTP viejo literal (D-36)"*. Se copió del contrato anterior sin verificar que el catálogo real lo cumpliera. **El contrato viejo describía un cliente que siempre mandaba ambos campos; el catálogo de hoy no.**
+- **Solución:** `limitTime` pasa a ser opcional, y la validación de orden solo se aplica cuando hay hora de cierre. `triggerTime` sigue siendo obligatoria: sin hora de disparo el hábito no se puede ubicar en la jornada.
+- **Cómo evitar que vuelva a pasar:** cuando un DTO se copia de un contrato anterior, **hay que contrastar cada campo obligatorio contra los datos reales** antes de darlo por bueno. Un `@NotNull` heredado sin verificar convierte un endpoint en inútil para la mayoría de los casos, y el síntoma —"no funciona"— aparece lejos de la causa. Es la misma familia que **E-65** (una anotación de Jackson 2 ignorada en silencio por Jackson 3) y **E-60**: *el mensaje apuntaba a un lugar y la causa estaba en otro*.

@@ -21,15 +21,22 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.habits.domain.model.santuario.RachaSinCelular;
+import com.renaser.os.habits.domain.model.santuario.RachaSinCelularId;
 import com.renaser.os.points.api.AjustarPuntosPort;
 import com.renaser.os.points.api.MotivoPuntos;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.net.URI;
 import java.time.Duration;
@@ -50,6 +57,8 @@ import java.util.NoSuchElementException;
 @Service
 public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, RomperRachaUseCase,
         SolicitarUrlAdjuntoRachaUseCase, ExpirarRachasVencidasUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(RachaService.class);
 
     /** Habit.systemKey que identifica "Dia sin celular" — nunca por titulo (phoneFreeKeys.ts:12). */
     public static final String CLAVE_SISTEMA_SIN_CELULAR = "PHONE_FREE_DAY";
@@ -73,12 +82,22 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
     private final AlmacenamientoPort almacenamientoPort;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final IdGenerator idGenerator;
+    /**
+     * Transaccion PROPIA (REQUIRES_NEW) para el barrido nocturno de {@link #expirarVencidas}
+     * — misma razon y misma advertencia que {@code RegistroService.transaccionPropia}: solo
+     * para el barrido, nunca para {@link #cerrar} (ahi C-9 se resuelve con {@code
+     * noRollbackFor}, porque la racha ya esta bajo bloqueo pesimista de la transaccion en
+     * curso — ver {@link #requireRachaActiva}).
+     */
+    private final TransactionTemplate transaccionPropia;
 
     public RachaService(LoadRachaSinCelularPort loadRachaPort, SaveRachaSinCelularPort saveRachaPort,
                          LoadRegistroHabitoPort loadRegistroPort, SaveRegistroHabitoPort saveRegistroPort,
                          LoadHabitoPort loadHabitoPort, ConsultarProgresoParticipanteHabitsPort progresoPort,
                          AjustarPuntosPort ajustarPuntosPort, RegistrarEvidenciaPort registrarEvidenciaPort,
-                         AlmacenamientoPort almacenamientoPort, ApplicationEventPublisher events, Clock clock) {
+                         AlmacenamientoPort almacenamientoPort, ApplicationEventPublisher events, Clock clock,
+                         IdGenerator idGenerator, PlatformTransactionManager transactionManager) {
         this.loadRachaPort = loadRachaPort;
         this.saveRachaPort = saveRachaPort;
         this.loadRegistroPort = loadRegistroPort;
@@ -90,6 +109,9 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
         this.almacenamientoPort = almacenamientoPort;
         this.events = events;
         this.clock = clock;
+        this.idGenerator = idGenerator;
+        this.transaccionPropia = new TransactionTemplate(transactionManager);
+        this.transaccionPropia.setPropagationBehavior(Propagation.REQUIRES_NEW.value());
     }
 
     @Override
@@ -111,13 +133,14 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
         registro.iniciar(ahora);
         saveRegistroPort.save(registro);
 
-        RachaSinCelular racha = RachaSinCelular.iniciar(registro.participanteId(), registro.id(),
-                command.horasObjetivo(), ahora);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
+        RachaSinCelular racha = RachaSinCelular.iniciar(RachaSinCelularId.of(idGenerator.newId()),
+                registro.participanteId(), registro.id(), command.horasObjetivo(), ahora);
         return saveRachaPort.save(racha);
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = RachaVencidaException.class)
     public RachaSinCelular cerrar(CerrarRachaCommand command) {
         RachaSinCelular racha = requireRachaActiva(command.actorId());
         Instant ahora = clock.now();
@@ -126,10 +149,14 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
             throw new IllegalStateException("Todavia no llegas al primer hito de 3 horas");
         }
         if (ahora.isAfter(racha.plazoCierre(EXTENSION_DEFAULT_HORAS))) {
+            // C-9: igual que en RegistroService.completar — sin el noRollbackFor de arriba
+            // (acotado a este tipo puntual, no a IllegalStateException en general) el throw
+            // revierte el save y liberarRegistro de las lineas anteriores, la racha queda
+            // ACTIVA para siempre y rachas_viva_uk le impide al aprendiz iniciar otra.
             racha.expirar(ahora);
             saveRachaPort.save(racha);
             liberarRegistro(racha, ahora);
-            throw new IllegalStateException("El plazo para cerrar esta racha ya vencio");
+            throw new RachaVencidaException("El plazo para cerrar esta racha ya vencio");
         }
 
         boolean completo = racha.cerrar(ahora);
@@ -178,21 +205,44 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
         return guardada;
     }
 
+    /**
+     * C-6: cada racha vencida se cierra en su propia transaccion ({@link #transaccionPropia},
+     * REQUIRES_NEW) — si una falla (por ejemplo, {@link #liberarRegistro} no encuentra el
+     * registro), esa racha queda ACTIVA para el proximo barrido y las demas se procesan
+     * igual, en vez de que una sola fila mala revierta el barrido completo de la noche.
+     */
     @Override
-    @Transactional
     public int expirarVencidas(List<UserId> participanteIds) {
         List<RachaSinCelular> activas = loadRachaPort.activasDe(participanteIds);
         Instant ahora = clock.now();
         int expiradas = 0;
+        int fallidas = 0;
         for (RachaSinCelular racha : activas) {
-            if (ahora.isAfter(racha.plazoCierre(EXTENSION_DEFAULT_HORAS))) {
-                racha.expirar(ahora);
-                saveRachaPort.save(racha);
-                liberarRegistro(racha, ahora);
+            if (!ahora.isAfter(racha.plazoCierre(EXTENSION_DEFAULT_HORAS))) {
+                continue;
+            }
+            try {
+                expirarUnaEnTransaccionPropia(racha, ahora);
                 expiradas++;
+            } catch (RuntimeException ex) {
+                fallidas++;
+                log.warn("[habits] no se pudo expirar la racha sin celular {} (participante {}): {}", racha.id(),
+                        racha.participanteId(), ex.toString());
             }
         }
+        if (expiradas > 0 || fallidas > 0) {
+            log.info("[habits] barrido de expiracion de rachas sin celular: {} expirada(s), {} fallida(s) de {} activa(s)",
+                    expiradas, fallidas, activas.size());
+        }
         return expiradas;
+    }
+
+    private void expirarUnaEnTransaccionPropia(RachaSinCelular racha, Instant ahora) {
+        transaccionPropia.executeWithoutResult(status -> {
+            racha.expirar(ahora);
+            saveRachaPort.save(racha);
+            liberarRegistro(racha, ahora);
+        });
     }
 
     private void liberarRegistro(RachaSinCelular racha, Instant ahora) {

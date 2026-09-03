@@ -20,15 +20,15 @@ class RegistroPoliticasHabitoTest {
     private static final Instant AHORA = Instant.parse("2026-08-26T10:00:00Z");
 
     private static Habito habito(TipoHabito tipo, String claveSistema) {
-        return Habito.rehydrate(HabitoId.newId(), AmbitoHabito.SISTEMA, null, "Habito", null, tipo, null, null,
-                claveSistema, ExigenciaEvidencia.OPCIONAL, false, false, false, null, null, null, null, true, AHORA,
-                AHORA);
+        return Habito.rehydrate(HabitoId.of(UUID.randomUUID()), AmbitoHabito.SISTEMA, null, "Habito", null, tipo, null,
+                null, claveSistema, ExigenciaEvidencia.OPCIONAL, false, false, true, false, null, null, null, null,
+                true, AHORA, AHORA);
     }
 
     private static Habito habitoPersonal(TipoHabito tipo) {
-        return Habito.rehydrate(HabitoId.newId(), AmbitoHabito.PERSONAL, UserId.of(UUID.randomUUID()), "Mio", null,
-                tipo, null, null, null, ExigenciaEvidencia.OPCIONAL, false, false, false, null, null, null, null,
-                true, AHORA, AHORA);
+        return Habito.rehydrate(HabitoId.of(UUID.randomUUID()), AmbitoHabito.PERSONAL, UserId.of(UUID.randomUUID()),
+                "Mio", null, tipo, null, null, null, ExigenciaEvidencia.OPCIONAL, false, false, true, false, null,
+                null, null, null, true, AHORA, AHORA);
     }
 
     private static PoliticaHabito politica(SelectorHabito selector, DecisionPolitica decision) {

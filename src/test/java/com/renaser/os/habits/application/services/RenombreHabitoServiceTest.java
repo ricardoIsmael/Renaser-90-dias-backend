@@ -56,11 +56,11 @@ class RenombreHabitoServiceTest {
     }
 
     private static Habito habitoRenombrable(String claveSistema) {
-        Habito base = Habito.crearDeSistema("Jugo verde", TipoHabito.CHECKBOX, "NUTRICION",
-                ExigenciaEvidencia.OPCIONAL, CLOCK.now());
+        Habito base = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Jugo verde", TipoHabito.CHECKBOX,
+                "NUTRICION", ExigenciaEvidencia.OPCIONAL, CLOCK.now());
         return Habito.rehydrate(base.id(), base.ambito(), null, base.titulo(), null, base.tipo(),
-                base.categoriaClave(), null, claveSistema, base.exigenciaEvidencia(), false, false, false, null,
-                null, null, null, true, CLOCK.now(), CLOCK.now());
+                base.categoriaClave(), null, claveSistema, base.exigenciaEvidencia(), false, false, true, false,
+                null, null, null, null, true, CLOCK.now(), CLOCK.now());
     }
 
     @Test
@@ -122,7 +122,7 @@ class RenombreHabitoServiceTest {
         when(progresoPort.deParticipante(actor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, true)));
 
-        assertThatThrownBy(() -> service.renombrar(new RenombrarHabitoCommand(actor, HabitoId.newId(), "titulo",
-                "motivo"))).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> service.renombrar(new RenombrarHabitoCommand(actor, HabitoId.of(UUID.randomUUID()),
+                "titulo", "motivo"))).isInstanceOf(NotAuthorizedException.class);
     }
 }

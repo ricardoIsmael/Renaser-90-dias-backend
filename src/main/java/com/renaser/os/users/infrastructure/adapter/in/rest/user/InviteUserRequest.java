@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 public record InviteUserRequest(
-        @NotBlank String supabaseUserId,
+        @NotBlank String usuarioId,
         @NotBlank @Email String email,
         @NotBlank String fullName,
         @NotNull UserRole role) {

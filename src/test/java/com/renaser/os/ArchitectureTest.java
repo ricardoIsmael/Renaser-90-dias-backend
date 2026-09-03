@@ -7,6 +7,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModules;
 
+import java.util.UUID;
+
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 /**
@@ -86,6 +88,21 @@ class ArchitectureTest {
                 .orShould().haveSimpleNameEndingWith("Helper")
                 .orShould().haveSimpleNameEndingWith("Manager")
                 .because("son nombres que no dicen nada y se vuelven basureros (CLAUDE.MD sec. 5.4.8)")
+                .check(CLASSES);
+    }
+
+
+    @Test
+    @DisplayName("domain/ no genera identidad: el id entra por el puerto IdGenerator")
+    void domainDoesNotGenerateItsOwnIdentity() {
+        noClasses()
+                .that().resideInAPackage("..domain..")
+                .should().callMethod(UUID.class, "randomUUID")
+                .because("domain/ es puro y determinista: sin I/O, sin reloj, sin aleatoriedad "
+                        + "(CLAUDE.MD sec. 5.4.7). La identidad entra por IdGenerator, igual que la "
+                        + "hora entra por Clock — una factoria que llama a randomUUID() devuelve un "
+                        + "objeto distinto en cada invocacion y vuelve intesteable comparar el "
+                        + "agregado esperado contra el obtenido (D-59)")
                 .check(CLASSES);
     }
 }

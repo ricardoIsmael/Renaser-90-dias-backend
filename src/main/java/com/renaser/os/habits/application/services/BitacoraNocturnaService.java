@@ -7,8 +7,10 @@ import com.renaser.os.habits.application.ports.out.diario.SaveEntradaDiarioPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.domain.model.diario.EntradaDiario;
+import com.renaser.os.habits.domain.model.diario.EntradaDiarioId;
 import com.renaser.os.habits.domain.model.diario.TipoEntradaDiario;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -28,13 +30,16 @@ public class BitacoraNocturnaService implements EscribirBitacoraNocturnaUseCase,
     private final LoadEntradaDiarioPort loadPort;
     private final SaveEntradaDiarioPort savePort;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public BitacoraNocturnaService(ConsultarProgresoParticipanteHabitsPort progresoPort,
-                                    LoadEntradaDiarioPort loadPort, SaveEntradaDiarioPort savePort, Clock clock) {
+                                    LoadEntradaDiarioPort loadPort, SaveEntradaDiarioPort savePort, Clock clock,
+                                    IdGenerator idGenerator) {
         this.progresoPort = progresoPort;
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -46,7 +51,9 @@ public class BitacoraNocturnaService implements EscribirBitacoraNocturnaUseCase,
 
         Optional<EntradaDiario> existente = loadPort.porParticipanteFechaYTipo(command.actorId(), hoy,
                 TipoEntradaDiario.BITACORA_NOCTURNA);
-        EntradaDiario entrada = existente.orElseGet(() -> EntradaDiario.escribir(command.actorId(), hoy,
+        // Solo el camino de alta pide identidad nueva: si ya hay entrada de hoy se reusa la suya.
+        EntradaDiario entrada = existente.orElseGet(() -> EntradaDiario.escribir(
+                EntradaDiarioId.of(idGenerator.newId()), command.actorId(), hoy,
                 TipoEntradaDiario.BITACORA_NOCTURNA, command.contenidoTexto(), ahora));
         if (existente.isPresent()) {
             entrada.actualizarTexto(command.contenidoTexto(), ahora);

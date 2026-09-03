@@ -1,6 +1,7 @@
 package com.renaser.os.support.application.services;
 
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.support.api.TicketMentorAbiertoEvent;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.NoSuchElementException;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -45,7 +47,8 @@ class TicketMentorServiceTest {
         actores = new FakeUserSummaryFinder();
         participaciones = new FakeParticipacionProgramaFinder();
         events = new RecordingEventPublisher();
-        service = new TicketMentorService(port, port, port, actores, participaciones, events, CLOCK);
+        service = new TicketMentorService(port, port, port, actores, participaciones, events, CLOCK,
+                idsSecuenciales());
 
         trainee = UserId.of(UUID.randomUUID());
         mentor = UserId.of(UUID.randomUUID());
@@ -53,6 +56,16 @@ class TicketMentorServiceTest {
         actores.conActor(trainee, UserRole.TRAINEE).conActor(mentor, UserRole.MENTOR)
                 .conActor(admin, UserRole.ADMIN);
         participaciones.conMentorAsignado(trainee, mentor);
+    }
+
+    /**
+     * Identidad determinista: con el id entrando por el puerto {@code IdGenerator}, la factoria
+     * del agregado ya no lo sortea. Es <b>secuencial</b>, no fijo, porque hay tests que abren mas
+     * de un ticket y el fake en memoria los indexa por id — un id fijo los colapsaria en uno solo.
+     */
+    private static IdGenerator idsSecuenciales() {
+        AtomicInteger contador = new AtomicInteger();
+        return () -> UUID.fromString("00000000-0000-4000-8000-%012d".formatted(contador.incrementAndGet()));
     }
 
     private TicketMentor abrirTicketDeTrainee() {
@@ -112,7 +125,8 @@ class TicketMentorServiceTest {
     @DisplayName("responder() sobre un ticket que no existe lanza NoSuchElementException")
     void responderTicketInexistente() {
         assertThatThrownBy(() -> service.responder(new ResponderTicketMentorCommand(
-                TicketMentorId.newId(), mentor, "respuesta"))).isInstanceOf(NoSuchElementException.class);
+                TicketMentorId.of(UUID.randomUUID()), mentor, "respuesta")))
+                .isInstanceOf(NoSuchElementException.class);
     }
 
     @Test

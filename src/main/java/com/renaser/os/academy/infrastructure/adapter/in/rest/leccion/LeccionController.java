@@ -6,8 +6,10 @@ import com.renaser.os.academy.application.ports.in.leccion.ConsultarMotivoBloque
 import com.renaser.os.academy.application.ports.in.leccion.DescompletarLeccionUseCase;
 import com.renaser.os.academy.domain.model.curso.LeccionId;
 import com.renaser.os.academy.infrastructure.adapter.in.rest.curso.MotivoBloqueoResponse;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,12 +39,14 @@ public class LeccionController {
         this.descompletarUseCase = descompletarUseCase;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "curso accesible y seccion ya desbloqueada por el dia de programa")
     @GetMapping("/{id}")
     public LeccionDetalleResponse leccion(@ActorAutenticado UserId actorId,
                                            @PathVariable("id") String leccionId) {
         return LeccionDetalleResponse.from(leccionUseCase.leccion(actorId, LeccionId.of(leccionId)));
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping("/{id}/preview")
     public MotivoBloqueoResponse preview(@ActorAutenticado UserId actorId,
                                           @PathVariable("id") String leccionId) {
@@ -54,6 +58,7 @@ public class LeccionController {
      * `leccion_progreso` (`src/services/cursos.ts: marcarLeccionCompletada`) —
      * cambio de release coordinado, ver `docs/MODULO_ACADEMY.md` §6.
      */
+    @RequiresPermission(value = Permission.USE_APP, scope = "curso accesible y seccion ya desbloqueada por el dia de programa")
     @PostMapping("/{id}/complete")
     public CompletarLeccionResponse completar(@ActorAutenticado UserId actorId,
                                                @PathVariable("id") String leccionId) {
@@ -65,6 +70,7 @@ public class LeccionController {
      * hacia hoy contra `leccion_progreso` (`src/services/cursos.ts:
      * desmarcarLeccion` del repo RN), ver `docs/MODULO_ACADEMY.md` §5, AC-16.
      */
+    @RequiresPermission(value = Permission.USE_APP, scope = "curso accesible y seccion ya desbloqueada por el dia de programa")
     @DeleteMapping("/{id}/complete")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void descompletar(@ActorAutenticado UserId actorId,

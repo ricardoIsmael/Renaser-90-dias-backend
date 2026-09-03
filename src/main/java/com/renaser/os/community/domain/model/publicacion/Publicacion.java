@@ -48,13 +48,19 @@ public final class Publicacion {
 
     /** La existencia/actividad de `categoriaClave` NO se valida aca: es una consulta a
      * `categorias_muro` que el dominio no puede hacer (CLAUDE.MD sec. 5.1) — la comprueba
-     * el caso de uso antes de llamar a este factory. */
-    public static Publicacion publicar(UserId autorId, String texto, List<MediaPublicacion> media,
-                                        String categoriaClave, Instant ahora) {
+     * el caso de uso antes de llamar a este factory.
+     *
+     * <p>El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code PublicacionMuroService.publicar}).
+     * Asi la factoria es referencialmente transparente y un test puede fijar el id que espera,
+     * en vez de tener que caer a {@link #rehydrate} para lograrlo. */
+    public static Publicacion publicar(PublicacionId id, UserId autorId, String texto,
+                                        List<MediaPublicacion> media, String categoriaClave, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(autorId, "autorId es obligatorio");
         requireTextoValido(texto);
         List<MediaPublicacion> mediaOrdenada = requireMediaValida(media);
-        return new Publicacion(PublicacionId.newId(), autorId, TipoPublicacion.MANUAL, categoriaClave, texto.trim(),
+        return new Publicacion(id, autorId, TipoPublicacion.MANUAL, categoriaClave, texto.trim(),
                 mediaOrdenada, false, ahora, ahora);
     }
 
@@ -66,13 +72,17 @@ public final class Publicacion {
      * documentado desde el inicio como "sin ningun trigger que lo genere todavia"). Sin
      * categoria: clasificar en una categoria del Muro es una decision manual del autor,
      * no aplica a un post que ningun humano redacto desde el editor.
+     *
+     * <p>El {@code id} entra por parametro, igual que en {@link #publicar}: lo pide el caso de uso
+     * al puerto {@code IdGenerator} ({@code PublicacionMuroService.publicarDesdeEvidencia}).
      */
-    public static Publicacion publicarAutomatica(UserId autorId, String texto, List<MediaPublicacion> media,
-                                                  Instant ahora) {
+    public static Publicacion publicarAutomatica(PublicacionId id, UserId autorId, String texto,
+                                                  List<MediaPublicacion> media, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(autorId, "autorId es obligatorio");
         requireTextoValido(texto);
         List<MediaPublicacion> mediaOrdenada = requireMediaValida(media);
-        return new Publicacion(PublicacionId.newId(), autorId, TipoPublicacion.HITO_AUTOMATICO, null, texto.trim(),
+        return new Publicacion(id, autorId, TipoPublicacion.HITO_AUTOMATICO, null, texto.trim(),
                 mediaOrdenada, false, ahora, ahora);
     }
 

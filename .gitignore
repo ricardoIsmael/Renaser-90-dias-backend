@@ -41,3 +41,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Evidencia de navegador de archify (docs/arquitectura/) ###
+# Capturas y hoja de contactos que genera `archify visual-check`. Son evidencia de una
+# corrida puntual, pesan ~700 KB y se regeneran en un comando; el recibo JSON si se versiona
+# porque es el que documenta que el artefacto contuvo a 1440x900.
+docs/arquitectura/*.visual-check.*.png
+docs/arquitectura/*.visual-check.html

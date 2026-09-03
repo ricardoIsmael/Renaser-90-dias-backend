@@ -11,8 +11,10 @@ import com.renaser.os.chat.application.ports.in.miembro.ListarMiembrosGlobalUseC
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.infrastructure.adapter.in.rest.miembro.MiembrosPageResponse;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -54,6 +56,7 @@ public class ConversacionController {
         this.renombrarConversacionGlobalUseCase = renombrarConversacionGlobalUseCase;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el destinatario tambien tiene que estar activo")
     @PostMapping("/direct")
     public ResponseEntity<ConversacionResponse> obtenerOCrearDirecta(
             @ActorAutenticado UserId actorId,
@@ -63,11 +66,13 @@ public class ConversacionController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ConversacionResponse.from(conversacion));
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping
     public List<ConversacionResumenResponse> listar(@ActorAutenticado UserId actorId) {
         return listarUseCase.listar(actorId).stream().map(ConversacionResumenResponse::from).toList();
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "participante de la conversacion")
     @PostMapping("/{id}/read")
     public ResponseEntity<Map<String, String>> marcarLeido(@ActorAutenticado UserId actorId,
                                                              @PathVariable UUID id) {
@@ -76,6 +81,7 @@ public class ConversacionController {
     }
 
     /** Ficha del grupo GLOBAL (#28): todos sus miembros, los cinco roles. */
+    @RequiresPermission(value = Permission.USE_APP, scope = "participante del grupo GLOBAL")
     @GetMapping("/global/members")
     public MiembrosPageResponse listarMiembrosGlobal(@ActorAutenticado UserId actorId,
                                                        @RequestParam(required = false) String cursor,
@@ -87,6 +93,7 @@ public class ConversacionController {
 
     /** Renombrar el grupo GLOBAL (#28) — solo ADMIN/ALCHEMIST, el caso de uso rechaza
      * con 403 a cualquier otro rol. */
+    @RequiresPermission(Permission.RENAME_GLOBAL_CHAT)
     @PatchMapping("/global/name")
     public ResponseEntity<Map<String, String>> renombrarGlobal(
             @ActorAutenticado UserId actorId,

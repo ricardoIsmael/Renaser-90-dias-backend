@@ -30,12 +30,13 @@ public final class ContratoFase {
     private final Instant firmadoEn;
     private final Instant creadoEn;
 
-    public static ContratoFase firmar(UserId participanteId, int diaProgramaActual, Clock clock) {
+    public static ContratoFase firmar(ContratoFaseId id, UserId participanteId, int diaProgramaActual, Clock clock) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         FasePrograma fase = FasePrograma.paraDiaPrograma(diaProgramaActual);
         requireFirmable(fase, diaProgramaActual);
         Instant ahora = clock.now();
-        return new ContratoFase(ContratoFaseId.newId(), participanteId, fase, BUCKET_DEFAULT,
+        return new ContratoFase(id, participanteId, fase, BUCKET_DEFAULT,
                 rutaFirma(participanteId, fase), ahora, ahora);
     }
 

@@ -4,8 +4,10 @@ import com.renaser.os.habits.application.ports.in.radar.ConsultarHistorialRadarU
 import com.renaser.os.habits.application.ports.in.radar.ConsultarUltimoRadarUseCase;
 import com.renaser.os.habits.application.ports.in.radar.RegistrarCheckInRadarUseCase;
 import com.renaser.os.habits.application.ports.in.radar.RegistrarCheckInRadarUseCase.RegistrarCheckInRadarCommand;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,6 +50,7 @@ public class RadarController {
         this.historialUseCase = historialUseCase;
     }
 
+    @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @PostMapping
     public RegistroRadarResponse registrar(@ActorAutenticado UserId actor,
                                             @RequestBody @Valid RegistrarCheckInRadarRequest request) {
@@ -57,6 +60,7 @@ public class RadarController {
         return RegistroRadarResponse.from(registro);
     }
 
+    @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @GetMapping("/latest")
     public UltimoRadarResponse ultimo(@ActorAutenticado UserId actor) {
         return ultimoUseCase.ultimo(actor, actor)
@@ -64,6 +68,7 @@ public class RadarController {
                 .orElse(new UltimoRadarResponse(null));
     }
 
+    @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @GetMapping("/history")
     public RadarHistoryPageResponse historial(@ActorAutenticado UserId actor,
                                                @RequestParam(required = false) Instant cursor) {

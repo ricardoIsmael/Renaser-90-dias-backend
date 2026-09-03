@@ -30,6 +30,9 @@
 		<java.version>25</java.version>
 		<spring-ai.version>2.0.0</spring-ai.version>
 		<spring-modulith.version>2.1.0</spring-modulith.version>
+		<!-- SDK de AWS v2 para el adaptador real de S3 (AlmacenamientoPort). El artefacto
+		     `s3` ya trae el S3Presigner: en la v2 no es un modulo aparte como en la v1. -->
+		<aws-sdk.version>2.42.41</aws-sdk.version>
 		<mapstruct.version>1.6.3</mapstruct.version>
 		<!-- Obligatorio desde Lombok 1.18.16: hace que MapStruct espere a que Lombok
 		     genere getters/setters. Sin esto los mappers se generan vacios SIN fallar el build. -->
@@ -47,6 +50,14 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-cache</artifactId>
 		</dependency>
+		<!-- Cache en memoria (Caffeine) para hot paths de lectura pura (CLAUDE.MD sec. 3 y 6,
+		     D-63). El starter-cache de arriba trae la abstraccion (@Cacheable/@EnableCaching);
+		     esta es la implementacion concreta que Spring Boot autoconfigura si la encuentra
+		     en el classpath. Sin version: la fija spring-boot-dependencies (el BOM del parent). -->
+		<dependency>
+			<groupId>com.github.ben-manes.caffeine</groupId>
+			<artifactId>caffeine</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
@@ -55,17 +66,7 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-redis</artifactId>
 		</dependency>
-		<!--
-			Sesion opaca guardada en Redis. Da hecho lo que si no habria que escribir a mano:
-			generar el identificador, guardarlo, expirarlo por TTL, manejar la cookie, y buscar
-			todas las sesiones de un usuario para cerrarlas de un golpe. Ver docs/MODULO_AUTH.md.
 
-			El STARTER de Boot, no la libreria `org.springframework.session:spring-session-data-redis`
-			suelta: en Boot 4 la autoconfiguracion vive en un modulo aparte, asi que la libreria sola
-			pone las clases en el classpath pero NO registra ningun bean. Sintoma: todo compila y los
-			tests pasan hasta que algo inyecta FindByIndexNameSessionRepository, y ahi revienta el
-			contexto entero con "required a bean that could not be found".
-		-->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-session-data-redis</artifactId>
@@ -91,14 +92,7 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
-		<!--
-			Envio de correo transaccional (codigo de verificacion, activacion de cuenta,
-			reseteo de contrasena, invitacion de staff). Aporta JavaMailSender, que Spring Boot
-			autoconfigura a partir de las propiedades `spring.mail.*`
-			(https://docs.spring.io/spring-boot/reference/io/email.html). Sin esas propiedades
-			no se crea el bean y el perfil se queda en el adaptador NoOp — ver
-			SmtpEnviarEmailAdapter.
-		-->
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-mail</artifactId>
@@ -150,6 +144,27 @@
 		<dependency>
 			<groupId>org.springframework.modulith</groupId>
 			<artifactId>spring-modulith-starter-jpa</artifactId>
+		</dependency>
+
+		<!--
+			S3 para S3AlmacenamientoAdapter: los 9 servicios que firman lecturas
+			(audioterapia, portadas de cursos y eventos, media del muro, testimonios, firma
+			de contratos, adjuntos de tickets, avatares) devolvian `about:blank` hasta que
+			existio este adaptador. El S3Presigner viene DENTRO de este artefacto: en el SDK
+			v2 no es un modulo aparte como lo era en la v1. Version fijada por el BOM.
+			No se usa el starter de Spring Cloud AWS: los dos beans que hacen falta se crean
+			en AlmacenamientoS3Config en cinco lineas, y ese starter arrastra su propio ciclo
+			de versiones atado a una linea concreta de Spring Boot.
+		-->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+			<exclusions>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>netty-nio-client</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 
 		<dependency>
@@ -249,6 +264,19 @@
 			<version>2.2.4</version>
 			<scope>test</scope>
 		</dependency>
+		<!-- ShedLock: lock distribuido para los @Scheduled que NO son seguros con N instancias.
+		     Solo 3 de los 10 schedulers lo llevan; la clasificacion caso por caso, y por que los
+		     otros 7 no lo necesitan, esta en docs/informes/auditoria-fixes/C-5.md (hallazgo C-5). -->
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-spring</artifactId>
+			<version>7.9.0</version>
+		</dependency>
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-provider-jdbc-template</artifactId>
+			<version>7.9.0</version>
+		</dependency>
 	</dependencies>
 	<dependencyManagement>
 		<dependencies>
@@ -263,6 +291,18 @@
 				<groupId>org.springframework.modulith</groupId>
 				<artifactId>spring-modulith-bom</artifactId>
 				<version>${spring-modulith.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<!--
+				BOM del SDK de AWS: alinea a una sola version las ~20 dependencias transitivas
+				de `s3` (auth, regions, http-client-spi, netty...). Sin el habria que fijar la
+				version de cada artefacto a mano.
+			-->
+			<dependency>
+				<groupId>software.amazon.awssdk</groupId>
+				<artifactId>bom</artifactId>
+				<version>${aws-sdk.version}</version>
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>

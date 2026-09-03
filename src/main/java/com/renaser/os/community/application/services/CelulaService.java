@@ -30,6 +30,7 @@ import com.renaser.os.community.domain.model.cohorte.Cohorte;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.AsignacionCelulaPort;
@@ -70,6 +71,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     private final AsignacionCelulaPort asignacionCelulaPort;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public CelulaService(LoadCelulaPort loadCelulaPort, SaveCelulaPort saveCelulaPort,
                           EliminarCelulaPort eliminarCelulaPort, LoadCohortePort loadCohortePort,
@@ -79,7 +81,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
                           ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort, UserSummaryFinder userSummaryFinder,
                           ParticipacionProgramaFinder participacionProgramaFinder,
                           AsignacionCelulaPort asignacionCelulaPort, ApplicationEventPublisher events,
-                          Clock clock) {
+                          Clock clock, IdGenerator idGenerator) {
         this.loadCelulaPort = loadCelulaPort;
         this.saveCelulaPort = saveCelulaPort;
         this.eliminarCelulaPort = eliminarCelulaPort;
@@ -93,33 +95,36 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         this.asignacionCelulaPort = asignacionCelulaPort;
         this.events = events;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
     @Transactional
-    public Celula crear(CrearCelulaCommand command) {
+    public CelulaDetalle crear(CrearCelulaCommand command) {
         requireAdmin(command.actorId());
         requireCohorte(command.cohorteId());
-        Celula celula = Celula.crear(command.nombre(), command.cohorteId(), command.urlVideollamada(), clock.now());
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        Celula celula = Celula.crear(CelulaId.of(idGenerator.newId()), command.nombre(), command.cohorteId(),
+                command.urlVideollamada(), clock.now());
         Celula guardada = saveCelulaPort.save(celula);
         events.publishEvent(new CelulaCreadaEvent(guardada.id().value(), clock.now()));
-        return guardada;
+        return aDetalle(guardada);
     }
 
     @Override
     @Transactional
-    public Celula actualizar(ActualizarCelulaCommand command) {
+    public CelulaDetalle actualizar(ActualizarCelulaCommand command) {
         requireAdmin(command.actorId());
         Celula celula = requireCelula(command.celulaId());
         requireCohorteNoCompletada(celula.cohorteId());
         celula.actualizarDatos(command.nombre(), command.urlVideollamada(), command.tocaUrlVideollamada(),
                 clock.now());
-        return saveCelulaPort.save(celula);
+        return aDetalle(saveCelulaPort.save(celula));
     }
 
     @Override
     @Transactional
-    public Celula asignar(AsignarMentorCelulaCommand command) {
+    public CelulaDetalle asignar(AsignarMentorCelulaCommand command) {
         requireAdmin(command.actorId());
         Celula celula = requireCelula(command.celulaId());
         UserSummary lider = userSummaryFinder.findById(command.mentorId())
@@ -140,16 +145,16 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
             throw new IllegalStateException("Ese mentor ya lidera otra celula");
         }
         celula.asignarMentor(command.mentorId(), clock.now());
-        return saveCelulaPort.save(celula);
+        return aDetalle(saveCelulaPort.save(celula));
     }
 
     @Override
     @Transactional
-    public Celula quitar(QuitarMentorCelulaCommand command) {
+    public CelulaDetalle quitar(QuitarMentorCelulaCommand command) {
         requireAdmin(command.actorId());
         Celula celula = requireCelula(command.celulaId());
         celula.quitarMentor(clock.now());
-        return saveCelulaPort.save(celula);
+        return aDetalle(saveCelulaPort.save(celula));
     }
 
     /**
@@ -160,9 +165,9 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
      */
     @Override
     @Transactional
-    public void asignar(AsignarAprendizCelulaCommand command) {
+    public CelulaDetalle asignar(AsignarAprendizCelulaCommand command) {
         requireAdmin(command.actorId());
-        requireCelula(command.celulaId());
+        Celula celula = requireCelula(command.celulaId());
         UserSummary trainee = userSummaryFinder.findById(command.traineeId())
                 .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado: " + command.traineeId()));
         if (trainee.status() != UserStatus.ACTIVE) {
@@ -172,6 +177,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
             throw new IllegalArgumentException("Solo se puede asignar celula a un aprendiz");
         }
         asignacionCelulaPort.asignarCelula(command.actorId(), command.traineeId(), command.celulaId().value());
+        return aDetalle(celula);
     }
 
     /** Contraparte de {@link #asignar(AsignarAprendizCelulaCommand)}. */
@@ -184,11 +190,11 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
 
     @Override
     @Transactional
-    public Celula programar(ProgramarSesionCelulaCommand command) {
+    public CelulaDetalle programar(ProgramarSesionCelulaCommand command) {
         requireAdmin(command.actorId());
         Celula celula = requireCelula(command.celulaId());
         celula.programarSesion(command.proximaSesionEn(), clock.now());
-        return saveCelulaPort.save(celula);
+        return aDetalle(saveCelulaPort.save(celula));
     }
 
     @Override
@@ -225,8 +231,16 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         } else {
             requireRolAdmin(actor);
         }
+        return aDetalle(celula);
+    }
+
+    /** Proyeccion completa de una celula — la misma que devuelve {@link #obtener}. Las
+     * mutaciones la construyen DENTRO de su propia transaccion (CLAUDE.MD sec. 5.4.6): el
+     * controller ya no encadena "muto y despues consulto", que caia en dos transacciones
+     * distintas y podia responder un estado ya cambiado por otro. */
+    private CelulaDetalle aDetalle(Celula celula) {
         PerfilBasico mentor = celula.mentorId() != null ? perfilBasico(celula.mentorId()) : null;
-        List<PerfilBasico> miembros = consultarMiembrosCelulaPort.deCelula(celulaId).stream()
+        List<PerfilBasico> miembros = consultarMiembrosCelulaPort.deCelula(celula.id()).stream()
                 .map(this::perfilBasico).toList();
         return new CelulaDetalle(celula, mentor, miembros);
     }

@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,4 +35,14 @@ interface SpringDataComentarioRepository extends JpaRepository<ComentarioJpaEnti
                                                @Param("cursor") Instant cursor, Pageable pageable);
 
     long countByPublicacionIdAndOcultoFalse(UUID publicacionId);
+
+    /** Conteo en lote para una pagina entera del feed (E-80): una sola consulta agrupada en vez
+     * de una por publicacion. Devuelve solo las publicaciones QUE TIENEN al menos un comentario
+     * visible — las que no aparecen valen cero, y de eso se encarga quien consume. */
+    @Query("""
+            SELECT c.publicacionId, COUNT(c) FROM ComentarioJpaEntity c
+            WHERE c.publicacionId IN :publicacionIds AND c.oculto = false
+            GROUP BY c.publicacionId
+            """)
+    List<Object[]> contarPorPublicacion(@Param("publicacionIds") Collection<UUID> publicacionIds);
 }

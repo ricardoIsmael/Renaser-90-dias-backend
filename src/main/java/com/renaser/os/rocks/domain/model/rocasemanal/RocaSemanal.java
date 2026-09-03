@@ -42,15 +42,23 @@ public final class RocaSemanal {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    /** Planifica una nueva Roca Semanal, con sus 3 acciones críticas (Planning Semanal, W-02). */
-    public static RocaSemanal planificar(RocaMaestraId rocaMaestraId, int numeroSemana, String titulo,
-                                          List<AccionCritica> acciones, String obstaculo, String contingencia,
-                                          Integer autoevaluacionInicio, Clock clock) {
+    /**
+     * Planifica una nueva Roca Semanal, con sus 3 acciones críticas (Planning Semanal, W-02).
+     *
+     * <p>El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code RocaSemanalService.crear}). Asi la
+     * factoria es referencialmente transparente y un test puede fijar el id que espera, en
+     * vez de tener que caer a {@link #rehydrate} para lograrlo (CLAUDE.MD §5.4.7).
+     */
+    public static RocaSemanal planificar(RocaSemanalId id, RocaMaestraId rocaMaestraId, int numeroSemana,
+                                          String titulo, List<AccionCritica> acciones, String obstaculo,
+                                          String contingencia, Integer autoevaluacionInicio, Clock clock) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(rocaMaestraId, "rocaMaestraId es obligatorio");
         requireNumeroSemanaValido(numeroSemana);
         requireAccionesValidas(acciones);
         Instant ahora = clock.now();
-        return new RocaSemanal(RocaSemanalId.newId(), rocaMaestraId, numeroSemana, requireTitulo(titulo), acciones,
+        return new RocaSemanal(id, rocaMaestraId, numeroSemana, requireTitulo(titulo), acciones,
                 requireTexto(obstaculo, "obstaculo"), requireTexto(contingencia, "contingencia"),
                 requireEscala(autoevaluacionInicio, "autoevaluacionInicio"), null, null, null, ahora, ahora);
     }

@@ -7,6 +7,7 @@ import com.renaser.os.calendar.application.ports.out.nivelmembresia.LoadNivelMem
 import com.renaser.os.calendar.application.ports.out.participante.ConsultarProgresoParticipanteCalendarPort;
 import com.renaser.os.calendar.application.ports.out.participante.ConsultarProgresoParticipanteCalendarPort.ProgresoParticipanteCalendar;
 import com.renaser.os.calendar.domain.model.evento.Evento;
+import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.evento.RolUsuario;
 import com.renaser.os.calendar.domain.model.evento.TipoAudiencia;
 import com.renaser.os.calendar.domain.model.evento.TipoEvento;
@@ -80,9 +81,10 @@ class ProximoEventoServiceTest {
     }
 
     private Evento eventoSuelto(String titulo, Instant iniciaEn) {
-        return Evento.crear(titulo, null, iniciaEn, 60, ZoneId.of("America/Lima"), TipoUbicacion.MEET,
-                "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO, false,
-                false, false, null, Set.of(), List.of(), actorId, CLOCK);
+        return Evento.crear(EventoId.of(UUID.randomUUID()), titulo, null, iniciaEn, 60,
+                ZoneId.of("America/Lima"), TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS,
+                null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(), actorId,
+                CLOCK);
     }
 
     @Test
@@ -115,5 +117,18 @@ class ProximoEventoServiceTest {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(suspendido));
 
         assertThatThrownBy(() -> service.proximoEventoDe(actorId)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    void unEventoFueraDeLaAudienciaDelVisorNoEsElProximo() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolUsuario.TRAINEE)));
+        Evento soloAdmins = Evento.crear(EventoId.of(UUID.randomUUID()), "Solo admins", null,
+                Instant.parse("2026-08-25T09:00:00Z"), 60, ZoneId.of("America/Lima"), TipoUbicacion.MEET,
+                "https://meet.google.com/abc", TipoAudiencia.ROLES,
+                null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(RolUsuario.ADMIN),
+                List.of(), actorId, CLOCK);
+        when(loadEventoPort.candidatosParaVisor(any(), any())).thenReturn(List.of(soloAdmins));
+
+        assertThat(service.proximoEventoDe(actorId)).isEmpty();
     }
 }

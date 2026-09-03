@@ -1,6 +1,7 @@
 package com.renaser.os.support.application.services;
 
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.support.api.TicketMentorAbiertoEvent;
@@ -43,11 +44,12 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
     private final ParticipacionProgramaFinder participacionFinder;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public TicketMentorService(LoadTicketMentorPort loadTicketMentorPort, SaveTicketMentorPort saveTicketMentorPort,
                                 BuscarBibliotecaPort buscarBibliotecaPort, UserSummaryFinder userSummaryFinder,
                                 ParticipacionProgramaFinder participacionFinder,
-                                ApplicationEventPublisher events, Clock clock) {
+                                ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator) {
         this.loadTicketMentorPort = loadTicketMentorPort;
         this.saveTicketMentorPort = saveTicketMentorPort;
         this.buscarBibliotecaPort = buscarBibliotecaPort;
@@ -55,14 +57,17 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
         this.participacionFinder = participacionFinder;
         this.events = events;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
     @Transactional
     public TicketMentor abrir(AbrirTicketMentorCommand command) {
         requireRol(command.participanteId(), UserRole.TRAINEE, "Solo un aprendiz puede abrir un ticket");
-        TicketMentor ticket = TicketMentor.abrir(command.participanteId(), command.descripcionBloqueo(),
-                command.solucionesIntentadas(), command.impactoMetaSmart(), clock);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
+        TicketMentor ticket = TicketMentor.abrir(TicketMentorId.of(idGenerator.newId()),
+                command.participanteId(), command.descripcionBloqueo(), command.solucionesIntentadas(),
+                command.impactoMetaSmart(), clock);
         TicketMentor saved = saveTicketMentorPort.save(ticket);
         events.publishEvent(new TicketMentorAbiertoEvent(saved.id(), saved.participanteId(), clock.now()));
         return saved;

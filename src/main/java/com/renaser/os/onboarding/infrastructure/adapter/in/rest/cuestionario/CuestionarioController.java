@@ -2,8 +2,10 @@ package com.renaser.os.onboarding.infrastructure.adapter.in.rest.cuestionario;
 
 import com.renaser.os.onboarding.application.ports.in.cuestionario.ObtenerCuestionarioUseCase;
 import com.renaser.os.onboarding.application.ports.in.cuestionario.ObtenerCuestionarioUseCase.ObtenerCuestionarioQuery;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -19,6 +21,7 @@ public class CuestionarioController {
         this.obtenerCuestionarioUseCase = obtenerCuestionarioUseCase;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping("/questionnaire")
     public CuestionarioResponse obtener(@ActorAutenticado UserId actor,
                                          @RequestParam("flow") String flow) {

@@ -23,6 +23,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -61,6 +62,13 @@ class AvatarServiceTest {
         return user;
     }
 
+    /** Se comporta como el adaptador de S3: la URL publica es siempre la misma para una ruta. */
+    private void stubUrlPublicaDeterminista() {
+        when(almacenamientoPort.urlPublica(anyString()))
+                .thenAnswer(inv -> URI.create("https://s3-renaser90dias.s3.us-east-1.amazonaws.com/"
+                        + inv.getArgument(0)));
+    }
+
     @Test
     @DisplayName("solicitarUrl pide una URL firmada con el bucket compartido y una ruta por usuario")
     void solicitarUrlDevuelveBucketYRutaEsperados() {
@@ -85,20 +93,81 @@ class AvatarServiceTest {
                 .isInstanceOf(NotAuthorizedException.class);
     }
 
+    /**
+     * E-57: lo que se persiste es la URL PERMANENTE. Antes se guardaba la URL de lectura
+     * prefirmada (7 dias) y a la semana el avatar quedaba roto para siempre, en todas las
+     * pantallas que lo muestran.
+     */
     @Test
-    @DisplayName("confirmar resuelve una URL de lectura y la persiste como avatarUrl")
-    void confirmarPersisteLaUrlResuelta() {
+    @DisplayName("E-57: confirmar persiste una URL permanente, sin firma ni vencimiento")
+    void confirmarPersisteUnaUrlPermanente() {
         UserId actorId = UserId.of(UUID.randomUUID());
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId)));
-        when(almacenamientoPort.firmarLectura(anyString(), any(Duration.class)))
-                .thenReturn(URI.create("https://s3.example/avatares/" + actorId + "?sig=abc"));
+        stubUrlPublicaDeterminista();
 
         service.confirmar(new ConfirmarAvatarCommand(actorId, AvatarService.BUCKET_AVATARES,
                 "avatares/" + actorId));
 
         var captor = ArgumentCaptor.forClass(User.class);
         verify(saveUserPort).save(captor.capture());
-        assertThat(captor.getValue().avatarUrl()).isEqualTo("https://s3.example/avatares/" + actorId + "?sig=abc");
+        String guardado = captor.getValue().avatarUrl();
+        assertThat(guardado)
+                .isEqualTo("https://s3-renaser90dias.s3.us-east-1.amazonaws.com/avatares/" + actorId);
+        assertThat(guardado).doesNotContain("?", "X-Amz-Signature", "X-Amz-Expires");
+        // Nunca se pide una firma de lectura: si se pidiera, lo guardado volveria a vencer.
+        verify(almacenamientoPort, never()).firmarLectura(anyString(), any(Duration.class));
+    }
+
+    /**
+     * La prueba de que el defecto murio, y de la razon por la que se eligio URL publica en vez de
+     * firmar al leer: dos lecturas del mismo avatar dan EXACTAMENTE la misma URL. Eso es lo que
+     * permite que el cliente la cachee — una prefirmada cambiaria en cada respuesta y un muro con
+     * 20 avatares volveria a descargar las 20 fotos cada vez.
+     */
+    @Test
+    @DisplayName("E-57: dos lecturas del mismo avatar devuelven la misma URL, sin query de firma")
+    void dosLecturasDelMismoAvatarDevuelvenLaMismaUrl() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId)));
+        // Cuenta cuantas veces se llamo: la URL publica no depende de la invocacion, la prefirmada si.
+        AtomicInteger invocaciones = new AtomicInteger();
+        when(almacenamientoPort.urlPublica(anyString())).thenAnswer(inv -> {
+            invocaciones.incrementAndGet();
+            return URI.create("https://s3-renaser90dias.s3.us-east-1.amazonaws.com/" + inv.getArgument(0));
+        });
+
+        service.confirmar(new ConfirmarAvatarCommand(actorId, AvatarService.BUCKET_AVATARES,
+                "avatares/" + actorId));
+        service.confirmar(new ConfirmarAvatarCommand(actorId, AvatarService.BUCKET_AVATARES,
+                "avatares/" + actorId));
+
+        var captor = ArgumentCaptor.forClass(User.class);
+        verify(saveUserPort, org.mockito.Mockito.times(2)).save(captor.capture());
+        String primera = captor.getAllValues().get(0).avatarUrl();
+        String segunda = captor.getAllValues().get(1).avatarUrl();
+        assertThat(primera).isEqualTo(segunda);
+        assertThat(URI.create(primera).getQuery()).isNull();
+        assertThat(invocaciones).hasValue(2);
+    }
+
+    /**
+     * La `ruta` viaja en el body y no se confia en ella: la ruta publicada la recalcula el
+     * servicio desde el actor, asi que pedir que se publique el objeto de otro no cambia nada.
+     */
+    @Test
+    @DisplayName("confirmar ignora la ruta del body y publica siempre la del propio actor")
+    void confirmarIgnoraLaRutaDelBody() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId)));
+        stubUrlPublicaDeterminista();
+
+        service.confirmar(new ConfirmarAvatarCommand(actorId, AvatarService.BUCKET_AVATARES,
+                "contratos/" + UUID.randomUUID() + "/firma.png"));
+
+        verify(almacenamientoPort).urlPublica("avatares/" + actorId);
+        var captor = ArgumentCaptor.forClass(User.class);
+        verify(saveUserPort).save(captor.capture());
+        assertThat(captor.getValue().avatarUrl()).endsWith("/avatares/" + actorId);
     }
 
     @Test

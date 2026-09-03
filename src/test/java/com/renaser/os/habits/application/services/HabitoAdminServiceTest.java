@@ -12,6 +12,7 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -41,6 +42,8 @@ import static org.mockito.Mockito.when;
 class HabitoAdminServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-26T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, crearDeSistema() ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadHabitoPort loadPort;
@@ -48,6 +51,8 @@ class HabitoAdminServiceTest {
     private SaveHabitoPort savePort;
     @Mock
     private UserSummaryFinder userSummaryFinder;
+    @Mock
+    private IdGenerator idGenerator;
 
     private HabitoAdminService service;
 
@@ -58,7 +63,9 @@ class HabitoAdminServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new HabitoAdminService(loadPort, savePort, new HabitoAdminGuard(userSummaryFinder), CLOCK);
+        service = new HabitoAdminService(loadPort, savePort, new HabitoAdminGuard(userSummaryFinder), CLOCK,
+                idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(alchemist)).thenReturn(
@@ -102,7 +109,7 @@ class HabitoAdminServiceTest {
 
     @Test
     void actualizarSobreHabitoInexistenteFalla404() {
-        HabitoId id = HabitoId.newId();
+        HabitoId id = HabitoId.of(UUID.randomUUID());
         when(loadPort.byId(id)).thenReturn(Optional.empty());
         var command = new ActualizarHabitoCommand(admin, id, detalles());
 
@@ -111,7 +118,8 @@ class HabitoAdminServiceTest {
 
     @Test
     void actualizarNoCambiaElTipoNiLaClaveSistema() {
-        Habito existente = Habito.crearDeSistema("Titulo", TipoHabito.BLOQUEO, detalles(), CLOCK.now());
+        Habito existente = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Titulo", TipoHabito.BLOQUEO,
+                detalles(), CLOCK.now());
         HabitoId id = existente.id();
         when(loadPort.byId(id)).thenReturn(Optional.of(existente));
         var nuevosDetalles = new DetallesHabito("otra", "MENTE", ExigenciaEvidencia.OBLIGATORIA, true, true);
@@ -125,7 +133,8 @@ class HabitoAdminServiceTest {
 
     @Test
     void cambiarActivoDesactivaYReactiva() {
-        Habito existente = Habito.crearDeSistema("Titulo", TipoHabito.CHECKBOX, detalles(), CLOCK.now());
+        Habito existente = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Titulo", TipoHabito.CHECKBOX,
+                detalles(), CLOCK.now());
         HabitoId id = existente.id();
         when(loadPort.byId(id)).thenReturn(Optional.of(existente));
 
@@ -138,14 +147,14 @@ class HabitoAdminServiceTest {
 
     @Test
     void eliminarComoMentorEsRechazadoSinTocarElPuerto() {
-        var command = new EliminarHabitoCommand(mentor, HabitoId.newId());
+        var command = new EliminarHabitoCommand(mentor, HabitoId.of(UUID.randomUUID()));
         assertThatThrownBy(() -> service.eliminar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(savePort, never()).eliminar(any());
     }
 
     @Test
     void eliminarSobreHabitoInexistenteFalla404() {
-        HabitoId id = HabitoId.newId();
+        HabitoId id = HabitoId.of(UUID.randomUUID());
         when(loadPort.byId(id)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.eliminar(new EliminarHabitoCommand(admin, id)))
@@ -161,7 +170,8 @@ class HabitoAdminServiceTest {
     @Test
     void listarComoAdminDevuelveElCatalogoCompleto() {
         when(loadPort.catalogoCompleto()).thenReturn(
-                java.util.List.of(Habito.crearDeSistema("A", TipoHabito.CHECKBOX, detalles(), CLOCK.now())));
+                java.util.List.of(Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "A", TipoHabito.CHECKBOX,
+                        detalles(), CLOCK.now())));
 
         assertThat(service.listar(admin)).hasSize(1);
     }

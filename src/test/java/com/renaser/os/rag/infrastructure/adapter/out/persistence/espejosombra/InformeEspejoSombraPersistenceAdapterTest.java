@@ -5,6 +5,7 @@ import com.renaser.os.rag.application.ports.out.espejosombra.LoadInformeEspejoSo
 import com.renaser.os.rag.application.ports.out.espejosombra.SaveInformeEspejoSombraPort;
 import com.renaser.os.rag.domain.model.espejosombra.DistribucionTemporal;
 import com.renaser.os.rag.domain.model.espejosombra.InformeEspejoSombra;
+import com.renaser.os.rag.domain.model.espejosombra.InformeEspejoSombraId;
 import com.renaser.os.rag.domain.model.espejosombra.PreguntaConfrontacion;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
@@ -67,6 +68,11 @@ class InformeEspejoSombraPersistenceAdapterTest {
                 .executeUpdate();
     }
 
+    /** Un id cualquiera, distinto por informe: la identidad ya no la sortea el agregado. */
+    private static InformeEspejoSombraId nuevoId() {
+        return InformeEspejoSombraId.of(UUID.randomUUID());
+    }
+
     private static List<PreguntaConfrontacion> tresPreguntas() {
         return List.of(new PreguntaConfrontacion(1, "Que evitaste esta semana?"),
                 new PreguntaConfrontacion(2, "Que repetiste sin darte cuenta?"),
@@ -75,7 +81,7 @@ class InformeEspejoSombraPersistenceAdapterTest {
 
     @Test
     void guardaYRecuperaElInformeConSusPreguntasEnOrden() {
-        InformeEspejoSombra informe = InformeEspejoSombra.generar(participanteId, LocalDate.of(2026, 8, 17),
+        InformeEspejoSombra informe = InformeEspejoSombra.generar(nuevoId(), participanteId, LocalDate.of(2026, 8, 17),
                 4, "Evitacion", new DistribucionTemporal(30, 50, 20), "insight de la semana", tresPreguntas(), CLOCK);
 
         savePort.save(informe);
@@ -97,7 +103,7 @@ class InformeEspejoSombraPersistenceAdapterTest {
     void porParticipanteYSemanaEncuentraElInformeDeEsaSemanaUnicamente() {
         LocalDate semana1 = LocalDate.of(2026, 8, 3);
         LocalDate semana2 = LocalDate.of(2026, 8, 10);
-        savePort.save(InformeEspejoSombra.generar(participanteId, semana1, 2, "patron1",
+        savePort.save(InformeEspejoSombra.generar(nuevoId(), participanteId, semana1, 2, "patron1",
                 new DistribucionTemporal(10, 80, 10), "insight1", List.of(), CLOCK));
         entityManager.flush();
         entityManager.clear();
@@ -110,9 +116,9 @@ class InformeEspejoSombraPersistenceAdapterTest {
     void deParticipanteDevuelveLosInformesMasRecientesPrimero() {
         LocalDate semana1 = LocalDate.of(2026, 8, 3);
         LocalDate semana2 = LocalDate.of(2026, 8, 10);
-        savePort.save(InformeEspejoSombra.generar(participanteId, semana1, 2, "patron1",
+        savePort.save(InformeEspejoSombra.generar(nuevoId(), participanteId, semana1, 2, "patron1",
                 new DistribucionTemporal(10, 80, 10), "insight1", List.of(), CLOCK));
-        savePort.save(InformeEspejoSombra.generar(participanteId, semana2, 3, "patron2",
+        savePort.save(InformeEspejoSombra.generar(nuevoId(), participanteId, semana2, 3, "patron2",
                 new DistribucionTemporal(20, 60, 20), "insight2", List.of(), CLOCK));
         entityManager.flush();
         entityManager.clear();
@@ -130,11 +136,11 @@ class InformeEspejoSombraPersistenceAdapterTest {
     @Test
     void noSePuedeGuardarDosInformesParaLaMismaSemana() {
         LocalDate semana = LocalDate.of(2026, 8, 3);
-        savePort.save(InformeEspejoSombra.generar(participanteId, semana, 2, "patron1",
+        savePort.save(InformeEspejoSombra.generar(nuevoId(), participanteId, semana, 2, "patron1",
                 new DistribucionTemporal(10, 80, 10), "insight1", List.of(), CLOCK));
         entityManager.flush();
 
-        InformeEspejoSombra duplicado = InformeEspejoSombra.generar(participanteId, semana, 5, "patron2",
+        InformeEspejoSombra duplicado = InformeEspejoSombra.generar(nuevoId(), participanteId, semana, 5, "patron2",
                 new DistribucionTemporal(20, 60, 20), "insight2", List.of(), CLOCK);
 
         assertThatThrownBy(() -> {

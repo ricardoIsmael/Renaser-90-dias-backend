@@ -9,8 +9,10 @@ import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUse
 import com.renaser.os.evidence.application.ports.in.evidencia.RevisarManualmenteUseCase;
 import com.renaser.os.evidence.application.ports.in.evidencia.RevisarManualmenteUseCase.RevisarManualmenteCommand;
 import com.renaser.os.evidence.domain.model.evidencia.EvidenciaId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -47,6 +49,7 @@ public class EvidenciaAdminController {
      * {@code GET /api/v1/evidence}, pero sin el scoping de dueño/mentor: acá el único
      * gate es el rol (ver javadoc de {@link ListarEvidenciaAdminUseCase}).
      */
+    @RequiresPermission(Permission.MANAGE_EVIDENCE)
     @GetMapping
     public EvidenciaPageResponse listar(@ActorAutenticado UserId actor,
                                          @RequestParam(required = false) UUID participanteId,
@@ -64,6 +67,7 @@ public class EvidenciaAdminController {
         return EvidenciaPageResponse.from(listarUseCase.listar(comando));
     }
 
+    @RequiresPermission(Permission.MANAGE_EVIDENCE)
     @PostMapping("/{id}/review")
     public EvidenciaResponse revisar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                       @Valid @RequestBody RevisarManualmenteRequest request) {
@@ -72,6 +76,7 @@ public class EvidenciaAdminController {
         return EvidenciaResponse.from(evidencia);
     }
 
+    @RequiresPermission(Permission.MANAGE_EVIDENCE)
     @PostMapping("/{id}/void")
     public EvidenciaResponse anular(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                      @Valid @RequestBody AnularVeredictoRequest request) {

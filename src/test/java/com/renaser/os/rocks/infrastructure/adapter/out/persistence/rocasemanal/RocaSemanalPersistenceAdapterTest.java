@@ -4,6 +4,7 @@ import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraId;
 import com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
+import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanalId;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.persistence.EntityManager;
@@ -53,7 +54,7 @@ class RocaSemanalPersistenceAdapterTest {
                         """)
                 .setParameter("id", participanteId.value())
                 .executeUpdate();
-        rocaMaestraId = RocaMaestraId.newId();
+        rocaMaestraId = RocaMaestraId.of(UUID.randomUUID());
         entityManager.createNativeQuery("""
                         INSERT INTO renaser.rocas_maestras (id, participante_id, eje, objetivo)
                         VALUES (:id, :pid, CAST('CUERPO' AS renaser.eje_objetivo), 'objetivo')
@@ -63,13 +64,18 @@ class RocaSemanalPersistenceAdapterTest {
                 .executeUpdate();
     }
 
+    /** El id ya no lo sortea la factoria: entra por parametro (puerto IdGenerator). */
+    private static RocaSemanalId unId() {
+        return RocaSemanalId.of(UUID.randomUUID());
+    }
+
     private static List<AccionCritica> tresAcciones() {
         return List.of(new AccionCritica(1, "uno"), new AccionCritica(2, "dos"), new AccionCritica(3, "tres"));
     }
 
     @Test
     void guardaYRecuperaLasTresAccionesCriticasEnOrden() {
-        RocaSemanal roca = RocaSemanal.planificar(rocaMaestraId, 3, "Titulo", tresAcciones(), "obstaculo",
+        RocaSemanal roca = RocaSemanal.planificar(unId(), rocaMaestraId, 3, "Titulo", tresAcciones(), "obstaculo",
                 "contingencia", 6, CLOCK);
 
         adapter.save(roca);
@@ -84,7 +90,8 @@ class RocaSemanalPersistenceAdapterTest {
 
     @Test
     void deMaestraYSemanaEncuentraLaRocaDeEsaSemana() {
-        RocaSemanal roca = RocaSemanal.planificar(rocaMaestraId, 5, "T", tresAcciones(), null, null, null, CLOCK);
+        RocaSemanal roca = RocaSemanal.planificar(unId(), rocaMaestraId, 5, "T", tresAcciones(), null, null,
+                null, CLOCK);
         adapter.save(roca);
         entityManager.flush();
         entityManager.clear();
@@ -95,7 +102,8 @@ class RocaSemanalPersistenceAdapterTest {
 
     @Test
     void actualizarYGuardarSobreescribeLasAccionesCriticas() {
-        RocaSemanal roca = RocaSemanal.planificar(rocaMaestraId, 2, "T", tresAcciones(), null, null, null, CLOCK);
+        RocaSemanal roca = RocaSemanal.planificar(unId(), rocaMaestraId, 2, "T", tresAcciones(), null, null,
+                null, CLOCK);
         roca = adapter.save(roca);
         roca.actualizarPlanificacion(null,
                 List.of(new AccionCritica(1, "nueva1"), new AccionCritica(2, "nueva2"),

@@ -35,8 +35,9 @@ class HabitoCompletadoNotificationListener {
 
     @ApplicationModuleListener
     void on(HabitoCompletadoEvent event) {
+        // C-7: registroId es la clave de deduplicacion si el outbox reentrega este evento.
         emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(event.participanteId(),
                 TipoNotificacion.LOGRO_DESBLOQUEADO, "Habito completado",
-                "Sumaste " + event.puntosOtorgados() + " puntos.", null));
+                "Sumaste " + event.puntosOtorgados() + " puntos.", null, event.registroId()));
     }
 }

@@ -38,6 +38,7 @@ import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
 import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.context.ApplicationEventPublisher;
@@ -79,13 +80,14 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
     private final PublicarEnMuroPort publicarEnMuroPort;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public RocaDiariaService(LoadRocaMaestraPort loadRocaMaestraPort, LoadRocaSemanalPort loadRocaSemanalPort,
                               LoadRocaDiariaPort loadRocaDiariaPort, SaveRocaDiariaPort saveRocaDiariaPort,
                               RegistrarEvidenciaPort registrarEvidenciaPort,
                               ConsultarProgresoParticipanteRocksPort progresoPort, AlmacenamientoPort almacenamientoPort,
                               AjustarPuntosPort ajustarPuntosPort, PublicarEnMuroPort publicarEnMuroPort,
-                              ApplicationEventPublisher events, Clock clock) {
+                              ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator) {
         this.loadRocaMaestraPort = loadRocaMaestraPort;
         this.loadRocaSemanalPort = loadRocaSemanalPort;
         this.loadRocaDiariaPort = loadRocaDiariaPort;
@@ -97,6 +99,7 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         this.publicarEnMuroPort = publicarEnMuroPort;
         this.events = events;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -132,7 +135,7 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
     @Transactional
     public RocaDiaria completar(CompletarRocaDiariaCommand command) {
         ProgresoParticipanteRocks progreso = requireProgreso(command.actorId());
-        RocaDiaria roca = requireRocaPropia(command.actorId(), command.rocaDiariaId());
+        RocaDiaria roca = requireRocaPropiaParaEscritura(command.actorId(), command.rocaDiariaId());
         if (roca.completada()) {
             throw new IllegalStateException("ALREADY_COMPLETED: esta roca ya tiene evidencia");
         }
@@ -229,9 +232,10 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         RocaSemanal rocaSemanal = loadRocaSemanalPort.deMaestraYSemana(maestra.id(), numeroSemana)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "NO_WEEKLY_ROCK: no hay plan semanal activo para el eje " + item.eje()));
-        return RocaDiaria.planificar(actorId, fecha, item.posicion(), item.titulo(), item.descripcion(),
-                item.puntajeImpacto(), item.esDelegable(), item.eje(), rocaSemanal.id(), item.horaInicio(),
-                item.horaFin(), clock);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
+        return RocaDiaria.planificar(RocaDiariaId.of(idGenerator.newId()), actorId, fecha, item.posicion(),
+                item.titulo(), item.descripcion(), item.puntajeImpacto(), item.esDelegable(), item.eje(),
+                rocaSemanal.id(), item.horaInicio(), item.horaFin(), clock);
     }
 
     /**
@@ -328,6 +332,21 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
 
     private RocaDiaria requireRocaPropia(UserId actorId, RocaDiariaId id) {
         RocaDiaria roca = loadRocaDiariaPort.byId(id)
+                .orElseThrow(() -> new NoSuchElementException("Roca diaria no encontrada: " + id));
+        if (!roca.participanteId().equals(actorId)) {
+            throw new NotAuthorizedException("Esta roca diaria no pertenece al actor");
+        }
+        return roca;
+    }
+
+    /**
+     * Igual que {@link #requireRocaPropia} pero con bloqueo pesimista (C-2): se usa
+     * exclusivamente en el camino que MUTA la roca ({@link #completar}). El resto de los
+     * hermanos de esta clase ({@link #solicitarUrl}, {@code hoy}, {@code deHoy}, {@code manana})
+     * son de solo lectura y no arriesgan un doble efecto — no necesitan el bloqueo.
+     */
+    private RocaDiaria requireRocaPropiaParaEscritura(UserId actorId, RocaDiariaId id) {
+        RocaDiaria roca = loadRocaDiariaPort.byIdParaEscritura(id)
                 .orElseThrow(() -> new NoSuchElementException("Roca diaria no encontrada: " + id));
         if (!roca.participanteId().equals(actorId)) {
             throw new NotAuthorizedException("Esta roca diaria no pertenece al actor");

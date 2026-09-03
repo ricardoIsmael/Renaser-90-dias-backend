@@ -18,7 +18,8 @@ class RachaSinCelularTest {
     private static final Instant INICIO = Instant.parse("2026-08-24T09:00:00Z");
 
     private static RachaSinCelular nuevaActiva(int horasObjetivo) {
-        return RachaSinCelular.iniciar(UserId.of(UUID.randomUUID()), RegistroHabitoId.newId(), horasObjetivo, INICIO);
+        return RachaSinCelular.iniciar(RachaSinCelularId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                RegistroHabitoId.of(UUID.randomUUID()), horasObjetivo, INICIO);
     }
 
     @Test

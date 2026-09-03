@@ -9,8 +9,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 class ComentarioPersistenceAdapter implements LoadComentarioPort, SaveComentarioPort {
@@ -40,6 +44,19 @@ class ComentarioPersistenceAdapter implements LoadComentarioPort, SaveComentario
     @Override
     public int contar(PublicacionId publicacionId) {
         return (int) repository.countByPublicacionIdAndOcultoFalse(publicacionId.value());
+    }
+
+    @Override
+    public Map<PublicacionId, Integer> contarDeVarias(Collection<PublicacionId> publicacionIds) {
+        if (publicacionIds.isEmpty()) {
+            return Map.of(); // un `IN ()` vacio no es SQL valido; ademas evita el viaje a la base
+        }
+        List<UUID> valores = publicacionIds.stream().map(PublicacionId::value).toList();
+        Map<PublicacionId, Integer> resultado = new HashMap<>();
+        for (Object[] fila : repository.contarPorPublicacion(valores)) {
+            resultado.put(PublicacionId.of((UUID) fila[0]), ((Number) fila[1]).intValue());
+        }
+        return resultado;
     }
 
     @Override

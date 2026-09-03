@@ -29,7 +29,8 @@ class ParticipacionProgramaPersistenceMapper {
                 e.getActualizadoEn(),
                 toDomainTipoMeta(e.getTipoMeta()),
                 e.getNombreRetoPersonal(),
-                e.getProgramaCompletadoEn());
+                e.getProgramaCompletadoEn(),
+                e.getDiaProgramaAvanzadoEl());
     }
 
     ParticipacionProgramaJpaEntity toEntity(ParticipacionPrograma p) {
@@ -48,7 +49,8 @@ class ParticipacionProgramaPersistenceMapper {
                 p.actualizadoEn(),
                 toJpaTipoMeta(p.tipoMeta()),
                 p.nombreRetoPersonal(),
-                p.programaCompletadoEn());
+                p.programaCompletadoEn(),
+                p.diaProgramaAvanzadoEl());
     }
 
     private TipoMetaJpa toJpaTipoMeta(TipoMeta tipoMeta) {

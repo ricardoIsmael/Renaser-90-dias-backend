@@ -1,7 +1,9 @@
 package com.renaser.os.support.infrastructure.adapter.in.rest.ticketmentor;
 
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.support.application.ports.in.ticketmentor.AbrirTicketMentorUseCase;
 import com.renaser.os.support.application.ports.in.ticketmentor.AbrirTicketMentorUseCase.AbrirTicketMentorCommand;
 import com.renaser.os.support.application.ports.in.ticketmentor.BuscarBibliotecaUseCase;
@@ -47,6 +49,7 @@ public class TicketMentorController {
         this.listarUseCase = listarUseCase;
     }
 
+    @RequiresPermission(Permission.OPEN_MENTOR_TICKET)
     @PostMapping
     public ResponseEntity<TicketMentorResponse> abrir(@ActorAutenticado UserId actor,
                                                         @RequestBody @Valid AbrirTicketMentorRequest request) {
@@ -55,12 +58,14 @@ public class TicketMentorController {
         return ResponseEntity.status(HttpStatus.CREATED).body(TicketMentorResponse.from(ticket));
     }
 
+    @RequiresPermission(value = Permission.USE_MENTOR_TICKETS, scope = "un TRAINEE ve los suyos; hoy un MENTOR ve todos y no solo los de sus aprendices (deuda ya anotada en TicketMentorService)")
     @GetMapping
     public TicketsMentorPageResponse propios(@ActorAutenticado UserId actor,
                                               @RequestParam(required = false) String cursor) {
         return TicketsMentorPageResponse.from(listarUseCase.propios(actor, parseCursor(cursor)));
     }
 
+    @RequiresPermission(value = Permission.ANSWER_MENTOR_TICKET, scope = "solo el mentor asignado a ese aprendiz")
     @PostMapping("/{id}/answer")
     public TicketMentorResponse responder(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                            @RequestBody @Valid ResponderTicketMentorRequest request) {
@@ -69,6 +74,7 @@ public class TicketMentorController {
         return TicketMentorResponse.from(ticket);
     }
 
+    @RequiresPermission(value = Permission.ANSWER_MENTOR_TICKET, scope = "solo el mentor asignado a ese aprendiz")
     @PostMapping("/{id}/save-to-library")
     public TicketMentorResponse guardarEnBiblioteca(@PathVariable UUID id,
                                                       @ActorAutenticado UserId actor) {
@@ -77,6 +83,7 @@ public class TicketMentorController {
         return TicketMentorResponse.from(ticket);
     }
 
+    @RequiresPermission(Permission.USE_MENTOR_TICKETS)
     @GetMapping("/library")
     public BibliotecaSearchResponse buscarEnBiblioteca(@ActorAutenticado UserId actor,
                                                          @RequestParam String q) {

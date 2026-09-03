@@ -35,4 +35,10 @@ class PuntajeParticipantePersistenceAdapter implements LoadPuntajePort, SavePunt
         var saved = repository.saveAndFlush(mapper.toEntity(puntaje));
         return mapper.toDomain(saved);
     }
+
+    @Override
+    public void crearFilaInicialSiFalta(PuntajeParticipante inicial) {
+        repository.insertarInicialSiFalta(inicial.participanteId().value(), inicial.coherencia(),
+                inicial.puntosLiga(), inicial.rachaActual(), inicial.rachaMaxima(), inicial.actualizadoEn());
+    }
 }

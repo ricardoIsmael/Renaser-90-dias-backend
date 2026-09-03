@@ -52,10 +52,17 @@ public final class InformeEspejoSombra {
      * semana (no generar dos veces para la misma semana) es responsabilidad del caso
      * de uso que orquesta esto ({@code EspejoSombraService.generar}), apoyada en el
      * UNIQUE de la tabla — este factory method no la conoce ni la necesita conocer.
+     *
+     * <p>El {@code id} entra por parámetro, no se genera acá: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code EspejoSombraService.generar}).
+     * Así {@code generar} es referencialmente transparente y un test puede fijar el id que
+     * espera, en vez de tener que caer a {@link #rehydrate} para lograrlo.
      */
-    public static InformeEspejoSombra generar(UserId participanteId, LocalDate semanaInicio, int cantidadEntradas,
+    public static InformeEspejoSombra generar(InformeEspejoSombraId id, UserId participanteId,
+                                                LocalDate semanaInicio, int cantidadEntradas,
                                                 String patronDominante, DistribucionTemporal distribucion,
                                                 String insight, List<PreguntaConfrontacion> preguntas, Clock clock) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Objects.requireNonNull(semanaInicio, "semanaInicio es obligatorio");
         Objects.requireNonNull(distribucion, "distribucion es obligatoria");
@@ -64,7 +71,7 @@ public final class InformeEspejoSombra {
         requireTexto(insight, "insight");
         requireCantidadEntradasValida(cantidadEntradas);
         List<PreguntaConfrontacion> preguntasValidas = requirePreguntasValidas(preguntas);
-        return new InformeEspejoSombra(InformeEspejoSombraId.newId(), participanteId, semanaInicio, cantidadEntradas,
+        return new InformeEspejoSombra(id, participanteId, semanaInicio, cantidadEntradas,
                 patronDominante, distribucion, insight, preguntasValidas, clock.now());
     }
 

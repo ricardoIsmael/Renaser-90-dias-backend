@@ -12,7 +12,6 @@ import com.renaser.os.calendar.application.ports.out.participante.ConsultarProgr
 import com.renaser.os.calendar.application.ports.out.participante.ResolverAudienciaMasivaPort;
 import com.renaser.os.calendar.application.ports.out.recordatorio.LoadRecordatorioPort;
 import com.renaser.os.calendar.application.ports.out.recordatorio.SaveRecordatorioPort;
-import com.renaser.os.calendar.domain.model.evento.EstadoEvento;
 import com.renaser.os.calendar.domain.model.evento.Evento;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.evento.TipoAudiencia;
@@ -76,7 +75,7 @@ class RecordatorioServiceTest {
 
     private RecordatorioService service;
     private final UserId usuarioId = UserId.of(UUID.randomUUID());
-    private final EventoId eventoId = EventoId.newId();
+    private final EventoId eventoId = EventoId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
@@ -85,15 +84,14 @@ class RecordatorioServiceTest {
                 cursoPort, elegibilidadPort, events, CLOCK);
     }
 
-    /** rehydrate(), no crear(): crear() siempre asigna un EventoId nuevo al azar
-     * (EventoId.newId()), que rompe la premisa del mock — loadEventoPort.byId(eventoId)
-     * debe devolver un Evento cuyo id() sea EXACTAMENTE el id consultado, como pasaria
-     * de verdad contra el adaptador de persistencia. */
+    /** crear(), no rehydrate(): desde que el id entra por parametro (puerto IdGenerator), la
+     * factoria real del agregado devuelve un Evento cuyo id() es EXACTAMENTE el que consulta el
+     * mock. Antes habia que caer a rehydrate() — que ademas se saltea las validaciones y obliga a
+     * repetir estado/creadoEn/actualizadoEn a mano — solo para poder fijar el id. */
     private Evento evento(TipoEvento tipo) {
-        return Evento.rehydrate(eventoId, "Sesion", null, null, Instant.parse("2026-09-10T19:00:00Z"), 60,
+        return Evento.crear(eventoId, "Sesion", null, Instant.parse("2026-09-10T19:00:00Z"), 60,
                 ZoneId.of("America/Lima"), TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS,
-                null, null, null, EstadoEvento.PUBLICADO, tipo, false, false, false, null, Set.of(), List.of(),
-                usuarioId, CLOCK.now(), CLOCK.now());
+                null, null, null, tipo, false, false, false, null, Set.of(), List.of(), usuarioId, CLOCK);
     }
 
     @Test

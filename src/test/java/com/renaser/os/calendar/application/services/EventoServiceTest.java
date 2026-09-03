@@ -19,6 +19,7 @@ import com.renaser.os.calendar.domain.model.evento.TipoEvento;
 import com.renaser.os.calendar.domain.model.evento.TipoUbicacion;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,8 @@ import static org.mockito.Mockito.when;
 class EventoServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, crear() ya no sortea el EventoId. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadEventoPort loadEventoPort;
@@ -64,6 +67,8 @@ class EventoServiceTest {
     private AlmacenamientoPort almacenamientoPort;
     @Mock
     private ConsultarProgresoParticipanteCalendarPort progresoPort;
+    @Mock
+    private IdGenerator idGenerator;
 
     private AccesoEventoService accesoEventoService;
     private EventoService service;
@@ -74,8 +79,10 @@ class EventoServiceTest {
     void setUp() {
         accesoEventoService = new AccesoEventoService(progresoPort, nivelPort, cursoIdNoOp(), (u, t) -> false);
         service = new EventoService(loadEventoPort, saveEventoPort, loadExcepcionPort, saveExcepcionPort,
-                loadConfirmacionPort, saveRecordatorioPort, nivelPort, almacenamientoPort, accesoEventoService, CLOCK);
+                loadConfirmacionPort, saveRecordatorioPort, nivelPort, almacenamientoPort, accesoEventoService, CLOCK,
+                idGenerator);
         lenient().when(nivelPort.listar()).thenReturn(List.of());
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
     }
 
     private static com.renaser.os.calendar.application.ports.out.curso.ResolverAudienciaCursoPort cursoIdNoOp() {
@@ -147,9 +154,9 @@ class EventoServiceTest {
 
     @Test
     void mentorNoPuedeEditarEventoQueNoCreo() {
-        EventoId eventoId = EventoId.newId();
+        EventoId eventoId = EventoId.of(UUID.randomUUID());
         UserId otroCreador = UserId.of(UUID.randomUUID());
-        Evento eventoAjeno = Evento.crear("Sesion", null, Instant.parse("2026-09-01T19:00:00Z"), 60,
+        Evento eventoAjeno = Evento.crear(eventoId, "Sesion", null, Instant.parse("2026-09-01T19:00:00Z"), 60,
                 ZoneId.of("America/Lima"), TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS,
                 null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(), otroCreador,
                 CLOCK);
@@ -169,8 +176,8 @@ class EventoServiceTest {
 
     @Test
     void eliminarBorraLaPortadaSiExiste() {
-        EventoId eventoId = EventoId.newId();
-        Evento evento = Evento.crear("Sesion", null, Instant.parse("2026-09-01T19:00:00Z"), 60,
+        EventoId eventoId = EventoId.of(UUID.randomUUID());
+        Evento evento = Evento.crear(eventoId, "Sesion", null, Instant.parse("2026-09-01T19:00:00Z"), 60,
                 ZoneId.of("America/Lima"), TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS,
                 null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(), actorId,
                 CLOCK);
@@ -187,8 +194,8 @@ class EventoServiceTest {
 
     @Test
     void cancelarOcurrenciaDeEventoNoRecurrenteFalla() {
-        EventoId eventoId = EventoId.newId();
-        Evento evento = Evento.crear("Sesion", null, Instant.parse("2026-09-01T19:00:00Z"), 60,
+        EventoId eventoId = EventoId.of(UUID.randomUUID());
+        Evento evento = Evento.crear(eventoId, "Sesion", null, Instant.parse("2026-09-01T19:00:00Z"), 60,
                 ZoneId.of("America/Lima"), TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS,
                 null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(), actorId,
                 CLOCK);

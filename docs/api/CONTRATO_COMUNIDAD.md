@@ -121,12 +121,12 @@ curl -s -X POST "http://localhost:8080/api/v1/wall" \
 
 ### 1.8 `GET /api/v1/wall/mine` — cuántas publiqué
 
-**Quién puede:** cualquiera (no hay chequeo de actor activo en este método — `contarMisPublicaciones` llama directo al puerto, sin `requireActorActivo`). **Trampa:** un actor suspendido o inexistente igual recibe `200 {"count": 0}` en vez de un 403/404 — no hay validación de actor en este endpoint puntual.
+**Quién puede:** actor `ACTIVE` (`requireActorActivo`). **Corregido 2026-08-31 (E-50):** antes no había ningún chequeo de actor acá — un actor suspendido o inexistente recibía `200 {"count": 0}`. Ahora una cuenta suspendida recibe 403 y una inexistente 404, igual que en `GET /api/v1/wall`.
 **Respuesta:** `{"count": 3}`.
 
 ### 1.9 `GET /api/v1/wall/latest-author` — nombre del último que publicó
 
-**Quién puede:** cualquiera, **sin chequeo de actor en absoluto** (`ultimoAutor()` no recibe `actorId`). El header `X-Actor-Id` se exige por firma del controller pero el caso de uso ni lo mira.
+**Quién puede:** actor `ACTIVE` (`requireActorActivo`, mismo guard que el feed). **Corregido 2026-08-31 (E-50):** antes el caso de uso ni siquiera recibía el `actorId` que el controller ya tenía, así que cualquiera —incluida una cuenta suspendida— obtenía el nombre completo de la última persona que publicó.
 **Respuesta:** `{"authorName": "Juan Perez"}` o `{"authorName": null}` si no hay publicaciones visibles.
 
 ### 1.10 `POST /api/v1/wall/{id}/react` — reaccionar
@@ -326,10 +326,10 @@ Solo `ADMIN`/`ALCHEMIST`. `204`.
 
 Servicio: `CelulaService` (métodos `miCelula`/`misCompaneros`).
 
-**Trampa de autorización real vs. javadoc:** el comentario del controller dice *"solo TRAINEE"*, pero el código de `CelulaService.miCelula`/`misCompaneros` **solo llama `requireActorActivo`** — no hay ningún chequeo de `rol == TRAINEE`. En la práctica, un `MENTOR` o `ADMIN` activo que mande su propio `X-Actor-Id` también recibe una respuesta (probablemente 404 `assigned:false` porque no está en `participantes_celula`, pero no un 403). Si vas a escribir un test de autorización negativa para este endpoint, el código real no lo bloquea por rol — solo por estado de cuenta.
+**Trampa de autorización real vs. javadoc:** el comentario del controller dice *"solo TRAINEE"*, pero el código de `CelulaService.miCelula`/`misCompaneros` **solo llama `requireActorActivo`** — no hay ningún chequeo de `rol == TRAINEE`. En la práctica, un `MENTOR` o `ADMIN` activo que mande su propio `X-Actor-Id` también recibe una respuesta (probablemente 200 `assigned:false` porque no está en `participantes_celula`, pero no un 403). Si vas a escribir un test de autorización negativa para este endpoint, el código real no lo bloquea por rol — solo por estado de cuenta.
 
 ### 6.1 `GET /api/v1/me/cell`
-**Confirmado — 404 que NO es un error real:** si el actor no tiene célula asignada, la respuesta es `404 Not Found` con body `{"assigned": false}` — **no** el `ApiErrorResponse` estándar (`{message, timestamp}`). Un cliente que solo mira el código HTTP para decidir "hubo un error" va a tratar esto como fallo; hay que mirar el body.
+**Corregido (comunidad-mentor-y-tribu, 2026-09-02):** si el actor no tiene célula asignada, la respuesta es `200 OK` con body `{"assigned": false}` — antes era `404 Not Found` con el mismo body, lo que un cliente no podía distinguir de un error real de red/ruta. `GET /api/v1/me/cell/members` (§6.2) ya usaba 200 para el mismo caso; este cambio alinea ambos endpoints al mismo criterio.
 **Si tiene célula, 200:**
 ```json
 { "cellId":"...", "cellName":"...", "cohortName":"...", "cohortStatus":"ACTIVE", "mentorName":"...", "mentorAvatarUrl":"...",

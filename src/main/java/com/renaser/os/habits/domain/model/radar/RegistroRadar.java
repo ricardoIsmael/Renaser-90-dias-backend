@@ -33,14 +33,20 @@ public final class RegistroRadar {
     private final String queEvito;
     private final Instant creadoEn;
 
-    public static RegistroRadar registrar(UserId participanteId, String queHago, String quePienso, String queSiento,
-                                           int nivelEnergia, String queEvito, Instant ahora) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code RadarService.registrar}).
+     */
+    public static RegistroRadar registrar(RegistroRadarId id, UserId participanteId, String queHago,
+                                           String quePienso, String queSiento, int nivelEnergia, String queEvito,
+                                           Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         if (nivelEnergia < NIVEL_ENERGIA_MIN || nivelEnergia > NIVEL_ENERGIA_MAX) {
             throw new IllegalArgumentException(
                     "nivelEnergia fuera de rango " + NIVEL_ENERGIA_MIN + ".." + NIVEL_ENERGIA_MAX + ": " + nivelEnergia);
         }
-        return new RegistroRadar(RegistroRadarId.newId(), participanteId, requireNotBlank(queHago, "queHago"),
+        return new RegistroRadar(id, participanteId, requireNotBlank(queHago, "queHago"),
                 requireNotBlank(quePienso, "quePienso"), requireNotBlank(queSiento, "queSiento"), nivelEnergia,
                 requireNotBlank(queEvito, "queEvito"), ahora);
     }

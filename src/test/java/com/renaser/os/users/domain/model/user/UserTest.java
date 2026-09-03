@@ -176,4 +176,51 @@ class UserTest {
 
         assertThat(user.hasAccess()).isTrue();
     }
+
+    // ─── E-57: el avatar guarda una URL PERMANENTE, jamas una prefirmada ─────
+
+    private static final String URL_PUBLICA =
+            "https://s3-renaser90dias.s3.us-east-1.amazonaws.com/avatares/perfil.png";
+
+    @Test
+    @DisplayName("changeAvatar acepta la URL permanente del objeto publico")
+    void changeAvatarAceptaUnaUrlPermanente() {
+        User user = trainee();
+
+        user.changeAvatar(URL_PUBLICA);
+
+        assertThat(user.avatarUrl()).isEqualTo(URL_PUBLICA);
+    }
+
+    /**
+     * El defecto original: se guardaba la URL de lectura PREFIRMADA (7 dias) y a la semana
+     * vencia sin que nada la volviera a firmar. El chequeo del dominio es lo que hace que no
+     * pueda repetirse en silencio, venga de donde venga la escritura.
+     */
+    @Test
+    @DisplayName("E-57: changeAvatar rechaza una URL prefirmada — vence y deja la foto rota")
+    void changeAvatarRechazaUnaUrlPrefirmada() {
+        User user = trainee();
+        String prefirmada = URL_PUBLICA + "?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=604800"
+                + "&X-Amz-Signature=deadbeef";
+
+        assertThatThrownBy(() -> user.changeAvatar(prefirmada))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(user.avatarUrl()).isNull();
+    }
+
+    @Test
+    @DisplayName("changeAvatar(null) quita el avatar; vacio es lo mismo que null")
+    void changeAvatarNullQuitaElAvatar() {
+        User user = trainee();
+        user.changeAvatar(URL_PUBLICA);
+
+        user.changeAvatar(null);
+        assertThat(user.avatarUrl()).isNull();
+
+        user.changeAvatar(URL_PUBLICA);
+        user.changeAvatar("   ");
+        assertThat(user.avatarUrl()).isNull();
+    }
 }

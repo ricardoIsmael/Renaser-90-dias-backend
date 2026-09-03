@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.experimental.Accessors;
 
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * Un mensaje dentro de una conversacion (tabla `mensajes`). Replica en dominio los dos
@@ -44,13 +45,21 @@ public final class Mensaje {
     private final MensajeId respuestaAId;
     private final Instant creadoEn;
 
-    public static Mensaje escribir(ConversacionId conversacionId, UserId emisorId, TipoMensaje tipo, String texto,
-                                    String mediaBucket, String mediaRuta, String mediaMime, Integer mediaBytes,
-                                    Short mediaDuracionS, MensajeId respuestaAId, Instant ahora) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code MensajeService.enviar}). Asi la
+     * factoria es referencialmente transparente y un test puede fijar el id que espera
+     * (CLAUDE.MD §5.4.7).
+     */
+    public static Mensaje escribir(MensajeId id, ConversacionId conversacionId, UserId emisorId, TipoMensaje tipo,
+                                    String texto, String mediaBucket, String mediaRuta, String mediaMime,
+                                    Integer mediaBytes, Short mediaDuracionS, MensajeId respuestaAId,
+                                    Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         requireConContenido(tipo, texto, mediaRuta);
         requireMediaCompleta(mediaBucket, mediaRuta);
         requirePositivosSiVienen(mediaBytes, mediaDuracionS);
-        return new Mensaje(MensajeId.newId(), conversacionId, emisorId, tipo, texto, mediaBucket, mediaRuta,
+        return new Mensaje(id, conversacionId, emisorId, tipo, texto, mediaBucket, mediaRuta,
                 mediaMime, mediaBytes, mediaDuracionS, false, null, respuestaAId, ahora);
     }
 

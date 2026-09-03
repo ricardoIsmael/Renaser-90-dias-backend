@@ -5,6 +5,7 @@ import com.renaser.os.rocks.application.ports.out.coherencia.CargarConteoDiarioR
 import com.renaser.os.rocks.application.ports.out.rocadiaria.SaveRocaDiariaPort;
 import com.renaser.os.rocks.domain.model.coherencia.DiaRocas;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria;
+import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
@@ -79,8 +80,8 @@ class CargarConteoDiarioRocasPersistenceAdapterTest {
     }
 
     private RocaDiaria roca(UserId participante, LocalDate fecha, EjeObjetivo eje, boolean completada) {
-        RocaDiaria r = RocaDiaria.planificar(participante, fecha, 1, "titulo", null, 5, false, eje, null,
-                null, null, CLOCK);
+        RocaDiaria r = RocaDiaria.planificar(RocaDiariaId.of(UUID.randomUUID()), participante, fecha, 1,
+                "titulo", null, 5, false, eje, null, null, null, CLOCK);
         if (completada) {
             r.completar(CLOCK.now(), CLOCK);
         }

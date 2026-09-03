@@ -31,9 +31,11 @@ public final class TokenPush {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    public static TokenPush registrar(UserId usuarioId, String token, PlataformaPush plataforma, Clock clock) {
+    public static TokenPush registrar(TokenPushId id, UserId usuarioId, String token, PlataformaPush plataforma,
+                                       Clock clock) {
         Instant ahora = clock.now();
-        return new TokenPush(TokenPushId.newId(), Objects.requireNonNull(usuarioId, "usuarioId es obligatorio"),
+        return new TokenPush(Objects.requireNonNull(id, "id es obligatorio"),
+                Objects.requireNonNull(usuarioId, "usuarioId es obligatorio"),
                 requireNotBlank(token), plataforma, ahora, ahora);
     }
 

@@ -347,6 +347,180 @@ curl -s "http://localhost:8080/api/v1/radar/history" -H "X-Actor-Id: <UUID_TRAIN
 
 ---
 
+### 1.7 Horario personal de los hábitos (`/api/v1/habit-preferences`)
+
+Cada aprendiz puede correr la hora de disparo/límite de un hábito dentro de una cuota semanal. Dos reglas
+gobiernan todo lo de acá y conviene tenerlas presentes antes de leer los campos:
+
+- **Semana de acomodo**: hasta el **día 7** de programa (o el propio límite del hábito, si es mayor) los
+  cambios inmediatos son ilimitados. Después, hasta **3 hábitos DISTINTOS** por semana de programa —
+  reeditar uno ya tocado esa semana no gasta cupo nuevo.
+- **"No se improvisa el día"**: si la ventana de hoy de ese hábito **ya arrancó** (su hora de disparo
+  vigente ya pasó), el cambio **no se rechaza**: queda programado para mañana. El horario de hoy no se
+  toca, y el cambio pasa a regir de madrugada (barrido nocturno). Recién ahí gasta cupo.
+
+#### `GET /api/v1/habit-preferences`
+
+Configuración de horarios del propio actor: qué rige hoy, qué quedó programado y cuánto cupo queda.
+
+- **Headers**: `X-Actor-Id`.
+- **Request body**: ninguno.
+- **Response 200** — `HabitPreferencesResponse`:
+
+```json
+{
+  "habits": [
+    {
+      "habitId": "uuid",
+      "title": "Jugo verde",
+      "triggerTime": "07:00:00",
+      "limitTime": "09:00:00",
+      "customized": true,
+      "pendingChange": {
+        "triggerTime": "06:00:00",
+        "limitTime": "08:00:00",
+        "effectiveDate": "2026-09-01"
+      }
+    },
+    {
+      "habitId": "uuid",
+      "title": "Meditar",
+      "triggerTime": "06:00:00",
+      "limitTime": "08:00:00",
+      "customized": false,
+      "pendingChange": null
+    }
+  ],
+  "scheduleEdits": { "used": 1, "remaining": 2, "limit": 3, "period": "WEEK" }
+}
+```
+
+  `habits`: **todos los hábitos activos del aprendiz** — catálogo del sistema + sus hábitos personales —,
+  no solo los que hoy tienen track. Hábitos sin horario aplicable hoy y sin preferencia propia vienen con
+  `triggerTime`/`limitTime` en `null`.
+  `triggerTime`/`limitTime`: lo **vigente hoy** — la preferencia del aprendiz si la seteó, si no el default
+  del catálogo (misma resolución que `GET /habit-tracks/today`).
+  `customized`: `true` si el horario sale de una preferencia propia, `false` si viene de fábrica.
+  `pendingChange`: `null` salvo que haya un cambio programado esperando su fecha. Sus horas son las que
+  regirán **desde** `effectiveDate`, no las de hoy.
+  `scheduleEdits`: idéntico en forma y literales al que devuelve el PATCH. `period`: `"FREE"` (semana de
+  acomodo, sin cupo) o `"WEEK"`. Un cambio todavía programado **no** figura en `used` — lo hará el día que
+  pase a regir.
+
+- **Quién puede llamarlo**: cualquier actor, siempre sobre sí mismo (no toma id de nadie en la URL).
+- **Errores**: `403` si la cuenta está suspendida; `404` si el actor no es un participante del programa.
+
+#### `PATCH /api/v1/habit-preferences/{habitId}`
+
+Cambia el horario de un hábito.
+
+- **Headers**: `X-Actor-Id`, `Content-Type: application/json`.
+- **Request body** — `UpdateHabitPreferenceRequest`:
+
+```json
+{ "triggerTime": "07:00:00", "limitTime": "09:00:00", "reminderEnabled": true, "reminderMinutesBefore": 15 }
+```
+
+  `triggerTime`/`limitTime` obligatorios; `limitTime` tiene que ser **posterior** a `triggerTime`.
+  `reminderMinutesBefore` opcional (`null` = sin minutos configurados).
+
+- **Response 200** — `HabitPreferenceResponse`:
+
+```json
+{
+  "habitId": "uuid", "triggerTime": "07:00:00", "limitTime": "09:00:00",
+  "deferred": true, "deferredEffectiveDate": "2026-09-01",
+  "scheduleEdits": { "used": 1, "remaining": 2, "limit": 3, "period": "WEEK" }
+}
+```
+
+  `deferred`: `true` cuando la ventana de hoy ya había arrancado. En ese caso `triggerTime`/`limitTime`
+  son **lo que regirá desde `deferredEffectiveDate`**, no lo vigente hoy — para ver lo vigente hoy, el GET.
+  `deferredEffectiveDate`: `null` cuando `deferred` es `false`.
+
+- **Errores**: `403` cuenta suspendida; `404` hábito o participante inexistente; `400` `limitTime` anterior
+  o igual a `triggerTime`; `409` cupo semanal agotado
+  (`"Esta semana ya reacomodaste 3 habitos. Puedes seguir ajustando esos, y el resto la semana que viene."`).
+
+```bash
+curl -s http://localhost:8080/api/v1/habit-preferences -H "X-Actor-Id: <UUID_TRAINEE>"
+
+curl -s -X PATCH http://localhost:8080/api/v1/habit-preferences/<UUID_HABITO> \
+  -H "X-Actor-Id: <UUID_TRAINEE>" -H "Content-Type: application/json" \
+  -d '{"triggerTime":"07:00:00","limitTime":"09:00:00","reminderEnabled":true,"reminderMinutesBefore":15}'
+```
+
+### 1.8 Panel admin — hábitos de UN aprendiz (`GET /api/v1/admin/trainees/{traineeId}/habits`)
+
+La **vista vertical** del panel: no el catálogo (eso es `/api/v1/admin/habits`) ni el perfil (eso es
+`/api/v1/admin/trainees/{id}`), sino qué tiene configurado **una persona concreta** sobre sus hábitos.
+Vive en el módulo `habits` aunque la ruta cuelgue de `/admin/trainees/` — el dato es de hábitos y la
+autorización de admin de hábitos ya vive ahí (`HabitoAdminGuard`).
+
+- **Headers**: `X-Actor-Id` con el UUID de un **ADMIN/ALCHEMIST activo**.
+- **Solo lectura.** Ningún campo de esta respuesta se edita por acá: el horario lo cambia el propio
+  aprendiz (`PATCH /api/v1/habit-preferences/{habitId}`) y el catálogo, `/api/v1/admin/habits`.
+- **Sin paginación, a propósito**: el tope de `habits` es "los hábitos activos de UNA persona"
+  (catálogo de sistema activo + sus hábitos personales), no crece con el uso.
+- **Response 200** (`TraineeHabitsResponse`):
+
+```json
+{
+  "traineeId": "9f1c…",
+  "programDay": 30,
+  "localDate": "2026-08-25",
+  "timeZone": "America/Lima",
+  "scheduleEdits": { "used": 2, "remaining": 1, "limit": 3, "period": "WEEK" },
+  "habits": [
+    {
+      "habitId": "3ab7…",
+      "catalogTitle": "Agua al despertar",
+      "personalTitle": "Mi vaso de agua",
+      "isPersonal": false,
+      "habitType": "CHECKBOX",
+      "category": "BODY",
+      "triggerTime": "07:30:00",
+      "limitTime": "09:00:00",
+      "customSchedule": true,
+      "reminderEnabled": true,
+      "reminderMinutesBefore": 15,
+      "pendingScheduleChange": {
+        "triggerTime": "08:00:00", "limitTime": "09:00:00", "effectiveDate": "2026-08-26"
+      },
+      "unlock": { "programDay": 5, "chosenByTrainee": false },
+      "weeklyDayChoice": false,
+      "chosenWeeklyDate": null
+    }
+  ]
+}
+```
+
+Cómo leer cada campo:
+
+| Campo | Qué es |
+|---|---|
+| `programDay` / `localDate` / `timeZone` | Contexto contra el que se resolvió la vista — **zona del aprendiz**, no la del servidor ni la del admin. El horario vigente y el día semanal dependen de él |
+| `scheduleEdits` | Cuota semanal de reacomodo de horario ya gastada, contada sobre `historial_cambios_horario` (hábitos **distintos** cambiados en la semana de programa). `period`: `"FREE"` durante la semana de acomodo inicial (día ≤ 7, sin cupo), `"WEEK"` después. Mismos literales que ya devuelve el autoservicio |
+| `catalogTitle` / `personalTitle` | Título del catálogo y el renombre del aprendiz (`renombres_habito`). `personalTitle` es `null` si no lo renombró |
+| `isPersonal` | `true` = hábito propio del aprendiz (`ambito='PERSONAL'`); `false` = del catálogo del sistema |
+| `triggerTime` / `limitTime` | Horario **vigente**: su preferencia (`preferencias_horario`) pisando al del catálogo (`horarios_habito` del tramo vigente para `programDay`). Misma precedencia que aplica `RegistroService` |
+| `customSchedule` | `true` si esa hora la puso la persona; `false` si viene del catálogo |
+| `pendingScheduleChange` | Cambio ya decidido que todavía no rige (`cambios_horario_pendientes`), con su fecha efectiva. `null` si no hay |
+| `unlock` | Día de programa en que se le desbloquea el hábito. **`chosenByTrainee: false` = lo puso el relleno automático** (`elegido_en` NULL), no la persona |
+| `weeklyDayChoice` / `chosenWeeklyDate` | Si el hábito se elige por día de la semana, y qué fecha eligió para la semana en curso (`dias_semanales_habito`, ancla lunes) |
+
+- **Errores**: `403` si el actor no es ADMIN/ALCHEMIST **o está `SUSPENDED`** (aunque su token sea válido);
+  `404` si el `traineeId` no está inscripto en el programa. Un aprendiz **suspendido sí se puede consultar**
+  — un operador tiene que poder auditar justamente a quien acaba de suspender.
+
+```bash
+curl -s http://localhost:8080/api/v1/admin/trainees/<UUID_TRAINEE>/habits -H "X-Actor-Id: <UUID_ADMIN>"
+
+# Con un mentor -> 403
+curl -s -o /dev/null -w "%{http_code}\n" \
+  http://localhost:8080/api/v1/admin/trainees/<UUID_TRAINEE>/habits -H "X-Actor-Id: <UUID_MENTOR>"
+```
+
 ## 2. `rocks` — Roca Maestra, Roca Semanal, Roca Diaria, Modo Verdugo
 
 Autoservicio estricto en todos los endpoints, con una regla adicional constante en `rocks`: **solo rol

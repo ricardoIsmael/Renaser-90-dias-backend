@@ -14,6 +14,7 @@ import com.renaser.os.community.domain.model.publicacion.Publicacion;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.community.domain.model.publicacion.TipoPublicacion;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -21,6 +22,7 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -43,6 +45,8 @@ import static org.mockito.Mockito.when;
 class ComentarioMuroServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, la factoria del agregado ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadPublicacionPort loadPublicacionPort;
@@ -54,6 +58,8 @@ class ComentarioMuroServiceTest {
     private ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort;
     @Mock
     private UserSummaryFinder userSummaryFinder;
+    @Mock
+    private IdGenerator idGenerator;
 
     private ComentarioMuroService service;
 
@@ -61,11 +67,13 @@ class ComentarioMuroServiceTest {
     private final UserId otro = UserId.of(UUID.randomUUID());
     private final UserId admin = UserId.of(UUID.randomUUID());
     private final UserId suspendido = UserId.of(UUID.randomUUID());
+    private final UserId adminSuspendido = UserId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
         service = new ComentarioMuroService(loadPublicacionPort, loadComentarioPort, saveComentarioPort,
-                consultarPerfilUsuarioPort, userSummaryFinder, CLOCK);
+                consultarPerfilUsuarioPort, userSummaryFinder, CLOCK, idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(consultarPerfilUsuarioPort.porId(any())).thenReturn(Optional.empty());
         lenient().when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
@@ -75,17 +83,20 @@ class ComentarioMuroServiceTest {
                 .thenReturn(Optional.of(new UserSummary(autor, "Autor", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(suspendido)).thenReturn(
                 Optional.of(new UserSummary(suspendido, "Suspendido", null, UserRole.TRAINEE, UserStatus.SUSPENDED)));
+        lenient().when(userSummaryFinder.findById(adminSuspendido)).thenReturn(Optional.of(new UserSummary(
+                adminSuspendido, "Admin suspendido", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
     }
 
     private Publicacion publicacionVisible() {
-        return Publicacion.rehydrate(PublicacionId.newId(), UserId.of(UUID.randomUUID()), TipoPublicacion.MANUAL,
-                null, "hola", List.of(new MediaPublicacion("wall", "muro/x/1.jpg", "image/jpeg", 0)), false,
+        return Publicacion.rehydrate(PublicacionId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                TipoPublicacion.MANUAL, null, "hola",
+                List.of(new MediaPublicacion("wall", "muro/x/1.jpg", "image/jpeg", 0)), false,
                 CLOCK.now(), CLOCK.now());
     }
 
     private Comentario comentarioDe(UserId autorId, PublicacionId publicacionId) {
-        return Comentario.rehydrate(ComentarioId.newId(), publicacionId, autorId, "que lindo", false, CLOCK.now(),
-                CLOCK.now());
+        return Comentario.rehydrate(ComentarioId.of(UUID.randomUUID()), publicacionId, autorId, "que lindo", false,
+                CLOCK.now(), CLOCK.now());
     }
 
     @Test
@@ -143,8 +154,9 @@ class ComentarioMuroServiceTest {
 
     @Test
     void escribirEnUnaPublicacionOcultaFalla() {
-        Publicacion oculta = Publicacion.rehydrate(PublicacionId.newId(), autor, TipoPublicacion.MANUAL, null,
-                "hola", List.of(new MediaPublicacion("wall", "x", "image/jpeg", 0)), true, CLOCK.now(), CLOCK.now());
+        Publicacion oculta = Publicacion.rehydrate(PublicacionId.of(UUID.randomUUID()), autor,
+                TipoPublicacion.MANUAL, null, "hola",
+                List.of(new MediaPublicacion("wall", "x", "image/jpeg", 0)), true, CLOCK.now(), CLOCK.now());
         when(loadPublicacionPort.porId(oculta.id())).thenReturn(Optional.of(oculta));
 
         var command = new EscribirComentarioCommand(autor, oculta.id(), "hola");
@@ -182,6 +194,19 @@ class ComentarioMuroServiceTest {
 
         var command = new OcultarComentarioCommand(suspendido, comentario.id());
         assertThatThrownBy(() -> service.ocultar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveComentarioPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("ocultar(): un moderador SUSPENDIDO no modera un comentario ajeno -> 403")
+    void moderadorSuspendidoNoPuedeOcultarUnComentarioAjeno() {
+        Publicacion publicacion = publicacionVisible();
+        Comentario comentario = comentarioDe(autor, publicacion.id());
+        when(loadComentarioPort.porId(comentario.id())).thenReturn(Optional.of(comentario));
+
+        var command = new OcultarComentarioCommand(adminSuspendido, comentario.id());
+        assertThatThrownBy(() -> service.ocultar(command)).isInstanceOf(NotAuthorizedException.class);
+        assertThat(comentario.oculto()).isFalse();
         verify(saveComentarioPort, never()).save(any());
     }
 }

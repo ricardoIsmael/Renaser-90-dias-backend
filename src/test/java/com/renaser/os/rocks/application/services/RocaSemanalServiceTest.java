@@ -16,6 +16,7 @@ import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraId;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanalId;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,8 @@ class RocaSemanalServiceTest {
 
     // domingo 2026-08-23 13:00 UTC: ventana semanal EN_PLAZO
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-23T13:00:00Z"));
+    /** Id fijo que devuelve el IdGenerator mockeado, mismo espiritu que el FixedClock de arriba. */
+    private static final UUID ID_GENERADO = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     @Mock
     private LoadRocaMaestraPort loadRocaMaestraPort;
@@ -54,6 +57,8 @@ class RocaSemanalServiceTest {
     private SaveRocaSemanalPort saveRocaSemanalPort;
     @Mock
     private ConsultarProgresoParticipanteRocksPort progresoPort;
+    @Mock
+    private IdGenerator idGenerator;
 
     private RocaSemanalService service;
     private UserId actorId;
@@ -61,8 +66,10 @@ class RocaSemanalServiceTest {
     @BeforeEach
     void setUp() {
         service = new RocaSemanalService(loadRocaMaestraPort, loadRocaSemanalPort, saveRocaSemanalPort, progresoPort,
-                CLOCK);
+                CLOCK, idGenerator);
         actorId = UserId.of(UUID.randomUUID());
+        // lenient: no todos los casos llegan a generar un id (varios cortan antes, en autorizacion).
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
     }
 
     private static ProgresoParticipanteRocks progreso(RolParticipante rol, boolean suspendido) {
@@ -73,10 +80,12 @@ class RocaSemanalServiceTest {
 
     private List<RocaMaestra> tresMaestras() {
         return List.of(
-                RocaMaestra.rehydrate(RocaMaestraId.newId(), actorId, EjeObjetivo.CUERPO, "obj cuerpo", Instant.now()),
-                RocaMaestra.rehydrate(RocaMaestraId.newId(), actorId, EjeObjetivo.TRABAJO, "obj trabajo", Instant.now()),
-                RocaMaestra.rehydrate(RocaMaestraId.newId(), actorId, EjeObjetivo.RELACIONES, "obj relaciones",
-                        Instant.now()));
+                RocaMaestra.rehydrate(RocaMaestraId.of(UUID.randomUUID()), actorId, EjeObjetivo.CUERPO,
+                        "obj cuerpo", Instant.now()),
+                RocaMaestra.rehydrate(RocaMaestraId.of(UUID.randomUUID()), actorId, EjeObjetivo.TRABAJO,
+                        "obj trabajo", Instant.now()),
+                RocaMaestra.rehydrate(RocaMaestraId.of(UUID.randomUUID()), actorId, EjeObjetivo.RELACIONES,
+                        "obj relaciones", Instant.now()));
     }
 
     private static ItemRocaSemanal item(EjeObjetivo eje) {
@@ -121,7 +130,8 @@ class RocaSemanalServiceTest {
         List<RocaMaestra> maestras = tresMaestras();
         when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(maestras);
         when(loadRocaSemanalPort.deParticipanteYSemana(anyList(), anyInt()))
-                .thenReturn(List.of(RocaSemanal.planificar(tresMaestras().get(0).id(), 2, "x",
+                .thenReturn(List.of(RocaSemanal.planificar(RocaSemanalId.of(UUID.randomUUID()),
+                        tresMaestras().get(0).id(), 2, "x",
                         List.of(new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(1, "a"),
                                 new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(2, "b"),
                                 new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(3, "c")),
@@ -151,10 +161,10 @@ class RocaSemanalServiceTest {
     void editarFueraDeLaVentanaEsRechazado() {
         FixedClock clockCierre = FixedClock.at(Instant.parse("2026-08-25T10:00:00Z")); // martes, ventana cerrada
         service = new RocaSemanalService(loadRocaMaestraPort, loadRocaSemanalPort, saveRocaSemanalPort, progresoPort,
-                clockCierre);
+                clockCierre, idGenerator);
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         RocaMaestraId maestraId = tresMaestras().get(0).id();
-        RocaSemanal existente = RocaSemanal.planificar(maestraId, 2, "T",
+        RocaSemanal existente = RocaSemanal.planificar(RocaSemanalId.of(UUID.randomUUID()), maestraId, 2, "T",
                 List.of(new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(1, "a"),
                         new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(2, "b"),
                         new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(3, "c")),
@@ -171,7 +181,7 @@ class RocaSemanalServiceTest {
     void cerrarEsIdempotenteYSobreescribe() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         RocaMaestraId maestraId = tresMaestras().get(0).id();
-        RocaSemanal existente = RocaSemanal.planificar(maestraId, 2, "T",
+        RocaSemanal existente = RocaSemanal.planificar(RocaSemanalId.of(UUID.randomUUID()), maestraId, 2, "T",
                 List.of(new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(1, "a"),
                         new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(2, "b"),
                         new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(3, "c")),

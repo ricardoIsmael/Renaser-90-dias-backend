@@ -13,27 +13,32 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ComentarioTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** El id ya no lo sortea la factoria: entra por parametro, generado por el puerto IdGenerator. */
+    private static final ComentarioId ID = ComentarioId.of(UUID.randomUUID());
 
     private static Comentario nuevo() {
-        return Comentario.escribir(PublicacionId.newId(), UserId.of(UUID.randomUUID()), "que lindo!", CLOCK.now());
+        return Comentario.escribir(ID, PublicacionId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                "que lindo!", CLOCK.now());
     }
 
     @Test
     void escribirNaceVisible() {
-        assertThat(nuevo().oculto()).isFalse();
+        Comentario c = nuevo();
+        assertThat(c.id()).isEqualTo(ID);
+        assertThat(c.oculto()).isFalse();
     }
 
     @Test
     void textoVacioEsInvalido() {
-        assertThatThrownBy(() -> Comentario.escribir(PublicacionId.newId(), UserId.of(UUID.randomUUID()), " ",
-                CLOCK.now())).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Comentario.escribir(ID, PublicacionId.of(UUID.randomUUID()),
+                UserId.of(UUID.randomUUID()), " ", CLOCK.now())).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void masDe500CaracteresEsInvalido() {
         String largo = "a".repeat(501);
-        assertThatThrownBy(() -> Comentario.escribir(PublicacionId.newId(), UserId.of(UUID.randomUUID()), largo,
-                CLOCK.now())).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Comentario.escribir(ID, PublicacionId.of(UUID.randomUUID()),
+                UserId.of(UUID.randomUUID()), largo, CLOCK.now())).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

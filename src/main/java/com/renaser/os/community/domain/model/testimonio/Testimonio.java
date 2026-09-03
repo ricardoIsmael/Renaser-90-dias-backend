@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.experimental.Accessors;
 
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * Un testimonio de la comunidad (tabla `testimonios`), a mano o promovido desde una
@@ -42,14 +43,21 @@ public final class Testimonio {
     private boolean destacado;
     private final Instant creadoEn;
 
-    public static Testimonio crear(UserId usuarioId, PublicacionId publicacionMuroId, String nombre,
-                                    String rolTexto, String avatarUrl, String fotoEventoRuta, String texto,
-                                    int estrellas, Instant ahora) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code TestimonioService.crear/promover}). Asi la
+     * factoria es referencialmente transparente y un test puede fijar el id que espera, en
+     * vez de tener que caer a {@link #rehydrate} para lograrlo.
+     */
+    public static Testimonio crear(TestimonioId id, UserId usuarioId, PublicacionId publicacionMuroId,
+                                    String nombre, String rolTexto, String avatarUrl, String fotoEventoRuta,
+                                    String texto, int estrellas, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         requireNombreValido(nombre);
         requireTextoValido(texto);
         requireEstrellasValidas(estrellas);
         String rolEfectivo = (rolTexto == null || rolTexto.isBlank()) ? "Miembro de la comunidad" : rolTexto;
-        return new Testimonio(TestimonioId.newId(), usuarioId, publicacionMuroId, nombre, rolEfectivo, avatarUrl,
+        return new Testimonio(id, usuarioId, publicacionMuroId, nombre, rolEfectivo, avatarUrl,
                 fotoEventoRuta, texto, estrellas, true, ahora);
     }
 

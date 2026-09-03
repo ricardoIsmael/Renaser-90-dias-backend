@@ -5,6 +5,8 @@ import com.renaser.os.community.api.PublicarEnMuroPort;
 import com.renaser.os.community.api.PublicarEnMuroPort.PublicarDesdeEvidenciaComando;
 import com.renaser.os.community.application.ports.in.categoria.ConsultarCategoriasMuroUseCase;
 import com.renaser.os.community.application.ports.in.publicacion.ConsultarFeedUseCase;
+import com.renaser.os.community.application.ports.in.publicacion.ConsultarReaccionesUseCase;
+import com.renaser.os.community.application.ports.in.publicacion.ConsultarReaccionesUseCase.ReaccionVista;
 import com.renaser.os.community.application.ports.in.publicacion.EditarPublicacionUseCase;
 import com.renaser.os.community.application.ports.in.publicacion.EliminarPublicacionUseCase;
 import com.renaser.os.community.application.ports.in.publicacion.OcultarPublicacionUseCase;
@@ -28,6 +30,7 @@ import com.renaser.os.community.domain.model.publicacion.ReaccionMuro.Reaccionar
 import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -51,7 +54,7 @@ import java.util.UUID;
 @Service
 public class PublicacionMuroService implements PublicarUseCase, EditarPublicacionUseCase, OcultarPublicacionUseCase,
         RestaurarPublicacionUseCase, EliminarPublicacionUseCase, ReaccionarUseCase, ConsultarFeedUseCase,
-        SolicitarUrlSubidaMediaUseCase, PublicarEnMuroPort {
+        ConsultarReaccionesUseCase, SolicitarUrlSubidaMediaUseCase, PublicarEnMuroPort {
 
     private static final int TAMANO_PAGINA = 20;
     private static final Duration VALIDEZ_URL_SUBIDA = Duration.ofMinutes(10);
@@ -68,6 +71,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     private final UserSummaryFinder userSummaryFinder;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public PublicacionMuroService(LoadPublicacionPort loadPublicacionPort, SavePublicacionPort savePublicacionPort,
                                    EliminarPublicacionPort eliminarPublicacionPort,
@@ -75,7 +79,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
                                    ConsultarCategoriasMuroUseCase categoriasUseCase,
                                    ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort,
                                    AlmacenamientoPort almacenamientoPort, UserSummaryFinder userSummaryFinder,
-                                   ApplicationEventPublisher events, Clock clock) {
+                                   ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator) {
         this.loadPublicacionPort = loadPublicacionPort;
         this.savePublicacionPort = savePublicacionPort;
         this.eliminarPublicacionPort = eliminarPublicacionPort;
@@ -87,6 +91,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         this.userSummaryFinder = userSummaryFinder;
         this.events = events;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -97,8 +102,9 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
             throw new IllegalArgumentException("Categoria desconocida: " + command.categoriaClave());
         }
         List<MediaPublicacion> media = aMedia(command.media());
-        Publicacion publicacion = Publicacion.publicar(command.autorId(), command.texto(), media,
-                command.categoriaClave(), clock.now());
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        Publicacion publicacion = Publicacion.publicar(PublicacionId.of(idGenerator.newId()), command.autorId(),
+                command.texto(), media, command.categoriaClave(), clock.now());
         Publicacion guardada = savePublicacionPort.save(publicacion);
         events.publishEvent(new PublicacionCreadaEvent(guardada.id().value(), guardada.autorId(),
                 guardada.categoriaClave(), clock.now()));
@@ -170,7 +176,49 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
                 conteo.getOrDefault(TipoReaccion.NO_ME_GUSTA, 0));
     }
 
+    /**
+     * Quien reacciono a una publicacion (modal "Reacciones del post"). Misma puerta de
+     * visibilidad que {@link #reaccionar}: {@link #requireVisible} primero (una publicacion
+     * oculta o inexistente es 404 para cualquiera), {@link #requireActorHabilitado} despues
+     * (actor inexistente o suspendido es 403 fail-closed, nunca delata si el recurso existe).
+     *
+     * <p>Nunca N+1: la lista completa de reacciones sale de UNA consulta
+     * ({@link ReaccionMuroPort#listarDe}) y los datos de las personas de UNA sola pasada en
+     * lote ({@link UserSummaryFinder#findByIds}), sin importar cuantas reacciones tenga la
+     * publicacion — mismo criterio que {@link #aVistas} para el feed (E-80).
+     */
     @Override
+    @Transactional(readOnly = true)
+    public List<ReaccionVista> reacciones(UserId actorId, PublicacionId publicacionId) {
+        requireVisible(publicacionId);
+        requireActorHabilitado(actorId);
+        List<ReaccionMuro> filas = reaccionMuroPort.listarDe(publicacionId);
+        if (filas.isEmpty()) {
+            return List.of();
+        }
+        Map<UserId, UserSummary> usuarios = userSummaryFinder.findByIds(
+                filas.stream().map(ReaccionMuro::usuarioId).distinct().toList());
+        return filas.stream().map(fila -> aReaccionVista(fila, usuarios.get(fila.usuarioId()))).toList();
+    }
+
+    private static ReaccionVista aReaccionVista(ReaccionMuro fila, UserSummary usuario) {
+        return new ReaccionVista(fila.usuarioId(), usuario != null ? usuario.fullName() : null,
+                usuario != null ? usuario.avatarUrl() : null, usuario != null ? usuario.role() : null, fila.tipo());
+    }
+
+    /**
+     * {@code readOnly} y no una transaccion normal: las cinco consultas de una carga del Muro
+     * comparten UNA conexion de Hikari en vez de pedir y devolver una cada una (E-80), y el
+     * `readOnly` le dice a Hibernate que no haga dirty checking de nada de lo que lea.
+     *
+     * <p>Firmar las URLs de lectura dentro de la transaccion es seguro y no contradice la regla
+     * de CLAUDE.MD sec. 7 sobre no esperar a un servicio externo con una transaccion abierta: el
+     * presigner de S3 calcula la firma <b>localmente</b> con la credencial, sin llamar a AWS
+     * (ver {@code AlmacenamientoS3Config.s3Presigner}). No hay espera de red que pueda retener
+     * la conexion.
+     */
+    @Override
+    @Transactional(readOnly = true)
     public PaginaPublicaciones feed(UserId actorId, Instant cursor, String categoriaClave) {
         requireActorActivo(actorId);
         if (categoriaClave != null && !categoriasUseCase.clavesExistentes().contains(categoriaClave)) {
@@ -180,7 +228,9 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         return aPagina(pagina, actorId);
     }
 
+    /** Misma razon que {@link #feed}: una conexion para toda la pagina, no una por consulta. */
     @Override
+    @Transactional(readOnly = true)
     public PaginaPublicaciones feedOculto(UserId actorId, Instant cursor) {
         requireModerador(actorId);
         List<Publicacion> pagina = loadPublicacionPort.feedOculto(cursor, TAMANO_PAGINA);
@@ -189,11 +239,15 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
 
     @Override
     public int contarMisPublicaciones(UserId actorId) {
+        requireActorActivo(actorId);
         return loadPublicacionPort.contarPorAutor(actorId);
     }
 
+    /** Mismo guard que {@link #feed}: expone el nombre completo de otra persona, asi que
+     * una cuenta suspendida (o inexistente) no lo obtiene. Ver E-50. */
     @Override
-    public Optional<String> ultimoAutor() {
+    public Optional<String> ultimoAutor(UserId actorId) {
+        requireActorActivo(actorId);
         return loadPublicacionPort.ultimaVisible()
                 .flatMap(p -> consultarPerfilUsuarioPort.porId(p.autorId()))
                 .map(PerfilUsuario::nombreCompleto);
@@ -202,9 +256,33 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Override
     public UrlSubidaMedia solicitarUrl(SolicitarUrlSubidaMediaCommand command) {
         requireActorPuedePublicar(command.actorId());
-        String ruta = "muro/" + command.actorId() + "/" + UUID.randomUUID();
+        String ruta = rutaDeMedia(command.tipoContenido(), command.actorId());
         URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
         return new UrlSubidaMedia(url, MediaPublicacion.BUCKET_DEFAULT, ruta);
+    }
+
+    /**
+     * Fotos y videos van a prefijos separados dentro de {@code muro/}. No es orden: en S3 el
+     * prefijo es lo unico que permite aplicar reglas distintas por tipo de archivo — ciclo de
+     * vida, clase de almacenamiento, o un permiso de lectura que valga para las fotos y no para
+     * los videos. Mezclarlos en una sola carpeta obliga a mirar la extension de cada objeto para
+     * decidir cualquiera de esas cosas.
+     *
+     * <p>El tipo se rechaza aca ademas de en {@link MediaPublicacion}: esta URL se firma ANTES de
+     * que exista la publicacion, asi que si no se valida en este punto se firma una subida para
+     * un archivo que el dominio va a rechazar despues, y el objeto queda huerfano en el bucket.
+     */
+    private static String rutaDeMedia(String tipoContenido, UserId autorId) {
+        String carpeta;
+        if (tipoContenido.startsWith("image/")) {
+            carpeta = "fotos";
+        } else if (tipoContenido.startsWith("video/")) {
+            carpeta = "videos";
+        } else {
+            throw new IllegalArgumentException(
+                    "tipoContenido debe empezar con image/ o video/: " + tipoContenido);
+        }
+        return "muro/" + carpeta + "/" + autorId + "/" + UUID.randomUUID();
     }
 
     /** Hueco #17 (docs/MODULO_ROCKS.md sec. 11.2): entrada publica para que OTRO modulo
@@ -216,8 +294,9 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     public UUID publicarDesdeEvidencia(PublicarDesdeEvidenciaComando comando) {
         requireActorPuedePublicar(comando.autorId());
         MediaPublicacion media = new MediaPublicacion(comando.bucket(), comando.ruta(), comando.mime(), 0);
-        Publicacion publicacion = Publicacion.publicarAutomatica(comando.autorId(), comando.texto(), List.of(media),
-                clock.now());
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        Publicacion publicacion = Publicacion.publicarAutomatica(PublicacionId.of(idGenerator.newId()),
+                comando.autorId(), comando.texto(), List.of(media), clock.now());
         Publicacion guardada = savePublicacionPort.save(publicacion);
         events.publishEvent(new PublicacionCreadaEvent(guardada.id().value(), guardada.autorId(),
                 guardada.categoriaClave(), clock.now()));
@@ -227,16 +306,45 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     private PaginaPublicaciones aPagina(List<Publicacion> filasConExtra, UserId actorId) {
         boolean hayMas = filasConExtra.size() > TAMANO_PAGINA;
         List<Publicacion> pagina = hayMas ? filasConExtra.subList(0, TAMANO_PAGINA) : filasConExtra;
-        List<PublicacionVista> vistas = pagina.stream().map(p -> aVista(p, actorId)).toList();
         Instant siguiente = hayMas ? pagina.get(pagina.size() - 1).creadoEn() : null;
-        return new PaginaPublicaciones(vistas, siguiente);
+        return new PaginaPublicaciones(aVistas(pagina, actorId), siguiente);
     }
 
     private PublicacionVista aVista(Publicacion publicacion, UserId viewerId) {
-        PerfilUsuario autor = consultarPerfilUsuarioPort.porId(publicacion.autorId()).orElse(null);
-        Map<TipoReaccion, Integer> conteo = reaccionMuroPort.contarPorTipo(publicacion.id());
-        TipoReaccion miReaccion = reaccionMuroPort.deUsuario(publicacion.id(), viewerId).orElse(null);
-        int comentarios = loadComentarioPort.contar(publicacion.id());
+        return aVistas(List.of(publicacion), viewerId).get(0);
+    }
+
+    /**
+     * Enriquece una pagina entera con <b>cuatro consultas fijas</b>, no cuatro por publicacion
+     * (E-80). Antes esto llamaba a {@code aVista} en un bucle: con {@code TAMANO_PAGINA = 20} eso
+     * eran ~84 consultas por carga del Muro, y como {@code feed()} no abria transaccion, cada una
+     * pedia y devolvia su propia conexion de Hikari (pool de 20). En el Postgres local no se nota
+     * -- esta a microsegundos-- pero contra una base administrada en otra zona son 0,5-2 ms por
+     * viaje, o sea 40-170 ms de pura espera por usuario y por carga, multiplicado por cada
+     * aprendiz que abre la Comunidad.
+     *
+     * <p>El costo ahora no depende del tamano de la pagina: 20 publicaciones cuestan lo mismo que
+     * 1. Firmar las URLs si es por archivo, pero eso es calculo local (HMAC), no una vuelta a AWS
+     * -- ver el javadoc de {@code AlmacenamientoS3Config.s3Presigner}.
+     */
+    private List<PublicacionVista> aVistas(List<Publicacion> publicaciones, UserId viewerId) {
+        if (publicaciones.isEmpty()) {
+            return List.of();
+        }
+        List<PublicacionId> ids = publicaciones.stream().map(Publicacion::id).toList();
+        Map<UserId, PerfilUsuario> autores = consultarPerfilUsuarioPort.porIds(
+                publicaciones.stream().map(Publicacion::autorId).distinct().toList());
+        Map<PublicacionId, Map<TipoReaccion, Integer>> conteos = reaccionMuroPort.contarPorTipoDeVarias(ids);
+        Map<PublicacionId, TipoReaccion> misReacciones = reaccionMuroPort.deUsuarioEnVarias(ids, viewerId);
+        Map<PublicacionId, Integer> comentarios = loadComentarioPort.contarDeVarias(ids);
+        return publicaciones.stream()
+                .map(p -> aVista(p, autores.get(p.autorId()), conteos.getOrDefault(p.id(), Map.of()),
+                        misReacciones.get(p.id()), comentarios.getOrDefault(p.id(), 0)))
+                .toList();
+    }
+
+    private PublicacionVista aVista(Publicacion publicacion, PerfilUsuario autor,
+                                     Map<TipoReaccion, Integer> conteo, TipoReaccion miReaccion, int comentarios) {
         List<MediaFirmada> media = publicacion.media().stream()
                 .map(m -> new MediaFirmada(almacenamientoPort.firmarLectura(m.ruta(), VALIDEZ_URL_LECTURA), m.mime(),
                         m.orden()))

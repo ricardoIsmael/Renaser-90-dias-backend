@@ -33,12 +33,19 @@ public final class EntradaDiario {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    public static EntradaDiario escribir(UserId participanteId, LocalDate fecha, TipoEntradaDiario tipo,
-                                          String contenidoTexto, Instant ahora) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code BitacoraNocturnaService.escribir}).
+     * Asi {@code escribir} es referencialmente transparente y un test puede fijar el id que
+     * espera, en vez de tener que caer a {@link #rehydrate} para lograrlo.
+     */
+    public static EntradaDiario escribir(EntradaDiarioId id, UserId participanteId, LocalDate fecha,
+                                          TipoEntradaDiario tipo, String contenidoTexto, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Objects.requireNonNull(fecha, "fecha es obligatoria");
         Objects.requireNonNull(tipo, "tipo es obligatorio");
-        return new EntradaDiario(EntradaDiarioId.newId(), participanteId, fecha, tipo, contenidoTexto, null, null,
+        return new EntradaDiario(id, participanteId, fecha, tipo, contenidoTexto, null, null,
                 null, ahora, ahora);
     }
 

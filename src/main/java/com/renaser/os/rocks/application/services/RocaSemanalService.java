@@ -20,6 +20,7 @@ import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanalId;
 import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
 import com.renaser.os.rocks.domain.model.rocasemanal.VentanaPlanificacionSemanal;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -45,15 +46,18 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
     private final SaveRocaSemanalPort saveRocaSemanalPort;
     private final ConsultarProgresoParticipanteRocksPort progresoPort;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public RocaSemanalService(LoadRocaMaestraPort loadRocaMaestraPort, LoadRocaSemanalPort loadRocaSemanalPort,
                                SaveRocaSemanalPort saveRocaSemanalPort,
-                               ConsultarProgresoParticipanteRocksPort progresoPort, Clock clock) {
+                               ConsultarProgresoParticipanteRocksPort progresoPort, Clock clock,
+                               IdGenerator idGenerator) {
         this.loadRocaMaestraPort = loadRocaMaestraPort;
         this.loadRocaSemanalPort = loadRocaSemanalPort;
         this.saveRocaSemanalPort = saveRocaSemanalPort;
         this.progresoPort = progresoPort;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -72,7 +76,9 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
         }
 
         List<RocaSemanal> creadas = command.rocas().stream()
-                .map(item -> RocaSemanal.planificar(maestras.get(item.eje()).id(), numeroSemana, item.titulo(),
+                // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
+                .map(item -> RocaSemanal.planificar(RocaSemanalId.of(idGenerator.newId()),
+                        maestras.get(item.eje()).id(), numeroSemana, item.titulo(),
                         acciones(item.accionCritica1(), item.accionCritica2(), item.accionCritica3()),
                         item.obstaculo(), item.contingencia(), item.autoevaluacionInicio(), clock))
                 .map(saveRocaSemanalPort::save)

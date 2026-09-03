@@ -9,6 +9,7 @@ import lombok.experimental.Accessors;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Un mensaje del chat de Renasia (tabla `mensajes_renasia`). {@code usuarioId} apunta a
@@ -34,21 +35,25 @@ public final class MensajeRenasia {
     private final List<FuenteMensaje> fuentes;
     private final Instant creadoEn;
 
-    public static MensajeRenasia escribirDeUsuario(UserId usuarioId, String contenido, Instant ahora) {
-        return crear(usuarioId, RolMensaje.USUARIO, contenido, List.of(), ahora);
+    /** El {@code id} entra por parametro: lo arma el caso de uso con el puerto {@code IdGenerator}. */
+    public static MensajeRenasia escribirDeUsuario(MensajeRenasiaId id, UserId usuarioId, String contenido,
+                                                    Instant ahora) {
+        return crear(id, usuarioId, RolMensaje.USUARIO, contenido, List.of(), ahora);
     }
 
-    public static MensajeRenasia escribirDeAsistente(UserId usuarioId, String contenido, List<FuenteMensaje> fuentes,
-                                                       Instant ahora) {
-        return crear(usuarioId, RolMensaje.ASISTENTE, contenido, fuentes, ahora);
+    /** El {@code id} entra por parametro: lo arma el caso de uso con el puerto {@code IdGenerator}. */
+    public static MensajeRenasia escribirDeAsistente(MensajeRenasiaId id, UserId usuarioId, String contenido,
+                                                       List<FuenteMensaje> fuentes, Instant ahora) {
+        return crear(id, usuarioId, RolMensaje.ASISTENTE, contenido, fuentes, ahora);
     }
 
-    private static MensajeRenasia crear(UserId usuarioId, RolMensaje rol, String contenido,
+    private static MensajeRenasia crear(MensajeRenasiaId id, UserId usuarioId, RolMensaje rol, String contenido,
                                          List<FuenteMensaje> fuentes, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         requireUsuarioId(usuarioId);
         requireContenido(contenido);
         requireFuentesSoloDeAsistente(rol, fuentes);
-        return new MensajeRenasia(MensajeRenasiaId.newId(), usuarioId, rol, contenido, List.copyOf(fuentes), ahora);
+        return new MensajeRenasia(id, usuarioId, rol, contenido, List.copyOf(fuentes), ahora);
     }
 
     /** Solo para el adaptador de persistencia. */

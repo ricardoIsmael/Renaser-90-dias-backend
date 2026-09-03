@@ -1,8 +1,10 @@
 package com.renaser.os.academy.infrastructure.adapter.in.rest.recomendacion;
 
 import com.renaser.os.academy.application.ports.in.recomendacion.ConsultarRecomendacionDiariaUseCase;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,6 +20,7 @@ public class RecomendacionController {
         this.recomendacionUseCase = recomendacionUseCase;
     }
 
+    @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @GetMapping
     public RecomendacionResponse recomendacion(@ActorAutenticado UserId actorId) {
         return RecomendacionResponse.from(recomendacionUseCase.recomendacion(actorId));

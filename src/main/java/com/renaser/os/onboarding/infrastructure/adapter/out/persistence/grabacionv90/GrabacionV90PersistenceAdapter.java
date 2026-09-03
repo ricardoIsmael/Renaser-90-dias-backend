@@ -28,6 +28,11 @@ class GrabacionV90PersistenceAdapter implements LoadGrabacionV90Port, SaveGrabac
     }
 
     @Override
+    public Optional<GrabacionV90> porIdParaEscritura(long id) {
+        return repository.findByIdParaEscritura(id).map(mapper::toDomain);
+    }
+
+    @Override
     public Optional<GrabacionV90> porSlot(UserId usuarioId, String fase, String eje, short indice) {
         return repository.findByUsuarioIdAndFaseAndEjeAndIndice(usuarioId.value(), fase, eje, indice)
                 .map(mapper::toDomain);

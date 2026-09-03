@@ -19,6 +19,7 @@ import com.renaser.os.evidence.domain.model.evidencia.EvidenciaId;
 import com.renaser.os.points.api.AjustarPuntosPort;
 import com.renaser.os.points.api.MotivoPuntos;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
@@ -56,6 +57,8 @@ import static org.mockito.Mockito.when;
 class EvidenciaServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-25T10:00:00Z"));
+    /** Id fijo que devuelve el IdGenerator mockeado, mismo espiritu que el FixedClock de arriba. */
+    private static final UUID ID_GENERADO = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     @Mock
     private LoadEvidenciaPort loadEvidenciaPort;
@@ -69,14 +72,18 @@ class EvidenciaServiceTest {
     private ParticipacionProgramaFinder participacionFinder;
     @Mock
     private AjustarPuntosPort ajustarPuntosPort;
+    @Mock
+    private IdGenerator idGenerator;
 
     private EvidenciaService service;
 
     @BeforeEach
     void setUp() {
         service = new EvidenciaService(loadEvidenciaPort, saveEvidenciaPort, validacionIAPort, userSummaryFinder,
-                participacionFinder, ajustarPuntosPort, CLOCK);
+                participacionFinder, ajustarPuntosPort, CLOCK, idGenerator);
         lenient().when(saveEvidenciaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        // lenient: la mayoria de los casos no llega a registrar (cortan antes, en autorizacion).
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
     }
 
     private static UserSummary activo(UserId id, UserRole role) {
@@ -88,8 +95,9 @@ class EvidenciaServiceTest {
     }
 
     private Evidencia evidenciaDe(UserId participanteId) {
-        return Evidencia.registrar(participanteId, new DestinoEvidencia.RegistroHabito(UUID.randomUUID()),
-                TipoEvidencia.TEXTO, null, null, "hecho", null, null, null, false, CLOCK.now(), CLOCK);
+        return Evidencia.registrar(EvidenciaId.of(UUID.randomUUID()), participanteId,
+                new DestinoEvidencia.RegistroHabito(UUID.randomUUID()), TipoEvidencia.TEXTO, null, null,
+                "hecho", null, null, null, false, CLOCK.now(), CLOCK);
     }
 
     private RegistrarEvidenciaComando comandoTexto(UserId participanteId) {
@@ -161,7 +169,7 @@ class EvidenciaServiceTest {
 
     @Test
     void evidenciaInexistenteLanzaNoSuchElement() {
-        EvidenciaId id = EvidenciaId.newId();
+        EvidenciaId id = EvidenciaId.of(UUID.randomUUID());
         when(loadEvidenciaPort.byId(id)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.porId(UserId.of(UUID.randomUUID()), id))
@@ -176,7 +184,8 @@ class EvidenciaServiceTest {
         UserId trainee = UserId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(trainee)).thenReturn(Optional.of(activo(trainee, UserRole.TRAINEE)));
 
-        assertThatThrownBy(() -> service.revisar(new RevisarManualmenteCommand(trainee, EvidenciaId.newId(), true, "x")))
+        assertThatThrownBy(() -> service.revisar(
+                new RevisarManualmenteCommand(trainee, EvidenciaId.of(UUID.randomUUID()), true, "x")))
                 .isInstanceOf(NotAuthorizedException.class);
     }
 
@@ -202,7 +211,7 @@ class EvidenciaServiceTest {
         UserId admin = UserId.of(UUID.randomUUID());
         Evidencia evidencia = evidenciaDe(duenoId);
         evidencia.aprobarPorIa();
-        when(loadEvidenciaPort.byId(evidencia.id())).thenReturn(Optional.of(evidencia));
+        when(loadEvidenciaPort.byIdParaEscritura(evidencia.id())).thenReturn(Optional.of(evidencia));
         when(userSummaryFinder.findById(admin)).thenReturn(Optional.of(activo(admin, UserRole.ADMIN)));
 
         Evidencia resultado = service.anular(new AnularVeredictoCommand(admin, evidencia.id(), "duplicada"));
@@ -216,7 +225,8 @@ class EvidenciaServiceTest {
         UserId trainee = UserId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(trainee)).thenReturn(Optional.of(activo(trainee, UserRole.TRAINEE)));
 
-        assertThatThrownBy(() -> service.anular(new AnularVeredictoCommand(trainee, EvidenciaId.newId(), "x")))
+        assertThatThrownBy(() -> service.anular(
+                new AnularVeredictoCommand(trainee, EvidenciaId.of(UUID.randomUUID()), "x")))
                 .isInstanceOf(NotAuthorizedException.class);
     }
 
@@ -226,7 +236,8 @@ class EvidenciaServiceTest {
         UserId mentor = UserId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(mentor)).thenReturn(Optional.of(activo(mentor, UserRole.MENTOR)));
 
-        assertThatThrownBy(() -> service.anular(new AnularVeredictoCommand(mentor, EvidenciaId.newId(), "x")))
+        assertThatThrownBy(() -> service.anular(
+                new AnularVeredictoCommand(mentor, EvidenciaId.of(UUID.randomUUID()), "x")))
                 .isInstanceOf(NotAuthorizedException.class);
     }
 
@@ -239,7 +250,7 @@ class EvidenciaServiceTest {
         UserId admin = UserId.of(UUID.randomUUID());
         Evidencia evidencia = evidenciaDe(duenoId);
         evidencia.aprobarPorIa();
-        when(loadEvidenciaPort.byId(evidencia.id())).thenReturn(Optional.of(evidencia));
+        when(loadEvidenciaPort.byIdParaEscritura(evidencia.id())).thenReturn(Optional.of(evidencia));
         when(userSummaryFinder.findById(admin)).thenReturn(Optional.of(activo(admin, UserRole.ADMIN)));
 
         service.anular(new AnularVeredictoCommand(admin, evidencia.id(), "primera anulacion"));
@@ -255,11 +266,11 @@ class EvidenciaServiceTest {
     void anularRevierteLaPenalizacionCuandoEstabaAplicada() {
         UserId duenoId = UserId.of(UUID.randomUUID());
         UserId admin = UserId.of(UUID.randomUUID());
-        Evidencia evidencia = Evidencia.rehydrate(EvidenciaId.newId(), duenoId,
+        Evidencia evidencia = Evidencia.rehydrate(EvidenciaId.of(UUID.randomUUID()), duenoId,
                 new DestinoEvidencia.RegistroHabito(UUID.randomUUID()), TipoEvidencia.TEXTO, null, null, "hecho",
                 null, CLOCK.now(), null, null, false, EstadoValidacion.RECHAZADA, "rechazada por IA", 1, true, false,
                 CLOCK.now());
-        when(loadEvidenciaPort.byId(evidencia.id())).thenReturn(Optional.of(evidencia));
+        when(loadEvidenciaPort.byIdParaEscritura(evidencia.id())).thenReturn(Optional.of(evidencia));
         when(userSummaryFinder.findById(admin)).thenReturn(Optional.of(activo(admin, UserRole.ADMIN)));
 
         Evidencia resultado = service.anular(new AnularVeredictoCommand(admin, evidencia.id(), "admin revierte"));
@@ -278,7 +289,7 @@ class EvidenciaServiceTest {
         UserId admin = UserId.of(UUID.randomUUID());
         Evidencia evidencia = evidenciaDe(duenoId);
         evidencia.aprobarPorIa();
-        when(loadEvidenciaPort.byId(evidencia.id())).thenReturn(Optional.of(evidencia));
+        when(loadEvidenciaPort.byIdParaEscritura(evidencia.id())).thenReturn(Optional.of(evidencia));
         when(userSummaryFinder.findById(admin)).thenReturn(Optional.of(activo(admin, UserRole.ADMIN)));
 
         service.anular(new AnularVeredictoCommand(admin, evidencia.id(), "sin penalizacion"));
@@ -292,7 +303,8 @@ class EvidenciaServiceTest {
         UserId adminSuspendido = UserId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(adminSuspendido)).thenReturn(Optional.of(suspendido(adminSuspendido)));
 
-        assertThatThrownBy(() -> service.anular(new AnularVeredictoCommand(adminSuspendido, EvidenciaId.newId(), "x")))
+        assertThatThrownBy(() -> service.anular(
+                new AnularVeredictoCommand(adminSuspendido, EvidenciaId.of(UUID.randomUUID()), "x")))
                 .isInstanceOf(NotAuthorizedException.class);
     }
 
@@ -322,6 +334,61 @@ class EvidenciaServiceTest {
 
         assertThat(procesadas).isZero();
         verify(validacionIAPort, never()).validar(any());
+    }
+
+    @Test
+    @DisplayName("C-4: si la IA lanza para una evidencia del lote, se cuenta como intento fallido "
+            + "(igual que NO_DISPONIBLE) en vez de propagar la excepcion")
+    void procesarLoteTrataUnaExcepcionDeIaComoIntentoFallido() {
+        Evidencia pendiente = evidenciaDe(UserId.of(UUID.randomUUID()));
+        when(loadEvidenciaPort.pendientesLote(any(), org.mockito.ArgumentMatchers.eq(25)))
+                .thenReturn(List.of(pendiente));
+        when(validacionIAPort.validar(pendiente)).thenThrow(new RuntimeException("timeout simulado de la IA"));
+
+        int procesadas = service.procesarLote();
+
+        assertThat(procesadas).isEqualTo(1);
+        assertThat(pendiente.intentosIa()).isEqualTo(1);
+        assertThat(pendiente.estadoValidacion()).isEqualTo(EstadoValidacion.PENDIENTE);
+        verify(saveEvidenciaPort).save(pendiente);
+    }
+
+    @Test
+    @DisplayName("C-4 (poison pill): una evidencia que siempre falla no bloquea a las demas del lote")
+    void procesarLoteAislaUnaEvidenciaQueFallaYSigueConElResto() {
+        Evidencia fallaSiempre = evidenciaDe(UserId.of(UUID.randomUUID()));
+        Evidencia procesaBien = evidenciaDe(UserId.of(UUID.randomUUID()));
+        when(loadEvidenciaPort.pendientesLote(any(), org.mockito.ArgumentMatchers.eq(25)))
+                .thenReturn(List.of(fallaSiempre, procesaBien));
+        when(validacionIAPort.validar(fallaSiempre)).thenThrow(new RuntimeException("proveedor caido"));
+        when(validacionIAPort.validar(procesaBien)).thenReturn(ResultadoValidacionIA.APROBADA);
+
+        int procesadas = service.procesarLote();
+
+        assertThat(procesadas).isEqualTo(2);
+        assertThat(fallaSiempre.intentosIa()).isEqualTo(1);
+        assertThat(fallaSiempre.estadoValidacion()).isEqualTo(EstadoValidacion.PENDIENTE);
+        assertThat(procesaBien.estadoValidacion()).isEqualTo(EstadoValidacion.VALIDA);
+        verify(saveEvidenciaPort).save(fallaSiempre);
+        verify(saveEvidenciaPort).save(procesaBien);
+    }
+
+    @Test
+    @DisplayName("C-4 (poison pill): un fallo al PERSISTIR una evidencia tampoco bloquea a las demas del lote")
+    void procesarLoteAislaUnFalloAlPersistirYSigueConElResto() {
+        Evidencia fallaAlGuardar = evidenciaDe(UserId.of(UUID.randomUUID()));
+        Evidencia procesaBien = evidenciaDe(UserId.of(UUID.randomUUID()));
+        when(loadEvidenciaPort.pendientesLote(any(), org.mockito.ArgumentMatchers.eq(25)))
+                .thenReturn(List.of(fallaAlGuardar, procesaBien));
+        when(validacionIAPort.validar(any())).thenReturn(ResultadoValidacionIA.APROBADA);
+        when(saveEvidenciaPort.save(fallaAlGuardar))
+                .thenThrow(new RuntimeException("conexion perdida al guardar"));
+
+        int procesadas = service.procesarLote();
+
+        assertThat(procesadas).isEqualTo(2);
+        assertThat(procesaBien.estadoValidacion()).isEqualTo(EstadoValidacion.VALIDA);
+        verify(saveEvidenciaPort).save(procesaBien);
     }
 
     // ---- listado general (hueco #19): dueño / mentor asignado / admin ----

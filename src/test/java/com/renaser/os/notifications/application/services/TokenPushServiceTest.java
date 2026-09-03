@@ -5,6 +5,7 @@ import com.renaser.os.notifications.application.ports.out.tokenpush.UpsertTokenP
 import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -35,17 +36,23 @@ import static org.mockito.Mockito.when;
 class TokenPushServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, registrar() ya no sortea el TokenPushId. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private UpsertTokenPushPort upsertTokenPushPort;
     @Mock
     private UserSummaryFinder userSummaryFinder;
+    @Mock
+    private IdGenerator idGenerator;
 
     private TokenPushService service;
 
     @BeforeEach
     void setUp() {
-        service = new TokenPushService(upsertTokenPushPort, new ActorNotificacionesGuard(userSummaryFinder), CLOCK);
+        service = new TokenPushService(upsertTokenPushPort, new ActorNotificacionesGuard(userSummaryFinder),
+                CLOCK, idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(upsertTokenPushPort.upsertPorToken(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(userSummaryFinder.findById(any())).thenAnswer(inv -> Optional.of(
                 new UserSummary(inv.getArgument(0), "Test", null, UserRole.TRAINEE, UserStatus.ACTIVE)));

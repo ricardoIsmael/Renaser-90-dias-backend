@@ -99,4 +99,84 @@ class ProcesarValidacionV90ServiceTest {
         verify(saveGrabacionPort, never()).guardar(any());
         verify(validacionIAPort, never()).validar(any());
     }
+
+    /**
+     * C-1/C-3 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): con Gemini
+     * real, {@link ValidacionIAPort#validar} puede lanzar (timeout, error de red) — a
+     * diferencia del {@code NoOpValidacionIAAdapter} de hoy, que nunca lanza. Antes de este
+     * cambio, {@code procesar()} no capturaba esa excepcion: se propagaba sin llegar nunca a
+     * {@code saveGrabacionPort.guardar}, y la grabacion quedaba en PROCESANDO para siempre.
+     * Ahora se trata igual que NO_DISPONIBLE.
+     */
+    @Test
+    @DisplayName("procesar(): la IA lanza -> se trata como NO_DISPONIBLE, el registro no queda atrapado en PROCESANDO")
+    void procesarSiLaIaLanzaNoDejaElRegistroAtrapado() {
+        GrabacionV90 g = grabacionGrabadaDe(usuarioId);
+        g.procesarIntentoDeValidacion(CLOCK);
+        when(loadGrabacionPort.porId(9L)).thenReturn(Optional.of(g));
+        when(validacionIAPort.validar(any())).thenThrow(new RuntimeException("timeout simulado de Gemini"));
+        when(saveGrabacionPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.procesar(usuarioId, 9L);
+
+        assertThat(g.estadoIa()).isNotEqualTo(EstadoIAv90.PROCESANDO);
+        assertThat(g.estadoIa()).isEqualTo(EstadoIAv90.PENDIENTE);
+        verify(saveGrabacionPort).guardar(g);
+    }
+
+    /**
+     * C-3 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): a diferencia del
+     * test anterior (la IA lanza, ya cubierto por C-1), aca lo que falla es GUARDAR el
+     * veredicto ya calculado (ej. Postgres se cae en ese instante). Sin rescate, la grabacion
+     * queda en PROCESANDO para siempre porque nunca se llega a persistir la transicion. Se
+     * simula con dos lecturas distintas de {@code loadGrabacionPort.porId}: la primera (la
+     * que ya trae el test) y una segunda, fresca, que representa lo que "realmente" quedo
+     * comprometido en base (todavia PROCESANDO, porque el guardado nunca llego).
+     */
+    @Test
+    @DisplayName("procesar(): si falla el guardado del veredicto, se releen y se rescata la grabacion de "
+            + "PROCESANDO en vez de dejarla atrapada")
+    void procesarRescataSiFallaElGuardadoDelVeredicto() {
+        GrabacionV90 gInicial = grabacionGrabadaDe(usuarioId);
+        gInicial.procesarIntentoDeValidacion(CLOCK);
+        GrabacionV90 gComprometidaEnBase = grabacionGrabadaDe(usuarioId);
+        gComprometidaEnBase.procesarIntentoDeValidacion(CLOCK);
+
+        when(loadGrabacionPort.porId(9L))
+                .thenReturn(Optional.of(gInicial))
+                .thenReturn(Optional.of(gComprometidaEnBase));
+        when(validacionIAPort.validar(any()))
+                .thenReturn(new ResultadoValidacionV90(ResultadoValidacionV90.Estado.APROBADA, "{\"ok\":true}"));
+        when(saveGrabacionPort.guardar(any()))
+                .thenThrow(new RuntimeException("conexion a Postgres perdida (simulado)"))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        service.procesar(usuarioId, 9L);
+
+        assertThat(gComprometidaEnBase.estadoIa()).isNotEqualTo(EstadoIAv90.PROCESANDO);
+        assertThat(gComprometidaEnBase.estadoIa()).isEqualTo(EstadoIAv90.PENDIENTE);
+        verify(saveGrabacionPort, org.mockito.Mockito.times(2)).guardar(any());
+    }
+
+    @Test
+    @DisplayName("procesar(): si el rescate TAMBIEN falla al guardar, se loguea y no se propaga (el @Async "
+            + "que llama a procesar() no debe reventar por esto)")
+    void procesarNoPropagaSiElRescateTambienFalla() {
+        GrabacionV90 gInicial = grabacionGrabadaDe(usuarioId);
+        gInicial.procesarIntentoDeValidacion(CLOCK);
+        GrabacionV90 gComprometidaEnBase = grabacionGrabadaDe(usuarioId);
+        gComprometidaEnBase.procesarIntentoDeValidacion(CLOCK);
+
+        when(loadGrabacionPort.porId(9L))
+                .thenReturn(Optional.of(gInicial))
+                .thenReturn(Optional.of(gComprometidaEnBase));
+        when(validacionIAPort.validar(any()))
+                .thenReturn(new ResultadoValidacionV90(ResultadoValidacionV90.Estado.APROBADA, "{\"ok\":true}"));
+        when(saveGrabacionPort.guardar(any()))
+                .thenThrow(new RuntimeException("Postgres caida (simulado, primer intento)"))
+                .thenThrow(new RuntimeException("Postgres caida (simulado, rescate)"));
+
+        org.assertj.core.api.Assertions.assertThatCode(() -> service.procesar(usuarioId, 9L))
+                .doesNotThrowAnyException();
+    }
 }

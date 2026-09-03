@@ -4,6 +4,7 @@ import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FragmentoRelevante;
 import com.renaser.os.rag.application.ports.out.ia.EmbeddingPort;
 import com.renaser.os.rag.domain.model.conocimiento.ChunkConocimiento;
+import com.renaser.os.rag.domain.model.conocimiento.ChunkConocimientoId;
 import com.renaser.os.shared.domain.FixedClock;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.data.Offset.offset;
@@ -47,6 +49,11 @@ class PgVectorNativoAdapterTest {
     @MockitoBean
     private EmbeddingPort embeddingPort;
 
+    /** Un id cualquiera, distinto por chunk: la identidad ya no la sortea el agregado. */
+    private static ChunkConocimientoId nuevoId() {
+        return ChunkConocimientoId.of(UUID.randomUUID());
+    }
+
     private static List<Float> vectorConComponentes(int indiceA, float valorA, int indiceB, float valorB) {
         List<Float> vector = new ArrayList<>(Collections.nCopies(ChunkConocimiento.DIMENSION_EMBEDDING, 0.0f));
         vector.set(indiceA, valorA);
@@ -58,11 +65,11 @@ class PgVectorNativoAdapterTest {
 
     @Test
     void buscarSimilaresDevuelveLosChunksOrdenadosPorDistanciaCosenoAscendente() {
-        ChunkConocimiento identico = ChunkConocimiento.indexar("LECCION", "texto", "doc-1", null,
+        ChunkConocimiento identico = ChunkConocimiento.indexar(nuevoId(), "LECCION", "texto", "doc-1", null,
                 "contenido identico a la consulta", vectorConComponentes(0, 1.0f, -1, 0f), Map.of(), CLOCK);
-        ChunkConocimiento parecido = ChunkConocimiento.indexar("LECCION", "texto", "doc-2", null,
+        ChunkConocimiento parecido = ChunkConocimiento.indexar(nuevoId(), "LECCION", "texto", "doc-2", null,
                 "contenido parecido a la consulta", vectorConComponentes(0, 0.9f, 1, 0.1f), Map.of(), CLOCK);
-        ChunkConocimiento distinto = ChunkConocimiento.indexar("LECCION", "texto", "doc-3", null,
+        ChunkConocimiento distinto = ChunkConocimiento.indexar(nuevoId(), "LECCION", "texto", "doc-3", null,
                 "contenido sin relacion con la consulta", vectorConComponentes(1, 1.0f, -1, 0f), Map.of(), CLOCK);
         // Insertados en orden distinto al esperado en la respuesta: si el resultado
         // sale ordenado es porque el ORDER BY embedding <=> ... realmente ordena.
@@ -85,7 +92,7 @@ class PgVectorNativoAdapterTest {
     @Test
     void buscarSimilaresRespetaElLimiteTopK() {
         for (int i = 0; i < 5; i++) {
-            adapter.save(ChunkConocimiento.indexar("LECCION", "texto", "doc-" + i, null, "contenido " + i,
+            adapter.save(ChunkConocimiento.indexar(nuevoId(), "LECCION", "texto", "doc-" + i, null, "contenido " + i,
                     vectorConComponentes(i, 1.0f, -1, 0f), Map.of(), CLOCK));
         }
         when(embeddingPort.generar(eq(CONSULTA))).thenReturn(vectorConComponentes(0, 1.0f, -1, 0f));
@@ -97,7 +104,7 @@ class PgVectorNativoAdapterTest {
 
     @Test
     void saveGuardaLeccionIdNuloCuandoLaFuenteNoVieneDeUnaLeccionPuntual() {
-        ChunkConocimiento chunk = ChunkConocimiento.indexar("DOCUMENTO_LIBRE", null, "doc-99", null,
+        ChunkConocimiento chunk = ChunkConocimiento.indexar(nuevoId(), "DOCUMENTO_LIBRE", null, "doc-99", null,
                 "contenido sin leccion asociada", vectorConComponentes(5, 1.0f, -1, 0f), Map.of("clave", "valor"),
                 CLOCK);
 

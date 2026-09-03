@@ -26,6 +26,13 @@ public final class User {
     private UserRole role;
     private UserStatus status;
     private String fullName;
+    /**
+     * URL PERMANENTE y sin firmar de la foto de perfil (el objeto del avatar es de lectura
+     * publica, D-55). Es la unica excepcion deliberada a la regla P-03 del esquema — el resto
+     * de los binarios guarda ruta y se firma al leer — y se sostiene solo mientras el objeto
+     * sea publico: una URL PREFIRMADA guardada aca vence y no se vuelve a firmar jamas, que fue
+     * exactamente el defecto E-57. {@link #changeAvatar} rechaza las prefirmadas por eso.
+     */
     private String avatarUrl;
     /** Solo tiene sentido si role == ALCHEMIST. Sin tabla propia: decisión 2026-08-24, ver D-25. */
     private String bio;
@@ -120,8 +127,35 @@ public final class User {
         this.fullName = requireName(newFullName);
     }
 
+    /**
+     * Guarda la URL PERMANENTE del avatar. {@code null} o vacio quita el avatar.
+     *
+     * <p>Rechaza las URLs PREFIRMADAS, que es la unica forma conocida de romper esto: una
+     * prefirmada trae su propio vencimiento y, guardada, deja de servir el dia que caduca sin
+     * que nada la vuelva a firmar. Paso de verdad — el avatar se firmaba por 7 dias y se
+     * persistia (E-57) — y no se notaba porque el defecto tarda una semana en aparecer. El
+     * chequeo es barato y es la razon por la que no puede repetirse en silencio.
+     */
     public void changeAvatar(String newAvatarUrl) {
-        this.avatarUrl = newAvatarUrl;
+        this.avatarUrl = requireUrlNoPrefirmada(newAvatarUrl);
+    }
+
+    /** Marcas de SigV4 en la query string. Nombres del estandar de AWS, no de nuestro codigo. */
+    private static final String[] MARCAS_DE_URL_PREFIRMADA = {"x-amz-signature", "x-amz-credential",
+            "x-amz-expires"};
+
+    private static String requireUrlNoPrefirmada(String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        String enMinusculas = url.toLowerCase(java.util.Locale.ROOT);
+        for (String marca : MARCAS_DE_URL_PREFIRMADA) {
+            if (enMinusculas.contains(marca)) {
+                throw new IllegalArgumentException(
+                        "El avatar guarda una URL permanente; una URL prefirmada vence y dejaria la foto rota");
+            }
+        }
+        return url.trim();
     }
 
     public void updateBio(String newBio) {

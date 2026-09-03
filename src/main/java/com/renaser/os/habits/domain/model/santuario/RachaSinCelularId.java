@@ -2,6 +2,14 @@ package com.renaser.os.habits.domain.model.santuario;
 
 import java.util.UUID;
 
+/**
+ * Identidad de una racha "Dia sin celular" (tabla {@code rachas_sin_celular}).
+ * Valida y envuelve un UUID, pero <b>no lo genera</b>: la generacion
+ * vive fuera de {@code domain/}, detras del puerto
+ * {@link com.renaser.os.shared.domain.IdGenerator}, y el caso de uso arma el id con
+ * {@code RachaSinCelularId.of(idGenerator.newId())} antes de invocar la factoria del agregado
+ * (CLAUDE.MD 5.4.7: {@code domain/} sin aleatoriedad).
+ */
 public record RachaSinCelularId(UUID value) {
 
     public RachaSinCelularId {
@@ -12,10 +20,6 @@ public record RachaSinCelularId(UUID value) {
 
     public static RachaSinCelularId of(UUID value) {
         return new RachaSinCelularId(value);
-    }
-
-    public static RachaSinCelularId newId() {
-        return new RachaSinCelularId(UUID.randomUUID());
     }
 
     @Override

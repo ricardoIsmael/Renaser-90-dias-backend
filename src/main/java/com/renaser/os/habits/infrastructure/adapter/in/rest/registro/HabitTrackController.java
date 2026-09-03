@@ -7,8 +7,10 @@ import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDia
 import com.renaser.os.habits.application.ports.in.registro.SubirEvidenciaRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.SubirEvidenciaRegistroUseCase.SubirEvidenciaRegistroCommand;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -42,12 +44,14 @@ public class HabitTrackController {
     }
 
     /** Hueco #10: cada registro trae el catalogo resuelto (titulo/tipo/guia/horario) — sin N+1. */
+    @RequiresPermission(value = Permission.USE_APP, scope = "opera sobre los habitos del propio actor")
     @GetMapping("/today")
     public List<RegistroHabitoConCatalogoResponse> hoy(@ActorAutenticado UserId actor) {
         return consultarTracksDelDiaUseCase.consultar(actor, actor, LocalDate.now())
                 .stream().map(RegistroHabitoConCatalogoResponse::from).toList();
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "dueno del registro de habito")
     @PostMapping("/{id}/complete")
     public RegistroHabitoResponse completar(@ActorAutenticado UserId actor, @PathVariable String id,
                                              @RequestBody @Valid CompletarRegistroRequest request) {
@@ -58,6 +62,7 @@ public class HabitTrackController {
     }
 
     /** D-H6: sube la evidencia de un registro diario, delegando en `evidence.api.RegistrarEvidenciaPort`. */
+    @RequiresPermission(value = Permission.USE_APP, scope = "dueno del registro de habito")
     @PostMapping("/{id}/evidence")
     public EvidenciaRegistroResponse subirEvidencia(@ActorAutenticado UserId actor,
                                                       @PathVariable String id,

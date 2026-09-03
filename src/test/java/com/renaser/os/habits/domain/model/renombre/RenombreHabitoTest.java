@@ -20,8 +20,8 @@ class RenombreHabitoTest {
 
     @Test
     void creaConTituloYMotivoRecortados() {
-        RenombreHabito renombre = RenombreHabito.crear(participante(), HabitoId.newId(), "  Jugo de papaya  ",
-                "  Gastritis  ", AHORA);
+        RenombreHabito renombre = RenombreHabito.crear(participante(), HabitoId.of(UUID.randomUUID()),
+                "  Jugo de papaya  ", "  Gastritis  ", AHORA);
 
         assertThat(renombre.tituloPersonal()).isEqualTo("Jugo de papaya");
         assertThat(renombre.motivo()).isEqualTo("Gastritis");
@@ -29,33 +29,37 @@ class RenombreHabitoTest {
 
     @Test
     void tituloVacioRechazado() {
-        assertThatThrownBy(() -> RenombreHabito.crear(participante(), HabitoId.newId(), "   ", "motivo", AHORA))
+        assertThatThrownBy(() -> RenombreHabito.crear(participante(), HabitoId.of(UUID.randomUUID()), "   ", "motivo",
+                AHORA))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void motivoVacioRechazado() {
-        assertThatThrownBy(() -> RenombreHabito.crear(participante(), HabitoId.newId(), "titulo", "  ", AHORA))
+        assertThatThrownBy(() -> RenombreHabito.crear(participante(), HabitoId.of(UUID.randomUUID()), "titulo", "  ",
+                AHORA))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void tituloDemasiadoLargoRechazado() {
         String largo = "x".repeat(61);
-        assertThatThrownBy(() -> RenombreHabito.crear(participante(), HabitoId.newId(), largo, "motivo", AHORA))
+        assertThatThrownBy(() -> RenombreHabito.crear(participante(), HabitoId.of(UUID.randomUUID()), largo, "motivo",
+                AHORA))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void motivoDemasiadoLargoRechazado() {
         String largo = "x".repeat(201);
-        assertThatThrownBy(() -> RenombreHabito.crear(participante(), HabitoId.newId(), "titulo", largo, AHORA))
+        assertThatThrownBy(() -> RenombreHabito.crear(participante(), HabitoId.of(UUID.randomUUID()), "titulo", largo,
+                AHORA))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void actualizarCambiaTituloYMotivo() {
-        RenombreHabito renombre = RenombreHabito.crear(participante(), HabitoId.newId(), "Jugo de papaya",
+        RenombreHabito renombre = RenombreHabito.crear(participante(), HabitoId.of(UUID.randomUUID()), "Jugo de papaya",
                 "Gastritis", AHORA);
         Instant despues = AHORA.plusSeconds(60);
 

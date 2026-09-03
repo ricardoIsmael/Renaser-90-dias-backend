@@ -10,12 +10,13 @@ class NotificacionPersistenceMapper {
 
     Notificacion toDomain(NotificacionJpaEntity e) {
         return Notificacion.rehydrate(e.getId(), UserId.of(e.getUsuarioId()), toDomainTipo(e.getTipo()),
-                e.getTitulo(), e.getCuerpo(), e.getRutaApp(), e.getLeidaEn(), e.getCreadoEn());
+                e.getTitulo(), e.getCuerpo(), e.getRutaApp(), e.getLeidaEn(), e.getCreadoEn(),
+                e.getOrigenEventoId());
     }
 
     NotificacionJpaEntity toEntity(Notificacion n) {
         return new NotificacionJpaEntity(n.id(), n.usuarioId().value(), toJpaTipo(n.tipo()), n.titulo(), n.cuerpo(),
-                n.rutaApp(), n.leidaEn(), n.creadoEn());
+                n.rutaApp(), n.leidaEn(), n.creadoEn(), n.origenEventoId());
     }
 
     private TipoNotificacionJpa toJpaTipo(TipoNotificacion tipo) {

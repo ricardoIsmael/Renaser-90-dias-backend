@@ -54,11 +54,11 @@ class EleccionDiaSemanalServiceTest {
     }
 
     private static Habito habitoDeEleccionSemanal() {
-        Habito base = Habito.crearDeSistema("Dia sin celular", TipoHabito.CHECKBOX, "MENTE",
-                ExigenciaEvidencia.OPCIONAL, CLOCK.now());
+        Habito base = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Dia sin celular", TipoHabito.CHECKBOX,
+                "MENTE", ExigenciaEvidencia.OPCIONAL, CLOCK.now());
         return Habito.rehydrate(base.id(), base.ambito(), null, base.titulo(), null, base.tipo(),
-                base.categoriaClave(), null, "PHONE_FREE_DAY", base.exigenciaEvidencia(), false, false, true, null,
-                null, null, null, true, CLOCK.now(), CLOCK.now());
+                base.categoriaClave(), null, "PHONE_FREE_DAY", base.exigenciaEvidencia(), false, false, true, true,
+                null, null, null, null, true, CLOCK.now(), CLOCK.now());
     }
 
     @Test
@@ -67,15 +67,15 @@ class EleccionDiaSemanalServiceTest {
         when(progresoPort.deParticipante(actor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, false)));
 
-        assertThatThrownBy(() -> service.elegir(new ElegirDiaSemanalCommand(actor, HabitoId.newId(),
+        assertThatThrownBy(() -> service.elegir(new ElegirDiaSemanalCommand(actor, HabitoId.of(UUID.randomUUID()),
                 LocalDate.of(2026, 8, 25)))).isInstanceOf(NotAuthorizedException.class);
     }
 
     @Test
     void habitoSinEleccionSemanalRechazado() {
         UserId actor = UserId.of(UUID.randomUUID());
-        Habito habito = Habito.crearDeSistema("Otro", TipoHabito.CHECKBOX, "MENTE", ExigenciaEvidencia.OPCIONAL,
-                CLOCK.now());
+        Habito habito = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Otro", TipoHabito.CHECKBOX, "MENTE",
+                ExigenciaEvidencia.OPCIONAL, CLOCK.now());
         when(progresoPort.deParticipante(actor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));

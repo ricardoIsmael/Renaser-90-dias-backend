@@ -20,8 +20,9 @@ class RachaCompletadaNotificationListener {
 
     @ApplicationModuleListener
     void on(RachaCompletadaEvent event) {
+        // C-7: rachaId es la clave de deduplicacion si el outbox reentrega este evento.
         emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(event.participanteId(),
                 TipoNotificacion.LOGRO_DESBLOQUEADO, "Racha sin celular completada",
-                "Completaste un ciclo completo de Santuario sin celular.", null));
+                "Completaste un ciclo completo de Santuario sin celular.", null, event.rachaId()));
     }
 }

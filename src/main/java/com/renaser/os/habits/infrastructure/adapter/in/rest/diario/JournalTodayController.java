@@ -3,8 +3,10 @@ package com.renaser.os.habits.infrastructure.adapter.in.rest.diario;
 import com.renaser.os.habits.application.ports.in.diario.ConsultarBitacoraNocturnaUseCase;
 import com.renaser.os.habits.application.ports.in.diario.EscribirBitacoraNocturnaUseCase;
 import com.renaser.os.habits.application.ports.in.diario.EscribirBitacoraNocturnaUseCase.EscribirBitacoraNocturnaCommand;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -30,11 +32,13 @@ public class JournalTodayController {
         this.escribirUseCase = escribirUseCase;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping
     public JournalEntryResponse hoy(@ActorAutenticado UserId actor) {
         return JournalEntryResponse.from(consultarUseCase.consultarHoy(actor));
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @PutMapping
     public JournalEntryResponse escribir(@ActorAutenticado UserId actor,
                                           @RequestBody @Valid UpsertJournalEntryRequest request) {

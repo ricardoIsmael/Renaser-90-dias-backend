@@ -17,8 +17,10 @@ import com.renaser.os.calendar.domain.model.evento.Recurrencia;
 import com.renaser.os.calendar.domain.model.evento.ReglaRecordatorio;
 import com.renaser.os.calendar.domain.model.evento.RolUsuario;
 import com.renaser.os.calendar.domain.model.evento.TipoEvento;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -80,6 +82,7 @@ class EventoController {
         this.confirmarAsistenciaUseCase = confirmarAsistenciaUseCase;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el listado ya viene filtrado por la audiencia de cada evento")
     @GetMapping
     public List<OcurrenciaResponse> listar(@ActorAutenticado UserId actor,
                                             @RequestParam("from") String from, @RequestParam("to") String to,
@@ -88,12 +91,14 @@ class EventoController {
         return ocurrencias.stream().map(OcurrenciaResponse::from).toList();
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el actor tiene que estar en la audiencia del evento")
     @GetMapping("/{id}")
     public EventoResponse obtener(@ActorAutenticado UserId actor, @PathVariable UUID id) {
         EventoVista vista = obtenerUseCase.obtener(actor, EventoId.of(id));
         return EventoResponse.from(vista.evento(), vista.coverUrl());
     }
 
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "un MENTOR ademas tiene que liderar una celula, y la audiencia se le fuerza a esa celula")
     @PostMapping
     public ResponseEntity<EventoResponse> crear(@ActorAutenticado UserId actor,
                                                  @Valid @RequestBody EventoRequest request) {
@@ -101,6 +106,7 @@ class EventoController {
         return ResponseEntity.status(HttpStatus.CREATED).body(EventoResponse.from(creado.evento(), creado.coverUrl()));
     }
 
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "un MENTOR solo puede editar los eventos que creo")
     @PutMapping("/{id}")
     public EventoResponse actualizar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                       @Valid @RequestBody EventoRequest request) {
@@ -108,12 +114,14 @@ class EventoController {
         return EventoResponse.from(actualizado.evento(), actualizado.coverUrl());
     }
 
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "un MENTOR solo puede eliminar los eventos que creo")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actor, @PathVariable UUID id) {
         eliminarUseCase.eliminar(actor, EventoId.of(id));
         return ResponseEntity.noContent().build();
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el actor tiene que estar en la audiencia del evento")
     @PutMapping("/{id}/rsvp")
     public ResponseEntity<Void> rsvp(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                       @Valid @RequestBody RsvpRequest request) {
@@ -122,6 +130,7 @@ class EventoController {
         return ResponseEntity.ok().build();
     }
 
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "un MENTOR solo sobre los eventos que creo")
     @PostMapping("/{id}/cancel-occurrence")
     public ResponseEntity<Void> cancelarOcurrencia(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                                     @Valid @RequestBody CancelarOcurrenciaRequest request) {
@@ -129,6 +138,7 @@ class EventoController {
         return ResponseEntity.ok().build();
     }
 
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "un MENTOR solo sobre los eventos que creo")
     @PostMapping("/{id}/portada/upload-url")
     public UrlPortadaResponse solicitarUrlPortada(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                                    @Valid @RequestBody SolicitarUrlPortadaRequest request) {
@@ -136,6 +146,7 @@ class EventoController {
         return UrlPortadaResponse.from(url);
     }
 
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "un MENTOR solo sobre los eventos que creo")
     @PostMapping("/{id}/portada/confirm")
     public EventoResponse confirmarPortada(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                             @Valid @RequestBody ConfirmarPortadaRequest request) {

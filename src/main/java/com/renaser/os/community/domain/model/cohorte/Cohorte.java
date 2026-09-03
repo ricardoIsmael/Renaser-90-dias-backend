@@ -29,11 +29,19 @@ public final class Cohorte {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    public static Cohorte crear(String nombre, LocalDate fechaInicio, LocalDate fechaFin, Instant ahora) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code CohorteService.crear}). Asi la
+     * factoria es referencialmente transparente y un test puede fijar el id que espera, en
+     * vez de tener que caer a {@link #rehydrate} para lograrlo.
+     */
+    public static Cohorte crear(CohorteId id, String nombre, LocalDate fechaInicio, LocalDate fechaFin,
+                                 Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         requireNombreValido(nombre);
         Objects.requireNonNull(fechaInicio, "fechaInicio es obligatoria");
         requireRangoValido(fechaInicio, fechaFin);
-        return new Cohorte(CohorteId.newId(), nombre, fechaInicio, fechaFin, EstadoCohorte.PLANIFICADA, ahora, ahora);
+        return new Cohorte(id, nombre, fechaInicio, fechaFin, EstadoCohorte.PLANIFICADA, ahora, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */

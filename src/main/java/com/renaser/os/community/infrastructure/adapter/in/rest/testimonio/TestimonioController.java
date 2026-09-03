@@ -40,11 +40,13 @@ public class TestimonioController {
         this.promoverUseCase = promoverUseCase;
     }
 
+    // TODO(auth fase 4): sin clasificar. No recibe actor ni ejecuta guard. Los testimonios destacados podrian ser contenido publico de marketing, pero el codigo no lo dice en ningun lado. NO marcar publico por defecto.
     @GetMapping
     public List<TestimonioResponse> listar() {
         return consultarUseCase.listarDestacados().stream().map(TestimonioResponse::from).toList();
     }
 
+    // TODO(auth fase 4): sin clasificar. Un solo handler con dos autorizaciones segun el body: sin wallPostId acepta actor null y no valida nada; con wallPostId exige PROMOTE_TESTIMONIAL. No es declarable hasta partirlo en dos endpoints.
     @PostMapping
     public ResponseEntity<TestimonioResponse> crear(
             @ActorAutenticado(required = false) UserId actorId,

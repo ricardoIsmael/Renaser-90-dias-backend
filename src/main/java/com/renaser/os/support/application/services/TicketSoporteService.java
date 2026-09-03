@@ -2,6 +2,7 @@ package com.renaser.os.support.application.services;
 
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.support.application.ports.in.ticketsoporte.AbrirTicketSoporteUseCase;
@@ -44,15 +45,17 @@ public class TicketSoporteService implements AbrirTicketSoporteUseCase, ListarTi
     private final UserSummaryFinder userSummaryFinder;
     private final AlmacenamientoPort almacenamientoPort;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public TicketSoporteService(LoadTicketSoportePort loadTicketSoportePort,
                                  SaveTicketSoportePort saveTicketSoportePort, UserSummaryFinder userSummaryFinder,
-                                 AlmacenamientoPort almacenamientoPort, Clock clock) {
+                                 AlmacenamientoPort almacenamientoPort, Clock clock, IdGenerator idGenerator) {
         this.loadTicketSoportePort = loadTicketSoportePort;
         this.saveTicketSoportePort = saveTicketSoportePort;
         this.userSummaryFinder = userSummaryFinder;
         this.almacenamientoPort = almacenamientoPort;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -63,8 +66,9 @@ public class TicketSoporteService implements AbrirTicketSoporteUseCase, ListarTi
         AdjuntoSoporte adjunto = command.adjuntoBucket() != null && command.adjuntoRuta() != null
                 ? new AdjuntoSoporte(command.adjuntoBucket(), command.adjuntoRuta())
                 : null;
-        TicketSoporte ticket = TicketSoporte.abrir(command.usuarioId(), categoria, command.asunto(),
-                command.mensaje(), command.clientLog(), adjunto, clock);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
+        TicketSoporte ticket = TicketSoporte.abrir(TicketSoporteId.of(idGenerator.newId()), command.usuarioId(),
+                categoria, command.asunto(), command.mensaje(), command.clientLog(), adjunto, clock);
         return aVista(saveTicketSoportePort.save(ticket));
     }
 

@@ -31,11 +31,19 @@ public final class Comentario {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    public static Comentario escribir(PublicacionId publicacionId, UserId autorId, String texto, Instant ahora) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code ComentarioMuroService.escribir}). Asi la
+     * factoria es referencialmente transparente y un test puede fijar el id que espera, en
+     * vez de tener que caer a {@link #rehydrate} para lograrlo.
+     */
+    public static Comentario escribir(ComentarioId id, PublicacionId publicacionId, UserId autorId, String texto,
+                                       Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(publicacionId, "publicacionId es obligatorio");
         Objects.requireNonNull(autorId, "autorId es obligatorio");
         requireTextoValido(texto);
-        return new Comentario(ComentarioId.newId(), publicacionId, autorId, texto.trim(), false, ahora, ahora);
+        return new Comentario(id, publicacionId, autorId, texto.trim(), false, ahora, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */

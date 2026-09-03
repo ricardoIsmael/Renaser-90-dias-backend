@@ -4,8 +4,10 @@ import com.renaser.os.academy.application.ports.in.clasediaria.CompletarClaseDia
 import com.renaser.os.academy.application.ports.in.clasediaria.CompletarClaseDiariaUseCase.CompletarClaseDiariaCommand;
 import com.renaser.os.academy.application.ports.in.clasediaria.ConsultarClaseDiariaUseCase;
 import com.renaser.os.academy.domain.model.curso.LeccionId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,11 +33,13 @@ public class ClaseDiariaController {
         this.completarClaseDiariaUseCase = completarClaseDiariaUseCase;
     }
 
+    @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @GetMapping
     public ClaseDiariaResponse claseDeHoy(@ActorAutenticado UserId actorId) {
         return ClaseDiariaResponse.from(claseDiariaUseCase.claseDeHoy(actorId));
     }
 
+    @RequiresPermission(value = Permission.FOLLOW_OWN_PROGRAM, scope = "solo la clase diaria de hoy")
     @PostMapping
     public CompletarClaseDiariaResponse completar(@ActorAutenticado UserId actorId,
                                                     @Valid @RequestBody CompletarClaseDiariaRequest request) {

@@ -80,16 +80,23 @@ class EvidenciaPersistenceAdapterTest {
                 .executeUpdate();
     }
 
+    /** Un id cualquiera, distinto por evidencia: lo que debe fallar en los tests de constraint es el
+     * indice unico de la tabla, no una colision de clave primaria. */
+    private static EvidenciaId nuevoId() {
+        return EvidenciaId.of(UUID.randomUUID());
+    }
+
     private Evidencia evidenciaRocaTexto(boolean esPrincipal) {
-        return Evidencia.registrar(participanteId, new DestinoEvidencia.RocaDiaria(rocaDiariaId), TipoEvidencia.TEXTO,
-                null, null, "listo", null, -12.05, -77.03, esPrincipal, CLOCK.now(), CLOCK);
+        return Evidencia.registrar(nuevoId(), participanteId, new DestinoEvidencia.RocaDiaria(rocaDiariaId),
+                TipoEvidencia.TEXTO, null, null, "listo", null, -12.05, -77.03, esPrincipal, CLOCK.now(), CLOCK);
     }
 
     /** {@code creadoEn} distinto por evidencia (a diferencia de {@link #evidenciaRocaTexto}, que siempre usa
      * {@code CLOCK} fijo) — necesario para probar orden de keyset y filtros de rango de fechas. */
     private Evidencia evidenciaRocaTextoEn(Instant creadoEn, boolean esPrincipal) {
-        return Evidencia.registrar(participanteId, new DestinoEvidencia.RocaDiaria(rocaDiariaId), TipoEvidencia.TEXTO,
-                null, null, "contenido", null, null, null, esPrincipal, creadoEn, FixedClock.at(creadoEn));
+        return Evidencia.registrar(nuevoId(), participanteId, new DestinoEvidencia.RocaDiaria(rocaDiariaId),
+                TipoEvidencia.TEXTO, null, null, "contenido", null, null, null, esPrincipal, creadoEn,
+                FixedClock.at(creadoEn));
     }
 
     @Test
@@ -112,7 +119,23 @@ class EvidenciaPersistenceAdapterTest {
 
     @Test
     void byIdDeIdInexistenteDevuelveVacio() {
-        assertThat(adapter.byId(EvidenciaId.newId())).isEmpty();
+        assertThat(adapter.byId(EvidenciaId.of(UUID.randomUUID()))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("C-13: byIdParaEscritura trae la misma fila que byId (el lock no cambia el resultado)")
+    void byIdParaEscrituraDevuelveLaMismaEvidenciaQueById() {
+        Evidencia guardada = adapter.save(evidenciaRocaTexto(true));
+
+        Optional<Evidencia> recuperada = adapter.byIdParaEscritura(guardada.id());
+
+        assertThat(recuperada).isPresent();
+        assertThat(recuperada.get().id()).isEqualTo(guardada.id());
+    }
+
+    @Test
+    void byIdParaEscrituraDeIdInexistenteDevuelveVacio() {
+        assertThat(adapter.byIdParaEscritura(EvidenciaId.of(UUID.randomUUID()))).isEmpty();
     }
 
     @Test
@@ -126,10 +149,12 @@ class EvidenciaPersistenceAdapterTest {
 
     @Test
     void pendientesLoteDevuelveSoloLasPendientesOrdenadasPorSubidaEn() {
-        Evidencia primera = adapter.save(Evidencia.registrar(participanteId, new DestinoEvidencia.RocaDiaria(rocaDiariaId),
+        Evidencia primera = adapter.save(Evidencia.registrar(nuevoId(), participanteId,
+                new DestinoEvidencia.RocaDiaria(rocaDiariaId),
                 TipoEvidencia.TEXTO, null, null, "una", null, null, null, false, Instant.parse("2026-08-25T09:00:00Z"),
                 CLOCK));
-        Evidencia segunda = adapter.save(Evidencia.registrar(participanteId, new DestinoEvidencia.RocaDiaria(rocaDiariaId),
+        Evidencia segunda = adapter.save(Evidencia.registrar(nuevoId(), participanteId,
+                new DestinoEvidencia.RocaDiaria(rocaDiariaId),
                 TipoEvidencia.TEXTO, null, null, "otra", null, null, null, false, Instant.parse("2026-08-25T09:05:00Z"),
                 CLOCK));
         Evidencia aprobada = adapter.save(evidenciaRocaTexto(false));
@@ -225,7 +250,7 @@ class EvidenciaPersistenceAdapterTest {
                 .setParameter("pid", otroParticipante.value())
                 .executeUpdate();
         Evidencia miEvidencia = adapter.save(evidenciaRocaTextoEn(Instant.parse("2026-08-25T09:00:00Z"), false));
-        adapter.save(Evidencia.registrar(otroParticipante, new DestinoEvidencia.RocaDiaria(otraRoca),
+        adapter.save(Evidencia.registrar(nuevoId(), otroParticipante, new DestinoEvidencia.RocaDiaria(otraRoca),
                 TipoEvidencia.TEXTO, null, null, "otro", null, null, null, false,
                 Instant.parse("2026-08-25T09:05:00Z"), FixedClock.at(Instant.parse("2026-08-25T09:05:00Z"))));
 

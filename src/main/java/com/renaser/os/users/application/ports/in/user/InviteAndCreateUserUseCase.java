@@ -24,7 +24,7 @@ public interface InviteAndCreateUserUseCase {
     UserId inviteStaff(InviteStaffCommand command);
 
     record InviteUserCommand(
-            @NotBlank String supabaseUserId,
+            @NotBlank String usuarioId,
             @NotBlank @Email String email,
             @NotBlank String fullName,
             @NotNull UserRole role,
@@ -32,7 +32,7 @@ public interface InviteAndCreateUserUseCase {
 
         public InviteUserCommand {
             SelfValidating.validateConstructorArgs(InviteUserCommand.class,
-                    supabaseUserId, email, fullName, role, actorId);
+                    usuarioId, email, fullName, role, actorId);
         }
     }
 

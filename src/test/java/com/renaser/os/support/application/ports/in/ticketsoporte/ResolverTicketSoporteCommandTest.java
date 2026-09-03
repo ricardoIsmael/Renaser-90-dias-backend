@@ -20,14 +20,15 @@ class ResolverTicketSoporteCommandTest {
 
     @Test
     void adminNotesEsOpcional() {
-        var command = new ResolverTicketSoporteCommand(TicketSoporteId.newId(), UserId.of(UUID.randomUUID()), null);
+        var command = new ResolverTicketSoporteCommand(TicketSoporteId.of(UUID.randomUUID()),
+                UserId.of(UUID.randomUUID()), null);
 
         assertThat(command.adminNotes()).isNull();
     }
 
     @Test
     void adminNotesHastaCuatroMilCaracteresEsValido_4001Rechaza() {
-        TicketSoporteId ticketId = TicketSoporteId.newId();
+        TicketSoporteId ticketId = TicketSoporteId.of(UUID.randomUUID());
         UserId actorId = UserId.of(UUID.randomUUID());
 
         assertThatCode(() -> new ResolverTicketSoporteCommand(ticketId, actorId, de(4000)))
@@ -45,7 +46,7 @@ class ResolverTicketSoporteCommandTest {
 
     @Test
     void rechazaActorIdNulo() {
-        assertThatThrownBy(() -> new ResolverTicketSoporteCommand(TicketSoporteId.newId(), null, "notas"))
+        assertThatThrownBy(() -> new ResolverTicketSoporteCommand(TicketSoporteId.of(UUID.randomUUID()), null, "notas"))
                 .isInstanceOf(ConstraintViolationException.class);
     }
 }

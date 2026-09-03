@@ -2,6 +2,7 @@ package com.renaser.os.rocks.infrastructure.adapter.out.persistence.rocadiaria;
 
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria;
+import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
@@ -55,10 +56,15 @@ class RocaDiariaPersistenceAdapterTest {
                 .executeUpdate();
     }
 
+    /** El id ya no lo sortea la factoria: entra por parametro (puerto IdGenerator). */
+    private static RocaDiariaId unId() {
+        return RocaDiariaId.of(UUID.randomUUID());
+    }
+
     @Test
     void guardaYRecuperaUnaRocaDiariaPorFecha() {
-        RocaDiaria roca = RocaDiaria.planificar(participanteId, LocalDate.of(2026, 8, 25), 1, "titulo", "desc", 8,
-                false, EjeObjetivo.CUERPO, null, LocalTime.of(18, 0), LocalTime.of(20, 0), CLOCK);
+        RocaDiaria roca = RocaDiaria.planificar(unId(), participanteId, LocalDate.of(2026, 8, 25), 1, "titulo",
+                "desc", 8, false, EjeObjetivo.CUERPO, null, LocalTime.of(18, 0), LocalTime.of(20, 0), CLOCK);
 
         adapter.save(roca);
 
@@ -72,10 +78,10 @@ class RocaDiariaPersistenceAdapterTest {
     void contarDeParticipanteYFechaCuentaCorrectamente() {
         LocalDate fecha = LocalDate.of(2026, 8, 26);
         adapter.saveAll(List.of(
-                RocaDiaria.planificar(participanteId, fecha, 1, "verde", null, 5, false, EjeObjetivo.CUERPO, null,
-                        null, null, CLOCK),
-                RocaDiaria.planificar(participanteId, fecha, 2, "amarilla", null, 5, false, EjeObjetivo.CUERPO, null,
-                        null, null, CLOCK)));
+                RocaDiaria.planificar(unId(), participanteId, fecha, 1, "verde", null, 5, false,
+                        EjeObjetivo.CUERPO, null, null, null, CLOCK),
+                RocaDiaria.planificar(unId(), participanteId, fecha, 2, "amarilla", null, 5, false,
+                        EjeObjetivo.CUERPO, null, null, null, CLOCK)));
 
         assertThat(adapter.contarDeParticipanteYFecha(participanteId, fecha)).isEqualTo(2);
         assertThat(adapter.contarDeParticipanteYFecha(participanteId, fecha.plusDays(1))).isEqualTo(0);
@@ -83,8 +89,8 @@ class RocaDiariaPersistenceAdapterTest {
 
     @Test
     void completarYGuardarPersisteElEstado() {
-        RocaDiaria roca = RocaDiaria.planificar(participanteId, LocalDate.of(2026, 8, 27), 1, "t", null, 5, false,
-                EjeObjetivo.TRABAJO, null, null, null, CLOCK);
+        RocaDiaria roca = RocaDiaria.planificar(unId(), participanteId, LocalDate.of(2026, 8, 27), 1, "t", null,
+                5, false, EjeObjetivo.TRABAJO, null, null, null, CLOCK);
         roca = adapter.save(roca);
 
         roca.completar(CLOCK.now(), CLOCK);

@@ -15,6 +15,7 @@ import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -43,6 +44,8 @@ import static org.mockito.Mockito.when;
 class HorarioHabitoAdminServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-26T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, crear() ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadHabitoPort loadHabitoPort;
@@ -52,6 +55,8 @@ class HorarioHabitoAdminServiceTest {
     private SaveHorarioHabitoPort savePort;
     @Mock
     private UserSummaryFinder userSummaryFinder;
+    @Mock
+    private IdGenerator idGenerator;
 
     private HorarioHabitoAdminService service;
 
@@ -61,7 +66,8 @@ class HorarioHabitoAdminServiceTest {
     @BeforeEach
     void setUp() {
         service = new HorarioHabitoAdminService(loadHabitoPort, loadPort, savePort,
-                new HabitoAdminGuard(userSummaryFinder), CLOCK);
+                new HabitoAdminGuard(userSummaryFinder), CLOCK, idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(mentor))
@@ -70,20 +76,20 @@ class HorarioHabitoAdminServiceTest {
     }
 
     private Habito habitoExistente() {
-        return Habito.crearDeSistema("Titulo", TipoHabito.CHECKBOX,
+        return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Titulo", TipoHabito.CHECKBOX,
                 new DetallesHabito(null, "CUERPO", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
     }
 
     @Test
     void crearComoMentorEsRechazado() {
-        var command = new CrearHorarioHabitoCommand(mentor, HabitoId.newId(), 1, null, TipoDia.DISCIPLINA, null,
-                null);
+        var command = new CrearHorarioHabitoCommand(mentor, HabitoId.of(UUID.randomUUID()), 1, null, TipoDia.DISCIPLINA,
+                null, null);
         assertThatThrownBy(() -> service.crear(command)).isInstanceOf(NotAuthorizedException.class);
     }
 
     @Test
     void crearSobreHabitoInexistenteFalla404() {
-        HabitoId habitoId = HabitoId.newId();
+        HabitoId habitoId = HabitoId.of(UUID.randomUUID());
         when(loadHabitoPort.byId(habitoId)).thenReturn(Optional.empty());
         var command = new CrearHorarioHabitoCommand(admin, habitoId, 1, null, TipoDia.DISCIPLINA, null, null);
 
@@ -105,8 +111,9 @@ class HorarioHabitoAdminServiceTest {
 
     @Test
     void actualizarConCamposOmitidosMantieneLosValoresActuales() {
-        HorarioHabito existente = HorarioHabito.crear(HabitoId.newId(), 1, 10, TipoDia.DISCIPLINA,
-                LocalTime.of(6, 0), LocalTime.of(9, 0), CLOCK.now());
+        HorarioHabito existente = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), 1, 10, TipoDia.DISCIPLINA, LocalTime.of(6, 0), LocalTime.of(9, 0),
+                CLOCK.now());
         when(loadPort.byId(existente.id())).thenReturn(Optional.of(existente));
         var command = new ActualizarHorarioHabitoCommand(admin, existente.id(), null, null, null, null, null, false,
                 false, false);
@@ -122,8 +129,8 @@ class HorarioHabitoAdminServiceTest {
 
     @Test
     void actualizarConLimpiarDiaFinLoDejaAbierto() {
-        HorarioHabito existente = HorarioHabito.crear(HabitoId.newId(), 1, 10, TipoDia.DISCIPLINA, null, null,
-                CLOCK.now());
+        HorarioHabito existente = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), 1, 10, TipoDia.DISCIPLINA, null, null, CLOCK.now());
         when(loadPort.byId(existente.id())).thenReturn(Optional.of(existente));
         var command = new ActualizarHorarioHabitoCommand(admin, existente.id(), null, null, null, null, null, true,
                 false, false);
@@ -135,8 +142,9 @@ class HorarioHabitoAdminServiceTest {
 
     @Test
     void actualizarConLimpiarHorasLasDejaNulas() {
-        HorarioHabito existente = HorarioHabito.crear(HabitoId.newId(), 1, 10, TipoDia.DISCIPLINA,
-                LocalTime.of(6, 0), LocalTime.of(9, 0), CLOCK.now());
+        HorarioHabito existente = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), 1, 10, TipoDia.DISCIPLINA, LocalTime.of(6, 0), LocalTime.of(9, 0),
+                CLOCK.now());
         when(loadPort.byId(existente.id())).thenReturn(Optional.of(existente));
         var command = new ActualizarHorarioHabitoCommand(admin, existente.id(), null, null, null, null, null, false,
                 true, true);
@@ -149,7 +157,7 @@ class HorarioHabitoAdminServiceTest {
 
     @Test
     void eliminarSobreHorarioInexistenteFalla404() {
-        HorarioHabitoId id = HorarioHabitoId.newId();
+        HorarioHabitoId id = HorarioHabitoId.of(UUID.randomUUID());
         when(loadPort.byId(id)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.eliminar(new EliminarHorarioHabitoCommand(admin, id)))

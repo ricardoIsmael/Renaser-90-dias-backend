@@ -7,6 +7,7 @@ import com.renaser.os.support.domain.model.ticketsoporte.AdjuntoSoporte;
 import com.renaser.os.support.domain.model.ticketsoporte.CategoriaSoporte;
 import com.renaser.os.support.domain.model.ticketsoporte.EstadoTicketSoporte;
 import com.renaser.os.support.domain.model.ticketsoporte.TicketSoporte;
+import com.renaser.os.support.domain.model.ticketsoporte.TicketSoporteId;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -39,6 +40,11 @@ class TicketSoportePersistenceAdapterTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    /** Un id nuevo por ticket: la identidad ya no la sortea la factoria, entra por el puerto IdGenerator. */
+    private static TicketSoporteId nuevoId() {
+        return TicketSoporteId.of(UUID.randomUUID());
+    }
+
     private UserId sembrarUsuario() {
         UUID id = UUID.randomUUID();
         jdbc.update("insert into renaser.usuarios (id, email, nombre_completo, rol) values (?, ?, ?, 'APRENDIZ')",
@@ -49,7 +55,7 @@ class TicketSoportePersistenceAdapterTest {
     @Test
     void guardaYRecuperaUnTicketSinAdjunto() {
         UserId usuario = sembrarUsuario();
-        TicketSoporte ticket = TicketSoporte.abrir(usuario, CategoriaSoporte.TECNICO, "La app se cierra",
+        TicketSoporte ticket = TicketSoporte.abrir(nuevoId(), usuario, CategoriaSoporte.TECNICO, "La app se cierra",
                 "Se cierra sola al abrir el modulo de habitos", "GET /habits -> 500", null, CLOCK);
 
         var guardado = adapter.save(ticket);
@@ -65,7 +71,7 @@ class TicketSoportePersistenceAdapterTest {
     void guardaYRecuperaUnTicketConAdjunto() {
         UserId usuario = sembrarUsuario();
         AdjuntoSoporte adjunto = new AdjuntoSoporte("renaser-files", "soporte/" + usuario.value() + "/1.png");
-        TicketSoporte ticket = TicketSoporte.abrir(usuario, CategoriaSoporte.CUENTA, "No puedo entrar",
+        TicketSoporte ticket = TicketSoporte.abrir(nuevoId(), usuario, CategoriaSoporte.CUENTA, "No puedo entrar",
                 "Me sale credenciales invalidas aunque la contrasena es correcta", null, adjunto, CLOCK);
 
         adapter.save(ticket);
@@ -77,8 +83,8 @@ class TicketSoportePersistenceAdapterTest {
     @Test
     void traduceAmbosEstadosEnLasDosDirecciones() {
         UserId usuario = sembrarUsuario();
-        TicketSoporte ticket = TicketSoporte.abrir(usuario, CategoriaSoporte.OTRO, "Consulta", "Duda general sobre el programa de 90 dias",
-                null, null, CLOCK);
+        TicketSoporte ticket = TicketSoporte.abrir(nuevoId(), usuario, CategoriaSoporte.OTRO, "Consulta",
+                "Duda general sobre el programa de 90 dias", null, null, CLOCK);
         adapter.save(ticket);
         assertThat(adapter.byId(ticket.id()).orElseThrow().estado()).isEqualTo(EstadoTicketSoporte.ABIERTO);
 
@@ -93,10 +99,10 @@ class TicketSoportePersistenceAdapterTest {
     void porUsuarioSoloDevuelveLosDeEseUsuario() {
         UserId usuarioA = sembrarUsuario();
         UserId usuarioB = sembrarUsuario();
-        adapter.save(TicketSoporte.abrir(usuarioA, CategoriaSoporte.OTRO, "a", "un mensaje de diez caracteres",
-                null, null, CLOCK));
-        adapter.save(TicketSoporte.abrir(usuarioB, CategoriaSoporte.OTRO, "b", "un mensaje de diez caracteres",
-                null, null, CLOCK));
+        adapter.save(TicketSoporte.abrir(nuevoId(), usuarioA, CategoriaSoporte.OTRO, "a",
+                "un mensaje de diez caracteres", null, null, CLOCK));
+        adapter.save(TicketSoporte.abrir(nuevoId(), usuarioB, CategoriaSoporte.OTRO, "b",
+                "un mensaje de diez caracteres", null, null, CLOCK));
 
         var propios = adapter.porUsuario(usuarioA);
 
@@ -107,9 +113,9 @@ class TicketSoportePersistenceAdapterTest {
     @Test
     void todosFiltraPorEstadoCuandoSePide() {
         UserId usuario = sembrarUsuario();
-        TicketSoporte abierto = TicketSoporte.abrir(usuario, CategoriaSoporte.OTRO, "abierto",
+        TicketSoporte abierto = TicketSoporte.abrir(nuevoId(), usuario, CategoriaSoporte.OTRO, "abierto",
                 "un mensaje de diez caracteres", null, null, CLOCK);
-        TicketSoporte resuelto = TicketSoporte.abrir(usuario, CategoriaSoporte.OTRO, "resuelto",
+        TicketSoporte resuelto = TicketSoporte.abrir(nuevoId(), usuario, CategoriaSoporte.OTRO, "resuelto",
                 "un mensaje de diez caracteres", null, null, CLOCK);
         resuelto.resolver(null, CLOCK);
         adapter.save(abierto);
@@ -123,10 +129,10 @@ class TicketSoportePersistenceAdapterTest {
     @Test
     void categoriaFacturacionYCuentaTraducenBienElEnumEnEspanol() {
         UserId usuario = sembrarUsuario();
-        adapter.save(TicketSoporte.abrir(usuario, CategoriaSoporte.FACTURACION, "cobro duplicado",
+        adapter.save(TicketSoporte.abrir(nuevoId(), usuario, CategoriaSoporte.FACTURACION, "cobro duplicado",
                 "me cobraron dos veces la suscripcion", null, null, CLOCK));
-        adapter.save(TicketSoporte.abrir(usuario, CategoriaSoporte.CUENTA, "no entro", "credenciales invalidas todo el tiempo",
-                null, null, CLOCK));
+        adapter.save(TicketSoporte.abrir(nuevoId(), usuario, CategoriaSoporte.CUENTA, "no entro",
+                "credenciales invalidas todo el tiempo", null, null, CLOCK));
 
         var todos = adapter.porUsuario(usuario);
 

@@ -6,8 +6,10 @@ import com.renaser.os.chat.application.ports.in.mensaje.ListarMensajesUseCase;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +36,7 @@ public class MensajeController {
         this.listarUseCase = listarUseCase;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "participante de la conversacion")
     @PostMapping
     public ResponseEntity<MensajeResponse> enviar(@ActorAutenticado UserId actorId,
                                                     @PathVariable UUID conversationId,
@@ -46,6 +49,7 @@ public class MensajeController {
         return ResponseEntity.status(HttpStatus.CREATED).body(MensajeResponse.from(mensaje));
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "participante de la conversacion")
     @GetMapping
     public MensajesPageResponse listar(@ActorAutenticado UserId actorId,
                                         @PathVariable UUID conversationId,

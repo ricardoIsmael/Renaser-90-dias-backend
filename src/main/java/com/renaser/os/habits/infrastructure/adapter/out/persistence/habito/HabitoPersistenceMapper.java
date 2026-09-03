@@ -17,7 +17,7 @@ class HabitoPersistenceMapper {
                 e.getParticipanteId() != null ? UserId.of(e.getParticipanteId()) : null, e.getTitulo(),
                 e.getDescripcion(), toDomainTipo(e.getTipo()), e.getCategoriaClave(), e.getIconoClave(),
                 e.getClaveSistema(), toDomainExigencia(e.getExigenciaEvidencia()), e.isEsOpcional(),
-                e.isObligatorioEnIntoxicacion(), e.isEleccionDiaSemanal(),
+                e.isObligatorioEnIntoxicacion(), e.isDesactivable(), e.isEleccionDiaSemanal(),
                 e.getHorasExtraEvidencia() != null ? e.getHorasExtraEvidencia().intValue() : null,
                 e.getDiaLimiteEdicionLibre() != null ? e.getDiaLimiteEdicionLibre().intValue() : null,
                 toDomainPlantilla(e.getPlantillaClave()), e.getEtiquetaMeta(), e.isActivo(), e.getCreadoEn(),
@@ -29,7 +29,8 @@ class HabitoPersistenceMapper {
                 h.participanteId() != null ? h.participanteId().value() : null, h.titulo(), h.descripcion(),
                 toJpaTipo(h.tipo()), h.categoriaClave(), h.iconoClave(), h.claveSistema(),
                 toJpaExigencia(h.exigenciaEvidencia()), h.esOpcional(), h.obligatorioEnIntoxicacion(),
-                h.eleccionDiaSemanal(), h.horasExtraEvidencia() != null ? h.horasExtraEvidencia().shortValue() : null,
+                h.desactivable(), h.eleccionDiaSemanal(),
+                h.horasExtraEvidencia() != null ? h.horasExtraEvidencia().shortValue() : null,
                 h.diaLimiteEdicionLibre() != null ? h.diaLimiteEdicionLibre().shortValue() : null,
                 toJpaPlantilla(h.plantillaClave()), h.etiquetaMeta(), h.activo(), h.creadoEn(), h.actualizadoEn());
     }

@@ -28,6 +28,7 @@ import com.renaser.os.calendar.domain.model.evento.TipoAudiencia;
 import com.renaser.os.calendar.domain.model.recordatorio.RecordatorioEvento;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
@@ -71,12 +72,13 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
     private final AlmacenamientoPort almacenamientoPort;
     private final AccesoEventoService accesoEventoService;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public EventoService(LoadEventoPort loadEventoPort, SaveEventoPort saveEventoPort,
                           LoadExcepcionPort loadExcepcionPort, SaveExcepcionPort saveExcepcionPort,
                           LoadConfirmacionPort loadConfirmacionPort, SaveRecordatorioPort saveRecordatorioPort,
                           LoadNivelMembresiaPort nivelPort, AlmacenamientoPort almacenamientoPort,
-                          AccesoEventoService accesoEventoService, Clock clock) {
+                          AccesoEventoService accesoEventoService, Clock clock, IdGenerator idGenerator) {
         this.loadEventoPort = loadEventoPort;
         this.saveEventoPort = saveEventoPort;
         this.loadExcepcionPort = loadExcepcionPort;
@@ -87,6 +89,7 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
         this.almacenamientoPort = almacenamientoPort;
         this.accesoEventoService = accesoEventoService;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -151,11 +154,12 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
         }
         requireNivelExiste(tipoAudiencia, nivelMinimoId);
 
-        Evento evento = Evento.crear(cmd.titulo(), cmd.descripcion(), cmd.iniciaEn(), cmd.duracionMinutos(),
-                cmd.timezone(), cmd.tipoUbicacion(), cmd.valorUbicacion(), tipoAudiencia, nivelMinimoId, cursoId,
-                celulaDestinoId, cmd.tipoEvento(), cmd.notificarAlCrear(), cmd.recordarPorEmail(),
-                cmd.recordatoriosPersonalizados(), cmd.recurrencia(), rolesDestino, cmd.reglasRecordatorio(),
-                cmd.actorId(), clock);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
+        Evento evento = Evento.crear(EventoId.of(idGenerator.newId()), cmd.titulo(), cmd.descripcion(),
+                cmd.iniciaEn(), cmd.duracionMinutos(), cmd.timezone(), cmd.tipoUbicacion(), cmd.valorUbicacion(),
+                tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, cmd.tipoEvento(), cmd.notificarAlCrear(),
+                cmd.recordarPorEmail(), cmd.recordatoriosPersonalizados(), cmd.recurrencia(), rolesDestino,
+                cmd.reglasRecordatorio(), cmd.actorId(), clock);
         Evento guardado = saveEventoPort.guardar(evento);
         return new EventoVista(guardado, coverUrlDe(guardado));
     }
@@ -238,7 +242,7 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
                 .filter(e -> e.inicioOcurrencia().equals(inicioOcurrencia)).findFirst();
         Excepcion excepcion = excepcionExistente
                 .map(e -> new Excepcion(e.id(), eventoId, inicioOcurrencia, true, null, null, null))
-                .orElseGet(() -> Excepcion.cancelar(eventoId, inicioOcurrencia));
+                .orElseGet(() -> Excepcion.cancelar(idGenerator.newId(), eventoId, inicioOcurrencia));
         saveExcepcionPort.upsert(excepcion);
 
         try {

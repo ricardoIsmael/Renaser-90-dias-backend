@@ -5,6 +5,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
+import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.persistence.EntityManager;
@@ -41,7 +42,7 @@ class RegistroHabitoPersistenceAdapterTest {
     @BeforeEach
     void seedFixtures() {
         participanteId = UserId.of(UUID.randomUUID());
-        habitoId = HabitoId.newId();
+        habitoId = HabitoId.of(UUID.randomUUID());
 
         entityManager.createNativeQuery("""
                         INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
@@ -65,7 +66,8 @@ class RegistroHabitoPersistenceAdapterTest {
     }
 
     private RegistroHabito nuevoPendiente(LocalDate fecha) {
-        return RegistroHabito.generar(participanteId, habitoId, fecha, 5, TipoDia.DISCIPLINA, false, CLOCK.now());
+        return RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participanteId, habitoId, fecha, 5,
+                TipoDia.DISCIPLINA, false, CLOCK.now());
     }
 
     @Test

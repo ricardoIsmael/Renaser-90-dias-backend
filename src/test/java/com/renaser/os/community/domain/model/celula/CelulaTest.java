@@ -14,20 +14,23 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class CelulaTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** El id ya no lo sortea la factoria: entra por parametro, generado por el puerto IdGenerator. */
+    private static final CelulaId ID = CelulaId.of(UUID.randomUUID());
 
     private static Celula nueva() {
-        return Celula.crear("Celula 1", CohorteId.newId(), null, CLOCK.now());
+        return Celula.crear(ID, "Celula 1", CohorteId.of(UUID.randomUUID()), null, CLOCK.now());
     }
 
     @Test
     void crearNaceSinMentor() {
         Celula c = nueva();
+        assertThat(c.id()).isEqualTo(ID);
         assertThat(c.mentorId()).isNull();
     }
 
     @Test
     void nombreVacioEsInvalido() {
-        assertThatThrownBy(() -> Celula.crear(" ", CohorteId.newId(), null, CLOCK.now()))
+        assertThatThrownBy(() -> Celula.crear(ID, " ", CohorteId.of(UUID.randomUUID()), null, CLOCK.now()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

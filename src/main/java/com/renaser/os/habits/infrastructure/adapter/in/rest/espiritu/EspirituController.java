@@ -3,8 +3,10 @@ package com.renaser.os.habits.infrastructure.adapter.in.rest.espiritu;
 import com.renaser.os.habits.application.ports.in.espiritu.ConsultarEstadoEspirituUseCase;
 import com.renaser.os.habits.application.ports.in.espiritu.EntregarResumenEspirituUseCase;
 import com.renaser.os.habits.application.ports.in.espiritu.EntregarResumenEspirituUseCase.EntregarResumenEspirituCommand;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,11 +33,13 @@ public class EspirituController {
         this.entregarUseCase = entregarUseCase;
     }
 
+    @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @GetMapping("/status")
     public SpiritStatusResponse status(@ActorAutenticado UserId actor) {
         return SpiritStatusResponse.from(consultarUseCase.consultar(actor));
     }
 
+    @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @PostMapping("/submit")
     public SubmitSpiritSummaryResponse submit(@ActorAutenticado UserId actor,
                                                @RequestBody @Valid SubmitSpiritSummaryRequest request) {

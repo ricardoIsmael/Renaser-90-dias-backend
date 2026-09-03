@@ -19,12 +19,17 @@ class ContratoFaseTest {
         return UserId.of(UUID.randomUUID());
     }
 
+    private static ContratoFaseId newContratoId() {
+        return ContratoFaseId.of(UUID.randomUUID());
+    }
+
     @Test
     @DisplayName("firmar() en dia desbloqueado crea el contrato con bucket/ruta deterministicos")
     void firmarCreaContratoConRutaDeterministica() {
         UserId participanteId = newParticipanteId();
 
-        ContratoFase contrato = ContratoFase.firmar(participanteId, 20, CLOCK); // dia 20 -> Fase II, ya desbloqueada (17)
+        // dia 20 -> Fase II, ya desbloqueada (17)
+        ContratoFase contrato = ContratoFase.firmar(newContratoId(), participanteId, 20, CLOCK);
 
         assertThat(contrato.fase()).isEqualTo(FasePrograma.FASE_2_DESARROLLO);
         assertThat(contrato.bucket()).isEqualTo(ContratoFase.BUCKET_DEFAULT);
@@ -38,7 +43,7 @@ class ContratoFaseTest {
     void firmarEnFaseUnoRechaza() {
         UserId participanteId = newParticipanteId();
 
-        assertThatThrownBy(() -> ContratoFase.firmar(participanteId, 5, CLOCK))
+        assertThatThrownBy(() -> ContratoFase.firmar(newContratoId(), participanteId, 5, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("onboarding");
     }
@@ -49,7 +54,7 @@ class ContratoFaseTest {
         UserId participanteId = newParticipanteId();
 
         // dia 10: ya es Fase II (arranca dia 8) pero el pacto se desbloquea recien el 17.
-        assertThatThrownBy(() -> ContratoFase.firmar(participanteId, 10, CLOCK))
+        assertThatThrownBy(() -> ContratoFase.firmar(newContratoId(), participanteId, 10, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Todavia no te toca");
     }
@@ -69,7 +74,7 @@ class ContratoFaseTest {
     @DisplayName("rehydrate reconstruye sin volver a validar (rol del adaptador de persistencia)")
     void rehydrateReconstruyeSinValidar() {
         UserId participanteId = newParticipanteId();
-        ContratoFaseId id = ContratoFaseId.newId();
+        ContratoFaseId id = newContratoId();
 
         ContratoFase contrato = ContratoFase.rehydrate(id, participanteId, FasePrograma.FASE_2_DESARROLLO,
                 "otro-bucket", "otra/ruta.svg", CLOCK.now(), CLOCK.now());
@@ -81,7 +86,7 @@ class ContratoFaseTest {
     @Test
     @DisplayName("dos contratos con el mismo id son iguales, aunque difieran en otros campos")
     void equalsPorId() {
-        ContratoFaseId id = ContratoFaseId.newId();
+        ContratoFaseId id = newContratoId();
         UserId participanteId = newParticipanteId();
         ContratoFase a = ContratoFase.rehydrate(id, participanteId, FasePrograma.FASE_2_DESARROLLO,
                 ContratoFase.BUCKET_DEFAULT, "a.svg", CLOCK.now(), CLOCK.now());

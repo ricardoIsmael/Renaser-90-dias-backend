@@ -11,8 +11,10 @@ import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsu
 import com.renaser.os.community.domain.model.publicacion.MediaPublicacion;
 import com.renaser.os.community.domain.model.publicacion.Publicacion;
 import com.renaser.os.community.domain.model.testimonio.Testimonio;
+import com.renaser.os.community.domain.model.testimonio.TestimonioId;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -42,12 +44,13 @@ public class TestimonioService implements CrearTestimonioUseCase, PromoverPublic
     private final AlmacenamientoPort almacenamientoPort;
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public TestimonioService(LoadTestimonioPort loadTestimonioPort, SaveTestimonioPort saveTestimonioPort,
                               LoadPublicacionPort loadPublicacionPort,
                               ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort,
                               AlmacenamientoPort almacenamientoPort, UserSummaryFinder userSummaryFinder,
-                              Clock clock) {
+                              Clock clock, IdGenerator idGenerator) {
         this.loadTestimonioPort = loadTestimonioPort;
         this.saveTestimonioPort = saveTestimonioPort;
         this.loadPublicacionPort = loadPublicacionPort;
@@ -55,13 +58,15 @@ public class TestimonioService implements CrearTestimonioUseCase, PromoverPublic
         this.almacenamientoPort = almacenamientoPort;
         this.userSummaryFinder = userSummaryFinder;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
     @Transactional
     public TestimonioVista crear(CrearTestimonioCommand command) {
-        Testimonio testimonio = Testimonio.crear(command.actorId(), null, command.nombre(), command.rolTexto(), null,
-                null, command.texto(), command.estrellas(), clock.now());
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        Testimonio testimonio = Testimonio.crear(TestimonioId.of(idGenerator.newId()), command.actorId(), null,
+                command.nombre(), command.rolTexto(), null, null, command.texto(), command.estrellas(), clock.now());
         return aVista(saveTestimonioPort.save(testimonio));
     }
 
@@ -81,9 +86,14 @@ public class TestimonioService implements CrearTestimonioUseCase, PromoverPublic
                 .min((a, b) -> Integer.compare(a.orden(), b.orden()));
         String fotoEventoRuta = portada.map(MediaPublicacion::ruta).orElse(null);
 
-        Testimonio testimonio = Testimonio.crear(publicacion.autorId(), publicacion.id(), autor.nombreCompleto(),
-                resumenAutor.role().name(), autor.avatarUrl(), fotoEventoRuta, publicacion.texto(),
-                command.estrellas(), clock.now());
+        // El avatar se congela a proposito: un testimonio es una foto de un momento. Vale ahora
+        // que `usuarios.avatar_url` guarda una URL PERMANENTE; cuando guardaba una prefirmada,
+        // esta copia heredaba el vencimiento y quedaba rota igual (E-57 — la migracion V13
+        // limpia las filas que quedaron con una firma congelada aca).
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        Testimonio testimonio = Testimonio.crear(TestimonioId.of(idGenerator.newId()), publicacion.autorId(),
+                publicacion.id(), autor.nombreCompleto(), resumenAutor.role().name(), autor.avatarUrl(),
+                fotoEventoRuta, publicacion.texto(), command.estrellas(), clock.now());
         return aVista(saveTestimonioPort.save(testimonio));
     }
 

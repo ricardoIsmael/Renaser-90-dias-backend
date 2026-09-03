@@ -10,17 +10,25 @@ import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Objects;
 import java.util.Map;
 import java.util.UUID;
 
 @Component
 class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankingSnapshotPort, LoadRankingPort {
+
+    /**
+     * Nombre logico del cache Caffeine (D-63, motor definido en
+     * {@code shared/infrastructure/cache/CacheConfig}). El ranking se lee muchas veces por
+     * cada vez que cambia — colapsa lecturas simultaneas en una sola consulta a Postgres.
+     */
+    private static final String CACHE_RANKING = "ranking";
 
     /**
      * Solo la tabla PROPIA de `points`. Quienes son aprendices activos y como se llaman
@@ -63,30 +71,51 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
         Map<UserId, UserSummary> resumenes = userSummaryFinder.findByIds(
                 puntajes.stream().map(PuntajeCrudo::participanteId).toList());
         return puntajes.stream()
-                .map(puntaje -> {
-                    UserSummary resumen = resumenes.get(puntaje.participanteId());
-                    if (resumen == null || resumen.role() != UserRole.TRAINEE
-                            || resumen.status() != UserStatus.ACTIVE) {
-                        return null;
-                    }
-                    return new CandidatoRanking(puntaje.participanteId(), resumen.fullName(),
-                            puntaje.puntosLiga(), puntaje.coherencia());
-                })
-                .filter(Objects::nonNull)
+                .filter(puntaje -> compiteEnElRanking(resumenes.get(puntaje.participanteId())))
+                .map(puntaje -> aCandidato(puntaje, resumenes.get(puntaje.participanteId())))
                 .toList();
+    }
+
+    /**
+     * Solo el aprendiz activo compite: el staff no entra al ranking, y una cuenta suspendida
+     * deja de figurar. {@code null} = el puntaje quedo huerfano (el usuario ya no existe).
+     */
+    private static boolean compiteEnElRanking(UserSummary resumen) {
+        return resumen != null && resumen.role() == UserRole.TRAINEE && resumen.status() == UserStatus.ACTIVE;
+    }
+
+    private static CandidatoRanking aCandidato(PuntajeCrudo puntaje, UserSummary resumen) {
+        return new CandidatoRanking(puntaje.participanteId(), resumen.fullName(),
+                puntaje.puntosLiga(), puntaje.coherencia());
     }
 
     private record PuntajeCrudo(UserId participanteId, int puntosLiga, java.math.BigDecimal coherencia) {
     }
 
+    /**
+     * Invalida la entrada de cache de ESTE tipo+fecha al toque: el snapshot nocturno
+     * (D-63, {@code SnapshotRankingScheduler}) no debe esperar el TTL para reflejarse — mismo
+     * criterio que la invalidacion por evento de CLAUDE.MD sec. 5.3.5 (el TTL es la red de
+     * seguridad, no el mecanismo principal).
+     */
     @Override
+    @CacheEvict(cacheNames = CACHE_RANKING, key = "#tipo + '|' + #fecha")
     public void reemplazar(TipoRanking tipo, LocalDate fecha, List<PosicionRanking> posiciones) {
         TipoRankingJpa tipoJpa = mapper.toJpaTipo(tipo);
         repository.deleteByTipoAndFecha(tipoJpa, fecha);
         repository.saveAllAndFlush(posiciones.stream().map(mapper::toEntity).toList());
     }
 
+    /**
+     * Cacheado en memoria (D-63): es el hot path que muchas personas miran a la vez y que
+     * cambia poco (1 snapshot por dia). La clave INCLUYE tipo y fecha — los dos parametros
+     * que cambian el resultado — para no servirle a alguien el ranking de otra consulta.
+     * Nunca el actor: esta consulta no varia segun quien pregunta (la posicion propia no se
+     * marca aca, ver {@code RankingAgregadoService}), asi que el actor NO forma parte de la
+     * clave a proposito.
+     */
     @Override
+    @Cacheable(cacheNames = CACHE_RANKING, key = "#tipo + '|' + #fecha")
     public List<EntradaRankingConNombre> porTipoYFecha(TipoRanking tipo, LocalDate fecha) {
         List<RankingAprendizJpaEntity> filas = repository.findByTipoAndFechaOrderByPosicion(
                 mapper.toJpaTipo(tipo), fecha);

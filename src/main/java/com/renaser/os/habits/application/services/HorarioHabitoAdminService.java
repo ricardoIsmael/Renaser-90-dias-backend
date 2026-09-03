@@ -11,6 +11,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,14 +29,17 @@ public class HorarioHabitoAdminService implements ConsultarHorariosDeHabitoUseCa
     private final SaveHorarioHabitoPort savePort;
     private final HabitoAdminGuard guard;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public HorarioHabitoAdminService(LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadPort,
-                                      SaveHorarioHabitoPort savePort, HabitoAdminGuard guard, Clock clock) {
+                                      SaveHorarioHabitoPort savePort, HabitoAdminGuard guard, Clock clock,
+                                      IdGenerator idGenerator) {
         this.loadHabitoPort = loadHabitoPort;
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.guard = guard;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -50,8 +54,10 @@ public class HorarioHabitoAdminService implements ConsultarHorariosDeHabitoUseCa
     public HorarioHabito crear(CrearHorarioHabitoCommand command) {
         guard.requireAdmin(command.actorId());
         requireHabito(command.habitoId());
-        HorarioHabito horario = HorarioHabito.crear(command.habitoId(), command.diaInicio(), command.diaFin(),
-                command.tipoDia(), command.horaDisparo(), command.horaLimite(), clock.now());
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
+        HorarioHabito horario = HorarioHabito.crear(HorarioHabitoId.of(idGenerator.newId()), command.habitoId(),
+                command.diaInicio(), command.diaFin(), command.tipoDia(), command.horaDisparo(),
+                command.horaLimite(), clock.now());
         return savePort.save(horario);
     }
 

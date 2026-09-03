@@ -16,6 +16,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class InformeEspejoSombraTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** El id ya no lo sortea el agregado: entra por parametro, lo arma el caso de uso (IdGenerator). */
+    private static final InformeEspejoSombraId ID = InformeEspejoSombraId.of(
+            UUID.fromString("11111111-1111-1111-1111-111111111111"));
 
     private static UserId participante() {
         return UserId.of(UUID.randomUUID());
@@ -32,7 +35,7 @@ class InformeEspejoSombraTest {
 
     @Test
     void generaUnInformeValido() {
-        InformeEspejoSombra informe = InformeEspejoSombra.generar(participante(), LocalDate.of(2026, 8, 17), 4,
+        InformeEspejoSombra informe = InformeEspejoSombra.generar(ID, participante(), LocalDate.of(2026, 8, 17), 4,
                 "Evitacion", distribucion(), "Insight de la semana", tresPreguntas(), CLOCK);
 
         assertThat(informe.id()).isNotNull();
@@ -53,7 +56,7 @@ class InformeEspejoSombraTest {
         }
         once.add(new PreguntaConfrontacion(1, "pregunta once, orden repetido"));
 
-        assertThatThrownBy(() -> InformeEspejoSombra.generar(participante(), LocalDate.of(2026, 8, 17), 4,
+        assertThatThrownBy(() -> InformeEspejoSombra.generar(ID, participante(), LocalDate.of(2026, 8, 17), 4,
                 "patron", distribucion(), "insight", once, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Maximo");
@@ -63,7 +66,7 @@ class InformeEspejoSombraTest {
         for (int i = 1; i <= 10; i++) {
             diezValidas.add(new PreguntaConfrontacion(i, "pregunta " + i));
         }
-        InformeEspejoSombra informe = InformeEspejoSombra.generar(participante(), LocalDate.of(2026, 8, 17), 4,
+        InformeEspejoSombra informe = InformeEspejoSombra.generar(ID, participante(), LocalDate.of(2026, 8, 17), 4,
                 "patron", distribucion(), "insight", diezValidas, CLOCK);
         assertThat(informe.preguntas()).hasSize(10);
     }
@@ -73,7 +76,7 @@ class InformeEspejoSombraTest {
         List<PreguntaConfrontacion> conDuplicado = List.of(new PreguntaConfrontacion(1, "uno"),
                 new PreguntaConfrontacion(1, "otra con el mismo orden"));
 
-        assertThatThrownBy(() -> InformeEspejoSombra.generar(participante(), LocalDate.of(2026, 8, 17), 4,
+        assertThatThrownBy(() -> InformeEspejoSombra.generar(ID, participante(), LocalDate.of(2026, 8, 17), 4,
                 "patron", distribucion(), "insight", conDuplicado, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("duplicado");
@@ -81,7 +84,7 @@ class InformeEspejoSombraTest {
 
     @Test
     void aceptaListaDePreguntasVacia() {
-        InformeEspejoSombra informe = InformeEspejoSombra.generar(participante(), LocalDate.of(2026, 8, 17), 0,
+        InformeEspejoSombra informe = InformeEspejoSombra.generar(ID, participante(), LocalDate.of(2026, 8, 17), 0,
                 "patron", distribucion(), "insight", List.of(), CLOCK);
 
         assertThat(informe.preguntas()).isEmpty();
@@ -89,21 +92,21 @@ class InformeEspejoSombraTest {
 
     @Test
     void rechazaCantidadEntradasNegativa() {
-        assertThatThrownBy(() -> InformeEspejoSombra.generar(participante(), LocalDate.of(2026, 8, 17), -1,
+        assertThatThrownBy(() -> InformeEspejoSombra.generar(ID, participante(), LocalDate.of(2026, 8, 17), -1,
                 "patron", distribucion(), "insight", tresPreguntas(), CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rechazaPatronDominanteVacio() {
-        assertThatThrownBy(() -> InformeEspejoSombra.generar(participante(), LocalDate.of(2026, 8, 17), 4,
+        assertThatThrownBy(() -> InformeEspejoSombra.generar(ID, participante(), LocalDate.of(2026, 8, 17), 4,
                 " ", distribucion(), "insight", tresPreguntas(), CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rechazaInsightVacio() {
-        assertThatThrownBy(() -> InformeEspejoSombra.generar(participante(), LocalDate.of(2026, 8, 17), 4,
+        assertThatThrownBy(() -> InformeEspejoSombra.generar(ID, participante(), LocalDate.of(2026, 8, 17), 4,
                 "patron", distribucion(), "  ", tresPreguntas(), CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
@@ -111,8 +114,8 @@ class InformeEspejoSombraTest {
     @Test
     void rehydrateNoRevalidaPeroPreservaLosDatos() {
         UserId participanteId = participante();
-        InformeEspejoSombra informe = InformeEspejoSombra.rehydrate(InformeEspejoSombraId.newId(), participanteId,
-                LocalDate.of(2026, 8, 10), 5, "patron", distribucion(), "insight", tresPreguntas(),
+        InformeEspejoSombra informe = InformeEspejoSombra.rehydrate(InformeEspejoSombraId.of(UUID.randomUUID()),
+                participanteId, LocalDate.of(2026, 8, 10), 5, "patron", distribucion(), "insight", tresPreguntas(),
                 Instant.parse("2026-08-11T00:00:00Z"));
 
         assertThat(informe.participanteId()).isEqualTo(participanteId);

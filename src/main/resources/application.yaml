@@ -4,10 +4,38 @@ spring:
   threads:
     virtual:
       enabled: true
+  # C-1 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): con hilos
+  # virtuales habilitados, Spring Boot usa un SimpleAsyncTaskExecutor sin tope propio para
+  # @Async — sin `simple.concurrency-limit`, cada despacho (hoy solo onboarding, la
+  # validacion V90) lanza un hilo mas sin ningun limite. 20 concurrentes duplica el
+  # escenario de la auditoria ("diez aprendices piden validacion en el mismo minuto") y
+  # acota cuanto se llama a Gemini/el proveedor de IA a la vez (protege su rate limit,
+  # no solo el pool de Postgres, que ya no lo necesita porque la IA dejo de correr dentro
+  # de una transaccion). Se deja `reject-tasks-when-limit-reached` en su default (false):
+  # al llegar al tope, el despacho espera un permiso en vez de fallar — no retiene ninguna
+  # conexion de base mientras espera, asi que esperar es mas barato que romper el flujo.
+  task:
+    execution:
+      simple:
+        concurrency-limit: ${ASYNC_IA_CONCURRENCY_LIMIT:20}
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/renaser}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
+    # C-1: HikariCP no tenia ningun valor propio (el default sin configurar es 10,
+    # "pool Hikari de 10" que cito la auditoria). Ahora que la IA ya no retiene conexiones
+    # (ver los @Service de onboarding/rag/academy), el pool solo necesita cubrir
+    # transacciones cortas (CLAUDE.MD §3: unos pocos ms cada una) — 20 da margen frente a
+    # los mismos 20 despachos concurrentes de arriba sin sobre-provisionar un Postgres
+    # unico en Docker local (§11, todavia sin entorno productivo definido).
+    # connection-timeout mas corto que el default de Hikari (30000ms): si el pool esta
+    # agotado de verdad (ej. caida de Postgres), una request ya viola por 100x el SLO de
+    # §3 mucho antes de los 30s — falla rapido (5s) en vez de amontonar requests esperando.
+    hikari:
+      pool-name: RenaserHikari
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:5000}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -32,11 +60,20 @@ spring:
     data:
       redis:
         repository-type: indexed
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: ${SUPABASE_JWKS_URL:https://apvnaigldsjqeloiolcu.supabase.co/auth/v1/.well-known/jwks.json}
+  # C-18 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html,
+  # docs/informes/auditoria-fixes/C-18.md): open-in-view estaba activo por default (sin esta
+  # clave) y mantenia la sesion de Hibernate abierta durante todo el renderizado de la
+  # respuesta HTTP -- una transaccion de facto sin limite claro, contraria al patron de
+  # transaccion corta de CLAUDE.MD S3. Se apaga porque en este repo el riesgo clasico
+  # (LazyInitializationException al armar el DTO fuera del servicio) no aplica: verificado
+  # que ninguna de las 74 *JpaEntity de src/main/java tiene @OneToMany/@ManyToOne/@OneToOne/
+  # @ManyToMany reales (cero resultados de grep, ni @Basic(fetch=LAZY) ni @Lob), los dos
+  # unicos @ElementCollection (InformeEspejoSombraJpaEntity, RocaSemanalJpaEntity) son
+  # FetchType.EAGER, y ninguna *JpaEntity se referencia fuera de su propio paquete
+  # adapter/out/persistence (regla hexagonal de CLAUDE.MD S5.1: solo domain/DTOs cruzan hacia
+  # el controller). Detalle completo del analisis en C-18.md.
+  jpa:
+    open-in-view: false
   ai:
     model:
       chat: none
@@ -44,6 +81,21 @@ spring:
       vectorstore: none
   ai.google.genai.api-key: ${GOOGLE_GENAI_API_KEY:}
   ai.google.genai.embedding.text.model: ${RENASIA_EMBEDDING_MODEL:text-embedding-004}
+  # C-7: el outbox de Spring Modulith (event_publication, V2) no tenia ninguna configuracion
+  # propia. Analisis completo en docs/informes/auditoria-fixes/C-7.md.
+  modulith:
+    events:
+      # Si el proceso muere entre el commit del evento y que el listener termine, la fila queda
+      # incompleta y nadie la reentregaba. Con esto se reentrega al arrancar. El riesgo de
+      # avalancha al reiniciar queda acotado por el mismo tope de C-1
+      # (spring.task.execution.simple.concurrency-limit), que gobierna el executor que Modulith
+      # reutiliza para @ApplicationModuleListener.
+      republish-outstanding-events-on-restart: true
+      # UPDATE (el default) marca completion_date y deja la fila para siempre: crecimiento sin
+      # limite (E-4). DELETE la borra apenas se completa, asi que en el camino feliz no queda
+      # nada que purgar. La purga de EventPublicationMaintenanceScheduler queda como red de
+      # seguridad por si algun entorno vuelve a UPDATE.
+      completion-mode: DELETE
   autoconfigure:
     exclude:
       - org.springframework.ai.model.google.genai.autoconfigure.chat.GoogleGenAiChatAutoConfiguration
@@ -52,14 +104,51 @@ spring:
       - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
 
 renaser:
-  # Proveedor de correo transaccional: `smtp` (SmtpEnviarEmailAdapter, real) o `noop`
-  # (NoOpEnviarEmailAdapter, solo loguea). Por defecto `noop` para que el entorno local y los
-  # tests no necesiten un servidor SMTP. Para activar el envio real hacen falta LAS DOS cosas:
-  # EMAIL_PROVEEDOR=smtp y las credenciales de `spring.mail.*` de mas abajo.
+  # Ventanas de lock de los schedulers que NO son seguros con varias instancias (C-5) mas
+  # los que se agregaron despues con el mismo criterio (habits-generar-tracks-del-dia).
+  # lock-at-most-for: si el proceso muere sin soltar el lock, este es el tiempo que el barrido
+  # queda bloqueado -- tiene que superar lo que tarda la corrida mas lenta, o dos instancias se
+  # solapan igual. lock-at-least-for: evita que dos instancias con relojes desfasados por
+  # milisegundos entren las dos. Justificacion de cada valor en docs/informes/auditoria-fixes/C-5.md
+  # EventPublicationMaintenanceScheduler (shared/infrastructure/event), C-7.
+  eventos:
+    # Cada cuanto reintenta publicaciones incompletas SIN esperar a un restart: el backend
+    # corre siempre-arriba y entre un deploy y el siguiente pueden pasar dias. El umbral es
+    # mayor a cualquier ejecucion normal de un listener (hoy solo escrituras a Postgres) para
+    # no reintentar algo que esta lento en vez de fallado.
+    reintento-tras: PT5M
+    mantenimiento-cron: "0 */5 * * * *"
+    # Red de seguridad si algun entorno vuelve a completion-mode=UPDATE; con DELETE esta purga
+    # normalmente no encuentra nada.
+    retencion-completados: P7D
+  scheduling:
+    shedlock:
+      evidence-procesar-cola:
+        lock-at-most-for: PT20M
+        lock-at-least-for: PT10S
+      habits-promover-cambios-horario:
+        lock-at-most-for: PT15M
+        lock-at-least-for: PT10S
+      rag-generar-informes-semanales:
+        lock-at-most-for: PT6H
+        lock-at-least-for: PT1M
+      # D-67: avanza el dia de programa de cada participante. Sin lock, dos instancias
+      # pueden avanzar al mismo aprendiz dos veces y hacerle saltar un dia del programa.
+      users-avanzar-dia-programa:
+        lock-at-most-for: PT30M
+        lock-at-least-for: PT30S
+      # Barrido nocturno que genera los tracks del dia (habits-barrido-nocturno.md). Sin
+      # lock, dos instancias recorren el padron completo y duplican el trabajo por
+      # participante (el UNIQUE de registros_habito evita filas duplicadas, pero no evita
+      # el trabajo doble ni, el dia que haya IA en el camino, el costo doble).
+      habits-generar-tracks-del-dia:
+        lock-at-most-for: PT30M
+        lock-at-least-for: PT30S
   email:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}
   storage:
+    proveedor: ${STORAGE_PROVEEDOR:noop}
     s3:
       bucket: ${AWS_S3_BUCKET:s3-renaser90dias}
       region: ${AWS_REGION:us-east-1}

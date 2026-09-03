@@ -14,6 +14,7 @@ import com.renaser.os.community.domain.model.publicacion.ComentarioId;
 import com.renaser.os.community.domain.model.publicacion.Publicacion;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -38,17 +39,19 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
     private final ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort;
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public ComentarioMuroService(LoadPublicacionPort loadPublicacionPort, LoadComentarioPort loadComentarioPort,
                                   SaveComentarioPort saveComentarioPort,
                                   ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort,
-                                  UserSummaryFinder userSummaryFinder, Clock clock) {
+                                  UserSummaryFinder userSummaryFinder, Clock clock, IdGenerator idGenerator) {
         this.loadPublicacionPort = loadPublicacionPort;
         this.loadComentarioPort = loadComentarioPort;
         this.saveComentarioPort = saveComentarioPort;
         this.consultarPerfilUsuarioPort = consultarPerfilUsuarioPort;
         this.userSummaryFinder = userSummaryFinder;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -56,8 +59,9 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
     public EscribirComentarioUseCase.Resultado escribir(EscribirComentarioCommand command) {
         requireVisible(command.publicacionId());
         requireActorHabilitado(command.autorId());
-        Comentario comentario = Comentario.escribir(command.publicacionId(), command.autorId(), command.texto(),
-                clock.now());
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        Comentario comentario = Comentario.escribir(ComentarioId.of(idGenerator.newId()), command.publicacionId(),
+                command.autorId(), command.texto(), clock.now());
         Comentario guardado = saveComentarioPort.save(comentario);
         int cantidad = loadComentarioPort.contar(command.publicacionId());
         return new EscribirComentarioUseCase.Resultado(aVista(guardado), cantidad);

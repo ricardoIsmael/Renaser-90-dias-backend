@@ -1,7 +1,9 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.user;
 
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.user.CancelAccountDeletionUseCase;
 import com.renaser.os.users.application.ports.in.user.ConfirmarAvatarUseCase;
 import com.renaser.os.users.application.ports.in.user.ConfirmarAvatarUseCase.ConfirmarAvatarCommand;
@@ -66,11 +68,13 @@ public class UserController {
         this.getAccountDeletionStatusUseCase = getAccountDeletionStatusUseCase;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "self")
     @PostMapping("/me")
     public UserResponse me(@ActorAutenticado UserId actor) {
         return UserResponse.from(getMyFullProfileUseCase.getMyFullProfile(actor));
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "self")
     @PatchMapping("/me")
     public ResponseEntity<Void> updateMe(@ActorAutenticado UserId actor,
                                           @RequestBody UpdateMyProfileRequest request) {
@@ -79,14 +83,16 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
+    @RequiresPermission(value = Permission.MANAGE_ROLES, scope = "el guard real es User.requireRoleManager: invitar es asignar un rol")
     @PostMapping("/invite")
     public ResponseEntity<UserIdResponse> invite(@ActorAutenticado UserId actor,
                                                   @RequestBody @Valid InviteUserRequest request) {
-        UserId invited = inviteUseCase.invite(new InviteUserCommand(request.supabaseUserId(), request.email(),
+        UserId invited = inviteUseCase.invite(new InviteUserCommand(request.usuarioId(), request.email(),
                 request.fullName(), request.role(), actor));
         return ResponseEntity.status(HttpStatus.CREATED).body(new UserIdResponse(invited.value()));
     }
 
+    @RequiresPermission(Permission.MANAGE_ROLES)
     @PatchMapping("/{id}/role")
     public ResponseEntity<Void> updateRole(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                             @RequestBody @Valid UpdateUserRoleRequest request) {
@@ -97,6 +103,7 @@ public class UserController {
     // ─── Avatar generico (gap #4) — mismo patron upload-url -> PUT -> confirmar
     // que ya usan `rocks`/`onboarding`/`calendar` (docs/PLAN_INTEGRACION_FRONTEND.md §2) ──
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "self")
     @PostMapping("/me/avatar/upload-url")
     public UrlAvatarResponse urlDeSubidaAvatar(@ActorAutenticado UserId actor,
                                                 @RequestBody @Valid SolicitarUrlAvatarRequest request) {
@@ -105,6 +112,7 @@ public class UserController {
         return UrlAvatarResponse.from(url);
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "self")
     @PatchMapping("/me/avatar")
     public ResponseEntity<Void> confirmarAvatar(@ActorAutenticado UserId actor,
                                                  @RequestBody @Valid ConfirmarAvatarRequest request) {
@@ -116,11 +124,13 @@ public class UserController {
     // ─── Baja de cuenta autogestionada (gap #5) — mismo patron GET/POST/DELETE
     // que /api/v1/mentor/activate-tracking (D-34) ──────────────────────────────
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "self")
     @GetMapping("/me/account-deletion")
     public AccountDeletionStatusResponse estadoBajaCuenta(@ActorAutenticado UserId actor) {
         return AccountDeletionStatusResponse.from(getAccountDeletionStatusUseCase.status(actor));
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "self")
     @PostMapping("/me/account-deletion")
     public AccountDeletionStatusResponse solicitarBajaCuenta(@ActorAutenticado UserId actor,
                                                               @RequestBody @Valid RequestAccountDeletionRequest request) {
@@ -129,6 +139,7 @@ public class UserController {
         return AccountDeletionStatusResponse.from(estado);
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "self")
     @DeleteMapping("/me/account-deletion")
     public AccountDeletionStatusResponse cancelarBajaCuenta(@ActorAutenticado UserId actor) {
         return AccountDeletionStatusResponse.from(cancelAccountDeletionUseCase.cancel(actor));

@@ -13,6 +13,7 @@ import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.community.domain.model.publicacion.TipoPublicacion;
 import com.renaser.os.community.domain.model.testimonio.Testimonio;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.infrastructure.storage.NoOpAlmacenamientoAdapter;
@@ -21,6 +22,7 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -43,6 +45,8 @@ import static org.mockito.Mockito.when;
 class TestimonioServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, la factoria del agregado ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadTestimonioPort loadTestimonioPort;
@@ -54,6 +58,8 @@ class TestimonioServiceTest {
     private ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort;
     @Mock
     private UserSummaryFinder userSummaryFinder;
+    @Mock
+    private IdGenerator idGenerator;
 
     private TestimonioService service;
 
@@ -63,7 +69,9 @@ class TestimonioServiceTest {
     @BeforeEach
     void setUp() {
         service = new TestimonioService(loadTestimonioPort, saveTestimonioPort, loadPublicacionPort,
-                consultarPerfilUsuarioPort, new NoOpAlmacenamientoAdapter(), userSummaryFinder, CLOCK);
+                consultarPerfilUsuarioPort, new NoOpAlmacenamientoAdapter(), userSummaryFinder, CLOCK,
+                idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveTestimonioPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -80,7 +88,7 @@ class TestimonioServiceTest {
         UserId trainee = UserId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(trainee))
                 .thenReturn(Optional.of(new UserSummary(trainee, "T", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
-        var command = new PromoverPublicacionCommand(trainee, PublicacionId.newId(), 5);
+        var command = new PromoverPublicacionCommand(trainee, PublicacionId.of(UUID.randomUUID()), 5);
         assertThatThrownBy(() -> service.promover(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveTestimonioPort, never()).save(any());
     }
@@ -89,7 +97,8 @@ class TestimonioServiceTest {
     void promoverUsaLaPrimeraFotoDelCarrusel() {
         when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
-        Publicacion publicacion = Publicacion.rehydrate(PublicacionId.newId(), autor, TipoPublicacion.MANUAL, null,
+        Publicacion publicacion = Publicacion.rehydrate(PublicacionId.of(UUID.randomUUID()), autor,
+                TipoPublicacion.MANUAL, null,
                 "que gran dia", List.of(new MediaPublicacion("wall", "muro/x/2.jpg", "image/jpeg", 1),
                         new MediaPublicacion("wall", "muro/x/1.jpg", "image/jpeg", 0)), false, CLOCK.now(),
                 CLOCK.now());
@@ -105,5 +114,17 @@ class TestimonioServiceTest {
         Testimonio testimonio = vista.testimonio();
         assertThat(testimonio.fotoEventoRuta()).isEqualTo("muro/x/1.jpg");
         assertThat(testimonio.texto()).isEqualTo("que gran dia");
+    }
+
+    @Test
+    @DisplayName("promover(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
+    void promoverConAdminSuspendidoFalla() {
+        UserId adminSuspendido = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(adminSuspendido)).thenReturn(Optional.of(new UserSummary(
+                adminSuspendido, "Admin suspendido", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
+
+        var command = new PromoverPublicacionCommand(adminSuspendido, PublicacionId.of(UUID.randomUUID()), 5);
+        assertThatThrownBy(() -> service.promover(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveTestimonioPort, never()).save(any());
     }
 }

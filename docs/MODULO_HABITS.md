@@ -68,7 +68,7 @@ habits/
 │   ├── horario/          HorarioHabito, HorarioHabitoId
 │   ├── guia/              GuiaHabito, AdjuntoGuia, SeccionGuia, TipoMedioGuia, *Id           (solo dominio, ver §6)
 │   ├── registro/          RegistroHabito, EstadoRegistro, VentanaEntrega, ResultadoOtorgamiento, FaseOtorgamiento, RegistroHabitoId
-│   ├── preferencia/       PreferenciaHorario, CambioHorarioPendiente                          (dominio completo; caso de uso propio NO wireado, ver §6)
+│   ├── preferencia/       PreferenciaHorario, CambioHorarioPendiente, CuotaEdicionHorario     (completo desde §12.1/§20)
 │   ├── santuario/         SesionBloqueo, EstadoSesionBloqueo, MotivoSalidaBloqueo, RachaSinCelular, EstadoRacha, RachaSinCelularId
 │   ├── espiritu/           RegistroEspiritu, EstadoRegistroEspiritu, RegistroEspirituId        (solo dominio, ver §6)
 │   ├── radar/              RegistroRadar, RegistroRadarId                                       (COMPLETO — ver §8)
@@ -369,11 +369,14 @@ Cuatro piezas nuevas, todas construidas sobre lo que ya existía en `preferencia
 
 - **`FREE_SCHEDULE_EDITS_UNTIL_DAY = 7`**: hasta el día 7 de programa (o el propio `Habito.diaLimiteEdicionLibre` si es mayor — columna `dia_limite_edicion_libre` del baseline, **ahora mapeada** en `Habito`/`HabitoJpaEntity`/`HabitoPersistenceMapper`, cerrando parte de D-H5), los cambios inmediatos son ilimitados.
 - **`WEEKLY_SCHEDULE_EDIT_LIMIT = 3`**: pasada la semana libre, hasta 3 hábitos DISTINTOS reacomodables por semana de programa. Se cuenta con una bitácora append-only nueva (`historial_cambios_horario`, tabla ya existente en el baseline sin dueño hasta ahora — puerto `HistorialCambioHorarioPort`) — reeditar un hábito ya tocado esa semana no gasta cupo nuevo.
-- **"No se improvisa el día"**: si la ventana de HOY de ese hábito ya arrancó (la hora de disparo vigente ya pasó), el cambio nunca se rechaza — queda PROGRAMADO para mañana vía `CambioHorarioPendiente` (dominio ya existía, **ahora con persistencia**: `LoadCambioHorarioPendientePort`/`SaveCambioHorarioPendientePort`, tabla `cambios_horario_pendientes`). Un cambio programado NO gasta cupo (igual que el repo viejo).
+- **"No se improvisa el día"**: si la ventana de HOY de ese hábito ya arrancó (la hora de disparo vigente ya pasó), el cambio nunca se rechaza — queda PROGRAMADO para mañana vía `CambioHorarioPendiente` (dominio ya existía, **ahora con persistencia**: `LoadCambioHorarioPendientePort`/`SaveCambioHorarioPendientePort`, tabla `cambios_horario_pendientes`). Un cambio programado no gasta cupo **al pedirlo** (igual que el repo viejo).
+  > **Corregido 2026-08-31 (§20).** Esta línea decía "un cambio programado NO gasta cupo" a secas. Sigue siendo cierto en el momento del PATCH, pero **sí lo gasta el día en que pasa a regir** — si no, diferir sería la vía para saltarse la cuota semanal entera. Ver §20.2.
 
 **Simplificación deliberada:** la cuota reportada en la respuesta no excluye a OTROS hábitos que hoy tengan su propia ventana extendida (el repo viejo lo hace vía `readExtendedFreeWindows`, una lista de todos los hábitos con ventana propia) — solo se resuelve la ventana extendida DEL hábito que se está editando. El campo `horaDisparo`/`horaLimite` de la respuesta es lo que se acaba de guardar (inmediato o programado), no un "vigente hoy" recalculado aparte — simplificación respecto al repo viejo, que separaba ambas cosas. `isProgramCompleted` (post-programa, cupo libre para siempre) no existe todavía en `ConsultarProgresoParticipanteHabitsPort` — no implementado.
 
 Tests: `PreferenciaHorarioServiceTest` — orden de horas inválido, semana libre sin consultar historial, cupo agotado lanza, reeditar un hábito ya tocado no gasta cupo nuevo, ventana de hoy ya arrancada difiere el cambio a mañana.
+
+> **El camino diferido de esta sección tenía dos defectos, corregidos el 2026-08-31 — ver §20 (E-53, E-54).** El cambio programado no se aplicaba nunca, y el propio INSERT del pendiente violaba una FK la primera vez.
 
 ### 12.2 `weekly-habit-days` — elegir el día de la semana
 
@@ -716,3 +719,205 @@ Depende de cuál de las dos cosas es "hábitos por rol" — son necesidades dist
 | **(b) Restricción de quién puede operar/ver sus propios tracks de hábito** (ej. solo TRAINEE completa hábitos, igual que ya pasa en `radar`) | **No, cero tablas nuevas.** Es agregar un guard de rol al servicio existente (mismo patrón que `HabitoAdminGuard` o el chequeo que ya usa `radar`), leyendo el rol que `ActorAutenticado`/`ConsultarProgresoParticipanteHabitsPort` ya resuelven. Puro cambio de código de aplicación. |
 
 **Conclusión de este paso:** no hay forma de evitar una tabla nueva si lo que hace falta es (a); sí se puede evitar por completo si es (b). Falta confirmar cuál de las dos es la necesidad real antes de tocar código — sigue como pregunta abierta de este documento hasta que se confirme.
+
+---
+
+## 20. Cambios de horario diferidos: se aplican de verdad, y el GET que faltaba — completado 2026-08-31
+
+Auditoría del camino diferido de §12.1 (`PATCH /api/v1/habit-preferences/{habitId}`). Tres defectos
+confirmados; los dos primeros quedaron en la bitácora (E-53, E-54) porque son bugs reales, no
+decisiones de diseño.
+
+### 20.1 Defecto 1 (E-53) — el cambio diferido no se aplicaba nunca
+
+`PreferenciaHorarioService.aplicarEdicion`, rama `if (contexto.diferido())`, solo hacía
+`saveCambioPendientePort.save(pendiente)`. Del otro lado no había nadie: `LoadCambioHorarioPendientePort`
+no lo inyectaba ningún servicio, `CambioHorarioPendiente.rigeEn(fecha)` no lo llamaba nadie, y
+`TracksDelDiaProyeccionService` — el que arma el día del aprendiz — resuelve el horario con
+`LoadHorarioHabitoPort` + `LoadPreferenciaHorarioPort`, sin mirar los pendientes. La API respondía
+`deferred: true` con su `deferredEffectiveDate`, y al día siguiente no pasaba nada: la fila quedaba
+huérfana para siempre.
+
+**Solución — un barrido nocturno, no el camino de lectura.** `PromoverCambiosHorarioProgramadosUseCase`
+(puerto in) + `PromocionCambioHorarioService` + `PromoverCambiosHorarioScheduler`
+(`infrastructure/adapter/in/scheduler/`, décimo scheduler del repo). El puerto de salida suma
+`LoadCambioHorarioPendientePort.queYaRigenEn(fecha)` — `fecha_efectiva <= fecha`, de todos los
+participantes en una sola consulta, mismo criterio que `CambioHorarioPendiente.rigeEn`.
+
+Por cada pendiente vencido, dentro de una transacción: escribe las horas en `preferencias_horario`,
+registra en `historial_cambios_horario` y borra el pendiente.
+
+- **Por qué un job y no la lectura:** el RNF principal del proyecto es latencia (CLAUDE.MD §3) y
+  `TracksDelDiaProyeccionService` es hot path. Resolver los pendientes ahí sería una consulta más por
+  hábito, en cada request, para un evento que ocurre como mucho una vez por hábito por día.
+- **Por qué un `@Scheduled` propio y no una línea dentro de `ExpirarRegistrosScheduler`:** cerrar el día
+  anterior y abrir la configuración del día nuevo son responsabilidades distintas (SRP, §5.4.8) — juntas,
+  un fallo de una arrastra a la otra.
+- **Hora: `0 40 4 * * *` UTC.** El barrido de `habits` corre a las 05:00 UTC (~00:00 Lima, hora heredada
+  del cron viejo) y la promoción tiene que correr **antes** — el orden conceptual del amanecer es
+  "primero queda vigente el horario nuevo, después se cierra lo vencido". Dos `@Scheduled` con el mismo
+  cron no garantizan orden (el pool de Spring puede correrlos en paralelo), así que la separación es
+  explícita en la hora; 04:40 además no pisa las 04:30 de la purga de `notifications`.
+  Contrapartida asumida: `fecha_efectiva` se calcula en la zona del participante y el barrido compara
+  contra la fecha UTC del reloj — para Lima eso adelanta el cambio ~20 minutos (23:40 local), una franja
+  donde ninguna ventana de hábito está viva.
+- **Idempotencia:** borrar el pendiente en la misma transacción en que se escribe el historial es lo que
+  la garantiza — una segunda corrida el mismo día no encuentra nada que promover, así que no duplica
+  historial ni falla. `SaveCambioHorarioPendientePort.borrar` ya era idempotente de antes.
+
+### 20.2 Decisión: el cambio diferido SÍ cobra cupo, pero el día que empieza a regir
+
+`historial_cambios_horario` **es** el contador de la cuota semanal (lo dice el javadoc de
+`HistorialCambioHorarioPort`), y `requireCupoDisponible` deliberadamente no cobra cuando `diferido` es
+true. Eso está bien en el momento del pedido: "no se improvisa el día" no puede convertirse en "perdiste
+la decisión", así que el PATCH nunca rechaza un cambio diferido. Pero si la promoción tampoco cobrara,
+**diferir sería la vía para saltarse la cuota semanal entera**: bastaría con pedir todos los cambios con
+la ventana ya arrancada.
+
+**Se cobra al promover.** Razones:
+
+1. Mantiene la invariante que le da sentido al contador: *una fila de `historial_cambios_horario` = un
+   cambio de horario que efectivamente rigió*. Un cambio programado que el aprendiz pisa con otro antes
+   de que llegue su fecha no llega a costar nada — correcto, nunca rigió.
+2. Cobra en la **semana correcta**: se registra con `cambiado_el = fecha_efectiva`, o sea contra la
+   semana de programa en la que el cambio pasa a regir, no contra la del pedido.
+3. **La promoción nunca rechaza por falta de cupo.** Puede dejar la cuota de esa semana al tope (o
+   pasada); el efecto es que no se pueden reacomodar hábitos *nuevos* hasta la semana siguiente, no que
+   se pierda una decisión ya confirmada al aprendiz.
+
+Consecuencia visible en el contrato: la respuesta del PATCH diferido sigue informando la cuota **sin**
+contar ese cambio (no hay drift respecto de §12.1) — el cliente lo ve igual, explícito, en el
+`pendingChange` del nuevo GET, y la cuota lo refleja al día siguiente.
+
+### 20.3 Defecto 2 (E-54) — la rama diferida violaba una FK la primera vez
+
+`cambios_horario_pendientes` tiene
+`FOREIGN KEY (participante_id, habito_id) REFERENCES preferencias_horario (participante_id, habito_id)`
+(V1 del baseline). La rama diferida no creaba la fila padre, así que un aprendiz que nunca había editado
+ese hábito y lo intentaba con la ventana ya arrancada chocaba contra la FK.
+
+**Reproducido de verdad**, no solo predicho por lectura: `CambioHorarioPendientePersistenceAdapterTest.
+sinFilaEnPreferenciasHorarioLaFkRechazaElPendiente` lo dispara contra Postgres real (SQLState 23503).
+
+**Solución:** `asegurarPreferenciaVigente` crea la fila padre antes de guardar el pendiente, **con los
+valores vigentes HOY** (si ya hay preferencia propia no hay nada que crear; si no, las horas del
+`horarios_habito` que aplica hoy). Nunca con las horas pedidas: el día en curso no se toca. Si el
+catálogo no tiene horario aplicable, la fila se crea con `NULL`, que en `preferencias_horario` significa
+exactamente "sin override". La congelación del valor del catálogo dura como mucho un día: la promoción
+de la mañana siguiente sobrescribe ambas horas.
+
+De paso, el cálculo de "qué rige hoy" quedó en un solo lugar (`resolverVentanaVigenteHoy` →
+`VentanaVigenteHoy`), que antes resolvía solo la hora de disparo y ahora resuelve también la hora límite
+y si ya existe fila padre.
+
+### 20.4 Defecto 3 — `GET /api/v1/habit-preferences` (solo existía el PATCH)
+
+El aprendiz podía **escribir** su horario pero no leerlo: no había forma de saber qué rige, qué quedó
+programado ni cuánto cupo le queda. Escribía a ciegas.
+
+`ConsultarPreferenciasHorarioUseCase` / `ConsultaPreferenciasHorarioService`, aditivo (no toca el PATCH).
+Devuelve, por cada hábito activo del aprendiz (mismo conjunto que usa `RegistroService.generar`: catálogo
+activo + personales activos):
+
+```json
+{
+  "habits": [{
+    "habitId": "uuid", "title": "Jugo verde",
+    "triggerTime": "07:00", "limitTime": "09:00",
+    "customized": true,
+    "pendingChange": { "triggerTime": "06:00", "limitTime": "08:00", "effectiveDate": "2026-09-01" }
+  }],
+  "scheduleEdits": { "used": 2, "remaining": 1, "limit": 3, "period": "WEEK" }
+}
+```
+
+- `triggerTime`/`limitTime`: lo **vigente hoy** (preferencia propia si está seteada, si no el default del
+  catálogo — misma resolución que `TracksDelDiaProyeccionService`).
+- `customized`: si el horario sale de una fila propia en `preferencias_horario` o viene de fábrica.
+- `pendingChange`: `null` salvo que haya un cambio diferido esperando; `effectiveDate` es el mismo dato
+  que el PATCH devuelve como `deferredEffectiveDate`.
+- `scheduleEdits`: **misma forma y mismos literales** (`FREE`/`WEEK`, D-36) que devuelve el PATCH — se
+  reutiliza `HabitPreferenceResponse.ScheduleEditQuotaResponse`, el cliente no reconcilia dos formas del
+  mismo dato.
+- **Nunca N+1**: horarios, preferencias y pendientes se piden UNA vez cada uno por el conjunto completo
+  de hábitos (verificado con `verify(..., times(1))`).
+
+Autoservicio estricto, igual que el resto del módulo: actor de la sesión, `SUSPENDED` → `403`.
+Documentado en `docs/api/CONTRATO_DIA_A_DIA.md` §1.7.
+
+### 20.5 Refactors que trajo esta pasada
+
+- **`domain/model/preferencia/CuotaEdicionHorario`** (nuevo, dominio puro): la regla de cuota
+  (`DIAS_DE_ACOMODO_LIBRE=7`, `HABITOS_POR_SEMANA=3`, `inicioSemanaPrograma`, literales `FREE`/`WEEK`)
+  dejó de ser constantes privadas de un servicio, porque ahora la comparten tres caminos que tienen que
+  decir lo mismo: el PATCH que la cobra, el GET que la informa y la promoción que la cobra al regir.
+  `PreferenciaHorarioService.FREE_SCHEDULE_EDITS_UNTIL_DAY`/`WEEKLY_SCHEDULE_EDIT_LIMIT` siguen
+  existiendo, ahora delegando en el dominio (una sola fuente de verdad).
+- **`TipoDia.delDia(LocalDate)`** (nuevo, dominio): la regla "domingo → `DOMINGO`, si no `DISCIPLINA`"
+  estaba a punto de quedar duplicada en un tercer lugar. `RegistroService.resolverTipoDia` ahora delega.
+
+### 20.6 Tests
+
+| Test | Qué cubre |
+|---|---|
+| `CambioHorarioPendientePersistenceAdapterTest` (**nuevo**, Testcontainers) | Faltaba, y CLAUDE.MD §0.2 lo exige — su ausencia es la razón por la que E-53 y E-54 sobrevivieron: la única prueba del camino diferido era con mocks, que no ven ni la FK ni las consultas reales. Guardar/recuperar, `deParticipante` filtra por participante, `queYaRigenEn` trae vencidos y de hoy pero no futuros, **la FK del defecto 2**, `borrar` idempotente y efectivo. 6 tests |
+| `PromocionCambioHorarioServiceTest` (**nuevo**) | Sin pendientes no toca nada; escribe las horas programadas; recordatorio `null` no pisa el vigente y el explícito sí se aplica; registra en historial con la fecha efectiva (la decisión de cupo); borra el pendiente y una segunda corrida no duplica; sin preferencia previa la crea. 7 tests |
+| `ConsultaPreferenciasHorarioServiceTest` (**nuevo**) | Suspendido → 403; sin hábitos no consulta el catálogo de horarios; catálogo vs. preferencia propia y `customized`; expone el cambio programado con su fecha; semana de acomodo no consulta historial; cuota consumida fuera de ella; nunca N+1. 8 tests |
+| `CuotaEdicionHorarioTest` (**nuevo**, dominio puro) | Semana de acomodo, inicio de semana de programa (incluido día 0), restantes nunca negativos, literales del contrato. 5 tests |
+| `PreferenciaHorarioServiceTest` (**+1**) | `elPrimerCambioDiferidoDeUnHabitoNuncaEditadoCreaLaFilaPadreConLoVigenteHoy` — la fila padre se crea con las horas del catálogo (08:00/10:00), no con las pedidas (07:00/09:00) |
+
+Esta pasada suma **27 tests** (6 + 7 + 8 + 5 + 1). `./mvnw clean test` — **1697/1697 en verde**,
+`BUILD SUCCESS` (27:16 min, 2026-08-31), `ArchitectureTest` y `ModuleDocumentationTest` incluidos.
+
+### 20.7 Lo que quedó afuera, explícito
+
+- **La promoción no filtra por zona horaria del participante** (§20.1): compara `fecha_efectiva` contra la
+  fecha UTC del reloj, no contra "hoy" en la zona de cada aprendiz. Corregirlo bien implica agrupar por
+  zona o mover la comparación a la consulta, y el desfase real (±20 min en Lima, en plena madrugada) no lo
+  justifica todavía. Queda anotado, no escondido.
+- **`GenerarTracksDelDiaUseCase` sigue sin filtrar por elección semanal** (D-H3) — sin relación con esta
+  pasada, sigue abierto.
+- **El GET no devuelve `originalTitle` ni aplica el renombre** (§12.3): expone `Habito.titulo` tal cual,
+  igual que la proyección del hueco #10. Mismo pendiente de siempre, no uno nuevo.
+
+---
+
+## 21. Identidad por el puerto `IdGenerator` — `habits` migrado (D-59) — 2026-08-31
+
+`domain/` debe ser puro y determinista (CLAUDE.MD §5.4.7: "sin I/O, sin reloj del sistema, sin
+aleatoriedad"). El reloj ya estaba resuelto con el puerto `Clock`; la identidad no. `habits` era el
+módulo más grande de la migración: **9 value objects de identidad** sorteaban su propio UUID.
+
+**Qué cambió, mismo patrón que el piloto de `calendar` (commit `bb01bc1`):**
+
+- Los 9 VOs — `HabitoId`, `HorarioHabitoId`, `GuiaHabitoId`, `AdjuntoGuiaId`, `RegistroHabitoId`,
+  `RachaSinCelularId`, `RegistroRadarId`, `EntradaDiarioId`, `RegistroEspirituId` — **pierden
+  `newId()`**; `of(UUID)` y su validación no se tocan.
+- Las factorías de los agregados reciben el id como **primer parámetro**, con
+  `Objects.requireNonNull(id, "id es obligatorio")`: `Habito.crearDeSistema` (las dos sobrecargas),
+  `Habito.crearPersonal`, `HorarioHabito.crear`, `GuiaHabito.crear`, `AdjuntoGuia.deEnlace`/`deArchivo`,
+  `RegistroHabito.generar`, `RachaSinCelular.iniciar`, `RegistroRadar.registrar`,
+  `EntradaDiario.escribir`, `RegistroEspiritu.desbloquear`.
+- Ocho casos de uso inyectan el puerto: `HabitoAdminService`, `HorarioHabitoAdminService`,
+  `GuiaHabitoAdminService`, `RegistroService`, `RachaService`, `RadarService`,
+  `BitacoraNocturnaService`, `EspirituService`. **El dominio no importa `IdGenerator`**: lo inyecta el
+  caso de uso, nunca la entidad.
+- **Los upserts no se tocaron**: `BitacoraNocturnaService.escribir` y `GuiaHabitoAdminService.upsert`
+  /`guiaParaAdjunto` piden identidad nueva solo dentro del `orElseGet`, es decir solo en el camino de
+  alta — la entrada o la guía que ya existe conserva su id.
+
+**Beneficio concreto, no teórico:** en `GuiaHabitoAdminServiceTest` el mock
+`loadHabitoPort.byId(habitoId)` devolvía un `Habito` con un id **distinto** al consultado, porque la
+factoría lo sorteaba. Ahora devuelve uno con ese mismo id, como haría el adaptador de persistencia real.
+
+**Queda dicho, no arreglado (§5.4.8, techo de 4 parámetros):** las factorías de este módulo ya estaban
+por encima del techo antes del cambio y ahora suman uno más — `AdjuntoGuia.deArchivo` 10→11,
+`Habito.crearPersonal` 7→8, `HorarioHabito.crear` 7→8, `RegistroHabito.generar` 7→8,
+`AdjuntoGuia.deEnlace` 6→7, `Habito.crearDeSistema(String,…)` 5→6, `EntradaDiario.escribir` 5→6,
+`RegistroEspiritu.desbloquear` 5→6, `RegistroRadar.registrar` 7→8, `RachaSinCelular.iniciar` 4→5 y
+`Habito.crearDeSistema(…, DetallesHabito, …)` 4→5 (estas dos últimas cruzan el techo **con** este
+cambio). Convertirlas a un `record` de comando es trabajo aparte, con su propia decisión.
+
+**Pendiente que no es de este cambio:** `ArchitectureTest.MODULOS_SIN_MIGRAR_A_IDGENERATOR` todavía
+lista `com.renaser.os.habits..`; sacarlo de esa lista corresponde a quien cierre la migración de los
+módulos restantes (el archivo no se toca por módulo, para no pisar el trabajo en paralelo).

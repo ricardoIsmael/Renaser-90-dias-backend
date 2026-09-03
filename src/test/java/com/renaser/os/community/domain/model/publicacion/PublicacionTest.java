@@ -16,25 +16,28 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class PublicacionTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** El id ya no lo sortea la factoria: entra por parametro, generado por el puerto IdGenerator. */
+    private static final PublicacionId ID = PublicacionId.of(UUID.randomUUID());
 
     private static MediaPublicacion foto() {
         return new MediaPublicacion("wall", "muro/x/1.jpg", "image/jpeg", 0);
     }
 
     private static Publicacion nueva() {
-        return Publicacion.publicar(UserId.of(UUID.randomUUID()), "Hola comunidad", List.of(foto()), null,
+        return Publicacion.publicar(ID, UserId.of(UUID.randomUUID()), "Hola comunidad", List.of(foto()), null,
                 CLOCK.now());
     }
 
     @Test
     void publicarSiempreEsManual() {
         Publicacion p = nueva();
+        assertThat(p.id()).isEqualTo(ID);
         assertThat(p.tipo()).isEqualTo(TipoPublicacion.MANUAL);
     }
 
     @Test
     void sinMediaEsInvalido() {
-        assertThatThrownBy(() -> Publicacion.publicar(UserId.of(UUID.randomUUID()), "texto", List.of(), null,
+        assertThatThrownBy(() -> Publicacion.publicar(ID, UserId.of(UUID.randomUUID()), "texto", List.of(), null,
                 CLOCK.now())).isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -42,13 +45,13 @@ class PublicacionTest {
     void masDeDiezArchivosEsInvalido() {
         List<MediaPublicacion> media = java.util.stream.IntStream.range(0, 11)
                 .mapToObj(i -> new MediaPublicacion("wall", "muro/x/" + i, "image/jpeg", i)).toList();
-        assertThatThrownBy(() -> Publicacion.publicar(UserId.of(UUID.randomUUID()), "texto", media, null,
+        assertThatThrownBy(() -> Publicacion.publicar(ID, UserId.of(UUID.randomUUID()), "texto", media, null,
                 CLOCK.now())).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void textoVacioEsInvalido() {
-        assertThatThrownBy(() -> Publicacion.publicar(UserId.of(UUID.randomUUID()), "   ", List.of(foto()), null,
+        assertThatThrownBy(() -> Publicacion.publicar(ID, UserId.of(UUID.randomUUID()), "   ", List.of(foto()), null,
                 CLOCK.now())).isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -85,8 +88,8 @@ class PublicacionTest {
     /** Hueco #17 (docs/MODULO_ROCKS.md sec. 11.2): entrada para community.api.PublicarEnMuroPort. */
     @Test
     void publicarAutomaticaEsHitoAutomaticoYSinCategoria() {
-        Publicacion p = Publicacion.publicarAutomatica(UserId.of(UUID.randomUUID()), "Complete mi Roca: Meditar",
-                List.of(foto()), CLOCK.now());
+        Publicacion p = Publicacion.publicarAutomatica(ID, UserId.of(UUID.randomUUID()),
+                "Complete mi Roca: Meditar", List.of(foto()), CLOCK.now());
         assertThat(p.tipo()).isEqualTo(TipoPublicacion.HITO_AUTOMATICO);
         assertThat(p.categoriaClave()).isNull();
         assertThat(p.oculta()).isFalse();
@@ -94,7 +97,7 @@ class PublicacionTest {
 
     @Test
     void publicarAutomaticaSinMediaEsInvalido() {
-        assertThatThrownBy(() -> Publicacion.publicarAutomatica(UserId.of(UUID.randomUUID()), "texto", List.of(),
-                CLOCK.now())).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Publicacion.publicarAutomatica(ID, UserId.of(UUID.randomUUID()), "texto",
+                List.of(), CLOCK.now())).isInstanceOf(IllegalArgumentException.class);
     }
 }

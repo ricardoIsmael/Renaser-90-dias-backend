@@ -5,8 +5,10 @@ import com.renaser.os.habits.application.ports.in.renombre.QuitarRenombreHabitoU
 import com.renaser.os.habits.application.ports.in.renombre.RenombrarHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.renombre.RenombrarHabitoUseCase.RenombrarHabitoCommand;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,6 +32,7 @@ public class HabitRenameController {
         this.quitarUseCase = quitarUseCase;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @PutMapping
     public HabitRenameResponse renombrar(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
                                           @RequestBody @Valid RenameHabitRequest request) {
@@ -38,6 +41,7 @@ public class HabitRenameController {
         return HabitRenameResponse.from(renombre);
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @DeleteMapping
     public void quitar(@ActorAutenticado UserId actor, @PathVariable UUID habitId) {
         quitarUseCase.quitar(new QuitarRenombreHabitoCommand(actor, HabitoId.of(habitId)));

@@ -7,8 +7,10 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
 import com.renaser.os.habits.domain.model.diario.EntradaDiario;
+import com.renaser.os.habits.domain.model.diario.EntradaDiarioId;
 import com.renaser.os.habits.domain.model.diario.TipoEntradaDiario;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +34,8 @@ import static org.mockito.Mockito.when;
 class BitacoraNocturnaServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-26T21:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, escribir() ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
@@ -39,12 +43,15 @@ class BitacoraNocturnaServiceTest {
     private LoadEntradaDiarioPort loadPort;
     @Mock
     private SaveEntradaDiarioPort savePort;
+    @Mock
+    private IdGenerator idGenerator;
 
     private BitacoraNocturnaService service;
 
     @BeforeEach
     void setUp() {
-        service = new BitacoraNocturnaService(progresoPort, loadPort, savePort, CLOCK);
+        service = new BitacoraNocturnaService(progresoPort, loadPort, savePort, CLOCK, idGenerator);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(savePort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -86,8 +93,8 @@ class BitacoraNocturnaServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(actor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
-        EntradaDiario existente = EntradaDiario.escribir(actor, LocalDate.of(2026, 8, 26),
-                TipoEntradaDiario.BITACORA_NOCTURNA, "primer intento", CLOCK.now());
+        EntradaDiario existente = EntradaDiario.escribir(EntradaDiarioId.of(UUID.randomUUID()), actor,
+                LocalDate.of(2026, 8, 26), TipoEntradaDiario.BITACORA_NOCTURNA, "primer intento", CLOCK.now());
         when(loadPort.porParticipanteFechaYTipo(actor, LocalDate.of(2026, 8, 26), TipoEntradaDiario.BITACORA_NOCTURNA))
                 .thenReturn(Optional.of(existente));
 

@@ -1,0 +1,591 @@
+<title>Horarios y panel de mando</title>
+<style>
+  :root {
+    --ground:        #F1F4F4;
+    --surface:       #FBFCFC;
+    --surface-sunk:  #E7ECEC;
+    --line:          #CFD8D8;
+    --line-soft:     #DFE6E6;
+    --text:          #1A2426;
+    --text-soft:     #55686B;
+    --text-faint:    #7C8D90;
+    --accent:        #1F6F63;
+    --accent-soft:   #DCEBE8;
+    --warn:          #A85E28;
+    --warn-soft:     #F6E9DE;
+    --crit:          #94262B;
+    --crit-soft:     #F6E2E3;
+    --ok:            #2E7D6B;
+    --ok-soft:       #DDEDE8;
+    --shadow:        0 1px 2px rgba(26,36,38,.06), 0 8px 24px -12px rgba(26,36,38,.18);
+    --display: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+    --body: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #101719; --surface: #172023; --surface-sunk: #0C1214;
+      --line: #2C393C; --line-soft: #232E31;
+      --text: #E4EBEB; --text-soft: #9DAFB1; --text-faint: #74878A;
+      --accent: #4FB3A1; --accent-soft: #16302D;
+      --warn: #D89A62; --warn-soft: #2E2318;
+      --crit: #E0767B; --crit-soft: #301A1C;
+      --ok: #58B79F; --ok-soft: #14302A;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #101719; --surface: #172023; --surface-sunk: #0C1214;
+    --line: #2C393C; --line-soft: #232E31;
+    --text: #E4EBEB; --text-soft: #9DAFB1; --text-faint: #74878A;
+    --accent: #4FB3A1; --accent-soft: #16302D;
+    --warn: #D89A62; --warn-soft: #2E2318;
+    --crit: #E0767B; --crit-soft: #301A1C;
+    --ok: #58B79F; --ok-soft: #14302A;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0; background: var(--ground); color: var(--text);
+    font-family: var(--body); font-size: 16px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .shell {
+    max-width: 1180px; margin: 0 auto; padding: 0 24px 96px;
+    display: grid; grid-template-columns: 210px minmax(0, 1fr);
+    gap: 56px; align-items: start;
+  }
+  nav {
+    position: sticky; top: 0; padding: 48px 24px 48px 0;
+    display: flex; flex-direction: column; gap: 2px;
+    border-right: 1px solid var(--line-soft); margin-right: -32px;
+  }
+  nav .navlabel {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--text-faint); margin-bottom: 12px;
+  }
+  nav .navlabel + .navlabel, nav a + .navlabel { margin-top: 20px; }
+  nav a {
+    color: var(--text-soft); text-decoration: none; font-size: 13.5px;
+    padding: 5px 0 5px 12px; border-left: 2px solid transparent;
+    transition: color .15s, border-color .15s;
+  }
+  nav a:hover, nav a:focus-visible { color: var(--accent); border-left-color: var(--accent); }
+  nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+  main { padding: 48px 0 0; min-width: 0; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  h1 {
+    font-family: var(--display); font-weight: 400;
+    font-size: clamp(34px, 5vw, 52px); line-height: 1.08;
+    letter-spacing: -.015em; margin: 14px 0 0; text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 18px; line-height: 1.55; color: var(--text-soft);
+    max-width: 62ch; margin: 18px 0 0;
+  }
+  .parthead {
+    margin-top: 72px; padding-top: 26px; border-top: 2px solid var(--text);
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  }
+  .parthead .tag {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  h2 {
+    font-family: var(--display); font-weight: 400; font-size: 32px;
+    letter-spacing: -.012em; margin: 8px 0 0; text-wrap: balance; width: 100%;
+  }
+  h3 {
+    font-family: var(--display); font-weight: 400; font-size: 22px;
+    letter-spacing: -.008em; margin: 0 0 8px; text-wrap: balance;
+  }
+  section { margin-top: 52px; scroll-margin-top: 24px; }
+  .lede { color: var(--text-soft); max-width: 66ch; margin: 0 0 26px; }
+  p { max-width: 68ch; }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--line);
+    border-top: 2px solid var(--accent); border-radius: 3px;
+    padding: 22px 26px; box-shadow: var(--shadow); margin: 0 0 24px;
+  }
+  .callout.bug  { border-top-color: var(--crit); }
+  .callout.warn { border-top-color: var(--warn); }
+  .callout.good { border-top-color: var(--ok); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout p { margin: 0 0 12px; }
+
+  .pill {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; padding: 3px 8px; border-radius: 2px;
+    white-space: nowrap; display: inline-block;
+  }
+  .pill.ok   { background: var(--ok-soft);   color: var(--ok); }
+  .pill.bug  { background: var(--crit-soft); color: var(--crit); }
+  .pill.gap  { background: var(--warn-soft); color: var(--warn); }
+  .pill.note { background: var(--accent-soft); color: var(--accent); }
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); margin-bottom: 24px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--text-faint); font-weight: 400; white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: 0; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+  pre {
+    background: var(--surface-sunk); border: 1px solid var(--line-soft);
+    border-radius: 3px; padding: 14px 16px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+    margin: 0 0 16px; color: var(--text);
+  }
+  code { font-family: var(--mono); font-size: .9em; }
+  p code, li code, td code { background: var(--surface-sunk); padding: 1px 5px; border-radius: 2px; }
+
+  .options { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .option {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 3px; padding: 20px 22px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .option .cost {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text-faint);
+  }
+  .option h4 { font-family: var(--display); font-weight: 400; font-size: 19px; margin: 0; }
+  .option p { font-size: 14.5px; margin: 0; color: var(--text-soft); }
+  .option.pick { border-color: var(--accent); }
+
+  ul.plain { list-style: none; padding: 0; margin: 0 0 20px; display: flex; flex-direction: column; gap: 13px; }
+  ul.plain li { padding-left: 20px; position: relative; max-width: 68ch; }
+  ul.plain li::before {
+    content: ""; position: absolute; left: 2px; top: .62em;
+    width: 6px; height: 6px; border: 1px solid var(--accent); border-radius: 50%;
+  }
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 0 0 20px; display: flex; flex-direction: column; gap: 16px; }
+  ol.steps li { counter-increment: s; padding-left: 42px; position: relative; max-width: 66ch; }
+  ol.steps li::before {
+    content: counter(s); position: absolute; left: 0; top: -1px;
+    font-family: var(--mono); font-size: 12px; width: 26px; height: 26px;
+    display: grid; place-items: center; border: 1px solid var(--accent);
+    color: var(--accent); border-radius: 50%;
+  }
+  strong { font-weight: 650; }
+  .quiet { color: var(--text-soft); }
+
+  footer {
+    margin-top: 72px; padding-top: 22px; border-top: 1px solid var(--line-soft);
+    font-family: var(--mono); font-size: 11.5px; color: var(--text-faint); line-height: 1.75;
+  }
+
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; gap: 0; padding: 0 20px 72px; }
+    nav {
+      position: static; flex-direction: row; flex-wrap: wrap; gap: 6px 16px;
+      border-right: 0; border-bottom: 1px solid var(--line-soft);
+      margin-right: 0; padding: 28px 0 18px;
+    }
+    nav .navlabel { width: 100%; margin-bottom: 4px; }
+    nav a { border-left: 0; padding: 2px 0; }
+    main { padding-top: 34px; }
+  }
+</style>
+
+<div class="shell">
+  <nav>
+    <span class="navlabel">Parte A · Horarios</span>
+    <a href="#ya-existe">Lo que ya existe</a>
+    <a href="#falta">Lo que falta</a>
+    <a href="#rompe">¿Rompe algo?</a>
+    <a href="#trabajo-a">El trabajo</a>
+    <span class="navlabel">Parte B · Panel</span>
+    <a href="#estado-panel">Estado actual</a>
+    <a href="#riesgo-panel">El riesgo real</a>
+    <a href="#opciones">Tres opciones</a>
+    <span class="navlabel">Cierre</span>
+    <a href="#rnf">Los RNF</a>
+    <a href="#ml">Lo que ML/IA necesita</a>
+    <a href="#decision">Qué decidís</a>
+  </nav>
+
+  <main>
+    <header>
+      <span class="eyebrow">Plan para decidir · 31 agosto 2026</span>
+      <h1>Horarios y panel de mando</h1>
+      <p class="standfirst">
+        Dos pedidos: que el aprendiz controle el horario de sus hábitos, y que vos controles
+        todo desde el panel. El primero está construido casi entero y tiene tres cosas rotas.
+        El segundo es la mitad del trabajo que queda en el proyecto. Ninguno de los dos toca
+        la base de datos.
+      </p>
+    </header>
+
+    <div class="parthead">
+      <span class="tag">Parte A</span>
+      <h2>El aprendiz controla su horario</h2>
+    </div>
+
+    <section id="ya-existe">
+      <h3>Lo que ya existe</h3>
+      <p class="lede">
+        Esto es lo primero que hay que decir, porque cambia la conversación con el cliente:
+        <strong>lo que pidió ya está construido.</strong> El esquema lo modeló completo y los
+        casos de uso están escritos.
+      </p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Capacidad</th><th>Dónde vive</th><th>Estado</th></tr></thead>
+          <tbody>
+            <tr><td>Cambiar hora de disparo y hora límite de un hábito</td><td><code>PATCH /api/v1/habit-preferences/{habitId}</code></td><td><span class="pill ok">Funciona</span></td></tr>
+            <tr><td>Cuota de 3 hábitos distintos por semana</td><td><code>PreferenciaHorarioService</code></td><td><span class="pill gap">Hardcodeada</span></td></tr>
+            <tr><td>Cambios libres hasta el día 7 del programa</td><td>idem</td><td><span class="pill gap">Hardcodeada</span></td></tr>
+            <tr><td>“No se improvisa el día”: si la ventana ya arrancó, el cambio se difiere a mañana</td><td><code>cambios_horario_pendientes</code></td><td><span class="pill bug">Nunca se aplica</span></td></tr>
+            <tr><td>Elegir qué día de la semana toca un hábito semanal</td><td><code>EleccionDiaSemanalService</code></td><td><span class="pill ok">Funciona</span></td></tr>
+            <tr><td>Elegir el día en que se desbloquea un hábito</td><td><code>DesbloqueoHabitoService</code></td><td><span class="pill ok">Funciona</span></td></tr>
+            <tr><td>Renombrar un hábito a lo propio</td><td><code>renombres_habito</code></td><td><span class="pill ok">Funciona</span></td></tr>
+            <tr><td>Crear hábitos personales propios</td><td>autoservicio de catálogo</td><td><span class="pill ok">Funciona</span></td></tr>
+            <tr><td>Bitácora de cada cambio, que además cuenta la cuota</td><td><code>historial_cambios_horario</code></td><td><span class="pill ok">Funciona</span></td></tr>
+            <tr><td>Leer la configuración vigente de sus hábitos</td><td>—</td><td><span class="pill gap">No hay GET</span></td></tr>
+            <tr><td>Recordatorio antes de la hora del hábito</td><td><code>preferencias_horario</code></td><td><span class="pill bug">Se guarda, nadie lo lee</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="falta">
+      <h3>Lo que falta, y dos de las tres cosas son defectos</h3>
+
+      <div class="callout bug">
+        <p><span class="pill bug">Defecto 1</span></p>
+        <p>
+          <strong>El cambio diferido se guarda y no se aplica nunca.</strong> Si el aprendiz cambia
+          el horario después de que la ventana de hoy arrancó, la API responde “programado para
+          mañana” con su fecha efectiva. Mañana no pasa nada.
+        </p>
+<pre>PreferenciaHorarioService.aplicarEdicion()
+  if (diferido)  → saveCambioPendientePort.save(pendiente)   // y nada más
+  else           → aplicarInmediato() + borrar pendiente + historial
+
+LoadCambioHorarioPendientePort   → no lo inyecta ningún servicio
+CambioHorarioPendiente.rigeEn()  → no lo llama nadie
+TracksDelDiaProyeccionService    → lee horarios y preferencias, NO los pendientes</pre>
+        <p>
+          La rama diferida tampoco escribe en <code>preferencias_horario</code> ni en el historial.
+          La decisión del aprendiz se pierde en silencio.
+        </p>
+      </div>
+
+      <div class="callout bug">
+        <p><span class="pill bug">Defecto 2</span></p>
+        <p>
+          <strong>Ese mismo camino probablemente devuelve 500 la primera vez.</strong>
+          <code>cambios_horario_pendientes</code> tiene una clave foránea compuesta hacia
+          <code>preferencias_horario</code>:
+        </p>
+<pre>FOREIGN KEY (participante_id, habito_id)
+    REFERENCES preferencias_horario (participante_id, habito_id) ON DELETE CASCADE</pre>
+        <p>
+          Pero la rama diferida no crea la fila padre. Entonces: un aprendiz que <em>nunca</em>
+          editó ese hábito y lo intenta con la ventana ya arrancada → no existe la fila en
+          <code>preferencias_horario</code> → violación de la foránea.
+        </p>
+        <p class="quiet">
+          Predicho leyendo el código y el esquema, <strong>no reproducido en ejecución</strong>. Se
+          confirma en un test de integración, que es justamente lo que falta (abajo).
+        </p>
+      </div>
+
+      <div class="callout warn">
+        <p><span class="pill gap">Hueco 3</span></p>
+        <p>
+          <strong>El recordatorio no existe.</strong> <code>recordatorio_activo</code> y
+          <code>minutos_recordatorio</code> se guardan y ningún proceso los consume. El módulo
+          <code>notifications</code> solo reacciona a eventos ya ocurridos —hábito completado,
+          racha, roca— y no conoce horarios. El aprendiz activa un recordatorio que nunca va a sonar.
+        </p>
+      </div>
+
+      <div class="callout warn">
+        <p><span class="pill gap">Deuda que lo explica todo</span></p>
+        <p>
+          <code>CambioHorarioPendientePersistenceAdapter</code> <strong>no tiene prueba de
+          integración con base de datos real</strong>. La única prueba del camino diferido usa
+          puertos simulados: verifica que se llamó a <code>save</code>, y por construcción no puede
+          ver ni que la fila nunca se aplica ni que la foránea falla.
+        </p>
+        <p class="quiet">
+          Tu §0.2 lo exige textual: <em>“Pruebas de integración con Testcontainers: obligatorias
+          para todo adaptador nuevo (persistencia…)”</em>.
+        </p>
+      </div>
+    </section>
+
+    <section id="rompe">
+      <h3>¿Rompe algo?</h3>
+      <p class="lede">La pregunta que hiciste, respondida capa por capa.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Capa</th><th>¿Se rompe?</th><th>Por qué</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Base de datos</strong></td>
+              <td><span class="pill ok">No</span></td>
+              <td>Cero tablas nuevas. <code>preferencias_horario</code>, <code>cambios_horario_pendientes</code> e <code>historial_cambios_horario</code> ya modelan todo el pedido.</td>
+            </tr>
+            <tr>
+              <td><strong>Esquema / migraciones</strong></td>
+              <td><span class="pill ok">No</span></td>
+              <td>Solo si querés la cuota configurable: eso sí pide dónde guardar el parámetro.</td>
+            </tr>
+            <tr>
+              <td><strong>Contrato de API</strong></td>
+              <td><span class="pill ok">No</span></td>
+              <td>El <code>PATCH</code> no cambia de forma. El <code>GET</code> nuevo es aditivo: nada de lo que el frontend ya manda deja de funcionar.</td>
+            </tr>
+            <tr>
+              <td><strong>Expiración nocturna</strong></td>
+              <td><span class="pill ok">No</span></td>
+              <td>El barrido de las 05:00 UTC expira <em>por fecha</em>, no por hora: <code>expirarPendientesAnterioresA(hoy)</code>. Ni mira <code>hora_limite</code>. Mover el horario no altera qué expira.</td>
+            </tr>
+            <tr>
+              <td><strong>Completar un hábito</strong></td>
+              <td><span class="pill gap">Acoplado</span></td>
+              <td><code>RegistroService</code> sí lee <code>hora_limite</code> en vivo para calcular la ventana de entrega, y la preferencia pisa al catálogo. Un cambio inmediato mueve la ventana del día en curso. <strong>Ese es exactamente el motivo por el que existe el diferido</strong> — que es lo que hay que terminar de construir.</td>
+            </tr>
+            <tr>
+              <td><strong>Puntos y coherencia</strong></td>
+              <td><span class="pill ok">No</span></td>
+              <td>Nada se recalcula hacia atrás. El registro congela <code>puntos_otorgados</code> y <code>dia_programa</code> como hechos históricos.</td>
+            </tr>
+            <tr>
+              <td><strong>Otros módulos</strong></td>
+              <td><span class="pill ok">No</span></td>
+              <td><code>points</code>, <code>community</code> y <code>phasecontracts</code> reaccionan a eventos de dominio, no al horario. El hexágono aísla el cambio dentro de <code>habits</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout good">
+        <p>
+          <strong>Resumen honesto:</strong> este pedido no rompe nada. No es una funcionalidad
+          nueva — es <strong>terminar una que quedó a medias</strong> y cerrarle los tres huecos.
+          Ese es el mejor tipo de trabajo que te puede pedir un cliente.
+        </p>
+      </div>
+    </section>
+
+    <section id="trabajo-a">
+      <h3>El trabajo, en orden</h3>
+      <ol class="steps">
+        <li><strong>Aplicar los cambios diferidos.</strong> Que <code>TracksDelDiaProyeccionService</code> y <code>RegistroService</code> consulten el pendiente y, si <code>rigeEn(hoy)</code>, lo promuevan a <code>preferencias_horario</code>, lo borren y lo anoten en el historial. Corregir de paso la foránea creando la fila padre. <span class="quiet">Es corregir, no construir.</span></li>
+        <li><strong>Prueba de integración con Testcontainers</strong> del adaptador de pendientes. Es lo que exige tu §0.2 y lo que habría atrapado los dos defectos.</li>
+        <li><strong><code>GET /api/v1/habit-preferences</code></strong> con la configuración vigente de cada hábito, el pendiente si lo hay, y la cuota restante. Sin esto el aprendiz no puede “planificar”: solo puede escribir a ciegas.</li>
+        <li><strong>Recordatorios de hábito.</strong> Es lo único genuinamente nuevo: un <code>@Scheduled</code> que lea las preferencias con recordatorio activo y publique un evento que <code>notifications</code> ya sabe consumir.</li>
+        <li><strong>Cuota y días libres configurables</strong> por endpoint admin, igual que hiciste con la duración de las audioterapias en D-48/D-49. Hoy son <code>WEEKLY_SCHEDULE_EDIT_LIMIT = 3</code> y <code>FREE_SCHEDULE_EDITS_UNTIL_DAY = 7</code> compilados dentro del servicio, y el negocio ajusta estos números seguido.</li>
+      </ol>
+    </section>
+
+    <div class="parthead">
+      <span class="tag">Parte B</span>
+      <h2>Control total desde el panel</h2>
+    </div>
+
+    <section id="estado-panel">
+      <h3>Dónde estás hoy</h3>
+      <p class="lede">15 controllers administrativos, repartidos en 7 de los 14 módulos.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Módulo</th><th>Qué podés administrar hoy</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><code>users</code></td><td>Staff, aprendices, rol, estado, solicitudes de cuenta</td><td><span class="pill ok">Sí</span></td></tr>
+            <tr><td><code>habits</code></td><td>Catálogo de hábitos, horarios del catálogo, guías, audioterapias</td><td><span class="pill ok">Sí</span></td></tr>
+            <tr><td><code>community</code></td><td>Células, cohortes, categorías del muro</td><td><span class="pill ok">Sí</span></td></tr>
+            <tr><td><code>evidence</code></td><td>Revisión de evidencia</td><td><span class="pill ok">Sí</span></td></tr>
+            <tr><td><code>onboarding</code></td><td>Catálogo de preguntas</td><td><span class="pill ok">Sí</span></td></tr>
+            <tr><td><code>rag</code></td><td>Base de conocimiento</td><td><span class="pill ok">Sí</span></td></tr>
+            <tr><td><code>support</code></td><td>Tickets</td><td><span class="pill ok">Sí</span></td></tr>
+            <tr><td><code>academy</code></td><td>—</td><td><span class="pill gap">Nada</span></td></tr>
+            <tr><td><code>calendar</code></td><td>—</td><td><span class="pill gap">Nada</span></td></tr>
+            <tr><td><code>chat</code></td><td>—</td><td><span class="pill gap">Nada</span></td></tr>
+            <tr><td><code>notifications</code></td><td>—</td><td><span class="pill gap">Nada</span></td></tr>
+            <tr><td><code>phasecontracts</code></td><td>—</td><td><span class="pill gap">Nada</span></td></tr>
+            <tr><td><code>points</code></td><td>—</td><td><span class="pill gap">Nada</span></td></tr>
+            <tr><td><code>rocks</code></td><td>—</td><td><span class="pill gap">Nada</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout warn">
+        <p>
+          <strong>Y el hueco que nombraste específicamente:</strong> no existe ningún endpoint para
+          ver los hábitos personalizados <em>de un aprendiz concreto</em>. El admin de
+          <code>habits</code> es de catálogo — qué hábitos existen para todos. El admin de
+          <code>users</code> muestra perfil, rol y estado. <strong>Nadie cruza las dos cosas.</strong>
+          Hoy no podés abrir a un aprendiz y ver su horario, su cuota gastada, sus hábitos propios
+          ni su historial de cambios.
+        </p>
+      </div>
+    </section>
+
+    <section id="riesgo-panel">
+      <h3>El riesgo real no es construirlo. Es que te coma la latencia.</h3>
+      <p class="lede">
+        Dijiste que tus RNF son siempre concurrencia, disponibilidad, interoperabilidad y velocidad.
+        El panel administrativo es, con diferencia, <strong>el lugar donde se matan los cuatro</strong>,
+        y por un motivo concreto: sus consultas no se parecen a las del aprendiz.
+      </p>
+      <ul class="plain">
+        <li>El aprendiz hace <strong>lecturas por clave, de sus propias filas</strong>: una consulta indexada, sub-milisegundo. Es el camino caliente que tu arquitectura optimizó.</li>
+        <li>El admin hace <strong>listados, filtros, conteos, cruces y exportes sobre todas las filas</strong>. Un solo listado mal escrito bloquea conexiones del mismo pool que atiende a los 90 aprendices.</li>
+        <li>Con varias instancias detrás del balanceador, un reporte pesado no degrada solo esa instancia: <strong>agota el pool de Postgres, que es compartido</strong>.</li>
+      </ul>
+      <p>Las tres reglas que lo evitan, y hay que fijarlas antes de escribir el primer endpoint:</p>
+      <ol class="steps">
+        <li><strong>Paginación obligatoria, sin excepción.</strong> Ningún endpoint admin devuelve una colección sin límite. Ni “son solo 90 aprendices” — hoy son 90.</li>
+        <li><strong>Lectura por proyección, no por entidad.</strong> Para listados y reportes, <code>JdbcClient</code> con una consulta que trae exactamente las columnas de la pantalla. JPA es para el dominio que muta, no para grillas. Esto ya está decidido en tu §11 y no se está usando.</li>
+        <li><strong>Timeout propio y presupuesto separado.</strong> Una consulta admin que tarda no puede quedarse con la conexión del aprendiz que está completando su hábito. Si más adelante hay reportes pesados de verdad, van contra una réplica de lectura.</li>
+      </ol>
+      <div class="callout">
+        <p>
+          <strong>Lo que no es riesgo:</strong> la interoperabilidad. Los endpoints admin son
+          <code>/api/v1/admin/**</code> sobre la misma API, con <code>springdoc-openapi</code> el
+          panel se tipa solo, y el monolito modular hace que “ver los hábitos de este aprendiz”
+          sea una llamada Java entre <code>users</code> y <code>habits</code> — no una llamada de
+          red entre servicios.
+        </p>
+      </div>
+    </section>
+
+    <section id="opciones">
+      <h3>Tres opciones, para que elijas</h3>
+      <div class="options">
+        <div class="option pick">
+          <span class="cost">Opción A · la que recomiendo</span>
+          <h4>Vertical por aprendiz</h4>
+          <p>
+            Una sola pantalla: abrís un aprendiz y ves todo lo suyo — perfil, fase, hábitos
+            personalizados con su horario y cuota, rocas, puntos, asistencia. Un endpoint de
+            agregación por aprendiz.
+          </p>
+          <p><strong>Por qué:</strong> es exactamente lo que pediste, es una consulta acotada por clave (rápida por construcción), y es el dataset que ML/IA va a necesitar después.</p>
+        </div>
+        <div class="option">
+          <span class="cost">Opción B</span>
+          <h4>Completar los 7 módulos</h4>
+          <p>
+            CRUD administrativo para <code>academy</code>, <code>calendar</code>, <code>chat</code>,
+            <code>notifications</code>, <code>phasecontracts</code>, <code>points</code> y
+            <code>rocks</code>.
+          </p>
+          <p><strong>Cuidado:</strong> es mucho más trabajo, y buena parte son pantallas que quizá nunca uses. Cobertura no es lo mismo que control.</p>
+        </div>
+        <div class="option">
+          <span class="cost">Opción C</span>
+          <h4>Las dos, en ese orden</h4>
+          <p>
+            Primero la vertical por aprendiz. Después, los módulos que el uso real demuestre que
+            hacen falta.
+          </p>
+          <p><strong>Ventaja:</strong> el orden lo decide el uso, no una lista. Y cada módulo que agregues ya tiene las tres reglas de rendimiento fijadas.</p>
+        </div>
+      </div>
+      <div class="callout warn">
+        <p>
+          <strong>Un requisito que atraviesa las tres:</strong> el panel administrativo es
+          precisamente lo que <em>no</em> puede quedar detrás de la autenticación abierta que
+          señala la auditoría. Un endpoint que lista todos los aprendices con sus datos personales,
+          alcanzable con un encabezado <code>X-Actor-Id</code> inventado, es una fuga de datos
+          completa. <strong>Cerrar auth es prerrequisito de esta parte, no un paralelo.</strong>
+        </p>
+      </div>
+    </section>
+
+    <section id="rnf">
+      <h3>Cómo queda cada RNF</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>RNF</th><th>Horarios</th><th>Panel</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Concurrencia</strong></td>
+              <td>Sin cambio. La escritura es una fila por aprendiz y hábito, con clave primaria compuesta: no hay contención.</td>
+              <td>Es donde está el riesgo. Se controla con paginación y proyecciones, no con más máquinas.</td>
+            </tr>
+            <tr>
+              <td><strong>Disponibilidad</strong></td>
+              <td>Mejora: hoy hay un camino que probablemente devuelve 500.</td>
+              <td>Requiere timeout propio para que un reporte no arrastre al camino del aprendiz.</td>
+            </tr>
+            <tr>
+              <td><strong>Interoperabilidad</strong></td>
+              <td>El <code>GET</code> nuevo es aditivo; el <code>PATCH</code> no cambia.</td>
+              <td>Mismo <code>/api/v1</code>, mismo OpenAPI. El panel se tipa desde el contrato.</td>
+            </tr>
+            <tr>
+              <td><strong>Velocidad</strong></td>
+              <td>Una lectura más por hábito al armar el día; candidata directa a caché en proceso.</td>
+              <td>Consulta por clave si vas por la Opción A. Los listados globales son los que hay que vigilar.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="ml">
+      <h3>Lo que esto le deja servido a ML e IA</h3>
+      <p class="lede">Lo mencionaste como lo que viene después. Vale decir qué de estas dos decisiones lo habilita y qué lo arruinaría.</p>
+      <ul class="plain">
+        <li><strong><code>historial_cambios_horario</code> ya es append-only.</strong> Cada cambio queda con su fecha. Eso es una serie temporal de comportamiento real —cuándo una persona reacomoda su día, qué hábito mueve primero, en qué semana del programa— que es exactamente lo que un modelo de adherencia necesita. <strong>No lo conviertas nunca en una tabla que se sobreescribe.</strong></li>
+        <li><strong>La vertical por aprendiz de la Opción A es el vector de características.</strong> Construirla para el panel te deja armado el conjunto de datos, sin un trabajo aparte.</li>
+        <li><strong>Los recordatorios son la palanca.</strong> Un modelo que predice adherencia sin ninguna acción que ejecutar no sirve de nada. El recordatorio configurable es el mecanismo por el que una predicción se convierte en algo que le pasa al aprendiz.</li>
+        <li><strong>La IA sigue apagada.</strong> <code>spring.ai.model.chat</code> y <code>embedding</code> están en <code>none</code> y los adaptadores activos son <code>NoOp</code>. Eso está bien hoy, pero significa que <em>todavía no se probó ni una vez contra un proveedor real</em>. Cuando llegue el momento, esa es la primera cosa a verificar, no la última.</li>
+      </ul>
+    </section>
+
+    <section id="decision">
+      <h3>Decidido el 31 de agosto</h3>
+      <p class="lede">Esta sección era la de preguntas. Quedaron contestadas todas.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Pregunta</th><th>Respuesta del dueño del proyecto</th></tr></thead>
+          <tbody>
+            <tr><td>¿Arranco por los dos defectos de la Parte A?</td><td><strong>Sí.</strong> En curso, con su prueba de integración.</td></tr>
+            <tr><td>Parte B: ¿opción A, B o C?</td><td><strong>Opción C</strong> — la vertical por aprendiz primero, los módulos que falten después.</td></tr>
+            <tr><td>¿El backend está desplegado?</td><td><strong>No.</strong> Solo local, en desarrollo. Postgres y Redis en Docker.</td></tr>
+            <tr><td>¿Cuándo se cierra auth?</td><td>Después de terminar los endpoints. La decisión es terminar el backend completo antes de tocar el frontend.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Lo único que quedó sin decidir es <strong>si los recordatorios de hábito entran ahora o después</strong>.
+        Es la única pieza genuinamente nueva de la Parte A y es la que toca <code>notifications</code>;
+        el resto es terminar lo que ya está a medias.
+      </p>
+      <div class="callout warn">
+        <p>
+          <strong>Una condición que sobrevive a la respuesta “no está desplegado”:</strong> el panel
+          administrativo lista aprendices con sus datos personales. El día que exista cualquier
+          entorno alcanzable —aunque sea de pruebas— esos endpoints no pueden seguir detrás de una
+          API que acepta un <code>X-Actor-Id</code> inventado. Cerrar auth deja de ser una fase del
+          plan y pasa a ser prerrequisito del primer despliegue.
+        </p>
+      </div>
+    </section>
+
+    <footer>
+      Verificado contra el código en el commit d8220fa · rama feature/migracion-catalogo-y-audioterapia<br>
+      Parte A leída en PreferenciaHorarioService, RegistroService, TracksDelDiaProyeccionService y V1__baseline_renaser.sql<br>
+      Parte B medida sobre los 15 controllers con prefijo /api/v1/admin<br>
+      Documento hermano: la auditoría del mismo día
+    </footer>
+  </main>
+</div>

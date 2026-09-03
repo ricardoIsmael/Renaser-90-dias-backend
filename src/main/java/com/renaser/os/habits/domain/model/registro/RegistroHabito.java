@@ -46,9 +46,18 @@ public final class RegistroHabito {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    /** Generado por el scheduler nocturno (o al activar el programa) — siempre PENDIENTE, 0 puntos. */
-    public static RegistroHabito generar(UserId participanteId, HabitoId habitoId, LocalDate fechaEjecucion,
-                                          int diaPrograma, TipoDia tipoDia, boolean esOpcional, Instant ahora) {
+    /**
+     * Generado por el scheduler nocturno (o al activar el programa) — siempre PENDIENTE, 0 puntos.
+     *
+     * <p>El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code RegistroService}). Asi
+     * {@code generar} es referencialmente transparente y un test puede fijar el id que espera,
+     * en vez de tener que caer a {@link #rehydrate} para lograrlo.
+     */
+    public static RegistroHabito generar(RegistroHabitoId id, UserId participanteId, HabitoId habitoId,
+                                          LocalDate fechaEjecucion, int diaPrograma, TipoDia tipoDia,
+                                          boolean esOpcional, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Objects.requireNonNull(habitoId, "habitoId es obligatorio");
         Objects.requireNonNull(fechaEjecucion, "fechaEjecucion es obligatoria");
@@ -56,7 +65,7 @@ public final class RegistroHabito {
         if (diaPrograma < 0 || diaPrograma > 90) {
             throw new IllegalArgumentException("diaPrograma fuera de rango 0..90: " + diaPrograma);
         }
-        return new RegistroHabito(RegistroHabitoId.newId(), participanteId, habitoId, fechaEjecucion, diaPrograma,
+        return new RegistroHabito(id, participanteId, habitoId, fechaEjecucion, diaPrograma,
                 tipoDia, esOpcional, EstadoRegistro.PENDIENTE, 0, null, null, null, null, ahora, ahora);
     }
 

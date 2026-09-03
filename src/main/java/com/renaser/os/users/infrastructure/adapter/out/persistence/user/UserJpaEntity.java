@@ -43,6 +43,7 @@ public class UserJpaEntity {
 
     private String nombreCompleto;
 
+    /** `usuarios.avatar_url` — URL PERMANENTE del objeto publico, nunca una prefirmada (E-57). */
     private String avatarUrl;
 
     private String bio;

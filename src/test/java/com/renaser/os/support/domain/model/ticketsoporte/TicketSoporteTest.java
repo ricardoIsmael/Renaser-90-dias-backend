@@ -14,13 +14,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class TicketSoporteTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    private static final TicketSoporteId ID = TicketSoporteId.of(
+            UUID.fromString("22222222-2222-2222-2222-222222222222"));
 
     private static UserId nuevoUsuario() {
         return UserId.of(UUID.randomUUID());
     }
 
     private static TicketSoporte ticketAbierto() {
-        return TicketSoporte.abrir(nuevoUsuario(), CategoriaSoporte.TECNICO, "La app se cierra",
+        return TicketSoporte.abrir(ID, nuevoUsuario(), CategoriaSoporte.TECNICO, "La app se cierra",
                 "Se cierra sola al abrir el modulo de habitos", null, null, CLOCK);
     }
 
@@ -29,6 +31,7 @@ class TicketSoporteTest {
     void abrirNaceAbierto() {
         TicketSoporte ticket = ticketAbierto();
 
+        assertThat(ticket.id()).isEqualTo(ID);
         assertThat(ticket.estado()).isEqualTo(EstadoTicketSoporte.ABIERTO);
         assertThat(ticket.notasAdmin()).isNull();
         assertThat(ticket.resueltoEn()).isNull();
@@ -40,8 +43,8 @@ class TicketSoporteTest {
     void mensajeExigeMinimoDiezCaracteres() {
         UserId usuario = nuevoUsuario();
 
-        assertThatThrownBy(() -> TicketSoporte.abrir(usuario, CategoriaSoporte.OTRO, "Asunto", "corto", null, null,
-                CLOCK)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> TicketSoporte.abrir(ID, usuario, CategoriaSoporte.OTRO, "Asunto", "corto", null,
+                null, CLOCK)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -49,7 +52,7 @@ class TicketSoporteTest {
     void asuntoEsObligatorio() {
         UserId usuario = nuevoUsuario();
 
-        assertThatThrownBy(() -> TicketSoporte.abrir(usuario, CategoriaSoporte.OTRO, "   ",
+        assertThatThrownBy(() -> TicketSoporte.abrir(ID, usuario, CategoriaSoporte.OTRO, "   ",
                 "Un mensaje con longitud suficiente", null, null, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
@@ -59,7 +62,7 @@ class TicketSoporteTest {
     void categoriaEsObligatoriaEnElDominio() {
         UserId usuario = nuevoUsuario();
 
-        assertThatThrownBy(() -> TicketSoporte.abrir(usuario, null, "Asunto",
+        assertThatThrownBy(() -> TicketSoporte.abrir(ID, usuario, null, "Asunto",
                 "Un mensaje con longitud suficiente", null, null, CLOCK)).isInstanceOf(NullPointerException.class);
     }
 
@@ -100,7 +103,7 @@ class TicketSoporteTest {
     @Test
     @DisplayName("rehydrate() reconstruye un ticket ya existente tal cual (para el adaptador de persistencia)")
     void rehydrateReconstruyeSinValidar() {
-        TicketSoporteId id = TicketSoporteId.newId();
+        TicketSoporteId id = TicketSoporteId.of(UUID.randomUUID());
         UserId usuario = nuevoUsuario();
         AdjuntoSoporte adjunto = new AdjuntoSoporte("renaser-files", "soporte/x/1.png");
 

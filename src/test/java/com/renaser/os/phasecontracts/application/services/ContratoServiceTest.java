@@ -10,9 +10,11 @@ import com.renaser.os.phasecontracts.application.ports.out.contrato.ConsultarPro
 import com.renaser.os.phasecontracts.application.ports.out.contrato.LoadContratoPort;
 import com.renaser.os.phasecontracts.application.ports.out.contrato.SaveContratoPort;
 import com.renaser.os.phasecontracts.domain.model.contrato.ContratoFase;
+import com.renaser.os.phasecontracts.domain.model.contrato.ContratoFaseId;
 import com.renaser.os.phasecontracts.domain.model.contrato.FasePrograma;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,6 +45,8 @@ import static org.mockito.Mockito.when;
 class ContratoServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, firmar() ya no sortea el ContratoFaseId. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadContratoPort loadContratoPort;
@@ -51,14 +56,18 @@ class ContratoServiceTest {
     private ConsultarProgresoParticipantePort progresoPort;
     @Mock
     private AlmacenamientoPort almacenamientoPort;
+    @Mock
+    private IdGenerator idGenerator;
 
     private ContratoService service;
     private UserId participanteId;
 
     @BeforeEach
     void setUp() {
-        service = new ContratoService(loadContratoPort, saveContratoPort, progresoPort, almacenamientoPort, CLOCK);
+        service = new ContratoService(loadContratoPort, saveContratoPort, progresoPort, almacenamientoPort,
+                CLOCK, idGenerator);
         participanteId = UserId.of(UUID.randomUUID());
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
     }
 
     private void progreso(int diaPrograma, RolParticipante rol, boolean suspendido) {
@@ -86,7 +95,7 @@ class ContratoServiceTest {
     @DisplayName("firmar(): idempotente -- si ya existe, devuelve el original y NUNCA sobreescribe")
     void firmarEsIdempotente() {
         progreso(20, RolParticipante.TRAINEE, false);
-        ContratoFase existente = ContratoFase.firmar(participanteId, 20, CLOCK);
+        ContratoFase existente = ContratoFase.firmar(ContratoFaseId.of(UUID.randomUUID()), participanteId, 20, CLOCK);
         when(loadContratoPort.porParticipanteYFase(participanteId, FasePrograma.FASE_2_DESARROLLO))
                 .thenReturn(Optional.of(existente));
 
@@ -166,7 +175,8 @@ class ContratoServiceTest {
     void consultarPendienteYaFirmada() {
         progreso(20, RolParticipante.TRAINEE, false);
         when(loadContratoPort.porParticipanteYFase(participanteId, FasePrograma.FASE_2_DESARROLLO))
-                .thenReturn(Optional.of(ContratoFase.firmar(participanteId, 20, CLOCK)));
+                .thenReturn(Optional.of(ContratoFase.firmar(ContratoFaseId.of(UUID.randomUUID()),
+                        participanteId, 20, CLOCK)));
 
         assertThat(service.consultarPendiente(participanteId).pendiente()).isFalse();
     }
@@ -186,7 +196,7 @@ class ContratoServiceTest {
     @DisplayName("consultarDeParticipante(): mapea cada contrato con su URL de lectura prefirmada")
     void consultarDeParticipanteMapeaUrlDeLectura() {
         progreso(70, RolParticipante.TRAINEE, false);
-        ContratoFase c1 = ContratoFase.firmar(participanteId, 20, CLOCK);
+        ContratoFase c1 = ContratoFase.firmar(ContratoFaseId.of(UUID.randomUUID()), participanteId, 20, CLOCK);
         when(loadContratoPort.todosDeParticipante(participanteId)).thenReturn(List.of(c1));
         URI url = URI.create("https://s3.example/firmas/x/fase_2.svg?sig=abc");
         when(almacenamientoPort.firmarLectura(anyString(), any(Duration.class))).thenReturn(url);
@@ -246,7 +256,7 @@ class ContratoServiceTest {
     @Test
     @DisplayName("estaFirmado(): pasa directo al puerto de lectura, sin exigir rol/estado del actor")
     void estaFirmadoConsultaElPuertoDirecto() {
-        ContratoFase firmado = ContratoFase.firmar(participanteId, 35, CLOCK);
+        ContratoFase firmado = ContratoFase.firmar(ContratoFaseId.of(UUID.randomUUID()), participanteId, 35, CLOCK);
         when(loadContratoPort.porParticipanteYFase(participanteId, FasePrograma.FASE_3_GUERRERO_ALQUIMISTA))
                 .thenReturn(Optional.of(firmado));
 

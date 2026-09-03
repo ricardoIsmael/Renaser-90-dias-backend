@@ -2,6 +2,7 @@ package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -13,7 +14,6 @@ import com.renaser.os.users.application.ports.in.accountrequest.RejectAccountReq
 import com.renaser.os.users.application.ports.out.accountrequest.DeleteAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SaveAccountRequestPort;
-import com.renaser.os.users.application.ports.out.accountrequest.SupabaseAdminAuthPort;
 import com.renaser.os.users.application.ports.out.autenticacion.SaveCredencialPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
 import com.renaser.os.users.application.ports.out.user.DeleteUserPort;
@@ -39,6 +39,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -55,6 +56,9 @@ import static org.mockito.Mockito.when;
 class AccountRequestServiceTest {
 
     private static final Clock CLOCK = FixedClock.at(Instant.parse("2026-08-25T10:00:00Z"));
+    /** Identidades fijas: con el id entrando por el puerto IdGenerator, submit() ya no las sortea. */
+    private static final UUID ID_USUARIO_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
+    private static final UUID ID_SOLICITUD_GENERADA = UUID.fromString("00000000-0000-4000-8000-000000000002");
 
     @Mock
     private LoadAccountRequestPort loadAccountRequestPort;
@@ -73,26 +77,36 @@ class AccountRequestServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
-    private SupabaseAdminAuthPort supabaseAdminAuthPort;
-    @Mock
     private SaveParticipacionProgramaPort saveParticipacionProgramaPort;
     @Mock
     private com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort tokenVerificacionEmailPort;
     @Mock
+    private com.renaser.os.users.application.ports.out.autenticacion.LimitarSolicitudesResetPort limitarSolicitudesResetPort;
+    @Mock
+    private com.renaser.os.users.application.ports.out.autenticacion.SaveIdentidadExternaPort saveIdentidadExternaPort;
+    @Mock
     private org.springframework.context.ApplicationEventPublisher events;
+    @Mock
+    private IdGenerator idGenerator;
 
     private AccountRequestService service;
 
     @BeforeEach
     void setUp() {
         service = new AccountRequestService(loadAccountRequestPort, saveAccountRequestPort, deleteAccountRequestPort,
-                loadUserPort, saveUserPort, deleteUserPort, saveCredencialPort, passwordEncoder,
-                supabaseAdminAuthPort, saveParticipacionProgramaPort, tokenVerificacionEmailPort,
-                new RequireActiveUserGuard(loadUserPort), new RequireAdminGuard(loadUserPort), events, CLOCK);
+                loadUserPort, saveUserPort, deleteUserPort, saveCredencialPort, saveIdentidadExternaPort,
+                passwordEncoder, saveParticipacionProgramaPort, tokenVerificacionEmailPort,
+                limitarSolicitudesResetPort, new RequireActiveUserGuard(loadUserPort),
+                new RequireAdminGuard(loadUserPort), events, CLOCK, idGenerator);
         lenient().when(saveAccountRequestPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(passwordEncoder.encode(any())).thenReturn("hash-de-prueba");
+        // C-16: registrarIntento (Redis) reemplazo el COUNT de Postgres para el limite por IP;
+        // por defecto "queda margen" para no forzar a cada test existente a stubearlo.
+        lenient().when(limitarSolicitudesResetPort.registrarIntento(any(), any(), anyInt())).thenReturn(true);
+        // submit() pide dos ids al puerto: el del usuario y el de la solicitud, en ese orden.
+        lenient().when(idGenerator.newId()).thenReturn(ID_USUARIO_GENERADO, ID_SOLICITUD_GENERADA);
     }
 
     private static UserId id() {
@@ -111,26 +125,27 @@ class AccountRequestServiceTest {
     }
 
     private static AccountRequest pendiente() {
-        return AccountRequest.submit(UserId.of(UUID.randomUUID()), new Email("solicitante@renaser.dev"),
-                "Solicitante", "555-0000", "Lima", null, CLOCK);
+        return AccountRequest.submit(AccountRequestId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                new Email("solicitante@renaser.dev"),
+                "Solicitante", "555-0000", "Lima", null, null, CLOCK);
     }
 
     /** El usuario tal como queda tras {@code submit()}: ya existe, INACTIVE, esperando aprobar. */
     private static User pendienteDeAprobacion(AccountRequest request) {
-        return User.registrarPendienteAprobacion(request.supabaseUserId(), request.email(), request.fullName());
+        return User.registrarPendienteAprobacion(request.usuarioId(), request.email(), request.fullName());
     }
 
     /** Stub comun a los tests de {@code approve()}: el usuario que la solicitud ya creo. */
     private void stubUsuarioPendiente(AccountRequest request) {
-        lenient().when(loadUserPort.byId(request.supabaseUserId()))
+        lenient().when(loadUserPort.byId(request.usuarioId()))
                 .thenReturn(Optional.of(pendienteDeAprobacion(request)));
     }
 
     private static com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand
     comandoDeAlta(String verificationToken) {
-        return new com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand(
-                "solicitante@renaser.dev", "Solicitante", "555-0000", "Lima", verificationToken,
-                "una-contrasena-de-12-o-mas", "127.0.0.1");
+        return com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand
+                .porFormulario("solicitante@renaser.dev", "Solicitante", "555-0000", "Lima", verificationToken,
+                        "una-contrasena-de-12-o-mas", "127.0.0.1");
     }
 
     @Test
@@ -191,6 +206,113 @@ class AccountRequestServiceTest {
     }
 
     @Test
+    @DisplayName("C-16: si el limite de solicitudes por IP ya se agoto (Redis), submit no consume "
+            + "el token de verificacion ni llega a guardar nada")
+    void submitRechazaPorLimiteDeIpSinConsumirElToken() {
+        when(limitarSolicitudesResetPort.registrarIntento(eq("account-request:ip:127.0.0.1"), any(), eq(60)))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> service.submit(comandoDeAlta("token-valido")))
+                .isInstanceOf(com.renaser.os.shared.domain.RateLimitExceededException.class);
+
+        verify(tokenVerificacionEmailPort, never()).consumir(any());
+        verify(saveUserPort, never()).save(any());
+        verify(saveAccountRequestPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("C-16: si el correo ya tiene una cuenta, submit rechaza ANTES de consumir el token "
+            + "de verificacion — antes lo consumia igual y despues chocaba con el UNIQUE de Postgres")
+    void submitRechazaUnCorreoConCuentaExistenteSinConsumirElToken() {
+        when(loadUserPort.byEmail(new Email("solicitante@renaser.dev")))
+                .thenReturn(Optional.of(activo(id(), UserRole.TRAINEE)));
+
+        assertThatThrownBy(() -> service.submit(comandoDeAlta("token-valido")))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(tokenVerificacionEmailPort, never()).consumir(any());
+        verify(saveUserPort, never()).save(any());
+        verify(saveAccountRequestPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("C-16: si el correo ya tiene una solicitud (pendiente o decidida), submit rechaza "
+            + "ANTES de consumir el token de verificacion")
+    void submitRechazaUnCorreoConSolicitudExistenteSinConsumirElToken() {
+        when(loadAccountRequestPort.existePorEmail(new Email("solicitante@renaser.dev"))).thenReturn(true);
+
+        assertThatThrownBy(() -> service.submit(comandoDeAlta("token-valido")))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(tokenVerificacionEmailPort, never()).consumir(any());
+        verify(saveUserPort, never()).save(any());
+    }
+
+    /** Una solicitud abierta por Google, tal cual la deja {@code AutenticacionSocialService}. */
+    private static AccountRequest pendienteSocial() {
+        return AccountRequest.submit(AccountRequestId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                new Email("social@renaser.dev"),
+                "Sofia Social", "555-0001", "Lima", null,
+                new com.renaser.os.users.domain.model.accountrequest.OrigenSocial(
+                        com.renaser.os.users.domain.model.identidadexterna.ProveedorIdentidad.GOOGLE,
+                        "google-sub-aprobado"),
+                CLOCK);
+    }
+
+    @Test
+    @DisplayName("A-7: aprobar una solicitud de origen social escribe la IdentidadExterna, que es "
+            + "lo que le permite a esa persona volver a entrar por el mismo proveedor")
+    void approveDeUnaSolicitudSocialVinculaLaIdentidadExterna() {
+        AccountRequest request = pendienteSocial();
+        UserId actorId = id();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        stubUsuarioPendiente(request);
+
+        service.approve(new ApproveAccountRequestCommand(request.id(), actorId));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.renaser.os.users.domain.model.identidadexterna.IdentidadExterna.class);
+        verify(saveIdentidadExternaPort).guardar(captor.capture());
+        assertThat(captor.getValue().proveedor())
+                .isEqualTo(com.renaser.os.users.domain.model.identidadexterna.ProveedorIdentidad.GOOGLE);
+        assertThat(captor.getValue().sujetoProveedor()).isEqualTo("google-sub-aprobado");
+        assertThat(captor.getValue().usuarioId()).isEqualTo(request.usuarioId());
+    }
+
+    @Test
+    @DisplayName("A-7: un alta por formulario no vincula ninguna identidad externa")
+    void approveDeUnaSolicitudPorFormularioNoVinculaNada() {
+        AccountRequest request = pendiente();
+        UserId actorId = id();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        stubUsuarioPendiente(request);
+
+        service.approve(new ApproveAccountRequestCommand(request.id(), actorId));
+
+        verify(saveIdentidadExternaPort, never()).guardar(any());
+    }
+
+    @Test
+    @DisplayName("A-7: submit propaga el origen social del comando a la solicitud que persiste")
+    void submitPersisteElOrigenSocialDelComando() {
+        when(tokenVerificacionEmailPort.consumir("token-social")).thenReturn(Optional.of("social@renaser.dev"));
+
+        service.submit(com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase
+                .SubmitAccountRequestCommand.porProveedorSocial("social@renaser.dev", "Sofia Social", "555-0001",
+                        "Lima", "token-social", "127.0.0.1",
+                        com.renaser.os.users.domain.model.identidadexterna.ProveedorIdentidad.GOOGLE,
+                        "google-sub-submit"));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(AccountRequest.class);
+        verify(saveAccountRequestPort).save(captor.capture());
+        assertThat(captor.getValue().origenSocial().sujetoProveedor()).isEqualTo("google-sub-submit");
+        // Sin contrasena: esta cuenta entra por el proveedor, no por clave propia.
+        verify(saveCredencialPort, never()).guardar(any(), any());
+    }
+
+    @Test
     @DisplayName("un ADMIN SUSPENDIDO no puede aprobar una solicitud de alta (no crea el usuario)")
     void approveRechazaActorSuspendido() {
         AccountRequest request = pendiente();
@@ -235,7 +357,7 @@ class AccountRequestServiceTest {
 
         var saveUserCaptor = org.mockito.ArgumentCaptor.forClass(User.class);
         verify(saveUserPort).save(saveUserCaptor.capture());
-        assertThat(saveUserCaptor.getValue().id()).isEqualTo(request.supabaseUserId());
+        assertThat(saveUserCaptor.getValue().id()).isEqualTo(request.usuarioId());
         assertThat(saveUserCaptor.getValue().status()).isEqualTo(UserStatus.ACTIVE);
         verify(saveCredencialPort, never()).guardar(any(), any());
     }
@@ -248,8 +370,8 @@ class AccountRequestServiceTest {
         UserId actorId = id();
         when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
-        when(loadUserPort.byId(request.supabaseUserId()))
-                .thenReturn(Optional.of(activo(request.supabaseUserId(), UserRole.TRAINEE)));
+        when(loadUserPort.byId(request.usuarioId()))
+                .thenReturn(Optional.of(activo(request.usuarioId(), UserRole.TRAINEE)));
 
         assertThatThrownBy(() -> service.approve(new ApproveAccountRequestCommand(request.id(), actorId)))
                 .isInstanceOf(IllegalStateException.class);
@@ -290,7 +412,6 @@ class AccountRequestServiceTest {
                 .isInstanceOf(NotAuthorizedException.class);
 
         verify(saveAccountRequestPort, never()).save(any());
-        verify(supabaseAdminAuthPort, never()).deleteUser(any());
         verify(deleteUserPort, never()).deleteById(any());
     }
 
@@ -305,7 +426,7 @@ class AccountRequestServiceTest {
 
         service.reject(new RejectAccountRequestCommand(request.id(), actorId, "motivo"));
 
-        verify(deleteUserPort).deleteById(request.supabaseUserId());
+        verify(deleteUserPort).deleteById(request.usuarioId());
     }
 
     // ─── panel admin de solicitudes de cuenta (gap #9) ─────────────────────
@@ -337,7 +458,7 @@ class AccountRequestServiceTest {
     @DisplayName("eliminar: una solicitud inexistente da 404 sin importar si el actor es valido")
     void eliminarRechazaSolicitudInexistenteAntesDeChequearElActor() {
         UserId actorId = id();
-        AccountRequestId requestId = AccountRequestId.newId();
+        AccountRequestId requestId = AccountRequestId.of(UUID.randomUUID());
         when(loadAccountRequestPort.byId(requestId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.eliminar(new DeleteAccountRequestCommand(actorId, requestId)))
@@ -376,7 +497,7 @@ class AccountRequestServiceTest {
     @Test
     @DisplayName("consultar: PUBLIC_ENDPOINT, sin actor — una solicitud inexistente da 404")
     void consultarRechazaSolicitudInexistente() {
-        AccountRequestId requestId = AccountRequestId.newId();
+        AccountRequestId requestId = AccountRequestId.of(UUID.randomUUID());
         when(loadAccountRequestPort.byId(requestId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.consultar(requestId)).isInstanceOf(java.util.NoSuchElementException.class);

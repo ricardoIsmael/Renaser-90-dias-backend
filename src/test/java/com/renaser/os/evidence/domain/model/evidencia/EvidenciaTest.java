@@ -17,6 +17,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class EvidenciaTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-25T12:00:00Z"));
+    /** El id ya no lo sortea el agregado: entra por parametro, lo arma el caso de uso (IdGenerator). */
+    private static final EvidenciaId ID = EvidenciaId.of(
+            UUID.fromString("11111111-1111-1111-1111-111111111111"));
 
     private static UserId participante() {
         return UserId.of(UUID.randomUUID());
@@ -31,7 +34,7 @@ class EvidenciaTest {
     }
 
     private Evidencia evidenciaTexto() {
-        return Evidencia.registrar(participante(), destinoRoca(), TipoEvidencia.TEXTO, null, null, "hecho", null,
+        return Evidencia.registrar(ID, participante(), destinoRoca(), TipoEvidencia.TEXTO, null, null, "hecho", null,
                 null, null, true, CLOCK.now(), CLOCK);
     }
 
@@ -48,7 +51,7 @@ class EvidenciaTest {
     @Test
     @DisplayName("TEXTO sin contenidoTexto es rechazado")
     void textoSinContenidoRechazado() {
-        assertThatThrownBy(() -> Evidencia.registrar(participante(), destinoHabito(), TipoEvidencia.TEXTO, null,
+        assertThatThrownBy(() -> Evidencia.registrar(ID, participante(), destinoHabito(), TipoEvidencia.TEXTO, null,
                 null, null, null, null, null, false, CLOCK.now(), CLOCK))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("contenidoTexto");
@@ -57,7 +60,7 @@ class EvidenciaTest {
     @Test
     @DisplayName("FOTO sin bucket/rutaStorage es rechazada")
     void fotoSinBucketRechazada() {
-        assertThatThrownBy(() -> Evidencia.registrar(participante(), destinoHabito(), TipoEvidencia.FOTO, null,
+        assertThatThrownBy(() -> Evidencia.registrar(ID, participante(), destinoHabito(), TipoEvidencia.FOTO, null,
                 null, null, Instant.now(), null, null, false, CLOCK.now(), CLOCK))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("bucket");
@@ -65,7 +68,7 @@ class EvidenciaTest {
 
     @Test
     void fotoConBucketYRutaEsValida() {
-        Evidencia e = Evidencia.registrar(participante(), destinoHabito(), TipoEvidencia.FOTO, "bucket", "ruta",
+        Evidencia e = Evidencia.registrar(ID, participante(), destinoHabito(), TipoEvidencia.FOTO, "bucket", "ruta",
                 null, Instant.now(), null, null, false, CLOCK.now(), CLOCK);
         assertThat(e.tipo()).isEqualTo(TipoEvidencia.FOTO);
         assertThat(e.estadoValidacion()).isEqualTo(EstadoValidacion.PENDIENTE);
@@ -75,21 +78,21 @@ class EvidenciaTest {
 
     @Test
     void gpsSoloLatitudEsRechazado() {
-        assertThatThrownBy(() -> Evidencia.registrar(participante(), destinoHabito(), TipoEvidencia.TEXTO, null,
+        assertThatThrownBy(() -> Evidencia.registrar(ID, participante(), destinoHabito(), TipoEvidencia.TEXTO, null,
                 null, "hecho", null, -12.05, null, false, CLOCK.now(), CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void gpsFueraDeRangoEsRechazado() {
-        assertThatThrownBy(() -> Evidencia.registrar(participante(), destinoHabito(), TipoEvidencia.TEXTO, null,
+        assertThatThrownBy(() -> Evidencia.registrar(ID, participante(), destinoHabito(), TipoEvidencia.TEXTO, null,
                 null, "hecho", null, 200.0, 0.0, false, CLOCK.now(), CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void gpsCompletoYValidoEsAceptado() {
-        Evidencia e = Evidencia.registrar(participante(), destinoHabito(), TipoEvidencia.TEXTO, null, null, "hecho",
+        Evidencia e = Evidencia.registrar(ID, participante(), destinoHabito(), TipoEvidencia.TEXTO, null, null, "hecho",
                 null, -12.05, -77.03, false, CLOCK.now(), CLOCK);
         assertThat(e.gpsLat()).isEqualTo(-12.05);
         assertThat(e.gpsLng()).isEqualTo(-77.03);
@@ -100,7 +103,7 @@ class EvidenciaTest {
     @Test
     @DisplayName("esPrincipal=true en un destino que no es RocaDiaria es rechazado")
     void esPrincipalSoloEnRocaRechazaOtroDestino() {
-        assertThatThrownBy(() -> Evidencia.registrar(participante(), destinoHabito(), TipoEvidencia.TEXTO, null,
+        assertThatThrownBy(() -> Evidencia.registrar(ID, participante(), destinoHabito(), TipoEvidencia.TEXTO, null,
                 null, "hecho", null, null, null, true, CLOCK.now(), CLOCK))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("esPrincipal");
@@ -241,9 +244,9 @@ class EvidenciaTest {
     @Test
     @DisplayName("anularVeredicto devuelve true y apaga penalizacionAplicada cuando la evidencia tenia una penalizacion")
     void anularVeredictoSenalaReversionDePenalizacionYLaApaga() {
-        Evidencia e = Evidencia.rehydrate(EvidenciaId.newId(), participante(), destinoHabito(), TipoEvidencia.TEXTO,
-                null, null, "hecho", null, CLOCK.now(), null, null, false, EstadoValidacion.RECHAZADA,
-                "rechazada por IA", 3, true, false, CLOCK.now());
+        Evidencia e = Evidencia.rehydrate(EvidenciaId.of(UUID.randomUUID()), participante(), destinoHabito(),
+                TipoEvidencia.TEXTO, null, null, "hecho", null, CLOCK.now(), null, null, false,
+                EstadoValidacion.RECHAZADA, "rechazada por IA", 3, true, false, CLOCK.now());
 
         boolean requiereReversion = e.anularVeredicto("admin revierte el veredicto");
 

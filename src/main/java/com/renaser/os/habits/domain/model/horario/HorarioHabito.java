@@ -35,8 +35,13 @@ public final class HorarioHabito {
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
-    public static HorarioHabito crear(HabitoId habitoId, int diaInicio, Integer diaFin, TipoDia tipoDia,
-                                       LocalTime horaDisparo, LocalTime horaLimite, Instant ahora) {
+    /**
+     * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
+     * {@code IdGenerator} que inyecta el caso de uso ({@code HorarioHabitoAdminService.crear}).
+     */
+    public static HorarioHabito crear(HorarioHabitoId id, HabitoId habitoId, int diaInicio, Integer diaFin,
+                                       TipoDia tipoDia, LocalTime horaDisparo, LocalTime horaLimite, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(habitoId, "habitoId es obligatorio");
         Objects.requireNonNull(tipoDia, "tipoDia es obligatorio");
         if (diaInicio < 1 || diaInicio > 90) {
@@ -45,7 +50,8 @@ public final class HorarioHabito {
         if (diaFin != null && diaFin < diaInicio) {
             throw new IllegalArgumentException("diaFin no puede ser anterior a diaInicio");
         }
-        return new HorarioHabito(HorarioHabitoId.newId(), habitoId, diaInicio, diaFin, tipoDia, horaDisparo,
+        requireHorasCoherentes(horaDisparo, horaLimite);
+        return new HorarioHabito(id, habitoId, diaInicio, diaFin, tipoDia, horaDisparo,
                 horaLimite, ahora, ahora);
     }
 
@@ -64,9 +70,24 @@ public final class HorarioHabito {
     }
 
     public void actualizarHoras(LocalTime horaDisparo, LocalTime horaLimite, Instant ahora) {
+        requireHorasCoherentes(horaDisparo, horaLimite);
         this.horaDisparo = horaDisparo;
         this.horaLimite = horaLimite;
         this.actualizadoEn = ahora;
+    }
+
+    /**
+     * Invariante del agregado, no solo una anotacion de DTO (CLAUDE.MD §5.3, encargo
+     * "habits-personal-con-horario"): si las dos horas vienen cargadas, la de limite tiene
+     * que ser posterior a la de disparo — si no, el habito nace vencido y nunca se puede
+     * completar. {@code horaDisparo} nulo (horario "todo el dia") sigue permitido, igual que
+     * hoy: esto no endurece el caso ya usado por el catalogo admin, solo cierra el caso
+     * absurdo de limite &lt;= disparo cuando ambas vienen cargadas.
+     */
+    private static void requireHorasCoherentes(LocalTime horaDisparo, LocalTime horaLimite) {
+        if (horaDisparo != null && horaLimite != null && !horaLimite.isAfter(horaDisparo)) {
+            throw new IllegalArgumentException("horaLimite debe ser posterior a horaDisparo");
+        }
     }
 
     /** Edicion administrativa del rango de dias/tipo de dia (panel admin, hueco #11). */

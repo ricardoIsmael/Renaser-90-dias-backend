@@ -15,10 +15,12 @@ import com.renaser.os.habits.application.ports.out.santuario.LoadSesionBloqueoPo
 import com.renaser.os.habits.application.ports.out.santuario.SaveSesionBloqueoPort;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
+import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
+import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.habits.domain.model.santuario.MotivoSalidaBloqueo;
 import com.renaser.os.habits.domain.model.santuario.SesionBloqueo;
 import com.renaser.os.points.api.AjustarPuntosPort;
@@ -84,13 +86,13 @@ class SantuarioServiceTest {
     }
 
     private static Habito habitoBloqueo() {
-        return Habito.crearDeSistema("Santuario", TipoHabito.BLOQUEO, "MENTE", ExigenciaEvidencia.OPCIONAL,
-                CLOCK.now());
+        return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Santuario", TipoHabito.BLOQUEO, "MENTE",
+                ExigenciaEvidencia.OPCIONAL, CLOCK.now());
     }
 
     private static RegistroHabito registroPendiente(UserId participanteId, Habito habito) {
-        return RegistroHabito.generar(participanteId, habito.id(), LocalDate.of(2026, 8, 24), 5, TipoDia.DISCIPLINA,
-                false, CLOCK.now());
+        return RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participanteId, habito.id(),
+                LocalDate.of(2026, 8, 24), 5, TipoDia.DISCIPLINA, false, CLOCK.now());
     }
 
     @Test
@@ -108,8 +110,8 @@ class SantuarioServiceTest {
     @Test
     void iniciarRechazaHabitoQueNoEsBloqueo() {
         UserId dueno = UserId.of(UUID.randomUUID());
-        Habito checkbox = Habito.crearDeSistema("Meditar", TipoHabito.CHECKBOX, "MENTE", ExigenciaEvidencia.OPCIONAL,
-                CLOCK.now());
+        Habito checkbox = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Meditar", TipoHabito.CHECKBOX, "MENTE",
+                ExigenciaEvidencia.OPCIONAL, CLOCK.now());
         RegistroHabito registro = registroPendiente(dueno, checkbox);
         when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(checkbox.id())).thenReturn(Optional.of(checkbox));

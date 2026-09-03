@@ -2,6 +2,7 @@ package com.renaser.os.habits.infrastructure.adapter.in.rest.desbloqueo;
 
 import com.renaser.os.habits.application.ports.in.desbloqueo.ConsultarDesbloqueosHabitoUseCase.ItemDesbloqueo;
 import com.renaser.os.habits.application.ports.in.desbloqueo.ConsultarDesbloqueosHabitoUseCase.PlanDesbloqueo;
+import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
 
 import java.time.Instant;
 import java.util.List;
@@ -18,6 +19,12 @@ public record HabitUnlockPlanResponse(boolean enabled, List<HabitUnlockItemRespo
 
         public static HabitUnlockItemResponse from(ItemDesbloqueo item) {
             return new HabitUnlockItemResponse(item.habitoId().value(), item.diaDesbloqueo(), item.elegidoEn());
+        }
+
+        /** Respuesta de {@code PUT .../{habitId}} — la fila recien asegurada por {@code ElegirHabitoUseCase}. */
+        public static HabitUnlockItemResponse from(DesbloqueoHabito desbloqueo) {
+            return new HabitUnlockItemResponse(desbloqueo.habitoId().value(), desbloqueo.diaDesbloqueo(),
+                    desbloqueo.elegidoEn());
         }
     }
 }

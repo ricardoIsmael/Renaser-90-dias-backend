@@ -7,8 +7,16 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -20,8 +28,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import(TestcontainersConfiguration.class)
 class CodigoVerificacionEmailRedisAdapterTest {
 
+    /**
+     * Identico al prefijo privado {@code CodigoVerificacionEmailRedisAdapter.PREFIJO_INTENTOS}
+     * (mismo archivo, mismo paquete) — se duplica aca porque el campo es {@code private}, no
+     * package-private. Si ese literal cambia, este test hay que actualizarlo a mano.
+     */
+    private static final String PREFIJO_INTENTOS = "email-verification:intentos:";
+
     @Autowired
     private CodigoVerificacionEmailPort codigoVerificacionEmailPort;
+    @Autowired
+    private StringRedisTemplate redisTemplate;
 
     @Test
     void generarYVerificarConElCodigoCorrectoTieneExito() {
@@ -131,5 +148,85 @@ class CodigoVerificacionEmailRedisAdapterTest {
 
         assertThat(codigoVerificacionEmailPort.verificarCodigo("codigo8a@renaser.dev", codigoB, 5)).isFalse();
         assertThat(codigoVerificacionEmailPort.verificarCodigo("codigo8a@renaser.dev", codigoA, 5)).isTrue();
+    }
+
+    @Test
+    @DisplayName("C-8: el TTL de intentos se fija en el primer intento fallido, copiado del "
+            + "TTL restante del codigo, y NO se renueva en fallos posteriores")
+    void elTtlDeIntentosSeFijaUnaVezDesdeElCodigoYNoSeRenueva() throws InterruptedException {
+        String email = "codigo9@renaser.dev";
+        codigoVerificacionEmailPort.generarCodigo(email, Duration.ofSeconds(30));
+
+        codigoVerificacionEmailPort.verificarCodigo(email, "000000", 10);
+        Long ttlTrasPrimerFallo = redisTemplate.getExpire(claveIntentos(email), TimeUnit.MILLISECONDS);
+        assertThat(ttlTrasPrimerFallo).isPositive();
+
+        Thread.sleep(400);
+
+        codigoVerificacionEmailPort.verificarCodigo(email, "000000", 10);
+        Long ttlTrasSegundoFallo = redisTemplate.getExpire(claveIntentos(email), TimeUnit.MILLISECONDS);
+
+        // Debe haber seguido corriendo (bajado en los ~400ms dormidos), no haberse
+        // reiniciado al TTL completo del codigo.
+        assertThat(ttlTrasSegundoFallo).isLessThan(ttlTrasPrimerFallo);
+    }
+
+    @Test
+    @DisplayName("C-8: una clave de intentos envenenada (existe, sin TTL) se autorepara en el "
+            + "siguiente fallo mientras el codigo siga vigente")
+    void unaClaveDeIntentosEnvenenadaSinTtlSeAutoreparaEnElSiguienteFallo() {
+        String email = "codigo10@renaser.dev";
+        codigoVerificacionEmailPort.generarCodigo(email, Duration.ofSeconds(30));
+        // Simula el estado que dejaba el codigo viejo: la clave de intentos ya existe
+        // (como si llevara varios fallos contados) pero SIN TTL propio.
+        redisTemplate.opsForValue().set(claveIntentos(email), "3");
+        assertThat(redisTemplate.getExpire(claveIntentos(email))).isEqualTo(-1L);
+
+        codigoVerificacionEmailPort.verificarCodigo(email, "000000", 10);
+
+        assertThat(redisTemplate.getExpire(claveIntentos(email))).isGreaterThan(0L);
+    }
+
+    @Test
+    @DisplayName("el limite de intentos se respeta bajo fallos concurrentes (INCR + TTL "
+            + "atomicos via Lua)")
+    void elLimiteDeIntentosSeRespetaBajoConcurrencia() throws InterruptedException {
+        String email = "codigo11@renaser.dev";
+        String codigoReal = codigoVerificacionEmailPort.generarCodigo(email, Duration.ofSeconds(30));
+        int maxIntentos = 20;
+        int fallosConcurrentes = maxIntentos + 15;
+
+        ExecutorService pool = Executors.newFixedThreadPool(10);
+        List<Future<Boolean>> resultados;
+        try {
+            List<Callable<Boolean>> tareas = IntStream.range(0, fallosConcurrentes)
+                    .<Callable<Boolean>>mapToObj(i -> () ->
+                            codigoVerificacionEmailPort.verificarCodigo(email, "000000", maxIntentos))
+                    .toList();
+            resultados = pool.invokeAll(tareas, 30, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdown();
+        }
+
+        // Todos los intentos fueron con un codigo incorrecto, asi que ninguno tiene exito;
+        // lo que se demuestra es que el codigo real deja de servir apenas se llega al maximo
+        // de fallos, sin importar cuantos fallos concurrentes se dispararon de mas.
+        resultados.forEach(f -> assertThat(obtenerResultado(f)).isFalse());
+        assertThat(codigoVerificacionEmailPort.verificarCodigo(email, codigoReal, maxIntentos))
+                .as("el codigo real ya no debe servir: se llego (o se paso) el maximo de "
+                        + "intentos fallidos permitidos")
+                .isFalse();
+    }
+
+    private static boolean obtenerResultado(Future<Boolean> future) {
+        try {
+            return future.get();
+        } catch (Exception e) {
+            throw new RuntimeException("Fallo inesperado en un intento concurrente", e);
+        }
+    }
+
+    private static String claveIntentos(String email) {
+        return PREFIJO_INTENTOS + email;
     }
 }

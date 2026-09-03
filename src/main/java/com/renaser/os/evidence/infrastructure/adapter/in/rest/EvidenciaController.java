@@ -6,8 +6,10 @@ import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUse
 import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase.ListarEvidenciaComando;
 import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase.TipoDestino;
 import com.renaser.os.evidence.domain.model.evidencia.EvidenciaId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -38,6 +40,7 @@ public class EvidenciaController {
         this.listarUseCase = listarUseCase;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el dueno de la evidencia; la ajena exige MANAGE_EVIDENCE")
     @GetMapping("/{id}")
     public EvidenciaResponse porId(@ActorAutenticado UserId actor, @PathVariable UUID id) {
         var evidencia = consultarUseCase.porId(actor, EvidenciaId.of(id));
@@ -51,6 +54,7 @@ public class EvidenciaController {
      * {@code cursor} — mismo contrato que {@code GET /api/v1/wall}. La autorización
      * (dueño / mentor asignado / admin) vive en {@code EvidenciaService}, no acá.
      */
+    @RequiresPermission(value = Permission.USE_APP, scope = "el listado se acota por rol: ADMIN/ALCHEMIST sin filtro, MENTOR solo sus asignados, el resto solo lo propio")
     @GetMapping
     public EvidenciaPageResponse listar(@ActorAutenticado UserId actor,
                                          @RequestParam(required = false) UUID participanteId,

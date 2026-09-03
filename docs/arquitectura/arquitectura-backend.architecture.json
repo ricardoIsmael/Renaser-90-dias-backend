@@ -1,0 +1,398 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Renaser OS — Backend: monolito modular Spring Modulith",
+    "output": "arquitectura-backend.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/ricardoIsmael/Renaser-90-dias-backend",
+      "revision": "d8220fae5d9f31ffb73bf25f320dd7c9dd5d47ec"
+    }
+  },
+  "components": [
+    {
+      "id": "app",
+      "type": "external",
+      "label": "RenaserPlayStore",
+      "sublabel": "App React Native",
+      "tag": "cliente en producción",
+      "pos": [
+        40,
+        190
+      ],
+      "size": [
+        190,
+        68
+      ]
+    },
+    {
+      "id": "cron",
+      "type": "backend",
+      "label": "Schedulers",
+      "sublabel": "9 jobs @Scheduled",
+      "pos": [
+        270,
+        40
+      ],
+      "size": [
+        200,
+        68
+      ],
+      "sources": [
+        {
+          "path": "src/main/java/com/renaser/os/habits/infrastructure/adapter/in/scheduler/ExpirarRegistrosScheduler.java"
+        }
+      ]
+    },
+    {
+      "id": "rest",
+      "type": "backend",
+      "label": "Adaptadores REST",
+      "sublabel": "72 controllers bajo /api/v1",
+      "pos": [
+        270,
+        190
+      ],
+      "size": [
+        200,
+        68
+      ],
+      "sources": [
+        {
+          "path": "src/main/java/com/renaser/os/academy/infrastructure/adapter/in/rest/curso/CursoController.java",
+          "label": "ejemplo de adapter/in/rest"
+        }
+      ]
+    },
+    {
+      "id": "ws",
+      "type": "backend",
+      "label": "WebSocket de chat",
+      "sublabel": "handshake por actor",
+      "pos": [
+        270,
+        300
+      ],
+      "size": [
+        200,
+        68
+      ],
+      "sources": [
+        {
+          "path": "src/main/java/com/renaser/os/chat/infrastructure/adapter/in/websocket/WebSocketConfig.java"
+        }
+      ]
+    },
+    {
+      "id": "nucleo",
+      "type": "backend",
+      "label": "14 módulos hexagonales",
+      "sublabel": "un hexágono por dominio",
+      "tag": "Java 25 · virtual threads",
+      "pos": [
+        600,
+        150
+      ],
+      "size": [
+        200,
+        190
+      ],
+      "sources": [
+        {
+          "path": "src/main/java/com/renaser/os/RenaserOsApplication.java"
+        }
+      ]
+    },
+    {
+      "id": "oauth",
+      "type": "security",
+      "label": "Google · Apple · Facebook",
+      "sublabel": "OIDC, verificación de id_token",
+      "tag": "identidades_externas",
+      "pos": [
+        1150,
+        40
+      ],
+      "size": [
+        200,
+        68
+      ],
+      "sources": [
+        {
+          "path": "src/main/java/com/renaser/os/users/infrastructure/adapter/out/oauth/GoogleIdentidadAdapter.java"
+        }
+      ]
+    },
+    {
+      "id": "genai",
+      "type": "external",
+      "label": "Google GenAI",
+      "sublabel": "Spring AI, hoy en NoOp",
+      "pos": [
+        1150,
+        250
+      ],
+      "size": [
+        200,
+        68
+      ],
+      "sources": [
+        {
+          "path": "src/main/resources/application.yaml"
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "type": "cloud",
+      "label": "Amazon S3",
+      "sublabel": "evidencias y audios",
+      "pos": [
+        1150,
+        360
+      ],
+      "size": [
+        200,
+        68
+      ]
+    },
+    {
+      "id": "smtp",
+      "type": "external",
+      "label": "SMTP",
+      "sublabel": "correo transaccional",
+      "pos": [
+        1150,
+        500
+      ],
+      "size": [
+        200,
+        68
+      ],
+      "sources": [
+        {
+          "path": "src/main/java/com/renaser/os/users/infrastructure/adapter/out/email/SmtpEnviarEmailAdapter.java"
+        }
+      ]
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "92 tablas · pgvector · Flyway",
+      "pos": [
+        400,
+        500
+      ],
+      "size": [
+        200,
+        68
+      ],
+      "sources": [
+        {
+          "path": "src/main/resources/db/migration/V1__baseline_renaser.sql"
+        }
+      ]
+    },
+    {
+      "id": "outbox",
+      "type": "messagebus",
+      "label": "Outbox de eventos",
+      "sublabel": "event_publication, mismo Postgres",
+      "pos": [
+        700,
+        500
+      ],
+      "size": [
+        200,
+        68
+      ],
+      "sources": [
+        {
+          "path": "src/main/resources/db/migration/V2__spring_modulith_event_publication.sql"
+        }
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "sesión · pub/sub · cuota · tokens",
+      "pos": [
+        40,
+        500
+      ],
+      "size": [
+        200,
+        68
+      ],
+      "sources": [
+        {
+          "path": "src/main/java/com/renaser/os/chat/infrastructure/adapter/out/redis/RedisChatPublisher.java"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Proceso JVM único — Spring Boot 4.1",
+      "wraps": [
+        "cron",
+        "rest",
+        "ws",
+        "nucleo"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "app-rest",
+      "from": "app",
+      "to": "rest",
+      "label": "HTTPS /api/v1",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -28
+    },
+    {
+      "id": "rest-nucleo",
+      "from": "rest",
+      "to": "nucleo",
+      "label": "invoca casos de uso",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "nucleo-pg",
+      "from": "nucleo",
+      "to": "pg",
+      "label": "JPA + JDBC",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelSegment": 2
+    },
+    {
+      "id": "app-ws",
+      "from": "app",
+      "to": "ws",
+      "label": "WebSocket",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "id": "ws-nucleo",
+      "from": "ws",
+      "to": "nucleo",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "cron-nucleo",
+      "from": "cron",
+      "to": "nucleo",
+      "label": "expiración y snapshots nocturnos",
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "id": "nucleo-outbox",
+      "from": "nucleo",
+      "to": "outbox",
+      "label": "eventos de dominio at-least-once",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelSegment": 2
+    },
+    {
+      "id": "nucleo-redis",
+      "from": "nucleo",
+      "to": "redis",
+      "label": "fan-out de chat entre instancias",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelSegment": 2
+    },
+    {
+      "id": "nucleo-oauth",
+      "from": "nucleo",
+      "to": "oauth",
+      "label": "valida id_token contra JWKS",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelSegment": 2
+    },
+    {
+      "id": "nucleo-genai",
+      "from": "nucleo",
+      "to": "genai",
+      "label": "validación IA async",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelSegment": 2
+    },
+    {
+      "id": "nucleo-s3",
+      "from": "nucleo",
+      "to": "s3",
+      "label": "sube evidencia",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelSegment": 2
+    },
+    {
+      "id": "nucleo-smtp",
+      "from": "nucleo",
+      "to": "smtp",
+      "label": "alta y reset de contraseña",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelSegment": 2
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Los 14 módulos",
+      "items": [
+        "users · habits · rocks · evidence · onboarding",
+        "academy · community · calendar · chat · notifications",
+        "rag · support · points · phasecontracts"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Por qué un solo proceso",
+      "items": [
+        "Completar un hábito suma puntos y revisa fase en una transacción ACID",
+        "Entre módulos se llama por método Java, no por red",
+        "Escala horizontal con N instancias tras el balanceador"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Lo que cruza instancias",
+      "items": [
+        "Chat en vivo por Redis pub/sub: un evento in-process no sale de su JVM",
+        "La sesión vive en Redis, no en memoria del nodo",
+        "El outbox sostiene el efecto secundario aunque el proceso caiga"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Estado real de la IA",
+      "items": [
+        "spring.ai.model.chat y embedding en none: los adaptadores activos son NoOp",
+        "El contrato async 202 + polling ya existe y no depende del proveedor",
+        "Cambiar de proveedor no toca dominio: está detrás de un puerto"
+      ]
+    }
+  ]
+}

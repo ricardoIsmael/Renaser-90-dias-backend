@@ -21,8 +21,9 @@ class SantuarioRotoNotificationListener {
 
     @ApplicationModuleListener
     void on(SantuarioRotoEvent event) {
+        // C-7: registroId es la clave de deduplicacion si el outbox reentrega este evento.
         emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(event.participanteId(),
                 TipoNotificacion.SANTUARIO_ROTO, "Se rompio tu sesion de Santuario",
-                "Tu sesion de Santuario se rompio antes de tiempo.", null));
+                "Tu sesion de Santuario se rompio antes de tiempo.", null, event.registroId()));
     }
 }

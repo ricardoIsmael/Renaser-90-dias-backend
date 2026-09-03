@@ -14,6 +14,7 @@ import com.renaser.os.rag.domain.model.espejosombra.InformeEspejoSombra;
 import com.renaser.os.rag.domain.model.espejosombra.InformeEspejoSombraId;
 import com.renaser.os.rag.domain.model.espejosombra.PreguntaConfrontacion;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.ParticipacionPrograma;
@@ -25,7 +26,6 @@ import com.renaser.os.users.api.UserSummaryFinder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -54,6 +54,7 @@ public class EspejoSombraService implements GenerarInformeEspejoSombraUseCase, O
     private final UserSummaryFinder userSummaryFinder;
     private final ParticipacionProgramaFinder participacionFinder;
     private final Clock clock;
+    private final IdGenerator idGenerator;
 
     public EspejoSombraService(LoadInformeEspejoSombraPort loadInformePort,
                                 SaveInformeEspejoSombraPort saveInformePort,
@@ -61,7 +62,7 @@ public class EspejoSombraService implements GenerarInformeEspejoSombraUseCase, O
                                 GenerarInsightSemanalPort generarInsightPort,
                                 UserSummaryFinder userSummaryFinder,
                                 ParticipacionProgramaFinder participacionFinder,
-                                Clock clock) {
+                                Clock clock, IdGenerator idGenerator) {
         this.loadInformePort = loadInformePort;
         this.saveInformePort = saveInformePort;
         this.leerEntradasPort = leerEntradasPort;
@@ -69,6 +70,7 @@ public class EspejoSombraService implements GenerarInformeEspejoSombraUseCase, O
         this.userSummaryFinder = userSummaryFinder;
         this.participacionFinder = participacionFinder;
         this.clock = clock;
+        this.idGenerator = idGenerator;
     }
 
     /**
@@ -89,9 +91,16 @@ public class EspejoSombraService implements GenerarInformeEspejoSombraUseCase, O
      *   persiste nada y solo deja un WARN. Nunca se inventa un informe con datos
      *   falsos (CLAUDE.MD §0.6).</li>
      * </ol>
+     *
+     * <p><b>C-1 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html):</b> este
+     * método YA NO es {@code @Transactional}. Antes envolvía en una sola transacción la
+     * lectura de entradas, la llamada a {@link GenerarInsightSemanalPort} (IA, puede tardar
+     * segundos con un proveedor real) y el guardado — reteniendo una conexión de Hikari todo
+     * ese tiempo. Las lecturas y el guardado ya corren en su propia transacción corta gracias
+     * a Spring Data JPA ({@code InformeEspejoSombraPersistenceAdapter}); la IA queda afuera
+     * de cualquier transacción.
      */
     @Override
-    @Transactional
     public void generar(UserId participanteId, LocalDate semanaInicio) {
         if (loadInformePort.porParticipanteYSemana(participanteId, semanaInicio).isPresent()) {
             log.debug("[rag.EspejoSombraService] informe ya existe, se omite. participante={} semana={}",
@@ -130,8 +139,10 @@ public class EspejoSombraService implements GenerarInformeEspejoSombraUseCase, O
         DistribucionTemporal distribucion = new DistribucionTemporal(insight.pctPasado(), insight.pctPresente(),
                 insight.pctFuturo());
         List<PreguntaConfrontacion> preguntas = aPreguntas(insight.preguntasConfrontacion());
-        return InformeEspejoSombra.generar(participanteId, semanaInicio, cantidadEntradas, insight.patronDominante(),
-                distribucion, insight.insight(), preguntas, clock);
+        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        return InformeEspejoSombra.generar(InformeEspejoSombraId.of(idGenerator.newId()), participanteId,
+                semanaInicio, cantidadEntradas, insight.patronDominante(), distribucion, insight.insight(),
+                preguntas, clock);
     }
 
     /** Toma como mucho {@link InformeEspejoSombra#MAX_PREGUNTAS} preguntas de la IA, numeradas 1..N. */

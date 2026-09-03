@@ -4,6 +4,7 @@ import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPo
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ListarUsuariosDeConversacionPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
+import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -44,7 +45,7 @@ class MiembroServiceTest {
 
     private MiembroService service;
 
-    private final Conversacion global = Conversacion.crearGlobal(AHORA);
+    private final Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), AHORA);
     private final UserId actor = UserId.of(UUID.randomUUID());
     private final UserId otroActivo = UserId.of(UUID.randomUUID());
     private final UserId otroSuspendido = UserId.of(UUID.randomUUID());

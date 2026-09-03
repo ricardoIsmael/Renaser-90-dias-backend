@@ -1,7 +1,9 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.admin;
 
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.application.ports.in.admin.ListStaffUseCase;
 import com.renaser.os.users.application.ports.in.admin.ListStaffUseCase.ListStaffCommand;
@@ -53,6 +55,7 @@ public class StaffAdminController {
         this.updateStaffProfileUseCase = updateStaffProfileUseCase;
     }
 
+    @RequiresPermission(Permission.MANAGE_STAFF)
     @GetMapping
     public StaffPageResponse listar(@ActorAutenticado UserId actor,
                                      @RequestParam(required = false) UserRole role,
@@ -63,6 +66,7 @@ public class StaffAdminController {
         return StaffPageResponse.from(pagina);
     }
 
+    @RequiresPermission(value = Permission.MANAGE_ROLES, scope = "el guard real es User.requireRoleManager: invitar es asignar un rol")
     @PostMapping("/invite")
     public ResponseEntity<UserIdResponse> invite(@ActorAutenticado UserId actor,
                                                   @RequestBody @Valid InviteStaffRequest request) {
@@ -71,6 +75,7 @@ public class StaffAdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(new UserIdResponse(invited.value()));
     }
 
+    @RequiresPermission(Permission.MANAGE_STAFF)
     @PatchMapping("/{id}/status")
     public ResponseEntity<Void> updateStatus(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                               @RequestBody @Valid UpdateUserStatusRequest request) {
@@ -79,6 +84,7 @@ public class StaffAdminController {
         return ResponseEntity.noContent().build();
     }
 
+    @RequiresPermission(Permission.MANAGE_STAFF)
     @PutMapping("/{id}")
     public ResponseEntity<Void> updateProfile(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                                @RequestBody UpdateStaffProfileRequest request) {

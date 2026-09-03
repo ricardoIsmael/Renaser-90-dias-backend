@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -26,6 +27,18 @@ import java.util.UUID;
  */
 interface SpringDataEvidenciaRepository extends JpaRepository<EvidenciaJpaEntity, UUID>,
         JpaSpecificationExecutor<EvidenciaJpaEntity> {
+
+    /**
+     * Bloqueo pesimista para el camino de ESCRITURA (anular veredicto) — mismo patrón
+     * que {@code SpringDataRocaDiariaRepository.findByIdParaEscritura}. Sin él, dos
+     * admins concurrentes (o un doble clic) leen la misma evidencia con
+     * {@code penalizacionAplicada=true}, ambas pasan la validación en memoria y ambas
+     * piden a {@code points} que revierta la penalización: doble reversión (C-13,
+     * docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT e FROM EvidenciaJpaEntity e WHERE e.id = :id")
+    Optional<EvidenciaJpaEntity> findByIdParaEscritura(@Param("id") UUID id);
 
     /**
      * {@code FOR UPDATE SKIP LOCKED} sobre {@code evidencias_cola_ia_idx} — mismo idiom

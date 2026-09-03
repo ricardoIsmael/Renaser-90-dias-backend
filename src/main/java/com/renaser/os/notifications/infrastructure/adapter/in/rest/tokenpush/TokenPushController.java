@@ -3,8 +3,10 @@ package com.renaser.os.notifications.infrastructure.adapter.in.rest.tokenpush;
 import com.renaser.os.notifications.application.ports.in.tokenpush.RegistrarTokenPushUseCase;
 import com.renaser.os.notifications.application.ports.in.tokenpush.RegistrarTokenPushUseCase.RegistrarTokenPushCommand;
 import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,6 +28,7 @@ public class TokenPushController {
         this.registrarTokenPushUseCase = registrarTokenPushUseCase;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @PostMapping
     public TokenPushResponse registrar(@ActorAutenticado UserId actor,
                                         @RequestBody @Valid RegistrarTokenPushRequest request) {

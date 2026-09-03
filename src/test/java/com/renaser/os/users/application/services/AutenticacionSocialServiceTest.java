@@ -2,23 +2,25 @@ package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.IdentidadProveedorInvalidaException;
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase;
-import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand;
 import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionConProveedorUseCase.IniciarSesionConProveedorCommand;
 import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionConProveedorUseCase.ResultadoLoginSocial;
+import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.autenticacion.IdentidadVerificada;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadIdentidadExternaPort;
-import com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort;
+import com.renaser.os.users.application.ports.out.autenticacion.RegistroPendienteSocial;
+import com.renaser.os.users.application.ports.out.autenticacion.TokenRegistroPendienteSocialPort;
 import com.renaser.os.users.application.ports.out.autenticacion.VerificadorIdentidadProveedor;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
+import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
+import com.renaser.os.users.domain.model.accountrequest.OrigenSocial;
 import com.renaser.os.users.domain.model.identidadexterna.IdentidadExterna;
 import com.renaser.os.users.domain.model.identidadexterna.ProveedorIdentidad;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -46,26 +48,41 @@ class AutenticacionSocialServiceTest {
     @Mock
     private LoadIdentidadExternaPort loadIdentidadExternaPort;
     @Mock
+    private LoadAccountRequestPort loadAccountRequestPort;
+    @Mock
     private LoadUserPort loadUserPort;
     @Mock
-    private SubmitAccountRequestUseCase submitAccountRequestUseCase;
-    @Mock
-    private TokenVerificacionEmailPort tokenVerificacionEmailPort;
+    private TokenRegistroPendienteSocialPort tokenRegistroPendienteSocialPort;
 
     private AutenticacionSocialService service() {
         when(verificadorGoogle.proveedor()).thenReturn(ProveedorIdentidad.GOOGLE);
-        return new AutenticacionSocialService(List.of(verificadorGoogle), loadIdentidadExternaPort, loadUserPort,
-                submitAccountRequestUseCase, tokenVerificacionEmailPort);
+        return new AutenticacionSocialService(List.of(verificadorGoogle), loadIdentidadExternaPort,
+                loadAccountRequestPort, loadUserPort, tokenRegistroPendienteSocialPort);
     }
 
-    private static IniciarSesionConProveedorCommand command(String phone) {
+    private static IniciarSesionConProveedorCommand command() {
         return new IniciarSesionConProveedorCommand(ProveedorIdentidad.GOOGLE, "un-code", "un-verifier",
-                "https://app.renaser.dev/callback", phone, "Rosario", "127.0.0.1");
+                "https://app.renaser.dev/callback", "127.0.0.1");
     }
+
+    private static final FixedClock RELOJ = FixedClock.at(Instant.parse("2026-08-31T10:00:00Z"));
 
     private static User usuario(UserId id) {
         return User.rehydrate(id, new Email("actor@renaser.dev"), UserRole.TRAINEE, UserStatus.ACTIVE,
                 "Actor de Prueba", null, null, null, null);
+    }
+
+    private static User usuarioAdmin() {
+        return User.rehydrate(UserId.of(UUID.randomUUID()), new Email("admin@renaser.dev"), UserRole.ADMIN,
+                UserStatus.ACTIVE, "Admin", null, null, null, null);
+    }
+
+    /** Una solicitud abierta por Google, tal cual la deja el segundo paso del alta social. */
+    private static AccountRequest solicitudSocialPendiente(String sujeto, String email) {
+        return AccountRequest.submit(AccountRequestId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                new Email(email), "Alguien",
+                "+54 341 1234567", "Rosario", "127.0.0.1",
+                new OrigenSocial(ProveedorIdentidad.GOOGLE, sujeto), RELOJ);
     }
 
     @Test
@@ -78,101 +95,122 @@ class AutenticacionSocialServiceTest {
                         "actor@renaser.dev", Instant.now())));
         when(loadUserPort.byId(id)).thenReturn(Optional.of(usuario(id)));
 
-        ResultadoLoginSocial resultado = service().iniciarSesion(command(null));
+        ResultadoLoginSocial resultado = service().iniciarSesion(command());
 
         assertThat(resultado).isInstanceOf(ResultadoLoginSocial.SesionIniciada.class);
         assertThat(((ResultadoLoginSocial.SesionIniciada) resultado).usuario().id()).isEqualTo(id);
-        verify(submitAccountRequestUseCase, never()).submit(any());
+        verify(tokenRegistroPendienteSocialPort, never()).generar(any(), any());
     }
 
+    /**
+     * El corazon de D-65 (2026-09-01, docs/MODULO_AUTH.md §6.10): identidad nueva NO abre una
+     * AccountRequest en esta misma llamada, retiene la identidad verificada en Redis y devuelve
+     * el token de continuacion + los datos para prellenar el formulario.
+     */
     @Test
-    void identidadNuevaConTelefonoAbreUnaAccountRequestSinCrearUsuario() {
+    void identidadNuevaRetieneElRegistroPendienteSinAbrirAccountRequest() {
         when(verificadorGoogle.verificar(any()))
                 .thenReturn(new IdentidadVerificada("google-sub-nuevo", "nuevo@renaser.dev", true, "Persona Nueva"));
         when(loadIdentidadExternaPort.porProveedorYSujeto(ProveedorIdentidad.GOOGLE, "google-sub-nuevo"))
                 .thenReturn(Optional.empty());
         when(loadUserPort.byEmail(new Email("nuevo@renaser.dev"))).thenReturn(Optional.empty());
-        AccountRequestId solicitudId = AccountRequestId.newId();
-        when(submitAccountRequestUseCase.submit(any())).thenReturn(solicitudId);
-        when(tokenVerificacionEmailPort.generar(eq("nuevo@renaser.dev"), any()))
-                .thenReturn("token-verificacion-social");
+        when(tokenRegistroPendienteSocialPort.generar(any(), any())).thenReturn("token-registro-pendiente");
 
-        ResultadoLoginSocial resultado = service().iniciarSesion(command("+54 341 1234567"));
+        ResultadoLoginSocial resultado = service().iniciarSesion(command());
 
-        assertThat(resultado).isInstanceOf(ResultadoLoginSocial.SolicitudCreada.class);
-        assertThat(((ResultadoLoginSocial.SolicitudCreada) resultado).solicitudId()).isEqualTo(solicitudId);
+        assertThat(resultado).isInstanceOf(ResultadoLoginSocial.RegistroPendiente.class);
+        ResultadoLoginSocial.RegistroPendiente pendiente = (ResultadoLoginSocial.RegistroPendiente) resultado;
+        assertThat(pendiente.token()).isEqualTo("token-registro-pendiente");
+        assertThat(pendiente.email()).isEqualTo("nuevo@renaser.dev");
+        assertThat(pendiente.fullName()).isEqualTo("Persona Nueva");
 
-        ArgumentCaptor<SubmitAccountRequestCommand> captor = ArgumentCaptor.forClass(SubmitAccountRequestCommand.class);
-        verify(submitAccountRequestUseCase).submit(captor.capture());
+        ArgumentCaptor<RegistroPendienteSocial> captor = ArgumentCaptor.forClass(RegistroPendienteSocial.class);
+        verify(tokenRegistroPendienteSocialPort).generar(captor.capture(),
+                eq(AutenticacionSocialService.VIGENCIA_REGISTRO_PENDIENTE));
         assertThat(captor.getValue().email()).isEqualTo("nuevo@renaser.dev");
         assertThat(captor.getValue().fullName()).isEqualTo("Persona Nueva");
-        assertThat(captor.getValue().phone()).isEqualTo("+54 341 1234567");
-        assertThat(captor.getValue().city()).isEqualTo("Rosario");
-        assertThat(captor.getValue().verificationToken()).isEqualTo("token-verificacion-social");
-        // 2026-08-27: sin contrasena — esta cuenta entra por el proveedor, no por clave propia.
-        assertThat(captor.getValue().contrasena()).isNull();
+        assertThat(captor.getValue().proveedor()).isEqualTo(ProveedorIdentidad.GOOGLE);
+        assertThat(captor.getValue().sujetoProveedor()).isEqualTo("google-sub-nuevo");
     }
 
     @Test
-    @DisplayName("2026-08-27: la identidad social ya viene pre-verificada por el proveedor, asi "
-            + "que se salta el codigo de 6 digitos y genera el token de verificacion directo")
-    void identidadNuevaGeneraElTokenDeVerificacionSinPedirCodigo() {
-        when(verificadorGoogle.verificar(any()))
-                .thenReturn(new IdentidadVerificada("google-sub-directo", "directo@renaser.dev", true, "Directo"));
-        when(loadIdentidadExternaPort.porProveedorYSujeto(any(), any())).thenReturn(Optional.empty());
-        when(loadUserPort.byEmail(any())).thenReturn(Optional.empty());
-        when(submitAccountRequestUseCase.submit(any())).thenReturn(AccountRequestId.newId());
-        when(tokenVerificacionEmailPort.generar(eq("directo@renaser.dev"), any())).thenReturn("otro-token");
-
-        service().iniciarSesion(command("+54 341 1234567"));
-
-        verify(tokenVerificacionEmailPort).generar(eq("directo@renaser.dev"),
-                eq(VerificacionEmailService.VIGENCIA_TOKEN_VERIFICACION));
-    }
-
-    @Test
-    void identidadNuevaSinNombreUsaElEmailComoFullName() {
+    void identidadNuevaSinNombreUsaElEmailComoFullNameEnElPrellenado() {
         when(verificadorGoogle.verificar(any()))
                 .thenReturn(new IdentidadVerificada("google-sub-sin-nombre", "sinnombre@renaser.dev", true, null));
         when(loadIdentidadExternaPort.porProveedorYSujeto(any(), any())).thenReturn(Optional.empty());
         when(loadUserPort.byEmail(any())).thenReturn(Optional.empty());
-        when(submitAccountRequestUseCase.submit(any())).thenReturn(AccountRequestId.newId());
-        when(tokenVerificacionEmailPort.generar(any(), any())).thenReturn("token-verificacion-sin-nombre");
+        when(tokenRegistroPendienteSocialPort.generar(any(), any())).thenReturn("token-sin-nombre");
 
-        service().iniciarSesion(command("+54 341 1234567"));
+        ResultadoLoginSocial resultado = service().iniciarSesion(command());
 
-        ArgumentCaptor<SubmitAccountRequestCommand> captor = ArgumentCaptor.forClass(SubmitAccountRequestCommand.class);
-        verify(submitAccountRequestUseCase).submit(captor.capture());
-        assertThat(captor.getValue().fullName()).isEqualTo("sinnombre@renaser.dev");
-    }
-
-    @Test
-    void identidadNuevaSinTelefonoRechazadaSinLlegarASubmit() {
-        when(verificadorGoogle.verificar(any()))
-                .thenReturn(new IdentidadVerificada("google-sub-2", "sintelefono@renaser.dev", true, "Alguien"));
-        when(loadIdentidadExternaPort.porProveedorYSujeto(any(), any())).thenReturn(Optional.empty());
-        when(loadUserPort.byEmail(any())).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service().iniciarSesion(command(null)))
-                .isInstanceOf(IllegalArgumentException.class);
-        verify(submitAccountRequestUseCase, never()).submit(any());
+        assertThat(((ResultadoLoginSocial.RegistroPendiente) resultado).fullName())
+                .isEqualTo("sinnombre@renaser.dev");
     }
 
     /**
-     * §6.4: no vincula por email, ni siquiera silenciosamente creando otra solicitud para un
-     * email que ya tiene cuenta — se rechaza en vez de generar una AccountRequest confusa.
+     * §6.4: no vincula por email, ni siquiera silenciosamente reteniendo un registro pendiente
+     * para un email que ya tiene cuenta — devuelve {@code CuentaExistenteSinVinculo} en vez de
+     * eso. Sigue sin abrir sesion: eso es lo unico que importa para la seguridad.
      */
     @Test
-    void identidadNuevaConEmailDeUnUsuarioExistenteEsRechazada() {
+    void identidadNuevaConEmailDeUnUsuarioExistenteNoVinculaNiAbreSesion() {
         UserId existente = UserId.of(UUID.randomUUID());
         when(verificadorGoogle.verificar(any()))
                 .thenReturn(new IdentidadVerificada("google-sub-otro", "yaexiste@renaser.dev", true, "Alguien"));
         when(loadIdentidadExternaPort.porProveedorYSujeto(any(), any())).thenReturn(Optional.empty());
         when(loadUserPort.byEmail(new Email("yaexiste@renaser.dev"))).thenReturn(Optional.of(usuario(existente)));
 
-        assertThatThrownBy(() -> service().iniciarSesion(command("+54 341 1234567")))
-                .isInstanceOf(IllegalStateException.class);
-        verify(submitAccountRequestUseCase, never()).submit(any());
+        ResultadoLoginSocial resultado = service().iniciarSesion(command());
+
+        assertThat(resultado).isInstanceOf(ResultadoLoginSocial.CuentaExistenteSinVinculo.class);
+        assertThat(((ResultadoLoginSocial.CuentaExistenteSinVinculo) resultado).proveedor())
+                .isEqualTo(ProveedorIdentidad.GOOGLE);
+        verify(tokenRegistroPendienteSocialPort, never()).generar(any(), any());
+    }
+
+    /**
+     * A-7: volver a tocar "Continuar con Google" mientras un admin no decide NO crea una segunda
+     * solicitud ni devuelve un error — devuelve la que ya existe, encontrada por
+     * {@code (proveedor, sujeto)}.
+     */
+    @Test
+    void identidadConSolicitudPendienteDevuelveSolicitudEnRevisionSinRetenerNada() {
+        AccountRequest previa = solicitudSocialPendiente("google-sub-espera", "espera@renaser.dev");
+        when(verificadorGoogle.verificar(any()))
+                .thenReturn(new IdentidadVerificada("google-sub-espera", "espera@renaser.dev", true, "Espera"));
+        when(loadIdentidadExternaPort.porProveedorYSujeto(any(), any())).thenReturn(Optional.empty());
+        when(loadAccountRequestPort.porOrigenSocial(
+                new OrigenSocial(ProveedorIdentidad.GOOGLE, "google-sub-espera")))
+                .thenReturn(Optional.of(previa));
+
+        ResultadoLoginSocial resultado = service().iniciarSesion(command());
+
+        assertThat(resultado).isInstanceOf(ResultadoLoginSocial.SolicitudEnRevision.class);
+        assertThat(((ResultadoLoginSocial.SolicitudEnRevision) resultado).solicitudId()).isEqualTo(previa.id());
+        verify(tokenRegistroPendienteSocialPort, never()).generar(any(), any());
+        // El correo no se consulta siquiera: la identidad ya quedo resuelta por (proveedor, sujeto).
+        verify(loadUserPort, never()).byEmail(any());
+    }
+
+    /**
+     * Una solicitud social YA RECHAZADA no bloquea para siempre: la persona puede volver a
+     * intentarlo y se le retiene un registro pendiente nuevo. Solo las PENDIENTES cortan el
+     * camino.
+     */
+    @Test
+    void identidadConSolicitudRechazadaPuedeVolverAIntentarlo() {
+        AccountRequest rechazada = solicitudSocialPendiente("google-sub-rechazado", "rechazado@renaser.dev");
+        rechazada.reject(usuarioAdmin(), "Datos incompletos", RELOJ);
+        when(verificadorGoogle.verificar(any()))
+                .thenReturn(new IdentidadVerificada("google-sub-rechazado", "rechazado@renaser.dev", true, "Otra Vez"));
+        when(loadIdentidadExternaPort.porProveedorYSujeto(any(), any())).thenReturn(Optional.empty());
+        when(loadAccountRequestPort.porOrigenSocial(any())).thenReturn(Optional.of(rechazada));
+        when(loadUserPort.byEmail(any())).thenReturn(Optional.empty());
+        when(tokenRegistroPendienteSocialPort.generar(any(), any())).thenReturn("token-reintento");
+
+        ResultadoLoginSocial resultado = service().iniciarSesion(command());
+
+        assertThat(resultado).isInstanceOf(ResultadoLoginSocial.RegistroPendiente.class);
     }
 
     @Test
@@ -180,7 +218,7 @@ class AutenticacionSocialServiceTest {
         when(verificadorGoogle.verificar(any()))
                 .thenReturn(new IdentidadVerificada("google-sub-3", "sinverificar@renaser.dev", false, "Alguien"));
 
-        assertThatThrownBy(() -> service().iniciarSesion(command(null)))
+        assertThatThrownBy(() -> service().iniciarSesion(command()))
                 .isInstanceOf(IdentidadProveedorInvalidaException.class);
         verify(loadIdentidadExternaPort, never()).porProveedorYSujeto(any(), any());
     }
@@ -195,7 +233,7 @@ class AutenticacionSocialServiceTest {
                         "huerfano@renaser.dev", Instant.now())));
         when(loadUserPort.byId(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().iniciarSesion(command(null)))
+        assertThatThrownBy(() -> service().iniciarSesion(command()))
                 .isInstanceOf(IllegalStateException.class);
     }
 }

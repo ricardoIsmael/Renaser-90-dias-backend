@@ -45,7 +45,7 @@ class TicketMentorCommandsTest {
 
     @Test
     void responderRechazaRespuestaEnBlanco() {
-        assertThatThrownBy(() -> new ResponderTicketMentorCommand(TicketMentorId.newId(), id(), "   "))
+        assertThatThrownBy(() -> new ResponderTicketMentorCommand(TicketMentorId.of(UUID.randomUUID()), id(), "   "))
                 .isInstanceOf(ConstraintViolationException.class);
     }
 
@@ -63,15 +63,16 @@ class TicketMentorCommandsTest {
 
     @Test
     void guardarRechazaActorIdNulo() {
-        assertThatThrownBy(() -> new GuardarEnBibliotecaCommand(TicketMentorId.newId(), null))
+        assertThatThrownBy(() -> new GuardarEnBibliotecaCommand(TicketMentorId.of(UUID.randomUUID()), null))
                 .isInstanceOf(ConstraintViolationException.class);
     }
 
     @Test
     void losCuatroComandosSonValidosConDatosCorrectos() {
         assertThat(new AbrirTicketMentorCommand(id(), "a", "b", "c").descripcionBloqueo()).isEqualTo("a");
-        assertThat(new ResponderTicketMentorCommand(TicketMentorId.newId(), id(), "r").respuesta()).isEqualTo("r");
+        assertThat(new ResponderTicketMentorCommand(TicketMentorId.of(UUID.randomUUID()), id(), "r").respuesta())
+                .isEqualTo("r");
         assertThat(new BuscarBibliotecaCommand(id(), "q").query()).isEqualTo("q");
-        assertThat(new GuardarEnBibliotecaCommand(TicketMentorId.newId(), id()).actorId()).isNotNull();
+        assertThat(new GuardarEnBibliotecaCommand(TicketMentorId.of(UUID.randomUUID()), id()).actorId()).isNotNull();
     }
 }

@@ -15,6 +15,7 @@ public record Excepcion(UUID id, EventoId eventoId, Instant inicioOcurrencia, bo
                          Integer nuevaDuracion, String nuevoTitulo) {
 
     public Excepcion {
+        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(eventoId, "eventoId es obligatorio");
         Objects.requireNonNull(inicioOcurrencia, "inicioOcurrencia es obligatorio");
         if (nuevaDuracion != null && nuevaDuracion <= 0) {
@@ -22,13 +23,14 @@ public record Excepcion(UUID id, EventoId eventoId, Instant inicioOcurrencia, bo
         }
     }
 
-    public static Excepcion cancelar(EventoId eventoId, Instant inicioOcurrencia) {
-        return new Excepcion(UUID.randomUUID(), eventoId, inicioOcurrencia, true, null, null, null);
+    /** El {@code id} entra por parametro: lo genera el caso de uso con el puerto {@code IdGenerator}. */
+    public static Excepcion cancelar(UUID id, EventoId eventoId, Instant inicioOcurrencia) {
+        return new Excepcion(id, eventoId, inicioOcurrencia, true, null, null, null);
     }
 
-    public static Excepcion reprogramar(EventoId eventoId, Instant inicioOcurrencia, Instant nuevoInicio,
+    /** El {@code id} entra por parametro: lo genera el caso de uso con el puerto {@code IdGenerator}. */
+    public static Excepcion reprogramar(UUID id, EventoId eventoId, Instant inicioOcurrencia, Instant nuevoInicio,
                                          Integer nuevaDuracion, String nuevoTitulo) {
-        return new Excepcion(UUID.randomUUID(), eventoId, inicioOcurrencia, false, nuevoInicio, nuevaDuracion,
-                nuevoTitulo);
+        return new Excepcion(id, eventoId, inicioOcurrencia, false, nuevoInicio, nuevaDuracion, nuevoTitulo);
     }
 }

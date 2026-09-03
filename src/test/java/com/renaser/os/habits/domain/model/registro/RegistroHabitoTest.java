@@ -20,8 +20,8 @@ class RegistroHabitoTest {
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
 
     private static RegistroHabito nuevoPendiente() {
-        return RegistroHabito.generar(UserId.of(UUID.randomUUID()), HabitoId.newId(), LocalDate.of(2026, 8, 24), 5,
-                TipoDia.DISCIPLINA, false, CLOCK.now());
+        return RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), LocalDate.of(2026, 8, 24), 5, TipoDia.DISCIPLINA, false, CLOCK.now());
     }
 
     @Test
@@ -34,8 +34,9 @@ class RegistroHabitoTest {
 
     @Test
     void diaProgramaFueraDeRangoEsInvalido() {
-        assertThatThrownBy(() -> RegistroHabito.generar(UserId.of(UUID.randomUUID()), HabitoId.newId(),
-                LocalDate.now(), 91, TipoDia.TODOS, false, CLOCK.now()))
+        assertThatThrownBy(() -> RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()),
+                UserId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()), LocalDate.now(), 91, TipoDia.TODOS, false,
+                CLOCK.now()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

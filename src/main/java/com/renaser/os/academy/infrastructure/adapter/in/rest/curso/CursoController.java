@@ -6,8 +6,10 @@ import com.renaser.os.academy.application.ports.in.curso.ConsultarMisCursosUseCa
 import com.renaser.os.academy.application.ports.in.curso.ConsultarMotivoBloqueoCursoUseCase;
 import com.renaser.os.academy.application.ports.in.curso.ConsultarSeccionesCursoUseCase;
 import com.renaser.os.academy.domain.model.curso.CursoId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,6 +44,7 @@ public class CursoController {
         this.cursosBloqueadosUseCase = cursosBloqueadosUseCase;
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping
     public List<MiCursoResponse> misCursos(@ActorAutenticado UserId actorId) {
         return misCursosUseCase.misCursos(actorId).stream().map(MiCursoResponse::from).toList();
@@ -54,6 +57,7 @@ public class CursoController {
      * `/{id}` para que Spring la resuelva como segmento fijo, no como un id de
      * curso.
      */
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping("/bloqueados")
     public List<CursoBloqueadoResponse> bloqueados(@ActorAutenticado UserId actorId) {
         return cursosBloqueadosUseCase.cursosBloqueados(actorId).stream()
@@ -61,11 +65,13 @@ public class CursoController {
                 .toList();
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el curso tiene que ser visible para el rol y el dia de programa del actor")
     @GetMapping("/{id}")
     public CursoDetalleResponse detalle(@ActorAutenticado UserId actorId, @PathVariable("id") String cursoId) {
         return CursoDetalleResponse.from(detalleUseCase.detalle(actorId, CursoId.of(cursoId)));
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el curso tiene que ser visible para el rol y el dia de programa del actor")
     @GetMapping("/{id}/secciones")
     public List<SeccionConLeccionesResponse> secciones(@ActorAutenticado UserId actorId,
                                                          @PathVariable("id") String cursoId) {
@@ -74,6 +80,7 @@ public class CursoController {
                 .toList();
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping("/{id}/preview")
     public MotivoBloqueoResponse preview(@ActorAutenticado UserId actorId,
                                           @PathVariable("id") String cursoId) {

@@ -7,8 +7,10 @@ import com.renaser.os.habits.application.ports.in.santuario.IniciarSesionBloqueo
 import com.renaser.os.habits.application.ports.in.santuario.RomperSesionBloqueoUseCase;
 import com.renaser.os.habits.application.ports.in.santuario.RomperSesionBloqueoUseCase.RomperSesionBloqueoCommand;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,18 +38,21 @@ public class SantuarioController {
         this.romperUseCase = romperUseCase;
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "dueno del registro de habito")
     @PostMapping("/start")
     public SesionBloqueoResponse iniciar(@ActorAutenticado UserId actor, @PathVariable String id) {
         var sesion = iniciarUseCase.iniciar(new IniciarSesionBloqueoCommand(actor, registroId(id)));
         return SesionBloqueoResponse.from(sesion);
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "dueno del registro de habito")
     @PostMapping("/complete")
     public SesionBloqueoResponse completar(@ActorAutenticado UserId actor, @PathVariable String id) {
         var sesion = completarUseCase.completar(new CompletarSesionBloqueoCommand(actor, registroId(id)));
         return SesionBloqueoResponse.from(sesion);
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "dueno del registro de habito")
     @PostMapping("/break")
     public SesionBloqueoResponse romper(@ActorAutenticado UserId actor, @PathVariable String id,
                                          @RequestBody @Valid RomperSantuarioRequest request) {

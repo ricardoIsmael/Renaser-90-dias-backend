@@ -10,14 +10,19 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
 import com.renaser.os.habits.domain.model.espiritu.RegistroEspiritu;
+import com.renaser.os.habits.domain.model.espiritu.RegistroEspirituId;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.util.List;
@@ -25,6 +30,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -37,6 +43,8 @@ class EspirituServiceTest {
 
     /** 09:00 UTC — despues de las 07:00 de desbloqueo. */
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T09:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, desbloquear() ya no lo sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadRegistroEspirituPort loadPort;
@@ -46,12 +54,20 @@ class EspirituServiceTest {
     private AudioCatalogPort audioCatalogPort;
     @Mock
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
+    @Mock
+    private IdGenerator idGenerator;
+    /** No necesita stubbing: TransactionTemplate.execute con getTransaction()==null solo
+     * corre el callback directo, mismo criterio que PromocionCambioHorarioServiceTest. */
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private EspirituService service;
 
     @BeforeEach
     void setUp() {
-        service = new EspirituService(loadPort, savePort, audioCatalogPort, progresoPort, CLOCK);
+        service = new EspirituService(loadPort, savePort, audioCatalogPort, progresoPort, CLOCK, idGenerator,
+                transactionManager);
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(savePort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -134,8 +150,8 @@ class EspirituServiceTest {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false)));
-        RegistroEspiritu registro = RegistroEspiritu.desbloquear(actor, 1, CLOCK.now(),
-                CLOCK.now().plusSeconds(3600), CLOCK.now());
+        RegistroEspiritu registro = RegistroEspiritu.desbloquear(RegistroEspirituId.of(UUID.randomUUID()), actor, 1,
+                CLOCK.now(), CLOCK.now().plusSeconds(3600), CLOCK.now());
         when(loadPort.ultimoDe(actor)).thenReturn(Optional.of(registro));
         when(loadPort.porParticipanteYDia(actor, 1)).thenReturn(Optional.of(registro));
 
@@ -155,6 +171,23 @@ class EspirituServiceTest {
 
         assertThatThrownBy(() -> service.entregar(new EntregarResumenEspirituCommand(actor, 5, "resumen")))
                 .isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
+    @Test
+    @DisplayName("C-10: si el INSERT choca con el UNIQUE(participante_id, dia) por una carrera, consultar() no explota")
+    void consultarNoPropagaLaViolacionDeUnicidadDeUnaCreacionConcurrente() {
+        UserId actor = trainee();
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadPort.ultimoDe(actor)).thenReturn(Optional.empty());
+        when(audioCatalogPort.porDia(1)).thenReturn(
+                Optional.of(new AudioEspiritu(1, "Dia 1", "drive-1", "audio/mpeg", 1000)));
+        // Simula que otra lectura concurrente ya gano la carrera y creo la fila primero.
+        when(savePort.save(any())).thenThrow(new DataIntegrityViolationException("unique_violation simulado"));
+        when(loadPort.todosDe(actor)).thenReturn(List.of());
+        when(audioCatalogPort.todos()).thenReturn(List.of());
+
+        assertThatCode(() -> service.consultar(actor)).doesNotThrowAnyException();
     }
 
     @Test

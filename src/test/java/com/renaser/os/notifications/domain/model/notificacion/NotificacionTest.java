@@ -2,6 +2,7 @@ package com.renaser.os.notifications.domain.model.notificacion;
 
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -56,6 +57,34 @@ class NotificacionTest {
         n.marcarLeida(masTarde); // repetir no debe mover leidaEn
 
         assertThat(n.leidaEn()).isEqualTo(primeraLectura);
+    }
+
+    @Test
+    @DisplayName("C-7: emitir() con origenEventoId lo conserva; sin el, queda null (retrocompatible)")
+    void emitirConOrigenEventoIdLoConserva() {
+        UUID origenEventoId = UUID.randomUUID();
+
+        Notificacion conOrigen = Notificacion.emitir(usuario(), TipoNotificacion.HITO_PROGRAMA, "T", "C", null,
+                origenEventoId, CLOCK);
+        Notificacion sinOrigen = Notificacion.emitir(usuario(), TipoNotificacion.HITO_PROGRAMA, "T", "C", null,
+                CLOCK);
+
+        assertThat(conOrigen.origenEventoId()).isEqualTo(origenEventoId);
+        assertThat(sinOrigen.origenEventoId()).isNull();
+    }
+
+    @Test
+    @DisplayName("C-7: rehydrate() con origenEventoId lo conserva; el overload de 8 args sigue dando null")
+    void rehydrateConOrigenEventoIdLoConserva() {
+        UUID origenEventoId = UUID.randomUUID();
+
+        Notificacion conOrigen = Notificacion.rehydrate(1L, usuario(), TipoNotificacion.HITO_PROGRAMA, "T", "C", null,
+                null, CLOCK.now(), origenEventoId);
+        Notificacion sinOrigen = Notificacion.rehydrate(2L, usuario(), TipoNotificacion.HITO_PROGRAMA, "T", "C", null,
+                null, CLOCK.now());
+
+        assertThat(conOrigen.origenEventoId()).isEqualTo(origenEventoId);
+        assertThat(sinOrigen.origenEventoId()).isNull();
     }
 
     @Test

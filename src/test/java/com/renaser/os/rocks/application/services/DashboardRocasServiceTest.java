@@ -87,10 +87,12 @@ class DashboardRocasServiceTest {
     private static List<RocaMaestra> tresMaestras(UserId participante) {
         Instant ahora = CLOCK.now();
         return List.of(
-                new RocaMaestra(RocaMaestraId.newId(), participante, EjeObjetivo.CUERPO, "objetivo cuerpo", ahora),
-                new RocaMaestra(RocaMaestraId.newId(), participante, EjeObjetivo.TRABAJO, "objetivo trabajo", ahora),
-                new RocaMaestra(RocaMaestraId.newId(), participante, EjeObjetivo.RELACIONES, "objetivo relaciones",
-                        ahora));
+                new RocaMaestra(RocaMaestraId.of(UUID.randomUUID()), participante, EjeObjetivo.CUERPO,
+                        "objetivo cuerpo", ahora),
+                new RocaMaestra(RocaMaestraId.of(UUID.randomUUID()), participante, EjeObjetivo.TRABAJO,
+                        "objetivo trabajo", ahora),
+                new RocaMaestra(RocaMaestraId.of(UUID.randomUUID()), participante, EjeObjetivo.RELACIONES,
+                        "objetivo relaciones", ahora));
     }
 
     @Test

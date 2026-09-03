@@ -14,6 +14,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
+import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -62,12 +63,13 @@ class ClaseDiariaHabitoServiceTest {
     }
 
     private static Habito habitoDailyClass() {
-        return Habito.crearDeSistema("Clase diaria", TipoHabito.CHECKBOX, "ACADEMIA", ExigenciaEvidencia.OPCIONAL,
-                CLOCK.now());
+        return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Clase diaria", TipoHabito.CHECKBOX, "ACADEMIA",
+                ExigenciaEvidencia.OPCIONAL, CLOCK.now());
     }
 
     private static RegistroHabito registroPendiente(UserId participanteId, HabitoId habitoId) {
-        return RegistroHabito.generar(participanteId, habitoId, HOY, 5, TipoDia.DISCIPLINA, false, CLOCK.now());
+        return RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participanteId, habitoId, HOY, 5,
+                TipoDia.DISCIPLINA, false, CLOCK.now());
     }
 
     private void mockProgresoActivo(UserId participanteId) {

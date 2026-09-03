@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Placeholder cuando no hay proveedor de correo configurado. Mismo patron que
- * {@code NoOpPushAdapter}/{@code NoOpSupabaseAdminAuthAdapter}: el flujo queda completo y
+ * {@code NoOpPushAdapter}: el flujo queda completo y
  * probado detras de {@link EnviarEmailPort} sin depender de credenciales.
  *
  * <p><b>Ya existe el adaptador real:</b> {@link SmtpEnviarEmailAdapter} (2026-08-27). Este sigue

@@ -9,8 +9,10 @@ import com.renaser.os.community.application.ports.in.publicacion.OcultarComentar
 import com.renaser.os.community.application.ports.in.publicacion.OcultarComentarioUseCase.OcultarComentarioCommand;
 import com.renaser.os.community.domain.model.publicacion.ComentarioId;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +48,7 @@ public class WallCommentController {
         this.ocultarUseCase = ocultarUseCase;
     }
 
+    // TODO(auth fase 4): sin clasificar. No recibe actor ni ejecuta guard, pero el feed del Muro si exige cuenta activa: no se puede saber desde el codigo si es publico a proposito o una omision. NO marcar publico por defecto.
     @GetMapping
     public WallCommentsPageResponse listar(@PathVariable UUID postId,
                                             @RequestParam(required = false) String cursor) {
@@ -64,6 +67,7 @@ public class WallCommentController {
         }
     }
 
+    @RequiresPermission(Permission.USE_APP)
     @PostMapping
     public ResponseEntity<Map<String, Object>> crear(@ActorAutenticado UserId actorId,
                                                        @PathVariable UUID postId,
@@ -75,6 +79,7 @@ public class WallCommentController {
                 "commentCount", resultado.cantidadComentarios()));
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "solo el autor del comentario, sin excepcion para el moderador")
     @PatchMapping("/{commentId}")
     public WallCommentResponse actualizar(@ActorAutenticado UserId actorId, @PathVariable UUID postId,
                                            @PathVariable UUID commentId,
@@ -83,6 +88,7 @@ public class WallCommentController {
                 new EditarComentarioCommand(actorId, ComentarioId.of(commentId), request.text())));
     }
 
+    @RequiresPermission(value = Permission.USE_APP, scope = "el autor del comentario, o quien tenga MODERATE_WALL")
     @DeleteMapping("/{commentId}")
     public Map<String, Integer> eliminar(@ActorAutenticado UserId actorId, @PathVariable UUID postId,
                                           @PathVariable UUID commentId) {

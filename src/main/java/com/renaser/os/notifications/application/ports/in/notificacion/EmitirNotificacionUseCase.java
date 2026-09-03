@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * El unico punto de entrada para crear una notificacion — lo llaman los 4 listeners de
@@ -23,15 +24,19 @@ import java.util.Optional;
  */
 public interface EmitirNotificacionUseCase {
 
-    /** Vacio cuando la preferencia del usuario esta explicitamente apagada para ese tipo. */
+    /** Vacio cuando la preferencia del usuario esta explicitamente apagada para ese tipo, O
+     * cuando el mismo {@code origenEventoId} ya genero una notificacion antes — C-7: el outbox
+     * de Modulith es at-least-once, una redelivery del mismo evento no debe duplicar la fila
+     * ni el push (ver {@code notificaciones_origen_evento_uk}, V16). */
     Optional<Notificacion> emitir(EmitirNotificacionCommand command);
 
     record EmitirNotificacionCommand(@NotNull UserId usuarioId, @NotNull TipoNotificacion tipo,
-                                      @NotBlank String titulo, @NotBlank String cuerpo, String rutaApp) {
+                                      @NotBlank String titulo, @NotBlank String cuerpo, String rutaApp,
+                                      UUID origenEventoId) {
 
         public EmitirNotificacionCommand {
             SelfValidating.validateConstructorArgs(EmitirNotificacionCommand.class, usuarioId, tipo, titulo, cuerpo,
-                    rutaApp);
+                    rutaApp, origenEventoId);
         }
     }
 }

@@ -1,7 +1,9 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.admin;
 
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.participante.GetTraineeDetailUseCase;
 import com.renaser.os.users.application.ports.in.participante.GetTraineeDetailUseCase.GetTraineeDetailCommand;
 import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase;
@@ -42,6 +44,7 @@ public class TraineeAdminController {
         this.setTraineeProgramDayUseCase = setTraineeProgramDayUseCase;
     }
 
+    @RequiresPermission(Permission.MANAGE_TRAINEES)
     @GetMapping
     public TraineePageResponse listar(@ActorAutenticado UserId actor,
                                        @RequestParam(defaultValue = "0") int page,
@@ -50,12 +53,14 @@ public class TraineeAdminController {
         return TraineePageResponse.from(pagina);
     }
 
+    @RequiresPermission(Permission.MANAGE_TRAINEES)
     @GetMapping("/{id}")
     public TraineeDetailResponse detalle(@PathVariable UUID id, @ActorAutenticado UserId actor) {
         var detalle = getTraineeDetailUseCase.obtener(new GetTraineeDetailCommand(actor, UserId.of(id)));
         return TraineeDetailResponse.from(detalle);
     }
 
+    @RequiresPermission(Permission.MANAGE_TRAINEES)
     @PutMapping("/{id}/program-day")
     public ResponseEntity<Void> setProgramDay(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                                @RequestBody @Valid SetProgramDayRequest request) {

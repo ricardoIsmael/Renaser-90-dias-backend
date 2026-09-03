@@ -11,11 +11,19 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
 import com.renaser.os.habits.domain.model.espiritu.EstadoRegistroEspiritu;
 import com.renaser.os.habits.domain.model.espiritu.RegistroEspiritu;
+import com.renaser.os.habits.domain.model.espiritu.RegistroEspirituId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -55,6 +63,8 @@ import java.util.TreeSet;
 @Service
 public class EspirituService implements ConsultarEstadoEspirituUseCase, EntregarResumenEspirituUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(EspirituService.class);
+
     /** Hora local desde la que se evalua el avance del dia (spirit-audio/service.ts:55). */
     static final LocalTime HORA_DESBLOQUEO = LocalTime.of(7, 0);
     /** Hora limite de entrega, mismo dia del desbloqueo (spirit-audio/service.ts:56). */
@@ -67,15 +77,28 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
     private final AudioCatalogPort audioCatalogPort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final Clock clock;
+    private final IdGenerator idGenerator;
+    /**
+     * Transaccion PROPIA (REQUIRES_NEW) para el INSERT de {@link #crearSiHayAudio} — C-10
+     * (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html). Mismo criterio que
+     * {@code RegistroService}/{@code RachaService}/{@code PromocionCambioHorarioService}: no
+     * se toca ninguna fila bloqueada por la transaccion en curso (esto es un INSERT de una
+     * fila nueva, no una actualizacion de una ya leida), asi que aislarla no arriesga un
+     * auto-interbloqueo.
+     */
+    private final TransactionTemplate transaccionPropia;
 
     public EspirituService(LoadRegistroEspirituPort loadPort, SaveRegistroEspirituPort savePort,
                             AudioCatalogPort audioCatalogPort, ConsultarProgresoParticipanteHabitsPort progresoPort,
-                            Clock clock) {
+                            Clock clock, IdGenerator idGenerator, PlatformTransactionManager transactionManager) {
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.audioCatalogPort = audioCatalogPort;
         this.progresoPort = progresoPort;
         this.clock = clock;
+        this.idGenerator = idGenerator;
+        this.transaccionPropia = new TransactionTemplate(transactionManager);
+        this.transaccionPropia.setPropagationBehavior(Propagation.REQUIRES_NEW.value());
     }
 
     @Override
@@ -149,13 +172,44 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
         crearSiHayAudio(participanteId, ultimo.dia() + 1, zona, ahora);
     }
 
+    /**
+     * C-10 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): {@code consultar}
+     * es una lectura que, si hace falta, desbloquea el siguiente audio escribiendo una fila
+     * nueva — un clasico check-then-act. Dos lecturas casi simultaneas del mismo participante
+     * (la app movil reintenta, o el usuario refresca dos veces) pueden ver el mismo "ultimo"
+     * registro y las dos decidir que hay que desbloquear el MISMO dia: las dos intentan el
+     * INSERT y la segunda pierde contra el {@code UNIQUE(participante_id, dia)} — sin este
+     * arreglo, {@code GlobalExceptionHandler} traduce eso a un 409 para una simple lectura.
+     *
+     * <p>El INSERT corre en su propia transaccion ({@link #transaccionPropia}, REQUIRES_NEW)
+     * a proposito: si se atrapara la violacion de unicidad dentro de la MISMA transaccion de
+     * {@code consultar}/{@code entregar} (ambos {@code @Transactional}), Postgres ya dejo esa
+     * transaccion abortada en cuanto el INSERT fallo — cualquier lectura posterior en la misma
+     * transaccion (como {@link #construirVista} o {@code porParticipanteYDia}) explotaria con
+     * "current transaction is aborted" en vez de con el error real. Aislando el INSERT, si
+     * pierde la carrera solo se deshace ESA transaccion chica; la de {@code consultar}/
+     * {@code entregar} sigue sana y puede releer con normalidad.
+     *
+     * <p>No hace falta releer la fila ganadora aca: quien pierde la carrera no necesita el
+     * {@code RegistroEspiritu} recien creado por el otro hilo, solo necesita no fallar — los
+     * llamadores ({@link #construirVista}, {@code porParticipanteYDia} en {@code entregar})
+     * ya releen el estado fresco de la base despues de {@code asegurarAvance}, asi que ambos
+     * terminan viendo la MISMA fila (la del hilo que gano), sea cual sea el orden real de
+     * llegada.
+     */
     private void crearSiHayAudio(UserId participanteId, int diaAudio, ZoneId zona, Instant ahora) {
         if (audioCatalogPort.porDia(diaAudio).isEmpty()) {
             return; // catalogo no tiene ese dia todavia: el aprendiz queda al dia, esperando contenido
         }
         Instant fechaLimite = ahora.atZone(zona).toLocalDate().atTime(HORA_LIMITE).atZone(zona).toInstant();
-        RegistroEspiritu nuevo = RegistroEspiritu.desbloquear(participanteId, diaAudio, ahora, fechaLimite, ahora);
-        savePort.save(nuevo);
+        RegistroEspiritu nuevo = RegistroEspiritu.desbloquear(RegistroEspirituId.of(idGenerator.newId()),
+                participanteId, diaAudio, ahora, fechaLimite, ahora);
+        try {
+            transaccionPropia.executeWithoutResult(status -> savePort.save(nuevo));
+        } catch (DataIntegrityViolationException yaDesbloqueadoPorOtraLectura) {
+            log.debug("[EspirituService] el dia {} de {} ya fue desbloqueado por una lectura concurrente",
+                    diaAudio, participanteId);
+        }
     }
 
     /** El "dia" calendario al que pertenece un track es el de su plazo de entrega (mediodia). */

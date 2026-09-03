@@ -285,7 +285,7 @@ mismo patrón que `RolUsuarioJpa`/`UserPersistenceMapper`.
 | D-35 | `AssignMentorToTraineeUseCase` NO escribe ningún contador en `perfiles_mentor` — `total_trainees_managed` fue eliminado del baseline (P-17, derivable via `COUNT`). Escribirlo sería inventar una columna | 2026-08-24 |
 | D-36 | `users.api.FasePrograma` usa vocabulario inglés (`PHASE_1_REBIRTH`...) igual que la app y el backend viejo; la columna Postgres `fase_programa` sigue en español — traducción explícita en el mapper, nunca en el dominio | 2026-08-24 |
 | D-52 | Hueco #1 no era "falta `TraineeProfile`": era falta de 3 columnas sin mapear en `ParticipacionPrograma` (`tipo_meta`/`nombre_reto_personal`/`programa_completado_en`) + 2 endpoints. `GetMyFullProfileUseCase` compone `User`+`ParticipacionPrograma` en la capa de aplicación (nunca en el controller) para no tocar `GetMyProfileUseCase`, que ya usa el flujo de login | 2026-08-26 |
-| D-53 | Avatar genérico (gap #4): mismo patrón upload-url→PUT→confirmar del resto del sistema, pero la confirmación resuelve y persiste una URL de LECTURA firmada (7 días) en vez de guardar solo la ruta — `usuarios.avatar_url` ya es consumido como URL directa por `community`/`chat`/`mentor` vía `UserSummary`, cambiar esa semántica los rompería | 2026-08-26 |
+| ~~D-53~~ | ~~Avatar genérico (gap #4): la confirmación resuelve y persiste una URL de LECTURA firmada (7 días) en vez de guardar solo la ruta~~ ❌ **Era un defecto, no una limitación — revertido 2026-08-31 por D-55 (`docs/MODULOS_A_AVANZAR.md`), ver E-57.** Una URL prefirmada vence: a los 7 días del último cambio de foto el avatar quedaba roto para siempre en todas las pantallas. Ahora el objeto es de lectura pública y la columna guarda su URL permanente | 2026-08-26, superado 2026-08-31 |
 | D-54 | Baja de cuenta (gap #5): 14 días de gracia CONFIRMADOS (comentario de `usuarios.baja_solicitada_en` en el baseline + `DIAS_DE_GRACIA` del backend viejo coinciden), configurable vía `renaser.users.account-deletion.grace-period-days`. Acceso se conserva durante la gracia a propósito (permite cancelar). Purga = un solo `DeleteUserPort.deleteById` — las FK del baseline hacen el resto (CASCADE/SET NULL) | 2026-08-26 |
 
 ## 9. Paneles admin — staff, aprendices, solicitudes de cuenta (gaps #6/#7/#9)
@@ -401,16 +401,59 @@ frontend real:
 (no `UserAccountService`: es un concepto distinto, sube y confirma un archivo). Mismo bucket
 compartido `renaser-files` que `rocks`/`habits`/`calendar` (D-34), ruta `avatares/{userId}`.
 
-**Limitación conocida y documentada, no un gap silencioso:** a diferencia de `calendar`
-(que guarda solo la `ruta` y resuelve una URL de lectura firmada EN CADA respuesta),
-`usuarios.avatar_url` es un string plano que `community`/`chat`/`mentor` ya consumen
-directo como URL servible vía `UserSummary` — cambiar esa semántica rompería esos
-consumidores (fuera del alcance de este encargo, que era solo `users`). La confirmación
-resuelve la URL de lectura UNA VEZ (validez 7 días, la más larga razonable) y la persiste
-tal cual. Como el sistema entero sigue con `NoOpAlmacenamientoAdapter` (D-34: sin
-credenciales AWS S3 reales), esto es hoy un placeholder consistente con el resto del
-sistema, no un gap nuevo — el día que exista un adaptador real, la vía correcta a largo
-plazo es un bucket de avatares público (URL permanente), no una URL firmada.
+#### Corregido 2026-08-31 — el avatar guarda una URL PERMANENTE (D-55, `docs/BITACORA_ERRORES.md` E-57)
+
+La versión original de este gap persistía una URL de lectura **prefirmada** (validez 7 días,
+el máximo que permite SigV4) en `usuarios.avatar_url`. Eso era un defecto, no una limitación:
+**a los 7 días del último cambio de foto la firma vence y nadie la vuelve a firmar nunca**, y
+el mismo string se sirve en el muro, los comentarios, el chat, los miembros de célula, los
+testimonios y el panel admin — todos lo reciben vía `users.api.UserSummary`. No se notaba
+porque el adaptador por defecto (`NoOpAlmacenamientoAdapter`) devuelve `about:blank`: estaba
+escrito para romperse el día que se activara S3, una semana después, sin ningún error en el log.
+
+**Qué hace ahora:**
+
+- El objeto del avatar es de **lectura pública** y la columna guarda su **URL permanente** — el
+  nombre `avatar_url` ahora es correcto. `AlmacenamientoPort` ganó `urlPublica(ruta)`, que
+  `S3AlmacenamientoAdapter` compone con `S3Utilities` (bucket + región, sin llamar a AWS).
+- La **subida no cambió**: sigue siendo una URL prefirmada de 10 minutos. Lo que hace público
+  al objeto es la política del bucket, no el código. Escribir en el bucket nunca es público.
+- `User.changeAvatar` **rechaza** cualquier valor con marcas de SigV4
+  (`X-Amz-Signature`/`X-Amz-Credential`/`X-Amz-Expires`), y `V13` agrega el `CHECK` equivalente
+  en `usuarios` y en `testimonios`. Persistir una prefirmada volvió a ser difícil, en las dos capas.
+- `confirmar` recalcula la ruta desde el actor y **no confía en la del body**: nadie puede
+  publicar como avatar propio un objeto ajeno del bucket.
+- **`chat` y `community` no cambiaron**: reciben la URL ya lista dentro de `UserSummary`.
+
+**Por qué URL pública y no "firmar al leer".** Firmar en cada respuesta también arregla el
+vencimiento, y es lo correcto para evidencia, contratos, adjuntos y audios — ahí el vencimiento
+*es* la medida de seguridad. Para el avatar no: la URL cambiaría en cada respuesta y eso invalida
+el caché de imagen del cliente, así que un muro con 20 avatares volvería a descargar las 20 fotos
+en cada pantallazo. El avatar es el activo de menor sensibilidad y el que más se repite por
+respuesta; es el patrón de GitHub/Slack. Decisión del dueño del proyecto, que aceptó
+explícitamente que la ruta sea adivinable.
+
+> ⚠️ **Requisito de infraestructura — sin esto la foto no se ve.** El bucket tiene que permitir
+> `s3:GetObject` **anónimo** sobre el prefijo `avatares/*`. S3 bloquea el acceso público por
+> defecto (*Block Public Access*), así que hay que desactivar esa opción para el bucket y agregar
+> la bucket policy correspondiente. Sin ese cambio la URL que devuelve el backend es correcta
+> pero responde **403**. Los permisos IAM del backend **no cambian**: siguen siendo `GetObject`,
+> `PutObject` y `DeleteObject` sobre el bucket (D-54). Ver D-55 en `docs/MODULOS_A_AVANZAR.md`.
+
+**Migración de datos (`V13__avatar_url_permanente.sql`).** No cambia la estructura, solo repara
+valores: corta la query string de las filas prefirmadas (`split_part(avatar_url, '?', 1)` — exacto
+y no heurístico, porque en SigV4 todo lo que caduca vive después del `?`) y pone `NULL` en las que
+tenían el marcador `about:blank#pendiente-s3/...` del `NoOp`, que no son reparables ni tienen un
+objeto detrás (cuando el `NoOp` estaba activo, la URL de subida también era un marcador, así que
+el cliente nunca llegó a subir nada). Las `NULL` no se tocan: siguen significando "no tiene avatar".
+Lo mismo para `testimonios.avatar_url`, que copia el avatar del autor al promover y heredaba el
+mismo vencimiento.
+
+**Verificado:** `./mvnw clean test` → **1747/1747 en verde** (2026-08-31). `V13` la aplica Flyway
+contra el Postgres real de Testcontainers en cada build, así que los `CHECK` nuevos y los `UPDATE`
+de reparación se ejecutan de verdad, no solo en el despliegue. **Lo que estas pruebas NO cubren, a
+propósito:** que el bucket esté efectivamente abierto para lectura anónima en `avatares/*` — eso
+exige la política de S3 del recuadro de arriba y se verifica en el despliegue, no acá.
 
 ### Gap #5 — baja de cuenta autogestionada
 
@@ -467,6 +510,50 @@ consultado, no reconstruido de memoria:
 |---|---|---|
 | R-8 | ¿Se quiere replicar el enmascaramiento "ALCHEMIST con `traineeProfile` → `role: TRAINEE`" del backend viejo en `POST /api/v1/users/me`? | ⬜ Abierto — no implementado a propósito, ver gap #1 arriba |
 | R-9 | ¿Hace falta baja de cuenta SIN gracia para el panel admin, y/o baja pública sin sesión por enlace de correo (exigida por Google Play para quien desinstaló la app)? | ⬜ Abierto — fuera del alcance literal de este encargo (autogestión) |
+
+## 11. Vista vertical del panel: los hábitos de UN aprendiz (2026-08-31)
+
+**Dónde vive el código: en `habits`, no acá.** Se documenta en este archivo porque cierra un
+hueco del panel admin de aprendices descrito en §9 (gap #7), y porque es la pieza que le
+faltaba a `GET /api/v1/admin/trainees/{id}` para que un operador pueda abrir a una persona y
+ver algo más que su perfil.
+
+**El hueco, medido:** el admin de `habits` (`/api/v1/admin/habits`) es de **catálogo** — qué
+hábitos existen para todos. El admin de `users` (`/api/v1/admin/trainees`) muestra **perfil,
+rol y estado**. Nadie cruzaba las dos cosas: era imposible ver el horario real de un aprendiz,
+sus hábitos propios, su cuota de cambios gastada ni su plan de desbloqueo.
+
+**Qué se construyó:** `GET /api/v1/admin/trainees/{traineeId}/habits` — contrato completo en
+[`docs/api/CONTRATO_DIA_A_DIA.md`](api/CONTRATO_DIA_A_DIA.md) §1.7. Por cada hábito activo del
+aprendiz: identidad (título del catálogo + renombre propio si lo hay), ámbito
+(sistema/personal), horario vigente (su preferencia pisando al catálogo), cambio de horario
+programado con su fecha efectiva, recordatorio, día de desbloqueo (con si lo eligió la persona
+o el relleno automático), día semanal elegido, y la cuota semanal de reacomodos usados/restantes.
+
+**Por qué el código está en `habits` y no en `users`:** el dato es de hábitos (seis tablas de
+ese módulo) y la autorización de admin de hábitos ya vive ahí (`HabitoAdminGuard`, reusado tal
+cual). Ponerlo en `users` habría obligado a una llamada entre módulos para leer tablas ajenas.
+La ruta cuelga de `/admin/trainees/` porque es la pantalla del operador — Spring rutea por
+path, no por módulo, así que los dos controllers conviven sin conflicto.
+
+**Rendimiento — primer uso real de `JdbcClient` en el repo (CLAUDE.MD §11).** La grilla se lee
+por **proyección**, no por entidad: una sola consulta con dos `LATERAL` cruza `habitos`,
+`renombres_habito`, `horarios_habito`, `preferencias_horario`, `cambios_horario_pendientes`,
+`desbloqueos_habito` y `dias_semanales_habito`, trayendo exactamente las columnas de la
+respuesta. El endpoint hace **4 consultas fijas** en total (actor, participante, proyección,
+cuota), ninguna dentro de un bucle — un aprendiz con 40 hábitos cuesta lo mismo que uno con 3.
+Sin paginación a propósito: el tope de la colección son los hábitos activos de una persona, no
+crece con el uso (justificado en el javadoc de `LeerHabitosPersonalizadosPort`).
+
+**Reglas reusadas, no reinventadas:** la precedencia preferencia-sobre-catálogo es la de
+`RegistroService`/`TracksDelDiaProyeccionService`; la cuota se cuenta con el mismo
+`HistorialCambioHorarioPort` que la cobra en `PreferenciaHorarioService` (sin modificarlo); el
+ancla de semana de calendario es la de `EleccionDiaSemanalService`.
+
+**Autorización:** ADMIN/ALCHEMIST activos. Rol sin permiso → 403; actor `SUSPENDED` → 403
+aunque su token sea válido. El aprendiz mirado **sí** puede estar suspendido: un operador tiene
+que poder auditar justamente a quien acaba de suspender. Orden E-42 respetado (el aprendiz se
+carga primero, el gate de admin va después).
 
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 

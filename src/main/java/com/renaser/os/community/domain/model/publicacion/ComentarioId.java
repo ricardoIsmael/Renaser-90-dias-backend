@@ -2,7 +2,13 @@ package com.renaser.os.community.domain.model.publicacion;
 
 import java.util.UUID;
 
-/** Identidad de un comentario del Muro (tabla `comentarios_muro`). */
+/**
+ * Identidad de un comentario del Muro (tabla `comentarios_muro`). Valida y envuelve un UUID, pero <b>no lo
+ * genera</b>: la generacion vive fuera de {@code domain/}, detras del puerto
+ * {@link com.renaser.os.shared.domain.IdGenerator}, y el caso de uso arma el id con
+ * {@code ComentarioId.of(idGenerator.newId())} antes de invocar la factoria del agregado
+ * (CLAUDE.MD sec. 5.4.7: {@code domain/} es puro, sin aleatoriedad).
+ */
 public record ComentarioId(UUID value) {
 
     public ComentarioId {
@@ -13,10 +19,6 @@ public record ComentarioId(UUID value) {
 
     public static ComentarioId of(UUID value) {
         return new ComentarioId(value);
-    }
-
-    public static ComentarioId newId() {
-        return new ComentarioId(UUID.randomUUID());
     }
 
     @Override

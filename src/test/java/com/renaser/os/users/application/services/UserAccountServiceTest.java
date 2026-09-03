@@ -2,6 +2,7 @@ package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -28,6 +29,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -37,6 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -52,6 +57,8 @@ import static org.mockito.Mockito.when;
 class UserAccountServiceTest {
 
     private static final Clock CLOCK = FixedClock.at(Instant.parse("2026-08-25T10:00:00Z"));
+    /** Identidad fija: con el id entrando por el puerto IdGenerator, inviteStaff() ya no la sortea. */
+    private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
     private LoadUserPort loadUserPort;
@@ -71,16 +78,25 @@ class UserAccountServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private org.springframework.context.ApplicationEventPublisher events;
+    @Mock
+    private IdGenerator idGenerator;
 
     private UserAccountService service;
 
     @BeforeEach
     void setUp() {
+        // Sin base de datos: el TransactionTemplate solo tiene que ejecutar el callback.
+        // Lo que de verdad prueba que el envio ocurre fuera de la transaccion es
+        // UserAccountServiceInvitarStaffTransaccionIT, contra Postgres real (C-11).
+        TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
+        lenient().when(transactionTemplate.execute(any())).thenAnswer(inv ->
+                ((TransactionCallback<?>) inv.getArgument(0)).doInTransaction(new SimpleTransactionStatus()));
         service = new UserAccountService(loadUserPort, saveUserPort, loadMentorProfilePort, saveMentorProfilePort,
                 loadParticipacionProgramaPort, new RequireActiveUserGuard(loadUserPort), saveCredencialPort,
-                enviarEmailPort, passwordEncoder, events, CLOCK);
+                enviarEmailPort, passwordEncoder, events, CLOCK, idGenerator, transactionTemplate);
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(passwordEncoder.encode(org.mockito.ArgumentMatchers.anyString())).thenReturn("{bcrypt}hash");
+        lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
     }
 
     private static UserId id() {
@@ -246,6 +262,24 @@ class UserAccountServiceTest {
         assertThat(perfil.traineeProfile()).isNotNull();
         assertThat(perfil.traineeProfile().startDate()).isEqualTo(participacion.fechaInicio());
         assertThat(perfil.traineeProfile().isProgramCompleted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("C-11: si el envio del correo de invitacion falla, el alta no se pierde ni la "
+            + "excepcion se propaga -- el usuario y su credencial ya quedaron guardados")
+    void inviteStaffNoPierdeElAltaSiFallaElEnvioDelCorreo() {
+        UserId actorId = id();
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        org.mockito.Mockito.doThrow(new com.renaser.os.shared.domain.EnvioEmailFallidoException(
+                        new RuntimeException("SMTP no responde")))
+                .when(enviarEmailPort).enviarInvitacionStaff(any(), any());
+
+        UserId nuevoId = service.inviteStaff(
+                new InviteStaffCommand("nuevo-mentor@renaser.dev", "Nuevo Mentor", UserRole.MENTOR, actorId));
+
+        assertThat(nuevoId).isNotNull();
+        verify(saveUserPort).save(any());
+        verify(saveCredencialPort).guardar(any(), any());
     }
 
     @Test

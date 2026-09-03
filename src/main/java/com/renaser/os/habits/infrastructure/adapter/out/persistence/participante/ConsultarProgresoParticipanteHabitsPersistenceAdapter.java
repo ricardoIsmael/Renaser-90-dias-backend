@@ -7,6 +7,7 @@ import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -30,6 +31,11 @@ class ConsultarProgresoParticipanteHabitsPersistenceAdapter implements Consultar
         return participacionFinder.deParticipante(participanteId)
                 .filter(ParticipacionPrograma::inscrito)
                 .map(ConsultarProgresoParticipanteHabitsPersistenceAdapter::aProgreso);
+    }
+
+    @Override
+    public List<UserId> participantesInscritosActivos() {
+        return participacionFinder.participantesInscritosActivos();
     }
 
     private static ProgresoParticipanteHabits aProgreso(ParticipacionPrograma participacion) {

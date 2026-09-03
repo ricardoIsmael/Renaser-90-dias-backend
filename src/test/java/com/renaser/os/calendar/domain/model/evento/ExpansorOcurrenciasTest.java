@@ -8,6 +8,7 @@ import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -118,7 +119,7 @@ class ExpansorOcurrenciasTest {
         Instant inicio = Instant.parse("2026-09-01T10:00:00Z");
         Recurrencia r = new Recurrencia(FrecuenciaRecurrencia.DIARIA, 1, null, 3, Set.of());
         Instant segundaOcurrencia = Instant.parse("2026-09-02T10:00:00Z");
-        Excepcion cancelada = Excepcion.cancelar(EventoId.newId(), segundaOcurrencia);
+        Excepcion cancelada = Excepcion.cancelar(UUID.randomUUID(), EventoId.of(UUID.randomUUID()), segundaOcurrencia);
 
         List<Ocurrencia> ocurrencias = ExpansorOcurrencias.expandir(inicio, null, ZoneId.of("UTC"), r, inicio,
                 Instant.parse("2026-12-01T00:00:00Z"), List.of(cancelada));
@@ -133,7 +134,8 @@ class ExpansorOcurrenciasTest {
         Recurrencia r = new Recurrencia(FrecuenciaRecurrencia.DIARIA, 1, null, 3, Set.of());
         Instant primeraOcurrencia = inicio;
         Instant nuevoInicio = Instant.parse("2026-09-01T15:00:00Z");
-        Excepcion movida = Excepcion.reprogramar(EventoId.newId(), primeraOcurrencia, nuevoInicio, 90, "Nuevo titulo");
+        Excepcion movida = Excepcion.reprogramar(UUID.randomUUID(), EventoId.of(UUID.randomUUID()),
+                primeraOcurrencia, nuevoInicio, 90, "Nuevo titulo");
 
         List<Ocurrencia> ocurrencias = ExpansorOcurrencias.expandir(inicio, 60, ZoneId.of("UTC"), r, inicio,
                 Instant.parse("2026-12-01T00:00:00Z"), List.of(movida));

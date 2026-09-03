@@ -2,6 +2,7 @@ package com.renaser.os.community.infrastructure.adapter.out.persistence.publicac
 
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.community.domain.model.publicacion.Comentario;
+import com.renaser.os.community.domain.model.publicacion.ComentarioId;
 import com.renaser.os.community.domain.model.publicacion.MediaPublicacion;
 import com.renaser.os.community.domain.model.publicacion.Publicacion;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
@@ -54,7 +55,8 @@ class ComentarioPersistenceAdapterTest {
                 .setParameter("id", autorId.value())
                 .setParameter("email", autorId + "@renaser.test")
                 .executeUpdate();
-        Publicacion publicacion = Publicacion.publicar(autorId, "texto de prueba",
+        Publicacion publicacion = Publicacion.publicar(PublicacionId.of(UUID.randomUUID()), autorId,
+                "texto de prueba",
                 List.of(new MediaPublicacion(MediaPublicacion.BUCKET_DEFAULT, "ruta/1.jpg", "image/jpeg", 0)),
                 null, Instant.parse("2026-08-20T09:00:00Z"));
         publicacionAdapter.save(publicacion);
@@ -62,7 +64,8 @@ class ComentarioPersistenceAdapterTest {
     }
 
     private void crearComentario(Instant creadoEn) {
-        adapter.save(Comentario.escribir(publicacionId, autorId, "comentario " + creadoEn, creadoEn));
+        adapter.save(Comentario.escribir(ComentarioId.of(UUID.randomUUID()), publicacionId, autorId,
+                "comentario " + creadoEn, creadoEn));
     }
 
     @Test

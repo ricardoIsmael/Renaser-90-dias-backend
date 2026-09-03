@@ -20,9 +20,11 @@ class EventoTest {
     private static final Instant INICIA_EN = Instant.parse("2026-09-01T19:00:00Z");
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
     private static final UserId CREADOR = UserId.of(UUID.randomUUID());
+    /** El id ya no lo sortea crear(): entra por parametro, generado por el puerto IdGenerator. */
+    private static final EventoId ID = EventoId.of(UUID.randomUUID());
 
     private static Evento eventoTodos() {
-        return Evento.crear("Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET, "https://meet.google.com/abc",
+        return Evento.crear(ID, "Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET, "https://meet.google.com/abc",
                 TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(),
                 List.of(), CREADOR, CLOCK);
     }
@@ -30,6 +32,7 @@ class EventoTest {
     @Test
     void creaUnEventoValido() {
         Evento evento = eventoTodos();
+        assertThat(evento.id()).isEqualTo(ID);
         assertThat(evento.titulo()).isEqualTo("Sesion");
         assertThat(evento.estado()).isEqualTo(EstadoEvento.PUBLICADO);
         assertThat(evento.creadoPor()).isEqualTo(CREADOR);
@@ -37,7 +40,7 @@ class EventoTest {
 
     @Test
     void tituloMayorATreintaCaracteresRechazado() {
-        assertThatThrownBy(() -> Evento.crear("x".repeat(31), null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
+        assertThatThrownBy(() -> Evento.crear(ID, "x".repeat(31), null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
                 "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO, false,
                 false, false, null, Set.of(), List.of(), CREADOR, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -45,7 +48,7 @@ class EventoTest {
 
     @Test
     void tituloVacioRechazado() {
-        assertThatThrownBy(() -> Evento.crear("  ", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
+        assertThatThrownBy(() -> Evento.crear(ID, "  ", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
                 "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO, false,
                 false, false, null, Set.of(), List.of(), CREADOR, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -53,7 +56,7 @@ class EventoTest {
 
     @Test
     void nivelMinimoSinAudienciaNivelMinimoRechazado() {
-        assertThatThrownBy(() -> Evento.crear("Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
+        assertThatThrownBy(() -> Evento.crear(ID, "Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
                 "https://meet.google.com/abc", TipoAudiencia.TODOS, 1, null, null, TipoEvento.ESPONTANEO, false,
                 false, false, null, Set.of(), List.of(), CREADOR, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -62,7 +65,7 @@ class EventoTest {
 
     @Test
     void audienciaNivelMinimoSinNivelIdRechazada() {
-        assertThatThrownBy(() -> Evento.crear("Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
+        assertThatThrownBy(() -> Evento.crear(ID, "Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
                 "https://meet.google.com/abc", TipoAudiencia.NIVEL_MINIMO, null, null, null, TipoEvento.ESPONTANEO,
                 false, false, false, null, Set.of(), List.of(), CREADOR, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -70,7 +73,7 @@ class EventoTest {
 
     @Test
     void audienciaRolesSinRolesRechazada() {
-        assertThatThrownBy(() -> Evento.crear("Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
+        assertThatThrownBy(() -> Evento.crear(ID, "Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
                 "https://meet.google.com/abc", TipoAudiencia.ROLES, null, null, null, TipoEvento.ESPONTANEO, false,
                 false, false, null, Set.of(), List.of(), CREADOR, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -78,7 +81,7 @@ class EventoTest {
 
     @Test
     void audienciaRolesConRolesValida() {
-        Evento evento = Evento.crear("Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
+        Evento evento = Evento.crear(ID, "Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
                 "https://meet.google.com/abc", TipoAudiencia.ROLES, null, null, null, TipoEvento.ESPONTANEO, false,
                 false, false, null, Set.of(RolUsuario.MENTOR), List.of(), CREADOR, CLOCK);
         assertThat(evento.rolesDestino()).containsExactly(RolUsuario.MENTOR);
@@ -86,7 +89,7 @@ class EventoTest {
 
     @Test
     void ubicacionZoomSinUrlRechazada() {
-        assertThatThrownBy(() -> Evento.crear("Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.ZOOM, null,
+        assertThatThrownBy(() -> Evento.crear(ID, "Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.ZOOM, null,
                 TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(),
                 List.of(), CREADOR, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -94,7 +97,7 @@ class EventoTest {
 
     @Test
     void ubicacionLlamadaInternaConValorRechazada() {
-        assertThatThrownBy(() -> Evento.crear("Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.LLAMADA_INTERNA,
+        assertThatThrownBy(() -> Evento.crear(ID, "Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.LLAMADA_INTERNA,
                 "algo", TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO, false, false, false, null,
                 Set.of(), List.of(), CREADOR, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -107,7 +110,7 @@ class EventoTest {
                 ReglaRecordatorio.minutosAntes(3, 15), ReglaRecordatorio.minutosAntes(4, 20),
                 ReglaRecordatorio.minutosAntes(5, 25), ReglaRecordatorio.minutosAntes(6, 30));
 
-        assertThatThrownBy(() -> Evento.crear("Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
+        assertThatThrownBy(() -> Evento.crear(ID, "Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
                 "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO, false,
                 false, true, null, Set.of(), seis, CREADOR, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -118,7 +121,7 @@ class EventoTest {
         List<ReglaRecordatorio> duplicadas = List.of(
                 ReglaRecordatorio.minutosAntes(1, 10), ReglaRecordatorio.minutosAntes(2, 10));
 
-        assertThatThrownBy(() -> Evento.crear("Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
+        assertThatThrownBy(() -> Evento.crear(ID, "Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
                 "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO, false,
                 false, true, null, Set.of(), duplicadas, CREADOR, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -132,7 +135,7 @@ class EventoTest {
 
     @Test
     void reglasEfectivasVaciasSignificaNoAvisaCuandoPersonalizadasSinFilas() {
-        Evento evento = Evento.crear("Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
+        Evento evento = Evento.crear(ID, "Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
                 "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO, false,
                 false, true, null, Set.of(), List.of(), CREADOR, CLOCK);
         assertThat(evento.reglasRecordatorioEfectivas()).isEmpty();
@@ -143,7 +146,7 @@ class EventoTest {
         Recurrencia recurrenciaInvalida = new Recurrencia(FrecuenciaRecurrencia.SEMANAL, 1,
                 INICIA_EN.minusSeconds(3600), null, Set.of(java.time.DayOfWeek.MONDAY));
 
-        assertThatThrownBy(() -> Evento.crear("Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
+        assertThatThrownBy(() -> Evento.crear(ID, "Sesion", null, INICIA_EN, 60, LIMA, TipoUbicacion.MEET,
                 "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO, false,
                 false, false, recurrenciaInvalida, Set.of(), List.of(), CREADOR, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -183,7 +186,7 @@ class EventoTest {
      */
     @Test
     void rehydrateConRolesDestinoVacioNoRevienta() {
-        Evento evento = Evento.rehydrate(EventoId.newId(), "Sesion", null, null, INICIA_EN, 60, LIMA,
+        Evento evento = Evento.rehydrate(EventoId.of(UUID.randomUUID()), "Sesion", null, null, INICIA_EN, 60, LIMA,
                 TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null,
                 EstadoEvento.PUBLICADO, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(),
                 CREADOR, CLOCK.now(), CLOCK.now());
@@ -193,7 +196,7 @@ class EventoTest {
 
     @Test
     void rehydrateConRolesDestinoNuloNoRevienta() {
-        Evento evento = Evento.rehydrate(EventoId.newId(), "Sesion", null, null, INICIA_EN, 60, LIMA,
+        Evento evento = Evento.rehydrate(EventoId.of(UUID.randomUUID()), "Sesion", null, null, INICIA_EN, 60, LIMA,
                 TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null,
                 EstadoEvento.PUBLICADO, TipoEvento.ESPONTANEO, false, false, false, null, null, null,
                 CREADOR, CLOCK.now(), CLOCK.now());
@@ -204,7 +207,7 @@ class EventoTest {
 
     @Test
     void rehydrateConRolesDestinoNoVacioLosConserva() {
-        Evento evento = Evento.rehydrate(EventoId.newId(), "Sesion", null, null, INICIA_EN, 60, LIMA,
+        Evento evento = Evento.rehydrate(EventoId.of(UUID.randomUUID()), "Sesion", null, null, INICIA_EN, 60, LIMA,
                 TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.ROLES, null, null, null,
                 EstadoEvento.PUBLICADO, TipoEvento.ESPONTANEO, false, false, false, null,
                 Set.of(RolUsuario.MENTOR), List.of(), CREADOR, CLOCK.now(), CLOCK.now());

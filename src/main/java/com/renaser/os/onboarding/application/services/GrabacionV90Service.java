@@ -8,6 +8,7 @@ import com.renaser.os.onboarding.application.ports.out.grabacionv90.DespacharVal
 import com.renaser.os.onboarding.application.ports.out.grabacionv90.LoadGrabacionV90Port;
 import com.renaser.os.onboarding.application.ports.out.grabacionv90.SaveGrabacionV90Port;
 import com.renaser.os.onboarding.application.ports.out.media.LoadMediaPort;
+import com.renaser.os.onboarding.domain.model.grabacionv90.EstadoIAv90;
 import com.renaser.os.onboarding.domain.model.grabacionv90.GrabacionV90;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -69,11 +70,26 @@ public class GrabacionV90Service implements RegistrarGrabacionV90UseCase, Listar
         return loadGrabacionPort.todasDeUsuario(usuarioId);
     }
 
+    /**
+     * C-3 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): {@code
+     * requireGrabacionPropiaParaEscritura} lee CON bloqueo pesimista, asi que dos POST
+     * concurrentes sobre la misma grabacion ya no pueden leer ambas {@code PENDIENTE} antes
+     * de que cualquiera escriba — la segunda transaccion queda bloqueada hasta que la primera
+     * comprometa, y al leer despues ve el {@code PROCESANDO} ya comprometido. En ese caso no
+     * se vuelve a llamar a {@code procesarIntentoDeValidacion} (que rechazaria con un 409) ni
+     * se despacha una segunda validacion IA: se responde el mismo 202 idempotente que ya
+     * define el contrato (CLAUDE.MD §7) — el aprendiz que doble-clickea o cuyo cliente
+     * reintenta por timeout ve exactamente el mismo resultado que si su request hubiera sido
+     * la unica.
+     */
     @Override
     @Transactional
     public void solicitarValidacion(SolicitarValidacionV90Command command) {
         requireActorActivo(command.usuarioId());
-        GrabacionV90 grabacion = requireGrabacionPropia(command.usuarioId(), command.grabacionId());
+        GrabacionV90 grabacion = requireGrabacionPropiaParaEscritura(command.usuarioId(), command.grabacionId());
+        if (grabacion.estadoIa() == EstadoIAv90.PROCESANDO) {
+            return;
+        }
         grabacion.procesarIntentoDeValidacion(clock);
         saveGrabacionPort.guardar(grabacion);
         despacharDespuesDelCommit(command.usuarioId(), command.grabacionId());
@@ -108,6 +124,19 @@ public class GrabacionV90Service implements RegistrarGrabacionV90UseCase, Listar
 
     private GrabacionV90 requireGrabacionPropia(UserId usuarioId, long grabacionId) {
         GrabacionV90 grabacion = loadGrabacionPort.porId(grabacionId)
+                .orElseThrow(() -> new NoSuchElementException("Grabacion no encontrada: " + grabacionId));
+        if (!grabacion.usuarioId().equals(usuarioId)) {
+            throw new NotAuthorizedException("Esta grabacion no pertenece al usuario");
+        }
+        return grabacion;
+    }
+
+    /** Igual que {@link #requireGrabacionPropia}, pero con bloqueo pesimista (C-3) — solo
+     * para el camino de escritura de {@link #solicitarValidacion}. Las lecturas puras
+     * ({@link #consultarEstado}) siguen sin lock: el polling ocurre mucho mas seguido que la
+     * escritura y no tiene sentido pagar contencion de fila por el. */
+    private GrabacionV90 requireGrabacionPropiaParaEscritura(UserId usuarioId, long grabacionId) {
+        GrabacionV90 grabacion = loadGrabacionPort.porIdParaEscritura(grabacionId)
                 .orElseThrow(() -> new NoSuchElementException("Grabacion no encontrada: " + grabacionId));
         if (!grabacion.usuarioId().equals(usuarioId)) {
             throw new NotAuthorizedException("Esta grabacion no pertenece al usuario");

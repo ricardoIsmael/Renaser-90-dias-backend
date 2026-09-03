@@ -25,7 +25,7 @@ public class AccountRequestJpaEntity {
     @Id
     private UUID id;
 
-    private UUID supabaseUserId;
+    private UUID usuarioId;
 
     private String email;
 
@@ -34,6 +34,15 @@ public class AccountRequestJpaEntity {
     private String telefono;
 
     private String ciudad;
+
+    /**
+     * Origen social del alta (migracion V12). Los dos son NULL en el alta por formulario y
+     * ambos no-NULL en la que abre un proveedor — un CHECK de la base repite esa regla. Se
+     * guardan como texto plano y no como enum nativo, igual que en `identidades_externas`.
+     */
+    private String proveedor;
+
+    private String sujetoProveedor;
 
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)

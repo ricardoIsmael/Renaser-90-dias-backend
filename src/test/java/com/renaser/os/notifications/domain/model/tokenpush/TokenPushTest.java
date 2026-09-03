@@ -18,9 +18,13 @@ class TokenPushTest {
         return UserId.of(UUID.randomUUID());
     }
 
+    private static TokenPushId nuevoId() {
+        return TokenPushId.of(UUID.randomUUID());
+    }
+
     @Test
     void registrarAsignaIdYFechas() {
-        TokenPush t = TokenPush.registrar(usuario(), "expo-token-123", PlataformaPush.IOS, CLOCK);
+        TokenPush t = TokenPush.registrar(nuevoId(), usuario(), "expo-token-123", PlataformaPush.IOS, CLOCK);
 
         assertThat(t.id()).isNotNull();
         assertThat(t.token()).isEqualTo("expo-token-123");
@@ -30,13 +34,13 @@ class TokenPushTest {
 
     @Test
     void registrarRechazaTokenVacio() {
-        assertThatThrownBy(() -> TokenPush.registrar(usuario(), "  ", PlataformaPush.ANDROID, CLOCK))
+        assertThatThrownBy(() -> TokenPush.registrar(nuevoId(), usuario(), "  ", PlataformaPush.ANDROID, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void registrarAceptaPlataformaNula() {
-        TokenPush t = TokenPush.registrar(usuario(), "token-sin-plataforma", null, CLOCK);
+        TokenPush t = TokenPush.registrar(nuevoId(), usuario(), "token-sin-plataforma", null, CLOCK);
         assertThat(t.plataforma()).isNull();
     }
 
@@ -44,7 +48,7 @@ class TokenPushTest {
     void reasignarCambiaDuenoYPlataformaSinCambiarElToken() {
         UserId original = usuario();
         UserId nuevo = usuario();
-        TokenPush t = TokenPush.registrar(original, "token-compartido", PlataformaPush.IOS, CLOCK);
+        TokenPush t = TokenPush.registrar(nuevoId(), original, "token-compartido", PlataformaPush.IOS, CLOCK);
 
         FixedClock masTarde = FixedClock.at(CLOCK.now().plusSeconds(3600));
         t.reasignar(nuevo, PlataformaPush.ANDROID, masTarde);

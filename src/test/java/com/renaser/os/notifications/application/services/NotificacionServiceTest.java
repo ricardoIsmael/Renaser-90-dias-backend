@@ -21,6 +21,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -57,13 +59,18 @@ class NotificacionServiceTest {
     private PushPort pushPort;
     @Mock
     private UserSummaryFinder userSummaryFinder;
+    /** No necesita stubbing: TransactionTemplate.execute con getTransaction()==null solo corre
+     * el callback directo (mismo criterio que ConversacionServiceTest, C-10). */
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private NotificacionService service;
 
     @BeforeEach
     void setUp() {
         service = new NotificacionService(loadNotificacionPort, saveNotificacionPort, loadPreferenciasPort,
-                loadTokenPushPort, pushPort, new ActorNotificacionesGuard(userSummaryFinder), CLOCK);
+                loadTokenPushPort, pushPort, new ActorNotificacionesGuard(userSummaryFinder), CLOCK,
+                transactionManager);
         lenient().when(userSummaryFinder.findById(any())).thenAnswer(inv -> Optional.of(
                 new UserSummary(inv.getArgument(0), "Test", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(saveNotificacionPort.guardar(any())).thenAnswer(inv -> {
@@ -86,7 +93,7 @@ class NotificacionServiceTest {
                 .thenReturn(Optional.empty());
 
         Optional<Notificacion> resultado = service.emitir(
-                new EmitirNotificacionCommand(usuario, TipoNotificacion.SANTUARIO_ROTO, "T", "C", null));
+                new EmitirNotificacionCommand(usuario, TipoNotificacion.SANTUARIO_ROTO, "T", "C", null, null));
 
         assertThat(resultado).isPresent();
         verify(saveNotificacionPort).guardar(any());
@@ -100,7 +107,7 @@ class NotificacionServiceTest {
                 .thenReturn(Optional.of(false));
 
         Optional<Notificacion> resultado = service.emitir(
-                new EmitirNotificacionCommand(usuario, TipoNotificacion.SANTUARIO_ROTO, "T", "C", null));
+                new EmitirNotificacionCommand(usuario, TipoNotificacion.SANTUARIO_ROTO, "T", "C", null, null));
 
         assertThat(resultado).isEmpty();
         verify(saveNotificacionPort, never()).guardar(any());
@@ -114,7 +121,7 @@ class NotificacionServiceTest {
                 .thenReturn(Optional.of(true));
 
         Optional<Notificacion> resultado = service.emitir(
-                new EmitirNotificacionCommand(usuario, TipoNotificacion.MENSAJE_MENTOR, "T", "C", null));
+                new EmitirNotificacionCommand(usuario, TipoNotificacion.MENSAJE_MENTOR, "T", "C", null, null));
 
         assertThat(resultado).isPresent();
     }
@@ -128,7 +135,7 @@ class NotificacionServiceTest {
         doThrow(new RuntimeException("Expo caido")).when(pushPort).enviar(anyList(), any(), any());
 
         Optional<Notificacion> resultado = service.emitir(
-                new EmitirNotificacionCommand(usuario, TipoNotificacion.ANUNCIO_SISTEMA, "T", "C", null));
+                new EmitirNotificacionCommand(usuario, TipoNotificacion.ANUNCIO_SISTEMA, "T", "C", null, null));
 
         assertThat(resultado).isPresent();
         verify(saveNotificacionPort).guardar(any());
@@ -204,11 +211,39 @@ class NotificacionServiceTest {
                 .thenReturn(Optional.of(true));
 
         Optional<Notificacion> emitida = service.emitir(new EmitirNotificacionCommand(destinatario,
-                TipoNotificacion.MENSAJE_MENTOR, "Titulo", "Cuerpo", null));
+                TipoNotificacion.MENSAJE_MENTOR, "Titulo", "Cuerpo", null, null));
 
         assertThat(emitida).isPresent();
         verify(saveNotificacionPort).guardar(any());
         // La asercion clave: el guard no se invoca en este camino, por eso da igual el estado.
         verify(userSummaryFinder, never()).findById(any());
+    }
+
+    /**
+     * C-7: el outbox de Spring Modulith es at-least-once — el mismo evento
+     * (mismo {@code origenEventoId}) puede llegarle a {@code emitir} mas de una vez (reintento
+     * tras un fallo transitorio, o la republicacion al reiniciar). La segunda entrega choca
+     * contra {@code notificaciones_origen_evento_uk} (V16); en este test unitario se simula esa
+     * colision con el puerto lanzando {@link DataIntegrityViolationException} directamente
+     * (la prueba de que el indice real la produce vive en
+     * {@code NotificacionEmitirIdempotenciaIT}, con Testcontainers).
+     */
+    @Test
+    @DisplayName("C-7: emitir() con el mismo origenEventoId dos veces -> la segunda entrega no "
+            + "crea una fila nueva ni reenvia el push")
+    void emitirConElMismoOrigenEventoDosVecesEsIdempotente() {
+        UserId usuario = usuario();
+        UUID origenEventoId = UUID.randomUUID();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.HITO_PROGRAMA))
+                .thenReturn(Optional.of(true));
+        when(saveNotificacionPort.guardar(any()))
+                .thenThrow(new DataIntegrityViolationException("notificaciones_origen_evento_uk"));
+
+        Optional<Notificacion> resultado = service.emitir(
+                new EmitirNotificacionCommand(usuario, TipoNotificacion.HITO_PROGRAMA, "T", "C", null,
+                        origenEventoId));
+
+        assertThat(resultado).isEmpty();
+        verify(pushPort, never()).enviar(anyList(), any(), any());
     }
 }
