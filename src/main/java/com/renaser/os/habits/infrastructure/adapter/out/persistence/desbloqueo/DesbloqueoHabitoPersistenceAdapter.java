@@ -39,4 +39,14 @@ class DesbloqueoHabitoPersistenceAdapter implements LoadDesbloqueoHabitoPort, Sa
                                Instant ahora) {
         repository.elegirSiFalta(participanteId.value(), habitoId.value(), diaDesbloqueo, elegidoEn, ahora);
     }
+
+    @Override
+    public DesbloqueoHabito save(DesbloqueoHabito desbloqueo) {
+        return mapper.toDomain(repository.save(mapper.toEntity(desbloqueo)));
+    }
+
+    @Override
+    public void borrar(UserId participanteId, HabitoId habitoId) {
+        repository.deleteByParticipanteIdAndHabitoId(participanteId.value(), habitoId.value());
+    }
 }

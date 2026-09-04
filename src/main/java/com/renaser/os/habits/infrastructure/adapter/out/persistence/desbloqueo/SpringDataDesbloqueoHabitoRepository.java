@@ -33,4 +33,8 @@ interface SpringDataDesbloqueoHabitoRepository extends JpaRepository<DesbloqueoH
     void elegirSiFalta(@Param("participanteId") UUID participanteId, @Param("habitoId") UUID habitoId,
                         @Param("diaDesbloqueo") int diaDesbloqueo, @Param("elegidoEn") Instant elegidoEn,
                         @Param("ahora") Instant ahora);
+
+    /** Idempotente por naturaleza: borrar lo que no existe afecta 0 filas y no falla (D-87). */
+    @Modifying(clearAutomatically = true)
+    void deleteByParticipanteIdAndHabitoId(UUID participanteId, UUID habitoId);
 }
