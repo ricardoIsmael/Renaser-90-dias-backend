@@ -12,6 +12,8 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
+import com.renaser.os.habits.application.ports.out.desbloqueo.LoadDesbloqueoHabitoPort;
+import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
@@ -47,6 +49,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
@@ -69,6 +72,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     private final LoadPreferenciaHorarioPort loadPreferenciaPort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final AjustarPuntosPort ajustarPuntosPort;
+    /** D-87: para saltear los habitos que el aprendiz pauso. */
+    private final LoadDesbloqueoHabitoPort loadDesbloqueoPort;
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final IdGenerator idGenerator;
@@ -89,6 +94,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
                             LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
                             LoadPreferenciaHorarioPort loadPreferenciaPort,
                             ConsultarProgresoParticipanteHabitsPort progresoPort, AjustarPuntosPort ajustarPuntosPort,
+                            LoadDesbloqueoHabitoPort loadDesbloqueoPort,
                             ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator,
                             List<PoliticaHabito> politicas, PlatformTransactionManager transactionManager) {
         this.loadRegistroPort = loadRegistroPort;
@@ -98,6 +104,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         this.loadPreferenciaPort = loadPreferenciaPort;
         this.progresoPort = progresoPort;
         this.ajustarPuntosPort = ajustarPuntosPort;
+        this.loadDesbloqueoPort = loadDesbloqueoPort;
         this.events = events;
         this.clock = clock;
         this.idGenerator = idGenerator;
@@ -152,8 +159,23 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         List<Habito> catalogo = new ArrayList<>(loadHabitoPort.catalogoActivo());
         catalogo.addAll(loadHabitoPort.personalesActivosDe(participanteId));
 
+        // D-87: los habitos que este aprendiz PAUSO no generan track. Se resuelve en UNA consulta
+        // y no una por habito — el barrido nocturno recorre todo el padron.
+        //
+        // Compatibilidad hacia atras, deliberada: solo se saltean los PAUSADOS explicitos. Un
+        // habito sin fila en `desbloqueos_habito` se sigue generando como siempre. Filtrar por
+        // "esta en el plan" habria dejado a TODO el padron sin habitos de un dia para el otro,
+        // porque hoy esa tabla esta vacia para todos.
+        Set<HabitoId> pausados = loadDesbloqueoPort.deParticipante(participanteId).stream()
+                .filter(DesbloqueoHabito::estaPausado)
+                .map(DesbloqueoHabito::habitoId)
+                .collect(java.util.stream.Collectors.toSet());
+
         List<RegistroHabito> generados = new ArrayList<>();
         for (Habito habito : catalogo) {
+            if (pausados.contains(habito.id())) {
+                continue;
+            }
             if (loadRegistroPort.porParticipanteHabitoYFecha(participanteId, habito.id(), fecha).isPresent()) {
                 continue; // idempotente: ya existe (UNIQUE participante+habito+fecha)
             }

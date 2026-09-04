@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.ports.out.desbloqueo;
 
+import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.UserId;
 
@@ -22,4 +23,10 @@ public interface SaveDesbloqueoHabitoPort {
      * intento que gano la carrera de creacion.
      */
     void elegirSiFalta(UserId participanteId, HabitoId habitoId, int diaDesbloqueo, Instant elegidoEn, Instant ahora);
+
+    /** Persiste un desbloqueo ya existente — hoy solo cambia `pausado_en` (V23, D-87). */
+    DesbloqueoHabito save(DesbloqueoHabito desbloqueo);
+
+    /** Saca el habito del plan. Idempotente: borrar lo que no esta no falla. */
+    void borrar(UserId participanteId, HabitoId habitoId);
 }

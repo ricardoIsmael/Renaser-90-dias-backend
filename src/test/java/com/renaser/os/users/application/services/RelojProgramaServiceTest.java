@@ -147,6 +147,40 @@ class RelojProgramaServiceTest {
         assertThat(estado.fechasValidas()).isEmpty();
     }
 
+    /**
+     * D-84: Plan necesita distinguir "todavia no elegiste" de "ya elegiste, arrancas el X".
+     * Hasta ahora las dos situaciones devolvian lo mismo y en pantalla se veian igual: un
+     * plan vacio sin explicacion.
+     */
+    @Test
+    void consultarEstadoActivadoDevuelveLaFechaDeInicioElegida() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        var participacion = ParticipacionPrograma.inscribirTraineeAprobado(actorId, CLOCK);
+        participacion.activarPrograma(CLOCK.today().plusDays(2), CLOCK);
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuarioActivo(actorId)));
+        when(loadParticipacionProgramaPort.byParticipanteId(actorId)).thenReturn(Optional.of(participacion));
+
+        var estado = service.consultarEstado(new ConsultarActivacionProgramaQuery(actorId));
+
+        assertThat(estado.activado()).isTrue();
+        assertThat(estado.fechasValidas()).isEmpty();
+        assertThat(estado.fechaInicio()).isEqualTo(CLOCK.today().plusDays(2));
+    }
+
+    @Test
+    void consultarEstadoSinActivarNoDevuelveFechaDeInicio() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuarioActivo(actorId)));
+        when(loadParticipacionProgramaPort.byParticipanteId(actorId))
+                .thenReturn(Optional.of(ParticipacionPrograma.inscribirTraineeAprobado(actorId, CLOCK)));
+
+        var estado = service.consultarEstado(new ConsultarActivacionProgramaQuery(actorId));
+
+        assertThat(estado.activado()).isFalse();
+        assertThat(estado.fechaInicio()).isNull();
+        assertThat(estado.fechasValidas()).hasSize(3);
+    }
+
     // ─── avanzarParticipantesActivos (cron nocturno) ───────────────────────
 
     @Test

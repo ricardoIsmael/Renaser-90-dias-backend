@@ -32,4 +32,7 @@ public class DesbloqueoHabitoJpaEntity {
     private Instant creadoEn;
 
     private Instant actualizadoEn;
+
+    /** `pausado_en` (V23): NULL = ACTIVO para este aprendiz. */
+    private Instant pausadoEn;
 }

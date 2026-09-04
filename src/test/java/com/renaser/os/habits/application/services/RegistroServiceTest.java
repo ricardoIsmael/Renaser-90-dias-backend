@@ -71,6 +71,8 @@ class RegistroServiceTest {
     @Mock
     private AjustarPuntosPort ajustarPuntosPort;
     @Mock
+    private com.renaser.os.habits.application.ports.out.desbloqueo.LoadDesbloqueoHabitoPort loadDesbloqueoPort;
+    @Mock
     private org.springframework.context.ApplicationEventPublisher events;
     @Mock
     private IdGenerator idGenerator;
@@ -91,7 +93,7 @@ class RegistroServiceTest {
         // tal cual mantiene el test fiel al comportamiento de produccion (el rechazo de
         // BLOQUEO que antes estaba hardcodeado en el servicio ahora lo aporta esta).
         service = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
-                loadPreferenciaPort, progresoPort, ajustarPuntosPort, events, CLOCK, idGenerator,
+                loadPreferenciaPort, progresoPort, ajustarPuntosPort, loadDesbloqueoPort, events, CLOCK, idGenerator,
                 List.of(new PoliticaSantuario()), transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));

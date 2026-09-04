@@ -69,9 +69,9 @@ public class RelojProgramaService
         User actor = requireActiveUserGuard.of(query.actorId());
         ParticipacionPrograma participacion = requireParticipacionDe(actor.id());
         if (participacion.estaActivado()) {
-            return new EstadoActivacionPrograma(true, List.of());
+            return new EstadoActivacionPrograma(true, List.of(), participacion.fechaInicio());
         }
-        return new EstadoActivacionPrograma(false, participacion.opcionesDeActivacion(clock));
+        return new EstadoActivacionPrograma(false, participacion.opcionesDeActivacion(clock), null);
     }
 
     /**
