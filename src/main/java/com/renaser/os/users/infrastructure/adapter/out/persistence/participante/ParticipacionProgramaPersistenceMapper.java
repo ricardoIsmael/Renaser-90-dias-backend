@@ -8,8 +8,9 @@ import org.springframework.stereotype.Component;
 
 import java.time.ZoneId;
 
-/** Mapper a mano (D-28): la columna `dia_programa` es `smallint` (short) contra el
- * `int` del dominio, y `fase`/`timezone` necesitan traduccion — no es mapeo plano. */
+/** Mapper a mano (D-28): las columnas `dia_programa` y `dias_ajuste_programa` son
+ * `smallint` (short) contra el `int` del dominio, y `fase`/`timezone` necesitan
+ * traduccion — no es mapeo plano. */
 @Component
 class ParticipacionProgramaPersistenceMapper {
 
@@ -30,7 +31,8 @@ class ParticipacionProgramaPersistenceMapper {
                 toDomainTipoMeta(e.getTipoMeta()),
                 e.getNombreRetoPersonal(),
                 e.getProgramaCompletadoEn(),
-                e.getDiaProgramaAvanzadoEl());
+                e.getDiaProgramaAvanzadoEl(),
+                e.getDiasAjustePrograma());
     }
 
     ParticipacionProgramaJpaEntity toEntity(ParticipacionPrograma p) {
@@ -50,7 +52,8 @@ class ParticipacionProgramaPersistenceMapper {
                 toJpaTipoMeta(p.tipoMeta()),
                 p.nombreRetoPersonal(),
                 p.programaCompletadoEn(),
-                p.diaProgramaAvanzadoEl());
+                p.diaProgramaAvanzadoEl(),
+                (short) p.diasAjuste());
     }
 
     private TipoMetaJpa toJpaTipoMeta(TipoMeta tipoMeta) {

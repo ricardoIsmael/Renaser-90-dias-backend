@@ -158,7 +158,7 @@ class RelojProgramaServiceTest {
                 CLOCK.now(), null, null, null, CLOCK.today().minusDays(1));
         ParticipacionPrograma yaAvanzadaHoy = ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null,
                 null, 10, com.renaser.os.users.api.FasePrograma.PHASE_2_DEVELOPMENT,
-                CLOCK.today().minusDays(10), CLOCK.now(), java.time.ZoneId.of("America/Lima"), false, 0, CLOCK.now(),
+                CLOCK.today().minusDays(9), CLOCK.now(), java.time.ZoneId.of("America/Lima"), false, 0, CLOCK.now(),
                 CLOCK.now(), null, null, null, CLOCK.today());
 
         List<ParticipacionPrograma> unicaPagina = new ArrayList<>(
@@ -173,6 +173,40 @@ class RelojProgramaServiceTest {
         verify(saveParticipacionProgramaPort, times(1)).save(any());
         assertThat(pendienteDeAvance.diaPrograma()).isEqualTo(6);
         assertThat(yaAvanzadaHoy.diaPrograma()).isEqualTo(10);
+    }
+
+    /**
+     * Regresion del bug del 2026-09-03 (BITACORA E-91). Una cuenta de America/Lima con
+     * `fecha_inicio` = HOY tiene que estar en el dia 1 durante TODO ese dia, corra el
+     * barrido a la hora que corra.
+     *
+     * <p>Con el modelo incremental y el cron de las 04:50 UTC esto daba 0: para Lima
+     * (UTC-5) esas son las 23:50 del dia ANTERIOR, asi que la guarda
+     * "la fecha de inicio todavia no llego" era verdadera y el aprendiz pasaba su Dia 1
+     * entero viendo "dia 0". El modelo derivado no depende de a que hora corrio nadie.
+     */
+    @Test
+    void unParticipanteDeLimaEstaEnElDiaUnoDuranteTodoSuPrimerDia() {
+        var inicio = java.time.LocalDate.of(2026, 9, 3);
+        var lima = java.time.ZoneId.of("America/Lima");
+        // 14:00 en Lima del propio dia de inicio (19:00 UTC): plena jornada del Dia 1.
+        var relojEnPlenoDiaUno = FixedClock.at(Instant.parse("2026-09-03T19:00:00Z"));
+        var service = new RelojProgramaService(new RequireActiveUserGuard(loadUserPort),
+                loadParticipacionProgramaPort, saveParticipacionProgramaPort,
+                listarParticipantesConProgramaActivoPort, relojEnPlenoDiaUno);
+        ParticipacionPrograma recienActivado = ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null,
+                null, 0, com.renaser.os.users.api.FasePrograma.PHASE_1_REBIRTH, inicio,
+                Instant.parse("2026-09-03T04:07:00Z"), lima, false, 0,
+                relojEnPlenoDiaUno.now(), relojEnPlenoDiaUno.now(), null, null, null, null);
+        when(listarParticipantesConProgramaActivoPort.pagina(0, 500))
+                .thenReturn(new ArrayList<>(List.of(recienActivado)));
+        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var resultado = service.avanzarParticipantesActivos();
+
+        assertThat(resultado.avanzados()).isEqualTo(1);
+        assertThat(recienActivado.diaPrograma()).isEqualTo(1);
+        assertThat(recienActivado.diaProgramaAvanzadoEl()).isEqualTo(inicio);
     }
 
     /** Verifica que el barrido SI pida una segunda pagina cuando la primera viene llena

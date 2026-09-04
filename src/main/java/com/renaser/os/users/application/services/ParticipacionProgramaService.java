@@ -1,6 +1,7 @@
 package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.AsignacionCelulaPort;
@@ -23,8 +24,13 @@ import com.renaser.os.users.application.ports.out.participante.DeleteParticipaci
 import com.renaser.os.users.application.ports.out.participante.LoadParticipacionProgramaPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
+import com.renaser.os.users.application.ports.out.ajustediaprograma.LoadUltimoAjusteDiaProgramaPort;
+import com.renaser.os.users.application.ports.out.ajustediaprograma.SaveAjusteDiaProgramaPort;
+import com.renaser.os.users.domain.model.ajustediaprograma.AjusteDiaPrograma;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.user.User;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,6 +66,8 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     private static final Set<UserRole> ROLES_CON_SEGUIMIENTO_OPCIONAL =
             EnumSet.of(UserRole.MENTOR, UserRole.MENTOR_LEAD, UserRole.ADMIN, UserRole.ALCHEMIST);
 
+    private static final Logger log = LoggerFactory.getLogger(ParticipacionProgramaService.class);
+
     private final RequireActiveUserGuard requireActiveUserGuard;
     private final LoadParticipacionProgramaPort loadParticipacionProgramaPort;
     private final SaveParticipacionProgramaPort saveParticipacionProgramaPort;
@@ -68,6 +76,9 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     private final LoadMentorProfilePort loadMentorProfilePort;
     private final LoadUserPort loadUserPort;
     private final RequireAdminGuard requireAdminGuard;
+    private final SaveAjusteDiaProgramaPort saveAjusteDiaProgramaPort;
+    private final LoadUltimoAjusteDiaProgramaPort loadUltimoAjusteDiaProgramaPort;
+    private final IdGenerator idGenerator;
     private final Clock clock;
 
     public ParticipacionProgramaService(RequireActiveUserGuard requireActiveUserGuard,
@@ -76,7 +87,10 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
                                          DeleteParticipacionProgramaPort deleteParticipacionProgramaPort,
                                          ConsultarResumenParticipacionPort consultarResumenParticipacionPort,
                                          LoadMentorProfilePort loadMentorProfilePort, LoadUserPort loadUserPort,
-                                         RequireAdminGuard requireAdminGuard, Clock clock) {
+                                         RequireAdminGuard requireAdminGuard,
+                                         SaveAjusteDiaProgramaPort saveAjusteDiaProgramaPort,
+                                         LoadUltimoAjusteDiaProgramaPort loadUltimoAjusteDiaProgramaPort,
+                                         IdGenerator idGenerator, Clock clock) {
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.loadParticipacionProgramaPort = loadParticipacionProgramaPort;
         this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
@@ -85,6 +99,9 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
         this.loadMentorProfilePort = loadMentorProfilePort;
         this.loadUserPort = loadUserPort;
         this.requireAdminGuard = requireAdminGuard;
+        this.saveAjusteDiaProgramaPort = saveAjusteDiaProgramaPort;
+        this.loadUltimoAjusteDiaProgramaPort = loadUltimoAjusteDiaProgramaPort;
+        this.idGenerator = idGenerator;
         this.clock = clock;
     }
 
@@ -233,7 +250,8 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
         requireAdminGuard.requireAdminActivo(command.actorId());
         var participacion = consultarResumenParticipacionPort.resumenDe(command.traineeId())
                 .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + command.traineeId()));
-        return new TraineeDetail(trainee, participacion);
+        return new TraineeDetail(trainee, participacion,
+                loadUltimoAjusteDiaProgramaPort.ultimoDe(command.traineeId()).orElse(null));
     }
 
     /** Mismo orden que {@link #obtener}: recurso primero, gate de admin despues (E-42). */
@@ -245,8 +263,20 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
                         "Participante no inscripto en el programa: " + command.traineeId()));
         requireAdminGuard.requireAdminActivo(command.actorId());
 
+        int diaAnterior = participacion.diaPrograma();
+        int ajusteAnterior = participacion.diasAjuste();
+
         participacion.fijarDia(command.newProgramDay(), clock);
         saveParticipacionProgramaPort.save(participacion);
+
+        // D-82: la bitacora va en la MISMA transaccion que el ajuste. Si se guardara
+        // aparte (o por evento async), un fallo dejaria el dia movido sin rastro de quien
+        // lo movio -- que es exactamente el agujero que esta tabla viene a cerrar.
+        saveAjusteDiaProgramaPort.save(AjusteDiaPrograma.registrar(idGenerator.newId(), command.traineeId(), diaAnterior,
+                participacion.diaPrograma(), ajusteAnterior, participacion.diasAjuste(), command.motivo(),
+                command.actorId(), clock));
+        log.info("[users] dia de programa de {} ajustado de {} a {} por {}", command.traineeId(), diaAnterior,
+                participacion.diaPrograma(), command.actorId());
     }
 
     /**
