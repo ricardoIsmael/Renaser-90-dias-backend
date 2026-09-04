@@ -12,6 +12,7 @@ import lombok.experimental.Accessors;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -25,7 +26,16 @@ import java.util.UUID;
  * <p>{@code fechaGraduacionEsperada} NO es un campo: en Postgres es columna generada
  * ({@code GENERATED ALWAYS AS (fecha_inicio + 90) STORED}) — este agregado nunca la
  * escribe, y el dominio la calcula al vuelo con {@link #fechaGraduacionEsperada()} en
- * vez de duplicar el valor.
+ * vez de duplicar el valor. <b>Desde V20 la columna generada quedo obsoleta</b>: no
+ * contempla {@link #diasAjuste}, y el metodo del dominio si.
+ *
+ * <p><b>El reloj del programa es DERIVADO, no incremental</b> (V20, BITACORA E-91).
+ * {@link #diaPrograma} no se incrementa: es la materializacion de una cuenta con fechas
+ * — {@link #diaProgramaDerivado(LocalDate)}. Eso lo vuelve idempotente y capaz de
+ * recuperarse solo: si nadie sincronizo por tres dias, la primera corrida deja el dia
+ * correcto en vez de quedar tres dias atrasado para siempre. El campo se sigue
+ * materializando porque siete modulos lo leen por {@code ParticipacionProgramaFinder}
+ * sin conocer la zona horaria del participante.
  */
 @Getter
 @Accessors(fluent = true)
@@ -67,6 +77,11 @@ public final class ParticipacionPrograma {
      * al declararse AL FINAL a proposito: evita reordenar el constructor generado por
      * Lombok y romper las llamadas posicionales existentes de {@link #rehydrate}. */
     private LocalDate diaProgramaAvanzadoEl;
+    /** `dias_ajuste_programa` (V20) — dias de calendario que NO cuentan para el programa.
+     * Positivo = el participante RETROCEDE (viajo, se enfermo: se lo devuelve a un dia
+     * anterior sin castigarle el puntaje ya ganado); negativo = se lo ADELANTA. Es el
+     * unico knob del reloj: {@link #fijarDia} no escribe el dia, escribe este ajuste. */
+    private int diasAjuste;
 
     /**
      * Alta de "seguimiento personal" (Habitos/Rocas opcional para staff — MENTOR,
@@ -80,7 +95,7 @@ public final class ParticipacionPrograma {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Instant now = clock.now();
         return new ParticipacionPrograma(participanteId, null, null, 1, FasePrograma.initial(), clock.today(),
-                now, ZONA_POR_DEFECTO, false, 0, now, now, null, null, null, null);
+                now, ZONA_POR_DEFECTO, false, 0, now, now, null, null, null, null, 0);
     }
 
     /**
@@ -96,7 +111,7 @@ public final class ParticipacionPrograma {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Instant now = clock.now();
         return new ParticipacionPrograma(participanteId, null, null, 0, FasePrograma.initial(),
-                clock.today().plusDays(1), null, ZONA_POR_DEFECTO, false, 0, now, now, null, null, null, null);
+                clock.today().plusDays(1), null, ZONA_POR_DEFECTO, false, 0, now, now, null, null, null, null, 0);
     }
 
     /** Firma historica (12 campos, sin tipoMeta/nombreRetoPersonal/programaCompletadoEn): se
@@ -125,7 +140,9 @@ public final class ParticipacionPrograma {
                 nombreRetoPersonal, programaCompletadoEn, null);
     }
 
-    /** Solo para el adaptador de persistencia: reconstruye una fila ya existente. */
+    /** Firma de 16 campos (sin `diasAjuste`): se conserva por el mismo motivo que las
+     * anteriores — no obligar a los llamadores existentes a agregar un campo que no
+     * rehidratan. Un participante sin ajuste registrado es un participante con ajuste 0. */
     public static ParticipacionPrograma rehydrate(UserId participanteId, UserId mentorId, UUID celulaId,
                                                    int diaPrograma, FasePrograma fase, LocalDate fechaInicio,
                                                    Instant programaActivadoEn, ZoneId timezone,
@@ -133,40 +150,86 @@ public final class ParticipacionPrograma {
                                                    Instant actualizadoEn, TipoMeta tipoMeta,
                                                    String nombreRetoPersonal, Instant programaCompletadoEn,
                                                    LocalDate diaProgramaAvanzadoEl) {
+        return rehydrate(participanteId, mentorId, celulaId, diaPrograma, fase, fechaInicio, programaActivadoEn,
+                timezone, programaCompletado, diaPostPrograma, creadoEn, actualizadoEn, tipoMeta,
+                nombreRetoPersonal, programaCompletadoEn, diaProgramaAvanzadoEl, 0);
+    }
+
+    /** Solo para el adaptador de persistencia: reconstruye una fila ya existente. */
+    public static ParticipacionPrograma rehydrate(UserId participanteId, UserId mentorId, UUID celulaId,
+                                                   int diaPrograma, FasePrograma fase, LocalDate fechaInicio,
+                                                   Instant programaActivadoEn, ZoneId timezone,
+                                                   boolean programaCompletado, int diaPostPrograma, Instant creadoEn,
+                                                   Instant actualizadoEn, TipoMeta tipoMeta,
+                                                   String nombreRetoPersonal, Instant programaCompletadoEn,
+                                                   LocalDate diaProgramaAvanzadoEl, int diasAjuste) {
         return new ParticipacionPrograma(participanteId, mentorId, celulaId, diaPrograma, fase, fechaInicio,
                 programaActivadoEn, timezone, programaCompletado, diaPostPrograma, creadoEn, actualizadoEn,
-                tipoMeta, nombreRetoPersonal, programaCompletadoEn, diaProgramaAvanzadoEl);
+                tipoMeta, nombreRetoPersonal, programaCompletadoEn, diaProgramaAvanzadoEl, diasAjuste);
     }
 
-    /** `fecha_inicio + 90` — NUNCA se persiste (columna generada en Postgres, se calcula al vuelo). */
+    /**
+     * `fecha_inicio + 90 + dias_ajuste_programa`. Corre hacia adelante cuando a un
+     * participante se le devolvieron dias (V20): si viajo una semana y se lo retrocedio,
+     * sus 90 dias de programa terminan una semana mas tarde — que es justamente el punto
+     * de retrocederlo. NO coincide con la columna generada `fecha_graduacion_esperada`
+     * del baseline, que ignora el ajuste; manda este metodo.
+     */
     public LocalDate fechaGraduacionEsperada() {
-        return fechaInicio.plusDays(DURACION_PROGRAMA_DIAS);
+        return fechaInicio.plusDays(DURACION_PROGRAMA_DIAS + (long) diasAjuste);
     }
 
-    public void avanzarDia(Clock clock) {
-        if (diaPrograma >= DURACION_PROGRAMA_DIAS) {
-            return;
+    /**
+     * <b>La cuenta que define el reloj del programa</b> (V20). Dia 1 es
+     * {@link #fechaInicio}; de ahi en adelante son dias de calendario EN LA ZONA DEL
+     * PARTICIPANTE, menos los que no cuentan ({@link #diasAjuste}), acotado a [0, 90].
+     *
+     * <p>Devuelve 0 mientras el reloj no arranco: nadie eligio su Dia 1
+     * ({@link #estaActivado()} falso) o la fecha elegida todavia no llego.
+     *
+     * <p>Es una funcion pura de (fechaInicio, hoy, diasAjuste) — no mira el estado
+     * actual de {@link #diaPrograma}. Esa es toda la diferencia con el modelo viejo, que
+     * incrementaba: una cuenta no se puede "atrasar" por una corrida que no ocurrio.
+     */
+    public int diaProgramaDerivado(LocalDate hoyEnZonaParticipante) {
+        Objects.requireNonNull(hoyEnZonaParticipante, "hoyEnZonaParticipante es obligatorio");
+        if (!estaActivado() || fechaInicio.isAfter(hoyEnZonaParticipante)) {
+            return 0;
         }
-        this.diaPrograma++;
-        this.actualizadoEn = clock.now();
+        long transcurridos = ChronoUnit.DAYS.between(fechaInicio, hoyEnZonaParticipante) + 1;
+        return (int) Math.clamp(transcurridos - diasAjuste, 0, DURACION_PROGRAMA_DIAS);
     }
 
     /**
      * Ajuste operativo de un ADMIN/ALCHEMIST (panel admin de aprendices, gap #7 de
-     * docs/PLAN_INTEGRACION_FRONTEND.md) — a diferencia de {@link #avanzarDia}, que solo
-     * incrementa de a 1 (el paso normal del reloj del programa), esto fija el dia
-     * exacto que pide un operador humano (ej. corregir un desfase). NO es una regla de
-     * negocio nueva: el limite [0, 90] es la misma invariante que ya impone
-     * {@link #avanzarDia} (nunca supera {@value #DURACION_PROGRAMA_DIAS}), aplicada
-     * tambien al piso.
+     * docs/PLAN_INTEGRACION_FRONTEND.md): "este aprendiz viajo dos semanas, devolvelo al
+     * dia 34". El limite [0, 90] es la misma invariante de siempre.
+     *
+     * <p><b>Que cambio en V20:</b> ya no escribe {@link #diaPrograma} a mano — eso era
+     * incoherente con el modelo derivado (la proxima sincronizacion lo hubiera pisado, y
+     * ademas dejaba {@link #fechaInicio} contando una historia distinta a la del dia).
+     * Escribe {@link #diasAjuste}, el corrimiento que hace que HOY caiga en
+     * {@code nuevoDia}, y despues materializa el dia. Efectos que salen gratis de
+     * hacerlo asi: el ajuste PERSISTE (manana el reloj sigue desde el dia 35, no vuelve
+     * de un salto al dia real), la graduacion se corre sola, y el ajuste queda registrado
+     * y auditable en vez de perderse dentro de un contador.
+     *
+     * <p>Retroceder NO borra nada: los habitos, evidencias y puntajes ya ganados quedan
+     * como estan (viven en otras tablas, con su propia fecha). Se retoma el conteo, no se
+     * reescribe la historia.
      */
     public void fijarDia(int nuevoDia, Clock clock) {
         if (nuevoDia < 0 || nuevoDia > DURACION_PROGRAMA_DIAS) {
             throw new IllegalArgumentException(
                     "diaPrograma debe estar entre 0 y " + DURACION_PROGRAMA_DIAS + ", recibido: " + nuevoDia);
         }
+        LocalDate hoy = hoyEnMiZona(clock);
+        if (estaActivado() && !fechaInicio.isAfter(hoy)) {
+            long transcurridos = ChronoUnit.DAYS.between(fechaInicio, hoy) + 1;
+            this.diasAjuste = (int) (transcurridos - nuevoDia);
+        }
         this.diaPrograma = nuevoDia;
-        // D-66: la fase SIEMPRE se deriva del dia, nunca se deja "colgada" del valor
+        // D-67: la fase SIEMPRE se deriva del dia, nunca se deja "colgada" del valor
         // anterior — este ajuste manual es justo la via que dejaba una fase vieja
         // conviviendo con un dia nuevo (el bug real de docs/MODULO_PHASECONTRACTS.md §0.2).
         this.fase = FasePrograma.paraDiaPrograma(nuevoDia);
@@ -184,7 +247,7 @@ public final class ParticipacionPrograma {
      * opcion, nunca hoy — siempre en SU zona horaria ({@link #timezone}, nunca UTC ni la
      * del servidor). Como la fecha elegida nunca puede ser hoy, {@code diaPrograma}
      * jamas se adelanta en el acto: siempre queda en 0 hasta que
-     * {@link #avanzarDiaDelPrograma} (cron nocturno) detecte que llego el dia.
+     * {@link #sincronizarDiaDelPrograma} (barrido del reloj) detecte que llego el dia.
      *
      * <p>Idempotencia (distincion tecnica, no de negocio): reintentar con la MISMA
      * fecha que ya esta activada es un no-op silencioso (200) — un timeout de red no
@@ -226,30 +289,36 @@ public final class ParticipacionPrograma {
     }
 
     /**
-     * Avance idempotente del cron nocturno (QA-33, D-66). {@code hoyEnZonaParticipante}
-     * lo calcula el llamador ({@code clock.now().atZone(timezone).toLocalDate()}) porque
-     * es el mismo dato que {@link #diaProgramaAvanzadoEl} — pasarlo en vez de recalcularlo
-     * ahi adentro evita que domain y aplicacion puedan discrepar en la zona usada.
+     * Materializa {@link #diaProgramaDerivado(LocalDate)} en el agregado — lo que corre
+     * el barrido del reloj (V20; antes {@code avanzarDiaDelPrograma}, incremental).
+     * {@code hoyEnZonaParticipante} lo calcula el llamador
+     * ({@code clock.now().atZone(timezone).toLocalDate()}) porque es el mismo dato que
+     * {@link #diaProgramaAvanzadoEl} — pasarlo en vez de recalcularlo aca adentro evita
+     * que dominio y aplicacion puedan discrepar en la zona usada.
      *
-     * <p>No avanza (devuelve {@code false}, sin tocar nada) en tres casos: el reloj del
-     * programa esta PAUSADO ({@link #estaActivado()} falso — nadie eligio fecha
-     * todavia); la fecha de inicio elegida todavia no llego; o ya se avanzo para este
-     * dia calendario (correr el cron dos veces el mismo dia no adelanta dos dias).
+     * <p>Devuelve {@code true} SOLO si algo cambio, para que el barrido guarde unicamente
+     * las filas que lo necesitan: el reloj corre cada hora (ver
+     * {@code AvanzarDiaProgramaScheduler}, que debe alcanzar la medianoche local de
+     * cualquier zona) y sin este filtro serian 24 UPDATE diarios por participante.
+     *
+     * <p>No toca nada mientras el reloj no arranco: nadie eligio su Dia 1
+     * ({@link #estaActivado()} falso) o la fecha elegida todavia no llego. Ese caso se
+     * distingue a proposito de "derivado = 0": un participante pre-activacion conserva
+     * el dia que un admin le haya fijado a mano.
      */
-    public boolean avanzarDiaDelPrograma(LocalDate hoyEnZonaParticipante, Clock clock) {
+    public boolean sincronizarDiaDelPrograma(LocalDate hoyEnZonaParticipante, Clock clock) {
         Objects.requireNonNull(hoyEnZonaParticipante, "hoyEnZonaParticipante es obligatorio");
         if (!estaActivado() || fechaInicio.isAfter(hoyEnZonaParticipante)) {
             return false;
         }
-        if (diaProgramaAvanzadoEl != null && !diaProgramaAvanzadoEl.isBefore(hoyEnZonaParticipante)) {
+        int derivado = diaProgramaDerivado(hoyEnZonaParticipante);
+        if (derivado == diaPrograma && hoyEnZonaParticipante.equals(diaProgramaAvanzadoEl)) {
             return false;
         }
-        if (diaPrograma >= DURACION_PROGRAMA_DIAS) {
-            return false;
-        }
-        avanzarDia(clock);
+        this.diaPrograma = derivado;
         this.diaProgramaAvanzadoEl = hoyEnZonaParticipante;
-        this.fase = FasePrograma.paraDiaPrograma(diaPrograma);
+        this.fase = FasePrograma.paraDiaPrograma(derivado);
+        this.actualizadoEn = clock.now();
         return true;
     }
 
@@ -299,6 +368,7 @@ public final class ParticipacionPrograma {
 
     @Override
     public String toString() {
-        return "ParticipacionPrograma[" + participanteId + ", dia=" + diaPrograma + ", " + fase + "]";
+        return "ParticipacionPrograma[" + participanteId + ", dia=" + diaPrograma + ", ajuste=" + diasAjuste
+                + ", " + fase + "]";
     }
 }

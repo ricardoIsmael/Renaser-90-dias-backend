@@ -71,7 +71,11 @@ public class ParticipacionProgramaJpaEntity {
 
     private Instant programaCompletadoEn;
 
-    /** `dia_programa_avanzado_el` — SI se mapea desde D-66: es la idempotencia del
-     * cron nocturno (`AvanzarDiaProgramaScheduler`), que ahora si existe. */
+    /** `dia_programa_avanzado_el` — SI se mapea desde D-66: es la fecha local de la
+     * ultima sincronizacion del reloj (`AvanzarDiaProgramaScheduler`). */
     private LocalDate diaProgramaAvanzadoEl;
+
+    /** `dias_ajuste_programa` (V20) — dias de calendario que no cuentan para el programa.
+     * Con signo: positivo retrocede al participante, negativo lo adelanta. */
+    private short diasAjustePrograma;
 }

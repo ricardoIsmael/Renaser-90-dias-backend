@@ -75,11 +75,17 @@ public class RelojProgramaService
     }
 
     /**
-     * Cron nocturno (docs/MODULO_PHASECONTRACTS.md §0.2, bloqueante cerrado por D-66).
-     * Sin {@code @Transactional} a proposito: cada {@code save()} de Spring Data corre en
-     * su propia transaccion implicita, asi que un fallo a mitad del barrido deja lo ya
-     * guardado guardado — el propio chequeo de idempotencia de
-     * {@code avanzarDiaDelPrograma} hace seguro reintentar sin duplicar avances.
+     * Barrido del reloj (docs/MODULO_PHASECONTRACTS.md §0.2, bloqueante cerrado por D-67).
+     * Corre cada hora, no una vez por noche: la medianoche local cae en una hora UTC
+     * distinta por zona horaria, y una unica corrida diaria dejaba fuera a media America
+     * (bug del 2026-09-03, BITACORA E-91). Es barato porque
+     * {@code sincronizarDiaDelPrograma} devuelve {@code false} cuando no hay nada que
+     * cambiar: se guarda como mucho una vez por participante por dia.
+     *
+     * <p>Sin {@code @Transactional} a proposito: cada {@code save()} de Spring Data corre
+     * en su propia transaccion implicita, asi que un fallo a mitad del barrido deja lo ya
+     * guardado guardado — y como el dia es DERIVADO de las fechas (V20), no incremental,
+     * reintentar nunca duplica ni saltea un dia.
      */
     @Override
     public ResultadoAvance avanzarParticipantesActivos() {
@@ -92,7 +98,7 @@ public class RelojProgramaService
             for (ParticipacionPrograma participacion : lote) {
                 evaluados++;
                 LocalDate hoyEnSuZona = clock.now().atZone(participacion.timezone()).toLocalDate();
-                if (participacion.avanzarDiaDelPrograma(hoyEnSuZona, clock)) {
+                if (participacion.sincronizarDiaDelPrograma(hoyEnSuZona, clock)) {
                     saveParticipacionProgramaPort.save(participacion);
                     avanzados++;
                 }

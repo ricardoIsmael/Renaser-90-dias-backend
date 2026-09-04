@@ -62,3 +62,10 @@ graphify-out/
 .env
 .env.*
 !.env.example
+
+# Configuraciones de ejecucion de IntelliJ. NO se versionan: `.run/*.run.xml` guarda las
+# variables de entorno en TEXTO PLANO, y hoy ese archivo contiene credenciales reales
+# (AWS_SECRET_ACCESS_KEY, GOOGLE_GENAI_API_KEY, GOOGLE_OAUTH_CLIENT_SECRET, SMTP_PASSWORD).
+# Estaba a un `git add .` de quedar en la historia del repo, de donde no se borra facil.
+# Ver .env.example para la lista de variables que hace falta definir.
+.run/

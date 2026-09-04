@@ -47,45 +47,43 @@ class ParticipacionProgramaTest {
         assertThat(p.fechaGraduacionEsperada()).isEqualTo(CLOCK.today().plusDays(90));
     }
 
+    // --- diaProgramaDerivado: la cuenta que define el reloj (V20) ---------
+
     @Test
-    void avanzarDiaIncrementaYActualizaTimestamp() {
+    void diaProgramaDerivadoCuentaElDiaDeInicioComoDiaUno() {
         ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
-        FixedClock later = FixedClock.at(CLOCK.now().plusSeconds(3600));
 
-        p.avanzarDia(later);
-
-        assertThat(p.diaPrograma()).isEqualTo(2);
-        assertThat(p.actualizadoEn()).isEqualTo(later.now());
+        assertThat(p.diaProgramaDerivado(CLOCK.today())).isEqualTo(1);
+        assertThat(p.diaProgramaDerivado(CLOCK.today().plusDays(1))).isEqualTo(2);
+        assertThat(p.diaProgramaDerivado(CLOCK.today().plusDays(89))).isEqualTo(90);
     }
 
     @Test
-    void avanzarDiaNuncaSuperaNoventa() {
-        ParticipacionPrograma p = ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null, null, 90,
-                FasePrograma.PHASE_4_ASCENSION, LocalDate.of(2026, 1, 1), CLOCK.now(), ZoneId.of("America/Lima"),
-                false, 0, CLOCK.now(), CLOCK.now());
+    void diaProgramaDerivadoNuncaSuperaNoventa() {
+        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
 
-        p.avanzarDia(CLOCK);
-
-        assertThat(p.diaPrograma()).isEqualTo(90);
+        assertThat(p.diaProgramaDerivado(CLOCK.today().plusDays(500))).isEqualTo(90);
     }
 
     @Test
-    void asignarMentorCambiaElMentorYElTimestamp() {
-        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
-        UserId mentorId = UserId.of(UUID.randomUUID());
-        FixedClock later = FixedClock.at(CLOCK.now().plusSeconds(60));
+    void diaProgramaDerivadoEsCeroMientrasElRelojNoArranco() {
+        ParticipacionPrograma pausado = traineePausado();
+        assertThat(pausado.diaProgramaDerivado(CLOCK.today())).isZero();
 
-        p.asignarMentor(mentorId, later);
-
-        assertThat(p.mentorId()).isEqualTo(mentorId);
-        assertThat(p.actualizadoEn()).isEqualTo(later.now());
+        ParticipacionPrograma activadoParaDespues = traineePausado();
+        activadoParaDespues.activarPrograma(CLOCK.today().plusDays(2), CLOCK);
+        assertThat(activadoParaDespues.diaProgramaDerivado(CLOCK.today().plusDays(1))).isZero();
     }
 
     @Test
-    void asignarMentorRechazaMentorIdNulo() {
+    void diaProgramaDerivadoDescuentaLosDiasDeAjuste() {
         ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
+        // dia 40 de calendario, se lo devuelve al 34: 6 dias que no cuentan (viajo una semana)
+        p.fijarDia(34, FixedClock.at(CLOCK.now().plusSeconds(39L * 86400)));
 
-        assertThatThrownBy(() -> p.asignarMentor(null, CLOCK)).isInstanceOf(NullPointerException.class);
+        assertThat(p.diasAjuste()).isEqualTo(6);
+        assertThat(p.diaProgramaDerivado(CLOCK.today().plusDays(39))).isEqualTo(34);
+        assertThat(p.diaProgramaDerivado(CLOCK.today().plusDays(40))).isEqualTo(35);
     }
 
     // ─── fijarDia (panel admin de aprendices, gap #7) ──────────────────────
@@ -316,88 +314,148 @@ class ParticipacionProgramaTest {
                 CLOCK.today().plusDays(2), CLOCK.today().plusDays(3));
     }
 
-    // ─── avanzarDiaDelPrograma (cron nocturno, D-66) ────────────────────────
+    // --- sincronizarDiaDelPrograma (barrido del reloj, V20) --------------
 
     @Test
-    void avanzarDiaDelProgramaNoAvanzaUnParticipantePausado() {
+    void sincronizarNoTocaUnParticipantePausado() {
         ParticipacionPrograma p = traineePausado();
 
-        boolean avanzo = p.avanzarDiaDelPrograma(CLOCK.today(), CLOCK);
+        boolean cambio = p.sincronizarDiaDelPrograma(CLOCK.today(), CLOCK);
 
-        assertThat(avanzo).isFalse();
+        assertThat(cambio).isFalse();
         assertThat(p.diaPrograma()).isZero();
     }
 
     @Test
-    void avanzarDiaDelProgramaNoAvanzaSiLaFechaDeInicioNoLlego() {
+    void sincronizarNoTocaNadaSiLaFechaDeInicioNoLlego() {
         ParticipacionPrograma p = traineePausado();
         p.activarPrograma(CLOCK.today().plusDays(2), CLOCK);
 
-        boolean avanzo = p.avanzarDiaDelPrograma(CLOCK.today().plusDays(1), CLOCK);
+        boolean cambio = p.sincronizarDiaDelPrograma(CLOCK.today().plusDays(1), CLOCK);
 
-        assertThat(avanzo).isFalse();
+        assertThat(cambio).isFalse();
         assertThat(p.diaPrograma()).isZero();
     }
 
     @Test
-    void avanzarDiaDelProgramaAvanzaElDiaQueLlegaLaFechaDeInicio() {
+    void sincronizarPoneDiaUnoElDiaQueLlegaLaFechaDeInicio() {
         ParticipacionPrograma p = traineePausado();
         p.activarPrograma(CLOCK.today().plusDays(2), CLOCK);
 
-        boolean avanzo = p.avanzarDiaDelPrograma(CLOCK.today().plusDays(2), CLOCK);
+        boolean cambio = p.sincronizarDiaDelPrograma(CLOCK.today().plusDays(2), CLOCK);
 
-        assertThat(avanzo).isTrue();
+        assertThat(cambio).isTrue();
         assertThat(p.diaPrograma()).isEqualTo(1);
         assertThat(p.diaProgramaAvanzadoEl()).isEqualTo(CLOCK.today().plusDays(2));
     }
 
     @Test
-    void avanzarDiaDelProgramaEsIdempotentePorDiaCalendario() {
+    void sincronizarDosVecesElMismoDiaNoCambiaNadaLaSegundaVez() {
         ParticipacionPrograma p = traineePausado();
         p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
-        p.avanzarDiaDelPrograma(CLOCK.today().plusDays(1), CLOCK);
+        p.sincronizarDiaDelPrograma(CLOCK.today().plusDays(1), CLOCK);
         assertThat(p.diaPrograma()).isEqualTo(1);
 
-        boolean segundaCorridaMismoDia = p.avanzarDiaDelPrograma(CLOCK.today().plusDays(1), CLOCK);
+        boolean segundaCorridaMismoDia = p.sincronizarDiaDelPrograma(CLOCK.today().plusDays(1), CLOCK);
 
         assertThat(segundaCorridaMismoDia).isFalse();
         assertThat(p.diaPrograma()).isEqualTo(1);
 
-        boolean corridaDelDiaSiguiente = p.avanzarDiaDelPrograma(CLOCK.today().plusDays(2), CLOCK);
+        boolean corridaDelDiaSiguiente = p.sincronizarDiaDelPrograma(CLOCK.today().plusDays(2), CLOCK);
 
         assertThat(corridaDelDiaSiguiente).isTrue();
         assertThat(p.diaPrograma()).isEqualTo(2);
     }
 
+    /**
+     * La razon de ser del modelo derivado (V20, BITACORA E-91): con el modelo incremental
+     * viejo, tres dias sin que el barrido corriera se perdian para siempre -- al volver
+     * sumaba 1 y el aprendiz quedaba tres dias atrasado el resto del programa.
+     */
     @Test
-    void avanzarDiaDelProgramaRespetaElTopeDeNoventa() {
+    void sincronizarSePoneAlDiaDeUnaAunqueNadieHayaCorridoEnTresDias() {
+        ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
+        p.sincronizarDiaDelPrograma(CLOCK.today().plusDays(1), CLOCK);
+        assertThat(p.diaPrograma()).isEqualTo(1);
+
+        boolean cambio = p.sincronizarDiaDelPrograma(CLOCK.today().plusDays(4), CLOCK);
+
+        assertThat(cambio).isTrue();
+        assertThat(p.diaPrograma()).isEqualTo(4);
+    }
+
+    @Test
+    void sincronizarRespetaElTopeDeNoventa() {
         ParticipacionPrograma p = ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null, null, 90,
                 FasePrograma.PHASE_4_ASCENSION, LocalDate.of(2026, 1, 1), CLOCK.now(), ZoneId.of("America/Lima"),
-                false, 0, CLOCK.now(), CLOCK.now(), null, null, null, CLOCK.today().minusDays(1));
+                false, 0, CLOCK.now(), CLOCK.now(), null, null, null, CLOCK.today());
 
-        boolean avanzo = p.avanzarDiaDelPrograma(CLOCK.today(), CLOCK);
+        boolean cambio = p.sincronizarDiaDelPrograma(CLOCK.today(), CLOCK);
 
-        assertThat(avanzo).isFalse();
+        assertThat(cambio).isFalse();
         assertThat(p.diaPrograma()).isEqualTo(90);
     }
 
     @Test
-    void avanzarDiaDelProgramaRecalculaLaFaseAlCruzarUnUmbral() {
+    void sincronizarRecalculaLaFaseAlCruzarUnUmbral() {
         ParticipacionPrograma p = ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null, null, 7,
-                FasePrograma.PHASE_1_REBIRTH, LocalDate.of(2026, 1, 1), CLOCK.now(), ZoneId.of("America/Lima"),
+                FasePrograma.PHASE_1_REBIRTH, CLOCK.today().minusDays(7), CLOCK.now(), ZoneId.of("America/Lima"),
                 false, 0, CLOCK.now(), CLOCK.now(), null, null, null, CLOCK.today().minusDays(1));
 
-        p.avanzarDiaDelPrograma(CLOCK.today(), CLOCK);
+        p.sincronizarDiaDelPrograma(CLOCK.today(), CLOCK);
 
         assertThat(p.diaPrograma()).isEqualTo(8);
         assertThat(p.fase()).isEqualTo(FasePrograma.PHASE_2_DEVELOPMENT);
     }
 
     @Test
-    void avanzarDiaDelProgramaRechazaHoyEnZonaNulo() {
+    void sincronizarRechazaHoyEnZonaNulo() {
         ParticipacionPrograma p = traineePausado();
 
-        assertThatThrownBy(() -> p.avanzarDiaDelPrograma(null, CLOCK)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> p.sincronizarDiaDelPrograma(null, CLOCK)).isInstanceOf(NullPointerException.class);
+    }
+
+    // --- fijarDia: retroceder y que el reloj SIGA desde ahi (V20) ---------
+
+    /**
+     * El caso que motivo V20: "viaje dos semanas, devolveme al dia 34 para no perder el
+     * puntaje". Retroceder tiene que PERSISTIR -- con el modelo viejo, que escribia
+     * `diaPrograma` a mano, la corrida siguiente lo devolvia de un salto al dia real.
+     */
+    @Test
+    void fijarDiaRetrocedeYElRelojSigueDesdeAhiAlDiaSiguiente() {
+        ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
+        LocalDate diaCuarenta = p.fechaInicio().plusDays(39);
+        p.sincronizarDiaDelPrograma(diaCuarenta, CLOCK);
+        assertThat(p.diaPrograma()).isEqualTo(40);
+
+        p.fijarDia(34, relojEn(diaCuarenta, p));
+        assertThat(p.diaPrograma()).isEqualTo(34);
+
+        p.sincronizarDiaDelPrograma(diaCuarenta.plusDays(1), CLOCK);
+
+        assertThat(p.diaPrograma()).isEqualTo(35);
+    }
+
+    /** Retroceder corre la graduacion: los 90 dias siguen siendo 90 dias vividos. */
+    @Test
+    void fijarDiaHaciaAtrasCorreLaFechaDeGraduacion() {
+        ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
+        LocalDate inicio = p.fechaInicio();
+        assertThat(p.fechaGraduacionEsperada()).isEqualTo(inicio.plusDays(90));
+
+        p.fijarDia(34, relojEn(inicio.plusDays(39), p));
+
+        assertThat(p.diasAjuste()).isEqualTo(6);
+        assertThat(p.fechaGraduacionEsperada()).isEqualTo(inicio.plusDays(96));
+    }
+
+    /** Reloj posicionado al mediodia de `dia` en la zona del participante. */
+    private static FixedClock relojEn(LocalDate dia, ParticipacionPrograma p) {
+        return FixedClock.at(dia.atTime(12, 0).atZone(p.timezone()).toInstant());
     }
 
     // ─── fijarDia recalcula la fase (D-66: corrige el bug real de dos fases en el mismo dia) ─

@@ -65,7 +65,7 @@ public class TraineeAdminController {
     public ResponseEntity<Void> setProgramDay(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                                @RequestBody @Valid SetProgramDayRequest request) {
         setTraineeProgramDayUseCase.fijarDia(new SetProgramDayCommand(actor, UserId.of(id),
-                request.programDay()));
+                request.programDay(), request.motivo()));
         return ResponseEntity.noContent().build();
     }
 }

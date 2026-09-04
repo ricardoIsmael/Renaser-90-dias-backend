@@ -5,7 +5,7 @@ package com.renaser.os.users.application.ports.in.participante;
  * como bloqueante: "nada en el baseline garantiza que un cron la recalcule... ese cron
  * todavia no existe"). Sin parametros: recorre TODOS los participantes con el programa
  * activado, en paginas (ver {@code ListarParticipantesConProgramaActivoPort}), y avanza
- * a cada uno solo si {@code ParticipacionPrograma.avanzarDiaDelPrograma} lo permite
+ * a cada uno solo si {@code ParticipacionPrograma.sincronizarDiaDelPrograma} detecta un cambio
  * (idempotencia por dia calendario EN LA ZONA DE CADA PARTICIPANTE, no una fecha global
  * del servidor).
  */

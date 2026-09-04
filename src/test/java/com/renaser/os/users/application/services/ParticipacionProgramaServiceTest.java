@@ -58,6 +58,12 @@ class ParticipacionProgramaServiceTest {
     private ConsultarResumenParticipacionPort consultarResumenParticipacionPort;
     @Mock
     private LoadMentorProfilePort loadMentorProfilePort;
+    @Mock
+    private com.renaser.os.users.application.ports.out.ajustediaprograma.SaveAjusteDiaProgramaPort
+            saveAjusteDiaProgramaPort;
+    @Mock
+    private com.renaser.os.users.application.ports.out.ajustediaprograma.LoadUltimoAjusteDiaProgramaPort
+            loadUltimoAjusteDiaProgramaPort;
 
     private ParticipacionProgramaService service;
 
@@ -66,7 +72,8 @@ class ParticipacionProgramaServiceTest {
         service = new ParticipacionProgramaService(new RequireActiveUserGuard(loadUserPort),
                 loadParticipacionProgramaPort, saveParticipacionProgramaPort, deleteParticipacionProgramaPort,
                 consultarResumenParticipacionPort, loadMentorProfilePort, loadUserPort,
-                new RequireAdminGuard(loadUserPort), CLOCK);
+                new RequireAdminGuard(loadUserPort), saveAjusteDiaProgramaPort, loadUltimoAjusteDiaProgramaPort,
+                UUID::randomUUID, CLOCK);
     }
 
     private User usuario(UserId id, UserRole role, UserStatus status) {
@@ -324,6 +331,51 @@ class ParticipacionProgramaServiceTest {
         var captor = org.mockito.ArgumentCaptor.forClass(ParticipacionPrograma.class);
         verify(saveParticipacionProgramaPort).save(captor.capture());
         assertThat(captor.getValue().diaPrograma()).isEqualTo(45);
+    }
+
+    // --- bitacora de ajustes (D-82) -------------------------------------
+
+    /**
+     * El agujero que cierra D-82: antes se podia mover a alguien del dia 40 al 34 y no
+     * quedaba registro de quien ni por que.
+     */
+    @Test
+    void fijarDiaDejaConstanciaDeQuienLoMovioYPorQue() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        var participacion = ParticipacionPrograma.activarSeguimientoPersonal(traineeId, CLOCK);
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId)).thenReturn(Optional.of(participacion));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN,
+                UserStatus.ACTIVE)));
+        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.fijarDia(new SetProgramDayCommand(actorId, traineeId, 34, "Viaje, aviso al volver"));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.renaser.os.users.domain.model.ajustediaprograma.AjusteDiaPrograma.class);
+        verify(saveAjusteDiaProgramaPort).save(captor.capture());
+        var ajuste = captor.getValue();
+        assertThat(ajuste.participanteId()).isEqualTo(traineeId);
+        assertThat(ajuste.ajustadoPor()).isEqualTo(actorId);
+        assertThat(ajuste.diaAnterior()).isEqualTo(1);
+        assertThat(ajuste.diaNuevo()).isEqualTo(34);
+        assertThat(ajuste.motivo()).isEqualTo("Viaje, aviso al volver");
+    }
+
+    /** Un ajuste rechazado no puede dejar rastro en la bitacora. */
+    @Test
+    void fijarDiaRechazadoNoEscribeEnLaBitacora() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId))
+                .thenReturn(Optional.of(ParticipacionPrograma.inscribirTraineeAprobado(traineeId, CLOCK)));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN,
+                UserStatus.SUSPENDED)));
+
+        assertThatThrownBy(() -> service.fijarDia(new SetProgramDayCommand(actorId, traineeId, 34, "x")))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        verify(saveAjusteDiaProgramaPort, never()).save(any());
     }
 
     // ─── assign/remove celula (panel admin de aprendices, gap #25) ─────────
