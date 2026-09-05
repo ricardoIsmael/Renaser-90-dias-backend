@@ -4,6 +4,8 @@ import com.renaser.os.evidence.api.TipoEvidencia;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase;
+import com.renaser.os.habits.application.ports.in.registro.SolicitarUrlEvidenciaRegistroUseCase;
+import com.renaser.os.habits.application.ports.in.registro.SolicitarUrlEvidenciaRegistroUseCase.SolicitarUrlEvidenciaRegistroCommand;
 import com.renaser.os.habits.application.ports.in.registro.SubirEvidenciaRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.SubirEvidenciaRegistroUseCase.SubirEvidenciaRegistroCommand;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
@@ -34,13 +36,16 @@ public class HabitTrackController {
     private final ConsultarTracksDelDiaConCatalogoUseCase consultarTracksDelDiaUseCase;
     private final CompletarRegistroUseCase completarRegistroUseCase;
     private final SubirEvidenciaRegistroUseCase subirEvidenciaUseCase;
+    private final SolicitarUrlEvidenciaRegistroUseCase urlEvidenciaUseCase;
 
     public HabitTrackController(ConsultarTracksDelDiaConCatalogoUseCase consultarTracksDelDiaUseCase,
                                  CompletarRegistroUseCase completarRegistroUseCase,
-                                 SubirEvidenciaRegistroUseCase subirEvidenciaUseCase) {
+                                 SubirEvidenciaRegistroUseCase subirEvidenciaUseCase,
+                                 SolicitarUrlEvidenciaRegistroUseCase urlEvidenciaUseCase) {
         this.consultarTracksDelDiaUseCase = consultarTracksDelDiaUseCase;
         this.completarRegistroUseCase = completarRegistroUseCase;
         this.subirEvidenciaUseCase = subirEvidenciaUseCase;
+        this.urlEvidenciaUseCase = urlEvidenciaUseCase;
     }
 
     /** Hueco #10: cada registro trae el catalogo resuelto (titulo/tipo/guia/horario) — sin N+1. */
@@ -59,6 +64,21 @@ public class HabitTrackController {
                 RegistroHabitoId.of(java.util.UUID.fromString(id)), request.respuestaTexto(),
                 request.calificacionProductividad()));
         return RegistroHabitoResponse.from(registro);
+    }
+
+    /**
+     * Paso 1 del camino generico de evidencia: URL PUT prefirmada para FOTO/VIDEO/AUDIO/CAPTURA.
+     * El TEXTO no pasa por aca — va directo al POST de abajo con `contenidoTexto`.
+     */
+    @RequiresPermission(value = Permission.USE_APP, scope = "dueno del registro de habito")
+    @PostMapping("/{id}/evidence/upload-url")
+    public UrlEvidenciaRegistroResponse urlDeSubidaEvidencia(@ActorAutenticado UserId actor,
+                                                               @PathVariable String id,
+                                                               @RequestBody @Valid
+                                                               SolicitarUrlEvidenciaRegistroRequest request) {
+        var url = urlEvidenciaUseCase.solicitarUrl(new SolicitarUrlEvidenciaRegistroCommand(actor,
+                RegistroHabitoId.of(java.util.UUID.fromString(id)), request.tipoContenido()));
+        return UrlEvidenciaRegistroResponse.from(url);
     }
 
     /** D-H6: sube la evidencia de un registro diario, delegando en `evidence.api.RegistrarEvidenciaPort`. */

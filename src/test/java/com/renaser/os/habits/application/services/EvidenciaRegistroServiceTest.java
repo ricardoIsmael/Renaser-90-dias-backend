@@ -6,6 +6,7 @@ import com.renaser.os.evidence.api.RegistrarEvidenciaPort;
 import com.renaser.os.evidence.api.RegistrarEvidenciaPort.EvidenciaRegistrada;
 import com.renaser.os.evidence.api.RegistrarEvidenciaPort.RegistrarEvidenciaComando;
 import com.renaser.os.evidence.api.TipoEvidencia;
+import com.renaser.os.habits.application.ports.in.registro.SolicitarUrlEvidenciaRegistroUseCase.SolicitarUrlEvidenciaRegistroCommand;
 import com.renaser.os.habits.application.ports.in.registro.SubirEvidenciaRegistroUseCase.SubirEvidenciaRegistroCommand;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
@@ -15,6 +16,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
+import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -26,6 +28,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.NoSuchElementException;
@@ -50,13 +54,16 @@ class EvidenciaRegistroServiceTest {
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
     @Mock
     private RegistrarEvidenciaPort registrarEvidenciaPort;
+    @Mock
+    private AlmacenamientoPort almacenamientoPort;
 
     private EvidenciaRegistroService service;
     private UserId actorId;
 
     @BeforeEach
     void setUp() {
-        service = new EvidenciaRegistroService(loadRegistroPort, progresoPort, registrarEvidenciaPort, CLOCK);
+        service = new EvidenciaRegistroService(loadRegistroPort, progresoPort, registrarEvidenciaPort,
+                almacenamientoPort, UUID::randomUUID, CLOCK);
         actorId = UserId.of(UUID.randomUUID());
         lenient().when(registrarEvidenciaPort.registrar(any()))
                 .thenReturn(new EvidenciaRegistrada(UUID.randomUUID(), EstadoValidacion.PENDIENTE));
@@ -128,5 +135,47 @@ class EvidenciaRegistroServiceTest {
         assertThat(comando.esPrincipal()).isFalse();
         assertThat(comando.tipo()).isEqualTo(TipoEvidencia.TEXTO);
         assertThat(comando.contenidoTexto()).isEqualTo("listo");
+    }
+
+    @Test
+    @DisplayName("la URL de subida se firma bajo evidencia-habitos/<actor>/<registro>/ y devuelve la RUTA")
+    void firmaUrlDeSubidaBajoElPrefijoDeHabitos() {
+        RegistroHabito registro = registroDe(actorId);
+        when(loadRegistroPort.byId(registro.id())).thenReturn(Optional.of(registro));
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(false)));
+        when(almacenamientoPort.firmarSubida(any(), any(), any()))
+                .thenReturn(URI.create("https://s3.example/put"));
+
+        var url = service.solicitarUrl(new SolicitarUrlEvidenciaRegistroCommand(actorId, registro.id(), "video/mp4"));
+
+        assertThat(url.bucket()).isEqualTo(EvidenciaRegistroService.BUCKET_EVIDENCIA);
+        assertThat(url.ruta()).startsWith("evidencia-habitos/" + actorId + "/" + registro.id() + "/");
+        assertThat(url.url()).hasToString("https://s3.example/put");
+        verify(almacenamientoPort).firmarSubida(url.ruta(), "video/mp4", Duration.ofMinutes(10));
+    }
+
+    @Test
+    @DisplayName("cada subida firma una clave distinta: la segunda no pisa el archivo de la primera")
+    void cadaSubidaTieneClavePropia() {
+        RegistroHabito registro = registroDe(actorId);
+        when(loadRegistroPort.byId(registro.id())).thenReturn(Optional.of(registro));
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(false)));
+        when(almacenamientoPort.firmarSubida(any(), any(), any()))
+                .thenReturn(URI.create("https://s3.example/put"));
+
+        var comando = new SolicitarUrlEvidenciaRegistroCommand(actorId, registro.id(), "image/jpeg");
+
+        assertThat(service.solicitarUrl(comando).ruta()).isNotEqualTo(service.solicitarUrl(comando).ruta());
+    }
+
+    @Test
+    @DisplayName("CLAUDE.MD §0.3: pedir la URL de un registro ajeno -> NotAuthorizedException")
+    void urlDeRegistroAjenoRechazada() {
+        RegistroHabito registro = registroDe(UserId.of(UUID.randomUUID()));
+        when(loadRegistroPort.byId(registro.id())).thenReturn(Optional.of(registro));
+
+        var comando = new SolicitarUrlEvidenciaRegistroCommand(actorId, registro.id(), "image/jpeg");
+
+        assertThatThrownBy(() -> service.solicitarUrl(comando)).isInstanceOf(NotAuthorizedException.class);
     }
 }

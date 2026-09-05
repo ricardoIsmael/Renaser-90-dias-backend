@@ -25,6 +25,11 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
      * registro) — {@code null} si el habito no tiene horario configurado en ninguno de los
      * dos. {@code guia}: la vigente para {@code diaPrograma}, o {@code null} si no hay
      * ninguna todavia.
+     *
+     * <p>NO trae {@code claveSistema}, a proposito: el movil ya la recibe por
+     * {@code MiHabitoResponse.systemKey} de {@code GET /api/v1/habits} y une catalogo y track
+     * por {@code habitoId}. Repetirla aca seria un segundo lugar por donde el mismo dato puede
+     * quedar desincronizado.
      */
     record TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
                                    GuiaResumen guia, LocalTime horaDisparo, LocalTime horaLimite) {
