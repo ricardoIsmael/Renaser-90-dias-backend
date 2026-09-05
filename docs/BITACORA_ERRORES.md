@@ -2422,3 +2422,45 @@ rendimiento y el mismo almacenamiento — el limite no compra nada, solo agrega 
 **Verificado:** `./mvnw clean test` -> **2405 pruebas, 0 fallos**. La migracion no se ejercito
 todavia contra la base local — corre al proximo arranque de la app.
 
+---
+
+## E-110 — El acompanante desaparece de TODA la app al salir del chat por la barra de pestanas (2026-09-05) — **ABIERTO**
+
+**Sintoma:** el boton flotante de Renasia deja de aparecer en Hoy, Plan, Training y Yo. No vuelve
+solo. Reproducido en vivo el 2026-09-05.
+
+**Como reproducirlo:** Comunidad -> Entorno Renaser -> Chats Comunidad -> Global -> y salir tocando
+otra pestana de abajo (NO la flecha de volver). El flotante desaparece de todas las pantallas.
+
+**Como recuperarlo mientras tanto:** volver a Comunidad y salir del chat con la flecha `←`.
+
+**Causa — es una regresion introducida hoy con D-106.** La senal `chatEnPantalla` se generalizo para
+que el flotante se esconda cuando hay una sala de chat abierta. En `ComunidadScreen` se enciende asi:
+
+```java
+useEffect(() => {
+  if (!inAtencionPersonalizada || activeChat === null || groupInfoVisible) return;
+  return marcarChatMontado();
+}, [inAtencionPersonalizada, activeChat, groupInfoVisible]);
+```
+
+El efecto es correcto; el problema es la premisa. **`ComunidadScreen` NO se desmonta al cambiar de
+pestana** — el navegador de tabs la mantiene viva. Al irse por la barra de abajo, `activeChat` sigue
+apuntando a la conversacion, la limpieza nunca corre, y el contador queda en 1 para siempre.
+
+**Por que no paso antes:** la senal la usaba solo `ChatDelCurso`, un componente que SI se desmonta
+al salir del curso. Ahi el ciclo de vida del componente y "hay un chat en pantalla" coincidian. Al
+reusarla para Comunidad esa equivalencia se rompio, porque la condicion pasa a depender de ESTADO
+en una pantalla que nunca muere.
+
+**Y es el camino natural:** nadie sale de un chat con la flecha; se toca otra pestana.
+
+**Arreglo propuesto (no aplicado):** la condicion tiene que ser "hay un chat abierto **Y** esta
+pantalla esta enfocada". React Navigation expone `useIsFocused()` justamente para esto. Es agregar
+esa condicion al efecto.
+
+**La leccion, que vale mas que el arreglo:** al reusar una senal atada al ciclo de vida de un
+componente, hay que verificar que el componente nuevo tenga el MISMO ciclo de vida. Un
+`useEffect` con limpieza solo se apaga si el componente se desmonta o si cambian sus dependencias —
+y en un navegador de pestanas, salir de una pantalla no es ninguna de las dos cosas.
+
