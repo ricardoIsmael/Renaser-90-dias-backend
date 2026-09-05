@@ -1844,3 +1844,38 @@ el incremento (`== 1`) — lo segundo no autorrepara nada si la clave ya estaba 
   - **Derivar, no acumular.** Todo valor que sea función del calendario se calcula de fechas. Un contador incrementado desde un cron pierde para siempre cualquier corrida que no ocurra.
   - **Todo test de comportamiento diario debe incluir un caso con el reloj en una hora UTC que caiga en el día local anterior** (entre 00:00 y 05:00 UTC). Agregado: `RelojProgramaServiceTest.unParticipanteDeLimaEstaEnElDiaUnoDuranteTodoSuPrimerDia`.
   - Reglas ejecutables en [`.claude/rules/02-tiempo-zonas-y-schedulers.md`](../.claude/rules/02-tiempo-zonas-y-schedulers.md) y [`.claude/rules/03-pruebas.md`](../.claude/rules/03-pruebas.md), creadas en este mismo cambio.
+
+## E-92 — Un agente trunco `TrainingScreen.tsx` a 0 bytes y se perdio el cableado de otros dos (2026-09-04)
+
+**Sintoma exacto:** `src/screens/TrainingScreen.tsx` del movil quedo en **0 bytes**. No hubo mensaje de error visible: el archivo simplemente aparecio vacio mientras siete agentes trabajaban en paralelo sobre los dos repos.
+
+**Causa real:** un script de uno de los agentes (el de evidencia generica) abrio el archivo en modo escritura — que trunca antes de escribir — y fallo antes de volcar el contenido. Cuatro agentes tenian instruccion de tocar ese mismo archivo; el truncado borro los cambios sin commitear de los otros dos que ya habian escrito ahi (Clase Diaria y Post en Comunidad). Los componentes nuevos de esos flujos, en archivos propios, sobrevivieron intactos.
+
+**Solucion aplicada:** restaurar desde `HEAD`, reaplicar encima el trabajo de cada agente en el orden en que aterrizaron, y volver a cablear a mano los dos flujos perdidos (imports, estado, ramas en `toggleHabitState`/`openEvidenceModal`, back handler y montaje del modal). `npx tsc --noEmit` en cero con los siete trabajos juntos.
+
+**Como evitar que vuelva a pasar:**
+- **No lanzar en paralelo agentes que deban editar el mismo archivo.** Secuenciarlos, o repartir por archivo. Esta fue la causa de fondo, no el script.
+- Al escribir un archivo desde un script, escribir a un temporal y renombrar (`os.replace`), nunca `open(path, 'w')` directo sobre el original.
+- Antes de un trabajo en paralelo grande, `git stash`/commit del estado previo: lo que esta solo en el working tree no tiene copia en ningun lado (se busco en git, worktrees, Local History del IDE, cache de Metro y `dist/` — no estaba).
+
+## E-93 — "Una respuesta de tipo FIRMA requiere mediaId" al firmar el Pacto: los ids del onboarding estaban corridos en uno (2026-09-04)
+
+**Sintoma exacto (consola de Metro):** `WARN No se pudo guardar la respuesta de onboarding (questionId=5), se reintentara mas tarde: [ApiError: Una respuesta de tipo FIRMA requiere mediaId]`, y en pantalla "No pudimos registrar tu aceptacion del Pacto". Terminos y Condiciones "funcionaba" y el Pacto no.
+
+**Causa real:** el commit `9ab4f6f` del movil (2026-09-02, "elegir Dia 1 tras Terminos... y arregla firma/horario") le resto 1 a los 24 ids hardcodeados en `src/features/onboarding/data/mapaPreguntas.ts`. Con eso el nombre del participante viajaba con el id 5, que en la base es `signature` (FIRMA), y el backend lo rechazaba con razon. Terminos "funcionaba" porque la cuenta soporte lo hizo el 2026-09-01 22:15, un dia ANTES del commit, con los ids correctos (sus respuestas estan bajo 3/4/6 = accepted_terms/accepted_pacto/participant_name). La cuenta del dueno lo intento despues y no tiene ninguna respuesta guardada: todas rebotaron. Se verifico ademas que los 24 ids de la version anterior al commit coinciden uno por uno con `renaser.preguntas_onboarding` de hoy.
+
+**Pista falsa que costo tiempo:** hay una fila `test_question_1` (flujo `TEST_FLOW`) en el id 1, creada el 2026-08-25, que no viene de ninguna migracion ni de la suite. Parecia la causa del corrimiento, pero no lo es: existia antes de que se escribiera el mapa y antes del commit malo. Es contaminacion de pruebas y conviene borrarla, pero borrarla no cambia ningun id ya asignado.
+
+**Solucion aplicada:** restaurar los 24 numeros de `9ab4f6f^` en `mapaPreguntas.ts` — solo esas lineas, sin tocar el resto de ese commit ni el mecanismo de firma. Elegida por el dueno como la opcion mas segura ("como funcionaba Terminos").
+
+**Como evitar que vuelva a pasar:** los ids son detalle de una base concreta, lo estable es `clave_pregunta`. El backend ya expone el catalogo (`GET /api/v1/onboarding/questionnaire?flow=...`, con `id`, `questionKey` y `type`); el movil deberia resolver los ids por clave en tiempo de ejecucion y verificar el tipo, en vez de llevar numeros escritos a mano. Queda propuesto, no hecho (el dueno pidio no tocar esa zona mas alla de la restauracion).
+
+## E-94 — Pruebas de contexto completo que fallan con `NoClassDefFoundError` de una clase que nadie toco (2026-09-04)
+
+**Sintoma exacto:** `ApplicationContext failure threshold (1) exceeded` en cuatro pruebas `@SpringBootTest` del modulo `rag` (`PgVectorNativoAdapterTest`, `ControlCuotaRedisAdapterTest`, `RenasiaConversacionPersistenceAdapterTest`, `InformeEspejoSombraPersistenceAdapterTest`), 19 errores. En el primer intento, la causa raiz enterrada en la traza: `java.lang.NoClassDefFoundError: com/renaser/os/users/infrastructure/adapter/out/persistence/identidadexterna/SpringDataIdentidadExternaRepository$IdentidadExternaRow`. Antes, en la misma sesion, compilando con incremental habian aparecido ademas `cannot find symbol` en `academy` (`AsignacionCursoPersistenceMapper`, `CursoPersistenceAdapter`) — archivos que tampoco se habian tocado.
+
+**Causa real:** `target/classes` a medias. El IDE (con la app levantada y devtools) y Maven compilan sobre la MISMA carpeta; cuando se cruzan, un `.class` externo queda mas nuevo que su fuente pero sin sus clases internas (`$IdentidadExternaRow`), y ni el incremental de Maven ni devtools lo vuelven a generar porque "ya esta compilado". Las pruebas unitarias no lo notan; las de contexto completo, que instancian TODOS los beans, si.
+
+**Solucion aplicada:** forzar la recompilacion de todo sin `clean` (que con la app levantada tumba el contexto, ver reglas de trabajo): `find src/main/java -name "*.java" -exec touch {} +` y despues `./mvnw test -Dmaven.compiler.useIncrementalCompilation=false ...`. Las cuatro clases pasaron a 19/19 sin cambiar una linea de codigo.
+
+**Como evitar que vuelva a pasar:** cuando una prueba de contexto completo falle con `NoClassDefFoundError` o `cannot find symbol` en un archivo que no se toco, NO buscar el bug en ese archivo: es el `target` cruzado. Recompilar todo con el `touch` de arriba. La solucion de fondo seria que el IDE compile a otra carpeta (`out/`) y no a `target/classes`.
