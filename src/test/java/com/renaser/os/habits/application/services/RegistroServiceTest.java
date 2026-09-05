@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.application.politica.PoliticaPostDiarioComunidad;
 import com.renaser.os.habits.application.politica.PoliticaSantuario;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
@@ -10,10 +11,14 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
+import com.renaser.os.habits.domain.model.habito.AmbitoHabito;
+import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
+import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
+import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
@@ -35,6 +40,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -71,6 +77,8 @@ class RegistroServiceTest {
     @Mock
     private AjustarPuntosPort ajustarPuntosPort;
     @Mock
+    private com.renaser.os.community.api.PublicacionMuroFinder publicacionMuroFinder;
+    @Mock
     private com.renaser.os.habits.application.ports.out.desbloqueo.LoadDesbloqueoHabitoPort loadDesbloqueoPort;
     @Mock
     private org.springframework.context.ApplicationEventPublisher events;
@@ -93,8 +101,9 @@ class RegistroServiceTest {
         // tal cual mantiene el test fiel al comportamiento de produccion (el rechazo de
         // BLOQUEO que antes estaba hardcodeado en el servicio ahora lo aporta esta).
         service = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
-                loadPreferenciaPort, progresoPort, ajustarPuntosPort, loadDesbloqueoPort, events, CLOCK, idGenerator,
-                List.of(new PoliticaSantuario()), transactionManager);
+                loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
+                CLOCK, idGenerator, List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad()),
+                transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -106,6 +115,18 @@ class RegistroServiceTest {
     private static Habito habitoCheckbox() {
         return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Meditar", TipoHabito.CHECKBOX, "MENTE",
                 com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia.OPCIONAL, CLOCK.now());
+    }
+
+    /**
+     * El habito real POST DIARIO EN COMUNIDAD: CHECKBOX (igual que otros quince del catalogo)
+     * y con la {@code claveSistema} que le pone V24. Se arma con {@code rehydrate} y no con
+     * {@code crearDeSistema} porque esa factoria deja la clave en null a proposito.
+     */
+    private static Habito habitoPostDiarioComunidad() {
+        return Habito.rehydrate(HabitoId.of(UUID.randomUUID()), AmbitoHabito.SISTEMA, null,
+                "POST DIARIO EN COMUNIDAD", null, TipoHabito.CHECKBOX, "CONSCIENCIA", "COMMUNITY_POST",
+                PoliticaPostDiarioComunidad.CLAVE_SISTEMA, ExigenciaEvidencia.OPCIONAL, false, true, false, false,
+                null, null, null, null, true, CLOCK.now(), CLOCK.now());
     }
 
     private RegistroHabito registroPendiente(UserId participanteId, HabitoId habitoId) {
@@ -133,6 +154,102 @@ class RegistroServiceTest {
         assertThat(resultado).isEmpty();
     }
 
+    // ────────────────────────────────────────────────────────────────────────────────────
+    // POST DIARIO EN COMUNIDAD (pedido del dueno, 2026-09-04): solo se completa si publico.
+    // Los cuatro tests de abajo FALLAN contra el codigo anterior a PoliticaPostDiarioComunidad
+    // — antes este habito era un CHECKBOX cualquiera y se completaba siempre.
+    // ────────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("POST DIARIO: sin publicacion en el Muro no se completa, no da puntos y el registro sigue PENDIENTE")
+    void postDiarioSinPublicacionNoSeCompleta() {
+        UserId dueno = participante();
+        Habito habito = habitoPostDiarioComunidad();
+        RegistroHabito registro = registroPendiente(dueno, habito.id());
+        when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(progresoPort.deParticipante(dueno)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+        when(publicacionMuroFinder.publicoEntre(eq(dueno), any(), any())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.completar(
+                new CompletarRegistroCommand(dueno, registro.id(), null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Muro");
+
+        // Lo que de verdad importa: no se le pago ni se le movio el estado por decir que publico.
+        assertThat(registro.estado()).isEqualTo(EstadoRegistro.PENDIENTE);
+        verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
+        verify(saveRegistroPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("POST DIARIO: con publicacion ese dia se completa como cualquier otro habito")
+    void postDiarioConPublicacionSeCompleta() {
+        UserId dueno = participante();
+        Habito habito = habitoPostDiarioComunidad();
+        RegistroHabito registro = registroPendiente(dueno, habito.id());
+        when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteYHabito(dueno, habito.id())).thenReturn(Optional.empty());
+        when(progresoPort.deParticipante(dueno)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+        when(publicacionMuroFinder.publicoEntre(eq(dueno), any(), any())).thenReturn(true);
+
+        RegistroHabito resultado = service.completar(
+                new CompletarRegistroCommand(dueno, registro.id(), null, null));
+
+        assertThat(resultado.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
+    }
+
+    /**
+     * El test que hubiera atrapado E-91 en esta regla (regla 02): el reloj a las 02:00 UTC cae
+     * el dia ANTERIOR en Lima (UTC-5). Si la ventana se calculara en UTC — o peor, con
+     * {@code clock.today()} — se le contaria al aprendiz el post de otro dia. Se verifican los
+     * dos instantes exactos, no que "se llamo al puerto".
+     */
+    @Test
+    @DisplayName("POST DIARIO: el dia se abre y cierra en la zona del participante, no en UTC")
+    void postDiarioMideElDiaEnLaZonaDelParticipante() {
+        UserId dueno = participante();
+        Habito habito = habitoPostDiarioComunidad();
+        // El registro es del 24/08; el reloj del test esta en otro instante a proposito: lo que
+        // manda es la fecha de ejecucion del registro, no "ahora".
+        RegistroHabito registro = registroPendiente(dueno, habito.id());
+        when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(progresoPort.deParticipante(dueno)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+        when(publicacionMuroFinder.publicoEntre(any(), any(), any())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.completar(
+                new CompletarRegistroCommand(dueno, registro.id(), null, null)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        // 24/08 00:00 en Lima = 24/08 05:00Z; 25/08 00:00 en Lima = 25/08 05:00Z.
+        verify(publicacionMuroFinder).publicoEntre(dueno, Instant.parse("2026-08-24T05:00:00Z"),
+                Instant.parse("2026-08-25T05:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("un habito sin regla propia no consulta el Muro (la consulta es perezosa, no se paga de gratis)")
+    void habitoComunNoConsultaElMuro() {
+        UserId dueno = participante();
+        Habito habito = habitoCheckbox();
+        RegistroHabito registro = registroPendiente(dueno, habito.id());
+        when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteYHabito(dueno, habito.id())).thenReturn(Optional.empty());
+        when(progresoPort.deParticipante(dueno)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+
+        service.completar(new CompletarRegistroCommand(dueno, registro.id(), null, null));
+
+        verify(publicacionMuroFinder, never()).publicoEntre(any(), any(), any());
+    }
+
     @Test
     @DisplayName("completar(): actor distinto del dueno del registro -> NotAuthorizedException")
     void completarRechazaActorAjeno() {
@@ -148,9 +265,14 @@ class RegistroServiceTest {
         verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
     }
 
+    /**
+     * D-97: antes esta prueba afirmaba 0 puntos y ninguna llamada a AjustarPuntosPort (fiel a
+     * applyHabitAward del repo viejo). El dueno definio lo contrario: sin horario, la hora de la
+     * accion es el ancla — siempre a tiempo, puntaje completo. Es el caso de DESPERTAR.
+     */
     @Test
-    @DisplayName("completar sin horario configurado: 0 puntos, sin llamada a AjustarPuntosPort (aplyHabitAward viejo: sin ventana, sin award)")
-    void completarSinHorarioNoOtorgaPuntos() {
+    @DisplayName("completar sin horario configurado: la hora de la accion es el ancla, 10 puntos (D-97)")
+    void completarSinHorarioOtorgaPuntajeCompleto() {
         UserId dueno = participante();
         Habito habito = habitoCheckbox();
         RegistroHabito registro = registroPendiente(dueno, habito.id());
@@ -165,8 +287,8 @@ class RegistroServiceTest {
                 new CompletarRegistroCommand(dueno, registro.id(), "listo", null));
 
         assertThat(resultado.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
-        assertThat(resultado.puntosOtorgados()).isZero();
-        verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
+        assertThat(resultado.puntosOtorgados()).isEqualTo(10);
+        verify(ajustarPuntosPort).ajustar(eq(dueno), eq(MotivoPuntos.HABIT_COMPLETED), eq(10), any());
     }
 
     @Test
@@ -251,5 +373,53 @@ class RegistroServiceTest {
         assertThat(r3.estado()).isEqualTo(EstadoRegistro.EXPIRADO);
         // r2 igual queda mutada en memoria (el dominio no sabe que el save fallo), pero eso
         // no importa: nunca se persistio, asi que el proximo barrido la vuelve a intentar.
+    }
+
+    // ---- generar: el dia de desbloqueo elegido por el aprendiz ----
+
+    /**
+     * El habito elegido "para el dia 2" no puede generar registro el dia 1. Sin este filtro el
+     * numero se guardaba en `desbloqueos_habito` y no cambiaba nada: el barrido lo generaba igual.
+     */
+    @Test
+    @DisplayName("generar: un habito elegido para un dia futuro todavia no genera registro")
+    void generarSalteaElHabitoElegidoParaMasAdelante() {
+        UserId participante = participante();
+        Habito habito = habitoCheckbox();
+        when(progresoPort.deParticipante(participante)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(1, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
+        when(loadHabitoPort.personalesActivosDe(participante)).thenReturn(List.of());
+        when(loadDesbloqueoPort.deParticipante(participante)).thenReturn(List.of(
+                DesbloqueoHabito.rehydrate(participante, habito.id(), 2, CLOCK.now(), CLOCK.now(), CLOCK.now())));
+
+        List<RegistroHabito> generados = service.generar(participante, LocalDate.of(2026, 8, 24));
+
+        assertThat(generados).isEmpty();
+        verify(saveRegistroPort, never()).save(any());
+    }
+
+    /** Contraparte: llegado su dia, el mismo habito si genera. */
+    @Test
+    @DisplayName("generar: llegado el dia elegido, el habito genera registro normalmente")
+    void generarIncluyeElHabitoCuandoLlegaSuDia() {
+        UserId participante = participante();
+        Habito habito = habitoCheckbox();
+        when(progresoPort.deParticipante(participante)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(2, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
+        when(loadHabitoPort.personalesActivosDe(participante)).thenReturn(List.of());
+        when(loadDesbloqueoPort.deParticipante(participante)).thenReturn(List.of(
+                DesbloqueoHabito.rehydrate(participante, habito.id(), 2, CLOCK.now(), CLOCK.now(), CLOCK.now())));
+        when(loadRegistroPort.porParticipanteHabitoYFecha(eq(participante), eq(habito.id()), any()))
+                .thenReturn(Optional.empty());
+        when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null, TipoDia.TODOS,
+                        LocalTime.of(7, 0), null, CLOCK.now())));
+
+        List<RegistroHabito> generados = service.generar(participante, LocalDate.of(2026, 8, 24));
+
+        assertThat(generados).hasSize(1);
+        assertThat(generados.get(0).habitoId()).isEqualTo(habito.id());
     }
 }

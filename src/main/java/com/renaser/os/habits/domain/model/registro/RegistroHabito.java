@@ -93,9 +93,9 @@ public final class RegistroHabito {
 
     /**
      * PENDIENTE/EN_CURSO -> COMPLETADO. El llamador ya calculo el
-     * {@link ResultadoOtorgamiento} (o pasa 0 puntos si el habito no tiene
-     * ventana configurada — sin ventana, el repo viejo nunca otorga puntos,
-     * ver applyHabitAward en service.ts).
+     * {@link ResultadoOtorgamiento}. Sin ventana configurada, desde D-97 el
+     * llamador pasa el puntaje completo: la hora de la accion es el ancla
+     * (antes pasaba 0, fiel a applyHabitAward del repo viejo).
      */
     public void completar(int puntos, String respuestaTexto, Integer calificacionProductividad,
                            java.util.UUID entradaDiarioId, Instant ahora) {

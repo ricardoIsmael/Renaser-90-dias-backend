@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.community.api.PublicacionMuroFinder;
 import com.renaser.os.habits.api.HabitoCompletadoEvent;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
@@ -18,6 +19,7 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.politica.ContextoCompletar;
 import com.renaser.os.habits.domain.model.politica.DecisionPolitica;
 import com.renaser.os.habits.domain.model.politica.PoliticaHabito;
 import com.renaser.os.habits.domain.model.politica.RegistroPoliticasHabito;
@@ -72,6 +74,13 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     private final LoadPreferenciaHorarioPort loadPreferenciaPort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final AjustarPuntosPort ajustarPuntosPort;
+    /**
+     * Para POST DIARIO EN COMUNIDAD: el unico modo de saber si el aprendiz publico DE VERDAD.
+     * Se consume por el `api` de `community`, igual que {@link AjustarPuntosPort} de `points`
+     * — nunca leyendo `publicaciones_muro` desde aca (D-41). Solo lo mira
+     * {@link PoliticaPostDiarioComunidad}, y solo si a ese habito le toca decidir.
+     */
+    private final PublicacionMuroFinder publicacionMuroFinder;
     /** D-87: para saltear los habitos que el aprendiz pauso. */
     private final LoadDesbloqueoHabitoPort loadDesbloqueoPort;
     private final ApplicationEventPublisher events;
@@ -94,6 +103,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
                             LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
                             LoadPreferenciaHorarioPort loadPreferenciaPort,
                             ConsultarProgresoParticipanteHabitsPort progresoPort, AjustarPuntosPort ajustarPuntosPort,
+                            PublicacionMuroFinder publicacionMuroFinder,
                             LoadDesbloqueoHabitoPort loadDesbloqueoPort,
                             ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator,
                             List<PoliticaHabito> politicas, PlatformTransactionManager transactionManager) {
@@ -104,6 +114,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         this.loadPreferenciaPort = loadPreferenciaPort;
         this.progresoPort = progresoPort;
         this.ajustarPuntosPort = ajustarPuntosPort;
+        this.publicacionMuroFinder = publicacionMuroFinder;
         this.loadDesbloqueoPort = loadDesbloqueoPort;
         this.events = events;
         this.clock = clock;
@@ -162,18 +173,22 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         // D-87: los habitos que este aprendiz PAUSO no generan track. Se resuelve en UNA consulta
         // y no una por habito — el barrido nocturno recorre todo el padron.
         //
-        // Compatibilidad hacia atras, deliberada: solo se saltean los PAUSADOS explicitos. Un
-        // habito sin fila en `desbloqueos_habito` se sigue generando como siempre. Filtrar por
-        // "esta en el plan" habria dejado a TODO el padron sin habitos de un dia para el otro,
-        // porque hoy esa tabla esta vacia para todos.
-        Set<HabitoId> pausados = loadDesbloqueoPort.deParticipante(participanteId).stream()
-                .filter(DesbloqueoHabito::estaPausado)
+        // Se saltean tambien los que el aprendiz eligio para MAS ADELANTE (`dia_desbloqueo` en el
+        // futuro): sin esto, elegir un habito "para el dia 2" guardaba el numero y no cambiaba
+        // nada, el habito empezaba a generar track esa misma noche igual.
+        //
+        // Compatibilidad hacia atras, deliberada: solo se saltea lo que tiene fila y esta
+        // PAUSADO o todavia no le toca. Un habito sin fila en `desbloqueos_habito` se sigue
+        // generando como siempre. Filtrar por "esta en el plan" habria dejado a TODO el padron
+        // sin habitos de un dia para el otro, porque hoy esa tabla esta vacia para todos.
+        Set<HabitoId> fueraDelPlanDeHoy = loadDesbloqueoPort.deParticipante(participanteId).stream()
+                .filter(d -> d.estaPausado() || d.diaDesbloqueo() > progreso.diaPrograma())
                 .map(DesbloqueoHabito::habitoId)
                 .collect(java.util.stream.Collectors.toSet());
 
         List<RegistroHabito> generados = new ArrayList<>();
         for (Habito habito : catalogo) {
-            if (pausados.contains(habito.id())) {
+            if (fueraDelPlanDeHoy.contains(habito.id())) {
                 continue;
             }
             if (loadRegistroPort.porParticipanteHabitoYFecha(participanteId, habito.id(), fecha).isPresent()) {
@@ -209,7 +224,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         RegistroHabito registro = requireRegistro(command.registroId());
         requireSelf(command.actorId(), registro.participanteId());
         Habito habito = requireHabito(registro.habitoId());
-        requirePoliticaPermiteCompletarDirecto(habito);
+        requirePoliticaPermiteCompletarDirecto(habito, contextoDe(registro));
 
         Instant ahora = clock.now();
         VentanaEntrega ventana = resolverVentana(registro, habito);
@@ -225,7 +240,12 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
             throw new RegistroExpiradoException("El habito expiro — no se puede completar");
         }
 
-        int puntos = 0;
+        // D-97: un habito SIN horario (ni disparo ni cierre, ni de catalogo ni de preferencia —
+        // hoy DESPERTAR) se evidencia con el solo hecho de registrarlo, y la hora de la accion es
+        // su ancla: siempre esta a tiempo y paga el puntaje completo. Antes esta rama dejaba
+        // `puntos = 0` ("sin ventana, el repo viejo nunca otorga puntos"), y el efecto era que
+        // DESPERTAR se completaba y no pagaba nunca — el dueno lo definio al reves.
+        int puntos = ResultadoOtorgamiento.PUNTOS_COMPLETOS;
         MotivoPuntos motivo = MotivoPuntos.HABIT_COMPLETED;
         if (ventana != null) {
             ResultadoOtorgamiento resultado = ResultadoOtorgamiento.calcular(ventana.instanteAncla(), ahora,
@@ -336,14 +356,44 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
      * <p>El {@code switch} sobre {@link DecisionPolitica} es exhaustivo por ser sellada:
      * si manana aparece una tercera variante, el compilador obliga a contemplarla aca.
      */
-    private void requirePoliticaPermiteCompletarDirecto(Habito habito) {
+    private void requirePoliticaPermiteCompletarDirecto(Habito habito, ContextoCompletar contexto) {
         PoliticaHabito politica = politicas.para(habito);
-        switch (politica.puedeCompletarseDirecto(habito)) {
+        switch (politica.puedeCompletarseDirecto(habito, contexto)) {
             case DecisionPolitica.Procede ignorada -> {
                 // sigue el camino compartido
             }
             case DecisionPolitica.NoProcede(String motivo) -> throw new IllegalArgumentException(motivo);
         }
+    }
+
+    /**
+     * Los hechos externos que alguna politica puede necesitar, PEREZOSOS: el lambda no corre
+     * salvo que la politica de este habito pregunte, y hoy pregunta una sola de las tres
+     * (ver {@link ContextoCompletar}). Sin esa pereza, cada completacion del dia pagaria una
+     * consulta al Muro que casi nadie usa.
+     */
+    private ContextoCompletar contextoDe(RegistroHabito registro) {
+        return ContextoCompletar.de(() -> publicoEnElMuroEseDia(registro));
+    }
+
+    /**
+     * El dia del registro se abre y se cierra en la zona del PARTICIPANTE, no en UTC ni en la
+     * del servidor (regla 02-tiempo-zonas-y-schedulers, bug E-91): para alguien en Lima
+     * (UTC-5), una publicacion de las 02:00 UTC pertenece al dia ANTERIOR, y contarla contra
+     * el dia de hoy le regalaria el habito con el post de ayer.
+     *
+     * <p>Se ancla en {@code fechaEjecucion} del registro y no en "hoy": el registro es de un
+     * dia concreto, y ese es el dia que hay que comprobar aunque se complete un rato despues
+     * (la ventana de gracia/extension puede cruzar la medianoche).
+     *
+     * <p>Media ventana {@code [inicio, inicio+1dia)} — sin hueco ni solape entre dos dias
+     * consecutivos.
+     */
+    private boolean publicoEnElMuroEseDia(RegistroHabito registro) {
+        ZoneId zona = ZoneId.of(requireProgreso(registro.participanteId()).timezone());
+        LocalDate dia = registro.fechaEjecucion();
+        return publicacionMuroFinder.publicoEntre(registro.participanteId(), dia.atStartOfDay(zona).toInstant(),
+                dia.plusDays(1).atStartOfDay(zona).toInstant());
     }
 
     private void requireSelf(UserId actorId, UserId participanteId) {
