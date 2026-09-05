@@ -1,6 +1,7 @@
 package com.renaser.os.chat.application.services;
 
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.EnviarMensajeCommand;
+import com.renaser.os.chat.application.ports.in.mensaje.SolicitarUrlSubidaMediaChatUseCase.SolicitarUrlSubidaMediaChatCommand;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
 import com.renaser.os.chat.application.ports.out.mensaje.PublicarMensajeFanoutPort;
@@ -12,6 +13,7 @@ import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
+import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -26,6 +28,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +66,8 @@ class MensajeServiceTest {
     @Mock
     private UserSummaryFinder userSummaryFinder;
     @Mock
+    private AlmacenamientoPort almacenamientoPort;
+    @Mock
     private IdGenerator idGenerator;
 
     private MensajeService service;
@@ -79,7 +84,8 @@ class MensajeServiceTest {
     @BeforeEach
     void setUp() {
         service = new MensajeService(loadConversacionPort, esParticipantePort, marcarLeidoPort, saveMensajePort,
-                loadMensajePort, publicarMensajeFanoutPort, userSummaryFinder, CLOCK, idGenerator);
+                loadMensajePort, publicarMensajeFanoutPort, userSummaryFinder, almacenamientoPort, CLOCK,
+                idGenerator);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
                 Optional.of(new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
@@ -133,6 +139,77 @@ class MensajeServiceTest {
         // Sin transaccion Spring activa en el test (unit puro): el fanout se dispara
         // sincrono, tras el save — nunca antes.
         verify(publicarMensajeFanoutPort).publicar(any());
+    }
+
+    // ─── URL de subida de media (fotos y audios de chat) ──────────────────────────────────
+
+    private SolicitarUrlSubidaMediaChatCommand comandoDeSubida(UserId actorId, String tipoContenido) {
+        return new SolicitarUrlSubidaMediaChatCommand(actorId, conversacionId, tipoContenido);
+    }
+
+    @Test
+    void solicitarUrlDeSubidaRechazaAQuienNoEsParticipante() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.solicitarUrl(comandoDeSubida(activo, "image/jpeg")))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        // Lo que se protege no es solo la respuesta: es que no se llegue a firmar nada.
+        verify(almacenamientoPort, never()).firmarSubida(any(), any(), any());
+    }
+
+    @Test
+    void solicitarUrlDeSubidaRechazaAUnActorSuspendido() {
+        assertThatThrownBy(() -> service.solicitarUrl(comandoDeSubida(suspendido, "image/jpeg")))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        verify(almacenamientoPort, never()).firmarSubida(any(), any(), any());
+    }
+
+    @Test
+    void solicitarUrlDeSubidaDeFotoFirmaBajoElPrefijoDeLaConversacion() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+        when(almacenamientoPort.firmarSubida(any(), any(), any())).thenReturn(URI.create("https://s3/foto"));
+
+        var url = service.solicitarUrl(comandoDeSubida(activo, "image/jpeg"));
+
+        assertThat(url.bucket()).isEqualTo(Mensaje.BUCKET_DEFAULT);
+        assertThat(url.ruta()).startsWith("chat/" + conversacionId.value() + "/fotos/");
+        assertThat(url.url()).isEqualTo(URI.create("https://s3/foto"));
+    }
+
+    @Test
+    void solicitarUrlDeSubidaDeAudioUsaSuPropioPrefijo() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+        when(almacenamientoPort.firmarSubida(any(), any(), any())).thenReturn(URI.create("https://s3/audio"));
+
+        var url = service.solicitarUrl(comandoDeSubida(activo, "audio/m4a"));
+
+        assertThat(url.ruta()).startsWith("chat/" + conversacionId.value() + "/audios/");
+    }
+
+    @Test
+    void solicitarUrlDeSubidaDaUnaRutaDistintaCadaVez() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+        when(almacenamientoPort.firmarSubida(any(), any(), any())).thenReturn(URI.create("https://s3/x"));
+
+        // Dos fotos seguidas en el mismo chat no pueden pisarse la una a la otra en el bucket.
+        var primera = service.solicitarUrl(comandoDeSubida(activo, "image/jpeg"));
+        var segunda = service.solicitarUrl(comandoDeSubida(activo, "image/jpeg"));
+
+        assertThat(primera.ruta()).isNotEqualTo(segunda.ruta());
+    }
+
+    @Test
+    void solicitarUrlDeSubidaRechazaUnTipoDeContenidoQueElMensajeNoPodriaLlevar() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+
+        // Si se firmara, el archivo quedaria huerfano en el bucket: el mensaje nunca podria
+        // referenciarlo porque `TipoMensaje` no tiene un valor para el.
+        assertThatThrownBy(() -> service.solicitarUrl(comandoDeSubida(activo, "application/pdf")))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(almacenamientoPort, never()).firmarSubida(any(), any(), any());
     }
 
     @Test

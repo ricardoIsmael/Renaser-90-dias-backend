@@ -4,6 +4,7 @@ import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.ListarMensajesUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.MensajeEnriquecido;
 import com.renaser.os.chat.application.ports.in.mensaje.MensajeEnriquecido.RespuestaPreview;
+import com.renaser.os.chat.application.ports.in.mensaje.SolicitarUrlSubidaMediaChatUseCase;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
 import com.renaser.os.chat.application.ports.out.mensaje.PublicarMensajeFanoutPort;
@@ -13,6 +14,7 @@ import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
+import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -25,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -32,12 +36,16 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
-public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCase {
+public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCase,
+        SolicitarUrlSubidaMediaChatUseCase {
 
     private static final int LIMITE_POR_DEFECTO = 30;
     private static final int LIMITE_MAXIMO = 100;
+    private static final Duration VALIDEZ_URL_SUBIDA = Duration.ofMinutes(10);
+    private static final Duration VALIDEZ_URL_LECTURA = Duration.ofMinutes(15);
 
     private final LoadConversacionPort loadConversacionPort;
     private final EsParticipantePort esParticipantePort;
@@ -46,13 +54,15 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     private final LoadMensajePort loadMensajePort;
     private final PublicarMensajeFanoutPort publicarMensajeFanoutPort;
     private final UserSummaryFinder userSummaryFinder;
+    private final AlmacenamientoPort almacenamientoPort;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
     public MensajeService(LoadConversacionPort loadConversacionPort, EsParticipantePort esParticipantePort,
                            MarcarLeidoPort marcarLeidoPort, SaveMensajePort saveMensajePort,
                            LoadMensajePort loadMensajePort, PublicarMensajeFanoutPort publicarMensajeFanoutPort,
-                           UserSummaryFinder userSummaryFinder, Clock clock, IdGenerator idGenerator) {
+                           UserSummaryFinder userSummaryFinder, AlmacenamientoPort almacenamientoPort,
+                           Clock clock, IdGenerator idGenerator) {
         this.loadConversacionPort = loadConversacionPort;
         this.esParticipantePort = esParticipantePort;
         this.marcarLeidoPort = marcarLeidoPort;
@@ -60,6 +70,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         this.loadMensajePort = loadMensajePort;
         this.publicarMensajeFanoutPort = publicarMensajeFanoutPort;
         this.userSummaryFinder = userSummaryFinder;
+        this.almacenamientoPort = almacenamientoPort;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
@@ -105,6 +116,50 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         });
     }
 
+    /**
+     * Se firma la subida ANTES de que el mensaje exista, asi que la autorizacion se repite aca
+     * entera — activo, conversacion existente y participante — y no se delega a {@link #enviar}.
+     * Sin esto, cualquiera con sesion podria firmar subidas contra el prefijo de una conversacion
+     * de la que no forma parte, aunque despues no lograra enviar el mensaje.
+     *
+     * <p>Sin {@code @Transactional} a proposito: firmar es trabajo del adaptador de
+     * almacenamiento y no debe correr con una conexion de Hikari retenida. Las tres
+     * comprobaciones son lecturas y cada una va en la transaccion implicita de su repositorio.
+     */
+    @Override
+    public UrlSubidaMediaChat solicitarUrl(SolicitarUrlSubidaMediaChatCommand command) {
+        requireActivo(command.actorId());
+        requireConversacion(command.conversacionId());
+        requireParticipante(command.conversacionId(), command.actorId());
+        String ruta = rutaDeMedia(command.conversacionId(), command.tipoContenido());
+        URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
+        return new UrlSubidaMediaChat(url, Mensaje.BUCKET_DEFAULT, ruta);
+    }
+
+    /**
+     * Un prefijo por conversacion y, dentro, uno por tipo de archivo. El de la conversacion es lo
+     * que permite borrar o caducar todo el material de un chat sin recorrer objeto por objeto; el
+     * del tipo es el mismo criterio que ya usa el Muro (en S3 el prefijo es lo unico sobre lo que
+     * se pueden aplicar reglas distintas de ciclo de vida o de lectura).
+     *
+     * <p>El tipo se rechaza aca porque el objeto se sube antes de que exista el mensaje: firmar
+     * una subida que {@code Mensaje} despues va a rechazar deja el archivo huerfano en el bucket.
+     */
+    private static String rutaDeMedia(ConversacionId conversacionId, String tipoContenido) {
+        String carpeta;
+        if (tipoContenido.startsWith("image/")) {
+            carpeta = "fotos";
+        } else if (tipoContenido.startsWith("audio/")) {
+            carpeta = "audios";
+        } else if (tipoContenido.startsWith("video/")) {
+            carpeta = "videos";
+        } else {
+            throw new IllegalArgumentException(
+                    "tipoContenido debe empezar con image/, audio/ o video/: " + tipoContenido);
+        }
+        return "chat/" + conversacionId.value() + "/" + carpeta + "/" + UUID.randomUUID();
+    }
+
     @Override
     public PaginaMensajes listar(UserId actorId, ConversacionId conversacionId, Instant cursor, int limite) {
         requireActivo(actorId);
@@ -145,13 +200,25 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         return mensajes.stream().map(m -> aEnriquecido(m, originales, usuarios)).toList();
     }
 
-    private static MensajeEnriquecido aEnriquecido(Mensaje mensaje, Map<MensajeId, Mensaje> originales,
-                                                     Map<UserId, UserSummary> usuarios) {
+    private MensajeEnriquecido aEnriquecido(Mensaje mensaje, Map<MensajeId, Mensaje> originales,
+                                              Map<UserId, UserSummary> usuarios) {
         UserSummary emisor = usuarios.get(mensaje.emisorId());
         RespuestaPreview preview = mensaje.respuestaAId() == null ? null
                 : previewDe(originales.get(mensaje.respuestaAId()), usuarios);
         return new MensajeEnriquecido(mensaje, emisor != null ? emisor.fullName() : null,
-                emisor != null ? emisor.avatarUrl() : null, preview);
+                emisor != null ? emisor.avatarUrl() : null, preview, urlDeLectura(mensaje));
+    }
+
+    /**
+     * Deja de ser {@code static} a proposito: firmar necesita el puerto de almacenamiento. Se
+     * firma por mensaje y no en lote porque {@code firmarSubida}/{@code firmarLectura} son calculo
+     * local del SDK (no hay ida y vuelta a S3), asi que no es una consulta N+1.
+     */
+    private String urlDeLectura(Mensaje mensaje) {
+        if (mensaje.mediaRuta() == null) {
+            return null;
+        }
+        return almacenamientoPort.firmarLectura(mensaje.mediaRuta(), VALIDEZ_URL_LECTURA).toString();
     }
 
     /** {@code null} si el mensaje original ya no esta disponible (no deberia pasar hoy —

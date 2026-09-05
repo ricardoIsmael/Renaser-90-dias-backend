@@ -13,26 +13,31 @@ import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
  * mensajes (`GET .../messages`). El overload que recibe un {@link Mensaje} crudo (usado
  * hoy solo para el "ultimo mensaje" de {@code ConversacionResumenResponse}) los deja en
  * {@code null}: esa pantalla no los necesita (el frontend real no los pide en
- * {@code ConversationSummary.lastMessage}). */
+ * {@code ConversationSummary.lastMessage}).
+ *
+ * <p>Lo mismo vale para {@code mediaUrl}, la URL de lectura firmada del adjunto: solo viene en el
+ * listado de mensajes, que es la unica pantalla que muestra la foto o reproduce el audio. En el
+ * resumen de conversacion alcanza con {@code type} para escribir "Foto" o "Audio" al lado del
+ * chat, y firmar una URL por conversacion que nadie va a abrir seria trabajo tirado. */
 public record MensajeResponse(String id, String conversationId, String senderId, String senderName,
                                String senderAvatarUrl, String type, String text, String mediaBucket,
                                String mediaPath, String mediaMime, Integer mediaBytes,
-                               Short mediaDurationSeconds, boolean hidden, String replyToId,
+                               Short mediaDurationSeconds, String mediaUrl, boolean hidden, String replyToId,
                                ReplyPreviewResponse replyTo, String createdAt) {
 
     public static MensajeResponse from(Mensaje m) {
         return new MensajeResponse(m.id().toString(), m.conversacionId().toString(), m.emisorId().toString(), null,
                 null, toWireTipo(m.tipo()), m.texto(), m.mediaBucket(), m.mediaRuta(), m.mediaMime(), m.mediaBytes(),
-                m.mediaDuracionS(), m.oculto(), m.respuestaAId() != null ? m.respuestaAId().toString() : null, null,
-                m.creadoEn().toString());
+                m.mediaDuracionS(), null, m.oculto(),
+                m.respuestaAId() != null ? m.respuestaAId().toString() : null, null, m.creadoEn().toString());
     }
 
     public static MensajeResponse from(MensajeEnriquecido enriquecido) {
         Mensaje m = enriquecido.mensaje();
         return new MensajeResponse(m.id().toString(), m.conversacionId().toString(), m.emisorId().toString(),
                 enriquecido.nombreEmisor(), enriquecido.avatarEmisor(), toWireTipo(m.tipo()), m.texto(),
-                m.mediaBucket(), m.mediaRuta(), m.mediaMime(), m.mediaBytes(), m.mediaDuracionS(), m.oculto(),
-                m.respuestaAId() != null ? m.respuestaAId().toString() : null,
+                m.mediaBucket(), m.mediaRuta(), m.mediaMime(), m.mediaBytes(), m.mediaDuracionS(),
+                enriquecido.mediaUrl(), m.oculto(), m.respuestaAId() != null ? m.respuestaAId().toString() : null,
                 ReplyPreviewResponse.from(enriquecido.respuestaPreview()), m.creadoEn().toString());
     }
 

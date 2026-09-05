@@ -9,8 +9,9 @@ nada como terminado sin haber corrido las pruebas.
   pasó, ni se omite mencionar un test roto.
 - Si algo quedó sin probar (faltan credenciales, Docker, un dato), **se dice explícitamente qué
   quedó sin verificar y por qué**.
-- `JAVA_HOME` debe apuntar al JDK 25 (`C:\Program Files\Java\jdk-25.0.2`). Si Maven dice
-  `release version 25 not supported`, es eso — no el código.
+- `JAVA_HOME` debe apuntar al JDK 25 (`C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot`).
+  Si Maven dice `release version 25 not supported`, es eso — no el código. (Corregido 2026-09-05,
+  E-103: acá decía `C:\Program Files\Java\jdk-25.0.2`, una ruta que no existe en esta máquina.)
 
 ## Qué se prueba y dónde
 

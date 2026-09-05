@@ -2029,3 +2029,136 @@ Lo que despisto al principio: se busco en la barra de navegacion del sistema And
 **Verificado:** `./mvnw clean test` -> **2335 pruebas, 0 fallos** (7 nuevas de `DesbloqueoHabitoPausaTest`, incluida la que fija que el habito vuelve solo al dia siguiente). `npx tsc --noEmit` en cero. Flujo completo por HTTP contra el backend real: PUT al plan -> PATCH `{"active":false,"pausedUntil":"2026-09-06"}` -> 200 con `paused:true, pausedUntil:"2026-09-06"` -> la fila en `desbloqueos_habito` lo confirma -> reactivar limpia las dos columnas.
 
 **AISLAMIENTO (pregunta explicita del dueno): la pausa es SOLO del aprendiz que la hace.** `desbloqueos_habito` tiene PK `(participante_id, habito_id)` y el endpoint es self por construccion — `@ActorAutenticado UserId actor` mas el id del HABITO, sin id de aprendiz en la ruta: no hay forma de pausarle un habito a otro. Lo que SI es global es `habitos.orden` (el catalogo compartido, que es lo que se pidio: "orden fijo para todos") y `activeWeekdays`, que se deriva del catalogo y nadie escribe desde la app.
+
+---
+
+## E-102 — El chat mostraba fotos y audios que nunca se enviaban (2026-09-05)
+
+**Sintoma:** en Comunidad → un chat abierto, tocar el boton de la camara o el del microfono agregaba
+una burbuja a la conversacion que se veia enviada (con su doble check dorado). No llegaba a nadie, y
+desaparecia al recargar la app. El boton "GIF" hacia lo mismo con un emoji grande.
+
+**Sintoma 2, el que reporto el dueno:** el boton flotante del acompanante IA se montaba justo encima
+de la barra de escribir y tapaba el boton de enviar.
+
+**Causa real — y no era del cliente.** `chat` era el **unico modulo del backend sin endpoint de
+subida**. Todos los demas lo tienen (`community`, `rocks`, `habits`, `onboarding`, `calendar`,
+`phasecontracts`, `support`, `users`), y `EnviarMensajeRequest` aceptaba `mediaBucket`/`mediaPath`
+desde el primer dia — pero no habia ningun `upload-url` de donde sacar esas dos referencias. El
+cliente lo tenia documentado como hueco en `chatApi.ts` y, para que los botones del diseno no
+quedaran muertos, fabricaba una burbuja local con contenido inventado: `'Evidencia_1.jpg'`,
+`audioDuration: '0:28'` y el emisor fijo `'Kelin Arango'`. Compilaba, se veia bien y no era real.
+
+**Segunda mitad de la causa, que no se ve hasta arreglar la primera:** aunque se hubiera podido
+subir, `MensajeResponse` devolvia `mediaPath` — la clave del objeto en S3 —, no una URL abrible. Una
+`<Image>` con esa clave no muestra nada. Faltaban las dos piezas, no una.
+
+**Solucion:**
+1. `POST /api/v1/chat/conversations/{id}/media/upload-url` (`ChatMediaController` +
+   `SolicitarUrlSubidaMediaChatUseCase`), con el patron de 3 pasos ya establecido en el repo:
+   firmar → `PUT` directo a S3 → crear el mensaje. Ruta `chat/{conversacionId}/{fotos|audios|
+   videos}/{uuid}`. Rechaza cualquier MIME que no sea `image/`, `audio/` o `video/` **antes** de
+   firmar, para no dejar un objeto huerfano que ningun mensaje podria referenciar.
+2. `MensajeResponse.mediaUrl`, firmada en cada lectura con `AlmacenamientoPort.firmarLectura` y
+   **nunca persistida**: una URL firmada vence, y guardarla deja la foto en 403 para siempre. Es
+   exactamente el defecto E-79, ya cometido en el Muro.
+3. La autorizacion del `upload-url` se repite entera (activo + conversacion existente +
+   participante) en vez de delegarse a `enviar`: la URL se firma **antes** de que exista el mensaje,
+   asi que sin ese chequeo cualquiera con sesion podria firmar subidas contra el prefijo de una
+   conversacion ajena.
+4. GIF retirado por completo (tipo, opciones, modal, burbuja y estilos): no existia del lado del
+   backend, `tipo_mensaje` no tiene ese valor y nunca lo iba a tener.
+5. El flotante se esconde con la sala de chat abierta, reusando la senal que ya existia para el chat
+   de curso — se generalizo `chatDeCursoVisible.ts` a `chatEnPantalla.ts` en vez de duplicar el
+   mecanismo (el contador ya soportaba varios emisores).
+
+**Como evitar que vuelva a pasar.** El patron a reconocer es *"la UI tiene un control para algo que
+el backend no puede recibir"*. Cuando un boton del diseno no tiene endpoint detras, el reflejo no es
+simular la respuesta en el cliente: es **dejarlo deshabilitado o no dibujarlo**, y anotar el hueco.
+Una burbuja falsa se ve igual que una real en una demo, sobrevive meses y se descubre cuando alguien
+pregunta por que su foto no le llego a nadie. El comentario en `chatApi.ts` estaba bien escrito y
+decia la verdad — lo que fallo fue que la pantalla, al lado, hacia como si nada.
+
+**Verificado:** 75 pruebas del modulo `chat` en verde, 6 nuevas sobre el `upload-url` (prefijo por
+conversacion, ruta distinta en cada llamada, rechazo de MIME no soportado, y las dos de autorizacion
+negativa que exige `.claude/rules/03`). `npx tsc --noEmit` en cero.
+
+**SIN VERIFICAR, y es lo que falta:** `STORAGE_PROVEEDOR=s3` no esta configurado en este entorno, asi
+que **el camino real de subida nunca se ejercito contra S3**. Con el adaptador NoOp el `uploadUrl`
+sale como `about:blank#pendiente-s3/...`; el cliente lo detecta antes de intentar el `PUT` y avisa
+("El almacenamiento del servidor no esta configurado") en vez de reventar con un error de red
+criptico, pero eso es el camino degradado, no el bueno. Mandar una foto de punta a punta queda
+pendiente de esa variable (D-34).
+
+---
+
+## E-103 — `JAVA_HOME` de las reglas apunta a un JDK que no existe (2026-09-05)
+
+**Sintoma:** `.claude/rules/03-pruebas.md` dice que `JAVA_HOME` debe apuntar a
+`C:\Program Files\Java\jdk-25.0.2`. Ese directorio **no existe**: `Get-ChildItem "C:\Program
+Files\Java"` responde
+
+```
+Cannot find path 'C:\Program Files\Java' because it does not exist.
+```
+
+**Causa:** el JDK instalado es Eclipse Temurin y vive en
+`C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot`. La regla quedo con la ruta de una
+instalacion anterior. `CLAUDE.md` §12 ya nombra bien la version ("Eclipse Temurin JDK 25.0.4.1 LTS")
+pero no la ruta, asi que la unica ruta escrita en el repo era la incorrecta.
+
+**Solucion:** corregida la ruta en `.claude/rules/03-pruebas.md`.
+
+**Como evitar que vuelva a pasar:** es una tonteria de entorno y por eso mismo se repite — quien la
+lea de nuevo va a perder los mismos minutos. Si el JDK se reinstala en otro lado, se corrige la regla
+en el mismo momento, no "despues".
+
+---
+
+## E-104 — `Truncated class file`: dos builds de Maven sobre el mismo `target/` (2026-09-05)
+
+**Sintoma:** `./mvnw clean test` termina en **BUILD FAILURE con 0 pruebas ejecutadas**. El error, literal:
+
+```
+[ERROR] Truncated class file
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.6:test
+        (default-test) on project renaser-backend:
+[ERROR] There was an error in the forked process
+[ERROR] org.apache.maven.surefire.booter.SurefireBooterForkException: There was an error in the
+        forked process
+```
+
+No hay ni un nombre de prueba en la salida, ni un fallo de assertion: el proceso hijo de surefire
+muere antes de arrancar.
+
+**Segundo sintoma de la MISMA causa**, que aparece si el otro build ya tiene el directorio tomado:
+
+```
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-clean-plugin:3.5.0:clean
+        (default-clean) on project renaser-backend: Failed to clean project:
+        Failed to delete C:\Users\Usuario\Documents\renaser-backend\renaser-backend\target
+```
+
+En Windows esto es literal: el otro JVM tiene archivos abiertos dentro de `target/` y el sistema no
+deja borrar el directorio. Es la misma colision en un instante distinto — el primer sintoma es "te
+borre las clases mientras las leias", el segundo es "no puedo borrar porque vos las tenes abiertas".
+
+**Causa: no es el codigo.** Habia **dos builds corriendo a la vez sobre el mismo `target/`** — una
+sesion trabajando en `chat` y un agente en paralelo trabajando en `onboarding`, los dos sobre el
+mismo checkout. El `clean` de uno borra los `.class` que el otro esta leyendo, y surefire levanta un
+JVM con un classpath a medio escribir. De ahi el "Truncated class file": el archivo existe pero esta
+cortado.
+
+**Solucion:** esperar a que el otro build termine y volver a correr. No hay nada que arreglar en el
+codigo — el mismo comando pasa solo, sin cambios, en cuanto no hay concurrencia.
+
+**Como evitar que vuelva a pasar.** `target/` es un recurso compartido de todo el checkout, no del
+modulo en el que uno esta trabajando. Dos agentes sobre el mismo repo **no pueden compilar a la
+vez**, aunque toquen modulos que no se cruzan.
+
+- Al repartir trabajo entre varios agentes en este backend, o se coordina quien corre `mvnw`, o cada
+  uno trabaja en su propio **git worktree** (checkout separado = `target/` separado). El worktree es
+  la solucion real; la coordinacion se olvida.
+- El sintoma es facil de confundir con un problema del codigo, porque dice ERROR en rojo y falla el
+  build entero. La senal que lo distingue es **"0 pruebas ejecutadas"**: un problema real de codigo
+  falla DESPUES de correr pruebas, y nombra cual.

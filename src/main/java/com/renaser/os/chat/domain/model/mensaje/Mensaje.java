@@ -30,6 +30,13 @@ import java.util.Objects;
 @EqualsAndHashCode(of = "id")
 public final class Mensaje {
 
+    /**
+     * Nombre logico del deposito de los medios de chat. Vive en el dominio, igual que
+     * {@code MediaPublicacion.BUCKET_DEFAULT} en `community`: es parte de como se identifica un
+     * mensaje con media, no un detalle del adaptador de S3.
+     */
+    public static final String BUCKET_DEFAULT = "chat";
+
     private final MensajeId id;
     private final ConversacionId conversacionId;
     private final UserId emisorId;
