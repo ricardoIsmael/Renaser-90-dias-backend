@@ -2205,3 +2205,49 @@ nuevo, que es lo que la regla 01 pide.
 - El sintoma no grita: **devolver lista vacia se ve igual que "no tiene nada"**. Un bug de zona casi
   nunca falla ruidosamente; se manifiesta como datos que faltan en una franja horaria y aparecen
   solos al otro dia. Si alguien reporta "de noche no me aparece", la primera hipotesis es la zona.
+
+---
+
+## E-106 — La misma familia de E-105 en otros tres lugares, y el candado que la cierra (2026-09-05)
+
+**Contexto:** al cerrar E-105 el dueno pidio buscar el mismo defecto en el resto del backend. Su
+memoria era que ya lo habia arreglado — lo que habia arreglado era **E-91**, el reloj del dia de
+programa (commit `b3f3b10`). Es la misma causa en sitios distintos, y quedaban tres vivos.
+
+**Sintoma comun:** codigo que pregunta "que dia es hoy" al proceso, que corre en UTC, cuando el
+padron vive en `America/Lima` (UTC-5). Entre las **19:00 y la medianoche hora local** —cinco horas
+todas las noches— "hoy" del servidor ya es manana.
+
+**1. `ParticipacionPrograma.activarSeguimientoPersonal` y `inscribirTraineeAprobado`.** La
+`fechaInicio` salia de `clock.today()`. Un aprendiz aprobado de noche arrancaba con la fecha
+corrida un dia. **Lo grave es que ya no se disimula:** desde que `diaPrograma` se DERIVA de esa
+fecha (D-98), el corrimiento se arrastra los 90 dias. La zona ya estaba ahi mismo
+(`ZONA_POR_DEFECTO`), asi que el arreglo es un helper de una linea.
+
+**2. `RankingController`.** Sin `fecha` explicita usaba `clock.today()`, asi que de noche pedia el
+ranking de MANANA — cuyo snapshot no existe, porque `SnapshotRankingScheduler` corre a las 05:05
+UTC. El ranking se veia vacio todas las noches. Se resuelve en la zona del PADRON y no en la del
+actor: el ranking es una tabla comun, y si cada uno lo pidiera en su huso, dos personas de la misma
+celula verian rankings de dias distintos.
+
+**3. `ControlCuotaRedisAdapter`.** La clave diaria y el vencimiento se armaban contra la medianoche
+UTC, asi que la cuota de Renasia se renovaba a las 19:00 hora local: quien la agotaba a la tarde la
+recuperaba entera esa misma noche.
+
+**Los schedulers NO se tocaron, y esta bien:** `ExpirarRegistros` (05:00 UTC), `SnapshotRanking`
+(05:05) y `PromoverCambiosHorario` (04:40) estan alineados a proposito con la medianoche de Lima y
+lo documentan en su propio codigo. Ahi `clock.today()` es correcto.
+
+**Como evitar que vuelva a pasar — y esta vez es ejecutable.** Regla nueva en `ArchitectureTest`:
+`adaptersDeEntradaNoUsanLaFechaDelServidor` prohibe `LocalDate.now()` y `LocalDateTime.now()` en
+cualquier clase de `..adapter.in..`. **Verificada reintroduciendo el defecto a proposito**: con
+`LocalDate.now()` de vuelta en `RankingController` el build falla nombrando esa clase, y sin el
+pasa. Es un test de regresion real, no decoracion.
+
+**El patron a reconocer, para la proxima:** el `@Scheduled` lo piensa todo el mundo — al escribir un
+cron uno se pregunta "¿a que hora corre esto?". El `@GetMapping` no lo piensa nadie, porque "hoy"
+parece obvio. Los cuatro defectos de esta familia estaban en codigo que responde a una peticion, no
+en los crons.
+
+**Verificado:** `./mvnw clean test` -> **2395 pruebas, 0 fallos**.
+

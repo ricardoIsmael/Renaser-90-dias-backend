@@ -7,6 +7,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModules;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
@@ -103,6 +104,25 @@ class ArchitectureTest {
                         + "hora entra por Clock — una factoria que llama a randomUUID() devuelve un "
                         + "objeto distinto en cada invocacion y vuelve intesteable comparar el "
                         + "agregado esperado contra el obtenido (D-59)")
+                .check(CLASSES);
+    }
+
+    @Test
+    @DisplayName("adapter/in/ no decide cual es 'hoy': la fecha del servidor no es la de nadie")
+    void adaptersDeEntradaNoUsanLaFechaDelServidor() {
+        noClasses()
+                .that().resideInAPackage("..adapter.in..")
+                .should().callMethod(LocalDate.class, "now")
+                .orShould().callMethod(LocalDate.class, "now", java.time.ZoneId.class)
+                .orShould().callMethod(java.time.LocalDateTime.class, "now")
+                .because("es la familia de E-91 y E-105. `LocalDate.now()` devuelve la fecha del "
+                        + "PROCESO, y el proceso corre en UTC mientras el padron vive en "
+                        + "America/Lima: entre las 19:00 y la medianoche hora local, 'hoy' del "
+                        + "servidor ya es manana. `GET /habit-tracks/today` devolvia lista vacia "
+                        + "todas las noches por exactamente esto. El dia de una persona sale "
+                        + "SIEMPRE de clock.now().atZone(su zona).toLocalDate() (.claude/rules/02). "
+                        + "Los @Scheduled si pueden usar clock.today(), pero solo porque sus crons "
+                        + "estan alineados a proposito con la medianoche de Lima y lo documentan")
                 .check(CLASSES);
     }
 }
