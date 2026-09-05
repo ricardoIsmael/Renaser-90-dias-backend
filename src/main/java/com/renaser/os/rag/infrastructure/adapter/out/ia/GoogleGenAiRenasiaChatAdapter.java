@@ -1,5 +1,7 @@
 package com.renaser.os.rag.infrastructure.adapter.out.ia;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
@@ -10,6 +12,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
@@ -69,9 +72,14 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
     private final ChatClient chatClient;
     private final PromptTemplate promptAcompanante;
     private final PromptTemplate promptTutorCursos;
+    private final EjecutarHerramientaAgenteUseCase herramientasUseCase;
+    private final ObjectMapper json;
 
-    GoogleGenAiRenasiaChatAdapter(ChatModel chatModel) {
+    GoogleGenAiRenasiaChatAdapter(ChatModel chatModel, EjecutarHerramientaAgenteUseCase herramientasUseCase,
+                                   ObjectMapper json) {
         this.chatClient = ChatClient.create(chatModel);
+        this.herramientasUseCase = herramientasUseCase;
+        this.json = json;
         this.promptAcompanante = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_ACOMPANANTE));
         this.promptTutorCursos = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_TUTOR_CURSOS));
     }
@@ -95,12 +103,35 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
     public Flux<EventoRenasia> responder(Consulta consulta) {
         return chatClient.prompt()
                 .system(promptSistema(consulta))
+                .toolCallbacks(comoToolCallbacks(consulta))
                 .messages(comoTurnos(consulta.historial()))
                 .user(consulta.pregunta())
                 .stream()
                 .content()
                 .map(GoogleGenAiRenasiaChatAdapter::comoTexto)
                 .concatWithValues(new EventoRenasia.Fin());
+    }
+
+    /**
+     * Las herramientas del dominio, declaradas al modelo.
+     *
+     * <p><b>Esto es lo que faltaba hasta el 2026-09-05.</b> {@code Consulta} traia las
+     * herramientas desde que se construyeron, y este adaptador no las leia: nunca llegaban a
+     * Gemini. El sintoma era una respuesta real a un aprendiz que pidio su lista de habitos —
+     * <i>"no tengo acceso directo a tu cuenta personal, abre la aplicacion"</i>. Estaba diciendo
+     * la verdad.
+     *
+     * <p>El {@code actorId} de la consulta se fija en cada callback, asi que una herramienta solo
+     * puede operar sobre quien esta conversando. No es un argumento que el modelo pueda emitir.
+     *
+     * <p>Lista vacia cuando el agente no tiene herramientas (hoy, Sparkie): {@code toolCallbacks}
+     * la acepta y el modelo simplemente no recibe ninguna.
+     */
+    private List<ToolCallback> comoToolCallbacks(Consulta consulta) {
+        return consulta.herramientas().stream()
+                .map(definicion -> (ToolCallback) new HerramientaToolCallback(
+                        definicion, herramientasUseCase, consulta.actorId(), json))
+                .toList();
     }
 
     /** D-102: cada agente tiene su prompt; solo el tutor de cursos tiene seccion de ambito. */

@@ -4,6 +4,7 @@ import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
+import com.renaser.os.shared.domain.UserId;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -47,14 +48,22 @@ public interface ChatIAPort {
      * modelo pida una. Llega vacia para {@link AgenteConversacional#COURSE_TUTOR}, que no toca
      * habitos (D-102).
      *
-     * <p>El adaptador {@code NoOp} las recibe y no las usa — no hay modelo que las pida. Eso es
-     * exactamente lo que hoy significa "definidas y probadas, sin conectar".
+     * <p>{@code actorId} (2026-09-05) es EN NOMBRE DE QUIEN se ejecuta una herramienta. Viaja
+     * aparte de la pregunta y del historial a proposito: es identidad, no conversacion. Si el
+     * duenio de los datos pudiera salir de lo que el modelo escribe, "complete el habito de Juan"
+     * seria ejecutable. Sin este campo el adaptador no podia ejecutar herramientas en nombre de
+     * nadie, y por eso el modelo respondia "no tengo acceso a tu cuenta".
+     *
+     * <p>El adaptador {@code NoOp} recibe las herramientas y no las usa — no hay modelo que las
+     * pida. El adaptador real de Gemini SI las declara (ver {@code HerramientaToolCallback}).
      */
-    record Consulta(AgenteConversacional agente, String pregunta, List<String> contexto, String ambito,
-                    List<MensajeRenasia> historial, List<DefinicionHerramienta> herramientas) {
+    record Consulta(AgenteConversacional agente, UserId actorId, String pregunta, List<String> contexto,
+                    String ambito, List<MensajeRenasia> historial,
+                    List<DefinicionHerramienta> herramientas) {
 
         public Consulta {
             Objects.requireNonNull(agente, "agente no puede ser null");
+            Objects.requireNonNull(actorId, "actorId no puede ser null");
             Objects.requireNonNull(pregunta, "pregunta no puede ser null");
             contexto = List.copyOf(Objects.requireNonNull(contexto, "contexto no puede ser null"));
             historial = List.copyOf(Objects.requireNonNull(historial, "historial no puede ser null"));

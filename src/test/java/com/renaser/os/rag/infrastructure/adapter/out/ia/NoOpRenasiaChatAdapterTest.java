@@ -6,7 +6,10 @@ import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import com.renaser.os.shared.domain.UserId;
+
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -20,7 +23,7 @@ class NoOpRenasiaChatAdapterTest {
         // Solo reactor-core (sin reactor-test, no declarado como dependencia propia del pom):
         // .collectList().block() alcanza para verificar un Flux finito y corto como este.
         var eventos = new NoOpRenasiaChatAdapter()
-                .responder(new Consulta(agente, "hola", List.of(), null, List.of(), List.of()))
+                .responder(new Consulta(agente, UserId.of(UUID.randomUUID()), "hola", List.of(), null, List.of(), List.of()))
                 .collectList().block();
 
         assertThat(eventos).hasSize(2);

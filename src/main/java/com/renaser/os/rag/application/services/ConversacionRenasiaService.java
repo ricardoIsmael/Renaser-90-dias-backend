@@ -160,8 +160,8 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         List<String> contexto = fragmentos.stream().map(FragmentoRelevante::contenido).toList();
 
         StringBuilder respuestaCompleta = new StringBuilder();
-        return chatIAPort.responder(new Consulta(command.agente(), command.pregunta(), contexto, command.ambito(),
-                        historial, herramientasUseCase.disponibles(command.agente())))
+        return chatIAPort.responder(new Consulta(command.agente(), command.actorId(), command.pregunta(), contexto,
+                        command.ambito(), historial, herramientasUseCase.disponibles(command.agente())))
                 .doOnNext(evento -> acumularTexto(evento, respuestaCompleta))
                 .concatMap(evento -> agregarFuentesAntesDeFin(evento, fragmentos))
                 .doOnComplete(() -> persistirRespuestaAsistente(command, respuestaCompleta.toString(), fragmentos))
