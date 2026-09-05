@@ -1,6 +1,7 @@
 package com.renaser.os.community.application.services;
 
 import com.renaser.os.community.api.PublicacionCreadaEvent;
+import com.renaser.os.community.api.PublicacionMuroFinder;
 import com.renaser.os.community.api.PublicarEnMuroPort;
 import com.renaser.os.community.api.PublicarEnMuroPort.PublicarDesdeEvidenciaComando;
 import com.renaser.os.community.application.ports.in.categoria.ConsultarCategoriasMuroUseCase;
@@ -54,7 +55,7 @@ import java.util.UUID;
 @Service
 public class PublicacionMuroService implements PublicarUseCase, EditarPublicacionUseCase, OcultarPublicacionUseCase,
         RestaurarPublicacionUseCase, EliminarPublicacionUseCase, ReaccionarUseCase, ConsultarFeedUseCase,
-        ConsultarReaccionesUseCase, SolicitarUrlSubidaMediaUseCase, PublicarEnMuroPort {
+        ConsultarReaccionesUseCase, SolicitarUrlSubidaMediaUseCase, PublicarEnMuroPort, PublicacionMuroFinder {
 
     private static final int TAMANO_PAGINA = 20;
     private static final Duration VALIDEZ_URL_SUBIDA = Duration.ofMinutes(10);
@@ -241,6 +242,21 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     public int contarMisPublicaciones(UserId actorId) {
         requireActorActivo(actorId);
         return loadPublicacionPort.contarPorAutor(actorId);
+    }
+
+    /**
+     * SIN {@code requireActorActivo}, a diferencia de sus vecinos, y es deliberado: los otros
+     * metodos le DEVUELVEN contenido del Muro a un actor (nombres de terceros, feed), asi que
+     * chequean que ese actor pueda ver. Este responde por un hecho del propio
+     * {@code autorId} — un booleano, sin datos de nadie mas — y su llamador
+     * ({@code habits.RegistroService}) ya autorizo al aprendiz contra si mismo y contra su
+     * estado de cuenta antes de llegar aca. Agregar el guard seria consultar `usuarios` una
+     * segunda vez en el camino de completar un habito para reconfirmar lo mismo.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public boolean publicoEntre(UserId autorId, Instant desde, Instant hasta) {
+        return loadPublicacionPort.existeDeAutorEntre(autorId, desde, hasta);
     }
 
     /** Mismo guard que {@link #feed}: expone el nombre completo de otra persona, asi que

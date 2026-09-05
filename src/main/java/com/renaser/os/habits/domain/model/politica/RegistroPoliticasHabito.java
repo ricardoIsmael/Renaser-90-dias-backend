@@ -41,7 +41,7 @@ public final class RegistroPoliticasHabito {
         }
 
         @Override
-        public DecisionPolitica puedeCompletarseDirecto(Habito habito) {
+        public DecisionPolitica puedeCompletarseDirecto(Habito habito, ContextoCompletar contexto) {
             return DecisionPolitica.procede();
         }
     };

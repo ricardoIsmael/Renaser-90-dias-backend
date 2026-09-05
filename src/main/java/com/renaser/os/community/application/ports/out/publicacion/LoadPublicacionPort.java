@@ -22,5 +22,17 @@ public interface LoadPublicacionPort {
 
     int contarPorAutor(UserId autorId);
 
+    /**
+     * Si el autor tiene al menos una publicacion creada en {@code [desde, hasta)}. Es una
+     * pregunta de existencia, no un conteo: se responde con un {@code EXISTS} que corta en
+     * la primera fila, porque el unico consumidor ({@code community.api.PublicacionMuroFinder},
+     * para el habito POST DIARIO EN COMUNIDAD) solo necesita el si/no y esto corre en el
+     * camino de completar un habito.
+     *
+     * <p>Incluye las publicaciones {@code oculta = true} — el motivo esta en el javadoc del
+     * puerto publico, que es donde vive esa decision.
+     */
+    boolean existeDeAutorEntre(UserId autorId, Instant desde, Instant hasta);
+
     Optional<Publicacion> ultimaVisible();
 }

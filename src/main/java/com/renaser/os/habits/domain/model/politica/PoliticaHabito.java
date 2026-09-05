@@ -19,7 +19,8 @@ import com.renaser.os.habits.domain.model.habito.Habito;
  *
  * <p><b>Contrato:</b> las implementaciones son funciones puras y sin estado — no hacen
  * I/O, no leen el reloj del sistema y no lanzan excepciones para controlar el flujo.
- * Cualquier dato externo que necesiten llega por parametro.
+ * Cualquier dato externo que necesiten llega por parametro, dentro de
+ * {@link ContextoCompletar}.
  *
  * <p><b>Invariante que NINGUNA politica puede romper:</b> el calculo de puntos, la
  * racha, la coherencia y el evento de dominio viven en un solo lugar
@@ -43,6 +44,11 @@ public interface PoliticaHabito {
      * <p>Un habito con estado propio responde {@link DecisionPolitica#noProcede} y dice
      * por donde se hace de verdad — es lo que reemplaza al {@code if (esBloqueo())}
      * hardcodeado que habia antes en el servicio.
+     *
+     * <p>{@code contexto} trae los hechos que NO se pueden deducir del catalogo (hoy: si el
+     * participante publico en el Muro). Una politica que decide mirando solo el habito
+     * simplemente lo ignora — ver {@link ContextoCompletar} para por que llega asi y no
+     * como valores ya resueltos.
      */
-    DecisionPolitica puedeCompletarseDirecto(Habito habito);
+    DecisionPolitica puedeCompletarseDirecto(Habito habito, ContextoCompletar contexto);
 }
