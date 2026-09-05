@@ -11,7 +11,8 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 /**
@@ -32,6 +33,9 @@ import java.util.List;
  */
 @Component
 class ControlCuotaRedisAdapter implements ControlCuotaRenasiaPort {
+
+    /** Zona del padron. Igual que `ParticipacionPrograma.ZONA_POR_DEFECTO`: hoy todos en Lima. */
+    private static final ZoneId ZONA_PADRON = ZoneId.of("America/Lima");
 
     private static final String CLAVE_PREFIJO = "renasia:cuota:";
 
@@ -85,12 +89,26 @@ class ControlCuotaRedisAdapter implements ControlCuotaRenasiaPort {
         redisTemplate.execute(DECREMENTAR_SI_EXISTE, List.of(claveDeHoy(actorId)));
     }
 
+    /**
+     * El dia de la cuota es el del PADRON, no el del servidor.
+     *
+     * <p>Antes la clave se armaba con {@code clock.today()} y el vencimiento se calculaba contra la
+     * medianoche UTC. Con el backend en UTC y el padron en Lima (UTC-5) eso significaba que la
+     * cuota diaria se renovaba a las 19:00 hora local: quien la agotaba a la tarde la recuperaba
+     * entera esa misma noche, y el "dia" de la cuota no coincidia con el dia que la persona ve en
+     * la app. Misma familia que E-105.
+     */
     private String claveDeHoy(UserId actorId) {
-        return CLAVE_PREFIJO + actorId.value() + ":" + clock.today();
+        return CLAVE_PREFIJO + actorId.value() + ":" + hoyDelPadron();
     }
 
+    private LocalDate hoyDelPadron() {
+        return clock.now().atZone(ZONA_PADRON).toLocalDate();
+    }
+
+    /** Lo que falta para la medianoche DEL PADRON, que es cuando la cuota se renueva de verdad. */
     private Duration segundosHastaMedianoche() {
-        Instant medianoche = clock.today().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant medianoche = hoyDelPadron().plusDays(1).atStartOfDay(ZONA_PADRON).toInstant();
         Duration restante = Duration.between(clock.now(), medianoche);
         return restante.isNegative() ? Duration.ofSeconds(1) : restante;
     }

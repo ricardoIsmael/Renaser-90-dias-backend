@@ -31,10 +31,16 @@ public class NoOpRenasiaChatAdapter implements ChatIAPort {
     static final String TEXTO_PLACEHOLDER =
             "El asistente todavia no esta disponible: faltan credenciales de IA por configurar (D-39).";
 
+    /**
+     * Recibe las herramientas del agente y no las usa: no hay ningun modelo que pueda pedirlas.
+     * Se loguea CUANTAS llegaron (nunca su contenido) para dejar constancia de que el cableado
+     * esta hecho — es la unica evidencia en ejecucion de que enchufar el proveedor real va a ser
+     * configuracion y no reescritura.
+     */
     @Override
     public Flux<EventoRenasia> responder(Consulta consulta) {
-        log.warn("ChatIAPort.responder(...) placeholder para {}: faltan credenciales de IA (D-39).",
-                consulta.agente());
+        log.warn("ChatIAPort.responder(...) placeholder para {} con {} herramienta(s) disponible(s): "
+                + "faltan credenciales de IA (D-39).", consulta.agente(), consulta.herramientas().size());
         return Flux.just(new EventoRenasia.Texto(TEXTO_PLACEHOLDER), new EventoRenasia.Fin());
     }
 }

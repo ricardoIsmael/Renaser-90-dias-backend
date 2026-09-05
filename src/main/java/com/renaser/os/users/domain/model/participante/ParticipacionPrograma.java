@@ -46,6 +46,23 @@ public final class ParticipacionPrograma {
     private static final int DURACION_PROGRAMA_DIAS = 90;
     /** Mismo default que la columna `participantes_programa.timezone` del baseline. */
     private static final ZoneId ZONA_POR_DEFECTO = ZoneId.of("America/Lima");
+
+    /**
+     * "Hoy" para alguien que arranca el programa, en SU zona — no en la del servidor.
+     *
+     * <p>Antes estas dos factorias usaban {@code clock.today()}, que es la fecha del proceso. Con
+     * el backend en UTC y el padron en Lima (UTC-5), a un aprendiz aprobado despues de las 19:00
+     * hora local le quedaba una {@code fechaInicio} un dia adelantada — y desde que
+     * {@code diaPrograma} se DERIVA de esa fecha (D-98), ese corrimiento ya no se disimula: se
+     * arrastra los 90 dias. Misma familia que E-91 y E-105, entrando por el alta.
+     *
+     * <p>La zona se usa antes de que exista la fila, asi que es forzosamente
+     * {@link #ZONA_POR_DEFECTO}: es la misma que la fila va a llevar dos lineas mas abajo. Si algun
+     * dia el alta permite elegir zona, este metodo es el unico lugar que hay que tocar.
+     */
+    private static LocalDate hoyDelParticipante(Clock clock) {
+        return clock.now().atZone(ZONA_POR_DEFECTO).toLocalDate();
+    }
     /** Maximo de dias tras firmar Terminos que el aprendiz puede esperar para elegir
      * su Dia 1 (D-66): hoy, +1, +2 o +3 — 4 opciones, nunca "sin elegir". */
     private static final int MAX_DIAS_ESPERA_ACTIVACION = 3;
@@ -94,7 +111,8 @@ public final class ParticipacionPrograma {
     public static ParticipacionPrograma activarSeguimientoPersonal(UserId participanteId, Clock clock) {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Instant now = clock.now();
-        return new ParticipacionPrograma(participanteId, null, null, 1, FasePrograma.initial(), clock.today(),
+        return new ParticipacionPrograma(participanteId, null, null, 1, FasePrograma.initial(),
+                hoyDelParticipante(clock),
                 now, ZONA_POR_DEFECTO, false, 0, now, now, null, null, null, null, 0);
     }
 
@@ -111,7 +129,8 @@ public final class ParticipacionPrograma {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Instant now = clock.now();
         return new ParticipacionPrograma(participanteId, null, null, 0, FasePrograma.initial(),
-                clock.today().plusDays(1), null, ZONA_POR_DEFECTO, false, 0, now, now, null, null, null, null, 0);
+                hoyDelParticipante(clock).plusDays(1), null, ZONA_POR_DEFECTO, false, 0, now, now, null,
+                null, null, null, 0);
     }
 
     /** Firma historica (12 campos, sin tipoMeta/nombreRetoPersonal/programaCompletadoEn): se

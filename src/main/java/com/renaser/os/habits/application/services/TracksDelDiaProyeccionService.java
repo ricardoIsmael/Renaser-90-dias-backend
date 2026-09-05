@@ -6,18 +6,24 @@ import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUs
 import com.renaser.os.habits.application.ports.out.guia.LoadGuiaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.domain.model.guia.GuiaHabito;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.horario.HorarioResuelto;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
+import com.renaser.os.habits.domain.model.registro.PuntosEnJuego;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
+import com.renaser.os.habits.domain.model.registro.VentanaEntrega;
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -45,18 +51,35 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     private final LoadHorarioHabitoPort loadHorarioPort;
     private final LoadPreferenciaHorarioPort loadPreferenciaPort;
     private final LoadGuiaHabitoPort loadGuiaPort;
+    /** Para resolver la ventana de entrega en la zona del participante y con ella los puntos en juego. */
+    private final ConsultarProgresoParticipanteHabitsPort progresoPort;
+    private final Clock clock;
 
     public TracksDelDiaProyeccionService(ConsultarTracksDelDiaUseCase consultarTracksUseCase,
                                           GenerarTracksDelDiaUseCase generarTracksUseCase,
                                           LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
                                           LoadPreferenciaHorarioPort loadPreferenciaPort,
-                                          LoadGuiaHabitoPort loadGuiaPort) {
+                                          LoadGuiaHabitoPort loadGuiaPort,
+                                          ConsultarProgresoParticipanteHabitsPort progresoPort, Clock clock) {
         this.consultarTracksUseCase = consultarTracksUseCase;
         this.generarTracksUseCase = generarTracksUseCase;
         this.loadHabitoPort = loadHabitoPort;
         this.loadHorarioPort = loadHorarioPort;
         this.loadPreferenciaPort = loadPreferenciaPort;
         this.loadGuiaPort = loadGuiaPort;
+        this.progresoPort = progresoPort;
+        this.clock = clock;
+    }
+
+    /**
+     * "Hoy" en la zona del participante, nunca la del servidor (E-105, misma familia que E-91).
+     * Se resuelve aca y no en el controller porque es una decision de dominio: el dia de una
+     * persona empieza donde esa persona esta.
+     */
+    @Override
+    public List<TrackDelDiaConCatalogo> consultarHoyDe(UserId participanteId) {
+        LocalDate hoyEnSuZona = momentoDe(participanteId).hoy();
+        return consultar(participanteId, participanteId, hoyEnSuZona);
     }
 
     @Override
@@ -87,32 +110,56 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
                 .porParticipanteYHabitos(participanteId, habitoIds).stream()
                 .collect(Collectors.toMap(PreferenciaHorario::habitoId, p -> p));
 
+        MomentoDelParticipante momento = momentoDe(participanteId);
         return registros.stream()
-                .map(registro -> construirVista(registro, habitosPorId.get(registro.habitoId()),
+                .map(registro -> construirVista(registro, new CatalogoDeHabito(
+                        habitosPorId.get(registro.habitoId()),
                         horariosPorHabito.getOrDefault(registro.habitoId(), List.of()),
                         guiasPorHabito.getOrDefault(registro.habitoId(), List.of()),
-                        preferenciasPorHabito.get(registro.habitoId())))
+                        preferenciasPorHabito.get(registro.habitoId())), momento))
                 .toList();
     }
 
-    private static TrackDelDiaConCatalogo construirVista(RegistroHabito registro, Habito habito,
-                                                           List<HorarioHabito> horarios, List<GuiaHabito> guias,
-                                                           PreferenciaHorario preferencia) {
-        String titulo = habito != null ? habito.titulo() : null;
-        var tipo = habito != null ? habito.tipo() : null;
-        GuiaResumen guia = resolverGuia(guias, registro.diaPrograma());
-        HorarioHabito horarioVigente = horarios.stream()
-                .filter(h -> h.aplicaEnDia(registro.diaPrograma(), registro.tipoDia())).findFirst().orElse(null);
-        LocalTime horaDisparo = resolverHora(preferencia != null ? preferencia.horaDisparo() : null,
-                horarioVigente != null ? horarioVigente.horaDisparo() : null);
-        LocalTime horaLimite = resolverHora(preferencia != null ? preferencia.horaLimite() : null,
-                horarioVigente != null ? horarioVigente.horaLimite() : null);
-        return new TrackDelDiaConCatalogo(registro, titulo, tipo, guia, horaDisparo, horaLimite);
+    /**
+     * La zona del PARTICIPANTE, no la del servidor (regla 02, bug E-91): con el padron en
+     * America/Lima, calcular la ventana de entrega en UTC corre el plazo cinco horas y con el
+     * los puntos en juego. Si el participante no tiene progreso (no deberia llegar aca, porque
+     * {@code consultarTracksUseCase} ya lo exige), se cae a UTC y los puntos quedan como si el
+     * habito no tuviera horario — nunca se rompe la lectura de la pantalla por esto.
+     */
+    private MomentoDelParticipante momentoDe(UserId participanteId) {
+        ZoneId zona = progresoPort.deParticipante(participanteId)
+                .map(progreso -> ZoneId.of(progreso.timezone()))
+                .orElse(ZoneId.of("UTC"));
+        return new MomentoDelParticipante(zona, clock.now());
     }
 
-    /** Preferencia del participante gana si esta seteada; si no, el default del catalogo. */
-    private static LocalTime resolverHora(LocalTime dePreferencia, LocalTime deCatalogo) {
-        return dePreferencia != null ? dePreferencia : deCatalogo;
+    private static TrackDelDiaConCatalogo construirVista(RegistroHabito registro, CatalogoDeHabito catalogo,
+                                                          MomentoDelParticipante momento) {
+        Habito habito = catalogo.habito();
+        String titulo = habito != null ? habito.titulo() : null;
+        var tipo = habito != null ? habito.tipo() : null;
+        GuiaResumen guia = resolverGuia(catalogo.guias(), registro.diaPrograma());
+        HorarioHabito horarioVigente = catalogo.horarios().stream()
+                .filter(h -> h.aplicaEnDia(registro.diaPrograma(), registro.tipoDia())).findFirst().orElse(null);
+        HorarioResuelto horario = HorarioResuelto.de(horarioVigente, catalogo.preferencia());
+        return new TrackDelDiaConCatalogo(registro, titulo, tipo, guia, horario.horaDisparo(), horario.horaLimite(),
+                puntosEnJuegoDe(registro, catalogo, horario, momento));
+    }
+
+    /**
+     * {@code null} en los estados terminales: un habito ya completado, vencido o fallido no
+     * tiene nada en juego, y devolver "10 puntos" ahi seria mentirle a la pantalla.
+     */
+    private static PuntosEnJuego puntosEnJuegoDe(RegistroHabito registro, CatalogoDeHabito catalogo,
+                                                   HorarioResuelto horario, MomentoDelParticipante momento) {
+        if (registro.estado().esTerminal()) {
+            return null;
+        }
+        VentanaEntrega ventana = horario.sinHorario() ? null
+                : VentanaEntrega.calcular(registro.fechaEjecucion(), horario.horaDisparo(), horario.horaLimite(),
+                        momento.zona(), catalogo.habito() != null ? catalogo.habito().horasExtraEvidencia() : null);
+        return PuntosEnJuego.de(ventana, momento.ahora());
     }
 
     /** La guia vigente es la de mayor {@code diaInicio} que todavia aplica — la mas especifica/reciente. */
@@ -130,5 +177,20 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
             agrupado.computeIfAbsent(claveDe.apply(item), k -> new java.util.ArrayList<>()).add(item);
         }
         return agrupado;
+    }
+
+    /** Todo lo del catalogo que le toca a UN registro, ya resuelto del batch. Existe para que
+     * {@code construirVista} no tenga que recibir cinco parametros sueltos. */
+    private record CatalogoDeHabito(Habito habito, List<HorarioHabito> horarios, List<GuiaHabito> guias,
+                                     PreferenciaHorario preferencia) {
+    }
+
+    /** Contra que instante y en que zona se mide la ventana de entrega de este participante. */
+    private record MomentoDelParticipante(ZoneId zona, Instant ahora) {
+
+        /** La fecha de HOY para esta persona — no la del servidor (E-91, E-105). */
+        LocalDate hoy() {
+            return ahora.atZone(zona).toLocalDate();
+        }
     }
 }

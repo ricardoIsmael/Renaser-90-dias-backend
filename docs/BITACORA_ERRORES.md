@@ -2162,3 +2162,92 @@ vez**, aunque toquen modulos que no se cruzan.
 - El sintoma es facil de confundir con un problema del codigo, porque dice ERROR en rojo y falla el
   build entero. La senal que lo distingue es **"0 pruebas ejecutadas"**: un problema real de codigo
   falla DESPUES de correr pruebas, y nombra cual.
+
+## E-105 — La pantalla de habitos se apagaba todas las noches: `GET /habit-tracks/today` pedia el dia del servidor (2026-09-05)
+
+**Sintoma:** a partir de las 19:00 hora de Lima, `GET /api/v1/habit-tracks/today` devuelve **`[]`**
+para un aprendiz que si tiene habitos generados. En la app, la pantalla de Training entra en su
+estado vacio ("No pudimos cargar" no: *vacio*, que es peor porque parece correcto). A la manana
+siguiente vuelve solo. No hay ningun error en el log, ningun 4xx, ninguna excepcion.
+
+**Causa real.** `HabitTrackController.hoy` resolvia el dia asi:
+
+```java
+return consultarTracksDelDiaUseCase.consultar(actor, actor, LocalDate.now())
+```
+
+`LocalDate.now()` es la fecha del **servidor**. Con el proceso en UTC y el padron en
+`America/Lima` (UTC-5, el default de `participantes_programa.timezone`), a partir de las 19:00
+locales el servidor ya esta en el dia siguiente. La consulta salia con la fecha de MANANA,
+`registros_habito` no tiene ninguna fila para ese dia todavia, y la red de seguridad de
+`TracksDelDiaProyeccionService` no ayudaba: genera los tracks para el dia del participante (hoy) y
+vuelve a consultar por el del servidor (manana), asi que devolvia vacio igual.
+
+Es exactamente la misma familia que **E-91** — "el reloj del servidor no es el reloj del aprendiz"
+— en otro lugar del codigo. E-91 se arreglo en el scheduler y quedo la regla escrita
+(`.claude/rules/02-tiempo-zonas-y-schedulers.md`), pero nadie audito los **controllers** buscando el
+mismo patron.
+
+**Solucion.** La decision "que dia es hoy para esta persona" se movio del adaptador de transporte al
+caso de uso: `ConsultarTracksDelDiaConCatalogoUseCase.consultarHoyDe(participanteId)`, que resuelve
+la fecha con `clock.now().atZone(zona del participante).toLocalDate()`. El controller quedo tonto de
+nuevo, que es lo que la regla 01 pide.
+
+**Como evitar que vuelva a pasar.**
+
+- Test de regresion: `TracksDelDiaPuntosEnJuegoTest.consultaElDiaDelAprendizYNoElDelServidor`, con
+  el reloj fijado a las **01:50 UTC** (20:50 del dia anterior en Lima). Verifica que se consulte el
+  dia del aprendiz y **nunca** el del servidor. Contra el codigo viejo falla.
+- La senal general, ya escrita en la regla 02 y que ahora tiene un segundo caso real:
+  **`LocalDate.now()` y `clock.today()` no sirven para responder "que dia es hoy para un usuario"**.
+  Si el dato depende de una persona, la fecha sale de su zona. Buscar `LocalDate.now()` en
+  `adapter/in/` es una auditoria de diez minutos que conviene repetir.
+- El sintoma no grita: **devolver lista vacia se ve igual que "no tiene nada"**. Un bug de zona casi
+  nunca falla ruidosamente; se manifiesta como datos que faltan en una franja horaria y aparecen
+  solos al otro dia. Si alguien reporta "de noche no me aparece", la primera hipotesis es la zona.
+
+---
+
+## E-106 — La misma familia de E-105 en otros tres lugares, y el candado que la cierra (2026-09-05)
+
+**Contexto:** al cerrar E-105 el dueno pidio buscar el mismo defecto en el resto del backend. Su
+memoria era que ya lo habia arreglado — lo que habia arreglado era **E-91**, el reloj del dia de
+programa (commit `b3f3b10`). Es la misma causa en sitios distintos, y quedaban tres vivos.
+
+**Sintoma comun:** codigo que pregunta "que dia es hoy" al proceso, que corre en UTC, cuando el
+padron vive en `America/Lima` (UTC-5). Entre las **19:00 y la medianoche hora local** —cinco horas
+todas las noches— "hoy" del servidor ya es manana.
+
+**1. `ParticipacionPrograma.activarSeguimientoPersonal` y `inscribirTraineeAprobado`.** La
+`fechaInicio` salia de `clock.today()`. Un aprendiz aprobado de noche arrancaba con la fecha
+corrida un dia. **Lo grave es que ya no se disimula:** desde que `diaPrograma` se DERIVA de esa
+fecha (D-98), el corrimiento se arrastra los 90 dias. La zona ya estaba ahi mismo
+(`ZONA_POR_DEFECTO`), asi que el arreglo es un helper de una linea.
+
+**2. `RankingController`.** Sin `fecha` explicita usaba `clock.today()`, asi que de noche pedia el
+ranking de MANANA — cuyo snapshot no existe, porque `SnapshotRankingScheduler` corre a las 05:05
+UTC. El ranking se veia vacio todas las noches. Se resuelve en la zona del PADRON y no en la del
+actor: el ranking es una tabla comun, y si cada uno lo pidiera en su huso, dos personas de la misma
+celula verian rankings de dias distintos.
+
+**3. `ControlCuotaRedisAdapter`.** La clave diaria y el vencimiento se armaban contra la medianoche
+UTC, asi que la cuota de Renasia se renovaba a las 19:00 hora local: quien la agotaba a la tarde la
+recuperaba entera esa misma noche.
+
+**Los schedulers NO se tocaron, y esta bien:** `ExpirarRegistros` (05:00 UTC), `SnapshotRanking`
+(05:05) y `PromoverCambiosHorario` (04:40) estan alineados a proposito con la medianoche de Lima y
+lo documentan en su propio codigo. Ahi `clock.today()` es correcto.
+
+**Como evitar que vuelva a pasar — y esta vez es ejecutable.** Regla nueva en `ArchitectureTest`:
+`adaptersDeEntradaNoUsanLaFechaDelServidor` prohibe `LocalDate.now()` y `LocalDateTime.now()` en
+cualquier clase de `..adapter.in..`. **Verificada reintroduciendo el defecto a proposito**: con
+`LocalDate.now()` de vuelta en `RankingController` el build falla nombrando esa clase, y sin el
+pasa. Es un test de regresion real, no decoracion.
+
+**El patron a reconocer, para la proxima:** el `@Scheduled` lo piensa todo el mundo — al escribir un
+cron uno se pregunta "¿a que hora corre esto?". El `@GetMapping` no lo piensa nadie, porque "hoy"
+parece obvio. Los cuatro defectos de esta familia estaban en codigo que responde a una peticion, no
+en los crons.
+
+**Verificado:** `./mvnw clean test` -> **2395 pruebas, 0 fallos**.
+

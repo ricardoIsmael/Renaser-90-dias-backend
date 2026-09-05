@@ -2,6 +2,7 @@ package com.renaser.os.rag.application.services;
 
 import com.renaser.os.rag.application.ports.in.conversacion.ObtenerHistorialUseCase;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase;
+import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FiltroLecciones;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FragmentoRelevante;
@@ -103,6 +104,10 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     private final VectorStorePort vectorStorePort;
     private final ConsultarLeccionesVisiblesPort consultarLeccionesVisiblesPort;
     private final ChatIAPort chatIAPort;
+    /** Que puede HACER el agente, ademas de responder (2026-09-05). Solo se le piden las
+     * definiciones: la ejecucion la dispara el adaptador del proveedor cuando el modelo pida una,
+     * y hoy no hay ninguno conectado. */
+    private final EjecutarHerramientaAgenteUseCase herramientasUseCase;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
@@ -113,7 +118,8 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                                        LoadMensajeRenasiaPort loadMensajeRenasiaPort,
                                        SaveMensajeRenasiaPort saveMensajeRenasiaPort, VectorStorePort vectorStorePort,
                                        ConsultarLeccionesVisiblesPort consultarLeccionesVisiblesPort,
-                                       ChatIAPort chatIAPort, Clock clock, IdGenerator idGenerator) {
+                                       ChatIAPort chatIAPort, EjecutarHerramientaAgenteUseCase herramientasUseCase,
+                                       Clock clock, IdGenerator idGenerator) {
         this.userSummaryFinder = userSummaryFinder;
         this.controlCuotaRenasiaPort = controlCuotaRenasiaPort;
         this.loadConversacionRenasiaPort = loadConversacionRenasiaPort;
@@ -123,6 +129,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         this.vectorStorePort = vectorStorePort;
         this.consultarLeccionesVisiblesPort = consultarLeccionesVisiblesPort;
         this.chatIAPort = chatIAPort;
+        this.herramientasUseCase = herramientasUseCase;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
@@ -154,7 +161,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
 
         StringBuilder respuestaCompleta = new StringBuilder();
         return chatIAPort.responder(new Consulta(command.agente(), command.pregunta(), contexto, command.ambito(),
-                        historial))
+                        historial, herramientasUseCase.disponibles(command.agente())))
                 .doOnNext(evento -> acumularTexto(evento, respuestaCompleta))
                 .concatMap(evento -> agregarFuentesAntesDeFin(evento, fragmentos))
                 .doOnComplete(() -> persistirRespuestaAsistente(command, respuestaCompleta.toString(), fragmentos))
