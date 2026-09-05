@@ -116,7 +116,7 @@ class HerramientaToolCallbackTest {
 
         assertThat(espia.invocacionRecibida.get().nombre()).isEqualTo("marcar_habito_completado");
         assertThat(espia.invocacionRecibida.get().argumento("habitoId")).isEqualTo("habito-7");
-        assertThat(salida).isEqualTo("hecho");
+        assertThat(salida).contains("\"resultado\":\"hecho\"");
     }
 
     @Test
@@ -126,7 +126,23 @@ class HerramientaToolCallbackTest {
 
         // Si esto lanzara, el asistente se quedaria mudo a mitad de la frase en vez de explicarlo.
         assertThat(callback.call("{\"habitoId\":\"habito-7\"}"))
-                .isEqualTo("Ese habito ya vencio, no se puede marcar.");
+                .contains("\"ok\":false")
+                .contains("Ese habito ya vencio, no se puede marcar.");
+    }
+
+    @Test
+    void elResultadoVuelveComoObjetoJsonPorqueGeminiLoParsea() throws Exception {
+        var espia = new EjecutorEspia(ResultadoHerramienta.exito(
+                "id=93ef82a1 | ULTIMA COMIDA DEL DIA | estado=PENDIENTE\nid=a4435586 | DIA SIN CELULAR"));
+        var callback = new HerramientaToolCallback(sinParametros(), espia, ACTOR, JSON);
+
+        // El adaptador de Google hace parseJsonToMap() sobre esto antes de mandarlo. Devolver
+        // texto plano mata la conversacion entera con "Failed to parse JSON", DESPUES de que la
+        // herramienta ya se ejecuto bien. Por eso el contrato es objeto JSON, y por eso se fija aca.
+        var comoMapa = JSON.readValue(callback.call(null), java.util.Map.class);
+
+        assertThat(comoMapa).containsEntry("ok", true);
+        assertThat(comoMapa.get("resultado").toString()).contains("ULTIMA COMIDA DEL DIA");
     }
 
     @Test
@@ -139,7 +155,7 @@ class HerramientaToolCallbackTest {
         String salida = callback.call("{esto no es json");
 
         assertThat(espia.invocacionRecibida.get().argumentos()).isEmpty();
-        assertThat(salida).isEqualTo("Falta el identificador del habito.");
+        assertThat(salida).contains("Falta el identificador del habito.");
     }
 
     @Test
@@ -147,7 +163,7 @@ class HerramientaToolCallbackTest {
         var espia = new EjecutorEspia(ResultadoHerramienta.exito("Agua, Meditacion"));
         var callback = new HerramientaToolCallback(sinParametros(), espia, ACTOR, JSON);
 
-        assertThat(callback.call(null)).isEqualTo("Agua, Meditacion");
+        assertThat(callback.call(null)).contains("Agua, Meditacion");
         assertThat(espia.invocacionRecibida.get().argumentos()).isEmpty();
     }
 }

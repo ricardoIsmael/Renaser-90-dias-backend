@@ -2316,3 +2316,82 @@ dejan apagado es un hueco de cobertura con forma de suite en verde. Si un compon
 produccion, necesita al menos una prueba que lo construya con la propiedad encendida — si no, lo
 unico que verifica que arranque es levantar la app.
 
+---
+
+## E-108 — El tool calling ejecutaba bien y moria al devolver el resultado (2026-09-05)
+
+**Sintoma:** el acompanante contestaba `"No pude responder en este momento"` a cualquier pregunta.
+Sparkie (el tutor de cursos) funcionaba perfecto con la misma clave y el mismo modelo. En el log:
+
+```
+java.lang.RuntimeException: Failed to parse JSON: id=93ef82a1-... | ULTIMA COMIDA DEL DIA |
+estado=PENDIENTE | puntos_en_juego=10 de 10 | vence=2026-09-06T02:10:00Z ...
+    at GoogleGenAiChatModel.parseJsonToMap(GoogleGenAiChatModel.java:368)
+    at GoogleGenAiChatModel.messageToGeminiParts(GoogleGenAiChatModel.java:311)
+Caused by: StreamReadException: Unrecognized token 'id': was expecting (JSON String, Number, ...)
+```
+
+**Como se aislo, y vale la pena recordarlo:** COMPANION lleva herramientas, COURSE_TUTOR no (D-102).
+Probar los dos agentes con la misma infraestructura dejo la causa en un solo lugar sin leer una
+linea de codigo. Cuando dos caminos comparten todo menos una variable, esa variable es el
+experimento.
+
+**Causa:** el texto del error ERA la respuesta correcta de la herramienta — los habitos reales del
+aprendiz, con sus puntos y sus vencimientos. O sea que el modelo pidio la herramienta, el actor se
+resolvio, la consulta salio bien. Lo que fallaba era el ULTIMO paso: Gemini modela la respuesta de
+una funcion como un `Struct`, y el adaptador de Spring AI hace `parseJsonToMap(...)` sobre lo que
+devuelve `ToolCallback.call(...)`. Nuestro callback devolvia texto plano.
+
+**Solucion:** `HerramientaToolCallback.call` devuelve `{"ok": <bool>, "resultado": "<texto>"}`,
+serializado con Jackson (el contenido lleva saltos de linea, tildes y comillas). El `ok` deja que
+el modelo distinga "esto es lo que pediste" de "no se pudo, explicaselo".
+
+**Como evitar que vuelva a pasar:** la prueba `elResultadoVuelveComoObjetoJsonPorqueGeminiLoParsea`
+**parsea la salida como JSON** en vez de compararla como texto. Devolver texto plano vuelve a
+romper el build, no la conversacion.
+
+**La leccion que se generaliza:** el contrato de una herramienta con el modelo no termina en
+ejecutarla. El formato de la RESPUESTA es parte del contrato, y es la mitad que ninguna prueba
+unitaria del dominio ve — porque del lado del dominio devolver un `String` es perfectamente valido.
+
+---
+
+## E-109 — Los avisos de habitos publicaban CERO, cada cinco minutos, en silencio (2026-09-05)
+
+**Sintoma:** en el log, cada corrida del barrido:
+
+```
+ERROR: value too long for type character varying(255)
+[habits.DespacharAvisosHabitoScheduler] no se pudieron despachar los avisos de 1111...:
+  DataIntegrityViolationException: could not execute statement
+  [insert into event_publication (... serialized_event ...) values (...)]
+[habits.DespacharAvisosHabitoScheduler] 0 aviso(s) publicado(s), 8 participante(s) fallido(s) de 18
+```
+
+**La funcion entera de avisos no publico nunca nada.** Desde la app no se veia absolutamente nada:
+el barrido captura por participante y sigue, como manda `.claude/rules/02`. Eso esta BIEN —un
+aprendiz que falla no puede detener a los otros 17— pero significa que un fallo total se ve igual
+que un dia sin avisos. Solo aparecia en el log.
+
+**Causa, y es vieja:** `V2` creo el outbox de Spring Modulith con `VARCHAR(255)` en
+`serialized_event`, `listener_id` y `event_type`. El esquema OFICIAL de Modulith usa `TEXT` en las
+tres. Durante meses no molesto porque los eventos existentes serializan a ~108 caracteres (medido).
+`AvisoHabitoDebidoEvent` tiene ocho campos —dos UUID, el id del participante, el titulo del habito,
+el tipo de aviso, los minutos, los puntos y el instante— y su JSON pasa comodo los 255.
+
+**Solucion:** `V32` lleva las tres columnas a `TEXT`. No a un VARCHAR mas grande: elegir 512 solo
+mueve la fecha del proximo desbordamiento, y en Postgres `TEXT` y `VARCHAR(n)` tienen el mismo
+rendimiento y el mismo almacenamiento — el limite no compra nada, solo agrega una forma de fallar.
+
+**Como evitar que vuelva a pasar.** Dos cosas, y la segunda es la importante:
+
+1. Al agregar un evento de dominio nuevo, recordar que viaja SERIALIZADO por el outbox. Un evento
+   con muchos campos o con texto libre (un titulo, un mensaje) es el que rompe el limite.
+2. **Un barrido que falla en el 100% de los casos deberia gritar distinto que uno que falla en
+   uno.** Hoy `0 publicado(s), 8 fallido(s) de 18` sale en INFO igual que `8 publicado(s), 0
+   fallido(s)`. Un WARN cuando no se publico NADA habiendo trabajo que hacer habria puesto esto a
+   la vista el primer dia. Queda anotado como mejora pendiente del scheduler.
+
+**Verificado:** `./mvnw clean test` -> **2405 pruebas, 0 fallos**. La migracion no se ejercito
+todavia contra la base local — corre al proximo arranque de la app.
+

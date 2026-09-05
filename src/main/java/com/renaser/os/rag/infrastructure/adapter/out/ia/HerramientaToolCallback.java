@@ -64,15 +64,45 @@ class HerramientaToolCallback implements ToolCallback {
                 .build();
     }
 
+    /**
+     * El resultado vuelve al modelo como OBJETO JSON, no como texto plano.
+     *
+     * <p>No es una preferencia de estilo: Gemini modela la respuesta de una funcion como un
+     * {@code Struct}, y el adaptador de Spring AI hace {@code parseJsonToMap(...)} sobre lo que
+     * devuelve este metodo antes de mandarlo. Devolviendo texto suelto, la conversacion entera
+     * muere con:
+     *
+     * <pre>
+     * RuntimeException: Failed to parse JSON: id=93ef82a1-... | ULTIMA COMIDA DEL DIA | ...
+     *   at GoogleGenAiChatModel.parseJsonToMap(GoogleGenAiChatModel.java:368)
+     * </pre>
+     *
+     * Y el detalle cruel es que el fallo ocurre DESPUES de que todo lo dificil salio bien: el
+     * modelo pidio la herramienta, el actor se resolvio, los habitos se leyeron. Se rompia al
+     * empaquetar la respuesta.
+     *
+     * <p>El texto del dominio viaja dentro de {@code resultado} y el exito o fallo en {@code ok},
+     * para que el modelo pueda distinguir "esto es lo que pediste" de "no se pudo, explicaselo".
+     */
     @Override
     public String call(String argumentosJson) {
         InvocacionHerramienta invocacion = new InvocacionHerramienta(definicion.nombre(), comoArgumentos(argumentosJson));
         ResultadoHerramienta resultado = ejecutarUseCase.ejecutar(actorId, invocacion);
         return switch (resultado) {
-            case ResultadoHerramienta.Exito exito -> exito.contenido();
+            case ResultadoHerramienta.Exito exito -> comoObjetoJson(true, exito.contenido());
             // El motivo ya viene escrito para que lo lea una persona (ver ResultadoHerramienta).
-            case ResultadoHerramienta.Fallo fallo -> fallo.motivo();
+            case ResultadoHerramienta.Fallo fallo -> comoObjetoJson(false, fallo.motivo());
         };
+    }
+
+    /** Serializa con Jackson y no a mano: el contenido lleva saltos de linea, tildes y comillas. */
+    private String comoObjetoJson(boolean ok, String contenido) {
+        try {
+            return json.writeValueAsString(Map.of("ok", ok, "resultado", contenido));
+        } catch (Exception e) {
+            log.error("No se pudo serializar el resultado de la herramienta {}", definicion.nombre(), e);
+            return "{\"ok\":false,\"resultado\":\"No se pudo leer el resultado de la herramienta.\"}";
+        }
     }
 
     /**
