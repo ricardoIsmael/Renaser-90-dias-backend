@@ -2152,6 +2152,27 @@ cortado.
 **Solucion:** esperar a que el otro build termine y volver a correr. No hay nada que arreglar en el
 codigo — el mismo comando pasa solo, sin cambios, en cuanto no hay concurrencia.
 
+**Tercer sintoma, y este NO necesita dos agentes — te pasa con la app corriendo desde el IDE.**
+Levantada la app y corriendo `./mvnw clean test` en paralelo, el arranque muere con:
+
+```
+org.springframework.beans.factory.BeanCreationException: Error creating bean with name
+'meterRegistryPostProcessor' ...
+Caused by: java.lang.IllegalArgumentException: No classes found in packages [com.renaser.os]!
+    at org.springframework.modulith.core.ApplicationModules.<init>(ApplicationModules.java:134)
+```
+
+Parece un problema de configuracion de Modulith y no lo es: el `clean` borro `target/classes`, y
+Spring Modulith escanea el classpath al arrancar. Encontro la carpeta vacia y concluyo que no hay
+modulos. Con devtools, cada restart lo reintenta y vuelve a fallar hasta que alguien recompile.
+
+**La pista que lo delata:** el mensaje dice "no hay NINGUNA clase en `com.renaser.os`". Un problema
+real de Modulith se queja de un modulo concreto o de una dependencia entre dos; que no encuentre
+*nada* solo pasa si el directorio esta vacio.
+
+Ocurre en las dos direcciones: la app del IDE compilando contra `target/` rompe el build de Maven
+(sintomas 1 y 2), y el `clean` de Maven rompe la app del IDE (este). Es el mismo recurso compartido.
+
 **Como evitar que vuelva a pasar.** `target/` es un recurso compartido de todo el checkout, no del
 modulo en el que uno esta trabajando. Dos agentes sobre el mismo repo **no pueden compilar a la
 vez**, aunque toquen modulos que no se cruzan.
@@ -2250,4 +2271,48 @@ parece obvio. Los cuatro defectos de esta familia estaban en codigo que responde
 en los crons.
 
 **Verificado:** `./mvnw clean test` -> **2395 pruebas, 0 fallos**.
+
+---
+
+## E-107 — La app no arrancaba con 2403 pruebas en verde: `ObjectMapper` inyectado (2026-09-05)
+
+**Sintoma:** la suite completa paso (2403 pruebas, 0 fallos) y la aplicacion murio al arrancar:
+
+```
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Parameter 2 of constructor in com.renaser.os.rag.infrastructure.adapter.out.ia
+.GoogleGenAiRenasiaChatAdapter required a bean of type
+'com.fasterxml.jackson.databind.ObjectMapper' that could not be found.
+```
+
+**Causa:** al cablear el tool calling se agrego `ObjectMapper` como parametro de constructor del
+adaptador. Ese bean **no existe en este contexto**, y ya estaba documentado como **E-33**: Spring
+Boot 4.1 autoconfigura el `ObjectMapper` de **Jackson 3** (`tools.jackson.databind.ObjectMapper`),
+no el clasico `com.fasterxml` que usa este codigo. Las otras seis clases del repo que serializan
+JSON —`RedisChatPublisher`, `PgVectorNativoAdapter`, `EventoRenasiaSseMapper` y companiia— se
+construyen el suyo y lo dicen en su javadoc. Esta se salio del patron.
+
+**Solucion:** `this.json = new ObjectMapper()` dentro del adaptador, como el resto.
+
+**Por que 2403 pruebas no lo atraparon — esto es lo importante.** El adaptador real es
+`@ConditionalOnProperty(name = "renaser.ia.proveedor", havingValue = "google")`, y **las pruebas
+corren con `noop`**: el bean nunca se instanciaba, asi que cualquier error de inyeccion en el
+adaptador real era invisible hasta levantar la app a mano. La suite verde no era falsa, era ciega
+en ese camino.
+
+**Como evitar que vuelva a pasar.** Se agrego `GoogleGenAiRenasiaChatAdapterContextTest`: un
+`ApplicationContextRunner` que enciende `renaser.ia.proveedor=google`, ofrece solo lo que el
+contexto real ofrece (`ChatModel` y `EjecutarHerramientaAgenteUseCase`) y **deliberadamente no
+registra ningun `ObjectMapper`**. Resuelve el constructor de verdad. Verificado reintroduciendo el
+defecto: falla con el mismo mensaje que mostro la app.
+
+**La leccion que se generaliza:** todo bean detras de un `@ConditionalOnProperty` que las pruebas
+dejan apagado es un hueco de cobertura con forma de suite en verde. Si un componente solo existe en
+produccion, necesita al menos una prueba que lo construya con la propiedad encendida — si no, lo
+unico que verifica que arranque es levantar la app.
 

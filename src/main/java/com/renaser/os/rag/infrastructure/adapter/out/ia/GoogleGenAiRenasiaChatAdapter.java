@@ -75,11 +75,18 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
     private final EjecutarHerramientaAgenteUseCase herramientasUseCase;
     private final ObjectMapper json;
 
-    GoogleGenAiRenasiaChatAdapter(ChatModel chatModel, EjecutarHerramientaAgenteUseCase herramientasUseCase,
-                                   ObjectMapper json) {
+    /**
+     * El {@link ObjectMapper} es propio, NO inyectado (E-33): Spring Boot 4.1 autoconfigura el de
+     * Jackson 3 ({@code tools.jackson.databind.ObjectMapper}), no el clasico {@code com.fasterxml}
+     * que usa este codigo — pedirlo por constructor deja la app sin arrancar con
+     * {@code required a bean of type 'com.fasterxml.jackson.databind.ObjectMapper' that could not
+     * be found}. Es el mismo criterio que ya siguen `RedisChatPublisher`, `PgVectorNativoAdapter`
+     * y `EventoRenasiaSseMapper`.
+     */
+    GoogleGenAiRenasiaChatAdapter(ChatModel chatModel, EjecutarHerramientaAgenteUseCase herramientasUseCase) {
         this.chatClient = ChatClient.create(chatModel);
         this.herramientasUseCase = herramientasUseCase;
-        this.json = json;
+        this.json = new ObjectMapper();
         this.promptAcompanante = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_ACOMPANANTE));
         this.promptTutorCursos = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_TUTOR_CURSOS));
     }
