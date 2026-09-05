@@ -52,7 +52,9 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
     public PlanDesbloqueo consultar(UserId actorId) {
         requireProgreso(actorId);
         List<ItemDesbloqueo> items = loadPort.deParticipante(actorId).stream()
-                .map(d -> new ItemDesbloqueo(d.habitoId(), d.diaDesbloqueo(), d.elegidoEn())).toList();
+                .map(d -> new ItemDesbloqueo(d.habitoId(), d.diaDesbloqueo(), d.elegidoEn(), d.estaPausado(),
+                        d.pausadoHasta()))
+                .toList();
         return new PlanDesbloqueo(!items.isEmpty(), items);
     }
 
@@ -110,7 +112,7 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
         if (command.activo()) {
             desbloqueo.reactivar(clock.now());
         } else {
-            desbloqueo.pausar(habito.desactivable(), clock.now());
+            desbloqueo.pausar(habito.desactivable(), command.pausadoHasta(), clock.now());
         }
         return savePort.save(desbloqueo);
     }

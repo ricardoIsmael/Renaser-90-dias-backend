@@ -1,6 +1,7 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.habito;
 
 import com.renaser.os.habits.application.ports.in.habito.ConsultarMisHabitosUseCase;
+import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase;
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase.CrearHabitoPersonalCommand;
 import com.renaser.os.shared.domain.Permission;
@@ -51,6 +52,9 @@ public class MisHabitosController {
         var habito = crearUseCase.crear(new CrearHabitoPersonalCommand(actor, request.title(),
                 request.habitType().toDomain(), request.category().toClave(), request.template(),
                 request.goalLabel(), request.triggerTime(), request.limitTime()));
-        return ResponseEntity.status(HttpStatus.CREATED).body(MiHabitoResponse.from(habito));
+        // Un habito PERSONAL nace con horario TODOS (ver MisHabitosService.crear), asi que sus dias
+        // salen del propio dominio en vez de repetirse aca.
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(MiHabitoResponse.from(habito, TipoDia.TODOS.diasDeLaSemana()));
     }
 }

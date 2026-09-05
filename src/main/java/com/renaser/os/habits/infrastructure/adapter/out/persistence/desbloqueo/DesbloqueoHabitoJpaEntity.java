@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -35,4 +36,7 @@ public class DesbloqueoHabitoJpaEntity {
 
     /** `pausado_en` (V23): NULL = ACTIVO para este aprendiz. */
     private Instant pausadoEn;
+
+    /** `pausado_hasta` (V31): ultimo dia INCLUSIVE de la pausa. NULL con pausa = indefinida. */
+    private LocalDate pausadoHasta;
 }

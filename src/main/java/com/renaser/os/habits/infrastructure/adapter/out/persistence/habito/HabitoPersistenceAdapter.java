@@ -38,17 +38,18 @@ class HabitoPersistenceAdapter implements LoadHabitoPort, SaveHabitoPort {
 
     @Override
     public List<Habito> catalogoActivo() {
-        return repository.findByAmbitoAndActivoTrue(AmbitoHabitoJpa.SISTEMA).stream().map(mapper::toDomain).toList();
+        return repository.findByAmbitoAndActivoTrueOrderByOrdenAscTituloAsc(AmbitoHabitoJpa.SISTEMA).stream().map(mapper::toDomain).toList();
     }
 
     @Override
     public List<Habito> catalogoCompleto() {
-        return repository.findByAmbito(AmbitoHabitoJpa.SISTEMA).stream().map(mapper::toDomain).toList();
+        return repository.findByAmbitoOrderByOrdenAscTituloAsc(AmbitoHabitoJpa.SISTEMA).stream().map(mapper::toDomain).toList();
     }
 
     @Override
     public List<Habito> personalesActivosDe(UserId participanteId) {
-        return repository.findByAmbitoAndParticipanteIdAndActivoTrue(AmbitoHabitoJpa.PERSONAL, participanteId.value())
+        return repository.findByAmbitoAndParticipanteIdAndActivoTrueOrderByOrdenAscTituloAsc(AmbitoHabitoJpa.PERSONAL,
+                        participanteId.value())
                 .stream().map(mapper::toDomain).toList();
     }
 

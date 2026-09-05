@@ -11,11 +11,12 @@ class DesbloqueoHabitoPersistenceMapper {
     DesbloqueoHabito toDomain(DesbloqueoHabitoJpaEntity e) {
         return DesbloqueoHabito.rehydrate(UserId.of(e.getParticipanteId()), HabitoId.of(e.getHabitoId()),
                 e.getDiaDesbloqueo().intValue(), e.getElegidoEn(), e.getCreadoEn(), e.getActualizadoEn(),
-                e.getPausadoEn());
+                e.getPausadoEn(), e.getPausadoHasta());
     }
 
     DesbloqueoHabitoJpaEntity toEntity(DesbloqueoHabito d) {
         return new DesbloqueoHabitoJpaEntity(d.participanteId().value(), d.habitoId().value(),
-                (short) d.diaDesbloqueo(), d.elegidoEn(), d.creadoEn(), d.actualizadoEn(), d.pausadoEn());
+                (short) d.diaDesbloqueo(), d.elegidoEn(), d.creadoEn(), d.actualizadoEn(), d.pausadoEn(),
+                d.pausadoHasta());
     }
 }

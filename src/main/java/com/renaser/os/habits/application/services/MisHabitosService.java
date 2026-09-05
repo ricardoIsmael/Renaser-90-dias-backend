@@ -4,6 +4,7 @@ import com.renaser.os.habits.application.ports.in.habito.ConsultarMisHabitosUseC
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.SaveHabitoPort;
+import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.SaveHorarioHabitoPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
@@ -19,9 +20,14 @@ import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Autoservicio: el participante ve el catalogo activo + sus propios habitos PERSONAL, y puede
@@ -36,28 +42,69 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
     private final LoadHabitoPort loadPort;
     private final SaveHabitoPort savePort;
     private final SaveHorarioHabitoPort saveHorarioPort;
+    private final LoadHorarioHabitoPort loadHorarioPort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
     public MisHabitosService(LoadHabitoPort loadPort, SaveHabitoPort savePort,
-                              SaveHorarioHabitoPort saveHorarioPort,
+                              SaveHorarioHabitoPort saveHorarioPort, LoadHorarioHabitoPort loadHorarioPort,
                               ConsultarProgresoParticipanteHabitsPort progresoPort, Clock clock,
                               IdGenerator idGenerator) {
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.saveHorarioPort = saveHorarioPort;
+        this.loadHorarioPort = loadHorarioPort;
         this.progresoPort = progresoPort;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
 
+    /**
+     * El catalogo llega ya ordenado por {@code habitos.orden} desde el adaptador (V28); los
+     * PERSONAL se concatenan detras. El orden de esta lista ES el orden en que el movil los pinta.
+     */
     @Override
-    public List<Habito> consultar(UserId actor) {
+    public List<HabitoConDias> consultar(UserId actor) {
         List<Habito> habitos = new ArrayList<>(loadPort.catalogoActivo());
         habitos.addAll(loadPort.personalesActivosDe(actor));
-        return habitos;
+
+        // Una sola consulta para los N habitos, nunca una por habito (el puerto existe justo para
+        // esto). Sin esto el planificador semanal no puede saber que hay habitos que solo aplican
+        // los domingos.
+        List<HorarioHabito> horarios = loadHorarioPort.porHabitos(habitos.stream().map(Habito::id).toList());
+
+        Map<HabitoId, Set<DayOfWeek>> diasPorHabito = horarios.stream()
+                .collect(Collectors.groupingBy(HorarioHabito::habitoId,
+                        Collectors.flatMapping(h -> h.tipoDia().diasDeLaSemana().stream(),
+                                Collectors.toCollection(() -> EnumSet.noneOf(DayOfWeek.class)))));
+
+        // El habito existe para el aprendiz desde el `dia_inicio` MAS CHICO de sus horarios: si
+        // tiene varios tramos, el primero es el que lo habilita.
+        Map<HabitoId, Integer> desbloqueoPorHabito = horarios.stream()
+                .collect(Collectors.toMap(HorarioHabito::habitoId, HorarioHabito::diaInicio, Math::min));
+
+        int diaDelAprendiz = requireProgreso(actor).diaPrograma();
+
+        return habitos.stream()
+                .map(h -> {
+                    int desbloqueo = desbloqueoPorHabito.getOrDefault(h.id(), PRIMER_DIA);
+                    return new HabitoConDias(h, diasPorHabito.getOrDefault(h.id(), TODOS_LOS_DIAS), desbloqueo,
+                            Math.max(0, desbloqueo - diaDelAprendiz));
+                })
+                .toList();
     }
+
+    /**
+     * Un habito sin ningun horario no genera tracks, pero en el planificador semanal se muestra
+     * disponible los 7 dias en vez de desaparecer: es el comportamiento que ya habia antes de
+     * exponer los dias, y esconder un habito del plan por una fila de horario faltante seria un
+     * fallo mas dificil de notar que verlo de mas.
+     */
+    private static final Set<DayOfWeek> TODOS_LOS_DIAS = EnumSet.allOf(DayOfWeek.class);
+
+    /** Un habito sin horarios no tiene dia de desbloqueo propio: se considera disponible desde el 1. */
+    private static final int PRIMER_DIA = 1;
 
     /**
      * {@code ambito}/{@code participanteId} NO vienen del comando — {@link Habito#crearPersonal}

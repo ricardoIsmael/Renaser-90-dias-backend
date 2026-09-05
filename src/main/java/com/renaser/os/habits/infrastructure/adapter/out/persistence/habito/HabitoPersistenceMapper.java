@@ -32,7 +32,12 @@ class HabitoPersistenceMapper {
                 h.desactivable(), h.eleccionDiaSemanal(),
                 h.horasExtraEvidencia() != null ? h.horasExtraEvidencia().shortValue() : null,
                 h.diaLimiteEdicionLibre() != null ? h.diaLimiteEdicionLibre().shortValue() : null,
-                toJpaPlantilla(h.plantillaClave()), h.etiquetaMeta(), h.activo(), h.creadoEn(), h.actualizadoEn());
+                toJpaPlantilla(h.plantillaClave()), h.etiquetaMeta(),
+                // `orden` va en 0 y NO llega a la base: la columna esta mapeada como
+                // insertable/updatable=false (ver HabitoJpaEntity). El parametro existe solo
+                // porque la entidad usa @AllArgsConstructor.
+                (short) 0,
+                h.activo(), h.creadoEn(), h.actualizadoEn());
     }
 
     private AmbitoHabitoJpa toJpaAmbito(AmbitoHabito a) {

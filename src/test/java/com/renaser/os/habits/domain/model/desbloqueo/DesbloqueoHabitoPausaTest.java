@@ -5,6 +5,7 @@ import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -86,5 +87,83 @@ class DesbloqueoHabitoPausaTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("obligatorio");
         assertThat(d.estaPausado()).isFalse();
+    }
+
+    // ---- V31: pausa con fecha de fin ("pausalo hasta el domingo") ----
+
+    private static final LocalDate VIERNES = LocalDate.of(2026, 9, 4);
+    private static final LocalDate DOMINGO = LocalDate.of(2026, 9, 6);
+    private static final LocalDate LUNES = LocalDate.of(2026, 9, 7);
+
+    @Test
+    void unaPausaConFechaDeFinSigueVigenteHastaEseDiaINCLUSIVE() {
+        DesbloqueoHabito d = activo();
+
+        d.pausar(true, DOMINGO, AHORA);
+
+        assertThat(d.estaPausadoEl(VIERNES)).isTrue();
+        assertThat(d.estaPausadoEl(DOMINGO)).as("el ultimo dia todavia cuenta como pausado").isTrue();
+    }
+
+    /**
+     * La razon de ser del rango: el habito vuelve SOLO. Si esto se rompe, una pausa "hasta el
+     * domingo" se convierte en una pausa para siempre, que es justo lo que se queria evitar en un
+     * programa de 90 dias.
+     */
+    @Test
+    void desdeElDiaSiguienteElHabitoVuelveSinQueNadieLoToque() {
+        DesbloqueoHabito d = activo();
+
+        d.pausar(true, DOMINGO, AHORA);
+
+        assertThat(d.estaPausadoEl(LUNES)).isFalse();
+        assertThat(d.estaPausado()).as("la pausa sigue REGISTRADA; lo que cambio es el calendario").isTrue();
+    }
+
+    @Test
+    void unaPausaSinFechaDeFinSigueSiendoIndefinida() {
+        DesbloqueoHabito d = activo();
+
+        d.pausar(true, AHORA);
+
+        assertThat(d.estaPausadoEl(VIERNES)).isTrue();
+        assertThat(d.estaPausadoEl(LUNES.plusYears(1))).isTrue();
+        assertThat(d.pausadoHasta()).isNull();
+    }
+
+    @Test
+    void volverAPausarAjustaLaFechaDeFinPeroNoMueveElInicio() {
+        DesbloqueoHabito d = activo();
+        d.pausar(true, DOMINGO, AHORA);
+
+        d.pausar(true, LUNES, DESPUES);
+
+        assertThat(d.pausadoHasta()).as("se puede extender o acortar una pausa vigente").isEqualTo(LUNES);
+        assertThat(d.pausadoEn()).as("cuando dejo de hacerlo no cambia").isEqualTo(AHORA);
+    }
+
+    @Test
+    void reactivarLimpiaTambienLaFechaDeFin() {
+        DesbloqueoHabito d = activo();
+        d.pausar(true, DOMINGO, AHORA);
+
+        d.reactivar(DESPUES);
+
+        assertThat(d.estaPausado()).isFalse();
+        assertThat(d.pausadoHasta()).isNull();
+        assertThat(d.estaPausadoEl(VIERNES)).isFalse();
+    }
+
+    @Test
+    void unHabitoObligatorioTampocoSePuedePausarConFecha() {
+        assertThatThrownBy(() -> activo().pausar(false, DOMINGO, AHORA))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("obligatorio");
+    }
+
+    @Test
+    void unDesbloqueoActivoNoEstaPausadoNingunDia() {
+        assertThat(activo().estaPausadoEl(VIERNES)).isFalse();
+        assertThat(activo().pausadoHasta()).isNull();
     }
 }

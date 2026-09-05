@@ -3,7 +3,12 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase.CrearHabitoPersonalCommand;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.SaveHabitoPort;
+import com.renaser.os.habits.application.ports.in.habito.ConsultarMisHabitosUseCase.HabitoConDias;
+import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.SaveHorarioHabitoPort;
+import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
+import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
@@ -55,6 +60,8 @@ class MisHabitosServiceTest {
     @Mock
     private SaveHorarioHabitoPort saveHorarioPort;
     @Mock
+    private LoadHorarioHabitoPort loadHorarioPort;
+    @Mock
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
     @Mock
     private IdGenerator idGenerator;
@@ -65,7 +72,13 @@ class MisHabitosServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new MisHabitosService(loadPort, savePort, saveHorarioPort, progresoPort, CLOCK, idGenerator);
+        service = new MisHabitosService(loadPort, savePort, saveHorarioPort, loadHorarioPort, progresoPort, CLOCK,
+                idGenerator);
+        lenient().when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
+        // `consultar` necesita el dia de programa desde que calcula el desbloqueo de cada habito
+        // (dia 2: el mismo escenario en el que el dueño reporto ver habitos que aun no le tocaban).
+        lenient().when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(2, "America/Lima", RolParticipante.TRAINEE, false)));
         lenient().when(savePort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveHorarioPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -86,9 +99,9 @@ class MisHabitosServiceTest {
         when(loadPort.catalogoActivo()).thenReturn(List.of(sistema));
         when(loadPort.personalesActivosDe(actor)).thenReturn(List.of(personal));
 
-        List<Habito> resultado = service.consultar(actor);
+        List<HabitoConDias> resultado = service.consultar(actor);
 
-        assertThat(resultado).containsExactlyInAnyOrder(sistema, personal);
+        assertThat(resultado).extracting(HabitoConDias::habito).containsExactlyInAnyOrder(sistema, personal);
     }
 
     @Test
@@ -98,7 +111,118 @@ class MisHabitosServiceTest {
         when(loadPort.catalogoActivo()).thenReturn(List.of(sistema));
         when(loadPort.personalesActivosDe(actor)).thenReturn(List.of());
 
-        assertThat(service.consultar(actor)).containsExactly(sistema);
+        assertThat(service.consultar(actor)).extracting(HabitoConDias::habito).containsExactly(sistema);
+    }
+
+    // ---- dias de la semana (V28: los habitos de DOMINGO no aplican de lunes a sabado) ----
+
+    /**
+     * El bug que esto atrapa: el planificador semanal del movil marcaba los 7 dias para TODOS los
+     * habitos, asi que los tres habitos de DOMINGO (`DESCANSO PROFUNDO`, `RITUAL DE MAÑANA`,
+     * `AGUA E HIDRATACIÓN`) aparecian tambien de lunes a sabado. Contra el codigo viejo este test
+     * ni siquiera compila, porque `consultar` no devolvia los dias.
+     */
+    @Test
+    void unHabitoDeDomingoSoloAplicaLosDomingos() {
+        HabitoId id = HabitoId.of(UUID.randomUUID());
+        Habito soloDomingo = Habito.crearDeSistema(id, "DESCANSO PROFUNDO", TipoHabito.CHECKBOX,
+                new DetallesHabito("desc", "CUERPO", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
+        when(loadPort.catalogoActivo()).thenReturn(List.of(soloDomingo));
+        when(loadPort.personalesActivosDe(actor)).thenReturn(List.of());
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), id, 35, null, TipoDia.DOMINGO,
+                        DISPARO, null, CLOCK.now())));
+
+        assertThat(service.consultar(actor)).singleElement()
+                .extracting(HabitoConDias::diasSemana)
+                .isEqualTo(java.util.EnumSet.of(java.time.DayOfWeek.SUNDAY));
+    }
+
+    @Test
+    void unHabitoDeTodosLosDiasAplicaLosSiete() {
+        HabitoId id = HabitoId.of(UUID.randomUUID());
+        Habito diario = Habito.crearDeSistema(id, "DESPERTAR", TipoHabito.CHECKBOX,
+                new DetallesHabito("desc", "CUERPO", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
+        when(loadPort.catalogoActivo()).thenReturn(List.of(diario));
+        when(loadPort.personalesActivosDe(actor)).thenReturn(List.of());
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), id, 1, 90, TipoDia.TODOS,
+                        DISPARO, null, CLOCK.now())));
+
+        assertThat(service.consultar(actor)).singleElement()
+                .extracting(HabitoConDias::diasSemana)
+                .isEqualTo(java.util.EnumSet.allOf(java.time.DayOfWeek.class));
+    }
+
+    /** Sin horarios no se esconde el habito del plan: se muestra disponible los 7 dias. */
+    @Test
+    void unHabitoSinHorariosCaeAlosSieteDias() {
+        Habito huerfano = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Sin horario",
+                TipoHabito.CHECKBOX,
+                new DetallesHabito("desc", "MENTE", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
+        when(loadPort.catalogoActivo()).thenReturn(List.of(huerfano));
+        when(loadPort.personalesActivosDe(actor)).thenReturn(List.of());
+
+        assertThat(service.consultar(actor)).singleElement()
+                .extracting(HabitoConDias::diasSemana)
+                .isEqualTo(java.util.EnumSet.allOf(java.time.DayOfWeek.class));
+    }
+
+    /**
+     * El bug reportado: la cuenta estaba en el dia 2 y el Plan mostraba `Pastilla Renacer` (dia 8)
+     * y `AUDIOTERAPIA SEMANAL` (dia 11) como disponibles. La generacion diaria si los excluia; era
+     * el CATALOGO el que no decia nada sobre el desbloqueo.
+     */
+    @Test
+    void unHabitoQueSeDesbloqueaMasAdelanteViajaBloqueadoYConLosDiasQueFaltan() {
+        HabitoId id = HabitoId.of(UUID.randomUUID());
+        Habito pastilla = Habito.crearDeSistema(id, "Pastilla Renacer", TipoHabito.JOURNALING,
+                new DetallesHabito("desc", "ESPIRITU", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
+        when(loadPort.catalogoActivo()).thenReturn(List.of(pastilla));
+        when(loadPort.personalesActivosDe(actor)).thenReturn(List.of());
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), id, 8, null, TipoDia.TODOS,
+                        DISPARO, null, CLOCK.now())));
+
+        var vista = service.consultar(actor).getFirst();
+
+        assertThat(vista.diaDesbloqueo()).isEqualTo(8);
+        assertThat(vista.diasParaDesbloqueo()).as("dia 8 menos el dia 2 en que esta").isEqualTo(6);
+        assertThat(vista.bloqueado()).isTrue();
+    }
+
+    @Test
+    void unHabitoYaDesbloqueadoNoViajaBloqueado() {
+        HabitoId id = HabitoId.of(UUID.randomUUID());
+        Habito desdeElUno = Habito.crearDeSistema(id, "DESPERTAR", TipoHabito.CHECKBOX,
+                new DetallesHabito("desc", "CUERPO", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
+        when(loadPort.catalogoActivo()).thenReturn(List.of(desdeElUno));
+        when(loadPort.personalesActivosDe(actor)).thenReturn(List.of());
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), id, 1, 90, TipoDia.TODOS,
+                        DISPARO, null, CLOCK.now())));
+
+        var vista = service.consultar(actor).getFirst();
+
+        assertThat(vista.diasParaDesbloqueo()).isZero();
+        assertThat(vista.bloqueado()).isFalse();
+    }
+
+    /** Con varios tramos manda el mas temprano: el primero es el que lo habilita. */
+    @Test
+    void conVariosHorariosGanaElDiaDeInicioMasChico() {
+        HabitoId id = HabitoId.of(UUID.randomUUID());
+        Habito h = Habito.crearDeSistema(id, "Con tramos", TipoHabito.CHECKBOX,
+                new DetallesHabito("desc", "CUERPO", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
+        when(loadPort.catalogoActivo()).thenReturn(List.of(h));
+        when(loadPort.personalesActivosDe(actor)).thenReturn(List.of());
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), id, 40, null, TipoDia.TODOS,
+                        DISPARO, null, CLOCK.now()),
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), id, 5, 39, TipoDia.TODOS,
+                        DISPARO, null, CLOCK.now())));
+
+        assertThat(service.consultar(actor).getFirst().diaDesbloqueo()).isEqualTo(5);
     }
 
     // ---- crear (comportamiento preexistente) ----

@@ -4,6 +4,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -25,6 +26,11 @@ public interface ConsultarDesbloqueosHabitoUseCase {
     record PlanDesbloqueo(boolean enabled, List<ItemDesbloqueo> items) {
     }
 
-    record ItemDesbloqueo(HabitoId habitoId, int diaDesbloqueo, Instant elegidoEn) {
+    /**
+     * @param pausado      hay una pausa registrada para este aprendiz (V23).
+     * @param pausadoHasta ultimo dia INCLUSIVE de esa pausa, o {@code null} si es indefinida (V31).
+     */
+    record ItemDesbloqueo(HabitoId habitoId, int diaDesbloqueo, Instant elegidoEn, boolean pausado,
+                           LocalDate pausadoHasta) {
     }
 }

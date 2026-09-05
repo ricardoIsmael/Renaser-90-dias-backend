@@ -1868,7 +1868,9 @@ el incremento (`== 1`) — lo segundo no autorrepara nada si la clave ya estaba 
 
 **Solucion aplicada:** restaurar los 24 numeros de `9ab4f6f^` en `mapaPreguntas.ts` — solo esas lineas, sin tocar el resto de ese commit ni el mecanismo de firma. Elegida por el dueno como la opcion mas segura ("como funcionaba Terminos").
 
-**Como evitar que vuelva a pasar:** los ids son detalle de una base concreta, lo estable es `clave_pregunta`. El backend ya expone el catalogo (`GET /api/v1/onboarding/questionnaire?flow=...`, con `id`, `questionKey` y `type`); el movil deberia resolver los ids por clave en tiempo de ejecucion y verificar el tipo, en vez de llevar numeros escritos a mano. Queda propuesto, no hecho (el dueno pidio no tocar esa zona mas alla de la restauracion).
+**Como evitar que vuelva a pasar:** los ids son detalle de una base concreta, lo estable es `clave_pregunta`. El backend ya expone el catalogo (`GET /api/v1/onboarding/questionnaire?flow=...`, con `id`, `questionKey` y `type`); el movil deberia resolver los ids por clave en tiempo de ejecucion y verificar el tipo, en vez de llevar numeros escritos a mano.
+
+> **Actualizado 2026-09-04 (ver E-95).** Esto decia *"Queda propuesto, no hecho (el dueno pidio no tocar esa zona mas alla de la restauracion)"*. La restauracion de los 24 numeros se vencio en menos de un dia y el error volvio, asi que la resolucion por clave **se implemento**. Ademas, el diagnostico de arriba quedo incompleto: la causa de fondo no era el commit `9ab4f6f` sino que los ids del catalogo **no son reproducibles entre bases** — E-95 lo explica.
 
 ## E-94 — Pruebas de contexto completo que fallan con `NoClassDefFoundError` de una clase que nadie toco (2026-09-04)
 
@@ -1879,3 +1881,151 @@ el incremento (`== 1`) — lo segundo no autorrepara nada si la clave ya estaba 
 **Solucion aplicada:** forzar la recompilacion de todo sin `clean` (que con la app levantada tumba el contexto, ver reglas de trabajo): `find src/main/java -name "*.java" -exec touch {} +` y despues `./mvnw test -Dmaven.compiler.useIncrementalCompilation=false ...`. Las cuatro clases pasaron a 19/19 sin cambiar una linea de codigo.
 
 **Como evitar que vuelva a pasar:** cuando una prueba de contexto completo falle con `NoClassDefFoundError` o `cannot find symbol` en un archivo que no se toco, NO buscar el bug en ese archivo: es el `target` cruzado. Recompilar todo con el `touch` de arriba. La solucion de fondo seria que el IDE compile a otra carpeta (`out/`) y no a `target/classes`.
+
+## E-95 — El mismo "FIRMA requiere mediaId" del Pacto, un dia despues: los ids del catalogo de onboarding NO son reproducibles (2026-09-04)
+
+**Sintoma exacto (consola de Metro):** identico al de E-93, pero con otro numero — `WARN No se pudo guardar la respuesta de onboarding (questionId=4), se reintentara mas tarde: [ApiError: Una respuesta de tipo FIRMA requiere mediaId]`, disparado desde `usePersistenciaOnboarding.ts:35`.
+
+**Causa real — la que E-93 no vio.** E-93 trato esto como "los ids estan corridos en uno" y lo arreglo corriendo los 24 numeros de vuelta. El arreglo se vencio en menos de 24 horas porque el problema nunca fueron los numeros:
+
+`preguntas_onboarding.id` es una columna `GENERATED ALWAYS AS IDENTITY`, y el seed que la llena (`V10__catalogo_onboarding_default.sql`, linea 172) es un `INSERT ... SELECT ... FROM (VALUES ...) v JOIN secciones_onboarding s ON ...` **sin `ORDER BY`**. El orden en que ese JOIN emite las filas lo decide el planner de Postgres, no el orden del `VALUES`. Prueba directa: en el `VALUES` la primera fila es `accepted_terms` y `terms_signature` esta en la linea 152, pero en la base quedaron con id 2 y 1 respectivamente — dados vuelta.
+
+Es decir: **los ids del catalogo cambian entre bases de datos y entre resembrados.** Van a ser otros en produccion y otros en la maquina de cualquiera que levante el Docker de cero. La prueba de que eso ya paso: E-93 documento una fila contaminante `test_question_1` ocupando el id 1; hoy esa fila **ya no existe** y la tabla tiene 102 preguntas con ids 1..102 limpios. El catalogo se resembro despues de escribir E-93, todos los ids se corrieron en −1, y los 24 numeros "restaurados" quedaron mal otra vez — los 24, no solo el del Pacto (verificado uno por uno contra la base).
+
+**Por que fallaba de la peor forma posible:** un id corrido casi siempre guarda la respuesta **bajo la pregunta equivocada sin ningun error** (parece que funciono). Solo revienta ruidosamente cuando el corrimiento cae justo sobre una pregunta `FIRMA`/`AUDIO`/`ARCHIVO`, que son las unicas que exigen `mediaId` en vez de un valor tipado (`Respuesta.slotEsperado`, `SlotValor.SOLO_MEDIA`). El error visible era la punta: por debajo, el nombre, el pais, la profesion y todo lo demas se estaban guardando en la pregunta de al lado.
+
+**Solucion aplicada (movil, definitiva):** los ids desaparecieron del codigo. Se resuelven en runtime por `clave_pregunta`, que si tiene `UNIQUE` en la tabla y es la misma en toda base. No hizo falta tocar el backend: `GET /api/v1/onboarding/questionnaire?flow=...` ya devuelve `{ id, questionKey, type }`.
+
+- Nuevo `src/features/onboarding/data/catalogoPreguntas.ts`: pide los 3 flujos que responde la app (`terminos`, `pacto`, `ficha_inicial`), arma el mapa `clave -> { id, tipo }` y lo cachea (guarda la **promesa**, para que varias pantallas compartan una sola tanda de requests; si falla se limpia para poder reintentar).
+- `mapaPreguntas.ts` pasa a declarar `{ clave, tipo }` y **cero numeros**. Los builders devuelven `RespuestaPorClaveInput`.
+- `usePersistenciaOnboarding.enviarRespuestas` resuelve clave -> id justo antes de enviar. **Nunca manda un id adivinado**: si el catalogo no carga (fallo de red) deja todo pendiente de reintento; si una clave no existe o su tipo no coincide con el que la app asume, no la manda y la deja pendiente, que es lo que hace que la pantalla avise en vez de dar por guardado algo que no lo esta.
+- El chequeo de tipo (`catalogo.idDe(clave, tipoEsperado)`) es la red de seguridad: convierte un "se guardo bajo la pregunta equivocada en silencio" en un error explicito que nombra la clave.
+
+**Verificado (2026-09-04, contra el backend y la base reales, no solo con tests):**
+- `npx tsc --noEmit` en cero.
+- Las 24 claves del mapa resuelven contra el catalogo en vivo y **el tipo coincide en las 24**. Las 24 daban un id distinto del que estaba hardcodeado (−1 en todas), confirmando que el mapa entero estaba mal, no solo el Pacto.
+- Reproducido el fallo y su arreglo por HTTP: `POST /api/v1/onboarding/answers` con `{"questionId":4,"booleanValue":true}` (lo que mandaba el codigo viejo para `accepted_pacto`) devuelve **400 "Una respuesta de tipo FIRMA requiere mediaId"**; con el id que ahora resuelve la clave (`accepted_pacto` -> 3) devuelve **200**.
+- **Sin cubrir:** el movil no tiene runner de tests configurado (no hay `jest`/`vitest` en su `package.json`), asi que esto no quedo como prueba automatica. La verificacion de las 24 claves se hizo con un script suelto contra el backend en vivo.
+
+**Como evitar que vuelva a pasar:**
+- **Nunca hardcodear un id de fila generado por la base.** Si una tabla tiene una clave natural con `UNIQUE` (`clave_pregunta`, `clave_seccion`, `codigo`...), esa es la que viaja en el codigo; el id sustituto se resuelve contra la API. Vale para todo el repo, no solo para onboarding.
+- **Sospechar de un seed con `INSERT ... SELECT` sin `ORDER BY`** si alguien depende del orden de los ids que genera. `V10` ya corrio y no se edita (D-40); lo que se corrige es la dependencia, no la migracion.
+- **Cuando el mismo sintoma vuelve con otro numero, la causa no era el numero.** E-93 arreglo el sintoma y el bug volvio al dia siguiente; la senal de que faltaba mirar mas abajo fue justamente que el "arreglo" tuviera que ser un ±1.
+
+## E-96 — El slider de "Calidad de tu sueño" se iba al minimo al arrastrarlo (2026-09-04)
+
+**Sintoma exacto:** en el Capitulo 2 de la Ficha Inicial ("DESCANSO Y SALUD"), tocar o arrastrar el control de *Calidad de tu sueño* lo tiraba al extremo izquierdo. En la captura del dueno: thumb pegado a la izquierda y valor **2**, cuando el valor por defecto del formulario es 7. Se percibia como "la calidad se reinicia sola".
+
+**Causa real:** `SleepQualitySlider` (`src/features/onboarding/components/ChapterSalud.tsx`) calcula el valor con `evt.nativeEvent.locationX`, y en React Native **`locationX` se mide respecto del elemento que recibio el toque, no del elemento que tiene el `PanResponder`**. El riel tiene tres hijos decorativos (linea base, linea de progreso y el thumb), todos con `pointerEvents` por defecto. Al agarrar el thumb — que es exactamente lo que hace el usuario — el target pasaba a ser el thumb, un cuadrado de 20x20: `locationX` salia medido desde SU borde (~10 en el centro) en vez de desde el inicio del riel.
+
+Aritmetica del fallo, con el valor en 7 y un riel de ~290 px: `round(1 + (10/290)*9) = 1`. Y como el origen quedaba corrido, arrastrar 120 px a la derecha daba 5 en vez de 10. El defecto NO estaba en la formula: estaba en el dato que le llegaba.
+
+**Solucion aplicada:** `pointerEvents="none"` en los tres hijos decorativos, para que el target sea siempre `sliderTrackTouchArea` y `locationX` quede medido contra el riel — que es lo que `calculateValueFromX` siempre asumio. No se toco la aritmetica ni el `PanResponder`.
+
+**Relacion con el bug anterior del mismo control:** el `PanResponder` ya tenia documentado un primer arreglo (el scroll vertical secuestraba el gesto y reiniciaba el valor). Aquel se arreglo bien y sigue vigente; este es un segundo defecto independiente, con la misma consecuencia visible, y por eso parecia que el primero no se habia arreglado.
+
+**Verificado:** `npx tsc --noEmit` en cero y la aritmetica reproducida en una simulacion con el origen equivocado vs. el correcto. **Sin cubrir:** no se probo el arrastre real en el emulador (lo prueba el dueno); el movil no tiene runner de tests configurado.
+
+**Revisado de paso, sin defecto:** `SliderRating` (`ChapterCuerpo`) no usa `PanResponder`, son numeros tocables. `SignatureCanvas` si usa `locationX`, pero su unico hijo es un `<Svg style={StyleSheet.absoluteFill}>` — mismo origen y tamano que el contenedor, asi que las coordenadas coinciden.
+
+**Como evitar que vuelva a pasar:** cuando un `PanResponder` calcula posiciones con `locationX`/`locationY`, **todos los hijos del area tactil deben llevar `pointerEvents="none"`**, salvo que se quiera que sean target. Si un hijo puede recibir el toque y no comparte origen y tamano con el contenedor, las coordenadas van a salir corridas — y el sintoma es un valor que "salta" sin causa aparente, no un error.
+
+## E-97 — La firma del onboarding subia a S3 el texto "File not found" en vez del PNG (2026-09-04)
+
+**Sintoma exacto:** ninguno visible. La app decia "FIRMADO", la fila de `medias_onboarding` se creaba, la respuesta `terms_signature` quedaba apuntando a esa media y el flujo seguia normal. El fallo solo aparece mirando el bucket: los objetos de firma pesaban **14 bytes** y su contenido, en texto plano, era `File not found`. Un objeto anterior (2026-09-03 02:30) era un PNG valido pero de **67 bytes** — un lienzo de tamano cero.
+
+**Como se detecto:** verificando a mano en `s3-renaser90dias` con las credenciales de la configuracion de ejecucion del IDE (`.run/RenaserOsApplication.run.xml`), despues de que el dueno preguntara si la firma se habia guardado. La fila en Postgres existia y todo "parecia" bien.
+
+**Causa real:** `SignatureCanvas.capturarComoPng` usaba `captureRef(ref, { format: 'png', quality: 1 })`, cuyo `result` por defecto es `tmpfile`: devuelve una RUTA de archivo temporal. Esa ruta despues se leia con `fetch(uri).arrayBuffer()` en `subirArchivoOnboardingAS3`. En Android la ruta viene **sin el esquema `file://`**, asi que el `fetch` no la resolvia y devolvia —con status OK, no con error— un cuerpo de 14 bytes con el texto `File not found`. Como `respuesta.ok` era `true` y `arrayBuffer()` no lanzaba, no habia nada que fallara: esos 14 bytes se subian a S3 y despues se registraba la media como si todo hubiera salido bien.
+
+**Por que ninguna de las validaciones existentes lo atrapo:** el codigo ya distinguia "no se pudo leer el archivo local" de "S3 rechazo la subida", pero ambas ramas dependen de que algo LANCE. Acá no lanzaba nada: se leyeron bytes (14) y S3 acepto la subida (200). **Nadie miraba QUE se estaba subiendo.**
+
+**Solucion aplicada (movil):**
+1. `capturarComoPng` -> `capturarComoPngBase64`, con `result: 'base64'`. Los bytes vienen directo del modulo de captura, sin pasar por el sistema de archivos ni por `fetch` — se elimina la clase entera de fallo, no solo el sintoma en Android.
+2. `subirArchivoOnboardingAS3` recibe base64, lo decodifica y **valida antes de subir** que los bytes empiecen con la cabecera PNG (`PNG
+
+
+`) y midan al menos 100 bytes (el piso descarta la captura degenerada de 67 bytes). Si no, lanza con el tamano en el mensaje y **no sube nada**. Es lo que convierte "se guardo basura en silencio" en un error visible, que en evidencia con valor probatorio es lo minimo.
+3. El decodificador base64 se escribio a mano (ni `atob` ni `Buffer` estan garantizados en React Native).
+
+**Bug encontrado DENTRO del arreglo, al probarlo:** la primera version del decodificador fallaba con relleno. Cuando el largo no es multiplo de 3, el base64 termina en `=`, la limpieza lo descarta y el ultimo grupo queda con 2 o 3 caracteres; `abc.indexOf(undefined)` devuelve **-1** y contamina los bits del ultimo byte. Se detecto porque el round-trip de un PNG real de 67 bytes daba el largo correcto pero **bytes distintos** — con un archivo de largo multiplo de 3 habria pasado la prueba sin problema. Corregido con un `?? 0`. **Leccion:** probar un round-trip de codificacion con UN solo tamano no prueba nada; hay que barrer largos que ejerciten los tres casos de relleno.
+
+**Verificado:** round-trip identico en 11 largos distintos (1, 2, 3, 4, 5, 66, 67, 68, 100, 1023, 35862 bytes), contra el PNG real de 67 bytes recuperado del bucket, y `"File not found"` rechazado por la validacion. `npx tsc --noEmit` en cero. **Sin cubrir:** no se volvio a firmar desde el emulador — lo prueba el dueno; el movil no tiene runner de tests configurado.
+
+**Impacto en datos ya guardados:** las 2 firmas de la cuenta de prueba (`terms_signature`, 2026-09-03 y 2026-09-05) NO tienen PNG utilizable en S3. El trazo vectorial SVG si esta intacto en `medias_onboarding.metadatos` (1169 y 1469 caracteres), asi que la firma es reconstruible; lo que no existe es la imagen. Hay que volver a firmar.
+
+**Como evitar que vuelva a pasar:**
+- **Cuando se sube un archivo a un almacenamiento externo, validar el CONTENIDO antes de subir**, no solo que la lectura y el `PUT` no hayan lanzado. Un `fetch` puede devolver 200 con un cuerpo que no es lo que se pidio.
+- **Evitar el rodeo por el sistema de archivos cuando existe la opcion de obtener los bytes directo.** `result: 'base64'` no tiene el problema de esquemas de URI entre plataformas que si tiene `tmpfile`.
+- **Un `respuesta.ok === true` no significa que se subio lo correcto.** Para evidencia con valor legal, verificar tamano y magic number.
+
+## E-98 — La barra de pestanas se veia BLANCA en modo oscuro (2026-09-04)
+
+**Sintoma exacto:** con la app en modo oscuro, toda la barra inferior (HOY / PLAN / TRAINING / COMUNIDAD / YO) aparecia blanca, y el aro alrededor del boton central dorado tambien. El resto de la pantalla si respetaba el tema. Confirmado con captura del emulador via `adb exec-out screencap`: el pixel del centro de la barra daba **RGB(255,255,255)** exacto.
+
+**Causa real:** `TabBar` pintaba su fondo con `c.cardBg`, que en la paleta oscura es **translucido**: `rgba(255,255,255,0.04)` (`src/theme/tokens.ts`). Ese token esta pensado para apoyarse sobre `c.bg` y dar una tarjeta apenas mas clara que la pagina. Pero la TabBar la dibuja el navegador **fuera del `SafeAreaView` de la pantalla**, asi que detras no habia ningun fondo del tema: estaba la vista raiz de React Native, que es **blanca por defecto**. Un 4% de blanco sobre blanco da blanco puro. El mismo token en `borderColor` explicaba el aro blanco del boton central.
+
+Lo que despisto al principio: se busco en la barra de navegacion del sistema Android (`app.json` no declara `androidNavigationBar` y `userInterfaceStyle` esta en `"light"`). No era eso — `dumpsys window` mostro que esa barra es `fmt=TRANSLUCENT`, o sea que lo blanco lo pintaba la app.
+
+**Solucion aplicada:** en `barOuter`, fondo `c.bg` **opaco** de base y `c.cardBg` como capa encima (`StyleSheet.absoluteFill` con `pointerEvents="none"`), reproduciendo exactamente la composicion "tarjeta sobre pagina" que el token asume. El aro del boton central pasa a `c.bg`, que ademas lo separa del contenido de la pantalla contra el que se recorta por su `marginTop` negativo. **En modo claro no cambia nada visible**: ahi `bg` (#FCFBF9) y `cardBg` (#FDFCFA) son opacos y difieren en 1/255.
+
+**Como evitar que vuelva a pasar:** **un token de color translucido solo es valido sobre un fondo que el tema controle.** Todo componente que se dibuje fuera del arbol de una pantalla —barras del navegador, overlays, modales, portales— tiene que pintar primero un fondo opaco del tema; si no, hereda el blanco de la vista raiz y el modo oscuro se rompe solo en ese componente. Al revisar un color raro en modo oscuro, mirar antes que nada si el token es `rgba(...)` y que hay detras.
+
+## E-99 — Las respuestas de la IA mostraban el markdown crudo (`**negrita**`) en pantalla (2026-09-04)
+
+**Sintoma exacto:** en la burbuja del asistente se leia literalmente `Entra en la seccion **"Plan"**` y `**Sparkie**`, con los asteriscos a la vista. Las listas numeradas quedaban como texto corrido, sin sangria ni alineacion.
+
+**Causa real:** `MensajeBurbuja` renderizaba `{mensaje.texto}` dentro de un `<Text>` plano. Los modelos devuelven markdown basico siempre (negritas, listas numeradas, algun titulo) y nadie lo estaba interpretando.
+
+**Solucion aplicada:** nuevo `features/renasia/components/TextoAsistente.tsx`, que interpreta el subconjunto que los modelos usan de verdad: `**negrita**`/`__negrita__`, `*cursiva*`/`_cursiva_`, `` `codigo` ``, listas ordenadas (`1.`, `1)`), vinetas (`-`, `*`, `•`) y titulos (`#`..`######`). Se aplica **solo a los mensajes del asistente**: lo que escribe la persona se sigue mostrando literal, porque si tecleo asteriscos quiso asteriscos.
+
+**Por que no una libreria de markdown:** las respuestas de este producto son texto corto de chat, no documentos. Un parser completo traeria tablas, HTML embebido, imagenes y enlaces —superficie que no se quiere en una burbuja— y sus estilos por defecto pelearian con la tipografia Jost y la paleta dorada.
+
+**Detalle que se hubiera pasado por alto:** para la negrita no alcanza `fontWeight: '700'`. Con una familia cargada por archivo (Jost via `@expo-google-fonts`), Android ignora el peso si no se nombra la variante: hay que poner `fontFamily: 'Jost_700Bold'`, que ya esta cargada en `App.tsx`.
+
+**Verificado:** el parser se extrajo del archivo real y se ejecuto contra el mensaje exacto de la captura mas casos borde (`10.` para la alineacion de marcadores de dos digitos, vineta con cursiva, titulo `###`, y un `**` sin cerrar). Todo lo que no se interpreta se muestra tal cual — ante un markdown raro se ve el texto original, nunca una burbuja vacia. `npx tsc --noEmit` en cero. **Sin cubrir:** no se vio renderizado en el emulador; el movil no tiene runner de tests configurado.
+
+**Como evitar que vuelva a pasar:** toda superficie que muestre texto generado por un modelo tiene que decidir explicitamente si interpreta markdown o no. El default (`<Text>` plano) no es neutro: muestra los marcadores.
+
+## E-100 — El orden del catalogo de habitos no llegaba a la app, y los habitos de domingo salian todos los dias (2026-09-04)
+
+**Sintoma:** el dueno del producto pidio que los habitos activos salieran en el orden del panel de staging, y que los tres de DOMINGO aparecieran solo los domingos. En la app el orden era arbitrario y los de domingo se veian de lunes a sabado.
+
+**Tres causas distintas, no una:**
+
+1. **`habitos.orden` no lo usaba nadie fuera del panel admin.** El catalogo del movil sale de `findByAmbitoAndActivoTrue(...)`, **sin `ORDER BY`**: Postgres devolvia las filas en orden indefinido. Renumerar la columna sola no habria cambiado nada. Se agrego `...OrderByOrdenAscTituloAsc` en `SpringDataHabitoRepository`.
+2. **Empate real en la data.** `Pastilla Renacer` y `POST DIARIO EN COMUNIDAD` compartian `orden = 12`, y el unico consumidor desempataba por `titulo`, que depende del collation. Ademas la numeracion tenia huecos (13 -> 19 -> 29 -> 31). `V28` renumera 1..18.
+3. **Los dias de la semana no se exponian.** La base y el backend YA filtraban bien por `horarios_habito.tipo_dia` (`HorarioHabito.aplicaEnDia`), pero el planificador semanal del movil hacia `days: { ...TODOS_LOS_DIAS }` — y con razon: `MiHabitoResponse` no mandaba el dato. Se agrego `TipoDia.diasDeLaSemana()` en el **dominio** y `activeWeekdays` en la respuesta; el movil solo traduce el nombre del dia. Deducirlo del titulo no era opcion: `DESCANSO PROFUNDO` es de domingo y no lo dice, y el titulo es renombrable (lo mismo que descarto V18).
+
+**Dos errores propios que atraparon las pruebas, y valen mas que el arreglo:**
+
+- **`No property 'orden' found for type 'HabitoJpaEntity'` — 385 pruebas caidas.** La consulta derivada nueva no se podia construir porque la entidad JPA no mapeaba la columna. El detalle importante es COMO se mapeo: `@Column(insertable = false, updatable = false)`. El agregado `Habito` no lleva `orden`, asi que `HabitoPersistenceMapper.toEntity` tendria que inventar un valor en cada guardado y —con `@AllArgsConstructor`— ese valor pisaria el de la base en el primer UPDATE, **borrando el orden del catalogo entero**. Es el riesgo que el javadoc de esa clase ya advertia para las columnas no modeladas.
+- **Un indice unico agregado y retirado el mismo dia (V28 -> V29).** Se creo `habitos_catalogo_orden_unico_idx` como red contra futuros empates. La suite lo rechazo: la base de pruebas trae el catalogo real con 1..18 **ya ocupados**, asi que cualquier fixture que sembrara un habito de SISTEMA chocaba — 10 clases lo hacen, casi ninguna para probar el orden. **Leccion:** una restriccion global sobre una tabla sembrada por migraciones le cobra peaje a cada fixture presente y futuro; si el valor lo fijan las migraciones y no hay caso de uso que lo escriba, el lugar de esa validacion es el caso de uso (cuando exista el panel admin), no un indice.
+
+**El desempate lo decidi mal la primera vez.** `V28` separo 12/13 usando la hora de disparo (07:00 la Pastilla, 22:00 el Post) porque no habia criterio registrado. Al entrar despues al panel de staging —el catalogo curado a mano, que es la fuente de verdad— el orden coincidia en los 18 items **salvo en esas dos posiciones**: el Post va antes. `V30` lo corrige. Era una inferencia razonable, pero era mia y no la decision del producto: **cuando existe una fuente de verdad, se consulta antes de inferir.**
+
+**Verificado:** `./mvnw clean test` -> **2328 pruebas, 0 fallos**. `npx tsc --noEmit` en cero. Los 18 activos de la base de desarrollo coinciden uno por uno con el panel de staging.
+
+## E-101 — El orden del catalogo no llegaba al Plan, y la pausa no sobrevivia a recargar (2026-09-04)
+
+**Sintoma 1:** con `habitos.orden` ya corregido (E-100) y el backend devolviendo bien los 18 en orden, el Plan del movil los seguia mostrando en otro orden.
+
+**Causa:** el orden se descartaba DOS veces en el movil. `usePlanHabitos.ts` hacia `.sort((a,b) => a.time.localeCompare(b.time))` al cargar, y `PlanScreen.tsx` volvia a ordenar por hora dentro de cada franja. Lo segundo era **D-86**, una decision deliberada para que la seccion NOCHE no se leyera 22:30, 18:00, 21:00.
+
+**Solucion:** se respeta el orden del catalogo (`ordenCatalogo`, tomado del indice del array que ya viene ordenado del backend). **Revierte D-86 a pedido del dueno del producto**, y queda documentado en el codigo. En la practica casi no se pierde la lectura cronologica —NOCHE queda 18:00, 21:00, 21:30, 22:00, 22:30— y arregla un caso que el orden por hora empeoraba: `DESPERTAR` no tiene horario y caia al FINAL de la mañana.
+
+**Sintoma 2, encontrado al revisar el pedido de "elegir a que dias aplica":** el interruptor ACTIVO/PAUSADO no sobrevivia a recargar la app. D-87/V23 habian agregado la persistencia (`desbloqueos_habito.pausado_en`), pero **ninguna respuesta de lectura exponia el estado**: `GET /habits` no lo trae y `GET /habit-unlocks` devolvia solo `habitId/unlockDay/chosenAt`. Se persistia y no se leia de vuelta. Se agregaron `paused` y `pausedUntil` a `HabitUnlockItemResponse`.
+
+**Funcionalidad nueva (V31): pausa CON FECHA DE FIN.** `desbloqueos_habito.pausado_hasta date`. Semantica: `pausado_en` NULL = activo; con valor y `pausado_hasta` NULL = pausa indefinida (V23, sin cambios); con fecha = pausado hasta ese dia INCLUSIVE.
+
+**Por que rango de fechas y NO "dias de la semana"** (se evaluaron las dos, decision del dueno sobre recomendacion): un patron semanal ("nunca los sabados") crea un agujero PERMANENTE y silencioso en un programa de 90 dias, y duplicaria una regla que ya existe — que dias aplica un habito lo decide el catalogo via `horarios_habito.tipo_dia`, expuesto como `activeWeekdays`. Dos fuentes respondiendo "¿va hoy?" es la duplicacion que CLAUDE.MD prohibe. El rango se cura solo.
+
+**La propiedad que sostiene todo esto: la reanudacion se DERIVA, no se ejecuta.** `DesbloqueoHabito.estaPausadoEl(fecha)` compara contra el calendario del aprendiz; no hay cron que "despause". Una pausa hasta el domingo termina el domingo aunque el backend haya estado caido toda la semana — misma regla que `.claude/rules/02` (derivar, no acumular). La fecha se evalua SIEMPRE en la zona del participante, nunca con la del servidor (E-91), y por eso la columna es `date` y no `timestamptz`.
+
+**El choque que el dueno anticipo, y como se evito:** el dialogo aparece **solo al pausar**; reactivar sigue siendo un toque. El interruptor conserva un unico significado (encendido/apagado) y la fecha solo agrega "hasta cuando" al apagarlo.
+
+**Bug encontrado probando por HTTP, que ninguna prueba habria atrapado:** al agregar el 4to componente al record `CambiarEstadoHabitoCommand`, la llamada a `SelfValidating.validateConstructorArgs(...)` seguia pasando 3 argumentos. Hibernate Validator responde **400** con `HV000181: Wrong number of parameters ... expects 4 parameters, but got 3`. Compila perfecto: la firma es varargs. **Al agregar un componente a un record que use `validateConstructorArgs`, hay que agregarlo tambien a esa llamada.**
+
+**Verificado:** `./mvnw clean test` -> **2335 pruebas, 0 fallos** (7 nuevas de `DesbloqueoHabitoPausaTest`, incluida la que fija que el habito vuelve solo al dia siguiente). `npx tsc --noEmit` en cero. Flujo completo por HTTP contra el backend real: PUT al plan -> PATCH `{"active":false,"pausedUntil":"2026-09-06"}` -> 200 con `paused:true, pausedUntil:"2026-09-06"` -> la fila en `desbloqueos_habito` lo confirma -> reactivar limpia las dos columnas.
+
+**AISLAMIENTO (pregunta explicita del dueno): la pausa es SOLO del aprendiz que la hace.** `desbloqueos_habito` tiene PK `(participante_id, habito_id)` y el endpoint es self por construccion — `@ActorAutenticado UserId actor` mas el id del HABITO, sin id de aprendiz en la ruta: no hay forma de pausarle un habito a otro. Lo que SI es global es `habitos.orden` (el catalogo compartido, que es lo que se pidio: "orden fijo para todos") y `activeWeekdays`, que se deriva del catalogo y nadie escribe desde la app.

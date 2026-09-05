@@ -86,7 +86,8 @@ public class HabitUnlockController {
             @ActorAutenticado UserId actor, @PathVariable UUID habitId,
             @RequestBody @Valid CambiarEstadoHabitoRequest request) {
         var desbloqueo = cambiarEstadoUseCase.cambiarEstado(
-                new CambiarEstadoHabitoCommand(actor, HabitoId.of(habitId), request.active()));
+                new CambiarEstadoHabitoCommand(actor, HabitoId.of(habitId), request.active(),
+                        request.pausedUntil()));
         return HabitUnlockPlanResponse.HabitUnlockItemResponse.from(desbloqueo);
     }
 

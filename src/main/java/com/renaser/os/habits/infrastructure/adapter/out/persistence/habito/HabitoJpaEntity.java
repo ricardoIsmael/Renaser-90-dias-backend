@@ -1,5 +1,6 @@
 package com.renaser.os.habits.infrastructure.adapter.out.persistence.habito;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -75,6 +76,24 @@ public class HabitoJpaEntity {
     private PlantillaHabitoPersonalJpa plantillaClave;
 
     private String etiquetaMeta;
+
+    /**
+     * Orden de presentacion del catalogo SISTEMA (V28). Se mapea aunque el dominio {@code Habito}
+     * NO lo exponga: es metadato de presentacion del catalogo, no una regla de negocio del
+     * agregado. Sin este campo la consulta derivada
+     * {@code findByAmbitoAndActivoTrueOrderByOrdenAscTituloAsc} ni siquiera se construye y el
+     * contexto no levanta ({@code No property 'orden' found for type 'HabitoJpaEntity'}).
+     *
+     * <p><b>SOLO LECTURA a proposito</b> ({@code insertable/updatable = false}). El agregado
+     * {@code Habito} no lleva {@code orden}, asi que {@code HabitoPersistenceMapper.toEntity}
+     * tendria que inventar un valor en cada guardado — y con {@code @AllArgsConstructor} ese valor
+     * inventado pisaria el de la base en el primer UPDATE, borrando el orden del catalogo entero.
+     * Es exactamente el riesgo que ya advierte el javadoc de esta clase para las columnas no
+     * modeladas. Con estos flags Hibernate lo IGNORA al escribir: la fuente de verdad es la base
+     * (hoy la fija la migracion V28; no hay panel admin que lo cambie en caliente).
+     */
+    @Column(insertable = false, updatable = false)
+    private short orden;
 
     private boolean activo;
 

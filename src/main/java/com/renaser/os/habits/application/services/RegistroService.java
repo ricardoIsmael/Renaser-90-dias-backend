@@ -182,7 +182,10 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         // generando como siempre. Filtrar por "esta en el plan" habria dejado a TODO el padron
         // sin habitos de un dia para el otro, porque hoy esa tabla esta vacia para todos.
         Set<HabitoId> fueraDelPlanDeHoy = loadDesbloqueoPort.deParticipante(participanteId).stream()
-                .filter(d -> d.estaPausado() || d.diaDesbloqueo() > progreso.diaPrograma())
+                // `estaPausadoEl(fecha)` y no `estaPausado()`: desde V31 una pausa puede tener
+                // fecha de fin, y pasada esa fecha el habito vuelve a generarse SOLO — la
+                // reanudacion se deriva del calendario, no la ejecuta ningun cron.
+                .filter(d -> d.estaPausadoEl(fecha) || d.diaDesbloqueo() > progreso.diaPrograma())
                 .map(DesbloqueoHabito::habitoId)
                 .collect(java.util.stream.Collectors.toSet());
 
