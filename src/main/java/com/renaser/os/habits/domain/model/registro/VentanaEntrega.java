@@ -23,9 +23,16 @@ import java.time.ZoneId;
  * <p>{@code plazoEvidencia} = instanteAncla + 10 min de gracia + extension.
  * Pasado esto, el registro queda bloqueado (no acepta evidencia ni completacion)
  * y pasa a EXPIRADO.
+ *
+ * <p>{@code instanteInicio}: el momento en que al aprendiz LE TOCA el habito — su
+ * {@code hora_disparo} de ese dia. Se agrego para los avisos automaticos ("tu habito
+ * empieza en X"), que necesitan un instante que hasta ahora la ventana no guardaba:
+ * {@code instanteAncla} es la hora de CIERRE cuando el habito tiene una, no la de inicio.
+ * Es {@code null} cuando el habito solo tiene hora limite y ninguna de disparo — en ese
+ * caso no hay nada que anunciar como "empieza".
  */
 public record VentanaEntrega(Instant instanteAncla, boolean tieneHoraLimite, Duration extension,
-                              Instant plazoEvidencia) {
+                              Instant plazoEvidencia, Instant instanteInicio) {
 
     /** Minutos de gracia tras la hora fin para entregar evidencia (points.ts:41, GRACE_WINDOW_MINUTES). */
     public static final int GRACIA_MINUTOS = 10;
@@ -63,7 +70,9 @@ public record VentanaEntrega(Instant instanteAncla, boolean tieneHoraLimite, Dur
                 : (deseada.compareTo(margen) > 0 ? margen : deseada);
 
         Instant plazo = instanteAncla.plus(Duration.ofMinutes(GRACIA_MINUTOS)).plus(extension);
-        return new VentanaEntrega(instanteAncla, tieneHoraLimite, extension, plazo);
+        Instant instanteInicio = horaDisparo == null ? null
+                : inicioDia.plus(Duration.ofMinutes(horaDisparo.getHour() * 60L + horaDisparo.getMinute()));
+        return new VentanaEntrega(instanteAncla, tieneHoraLimite, extension, plazo, instanteInicio);
     }
 
     /** Ventanas 22:00 -&gt; 02:00: si el disparo no es anterior a la base, la base cae al dia siguiente. */

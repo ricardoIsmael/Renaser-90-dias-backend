@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services;
 
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase.PreguntarRenasiaCommand;
+import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FiltroLecciones;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FragmentoRelevante;
@@ -89,6 +90,8 @@ class ConversacionRenasiaServiceTest {
     @Mock
     private ChatIAPort chatIAPort;
     @Mock
+    private EjecutarHerramientaAgenteUseCase herramientasUseCase;
+    @Mock
     private IdGenerator idGenerator;
 
     private ConversacionRenasiaService service;
@@ -100,10 +103,11 @@ class ConversacionRenasiaServiceTest {
     void setUp() {
         service = new ConversacionRenasiaService(userSummaryFinder, controlCuotaRenasiaPort,
                 loadConversacionRenasiaPort, saveConversacionRenasiaPort, loadMensajeRenasiaPort,
-                saveMensajeRenasiaPort, vectorStorePort, consultarLeccionesVisiblesPort, chatIAPort, CLOCK,
-                idGenerator);
+                saveMensajeRenasiaPort, vectorStorePort, consultarLeccionesVisiblesPort, chatIAPort,
+                herramientasUseCase, CLOCK, idGenerator);
         // lenient: no todos los casos llegan a generar un id (varios cortan antes, en autorizacion o cuota).
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
+        lenient().when(herramientasUseCase.disponibles(any())).thenReturn(List.of());
         lenient().when(consultarLeccionesVisiblesPort.visiblesParaActor(any())).thenReturn(Set.of());
         lenient().when(consultarLeccionesVisiblesPort.visiblesParaActorEnCurso(any(), any())).thenReturn(Set.of());
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
@@ -428,5 +432,22 @@ class ConversacionRenasiaServiceTest {
 
         verify(loadMensajeRenasiaPort).pagina(activo, COURSE_TUTOR, null, 31);
         verify(loadMensajeRenasiaPort, never()).pagina(any(), eq(COMPANION), any(), anyInt());
+    }
+
+    /**
+     * 2026-09-05: las herramientas del agente le llegan al adaptador del proveedor dentro de la
+     * misma consulta, sin ninguna configuracion propia del adaptador. Es lo que hace que enchufar
+     * un modelo real sea configuracion y no reescritura.
+     */
+    @Test
+    void lasHerramientasDelAgenteViajanEnLaConsultaAlModelo() {
+        stubCaminoFeliz();
+        var herramienta = com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta
+                .sinParametros("consultar_habitos_del_dia", "los habitos de hoy");
+        when(herramientasUseCase.disponibles(COMPANION)).thenReturn(List.of(herramienta));
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(consultaEnviadaAlModelo().herramientas()).containsExactly(herramienta);
     }
 }

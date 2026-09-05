@@ -6,6 +6,7 @@ import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUs
 import com.renaser.os.habits.application.ports.out.guia.LoadGuiaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.domain.model.guia.GuiaHabito;
 import com.renaser.os.habits.domain.model.guia.GuiaHabitoId;
@@ -19,6 +20,7 @@ import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
+import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,13 +57,19 @@ class TracksDelDiaProyeccionServiceTest {
     private LoadPreferenciaHorarioPort loadPreferenciaPort;
     @Mock
     private LoadGuiaHabitoPort loadGuiaPort;
+    /** Agregado 2026-09-05: la proyeccion resuelve la ventana de entrega en la zona del aprendiz.
+     * Sin stub devuelve vacio, la zona cae a UTC y estos casos (que no miran puntos en juego)
+     * siguen valiendo lo mismo que antes. Los casos de zona real viven en
+     * {@code TracksDelDiaPuntosEnJuegoTest}. */
+    @Mock
+    private ConsultarProgresoParticipanteHabitsPort progresoPort;
 
     private TracksDelDiaProyeccionService service;
 
     @BeforeEach
     void setUp() {
         service = new TracksDelDiaProyeccionService(consultarTracksUseCase, generarTracksUseCase, loadHabitoPort,
-                loadHorarioPort, loadPreferenciaPort, loadGuiaPort);
+                loadHorarioPort, loadPreferenciaPort, loadGuiaPort, progresoPort, FixedClock.at(AHORA));
     }
 
     private static Habito habito(String titulo) {

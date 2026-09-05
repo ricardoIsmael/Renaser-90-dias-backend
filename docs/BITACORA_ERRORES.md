@@ -2162,3 +2162,46 @@ vez**, aunque toquen modulos que no se cruzan.
 - El sintoma es facil de confundir con un problema del codigo, porque dice ERROR en rojo y falla el
   build entero. La senal que lo distingue es **"0 pruebas ejecutadas"**: un problema real de codigo
   falla DESPUES de correr pruebas, y nombra cual.
+
+## E-105 — La pantalla de habitos se apagaba todas las noches: `GET /habit-tracks/today` pedia el dia del servidor (2026-09-05)
+
+**Sintoma:** a partir de las 19:00 hora de Lima, `GET /api/v1/habit-tracks/today` devuelve **`[]`**
+para un aprendiz que si tiene habitos generados. En la app, la pantalla de Training entra en su
+estado vacio ("No pudimos cargar" no: *vacio*, que es peor porque parece correcto). A la manana
+siguiente vuelve solo. No hay ningun error en el log, ningun 4xx, ninguna excepcion.
+
+**Causa real.** `HabitTrackController.hoy` resolvia el dia asi:
+
+```java
+return consultarTracksDelDiaUseCase.consultar(actor, actor, LocalDate.now())
+```
+
+`LocalDate.now()` es la fecha del **servidor**. Con el proceso en UTC y el padron en
+`America/Lima` (UTC-5, el default de `participantes_programa.timezone`), a partir de las 19:00
+locales el servidor ya esta en el dia siguiente. La consulta salia con la fecha de MANANA,
+`registros_habito` no tiene ninguna fila para ese dia todavia, y la red de seguridad de
+`TracksDelDiaProyeccionService` no ayudaba: genera los tracks para el dia del participante (hoy) y
+vuelve a consultar por el del servidor (manana), asi que devolvia vacio igual.
+
+Es exactamente la misma familia que **E-91** — "el reloj del servidor no es el reloj del aprendiz"
+— en otro lugar del codigo. E-91 se arreglo en el scheduler y quedo la regla escrita
+(`.claude/rules/02-tiempo-zonas-y-schedulers.md`), pero nadie audito los **controllers** buscando el
+mismo patron.
+
+**Solucion.** La decision "que dia es hoy para esta persona" se movio del adaptador de transporte al
+caso de uso: `ConsultarTracksDelDiaConCatalogoUseCase.consultarHoyDe(participanteId)`, que resuelve
+la fecha con `clock.now().atZone(zona del participante).toLocalDate()`. El controller quedo tonto de
+nuevo, que es lo que la regla 01 pide.
+
+**Como evitar que vuelva a pasar.**
+
+- Test de regresion: `TracksDelDiaPuntosEnJuegoTest.consultaElDiaDelAprendizYNoElDelServidor`, con
+  el reloj fijado a las **01:50 UTC** (20:50 del dia anterior en Lima). Verifica que se consulte el
+  dia del aprendiz y **nunca** el del servidor. Contra el codigo viejo falla.
+- La senal general, ya escrita en la regla 02 y que ahora tiene un segundo caso real:
+  **`LocalDate.now()` y `clock.today()` no sirven para responder "que dia es hoy para un usuario"**.
+  Si el dato depende de una persona, la fecha sale de su zona. Buscar `LocalDate.now()` en
+  `adapter/in/` es una auditoria de diez minutos que conviene repetir.
+- El sintoma no grita: **devolver lista vacia se ve igual que "no tiene nada"**. Un bug de zona casi
+  nunca falla ruidosamente; se manifiesta como datos que faltan en una franja horaria y aparecen
+  solos al otro dia. Si alguien reporta "de noche no me aparece", la primera hipotesis es la zona.

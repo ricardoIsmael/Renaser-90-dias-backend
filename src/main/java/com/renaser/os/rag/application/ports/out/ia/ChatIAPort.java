@@ -3,6 +3,7 @@ package com.renaser.os.rag.application.ports.out.ia;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
+import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -36,15 +37,28 @@ public interface ChatIAPort {
     /**
      * Todo lo que el modelo necesita para una respuesta. {@code ambito} es nulo para el
      * acompanante y opcional para el tutor de cursos; el resto es obligatorio.
+     *
+     * <p>{@code herramientas} (2026-09-05): que puede HACER el agente ademas de responder — hoy,
+     * mirar los habitos del dia, decir cuantos puntos hay en juego y marcar uno como hecho. Viaja
+     * en la consulta y no se configura dentro del adaptador para que QUE herramientas hay sea una
+     * decision de producto y no del proveedor: cambiarlas no toca ningun adaptador, y un
+     * adaptador real solo tiene que traducirlas al formato de su SDK (en Spring AI, un
+     * {@code ToolCallback}) y llamar a {@code EjecutarHerramientaAgenteUseCase.ejecutar} cuando el
+     * modelo pida una. Llega vacia para {@link AgenteConversacional#COURSE_TUTOR}, que no toca
+     * habitos (D-102).
+     *
+     * <p>El adaptador {@code NoOp} las recibe y no las usa — no hay modelo que las pida. Eso es
+     * exactamente lo que hoy significa "definidas y probadas, sin conectar".
      */
     record Consulta(AgenteConversacional agente, String pregunta, List<String> contexto, String ambito,
-                    List<MensajeRenasia> historial) {
+                    List<MensajeRenasia> historial, List<DefinicionHerramienta> herramientas) {
 
         public Consulta {
             Objects.requireNonNull(agente, "agente no puede ser null");
             Objects.requireNonNull(pregunta, "pregunta no puede ser null");
             contexto = List.copyOf(Objects.requireNonNull(contexto, "contexto no puede ser null"));
             historial = List.copyOf(Objects.requireNonNull(historial, "historial no puede ser null"));
+            herramientas = List.copyOf(Objects.requireNonNull(herramientas, "herramientas no puede ser null"));
         }
     }
 }

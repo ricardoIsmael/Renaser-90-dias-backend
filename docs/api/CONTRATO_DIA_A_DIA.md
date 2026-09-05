@@ -56,15 +56,32 @@ Hábitos (tracks) del día del propio actor.
 
 - **Headers**: `X-Actor-Id`.
 - **Request body**: ninguno.
-- **Response 200** — `List<RegistroHabitoResponse>`:
+- **Response 200** — `List<RegistroHabitoConCatalogoResponse>`:
 
 ```json
 [{
   "id": "uuid", "habitoId": "uuid", "fechaEjecucion": "2026-08-26", "diaPrograma": 12,
   "tipoDia": "DISCIPLINA", "esOpcional": false, "estado": "PENDIENTE", "puntosOtorgados": 0,
-  "respuestaTexto": null, "calificacionProductividad": null, "completadoEn": null
+  "respuestaTexto": null, "calificacionProductividad": null, "completadoEn": null,
+  "tituloHabito": "Ducha fría", "tipoHabito": "CHECKBOX", "guia": null,
+  "horaDisparo": "06:00:00", "horaLimite": "08:00:00",
+  "puntosEnJuego": 10, "puntosMaximos": 10, "plazoEvidencia": "2026-08-26T16:10:00Z"
 }]
 ```
+
+> **Corregido 2026-09-05.** Este bloque decía `List<RegistroHabitoResponse>` y omitía los cinco
+> campos de catálogo (`tituloHabito`, `tipoHabito`, `guia`, `horaDisparo`, `horaLimite`) que el
+> endpoint ya devolvía desde el hueco #10. Se agregan además los tres nuevos de D-111.
+
+  `puntosEnJuego` / `puntosMaximos` (D-111): lo que paga completarlo **ahora** y el techo de la
+  escala (D-97: 10 a tiempo o dentro de la extensión; de 10 a 5 decayendo en los 10 minutos de
+  gracia). Son `null` cuando el registro ya está en estado terminal — lo hecho, vencido o fallido
+  no tiene nada en juego. No confundir con `puntosOtorgados`, que es lo que YA se cobró.
+
+  `plazoEvidencia` (D-111): instante ISO en que el registro se bloquea, ya resuelto en la zona
+  horaria del aprendiz. Es lo que permite la cuenta regresiva y ordenar "el próximo a vencer" sin
+  que el cliente conozca zonas, gracia ni extensión. `null` si el hábito no tiene ninguna hora
+  configurada — ése no vence.
 
   `tipoDia`: `DISCIPLINA` cualquier día salvo domingo (`DOMINGO`). El tercer tipo del enum viejo,
   `INTOXICACION` (ciclos fijos), **no está implementado** en esta versión — confirmado en el comentario de
@@ -82,8 +99,15 @@ curl -s http://localhost:8080/api/v1/habit-tracks/today \
 ```
 
 **Trampa**: si nunca corrió el generador nocturno de tracks para hoy (`GenerarTracksDelDiaUseCase`, un
-scheduler), esta lista puede venir vacía aunque el catálogo tenga hábitos — no hay un endpoint síncrono en
-este alcance que dispare la generación bajo demanda.
+scheduler), esta lista puede venir vacía aunque el catálogo tenga hábitos — pero el propio endpoint
+tiene una red de seguridad: si el actor consulta sus propios tracks y no hay ninguno, genera los que
+todavía puede completar a esta hora antes de responder. Por eso este `GET` puede escribir.
+
+> **Corregido 2026-09-05 (E-105).** Hasta este cambio, "hoy" se resolvía con `LocalDate.now()` —
+> la fecha del **servidor**. Con el proceso en UTC y el padrón en `America/Lima`, a partir de las
+> 19:00 hora local este endpoint pedía los registros de MAÑANA y devolvía `[]` todas las noches.
+> Ahora la fecha sale de la zona del participante (`consultarHoyDe`). Si alguien reporta "de noche
+> no me aparecen los hábitos", ése era el motivo.
 
 ### 1.2 `POST /api/v1/habit-tracks/{id}/complete`
 

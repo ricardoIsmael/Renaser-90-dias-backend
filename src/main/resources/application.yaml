@@ -169,6 +169,28 @@ renaser:
       habits-generar-tracks-del-dia:
         lock-at-most-for: PT30M
         lock-at-least-for: PT30S
+      # Avisos automaticos de habitos (barrido cada 5 min). Sin lock, dos instancias recorren
+      # el padron completo y hacen el trabajo doble; lo que NO pueden es duplicar el aviso, eso
+      # ya lo impide la deduplicacion de notificaciones por origen_evento_id (C-7/V16).
+      # lock-at-most-for por debajo del intervalo del cron a proposito: si el proceso muere sin
+      # soltar el lock, se pierde a lo sumo una corrida, no la tarde entera.
+      habits-despachar-avisos:
+        lock-at-most-for: PT4M
+        lock-at-least-for: PT10S
+  habits:
+    # Cuanto antes se avisa cada cosa (2026-09-05). NO son constantes en el codigo porque el
+    # dueno todavia no confirmo los numeros y este repo tiene una regla explicita contra
+    # rellenar reglas de negocio con supuestos: estos dos valores son PROVISORIOS y estan a la
+    # espera de confirmacion. Ver AvisosHabitoConfig para el detalle.
+    #
+    # antelacion-vencimiento se mide contra el PLAZO de entrega (hora limite + gracia +
+    # extension), no contra la hora limite: desde D-97 entregar dentro de la extension paga el
+    # puntaje completo, asi que la hora limite ya no es el momento en que se pierde algo.
+    #
+    # Poner cualquiera de los dos en PT0S apaga ese aviso, sin ninguna bandera aparte.
+    avisos:
+      antelacion-inicio: ${HABITS_AVISO_ANTELACION_INICIO:PT15M}
+      antelacion-vencimiento: ${HABITS_AVISO_ANTELACION_VENCIMIENTO:PT30M}
   # Que proveedor de IA se usa. `noop` (el default) mantiene los adaptadores vacios: la app
   # arranca sin credenciales y responde con placeholders, que es una propiedad valiosa de este
   # repo y conviene no perder. `google` los reemplaza por los adaptadores reales de Gemini.

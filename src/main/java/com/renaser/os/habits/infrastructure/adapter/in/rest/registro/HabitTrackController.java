@@ -21,7 +21,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -48,11 +47,22 @@ public class HabitTrackController {
         this.urlEvidenciaUseCase = urlEvidenciaUseCase;
     }
 
-    /** Hueco #10: cada registro trae el catalogo resuelto (titulo/tipo/guia/horario) — sin N+1. */
+    /**
+     * Hueco #10: cada registro trae el catalogo resuelto (titulo/tipo/guia/horario) — sin N+1.
+     * Desde 2026-09-05 tambien los puntos en juego y el plazo de entrega.
+     *
+     * <p><b>Corregido 2026-09-05 (E-105).</b> Esta linea era
+     * {@code consultar(actor, actor, LocalDate.now())}: la fecha del SERVIDOR. Con el proceso en
+     * UTC y el padron en America/Lima (UTC-5), desde las 19:00 hora local pedia los registros de
+     * MANANA y devolvia lista vacia — la pantalla de habitos se apagaba todas las noches, justo
+     * en la franja de mayor uso. Cual es "hoy" para una persona depende de su zona, asi que la
+     * decision se movio al caso de uso ({@code consultarHoyDe}) y este controller volvio a ser
+     * tonto: regla 01, nada de calculos ni de reloj en un adaptador de transporte.
+     */
     @RequiresPermission(value = Permission.USE_APP, scope = "opera sobre los habitos del propio actor")
     @GetMapping("/today")
     public List<RegistroHabitoConCatalogoResponse> hoy(@ActorAutenticado UserId actor) {
-        return consultarTracksDelDiaUseCase.consultar(actor, actor, LocalDate.now())
+        return consultarTracksDelDiaUseCase.consultarHoyDe(actor)
                 .stream().map(RegistroHabitoConCatalogoResponse::from).toList();
     }
 
