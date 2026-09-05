@@ -404,6 +404,18 @@ Tests: `RenombreHabitoTest` (dominio — título/motivo vacíos o demasiado larg
 
 Tests: `DesbloqueoHabitoServiceTest` — suspendido rechazado, sin desbloqueos → `enabled=false`, con desbloqueos → `enabled=true` y los items.
 
+> **Corregido 2026-09-04 (D-87 y D-88).** El título de esta sección decía **SOLO LECTURA** y el párrafo de arriba decía "sin escribir ni reorganizar nada": las dos cosas dejaron de ser ciertas y se corrigen acá en vez de más adelante. Hoy `habit-unlocks` **escribe**:
+>
+> - `PUT /api/v1/habit-unlocks/{habitId}` — agrega el hábito al plan. Cuerpo **opcional** `{"unlockDay": n}` (1–90): para qué día del programa quiere el aprendiz que arranque. **Sin cuerpo se comporta como antes** (arranca hoy), así que ningún cliente ya publicado cambia. Pedir un día **anterior** al día actual del aprendiz devuelve **400** — los días ya vividos ya generaron o no sus registros, y desbloquear hacia atrás le mentiría a la coherencia de esos días. Idempotente por la PK compuesta: volver a elegir con otro `unlockDay` **no** mueve la fila; para cambiar el día hay que `DELETE` y volver a elegir.
+> - `PATCH /api/v1/habit-unlocks/{habitId}` — interruptor ACTIVO/PAUSADO **de ese aprendiz** (`pausado_en`, V23). Nunca toca `habitos.activo`, que es del catálogo compartido y es de admin.
+> - `DELETE /api/v1/habit-unlocks/{habitId}` — lo saca del plan. Idempotente.
+>
+> Lo que sigue **sin** portarse es el ALGORITMO de escalonamiento por lotes (D-H2), que es otra cosa: esto es alta/baja autoservicio de a un hábito.
+>
+> **`dia_desbloqueo` ya no es un número decorativo.** `RegistroService.generarInterno` saltea los hábitos cuya fila tenga `dia_desbloqueo > diaPrograma` (además de los pausados). Antes de D-88 el número se guardaba y el hábito generaba track igual esa misma noche. Se mantiene la compatibilidad de D-87: un hábito **sin fila** en `desbloqueos_habito` se sigue generando como siempre.
+>
+> Tests que lo cubren: `DesbloqueoHabitoServiceTest` (día futuro, día actual, día ya vivido → 400, fuera de rango → violación de constraint) y `RegistroServiceTest` (`generarSalteaElHabitoElegidoParaMasAdelante`, `generarIncluyeElHabitoCuandoLlegaSuDia`).
+
 ---
 
 ## 13. Hueco #13 — evidencia al cerrar la racha "Día sin celular" — completado 2026-08-26

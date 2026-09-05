@@ -44,4 +44,13 @@ public interface EnviarEmailPort {
      * {@code enviarInvitacionStaff}.
      */
     void enviarCodigoVerificacionEmail(String destinatarioEmail, String codigo);
+
+    /**
+     * Codigo de 6 digitos para RECUPERAR la contrasena desde la app (2026-09-04, D-102), en
+     * lugar del link de {@link #enviarResetContrasena} — que sigue existiendo para un frontend
+     * web. Mismo criterio de privacidad que {@link #enviarCodigoVerificacionEmail}: el codigo
+     * viaja en claro por aca y nunca se loguea. Copia de correo distinta a la del alta: quien
+     * lo recibe ya tiene cuenta y esta cambiando su contrasena, no verificando una casilla.
+     */
+    void enviarCodigoResetContrasena(String destinatarioEmail, String codigo);
 }

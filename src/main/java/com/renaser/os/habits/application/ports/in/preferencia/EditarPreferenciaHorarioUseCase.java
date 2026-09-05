@@ -17,12 +17,26 @@ import java.time.LocalTime;
 public interface EditarPreferenciaHorarioUseCase {
 
     /**
-     * Si la ventana de HOY de este habito ya arranco, el cambio queda PROGRAMADO para
-     * manana (nunca se rechaza — "no se improvisa el dia", pero tampoco se pierde la
-     * decision). Si no, rige desde ahora. Antes del dia 7 de programa (o del limite propio
-     * del habito, el que sea mayor) los cambios inmediatos son ilimitados; despues, cuesta
-     * cupo semanal — {@code WEEKLY_SCHEDULE_EDIT_LIMIT} habitos DISTINTOS por semana de
-     * programa, agotado el cupo lanza {@link IllegalStateException}.
+     * <b>D-91 — el dia en curso no se edita, nunca.</b> Todo cambio de horario queda PROGRAMADO
+     * para el dia siguiente, sin importar la hora a la que se pida ni si la ventana del habito
+     * ya arranco. La regla del producto es "el dia se cierra a la medianoche": para que un
+     * horario rija el dia D hay que pedirlo antes de que termine el dia D-1.
+     *
+     * <p>Antes de D-91 el cambio se aplicaba en el acto si la hora de disparo todavia no habia
+     * llegado, y solo se difería si ya habia pasado. Eso permitia reacomodar el dia en curso,
+     * que es justamente lo que el dueño pidio impedir.
+     *
+     * <p>Nunca se rechaza por la hora: "no se improvisa el dia" no puede volverse "perdiste la
+     * decision". El pedido se guarda y {@code PromocionCambioHorarioService} lo hace regir esa
+     * noche. Un segundo pedido sobre el mismo habito el mismo dia pisa al anterior (la PK de
+     * {@code cambios_horario_pendientes} es participante+habito), asi que el aprendiz puede
+     * cambiar de opinion todas las veces que quiera antes de la medianoche.
+     *
+     * <p>Si se rechaza por CUPO: hasta el dia 7 de programa (o el limite propio del habito, el
+     * que sea mayor) los cambios son ilimitados; despues cuesta cupo semanal —
+     * {@code WEEKLY_SCHEDULE_EDIT_LIMIT} habitos DISTINTOS por semana, y agotado lanza
+     * {@link IllegalStateException}. El cupo se mide contra la semana de la FECHA EFECTIVA y
+     * cuenta tambien los cambios ya programados que van a regir en esa semana.
      */
     ResultadoEdicionPreferencia editar(EditarPreferenciaHorarioCommand command);
 

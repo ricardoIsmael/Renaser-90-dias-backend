@@ -53,6 +53,14 @@ public sealed interface EventoRenasia {
     }
 
     /** Marca el final del streaming. Siempre es el ultimo evento de la secuencia. */
+    /**
+     * D-100: el modelo no pudo responder. Antes esto se tragaba en silencio y el cliente recibia
+     * un {@code Fin} pelado — tres preguntas del aprendiz y ninguna respuesta, sin saber por que.
+     * {@code mensaje} es apto para mostrar (nunca lleva la traza ni datos personales).
+     */
+    record Error(String mensaje) implements EventoRenasia {
+    }
+
     record Fin() implements EventoRenasia {
     }
 }

@@ -77,7 +77,7 @@ En ambos casos, después de 3 reintentos del scheduler el item cae a `REVISION_M
 
 | Problema | Detalle |
 |---|---|
-| `POST /api/v1/classroom/clase-diaria` no existe | `claseDiaria.ts:completarClaseDiaria()` llama un POST; `ClaseDiariaController` solo tiene `@GetMapping`. 405 garantizado. |
+| ~~`POST /api/v1/classroom/clase-diaria` no existe~~ **RESUELTO** | Ya existe (`ClaseDiariaController.completar`): cierra el habito `DAILY_CLASS` y marca la leccion vista, en una transaccion. Ver `docs/api/CONTRATO_CONTENIDO_IA.md` §1.11-bis. |
 | Endpoints sin usar por el frontend | `GET /api/v1/cursos/bloqueados` (el frontend usa un RPC de Supabase en su lugar); `POST/DELETE /api/v1/lecciones/{id}/complete` (el frontend escribe directo a la tabla `leccion_progreso` de Supabase). |
 
 ---

@@ -72,6 +72,22 @@ class SmtpEnviarEmailAdapterTest {
     }
 
     @Test
+    @DisplayName("el codigo de reset viaja en el cuerpo con SU asunto, y sin ningun link de reset (D-102)")
+    void enviaElCodigoDeResetSinLink() throws Exception {
+        prepararMimeMessage();
+
+        adapter.enviarCodigoResetContrasena(DESTINATARIO, "483920");
+
+        MimeMessage enviado = capturarEnviado();
+        assertThat(enviado.getSubject()).isEqualTo("Tu codigo para recuperar la contrasena de Renaser");
+        assertThat(enviado.getAllRecipients()[0]).hasToString(DESTINATARIO);
+        String cuerpo = contenido(enviado);
+        assertThat(cuerpo).contains("483920");
+        // La persona esta dentro de la app: un link a un frontend web inexistente solo la confundiria.
+        assertThat(cuerpo).doesNotContain(URL_RESET).doesNotContain("?token=");
+    }
+
+    @Test
     @DisplayName("el correo de activacion lleva el link con el token sobre la URL configurada")
     void enviaLaActivacionConSuLink() throws Exception {
         prepararMimeMessage();

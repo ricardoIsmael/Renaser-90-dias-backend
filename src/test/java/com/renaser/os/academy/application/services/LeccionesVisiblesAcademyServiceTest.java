@@ -31,6 +31,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -151,5 +153,42 @@ class LeccionesVisiblesAcademyServiceTest {
         lenient().when(loadLeccionPort.listarIdentificadores()).thenReturn(List.of());
 
         assertThat(service.leccionesVisiblesPara(ACTOR_ID)).isEmpty();
+    }
+
+    // ─── D-102: la variante por curso (para Sparkie, el tutor de cursos de `rag`) ───
+
+    @Test
+    @DisplayName("D-102: por curso devuelve solo las lecciones de ESE curso, aunque otros sean visibles")
+    void porCursoDevuelveSoloLasLeccionesDeEseCurso() {
+        when(progresoPort.deParticipante(ACTOR_ID))
+                .thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, 10, false)));
+        when(loadCursoPort.listarTodos()).thenReturn(List.of(curso("c1", null), curso("c2", null)));
+        when(loadSeccionCursoPort.listarTodas()).thenReturn(List.of());
+        when(loadLeccionPort.listarIdentificadores()).thenReturn(List.of(
+                new LeccionCatalogo(LeccionId.of("l1"), CursoId.of("c1"), null),
+                new LeccionCatalogo(LeccionId.of("l2"), CursoId.of("c2"), null)));
+
+        assertThat(service.leccionesVisiblesPara(ACTOR_ID, "c2")).containsExactly("l2");
+    }
+
+    @Test
+    @DisplayName("D-102: por curso respeta el mismo gate — un curso bloqueado por dia da vacio")
+    void porCursoBloqueadoDevuelveVacioSinConsultarLecciones() {
+        when(progresoPort.deParticipante(ACTOR_ID))
+                .thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, 10, false)));
+        when(loadCursoPort.listarTodos()).thenReturn(List.of(curso("c1", null), curso("c2", 30)));
+
+        assertThat(service.leccionesVisiblesPara(ACTOR_ID, "c2")).isEmpty();
+        verify(loadLeccionPort, never()).listarIdentificadores();
+    }
+
+    @Test
+    @DisplayName("D-102: por curso inexistente -> vacio, no una excepcion")
+    void porCursoInexistenteDevuelveVacio() {
+        when(progresoPort.deParticipante(ACTOR_ID))
+                .thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, 10, false)));
+        when(loadCursoPort.listarTodos()).thenReturn(List.of(curso("c1", null)));
+
+        assertThat(service.leccionesVisiblesPara(ACTOR_ID, "no-existe")).isEmpty();
     }
 }

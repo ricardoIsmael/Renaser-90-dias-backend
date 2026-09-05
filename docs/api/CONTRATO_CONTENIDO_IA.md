@@ -177,7 +177,20 @@ curl -s -X DELETE http://localhost:8080/api/v1/lecciones/leccion-1/complete \
 - **Quién puede llamarlo:** **solo TRAINEE**, con chequeo explícito de rol (no solo de visibilidad de catálogo) — 403 `"Solo un aprendiz tiene clase diaria"` para cualquier otro rol. 404/403 estándar de actor antes de eso.
 - Otro 403 posible: `"La clase diaria no esta disponible para tu cuenta"`, si la clase encontrada deja de ser visible en el último chequeo (ej. curso despublicado).
 - Selección real: cursos publicados con `dia_desbloqueo <= programDay`; dentro de ellos, la **sección con `dia_desbloqueo` más alto que siga siendo `<= programDay`** (porque desde el día ~15 las secciones representan rangos, no un día puntual); dentro de esa sección, la lección cuyo título matchea `/\bclase\b/i`, o si ninguna matchea, la primera por orden.
-- **Solo lectura** — completar la clase (que en el código viejo además cerraba el hábito y otorgaba puntos) queda pendiente de un hook hacia `habits`, no existe todavía.
+- **Solo lectura.** Completarla es el `POST` de abajo.
+
+### 1.11-bis `POST /api/v1/classroom/clase-diaria` — completar la clase del día
+
+- **Body:** `{"leccionId": "...", "resumen": "..."}`. `resumen`: **mínimo 15 y máximo 2000 caracteres** (decisión del dueño del producto, 2026-09-04 — antes el mínimo era 20, espejo del backend viejo, y no había máximo). Los dos límites viven en una sola constante compartida por los dos módulos: `habits.api.CompletarClaseDiariaHabitoUseCase.RESUMEN_MIN_LENGTH`/`RESUMEN_MAX_LENGTH`, que `academy` referencia en vez de repetir el número.
+- **200 OK** → `CompletarClaseDiariaResponse` (camelCase): `{"leccionId": "...", "registroHabitoId": "...", "puntosOtorgados": 10}`.
+- **Hace DOS escrituras, en este orden** (mismo que el repo viejo, envueltas en una `@Transactional` local): (1) cierra el registro de HOY del hábito de catálogo `DAILY_CLASS` — puntos, racha y ventana de entrega, dominio de `habits`, vía `habits.api.CompletarClaseDiariaHabitoUseCase`; (2) marca la lección como vista en `leccion_progreso` (`CompletarLeccionUseCase`). **Ambos pasos son idempotentes**: repetir el POST devuelve el resultado ya otorgado sin volver a sumar puntos (`EstadoRegistro.COMPLETADO` es terminal).
+- **El servidor revalida cuál es la clase de hoy**: si `leccionId` no es la que resuelve el `GET`, responde **403** `"Esta no es la clase diaria de hoy"` — el cliente nunca decide qué lección se completa.
+- **409** `"No hay una clase diaria disponible para completar hoy"` si el `GET` no está en `available`. **404** si no hay registro de `DAILY_CLASS` generado para hoy.
+- **Sin este POST el hábito NO queda completado**: no hay estado intermedio "completado sin resumen". Si el aprendiz abandona el flujo a mitad de camino, su Clase Diaria sigue `PENDIENTE` y puede reintentarla desde Training.
+
+```bash
+curl -s -X POST http://localhost:8080/api/v1/classroom/clase-diaria   -H "X-Actor-Id: 11111111-1111-1111-1111-111111111111" -H 'Content-Type: application/json'   -d '{"leccionId":"leccion-1","resumen":"Entendi que la disciplina se construye a diario"}'
+```
 
 ```bash
 curl -s http://localhost:8080/api/v1/classroom/clase-diaria \

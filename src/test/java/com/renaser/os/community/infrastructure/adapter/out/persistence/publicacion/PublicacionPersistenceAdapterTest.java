@@ -153,4 +153,87 @@ class PublicacionPersistenceAdapterTest {
         assertThat(pagina).hasSize(1);
         assertThat(pagina.get(0).id()).isEqualTo(oculta1.id());
     }
+
+    // ────────────────────────────────────────────────────────────────────────────────────
+    // existeDeAutorEntre — lo consume community.api.PublicacionMuroFinder, y de ahi `habits`
+    // para decidir si el POST DIARIO EN COMUNIDAD esta cumplido. Va contra Postgres real y no
+    // con mocks por el mismo motivo que el resto de este archivo: es una query derivada por
+    // nombre de metodo, y que compile no prueba que Spring Data la sepa traducir.
+    // ────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * La ventana es {@code [desde, hasta)}. Se prueban los DOS bordes con publicaciones
+     * exactamente en ellos, que es donde un {@code >} en vez de {@code >=} (o un {@code <=} en
+     * vez de {@code <}) le regalaria — o le negaria — el habito a alguien por un microsegundo.
+     */
+    @Test
+    void existeDeAutorEntreIncluyeElBordeDeAbajoYExcluyeElDeArriba() {
+        Instant desde = Instant.parse("2026-08-24T05:00:00Z"); // 24/08 00:00 en Lima
+        Instant hasta = Instant.parse("2026-08-25T05:00:00Z"); // 25/08 00:00 en Lima
+
+        crearPublicacion(null, desde);
+        assertThat(adapter.existeDeAutorEntre(autorId, desde, hasta)).isTrue();
+
+        UserId otroAutor = autorSuelto();
+        crearPublicacionDe(otroAutor, hasta);
+        // La publicacion del borde superior pertenece al dia SIGUIENTE, no a este.
+        assertThat(adapter.existeDeAutorEntre(otroAutor, desde, hasta)).isFalse();
+    }
+
+    @Test
+    void existeDeAutorEntreNoMiraLasPublicacionesDeOtroAutorNiOtroDia() {
+        Instant desde = Instant.parse("2026-08-24T05:00:00Z");
+        Instant hasta = Instant.parse("2026-08-25T05:00:00Z");
+
+        // Del propio autor pero del dia anterior: no alcanza para dar por cumplido el de hoy.
+        crearPublicacion(null, Instant.parse("2026-08-23T18:00:00Z"));
+        assertThat(adapter.existeDeAutorEntre(autorId, desde, hasta)).isFalse();
+
+        // De OTRO autor, dentro de la ventana: tampoco cuenta para este.
+        crearPublicacionDe(autorSuelto(), Instant.parse("2026-08-24T15:00:00Z"));
+        assertThat(adapter.existeDeAutorEntre(autorId, desde, hasta)).isFalse();
+    }
+
+    /**
+     * Una publicacion moderada SIGUE contando: la persona publico, y ocultarla es un acto
+     * posterior de otra persona. Es la diferencia deliberada contra {@code feed}, que si filtra
+     * {@code oculta = false} — el javadoc de {@code PublicacionMuroFinder} lo explica.
+     */
+    @Test
+    void existeDeAutorEntreCuentaTambienLaPublicacionOculta() {
+        Instant desde = Instant.parse("2026-08-24T05:00:00Z");
+        Instant hasta = Instant.parse("2026-08-25T05:00:00Z");
+        Publicacion publicada = crearPublicacion(null, Instant.parse("2026-08-24T15:00:00Z"));
+        publicada.ocultar(Instant.parse("2026-08-24T16:00:00Z"));
+        adapter.save(publicada);
+
+        assertThat(adapter.feed(null, 10, null)).isEmpty(); // el feed ya no la muestra
+        assertThat(adapter.existeDeAutorEntre(autorId, desde, hasta)).isTrue(); // el habito si
+    }
+
+    /** Un autor sin ninguna publicacion: el caso que mantiene el habito pendiente. */
+    @Test
+    void existeDeAutorEntreEsFalseSinNingunaPublicacion() {
+        assertThat(adapter.existeDeAutorEntre(autorId, Instant.parse("2026-08-24T05:00:00Z"),
+                Instant.parse("2026-08-25T05:00:00Z"))).isFalse();
+    }
+
+    /** Otro usuario con fila propia en `usuarios` — la FK de `publicaciones_muro` la exige. */
+    private UserId autorSuelto() {
+        UserId otro = UserId.of(UUID.randomUUID());
+        entityManager.createNativeQuery("""
+                        INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
+                        VALUES (:id, :email, 'Fixture 2', CAST('APRENDIZ' AS renaser.rol_usuario), 'ACTIVO')
+                        """)
+                .setParameter("id", otro.value())
+                .setParameter("email", otro + "@renaser.test")
+                .executeUpdate();
+        return otro;
+    }
+
+    private void crearPublicacionDe(UserId otroAutor, Instant creadoEn) {
+        adapter.save(Publicacion.publicar(PublicacionId.of(UUID.randomUUID()), otroAutor, "texto de prueba",
+                List.of(new MediaPublicacion(MediaPublicacion.BUCKET_DEFAULT, "ruta/1.jpg", "image/jpeg", 0)), null,
+                creadoEn));
+    }
 }

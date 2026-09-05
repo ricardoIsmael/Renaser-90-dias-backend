@@ -43,6 +43,10 @@ final class EventoRenasiaSseMapper {
                 var lecciones = nodo.putArray("lecciones");
                 fuentes.leccionIds().forEach(lecciones::add);
             }
+            case EventoRenasia.Error error -> {
+                nodo.put("tipo", "error");
+                nodo.put("valor", error.mensaje());
+            }
             case EventoRenasia.Fin ignorado -> nodo.put("tipo", "fin");
         }
         try {

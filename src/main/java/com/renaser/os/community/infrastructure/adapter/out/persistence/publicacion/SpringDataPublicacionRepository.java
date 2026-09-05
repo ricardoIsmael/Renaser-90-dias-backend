@@ -75,5 +75,17 @@ interface SpringDataPublicacionRepository extends JpaRepository<PublicacionJpaEn
 
     long countByAutorId(UUID autorId);
 
+    /**
+     * {@code [desde, hasta)} — media ventana. Derivado por nombre de metodo y no con
+     * {@code @Query}: no cae en E-31 (los dos parametros se comparan contra una columna
+     * tipada, nunca aparecen sueltos en un {@code IS NULL}) y Spring Data lo traduce a un
+     * {@code EXISTS} que corta en la primera fila. Lo cubre el indice `muro_autor_idx`
+     * sobre `autor_id` (V1).
+     *
+     * <p>Deliberadamente SIN filtro por `oculta`: ver el javadoc de
+     * {@code community.api.PublicacionMuroFinder}.
+     */
+    boolean existsByAutorIdAndCreadoEnGreaterThanEqualAndCreadoEnLessThan(UUID autorId, Instant desde, Instant hasta);
+
     Optional<PublicacionJpaEntity> findFirstByOcultaFalseOrderByCreadoEnDesc();
 }

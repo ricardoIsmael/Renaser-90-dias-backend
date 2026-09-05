@@ -18,6 +18,11 @@ import java.util.UUID;
  * {@code usuarioId} referencia `conversaciones_renasia.usuario_id` (la conversacion), no
  * `usuarios` directamente — docs/MODULO_RAG.md §2.
  *
+ * <p><b>D-102:</b> {@code agente} es la columna {@code text} de V27 ({@code COMPANION} /
+ * {@code COURSE_TUTOR}, con CHECK en la base). Se mapea como {@code String} y se traduce al enum
+ * de dominio en el mapper — no como {@code @Enumerated}, porque la columna es texto plano con
+ * CHECK, no un tipo Postgres como {@code rol_mensaje_renasia}.
+ *
  * <p><b>D-49:</b> {@code marcadoPorUsuario}, {@code notaMarca} y {@code anuladoPorAdmin} se
  * mapean SOLO para persistir sus valores por defecto de la BD congelada
  * ({@code false}/{@code null}) — no hay caso de uso ni endpoint que los use, ni el dominio
@@ -38,6 +43,8 @@ public class MensajeRenasiaJpaEntity {
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     private RolMensajeRenasiaJpa rol;
+
+    private String agente;
 
     private String contenido;
 

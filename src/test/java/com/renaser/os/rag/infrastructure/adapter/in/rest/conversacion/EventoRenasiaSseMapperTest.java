@@ -41,4 +41,10 @@ class EventoRenasiaSseMapperTest {
 
         assertThat(json).isEqualTo("{\"tipo\":\"texto\",\"valor\":\"dijo \\\"hola\\\" y salto de linea\\n\"}");
     }
+
+    @Test
+    void errorSeSerializaConTipoYValor() {
+        String json = EventoRenasiaSseMapper.aJson(new EventoRenasia.Error("no pude"));
+        org.assertj.core.api.Assertions.assertThat(json).contains("\"tipo\":\"error\"").contains("no pude");
+    }
 }

@@ -58,11 +58,33 @@ class GoogleGenAiClientesConfig {
         return Client.builder().apiKey(apiKey).build();
     }
 
+    /**
+     * {@code renaser.ia.busqueda-web} enciende el grounding con Google Search (2026-09-04). Es
+     * lo que le permite a Renasia responder algo util cuando la base de conocimiento del
+     * programa no cubre la pregunta, en vez de abstenerse — que era la queja concreta del
+     * dueño: el asistente quedaba mudo demasiado seguido.
+     *
+     * <p><b>Verificado contra el bytecode de {@code spring-ai-google-genai:2.0.0}</b>, no contra
+     * la documentacion (misma regla que el resto de esta clase):
+     * {@code GoogleGenAiChatOptions.Builder.googleSearchRetrieval(Boolean)} existe, y
+     * {@code GoogleGenAiChatModel} lo traduce a
+     * {@code Tool.builder().googleSearch(GoogleSearch.builder().build())} al armar el pedido.
+     *
+     * <p>Se separa en su propio bean de opciones para no pasar del techo de 4 parametros por
+     * metodo (CLAUDE.MD sec. 5.4.8) al sumarle el interruptor.
+     */
+    @Bean
+    GoogleGenAiChatOptions googleGenAiChatOptions(@Value("${spring.ai.google.genai.chat.model}") String modelo,
+            @Value("${renaser.ia.busqueda-web}") Boolean busquedaWeb) {
+        return GoogleGenAiChatOptions.builder()
+                .model(modelo)
+                .googleSearchRetrieval(busquedaWeb)
+                .build();
+    }
+
     @Bean
     GoogleGenAiChatModel googleGenAiChatModel(Client googleGenAiClient, ToolCallingManager toolCallingManager,
-            ObservationRegistry observationRegistry,
-            @Value("${spring.ai.google.genai.chat.model}") String modelo) {
-        GoogleGenAiChatOptions opciones = GoogleGenAiChatOptions.builder().model(modelo).build();
+            ObservationRegistry observationRegistry, GoogleGenAiChatOptions opciones) {
         return GoogleGenAiChatModel.builder()
                 .genAiClient(googleGenAiClient)
                 .options(opciones)

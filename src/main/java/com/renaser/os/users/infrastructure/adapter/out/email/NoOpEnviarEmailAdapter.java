@@ -76,4 +76,12 @@ public class NoOpEnviarEmailAdapter implements EnviarEmailPort {
                 + "(adaptador placeholder, sin proveedor real todavia; codigo de {} digitos generado)",
                 codigo.length());
     }
+
+    @Override
+    public void enviarCodigoResetContrasena(String destinatarioEmail, String codigo) {
+        // Mismo criterio que enviarCodigoVerificacionEmail: ni email ni codigo en el log.
+        log.info("[users.NoOpEnviarEmailAdapter] email de codigo de reset de contrasena simulado "
+                + "(adaptador placeholder, sin proveedor real todavia; codigo de {} digitos generado)",
+                codigo.length());
+    }
 }

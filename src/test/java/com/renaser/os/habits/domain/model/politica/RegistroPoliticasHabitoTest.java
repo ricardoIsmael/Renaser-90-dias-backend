@@ -39,7 +39,7 @@ class RegistroPoliticasHabitoTest {
             }
 
             @Override
-            public DecisionPolitica puedeCompletarseDirecto(Habito habito) {
+            public DecisionPolitica puedeCompletarseDirecto(Habito habito, ContextoCompletar contexto) {
                 return decision;
             }
         };
@@ -52,7 +52,10 @@ class RegistroPoliticasHabitoTest {
         var politica = registro.para(habito(TipoHabito.CHECKBOX, "CUALQUIERA"));
 
         assertThat(politica).isSameAs(RegistroPoliticasHabito.GENERICA);
-        assertThat(politica.puedeCompletarseDirecto(habito(TipoHabito.CHECKBOX, null)))
+        // sinHechosExternos(): la GENERICA no mira ningun hecho, y si lo mirara este contexto
+        // estallaria en vez de dejar pasar el error en silencio.
+        assertThat(politica.puedeCompletarseDirecto(habito(TipoHabito.CHECKBOX, null),
+                ContextoCompletar.sinHechosExternos()))
                 .isInstanceOf(DecisionPolitica.Procede.class);
     }
 

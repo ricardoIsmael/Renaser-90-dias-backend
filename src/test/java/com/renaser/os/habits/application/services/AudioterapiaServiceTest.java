@@ -105,6 +105,96 @@ class AudioterapiaServiceTest {
         });
     }
 
+    /**
+     * Catalogo uniforme de 7 dias por semana — la regla que el dueño confirmó el 2026-08-28 (D-49):
+     * la audioterapia es la misma durante 7 dias y recién ahí pasa a la siguiente. Con dia_inicio=11
+     * eso da ventanas 11-17, 18-24, 25-31, ...
+     */
+    private static List<Audioterapia> catalogoUniformeDeSieteDias(int semanas) {
+        return java.util.stream.IntStream.rangeClosed(1, semanas)
+                .mapToObj(s -> new Audioterapia(s, "Semana " + s, "ruta/" + s + ".mp3", "audio/mpeg", 1000, 7))
+                .toList();
+    }
+
+    @Test
+    void elDiaAnteriorAlDeInicioTodaviaNoDesbloquea() {
+        progresoDia(10);
+
+        assertThat(service.consultar(trainee)).isInstanceOf(EsperandoContenido.class);
+    }
+
+    @Test
+    void elUltimoDiaDeLaPrimeraVentanaSigueEnLaSemanaUno() {
+        progresoDia(17);
+        when(catalogoPort.todasOrdenadas()).thenReturn(catalogoUniformeDeSieteDias(3));
+
+        assertThat(service.consultar(trainee)).isInstanceOfSatisfying(AudioDeLaSemana.class, audio -> {
+            assertThat(audio.semanaActual()).isEqualTo(1);
+            assertThat(audio.diaSiguienteCambio()).isEqualTo(18);
+        });
+    }
+
+    @Test
+    void elDiaDieciochoRecienCambiaALaSemanaDos() {
+        progresoDia(18);
+        when(catalogoPort.todasOrdenadas()).thenReturn(catalogoUniformeDeSieteDias(3));
+
+        assertThat(service.consultar(trainee)).isInstanceOfSatisfying(AudioDeLaSemana.class, audio -> {
+            assertThat(audio.semanaActual()).isEqualTo(2);
+            assertThat(audio.diaSiguienteCambio()).isEqualTo(25);
+        });
+    }
+
+    @Test
+    void elUltimoDiaDeLaSegundaVentanaSigueEnLaSemanaDos() {
+        progresoDia(24);
+        when(catalogoPort.todasOrdenadas()).thenReturn(catalogoUniformeDeSieteDias(3));
+
+        assertThat(service.consultar(trainee)).isInstanceOfSatisfying(AudioDeLaSemana.class, audio -> {
+            assertThat(audio.semanaActual()).isEqualTo(2);
+            assertThat(audio.diaSiguienteCambio()).isEqualTo(25);
+        });
+    }
+
+    @Test
+    void elDiaVeinticincoCambiaALaSemanaTres() {
+        progresoDia(25);
+        when(catalogoPort.todasOrdenadas()).thenReturn(catalogoUniformeDeSieteDias(3));
+
+        assertThat(service.consultar(trainee)).isInstanceOfSatisfying(AudioDeLaSemana.class, audio -> {
+            assertThat(audio.semanaActual()).isEqualTo(3);
+            assertThat(audio.diaSiguienteCambio()).isEqualTo(32);
+        });
+    }
+
+    /**
+     * Regresión de mapeo: con las 13 audioterapias del catálogo real a 7 días cada una y dia_inicio=11,
+     * la semana 13 cae en los días 95-101 — fuera de los 90 días del programa. Este test fija el mapeo
+     * completo para que un cambio de fórmula lo rompa de inmediato.
+     */
+    @Test
+    void elCatalogoRealDeTreceSemanasSeMapeaDeSieteEnSieteDesdeElDiaOnce() {
+        List<Audioterapia> catalogo = catalogoUniformeDeSieteDias(13);
+        for (int semana = 1; semana <= 13; semana++) {
+            int primerDia = 11 + (semana - 1) * 7;
+            int ultimoDia = primerDia + 6;
+            for (int dia : new int[]{primerDia, ultimoDia}) {
+                AudioterapiaService aislado = new AudioterapiaService(loadHabitoPort, loadHorarioPort, catalogoPort,
+                        progresoPort, almacenamientoPort);
+                lenient().when(progresoPort.deParticipante(trainee)).thenReturn(
+                        Optional.of(new ProgresoParticipanteHabits(dia, "America/Lima", RolParticipante.TRAINEE,
+                                false)));
+                lenient().when(catalogoPort.todasOrdenadas()).thenReturn(catalogo);
+
+                int semanaEsperada = semana;
+                assertThat(aislado.consultar(trainee))
+                        .as("dia de programa %d", dia)
+                        .isInstanceOfSatisfying(AudioDeLaSemana.class,
+                                audio -> assertThat(audio.semanaActual()).isEqualTo(semanaEsperada));
+            }
+        }
+    }
+
     @Test
     void respetaDuracionesDistintasPorSemanaAlAcumular() {
         // semana 1 dura 5 dias (11-15), semana 2 arranca el 16

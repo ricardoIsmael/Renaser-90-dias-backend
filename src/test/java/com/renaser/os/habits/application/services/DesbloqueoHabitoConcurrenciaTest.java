@@ -92,7 +92,7 @@ class DesbloqueoHabitoConcurrenciaTest {
     @Test
     @DisplayName("elegir un habito de catalogo crea el desbloqueo con el dia de programa actual")
     void eligeUnHabitoNormal() {
-        DesbloqueoHabito resultado = elegirUseCase.elegir(new ElegirHabitoCommand(participanteId, habitoId));
+        DesbloqueoHabito resultado = elegirUseCase.elegir(new ElegirHabitoCommand(participanteId, habitoId, null));
 
         assertThat(resultado.participanteId()).isEqualTo(participanteId);
         assertThat(resultado.habitoId()).isEqualTo(habitoId);
@@ -103,8 +103,8 @@ class DesbloqueoHabitoConcurrenciaTest {
     @Test
     @DisplayName("elegir el mismo habito dos veces seguidas no duplica la fila")
     void elegirDosVecesSeguidasNoDuplica() {
-        elegirUseCase.elegir(new ElegirHabitoCommand(participanteId, habitoId));
-        elegirUseCase.elegir(new ElegirHabitoCommand(participanteId, habitoId));
+        elegirUseCase.elegir(new ElegirHabitoCommand(participanteId, habitoId, null));
+        elegirUseCase.elegir(new ElegirHabitoCommand(participanteId, habitoId, null));
 
         assertThat(contarDesbloqueos()).isEqualTo(1);
     }
@@ -117,7 +117,7 @@ class DesbloqueoHabitoConcurrenciaTest {
         try {
             List<Callable<DesbloqueoHabito>> intentos = IntStream.range(0, INTENTOS_CONCURRENTES)
                     .<Callable<DesbloqueoHabito>>mapToObj(i -> () ->
-                            elegirUseCase.elegir(new ElegirHabitoCommand(participanteId, habitoId)))
+                            elegirUseCase.elegir(new ElegirHabitoCommand(participanteId, habitoId, null)))
                     .toList();
             resultados = pool.invokeAll(intentos, 30, TimeUnit.SECONDS);
         } finally {

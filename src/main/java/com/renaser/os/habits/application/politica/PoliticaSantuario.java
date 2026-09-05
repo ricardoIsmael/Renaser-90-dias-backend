@@ -2,6 +2,7 @@ package com.renaser.os.habits.application.politica;
 
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
+import com.renaser.os.habits.domain.model.politica.ContextoCompletar;
 import com.renaser.os.habits.domain.model.politica.DecisionPolitica;
 import com.renaser.os.habits.domain.model.politica.PoliticaHabito;
 import com.renaser.os.habits.domain.model.politica.SelectorHabito;
@@ -28,8 +29,9 @@ public class PoliticaSantuario implements PoliticaHabito {
         return SelectorHabito.porTipo(TipoHabito.BLOQUEO);
     }
 
+    /** Ignora el {@code contexto}: para saber que un BLOQUEO necesita sesion alcanza el habito. */
     @Override
-    public DecisionPolitica puedeCompletarseDirecto(Habito habito) {
+    public DecisionPolitica puedeCompletarseDirecto(Habito habito, ContextoCompletar contexto) {
         return DecisionPolitica.noProcede(
                 "Los habitos BLOQUEO (Santuario) se completan via /habit-tracks/{id}/santuario, no aca");
     }

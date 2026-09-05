@@ -1,6 +1,7 @@
 package com.renaser.os.academy.application.ports.in.clasediaria;
 
 import com.renaser.os.academy.domain.model.curso.LeccionId;
+import com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase;
 import com.renaser.os.shared.application.SelfValidating;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.validation.constraints.NotBlank;
@@ -34,14 +35,24 @@ import java.util.UUID;
  */
 public interface CompletarClaseDiariaUseCase {
 
-    /** Longitud minima del resumen — espejo de {@code CLASE_DIARIA_SUMMARY_MIN_LENGTH}
-     * (RenaserBack {@code clase-diaria/schema.ts:3}). */
-    int RESUMEN_MIN_LENGTH = 20;
+    /**
+     * Longitud minima del resumen. Era 20, espejo de {@code CLASE_DIARIA_SUMMARY_MIN_LENGTH}
+     * (RenaserBack {@code clase-diaria/schema.ts:3}); el dueño del producto lo fijó en 15 al
+     * especificar el flujo de Training (2026-09-04, textual: "mínimo 15 letras hasta 2000").
+     * Se referencia la constante de {@code habits} en vez de repetir el número para que las dos
+     * mitades del flujo no puedan divergir.
+     */
+    int RESUMEN_MIN_LENGTH = CompletarClaseDiariaHabitoUseCase.RESUMEN_MIN_LENGTH;
+
+    /** Longitud maxima del resumen (dueño del producto, 2026-09-04: "hasta 2000"). */
+    int RESUMEN_MAX_LENGTH = CompletarClaseDiariaHabitoUseCase.RESUMEN_MAX_LENGTH;
 
     ClaseDiariaCompletada completar(CompletarClaseDiariaCommand command);
 
     record CompletarClaseDiariaCommand(@NotNull UserId actorId, @NotNull LeccionId leccionId,
-                                        @NotBlank @Size(min = RESUMEN_MIN_LENGTH) String resumen) {
+                                        @NotBlank
+                                        @Size(min = RESUMEN_MIN_LENGTH, max = RESUMEN_MAX_LENGTH)
+                                        String resumen) {
 
         public CompletarClaseDiariaCommand {
             SelfValidating.validateConstructorArgs(CompletarClaseDiariaCommand.class, actorId, leccionId, resumen);

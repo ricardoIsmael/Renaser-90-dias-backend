@@ -11,6 +11,8 @@ import com.renaser.os.rag.application.ports.out.conversacion.SaveConversacionRen
 import com.renaser.os.rag.application.ports.out.conversacion.SaveMensajeRenasiaPort;
 import com.renaser.os.rag.application.ports.out.cuota.ControlCuotaRenasiaPort;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
+import com.renaser.os.rag.application.ports.out.ia.ChatIAPort.Consulta;
+import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
@@ -26,6 +28,7 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -39,11 +42,14 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.renaser.os.rag.domain.model.conversacion.AgenteConversacional.COMPANION;
+import static com.renaser.os.rag.domain.model.conversacion.AgenteConversacional.COURSE_TUTOR;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -52,10 +58,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * NOTA: {@code VectorStorePort} y {@code ChatIAPort} los define el agente del agregado
- * `conocimiento` (docs/MODULO_RAG.md §4) — este test programa contra las firmas acordadas
- * en el encargo. Si esos puertos terminan con una firma distinta, este archivo se ajusta en
- * la integracion.
+ * Orquestacion de los dos asistentes (D-102) sobre puertos mockeados. Las reglas de dominio
+ * ({@code MensajeRenasia}, {@code EventoRenasia}) tienen sus propios tests; aca se verifica que el
+ * caso de uso las combina bien: memoria e historial por agente, contexto acotado al curso para el
+ * tutor, ambito solo para el tutor, y las garantias previas de cuota y streaming.
  */
 @ExtendWith(MockitoExtension.class)
 class ConversacionRenasiaServiceTest {
@@ -99,6 +105,7 @@ class ConversacionRenasiaServiceTest {
         // lenient: no todos los casos llegan a generar un id (varios cortan antes, en autorizacion o cuota).
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(consultarLeccionesVisiblesPort.visiblesParaActor(any())).thenReturn(Set.of());
+        lenient().when(consultarLeccionesVisiblesPort.visiblesParaActorEnCurso(any(), any())).thenReturn(Set.of());
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
                 Optional.of(new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(suspendido)).thenReturn(
@@ -108,8 +115,31 @@ class ConversacionRenasiaServiceTest {
         lenient().when(saveConversacionRenasiaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
+    /** Pregunta al acompanante, sin ambito ni curso: el chat general del programa. */
     private PreguntarRenasiaCommand pregunta(UserId actorId) {
-        return new PreguntarRenasiaCommand(actorId, "que es Renasia?");
+        return new PreguntarRenasiaCommand(actorId, COMPANION, "que es Renasia?", null, null);
+    }
+
+    /** Pregunta a Sparkie desde adentro de un curso. */
+    private PreguntarRenasiaCommand preguntaAlTutor(UserId actorId, String cursoId) {
+        return new PreguntarRenasiaCommand(actorId, COURSE_TUTOR, "que dice la leccion?", "el curso \"X\"", cursoId);
+    }
+
+    /** Un stream mínimo y válido para los tests a los que no les importa el contenido de la respuesta. */
+    private static Flux<EventoRenasia> streamOk() {
+        return Flux.just(new EventoRenasia.Texto("ok"), new EventoRenasia.Fin());
+    }
+
+    private void stubCaminoFeliz() {
+        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
+        when(chatIAPort.responder(any())).thenReturn(streamOk());
+    }
+
+    private Consulta consultaEnviadaAlModelo() {
+        ArgumentCaptor<Consulta> captor = ArgumentCaptor.forClass(Consulta.class);
+        verify(chatIAPort).responder(captor.capture());
+        return captor.getValue();
     }
 
     @Test
@@ -140,29 +170,143 @@ class ConversacionRenasiaServiceTest {
         verify(controlCuotaRenasiaPort).liberar(activo);
     }
 
+    /**
+     * D-100: el fallo del modelo ya NO revienta el stream. Antes esta prueba esperaba una
+     * excepcion; el efecto real de eso era que el controller convertia el error en un `fin`
+     * pelado y el aprendiz veia su pregunta sin ninguna respuesta ni motivo. Ahora el caso de
+     * uso emite un `error` apto para mostrar y despues el `fin` del contrato SSE. La cuota se
+     * sigue liberando (la pregunta no se respondio) y no se persiste ninguna respuesta.
+     */
     @Test
     void preguntarLiberaLaCuotaSiElStreamDeIaFalla() {
         when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
         when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
-        when(chatIAPort.responder(anyString(), anyList()))
-                .thenReturn(Flux.error(new RuntimeException("Gemini no responde")));
+        when(chatIAPort.responder(any())).thenReturn(Flux.error(new RuntimeException("Gemini no responde")));
 
-        assertThatThrownBy(() -> service.preguntar(pregunta(activo)).collectList().block())
-                .isInstanceOf(RuntimeException.class);
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
 
+        assertThat(eventos).hasSize(2);
+        assertThat(eventos.get(0)).isInstanceOf(EventoRenasia.Error.class);
+        assertThat(((EventoRenasia.Error) eventos.get(0)).mensaje())
+                .isEqualTo(ConversacionRenasiaService.MENSAJE_ERROR_MODELO);
+        assertThat(eventos.get(1)).isInstanceOf(EventoRenasia.Fin.class);
         verify(controlCuotaRenasiaPort).liberar(activo);
+        // Solo se guardo la pregunta del usuario: nunca una respuesta vacia del asistente.
+        verify(saveMensajeRenasiaPort, times(1)).save(any());
     }
 
-    /** Un stream mínimo y válido para los tests a los que no les importa el contenido de la respuesta. */
-    private static Flux<EventoRenasia> streamOk() {
-        return Flux.just(new EventoRenasia.Texto("ok"), new EventoRenasia.Fin());
+    /**
+     * D-100: memoria de la conversacion. Los ultimos turnos viajan al modelo en orden cronologico
+     * (el puerto los devuelve del mas nuevo al mas viejo) y SIN la pregunta actual — se leen antes
+     * de guardarla, para no mandarla dos veces.
+     */
+    @Test
+    void preguntarLePasaAlModeloLosTurnosPreviosEnOrdenCronologico() {
+        stubCaminoFeliz();
+        MensajeRenasia primero = MensajeRenasia.escribirDeUsuario(MensajeRenasiaId.of(UUID.randomUUID()), activo,
+                COMPANION, "hola", CLOCK.now().minusSeconds(20));
+        MensajeRenasia segundo = MensajeRenasia.escribirDeAsistente(MensajeRenasiaId.of(UUID.randomUUID()), activo,
+                COMPANION, "hola, como estas", List.of(), CLOCK.now().minusSeconds(10));
+        // El puerto pagina del mas nuevo al mas viejo.
+        when(loadMensajeRenasiaPort.pagina(eq(activo), eq(COMPANION), any(), eq(10)))
+                .thenReturn(List.of(segundo, primero));
+
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "y que te dije recien?", null, null))
+                .collectList().block();
+
+        Consulta consulta = consultaEnviadaAlModelo();
+        assertThat(consulta.pregunta()).isEqualTo("y que te dije recien?");
+        assertThat(consulta.historial()).containsExactly(primero, segundo);
+    }
+
+    /**
+     * D-102: la memoria es POR AGENTE. Lo que la persona hablo con el acompanante no le llega al
+     * tutor de cursos como turnos previos (ni al reves) — seria exactamente "juntarlos en un mismo",
+     * lo que el dueno pidio no hacer.
+     */
+    @Test
+    @DisplayName("D-102: la memoria del tutor se lee solo de los turnos del tutor")
+    void preguntarLeeLaMemoriaSoloDelAgenteQueHabla() {
+        stubCaminoFeliz();
+
+        service.preguntar(preguntaAlTutor(activo, "curso-1")).collectList().block();
+
+        verify(loadMensajeRenasiaPort).pagina(eq(activo), eq(COURSE_TUTOR), isNull(), eq(10));
+        verify(loadMensajeRenasiaPort, never()).pagina(any(), eq(COMPANION), any(), anyInt());
+    }
+
+    /** D-102: la pregunta y la respuesta se guardan con el agente que hablo, para poder releerlas por agente. */
+    @Test
+    void preguntarGuardaPreguntaYRespuestaConElAgenteQueHablo() {
+        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
+        when(chatIAPort.responder(any())).thenReturn(streamOk());
+
+        service.preguntar(preguntaAlTutor(activo, "curso-1")).collectList().block();
+
+        ArgumentCaptor<MensajeRenasia> captor = ArgumentCaptor.forClass(MensajeRenasia.class);
+        verify(saveMensajeRenasiaPort, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues()).extracting(MensajeRenasia::agente).containsOnly(COURSE_TUTOR);
+        assertThat(captor.getAllValues()).extracting(MensajeRenasia::rol)
+                .containsExactly(RolMensaje.USUARIO, RolMensaje.ASISTENTE);
+    }
+
+    /**
+     * D-102: Sparkie responde sobre UN curso. Si el cliente dice cual, el contexto se acota a las
+     * lecciones visibles DE ESE curso — no a todo lo visible del catalogo.
+     */
+    @Test
+    @DisplayName("D-102: el tutor con curso acota el contexto a ese curso")
+    void preguntarDelTutorAcotaElContextoAlCursoEnQueEsta() {
+        stubCaminoFeliz();
+        when(consultarLeccionesVisiblesPort.visiblesParaActorEnCurso(activo, "curso-1"))
+                .thenReturn(Set.of("leccion-del-curso"));
+
+        service.preguntar(preguntaAlTutor(activo, "curso-1")).collectList().block();
+
+        verify(vectorStorePort).buscarSimilares(eq("que dice la leccion?"), eq(5),
+                eq(FiltroLecciones.soloVisibles(Set.of("leccion-del-curso"))));
+        verify(consultarLeccionesVisiblesPort, never()).visiblesParaActor(any());
+        Consulta consulta = consultaEnviadaAlModelo();
+        assertThat(consulta.agente()).isEqualTo(COURSE_TUTOR);
+        assertThat(consulta.ambito()).isEqualTo("el curso \"X\"");
+    }
+
+    /** Un tutor sin curso (cliente que no lo mando) usa todo lo visible: mejor que quedarse sin material. */
+    @Test
+    void preguntarDelTutorSinCursoUsaTodoLoVisible() {
+        stubCaminoFeliz();
+        when(consultarLeccionesVisiblesPort.visiblesParaActor(activo)).thenReturn(Set.of("cualquier-visible"));
+
+        service.preguntar(preguntaAlTutor(activo, null)).collectList().block();
+
+        verify(vectorStorePort).buscarSimilares(anyString(), eq(5),
+                eq(FiltroLecciones.soloVisibles(Set.of("cualquier-visible"))));
+        verify(consultarLeccionesVisiblesPort, never()).visiblesParaActorEnCurso(any(), any());
+    }
+
+    /**
+     * D-102: el acompanante no tiene ambito ni curso. Un cliente anterior a D-102 que mande
+     * `scope` sin `agent` cae aca y no arrastra nada al prompt (que ya no tiene esa seccion).
+     */
+    @Test
+    @DisplayName("D-102: el acompanante ignora ambito y curso aunque el cliente los mande")
+    void preguntarDelAcompananteIgnoraAmbitoYCurso() {
+        stubCaminoFeliz();
+
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "hola", "el curso \"X\"", "curso-1"))
+                .collectList().block();
+
+        Consulta consulta = consultaEnviadaAlModelo();
+        assertThat(consulta.agente()).isEqualTo(COMPANION);
+        assertThat(consulta.ambito()).isNull();
+        verify(consultarLeccionesVisiblesPort).visiblesParaActor(activo);
+        verify(consultarLeccionesVisiblesPort, never()).visiblesParaActorEnCurso(any(), any());
     }
 
     @Test
     void preguntarNoLiberaLaCuotaCuandoElStreamTerminaBien() {
-        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
-        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
-        when(chatIAPort.responder(anyString(), anyList())).thenReturn(streamOk());
+        stubCaminoFeliz();
 
         service.preguntar(pregunta(activo)).collectList().block();
 
@@ -171,9 +315,7 @@ class ConversacionRenasiaServiceTest {
 
     @Test
     void preguntarCreaLaConversacionCuandoElActorNuncaHablóConRenasia() {
-        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
-        when(chatIAPort.responder(anyString(), anyList())).thenReturn(streamOk());
-        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
+        stubCaminoFeliz();
 
         service.preguntar(pregunta(activo)).collectList().block();
 
@@ -184,7 +326,7 @@ class ConversacionRenasiaServiceTest {
     void preguntarReusaLaConversacionExistenteSinCrearOtra() {
         when(loadConversacionRenasiaPort.porUsuarioId(activo))
                 .thenReturn(Optional.of(ConversacionRenasia.iniciar(activo, CLOCK.now())));
-        when(chatIAPort.responder(anyString(), anyList())).thenReturn(streamOk());
+        when(chatIAPort.responder(any())).thenReturn(streamOk());
         when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
 
         service.preguntar(pregunta(activo)).collectList().block();
@@ -194,9 +336,7 @@ class ConversacionRenasiaServiceTest {
 
     @Test
     void preguntarGuardaLaPreguntaDelUsuarioAntesDeConsumirElStream() {
-        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
-        when(chatIAPort.responder(anyString(), anyList())).thenReturn(streamOk());
-        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
+        stubCaminoFeliz();
 
         // El armado del Flux (sin suscribirse todavia) ya debe haber guardado la pregunta:
         // es una llamada sincrona dentro del cuerpo de preguntar(), no parte del stream.
@@ -210,7 +350,7 @@ class ConversacionRenasiaServiceTest {
     @Test
     void preguntarNoPersisteLaRespuestaDelAsistenteHastaQueElStreamTermina() {
         when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
-        when(chatIAPort.responder(anyString(), anyList())).thenReturn(Flux.just(
+        when(chatIAPort.responder(any())).thenReturn(Flux.just(
                 new EventoRenasia.Texto("Hola"), new EventoRenasia.Texto(" mundo"), new EventoRenasia.Fin()));
         when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of(
                 new FragmentoRelevante("contexto de la leccion 1", "leccion-1", 0.12),
@@ -240,10 +380,8 @@ class ConversacionRenasiaServiceTest {
 
     @Test
     void preguntarFiltraElContextoPorLasLeccionesVisiblesDelActor() {
-        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
-        when(chatIAPort.responder(anyString(), anyList())).thenReturn(streamOk());
+        stubCaminoFeliz();
         when(consultarLeccionesVisiblesPort.visiblesParaActor(activo)).thenReturn(Set.of("leccion-visible"));
-        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
 
         service.preguntar(pregunta(activo)).collectList().block();
 
@@ -256,22 +394,39 @@ class ConversacionRenasiaServiceTest {
 
     @Test
     void obtenerHistorialRechazaAUnActorSuspendido() {
-        assertThatThrownBy(() -> service.obtenerHistorial(suspendido, null, 30))
+        assertThatThrownBy(() -> service.obtenerHistorial(suspendido, COMPANION, null, 30))
                 .isInstanceOf(NotAuthorizedException.class);
     }
 
     @Test
-    void obtenerHistorialIndicaHayMasCuandoLaPaginaExcedeElLimite() {
-        MensajeRenasia m1 = MensajeRenasia.escribirDeUsuario(MensajeRenasiaId.of(UUID.randomUUID()), activo, "1",
-                CLOCK.now());
-        MensajeRenasia m2 = MensajeRenasia.escribirDeUsuario(MensajeRenasiaId.of(UUID.randomUUID()), activo, "2",
-                CLOCK.now());
-        when(loadMensajeRenasiaPort.pagina(activo, null, 2)).thenReturn(List.of(m1, m2));
+    void obtenerHistorialExigeAgente() {
+        assertThatThrownBy(() -> service.obtenerHistorial(activo, null, null, 30))
+                .isInstanceOf(NullPointerException.class);
+    }
 
-        var pagina = service.obtenerHistorial(activo, null, 1);
+    @Test
+    void obtenerHistorialIndicaHayMasCuandoLaPaginaExcedeElLimite() {
+        MensajeRenasia m1 = MensajeRenasia.escribirDeUsuario(MensajeRenasiaId.of(UUID.randomUUID()), activo,
+                COMPANION, "1", CLOCK.now());
+        MensajeRenasia m2 = MensajeRenasia.escribirDeUsuario(MensajeRenasiaId.of(UUID.randomUUID()), activo,
+                COMPANION, "2", CLOCK.now());
+        when(loadMensajeRenasiaPort.pagina(activo, COMPANION, null, 2)).thenReturn(List.of(m1, m2));
+
+        var pagina = service.obtenerHistorial(activo, COMPANION, null, 1);
 
         assertThat(pagina.mensajes()).hasSize(1);
         assertThat(pagina.hayMas()).isTrue();
         assertThat(pagina.siguienteCursor()).isEqualTo(m1.creadoEn());
+    }
+
+    /** D-102: el historial que ve la persona en el panel de Sparkie es SOLO el de Sparkie. */
+    @Test
+    void obtenerHistorialPideSoloElHistorialDelAgente() {
+        when(loadMensajeRenasiaPort.pagina(activo, COURSE_TUTOR, null, 31)).thenReturn(List.of());
+
+        service.obtenerHistorial(activo, COURSE_TUTOR, null, 30);
+
+        verify(loadMensajeRenasiaPort).pagina(activo, COURSE_TUTOR, null, 31);
+        verify(loadMensajeRenasiaPort, never()).pagina(any(), eq(COMPANION), any(), anyInt());
     }
 }

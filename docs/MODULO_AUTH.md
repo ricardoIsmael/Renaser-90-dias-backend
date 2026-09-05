@@ -490,6 +490,8 @@ La capa 3 mejora de verdad: antes un suspendido podía seguir operando hasta 30 
 
 ### 7.5 Reset de contraseña — hecho 2026-08-26
 
+> **Ampliado 2026-09-04 (D-105).** Al reset por token se le sumó el camino **por código de 6 dígitos**, que es el que usa la app: `POST /api/v1/auth/password/forgot` `{email}` manda el código por correo (misma respuesta exista o no la cuenta), `POST /api/v1/auth/password/verify-code` `{email, code}` lo verifica y devuelve el token de reset de esta misma sección, y el cambio de contraseña sigue siendo el endpoint existente con ese token. Mismo patrón que el OTP de alta (§2.2): código numérico en Redis con TTL y `GETDEL` de un solo uso (`AlmacenCodigoNumericoRedis`). El token por link de esta sección no se tocó.
+
 Construido en paralelo con el trabajo de Google/Apple/Facebook de §6.5 sobre el mismo checkout — sin conflicto: los únicos archivos compartidos (`GlobalExceptionHandler.java`, `AutenticacionController.java`, `application.yaml`) se tocaron en puntos distintos cada vez.
 
 **Lo que se construyó**, todo dentro de `users` (§3), sin tabla nueva (§2.2 ya preveía esto):

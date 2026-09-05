@@ -17,6 +17,7 @@ import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -103,15 +104,20 @@ class DesbloqueoHabitoServiceTest {
 
     // ---- elegir (nuevo) ----
 
+    /** D-103: antes el dia 0 daba 403. Quien empieza manana arma su plan hoy, y lo elegido arranca el dia 1. */
     @Test
-    void elegirDiaCeroRechazado() {
+    void elegirEnDiaCeroDesbloqueaParaElDiaUno() {
         UserId actor = UserId.of(UUID.randomUUID());
-        HabitoId habitoId = HabitoId.of(UUID.randomUUID());
+        Habito habito = habitoDeSistemaActivo();
         when(progresoPort.deParticipante(actor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(loadPort.deParticipanteYHabito(actor, habito.id())).thenReturn(Optional.of(
+                DesbloqueoHabito.rehydrate(actor, habito.id(), 1, CLOCK.now(), CLOCK.now(), CLOCK.now())));
 
-        assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, habitoId)))
-                .isInstanceOf(NotAuthorizedException.class);
+        service.elegir(new ElegirHabitoCommand(actor, habito.id(), null));
+
+        verify(savePort).elegirSiFalta(actor, habito.id(), 1, CLOCK.now(), CLOCK.now());
     }
 
     @Test
@@ -123,7 +129,7 @@ class DesbloqueoHabitoServiceTest {
                 Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
         when(loadHabitoPort.byId(personal.id())).thenReturn(Optional.of(personal));
 
-        assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, personal.id())))
+        assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, personal.id(), null)))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -136,7 +142,7 @@ class DesbloqueoHabitoServiceTest {
                 Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
 
-        assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, habito.id())))
+        assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, habito.id(), null)))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -151,7 +157,7 @@ class DesbloqueoHabitoServiceTest {
                 CLOCK.now());
         when(loadPort.deParticipanteYHabito(actor, habito.id())).thenReturn(Optional.of(esperado));
 
-        DesbloqueoHabito resultado = service.elegir(new ElegirHabitoCommand(actor, habito.id()));
+        DesbloqueoHabito resultado = service.elegir(new ElegirHabitoCommand(actor, habito.id(), null));
 
         assertThat(resultado).isEqualTo(esperado);
         verify(savePort).elegirSiFalta(actor, habito.id(), 10, CLOCK.now(), CLOCK.now());
@@ -169,10 +175,68 @@ class DesbloqueoHabitoServiceTest {
         // Ambas llamadas relean el mismo estado canonico persistido (DO NOTHING preserva el primer valor).
         when(loadPort.deParticipanteYHabito(actor, habito.id())).thenReturn(Optional.of(primero));
 
-        DesbloqueoHabito resultado1 = service.elegir(new ElegirHabitoCommand(actor, habito.id()));
-        DesbloqueoHabito resultado2 = service.elegir(new ElegirHabitoCommand(actor, habito.id()));
+        DesbloqueoHabito resultado1 = service.elegir(new ElegirHabitoCommand(actor, habito.id(), null));
+        DesbloqueoHabito resultado2 = service.elegir(new ElegirHabitoCommand(actor, habito.id(), null));
 
         assertThat(resultado1).isEqualTo(resultado2).isEqualTo(primero);
         verify(savePort, times(2)).elegirSiFalta(actor, habito.id(), 10, CLOCK.now(), CLOCK.now());
+    }
+
+    // ---- elegir con dia pedido (el aprendiz agenda el habito para mas adelante) ----
+
+    @Test
+    void elegirParaUnDiaFuturoGuardaEseDiaYNoElActual() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habitoDeSistemaActivo();
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(1, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        DesbloqueoHabito esperado = DesbloqueoHabito.rehydrate(actor, habito.id(), 2, CLOCK.now(), CLOCK.now(),
+                CLOCK.now());
+        when(loadPort.deParticipanteYHabito(actor, habito.id())).thenReturn(Optional.of(esperado));
+
+        DesbloqueoHabito resultado = service.elegir(new ElegirHabitoCommand(actor, habito.id(), 2));
+
+        assertThat(resultado.diaDesbloqueo()).isEqualTo(2);
+        verify(savePort).elegirSiFalta(actor, habito.id(), 2, CLOCK.now(), CLOCK.now());
+    }
+
+    @Test
+    void elegirParaElMismoDiaActualEsValido() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habitoDeSistemaActivo();
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(loadPort.deParticipanteYHabito(actor, habito.id())).thenReturn(Optional.of(
+                DesbloqueoHabito.rehydrate(actor, habito.id(), 10, CLOCK.now(), CLOCK.now(), CLOCK.now())));
+
+        service.elegir(new ElegirHabitoCommand(actor, habito.id(), 10));
+
+        verify(savePort).elegirSiFalta(actor, habito.id(), 10, CLOCK.now(), CLOCK.now());
+    }
+
+    @Test
+    void elegirParaUnDiaYaVividoRechazado() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habitoDeSistemaActivo();
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+
+        assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, habito.id(), 3)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("dia 10");
+    }
+
+    @Test
+    void elegirFueraDelRangoDelProgramaRechazadoPorElComando() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        HabitoId habitoId = HabitoId.of(UUID.randomUUID());
+
+        assertThatThrownBy(() -> new ElegirHabitoCommand(actor, habitoId, 91))
+                .isInstanceOf(ConstraintViolationException.class);
+        assertThatThrownBy(() -> new ElegirHabitoCommand(actor, habitoId, 0))
+                .isInstanceOf(ConstraintViolationException.class);
     }
 }
