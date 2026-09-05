@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.application.ports.in.espiritu.CompletarPastillaRenacerUseCase;
 import com.renaser.os.habits.application.ports.in.espiritu.ConsultarEstadoEspirituUseCase;
 import com.renaser.os.habits.application.ports.in.espiritu.EntregarResumenEspirituUseCase;
 import com.renaser.os.habits.application.ports.out.espiritu.AudioCatalogPort;
@@ -12,6 +13,7 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.domain.model.espiritu.EstadoRegistroEspiritu;
 import com.renaser.os.habits.domain.model.espiritu.RegistroEspiritu;
 import com.renaser.os.habits.domain.model.espiritu.RegistroEspirituId;
+import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -25,6 +27,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -50,15 +53,18 @@ import java.util.TreeSet;
  * (nunca lanza) — recien el proximo chequeo lazy con {@code daysSince>=1} lo pasa a
  * PERDIDO, con exactamente un dia de bloqueo despues (repo viejo: "the 1-day lockout").
  *
- * <p><b>Fuera de alcance de esta pasada (decision explicita, CLAUDE.MD §0.6):</b> el
- * espejo hacia el habito "Pastilla Renacer" que el repo viejo hace como efecto secundario
- * best-effort de una entrega a tiempo ({@code completePastillaRenacerTrack},
- * spirit-audio/service.ts) NO se replico aca. No fue parte del encargo explicito de este
- * agregado y, a diferencia del repo viejo (Prisma, sin el mismo riesgo), hacerlo bien en
- * Spring exige aislar esa escritura en su propia transaccion (REQUIRES_NEW) para no
- * arriesgar marcar la transaccion principal como rollback-only ante un fallo de un habito
- * ajeno — se documenta como pregunta abierta en docs/MODULO_HABITS.md en vez de
- * improvisarlo.
+ * <p><b>Espejo hacia el habito "Pastilla Renacer" (resuelto; era la pregunta abierta
+ * §10.1/§10.4 de docs/MODULO_HABITS.md):</b> una entrega completa ademas el habito de
+ * catalogo {@code PASTILLA_RENACER} de HOY, como en el repo viejo
+ * ({@code completePastillaRenacerTrack}, spirit-audio/service.ts). Se hace best-effort y en
+ * su PROPIA transaccion — ver {@link #reflejarEnPastillaRenacer}, que explica por que ambas
+ * cosas son obligatorias y por que aca REQUIRES_NEW no arriesga el auto-interbloqueo que
+ * {@code RegistroService} advierte.
+ *
+ * <p><b>Audio reproducible:</b> el catalogo dice QUE audio toca; el archivo se sirve como URL
+ * prefirmada desde el bucket, igual que la Audioterapia Semanal
+ * ({@code AudioterapiaService.firmarAudio}). Ver {@link #firmarAudio} para la degradacion
+ * cuando el archivo todavia no esta migrado.
  */
 @Service
 public class EspirituService implements ConsultarEstadoEspirituUseCase, EntregarResumenEspirituUseCase {
@@ -72,10 +78,17 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
     /** audioDay = diaPrograma - AUDIO_UNLOCK_START_DAY; diaPrograma 8 -> audio 1 (confirmado con cliente 2026-08-10). */
     static final int AUDIO_UNLOCK_START_DAY = 7;
 
+    /** Mismo TTL que la Audioterapia Semanal y que la portada de curso — sin motivo para diferir. */
+    static final Duration TTL_AUDIO = Duration.ofHours(1);
+
     private final LoadRegistroEspirituPort loadPort;
     private final SaveRegistroEspirituPort savePort;
     private final AudioCatalogPort audioCatalogPort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
+    /** Firma la URL de lectura del mp3 — mismo puerto y mismo TTL que la Audioterapia Semanal. */
+    private final AlmacenamientoPort almacenamientoPort;
+    /** Espejo hacia el habito de catalogo, best-effort: ver {@link #reflejarEnPastillaRenacer}. */
+    private final CompletarPastillaRenacerUseCase completarPastillaRenacer;
     private final Clock clock;
     private final IdGenerator idGenerator;
     /**
@@ -90,11 +103,15 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
 
     public EspirituService(LoadRegistroEspirituPort loadPort, SaveRegistroEspirituPort savePort,
                             AudioCatalogPort audioCatalogPort, ConsultarProgresoParticipanteHabitsPort progresoPort,
+                            AlmacenamientoPort almacenamientoPort,
+                            CompletarPastillaRenacerUseCase completarPastillaRenacer,
                             Clock clock, IdGenerator idGenerator, PlatformTransactionManager transactionManager) {
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.audioCatalogPort = audioCatalogPort;
         this.progresoPort = progresoPort;
+        this.almacenamientoPort = almacenamientoPort;
+        this.completarPastillaRenacer = completarPastillaRenacer;
         this.clock = clock;
         this.idGenerator = idGenerator;
         this.transaccionPropia = new TransactionTemplate(transactionManager);
@@ -126,7 +143,46 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
         }
         boolean aTiempo = registro.entregar(command.resumenTexto(), ahora);
         savePort.save(registro);
+        reflejarEnPastillaRenacer(command.actorId(), command.resumenTexto());
         return new ResultadoEntrega(aTiempo);
+    }
+
+    /**
+     * Completa el habito de catalogo "Pastilla Renacer" de hoy con el mismo resumen — el
+     * espejo que el repo viejo hace en {@code completePastillaRenacerTrack}. Sin esto, el
+     * aprendiz manda su resumen y el habito le sigue apareciendo pendiente en Training.
+     *
+     * <p><b>En su PROPIA transaccion (REQUIRES_NEW), no opcional:</b>
+     * {@code RegistroService.completar} es {@code @Transactional} (REQUIRED), asi que sin
+     * aislarlo se uniria a ESTA transaccion — y cualquier fallo suyo (el track ya expirado, un
+     * problema de puntos) marcaria como rollback-only la transaccion que acaba de guardar la
+     * entrega del resumen. El aprendiz perderia su texto por un fallo en un habito ajeno.
+     *
+     * <p><b>Por que aca REQUIRES_NEW es seguro</b> y no cae en el auto-interbloqueo que
+     * advierte el javadoc de {@code RegistroService.transaccionPropia}: esa advertencia es
+     * sobre abrir una segunda transaccion sobre una fila YA bloqueada por la transaccion en
+     * curso. Aca las filas son de tablas distintas — esta transaccion toca
+     * {@code registros_espiritu}, la anidada toca {@code registros_habito}, que esta
+     * transaccion no leyo ni bloqueo. No hay fila en comun, no hay ciclo posible.
+     *
+     * <p><b>Best-effort, como en el repo viejo:</b> el resumen ya esta guardado y no se
+     * revierte por nada de lo que pase aca. Un fallo se registra y se sigue.
+     *
+     * <p><b>Se refleja siempre, no solo si la entrega fue a tiempo.</b> El repo viejo solo
+     * espejaba las entregas a tiempo, pero en este backend una entrega tardia deja el registro
+     * de Espiritu PENDIENTE y el propio {@code RegistroService} ya decide si corresponden
+     * puntos segun la ventana del habito ({@code ResultadoOtorgamiento}). Cortar aca por
+     * tardanza penalizaria dos veces por lo mismo — una en Espiritu y otra en el habito — y
+     * dejaria el habito pendiente para siempre pese a que el aprendiz si escucho y respondio.
+     */
+    private void reflejarEnPastillaRenacer(UserId participanteId, String resumen) {
+        try {
+            transaccionPropia.executeWithoutResult(status ->
+                    completarPastillaRenacer.completarDeHoy(participanteId, resumen));
+        } catch (RuntimeException fallaDelHabitoAjeno) {
+            log.warn("[EspirituService] la entrega de {} se guardo, pero no se pudo reflejar en Pastilla Renacer: {}",
+                    participanteId, fallaDelHabitoAjeno.toString());
+        }
     }
 
     // ─── State machine lazy (ensureAdvanced, spirit-audio/service.ts:127-173) ──────────────
@@ -238,22 +294,50 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
         for (int dia : dias) {
             vista.add(vistaDeUnDia(dia, catalogoPorDia.get(dia), tracksPorDia.get(dia)));
         }
+        // nada mas: la URL del dia CURRENT ya se firmo dentro de vistaDeUnDia.
         Integer diaActual = tracksPorDia.keySet().stream().max(Integer::compareTo).orElse(null);
         return new EstadoEspiritu(vista, diaActual);
     }
 
-    private static DiaEspiritu vistaDeUnDia(int dia, AudioEspiritu audio, RegistroEspiritu track) {
+    private DiaEspiritu vistaDeUnDia(int dia, AudioEspiritu audio, RegistroEspiritu track) {
         String titulo = audio != null ? audio.titulo() : null;
+        String mime = audio != null ? audio.mime() : null;
+        Integer tamano = audio != null ? audio.tamanoBytes() : null;
         if (track == null) {
-            return new DiaEspiritu(dia, titulo, "LOCKED", null, null, null, null);
+            return new DiaEspiritu(dia, titulo, "LOCKED", null, null, null, null, null, mime, tamano);
         }
         String estado = switch (track.estado()) {
             case PENDIENTE -> "CURRENT";
             case ENTREGADO -> "SUBMITTED";
             case PERDIDO -> "MISSED";
         };
+        // Solo el dia en curso se puede escuchar y entregar: firmar los otros 42 seria trabajo
+        // tirado en un endpoint que la app consulta cada vez que abre Training.
+        String audioUrl = "CURRENT".equals(estado) ? firmarAudio(audio) : null;
         return new DiaEspiritu(dia, titulo, estado, track.desbloqueadoEn(), track.fechaLimite(), track.entregadoEn(),
-                track.resumenTexto());
+                track.resumenTexto(), audioUrl, mime, tamano);
+    }
+
+    /**
+     * Copia literal del criterio de {@code AudioterapiaService.firmarAudio}: una ruta que ya es
+     * una URL absoluta se devuelve tal cual (permite apuntar a un CDN sin tocar codigo), y una
+     * ruta de objeto se firma contra el bucket.
+     *
+     * <p>Devuelve {@code null} cuando el audio de ese dia todavia no tiene archivo servible.
+     * Hoy ese es el caso de las 43 filas: los mp3 de Espiritu nunca se migraron del Google
+     * Drive viejo al bucket (D-50), asi que {@code audios_espiritu.ruta_storage} esta en NULL
+     * (V25). El aprendiz ve el dia, el titulo y el formulario; el reproductor aparece cuando el
+     * archivo exista. Se degrada, no se rompe — mismo criterio que el resto del modulo.
+     */
+    private String firmarAudio(AudioEspiritu audio) {
+        if (audio == null || audio.rutaStorage() == null || audio.rutaStorage().isBlank()) {
+            return null;
+        }
+        String ruta = audio.rutaStorage();
+        if (ruta.matches("(?i)^https?://.*")) {
+            return ruta;
+        }
+        return almacenamientoPort.firmarLectura(ruta, TTL_AUDIO).toString();
     }
 
     private ProgresoParticipanteHabits requireParticipanteHabilitado(UserId actorId) {

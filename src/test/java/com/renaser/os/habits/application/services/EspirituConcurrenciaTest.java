@@ -142,7 +142,7 @@ class EspirituConcurrenciaTest {
         @Primary
         AudioCatalogPort audioCatalogPortFijo() {
             AudioCatalogPort.AudioEspiritu dia1 = new AudioCatalogPort.AudioEspiritu(1, "Dia 1", "drive-fixture",
-                    "audio/mpeg", 1000);
+                    "audio/mpeg", 1000, null);
             return new AudioCatalogPort() {
                 @Override
                 public Optional<AudioEspiritu> porDia(int dia) {
