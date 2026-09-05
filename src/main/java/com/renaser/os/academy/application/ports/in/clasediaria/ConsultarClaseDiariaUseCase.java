@@ -22,7 +22,20 @@ public interface ConsultarClaseDiariaUseCase {
     sealed interface ClaseDiariaResolution permits Disponible, NoIniciado, Proximamente {
     }
 
-    record Disponible(int programDay, CursoId cursoId, String cursoTitulo, LeccionId leccionId, String leccionTitulo)
+    /**
+     * {@code leccionCompletada} responde "¿esta persona YA vio la clase de hoy?".
+     *
+     * <p>Existe por un problema de producto concreto: al tocar el habito de la Clase Diaria, la app
+     * abria directamente el formulario que pide el resumen —<i>"¿que entendiste de la clase?"</i>—
+     * con la leccion reducida a un enlace. O sea, pedia el resumen de algo que la persona todavia
+     * no habia visto, y bastaba escribir quince letras para completar el habito sin mirar nada.
+     *
+     * <p>Con este campo el cliente puede llevar primero a la leccion y pedir el resumen despues.
+     * El dato ya existia en {@code LoadProgresoLeccionPort.estaCompletada}; lo que faltaba era
+     * exponerlo por este endpoint.
+     */
+    record Disponible(int programDay, CursoId cursoId, String cursoTitulo, LeccionId leccionId,
+                       String leccionTitulo, boolean leccionCompletada)
             implements ClaseDiariaResolution {
     }
 

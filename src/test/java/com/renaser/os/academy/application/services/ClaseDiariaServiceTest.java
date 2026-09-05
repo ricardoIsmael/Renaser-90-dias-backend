@@ -12,6 +12,7 @@ import com.renaser.os.academy.application.ports.out.curso.LoadCursoPort;
 import com.renaser.os.academy.application.ports.out.curso.LoadLeccionPort;
 import com.renaser.os.academy.application.ports.out.curso.LoadSeccionCursoPort;
 import com.renaser.os.academy.application.ports.out.participante.ConsultarProgresoParticipanteAcademyPort;
+import com.renaser.os.academy.application.ports.out.progreso.LoadProgresoLeccionPort;
 import com.renaser.os.academy.application.ports.out.participante.ConsultarProgresoParticipanteAcademyPort.ProgresoParticipanteAcademy;
 import com.renaser.os.academy.application.ports.out.participante.ConsultarProgresoParticipanteAcademyPort.RolParticipante;
 import com.renaser.os.academy.domain.model.curso.AccesoCurso;
@@ -63,13 +64,15 @@ class ClaseDiariaServiceTest {
     @Mock
     private ConsultarProgresoParticipanteAcademyPort progresoPort;
     @Mock
+    private LoadProgresoLeccionPort loadProgresoLeccionPort;
+    @Mock
     private CompletarClaseDiariaHabitoUseCase completarHabitoUseCase;
     @Mock
     private CompletarLeccionUseCase completarLeccionUseCase;
 
     private ClaseDiariaService service() {
         return new ClaseDiariaService(loadCursoPort, loadSeccionCursoPort, loadLeccionPort, progresoPort,
-                completarHabitoUseCase, completarLeccionUseCase);
+                loadProgresoLeccionPort, completarHabitoUseCase, completarLeccionUseCase);
     }
 
     private static Curso curso(String id, Integer diaDesbloqueo) {
@@ -145,6 +148,31 @@ class ClaseDiariaServiceTest {
         Leccion clase = new Leccion(LeccionId.of("l2"), CursoId.of("c1"), SeccionCursoId.of("s2"), "Clase del dia 17",
                 0, null, null, null, null, null, null, AHORA, AHORA);
         when(loadLeccionPort.porCurso(CursoId.of("c1"))).thenReturn(List.of(clase));
+    }
+
+    @Test
+    @DisplayName("claseDeHoy(): dice si la leccion YA fue vista, para que el cliente no pida el resumen antes")
+    void claseDeHoyInformaQueLaLeccionYaSeVio() {
+        mockClaseDisponibleHoy();
+        when(loadProgresoLeccionPort.estaCompletada(ACTOR_ID, LeccionId.of("l2"))).thenReturn(true);
+
+        var resolucion = service().claseDeHoy(ACTOR_ID);
+
+        assertThat(resolucion).isInstanceOf(Disponible.class);
+        assertThat(((Disponible) resolucion).leccionCompletada()).isTrue();
+    }
+
+    @Test
+    @DisplayName("claseDeHoy(): leccion sin ver -> leccionCompletada false, que es lo que manda al aprendiz a verla")
+    void claseDeHoyInformaQueLaLeccionNoSeVio() {
+        mockClaseDisponibleHoy();
+        when(loadProgresoLeccionPort.estaCompletada(ACTOR_ID, LeccionId.of("l2"))).thenReturn(false);
+
+        var resolucion = service().claseDeHoy(ACTOR_ID);
+
+        // El caso que motivo todo esto: sin este dato la app abria el formulario de resumen de una
+        // clase que la persona no habia visto, y bastaban quince letras para completar el habito.
+        assertThat(((Disponible) resolucion).leccionCompletada()).isFalse();
     }
 
     @Test

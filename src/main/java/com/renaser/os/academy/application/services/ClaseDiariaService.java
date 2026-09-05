@@ -3,6 +3,7 @@ package com.renaser.os.academy.application.services;
 import com.renaser.os.academy.application.ports.in.clasediaria.CompletarClaseDiariaUseCase;
 import com.renaser.os.academy.application.ports.in.clasediaria.ConsultarClaseDiariaUseCase;
 import com.renaser.os.academy.application.ports.in.leccion.CompletarLeccionUseCase;
+import com.renaser.os.academy.application.ports.out.progreso.LoadProgresoLeccionPort;
 import com.renaser.os.academy.application.ports.out.curso.LoadCursoPort;
 import com.renaser.os.academy.application.ports.out.curso.LoadLeccionPort;
 import com.renaser.os.academy.application.ports.out.curso.LoadSeccionCursoPort;
@@ -48,17 +49,20 @@ public class ClaseDiariaService implements ConsultarClaseDiariaUseCase, Completa
     private final LoadSeccionCursoPort loadSeccionCursoPort;
     private final LoadLeccionPort loadLeccionPort;
     private final ConsultarProgresoParticipanteAcademyPort progresoPort;
+    private final LoadProgresoLeccionPort loadProgresoLeccionPort;
     private final CompletarClaseDiariaHabitoUseCase completarHabitoUseCase;
     private final CompletarLeccionUseCase completarLeccionUseCase;
 
     public ClaseDiariaService(LoadCursoPort loadCursoPort, LoadSeccionCursoPort loadSeccionCursoPort,
                                LoadLeccionPort loadLeccionPort, ConsultarProgresoParticipanteAcademyPort progresoPort,
+                               LoadProgresoLeccionPort loadProgresoLeccionPort,
                                CompletarClaseDiariaHabitoUseCase completarHabitoUseCase,
                                CompletarLeccionUseCase completarLeccionUseCase) {
         this.loadCursoPort = loadCursoPort;
         this.loadSeccionCursoPort = loadSeccionCursoPort;
         this.loadLeccionPort = loadLeccionPort;
         this.progresoPort = progresoPort;
+        this.loadProgresoLeccionPort = loadProgresoLeccionPort;
         this.completarHabitoUseCase = completarHabitoUseCase;
         this.completarLeccionUseCase = completarLeccionUseCase;
     }
@@ -83,7 +87,10 @@ public class ClaseDiariaService implements ConsultarClaseDiariaUseCase, Completa
         }
 
         ClaseEncontrada c = clase.get();
-        return new Disponible(diaActual, c.cursoId(), c.cursoTitulo(), c.leccionId(), c.leccionTitulo());
+        // Una lectura por clave contra `progreso_leccion`; no hay N+1 porque la Clase Diaria
+        // resuelve UNA leccion. Ver el javadoc de `Disponible` para por que se expone.
+        boolean vista = loadProgresoLeccionPort.estaCompletada(actorId, c.leccionId());
+        return new Disponible(diaActual, c.cursoId(), c.cursoTitulo(), c.leccionId(), c.leccionTitulo(), vista);
     }
 
     /**
