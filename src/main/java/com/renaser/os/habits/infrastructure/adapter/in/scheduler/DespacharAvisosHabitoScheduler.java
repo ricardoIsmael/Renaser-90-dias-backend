@@ -75,9 +75,34 @@ class DespacharAvisosHabitoScheduler {
                         participanteId, ex.toString());
             }
         }
-        if (avisos > 0 || fallidos > 0) {
-            log.info("[habits.DespacharAvisosHabitoScheduler] {} aviso(s) publicado(s), {} participante(s) fallido(s)"
-                    + " de {}", avisos, fallidos, participantes.size());
+        registrarResumen(avisos, fallidos, participantes.size());
+    }
+
+    /**
+     * Un fallo TOTAL tiene que verse distinto de un dia tranquilo.
+     *
+     * <p>Esto sale de un defecto real (E-109): durante horas el barrido publico
+     * {@code 0 aviso(s) publicado(s), 8 participante(s) fallido(s) de 18} cada cinco minutos, y
+     * nadie lo noto. La linea salia en INFO, igual que un dia sin avisos que dar — y desde la app
+     * no se veia nada, porque capturar por participante y seguir (que es lo correcto: uno que
+     * falla no puede detener a los otros diecisiete) hace que un fallo del 100% se lea igual que
+     * un exito del 100%.
+     *
+     * <p>La regla: si habia trabajo que hacer y no se publico NADA, es {@code WARN}. Si algunos
+     * fallaron pero otros salieron, tambien — hubo perdida real. Solo el caso limpio queda en
+     * INFO. Cuesta cuatro lineas y es la diferencia entre enterarse el primer dia o cuando un
+     * aprendiz pregunte por que nunca le llega un aviso.
+     */
+    private void registrarResumen(int avisos, int fallidos, int participantes) {
+        if (avisos == 0 && fallidos == 0) {
+            return;
+        }
+        String plantilla = "[habits.DespacharAvisosHabitoScheduler] {} aviso(s) publicado(s), "
+                + "{} participante(s) fallido(s) de {}";
+        if (fallidos > 0) {
+            log.warn(plantilla, avisos, fallidos, participantes);
+        } else {
+            log.info(plantilla, avisos, fallidos, participantes);
         }
     }
 }

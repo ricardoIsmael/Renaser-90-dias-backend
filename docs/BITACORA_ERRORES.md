@@ -2173,6 +2173,33 @@ real de Modulith se queja de un modulo concreto o de una dependencia entre dos; 
 Ocurre en las dos direcciones: la app del IDE compilando contra `target/` rompe el build de Maven
 (sintomas 1 y 2), y el `clean` de Maven rompe la app del IDE (este). Es el mismo recurso compartido.
 
+**Cuarto sintoma, y es el mas enganioso de los cuatro.** Si el `clean` cae justo mientras Maven
+esta recompilando, la app arranca con `target/classes` a medio llenar y falla nombrando UNA clase:
+
+```
+Caused by: java.lang.NoClassDefFoundError:
+    com/renaser/os/academy/domain/model/curso/TipoVideoLeccion
+Caused by: java.lang.ClassNotFoundException: ...TipoVideoLeccion
+    at RestartClassLoader.loadClass(RestartClassLoader.java:123)
+```
+
+Parece un modulo mal armado o una dependencia rota — el nombre concreto invita a ir a buscar ESA
+clase. No es eso: la clase existe en el fuente y aparece en `target/` un segundo despues.
+
+**La verificacion que distingue los cuatro sintomas de un problema real, en un comando:**
+
+```bash
+ls src/main/java/com/renaser/os/.../LaClaseQueFalta.java   # si existe en el fuente...
+ls target/classes/com/renaser/os/.../LaClaseQueFalta.class  # ...y no en target, es esto
+```
+
+Si el fuente la tiene, no hay nada roto: hay un build corriendo. Antes de arrancar la app:
+
+```bash
+ls target/classes/com/renaser/os/RenaserOsApplication.class >/dev/null 2>&1 \
+  && echo "LIBRE" || echo "OCUPADO - hay un build corriendo"
+```
+
 **Como evitar que vuelva a pasar.** `target/` es un recurso compartido de todo el checkout, no del
 modulo en el que uno esta trabajando. Dos agentes sobre el mismo repo **no pueden compilar a la
 vez**, aunque toquen modulos que no se cruzan.
