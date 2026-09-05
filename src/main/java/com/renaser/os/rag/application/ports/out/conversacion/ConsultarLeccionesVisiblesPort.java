@@ -6,7 +6,7 @@ import java.util.Set;
 
 /**
  * Puerto propio de {@code rag} para saber qué lecciones puede ver HOY el actor que le
- * pregunta a Renasia. El gate de programa (rol + día de programa + publicación de curso y
+ * pregunta a un asistente. El gate de programa (rol + día de programa + publicación de curso y
  * sección) es una regla de {@code academy}, no de {@code rag} — por las reglas de Modulith
  * (CLAUDE.MD sec. 5.1), {@code rag} no puede importar {@code academy.domain.*} ni reimplementar
  * esa regla; el adaptador que implementa este puerto delega en
@@ -28,4 +28,14 @@ public interface ConsultarLeccionesVisiblesPort {
      * tiene ningún curso accesible — nunca {@code null}.
      */
     Set<String> visiblesParaActor(UserId actorId);
+
+    /**
+     * D-102: el tutor de cursos (Sparkie) responde sobre UN curso, asi que su contexto se acota
+     * a las lecciones de ese curso que el actor ya puede ver. El gate es el mismo de
+     * {@link #visiblesParaActor} (rol + dia + publicacion); solo cambia el universo.
+     *
+     * @return ids de lecciones de {@code cursoId} visibles hoy para {@code actorId}. Vacío si el
+     * curso no existe, esta bloqueado para el actor, o no tiene lecciones — nunca {@code null}.
+     */
+    Set<String> visiblesParaActorEnCurso(UserId actorId, String cursoId);
 }

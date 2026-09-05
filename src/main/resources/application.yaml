@@ -194,6 +194,26 @@ renaser:
   # arranque falla por ambiguedad.
   ia:
     proveedor: ${IA_PROVEEDOR:noop}
+    # Grounding con Google Search dentro de Renasia (2026-09-04, pedido del dueño): con esto en
+    # true el modelo puede buscar en internet cuando la base de conocimiento del programa no
+    # cubre la pregunta, en vez de abstenerse. El prompt de sistema le exige decir de que fuente
+    # sale cada respuesta, asi que "busca" nunca se confunde con "es contenido del programa".
+    #
+    # Solo tiene efecto con proveedor=google; el adaptador noop ni lo lee. Se deja en true por
+    # defecto a proposito — es el comportamiento pedido — y se apaga con IA_BUSQUEDA_WEB=false
+    # si hace falta acotar costo o volver a encerrar al asistente en el material propio.
+    #
+    # OJO: cada respuesta que use la herramienta de busqueda se cobra distinto que una respuesta
+    # normal. Verificado contra el bytecode de spring-ai-google-genai:2.0.0 —
+    # GoogleGenAiChatOptions.Builder.googleSearchRetrieval(Boolean) termina en
+    # Tool.builder().googleSearch(GoogleSearch.builder().build()), no es una opcion muerta.
+    #
+    # D-100 (2026-09-04): el default paso a FALSE. Con `gemini-3.1-flash-lite` (el modelo por
+    # defecto de arriba) la peticion con la herramienta de busqueda es rechazada por la API, el
+    # stream muere y el aprendiz veia sus preguntas sin ninguna respuesta. Para encender la
+    # busqueda hay que usar un modelo que la soporte (RENASIA_CHAT_MODEL sin `-lite`) Y poner
+    # IA_BUSQUEDA_WEB=true — las dos cosas, en la configuracion de ejecucion.
+    busqueda-web: ${IA_BUSQUEDA_WEB:false}
   email:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}

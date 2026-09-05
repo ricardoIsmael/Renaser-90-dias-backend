@@ -15,8 +15,10 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import org.springframework.stereotype.Service;
 
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -32,7 +34,12 @@ import java.util.stream.Collectors;
  * después, en memoria. La alternativa obvia — por cada curso visible, pedir sus secciones y
  * lecciones con {@code porCurso(cursoId)} — dispara una consulta por curso: exactamente el
  * patrón N+1 que {@code ContarRegistrosDiariosHabitsPort} documenta y que este método evita
- * a propósito (su primer consumidor, {@code rag}, llama esto en cada pregunta a Renasia).
+ * a propósito (su primer consumidor, {@code rag}, llama esto en cada pregunta a un asistente).
+ *
+ * <p><b>D-102 — la variante por curso es la misma pasada con el universo recortado.</b>
+ * {@link #leccionesVisiblesPara(UserId, String)} no agrega consultas ni reimplementa el gate:
+ * filtra el catálogo de cursos a uno solo ANTES de aplicar la visibilidad, y de ahí en adelante
+ * es idéntico. Un curso bloqueado para el actor da vacío, igual que si no existiera.
  */
 @Service
 public class LeccionesVisiblesAcademyService implements LeccionesVisiblesFinder {
@@ -53,6 +60,17 @@ public class LeccionesVisiblesAcademyService implements LeccionesVisiblesFinder 
 
     @Override
     public Set<String> leccionesVisiblesPara(UserId actorId) {
+        return leccionesVisibles(actorId, curso -> true);
+    }
+
+    @Override
+    public Set<String> leccionesVisiblesPara(UserId actorId, String cursoId) {
+        Objects.requireNonNull(cursoId, "cursoId es obligatorio");
+        CursoId buscado = CursoId.of(cursoId);
+        return leccionesVisibles(actorId, curso -> curso.id().equals(buscado));
+    }
+
+    private Set<String> leccionesVisibles(UserId actorId, Predicate<Curso> universo) {
         Optional<ProgresoParticipanteAcademy> progresoOpt = progresoPort.deParticipante(actorId);
         if (progresoOpt.isEmpty() || progresoOpt.get().suspendido()) {
             return Set.of();
@@ -62,13 +80,17 @@ public class LeccionesVisiblesAcademyService implements LeccionesVisiblesFinder 
         Integer programDay = rol == UserRole.TRAINEE ? progreso.diaPrograma() : null;
 
         Set<CursoId> cursosVisibles = loadCursoPort.listarTodos().stream()
+                .filter(universo)
                 .filter(curso -> curso.visibleEnCatalogoPara(rol, programDay))
                 .map(Curso::id)
                 .collect(Collectors.toSet());
         if (cursosVisibles.isEmpty()) {
             return Set.of();
         }
+        return leccionesDeCursosVisibles(cursosVisibles, rol, programDay);
+    }
 
+    private Set<String> leccionesDeCursosVisibles(Set<CursoId> cursosVisibles, UserRole rol, Integer programDay) {
         Set<SeccionCursoId> seccionesVisibles = loadSeccionCursoPort.listarTodas().stream()
                 .filter(seccion -> cursosVisibles.contains(seccion.cursoId())
                         && seccion.visibleEnCatalogoPara(rol, programDay))

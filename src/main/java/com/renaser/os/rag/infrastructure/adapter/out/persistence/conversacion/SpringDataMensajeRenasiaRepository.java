@@ -13,20 +13,24 @@ interface SpringDataMensajeRenasiaRepository extends JpaRepository<MensajeRenasi
 
     /** Dos metodos (con/sin cursor) en vez de {@code (:cursor IS NULL OR ...)} — mismo
      * defecto E-31 documentado por `community`/`chat` (Postgres no infiere el tipo de un
-     * parametro que solo aparece en {@code ? IS NULL}). */
+     * parametro que solo aparece en {@code ? IS NULL}). D-102: el {@code agente} entra al WHERE
+     * y lo cubre el indice {@code mensajes_renasia_agente_idx (usuario_id, agente, creado_en)}. */
     @Query("""
             SELECT m FROM MensajeRenasiaJpaEntity m
             WHERE m.usuarioId = :usuarioId
+              AND m.agente = :agente
             ORDER BY m.creadoEn DESC
             """)
-    List<MensajeRenasiaJpaEntity> paginaSinCursor(@Param("usuarioId") UUID usuarioId, Pageable pageable);
+    List<MensajeRenasiaJpaEntity> paginaSinCursor(@Param("usuarioId") UUID usuarioId, @Param("agente") String agente,
+                                                   Pageable pageable);
 
     @Query("""
             SELECT m FROM MensajeRenasiaJpaEntity m
             WHERE m.usuarioId = :usuarioId
+              AND m.agente = :agente
               AND m.creadoEn < :cursor
             ORDER BY m.creadoEn DESC
             """)
-    List<MensajeRenasiaJpaEntity> paginaConCursor(@Param("usuarioId") UUID usuarioId, @Param("cursor") Instant cursor,
-                                                   Pageable pageable);
+    List<MensajeRenasiaJpaEntity> paginaConCursor(@Param("usuarioId") UUID usuarioId, @Param("agente") String agente,
+                                                   @Param("cursor") Instant cursor, Pageable pageable);
 }

@@ -2,6 +2,7 @@ package com.renaser.os.rag.infrastructure.adapter.out.persistence.conversacion;
 
 import com.renaser.os.rag.application.ports.out.conversacion.LoadMensajeRenasiaPort;
 import com.renaser.os.rag.application.ports.out.conversacion.SaveMensajeRenasiaPort;
+import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.FuenteMensaje;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.shared.domain.UserId;
@@ -32,12 +33,13 @@ class MensajeRenasiaPersistenceAdapter implements SaveMensajeRenasiaPort, LoadMe
         this.mapper = mapper;
     }
 
+    /** D-102: la pagina es de UN agente; el WHERE lo aplica la consulta, nunca un filtro en memoria. */
     @Override
-    public List<MensajeRenasia> pagina(UserId usuarioId, Instant cursor, int limite) {
+    public List<MensajeRenasia> pagina(UserId usuarioId, AgenteConversacional agente, Instant cursor, int limite) {
         Pageable pageable = PageRequest.of(0, limite);
         List<MensajeRenasiaJpaEntity> filas = cursor == null
-                ? repository.paginaSinCursor(usuarioId.value(), pageable)
-                : repository.paginaConCursor(usuarioId.value(), cursor, pageable);
+                ? repository.paginaSinCursor(usuarioId.value(), agente.name(), pageable)
+                : repository.paginaConCursor(usuarioId.value(), agente.name(), cursor, pageable);
         Map<UUID, List<String>> leccionIdsPorMensaje = leccionIdsPorMensaje(filas);
         return filas.stream()
                 .map(fila -> mapper.toDomain(fila, leccionIdsPorMensaje.getOrDefault(fila.getId(), List.of())))

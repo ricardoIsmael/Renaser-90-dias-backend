@@ -26,4 +26,15 @@ public interface LeccionesVisiblesFinder {
      * existe, está suspendido, o no tiene ningún curso accesible — nunca {@code null}.
      */
     Set<String> leccionesVisiblesPara(UserId actorId);
+
+    /**
+     * D-102: la misma regla, acotada a UN curso. La necesita el tutor de cursos de `rag`
+     * (Sparkie), que responde sobre el curso en que la persona esta parada y no debe citar
+     * material de otros cursos.
+     *
+     * @return ids de las lecciones de {@code cursoId} visibles hoy para {@code actorId}. Vacío
+     * si el curso no existe, esta bloqueado para el actor, o el actor no existe o esta
+     * suspendido — nunca {@code null}.
+     */
+    Set<String> leccionesVisiblesPara(UserId actorId, String cursoId);
 }

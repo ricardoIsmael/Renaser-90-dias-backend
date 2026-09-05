@@ -23,4 +23,15 @@ class LeerLeccionesVisiblesAdapterTest {
 
         assertThat(adapter.visiblesParaActor(actorId)).containsExactlyInAnyOrder("l1", "l2");
     }
+
+    /** D-102: la variante por curso tampoco intersecta en memoria — se la pide a academy tal cual. */
+    @Test
+    void delegaEnElFinderPorCursoSinIntersectarPorSuCuenta() {
+        LeccionesVisiblesFinder finder = mock(LeccionesVisiblesFinder.class);
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(finder.leccionesVisiblesPara(actorId, "curso-1")).thenReturn(Set.of("l1"));
+        LeerLeccionesVisiblesAdapter adapter = new LeerLeccionesVisiblesAdapter(finder);
+
+        assertThat(adapter.visiblesParaActorEnCurso(actorId, "curso-1")).containsExactly("l1");
+    }
 }
