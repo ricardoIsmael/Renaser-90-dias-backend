@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
  * no en clases escaneadas como esta. Con dos condiciones simetricas sobre la MISMA propiedad
  * siempre hay exactamente un {@code EnviarEmailPort}, sin ambiguedad ni orden.
  *
- * <p><b>Reutilizacion:</b> los cuatro metodos del puerto se reducen a elegir una plantilla
+ * <p><b>Reutilizacion:</b> los cinco metodos del puerto se reducen a elegir una plantilla
  * ({@link PlantillasEmail}) y delegar en un unico {@link #enviar}, que concentra transporte,
  * UTF-8 y manejo de errores. No hay logica de armado de correo repetida.
  *
@@ -68,6 +68,11 @@ public class SmtpEnviarEmailAdapter implements EnviarEmailPort {
     @Override
     public void enviarCodigoVerificacionEmail(String destinatarioEmail, String codigo) {
         enviar(destinatarioEmail, PlantillasEmail.codigoVerificacion(codigo));
+    }
+
+    @Override
+    public void enviarCodigoResetContrasena(String destinatarioEmail, String codigo) {
+        enviar(destinatarioEmail, PlantillasEmail.codigoResetContrasena(codigo));
     }
 
     @Override

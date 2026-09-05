@@ -1,12 +1,17 @@
 package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.CodigoVerificacionInvalidoException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.TokenResetInvalidoException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.in.autenticacion.CerrarTodasLasSesionesUseCase;
 import com.renaser.os.users.application.ports.in.autenticacion.ConfirmarResetContrasenaUseCase.ConfirmarResetContrasenaCommand;
+import com.renaser.os.users.application.ports.in.autenticacion.SolicitarCodigoResetContrasenaUseCase.SolicitarCodigoResetContrasenaCommand;
 import com.renaser.os.users.application.ports.in.autenticacion.SolicitarResetContrasenaUseCase.SolicitarResetContrasenaCommand;
+import com.renaser.os.users.application.ports.in.autenticacion.VerificarCodigoResetContrasenaUseCase.ResultadoVerificacionReset;
+import com.renaser.os.users.application.ports.in.autenticacion.VerificarCodigoResetContrasenaUseCase.VerificarCodigoResetContrasenaCommand;
+import com.renaser.os.users.application.ports.out.autenticacion.CodigoResetContrasenaPort;
 import com.renaser.os.users.application.ports.out.autenticacion.EnviarEmailPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LimitarSolicitudesResetPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadCredencialPort;
@@ -15,6 +20,8 @@ import com.renaser.os.users.application.ports.out.autenticacion.SaveCredencialPo
 import com.renaser.os.users.application.ports.out.autenticacion.TokenResetContrasenaPort;
 import com.renaser.os.users.domain.model.user.Credencial;
 import jakarta.validation.ConstraintViolationException;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -26,12 +33,15 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,6 +58,8 @@ class ResetContrasenaServiceTest {
     @Mock
     private TokenResetContrasenaPort tokenResetContrasenaPort;
     @Mock
+    private CodigoResetContrasenaPort codigoResetContrasenaPort;
+    @Mock
     private LimitarSolicitudesResetPort limitarSolicitudesResetPort;
     @Mock
     private EnviarEmailPort enviarEmailPort;
@@ -60,19 +72,24 @@ class ResetContrasenaServiceTest {
 
     private ResetContrasenaService service() {
         return new ResetContrasenaService(loadCredencialPort, saveCredencialPort, tokenResetContrasenaPort,
-                limitarSolicitudesResetPort, enviarEmailPort, cerrarTodasLasSesionesUseCase, passwordEncoder, clock);
+                codigoResetContrasenaPort, limitarSolicitudesResetPort, enviarEmailPort,
+                cerrarTodasLasSesionesUseCase, passwordEncoder, clock);
     }
 
     private void permitirRateLimit() {
-        when(limitarSolicitudesResetPort.registrarIntento(anyString(), any(), org.mockito.ArgumentMatchers.anyInt()))
-                .thenReturn(true);
+        when(limitarSolicitudesResetPort.registrarIntento(anyString(), any(), anyInt())).thenReturn(true);
+    }
+
+    private UserId cuentaConContrasena() {
+        UserId id = UserId.of(UUID.randomUUID());
+        when(loadCredencialPort.porEmail(EMAIL)).thenReturn(Optional.of(new CredencialParaLogin(id, "hash", true)));
+        return id;
     }
 
     @Test
     void solicitarConCuentaExistenteYConContrasenaGeneraTokenYEnviaCorreo() {
         permitirRateLimit();
-        UserId id = UserId.of(UUID.randomUUID());
-        when(loadCredencialPort.porEmail(EMAIL)).thenReturn(Optional.of(new CredencialParaLogin(id, "hash", true)));
+        UserId id = cuentaConContrasena();
         when(tokenResetContrasenaPort.generar(eq(id), any(Duration.class))).thenReturn("token-opaco");
 
         service().solicitar(new SolicitarResetContrasenaCommand(EMAIL, IP));
@@ -120,7 +137,7 @@ class ResetContrasenaServiceTest {
 
     @Test
     void solicitarConLimiteDeTasaPorEmailExcedidoLanzaRateLimitExceeded() {
-        when(limitarSolicitudesResetPort.registrarIntento(eq("email:" + EMAIL), any(), org.mockito.ArgumentMatchers.anyInt()))
+        when(limitarSolicitudesResetPort.registrarIntento(eq("email:" + EMAIL), any(), anyInt()))
                 .thenReturn(false);
 
         assertThatThrownBy(() -> service().solicitar(new SolicitarResetContrasenaCommand(EMAIL, IP)))
@@ -131,9 +148,9 @@ class ResetContrasenaServiceTest {
 
     @Test
     void solicitarConLimiteDeTasaPorIpExcedidoLanzaRateLimitExceeded() {
-        when(limitarSolicitudesResetPort.registrarIntento(eq("email:" + EMAIL), any(), org.mockito.ArgumentMatchers.anyInt()))
+        when(limitarSolicitudesResetPort.registrarIntento(eq("email:" + EMAIL), any(), anyInt()))
                 .thenReturn(true);
-        when(limitarSolicitudesResetPort.registrarIntento(eq("ip:" + IP), any(), org.mockito.ArgumentMatchers.anyInt()))
+        when(limitarSolicitudesResetPort.registrarIntento(eq("ip:" + IP), any(), anyInt()))
                 .thenReturn(false);
 
         assertThatThrownBy(() -> service().solicitar(new SolicitarResetContrasenaCommand(EMAIL, IP)))
@@ -142,15 +159,14 @@ class ResetContrasenaServiceTest {
 
     @Test
     void solicitarSinIpOmiteElLimitePorIp() {
-        when(limitarSolicitudesResetPort.registrarIntento(eq("email:" + EMAIL), any(), org.mockito.ArgumentMatchers.anyInt()))
+        when(limitarSolicitudesResetPort.registrarIntento(eq("email:" + EMAIL), any(), anyInt()))
                 .thenReturn(true);
         when(loadCredencialPort.porEmail(EMAIL)).thenReturn(Optional.empty());
 
         service().solicitar(new SolicitarResetContrasenaCommand(EMAIL, null));
 
         // Solo el chequeo por email se ejecuta: sin IP no hay clave "ip:..." posible que registrar.
-        verify(limitarSolicitudesResetPort, org.mockito.Mockito.times(1))
-                .registrarIntento(anyString(), any(), org.mockito.ArgumentMatchers.anyInt());
+        verify(limitarSolicitudesResetPort, times(1)).registrarIntento(anyString(), any(), anyInt());
     }
 
     @Test
@@ -205,5 +221,133 @@ class ResetContrasenaServiceTest {
                 .isInstanceOf(ConstraintViolationException.class);
 
         verify(tokenResetContrasenaPort, never()).consumir(any());
+    }
+
+    /**
+     * Reset POR CODIGO (docs/MODULO_AUTH.md §7.6, D-102): el camino que usa la app. Mismas
+     * garantias que el reset por link (no-enumeracion, rate limit) y misma vigencia/limite de
+     * intentos que el codigo del alta.
+     */
+    @Nested
+    class PorCodigo {
+
+        @Test
+        void solicitarCodigoConCuentaConContrasenaGeneraCodigoYEnviaCorreoConLaVigenciaDelAlta() {
+            permitirRateLimit();
+            cuentaConContrasena();
+            when(codigoResetContrasenaPort.generarCodigo(eq(EMAIL), any(Duration.class))).thenReturn("483920");
+
+            service().solicitarCodigo(new SolicitarCodigoResetContrasenaCommand(EMAIL, IP));
+
+            // La vigencia es LA del alta, referenciada — si cambia alla, cambia aca sola.
+            verify(codigoResetContrasenaPort).generarCodigo(EMAIL, VerificacionEmailService.VIGENCIA_CODIGO);
+            verify(enviarEmailPort).enviarCodigoResetContrasena(EMAIL, "483920");
+            // Por codigo NO se manda el link: son dos correos distintos, nunca los dos.
+            verify(enviarEmailPort, never()).enviarResetContrasena(any(), any());
+            verify(tokenResetContrasenaPort, never()).generar(any(), any());
+        }
+
+        @Test
+        void solicitarCodigoConEmailInexistenteNoGeneraCodigoNiEnviaCorreoPeroNoLanzaExcepcion() {
+            permitirRateLimit();
+            when(loadCredencialPort.porEmail(EMAIL)).thenReturn(Optional.empty());
+
+            assertThatCode(() -> service().solicitarCodigo(new SolicitarCodigoResetContrasenaCommand(EMAIL, IP)))
+                    .doesNotThrowAnyException();
+
+            verify(codigoResetContrasenaPort, never()).generarCodigo(any(), any());
+            verify(enviarEmailPort, never()).enviarCodigoResetContrasena(any(), any());
+        }
+
+        @Test
+        void solicitarCodigoConCuentaSoloDeProveedorSocialNoGeneraCodigo() {
+            permitirRateLimit();
+            when(loadCredencialPort.porEmail(EMAIL))
+                    .thenReturn(Optional.of(new CredencialParaLogin(UserId.of(UUID.randomUUID()), null, true)));
+
+            service().solicitarCodigo(new SolicitarCodigoResetContrasenaCommand(EMAIL, IP));
+
+            verify(codigoResetContrasenaPort, never()).generarCodigo(any(), any());
+            verify(enviarEmailPort, never()).enviarCodigoResetContrasena(any(), any());
+        }
+
+        @Test
+        @DisplayName("comparte el contador de rate limit con el reset por link: misma clave email:/ip:")
+        void solicitarCodigoUsaElMismoContadorQueElResetPorLink() {
+            permitirRateLimit();
+            when(loadCredencialPort.porEmail(EMAIL)).thenReturn(Optional.empty());
+
+            service().solicitarCodigo(new SolicitarCodigoResetContrasenaCommand(EMAIL, IP));
+
+            verify(limitarSolicitudesResetPort).registrarIntento("email:" + EMAIL,
+                    ResetContrasenaService.VENTANA_RATE_LIMIT, ResetContrasenaService.LIMITE_POR_EMAIL);
+            verify(limitarSolicitudesResetPort).registrarIntento("ip:" + IP,
+                    ResetContrasenaService.VENTANA_RATE_LIMIT, ResetContrasenaService.LIMITE_POR_IP);
+        }
+
+        @Test
+        void solicitarCodigoConLimiteDeTasaExcedidoLanzaRateLimitExceededAntesDeMirarLaCuenta() {
+            when(limitarSolicitudesResetPort.registrarIntento(eq("email:" + EMAIL), any(), anyInt()))
+                    .thenReturn(false);
+
+            assertThatThrownBy(() -> service().solicitarCodigo(new SolicitarCodigoResetContrasenaCommand(EMAIL, IP)))
+                    .isInstanceOf(RateLimitExceededException.class);
+
+            verify(loadCredencialPort, never()).porEmail(any());
+            verify(codigoResetContrasenaPort, never()).generarCodigo(any(), any());
+        }
+
+        @Test
+        void verificarCodigoCorrectoEmiteElMismoTokenDeResetQueElFlujoPorLink() {
+            UserId id = cuentaConContrasena();
+            when(codigoResetContrasenaPort.verificarCodigo(EMAIL, "483920", VerificacionEmailService.MAX_INTENTOS))
+                    .thenReturn(true);
+            when(tokenResetContrasenaPort.generar(id, ResetContrasenaService.VIGENCIA_TOKEN)).thenReturn("token-opaco");
+
+            ResultadoVerificacionReset resultado = service().verificarCodigo(
+                    new VerificarCodigoResetContrasenaCommand(EMAIL, "483920"));
+
+            assertThat(resultado.resetToken()).isEqualTo("token-opaco");
+        }
+
+        @Test
+        void verificarCodigoIncorrectoLanzaExcepcionYNoEmiteToken() {
+            when(codigoResetContrasenaPort.verificarCodigo(EMAIL, "000000", VerificacionEmailService.MAX_INTENTOS))
+                    .thenReturn(false);
+
+            assertThatThrownBy(() -> service().verificarCodigo(new VerificarCodigoResetContrasenaCommand(EMAIL, "000000")))
+                    .isInstanceOf(CodigoVerificacionInvalidoException.class);
+
+            verify(tokenResetContrasenaPort, never()).generar(any(), any());
+            // Con el codigo mal ni siquiera se mira si hay cuenta: no hay nada que enumerar.
+            verify(loadCredencialPort, never()).porEmail(any());
+        }
+
+        /**
+         * Caso borde: el codigo coincide pero para cuando se verifica la cuenta ya no existe o
+         * perdio la contrasena. Se responde EXACTAMENTE igual que un codigo equivocado — no hay
+         * razon de negocio para distinguirlo ante el cliente.
+         */
+        @Test
+        void verificarCodigoCorrectoSinCuentaConContrasenaLanzaLaMismaExcepcionQueUnCodigoMalo() {
+            when(codigoResetContrasenaPort.verificarCodigo(EMAIL, "483920", VerificacionEmailService.MAX_INTENTOS))
+                    .thenReturn(true);
+            when(loadCredencialPort.porEmail(EMAIL)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service().verificarCodigo(new VerificarCodigoResetContrasenaCommand(EMAIL, "483920")))
+                    .isInstanceOf(CodigoVerificacionInvalidoException.class);
+
+            verify(tokenResetContrasenaPort, never()).generar(any(), any());
+        }
+
+        @Test
+        void verificarCodigoConFormaInvalidaRechazadoPorSelfValidatingSinGastarUnIntento() {
+            assertThatThrownBy(() -> service().verificarCodigo(new VerificarCodigoResetContrasenaCommand(EMAIL, "12345")))
+                    .isInstanceOf(ConstraintViolationException.class);
+            assertThatThrownBy(() -> service().verificarCodigo(new VerificarCodigoResetContrasenaCommand(EMAIL, "12345a")))
+                    .isInstanceOf(ConstraintViolationException.class);
+
+            verify(codigoResetContrasenaPort, never()).verificarCodigo(any(), any(), anyInt());
+        }
     }
 }
