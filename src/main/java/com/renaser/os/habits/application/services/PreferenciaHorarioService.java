@@ -6,6 +6,7 @@ import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.preferencia.HistorialCambioHorarioPort;
+import com.renaser.os.habits.application.ports.out.preferencia.LoadCambioHorarioPendientePort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.application.ports.out.preferencia.SaveCambioHorarioPendientePort;
 import com.renaser.os.habits.application.ports.out.preferencia.SavePreferenciaHorarioPort;
@@ -52,6 +53,8 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     private final LoadPreferenciaHorarioPort loadPreferenciaPort;
     private final SavePreferenciaHorarioPort savePreferenciaPort;
     private final SaveCambioHorarioPendientePort saveCambioPendientePort;
+    /** D-91: hace falta para que la cuota vea los cambios ya PROGRAMADOS, no solo los ya aplicados. */
+    private final LoadCambioHorarioPendientePort loadCambioPendientePort;
     private final HistorialCambioHorarioPort historialPort;
     private final LoadRegistroHabitoPort loadRegistroPort;
     private final Clock clock;
@@ -61,6 +64,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
                                       LoadPreferenciaHorarioPort loadPreferenciaPort,
                                       SavePreferenciaHorarioPort savePreferenciaPort,
                                       SaveCambioHorarioPendientePort saveCambioPendientePort,
+                                      LoadCambioHorarioPendientePort loadCambioPendientePort,
                                       HistorialCambioHorarioPort historialPort,
                                       LoadRegistroHabitoPort loadRegistroPort, Clock clock) {
         this.progresoPort = progresoPort;
@@ -69,6 +73,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         this.loadPreferenciaPort = loadPreferenciaPort;
         this.savePreferenciaPort = savePreferenciaPort;
         this.saveCambioPendientePort = saveCambioPendientePort;
+        this.loadCambioPendientePort = loadCambioPendientePort;
         this.historialPort = historialPort;
         this.loadRegistroPort = loadRegistroPort;
         this.clock = clock;
@@ -83,10 +88,9 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
 
         ZoneId zona = ZoneId.of(progreso.timezone());
         Instant ahora = clock.now();
-        LocalDate hoy = ahora.atZone(zona).toLocalDate();
 
         ContextoCuota contexto = resolverContextoCuota(command, habito, progreso.diaPrograma(), zona, ahora);
-        aplicarEdicion(command, contexto, ahora, hoy);
+        aplicarEdicion(command, contexto, ahora);
 
         return construirResultado(command, contexto);
     }
@@ -100,46 +104,70 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     private ContextoCuota resolverContextoCuota(EditarPreferenciaHorarioCommand command, Habito habito,
                                                  int diaPrograma, ZoneId zona, Instant ahora) {
         LocalDate hoy = ahora.atZone(zona).toLocalDate();
-        boolean semanaLibreGlobal = CuotaEdicionHorario.esSemanaDeAcomodoLibre(diaPrograma);
+        // D-91: el dia en curso NO se toca, sin excepciones. Todo cambio rige desde manana, asi que
+        // la cuota se mide contra la semana de programa de la FECHA EFECTIVA, no la de hoy: pedir un
+        // cambio el ultimo dia de una semana consume el cupo de la semana siguiente, que es cuando
+        // el cambio va a existir de verdad.
+        LocalDate fechaEfectiva = hoy.plusDays(1);
+        int diaEfectivo = diaPrograma + 1;
+
+        boolean semanaLibreGlobal = CuotaEdicionHorario.esSemanaDeAcomodoLibre(diaEfectivo);
         int libreHasta = Math.max(FREE_SCHEDULE_EDITS_UNTIL_DAY,
                 habito.diaLimiteEdicionLibre() != null ? habito.diaLimiteEdicionLibre() : FREE_SCHEDULE_EDITS_UNTIL_DAY);
-        boolean habitoLibre = diaPrograma <= libreHasta;
+        boolean habitoLibre = diaEfectivo <= libreHasta;
         VentanaVigenteHoy vigente = resolverVentanaVigenteHoy(command, zona, ahora);
 
         List<HabitoId> tocados = List.of();
         if (!semanaLibreGlobal) {
-            LocalDate inicioSemana = CuotaEdicionHorario.inicioSemanaPrograma(hoy, diaPrograma);
-            tocados = historialPort.distintosHabitosCambiadosDesde(command.actorId(), inicioSemana);
-            requireCupoDisponible(command.habitoId(), habitoLibre, vigente.yaArranco(), tocados);
+            LocalDate inicioSemana = CuotaEdicionHorario.inicioSemanaPrograma(fechaEfectiva, diaEfectivo);
+            tocados = habitosConCupoComprometido(command.actorId(), inicioSemana);
+            requireCupoDisponible(command.habitoId(), habitoLibre, tocados);
         }
-
-        LocalDate fechaEfectiva = vigente.yaArranco() ? hoy.plusDays(1) : null;
         return new ContextoCuota(semanaLibreGlobal, habitoLibre, vigente, fechaEfectiva, tocados);
     }
 
-    private static void requireCupoDisponible(HabitoId habitoId, boolean habitoLibre, boolean diferido,
-                                                List<HabitoId> tocados) {
-        if (!habitoLibre && !diferido && tocados.size() >= WEEKLY_SCHEDULE_EDIT_LIMIT
-                && !tocados.contains(habitoId)) {
+    /**
+     * Los habitos que ya se llevaron un cupo de esa semana: los que YA cambiaron de verdad
+     * ({@code historial_cambios_horario}) mas los que tienen un cambio programado que va a regir
+     * dentro de la misma semana.
+     *
+     * <p>La segunda mitad es nueva y es lo que impide que D-91 rompa la cuota. Antes solo se
+     * diferian los cambios sobre habitos cuya ventana ya habia arrancado, asi que la via diferida
+     * era estrecha y podia no cobrarse en el pedido; ahora se difiere TODO, y sin contar los
+     * pendientes bastaba con pedir los 18 habitos la misma noche para que el limite de
+     * {@value #WEEKLY_SCHEDULE_EDIT_LIMIT} no significara nada al dia siguiente.
+     */
+    private List<HabitoId> habitosConCupoComprometido(UserId actorId, LocalDate inicioSemana) {
+        LocalDate finSemana = inicioSemana.plusDays(6);
+        Set<HabitoId> comprometidos = new LinkedHashSet<>(
+                historialPort.distintosHabitosCambiadosDesde(actorId, inicioSemana));
+        loadCambioPendientePort.deParticipante(actorId).stream()
+                .filter(pendiente -> !pendiente.fechaEfectiva().isBefore(inicioSemana)
+                        && !pendiente.fechaEfectiva().isAfter(finSemana))
+                .map(CambioHorarioPendiente::habitoId)
+                .forEach(comprometidos::add);
+        return List.copyOf(comprometidos);
+    }
+
+    private static void requireCupoDisponible(HabitoId habitoId, boolean habitoLibre, List<HabitoId> tocados) {
+        if (!habitoLibre && tocados.size() >= WEEKLY_SCHEDULE_EDIT_LIMIT && !tocados.contains(habitoId)) {
             throw new IllegalStateException("Esta semana ya reacomodaste " + WEEKLY_SCHEDULE_EDIT_LIMIT
                     + " habitos. Puedes seguir ajustando esos, y el resto la semana que viene.");
         }
     }
 
-    private void aplicarEdicion(EditarPreferenciaHorarioCommand command, ContextoCuota contexto, Instant ahora,
-                                 LocalDate hoy) {
-        if (contexto.diferido()) {
-            asegurarPreferenciaVigente(command, contexto.ventanaVigente(), ahora);
-            CambioHorarioPendiente pendiente = CambioHorarioPendiente.programar(command.actorId(), command.habitoId(),
-                    command.horaDisparo(), command.horaLimite(), command.recordatorioActivo(),
-                    command.minutosRecordatorio(), contexto.fechaEfectivaDiferido(), ahora);
-            saveCambioPendientePort.save(pendiente);
-        } else {
-            aplicarInmediato(command, ahora);
-            saveCambioPendientePort.borrar(command.actorId(), command.habitoId());
-            historialPort.registrar(command.actorId(), command.habitoId(), hoy, command.horaDisparo(),
-                    command.horaLimite(), ahora);
-        }
+    /**
+     * D-91: ya no hay rama inmediata. Todo cambio se programa, y la promocion nocturna
+     * ({@code PromocionCambioHorarioService}) lo hace regir al dia siguiente — que es tambien
+     * donde se cobra el cupo y se escribe la bitacora. La preferencia vigente se crea igual, con
+     * lo que rige HOY, para que el dia en curso no se mueva ni un minuto.
+     */
+    private void aplicarEdicion(EditarPreferenciaHorarioCommand command, ContextoCuota contexto, Instant ahora) {
+        asegurarPreferenciaVigente(command, contexto.ventanaVigente(), ahora);
+        CambioHorarioPendiente pendiente = CambioHorarioPendiente.programar(command.actorId(), command.habitoId(),
+                command.horaDisparo(), command.horaLimite(), command.recordatorioActivo(),
+                command.minutosRecordatorio(), contexto.fechaEfectivaDiferido(), ahora);
+        saveCambioPendientePort.save(pendiente);
     }
 
     /**
@@ -156,15 +184,6 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         }
         savePreferenciaPort.save(PreferenciaHorario.crear(command.actorId(), command.habitoId(),
                 vigente.horaDisparo(), vigente.horaLimite(), ahora));
-    }
-
-    private void aplicarInmediato(EditarPreferenciaHorarioCommand command, Instant ahora) {
-        PreferenciaHorario pref = loadPreferenciaPort.porParticipanteYHabito(command.actorId(), command.habitoId())
-                .orElseGet(() -> PreferenciaHorario.crear(command.actorId(), command.habitoId(), command.horaDisparo(),
-                        command.horaLimite(), ahora));
-        pref.aplicarAhora(command.horaDisparo(), command.horaLimite(), ahora);
-        pref.actualizarRecordatorio(command.recordatorioActivo(), command.minutosRecordatorio(), ahora);
-        savePreferenciaPort.save(pref);
     }
 
     /**
@@ -186,9 +205,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
                 catalogo != null ? catalogo.horaDisparo() : null);
         LocalTime horaLimite = primeraNoNula(preferencia.map(PreferenciaHorario::horaLimite).orElse(null),
                 catalogo != null ? catalogo.horaLimite() : null);
-        boolean yaArranco = registroDeHoy.isPresent() && horaDisparo != null
-                && !ahora.atZone(zona).toLocalTime().isBefore(horaDisparo);
-        return new VentanaVigenteHoy(horaDisparo, horaLimite, yaArranco, preferencia.isPresent());
+        return new VentanaVigenteHoy(horaDisparo, horaLimite, preferencia.isPresent());
     }
 
     private HorarioHabito horarioDeCatalogoVigente(HabitoId habitoId, RegistroHabito registroDeHoy) {
@@ -221,8 +238,15 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
      */
     private static ResultadoEdicionPreferencia construirResultado(EditarPreferenciaHorarioCommand command,
                                                                     ContextoCuota contexto) {
+        // D-91: el habito que se acaba de editar SIEMPRE cuenta. Antes se lo excluia cuando el
+        // cambio era diferido, porque entonces "diferido" queria decir "todavia no cobra"; ahora
+        // todo cambio deja un pendiente que va a regir manana, y `habitosConCupoComprometido` ya
+        // cuenta esos pendientes — devolver un contador que ignore el propio pedido le mentiria
+        // a la pantalla que muestra "te quedan N".
         int usados;
-        if (contexto.semanaLibreGlobal() || contexto.diferido() || contexto.habitoLibre()) {
+        if (contexto.semanaLibreGlobal() || contexto.habitoLibre()) {
+            // Sin cupo que cobrar: informar "1 de 3" en la semana de acomodo seria mentirle a la
+            // pantalla, que muestra ese contador tal cual.
             usados = contexto.tocados().size();
         } else {
             Set<HabitoId> conjunto = new LinkedHashSet<>(contexto.tocados());
@@ -231,7 +255,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         }
         CuotaEdicionHorario cuota = CuotaEdicionHorario.de(usados, contexto.semanaLibreGlobal());
         return new ResultadoEdicionPreferencia(command.habitoId(), command.horaDisparo(), command.horaLimite(),
-                contexto.diferido(), contexto.fechaEfectivaDiferido(), cuota.usados(), cuota.restantes(),
+                true, contexto.fechaEfectivaDiferido(), cuota.usados(), cuota.restantes(),
                 cuota.limite(), cuota.periodo());
     }
 
@@ -243,15 +267,15 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
      */
     private record ContextoCuota(boolean semanaLibreGlobal, boolean habitoLibre, VentanaVigenteHoy ventanaVigente,
                                   LocalDate fechaEfectivaDiferido, List<HabitoId> tocados) {
-
-        boolean diferido() {
-            return ventanaVigente.yaArranco();
-        }
     }
 
-    /** {@code conPreferenciaPropia}: si ya existe fila en `preferencias_horario` (la padre de la FK). */
-    private record VentanaVigenteHoy(LocalTime horaDisparo, LocalTime horaLimite, boolean yaArranco,
-                                      boolean conPreferenciaPropia) {
+    /**
+     * {@code conPreferenciaPropia}: si ya existe fila en `preferencias_horario` (la padre de la FK).
+     *
+     * <p>D-91 le saco {@code yaArranco}: servia para decidir si el cambio se aplicaba hoy o se
+     * difería, y esa decision ya no existe — se difiere siempre.
+     */
+    private record VentanaVigenteHoy(LocalTime horaDisparo, LocalTime horaLimite, boolean conPreferenciaPropia) {
     }
 
     private Habito requireHabito(HabitoId id) {

@@ -56,12 +56,22 @@ public class HabitUnlockController {
         return HabitUnlockPlanResponse.from(consultarUseCase.consultar(actor));
     }
 
-    /** Idempotente: elegir el mismo habito dos veces no falla ni duplica (ver javadoc del caso de uso). */
+    /**
+     * Idempotente: elegir el mismo habito dos veces no falla ni duplica (ver javadoc del caso de
+     * uso) — y tampoco mueve el dia si el segundo pedido trae otro {@code unlockDay}.
+     *
+     * <p>El cuerpo es opcional: sin el, el habito arranca hoy, igual que antes de que este
+     * endpoint aceptara un dia. Con {@code {"unlockDay": 2}} el aprendiz lo deja agendado para
+     * el dia 2 del programa y hasta entonces no le genera registros.
+     */
     @RequiresPermission(Permission.USE_APP)
     @PutMapping("/{habitId}")
     public HabitUnlockPlanResponse.HabitUnlockItemResponse elegir(@ActorAutenticado UserId actor,
-                                                                    @PathVariable UUID habitId) {
-        var desbloqueo = elegirUseCase.elegir(new ElegirHabitoCommand(actor, HabitoId.of(habitId)));
+                                                                    @PathVariable UUID habitId,
+                                                                    @RequestBody(required = false) @Valid
+                                                                    ElegirHabitoRequest request) {
+        Integer diaPedido = request == null ? null : request.unlockDay();
+        var desbloqueo = elegirUseCase.elegir(new ElegirHabitoCommand(actor, HabitoId.of(habitId), diaPedido));
         return HabitUnlockPlanResponse.HabitUnlockItemResponse.from(desbloqueo);
     }
 

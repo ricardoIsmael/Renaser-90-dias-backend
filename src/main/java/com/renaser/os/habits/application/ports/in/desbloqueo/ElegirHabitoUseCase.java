@@ -4,6 +4,8 @@ import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.application.SelfValidating;
 import com.renaser.os.shared.domain.UserId;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
 /**
@@ -15,8 +17,6 @@ import jakarta.validation.constraints.NotNull;
  * <p><b>Simplificaciones deliberadas, NO confirmadas por negocio (ver
  * docs/informes/habits-eleccion-y-personales.md §4 para las preguntas abiertas):</b>
  * <ul>
- *   <li>{@code diaDesbloqueo} se fija al dia de programa ACTUAL del aprendiz en el momento de
- *       elegir (desbloqueo inmediato) — no hay escalonamiento por lotes.</li>
  *   <li>No hay un maximo de habitos elegibles: cualquier habito de catalogo activo se puede
  *       agregar.</li>
  * </ul>
@@ -25,9 +25,20 @@ public interface ElegirHabitoUseCase {
 
     DesbloqueoHabito elegir(ElegirHabitoCommand command);
 
-    record ElegirHabitoCommand(@NotNull UserId actorId, @NotNull HabitoId habitoId) {
+    /**
+     * {@code diaDesbloqueo} nulo = arranca HOY (el dia de programa actual del aprendiz), que es
+     * el comportamiento historico y el unico que existia antes. Con valor, el aprendiz elige
+     * para que dia del programa quiere que empiece — "lo agrego ahora, pero lo empiezo el dia 2".
+     *
+     * <p>Solo hacia adelante: el dia pedido tiene que ser {@code >=} el dia actual del aprendiz
+     * y {@code <= 90}. Desbloquear hacia atras no se acepta porque los dias ya vividos ya
+     * generaron (o no) sus registros: fingir que el habito estaba ahi le mentiria a la
+     * coherencia de esos dias.
+     */
+    record ElegirHabitoCommand(@NotNull UserId actorId, @NotNull HabitoId habitoId,
+                                @Min(1) @Max(90) Integer diaDesbloqueo) {
         public ElegirHabitoCommand {
-            SelfValidating.validateConstructorArgs(ElegirHabitoCommand.class, actorId, habitoId);
+            SelfValidating.validateConstructorArgs(ElegirHabitoCommand.class, actorId, habitoId, diaDesbloqueo);
         }
     }
 }

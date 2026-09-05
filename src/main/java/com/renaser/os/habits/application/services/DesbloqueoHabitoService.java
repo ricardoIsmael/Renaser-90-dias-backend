@@ -59,15 +59,21 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
     /**
      * Idempotente (ver javadoc de {@link SaveDesbloqueoHabitoPort#elegirSiFalta}): elegir dos
      * veces el mismo habito no falla ni duplica, simplemente devuelve el mismo resultado.
+     *
+     * <p>Consecuencia de esa idempotencia: volver a elegir el mismo habito con OTRO
+     * {@code diaDesbloqueo} tampoco lo mueve — el INSERT no hace nada y se relee la fila que ya
+     * estaba. Para cambiar el dia hay que sacar el habito del plan ({@code quitar}) y volver a
+     * elegirlo. Es deliberado: mover el dia de un habito ya empezado es otra operacion, con
+     * otras consecuencias sobre los registros ya generados.
      */
     @Override
     @Transactional
     public DesbloqueoHabito elegir(ElegirHabitoCommand command) {
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
-        if (progreso.diaPrograma() == 0) {
-            throw new NotAuthorizedException(
-                    "El Dia 0 es una vista previa — podras elegir habitos a partir del Dia 1");
-        }
+        // D-103: el dia 0 YA NO se rechaza. Con la regla "hoy se organiza manana" (D-91/D-98), quien
+        // eligio empezar manana tiene que poder armar su plan hoy — y el interruptor ACTIVO/PAUSADO
+        // pasa por aca primero (D-99), asi que el 403 de antes lo dejaba sin interruptor el dia
+        // previo a empezar. Lo que se elige en dia 0 arranca el dia 1: `resolverDiaDesbloqueo`.
         if (progreso.diaPrograma() > 90) {
             throw new IllegalArgumentException("El dia de programa esta fuera del rango de desbloqueo (1-90)");
         }
@@ -80,7 +86,8 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
         }
 
         Instant ahora = clock.now();
-        savePort.elegirSiFalta(command.actorId(), command.habitoId(), progreso.diaPrograma(), ahora, ahora);
+        int diaDesbloqueo = resolverDiaDesbloqueo(command.diaDesbloqueo(), progreso.diaPrograma());
+        savePort.elegirSiFalta(command.actorId(), command.habitoId(), diaDesbloqueo, ahora, ahora);
         return loadPort.deParticipanteYHabito(command.actorId(), command.habitoId())
                 .orElseThrow(() -> new IllegalStateException(
                         "Desbloqueo no encontrado tras asegurar su existencia: " + command.habitoId()));
@@ -122,6 +129,28 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
             throw new IllegalStateException("Este habito es obligatorio y no se puede sacar de tu plan");
         }
         savePort.borrar(command.actorId(), command.habitoId());
+    }
+
+    /**
+     * Sin dia pedido, el habito arranca hoy — el comportamiento historico, y el unico que
+     * existia antes de que el comando llevara el dia. Con dia pedido, solo hacia adelante: los
+     * dias ya vividos ya generaron (o no) sus registros, y desbloquear hacia atras le mentiria
+     * a la coherencia de esos dias.
+     *
+     * <p>El tope de 90 lo valida tambien el comando (`@Max`), pero se repite aca porque el
+     * dia ACTUAL puede ser mayor que el pedido y ese caso no lo cubre ninguna anotacion.
+     */
+    private static int resolverDiaDesbloqueo(Integer pedido, int diaActual) {
+        // Dia 0 = todavia no empezo: lo mas temprano que existe es el dia 1 (la columna exige 1-90).
+        int primerDiaPosible = Math.max(1, diaActual);
+        if (pedido == null) {
+            return primerDiaPosible;
+        }
+        if (pedido < primerDiaPosible) {
+            throw new IllegalArgumentException("No puedes desbloquear un habito para un dia que ya paso — "
+                    + "el mas temprano que puedes elegir es el dia " + primerDiaPosible);
+        }
+        return pedido;
     }
 
     private Habito requireHabito(HabitoId id) {

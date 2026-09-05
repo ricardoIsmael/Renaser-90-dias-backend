@@ -8,6 +8,7 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
 import com.renaser.os.habits.application.ports.out.preferencia.HistorialCambioHorarioPort;
+import com.renaser.os.habits.application.ports.out.preferencia.LoadCambioHorarioPendientePort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.application.ports.out.preferencia.SaveCambioHorarioPendientePort;
 import com.renaser.os.habits.application.ports.out.preferencia.SavePreferenciaHorarioPort;
@@ -19,6 +20,7 @@ import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
+import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
@@ -66,6 +68,8 @@ class PreferenciaHorarioServiceTest {
     @Mock
     private SaveCambioHorarioPendientePort saveCambioPendientePort;
     @Mock
+    private LoadCambioHorarioPendientePort loadCambioPendientePort;
+    @Mock
     private HistorialCambioHorarioPort historialPort;
     @Mock
     private LoadRegistroHabitoPort loadRegistroPort;
@@ -75,7 +79,8 @@ class PreferenciaHorarioServiceTest {
     @BeforeEach
     void setUp() {
         service = new PreferenciaHorarioService(progresoPort, loadHabitoPort, loadHorarioPort, loadPreferenciaPort,
-                savePreferenciaPort, saveCambioPendientePort, historialPort, loadRegistroPort, CLOCK);
+                savePreferenciaPort, saveCambioPendientePort, loadCambioPendientePort, historialPort, loadRegistroPort,
+                CLOCK);
         lenient().when(savePreferenciaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -107,8 +112,9 @@ class PreferenciaHorarioServiceTest {
                 LocalTime.of(9, 0), LocalTime.of(7, 0), true, null))).isInstanceOf(IllegalArgumentException.class);
     }
 
+    /** D-91: hasta el dia 7 tampoco se aplica en el acto — lo unico libre es el cupo, no el dia. */
     @Test
-    void enSemanaLibreAplicaInmediatoSinConsultarHistorial() {
+    void enSemanaLibreTambienSeDifiereYNoConsultaElHistorial() {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(
@@ -120,12 +126,16 @@ class PreferenciaHorarioServiceTest {
         ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
                 LocalTime.of(7, 0), LocalTime.of(9, 0), true, 15));
 
-        assertThat(resultado.diferido()).isFalse();
+        assertThat(resultado.diferido()).isTrue();
+        assertThat(resultado.fechaEfectivaDiferido()).isNotNull();
         assertThat(resultado.periodo()).isEqualTo("FREE");
         assertThat(resultado.cambiosUsados()).isZero();
+        // La preferencia vigente se crea igual (fila padre de la FK), pero con lo que rige HOY:
+        // el dia en curso no se mueve. Lo pedido viaja al pendiente.
         verify(savePreferenciaPort).save(any(PreferenciaHorario.class));
-        verify(historialPort).registrar(any(), any(), any(), any(), any(), any());
-        verify(saveCambioPendientePort).borrar(actor, habito.id());
+        verify(saveCambioPendientePort).save(any());
+        // Ya no se escribe la bitacora al pedir: la escribe la promocion, el dia que el cambio rige.
+        verify(historialPort, never()).registrar(any(), any(), any(), any(), any(), any());
         verify(historialPort, never()).distintosHabitosCambiadosDesde(any(), any());
     }
 
@@ -162,7 +172,7 @@ class PreferenciaHorarioServiceTest {
         ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
                 LocalTime.of(7, 0), LocalTime.of(9, 0), true, null));
 
-        assertThat(resultado.diferido()).isFalse();
+        assertThat(resultado.diferido()).isTrue();
         verify(savePreferenciaPort).save(any(PreferenciaHorario.class));
     }
 
@@ -224,5 +234,57 @@ class PreferenciaHorarioServiceTest {
         assertThat(padre.getValue().horaLimite()).isEqualTo(LocalTime.of(10, 0));
         verify(saveCambioPendientePort).save(any());
         verify(historialPort, never()).registrar(any(), any(), any(), any(), any(), any());
+    }
+
+    /**
+     * D-91, el corazon de la regla: la ventana de este habito NO arranco (dispara 23:00, el reloj
+     * marca las 10:00) y aun asi el cambio se difiere. Antes de D-91 este caso se aplicaba en el
+     * acto, y era exactamente lo que permitia reacomodar el dia en curso.
+     */
+    @Test
+    void seDifiereAunqueLaVentanaDeHoyTodaviaNoHayaArrancado() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFecha(any(), any(), any())).thenReturn(Optional.empty());
+        when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
+
+        ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
+                LocalTime.of(23, 0), null, false, null));
+
+        assertThat(resultado.diferido()).isTrue();
+        verify(saveCambioPendientePort).save(any());
+        verify(historialPort, never()).registrar(any(), any(), any(), any(), any(), any());
+    }
+
+    /**
+     * D-91 se comia la cuota si no se contaban los pendientes: con TODO diferido, el historial de
+     * la semana esta vacio hasta que la promocion corra, asi que un aprendiz podia pedir los 18
+     * habitos la misma noche y promoverlos todos al dia siguiente.
+     */
+    @Test
+    void losCambiosYaProgramadosParaEsaSemanaTambienConsumenCupo() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        // Historial vacio: nada rigio todavia esta semana.
+        when(historialPort.distintosHabitosCambiadosDesde(any(), any())).thenReturn(List.of());
+        // Pero ya hay 3 habitos DISTINTOS programados para manana.
+        LocalDate manana = LocalDate.ofInstant(CLOCK.now(), java.time.ZoneId.of("UTC")).plusDays(1);
+        when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of(
+                pendienteDe(actor, manana), pendienteDe(actor, manana), pendienteDe(actor, manana)));
+
+        assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
+                LocalTime.of(7, 0), null, false, null))).isInstanceOf(IllegalStateException.class);
+        verify(saveCambioPendientePort, never()).save(any());
+    }
+
+    private static CambioHorarioPendiente pendienteDe(UserId actor, LocalDate fechaEfectiva) {
+        return CambioHorarioPendiente.programar(actor, HabitoId.of(UUID.randomUUID()), LocalTime.of(8, 0), null,
+                false, null, fechaEfectiva, CLOCK.now());
     }
 }
