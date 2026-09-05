@@ -1,5 +1,6 @@
 package com.renaser.os.academy.application.services;
 
+import com.renaser.os.academy.application.ports.in.clasediaria.CompletarClaseDiariaUseCase;
 import com.renaser.os.academy.application.ports.in.clasediaria.CompletarClaseDiariaUseCase.ClaseDiariaCompletada;
 import com.renaser.os.academy.application.ports.in.clasediaria.CompletarClaseDiariaUseCase.CompletarClaseDiariaCommand;
 import com.renaser.os.academy.application.ports.in.clasediaria.ConsultarClaseDiariaUseCase.ClaseDiariaResolution;
@@ -40,6 +41,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -205,9 +207,33 @@ class ClaseDiariaServiceTest {
     }
 
     @Test
-    @DisplayName("CompletarClaseDiariaCommand: resumen menor a 20 caracteres es rechazado en el constructor")
+    @DisplayName("CompletarClaseDiariaCommand: resumen menor a 15 caracteres es rechazado en el constructor")
     void comandoRechazaResumenCorto() {
         assertThatThrownBy(() -> new CompletarClaseDiariaCommand(ACTOR_ID, LeccionId.of("l2"), "muy corto"))
                 .isInstanceOf(jakarta.validation.ConstraintViolationException.class);
+    }
+
+    @Test
+    @DisplayName("CompletarClaseDiariaCommand: los bordes exactos del resumen (15 y 2000) se aceptan; 14 y 2001 no")
+    void comandoRespetaLosBordesExactosDelResumen() {
+        assertThatThrownBy(() -> new CompletarClaseDiariaCommand(ACTOR_ID, LeccionId.of("l2"), "a".repeat(14)))
+                .isInstanceOf(jakarta.validation.ConstraintViolationException.class);
+        assertThatThrownBy(() -> new CompletarClaseDiariaCommand(ACTOR_ID, LeccionId.of("l2"), "a".repeat(2001)))
+                .isInstanceOf(jakarta.validation.ConstraintViolationException.class);
+
+        assertThatCode(() -> new CompletarClaseDiariaCommand(ACTOR_ID, LeccionId.of("l2"), "a".repeat(15)))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> new CompletarClaseDiariaCommand(ACTOR_ID, LeccionId.of("l2"), "a".repeat(2000)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("Los limites del resumen son EL MISMO valor en academy y en habits — si divergen, el aprendiz "
+            + "pasa una validacion y choca con la otra")
+    void losLimitesDelResumenNoPuedenDivergirEntreModulos() {
+        assertThat(CompletarClaseDiariaUseCase.RESUMEN_MIN_LENGTH)
+                .isEqualTo(CompletarClaseDiariaHabitoUseCase.RESUMEN_MIN_LENGTH).isEqualTo(15);
+        assertThat(CompletarClaseDiariaUseCase.RESUMEN_MAX_LENGTH)
+                .isEqualTo(CompletarClaseDiariaHabitoUseCase.RESUMEN_MAX_LENGTH).isEqualTo(2000);
     }
 }

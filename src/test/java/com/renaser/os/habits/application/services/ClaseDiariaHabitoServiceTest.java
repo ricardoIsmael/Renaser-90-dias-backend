@@ -32,6 +32,7 @@ import java.util.UUID;
 
 import static com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase.CLAVE_SISTEMA_DAILY_CLASS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -163,9 +164,24 @@ class ClaseDiariaHabitoServiceTest {
     }
 
     @Test
-    @DisplayName("CompletarClaseDiariaHabitoCommand: resumen menor a 20 caracteres es rechazado en el constructor")
+    @DisplayName("CompletarClaseDiariaHabitoCommand: resumen menor a 15 caracteres es rechazado en el constructor")
     void comandoRechazaResumenCorto() {
         assertThatThrownBy(() -> new CompletarClaseDiariaHabitoCommand(participante(), "muy corto"))
                 .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    @DisplayName("CompletarClaseDiariaHabitoCommand: los bordes exactos del resumen (15 y 2000) se aceptan; "
+            + "14 y 2001 no")
+    void comandoRespetaLosBordesExactosDelResumen() {
+        assertThatThrownBy(() -> new CompletarClaseDiariaHabitoCommand(participante(), "a".repeat(14)))
+                .isInstanceOf(ConstraintViolationException.class);
+        assertThatThrownBy(() -> new CompletarClaseDiariaHabitoCommand(participante(), "a".repeat(2001)))
+                .isInstanceOf(ConstraintViolationException.class);
+
+        assertThatCode(() -> new CompletarClaseDiariaHabitoCommand(participante(), "a".repeat(15)))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> new CompletarClaseDiariaHabitoCommand(participante(), "a".repeat(2000)))
+                .doesNotThrowAnyException();
     }
 }
