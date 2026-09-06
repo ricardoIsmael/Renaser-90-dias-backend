@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.evidence.api.RegistrosConEvidenciaFinder;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.TrackDelDiaConCatalogo;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
@@ -83,10 +84,13 @@ class TracksDelDiaPuntosEnJuegoTest {
     private LoadGuiaHabitoPort loadGuiaPort;
     @Mock
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
+    @Mock
+    private RegistrosConEvidenciaFinder registrosConEvidenciaFinder;
 
     private TracksDelDiaProyeccionService servicio() {
         return new TracksDelDiaProyeccionService(consultarTracksUseCase, generarTracksUseCase, loadHabitoPort,
-                loadHorarioPort, loadPreferenciaPort, loadGuiaPort, progresoPort, FixedClock.at(MADRUGADA_UTC));
+                loadHorarioPort, loadPreferenciaPort, loadGuiaPort, progresoPort, registrosConEvidenciaFinder,
+                FixedClock.at(MADRUGADA_UTC));
     }
 
     private void participanteEnLima() {

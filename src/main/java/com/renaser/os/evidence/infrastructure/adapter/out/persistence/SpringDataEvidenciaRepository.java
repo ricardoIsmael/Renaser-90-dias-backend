@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -47,6 +48,17 @@ interface SpringDataEvidenciaRepository extends JpaRepository<EvidenciaJpaEntity
      * en el dialecto Postgres). Seguro con múltiples instancias del scheduler corriendo
      * a la vez: cada una se lleva un lote disjunto de la cola de validación IA.
      */
+    /**
+     * Proyecta SOLO la columna {@code registro_habito_id}, no la entidad: la pregunta que
+     * responde es "cuales de estos ya tienen evidencia", asi que traer las filas enteras seria
+     * cargar bytes, EXIF y notas de validacion para tirarlos. {@code DISTINCT} porque un mismo
+     * registro admite varias evidencias (la tabla no lo limita, ver
+     * {@code EvidenciaRegistroService.solicitarUrl}). Se resuelve contra
+     * {@code evidencias_registro_idx}, el indice parcial del baseline.
+     */
+    @Query("SELECT DISTINCT e.registroHabitoId FROM EvidenciaJpaEntity e WHERE e.registroHabitoId IN :ids")
+    List<UUID> registrosHabitoConEvidencia(@Param("ids") Collection<UUID> ids);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
     @Query("SELECT e FROM EvidenciaJpaEntity e WHERE e.estadoValidacion = :estado AND e.subidaEn <= :hasta "

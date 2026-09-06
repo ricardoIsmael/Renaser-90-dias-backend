@@ -7,8 +7,11 @@ import com.renaser.os.evidence.domain.model.evidencia.EvidenciaId;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 public interface LoadEvidenciaPort {
 
@@ -44,6 +47,15 @@ public interface LoadEvidenciaPort {
      * puede pedir qué {@code participanteId}, vive en {@code EvidenciaService}, no acá).
      */
     List<Evidencia> buscar(FiltroEvidencia filtro, Instant cursor, int limite);
+
+    /**
+     * De {@code registrosHabitoIds}, los que tienen al menos una evidencia — en cualquier
+     * estado de validacion. Una sola consulta para todo el lote (nunca una por registro), que
+     * proyecta solo la columna {@code registro_habito_id} y se apoya en el indice parcial
+     * {@code evidencias_registro_idx} del baseline. Alimenta
+     * {@link com.renaser.os.evidence.api.RegistrosConEvidenciaFinder}, donde esta el porque.
+     */
+    Set<UUID> registrosHabitoConEvidencia(Collection<UUID> registrosHabitoIds);
 
     /**
      * Filtro de {@link #buscar}. {@code null} en cualquier campo = sin restringir por

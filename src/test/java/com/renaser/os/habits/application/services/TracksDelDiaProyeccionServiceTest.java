@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.evidence.api.RegistrosConEvidenciaFinder;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.TrackDelDiaConCatalogo;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
@@ -63,13 +64,19 @@ class TracksDelDiaProyeccionServiceTest {
      * {@code TracksDelDiaPuntosEnJuegoTest}. */
     @Mock
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
+    /** Agregado 2026-09-05 (D-113). Sin stub, Mockito devuelve conjunto vacio: ninguno de estos
+     * casos tiene evidencia, que es lo que ya asumian antes de que el campo existiera. El
+     * comportamiento del campo se prueba en {@link TracksDelDiaEvidenciaTest}. */
+    @Mock
+    private RegistrosConEvidenciaFinder registrosConEvidenciaFinder;
 
     private TracksDelDiaProyeccionService service;
 
     @BeforeEach
     void setUp() {
         service = new TracksDelDiaProyeccionService(consultarTracksUseCase, generarTracksUseCase, loadHabitoPort,
-                loadHorarioPort, loadPreferenciaPort, loadGuiaPort, progresoPort, FixedClock.at(AHORA));
+                loadHorarioPort, loadPreferenciaPort, loadGuiaPort, progresoPort, registrosConEvidenciaFinder,
+                FixedClock.at(AHORA));
     }
 
     private static Habito habito(String titulo) {
