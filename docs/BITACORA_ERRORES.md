@@ -3493,3 +3493,60 @@ duplicaba el mismo calculo**. Si lo duplica, quedan dos fuentes de verdad y solo
 test sigue verde en la franja comoda del dia y miente sobre lo que verifica. La franja peligrosa en
 este proyecto es **00:00-05:00 UTC**, que en Lima es la tarde-noche del dia anterior.
 
+
+---
+
+## E-127 — Flyway no puede aplicar `V1` en RDS: "permission denied to change default privileges" (2026-09-05) — **RESUELTO**
+
+**Sintoma exacto**, corriendo Flyway contra la instancia RDS recien creada:
+
+```
+Migrating schema "public" to version "1 - baseline renaser"
+ERROR: Migration of schema "public" to version "1 - baseline renaser" failed! Changes successfully rolled back.
+SQL State  : 42501
+Message    : ERROR: permission denied to change default privileges
+Line       : 1494
+```
+
+Contra el Postgres local en Docker la misma migracion pasa sin problema. Solo falla en RDS.
+
+**Causa real:** en Amazon RDS **el usuario maestro NO es superusuario**. Es una diferencia
+deliberada del servicio administrado, no un permiso mal puesto. `V1` crea tres roles de carril
+(`renaser_migraciones`, `renaser_escritura`, `renaser_lectura`) y despues hace:
+
+```sql
+ALTER DEFAULT PRIVILEGES FOR ROLE renaser_migraciones IN SCHEMA renaser
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO renaser_escritura;
+```
+
+`ALTER DEFAULT PRIVILEGES FOR ROLE <r>` exige ser superusuario **o miembro de `<r>`**. En el
+Postgres local se conecta como `postgres`, que es superusuario, y por eso nunca se noto. El
+usuario maestro de RDS no es ninguna de las dos cosas.
+
+**Solucion aplicada — sin tocar la migracion.** El baseline esta congelado (D-40) y ademas ya
+estaba aplicado en local: editarlo habria roto la suma de verificacion de Flyway ahi. Como el
+bloque que crea los roles en `V1` es idempotente (`IF NOT EXISTS`), alcanza con **pre-crear los
+roles y darle membresia al usuario maestro** antes de correr Flyway:
+
+```sql
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='renaser_migraciones') THEN CREATE ROLE renaser_migraciones NOLOGIN; END IF;
+    -- idem renaser_escritura, renaser_lectura
+END $$;
+GRANT renaser_migraciones TO renaser;
+GRANT renaser_escritura   TO renaser;
+GRANT renaser_lectura     TO renaser;
+```
+
+Con eso `V1` encuentra los roles creados, no hace nada en su `DO`, y el `ALTER DEFAULT PRIVILEGES`
+procede. Resultado: **32 migraciones aplicadas, v33, 94 tablas, `vector` y `pgcrypto` instaladas.**
+
+**Como evitar que vuelva a pasar:** este paso de arranque hay que correrlo en **cada base RDS
+nueva** (produccion, pruebas, la que sea) antes del primer Flyway. Esta escrito en
+`docs/INFRA_S3_BUCKET.md` y conviene moverlo al runbook de despliegue cuando exista.
+
+**La leccion general:** "pasa en local" y "pasa en el servicio administrado" no son lo mismo
+cuando la migracion hace DDL de privilegios. Postgres local corre como superusuario; RDS, Cloud
+SQL y Aurora no te dan superusuario nunca. Toda migracion que use `ALTER DEFAULT PRIVILEGES`,
+`CREATE EXTENSION` de extensiones no permitidas, o `ALTER SYSTEM`, es candidata a fallar recien
+en el primer despliegue real.
