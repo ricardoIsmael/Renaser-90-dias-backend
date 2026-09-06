@@ -3590,3 +3590,209 @@ semanas: es holgura, no garantia.
 > **Nota de numeracion.** Esta entrada se escribio como E-120 en su rama de origen, pero ese numero
 > ya estaba tomado en master por otra sesion que trabajaba en paralelo. Es la colision que advierte
 > la regla 05: verificar el ultimo numero **usado en master**, no en la copia propia.
+
+---
+
+## E-129 — `ERR_OUT_OF_RANGE ... Received -2119958528` al armar el zip de la Lambda (2026-09-05) — **RESUELTO**
+
+**Sintoma exacto**, al empaquetar el codigo del panel de solicitudes (`admin-panel/scripts/empaquetar.mjs`):
+
+```
+RangeError [ERR_OUT_OF_RANGE]: The value of "value" is out of range. It must be >= 0 and <= 4294967295. Received -2119958528
+    at checkInt (node:internal/buffer:74:11)
+    at Buffer.writeUInt32LE (node:internal/buffer:707:10)
+```
+
+**Causa real:** la linea que escribe los permisos unix del archivo dentro del zip:
+
+```js
+cabeceraCentral.writeUInt32LE(0o100644 << 16, 38);
+```
+
+En JavaScript **los operadores de bits trabajan sobre enteros con signo de 32 bits**. `0o100644`
+es 33188; `33188 << 16` son 2 175 008 768, que pasa `2^31`, asi que el resultado vuelve como
+**negativo**: -2 119 958 528. `writeUInt32LE` solo acepta valores sin signo, y explota.
+
+No tiene nada que ver con el zip, con Node 24 ni con la Lambda: es aritmetica de JS.
+
+**Solucion aplicada:** reinterpretar el resultado como sin signo con `>>> 0`, que es el unico
+operador de JS que devuelve un entero sin signo de 32 bits:
+
+```js
+cabeceraCentral.writeUInt32LE((0o100644 << 16) >>> 0, 38);
+```
+
+**Como evitar que vuelva a pasar:** **todo `<<` que pueda tocar el bit 31 lleva `>>> 0` pegado.**
+Aparece siempre en el mismo tipo de codigo: formatos binarios (zip, PNG, protocolos), permisos
+unix, mascaras de bits, colores RGBA. La senal de alarma es ver un `<< 16`, `<< 24` o `<< 31`
+seguido de una escritura sin signo.
+
+Verificado despues del arreglo: el zip generado se abre con `Expand-Archive` y el archivo sale
+con el tamano exacto original.
+
+---
+
+## E-130 — La Function URL responde `403 AccessDeniedException` aunque la politica de recurso sea la correcta (2026-09-05) — **RESUELTO**
+
+**Sintoma exacto.** Function URL recien creada con `--auth-type NONE` y su permiso puesto con
+`add-permission`. Cualquier `GET` a la URL devuelve:
+
+```
+HTTP/1.1 403 Forbidden
+x-amzn-ErrorType: AccessDeniedException
+
+{"Message":"Forbidden. For troubleshooting Function URL authorization issues, see: https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html"}
+```
+
+Y la politica de recurso es **exactamente** la que documenta AWS:
+
+```json
+{"Sid":"PermitirFunctionUrl","Effect":"Allow","Principal":"*","Action":"lambda:InvokeFunctionUrl",
+ "Resource":"arn:aws:lambda:us-east-1:302277511407:function:renaser-admin-panel",
+ "Condition":{"StringEquals":{"lambda:FunctionUrlAuthType":"NONE"}}}
+```
+
+**Lo que se descarto antes de encontrar la causa** (y por eso queda escrito, para no repetirlo):
+no era propagacion (403 sostenido durante mas de 10 minutos), no era una SCP (la cuenta no
+pertenece a ninguna organizacion), no era el `*` comido por el shell (la politica lo muestra
+literal), no era la VPC, y no era `add-permission` puesto antes de `create-function-url-config`
+(se borro y rehizo la URL en el otro orden, con el mismo 403).
+
+**Como se aislo:** se creo una funcion **temporal, minima, fuera de la VPC**, con su URL publica
+y su permiso, y devolvio el mismo 403. Con eso quedo claro que no era nada de la funcion del
+panel sino algo de la cuenta. (La funcion temporal se borro.)
+
+**Causa real: Lambda Block Public Access.** AWS agrego dos ajustes (`BlockPublicPolicy` y
+`RestrictPublicResource`) que **en las funciones nuevas vienen en denegar por defecto** y
+bloquean el acceso publico *sin importar lo que diga la politica de recurso*. Las funciones que
+ya existian de antes quedaron en permitir; las nuevas, no.
+
+**Agravante de diagnostico:** la AWS CLI instalada (2.34.47) y el boto3 instalado (1.43.9)
+**todavia no traen esas operaciones**, asi que ni siquiera se puede consultar el ajuste desde la
+linea de comandos. Verificado leyendo el modelo del servicio que trae la propia CLI
+(`awscli/botocore/data/lambda/2015-03-31/service-2.json`): filtrar las operaciones por `/Public/i`
+devuelve la lista vacia.
+
+**Solucion aplicada: NO se desactivo la proteccion.** La Function URL se dejo en **`AWS_IAM`**,
+que Block Public Access no toca porque no es acceso publico, y la firma SigV4 que un navegador
+no sabe hacer la resuelve `admin-panel/scripts/abrir-panel.py`, un ayudante local que escucha en
+`127.0.0.1`, firma con botocore y reenvia. Desactivar el bloqueo era la otra salida, pero es un
+ajuste de seguridad de la cuenta y esa decision es del dueno del proyecto, no de quien despliega.
+
+**De paso, otra trampa del mismo rato:** `delete-function-url-config` + `create-function-url-config`
+**cambia el id de la URL**. La direccion vieja deja de existir. Si hay algo apuntando a la URL
+(un marcador, un README), hay que actualizarlo — paso aca: se estuvo probando contra la URL
+vieja creyendo que el 403 seguia.
+
+**Como evitar que vuelva a pasar:** ante un `AccessDeniedException` en una Function URL con la
+politica correcta, la primera hipotesis ya no es la politica: es **Block Public Access**. Y si
+lo que se necesita es una URL que abra un navegador, `AWS_IAM` + ayudante local que firme es la
+salida que no pide desactivar ninguna proteccion.
+
+---
+
+## E-131 — `JAVA_HOME` de `.claude/rules/03-pruebas.md` apunta a una carpeta que no existe (2026-09-05) — **ABIERTO, reportado**
+
+**Sintoma exacto**, siguiendo al pie de la letra lo que dice la regla de pruebas:
+
+```
+/c/Users/panc1/.m2/wrapper/dists/apache-maven-3.9.16/56ba1f9f/bin/mvn: line 93: cd: /c/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot: No such file or directory
+The JAVA_HOME environment variable is not defined correctly,
+this environment variable is needed to run this program.
+```
+
+**Causa real:** en esta maquina **no existe** `C:\Program Files\Eclipse Adoptium\` — ni la carpeta
+padre. El JDK 25 que si esta instalado es:
+
+```
+C:\Program Files\Java\jdk-25.0.2      ->  java version "25.0.2" 2026-01-20 LTS
+```
+
+Que es, palabra por palabra, la ruta que `.claude/rules/03-pruebas.md` dice haber **corregido el
+2026-09-05 (E-103)** por ser "una ruta que no existe en esta maquina". Quedo al reves: se cambio
+una ruta correcta por una que no existe. El sintoma es identico al de E-103, asi que quien lo
+busque va a encontrar la entrada vieja y la solucion contraria.
+
+**Lo que se hizo:** correr las pruebas con `JAVA_HOME="C:/Program Files/Java/jdk-25.0.2"`, que
+funciona.
+
+**Lo que NO se hizo, a proposito:** editar `.claude/rules/03-pruebas.md`. Ese archivo es
+configuracion del entorno de trabajo y la correccion la tiene que aprobar el dueno del proyecto,
+sobre todo porque **ya se corrigio una vez en la direccion equivocada** — conviene confirmar cual
+de las dos rutas es la buena en cada maquina antes de volver a tocarlo. Puede que en otra maquina
+del equipo si exista Adoptium, y entonces lo correcto no sea reemplazar la ruta sino listar las dos.
+
+---
+
+## E-132 — `MSYS_NO_PATHCONV=1` y `fileb://` no conviven: la CLI recibe `/c/Users/...` y no la sabe abrir (2026-09-05) — **EVITADO**
+
+Es la contracara de la regla que ya se usa en todo el proyecto. En Git Bash sobre Windows hay que
+exportar `MSYS_NO_PATHCONV=1` para que un nombre como `/renaser/prod/DB_URL` no se convierta a
+ruta de Windows (si no, la CLI responde *"Parameter name must be a fully qualified name"*).
+
+**Pero esa misma variable apaga la conversion para TODOS los argumentos**, incluidos los que si
+son rutas de verdad. Con ella activa, `--zip-file "fileb://$PWD/panel.zip"` le pasa a `aws.exe`
+un `fileb:///c/Users/...`, que en Windows no existe. Lo mismo con `node /c/Users/...script.mjs`.
+
+**Como se evito:** convertir la raiz una sola vez con `cygpath -m`, que devuelve `C:/Users/...`
+—entendible por bash *y* por los binarios de Windows— y usar esa forma en todos los argumentos
+que son rutas:
+
+```bash
+RAIZ="$(cygpath -m "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)")"
+```
+
+**Regla practica:** en un script que exporta `MSYS_NO_PATHCONV=1`, toda ruta que vaya a un `.exe`
+pasa antes por `cygpath -m`. Los nombres que NO son rutas (parametros de SSM, ARNs) van tal cual,
+que es justo para lo que se puso la variable.
+
+---
+
+## E-133 — `TokenResetContrasenaRedisAdapterTest` falla 1 de cada tantas corridas: el test corre una carrera contra el reloj (2026-09-05) — **ABIERTO, reportado**
+
+**Sintoma exacto**, en una corrida completa de `./mvnw clean test` (2429 pruebas, 1 en rojo):
+
+```
+Expecting an empty Optional but was containing value: c716dba0-0df6-415a-b8b6-1ce45072ba38
+	at ...TokenResetContrasenaRedisAdapterTest.unTokenVencidoYaNoSePuedeConsumir(TokenResetContrasenaRedisAdapterTest.java:69)
+```
+
+**La misma clase, corrida sola, pasa 5 de 5.** Esa asimetria es la firma del problema.
+
+**Causa real:** el test no verifica una regla, verifica una carrera:
+
+```java
+String token = tokenResetContrasenaPort.generar(usuarioId, Duration.ofMillis(500));
+Thread.sleep(900);
+assertThat(tokenResetContrasenaPort.consumir(token)).isEmpty();
+```
+
+El margen es de **400 ms** entre que el TTL vence y que el test mira. En una corrida completa
+—2429 pruebas, Testcontainers levantando contenedores, la maquina compilando— ese margen se
+consume solo con una pausa de GC o con el planificador del sistema operativo dandole el CPU a
+otra cosa. Ademas la expiracion de Redis **no es instantanea al milisegundo**: Redis borra las
+claves vencidas de forma perezosa (al tocarlas) y por muestreo periodico, asi que "vencida" y
+"ya no esta" no son el mismo instante.
+
+**No es un error del codigo de produccion.** `TokenResetContrasenaRedisAdapter` esta bien: el
+token vencido no se puede consumir. Lo que esta mal calibrado es la prueba.
+
+**Como se detecto que era eso y no una regresion:** la corrida completa fallo en una sesion que
+**no toco una sola linea de Java** (se estaba construyendo el panel de solicitudes, en
+`admin-panel/`, fuera del build de Maven). Con cero cambios en el codigo bajo prueba, una
+prueba que falla y despues pasa solo puede ser inestable.
+
+**Lo que NO se hizo, a proposito:** arreglar el test. Estaba fuera del alcance de la tarea en
+curso (regla 00: encontrar un segundo problema mientras se resuelve el primero es motivo para
+**reportarlo**, no para arreglarlo en el mismo cambio).
+
+**Como arreglarlo cuando se tome:** no subir el `sleep` —eso solo alarga el build y deja la
+carrera igual, mas lenta—. Las dos salidas buenas son (a) borrar la clave a mano en vez de
+esperar a que Redis la venza, si lo que se quiere probar es "no existe → vacio", o (b) usar el
+puerto `Clock` inyectable que este repo ya tiene, y adelantar el reloj en vez de dormir. La
+segunda es la que va con la regla 02: **el tiempo entra por el puerto `Clock`, no por
+`Thread.sleep`**.
+
+**La leccion general:** un test que duerme es un test que apuesta. Si la apuesta es a 400 ms,
+la va a perder el dia que la maquina este ocupada — y va a perderla en CI, no en la maquina de
+quien lo escribio.
