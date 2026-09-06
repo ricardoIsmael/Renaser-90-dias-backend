@@ -246,3 +246,83 @@ Antes, el peor caso de una pregunta era **ilimitado** (sin timeout) o **30 s cor
 6. Decidir el RAG del acompañante (§6.2) — también alivia la cuota de Sparkie.
 7. Memoria del contenedor (§3.3) antes de la primera cohorte grande.
 8. Conectar o borrar `EvaluarRiesgoMensajePort` (§4.3).
+
+
+---
+
+## 9. Segunda pasada — la respuesta a "¿no hay nada más?"
+
+**Sí había más.** La primera pasada fue dirigida (rutas, borde, proveedor de IA, chat, estilos) y
+no exhaustiva. Esta segunda cubre lo que quedó fuera: los puntos de entrada que no son HTTP, la IP
+real detrás de CloudFront, permisos IAM, exposición del bucket, dependencias, secretos en git, y —
+sobre todo — **qué quedó abierto de la auditoría del 2026-09-01**, cuyos 22 hallazgos de seguridad
+(S-1…S-22) no tenían ningún rastro de cierre en la bitácora.
+
+### 9.1 Estado real de la auditoría del 2026-09-01 (verificado punto por punto, no por el nombre)
+
+| Hallazgo | Estado al 2026-09-06 | Evidencia |
+|---|---|---|
+| S-1 suplantación por header con toda la API en `permitAll` | **Cerrado en lo esencial** hoy | `SecurityConfig`: sesión obligatoria en todas las rutas con datos de personas (§2.1 y anteriores); queda `account-requests` público por diseño |
+| S-2 handshake WebSocket por `X-Actor-Id` | **Abierto → CERRADO hoy** (E-148) | `ActorHandshakeInterceptor` ahora resuelve desde Spring Session |
+| S-3 matriz de permisos falla abierta para 4 de 5 roles | **ABIERTO — decisión del dueño** | `UserRole.can`: `case MENTOR, MENTOR_LEAD, ADMIN, ALCHEMIST -> true` |
+| S-4 publicar directo en `/topic` | **Abierto → CERRADO hoy** (E-148) | guarda de `SEND` en `SubscripcionAutorizadaInterceptor` |
+| S-5 login sin rate limit | **Cerrado** hoy temprano | 10/h por email, 50/h por IP, verificado en producción |
+| S-6 WebSocket acepta cualquier origen | **Abierto → CERRADO hoy** (E-148) | `setAllowedOrigins(cors.origenes)` |
+| S-7 sesión no rotada al autenticar | **Cerrado** | `SesionWebAdapter.cerrar` invalida; el login crea sesión nueva |
+| S-8 sesiones de 30 días deslizantes | Abierto, **decisión de producto** | `spring.session.timeout: 30d` es deliberado para móvil |
+| S-10 mensajes internos verbatim, sin catch-all | **Parcial** | `GlobalExceptionHandler` devuelve `getMessage()` de `IllegalArgument/IllegalState`; el catch-all sigue sin existir, pero Boot no incluye mensaje ni stacktrace en el 500 por defecto |
+| S-12 Redis sin contraseña | **Mitigado** | sin puertos publicados en el host (`docker port redis` vacío); solo la red interna de Docker |
+| S-18/S-19 devtools en el pom, sin análisis de dependencias | **Aceptable / abierto** | `spring-boot-devtools` es `optional` + `runtime` (el plugin de Boot lo excluye del jar); sigue sin `dependency-check` |
+| S-20 Facebook `client_secret` en query | Abierto, **bajo** | así lo pide la Graph API de Facebook; viaja por TLS |
+| S-22 `InviteUserRequest.usuarioId` lo elige el cliente | Abierto, **bajo** | requiere `MANAGE_ROLES`; con S-3 abierto, un mentor podría |
+| Fuga de PII en `Email.java` (auditoría de código) | **Cerrado** | los mensajes ya no incluyen el correo |
+
+Los C-n de concurrencia tienen rastro (bitácora o `auditoria-fixes/`); ver §4.4.
+
+### 9.2 Hallazgos nuevos de la segunda pasada
+
+| # | Hallazgo | Severidad | Estado |
+|---|---|---|---|
+| N-23 | **WebSocket del chat: identidad por header del cliente, cualquier origen, `SEND` a `/topic`** (S-2/S-4/S-6) | **Crítica** | **Corregido** — E-148, 7 pruebas |
+| N-24 | **Detrás de CloudFront todos comparten la misma "IP"**: el límite de login (50/h) era un contador global | **Alta** | **Corregido** — `forward-headers-strategy: framework`, E-149, 1 prueba |
+| N-25 | **`UserRole.can` devuelve `true` a MENTOR, MENTOR_LEAD, ADMIN y ALCHEMIST para TODO permiso** (S-3). Un mentor con sesión puede invitar usuarios, cambiar roles y usar `/admin/**` | **Alta** | **Decisión del dueño** — es la matriz de permisos por rol, que `CLAUDE.md` §0.6 prohíbe inventar. Pregunta concreta en §9.3 |
+| N-26 | **Los avatares devuelven 403 en producción**: `AvatarService` usa `urlPublica`, el bucket bloquea todo acceso público y no hay política. Verificado con `curl` sobre un objeto real de `avatares/` | Media (funcional) | **Decisión del dueño**: (a) URL prefirmada de lectura al servir el avatar, o (b) CloudFront con OAC delante de `avatares/*`. NO abrir el bucket |
+| N-27 | Redis sin timeout: 60 s por comando (default de Lettuce); con la sesión obligatoria, Redis caído = cada request colgado un minuto, incluido `/actuator/health` | Media | **Corregido** — `timeout: 3s`, `connect-timeout: 2s` |
+| N-28 | Política IAM `bootstrap-primer-admin` seguía pegada al rol del EC2 (el script decía quitarla tras crear al primer admin) | Baja | **Corregido** — eliminada; queda el parámetro `BOOTSTRAP_ADMIN_PASSWORD`, que borra el dueño cuando haya cambiado su clave |
+| N-29 | `npm audit`: 16 moderadas — tooling de Expo (`@expo/config-plugins` → `xcode`, con fix) y `@react-navigation/*` vía `query-string`/`decode-uri-component` (sin fix) | Baja | Pendiente: `npm audit fix` para las de Expo en una rama aparte, con `tsc` y prueba manual |
+| N-30 | Token de sesión en `localStorage` en el build web (degradación documentada en `almacenamientoSeguro.ts`). Sin CSP en el frontend de Vercel | Baja | Pendiente: cabecera `Content-Security-Policy` en `vercel.json`; la sesión por header ya evita CSRF |
+| — | Historial de git de los dos repos **limpio** de claves (solo `AKIAIOSFODNN7EXAMPLE`, el ejemplo de la documentación de AWS) | — | Verificado |
+| — | Bucket `renaser90dias-prod`: acceso público bloqueado, AES256, versionado | — | Verificado |
+
+### 9.3 La pregunta que hay que contestar: la matriz de permisos (N-25)
+
+`UserRole.can` hoy:
+
+```java
+case TRAINEE -> PERMISOS_TRAINEE.contains(permission);
+case MENTOR, MENTOR_LEAD, ADMIN, ALCHEMIST -> true;
+```
+
+No lo corregí porque **qué puede hacer un mentor es una regla de negocio**, y la regla del repo es
+preguntarla, no rellenarla. Propuesta para confirmar (o corregir):
+
+| Permiso | TRAINEE | MENTOR | MENTOR_LEAD | ADMIN | ALCHEMIST |
+|---|---|---|---|---|---|
+| `USE_APP` | sí | sí | sí | sí | sí |
+| ver progreso de SUS aprendices | — | sí | sí | sí | sí |
+| `MANAGE_MENTOR_PROFILE` (bio propia) | — | sí | sí | sí | sí |
+| aprobar solicitudes de cuenta | — | — | ¿sí? | sí | sí |
+| `MANAGE_ROLES` / invitar staff | — | **no** | ¿no? | sí | sí |
+| `/admin/**` (catálogo, cohortes, evidencias, tickets) | — | **no** | ¿parcial? | sí | sí |
+
+Con esa tabla confirmada, el cambio es una línea por rol en `UserRole` y una prueba por celda.
+
+### 9.4 Verificación de la segunda pasada
+
+| Qué | Cómo | Resultado |
+|---|---|---|
+| Suite del backend con WebSocket, IP real y Redis | `./mvnw clean verify`, cifras de los XML | **2465 unitarias + 25 de integración: 0 fallos, 0 errores, 0 omitidas** (340 + 11 clases; incluye las 8 pruebas nuevas de la segunda pasada: WebSocket 7, IP real 1) |
+| IAM | `list-role-policies renaser-backend-ec2` | solo `app` (+ `AmazonSSMManagedInstanceCore`) |
+| Avatares | `curl` a la URL pública de un objeto real | `HTTP 403` (confirma N-26) |
+| Secretos en git | `git log -p --all -G` en los dos repos | limpio |
+| Día 7 (frontend) | `tsc --noEmit` + recorrido visual en el navegador con un arnés temporal | ver `docs/MAPA_RENACIMIENTO_DIA7.md` |

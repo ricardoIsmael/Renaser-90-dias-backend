@@ -75,6 +75,13 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # Auditoria NFR 2026-09-06 (2a pasada). Sin esto rige el default de Lettuce: 60 s por
+      # comando. Desde que casi toda la API exige sesion (que vive en Redis), un Redis caido
+      # dejaba CADA request colgado un minuto antes de fallar — incluido /actuator/health, que es
+      # lo que mira el CD para decidir si el despliegue salio bien. Redis corre en la misma
+      # maquina y responde en menos de un milisegundo: 3 s es generoso, 60 s es una caida total.
+      timeout: ${REDIS_TIMEOUT:3s}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
   # SMTP. Spring Boot solo crea el bean JavaMailSender si `spring.mail.host` tiene valor
   # (docs.spring.io/spring-boot/reference/io/email.html); sin credenciales queda vacio y el
   # perfil se sostiene con NoOpEnviarEmailAdapter. Los timeouts son obligatorios: sin ellos, un
@@ -301,3 +308,18 @@ renaser:
   users:
     account-deletion:
       grace-period-days: ${ACCOUNT_DELETION_GRACE_DAYS:14}
+
+# ---------------------------------------------------------------------------------------------
+# Auditoria NFR 2026-09-06 (2a pasada). El backend vive DETRAS de CloudFront, asi que
+# `request.getRemoteAddr()` -que usan los ocho puntos que limitan por IP: login, alta, reset-
+# devolvia la IP del borde de CloudFront, NO la del cliente. Consecuencia: el limite de 50
+# intentos de login por hora "por IP" era en realidad UN solo contador compartido por TODOS los
+# usuarios del producto; seis personas equivocandose ocho veces bloqueaban el login a todo el
+# mundo, y un atacante lo lograba solo. `framework` registra el ForwardedHeaderFilter de
+# Spring, que reescribe la direccion remota con el primer valor de X-Forwarded-For (el que
+# CloudFront pone: el cliente real). Se confia en ese header porque el security group solo
+# deja llegar al 8080 desde los rangos de CloudFront (y la IP del dueno): falsearlo exige
+# saltarse CloudFront, que es el pendiente de la cabecera secreta de origen (informe, 2.3).
+# ---------------------------------------------------------------------------------------------
+server:
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:framework}

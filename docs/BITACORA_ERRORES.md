@@ -5072,3 +5072,89 @@ implicaria agotar la cuota de produccion a proposito.
    no es una respuesta: en este caso era *ninguno*.
 3. **Cuota agotada no se reintenta.** Reintentar un 429 de cuota es la forma mas rapida de agotarla
    mas; se devuelve `Retry-After` y se deja que el cliente espere.
+
+---
+
+## E-148 — El WebSocket del chat se autenticaba con un header que escribe el cliente, aceptaba cualquier origen y dejaba publicar directo en `/topic` (2026-09-06) — **RESUELTO** (S-2, S-4 y S-6 de la auditoría del 2026-09-01)
+
+**Sintoma exacto.** No hubo síntoma visible, y por eso importa: la auditoría del 2026-09-01 lo marcó
+**crítico** (S-2) y en la bitácora no había ningún rastro de cierre. Verificado en el código el
+2026-09-06: `ActorHandshakeInterceptor.beforeHandshake` hacía
+
+```java
+String header = request.getHeaders().getFirst("X-Actor-Id");
+attributes.put(ATRIBUTO_ACTOR_ID, UUID.fromString(header));
+```
+
+Es decir: **quien se conectaba decía quién era**, y con eso `SubscripcionAutorizadaInterceptor`
+autorizaba suscribirse a `/topic/conversaciones/{id}` "como" esa persona. Los UUID no son
+secretos (catorce DTOs los devuelven). Las rutas HTTP se cerraron con `authenticated()` a lo largo
+del día; el canal en vivo quedó exactamente como el 1 de septiembre.
+
+Dos más, en el mismo archivo de configuración: `setAllowedOriginPatterns("*")` (S-6: cualquier
+página web podía abrir el socket desde el navegador de un aprendiz logueado) y ninguna guarda sobre
+`SEND` a `/topic/**` (S-4: el broker simple reparte a los suscriptores todo lo que reciba ahí, venga
+del servidor o de un cliente, saltándose el caso de uso y su persistencia).
+
+**Por qué pasó desapercibido.** Ningún cliente del repo usa el WebSocket (verificado: cero
+referencias a `stomp`, `sockjs` o `WebSocket` en `src/` del móvil; el chat va por REST). Una puerta
+que nadie usa no genera bugs — solo intrusos.
+
+**Solución.**
+
+- `ActorHandshakeInterceptor` resuelve el actor **desde Spring Session**: lee `X-Auth-Token`
+  (header) o `?token=` (los navegadores no pueden mandar cabeceras en el handshake), busca la
+  sesión en Redis (`SessionRepository.findById`) y toma el usuario del `SecurityContext` que guardó
+  el login. Sin sesión válida: 403, sin socket. `X-Actor-Id` ya no identifica a nadie.
+- `WebSocketConfig`: `setAllowedOrigins(renaser.web.cors.origenes)` — los mismos orígenes que CORS.
+- `SubscripcionAutorizadaInterceptor`: un `SEND` cuyo destino empiece por `/topic/` se rechaza; los
+  clientes escriben en `/app/**`, el único que publica en `/topic` es el servidor.
+
+**Verificación.** `ActorHandshakeInterceptorTest` (5): sesión válida por header, por `?token=`,
+**solo `X-Actor-Id` → rechazado**, token desconocido → 403, sesión sin autenticación → rechazado.
+`SubscripcionAutorizadaInterceptorEnvioTest` (2): `SEND /topic/...` → `MessagingException`;
+`SEND /app/...` pasa. Todo sin levantar Spring: `MapSession` y `MockHttpServletRequest`.
+**Sin verificar en vivo:** no hay cliente que abra el socket; se probará cuando lo haya.
+
+**Como evitar que vuelva a pasar:** cuando un mecanismo de autenticación cambia (acá: de header a
+sesión), **enumerar todos los puntos de entrada**, no solo los `@RestController`. WebSocket, SSE,
+schedulers que actúan "como" alguien, y webhooks son puntos de entrada aunque no tengan `@Mapping`.
+
+---
+
+## E-149 — Detrás de CloudFront, todos los usuarios compartían la misma "IP" para los límites de tasa (2026-09-06) — **RESUELTO**
+
+**Sintoma exacto.** Ninguno todavía, y era cuestión de tiempo: `AutenticacionController`,
+`AccountRequestController` y `ResetContrasenaPorCodigoController` alimentan los limitadores por IP
+con `request.getRemoteAddr()`, y el backend vive detrás de CloudFront **sin
+`server.forward-headers-strategy`** (verificado: ausente en todos los yaml). Detrás de un proxy,
+`getRemoteAddr()` es la IP del proxy. Consecuencia: el límite de **50 intentos de login por hora
+"por IP"** era en realidad **un solo contador para todo el producto** (repartido entre las pocas IPs
+de borde de CloudFront). Seis personas equivocando la contraseña ocho veces bloqueaban el login de
+todo el mundo durante una hora; un atacante lo lograba solo, y encima el 429 le confirmaba que
+funcionó. Lo mismo para el límite de altas (60/h) y el de reset.
+
+**Solución.** `server.forward-headers-strategy: framework` (`FORWARD_HEADERS_STRATEGY`): Spring
+registra el `ForwardedHeaderFilter`, que reescribe la dirección remota con el primer valor de
+`X-Forwarded-For` — el que CloudFront pone: el cliente real. **Se confía en ese header porque el
+security group solo deja llegar al 8080 desde los rangos de CloudFront (y la IP del dueño)**;
+falsearlo exige saltarse CloudFront, que es exactamente el pendiente de la cabecera secreta de
+origen (informe, §2.3). Cuando eso se cierre, la confianza en `X-Forwarded-For` queda completa.
+
+**La trampa del arnés, que vale registrar.** La primera versión de la prueba
+(`AccountRequestControllerIpRealTest`, `@WebMvcTest` + `server.forward-headers-strategy=framework`)
+falló con `expected "203.0.113.9" but was "127.0.0.1"`. No era la configuración: **en Spring Boot 4
+el bean del filtro se movió a `spring-boot-web-server`**, y esa auto-configuración **no forma parte
+del slice `@WebMvcTest`** (la lista `AutoConfigureWebMvc.imports` trae `WebMvcAutoConfiguration`,
+`ErrorMvcAutoConfiguration`, `HttpEncoding`… y ninguna de web-server). En el contexto completo de
+producción sí se carga. La prueba registra el filtro igual que lo hace Boot
+(`FilterRegistrationBean<ForwardedHeaderFilter>`) y lo dice en su javadoc: lo que verifica es el
+efecto del filtro sobre `getRemoteAddr()`, que es lo que consumen los controllers; el cableado
+propiedad → bean es de Boot y quedó verificado en el bytecode de `ServletWebServerConfiguration`.
+
+**Como evitar que vuelva a pasar:**
+
+1. **Todo backend detrás de un proxy declara cómo obtiene la IP real** el mismo día que se pone el
+   proxy. Un rate limit por IP sin eso no protege: castiga a todos por igual.
+2. **Un `@WebMvcTest` no es el contexto de producción.** Lo que se configura por propiedad en una
+   auto-configuración fuera del slice hay que importarlo a mano en la prueba, o probarlo en un IT.

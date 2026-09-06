@@ -1,5 +1,8 @@
 package com.renaser.os.chat.infrastructure.adapter.in.websocket;
 
+import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
+
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -23,16 +26,28 @@ class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final ActorHandshakeInterceptor actorHandshakeInterceptor;
     private final SubscripcionAutorizadaInterceptor subscripcionAutorizadaInterceptor;
+    /**
+     * Los MISMOS origenes que CORS (auditoria NFR 2026-09-06; S-6 de la auditoria del
+     * 2026-09-01). Antes era {@code setAllowedOriginPatterns("*")}: cualquier pagina web podia
+     * abrir el socket contra produccion desde el navegador de un aprendiz logueado. La app
+     * nativa no manda {@code Origin} y Spring la deja pasar igual; la lista solo restringe a los
+     * navegadores, que es donde vive el riesgo.
+     */
+    private final List<String> origenesPermitidos;
 
     WebSocketConfig(ActorHandshakeInterceptor actorHandshakeInterceptor,
-                     SubscripcionAutorizadaInterceptor subscripcionAutorizadaInterceptor) {
+                     SubscripcionAutorizadaInterceptor subscripcionAutorizadaInterceptor,
+                     @Value("${renaser.web.cors.origenes}") List<String> origenesPermitidos) {
         this.actorHandshakeInterceptor = actorHandshakeInterceptor;
         this.subscripcionAutorizadaInterceptor = subscripcionAutorizadaInterceptor;
+        this.origenesPermitidos = List.copyOf(origenesPermitidos);
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws").setAllowedOriginPatterns("*").addInterceptors(actorHandshakeInterceptor);
+        registry.addEndpoint("/ws")
+                .setAllowedOrigins(origenesPermitidos.toArray(String[]::new))
+                .addInterceptors(actorHandshakeInterceptor);
     }
 
     @Override

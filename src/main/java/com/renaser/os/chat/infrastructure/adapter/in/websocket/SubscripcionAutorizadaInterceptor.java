@@ -43,7 +43,23 @@ class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
     @Nullable
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
-        if (accessor == null || accessor.getCommand() != StompCommand.SUBSCRIBE) {
+        if (accessor == null) {
+            return message;
+        }
+        // S-4 (auditoria del 2026-09-01; cerrado 2026-09-06): el broker simple reparte a los
+        // suscriptores TODO lo que llegue a /topic/**, venga de la aplicacion o directo de un
+        // cliente. Sin esta guarda, cualquier socket autenticado podia publicar en la
+        // conversacion de otros saltandose el caso de uso (y su persistencia y sus guardas). Un
+        // cliente solo manda a /app/**; el unico que escribe en /topic es el servidor.
+        if (accessor.getCommand() == StompCommand.SEND) {
+            String destinoEnvio = accessor.getDestination();
+            if (destinoEnvio != null && destinoEnvio.startsWith("/topic/")) {
+                throw new org.springframework.messaging.MessagingException(
+                        "Un cliente no publica directo en /topic; usa /app");
+            }
+            return message;
+        }
+        if (accessor.getCommand() != StompCommand.SUBSCRIBE) {
             return message;
         }
         String destino = accessor.getDestination();
