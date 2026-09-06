@@ -21,6 +21,7 @@ import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.politica.ContextoCompletar;
 import com.renaser.os.habits.domain.model.politica.DecisionPolitica;
+import com.renaser.os.habits.domain.model.politica.GestoCompletar;
 import com.renaser.os.habits.domain.model.politica.PoliticaHabito;
 import com.renaser.os.habits.domain.model.politica.RegistroPoliticasHabito;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
@@ -227,7 +228,14 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         RegistroHabito registro = requireRegistro(command.registroId());
         requireSelf(command.actorId(), registro.participanteId());
         Habito habito = requireHabito(registro.habitoId());
-        requirePoliticaPermiteCompletarDirecto(habito, contextoDe(registro));
+        // La politica gobierna el GESTO GENERICO y solo ese — es literalmente la pregunta que
+        // `puedeCompletarseDirecto` dice contestar. Un habito con gesto propio (hoy solo la Clase
+        // Diaria) llega hasta aca a proposito, para no duplicar el calculo de puntos ni el de la
+        // ventana; preguntarle a la politica por esa invocacion seria hacerle una pregunta que no
+        // le corresponde, y le cerraria al habito su unico camino valido (E-120).
+        if (command.gesto() == GestoCompletar.GENERICO) {
+            requirePoliticaPermiteCompletarDirecto(habito, contextoDe(registro));
+        }
 
         Instant ahora = clock.now();
         VentanaEntrega ventana = resolverVentana(registro, habito);
