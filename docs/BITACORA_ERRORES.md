@@ -5158,3 +5158,53 @@ propiedad → bean es de Boot y quedó verificado en el bytecode de `ServletWebS
    proxy. Un rate limit por IP sin eso no protege: castiga a todos por igual.
 2. **Un `@WebMvcTest` no es el contexto de producción.** Lo que se configura por propiedad en una
    auto-configuración fuera del slice hay que importarlo a mano en la prueba, o probarlo en un IT.
+
+---
+
+## E-150 — `unTokenVencidoYaNoSePuedeConsumir` falla solo dentro de la suite completa (2026-09-06) — **DIAGNOSTICADO, prueba sin corregir**
+
+**Sintoma exacto**, corriendo `./mvnw clean verify` entero justo antes de mergear a `master`:
+
+```
+[ERROR] TokenVerificacionEmailRedisAdapterTest.unTokenVencidoYaNoSePuedeConsumir:60
+Expecting an empty Optional but was containing value: "verificado@renaser.dev"
+[ERROR] Tests run: 2465, Failures: 1, Errors: 0, Skipped: 0
+[INFO] BUILD FAILURE
+```
+
+**Qué hace la prueba** (`TokenVerificacionEmailRedisAdapterTest:55-61`): genera un token con
+`Duration.ofMillis(500)`, hace `Thread.sleep(900)` y espera que Redis ya lo haya vencido. El margen
+real es de **400 ms**.
+
+**Lo que se descartó, y por qué queda escrito.** No es una regresión de la rama de auditoría:
+
+- **No es un TTL de menos de un segundo mal convertido.** `TokenVerificacionEmailRedisAdapter.generar`
+  pasa el `Duration` tal cual a `opsForValue().set(clave, email, vigencia)`, y Spring Data Redis usa
+  `PSETEX` (milisegundos) cuando la duración no es un número entero de segundos. Si fuera eso,
+  fallaría **siempre**, no de a ratos.
+- **No es el `spring.data.redis.timeout: 3s` que agregó la auditoría.** Ese es el tiempo máximo de
+  un comando, no el TTL de una clave. Además, un timeout habría dado excepción, no un valor.
+- **No es la prueba en sí.** Corrida sola, `-Dtest=TokenVerificacionEmailRedisAdapterTest`, pasó
+  **tres de tres** (4 pruebas cada vez, 0 fallos).
+
+**Causa real: el reloj del contenedor bajo carga.** El vencimiento lo decide Redis con el reloj de
+**su** contenedor, mientras que el `sleep(900)` lo cuenta la JVM con el reloj del **host**. Con la
+máquina saturada por las 2.465 pruebas y Docker Desktop sobre WSL2, la VM se atrasa respecto del
+host lo suficiente como para que 400 ms de margen no alcancen. Sola, con la máquina libre, los dos
+relojes van juntos y el margen sobra.
+
+**Estado.** La prueba **no se tocó** en este cambio: se estaba mergeando a producción lo que ya
+estaba en la rama, y modificar una prueba en ese momento es meter una variable que nadie pidió. La
+suite se volvió a correr entera y quedó en verde antes de mergear.
+
+**Cómo evitar que vuelva a pasar:**
+
+1. **Una prueba que espera un vencimiento no se escribe con `Thread.sleep` y un margen chico.** Va
+   con espera activa (`Awaitility.await().atMost(...).until(...)`), que da por buena la primera
+   lectura correcta en vez de apostar a un instante. Es el arreglo pendiente para esta prueba y
+   para `TokenResetContrasenaRedisAdapterTest`, que tiene la misma forma.
+2. **Un fallo de una prueba de tiempo dentro de la suite completa se reintenta en aislamiento antes
+   de creerle.** Si pasa sola y falla acompañada, la hipótesis es el reloj o la carga, no el código.
+3. **Ojo con relojes de dos dominios en la misma aserción.** Si el que vence es Redis (o Postgres, o
+   el contenedor) y el que espera es la JVM, son dos relojes distintos: el margen tiene que ser
+   holgado o la espera tiene que ser activa.
