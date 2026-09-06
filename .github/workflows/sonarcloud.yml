@@ -1,0 +1,104 @@
+# Analisis de calidad estatica en SonarCloud, con la cobertura que genera JaCoCo.
+#
+# ESTADO: el workflow esta completo y funcional, pero TODAVIA NO HAY NADA CREADO DEL LADO DE
+# SONARCLOUD. Mientras falte el secret SONAR_TOKEN, el analisis se saltea con un aviso y el
+# workflow termina en verde -- a proposito: una pieza de infraestructura que nadie configuro
+# todavia no puede bloquear los PR de todo el equipo.
+#
+# Que hay que crear para encenderlo: docs/DESPLIEGUE_Y_CI.md §4.
+name: SonarCloud
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: sonar-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  analisis:
+    name: Analisis de calidad
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v7
+        with:
+          # Sonar necesita la historia completa: sin ella no puede calcular el "codigo nuevo"
+          # (lo que cambio respecto de la rama base) y trata el repositorio entero como nuevo.
+          fetch-depth: 0
+
+      - name: Instalar JDK 25 (Temurin)
+        uses: actions/setup-java@v6
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Cachear el analisis de Sonar
+        uses: actions/cache@v6
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      # El contexto `secrets` no se puede usar en el `if` de un job, solo dentro de un step. Por
+      # eso el chequeo se hace aca y los pasos siguientes miran esta salida.
+      #
+      # OJO: los PR que vienen de un fork NO reciben secrets, ni siquiera cuando SONAR_TOKEN
+      # existe. Ese caso cae por este mismo camino y tampoco rompe nada.
+      - name: Ver si hay credencial de SonarCloud
+        id: credencial
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "hay_token=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No hay secret SONAR_TOKEN. Se saltea el analisis de SonarCloud."
+            {
+              echo "### SonarCloud: salteado"
+              echo ""
+              echo "No existe el secret \`SONAR_TOKEN\` en este repositorio."
+              echo "Los pasos para crearlo estan en \`docs/DESPLIEGUE_Y_CI.md\` §4."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "hay_token=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Si hay token pero nadie cambio los placeholders del pom, sonar fallaría con un error de
+      # la API dificil de interpretar ("project not found" / "organization not found"). Mejor
+      # fallar aca, diciendo exactamente que falta.
+      - name: Comprobar que la organizacion y la clave del proyecto no son placeholders
+        if: steps.credencial.outputs.hay_token == 'true'
+        shell: bash
+        run: |
+          ORG=$(./mvnw -B -ntp -q help:evaluate -Dexpression=sonar.organization -DforceStdout)
+          KEY=$(./mvnw -B -ntp -q help:evaluate -Dexpression=sonar.projectKey -DforceStdout)
+          echo "sonar.organization = $ORG"
+          echo "sonar.projectKey   = $KEY"
+          if [[ "$ORG" == TODO-* || "$KEY" == TODO-* ]]; then
+            echo "::error::Hay SONAR_TOKEN pero sonar.organization / sonar.projectKey siguen siendo placeholders en pom.xml."
+            echo "::error::Reemplazalos por los valores reales que da SonarCloud al importar el repositorio (docs/DESPLIEGUE_Y_CI.md §4)."
+            exit 1
+          fi
+
+      # `verify` antes de `sonar:sonar` en el MISMO comando: Sonar no corre pruebas, solo lee el
+      # XML que dejo JaCoCo en target/site/jacoco/jacoco.xml. Si se invoca `sonar:sonar` solo,
+      # el analisis sube con 0% de cobertura y sin decir por que.
+      - name: Analizar
+        if: steps.credencial.outputs.hay_token == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          # Lo usa Sonar para comentar el resultado en el PR. Es el token que GitHub inyecta
+          # solo; no hay que crear nada.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./mvnw -B -ntp verify sonar:sonar

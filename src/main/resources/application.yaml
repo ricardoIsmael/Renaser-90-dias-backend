@@ -7,6 +7,25 @@ spring:
     import: optional:file:.env[.properties]
   application:
     name: renaser-backend
+  # AWS Systems Manager Parameter Store: APAGADO por defecto, encendido solo en el perfil
+  # `prod` (application-prod.yaml). Ver el comentario del starter en pom.xml para el detalle.
+  #
+  # La propiedad tiene que estar PRESENTE y en false; no alcanza con no ponerla.
+  # `ParameterStoreAutoConfiguration` es @ConditionalOnProperty(matchIfMissing = true), asi que
+  # con la clave ausente se activa, declara un bean `SsmClient` y su construccion resuelve la
+  # region con DefaultAwsRegionProviderChain. Sin region eso lanza `SdkClientException: Unable
+  # to load region from any of the providers in the chain` en el arranque — o sea, la app deja
+  # de levantar sin credenciales de AWS, que es justo la propiedad de este repo que hay que
+  # conservar (todos los adaptadores externos tienen NoOp y `optional:file:.env` no exige nada).
+  #
+  # El mismo bloque esta espejado en src/test/resources/application.yaml, que REEMPLAZA a este
+  # archivo en el classpath de test en vez de complementarlo.
+  cloud:
+    aws:
+      parameterstore:
+        enabled: ${AWS_PARAMETER_STORE_ENABLED:false}
+      region:
+        static: ${AWS_REGION:us-east-1}
   threads:
     virtual:
       enabled: true
