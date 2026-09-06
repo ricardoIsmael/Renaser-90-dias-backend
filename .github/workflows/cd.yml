@@ -1,0 +1,162 @@
+# Entrega continua: construye la imagen de Docker y la sube a Amazon ECR.
+#
+# QUE HACE HOY: construir y publicar la imagen, etiquetada con el SHA del commit y con `latest`.
+# QUE NO HACE: desplegarla. El destino (ECS Fargate / App Runner / EC2) TODAVIA NO ESTA DECIDIDO,
+# asi que el ultimo job esta explicitamente pendiente. No se agrega un `aws ecs update-service`
+# contra un cluster que nadie creo: fallaria en cada push y no ayudaria a decidir nada.
+#
+# AUTENTICACION: OIDC contra AWS, sin claves de acceso guardadas como secrets. GitHub le da al job
+# un token de identidad de corta duracion y AWS lo cambia por credenciales temporales para un rol.
+# El rol y su politica de confianza estan documentados en docs/DESPLIEGUE_Y_CI.md §5.
+name: CD
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  # `id-token: write` es lo que habilita OIDC. Sin este permiso, configure-aws-credentials no
+  # puede pedir el token y falla con "Could not load credentials from any providers".
+  id-token: write
+  contents: read
+
+jobs:
+  publicar-imagen:
+    name: Construir y publicar en ECR
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v7
+
+      # Mismo criterio que el workflow de SonarCloud: mientras la infraestructura de AWS no
+      # exista, este workflow avisa y termina en verde en vez de pintar de rojo cada push a
+      # master. En cuanto las variables del repositorio esten cargadas, corre solo.
+      - name: Ver si la infraestructura de AWS esta configurada
+        id: aws
+        shell: bash
+        env:
+          ROL: ${{ vars.AWS_ROLE_ARN }}
+          REGION: ${{ vars.AWS_REGION }}
+          REPO_ECR: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          # Con `if` explicitos y no con `[ ... ] && VAR=...`: bajo `set -e` (que es como
+          # GitHub invoca `shell: bash`) esa forma abreviada corta el paso si resulta ser la
+          # ultima linea del script. Funciona hasta que alguien agrega o quita una linea.
+          FALTAN=""
+          if [ -z "$ROL" ];      then FALTAN="$FALTAN AWS_ROLE_ARN";   fi
+          if [ -z "$REGION" ];   then FALTAN="$FALTAN AWS_REGION";     fi
+          if [ -z "$REPO_ECR" ]; then FALTAN="$FALTAN ECR_REPOSITORY"; fi
+          if [ -n "$FALTAN" ]; then
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Faltan variables del repositorio:$FALTAN. Se saltea la publicacion."
+            {
+              echo "### Publicacion en ECR: salteada"
+              echo ""
+              echo "Faltan estas variables de repositorio:\`$FALTAN\`."
+              echo "Como crearlas: \`docs/DESPLIEGUE_Y_CI.md\` §5."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Solo hace falta para construir para una arquitectura distinta a la del runner. Con
+      # IMAGEN_PLATAFORMAS=linux/amd64 (el default) no se usa, pero instalarlo cuesta segundos.
+      - name: Preparar QEMU (compilacion cruzada)
+        if: steps.aws.outputs.configurado == 'true'
+        uses: docker/setup-qemu-action@v4
+
+      - name: Preparar Buildx
+        if: steps.aws.outputs.configurado == 'true'
+        uses: docker/setup-buildx-action@v4
+
+      # Aca ocurre el intercambio OIDC: no hay AWS_ACCESS_KEY_ID ni AWS_SECRET_ACCESS_KEY en
+      # ningun lado. Las credenciales que salen de este paso duran lo que dura el job.
+      - name: Autenticarse en AWS por OIDC
+        if: steps.aws.outputs.configurado == 'true'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-renaser-backend-${{ github.run_id }}
+
+      - name: Iniciar sesion en ECR
+        if: steps.aws.outputs.configurado == 'true'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Armar las etiquetas de la imagen
+        if: steps.aws.outputs.configurado == 'true'
+        id: etiquetas
+        shell: bash
+        env:
+          REGISTRO: ${{ steps.ecr.outputs.registry }}
+          REPO_ECR: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          # Dos etiquetas, y las dos hacen falta:
+          #  - el SHA completo identifica sin ambiguedad que commit corre en produccion y permite
+          #    volver a una version anterior sin reconstruir nada;
+          #  - `latest` es la que apunta el despliegue cuando no se pide una version concreta.
+          #    Nunca sirve para saber QUE esta corriendo: para eso esta la del SHA.
+          echo "lista=${REGISTRO}/${REPO_ECR}:${GITHUB_SHA},${REGISTRO}/${REPO_ECR}:latest" >> "$GITHUB_OUTPUT"
+          echo "sha=${REGISTRO}/${REPO_ECR}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Construir y publicar
+        if: steps.aws.outputs.configurado == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.etiquetas.outputs.lista }}
+          # Default `linux/amd64` porque es la arquitectura del runner y compila nativo. Para
+          # Graviton hay que poner `linux/arm64` en la variable de repositorio IMAGEN_PLATAFORMAS.
+          #
+          # AVISO DE COSTO: cruzar a arm64 con QEMU emula la etapa de Maven entera y puede pasar
+          # de 4 minutos a mas de 30. Si el destino termina siendo Graviton, conviene mover este
+          # job a un runner arm64 nativo (`runs-on: ubuntu-24.04-arm`) en vez de emular.
+          platforms: ${{ vars.IMAGEN_PLATAFORMAS || 'linux/amd64' }}
+          # Cache de capas entre corridas, guardada en la propia cache de GitHub Actions.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Resumen
+        if: steps.aws.outputs.configurado == 'true'
+        shell: bash
+        run: |
+          {
+            echo "### Imagen publicada"
+            echo ""
+            echo '```'
+            echo "${{ steps.etiquetas.outputs.sha }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  desplegar:
+    name: Desplegar (PENDIENTE — falta decidir el destino)
+    needs: publicar-imagen
+    runs-on: ubuntu-latest
+    steps:
+      # Este job existe para que el hueco quede a la vista en la interfaz de Actions, no
+      # enterrado en un comentario. NO se inventa un destino: la decision entre ECS Fargate,
+      # App Runner y EC2 no esta tomada, y cada una necesita cosas distintas
+      # (definicion de tarea + servicio + balanceador, o un servicio de App Runner, o un
+      # user-data que haga docker pull). El analisis de las tres opciones, con lo que habria que
+      # crear en cada caso, esta en docs/DESPLIEGUE_Y_CI.md §5.3.
+      - name: Avisar que el despliegue no esta implementado
+        shell: bash
+        run: |
+          echo "::notice::La imagen quedo publicada en ECR. El despliegue automatico NO esta implementado."
+          {
+            echo "### Despliegue: pendiente de decision"
+            echo ""
+            echo "La imagen esta en ECR y lista para usarse, pero el destino de despliegue"
+            echo "(ECS Fargate / App Runner / EC2) todavia no fue elegido, asi que este paso"
+            echo "no hace nada. Ver \`docs/DESPLIEGUE_Y_CI.md\` §5.3."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -51,9 +51,17 @@ public interface CompletarClaseDiariaHabitoUseCase {
     int RESUMEN_MAX_LENGTH = 2000;
 
     /**
-     * Idempotente: si el registro de hoy ya está COMPLETADO, devuelve el resultado ya
-     * otorgado sin volver a completarlo ni a sumar puntos — ninguna transición del dominio
-     * abandona un estado terminal (ver {@code EstadoRegistro}).
+     * Idempotente ante un reintento genuino: si el registro de hoy ya está COMPLETADO
+     * <b>y tiene su resumen guardado</b>, devuelve el resultado ya otorgado sin volver a
+     * completarlo ni a sumar puntos — ninguna transición del dominio abandona un estado
+     * terminal (ver {@code EstadoRegistro}).
+     *
+     * <p><b>Corregido 2026-09-05 (E-120).</b> Antes esta idempotencia era ciega: cerrado el
+     * registro por CUALQUIER vía, un resumen que llegara después se descartaba en silencio y
+     * el POST igual respondía 200. Hoy ese caso —COMPLETADO sin resumen guardado— lanza
+     * {@code IllegalStateException} (409) con un mensaje que la persona entiende, en vez de
+     * fingir que el texto se guardó. El razonamiento completo, y por qué se eligió rechazar
+     * en lugar de guardar el resumen tardío, está en {@code ClaseDiariaHabitoService}.
      */
     RegistroCompletado completarDeHoy(CompletarClaseDiariaHabitoCommand command);
 

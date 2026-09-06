@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.application.politica.PoliticaClaseDiaria;
 import com.renaser.os.habits.application.politica.PoliticaPostDiarioComunidad;
 import com.renaser.os.habits.application.politica.PoliticaSantuario;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
@@ -20,6 +21,7 @@ import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
+import com.renaser.os.habits.domain.model.politica.GestoCompletar;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
@@ -45,6 +47,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase.CLAVE_SISTEMA_DAILY_CLASS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -102,7 +105,8 @@ class RegistroServiceTest {
         // BLOQUEO que antes estaba hardcodeado en el servicio ahora lo aporta esta).
         service = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
-                CLOCK, idGenerator, List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad()),
+                CLOCK, idGenerator,
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()),
                 transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -129,9 +133,64 @@ class RegistroServiceTest {
                 null, null, null, null, true, CLOCK.now(), CLOCK.now());
     }
 
+    /** El habito real CLASE DIARIA: CHECKBOX con {@code clave_sistema = 'DAILY_CLASS'} (V4). */
+    private static Habito habitoClaseDiaria() {
+        return Habito.rehydrate(HabitoId.of(UUID.randomUUID()), AmbitoHabito.SISTEMA, null, "Clase diaria", null,
+                TipoHabito.CHECKBOX, "MENTE", "READING", CLAVE_SISTEMA_DAILY_CLASS, ExigenciaEvidencia.OPCIONAL,
+                false, false, false, false, null, null, null, null, true, CLOCK.now(), CLOCK.now());
+    }
+
     private RegistroHabito registroPendiente(UserId participanteId, HabitoId habitoId) {
         return RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participanteId, habitoId,
                 LocalDate.of(2026, 8, 24), 5, TipoDia.DISCIPLINA, false, CLOCK.now());
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────────────
+    // CLASE DIARIA (E-120): el contrato dice que sin resumen el habito NO queda completado.
+    // Los dos tests de abajo FALLAN contra el codigo anterior a PoliticaClaseDiaria — antes
+    // DAILY_CLASS era un CHECKBOX cualquiera y la ruta generica lo cerraba sin pedir nada.
+    // ────────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("CLASE DIARIA: la ruta generica (y la herramienta del agente) no puede cerrarla ni pagarla")
+    void claseDiariaNoSeCierraConElGestoGenerico() {
+        UserId dueno = participante();
+        Habito habito = habitoClaseDiaria();
+        RegistroHabito registro = registroPendiente(dueno, habito.id());
+        when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(progresoPort.deParticipante(dueno)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+
+        assertThatThrownBy(() -> service.completar(
+                new CompletarRegistroCommand(dueno, registro.id(), "texto suelto sin pasar por la clase", null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("resumen");
+
+        assertThat(registro.estado()).isEqualTo(EstadoRegistro.PENDIENTE);
+        verify(saveRegistroPort, never()).save(any());
+        verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
+    }
+
+    @Test
+    @DisplayName("CLASE DIARIA: el gesto propio (POST /classroom/clase-diaria) si la cierra y paga")
+    void claseDiariaSeCierraConSuGestoPropio() {
+        UserId dueno = participante();
+        Habito habito = habitoClaseDiaria();
+        RegistroHabito registro = registroPendiente(dueno, habito.id());
+        when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteYHabito(dueno, habito.id())).thenReturn(Optional.empty());
+        when(progresoPort.deParticipante(dueno)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+
+        RegistroHabito resultado = service.completar(new CompletarRegistroCommand(dueno, registro.id(),
+                "Entendi que la disciplina se construye a diario", null, GestoCompletar.PROPIO_DEL_HABITO));
+
+        assertThat(resultado.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
+        assertThat(resultado.respuestaTexto()).isEqualTo("Entendi que la disciplina se construye a diario");
+        verify(ajustarPuntosPort).ajustar(eq(dueno), eq(MotivoPuntos.HABIT_COMPLETED), eq(10), any());
     }
 
     @Test

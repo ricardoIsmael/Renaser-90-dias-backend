@@ -1,0 +1,39 @@
+# Perfil `prod`. Se activa con SPRING_PROFILES_ACTIVE=prod (la imagen de Docker ya lo trae
+# puesto, ver Dockerfile).
+#
+# Este archivo NO define valores: lo unico que hace es decirle a la app que la configuracion
+# real la vaya a buscar a AWS Systems Manager Parameter Store. Los valores viven ahi, no en el
+# repositorio. La lista de parametros que hay que crear, con su tipo y quien los consume, esta
+# en docs/DESPLIEGUE_Y_CI.md §6.
+#
+# COMPLEMENTA a application.yaml, no lo reemplaza: los perfiles se suman al archivo base. Todo
+# lo que application.yaml deja en `${VARIABLE:default}` sigue teniendo su default; Parameter
+# Store solo lo pisa para las variables que existan alla.
+
+spring:
+  cloud:
+    aws:
+      parameterstore:
+        enabled: true
+      region:
+        # La region la resuelve la cadena estandar del SDK si esta vacia (variable de entorno
+        # AWS_REGION, metadatos de la instancia). Se deja explicita igual porque el
+        # ConfigDataLocationResolver corre ANTES de que exista el contexto de Spring: si no
+        # puede resolver la region en ese momento, el arranque muere sin haber leido nada.
+        static: ${AWS_REGION:us-east-1}
+
+  config:
+    # NO lleva `optional:` a proposito. Si Parameter Store no responde — rol IAM sin permisos,
+    # prefijo mal escrito, red cortada — queremos que el arranque FALLE ahi, ruidoso. Con
+    # `optional:` la app levantaria igual y se quedaria con los defaults de application.yaml:
+    # apuntando a `localhost:5433`, con `EMAIL_PROVEEDOR=noop` y `STORAGE_PROVEEDOR=noop`. Es
+    # decir, un backend "sano" segun el health check que no manda un solo correo y devuelve
+    # `about:blank#pendiente-s3/...` en cada archivo. Ese fallo silencioso es mucho peor que no
+    # arrancar.
+    #
+    # La barra final del prefijo importa: `aws-parameterstore:/renaser/prod/` lee TODOS los
+    # parametros bajo ese camino (getParametersByPath) y le saca el prefijo al nombre, asi que
+    # `/renaser/prod/DB_URL` termina siendo la propiedad `DB_URL` — exactamente el nombre que
+    # busca el `${DB_URL:...}` de application.yaml. Por eso los parametros se nombran igual que
+    # las variables del .env y no en formato `spring.datasource.url`.
+    import: aws-parameterstore:/renaser/prod/

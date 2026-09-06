@@ -106,9 +106,60 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .securityContext(ctx -> ctx.securityContextRepository(securityContextRepository))
                 .authorizeHttpRequests(auth -> auth
-                        // Renasia exige sesion real: sin ella no hay forma de saber de quien es la
-                        // conversacion, y el header de actor lo escribe el cliente. Ver el javadoc.
+                        // ---------------------------------------------------------------------
+                        // PUBLICOS: por definicion no puede haber sesion todavia.
+                        // ---------------------------------------------------------------------
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/social",
+                                "/api/v1/auth/social/complete").permitAll()
+                        .requestMatchers("/api/v1/auth/password/**",
+                                "/api/v1/auth/email-verification/**").permitAll()
+                        .requestMatchers("/api/v1/account-requests/**").permitAll()
+
+                        // ---------------------------------------------------------------------
+                        // LO QUE CONSUME LA APP MOVIL: exige sesion real (2026-09-05).
+                        //
+                        // Estas ~40 rutas se extrajeron del frontend, de las llamadas reales a
+                        // `/api/v1/...`. Cerrarlas es lo que termina con la suplantacion entre
+                        // aprendices: hasta ahora el actor salia del header `X-Actor-Id`, que lo
+                        // escribe el cliente, asi que cualquiera que supiera el UUID de otro
+                        // podia leer y escribir como esa persona. Los UUID no son secretos: 14
+                        // DTOs de respuesta los devuelven (muro, ranking, testimonios, tickets).
+                        //
+                        // No hace falta tocar los controllers para que esto funcione:
+                        // `ActorAutenticadoArgumentResolver` YA prefiere la sesion sobre el
+                        // header. Al exigir `authenticated()`, el `SecurityContext` viene poblado
+                        // con el usuario real y el header deja de leerse en estas rutas.
+                        //
+                        // Es `authenticated()` y NO un chequeo de rol TRAINEE a proposito: un
+                        // mentor o un admin abren las mismas pantallas, y filtrar por rol aca los
+                        // dejaria afuera. Que puede hacer cada rol lo sigue decidiendo
+                        // `@RequiresPermission` + `PermissionEnforcementInterceptor`.
+                        // ---------------------------------------------------------------------
+                        .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout").authenticated()
+                        .requestMatchers("/api/v1/home", "/api/v1/users/me/**").authenticated()
+                        .requestMatchers("/api/v1/habits", "/api/v1/habit-preferences/**",
+                                "/api/v1/habit-tracks/**", "/api/v1/habit-unlocks/**").authenticated()
+                        .requestMatchers("/api/v1/evidence", "/api/v1/evidence/**").authenticated()
+                        .requestMatchers("/api/v1/classroom/**", "/api/v1/cursos/**",
+                                "/api/v1/lecciones/**").authenticated()
+                        .requestMatchers("/api/v1/wall/**", "/api/v1/chat/**",
+                                "/api/v1/me/cell/**").authenticated()
+                        .requestMatchers("/api/v1/onboarding/**", "/api/v1/rocks/**",
+                                "/api/v1/spirit-audio/**").authenticated()
+                        .requestMatchers("/api/v1/tickets/**", "/api/v1/ranking/**").authenticated()
+                        // Renasia ya lo exigia desde 2026-09-03, por el mismo motivo.
                         .requestMatchers("/api/v1/renasia/**").authenticated()
+
+                        // ---------------------------------------------------------------------
+                        // EL RESTO sigue abierto POR AHORA, por decision del dueno del proyecto:
+                        // son rutas que la app movil todavia no consume (sobre todo el panel de
+                        // administracion). Queda dicho, para que nadie lo lea como "ya esta
+                        // seguro": mientras `/api/v1/admin/**` siga aca, alguien que conozca el
+                        // UUID de un admin puede seguir actuando como ese admin via `X-Actor-Id`.
+                        // Los guards de servicio (`requireAdminActivo`) verifican el ROL de ese
+                        // UUID, no que quien llama SEA ese usuario. Cerrar esto es la fase que
+                        // falta.
+                        // ---------------------------------------------------------------------
                         .anyRequest().permitAll());
         return http.build();
     }

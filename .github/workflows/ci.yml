@@ -1,0 +1,138 @@
+# Integracion continua: compila y corre la suite completa en cada push y cada PR.
+#
+# Corre sobre ubuntu-latest porque las pruebas de integracion usan Testcontainers y necesitan un
+# demonio de Docker; los runners de Ubuntu de GitHub lo traen instalado y andando. Un runner de
+# Windows o macOS NO sirve para esto.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# Si se empuja dos veces seguidas a la misma rama, cancela la corrida vieja: la suite tarda
+# varios minutos y no tiene sentido pagar dos veces por un commit que ya quedo atras.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Guarda contra el fallo de E-111: `mvnw` puede terminar en exit 0 SIN correr una sola prueba
+  # (por ejemplo con JAVA_HOME mal), y cualquier automatismo que mire solo el codigo de salida da
+  # el commit por probado. El paso "Verificar que las pruebas realmente corrieron" suma las lineas
+  # `Tests run:` de la salida y falla si el total queda por debajo de este piso.
+  #
+  # NO es una meta de cobertura ni un candado contra borrar pruebas: es un canario contra el cero.
+  # Se fija bien por debajo del total real para que agrupar o eliminar pruebas legitimamente no
+  # rompa el CI, pero muy por encima de cero para que "no corrio nada" no pase desapercibido.
+  MINIMO_PRUEBAS: 2000
+
+jobs:
+  build:
+    name: Compilar y probar
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v7
+
+      - name: Instalar JDK 25 (Temurin)
+        uses: actions/setup-java@v6
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          # Cachea ~/.m2/repository usando pom.xml como clave. Sin esto cada corrida vuelve a
+          # bajar Spring Boot, Spring AI, el SDK de AWS y Testcontainers desde cero.
+          cache: 'maven'
+
+      - name: Mostrar el entorno
+        run: |
+          java -version
+          ./mvnw -version
+          docker --version
+
+      # `verify` y no `test`: es lo unico que corre TAMBIEN las pruebas de integracion (failsafe,
+      # los archivos *IT.java) y lo unico que genera el XML de cobertura de JaCoCo.
+      - name: Compilar y correr la suite completa
+        shell: bash
+        run: |
+          set -o pipefail
+          ./mvnw -B -ntp clean verify | tee salida-maven.log
+
+      # Este paso existe por E-111 (docs/BITACORA_ERRORES.md). Se leen las lineas de RESUMEN de
+      # surefire y failsafe -- las que dicen `Tests run: N, Failures: ...` sin el sufijo `- in
+      # <clase>`, que son las por-clase -- y se suman.
+      - name: Verificar que las pruebas realmente corrieron
+        if: always()
+        shell: bash
+        run: |
+          if [ ! -f salida-maven.log ]; then
+            echo "::error::No existe salida-maven.log: el build ni siquiera arranco."
+            exit 1
+          fi
+
+          RESUMENES=$(grep -E 'Tests run: [0-9]+, Failures: [0-9]+, Errors: [0-9]+, Skipped: [0-9]+' salida-maven.log \
+                        | grep -v -- '- in ' || true)
+
+          if [ -z "$RESUMENES" ]; then
+            echo "::error::No aparece ninguna linea 'Tests run:' en la salida de Maven: no se ejecuto ni una prueba."
+            echo "::error::Dos causas posibles. (1) El build fallo ANTES de las pruebas -- mirar el paso anterior."
+            echo "::error::(2) Maven termino en exit 0 sin correr nada, tipicamente por JAVA_HOME mal (E-111)."
+            exit 1
+          fi
+
+          echo "Lineas de resumen encontradas:"
+          echo "$RESUMENES"
+
+          TOTAL=$(echo "$RESUMENES" | grep -oE 'Tests run: [0-9]+' | grep -oE '[0-9]+' \
+                    | awk '{s+=$1} END {print s+0}')
+          FALLOS=$(echo "$RESUMENES" | grep -oE 'Failures: [0-9]+' | grep -oE '[0-9]+' \
+                    | awk '{s+=$1} END {print s+0}')
+          ERRORES=$(echo "$RESUMENES" | grep -oE 'Errors: [0-9]+' | grep -oE '[0-9]+' \
+                    | awk '{s+=$1} END {print s+0}')
+
+          echo "### Pruebas ejecutadas: **$TOTAL** (fallos: $FALLOS, errores: $ERRORES)" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$TOTAL" -lt "$MINIMO_PRUEBAS" ]; then
+            echo "::error::Solo se ejecutaron $TOTAL pruebas; el piso configurado es $MINIMO_PRUEBAS."
+            echo "::error::O falto correr un bloque entero de la suite, o el piso quedo desactualizado."
+            exit 1
+          fi
+
+          if [ "$FALLOS" -ne 0 ] || [ "$ERRORES" -ne 0 ]; then
+            echo "::error::Hay $FALLOS fallos y $ERRORES errores."
+            exit 1
+          fi
+
+          echo "OK: $TOTAL pruebas, 0 fallos, 0 errores."
+
+      - name: Publicar el reporte de cobertura (JaCoCo)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacoco-report
+          # El HTML es para mirarlo a mano; el XML es el que consume SonarCloud; el .exec es el
+          # dato crudo, por si hay que regenerar el reporte sin volver a correr la suite.
+          path: |
+            target/site/jacoco/
+            target/jacoco.exec
+          if-no-files-found: warn
+          retention-days: 14
+
+      # Sin esto, un fallo de prueba en CI obliga a leer 4000 lineas de log en el navegador.
+      - name: Publicar los informes de las pruebas que fallaron
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: informes-de-pruebas
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+            salida-maven.log
+          if-no-files-found: warn
+          retention-days: 14

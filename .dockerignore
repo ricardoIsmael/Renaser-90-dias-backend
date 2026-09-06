@@ -1,0 +1,55 @@
+# Que NO viaja al contexto de build de Docker.
+#
+# Dos motivos, y el segundo es el importante:
+#  1. Velocidad: sin esto el contexto incluye target/ (~1 GB con las clases y el jar) y
+#     graphify-out/ (~23 MB de grafo), y el demonio de Docker los copia enteros antes de leer
+#     la primera linea del Dockerfile.
+#  2. Seguridad: .env y .run/ tienen credenciales REALES en texto plano (GOOGLE_GENAI_API_KEY,
+#     AWS_SECRET_ACCESS_KEY, SMTP_PASSWORD, GOOGLE_OAUTH_CLIENT_SECRET — ver .gitignore). Aunque
+#     el Dockerfile no los copie, cualquier `COPY . .` futuro los meteria en una capa de la
+#     imagen, de donde se leen con `docker history` aunque el archivo se borre despues.
+
+# --- Credenciales -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+.run/
+**/*.pem
+**/*.p8
+**/*.key
+
+# --- Artefactos de build ----------------------------------------------------------------------
+target/
+build/
+*.jar
+*.war
+
+# --- Control de versiones y metadatos ---------------------------------------------------------
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# --- Herramientas y editores ------------------------------------------------------------------
+.idea/
+.vscode/
+.settings/
+.classpath
+.project
+*.iml
+*.iws
+*.ipr
+.claude/
+.code-review-graph/
+graphify-out/
+scratchpad/
+
+# --- Documentacion (no participa de la compilacion) -------------------------------------------
+docs/
+*.md
+!README.md
+
+# --- Infraestructura local --------------------------------------------------------------------
+docker-compose.yml
+Dockerfile
+.dockerignore

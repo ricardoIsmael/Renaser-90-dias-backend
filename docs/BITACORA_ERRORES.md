@@ -2211,6 +2211,47 @@ vez**, aunque toquen modulos que no se cruzan.
   build entero. La senal que lo distingue es **"0 pruebas ejecutadas"**: un problema real de codigo
   falla DESPUES de correr pruebas, y nombra cual.
 
+**Quinto sintoma, la version masiva, vista el 2026-09-05 al montar el CI (D-114).** El mismo
+choque, pero a escala, y por eso es el mas alarmante de todos: `./mvnw clean verify` termina con
+
+```
+[ERROR] Tests run: 2086, Failures: 36, Errors: 349, Skipped: 0
+```
+
+**349 errores repartidos por TODOS los modulos** — `habits`, `rocks`, `rag`, `onboarding`, `users`,
+`points`, `support`, `notifications`, `phasecontracts` —, incluidas pruebas de dominio puro que no
+tocan infraestructura. Parece que alguien rompio el proyecto entero. Contando por tipo:
+
+```
+305 java.lang.NoClassDefFoundError
+223 java.lang.ClassNotFoundException
+164 org.mockito.exceptions.base.MockitoException
+```
+
+y las clases "que faltan" son cosas tan basicas como `RegistroRadarId`, `SemanaPrograma`,
+`PorcentajeHabitos` o `CatalogoHerramientasAgente`.
+
+**La verificacion que lo cierra en dos comandos**, y que distingue esto de una rotura real: al
+terminar el build, la clase esta **en el fuente Y en `target/`**.
+
+```bash
+ls src/main/java/com/renaser/os/habits/domain/model/radar/RegistroRadarId.java   # existe
+ls target/classes/com/renaser/os/habits/domain/model/radar/RegistroRadarId.class # existe tambien
+```
+
+Si las dos existen despues de la corrida, no falta ninguna clase: **faltaba mientras surefire la
+buscaba**, porque otro build estaba reescribiendo `target/` en ese momento. En esa maquina habia,
+ademas de la app levantada desde IntelliJ, otros dos `mvnw` que arrancaron mientras este corria.
+
+**Contraprueba, para no dejarlo en hipotesis:** la misma revision del codigo, compilada sobre una
+copia aislada del checkout (`target/` propio, sin nadie mas escribiendo), dio **2421 pruebas con 3
+fallos** — y esos 3 son E-126, un bug real de zona horaria. De 349 errores a 0 sin tocar una linea
+de codigo.
+
+**La leccion practica:** ante un numero de errores absurdamente grande y repartido por modulos que
+no tienen nada que ver entre si, la primera hipotesis no es el codigo, es el `target/` compartido.
+Un error real se concentra; una colision de builds se esparce.
+
 ## E-105 — La pantalla de habitos se apagaba todas las noches: `GET /habit-tracks/today` pedia el dia del servidor (2026-09-05)
 
 **Sintoma:** a partir de las 19:00 hora de Lima, `GET /api/v1/habit-tracks/today` devuelve **`[]`**
@@ -2463,4 +2504,992 @@ esa condicion al efecto.
 componente, hay que verificar que el componente nuevo tenga el MISMO ciclo de vida. Un
 `useEffect` con limpieza solo se apaga si el componente se desmonta o si cambian sus dependencias —
 y en un navegador de pestanas, salir de una pantalla no es ninguna de las dos cosas.
+
+
+---
+
+## E-111 — `./mvnw clean test` "pasa" sin ejecutar una sola prueba, y devuelve exit 0 (2026-09-05) — **RESUELTO**
+
+**Sintoma exacto**, al final de la salida de Maven:
+
+```
+/c/Users/panc1/.m2/wrapper/dists/apache-maven-3.9.16/56ba1f9f/bin/mvn: line 93: cd: /c/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot: No such file or directory
+The JAVA_HOME environment variable is not defined correctly,
+this environment variable is needed to run this program.
+```
+
+**Lo grave no es el mensaje: es que el proceso termina con `exit code 0`.** Un script de CI, un
+hook, o un agente que solo mire el codigo de salida da la tarea por probada. Ninguna prueba corrio.
+
+**Causa real:** la ruta de `JAVA_HOME` que documentaba `.claude/rules/03-pruebas.md` no existe en
+esta maquina. El JDK 25 real esta en `C:\Program Files\Java\jdk-25.0.2`. La regla decia
+`C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot`, y ademas afirmaba que E-103 habia
+corregido la ruta *desde* `C:\Program Files\Java\jdk-25.0.2` — es decir, **E-103 cambio la ruta que
+funcionaba por una que no existe**. No hay carpeta `Eclipse Adoptium` bajo `C:\Program Files\`.
+
+**Solucion aplicada:** `.claude/rules/03-pruebas.md` vuelve a `C:\Program Files\Java\jdk-25.0.2`,
+verificado con `ls` y con `"$JAVA_HOME/bin/java" -version` (responde `25.0.2+10-LTS-69`). Con la
+ruta correcta: **2407 pruebas, 0 fallos, BUILD SUCCESS, 4:15 min.**
+
+**Como evitar que vuelva a pasar:** no alcanza con mirar el exit code de `mvnw`. La verificacion
+tiene que ser sobre la **linea `Tests run:`** de la salida — si no aparece, no se corrio nada,
+diga lo que diga el codigo de salida. Antes de confiar en una ruta de JDK documentada, `ls`.
+
+**Leccion general:** una correccion documentada tambien puede estar equivocada. E-103 se escribio
+con la forma de una correccion ("aca decia X, era Y") y por eso nadie la volvio a mirar durante
+dos dias, mientras la orden obligatoria del repo —correr las pruebas— se cumplia en falso.
+
+---
+
+## E-112 — La Clase Diaria se vuelve imposible de completar apenas el aprendiz se saltea un dia (2026-09-05) — **RESUELTO**
+
+**Sintoma:** el aprendiz toca el habito "Clase Diaria" en Training y, en vez de abrirse la leccion
+del dia, aparece:
+
+```
+Leccion no disponible 🔒
+Para acceder a esta leccion primero debes completar la leccion anterior:
+"<titulo de la leccion anterior>"
+```
+
+El habito queda sin poder cerrarse. **Y no se destraba solo: empeora cada dia.**
+
+**Causa real — dos reglas que se contradicen:**
+
+1. El **backend** elige la Clase Diaria a partir del `dia_programa` del aprendiz
+   (`ClaseDiariaService.claseDeHoy`). Ese dia **avanza con el calendario**, haya o no completado la
+   clase de ayer (es derivado de fechas, D-81).
+2. El **frontend** abria esa leccion por `handleAbrirLeccion` (`ComunidadScreen`), que aplica una
+   regla de **progresion secuencial**: no se puede abrir una leccion si la anterior no esta
+   completada.
+
+Basta faltar **un** dia para que las dos se peleen: el dia avanza, la leccion de hoy pasa a ser otra,
+la anterior sigue incompleta, y el gate secuencial bloquea la de hoy. Al dia siguiente el hueco es
+mayor. El habito diario queda inalcanzable para siempre.
+
+**Por que estaba asi:** fue deliberado y esta escrito en el propio codigo — *"Deliberadamente NO se
+saltea `handleAbrirLeccion` (...) Entrar por un atajo que ignore esas reglas seria inventarle una
+excepcion a la Clase Diaria que nadie pidio."* El razonamiento es sensato **salvo por un detalle
+que no se verifico**: que la leccion de la Clase Diaria no la elige la persona navegando, la elige
+el reloj del programa. Una regla pensada para "no te saltees lecciones a mano" se aplico a un
+camino donde nadie eligio saltarse nada.
+
+**Solucion aplicada:** `handleAbrirLeccion` acepta `omitirProgresionSecuencial` (default `false`,
+asi la navegacion a mano no cambia en nada), y el deep-link de la Clase Diaria lo pasa en `true`.
+**El bloqueo por dia de programa (`lesson.locked`) SI se mantiene** — ese lo decide el backend y es
+el que de verdad ordena el curso; el secuencial era una regla que solo vivia en el cliente.
+
+**Como evitar que vuelva a pasar:** antes de reusar una regla de navegacion en un camino nuevo,
+preguntarse **quien eligio el destino**. Si lo eligio la persona, las reglas de navegacion manual
+aplican. Si lo eligio el servidor (un reloj, un scheduler, un deep-link), aplicarle una regla de
+"no te saltees pasos" convierte un atraso en un bloqueo permanente.
+
+---
+
+## E-113 — Un script de edicion que falla al escribir deja el archivo en 0 bytes (2026-09-05) — **RESUELTO**
+
+**Sintoma exacto:**
+
+```
+UnicodeEncodeError: 'utf-8' codec can't encode characters in position 39541-39542: surrogates not allowed
+```
+
+...y acto seguido `wc -c ComunidadScreen.tsx` devuelve **0**. El archivo entero desaparecio, no solo
+el cambio.
+
+**Causa real, y son dos cosas distintas:**
+
+1. En Python, un literal como `"\ud83d\udd12"` (el candado 🔒 escrito como **par sustituto**) no es
+   texto UTF-8 valido: `str.encode('utf-8')` lo rechaza. Un emoji fuera del plano basico se escribe
+   `"\U0001F512"` o con `chr(0x1F512)`, nunca como dos mitades sueltas.
+2. Lo que destruyo el archivo no fue el error, fue el orden: **`open(p, 'w')` trunca el archivo en
+   el momento de abrirlo**, antes de que `.write(s)` intente codificar. Cuando la codificacion
+   falla, ya no queda nada.
+
+**Solucion aplicada:** el archivo se recupero con `git checkout --` (estaba versionado y limpio) y
+los cambios se rehicieron con un script que **codifica primero y escribe despues**, sobre un
+temporal:
+
+```python
+datos = s.encode('utf-8')      # si algo no es UTF-8 valido, falla ACA y el original no se toca
+with open(p + '.tmp', 'wb') as f:
+    f.write(datos)
+os.replace(p + '.tmp', p)       # reemplazo atomico
+```
+
+**Como evitar que vuelva a pasar:** ningun script de edicion masiva abre el archivo destino en `'w'`.
+Se codifica a bytes primero, se escribe a un temporal, y se reemplaza con `os.replace`. Y antes de
+correr un script asi sobre un archivo, verificar que este limpio en git — es la unica red que
+convirtio esto en dos minutos de perdida en vez de una tarde.
+
+---
+
+## E-114 — "No pudimos enviar tu resumen" sobre un POST que SI funciono: el backend publicaba `habitTrackId` y el contrato dice `registroHabitoId` (2026-09-05) — **RESUELTO**
+
+**Sintoma exacto:** en el modal de Clase Diaria (Training), la persona escribe el resumen, toca
+"ENVIAR Y COMPLETAR" y aparece en rojo:
+
+```
+No pudimos enviar tu resumen. Intentá de nuevo.
+```
+
+Reintentar da exactamente lo mismo, siempre. El habito, sin embargo, **queda completado en el
+servidor**: los puntos se otorgan, la leccion se marca vista y el resumen se guarda. Solo la app
+cree que fallo.
+
+**Causa real — un nombre de campo, no un error de negocio.** `POST /api/v1/classroom/clase-diaria`
+respondia **200 OK** con:
+
+```json
+{"leccionId":"...","habitTrackId":"...","puntosOtorgados":5}
+```
+
+y el cliente movil valida toda respuesta contra el contrato publicado
+(`docs/api/CONTRATO_CONTENIDO_IA.md` §1.11-bis), que dice `registroHabitoId`:
+
+```ts
+const completarClaseDiariaSchema = z.object({
+  leccionId: z.string(), registroHabitoId: z.string(), puntosOtorgados: z.number(),
+}).passthrough();
+```
+
+`validarRespuesta` tira `Error("El backend respondió algo inesperado ... registroHabitoId: Required")`.
+Ese `Error` **no es un `ApiError`**, y `mensajeDeError` devuelve el texto por defecto para todo lo que
+no lo sea — de ahi que la persona vea el mensaje generico de red y no el detalle del campo. El 200
+se convierte en "fallo" del lado del cliente.
+
+De donde salio el nombre viejo: el DTO `CompletarClaseDiariaResponse` espejaba a mano el shape del
+backend anterior (RenaserBack `clase-diaria/service.ts:64,85`, `{ leccionId, habitTrackId }`), y su
+javadoc lo justificaba explicitamente. El contrato de ESTE backend, el use case
+(`ClaseDiariaCompletada.registroHabitoId`) y el resto del sistema (`EvidenciaResponse`,
+`CONTRATO_DIA_A_DIA.md`) ya usaban `registroHabitoId`. **El unico archivo de los cinco que decia
+otra cosa era el DTO web.**
+
+**Por que ninguna prueba lo vio, que es la parte importante:** `ClaseDiariaServiceTest` si
+verificaba `resultado.registroHabitoId()` — pero sobre el record del caso de uso, no sobre el JSON.
+Entre el caso de uso y el cable habia un mapeo a mano (`CompletarClaseDiariaResponse.from`) que
+nadie probaba. **Un contrato HTTP se verifica sobre el JSON serializado; asertar los accessors del
+record prueba el record, no el contrato.**
+
+**Falsa pista que costo tiempo:** en el log del mismo dia aparecia
+`409 -> Conflict: El registro ya esta en un estado terminal: COMPLETADO`, y era tentador cerrar el
+caso ahi. No era eso: `ClaseDiariaHabitoService.completarDeHoy` **si** es idempotente (retorna
+temprano si el registro ya esta `COMPLETADO`, sin volver a completarlo), asi que reenviar el resumen
+devuelve 200, nunca 409. Ese mensaje solo lo puede tirar `RegistroHabito.requireNoTerminal()`, cuyos
+tres llamadores son `RegistroService.completar` (la ruta generica
+`POST /habit-tracks/{id}/complete`), `RachaService` y `SantuarioService` — ninguno es la Clase
+Diaria. El javadoc de `ClaseDiariaService.completar` que promete idempotencia **no mentia**;
+verificarlo contra el codigo antes de creerle al log fue lo que destrabo el diagnostico.
+
+**Solucion aplicada:**
+
+1. `CompletarClaseDiariaResponse.habitTrackId` -> `registroHabitoId`, con el javadoc corregido para
+   que la proxima persona no lo "arregle" de vuelta al nombre del repo viejo.
+2. `CompletarClaseDiariaResponseTest` (nuevo): serializa el DTO con Jackson y asserta las **claves
+   del JSON**, incluida la ausencia de claves de mas. Falla contra el codigo viejo (verificado:
+   1 failure + 1 error).
+
+**Como evitar que vuelva a pasar:**
+
+- Cuando un DTO web se escribe espejando un backend anterior, **el contrato publicado
+  (`docs/api/*.md`) le gana al repo viejo**, porque es contra el contrato que se escribio el cliente.
+  Si los dos difieren, es un bug del DTO, no del contrato.
+- Todo DTO de salida con mapeo a mano lleva una prueba que mira el **JSON**, no los accessors. Es
+  barata (no necesita Spring) y es la unica que ve el nombre real del campo.
+- Si el cliente reporta "no se pudo enviar" pero el dato aparece guardado en el servidor, la
+  hipotesis numero uno es **validacion de la respuesta en el cliente**, no un fallo de escritura.
+
+---
+
+## E-116 — El Muro y el catalogo de Cursos se pintan uno encima del otro (2026-09-05) — **RESUELTO**
+
+**Sintoma exacto**, como lo reporto el dueno del proyecto:
+
+```
+bug encontrado con la solucion del post en comunidad. luego de publicar sale asi debe de ser
+normal el flujo me lleva a muro con publicar abierto y debo de poder subir algo nd mas luego
+que salga un mensaje su habito de post en comunidad se completo con exito no procede
+```
+
+La captura que adjunto muestra **dos secciones de `ComunidadScreen` apiladas en el mismo scroll**:
+arriba "VOLVER A COMUNIDAD" + "EVENTOS & EXPERIENCIAS" + las pestanas MURO/TESTIMONIOS/RANKING con
+una publicacion ya hecha, y pegado abajo "VOLVER A CURSOS" + la tarjeta del curso "FORMACION
+RENASER - FASE I". El Muro y Cursos, visibles a la vez.
+
+**Causa real:** `ComunidadScreen` decidia que seccion mostrar con **tres booleanos independientes**
+(`inEventosExperiencias`, `inExclusiveResources`, `inAtencionPersonalizada`), y cada bloque del
+render preguntaba solo por el suyo:
+
+```tsx
+{inEventosExperiencias && ( <ScrollView> ... )}          // VISTA 2
+{inExclusiveResources && selectedCourse !== null && ( <ScrollView> ... )}   // VISTA 3.1
+```
+
+Son `<ScrollView>` hermanos dentro del mismo `SafeAreaView`: con los dos booleanos en `true` se
+pintan los dos, uno debajo del otro. **Nada garantizaba que fueran excluyentes** — solo la
+casualidad de que los caminos de entrada a mano pasaran de a uno.
+
+Los dos atajos que entran desde la pestana Training rompen esa casualidad, porque prenden su flag
+sin apagar el resto:
+
+- `abrirCursoId`/`abrirLeccionId` (habito Clase Diaria) -> `setInExclusiveResources(true)`
+- `abrirComposerMuro` (habito de post en comunidad) -> `setInEventosExperiencias(true)`
+
+Basta tocar **un habito y despues el otro** — que es exactamente lo que hace un aprendiz cualquiera
+en su dia — para que queden las dos secciones prendidas. Cambiar de pestana no desmonta la
+pantalla, asi que el flag del primero sigue en `true` cuando llega el segundo.
+
+**Solucion aplicada:** un solo valor en vez de tres booleanos, para que el estado invalido **no se
+pueda ni escribir** (`ComunidadScreen.tsx`):
+
+```tsx
+type SeccionComunidad = 'inicio' | 'eventos' | 'recursos' | 'atencion';
+const [seccionActiva, setSeccionActiva] = useState<SeccionComunidad>('inicio');
+const inExclusiveResources = seccionActiva === 'recursos';   // derivados, ya no estados
+const inEventosExperiencias = seccionActiva === 'eventos';
+const inAtencionPersonalizada = seccionActiva === 'atencion';
+```
+
+Los tres nombres viejos se conservan como **derivados** a proposito: asi las ~15 condiciones de
+render y el manejador del boton "atras" no se tocaron, y el diff quedo en los ~10 lugares que
+escribian. Todo cambio de seccion pasa ahora por `irASeccion(seccion)`, que ademas limpia el
+sub-estado de la seccion que se deja (`fullScreenLesson`/`selectedCourseId` al salir de Recursos,
+`activeChat`/`groupInfoVisible` al salir de Atencion) — sin eso, quien dejaba una leccion abierta a
+pantalla completa volvia a caer dentro de ESA leccion la proxima vez que entraba a Recursos.
+
+**Como evitar que vuelva a pasar:** cuando dos estados son excluyentes **por diseno**, no se
+modelan con dos booleanos y disciplina — se modelan con **una sola variable**. Con N booleanos hay
+2^N combinaciones posibles y solo N+1 validas; las otras no fallan al escribirlas, fallan a la
+vista del usuario semanas despues. La senal de alarma concreta: si al agregar un camino de entrada
+hay que acordarse de apagar los flags de los otros, el modelo esta mal — cada camino nuevo es una
+oportunidad mas de olvidarselo, y aca hubo dos y se olvidaron los dos.
+
+---
+
+## E-117 — El habito "post en comunidad" no se cerraba NUNCA al publicar (2026-09-05) — **RESUELTO en el movil**
+
+**Sintoma exacto**, del mismo reporte de arriba: el aprendiz toca el habito, publica en el Muro, y
+el mensaje que deberia cerrar el flujo — *"su habito de post en comunidad se completo con exito"* —
+**no procede**. El habito queda pendiente hasta que el cron nocturno lo expira.
+
+**Causa real: de la regla de negocio se implemento solo la mitad.** La regla la dio el dueno del
+producto el 2026-09-04 y esta transcrita textual en el javadoc de `PoliticaPostDiarioComunidad`:
+
+> "Cuando publique algo, y recien ahi, se marca como completado. Ojo: debe publicar algo para
+> poder comprobar el estado."
+
+Lo construido fue la mitad **guardiana** ("no lo cierres si no publico"):
+`PoliticaPostDiarioComunidad.puedeCompletarseDirecto` consulta
+`PublicacionMuroFinder.publicoEntre(...)` y hace que `POST /habit-tracks/{id}/complete` responda
+400 si no hay publicacion de esa persona ese dia. Es un **guard**, no un **closer**: solo corre
+DENTRO de ese endpoint.
+
+La mitad que **dispara** el cierre no existia en ningun lado:
+
+- **Backend:** `PublicacionMuroService.publicar` emite `PublicacionCreadaEvent`... y ese evento
+  **no tiene ni un oyente**. El javadoc del propio evento dice que lo escucharia `notifications`
+  "en la Ola 3"; ese listener tampoco existe. De hecho **`habits` no tiene ni un solo listener de
+  eventos** en todo el modulo: los dos habitos que se cierran como efecto secundario (`DAILY_CLASS`
+  via `ClaseDiariaHabitoService`, `PASTILLA_RENACER` via `PastillaRenacerHabitoService`) lo hacen
+  con **llamada directa a un puerto de `habits.api`**, nunca por evento.
+- **Frontend:** `abrirMuroParaPublicar` (TrainingScreen) solo navega — dos lineas. Y al publicar,
+  `handlePublishPost` llamaba a `POST /api/v1/wall` y a `avisarPostPublicado()`, que es del
+  **arranque guiado** (pasar al Pacto), no de habitos. Nadie llamaba a `/complete`.
+
+Lo peor es que estaba **documentado al reves**, y por eso nadie lo noto: `habits.types.ts` decia
+*"el movil no puede marcarlo y listo — lo unico que puede hacer es llevar a publicar"*, y
+`TrainingScreen` decia *"mandar al muro es el unico camino que cierra"*. Navegar al muro no cerraba
+nada. Las dos frases describian la mitad guardiana como si fuera el flujo completo.
+
+**Solucion aplicada (en el movil):** el disparador que faltaba, con la publicacion ya confirmada.
+
+- `features/habits/api/postDiarioComunidad.ts` — `cerrarHabitoPostDiarioComunidad()`: cruza
+  `GET /habits` (de ahi sale `systemKey`, que `TrackDelDiaApi` no trae) con
+  `GET /habit-tracks/today`, y si el track de `COMMUNITY_POST` esta pendiente llama a
+  `POST /habit-tracks/{id}/complete`. Devuelve `completado | ya-estaba | no-aplica | fallo` y
+  **nunca lanza**: la publicacion ya esta guardada y un fallo cerrando el habito no puede terminar
+  mostrando "No se pudo publicar".
+- `ComunidadScreen.handlePublishPost` lo llama despues del `await` de publicar, y solo si devuelve
+  `completado` muestra el aviso que el dueno pidio.
+- `features/habits/events/avisoPostDiarioCerrado.ts` + un oyente en `TrainingScreen`: la tarjeta
+  del habito vive en OTRA pestana y `useTraining` carga una sola vez al montarse, asi que sin esto
+  la persona leia "completado" y volvia a encontrar la tarjeta sin tildar.
+
+**La verificacion sigue siendo del servidor.** El movil no "marca" nada por decision propia: pide
+el cierre, y el backend lo concede solo porque encuentra la publicacion en `publicaciones_muro`. Un
+cliente que llame sin haber publicado sigue comiendo el 400 de siempre.
+
+**Lo que quedaba ABIERTO — CERRADO el 2026-09-05, ver E-121:** `rocks` publica al Muro al completar
+la roca diaria (`PublicarEnMuroPort` -> `PublicacionMuroService.publicarDesdeEvidencia`), con la
+publicacion **a nombre del aprendiz**. O sea que hoy, con el guard ya en produccion, completar una
+roca **habilita** cerrar a mano el habito de post diario. Faltaba decidir si esa publicacion
+automatica ademas deberia **cerrarlo sola y pagar sus puntos**. Preguntado el 2026-09-05, el dueno
+del producto respondio **"si"**, y se implemento exactamente donde esta entrada decia que iba: un
+`@ApplicationModuleListener` de `PublicacionCreadaEvent` en `habits` — el primer listener del
+modulo. **Consecuencia para el movil:** `cerrarHabitoPostDiarioComunidad()` quedo redundante; ver
+E-121.
+
+**Como evitar que vuelva a pasar:** cuando una regla de negocio tiene forma de *"cuando pase X,
+entonces Y"*, se implementan **las dos mitades o ninguna**. Validar X sin disparar Y deja un
+sistema que rechaza correctamente lo invalido y no hace nunca lo valido — y que se ve "terminado"
+en revision, porque la parte dificil (la comprobacion contra la base) esta escrita y probada. La
+senal concreta que hubo que aprender a leer aca: **un evento de dominio con cero oyentes**
+(`PublicacionCreadaEvent`) es codigo que no hace nada; vale la pena un test de arquitectura que
+liste los eventos publicados sin ningun `@ApplicationModuleListener` que los escuche.
+
+---
+
+## E-118 — El contador "0/5 EVIDENCIAS" de Training no se movia nunca, aunque el aprendiz cerrara habitos (2026-09-05) — **RESUELTO en el movil**
+
+**Sintoma exacto**, palabras del dueno del producto:
+
+> "acabo de subir o registrar habitos y sale este mensaje me refiero la evidencias 0/5 no se
+> contabiliza"
+
+En la pantalla TRAINING, las cinco dimensiones con el numerador clavado en 0:
+
+```
+CUERPO            0/5 EVIDENCIAS
+MENTE             0/3 EVIDENCIAS
+EMOCIONES         0/1 EVIDENCIAS
+ESPIRITU          0/2 EVIDENCIAS
+VIDA Y NEGOCIO    0/0 EVIDENCIAS
+```
+
+El denominador SI variaba por dimension (5/3/1/2), asi que el reparto por categoria funcionaba.
+
+**Lo primero que se descarto, con datos y no con lectura de codigo.** El backend NO pierde el dato:
+
+```
+$ docker exec -e PGPASSWORD=postgres renaser-db psql -U postgres -d renaser \
+  -c "SELECT rh.fecha_ejecucion, h.categoria_clave, count(*) n, count(e.id) con_evidencia
+      FROM renaser.registros_habito rh
+      JOIN renaser.habitos h ON h.id = rh.habito_id
+      LEFT JOIN renaser.evidencias e ON e.registro_habito_id = rh.id
+      GROUP BY 1,2 ORDER BY 1,2;"
+
+ 2026-09-05 | CONSCIENCIA | 1 | 0
+ 2026-09-05 | CUERPO      | 5 | 0
+ 2026-09-05 | ESPIRITU    | 2 | 0
+ 2026-09-05 | MENTE       | 3 | 0
+```
+
+`GET /api/v1/evidence` devuelve 200 y trae bien la unica fila que existe, con
+`registroHabitoId` poblado; `GET /api/v1/habit-tracks/today` devuelve los 11 tracks del dia con su
+`estado`. El mapeo del movil tambien es correcto (`hasEvidence: habitosConEvidencia.has(track.id)`,
+y `track.id` ES el id del registro). **El numerador era 0 porque de verdad no habia ninguna fila en
+`renaser.evidencias` para los registros de hoy** — y sin embargo el aprendiz habia cerrado dos
+habitos (DESPERTAR a las 17:06 de Lima, Clase Diaria a las 17:26).
+
+**Causa real: el badge medía una cosa que, para la mitad del catalogo, no puede existir nunca.**
+En todo el backend hay **exactamente tres** lugares que crean una fila en `evidencias`
+(`grep "new DestinoEvidencia"`): la subida generica de archivo/texto de un habito
+(`EvidenciaRegistroService`), el Santuario (`RachaService`) y las rocas (`RocaDiariaService`). Los
+habitos cuya prueba **ES la accion** cierran el registro en `COMPLETADO` sin crear ninguna fila:
+
+| Habito | Como cierra | Fila en `evidencias` |
+|---|---|---|
+| DESPERTAR / DORMIR (`WAKE_UP`/`SLEEP`) | `POST /habit-tracks/{id}/complete`, la evidencia es `completado_en` (D-97) | no |
+| Clase Diaria (`DAILY_CLASS`) | `ClaseDiariaHabitoService`, llamada directa a `habits.api` | no |
+| Post Diario en Comunidad (`COMMUNITY_POST`) | idem, tras publicar en el Muro (E-117) | no |
+| Pastilla Renacer (`PASTILLA_RENACER`) | `PastillaRenacerHabitoService` | no |
+
+El caso que lo deja a la vista: **EMOCIONES tiene un solo habito, el Post Diario**, asi que
+"0/1 EVIDENCIAS" era **permanente** — ningun aprendiz podia verlo en 1/1 jamas. Un contador de
+progreso cuyo numerador no puede alcanzar su propio denominador esta roto por construccion, sin
+importar que la fuente de datos sea correcta.
+
+**De donde salio.** El badge contaba `done` y el commit `6cab4c9` (frontend) lo cambio a
+`hasEvidence`:
+
+```diff
+-                const doneCount = dimHabits.filter(h => h.done).length;
++                const evidenceCount = dimHabits.filter(h => h.hasEvidence).length;
+```
+
+El comentario que acompanaba el cambio ("pueden divergir con datos reales") era cierto, pero la
+divergencia no es simetrica: hay habitos que **nunca** van a tener fila de evidencia.
+
+**Solucion aplicada (solo movil, dos lineas en `TrainingScreen.tsx`):**
+
+```diff
+-  const sealedEvidencesCount = currentDimensionHabits.filter(h => h.hasEvidence).length;
++  const sealedEvidencesCount = currentDimensionHabits.filter(h => h.done || h.hasEvidence).length;
+...
+-                const evidenceCount = dimHabits.filter(h => h.hasEvidence).length;
++                const evidenceCount = dimHabits.filter(h => h.done || h.hasEvidence).length;
+```
+
+`||` y no solo `done`: en los datos reales ya hay un caso de evidencia subida sobre un registro que
+despues vencio (`5eb085d0`, PRIMERA COMIDA del 2026-09-04, `estado = EXPIRADO` con su foto
+cargada) — esa evidencia se entrego y tiene que contar. Se toco tambien
+`sealedEvidencesCount` porque si no la lista decia "1/1 EVIDENCIAS" y el detalle de la misma
+dimension "Evidencias selladas hoy 0%".
+
+**El backend no se toco:** el dato que sirve ya lo publica (`estado` de cada track). No se agrego
+ninguna fila de evidencia sintetica para los habitos de flujo propio — eso cambiaria el significado
+de `evidencias` (la tabla que alimenta la cola de validacion por IA y la revision manual) y ademas
+rompería el chip "VER / SUBIR" del detalle, que si tiene que preguntar por un archivo real.
+
+**Como evitar que vuelva a pasar:**
+
+- Antes de cambiar **que** cuenta un contador de progreso, verificar que la metrica nueva pueda
+  **llegar al denominador que ya esta en pantalla**. Si existe una fila del catalogo para la que el
+  numerador es 0 por definicion, la metrica no sirve para ese widget.
+- Cuando dos widgets de la misma pantalla usan la palabra "evidencias" para dos numeros distintos
+  (el badge de la lista y la barra del detalle), tienen que calcularse con **la misma** expresion.
+- `exigencia_evidencia` del catalogo es el chequeo barato: hoy 5 de los 11 habitos del dia son
+  `OPCIONAL`, o sea que "sin fila en `evidencias`" es su estado esperado para siempre, no una
+  anomalia.
+
+**Lo que queda ABIERTO (decision del dueno, no se invento):** el badge sigue diciendo "EVIDENCIAS"
+mientras el detalle llama "CUMPLIDOS" al mismo numero. Si se prefiere separar de verdad "cumplido"
+de "evidencia con archivo", el badge de la lista necesita otro texto — es copy, no logica.
+
+---
+
+## E-119 — Cuatro maquetas presentadas al aprendiz como contenido real (2026-09-05) — **RESUELTO**
+
+**Sintoma:** el dueno del proyecto recorrio la app y fue encontrando pantallas con contenido que
+parecia real y no lo era. No es un bug de logica: la app le **afirmaba cosas falsas al aprendiz**.
+
+Los cuatro lugares, y lo que decia cada uno:
+
+1. **Training -> dimension -> "GUIAS Y AUDIOS"**: una "AUDIO GUIA RECOMENDADA" distinta por
+   dimension (`DIMENSIONES_CONFIG`), un boton "ESCUCHAR SESION GUIADA" que solo abria un
+   `Alert.alert('Reproductor de Audio', ...)`, y una "RUTA DE CLASES (FASE 2)" de cinco clases
+   inventadas, **tres marcadas "✓ Completada"** sin que el aprendiz hubiera hecho ninguna.
+   El peor de todos era el tip de MACACO de MENTE:
+
+       "Hoy registraste frustracion dos veces. Escucha pensando: ¿que hecho ocurrio y que
+        historia anadiste?"
+
+   Una constante, igual para todos, todos los dias, **presentada como una observacion sobre el dia
+   de esa persona**.
+
+2. **Comunidad -> "TESTIMONIOS"**: dos testimonios inventados con nombre y apellido
+   ("Carlos Mendez, CEO & Fundador Tecnologico"; "Dra. Valeria Ruiz, Directora Medica & Cirujana"),
+   insignia de generacion, cifras de resultado ("+140% USD", "-50% Horas", "100% Sin Ansiedad") y
+   un boton "VER VIDEO TESTIMONIO" que no reproducia nada.
+
+3. **Login -> "ACCESO DIRECTO (MODO DEMO)"**: `demoLogin` entraba a la app **sin ninguna llamada al
+   servidor** — fijaba `USUARIO_DEMO_EXISTENTE` en estado local y marcaba el onboarding completo.
+
+4. **Compartir publicacion -> "WhatsApp y Otras Apps"**: retirado por pedido, por ahora. No era
+   falso, pero saca la publicacion de un aprendiz del circulo cerrado de la tribu y eso todavia no
+   esta decidido.
+
+**Causa real:** las pantallas se construyeron primero como maqueta visual con datos de relleno, y
+la integracion con el backend fue reemplazando esos datos **pantalla por pantalla**. Las que
+todavia no llegaron se quedaron con el relleno puesto y **con la misma apariencia que las ya
+integradas** — nada en la interfaz distingue "esto es real" de "esto es un placeholder". El codigo
+incluso lo admitia sin que nadie lo leyera como un problema:
+
+    // El Muro y "Recursos Exclusivos" ya no usan datos fijos (...). Testimonios y Ranking siguen
+    // con datos de mock — quedan fuera del alcance de esta integracion.
+
+**Ya habia pasado antes, exactamente igual.** `INITIAL_HABITS` eran 17 habitos inventados, 11 de
+ellos con `done: true`, `hasEvidence: true` y `streak: 37`. Se corrigio en su momento, pero se
+corrigio **ese array**, no la clase de problema.
+
+**Solucion aplicada:** las tres primeras pasan a un estado honesto y explicito ("EN DESARROLLO",
+"PROXIMAMENTE") y la cuarta se retira. En los tres casos **se borraron los datos inventados, no
+solo el render**: mientras las cadenas siguen en el archivo, alguien las vuelve a colgar de una
+pantalla.
+
+**Como evitar que vuelva a pasar:** la regla util no es "no dejar mocks" — es mas estrecha y se
+puede revisar en un PR:
+
+> **Ningun dato de relleno puede afirmar un hecho sobre el aprendiz ni sobre una persona con
+> nombre.** Un titulo inventado es un placeholder; `"✓ Completada"`, `"streak: 37"`,
+> `"Hoy registraste frustracion dos veces"` o un testimonio firmado por "Dra. Valeria Ruiz" son
+> **afirmaciones**. Si la pantalla todavia no tiene backend, va un estado vacio que lo diga.
+
+**Pendiente, y no es de codigo:** `GROUP_MEMBERS` (ComunidadScreen) sigue siendo mock y tambien
+lista personas con nombre y racha; hoy se renderiza en la info del grupo de chat. Queda anotado
+aca porque cae bajo la misma regla, pero no se toco en este cambio.
+
+---
+
+## E-120 — La Clase Diaria se podia cerrar sin resumen, y el resumen que llegaba despues se descartaba en silencio (2026-09-05) — **RESUELTO**
+
+**Sintoma exacto.** Dos sintomas encadenados, y el segundo es el que pierde datos:
+
+1. El aprendiz toca "Clase diaria" en la lista de habitos de Training (o le pide al acompanante
+   *"marca mi clase diaria como hecha"*) y el habito **se marca completado y paga sus 10 puntos**,
+   sin haber visto la clase ni escrito una linea de resumen.
+2. Mas tarde entra al flujo bueno, mira la clase, escribe su resumen y lo envia. El servidor
+   responde **`200 OK`** con los puntos ya otorgados... y el texto **no se guarda en ningun lado**.
+   `registros_habito.respuesta_texto` sigue en `NULL`.
+
+**Causa real: no existia ninguna `PoliticaHabito` para `DAILY_CLASS`.** De los ~40 habitos del
+catalogo solo dos tenian regla propia (`PoliticaSantuario` por tipo `BLOQUEO`,
+`PoliticaPostDiarioComunidad` por clave `COMMUNITY_POST`). `DAILY_CLASS` es un `CHECKBOX` normal,
+asi que caia en `RegistroPoliticasHabito.GENERICA` — la que dice "se completa con el gesto
+generico, sin condiciones". Eso dejaba **dos** puertas abiertas que no piden resumen:
+
+- `POST /api/v1/habit-tracks/{id}/complete` -> `RegistroService.completar`
+- la herramienta `marcar_habito_completado` del agente Renasia -> `HerramientasAgenteService` ->
+  `AgendaDelDiaFinder.completar`, que va al **mismo** caso de uso
+
+Y el contrato publicado afirmaba lo contrario, palabra por palabra
+(`docs/api/CONTRATO_CONTENIDO_IA.md` seccion 1.11-bis): *"Sin este POST el habito NO queda
+completado: no hay estado intermedio 'completado sin resumen'"*.
+
+**La perdida de datos es la segunda mitad.** `ClaseDiariaHabitoService.completarDeHoy` tenia un
+early-return idempotente que devolvia 200 **sin mirar `command.resumen()`**. Con el registro ya
+`COMPLETADO` por cualquiera de esas dos puertas, el resumen que la persona escribia entraba al
+servidor, no se guardaba, y se contestaba OK. Silenciosa: ni un log, ni un 4xx, ni una diferencia
+visible en la respuesta.
+
+**La complicacion, y por que el arreglo obvio no servia.** Poner una `PoliticaClaseDiaria` que
+devuelva `noProcede` rompe tambien el camino legitimo: `ClaseDiariaHabitoService` pasa **a
+proposito** por `CompletarRegistroUseCase` para no duplicar el calculo de puntos ni el de la
+ventana de entrega, asi que atraviesa la misma politica. Habia que distinguir *"me llamo la Clase
+Diaria con su resumen"* de *"me llamo la ruta generica"*.
+
+**Solucion aplicada — el gesto viaja en el comando, no en el contexto.**
+
+- `domain/model/politica/GestoCompletar` (`GENERICO` | `PROPIO_DEL_HABITO`) como componente nuevo
+  de `CompletarRegistroCommand`. `RegistroService.completar` consulta la politica **solo** cuando el
+  gesto es el generico — que es literalmente la pregunta que
+  `PoliticaHabito.puedeCompletarseDirecto` dice contestar en su javadoc ("si el habito puede darse
+  por cumplido con el gesto generico").
+- `PoliticaClaseDiaria` (por clave `DAILY_CLASS`) devuelve `noProcede` con un motivo que la persona
+  entiende. Las dos puertas viejas ahora responden **400**.
+- `ClaseDiariaHabitoService` manda `PROPIO_DEL_HABITO` y su camino sigue funcionando igual.
+- El constructor de 4 argumentos de `CompletarRegistroCommand` sigue existiendo y significa
+  `GENERICO`: el valor por defecto es el **seguro** (gobernado por la politica), y saltearla exige
+  escribirlo a proposito. El campo no existe en ningun DTO de entrada, asi que no viaja desde el
+  telefono — mismo blindaje que `puntos`.
+
+**Por que el gesto NO fue al `ContextoCompletar`,** que era la otra opcion sobre la mesa: ese objeto
+son "hechos EXTERNOS al catalogo" que la politica **consulta para decidir** (si publico en el Muro).
+El gesto no es un hecho del mundo: es **quien esta preguntando**. Metido ahi, cada politica futura
+tendria que acordarse de ramificar por el gesto para no cerrarle a su propio habito el unico camino
+valido. Con el dato en el comando, el unico que ramifica es quien orquesta, una sola vez.
+
+**Tampoco se llevo el resumen en el contexto** ("procede si viene texto"): el endpoint generico
+acepta un `respuestaTexto` libre, asi que la ruta generica quedaria abierta con solo mandar 15
+caracteres — y esa ruta no marca la leccion como vista ni comprueba que sea la clase de HOY, que
+son la otra mitad del gesto.
+
+**Y el resumen tardio: se rechaza, no se guarda.** Si el registro de hoy esta `COMPLETADO` **con**
+resumen, sigue siendo el 200 idempotente que el contrato promete (es un reintento genuino: doble
+toque, reenvio tras un corte). Si esta `COMPLETADO` **sin** resumen, se responde **409** con un
+mensaje claro en vez de tirar el texto en silencio. **Por que rechazar y no guardarlo:** guardarlo
+obliga a escribir sobre un agregado en estado terminal, y el dominio lo prohibe a proposito
+(`EstadoRegistro` declara COMPLETADO/FALLIDO/EXPIRADO terminales; `RegistroHabito` lo hace cumplir
+con `requireNoTerminal()` en cada mutador). Abrir un mutador de excepcion deja instalada una puerta
+de reparacion de datos que la proxima persona reusa para "un campo mas". Y el precio de no abrirla
+es acotado: despues de este arreglo el estado es **inalcanzable**, y las unicas filas que pueden
+caer ahi son de bases locales — no hay entorno desplegado. Cambiar una invariante del dominio de
+forma permanente para reparar datos de desarrollo es mal negocio. Si el dueno decide que el resumen
+tardio debe guardarse, es una regla de negocio nueva y se decide como tal.
+
+**Como evitar que vuelva a pasar.** La senal que hubo que aprender a leer: **un contrato que afirma
+"el unico camino es X" y un habito de catalogo sin politica propia son afirmaciones
+contradictorias**, y nada las cruzaba. Cada frase del contrato de la forma *"solo se puede hacer por
+aca"* necesita, del otro lado, o una `PoliticaHabito` o un test que pruebe que el resto de las
+puertas responde 4xx. Los dos tests de regresion
+(`RegistroServiceTest.claseDiariaNoSeCierraConElGestoGenerico` y
+`ClaseDiariaHabitoServiceTest.completarDeHoyRechazaResumenSobreRegistroCerradoSinResumen`) se
+verificaron en rojo contra el codigo viejo antes de darlo por arreglado.
+
+**Segundo bug encontrado y NO arreglado (fuera de alcance, se reporta):**
+`PastillaRenacerHabitoService.completarDeHoy` tiene **exactamente** el mismo early-return ciego —
+si el track de `PASTILLA_RENACER` ya esta `COMPLETADO`, descarta el `resumen` y devuelve 200. Y
+`PASTILLA_RENACER` tampoco tiene politica propia, asi que la ruta generica tambien lo puede cerrar
+sin resumen. Mismo bug, otro habito. No se toco porque el pedido era la Clase Diaria.
+
+---
+
+## E-121 — Publicar en el Muro no cerraba el habito de post diario: el evento no tenia oyente (2026-09-05) — **RESUELTO**
+
+**Sintoma exacto:** el mismo de E-117 desde el lado del servidor. El aprendiz publica en el Muro y
+el habito "POST DIARIO EN COMUNIDAD" **sigue PENDIENTE** hasta que el barrido nocturno lo expira,
+con sus puntos perdidos. Y cuando `rocks` publica sola al Muro al completar la roca diaria (a
+nombre del aprendiz), tampoco pasaba nada.
+
+**Causa real: `PublicacionCreadaEvent` no tenia ni un oyente.** De la regla del dueno (2026-09-04,
+*"cuando publique algo, y recien ahi, se marca como completado"*) estaba construida solo la mitad
+**guardiana** — `PoliticaPostDiarioComunidad`, que rechaza el cierre manual de quien no publico. La
+mitad que **dispara** el cierre no existia en el backend: `PublicacionMuroService` emitia el evento
+y nadie lo escuchaba (`habits` no tenia un solo listener en todo el modulo). E-117 lo tapo desde el
+movil, llamando a `/complete` despues de publicar; eso no cubria la publicacion automatica de
+`rocks`, que no pasa por el compositor del Muro.
+
+**Decision del dueno (2026-09-05), textual, ante la pregunta de si la publicacion automatica de
+`rocks` tambien deberia cerrar el habito y pagar sus puntos: "si".**
+
+**Solucion aplicada:**
+
+- `habits/infrastructure/adapter/in/event/PublicacionCreadaHabitoListener` —
+  `@ApplicationModuleListener` de `PublicacionCreadaEvent`. Es el **primer oyente de eventos de
+  `habits`**. Colgado del evento y no del endpoint de publicar a proposito: las dos vias (la manual
+  del Muro y `publicarDesdeEvidencia` de `rocks`) emiten el mismo evento.
+- `CerrarPostDiarioComunidadUseCase` / `PostDiarioComunidadHabitoService` — misma forma que
+  `ClaseDiariaHabitoService`: busca por `claveSistema`, localiza el registro y delega el cierre en
+  `CompletarRegistroUseCase`, donde ya viven los puntos, la ventana, el bloqueo pesimista y el
+  evento de dominio.
+
+**Los dos cuidados que costaron pensar, y que un test tapa mal:**
+
+1. **El dia es el de la PUBLICACION, en la zona del PARTICIPANTE — no "hoy", no UTC.** El outbox de
+   Modulith corre con `republish-outstanding-events-on-restart: true`: un evento que quedo sin
+   procesar se reentrega **al arrancar**, que puede ser al dia siguiente. Anclando en "hoy" se le
+   pagaria el habito de hoy con el post de ayer. Se ancla en `evento.occurredAt()` y se convierte
+   con `publicadoEn.atZone(zona del participante)`, no con `clock.today()` (regla 02, E-91). El
+   test que lo cubre usa las **02:00 UTC**, que en Lima son las 21:00 del dia anterior: con un
+   reloj fijado a las 10:00 UTC, como estaban todos los fixtures viejos, este bug no se ve.
+2. **Idempotencia en tres capas.** (a) el registro se busca por el dia de la publicacion, asi que
+   una reentrega apunta al mismo; (b) si ese registro ya esta en estado terminal se vuelve sin
+   tocarlo — es la guarda del caso comun (dos publicaciones el mismo dia, o el reinicio); (c) si
+   aun asi dos caminos llegan a la vez, el bloqueo pesimista de `RegistroService.requireRegistro`
+   serializa y el segundo choca contra `COMPLETADO`, que es terminal. **Nunca se paga dos veces.**
+
+**Se cierra con el gesto GENERICO a proposito** (no `PROPIO_DEL_HABITO`, ver E-120): asi
+`PoliticaPostDiarioComunidad` vuelve a comprobar contra `publicaciones_muro` que la publicacion
+existe dentro del dia de ese registro. Venir de un evento no da ningun atajo.
+
+**El oyente atrapa todo fallo y no propaga ninguno.** Publicar es lo que la persona vino a hacer;
+cerrar un habito es un efecto secundario, y un efecto secundario no puede dejar el evento dando
+vueltas en el outbox para siempre. El doble pago lo impiden el estado terminal y el bloqueo
+pesimista, no ese `catch`.
+
+**Consecuencia para el movil, NO tocada en este cambio:**
+`features/habits/api/postDiarioComunidad.ts` (`cerrarHabitoPostDiarioComunidad`, agregado en E-117)
+quedo **redundante**. El oyente corre async apenas commitea la publicacion, asi que casi siempre
+gana la carrera y la llamada del movil encuentra el registro ya `COMPLETADO`: recibe un **409** y
+devuelve `'fallo'`. **No es visible para la persona** — esa funcion atrapa el error, hace
+`console.warn` y no interrumpe el flujo de publicar — pero deja dos efectos: el aviso *"su habito
+de post en comunidad se completo con exito"* deja de mostrarse (solo se muestra con `'completado'`),
+y el log del movil se llena de warnings. Lo correcto es retirar esa llamada del movil y refrescar la
+tarjeta de Training por el evento local que ya existe. No se hizo aca porque el archivo es del
+movil y esta sin commitear por otra sesion.
+
+**Como evitar que vuelva a pasar:** vale la de E-117, ahora con un caso real detras — **un evento
+de dominio con cero oyentes es codigo que no hace nada**. Un test de arquitectura que liste los
+eventos publicados sin ningun `@ApplicationModuleListener` que los escuche habria marcado esto el
+dia que se escribio `PublicacionCreadaEvent`. Sigue sin existir.
+
+---
+
+## E-122 — `-Djarmode=layertools` no existe en Spring Boot 4.1: el `Dockerfile` de cualquier tutorial rompe (2026-09-05) — **EVITADO**
+
+**Sintoma exacto** (lo que habria pasado si se copiaba el `Dockerfile` estandar de cualquier guia
+de Spring Boot 3.x, que es lo que devuelve casi toda busqueda):
+
+```
+Unsupported jarmode: 'layertools'
+```
+
+La etapa de extraccion del `Dockerfile` muere y no se genera ninguna imagen. El mensaje no dice
+cual es el reemplazo ni desde que version cambio.
+
+**Causa real:** el modo `layertools` quedo **deprecado en Spring Boot 3.3**, siguio funcionando con
+aviso en 4.0, y **fue eliminado en 4.1** — la version exacta que usa este repo (4.1.1). El
+reemplazo es otro comando, con otros flags:
+
+```dockerfile
+# ROTO en 4.1
+RUN java -Djarmode=layertools -jar application.jar extract
+
+# CORRECTO
+RUN java -Djarmode=tools -jar application.jar extract --layers --destination extracted
+```
+
+El `--layers` no es opcional: sin el, `extract` saca el jar entero en vez de partirlo en capas, y
+se pierde todo el beneficio de cache de Docker sin ningun error.
+
+**Solucion aplicada:** el `Dockerfile` usa `-Djarmode=tools ... extract --layers`, con el motivo
+escrito en un comentario en el propio archivo para que nadie lo "arregle" de vuelta al comando
+viejo copiando de internet.
+
+**Como evitar que vuelva a pasar:** cualquier receta de infraestructura para Spring Boot que se
+encuentre buscando esta escrita para 3.x, porque 4.x es reciente. Antes de copiarla, comprobar
+contra las notas de version de 4.0 y 4.1 que la pieza que usa siga existiendo. Los tres candidatos
+del mismo tipo, ya verificados en este cambio: `jarmode` (cambio), `annotationProcessorPaths`
+(sigue igual, pero necesita `maven.compiler.proc=full` desde JDK 23) y `spring-boot:build-image`
+(sigue existiendo; no se usa aca porque el `Dockerfile` propio da control sobre el usuario no-root
+y la arquitectura).
+
+---
+
+## E-123 — Agregar Spring Cloud AWS tumba las 2400 pruebas si la propiedad se omite en vez de ponerse en `false` (2026-09-05) — **EVITADO**
+
+**Sintoma exacto** que produce agregar `spring-cloud-aws-starter-parameter-store` sin nada mas:
+**todo** test `@SpringBootTest` falla al levantar el contexto, y `./mvnw spring-boot:run` tampoco
+arranca en local:
+
+```
+software.amazon.awssdk.core.exception.SdkClientException: Unable to load region from any of the
+providers in the chain AwsRegionProviderChain(...)
+```
+
+No nombra Parameter Store ni AWS Systems Manager por ningun lado, asi que parece un problema de
+credenciales de S3 (que es lo unico de AWS que este repo ya usaba) y se busca en el lugar
+equivocado.
+
+**Causa real, y es contraintuitiva:** `ParameterStoreAutoConfiguration` esta anotada
+
+```java
+@ConditionalOnProperty(name = "spring.cloud.aws.parameterstore.enabled",
+                       havingValue = "true", matchIfMissing = true)
+```
+
+**`matchIfMissing = true`** significa que **con la propiedad ausente la autoconfiguracion se
+ACTIVA**. Declara un bean `SsmClient` cuya construccion resuelve la region con
+`DefaultAwsRegionProviderChain`, y sin region configurada eso explota durante el arranque. Es
+decir: *no poner nada* no es lo mismo que *ponerlo en false*. Lo primero enciende la integracion;
+solo lo segundo la apaga.
+
+Verificado leyendo las anotaciones del bytecode de `spring-cloud-aws-autoconfigure-4.1.1.jar`
+(`javap -v`), no suponiendo.
+
+**Segundo lugar donde muerde, y es el que se olvida:** poner la propiedad solo en
+`src/main/resources/application.yaml` **no alcanza**.
+`src/test/resources/application.yaml` **reemplaza** a ese archivo en el classpath de test (mismo
+nombre, gana el de test) en vez de complementarlo — cosa que el propio archivo de test ya
+advertia en un comentario por E-40. Sin espejar el bloque, main arranca bien y la suite entera se
+cae igual.
+
+**Solucion aplicada:** el bloque
+
+```yaml
+spring:
+  cloud:
+    aws:
+      parameterstore:
+        enabled: false
+      region:
+        static: ${AWS_REGION:us-east-1}
+```
+
+esta en los **dos** `application.yaml` (main y test), y solo `application-prod.yaml` lo pone en
+`true`. Es el mismo patron de espejado que ya tenian los hilos virtuales (C-14) y `open-in-view`
+(C-18).
+
+**El otro choque que se reviso y NO ocurre:** `S3AutoConfiguration` de Spring Cloud AWS declara
+beans `S3Client` y `S3Presigner`, los mismos que crea a mano `AlmacenamientoS3Config`. No compiten
+porque esa autoconfiguracion es `@ConditionalOnClass({S3Client, S3OutputStreamProvider})` y la
+segunda clase vive en `spring-cloud-aws-s3`, que el starter de Parameter Store **no** arrastra
+(confirmado con `dependency:tree`: solo entran `-parameter-store`, `-core`, `-autoconfigure` y
+`spring-boot-starter`). **El dia que alguien agregue otro modulo de Spring Cloud AWS, esto hay que
+revisarlo de nuevo:** si `spring-cloud-aws-s3` entra al classpath, esa autoconfiguracion se activa
+y, con `renaser.storage.proveedor=noop` (el default, donde `AlmacenamientoS3Config` no crea nada),
+seria ella la que cree los beans — con la misma falla de region de arriba.
+
+**Como evitar que vuelva a pasar:** antes de sumar un starter que hable con un servicio externo,
+mirar sus `AutoConfiguration.imports` y las condiciones de cada clase. La pregunta concreta no es
+"traigo lo que necesito" sino **"que se enciende solo por estar en el classpath, y que pasa si no
+hay credenciales"** — que es exactamente la propiedad que este repo cuida con sus adaptadores
+`NoOp`, y la que un starter mal apagado rompe sin avisar.
+
+---
+
+## E-124 — Un guion doble dentro de un comentario rompe el `pom.xml` entero (2026-09-05) — **RESUELTO**
+
+**Sintoma exacto:** cualquier comando de Maven muere antes de empezar, y el parser de XML de
+Python da la misma queja:
+
+```
+xml.parsers.expat.ExpatError: not well-formed (invalid token): line 239, column 5
+```
+
+Maven, por su lado, dice `Non-parseable POM ... expected START_TAG or END_TAG not TEXT`. Ninguno
+de los dos mensajes nombra la causa: los dos apuntan a una linea que, mirada de cerca, es prosa
+dentro de un `<!-- ... -->` y parece intachable.
+
+**Causa real:** **`--` no puede aparecer dentro de un comentario XML.** No es una rareza de Maven,
+es la especificacion de XML. Se escribio, dentro de un comentario del `pom.xml`, una frase con un
+guion doble usado como raya de puntuacion:
+
+```xml
+<!-- ... construye un cliente async
+     -- un fallo que solo aparece en produccion ... -->
+```
+
+Es facil de meter sin darse cuenta precisamente en **este** repo, donde la convencion es escribir
+comentarios largos y explicativos, y donde `--` se usa como separador de frase en los comentarios
+de Java y en el YAML sin ningun problema. En Java y en YAML es legal; en XML no.
+
+**Solucion aplicada:** se cambio el `--` por dos puntos. Cualquier otro signo sirve: `:`, `;`, una
+raya larga, o un guion simple.
+
+**Como evitar que vuelva a pasar:** despues de tocar el `pom.xml` (o cualquier XML), validarlo
+antes de correr Maven, que tarda menos y da un mensaje mas claro:
+
+```bash
+python -c "import xml.dom.minidom; xml.dom.minidom.parse('pom.xml'); print('OK')"
+```
+
+Y para cazar el caso concreto sin depender de que rompa:
+
+```bash
+python -c "
+import re
+src = open('pom.xml', encoding='utf-8').read()
+malos = [c for c in re.findall(r'<!--.*?-->', src, re.S) if '--' in c[4:-3]]
+print('comentarios con doble guion:', len(malos))
+"
+```
+
+---
+
+## E-125 — `BUILD FAILURE` sin una sola prueba en rojo, con otra sesion compilando el mismo `target/` (2026-09-05) — **RESUELTO**
+
+**Sintoma exacto:** en una tanda de tres `./mvnw clean test` seguidos sobre el mismo arbol (la unica
+diferencia entre corridas eran comentarios), la del medio termino en `BUILD FAILURE` **sin ningun
+fallo de assertion y sin ninguna clase de prueba en rojo**. Las corridas anterior y posterior dieron
+las dos, identicas:
+
+```
+[INFO] Tests run: 2421, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+```
+
+**Causa real: OTRA SESION estaba editando el mismo arbol mientras corria la suite.** Al terminar,
+`git status` mostro modificados `pom.xml`, `SecurityConfig.java`, `application.yaml` (main y test) y
+nuevos `Dockerfile`, `.github/` y `application-prod.yaml` — nada de eso lo habia tocado esta sesion.
+Era el trabajo de despliegue que quedo registrado en E-122/E-123/E-124. El mecanismo exacto no se
+puede fijar a posteriori, pero solo hay dos candidatos y los dos ya estan documentados: **E-123**
+(agregar `spring-cloud-aws-starter-parameter-store` sin la propiedad en `false` tumba TODOS los
+`@SpringBootTest` al levantar contexto) y **E-104** (dos builds de Maven sobre el mismo `target/`).
+En cualquiera de los dos, el fallo es del entorno y no del codigo: la corrida siguiente, ya con el
+arbol quieto, volvio a dar 2421 en verde.
+
+**Como reconocerlo en un minuto, que es el motivo de esta entrada.** Antes de salir a buscar el bug
+en el codigo, dos chequeos:
+
+1. **¿La salida trae una linea `Tests run: N, Failures: F, Errors: E`?** Si no la trae, el build ni
+   llego a correr pruebas: es del entorno. Si la trae con `Failures: 0, Errors: 0`, el codigo esta
+   bien y fallo el build alrededor.
+2. **`git status`** — si aparecen archivos modificados que uno no toco, hay otra sesion escribiendo
+   sobre el mismo arbol. Esperar a que termine y volver a correr.
+
+**Ruido que confunde y NO es la causa:** en el log de la corrida buena, el unico `[ERROR]` de todo
+el build es `Surefire is going to kill self fork JVM. The exit has elapsed 30 seconds after
+System.exit(0).` Aparece tambien cuando el build termina en verde.
+
+**Trampa de grep, aprendida aca:** filtrar el log con
+`grep -E "^\[INFO\] Tests run: ... Skipped: [0-9]+$"` **no matchea nunca** en esta maquina — los
+saltos de linea son CRLF y el `\r` queda antes del `$`. Un filtro que no matchea se ve identico a
+un build que no imprimio nada, y de ahi salio la mitad de la confusion. Filtrar sin anclar el final:
+`grep -E "Tests run: [0-9]+, Failures"`.
+
+---
+
+## E-126 — `ControlCuotaRedisAdapterTest` falla TODAS las noches a partir de las 19:00 de Lima: el test arma la clave en UTC (2026-09-05) — **RESUELTO**
+
+**Sintoma exacto:** `./mvnw clean test` en verde a las 18:50 y en rojo a las 19:20, **sin un solo
+cambio de codigo entre las dos corridas**. Tres fallos, los tres en la misma clase:
+
+```
+ControlCuotaRedisAdapterTest.elTtlSeFijaUnaSolaVezYNoSeRenuevaEnConsumosPosteriores
+  Expecting actual:  -2L  to be greater than:  0L
+
+ControlCuotaRedisAdapterTest.liberarSobreUnaClaveExistenteLaDecrementaSinTocarElTtl
+  expected: "1"  but was: null
+
+ControlCuotaRedisAdapterTest.unaClaveEnvenenadaSinTtlSeAutoreparaEnElSiguienteConsumo
+```
+
+El `-2L` es la pista: en Redis, `TTL` devuelve **-2 cuando la clave no existe**. No es que el TTL
+este mal — **el test esta mirando otra clave**.
+
+**Causa real: el arreglo de zona horaria se aplico al adaptador y NO a su test.** El propio javadoc
+de `ControlCuotaRedisAdapter` cuenta que la clave se armaba con la fecha UTC y se corrigio a la del
+padron ("misma familia que E-105"):
+
+```java
+private static final ZoneId ZONA_PADRON = ZoneId.of("America/Lima");
+private LocalDate hoyDelPadron() { return clock.now().atZone(ZONA_PADRON).toLocalDate(); }
+```
+
+Pero el helper del test se quedo en la version vieja:
+
+```java
+// ControlCuotaRedisAdapterTest:146
+private static String claveDeHoy(UserId actorId) {
+    return CLAVE_PREFIJO + actorId.value() + ":" + LocalDate.now(ZoneOffset.UTC);   // <-- UTC
+}
+```
+
+Entre las **19:00 y la medianoche de Lima** (UTC-5) la fecha UTC ya es la del dia siguiente, asi que
+la clave que arma el test (`...:2026-09-06`) no es la que escribe el adaptador (`...:2026-09-05`).
+Verificado en vivo en el momento del fallo: `date` daba `Sat Sep 5 19:21 HPS` y `date -u` daba
+`Sun Sep 6 00:21 UTC`.
+
+**No es flakiness: es determinista dentro de esa franja de cinco horas.** Falla siempre despues de
+las 19:00 y pasa siempre antes. Por eso puede convivir mucho tiempo con un CI "en verde" — depende
+de a que hora se corra.
+
+**Por que no se arreglo en su momento:** aparecio mientras se cerraban E-120/E-121, en otro modulo
+(`rag`) y sin relacion con ese trabajo. Regla 00: un segundo bug encontrado de paso se **reporta**,
+no se arregla en el mismo cambio. Se tomo despues, como tarea propia.
+
+**Solucion aplicada (2026-09-05, rama `claude/exciting-franklin-643f14`):** el helper del test dejo
+de recalcular la fecha por su cuenta y ahora la deriva **por el mismo camino que el adaptador** —
+el puerto `Clock` y la zona del padron:
+
+```java
+private static final ZoneId ZONA_PADRON = ZoneId.of("America/Lima");   // espejo del adaptador
+@Autowired private Clock clock;
+
+private String claveDeHoy(UserId actorId) {
+    LocalDate hoyDelPadron = clock.now().atZone(ZONA_PADRON).toLocalDate();
+    return CLAVE_PREFIJO + actorId.value() + ":" + hoyDelPadron;
+}
+```
+
+Se eligio pasar por `Clock` y no el minimo `LocalDate.now(ZONA_PADRON)` a proposito: con el `Clock`
+inyectado, test y adaptador comparten **una sola** expresion, asi que tampoco divergen si algun dia
+este contexto monta un `FixedClock`. El metodo dejo de ser `static` por eso. La alternativa que
+proponia esta entrada (exponer la clave package-private desde el adaptador) se descarto: obliga a
+abrir la API del adaptador de produccion para comodidad del test.
+
+**Como se verifico** — a proposito **dentro de la franja que rompe**, 19:39-19:45 hora de Lima
+(`date` = `Sat Sep 5 19:39 HPS`, `date -u` = `Sun Sep 6 00:39 UTC`: las dos fechas distintas):
+
+| Corrida | Codigo | Resultado |
+|---|---|---|
+| 1 — reproduccion | el test **viejo**, sin tocar | `Tests run: 5, Failures: 3` — los tres fallos exactos de arriba: TTL `-2`, TTL `-1`, `expected "1" but was null` |
+| 2 — arreglo | el test **nuevo** | `Tests run: 5, Failures: 0` |
+| 3 — suite completa | `./mvnw clean verify` | `Tests run: 2407, Failures: 0, Errors: 0, Skipped: 0` + `BUILD SUCCESS` |
+
+La corrida 1 es la que le da valor a la 2: prueba que en ese mismo instante el codigo viejo fallaba,
+asi que el verde de la 2 es del arreglo y no de la hora. **Fuera de la franja no se volvio a correr**
+(habria que esperar a pasada la medianoche de Lima), pero ahi el test ya pasaba antes — la franja
+cubierta es justamente la unica en la que fallaba.
+
+**En el mismo build fallo tambien** `CodigoVerificacionEmailRedisAdapterTest.unCodigoVencidoYaNoSePuedeVerificar`
+("Expecting value to be false but was true"), pero **eso si fue flakiness**: paso al reejecutar la
+clase sola. Son dos cosas distintas y conviene no confundirlas.
+
+**Confirmado desde una segunda sesion (la de infraestructura de CI, D-114), con dos datos que la
+primera no tenia:**
+
+1. **No lo causa el `pom.xml` nuevo.** Como el bug aparecio el mismo dia en que se agregaron JaCoCo,
+   failsafe y Spring Cloud AWS, lo primero fue descartarlos: se corrio esa sola clase sobre una copia
+   aislada del checkout con el **`pom.xml` de `HEAD`**, sin ninguno de esos cambios. **Mismos 3
+   fallos, mismas lineas.** Es preexistente y depende solo de la hora.
+
+   ```bash
+   git show HEAD:pom.xml > pom.xml    # sobre una copia aislada
+   ./mvnw -B -ntp test -Dtest=ControlCuotaRedisAdapterTest
+   # -> Tests run: 5, Failures: 3   (identico)
+   ```
+
+2. **Los runners de GitHub Actions corren en UTC.** El workflow `.github/workflows/ci.yml` que se
+   agrego el mismo dia corre en cada push y cada PR, asi que va a ver esta ventana igual que una
+   maquina de Lima: **el CI se va a poner rojo todas las noches por este motivo, no por el codigo del
+   PR**. Queda anotado en `docs/DESPLIEGUE_Y_CI.md` §3.2 como lo primero a mirar ante un fallo
+   nocturno inexplicable.
+
+**Como evitar que vuelva a pasar** — es la regla 03 ("escribir el test que hubiera atrapado el bug")
+leida al reves: cuando se corrige un bug de zona horaria en produccion, **hay que revisar si el test
+duplicaba el mismo calculo**. Si lo duplica, quedan dos fuentes de verdad y solo se arreglo una; el
+test sigue verde en la franja comoda del dia y miente sobre lo que verifica. La franja peligrosa en
+este proyecto es **00:00-05:00 UTC**, que en Lima es la tarde-noche del dia anterior.
 

@@ -13,6 +13,7 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
+import com.renaser.os.habits.domain.model.politica.GestoCompletar;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.FixedClock;
@@ -98,8 +99,35 @@ class ClaseDiariaHabitoServiceTest {
 
         assertThat(resultado.registroId()).isEqualTo(completado.id().value());
         assertThat(resultado.puntosOtorgados()).isEqualTo(10);
+        // E-120: con GESTO PROPIO, no generico. Es lo que hace que PoliticaClaseDiaria pueda
+        // cerrarle la puerta a POST /habit-tracks/{id}/complete sin cerrarle tambien esta.
         verify(completarRegistroUseCase).completar(new CompletarRegistroCommand(participanteId, pendiente.id(),
-                "Buen resumen de la clase de hoy", null));
+                "Buen resumen de la clase de hoy", null, GestoCompletar.PROPIO_DEL_HABITO));
+    }
+
+    /**
+     * E-120. Falla contra el codigo anterior: ese devolvia 200 con los puntos ya otorgados y
+     * descartaba {@code command.resumen()} sin dejar rastro.
+     */
+    @Test
+    @DisplayName("completarDeHoy(): un resumen sobre un registro cerrado SIN resumen se rechaza, no se descarta")
+    void completarDeHoyRechazaResumenSobreRegistroCerradoSinResumen() {
+        UserId participanteId = participante();
+        Habito habito = habitoDailyClass();
+        RegistroHabito cerradoSinResumen = registroPendiente(participanteId, habito.id());
+        // Como lo dejaba la ruta generica: COMPLETADO, con puntos, y sin una sola letra de resumen.
+        cerradoSinResumen.completar(10, null, null, null, CLOCK.now());
+
+        mockProgresoActivo(participanteId);
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFecha(participanteId, habito.id(), HOY))
+                .thenReturn(Optional.of(cerradoSinResumen));
+
+        assertThatThrownBy(() -> service().completarDeHoy(
+                new CompletarClaseDiariaHabitoCommand(participanteId, "Aprendi que la disciplina se construye")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("sin resumen");
+        verify(completarRegistroUseCase, never()).completar(any());
     }
 
     @Test

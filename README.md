@@ -283,11 +283,23 @@ sequenceDiagram
 
 ```bash
 docker compose up -d              # Postgres + pgvector, Redis
-./mvnw clean test                 # gate completo — debe quedar en verde
+./mvnw clean verify               # gate completo — unitarias + integración + cobertura
 ./mvnw spring-boot:run            # levanta en :8080
 ```
 
-Variables de entorno relevantes (ver `src/main/resources/application.yaml`): `DB_URL`/`DB_USERNAME`/`DB_PASSWORD`, `REDIS_HOST`/`REDIS_PORT`, `SUPABASE_JWKS_URL`, `GOOGLE_GENAI_API_KEY` (opcional — sin ella, `rag`/`evidence`/`onboarding` usan adaptadores NoOp sin romper nada), `AWS_S3_BUCKET`/`AWS_REGION`, `CORS_ORIGENES`, `RENASIA_LIMITE_DIARIO`.
+`JAVA_HOME` tiene que apuntar al JDK 25 (`C:\Program Files\Java\jdk-25.0.2`). Si está mal, `mvnw` **termina en `exit 0` sin ejecutar una sola prueba**: hay que mirar la línea `Tests run:` de la salida, no el código de retorno (E-111).
+
+> **`clean test` ya no es el gate completo.** Desde que existe `maven-failsafe-plugin`, las 10 pruebas de integración (`*IT.java`, Testcontainers contra Postgres y Redis reales) corren en `verify`, no en `test`, y el reporte de cobertura también se genera ahí.
+
+Variables de entorno relevantes (ver `src/main/resources/application.yaml`): `DB_URL`/`DB_USERNAME`/`DB_PASSWORD`, `REDIS_HOST`/`REDIS_PORT`, `GOOGLE_GENAI_API_KEY` (opcional — sin ella, `rag`/`evidence`/`onboarding` usan adaptadores NoOp sin romper nada), `AWS_S3_BUCKET`/`AWS_REGION`, `CORS_ORIGENES`, `RENASIA_LIMITE_DIARIO`.
+
+> **Corregido 2026-09-05.** Esta lista incluía `SUPABASE_JWKS_URL`, una variable que no existe en `application.yaml` ni en el código: Supabase quedó descartado el 2026-08-31 (`CLAUDE.md` §11) y la identidad es propia (`docs/MODULO_AUTH.md`).
+
+### 6.1 Build, CI/CD y configuración de producción
+
+Todo lo que tiene que ver con empaquetar y desplegar está en **[`docs/DESPLIEGUE_Y_CI.md`](docs/DESPLIEGUE_Y_CI.md)**: cobertura con JaCoCo, los tres workflows de GitHub Actions (CI, SonarCloud, publicación en ECR), el `Dockerfile` multi-etapa, y la configuración remota con AWS Systems Manager Parameter Store — incluida la lista de parámetros a crear y los roles de IAM.
+
+**Nada de la parte remota está encendida todavía** (no existen la organización de SonarCloud, el rol de IAM, el repositorio de ECR ni los parámetros): los workflows se saltean solos con un aviso mientras falte lo que necesitan, y §9 de ese documento es la lista de lo que hay que crear.
 
 ## 7. Estado actual
 

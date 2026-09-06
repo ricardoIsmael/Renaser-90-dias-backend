@@ -6,6 +6,18 @@ spring:
   threads:
     virtual:
       enabled: true
+  # Espeja el bloque de main. Sin esto la suite entera no arranca: este archivo REEMPLAZA a
+  # src/main/resources/application.yaml (mismo nombre, gana el de test), asi que la clave de
+  # main no llega aca, y `ParameterStoreAutoConfiguration` es @ConditionalOnProperty con
+  # matchIfMissing=true -- con la propiedad ausente se activa, crea un bean `SsmClient` y falla
+  # al resolver la region porque no hay credenciales de AWS en CI ni en local. Mismo motivo por
+  # el que ya estan espejados los hilos virtuales (C-14) y open-in-view (C-18).
+  cloud:
+    aws:
+      parameterstore:
+        enabled: false
+      region:
+        static: us-east-1
   # Mismo motivo que arriba: en main este limite (fijado al resolver C-1) acota a cuantos
   # @Async concurrentes se despachan a la vez (hoy solo onboarding, la validacion V90). Sin
   # espejarlo, un test que dispare varias validaciones a la vez veria un comportamiento de
