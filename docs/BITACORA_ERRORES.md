@@ -3550,3 +3550,43 @@ cuando la migracion hace DDL de privilegios. Postgres local corre como superusua
 SQL y Aurora no te dan superusuario nunca. Toda migracion que use `ALTER DEFAULT PRIVILEGES`,
 `CREATE EXTENSION` de extensiones no permitidas, o `ALTER SYSTEM`, es candidata a fallar recien
 en el primer despliegue real.
+
+---
+
+## E-128 — El chip de evidencia dice "SUBIR" sobre un archivo ya guardado, pasadas las 20 evidencias (2026-09-05) — **RESUELTO en habitos**
+
+**Sintoma:** el aprendiz sube una evidencia, la ve guardada, y al volver a Training el chip de ese
+habito sigue diciendo **SUBIR** en vez de **VER**. No pasa desde el principio: empieza a pasar
+cuando la persona acumula mas de 20 evidencias.
+
+**Causa real:** el movil cruzaba los registros del dia contra `GET /api/v1/evidence`, que devuelve
+**una pagina de 20**. A partir de la fila 21 el cruce ya no encuentra la evidencia y concluye que
+no existe. Con el uso normal del programa —varias evidencias por dia durante 90 dias— el umbral se
+cruza en la primera semana.
+
+**Por que no se resolvio filtrando en el cliente**, que era el arreglo obvio: para pedir "solo las
+de hoy" el movil tendria que saber **cuando empieza el dia de esa persona**, y no conoce
+`participantes_programa.timezone` — usaria la zona del dispositivo. Es la familia de E-91 y E-105
+otra vez, y habria reproducido el mismo sintoma por una causa nueva y mas dificil de ver: un
+aprendiz viajando, o con el telefono en otra zona, perderia evidencia legitima del filtro. Ademas
+el filtro **no elimina la paginacion**: un habito admite varias evidencias, asi que el cliente
+igual necesitaria recorrer `nextCursor`.
+
+**Solucion aplicada:** el servidor responde el dato ya resuelto. `RegistroHabitoConCatalogoResponse`
+gana `tieneEvidencia`, alimentado por una API publica nueva de `evidence`
+(`RegistrosConEvidenciaFinder`) que responde en lote "de estos registros, cuales ya tienen
+evidencia". Sin acoplamiento nuevo —`habits` ya dependia de `evidence.api`— y sin migracion: el
+indice parcial `evidencias_registro_idx` ya estaba en el baseline.
+
+**Como evitar que vuelva a pasar:** cuando el cliente necesita cruzar dos listas del servidor para
+saber algo, y una de las dos esta paginada, el cruce esta mal por construccion — funciona en las
+pruebas y se rompe en cuanto los datos crecen. El dato derivado lo calcula quien tiene las dos
+listas completas, que es el servidor.
+
+**Queda pendiente:** las rocas. `GET /api/v1/rocks/today` no tiene el campo equivalente, asi que
+VIDA Y NEGOCIO sigue cruzando contra el listado. Con una roca por dia las 20 filas cubren varias
+semanas: es holgura, no garantia.
+
+> **Nota de numeracion.** Esta entrada se escribio como E-120 en su rama de origen, pero ese numero
+> ya estaba tomado en master por otra sesion que trabajaba en paralelo. Es la colision que advierte
+> la regla 05: verificar el ultimo numero **usado en master**, no en la copia propia.
