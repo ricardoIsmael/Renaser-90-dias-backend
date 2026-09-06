@@ -4740,3 +4740,100 @@ y los 13 assets referenciados responden a `head-object`. Prueba de lectura real 
 copiar **se deriva de la base de datos**, no del listado del bucket viejo — es la base la que dice
 que claves se van a pedir. Y el tipo de un archivo se determina por sus **primeros bytes**, nunca
 por su extension: la extension es lo primero que se pierde en una exportacion.
+
+---
+
+## E-144 — `Alert` no existe en react-native-web: 99 diálogos muertos, y el interruptor de pausar hábitos que no respondía (2026-09-06) — **RESUELTO en el frontend**
+
+**Sintoma exacto, reportado por el dueño.** En `https://renaser-90-dias-frontend-livid.vercel.app/`,
+en Plan → Hábitos: *"si presiono desactivar no ocurre nada"*. El interruptor **ni siquiera se
+movía**. Sin dialogo, sin mensaje de error, sin una sola linea en la consola del navegador.
+
+**Falso positivo previo, que vale registrar.** Antes de esto se habia arreglado el CORS (el repo del
+frontend despliega al proyecto `-livid` de Vercel y ese dominio no estaba permitido). Ese arreglo era
+**real y necesario** —sin el ninguna llamada al backend pasaba— pero **no era la causa de este bug**,
+y darlo por cerrado sin reproducirlo hizo que se le dijera al dueño que probara algo que seguia
+roto. **Un arreglo verificado a nivel de infraestructura no es un sintoma verificado a nivel de
+producto.** El preflight devolvia 200 y el interruptor seguia sin moverse, porque nunca llegaba a
+hacerse una peticion.
+
+**Causa real.** `Alert` de `react-native-web` **no esta implementado**. El modulo entero, textual, en
+`node_modules/react-native-web/dist/exports/Alert/index.js` (0.21.2):
+
+```js
+class Alert {
+  static alert() {}
+}
+export default Alert;
+```
+
+Un metodo vacio. No es que se vea distinto o le falten estilos: **no hace nada y nunca ejecuta los
+`onPress` de los botones**. Y como no lanza ninguna excepcion, no hay rastro en ningun lado — es un
+fallo perfectamente silencioso, que es lo que lo hizo tan caro de encontrar.
+
+**Por que rompia justo el interruptor.** `PlanScreen.toggleHabitDayStatus` esta partido en dos
+caminos a proposito: **reactivar** es un toque directo, **pausar** primero pregunta hasta cuando
+(V31). La funcion que de verdad guarda —`aplicarEstadoHabito`— solo se llama desde el `onPress` de
+esas opciones. Como el dialogo nunca se dibujaba, ese `onPress` no existia, y con el se caia tambien
+la actualizacion optimista: por eso el switch no se movia ni visualmente.
+
+### El alcance real: 99 llamadas, y solo 3 bloqueaban una accion
+
+Clasificadas contando parentesis (no con una regex: los mensajes tienen parentesis y comillas
+adentro y una regex se corta a la mitad):
+
+| Tipo | Cuantas | Que pasaba en web |
+|---|---|---|
+| **Bloqueantes** (con botones y `onPress`) | **3** | La accion **nunca corria**. `PlanScreen.tsx:437` (pausar habito), `ComunidadScreen.tsx:1157`, `EvidenciaDesdeChatModal.tsx:101` |
+| **Informativas** (solo texto) | **93** | El aviso **nunca se veia**: errores de subida de evidencia, validaciones del onboarding, confirmaciones del Muro y de Yo |
+
+Las 93 informativas son la parte silenciosamente peor: **un fallo que se reportaba con
+`Alert.alert('No pudimos guardar el cambio', ...)` se veia, en web, exactamente igual que un exito.**
+
+**Solucion.** `src/components/Alerta.tsx`, con la **misma firma** que el `Alert` de React Native:
+
+- **En movil delega en el `Alert` nativo, sin tocar nada.** Los dialogos siguen siendo los del
+  sistema operativo; el riesgo de regresion en el build que va a las tiendas es nulo.
+- **En web** dibuja un dialogo propio y ejecuta los `onPress`.
+
+Se mantuvo la firma **a proposito** para que migrar cada archivo sea cambiar el `import` y nada mas:
+las 99 llamadas quedan como estaban. Renombrar a algo tipo `mostrarAlerta()` habria obligado a
+reescribirlas una por una, con 99 oportunidades de equivocarse.
+
+`AnfitrionAlerta` va montado una sola vez en `App.tsx`. Si una alerta se dispara antes de que monte,
+**queda en cola** en vez de perderse.
+
+**Dos detalles que solo aparecieron al mirarlo en el navegador,** y que ninguna cantidad de lectura
+del codigo habria mostrado:
+
+1. **El dialogo salia translucido.** El fondo usaba `c.cardBgAlt`, que en modo oscuro es
+   `rgba(255,255,255,0.07)`: se veia el formulario de atras a traves del cuadro, con los textos
+   encimados. Una tarjeta *dentro* de una pantalla puede ser translucida; un dialogo que *tapa* la
+   pantalla, no. Pasado a `c.bg`, que es opaco en los dos temas.
+2. **Cerrar tocando fuera tenia que ejecutar el boton `cancel`**, que es lo que hace el dialogo
+   nativo. Si no hay boton `cancel`, cierra sin ejecutar nada — nunca dispara una accion que la
+   persona no eligio.
+
+**Verificacion — hecha contra el build web real, no leyendo el codigo.** Servidor de Expo en
+`localhost:8081`, con un disparador temporal en `window` (quitado despues, y confirmado quitado con
+una recarga limpia):
+
+- El dialogo **se dibuja** en el DOM.
+- Pulsar una opcion imprime `PRUEBA: onPress EJECUTADO` — **ese es exactamente el callback que
+  antes nunca corria**.
+- Tocar el fondo cierra e imprime `PRUEBA: cancelado`, o sea ejecuta el boton `cancel`.
+- Recarga limpia: la app carga, sin errores en consola, sin rastro del disparador.
+
+**Como evitar que vuelva a pasar:**
+
+1. **Que un modulo de React Native exista en la web no significa que haga algo.** `react-native-web`
+   trae varios stubs vacios para que el bundle no se rompa. Antes de apoyar una funcionalidad en un
+   modulo de `react-native` en el build web, **abrir el archivo en `node_modules`** — son diez
+   lineas y se ve al instante. Otros candidatos a revisar con el mismo criterio si algun dia se usan:
+   `Share`, `Vibration`, `PermissionsAndroid`, `ToastAndroid`, `BackHandler`.
+2. **Un bug reportado no esta cerrado hasta reproducir el sintoma que reporto la persona.** Acá se
+   arreglo el CORS (correcto y necesario), se verifico a nivel de red, y se dio por resuelto algo que
+   nunca se habia reproducido. Verificar la capa que uno toco no es verificar el sintoma.
+3. **Sospechar de lo que falla sin dejar rastro.** No habia error en consola, ni peticion fallida, ni
+   excepcion. Cuando un boton "no hace nada" y la red esta limpia, la hipotesis no es el backend: es
+   que el handler nunca se llamo.
