@@ -2,6 +2,7 @@ package com.renaser.os.rag.infrastructure.adapter.out.redis;
 
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.rag.application.ports.out.cuota.ControlCuotaRenasiaPort;
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,7 +12,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -29,7 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * es {@code renaser.renasia.limite-diario=25} (src/test/resources/application.yaml).
  *
  * <p>Usa el reloj real del sistema (no se sobreescribe {@code Clock}): alcanza para probar
- * el TTL y la concurrencia sin necesitar controlar "hoy"/medianoche.
+ * el TTL y la concurrencia sin necesitar controlar "hoy"/medianoche. Lo que si importa es
+ * que la clave se derive por el MISMO camino que produccion — ver {@link #claveDeHoy}.
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
@@ -42,10 +44,19 @@ class ControlCuotaRedisAdapterTest {
      */
     private static final String CLAVE_PREFIJO = "renasia:cuota:";
 
+    /**
+     * Identica a {@code ControlCuotaRedisAdapter.ZONA_PADRON}, y duplicada aca por el mismo
+     * motivo que {@link #CLAVE_PREFIJO}: el campo es {@code private}. Si el padron cambia de
+     * zona, hay que actualizar las dos.
+     */
+    private static final ZoneId ZONA_PADRON = ZoneId.of("America/Lima");
+
     @Autowired
     private ControlCuotaRenasiaPort controlCuotaRenasiaPort;
     @Autowired
     private StringRedisTemplate redisTemplate;
+    @Autowired
+    private Clock clock;
 
     @Test
     @DisplayName("C-8: el TTL se fija en el primer consumo del dia y NO se renueva en los "
@@ -143,7 +154,20 @@ class ControlCuotaRedisAdapterTest {
         }
     }
 
-    private static String claveDeHoy(UserId actorId) {
-        return CLAVE_PREFIJO + actorId.value() + ":" + LocalDate.now(ZoneOffset.UTC);
+    /**
+     * Deriva la clave exactamente como {@code ControlCuotaRedisAdapter.claveDeHoy}: por el
+     * puerto {@code Clock} y en la zona del padron, nunca con un {@code LocalDate.now(...)}
+     * armado a mano.
+     *
+     * <p><b>E-126.</b> Antes usaba {@code LocalDate.now(ZoneOffset.UTC)} mientras el adaptador
+     * ya armaba la clave en {@code America/Lima}. Lima es UTC-5, asi que entre las 19:00 y la
+     * medianoche de Lima las dos fechas diferian y el test leia una clave que el adaptador
+     * nunca habia escrito: TTL {@code -2}/{@code -1} y {@code expected "1" but was null}.
+     * Misma familia que E-91, E-105 y E-106 — el codigo estaba bien y era el fixture el que
+     * reconstruia a mano un dato que produccion deriva del reloj del padron.
+     */
+    private String claveDeHoy(UserId actorId) {
+        LocalDate hoyDelPadron = clock.now().atZone(ZONA_PADRON).toLocalDate();
+        return CLAVE_PREFIJO + actorId.value() + ":" + hoyDelPadron;
     }
 }
