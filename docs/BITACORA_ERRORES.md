@@ -4837,3 +4837,88 @@ una recarga limpia):
 3. **Sospechar de lo que falla sin dejar rastro.** No habia error en consola, ni peticion fallida, ni
    excepcion. Cuando un boton "no hace nada" y la red esta limpia, la hipotesis no es el backend: es
    que el handler nunca se llamo.
+
+---
+
+## E-145 — La pausa de un hábito se escribía y nunca se leía de vuelta: al recargar, el hábito volvía a verse activo (2026-09-06) — **RESUELTO en el frontend**
+
+**Sintoma exacto, reportado por el dueño.** Con el diálogo de pausa ya funcionando (E-144): *"no se
+guarda, actualizo la página y vuelve a estar activo"*. El interruptor se apagaba, se elegía el
+plazo, y al recargar el Plan el hábito aparecía encendido otra vez.
+
+**Causa.** El PATCH **sí guardaba**. Lo que faltaba era la lectura. Al cargar la pantalla, el mapa
+`days` de cada hábito se reconstruía **únicamente** desde `habito.activeWeekdays`, que es el
+calendario del **catálogo compartido** — dice en qué días aplica el hábito para todo el padrón, y no
+sabe nada de la pausa personal de nadie. La pausa vive en `desbloqueos_habito`, en otro endpoint,
+y la app **nunca lo llamaba**: `habitsApi` tenía `PATCH`, `PUT` y `DELETE` sobre
+`/api/v1/habit-unlocks/{id}`, y ningún `GET`.
+
+**El backend ya estaba listo, y lo decía.** `HabitUnlockPlanResponse` expone `paused`/`pausedUntil`
+desde V31, con este javadoc escrito de antemano:
+
+> *"Antes NINGUNA respuesta de lectura exponia el estado de pausa, asi que el interruptor del Plan
+> no podia pintarse con el valor real: se apagaba un habito, se recargaba la app y volvia a verse
+> encendido. Es el mismo sintoma que D-87 creia haber cerrado — se persistia, pero no se leia de
+> vuelta."*
+
+V31 hizo su mitad; la del cliente quedó sin hacer. **Ningún `.java` se tocó en este arreglo.**
+
+**Solución.** `GET /api/v1/habit-unlocks` entra como tercera lectura en paralelo de
+`usePlanHabitos` (junto al catálogo y las preferencias), y el mapeo apaga los días sobre los que
+cae la pausa.
+
+### La decisión que hubo que tomar: una pausa es un RANGO DE FECHAS y el interruptor es POR DÍA
+
+El switch pregunta "¿este hábito está activo el JUEVES?" y la pausa responde "hasta el domingo".
+Para cruzarlos hace falta saber **qué fecha real es ese jueves**. De ahí sale lo demás:
+
+1. **La regla de qué semana se muestra se movió a `features/habits/utils/semanaDelPlan`**, sin
+   cambiarle el comportamiento. Antes vivía solo dentro de `PlanScreen`, que alcanzaba mientras
+   nadie más la necesitara. Ahora la necesitan dos lugares —las pestañas y el mapeo de la pausa— y
+   **dos copias que se separaran un día pintarían la pausa en la casilla equivocada, sin que
+   ninguna de las dos pareciera rota.**
+2. **Los días ya pasados NO se repintan.** La respuesta trae `pausedUntil` (hasta cuándo) pero no
+   desde cuándo. Apagar hacia atrás inventaría un pasado que no ocurrió: si alguien pausa el jueves
+   "hasta el domingo", el lunes de esa semana el hábito estuvo activo de verdad y su registro lo
+   demuestra. Ante la duda, no se reescribe la historia.
+3. **Una pausa vencida se apaga sola.** Sin fecha de fin (`pausedUntil = null`) la pausa es
+   indefinida y apaga todo lo que viene; con fecha, apaga hasta ese día inclusive y el hábito
+   vuelve solo, sin que nadie tenga que reactivarlo.
+
+`semanaDelPlan` **no importa nada** a propósito, y `PlanScreen` reexporta desde ahí el tipo del día:
+la dependencia apunta en un solo sentido, del que sabe poco al que sabe mucho.
+
+**Verificacion.** Contra el código real en el navegador (arnés temporal, quitado y confirmado
+quitado con recarga limpia). Semana lun 07 – dom 13, los siete casos:
+
+| Caso | Días encendidos |
+|---|---|
+| Sin fila en el plan | los 7 |
+| En el plan, sin pausar | los 7 |
+| Pausado solo hoy (lun 07) | MAR…DOM |
+| Pausado hasta el domingo | ninguno |
+| Pausado indefinido | ninguno |
+| **Pausa ya vencida (hasta ayer)** | **los 7 — vuelve solo** |
+| **Hoy jueves, pausa hasta el domingo** | **LUN, MAR, MIÉ — el pasado queda intacto** |
+
+**Un rodeo que vale registrar, porque cuesta media hora cada vez.** A mitad de la verificación la
+consola mostraba `ReferenceError: INDICE_DE_HOY is not defined` y se diagnosticó como un ciclo de
+importación. **No lo era:** eran mensajes **viejos del buffer de la pestaña**, de un estado
+intermedio del hot-reload (la constante ya borrada de un archivo y todavía no importada en el otro).
+Metro compilaba limpio y no reportaba nada. **`read_console_messages` devuelve historial, no solo lo
+de la carga actual** — para saber si un error es real hay que abrir una **pestaña nueva**, cuyo
+buffer arranca vacío, o contrastar contra la salida del bundler. El refactor que se hizo creyendo
+que había un ciclo se conservó porque es correcto por sí mismo, pero el comentario que afirmaba
+*"el bundle web reventaba"* se corrigió: describía un fallo que nunca ocurrió.
+
+**Como evitar que vuelva a pasar:**
+
+1. **Persistir no es guardar.** Un cambio está guardado cuando **sobrevive a recargar la pantalla**,
+   y eso exige las dos mitades: el endpoint que escribe y el que lee. Este mismo síntoma ya había
+   caído dos veces (D-87 y V31), siempre por la mitad que falta. Al agregar un dato del aprendiz,
+   la pregunta de cierre es *"¿quién lo lee de vuelta, y con qué llamada?"*.
+2. **Ojo con reconstruir un estado personal desde un dato compartido.** `activeWeekdays` es del
+   catálogo y respondía casi bien, que es lo que lo hacía difícil de ver: el interruptor funcionaba
+   para todo salvo justo para lo que el aprendiz había cambiado.
+3. **Una regla de calendario duplicada es una bomba de tiempo silenciosa.** Si dos lugares calculan
+   la misma semana por su cuenta, el día que se separen nada va a fallar — solo va a estar mal.
