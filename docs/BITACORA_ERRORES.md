@@ -4518,3 +4518,73 @@ de mas: `SendCommand` contra otra instancia, contra `AWS-RunPowerShellScript`, `
 **Como evitar que vuelva a pasar:** al escribir una politica nueva, simular **las dos listas**: lo
 que tiene que permitir y lo que no. Una politica que solo se probo por el lado de "funciona" es una
 politica de la que no se sabe cuanto de mas concede.
+
+---
+
+## E-141 — Los dos chats de IA mostraban en pantalla los ids internos de las lecciones recuperadas por el RAG (2026-09-06) — **RESUELTO en el frontend**
+
+**Sintoma exacto.** Al pie de cada respuesta del asistente, en los DOS chats del producto, se
+dibujaba un bloque asi:
+
+```
+LECCIONES CITADAS
+[ 3f9a1c2e-7b44-... ]  [ 08d5e611-a0c3-... ]
+```
+
+Un chip por cada id de leccion que el RAG habia recuperado para armar esa respuesta. No eran
+titulos legibles para el aprendiz: era el **identificador interno de la fila** en la base de
+conocimiento del backend.
+
+**Pedido del dueno, textual (2026-09-06):** *"la ia de renasia (...) eso no debe de citar o aparecer
+en su frontend para no tocar backend, no citar las referencias mejor, por seguridad. solo quita eso
+en los 2 chats"*. Y sobre cuales son los dos: *"una es de cursos y este si debe de pasar por el rag
+y el otro es de soporte con tool calling"* — es decir Sparkie (`COURSE_TUTOR`, entra por
+`ChatDelCurso`) y el acompanante (`COMPANION`, entra por `RenasiaLauncher`).
+
+**Donde estaba, y por que era un solo lugar.** Los dos chats son el mismo componente: `ChatDelCurso`
+y `RenasiaLauncher` montan los dos el mismo `RenasiaPanel`, que dibuja cada mensaje con
+`MensajeBurbuja`. El bloque de fuentes vivia unicamente ahi. Un solo borrado apago los dos chats;
+no habia dos implementaciones que sincronizar.
+
+**Que se hizo (solo frontend, ningun `.java` tocado).** Repo `Renaser-90-dias-frontend-`:
+
+| Archivo | Cambio |
+|---|---|
+| `components/MensajeBurbuja.tsx` | Se borro el bloque `LECCIONES CITADAS` y sus tres estilos (`fuentesBox`, `fuentesLista`, `fuenteChip`) |
+| `types/renasia.types.ts` | Se borro `RenasiaMensajeUI.lecciones` — es el modelo de PANTALLA y solo existia para alimentar esos chips |
+| `hooks/useRenasiaChat.ts` | `mapearMensajeApi` deja de leer `sourceLessonIds`; se quito el callback `onFuentes` y el campo de las dos burbujas optimistas |
+| `api/renasiaStream.ts` | Se quito `onFuentes` del tipo de callbacks; la rama `tipo === 'fuentes'` quedo vacia con un comentario |
+| `data/agentes.ts` | La pantalla vacia del acompanante prometia *"Cada respuesta cita las lecciones exactas de las que sale."* — se quito la frase |
+
+**La trampa, y la razon de ser de esta entrada.** El backend **no se toco**, asi que sigue mandando
+`sourceLessonIds` en el historial y el evento `{"tipo":"fuentes","lecciones":[...]}` en el stream.
+Eso deja tres cosas que parecen bugs y no lo son:
+
+1. **La rama `else if (evento.tipo === 'fuentes') { }` de `renasiaStream.ts` esta vacia a proposito.**
+   Se dejo escrita en vez de borrarla y dejar que el evento cayera en "lo desconocido se ignora",
+   justamente para que quede constancia de que el evento **se conoce** y la decision de descartarlo
+   es deliberada. Sin esa rama, el proximo que lea el archivo lo toma por un tipo sin soporte y
+   "arregla" un bug que no existe.
+2. **`sourceLessonIds` y `eventoFuentesSchema` siguen en el espejo del contrato** (`renasia.types.ts`,
+   `renasiaSchemas.ts`). Se dejaron porque el backend los sigue emitiendo: sacarlos del tipo no deja
+   de recibirlos, solo deja de documentar que llegan.
+3. **`RenasiaMensajeUI.lecciones` si se borro**, y la asimetria con el punto 2 es intencional: los
+   tipos del wire describen lo que el servidor manda; el modelo de pantalla describe lo que se
+   dibuja. Sin chips que alimentar, ese campo era estado muerto arrastrado por el hook.
+
+**Lo que este cambio NO resuelve, y hay que decidir aparte.** Los prompts de sistema de los dos
+agentes (`prompts/sparkie-cursos.st` y `prompts/renasia-sistema.st`) tienen una seccion *"De donde
+sacas lo que respondes"* que ordena, con todas las letras: *"Usa las fuentes en este orden, **y di
+siempre cual usaste**"*, con ejemplos como *"en esta leccion..."* y *"esto no es parte del curso, es
+informacion general que encontre"*. Esa atribucion viaja **dentro del texto** de la respuesta, no en
+los chips, asi que **sigue apareciendo en pantalla**. Quitar los chips no rompe nada (el modelo no
+queda hablando de fuentes invisibles: la referencia en prosa se sigue mostrando entera), pero
+tampoco la elimina. Si lo que el dueno quiere es que el asistente **no mencione de donde sale nada**,
+eso se cambia en esos dos `.st` del backend — que es exactamente lo que pidio no tocar. Queda
+planteado, sin tocar.
+
+**Como evitar que vuelva a pasar:** un id interno (UUID de fila, clave de la base de conocimiento,
+id de documento del RAG) **no se pinta nunca en una pantalla del aprendiz**, ni siquiera "mientras
+tanto". Si hace falta mostrar una fuente, se muestra su **titulo**, y el titulo lo tiene que mandar
+el backend como tal. La regla general: si un dato solo sirve para depurar, no se renderiza — se
+loguea.
