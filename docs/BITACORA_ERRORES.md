@@ -4588,3 +4588,155 @@ id de documento del RAG) **no se pinta nunca en una pantalla del aprendiz**, ni 
 tanto". Si hace falta mostrar una fuente, se muestra su **titulo**, y el titulo lo tiene que mandar
 el backend como tal. La regla general: si un dato solo sirve para depurar, no se renderiza — se
 loguea.
+
+---
+
+## E-142 — El workflow de CD nunca desplegó: dos fallos encadenados que lo dejaban en verde (2026-09-06) — **RESUELTO**
+
+**Sintoma exacto.** Cada push a `master` dejaba una corrida de CD en **verde**, terminada en unos
+8 segundos. En el detalle de la corrida, todos los pasos que importan aparecian `skipped`:
+
+```
+JOB: Construir y publicar en ECR  success
+    - Ver si la infraestructura de AWS esta configurada: success
+    - Construir y publicar: skipped
+JOB: Desplegar en la instancia EC2 (por SSM)  skipped
+```
+
+**Por que era invisible.** El paso guardian esta escrito a proposito para *no* pintar de rojo cuando
+la infraestructura todavia no existe (mismo criterio que `sonarcloud.yml`). Esa decision es correcta
+para un repo recien creado, pero tiene un costo que nadie habia pagado hasta ahora: **una vez que la
+infraestructura SI existe, un fallo de configuracion se sigue viendo igual que "todavia no toca".**
+El check verde de GitHub decia lo mismo en los dos casos.
+
+Consecuencia concreta: **todos los despliegues a produccion se venian haciendo a mano** (build local
++ `docker push` a ECR + `ssm send-command`). El pipeline existia, estaba probado en el papel, y no
+habia corrido ni una vez de punta a punta.
+
+### Causa 1 — las variables estaban en un *environment*, no en el repositorio
+
+`gh variable list` devolvia **vacio**, pero las cuatro variables existian y con los valores
+correctos: estaban cargadas dentro del environment **`AWS`**
+(`gh api repos/.../environments/AWS/variables`).
+
+Un `${{ vars.X }}` resuelve variables de environment **solo si el job declara `environment:`**. Los
+dos jobs de `cd.yml` no lo declaran, asi que `vars.AWS_ROLE_ARN` y compania llegaban vacias y el
+guardian concluia, correctamente, que faltaba configuracion.
+
+**Por que se resolvio moviendo las variables al repositorio y no agregando `environment: AWS` al
+workflow** — que era el arreglo "obvio": porque agregar `environment:` **cambia el claim `sub` del
+token OIDC** a `repo:OWNER/REPO:environment:AWS`, que no es lo que la politica de confianza del rol
+autoriza. El arreglo obvio habria cambiado un salteo silencioso por un fallo de permisos, y ademas
+habria requerido tocar IAM en el mismo movimiento. El environment `AWS` no tenia reglas de
+proteccion ni politica de ramas, asi que no aportaba nada que se perdiera al mover las variables.
+
+### Causa 2 — GitHub cambio el formato del `sub` de OIDC (claims inmutables)
+
+Con las variables ya visibles, la corrida siguiente llego mas lejos y fallo asi, 12 veces seguidas:
+
+```
+Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity
+```
+
+Todo lo obvio estaba bien: el proveedor OIDC existia con `ClientIDList = ["sts.amazonaws.com"]`, el
+rol existia, `id-token: write` estaba declarado, el `role-to-assume` era el correcto y el nombre del
+repo coincidia **con las mayusculas exactas** de la politica.
+
+La causa aparece al consultar `repos/{owner}/{repo}/actions/oidc/customization/sub`:
+
+```json
+{"use_default":true,"use_immutable_subject":false,
+ "sub_claim_prefix":"repo:ricardoIsmael@274585616/Renaser-90-dias-backend@1343032051"}
+```
+
+GitHub ahora emite el `sub` con los **IDs numericos** de la cuenta y del repositorio intercalados
+(`OWNER@OWNERID/REPO@REPOID`). La politica de confianza esperaba la forma vieja, solo con nombres, y
+la comparacion `StringLike` es exacta: no matchea.
+
+**Solucion.** La politica acepta ahora las **dos** formas, cada una escrita completa y sin comodines,
+las dos fijadas al mismo repo y a la misma rama:
+
+```
+repo:ricardoIsmael/Renaser-90-dias-backend:ref:refs/heads/master
+repo:ricardoIsmael@274585616/Renaser-90-dias-backend@1343032051:ref:refs/heads/master
+```
+
+**Nada de resolverlo con un comodin tipo `repo:ricardoIsmael*/Renaser-90-dias-backend*:...`.** Parece
+equivalente y no lo es: `ricardoIsmael*` tambien matchea a `ricardoIsmaelOtro`, un usuario que
+cualquiera puede crear. La forma con IDs es ademas **mas** segura que la de nombres — un nombre de
+usuario o de repo se puede transferir o renombrar, un ID numerico no.
+
+**Verificacion.** Corrida completa en verde de punta a punta por primera vez: OIDC → login a ECR →
+build → push → `ssm send-command` → `/actuator/health` **UP**. La instancia quedo corriendo la imagen
+etiquetada con el SHA del commit de `master`, no `latest`.
+
+**Como evitar que vuelva a pasar:**
+
+1. **Un guardian que saltea trabajo no puede reportar el mismo verde que un exito.** El paso deja un
+   `::notice::` y una linea en el resumen, pero el check de GitHub se ve identico. Si un workflow
+   puede auto-saltearse, hay que poder distinguir "salteado" de "hecho" **sin abrir la corrida** —
+   por ejemplo mirando la duracion: un CD real no termina en 8 segundos.
+2. **Un pipeline de despliegue no esta terminado hasta que corrio entero una vez.** Que los pasos
+   esten bien escritos no es evidencia de que funcionen; solo lo es una corrida verde que de verdad
+   construyo y desplego.
+3. Al cargar variables de Actions, **verificar el alcance**: `gh variable list` (repositorio) y
+   `gh api repos/.../environments/<env>/variables` (environment) son dos lugares distintos y el
+   workflow solo ve uno de los dos.
+
+---
+
+## E-143 — Los 50 archivos que faltaban del bucket viejo, y tres trampas al migrarlos (2026-09-06) — **RESUELTO**
+
+**Sintoma exacto.** En la pantalla de cursos no cargaba ninguna portada. El backend firmaba la URL
+correctamente y S3 respondia **404**: la fila de la base apuntaba a una clave que nunca se habia
+subido al bucket nuevo. Lo mismo con las 13 audioterapias y con las imagenes incrustadas en el
+cuerpo de 12 lecciones.
+
+**Causa.** Al migrar a la cuenta nueva de AWS se creo `renaser90dias-prod` y se subieron los 45
+audios de Pastilla Renacer, pero **nunca se copiaron** los objetos del bucket viejo
+(`s3-renaser90dias`), al que esta sesion no tenia acceso. Quedaron 50 objetos sin migrar: 23
+portadas, 13 audioterapias y 14 assets de leccion.
+
+**Verificacion de correspondencia antes de subir nada** (que es el punto de esta entrada):
+
+| Que | En la base | En disco | Coinciden |
+|---|---|---|---|
+| Portadas de curso (`cursos.portada_ruta`) | 23 | 23 | **23/23**, por id exacto |
+| Audioterapias (`audioterapias.ruta_storage`) | 13 | 13 | **13/13**, por nombre exacto |
+| Assets de leccion (referenciados en `lecciones.cuerpo_html`) | 13 | 14 | los 13 referenciados, +1 de sobra |
+
+### Trampa 1 — la ruta de la base ES la clave de S3, sin prefijo
+
+`S3AlmacenamientoAdapter` usa el argumento `ruta` **verbatim** como `key`; no antepone nada. Y los
+llamadores (`CatalogoAcademyService.firmarPortada`, `AudioterapiaService.firmarAudio`) lo pasan tal
+cual. Por eso `cursos.portada_ruta = <id>/portada.jpg` va a la **raiz** del bucket y no bajo
+`contenido/`, aunque los audios de Pastilla Renacer si vivan en `contenido/pastilla-renacer/`: esa
+diferencia esta en el dato, no en el codigo. Subir las portadas "ordenadas" bajo un prefijo las
+habria dejado igual de rotas, y ademas mas dificiles de diagnosticar.
+
+### Trampa 2 — cuatro archivos `.bin` que en realidad son PNG
+
+Tres de los cuatro `assets/*.bin` empiezan con `89 50 4E 47`: son PNG con la extension perdida en
+la exportacion original. **No hay que renombrarlos**: el `cuerpo_html` de la leccion referencia el
+nombre con `.bin`, asi que la clave tiene que conservarlo. Lo que hace que se vean es el
+**`Content-Type`**, que S3 devuelve al firmar la lectura — se subieron con `image/png` explicito,
+detectado por magic bytes y no por extension. Con el `application/octet-stream` que `aws s3 cp`
+habria puesto solo, la clave existiria, el 404 desapareceria, y la imagen igual no se dibujaria.
+
+### Trampa 3 — un asset que no es una imagen
+
+`1724d86936ba4bf6b059500e26e4a775/assets/c0077cc9a110-145086556.bin` empieza con `<!doctype ht`:
+es una **pagina HTML**, no una imagen. El numero del nombre (`145086556`) es el id de ivoox del
+audio que esa leccion enlaza, asi que lo que se guardo fue la pagina del reproductor en vez del
+recurso. Se subio igual, como `application/octet-stream`, para no dejar un 404 — pero **esa leccion
+va a seguir mostrando una imagen rota**, y el arreglo no es de infraestructura: hay que reemplazar
+el archivo de origen o quitar la referencia del `cuerpo_html`. **Queda pendiente, a la vista.**
+
+**Verificacion final.** El bucket paso de 49 a **99** objetos. Las 23 portadas, las 13 audioterapias
+y los 13 assets referenciados responden a `head-object`. Prueba de lectura real con URL prefirmada:
+`HTTP 200 | image/jpeg | 77184 bytes`.
+
+**Como evitar que vuelva a pasar:** al mover un bucket entre cuentas, la lista de lo que hay que
+copiar **se deriva de la base de datos**, no del listado del bucket viejo — es la base la que dice
+que claves se van a pedir. Y el tipo de un archivo se determina por sus **primeros bytes**, nunca
+por su extension: la extension es lo primero que se pierde en una exportacion.
