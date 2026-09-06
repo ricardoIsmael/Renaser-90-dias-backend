@@ -416,6 +416,27 @@ Tests: `DesbloqueoHabitoServiceTest` — suspendido rechazado, sin desbloqueos �
 >
 > Tests que lo cubren: `DesbloqueoHabitoServiceTest` (día futuro, día actual, día ya vivido → 400, fuera de rango → violación de constraint) y `RegistroServiceTest` (`generarSalteaElHabitoElegidoParaMasAdelante`, `generarIncluyeElHabitoCuandoLlegaSuDia`).
 
+> **Corregido 2026-09-06 (E-138 / D-116).** El bloque de arriba —y el `PUT` que describe— daba por
+> sentado que el plan es solo del catálogo. **No lo es: un hábito `PERSONAL` del propio aprendiz
+> también entra en `desbloqueos_habito`.** Hasta este cambio `PUT /api/v1/habit-unlocks/{habitId}`
+> rechazaba con **400 `"Solo se eligen habitos del catalogo, no habitos personales"`** cualquier
+> hábito que no fuera de SISTEMA, y como el móvil asegura la fila con ese `PUT` antes de mandar el
+> `PATCH` (D-99), **el interruptor ACTIVO/PAUSADO no funcionaba sobre ningún hábito propio.**
+>
+> - Ahora el `PUT` acepta: hábitos del catálogo **activos**, y hábitos `PERSONAL` **del actor**. El
+>   hábito personal de **otro** aprendiz responde **404** (no 403: un 403 confirmaría que ese id
+>   existe), y uno dado de baja (`activo = false`) responde 400.
+> - `PATCH` y `DELETE` **no cambiaron**: nunca discriminaron por ámbito. Un hábito personal siempre
+>   es `desactivable`, así que nunca recibe el 409 de "hábito obligatorio".
+> - La pausa de un hábito personal es **la misma** que la de uno de catálogo: rango
+>   `pausado_en`/`pausado_hasta` en la zona del aprendiz, con reanudación derivada de la fecha (V31).
+>   No hay una regla distinta para los hábitos propios, y **no hizo falta ninguna migración**.
+>
+> Tests: `DesbloqueoHabitoServiceTest` (propio aceptado, ajeno → 404, dado de baja → 400, y la
+> secuencia completa PUT+PATCH de pausa y reactivación) y `PausaHabitoPersonalIT` (Testcontainers:
+> la fila entra en Postgres con un `habito_id` de ámbito PERSONAL, el hábito pausado no genera track,
+> y vuelve solo al día siguiente del último día de la pausa).
+
 ---
 
 ## 13. Hueco #13 — evidencia al cerrar la racha "Día sin celular" — completado 2026-08-26

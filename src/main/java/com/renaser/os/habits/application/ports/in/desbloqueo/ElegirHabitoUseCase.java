@@ -9,10 +9,16 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * Escritura sobre {@code desbloqueos_habito}: el aprendiz agrega un habito del catalogo a su
- * plan (hueco #12, cierra PARCIALMENTE D-H2 — ver javadoc de {@link ConsultarDesbloqueosHabitoUseCase}
- * para lo que sigue sin portarse). Esto NO es el algoritmo de escalonamiento por lotes
- * (dias 1/3/5/7, `habitStaggering.ts`) del repo viejo: es un alta autoservicio simple.
+ * Escritura sobre {@code desbloqueos_habito}: el aprendiz agrega un habito a su plan (hueco #12,
+ * cierra PARCIALMENTE D-H2 — ver javadoc de {@link ConsultarDesbloqueosHabitoUseCase} para lo que
+ * sigue sin portarse). Esto NO es el algoritmo de escalonamiento por lotes (dias 1/3/5/7,
+ * `habitStaggering.ts`) del repo viejo: es un alta autoservicio simple.
+ *
+ * <p>Acepta habitos del catalogo SISTEMA (activos) y habitos PERSONAL del PROPIO aprendiz; el
+ * habito personal de otro se responde 404. <b>Antes rechazaba todo habito PERSONAL</b> — el
+ * porque de ese cambio esta en {@code DesbloqueoHabitoService.requirePuedeEntrarEnElPlan}
+ * (E-138): esta tabla es el unico lugar donde vive el interruptor ACTIVO/PAUSADO, asi que
+ * rechazar los personales los dejaba sin interruptor.
  *
  * <p><b>Simplificaciones deliberadas, NO confirmadas por negocio (ver
  * docs/informes/habits-eleccion-y-personales.md §4 para las preguntas abiertas):</b>

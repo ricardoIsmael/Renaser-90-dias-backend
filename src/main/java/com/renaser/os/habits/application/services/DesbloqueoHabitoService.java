@@ -62,6 +62,9 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
      * Idempotente (ver javadoc de {@link SaveDesbloqueoHabitoPort#elegirSiFalta}): elegir dos
      * veces el mismo habito no falla ni duplica, simplemente devuelve el mismo resultado.
      *
+     * <p>Admite habitos del catalogo y habitos PERSONAL del propio aprendiz — ver
+     * {@link #requirePuedeEntrarEnElPlan} para por que dejo de rechazar los personales (E-138).
+     *
      * <p>Consecuencia de esa idempotencia: volver a elegir el mismo habito con OTRO
      * {@code diaDesbloqueo} tampoco lo mueve — el INSERT no hace nada y se relee la fila que ya
      * estaba. Para cambiar el dia hay que sacar el habito del plan ({@code quitar}) y volver a
@@ -80,12 +83,7 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
             throw new IllegalArgumentException("El dia de programa esta fuera del rango de desbloqueo (1-90)");
         }
         Habito habito = requireHabito(command.habitoId());
-        if (!habito.esDeSistema()) {
-            throw new IllegalArgumentException("Solo se eligen habitos del catalogo, no habitos personales");
-        }
-        if (!habito.activo()) {
-            throw new IllegalArgumentException("Este habito no esta activo en el catalogo");
-        }
+        requirePuedeEntrarEnElPlan(habito, command.actorId());
 
         Instant ahora = clock.now();
         int diaDesbloqueo = resolverDiaDesbloqueo(command.diaDesbloqueo(), progreso.diaPrograma());
@@ -153,6 +151,38 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
                     + "el mas temprano que puedes elegir es el dia " + primerDiaPosible);
         }
         return pedido;
+    }
+
+    /**
+     * Que habitos puede meter un aprendiz en SU plan: los del catalogo compartido, y los PERSONAL
+     * que sean SUYOS. En los dos casos tiene que estar activo.
+     *
+     * <p><b>E-138: antes esto rechazaba TODO habito PERSONAL</b> con
+     * {@code "Solo se eligen habitos del catalogo, no habitos personales"}. La frase describia
+     * bien lo que significaba "elegir" cuando se escribio (sacar algo de un catalogo compartido),
+     * pero desde D-87/V23 esta tabla dejo de ser solo eso: {@code desbloqueos_habito} pasa a ser
+     * <i>"que habitos lleva este aprendiz en su plan"</i> y es el UNICO lugar donde vive el
+     * interruptor ACTIVO/PAUSADO ({@code pausado_en}/{@code pausado_hasta}, V31). Como el movil
+     * asegura la fila con este caso de uso antes de mandar el PATCH (D-99), el rechazo dejaba a
+     * los habitos propios sin interruptor: 400 al primer toque. La tabla `habitos` no tiene donde
+     * guardar esa pausa —su unica bandera es `activo`, que para un habito PERSONAL lo esconde
+     * entero de {@code GET /api/v1/habits} (baja logica, no pausa) y ademas no sabe expresar
+     * "hasta el domingo"—, asi que darle su propio mecanismo habria dejado dos tablas
+     * respondiendo la misma pregunta, que es justo lo que V23 y V31 argumentan evitar.
+     *
+     * <p>Lo que el rechazo SI protegia y aca se conserva explicito: el habito personal de OTRO
+     * aprendiz. Se responde 404 y no 403 a proposito — un habito ajeno no deberia ni existir para
+     * quien pregunta, y un 403 confirmaria que ese id es real.
+     */
+    private static void requirePuedeEntrarEnElPlan(Habito habito, UserId actorId) {
+        if (!habito.esDeSistema() && !habito.esPersonalDe(actorId)) {
+            throw new NoSuchElementException("Habito no encontrado: " + habito.id());
+        }
+        if (!habito.activo()) {
+            throw new IllegalArgumentException(habito.esDeSistema()
+                    ? "Este habito no esta activo en el catalogo"
+                    : "Este habito personal ya no esta activo");
+        }
     }
 
     private Habito requireHabito(HabitoId id) {
