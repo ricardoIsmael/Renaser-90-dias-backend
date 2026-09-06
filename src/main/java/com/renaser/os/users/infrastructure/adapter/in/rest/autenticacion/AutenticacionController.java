@@ -81,7 +81,7 @@ public class AutenticacionController {
     public UserResponse login(@RequestBody @Valid LoginRequest request, HttpServletRequest servletRequest,
                                HttpServletResponse servletResponse) {
         User actor = iniciarSesionUseCase.iniciarSesion(new IniciarSesionCommand(request.email(),
-                request.contrasena()));
+                request.contrasena(), servletRequest.getRemoteAddr()));
         sesionWeb.establecer(actor.id(), servletRequest, servletResponse);
         return UserResponse.from(actor);
     }

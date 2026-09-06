@@ -151,14 +151,23 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/renasia/**").authenticated()
 
                         // ---------------------------------------------------------------------
-                        // EL RESTO sigue abierto POR AHORA, por decision del dueno del proyecto:
-                        // son rutas que la app movil todavia no consume (sobre todo el panel de
-                        // administracion). Queda dicho, para que nadie lo lea como "ya esta
-                        // seguro": mientras `/api/v1/admin/**` siga aca, alguien que conozca el
-                        // UUID de un admin puede seguir actuando como ese admin via `X-Actor-Id`.
-                        // Los guards de servicio (`requireAdminActivo`) verifican el ROL de ese
-                        // UUID, no que quien llama SEA ese usuario. Cerrar esto es la fase que
-                        // falta.
+                        // ADMINISTRACION (2026-09-06). Estaba en permitAll mientras el backend
+                        // corria solo en la maquina del dueno, donde nadie mas llegaba. Al salir
+                        // a internet eso cambia de significado: los guards de servicio
+                        // (requireAdminActivo) verifican el ROL del UUID que llega en
+                        // X-Actor-Id, no que quien llama SEA ese usuario — y los UUID no son
+                        // secretos, catorce DTOs de respuesta los devuelven. Sin esta linea,
+                        // publicar el backend es publicar un panel de administracion sin
+                        // contrasena.
+                        // ---------------------------------------------------------------------
+                        .requestMatchers("/api/v1/admin/**").authenticated()
+
+                        // ---------------------------------------------------------------------
+                        // EL RESTO sigue abierto: son rutas que la app movil todavia no consume.
+                        // Ya NO incluyen `/api/v1/admin/**`, que se cerro arriba al salir a
+                        // internet. Lo que queda son endpoints sueltos que no exponen datos de
+                        // otras personas; el candidato mas visible a cerrarse despues es
+                        // `/api/v1/account-requests/**`, que hoy resuelve el actor por header.
                         // ---------------------------------------------------------------------
                         .anyRequest().permitAll());
         return http.build();

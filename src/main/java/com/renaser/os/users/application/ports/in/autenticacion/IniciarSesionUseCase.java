@@ -16,9 +16,15 @@ public interface IniciarSesionUseCase {
      */
     User iniciarSesion(IniciarSesionCommand command);
 
-    record IniciarSesionCommand(@NotBlank @Email String email, @NotBlank String contrasena) {
+    /**
+     * {@code requestIp} puede ser nula: solo alimenta el limite por IP, que es la segunda
+     * barrera. La que de verdad protege una cuenta es el limite por email, y esa no depende
+     * de la IP — un atacante rota direcciones, pero no puede rotar el correo de su victima.
+     */
+    record IniciarSesionCommand(@NotBlank @Email String email, @NotBlank String contrasena,
+                                 String requestIp) {
         public IniciarSesionCommand {
-            SelfValidating.validateConstructorArgs(IniciarSesionCommand.class, email, contrasena);
+            SelfValidating.validateConstructorArgs(IniciarSesionCommand.class, email, contrasena, requestIp);
         }
 
         /** Nunca se loguea junto al email: es una credencial en claro durante la request. */
