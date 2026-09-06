@@ -1,9 +1,17 @@
-# Entrega continua: construye la imagen de Docker y la sube a Amazon ECR.
+# Entrega continua: construye la imagen de Docker, la sube a Amazon ECR y la despliega.
 #
-# QUE HACE HOY: construir y publicar la imagen, etiquetada con el SHA del commit y con `latest`.
-# QUE NO HACE: desplegarla. El destino (ECS Fargate / App Runner / EC2) TODAVIA NO ESTA DECIDIDO,
-# asi que el ultimo job esta explicitamente pendiente. No se agrega un `aws ecs update-service`
-# contra un cluster que nadie creo: fallaria en cada push y no ayudaria a decidir nada.
+# QUE HACE: construir y publicar la imagen (etiquetada con el SHA del commit y con `latest`), y
+# despues reemplazar el contenedor `backend` de la instancia EC2 por esa imagen, esperando a que
+# `/actuator/health` responda UP antes de dar el despliegue por bueno.
+#
+# COMO DESPLIEGA: por AWS Systems Manager (`ssm send-command` + `AWS-RunShellScript`). No hay ECS,
+# ni CodeDeploy, ni balanceador: es una sola instancia EC2 corriendo dos contenedores de Docker
+# (`redis` y `backend`) en la red `renaser`. Para ese caso SSM es el mecanismo correcto — no hace
+# falta abrir SSH, ni guardar una clave privada como secret, ni tener la instancia en una subred
+# publica alcanzable por el runner. El detalle esta en docs/DESPLIEGUE_Y_CI.md §5.3.
+#
+# SE DESPLIEGA LA ETIQUETA DEL COMMIT, NO `latest`. `latest` no dice que version esta corriendo ni
+# permite saber a cual volver; la del SHA si, y ademas es inmutable en la practica.
 #
 # AUTENTICACION: OIDC contra AWS, sin claves de acceso guardadas como secrets. GitHub le da al job
 # un token de identidad de corta duracion y AWS lo cambia por credenciales temporales para un rol.
@@ -30,6 +38,14 @@ jobs:
     name: Construir y publicar en ECR
     runs-on: ubuntu-latest
     timeout-minutes: 45
+
+    # Lo que el job de despliegue necesita saber: si hubo publicacion, y que imagen exacta se
+    # publico. La referencia viaja completa (registro + repositorio + SHA) para que el job de
+    # abajo no tenga que rearmarla y arriesgarse a que las dos versiones se desincronicen.
+    outputs:
+      configurado: ${{ steps.aws.outputs.configurado }}
+      imagen: ${{ steps.etiquetas.outputs.sha }}
+      registro: ${{ steps.ecr.outputs.registry }}
 
     steps:
       - name: Descargar el codigo
@@ -139,24 +155,244 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   desplegar:
-    name: Desplegar (PENDIENTE — falta decidir el destino)
+    name: Desplegar en la instancia EC2 (por SSM)
     needs: publicar-imagen
+    # Si no se publico nada (faltaban variables), no hay nada nuevo que desplegar.
+    if: needs.publicar-imagen.outputs.configurado == 'true'
     runs-on: ubuntu-latest
+    # Tope duro del job. El presupuesto fino lo lleva el paso de espera; esto es la red de
+    # seguridad para que un runner colgado no quede una hora ocupando un puesto de la cola.
+    timeout-minutes: 25
+
     steps:
-      # Este job existe para que el hueco quede a la vista en la interfaz de Actions, no
-      # enterrado en un comentario. NO se inventa un destino: la decision entre ECS Fargate,
-      # App Runner y EC2 no esta tomada, y cada una necesita cosas distintas
-      # (definicion de tarea + servicio + balanceador, o un servicio de App Runner, o un
-      # user-data que haga docker pull). El analisis de las tres opciones, con lo que habria que
-      # crear en cada caso, esta en docs/DESPLIEGUE_Y_CI.md §5.3.
-      - name: Avisar que el despliegue no esta implementado
+      - name: Ver si hay una instancia destino configurada
+        id: destino
         shell: bash
+        env:
+          INSTANCIA: ${{ vars.EC2_INSTANCE_ID }}
         run: |
-          echo "::notice::La imagen quedo publicada en ECR. El despliegue automatico NO esta implementado."
+          if [ -z "$INSTANCIA" ]; then
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Falta la variable de repositorio EC2_INSTANCE_ID. La imagen quedo publicada en ECR pero NO se desplego."
+            {
+              echo "### Despliegue: salteado"
+              echo ""
+              echo "Falta la variable de repositorio \`EC2_INSTANCE_ID\`."
+              echo "Como crearla: \`docs/DESPLIEGUE_Y_CI.md\` §5.3."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Autenticarse en AWS por OIDC
+        if: steps.destino.outputs.configurado == 'true'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-despliegue-${{ github.run_id }}
+
+      # El script que corre DENTRO de la instancia se escribe a un archivo y se codifica con `jq`
+      # antes de mandarlo. NO se arma inline dentro de `--parameters commands=[...]`.
+      #
+      # POR QUE (esto costo dos fallos reales, ver BITACORA_ERRORES.md E-140): en esa forma inline
+      # la cadena atraviesa el shell del runner, el parser de la CLI y el del documento de SSM. Las
+      # comillas simples se pierden, y un `$` termina expandido antes de llegar a la instancia —
+      # `$$` es el caso peor, porque el shell lo reemplaza por su propio PID y el comando *funciona*
+      # con un valor equivocado. `jq -Rs` toma el archivo entero como una unica cadena JSON, asi que
+      # lo que corre en la instancia es byte por byte lo que dice el heredoc.
+      - name: Armar el script de despliegue
+        if: steps.destino.outputs.configurado == 'true'
+        shell: bash
+        env:
+          IMAGEN: ${{ needs.publicar-imagen.outputs.imagen }}
+          REGISTRO: ${{ needs.publicar-imagen.outputs.registro }}
+          REGION: ${{ vars.AWS_REGION }}
+          # Arrancar la aplicacion lleva unos 40 s (Spring Boot + Flyway contra RDS). El tope se
+          # deja MUY por encima para que un arranque lento por una migracion larga o por una RDS
+          # fria no se confunda con un despliegue roto. Se puede subir con una variable de
+          # repositorio sin tocar este archivo.
+          ESPERA: ${{ vars.DESPLIEGUE_ESPERA_SEGUNDOS || '240' }}
+        run: |
+          set -euo pipefail
+
+          # El cuerpo va en un heredoc con el delimitador ENTRE COMILLAS: asi bash no expande
+          # nada aca y los `$` de adentro son los de la instancia, no los del runner.
+          cat > cuerpo.sh <<'FIN_DEL_CUERPO'
+          set -euo pipefail
+
+          CONTENEDOR=backend
+          RED=renaser
+          PUERTO=8080
+
+          echo "== 1/5 Autenticando contra ECR =="
+          aws ecr get-login-password --region "$REGION" \
+            | docker login --username AWS --password-stdin "$REGISTRO"
+
+          # Se baja ANTES de tocar el contenedor que esta andando: si la imagen no existe o el
+          # registro no responde, se corta aca y produccion no se entera.
+          echo "== 2/5 Bajando $IMAGEN =="
+          docker pull "$IMAGEN"
+
+          ANTERIOR=$(docker inspect --format '{{.Config.Image}}' "$CONTENEDOR" 2>/dev/null || echo ninguna)
+          VOLVER="docker rm -f $CONTENEDOR; docker run -d --name $CONTENEDOR --network $RED -p $PUERTO:$PUERTO --restart unless-stopped -e SPRING_PROFILES_ACTIVE=prod -e AWS_REGION=$REGION $ANTERIOR"
+          echo "== Imagen que estaba corriendo: $ANTERIOR =="
+
+          # Aca empiezan los segundos de caida. Con una sola instancia y sin balanceador no hay
+          # forma de evitarlos: no hay a donde mandar el trafico mientras se cambia el contenedor.
+          echo "== 3/5 Reemplazando el contenedor =="
+          docker rm -f "$CONTENEDOR" >/dev/null 2>&1 || true
+          docker run -d \
+            --name "$CONTENEDOR" \
+            --network "$RED" \
+            -p "$PUERTO:$PUERTO" \
+            --restart unless-stopped \
+            -e SPRING_PROFILES_ACTIVE=prod \
+            -e AWS_REGION="$REGION" \
+            "$IMAGEN"
+
+          echo "== 4/5 Esperando a que /actuator/health diga UP (tope ${ESPERA}s) =="
+          DESDE=$(date +%s)
+          while true; do
+            CUERPO=$(curl -fsS --max-time 3 "http://localhost:$PUERTO/actuator/health" 2>/dev/null || true)
+            case "$CUERPO" in
+              *'"status":"UP"'*)
+                echo "== Sano tras $(( $(date +%s) - DESDE ))s: $CUERPO =="
+                break
+                ;;
+            esac
+            # Si el contenedor ya se murio, no tiene sentido seguir esperando el tope entero:
+            # se corta al toque y se dejan los ultimos registros a la vista.
+            if [ -z "$(docker ps -q --filter "name=^/${CONTENEDOR}$" --filter status=running)" ]; then
+              echo "ERROR: el contenedor $CONTENEDOR dejo de correr durante el arranque."
+              docker logs --tail 120 "$CONTENEDOR" 2>&1 || true
+              echo "PARA VOLVER A LA VERSION ANTERIOR: $VOLVER"
+              exit 1
+            fi
+            if [ $(( $(date +%s) - DESDE )) -ge "$ESPERA" ]; then
+              echo "ERROR: la aplicacion no respondio UP en ${ESPERA}s."
+              docker logs --tail 120 "$CONTENEDOR" 2>&1 || true
+              echo "PARA VOLVER A LA VERSION ANTERIOR: $VOLVER"
+              exit 1
+            fi
+            sleep 3
+          done
+
+          # NO se vuelve solo a la version anterior. Es deliberado: la aplicacion corre Flyway al
+          # arrancar y las migraciones no se deshacen, asi que si el arranque fallo DESPUES de
+          # migrar, devolver el binario viejo lo deja contra un esquema mas nuevo — peor que el
+          # problema original. Se falla ruidosamente y se deja el comando exacto a mano arriba.
+
+          echo "== 5/5 Limpieza y estado final =="
+          # Borra solo imagenes colgadas (sin etiqueta). La anterior queda con su etiqueta de SHA,
+          # que es justo la que hace falta si hay que volver atras.
+          docker image prune -f >/dev/null 2>&1 || true
+          docker ps --format '{{.Names}}  {{.Image}}  {{.Status}}'
+          LIBRE_KB=$(df -Pk / | awk 'NR==2 {print $4}')
+          echo "Disco libre en /: $(( LIBRE_KB / 1024 )) MB"
+          # El disco raiz son 8 GB y cada version de la imagen ocupa ~440 MB. Las etiquetadas no
+          # se borran solas (a proposito), asi que se avisa antes de que el disco sea el problema.
+          if [ "$LIBRE_KB" -lt 3145728 ]; then
+            echo "AVISO: quedan menos de 3 GB libres. Borrar imagenes viejas de renaser-backend."
+          fi
+          FIN_DEL_CUERPO
+
+          # Los valores se inyectan como asignaciones al principio del script, no interpolados
+          # adentro del heredoc: asi el cuerpo queda literal y auditable de un vistazo.
           {
-            echo "### Despliegue: pendiente de decision"
+            printf "IMAGEN='%s'\n"   "$IMAGEN"
+            printf "REGISTRO='%s'\n" "$REGISTRO"
+            printf "REGION='%s'\n"   "$REGION"
+            printf "ESPERA='%s'\n"   "$ESPERA"
+            cat cuerpo.sh
+          } > desplegar.sh
+
+          jq -Rs '{commands: [.]}' desplegar.sh > parametros.json
+          echo "Script de ${ESPERA}s de tope armado ($(wc -l < desplegar.sh) lineas)."
+
+      - name: Ejecutarlo en la instancia y esperar el resultado
+        if: steps.destino.outputs.configurado == 'true'
+        shell: bash
+        env:
+          INSTANCIA: ${{ vars.EC2_INSTANCE_ID }}
+          REGION: ${{ vars.AWS_REGION }}
+          ESPERA: ${{ vars.DESPLIEGUE_ESPERA_SEGUNDOS || '240' }}
+        run: |
+          set -euo pipefail
+
+          CID=$(aws ssm send-command \
+            --region "$REGION" \
+            --instance-ids "$INSTANCIA" \
+            --document-name AWS-RunShellScript \
+            --comment "CD ${GITHUB_SHA:0:7}" \
+            --parameters file://parametros.json \
+            --query "Command.CommandId" --output text)
+          echo "CommandId=$CID"
+          echo "CID=$CID" >> "$GITHUB_ENV"
+
+          # `ssm send-command` es asincrono: devuelve un id y se va. El codigo de salida del script
+          # remoto NO llega por ahi — llega en el Status de la invocacion. Sin este bucle, el
+          # workflow quedaria verde aunque la aplicacion no hubiera arrancado nunca.
+          #
+          # `aws ssm wait command-executed` existe, pero su tope es de 100 s: menos que el arranque
+          # de la aplicacion. Por eso el bucle es propio.
+          LIMITE=$(( ESPERA + 600 ))
+          INICIO=$SECONDS
+          ESTADO=Pending
+          while true; do
+            ESTADO=$(aws ssm get-command-invocation --region "$REGION" \
+                       --command-id "$CID" --instance-id "$INSTANCIA" \
+                       --query "Status" --output text 2>/dev/null || echo Pending)
+            case "$ESTADO" in
+              Success|Failed|Cancelled|TimedOut) break ;;
+            esac
+            if [ $(( SECONDS - INICIO )) -ge "$LIMITE" ]; then
+              ESTADO=SinRespuesta
+              break
+            fi
+            sleep 5
+          done
+
+          echo "----- salida de la instancia -----"
+          aws ssm get-command-invocation --region "$REGION" \
+            --command-id "$CID" --instance-id "$INSTANCIA" \
+            --query "StandardOutputContent" --output text 2>/dev/null || true
+          ERR=$(aws ssm get-command-invocation --region "$REGION" \
+                  --command-id "$CID" --instance-id "$INSTANCIA" \
+                  --query "StandardErrorContent" --output text 2>/dev/null || true)
+          # Ojo con leer esto como "fallo": `docker login` escribe siempre en stderr un aviso de
+          # que guarda la credencial sin cifrar en /root/.docker/config.json. Es benigno y
+          # esperable. Quien decide si el despliegue salio bien es el Status de la invocacion,
+          # nunca el hecho de que stderr traiga texto.
+          if [ -n "$ERR" ] && [ "$ERR" != "None" ]; then
+            echo "----- stderr de la instancia (puede traer avisos benignos) -----"
+            echo "$ERR"
+          fi
+          echo "----------------------------------"
+
+          echo "ESTADO_SSM=$ESTADO" >> "$GITHUB_ENV"
+          if [ "$ESTADO" != "Success" ]; then
+            echo "::error::El despliegue fallo (estado SSM: $ESTADO). La instancia NO quedo sirviendo esta version."
+            exit 1
+          fi
+          echo "Despliegue verificado: /actuator/health respondio UP."
+
+      - name: Resumen
+        if: always() && steps.destino.outputs.configurado == 'true'
+        shell: bash
+        env:
+          IMAGEN: ${{ needs.publicar-imagen.outputs.imagen }}
+          INSTANCIA: ${{ vars.EC2_INSTANCE_ID }}
+        run: |
+          {
+            echo "### Despliegue: ${ESTADO_SSM:-sin resultado}"
             echo ""
-            echo "La imagen esta en ECR y lista para usarse, pero el destino de despliegue"
-            echo "(ECS Fargate / App Runner / EC2) todavia no fue elegido, asi que este paso"
-            echo "no hace nada. Ver \`docs/DESPLIEGUE_Y_CI.md\` §5.3."
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Imagen | \`$IMAGEN\` |"
+            echo "| Instancia | \`$INSTANCIA\` |"
+            echo "| Comando SSM | \`${CID:-no llego a enviarse}\` |"
+            echo ""
+            echo "Durante el reemplazo del contenedor la API deja de responder unos segundos."
+            echo "Ver \`docs/DESPLIEGUE_Y_CI.md\` §5.3."
           } >> "$GITHUB_STEP_SUMMARY"

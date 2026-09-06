@@ -23,6 +23,32 @@ hermano de [`CLAUDE.md`](../CLAUDE.MD) (por qué cada decisión de arquitectura)
 > | Los tres workflows | **NO verificados.** Un workflow de GitHub Actions no se puede ejecutar sin empujar el repositorio. Sí se probaron por separado, a mano, el script que cuenta `Tests run:` y la guarda de placeholders de Sonar |
 > | Publicación en ECR y OIDC | **NO verificados.** No existe el rol, ni el repositorio de ECR |
 
+> **Actualización 2026-09-06 — la infraestructura de AWS ya existe, y el despliegue también.**
+> El párrafo de arriba quedó viejo el mismo día en varios puntos, y se corrige acá en vez de
+> borrarlo, para que se vea qué cambió:
+>
+> - **Sí existen** el proveedor OIDC, el rol `renaser-github-actions`, el repositorio de ECR
+>   `renaser-backend`, los parámetros de `/renaser/prod/` y una instancia EC2 sirviendo el backend
+>   detrás de CloudFront. Lo que **no** existe todavía es SonarCloud.
+> - **El destino de despliegue ya está decidido: la instancia EC2, por SSM** (§5.3, reescrita).
+>   El job `desplegar` del `cd.yml` dejó de ser un aviso y ahora despliega de verdad.
+> - **Los workflows siguen sin ejecutarse nunca.** No por falta de infraestructura, sino porque
+>   **el repositorio de GitHub no tiene ni una sola variable de Actions cargada**
+>   (`gh api .../actions/variables` devuelve `total_count: 0`). Sin `AWS_ROLE_ARN`, `AWS_REGION`,
+>   `ECR_REPOSITORY` y `EC2_INSTANCE_ID`, el `cd.yml` se saltea entero y termina en verde en unos
+>   15 segundos — que es exactamente lo que vienen haciendo las últimas corridas. **Las imágenes
+>   que hay en ECR se subieron a mano, no las publicó el workflow.** Crear esas cuatro variables
+>   (§5.1 e) es el único paso que falta para que la cadena completa funcione sola.
+> - **Qué se verificó del despliegue, el 2026-09-06:** la secuencia entera se corrió a mano con la
+>   CLI, paso por paso, extrayendo los `run:` del propio `cd.yml` para no probar una copia. Bajó la
+>   imagen, reemplazó el contenedor, y `/actuator/health` respondió `UP` **a los 43 s**. También se
+>   probaron los dos caminos de fallo (la aplicación no levanta, y el contenedor se muere durante
+>   el arranque) y el rol de IAM con `iam simulate-principal-policy`. **Lo que sigue sin
+>   verificarse es el workflow en sí y el intercambio OIDC**, por el mismo motivo de siempre: no se
+>   puede correr un workflow sin empujar el repositorio, y el rol solo se puede asumir desde
+>   GitHub. El detalle está en `BITACORA_ERRORES.md` **E-139** (el workflow verde que no hacía
+>   nada) y **E-140** (las tres trampas de `ssm send-command`).
+
 ---
 
 ## 1. Build local
@@ -190,10 +216,15 @@ Sonar no ejecuta pruebas: solo lee ese XML.
 
 ## 5. Entrega continua (`.github/workflows/cd.yml`)
 
-Corre en push a `master`. **Construye y publica la imagen; no despliega.**
+Corre en push a `master`. **Construye la imagen, la publica en ECR y la despliega en la instancia
+EC2**, esperando a que la aplicación responda `UP` antes de dar el despliegue por bueno.
+
+> **Corregido 2026-09-06.** Acá decía *"Construye y publica la imagen; no despliega"*. Era cierto
+> mientras el destino no estaba decidido. Ya lo está (§5.3).
 
 Como el resto, se saltea con un aviso mientras falten las variables de repositorio
-`AWS_ROLE_ARN`, `AWS_REGION` y `ECR_REPOSITORY`.
+`AWS_ROLE_ARN`, `AWS_REGION` y `ECR_REPOSITORY`; el job de despliegue se saltea, además, si falta
+`EC2_INSTANCE_ID`.
 
 ### 5.1 Autenticación: OIDC, no claves de acceso
 
@@ -273,17 +304,70 @@ provider → OpenID Connect:
 `ecr:GetAuthorizationToken` va sobre `*` porque es una acción de cuenta, no de recurso: no acepta
 un ARN de repositorio.
 
+**c.bis) La segunda política del rol, `desplegar-por-ssm`** — creada el 2026-09-06, es lo que le
+permite al workflow desplegar. Está aplicada en la cuenta real:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EjecutarElDespliegueSoloEnLaInstanciaDelBackend",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": [
+        "arn:aws:ec2:us-east-1:302277511407:instance/i-0ea00f555c5fe8028",
+        "arn:aws:ssm:us-east-1::document/AWS-RunShellScript"
+      ]
+    },
+    {
+      "Sid": "LeerElResultadoDelComando",
+      "Effect": "Allow",
+      "Action": "ssm:GetCommandInvocation",
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+Tres cosas que no son obvias y conviene no "arreglar" después:
+
+- **`ssm:SendCommand` necesita los DOS recursos.** AWS evalúa la llamada contra la instancia *y*
+  contra el documento. Con solo el ARN de la instancia, la llamada se rechaza igual. Y el ARN de
+  un documento propiedad de AWS **no lleva número de cuenta**: `arn:aws:ssm:us-east-1::document/...`,
+  con los dos puntos seguidos. Un ARN con la cuenta adentro apunta a un documento propio que no
+  existe, y el permiso no aplica.
+- **`ssm:GetCommandInvocation` tiene que ir sobre `*`.** No es pereza: esa acción **no soporta
+  permisos a nivel de recurso**, así que un ARN concreto la deja sin efecto. Es el único comodín de
+  la política, y lo que habilita es leer la salida de comandos de SSM — no ejecutarlos.
+- **Lo que deliberadamente NO se dio:** `ssm:StartSession` (una sesión interactiva en la instancia
+  es otra cosa que un despliegue), `ssm:GetParameter`/`PutParameter` (el workflow no necesita ver
+  ni tocar las credenciales de producción; las lee la instancia con su propio rol, §6.3), nada de
+  `ec2:*`, nada de `iam:*` y nada de S3. Verificado con `iam simulate-principal-policy`: las cuatro
+  acciones que hacen falta dan `allowed`, y `SendCommand` contra otra instancia, contra
+  `AWS-RunPowerShellScript`, `StartSession`, los parámetros, `ec2:TerminateInstances`,
+  `iam:PutRolePolicy` y `s3:GetObject` dan todas `implicitDeny`.
+
 **d) El repositorio de ECR** (`aws ecr create-repository --repository-name renaser-backend`).
 
 **e) Las variables en GitHub** — Settings → Secrets and variables → Actions → pestaña
 **Variables** (no Secrets: ninguna de estas es una credencial, ese es justamente el punto de OIDC):
 
-| Variable | Ejemplo | Obligatoria |
+| Variable | Valor real de este proyecto | Obligatoria |
 |---|---|---|
-| `AWS_ROLE_ARN` | `arn:aws:iam::123456789012:role/gha-renaser-backend` | Sí |
+| `AWS_ROLE_ARN` | `arn:aws:iam::302277511407:role/renaser-github-actions` | Sí — sin ella no se publica ni se despliega |
 | `AWS_REGION` | `us-east-1` | Sí |
 | `ECR_REPOSITORY` | `renaser-backend` | Sí |
+| `EC2_INSTANCE_ID` | `i-0ea00f555c5fe8028` | Sí para desplegar. Sin ella se publica la imagen y el job de despliegue se saltea con un aviso |
+| `DESPLIEGUE_ESPERA_SEGUNDOS` | — | No (default `240`) |
 | `IMAGEN_PLATAFORMAS` | `linux/arm64` | No (default `linux/amd64`) |
+
+> **Ninguna de estas cinco está creada todavía** (verificado el 2026-09-06:
+> `gh api repos/ricardoIsmael/Renaser-90-dias-backend/actions/variables` → `total_count: 0`).
+> Mientras sigan sin existir, el `cd.yml` corre, se saltea entero y **termina en verde sin haber
+> hecho nada** — que es justo lo que muestran sus últimas corridas, de 14 a 20 segundos cada una.
+> Crearlas es un paso manual de la consola de GitHub (o `gh variable set`), y es lo único que
+> separa a este repositorio de tener entrega continua real.
 
 ### 5.2 Etiquetas de la imagen
 
@@ -291,34 +375,110 @@ Cada publicación deja dos: `:<sha-del-commit>` y `:latest`. La del SHA es la qu
 qué está corriendo y para volver a una versión anterior sin reconstruir nada; `latest` es solo
 "la última", y nunca alcanza para responder qué versión está en producción.
 
-### 5.3 El despliegue está pendiente y por qué no se inventó
+**Lo que se despliega es la del SHA** (§5.3). `latest` queda como comodidad para un `docker pull`
+a mano, no como la referencia de producción: un contenedor corriendo `:latest` no permite saber de
+qué commit salió. Es exactamente lo que pasaba hasta el 2026-09-06, cuando el contenedor de
+producción corría `:latest` y para saber qué había adentro había que comparar digests contra ECR.
 
-**El destino no está decidido.** El workflow tiene un job final que solo imprime un aviso. No se
-agregó un `aws ecs update-service` contra un cluster que nadie creó: fallaría en cada push a master
-y no ayudaría a tomar la decisión.
+### 5.3 El despliegue: una sola EC2, por SSM
 
-Las tres opciones y lo que cada una obliga a construir:
+> **Reescrita 2026-09-06.** Esta sección se llamaba *"El despliegue está pendiente y por qué no se
+> inventó"* y explicaba que el destino no estaba decidido, comparando ECS Fargate / App Runner /
+> EC2. **Ya está decidido y construido: EC2 + Docker**, así que la comparación se resume abajo en
+> vez de presentarse como una elección abierta. El razonamiento de por qué no se inventó un
+> destino sigue siendo correcto y por eso el job estuvo vacío hasta hoy.
+
+**La infraestructura que existe de verdad** (verificada contra la cuenta `302277511407`,
+`us-east-1`, el 2026-09-06):
+
+| Pieza | Valor |
+|---|---|
+| Instancia | `i-0ea00f555c5fe8028` — t3.small, Amazon Linux 2023, IP fija `52.0.210.237` |
+| Contenedores | `redis` (`redis:7-alpine`, sin puertos publicados) y `backend` (la imagen de ECR, `-p 8080:8080`), los dos en la red de Docker `renaser` |
+| Rol de la instancia | `renaser-backend-ec2` — lee `/renaser/prod/*`, firma URLs de su bucket, baja de ECR, y trae `AmazonSSMManagedInstanceCore` |
+| Delante | CloudFront `E3O4M4W7JW3TJQ` (`djbooeq09skac.cloudfront.net`), hablando **HTTP** al origen |
+| Lo que **no** hay | ECS, CodeDeploy, balanceador, autoscaling |
+
+**Por qué SSM `send-command` y no otra cosa.** Con una sola instancia y sin orquestador, las
+alternativas eran SSH desde el runner o instalar un agente de despliegue. SSM gana por tres
+motivos concretos: no hay que abrir el puerto 22 a los rangos de GitHub, no hay que guardar una
+clave privada como secret (que es exactamente la clase de credencial permanente que §5.1 evita al
+usar OIDC), y el permiso queda acotado por IAM a *esa* instancia y *ese* documento (§5.1 c.bis).
+Además es el mismo mecanismo que ya se venía usando a mano — por ejemplo
+`scripts/crear-primer-admin.sh`.
+
+**Qué hace el job `desplegar`, en orden:**
+
+1. Se autentica por OIDC (el mismo rol que publica en ECR, con la política nueva).
+2. Arma el script que va a correr en la instancia y lo manda con
+   `ssm send-command --document-name AWS-RunShellScript`.
+3. Dentro de la instancia: `docker login` contra ECR → `docker pull` de **la etiqueta del commit**
+   → `docker rm -f backend` → `docker run` con la red `renaser`, `-p 8080:8080`,
+   `--restart unless-stopped`, `SPRING_PROFILES_ACTIVE=prod` y `AWS_REGION=us-east-1`.
+4. Consulta `http://localhost:8080/actuator/health` cada 3 s hasta que diga `"status":"UP"`, con un
+   tope de 240 s (`DESPLIEGUE_ESPERA_SEGUNDOS`). **Medido: la aplicación tarda 43 s en responder
+   `UP`**, así que el tope tiene más de 5× de margen para una migración larga o una RDS fría.
+5. El runner espera el `Status` de la invocación y **falla el workflow si no es `Success`**.
+
+**Se despliega la etiqueta del SHA, nunca `latest`.** `latest` no permite saber qué versión está
+corriendo ni a cuál volver. Con la etiqueta del commit, `docker ps` responde las dos preguntas.
+
+#### Las tres cosas que hay que tener presentes
+
+**1. Hay unos segundos de caída en cada despliegue, y es inevitable hoy.** Entre el `docker rm -f`
+y el momento en que la aplicación responde `UP` pasan ~45 s en los que la API no contesta: unos
+pocos segundos de conexión rechazada, y el resto con el proceso arrancando. CloudFront no tiene a
+dónde mandar el tráfico mientras tanto, así que el aprendiz ve errores. **No se disimula porque no
+se puede arreglar sin cambiar la topología:** hacerlo sin caída pide dos instancias detrás de un
+balanceador (o dos contenedores en puertos distintos y un proxy que cambie de destino), y eso es
+una decisión de infraestructura y de costo que nadie tomó. Mientras siga habiendo una sola
+instancia, conviene desplegar en horario de poco uso.
+
+**2. No se vuelve solo a la versión anterior, y es a propósito.** Si la aplicación no levanta, el
+workflow falla y deja escrito en la salida el comando exacto para restaurar la imagen anterior —
+pero no lo ejecuta. El motivo es Flyway: las migraciones corren al arrancar y no se deshacen, así
+que si el arranque falló *después* de migrar, devolver el binario viejo lo deja contra un esquema
+más nuevo, que es peor que el problema original. Automatizar el retroceso exige antes decidir qué
+hacer con el esquema, y eso no está decidido.
+
+**3. El disco son 8 GB y cada versión de la imagen ocupa ~440 MB.** El script borra las imágenes
+colgadas (`docker image prune -f`), pero **no** las etiquetadas — justamente porque la anterior es
+la que sirve para volver atrás. Con ~5,2 GB libres eso da lugar para unas diez versiones antes de
+que el disco sea el problema, así que el script avisa en la salida cuando quedan menos de 3 GB.
+Limpiar a mano:
+
+```bash
+aws ssm send-command --profile renaser --region us-east-1 \
+  --instance-ids i-0ea00f555c5fe8028 --document-name AWS-RunShellScript \
+  --parameters 'commands=["docker images renaser-backend --format {{.ID}} | tail -n +3 | xargs -r docker rmi"]'
+```
+
+#### El health check depende de que `/actuator/health` siga siendo público
+
+Sigue vigente lo que ya decía esta sección, y ahora con más peso, porque el despliegue **depende**
+de esa URL: `/actuator/health` responde sin autenticación **por omisión**, no por decisión.
+`SecurityConfig` todavía no tiene `anyRequest().authenticated()` —está anotado como pendiente en el
+propio archivo— y lo que no coincide con ningún `requestMatchers` queda permitido. El día que se
+cierre esa regla, el health check empieza a recibir 401, **y todos los despliegues van a fallar
+aunque la aplicación esté perfecta**. Al agregar `anyRequest().authenticated()` hay que dejar
+`/actuator/health` explícitamente permitido en el mismo cambio.
+
+#### Por qué EC2 y no ECS Fargate o App Runner
+
+La comparación que estaba acá sigue siendo válida como registro de la decisión:
 
 | Opción | Qué hay que crear | A favor | En contra |
 |---|---|---|---|
-| **ECS Fargate** | Cluster, task definition, service, ALB, target group, security groups, rol de tarea | Control fino, escalado horizontal, es lo que espera §5.2.1 de `CLAUDE.md` (varias instancias) | La más infraestructura para levantar |
+| **EC2 + Docker** *(elegida)* | Instancia, Docker, Elastic IP | Lo más barato y lo más simple de entender | Despliegue y ciclo de vida a mano; una sola instancia = caída en cada despliegue |
+| **ECS Fargate** | Cluster, task definition, service, ALB, target group, security groups, rol de tarea | Control fino, escalado horizontal, despliegue sin caída, es lo que espera §5.2.1 de `CLAUDE.md` (varias instancias) | La más infraestructura para levantar |
 | **App Runner** | Un servicio apuntando a la imagen de ECR | Lo más rápido de poner en pie; HTTPS y escalado incluidos | Menos control de red; el escalado a cero castiga el arranque de una JVM |
-| **EC2 + Docker** | Instancia, `user-data` con `docker pull`, Elastic IP o ALB | Lo más barato y lo más simple de entender | Los despliegues y el ciclo de vida quedan a mano |
 
-Lo que ya está resuelto y no cambia con la elección: la imagen es multi-arquitectura, corre como
-usuario sin privilegios, y toma su configuración de Parameter Store (§6). El rol **de ejecución**
-(el que usa la aplicación, distinto del rol de GitHub Actions) necesita los permisos de §6.3 y los
-de S3 que documenta `AlmacenamientoS3Config`.
-
-**Un detalle a mirar al cablear el health check, cualquiera sea el destino:** las tres opciones
-necesitan una URL que responda 200 para saber si la instancia está sana, y la candidata natural es
-`/actuator/health` (`spring-boot-starter-actuator` ya está en el `pom.xml`). Hoy responde sin
-autenticación **por omisión**, no por decisión: `SecurityConfig` todavía no tiene
-`anyRequest().authenticated()` —está anotado como pendiente en el propio archivo— y lo que no
-coincide con ningún `requestMatchers` queda permitido. El día que se cierre esa regla, el health
-check empieza a recibir 401 y la plataforma va a dar de baja instancias sanas. Al agregar
-`anyRequest().authenticated()` hay que dejar `/actuator/health` explícitamente permitido en el
-mismo cambio.
+**El día que haya más de una instancia**, este job deja de alcanzar: hay que desplegar de a una y
+sacarla del balanceador antes. Y ahí entran también las dos piezas que `CLAUDE.md` §5.2.1 ya
+anticipa (Redis Pub/Sub para el chat y para invalidar la caché de rol entre instancias). Migrar a
+ECS es el camino natural, y la imagen ya está lista para eso: es multi-arquitectura, corre como
+usuario sin privilegios, y toma su configuración de Parameter Store (§6) en vez de variables
+cableadas.
 
 ---
 
@@ -540,12 +700,15 @@ mappers vacíos **sin fallar el build** y el síntoma aparece en ejecución como
 
 ## 9. Resumen de lo que falta decidir o crear
 
+> **Actualizada 2026-09-06.** Los puntos 2, 3 y 4 estaban abiertos y ya no lo están; se dejan
+> tachados a la vista, con lo que quedó de cada uno, en vez de borrarlos.
+
 | # | Qué | Quién |
 |---|---|---|
 | 1 | Organización y proyecto en SonarCloud + secret `SONAR_TOKEN`, y reemplazar los dos `TODO-` del `pom.xml` | Dueño |
-| 2 | Proveedor OIDC, rol de IAM, repositorio de ECR, y las tres variables de repositorio en GitHub | Dueño |
-| 3 | **Destino de despliegue**: ECS Fargate / App Runner / EC2 (§5.3) | Decisión de producto e infraestructura |
-| 4 | Dónde se hostea el Postgres propio (RDS / Cloud SQL / VPS) — abierto desde `CLAUDE.md` §11 | Ídem |
+| 2 | ~~Proveedor OIDC, rol de IAM, repositorio de ECR~~ **creados**. Lo que falta son **las cuatro variables de repositorio en GitHub** (§5.1 e): hoy no hay ninguna y por eso el `cd.yml` se saltea entero en cada push | **Dueño — es el único paso que falta para que la entrega continua funcione sola** |
+| 3 | ~~**Destino de despliegue**: ECS Fargate / App Runner / EC2~~ **decidido: EC2 + Docker, desplegado por SSM** (§5.3). Queda abierto, para cuando el uso lo pida, pasar a dos instancias detrás de un balanceador para eliminar la caída de ~45 s por despliegue | Decisión de producto e infraestructura |
+| 4 | ~~Dónde se hostea el Postgres propio~~ **resuelto: RDS** (`renaser-prod...rds.amazonaws.com`) | Ídem |
 | 5 | Dominio real del frontend, para `RESET_PASSWORD_URL` / `ACTIVATE_ACCOUNT_URL` / `EMAIL_REMITENTE` | Dueño |
 | 6 | Los ~42 parámetros de `/renaser/prod/` (§6.4) | Dueño, al desplegar |
 | 7 | Logs estructurados en JSON para `prod` (`CLAUDE.md` §5.4.9). `application-prod.yaml` se creó solo con lo de Parameter Store; esa regla sigue sin implementarse | Pendiente, fuera del alcance de este cambio |

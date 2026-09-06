@@ -3796,3 +3796,725 @@ segunda es la que va con la regla 02: **el tiempo entra por el puerto `Clock`, n
 **La leccion general:** un test que duerme es un test que apuesta. Si la apuesta es a 400 ms,
 la va a perder el dia que la maquina este ocupada — y va a perderla en CI, no en la maquina de
 quien lo escribio.
+
+---
+
+## E-134 — La indexacion de la base de conocimiento se frena a los ~1.000 chunks: la API key de Google esta en el tramo gratuito, que da 1.000 embeddings por dia (2026-09-06) — **ABIERTO, bloqueado por cuota externa**
+
+**Sintoma exacto**, en los logs del contenedor de produccion:
+
+```
+com.google.genai.errors.ClientException: 429 . You exceeded your current quota, please check
+your plan and billing details. For more information on this error, head to:
+https://ai.google.dev/gemini-api/docs/rate-limits.
+{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{
+  "quotaMetric":"generativelanguage.googleapis.com/embed_content_free_tier_requests",
+  "quotaId":"EmbedContentRequestsPerDayPerProjectPerModel-FreeTier",
+  "quotaDimensions":{"location":"global","model":"gemini-embedding-1.0"},
+  "quotaValue":"1000"}]}
+{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"38s"}
+```
+
+Del lado del que indexa el sintoma es otro y **enganya**: el script no ve un 429, ve un **HTTP
+500**, y ademas ve que *algunos* chunks entran. Parece un backend inestable, no una cuota.
+
+**Causa real:** `quotaValue: 1000`. La clave de Google esta en el **tramo gratuito**, que
+permite **1.000 `embedContent` por dia, por proyecto y por modelo**. Cada chunk que se indexa
+es exactamente una llamada a `embedContent`. Las 124 transcripciones de los cursos, troceadas a
+450 palabras con 60 de solape, son **2.526 chunks**: dos veces y media la cuota diaria. El
+trabajo no entra en un dia por construccion, y no hay nada que arreglar en el codigo.
+
+**Por que se veia como "el backend se reinicio":** la cuota no degrada, corta en seco. Los
+chunks entraban a **0,4–1,6 s cada uno** (62 chunks de una leccion en 101 s) hasta la llamada
+1.000, y a partir de ahi cada uno tarda **mas de 80 s** — Spring AI reintenta con la espera de
+38 s que pide Google, y de vez en cuando alguno pasa. Una leccion que quedo en `ok=39 err=4` no
+perdio 4 pedazos por un reinicio: perdio los 4 que cayeron del otro lado del corte.
+
+**El agravante que multiplica el consumo:** el backend deja escapar la `ClientException` de
+Google, asi que el endpoint responde **500**, no 429. Un cliente razonable interpreta 500 como
+"error transitorio del servidor" y **reintenta** — y cada reintento es otra llamada a
+`embedContent` contra la misma cuota agotada, con los reintentos internos de Spring AI encima.
+La cuota se gasta mas rapido justamente cuando ya no queda.
+
+**Solucion aplicada:** ninguna en el codigo — es una cuota de un tercero. Se detuvo la
+indexacion al detectarla, en vez de seguir generando huecos.
+
+**Como evitar que vuelva a pasar:**
+
+1. **Antes de un trabajo masivo de embeddings, contar los chunks y compararlos con la cuota
+   del dia.** 2.526 contra 1.000 se sabia antes de empezar.
+2. **Traducir el 429 de Google a un 429 nuestro**, no a un 500. Es la diferencia entre un
+   cliente que espera y uno que reintenta y quema lo que queda. Es un `@ExceptionHandler` en
+   `GlobalExceptionHandler` sobre `ClientException` mirando el codigo.
+3. **No reponer una leccion a medias borrandola entera.** Cada chunk guarda
+   `metadatos->>'parte' = 'N/M'`, asi que se sabe *exactamente* que pedazos faltan:
+   `SELECT leccion_id, string_agg(split_part(metadatos->>'parte','/',1), ',') FROM
+   renaser.base_conocimiento GROUP BY leccion_id`. Reponer 4 chunks en vez de rehacer 43
+   ahorra 39 llamadas de una cuota que es el recurso escaso.
+4. Las cuotas **RPD de Google se reinician a medianoche del Pacifico**, no a medianoche UTC ni
+   local. Planificar los lotes con esa hora.
+
+**La leccion general:** cuando un trabajo masivo depende de una API de terceros, el limite que
+importa no es la latencia ni el tamanio del lote — es la cuota diaria, y conviene mirarla
+**antes** de arrancar. Y un 429 ajeno que se convierte en un 500 propio hace que todo el
+sistema empuje justo en la direccion equivocada.
+
+---
+
+## E-135 — El compositor del Muro ofrecia tres categorias que no existen en el catalogo, y la elegida no se mandaba nunca (2026-09-06) — **RESUELTO en el movil; el catalogo de produccion sigue vacio**
+
+**Sintoma exacto**, palabras del duenio del proyecto:
+
+> "en el muro que esten esas categorias, no las que tenemos"
+
+El compositor del Muro (`ComunidadScreen.tsx`, modal "NUEVA PUBLICACION") mostraba tres
+pastillas:
+
+```
+🔥 VICTORIA SOMATICA    ⚡ ALTO RENDIMIENTO    🧠 REFLEXION
+```
+
+Ninguna de las tres existe en `renaser.categorias_muro`. El catalogo real que administra
+ADMIN/ALCHEMIST son otras cinco: `REVELACIONES`, `AGRADECIMIENTO`, `AYUDA`, `PRESENTACION`
+(de sistema) y `LOGROS`.
+
+**Causa real — son dos defectos apilados, y el segundo escondia al primero:**
+
+1. **Las pastillas eran literales compilados en el bundle.** Un array escrito a mano en
+   `ComunidadScreen.tsx` y la union de tipos `PostTag` en `src/types/schema.types.ts`
+   (`'🔥 VICTORIA SOMATICA' | '⚡ ALTO RENDIMIENTO' | '🧠 REFLEXION' | '👑 OFICIAL'`). El
+   catalogo del servidor no se consultaba en ningun lado.
+
+2. **La categoria elegida no llegaba nunca al backend.** `handlePublishPost` llamaba a
+   `publicarOptimista(texto, fotos, nombreUsuario)` y ese hook llamaba a
+   `wallApi.publicarEnMuro(texto, media)` — **sin el tercer argumento**, que el propio
+   `wallApi` ya aceptaba. El estado `newPostTag` se escribia al tocar una pastilla y no lo
+   leia nadie mas que el resaltado visual. Todas las publicaciones del Muro salieron con
+   `category: null`.
+
+**El punto que importa para la proxima vez:** el defecto 2 hizo invisible al defecto 1. Si la
+etiqueta se hubiera mandado de verdad, el backend habria respondido **400 `"Categoria
+desconocida: 🔥 VICTORIA SOMATICA"`** (`PublicacionMuroService.publicar`, que valida contra
+`clavesExistentes()`) y el problema se habria visto el primer dia. Un campo muerto no falla:
+se ve bien y no hace nada.
+
+**Habia una pista escrita, y decia lo contrario de lo que pasaba.** `wallApi.ts` ya tenia
+`obtenerCategoriasMuro()` y su esquema Zod desde antes, con este comentario encima:
+
+> *"Sin UI que la use hoy: la pestania 'muro' no tiene selector de categorias (no hay pills en
+> el disenio actual...)"*
+
+Era falso: el selector existia desde siempre, con las categorias inventadas. La funcion
+correcta estaba escrita y sin enchufar, a diez lineas de la UI que la necesitaba.
+
+**Solucion aplicada** (solo movil, `Renaser-90-dias-frontend-`):
+
+- `src/features/community/hooks/useCategoriasMuro.ts` (nuevo) — pide
+  `GET /api/v1/wall/categories`, mismo patron que `useMiCelula`/`useWallFeed`. No reordena ni
+  filtra: el backend ya devuelve solo las activas y ordenadas por `orden`.
+- `ComunidadScreen.tsx` — las pastillas se pintan desde el catalogo (`emoji` + `label`), el
+  estado pasa a guardar la **clave** (`REVELACIONES`) y no el texto visible, ninguna viene
+  preseleccionada (elegir es opcional: `category` es opcional en `POST /api/v1/wall`) y volver
+  a tocar la elegida la desmarca. Tres estados de red cubiertos —cargando, fallo con
+  "Reintentar", catalogo vacio— y en ninguno el compositor queda inutilizable: sin catalogo se
+  publica igual, sin categoria.
+- `useWallFeed.publicarOptimista` recibe la categoria y la pasa a `publicarEnMuro`.
+- `PostTag` pasa a ser `string`: una union de literales no puede describir un catalogo que el
+  administrador edita en caliente.
+
+**Lo que NO se toco, y por que — el catalogo de produccion esta vacio:**
+
+```
+SELECT clave, etiqueta, emoji, orden, activa, es_sistema FROM renaser.categorias_muro;
+(0 rows)
+```
+
+`docs/MODULO_COMMUNITY.md` §1.2 documenta las cinco filas del catalogo real, y en la misma
+linea aclara que **eso no se convirtio en SQL ejecutable a proposito** (instruccion del
+supervisor, CM-15: queda para la fase de migracion de datos). No hay ninguna migracion Flyway
+que las siembre. Consecuencia: hasta que existan esas filas, el compositor muestra el estado
+vacio — correcto, pero sin pastillas. Sembrarlas no se hizo por cuenta propia porque las dos
+fuentes disponibles **no coinciden**: el documento dice `PRESENTACION` con 👋 en orden 5 y
+`LOGROS` en 3; el panel que ve el duenio muestra 👏 en orden 4 y `LOGROS` en 5. Elegir una de
+las dos seria inventar el dato.
+
+**Como evitar que vuelva a pasar:**
+
+1. **Un catalogo que se administra en caliente no se duplica nunca como literales en el
+   cliente.** Si el panel promete "los cambios llegan a la app sin publicar una version
+   nueva", cualquier lista compilada en el bundle rompe esa promesa por construccion.
+2. **Un comentario que dice "sin UI que la use hoy" sobre una funcion de API es una alarma, no
+   una nota.** O sobra la funcion, o la UI existe y esta resolviendo lo mismo por su cuenta —
+   que es lo que pasaba. Antes de escribir esa frase, buscar la UI.
+3. **Un `useState` cuyo valor no lo lee nadie fuera del render es un campo muerto.** Al agregar
+   un control nuevo al compositor, seguir el valor hasta la llamada de red; si no llega, el
+   control es decorativo.
+4. **Al portar una pantalla del disenio viejo, los valores de negocio del mock no son datos.**
+   Las tres categorias vienen del disenio original, no de ningun backend.
+
+**La leccion general:** cuando el servidor ya expone un catalogo y el cliente igual lleva el
+suyo escrito a mano, el sintoma que se ve (nombres equivocados) casi nunca es el peor problema.
+El peor es el que no se ve: el dato elegido no llegaba a ningun lado, y por eso nadie se entero
+en meses.
+
+---
+
+## E-136 — El recuadro de firma se corta a 300 px en web: un `<Svg>` sin `width`/`height` cae al tamanio de objeto por defecto de CSS (2026-09-06) — **RESUELTO**
+
+**Sintoma exacto**, reportado por el dueno del proyecto sobre el build web desplegado en Vercel:
+
+> "la firma no me deja poner de lado derecho mas como si estuviera bloqueado, es en terminos y condiciones"
+
+En el recuadro **FIRMA DE ACEPTACION LEGAL (CON TU DEDO)** (`TerminosScreen`) el trazo dorado se
+dibuja en los dos tercios izquierdos de la caja y el tercio derecho queda muerto: el dedo/mouse se
+mueve, la etiqueta pasa a "✓ TRAZADO" (o sea, el componente **si** registra que hay firma), pero no
+aparece linea. El borde del recuadro si llega hasta el final. En la app nativa no pasa.
+
+**Causa real** — nada que ver con el `PanResponder` ni con las coordenadas del toque, que estaban
+bien. `src/components/SignatureCanvas.tsx` (repo del frontend) dibujaba los trazos sobre:
+
+```tsx
+<Svg style={StyleSheet.absoluteFill}>
+```
+
+En **web**, `react-native-svg` no renderiza una vista nativa: emite un `<svg>` del DOM
+(`lib/module/web/WebShape.js` → `unstable_createElement` de `react-native-web`). Y
+`StyleSheet.absoluteFill` de `react-native-web` es exactamente
+`{position:'absolute', left:0, right:0, top:0, bottom:0}` — **sin ancho ni alto**.
+
+Un `<svg>` es un **elemento reemplazado**. Para un elemento reemplazado posicionado en absoluto con
+`width:auto`, CSS **ignora** `right` (y `bottom`) y usa su tamanio intrinseco; como un `<svg>` sin
+`width`/`height` no tiene ninguno, cae al *default object size* de CSS: **300 × 150 px**. O sea que
+el lienzo real era una franja fija de 300 px pegada al borde izquierdo, midiera lo que midiera el
+recuadro visible. Todo lo que se dibujaba mas alla de x = 300 caia fuera del viewport del SVG, que
+recorta su propio contenido por definicion.
+
+Medido en Chrome, sobre el markup exacto que emite la libreria:
+
+| Caso | Recuadro | `<svg>` resultante |
+|---|---|---|
+| Como estaba (`absoluteFill`, sin `width`/`height`) | 462 × 145 | **300 × 150** |
+| Con `width="100%" height="100%"` | 462 × 145 | 460 × 143 |
+| Con `width="100%" height="100%"`, caja angosta | 288 × 145 | 286 × 143 |
+
+**Por que en nativo nunca se vio:** Yoga si estira un hijo absoluto que tiene los cuatro lados en 0,
+asi que el `Svg` ocupaba la caja entera. Es mas: `react-native-svg` **omite a proposito** su default
+de `width = height = '100%'` cuando la posicion es `absolute` (`lib/module/elements/Svg.js`,
+`if (width === undefined && height === undefined && position !== 'absolute')`), contando con ese
+estirado de Yoga. En web ese default es justamente el que faltaba, y la libreria no lo repone.
+
+**Consecuencia que no era visible y si importa:** la firma se sube a S3 como **evidencia legal**
+(`capturarComoPngBase64` → `guardarFirma`). En web esa captura la hace `html2canvas` sobre el
+recuadro (`react-native-view-shot/lib/RNViewShot.web.js`), o sea que **el PNG guardado tenia el
+mismo trazo cortado que se veia en pantalla**. No es solo estetico: las firmas de Terminos y del
+Pacto hechas desde el build web quedaron truncadas en el bucket.
+
+**Solucion aplicada** (`src/components/SignatureCanvas.tsx`, una linea):
+
+```tsx
+<Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
+```
+
+Porcentaje y no pixeles medidos con `onLayout`, a proposito: asi el lienzo sigue al recuadro en
+cualquier ancho —movil angosto, tablet, web, y al redimensionar la ventana— sin numeros magicos y
+sin el frame inicial en blanco que tendria una medicion. **Sin `viewBox`**, tambien a proposito:
+1 unidad de usuario = 1 px, que es la escala en la que `locationX`/`locationY` graban los trazos;
+un `viewBox` escalaria el dibujo. En nativo el cambio es inocuo: `Svg.render()` lee `width`/`height`
+de `stylesAndProps` y termina aplicando `width:'100%', height:'100%'` sobre una caja sin padding —
+el mismo tamanio que ya tenia.
+
+**Sobre "el recuadro del Pacto si funciona": no.** Es el **mismo** componente — `SignatureCanvas` se
+usa en `TerminosScreen`, `PactoScreen` y `ChapterCompromiso`, y los tres tenian el `<svg>` de 300 px.
+Peor todavia: el recuadro del Pacto es **mas ancho** que el de Terminos en todos los anchos, porque
+Terminos mete el lienzo dentro de una tarjeta con `padding: 16` + borde y el Pacto no:
+
+| Ancho de ventana | Lienzo en Terminos | Lienzo en el Pacto |
+|---|---|---|
+| movil < 360 | W − 62 | W − 32 |
+| movil / normal | W − 70 | W − 40 |
+| tablet / web (`maxWidth: 560`) | 462 | 496 |
+
+El margen muerto a la derecha del Pacto era siempre **mayor o igual** al de Terminos, asi que **no
+existe ningun ancho de ventana donde el Pacto se vea bien y Terminos no**. La comparacion del
+reporte solo cierra si el Pacto se firmo en el celular (nativo, donde no falla) o con un trazo
+corto. El arreglo cubre los tres usos por igual.
+
+**Como evitar que vuelva a pasar:**
+
+- **Un `<Svg>` que se estira por estilo necesita `width`/`height` explicitos.** Al 2026-09-06 este
+  era el **unico** `<Svg>` del frontend sin `width` (`grep -rn "<Svg" src | grep -v "width="` devuelve
+  una sola linea): los ~40 de `Icon.tsx` y el de `FondoAnillos.tsx` ya lo pasan. Si aparece otro, la
+  regla es la misma.
+- **Apenas algo "se corta a media caja" en web, sospechar del 300 × 150.** Es el tamanio de objeto
+  por defecto de CSS y aparece siempre que un elemento reemplazado se queda sin dimensiones.
+- **Lo que se ve bien en nativo no prueba nada sobre web.** `react-native-web` y `react-native-svg`
+  traducen el mismo JSX a mecanismos de layout distintos (Yoga vs CSS), y este bug vive exactamente
+  en esa costura. Toda pantalla que se despliegue en Vercel hay que mirarla en el navegador, no solo
+  en Expo Go.
+
+**Lo que quedo sin verificar:** el arreglo **no se probo en la app corriendo** — no se levanto Expo
+ni se hizo `expo export`. Lo verificado es el mecanismo, medido en Chrome sobre el markup exacto que
+emite `react-native-svg` en web, mas `npx tsc --noEmit` en 0. **El frontend no tiene suite de
+pruebas** (no hay script `test` en `package.json` ni un solo `.test.tsx`), asi que hoy no hay forma
+de dejar un test de regresion, que es lo que la regla de pruebas pediria.
+
+**Reportado y NO arreglado (regla 00, fuera de alcance):** los trazos se guardan como coordenadas
+absolutas en pixeles (`M 132.4 70.1 L ...`, serializadas a JSON en `usuario`/S3). Si una firma
+guardada se vuelve a mostrar en un recuadro mas angosto que aquel donde se dibujo —otro dispositivo,
+o la misma persona en el celular despues de firmar en web— se va a ver cortada por la derecha otra
+vez, ahora por una razon distinta. La salida seria guardar tambien el ancho del lienzo y reescalar
+al reponer, o guardar los trazos normalizados a [0,1].
+
+
+---
+
+## E-137 — Un aprendiz recien registrado no podia usar ni crear habitos: tres defectos apilados sobre el mismo Dia 0 (2026-09-06) — **RESUELTO**
+
+**Sintoma exacto**, palabras del duenio del proyecto:
+
+> "me registre domingo pero yo quiero ordenar mis habitos para maniana no me deja xq no tengo la
+> opcion de ver? (...) no puedo crear un habito tampoco durante el dia que voy"
+
+En pantalla (Plan / "01. HABITOS (7 DIAS)"), cuenta `ricardoismael777@gmail.com`, domingo
+2026-09-06:
+
+- Selector de semana `LUN 31 · MAR 01 · MIE 02 · JUE 03 · VIE 04 · SAB 05 · DOM 06`, con **los
+  siete dias en gris** y DOM 06 seleccionado.
+- Los once habitos de MANIANA con **candado** y `FALTA 1 DIA` (`Pastilla Renacer`, `FALTAN 8 DIAS`).
+- Un habito propio recien creado, `adas`, con el interruptor en **PAUSADO**.
+- En los logs del backend, a las 12:55 UTC:
+  `400 -> Bad Request: El valor de 'habitId' no tiene el formato esperado`.
+
+**Los datos reales de produccion** (RDS `renaser-prod`, consultado por SSM el 2026-09-06 13:00 UTC):
+
+```
+usuarios:               id 96f7c5bf-00a5-4c76-93a3-69821ed5a20b, APRENDIZ/ACTIVO, creado 12:47 UTC
+participantes_programa: dia_programa = 0, fecha_inicio = 2026-09-07, timezone = America/Lima,
+                        programa_activado_en = 2026-09-06 12:51 UTC, dias_ajuste_programa = 0,
+                        dia_programa_avanzado_el = NULL
+habitos (PERSONAL):     0 filas      <- el habito `adas` de la captura NO EXISTE
+desbloqueos_habito:     0 filas
+registros_habito:       0 filas
+```
+
+**Lo primero que hay que descartar, y que aca NO era: no es un desfase de zona horaria.**
+`fecha_inicio = 2026-09-07` es *maniana*, y es lo correcto — `ParticipacionPrograma.activarPrograma`
+solo acepta `[hoy+1, hoy+3]` (D-66: "el reloj avanza a medianoche, firmar de tarde y elegir hoy
+dejaria un Dia 1 de pocas horas"). Con `fechaInicio` posterior a hoy, `diaProgramaDerivado` devuelve
+0 por definicion. El barrido horario (`AvanzarDiaProgramaScheduler`, `0 5 * * * *`) lo pasa a 1 a las
+05:05 UTC = 00:05 en Lima, o sea puntual. **Nada que ver con E-91 ni E-105.** El `dia_programa = 0`
+era correcto; lo que estaba mal era todo lo que el sistema hacia con ese 0.
+
+**Causa real — son tres defectos independientes, y el tercero fabricaba la evidencia falsa del
+cuarto sintoma:**
+
+1. **Backend: el alta de habito personal explotaba en Dia 0.** `MisHabitosService.crear` pasaba
+   `progreso.diaPrograma()` crudo a `HorarioHabito.crear`, cuyo invariante es `1..90`:
+
+   ```
+   java.lang.IllegalArgumentException: diaInicio fuera de rango 1..90: 0
+       at ...horario.HorarioHabito.crear(HorarioHabito.java:48)
+       at ...services.MisHabitosService.crear(MisHabitosService.java:140)
+   ```
+
+   Como el Dia 1 nunca puede ser hoy, **todo aprendiz pasa su primera jornada en dia 0**, asi que
+   esto no era un caso de borde: era el 100% de las altas recien aprobadas. Ya estaba anotado como
+   hueco abierto en `docs/informes/habits-personal-con-horario.md` ("bloquear antes con un mensaje
+   claro? usar `diaInicio = 1`?", decision de negocio sin confirmar) — y **D-103 la confirmo el
+   2026-09-04** para la operacion hermana `DesbloqueoHabitoService.resolverDiaDesbloqueo`
+   (`Math.max(1, diaActual)`), solo que nadie la trajo hasta aca.
+
+2. **Backend: el mismo 0 ponia candado sobre TODO el catalogo.**
+   `MisHabitosService.consultar` calculaba `diasParaDesbloqueo = max(0, diaDesbloqueo - 0)`, asi que
+   los 13 habitos del catalogo que arrancan el dia 1 (de 18 activos: `Pastilla Renacer` arranca el 8,
+   `AUDIOTERAPIA SEMANAL` el 11 y los tres de domingo el 35) viajaban con `daysUntilUnlock = 1` y
+   `locked = true`. En el
+   movil `habit.locked` apaga el interruptor ACTIVO/PAUSADO **y** el selector de hora: el aprendiz
+   veia su plan entero bajo llave justo la vispera de empezar — exactamente lo contrario de lo que
+   D-103 decidio ("quien eligio empezar maniana tiene que poder armar su plan hoy").
+
+3. **Movil: "Crear Habito" nunca llamo al backend.** `PlanScreen.handleSaveNewHabit` construia un
+   `PlanHabit` en memoria con un id inventado (`habit_` + timestamp), lo empujaba al estado de
+   React y anunciaba "Habito Creado". **No habia ni un `fetch`.** De ahi salen dos cosas:
+   - El habito `adas` de la captura no existia en la base (0 filas) y desaparecia al recargar.
+   - En cuanto el aprendiz tocaba su interruptor, el id falso viajaba a
+     `PUT /api/v1/habit-unlocks/habit_1757...` — **el `400 "El valor de 'habitId' no tiene el
+     formato esperado"` de los logs.**
+
+4. **Movil: el `PAUSADO` del habito recien creado era consecuencia del 3.** Ese objeto falso nacia
+   con `newHabitDays = {..., SAB: false, DOM: false}`, y la etiqueta se decide con
+   `isDayActive = habit.days[selectedDay]`. Creado un **domingo**, con DOM seleccionado, salia
+   `PAUSADO` recien nacido. No era una regla de negocio: era un valor por defecto del formulario.
+
+5. **Movil: un domingo el selector de semana no tenia ningun dia planificable.** D-98 dejo
+   `esPasado = indice <= indiceDeHoy` (hoy tambien se apaga) y la pestania inicial en
+   `min(indiceDeHoy + 1, 6)`. Un domingo `indiceDeHoy` vale 6: los siete dias apagados y la pestania
+   inicial cayendo sobre el propio domingo. El comentario de entonces asumia que esa semana cerrada
+   "era la verdad de ese momento" — **y no lo era**: maniana existe, es el lunes siguiente, y
+   simplemente no se estaba dibujando. Es literalmente el *"no tengo la opcion de ver"* del reporte.
+
+**Solucion aplicada:**
+
+| Defecto | Cambio |
+|---|---|
+| 1 y 2 | `MisHabitosService.primerDiaPlanificable(dia) = Math.max(1, dia)`, usado en `crear` (el `diaInicio` del horario) y en `consultar` (el dia contra el que se mide el desbloqueo). Es el MISMO `Math.max(1, ...)` que D-103 ya aplica en `DesbloqueoHabitoService`. **Solo cambia algo en el dia 0**: para `dia >= 1` devuelve el mismo valor |
+| 3 y 4 | `PlanScreen.handleSaveNewHabit` ahora llama a `POST /api/v1/habits` (`habitsApi.crearHabitoPersonal`, nuevo) y arma la tarjeta con `mapearPlanHabit` **sobre la respuesta del servidor**, no a mano — id real, categoria real, los 7 dias reales. Si el servidor rechaza, se avisa y el modal queda abierto; nunca mas un "creado" que no se creo |
+| 5 | `MOSTRAR_SEMANA_SIGUIENTE` en `PlanScreen`: cuando hoy es domingo se dibuja la semana siguiente completa y `ULTIMO_INDICE_NO_PLANIFICABLE` pasa a -1, con lo que sus 7 dias quedan abiertos y la pestania inicial es el lunes. Es lo que D-98 queria decir con "la pestania inicial pasa a ser MANIANA" |
+
+**Como evitar que vuelva a pasar:**
+
+- **Cuatro tests nuevos en `MisHabitosServiceTest`, todos rojos contra el codigo viejo** (dos con el
+  `IllegalArgumentException` literal de produccion): `enDia0ElHabitoPersonalSeCreaYSuHorarioArrancaElDia1`,
+  `enDia0ElHabitoPersonalSeCreaIgualConElRelojEnLaMadrugadaUtc` (reloj a las **02:00 UTC**, que en
+  Lima todavia es el dia anterior — regla 03), `enDia0LosHabitosQueArrancanElDia1NoViajanBloqueados`
+  y `enDia0UnHabitoQueArrancaMasAdelanteSigueBloqueado` (lo que NO se desbloquea de mas).
+- **Un test de integracion nuevo contra Postgres real**, `CrearHabitoPersonalGeneraTrackTransaccionIT.
+  enDia0ElHabitoSeCreaYSuHorarioArrancaElDia1`: importa que la fila entre de verdad, porque
+  `horarios_habito.dia_inicio` tiene `CHECK (dia_inicio BETWEEN 1 AND 90)` en el baseline — un 0
+  tampoco habria pasado la base.
+- **Cuidado al tocar un test que "documenta" un bug en vez de arreglarlo.** En ese mismo IT,
+  `siElHorarioEsInvalidoNoQuedaNingunHabitoHuerfano` usaba `dia_programa = 0` solo como forma comoda
+  de hacer explotar `HorarioHabito.crear` y asi demostrar el rollback. Al arreglar el bug ese
+  disparador dejo de existir y el test se puso rojo por la razon correcta. **No se borro**: se
+  renombro a `siElHorarioNoSePuedeGuardarNoQuedaNingunHabitoHuerfano` y el fallo se inyecta ahora en
+  el puerto (`@MockitoSpyBean SaveHorarioHabitoPort`), porque despues de este cambio **ningun comando
+  aceptado puede construir un `HorarioHabito` invalido** y lo unico que queda por cubrir es el fallo
+  de infraestructura en el segundo guardado — que es exactamente lo que `@Transactional` protege.
+- **La leccion que se repite y conviene tener a mano: el Dia 0 no es un caso de borde, es el estado
+  inicial de todas las cuentas.** D-66 garantiza que nadie empieza el mismo dia en que se aprueba,
+  asi que cualquier `if (dia < 1)` o rango `1..90` aplicado al dia de programa de un aprendiz es un
+  fallo para el 100% de los registros nuevos, no para un raro. D-103 ya lo arreglo en un endpoint;
+  esto lo arreglo en otros dos. **Al tocar cualquier cosa que lea `diaPrograma`, la primera pregunta
+  es "que hace esto con un 0?".**
+- **Un campo de formulario que el backend no guarda es un bug esperando.** La causa 4 no fue una
+  regla mal escrita: fue un valor por defecto de un selector que nunca viajo a ningun lado. Es el
+  mismo patron que E-135 ("un campo muerto no falla: se ve bien y no hace nada"). El modal de crear
+  habito quedo reducido a los tres datos que el servidor guarda de verdad (nombre, categoria, hora);
+  se sacaron el selector de icono (el icono lo deriva `mapearPlanHabit` de la categoria), el de
+  momento del dia (lo deriva de la hora), el de duracion (no existe en el modelo) y el de dias de la
+  semana (un habito personal es siempre `TipoDia.TODOS`).
+
+**Lo que quedo sin verificar:** el arreglo del movil **no se probo en la app corriendo** — no se
+levanto Expo ni se hizo `expo export`; lo verificado es `npx tsc --noEmit` en 0. **El frontend no
+tiene suite de pruebas** (no hay script `test` en `package.json` ni un solo `.test.tsx`), asi que no
+hay forma de dejar un test de regresion de los defectos 3, 4 y 5. Tampoco se probo el alta contra el
+backend desplegado: el contenedor de produccion sigue con la imagen anterior al arreglo.
+
+**Reportado y NO arreglado (regla 00, fuera de alcance):**
+
+- **Un habito PERSONAL no puede aplicar solo algunos dias de la semana.** `MisHabitosService.crear`
+  fija `TipoDia.TODOS` siempre, y el DTO no lleva dias. Por eso se saco el selector de dias del
+  modal en vez de hacerlo funcionar: soportarlo es trabajo de backend (campo nuevo en
+  `CreatePersonalHabitRequest` + mapeo a `TipoDia`) y una decision de producto sobre que
+  combinaciones se permiten (`TipoDia` no es un set libre de dias).
+- **`MisHabitosController.listar` dice en un comentario que "no ejecuta ningun guard (una cuenta
+  SUSPENDED sigue leyendo su catalogo)", y no es cierto**: `MisHabitosService.consultar` llama a
+  `requireProgreso`, que lanza `NotAuthorizedException` si el participante esta suspendido. El
+  comentario justifica la ausencia de `@RequiresPermission` con un hecho falso.
+- ~~**El interruptor ACTIVO/PAUSADO no va a funcionar sobre un habito PERSONAL, y ahora que el alta
+  funciona esto pasa a ser alcanzable.**~~ **CERRADO el 2026-09-06 por E-138** (mismo dia). Este
+  hallazgo decia ademas *"No se toco porque ese rechazo es deliberado y esta escrito"*, y esa parte
+  quedo desactualizada: el rechazo era deliberado **para lo que `desbloqueos_habito` significaba
+  antes de D-87**. Desde que esa tabla es tambien el unico lugar donde vive la pausa del aprendiz,
+  mantenerlo dejaba a los habitos propios sin interruptor. Ver E-138 para el razonamiento completo.
+- **El interruptor ACTIVO/PAUSADO se ve por dia pero se guarda por habito.** En Plan el switch vive
+  dentro del dia seleccionado (`days[selectedDay]`), pero lo que persiste es
+  `desbloqueos_habito.pausado_en`/`pausado_hasta`, que es un RANGO DE FECHAS del habito entero:
+  pausar "solo el martes" pausa el habito hasta la fecha elegida, todos los dias incluidos. Es
+  anterior a este cambio y no se toco. Cerrarlo pide decidir cual de las dos lecturas es la buena.
+- **`participantes_programa.habitos_escalonados_en` sigue sin lector ni escritor** (ya anotado en la
+  regla 04).
+
+---
+
+## E-138 — El interruptor ACTIVO/PAUSADO rechazaba con 400 cualquier habito PERSONAL (2026-09-06) — **RESUELTO**
+
+**Sintoma exacto**, tal como lo devuelve el backend al primer toque del interruptor sobre un habito
+propio:
+
+```
+PUT /api/v1/habit-unlocks/{habitId}
+400 Bad Request
+"Solo se eligen habitos del catalogo, no habitos personales"
+```
+
+El aprendiz ve, en la pantalla Plan: el switch se apaga (es optimista), y al instante vuelve a
+encenderse con el aviso **"No pudimos guardar el cambio — Intenta de nuevo en unos segundos."**
+Nunca se guarda nada.
+
+**Por que nadie lo habia visto hasta hoy.** Hacia falta tener un habito personal, y **crear uno no
+funcionaba**: el movil fabricaba un objeto en memoria con un id inventado y el backend moria con
+`IllegalArgumentException: diaInicio fuera de rango 1..90: 0`. Las dos cosas se arreglaron esta
+misma manana (E-137 / D-115), y en el mismo informe quedo anotado que el interruptor iba a fallar
+"en cuanto alguien lo toque". Esta entrada cierra ese hallazgo.
+
+**Causa real.** `PlanScreen.aplicarEstadoHabito` manda **dos** llamadas, en este orden (D-99):
+
+1. `PUT /api/v1/habit-unlocks/{id}` → `DesbloqueoHabitoService.elegir` — asegura la fila de
+   `desbloqueos_habito`, porque el PATCH exige que exista (404 si no).
+2. `PATCH /api/v1/habit-unlocks/{id}` → `DesbloqueoHabitoService.cambiarEstado` — escribe
+   `pausado_en` / `pausado_hasta`.
+
+El paso 2 **nunca rechazo un habito personal**; el que lo rechazaba era el paso 1, con una guarda
+escrita cuando `desbloqueos_habito` significaba otra cosa:
+
+```java
+if (!habito.esDeSistema()) {
+    throw new IllegalArgumentException("Solo se eligen habitos del catalogo, no habitos personales");
+}
+```
+
+Esa frase describia bien la operacion **"elegir"** original (agosto 2026): sacar algo de un catalogo
+compartido, que es una operacion sin sentido sobre un habito que ya es tuyo. Lo que cambio despues
+es **el significado de la tabla**: `V23` (D-87) y `V31` le agregaron `pausado_en` / `pausado_hasta`
+y la volvieron, textualmente en su propio comentario de migracion, *"que habitos lleva este aprendiz
+en su plan"*. Desde entonces `desbloqueos_habito` es el **unico** lugar donde vive el interruptor —
+y la guarda vieja, que nadie volvio a mirar, le cerraba la puerta a la mitad de los habitos.
+
+**Donde NO podia vivir la pausa de un habito personal, y por que.** Se reviso el esquema real antes
+de decidir:
+
+| Candidato | Por que no |
+|---|---|
+| `habitos.activo` | Es la unica bandera que tiene esa tabla, y para un habito PERSONAL significa *existe / se ve*: `LoadHabitoPort.personalesActivosDe` filtra por `activo = true`, asi que ponerlo en `false` **desaparece el habito de `GET /api/v1/habits`**. Eso es una baja logica, no una pausa — y el aprendiz se quedaria sin forma de volver a encenderlo |
+| Columnas nuevas de pausa en `habitos` | Dejaria **dos tablas respondiendo la misma pregunta**, que es exactamente lo que `V23` y `V31` argumentan evitar en sus cabeceras. Ademas duplica la semantica del rango (`pausado_hasta`) y obliga a que `RegistroService` consulte dos fuentes |
+| `participantes_programa.habitos_escalonados_en` | No es una pausa por habito sino un flag por participante; sigue sin lector ni escritor (regla 04) |
+| `desbloqueos_habito` | Ya tiene las dos columnas, con la semantica exacta; su FK apunta a `habitos(id)` **sin distinguir ambito**; y `RegistroService.generarInterno` ya aplica el filtro de pausa sobre la lista completa `catalogoActivo() + personalesActivosDe(...)`, sin mirar si el habito es de sistema. **El mecanismo ya funcionaba de punta a punta para un habito personal: lo unico que faltaba era poder crear la fila** |
+
+**Solucion aplicada.** Se cambio la guarda de `elegir` por la pregunta correcta — *"¿este habito
+puede entrar en el plan de este aprendiz?"* — en vez de *"¿es del catalogo?"*:
+
+```java
+private static void requirePuedeEntrarEnElPlan(Habito habito, UserId actorId) {
+    if (!habito.esDeSistema() && !habito.esPersonalDe(actorId)) {
+        throw new NoSuchElementException("Habito no encontrado: " + habito.id());
+    }
+    if (!habito.activo()) { ... }
+}
+```
+
+- **Lo que la guarda vieja SI protegia y aca queda explicito:** el habito personal de **otro**
+  aprendiz. Antes lo bloqueaba de rebote (rechazaba todos los personales); ahora se comprueba la
+  propiedad a proposito, con `Habito.esPersonalDe(UserId)` nuevo en el dominio. Se responde **404 y
+  no 403**: un 403 confirmaria que ese id existe.
+- **Un habito personal dado de baja** (`activo = false`) tampoco vuelve a entrar al plan.
+- **No hizo falta ninguna migracion, ni ningun cambio en el movil.** La secuencia PUT+PATCH de
+  `PlanScreen` es la misma; simplemente deja de recibir 400 en el primer paso.
+- **La regla de pausa no se reinterpreto para los habitos personales.** Sigue siendo la de V31: el
+  rango `pausado_en`/`pausado_hasta` se evalua en la zona del participante y la reanudacion se
+  **deriva** de la fecha, sin cron (regla 02). Un habito personal siempre es `desactivable`, asi que
+  nunca cae en el 409 de "habito obligatorio".
+
+**Como evitar que vuelva a pasar:**
+
+- **Ocho pruebas nuevas** — 5 unitarias (4 netas en `DesbloqueoHabitoServiceTest`, porque una
+  reemplaza a la que afirmaba lo contrario, + 1 en `HabitoTest`) y 3 de integracion. **Seis de las
+  ocho salen rojas contra el codigo viejo**, comprobado de verdad: se revirtio la guarda y se corrio
+  la suite, con **3 fallos en `DesbloqueoHabitoServiceTest` y 3 errores en `PausaHabitoPersonalIT`**,
+  los seis con el mensaje literal `"Solo se eligen habitos del catalogo, no habitos personales"`.
+  Las otras dos no podian salir rojas y conviene decir por que: la de `HabitoTest` prueba un metodo
+  que antes no existia (no compilaria), y `elInterruptorReactivaUnHabitoPersonalPausado` ejercita
+  solo `cambiarEstado`, que **nunca** rechazo un habito personal — el que rechazaba era el PUT:
+  - `DesbloqueoHabitoServiceTest.elegirElHabitoPersonalPropioLoAgregaAlPlan` — **es el metodo que
+    antes se llamaba `elegirHabitoPersonalRechazado` y afirmaba lo contrario.** No se borro: se dio
+    vuelta, para que quede a la vista que la regla cambio y por que.
+  - `...elegirElHabitoPersonalDeOtroAprendizNoSeEncuentra` y `...elegirUnHabitoPersonalDadoDeBajaRechazado`
+    — lo que sigue estando prohibido.
+  - `...elInterruptorPausaUnHabitoPersonalPropioHastaUnaFecha` y `...elInterruptorReactivaUnHabitoPersonalPausado`
+    — la secuencia completa PUT+PATCH, la misma que dispara el boton.
+  - `PausaHabitoPersonalIT` (Testcontainers, Postgres real, 3 pruebas): que la fila entre de verdad
+    con un `habito_id` de ambito PERSONAL (FK + `CHECK (dia_desbloqueo BETWEEN 1 AND 90)` +
+    `desbloqueos_pausa_hasta_requiere_pausa` de V31), que el habito pausado **no** genere track ese
+    dia, y que **vuelva solo** al dia siguiente del ultimo dia de la pausa sin que nadie toque nada.
+  - `HabitoTest.esPersonalDeDistingueElHabitoPropioDelAjenoYDelCatalogo`.
+- **La leccion general, que es la que conviene tener a mano: cuando una tabla cambia de significado,
+  hay que revisar las guardas que se escribieron contra el significado viejo.** El rechazo de
+  `elegir` no era un descuido cuando se escribio — era correcto. Lo que lo volvio un bug fue D-87
+  ampliando `desbloqueos_habito` de *"que eligio del catalogo"* a *"que lleva en su plan, y si esta
+  pausado"*, sin releer quien mas dependia de la definicion anterior. El sintoma tardo tres semanas
+  en aparecer solo porque hacia falta otro bug (E-137) para poder llegar a el.
+
+**Verificacion:** `./mvnw clean verify` con `JAVA_HOME=C:\Program Files\Java\jdk-25.0.2` →
+**`Tests run: 2441, Failures: 0, Errors: 0, Skipped: 0`** (surefire) y
+**`Tests run: 25, Failures: 0, Errors: 0, Skipped: 0`** (failsafe), `BUILD SUCCESS` en 06:55.
+
+**Lo que quedo sin verificar / sin arreglar:**
+
+- **El arreglo no se probo en la app corriendo.** No se levanto Expo. **El frontend no tiene suite de
+  pruebas** (no hay script `test` en `package.json` ni un solo archivo `.test.tsx`), asi que del lado
+  del movil solo se verifico `npx tsc --noEmit` en 0 — y el movil, ademas, **no se toco**.
+- **El interruptor se sigue viendo por dia y guardando por habito** (hallazgo de E-137, sin
+  cerrar): en Plan el switch vive dentro de `days[selectedDay]`, pero lo que persiste es un rango de
+  fechas del habito entero. Este cambio **no lo empeora** —un habito personal ahora se comporta
+  exactamente igual que uno de catalogo— pero tampoco lo cierra: sigue pidiendo decidir cual de las
+  dos lecturas es la buena.
+- **El estado de pausa nunca se lee de vuelta en el movil.** `habitsMappers` arma `days` desde
+  `activeWeekdays` (que dias de la semana aplica el habito) y **no** consulta `GET /habit-unlocks`,
+  que desde V31 ya expone `paused`/`pausedUntil`. Consecuencia: la pausa se guarda bien, pero al
+  recargar la app el switch vuelve a pintarse encendido. Es el mismo sintoma que D-87 creyo cerrar,
+  ahora del lado del cliente. Fuera del alcance de este encargo; es la continuacion natural del punto
+  anterior.
+- **`DELETE /api/v1/habit-unlocks/{id}` ("quitar del plan") hace lo contrario de lo que dice, y no se
+  toco.** Borra la fila, y por la compatibilidad hacia atras de D-87 (*"un habito sin fila se sigue
+  generando como siempre"*) el efecto real es que el habito **vuelve** a generar todos los dias. Es
+  preexistente, aplica igual a los habitos de catalogo, y el movil no lo llama.
+
+---
+
+## E-139 — El workflow de CD termina en verde en 15 segundos sin publicar ni desplegar nada (2026-09-06) — **DIAGNOSTICADO, falta un paso manual del dueno**
+
+**Sintoma exacto.** Las tres ultimas corridas del workflow `CD` sobre `master`, en `gh run list`:
+
+```
+completed  success  Integrar el cierre del panel de administracion...  CD  master  push  34011493241  20s
+completed  success  Registrar el cruce paginado de evidencias...       CD  master  push  34004788620  14s
+completed  success  Registrar por que Flyway no aplicaba el baseline   CD  master  push  34003689467  14s
+```
+
+Tres tildes verdes. Y sin embargo **ninguna de esas corridas construyo una imagen**: un `docker
+build` de este proyecto (Maven + JDK 25 + tres etapas) no entra en 14 segundos. Las imagenes que
+hay en ECR se subieron a mano desde la maquina de desarrollo.
+
+**Causa real: el repositorio de GitHub no tiene NI UNA variable de Actions cargada.**
+
+```
+$ gh api repos/ricardoIsmael/Renaser-90-dias-backend/actions/variables
+{"variables":[],"total_count":0}
+```
+
+El `cd.yml` tiene, a proposito, una guarda al principio: si faltan `AWS_ROLE_ARN`, `AWS_REGION` o
+`ECR_REPOSITORY`, avisa con un `::notice::`, escribe "Publicacion en ECR: salteada" en el resumen
+del job y **termina en verde**. La idea era buena — no pintar de rojo cada push mientras la
+infraestructura no existiera. El problema es lo que pasa despues: **la infraestructura se creo**
+(rol de IAM, proveedor OIDC, ECR, EC2, RDS, CloudFront) **y nadie cargo las variables**, asi que la
+guarda siguio salteando el workflow entero durante dias, con el mismo tilde verde de siempre.
+
+**La leccion, que es la misma de E-111 en otro disfraz.** E-111 era `./mvnw clean test` terminando
+en `exit 0` sin correr una sola prueba. Este es un workflow terminando en `success` sin hacer una
+sola cosa. En los dos casos **el codigo de salida no significa lo que uno cree**, y en los dos la
+verificacion real es mirar la evidencia de que el trabajo ocurrio: alli la linea `Tests run:`,
+aca la duracion del job y el paso de publicacion.
+
+**Como evitar que vuelva a pasar:**
+
+- Una guarda que se saltea **tiene que doler mas que un `::notice::`**. En el job de despliegue
+  agregado el 2026-09-06 la guarda usa `::warning::` — que sale amarillo en la interfaz de
+  Actions — en vez de `::notice::`, que pasa desapercibido.
+- **Cuando se crea una pieza de infraestructura, el mismo cambio carga la variable que la apunta.**
+  Un rol de IAM sin su `AWS_ROLE_ARN` en GitHub no sirve para nada, y no hay nada que avise.
+- Al mirar una corrida verde de un workflow que construye algo, **mirar la duracion**. Catorce
+  segundos no alcanzan para compilar este proyecto: si dice que si, no compilo.
+
+**Que falta para cerrarlo (es del dueno, no se puede hacer desde el repositorio):** crear en
+Settings -> Secrets and variables -> Actions -> **Variables** las cuatro que estan en
+`docs/DESPLIEGUE_Y_CI.md` §5.1 e — `AWS_ROLE_ARN`, `AWS_REGION`, `ECR_REPOSITORY` y
+`EC2_INSTANCE_ID`, con los valores reales que ya figuran en esa tabla.
+
+---
+
+## E-140 — Tres trampas de `ssm send-command` al automatizar un despliegue: el escapado, el codigo de salida que no llega, y el permiso que parece completo y no lo es (2026-09-06) — **RESUELTO**
+
+Las tres aparecieron armando el paso de despliegue del `cd.yml`, y las tres tienen la misma
+propiedad desagradable: **no fallan de forma ruidosa, fallan de forma equivocada**.
+
+### 1. El escapado inline no sobrevive, y `$$` es el caso peor
+
+**Sintoma.** Un comando armado asi, que es la forma que aparece en toda la documentacion:
+
+```bash
+aws ssm send-command --document-name AWS-RunShellScript \
+  --parameters 'commands=["curl -s -w \"%{http_code}\" http://localhost:8080/actuator/health"]'
+```
+
+llega a la instancia con las comillas simples comidas y los `$` ya expandidos. Costo dos fallos en
+una misma sesion. **El peor caso es `$$`**: el shell lo reemplaza por su propio PID, asi que el
+comando **no falla** — corre con un valor equivocado, que es mucho mas caro de diagnosticar que un
+error. La cadena atraviesa tres parsers distintos (el shell que lanza la CLI, el de la propia CLI,
+y el del documento de SSM) y cada uno se come una capa de comillas.
+
+**Solucion aplicada.** El script que corre en la instancia se escribe a un archivo y se codifica
+entero como **una unica cadena JSON**:
+
+```bash
+jq -Rs '{commands: [.]}' desplegar.sh > parametros.json
+aws ssm send-command ... --parameters file://parametros.json
+```
+
+`-R` lee crudo (sin interpretar JSON), `-s` junta todo el archivo en una sola cadena. Lo que corre
+en la instancia queda **byte por byte** igual al archivo — verificado comparando el contenido del
+JSON producido contra el archivo original. Y el archivo se genera con un *heredoc de delimitador
+entrecomillado* (`<<` seguido de `FIN` entre comillas simples), que es lo que impide que el shell
+local expanda nada de adentro. Los valores variables (imagen, region, tope de espera) se inyectan
+como asignaciones **antes** del cuerpo, no interpolados adentro.
+
+> Emparenta con **E-132** (`MSYS_NO_PATHCONV=1` y `fileb://`): la ruta que se le pasa a `file://`
+> desde Git Bash tiene que ser la forma `C:/...` de `cygpath -m`, no `/c/...`.
+
+### 2. `send-command` es asincrono: el codigo de salida del script remoto NO llega por ahi
+
+**Sintoma.** `aws ssm send-command` devuelve un `CommandId` y termina en `exit 0` **siempre** —
+tambien cuando el script remoto termina en `exit 1`. Un paso de despliegue que solo hace
+`send-command` **queda verde aunque la aplicacion no haya arrancado nunca**. Es la misma familia
+de E-111 y E-139: un exito que no significa nada.
+
+**Solucion aplicada.** El resultado real esta en el `Status` de la invocacion, que hay que ir a
+buscar aparte:
+
+```bash
+aws ssm get-command-invocation --command-id "$CID" --instance-id "$INSTANCIA" --query Status
+```
+
+Devuelve `Pending`/`InProgress` hasta que termina, y despues `Success` o `Failed`. El paso hace un
+bucle propio hasta que sale de esos dos primeros estados y **falla si no es `Success`**. Probado a
+mano mandando un script que hace `exit 1`: `Status=Failed`, el paso sale con 1, y la salida remota
+queda impresa en el registro.
+
+**Por que un bucle propio y no `aws ssm wait command-executed`:** ese waiter existe, pero son 20
+intentos cada 5 segundos = **100 s de tope**. Esta aplicacion tarda **43 s medidos** en responder
+`UP`, y una migracion de Flyway larga o una RDS fria se comen esos 100 s sin despeinarse. El
+waiter fallaria por vencimiento en un despliegue perfectamente sano.
+
+**Dos detalles del bucle que importan:** `get-command-invocation` puede responder
+`InvocationDoesNotExist` durante el primer segundo (hay que tolerarlo, no tratarlo como fallo), y
+**que `stderr` traiga texto no es un fallo**: `docker login` escribe siempre el aviso *"Your
+password will be stored unencrypted in /root/.docker/config.json"*. Quien decide es el `Status`.
+
+### 3. `ssm:SendCommand` necesita DOS recursos, y el ARN del documento no lleva cuenta
+
+**Sintoma esperable** si se concede solo el ARN de la instancia:
+
+```
+An error occurred (AccessDeniedException) when calling the SendCommand operation:
+User ... is not authorized to perform: ssm:SendCommand on resource: arn:aws:ssm:us-east-1::document/AWS-RunShellScript
+```
+
+AWS evalua la llamada contra la instancia **y** contra el documento. Y el ARN de un documento que
+es propiedad de AWS **no lleva numero de cuenta**: `arn:aws:ssm:us-east-1::document/AWS-RunShellScript`,
+con los dos puntos seguidos. Escribirlo con la cuenta adentro apunta a un documento propio que no
+existe, y el permiso no aplica aunque el nombre coincida.
+
+**La otra mitad:** `ssm:GetCommandInvocation` **no soporta permisos a nivel de recurso**. Acotarla
+a un ARN la deja sin efecto; tiene que ir sobre `*`. Es el unico comodin de la politica y conviene
+que quede escrito por que, para que nadie lo "corrija" despues.
+
+**Como se verifico sin poder asumir el rol.** El rol `renaser-github-actions` solo se puede asumir
+por OIDC desde GitHub, asi que desde la maquina de desarrollo **no hay forma de probarlo
+ejecutando**. La herramienta correcta es `iam simulate-principal-policy`, que evalua las politicas
+del rol sin asumirlo:
+
+```bash
+aws iam simulate-principal-policy --profile renaser \
+  --policy-source-arn arn:aws:iam::302277511407:role/renaser-github-actions \
+  --action-names ssm:SendCommand \
+  --resource-arns arn:aws:ssm:us-east-1::document/AWS-RunShellScript \
+  --query "EvaluationResults[0].EvalDecision"
+```
+
+**Y se simulan tambien los casos negativos**, que son los que demuestran que el permiso no quedo
+de mas: `SendCommand` contra otra instancia, contra `AWS-RunPowerShellScript`, `ssm:StartSession`,
+`ssm:GetParameter` sobre `/renaser/prod/*`, `ec2:TerminateInstances`, `iam:PutRolePolicy` y
+`s3:GetObject` — las siete dan `implicitDeny`.
+
+**Como evitar que vuelva a pasar:** al escribir una politica nueva, simular **las dos listas**: lo
+que tiene que permitir y lo que no. Una politica que solo se probo por el lado de "funciona" es una
+politica de la que no se sabe cuanto de mas concede.
