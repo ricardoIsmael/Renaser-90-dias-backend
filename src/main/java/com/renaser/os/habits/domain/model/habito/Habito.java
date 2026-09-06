@@ -160,6 +160,18 @@ public final class Habito {
         return ambito == AmbitoHabito.SISTEMA;
     }
 
+    /**
+     * Un habito PERSONAL cuyo dueno es este participante. Falso para el catalogo SISTEMA, que no
+     * tiene dueno, y falso para el habito personal de OTRO aprendiz.
+     *
+     * <p>Existe porque "es mio" es la pregunta que decide si un habito puede entrar en el plan de
+     * alguien ({@code DesbloqueoHabitoService.elegir}), y resolverla desde afuera obligaba a
+     * comparar {@code participanteId()} contra null a mano en cada llamador.
+     */
+    public boolean esPersonalDe(UserId participanteId) {
+        return ambito == AmbitoHabito.PERSONAL && Objects.equals(this.participanteId, participanteId);
+    }
+
     public boolean esBloqueo() {
         return tipo == TipoHabito.BLOQUEO;
     }

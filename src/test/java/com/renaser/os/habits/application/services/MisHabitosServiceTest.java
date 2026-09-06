@@ -318,4 +318,95 @@ class MisHabitosServiceTest {
         assertThatThrownBy(() -> comando(DISPARO, DISPARO)).isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(savePort, saveHorarioPort, progresoPort);
     }
+
+    // ---- dia 0: el aprendiz recien aprobado (E-137, D-103) ----
+    //
+    // Todo aprendiz pasa su primera jornada en dia 0: `ParticipacionPrograma.activarPrograma`
+    // solo acepta [hoy+1, hoy+3], asi que el Dia 1 nunca puede ser hoy. Estos tests fallan
+    // contra el codigo viejo, que medía todo contra el 0 crudo.
+
+    private static ProgresoParticipanteHabits enDia(int dia) {
+        return new ProgresoParticipanteHabits(dia, "America/Lima", RolParticipante.TRAINEE, false);
+    }
+
+    /**
+     * El bug del 2026-09-06: el aprendiz se registro un domingo, eligio empezar el lunes, y al
+     * crear un habito propio el alta se caia con {@code 400 "diaInicio fuera de rango 1..90: 0"} —
+     * un campo que el cliente nunca mando. Contra el codigo viejo este test explota en
+     * {@code service.crear(...)}.
+     */
+    @Test
+    void enDia0ElHabitoPersonalSeCreaYSuHorarioArrancaElDia1() {
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(0)));
+        when(idGenerator.newId()).thenReturn(UUID.randomUUID(), UUID.randomUUID());
+
+        Habito creado = service.crear(comando(DISPARO, LIMITE));
+
+        assertThat(creado.ambito()).isEqualTo(AmbitoHabito.PERSONAL);
+        org.mockito.ArgumentCaptor<HorarioHabito> captor = org.mockito.ArgumentCaptor.forClass(HorarioHabito.class);
+        org.mockito.Mockito.verify(saveHorarioPort).save(captor.capture());
+        assertThat(captor.getValue().diaInicio()).as("el dia 0 arranca el dia 1, como en D-103").isEqualTo(1);
+    }
+
+    /**
+     * Regla 02 / regla 03: el dia 0 NO puede depender de la hora del servidor. Con el reloj a las
+     * 02:00 UTC el servidor ya esta en el 7 de septiembre mientras que en Lima (UTC-5) todavia es
+     * el 6 — la hora exacta que escondio E-91. El alta tiene que comportarse igual que a las 10:00
+     * UTC porque el dia de programa lo manda `progresoPort`, no el reloj.
+     */
+    @Test
+    void enDia0ElHabitoPersonalSeCreaIgualConElRelojEnLaMadrugadaUtc() {
+        MisHabitosService servicioDeMadrugada = new MisHabitosService(loadPort, savePort, saveHorarioPort,
+                loadHorarioPort, progresoPort, FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator);
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(0)));
+        when(idGenerator.newId()).thenReturn(UUID.randomUUID(), UUID.randomUUID());
+
+        servicioDeMadrugada.crear(comando(DISPARO, LIMITE));
+
+        org.mockito.ArgumentCaptor<HorarioHabito> captor = org.mockito.ArgumentCaptor.forClass(HorarioHabito.class);
+        org.mockito.Mockito.verify(saveHorarioPort).save(captor.capture());
+        assertThat(captor.getValue().diaInicio()).isEqualTo(1);
+    }
+
+    /**
+     * El otro sintoma del mismo dia: los ~18 habitos que arrancan el dia 1 se veian TODOS con
+     * candado y "FALTA 1 DIA" la vispera de empezar, sin hora editable ni interruptor. D-103 ya
+     * decidio lo contrario ("quien eligio empezar mañana tiene que poder armar su plan hoy").
+     */
+    @Test
+    void enDia0LosHabitosQueArrancanElDia1NoViajanBloqueados() {
+        HabitoId id = HabitoId.of(UUID.randomUUID());
+        Habito desdeElUno = Habito.crearDeSistema(id, "DESPERTAR", TipoHabito.CHECKBOX,
+                new DetallesHabito("desc", "CUERPO", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(0)));
+        when(loadPort.catalogoActivo()).thenReturn(List.of(desdeElUno));
+        when(loadPort.personalesActivosDe(actor)).thenReturn(List.of());
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), id, 1, 90, TipoDia.TODOS,
+                        DISPARO, null, CLOCK.now())));
+
+        var vista = service.consultar(actor).getFirst();
+
+        assertThat(vista.diasParaDesbloqueo()).isZero();
+        assertThat(vista.bloqueado()).isFalse();
+    }
+
+    /** Lo que SIGUE bloqueado en dia 0: un habito que arranca mas adelante no se adelanta. */
+    @Test
+    void enDia0UnHabitoQueArrancaMasAdelanteSigueBloqueado() {
+        HabitoId id = HabitoId.of(UUID.randomUUID());
+        Habito pastilla = Habito.crearDeSistema(id, "Pastilla Renacer", TipoHabito.JOURNALING,
+                new DetallesHabito("desc", "ESPIRITU", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(0)));
+        when(loadPort.catalogoActivo()).thenReturn(List.of(pastilla));
+        when(loadPort.personalesActivosDe(actor)).thenReturn(List.of());
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), id, 8, null, TipoDia.TODOS,
+                        DISPARO, null, CLOCK.now())));
+
+        var vista = service.consultar(actor).getFirst();
+
+        assertThat(vista.diasParaDesbloqueo()).as("dia 8 contado desde el primer dia planificable").isEqualTo(7);
+        assertThat(vista.bloqueado()).isTrue();
+    }
 }

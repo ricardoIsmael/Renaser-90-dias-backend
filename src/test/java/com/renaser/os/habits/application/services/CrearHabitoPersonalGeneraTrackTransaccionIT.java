@@ -4,6 +4,7 @@ import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase;
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase.CrearHabitoPersonalCommand;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
+import com.renaser.os.habits.application.ports.out.horario.SaveHorarioHabitoPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.PlantillaHabitoPersonal;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
@@ -18,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
@@ -28,6 +30,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 
 /**
  * Cierra docs/informes/habits-eleccion-y-personales.md §3/§4.4: un habito PERSONAL sin
@@ -61,6 +65,9 @@ class CrearHabitoPersonalGeneraTrackTransaccionIT {
     private JdbcTemplate jdbcTemplate;
     @Autowired
     private TransactionTemplate transactionTemplate;
+    /** Espia, no mock: los demas tests de esta clase tienen que seguir guardando de verdad. */
+    @MockitoSpyBean
+    private SaveHorarioHabitoPort saveHorarioPort;
 
     private UserId participanteId;
 
@@ -140,20 +147,64 @@ class CrearHabitoPersonalGeneraTrackTransaccionIT {
         assertThat(generados).extracting(r -> r.habitoId()).contains(habito.id());
     }
 
+    /**
+     * El bug de produccion del 2026-09-06 (E-137), contra Postgres real.
+     *
+     * <p><b>Corregido en el mismo cambio:</b> este metodo se llamaba
+     * {@code siElHorarioEsInvalidoNoQuedaNingunHabitoHuerfano} y usaba {@code dia_programa = 0}
+     * como forma de provocar el rechazo de {@code HorarioHabito.crear}, para demostrar el
+     * rollback. Ese disparador dejo de existir: D-115 hace que el dia 0 arranque el dia 1, asi
+     * que el alta ya no falla. La atomicidad NO se dejo sin cubrir — se prueba abajo, en
+     * {@link #siElHorarioNoSePuedeGuardarNoQuedaNingunHabitoHuerfano}, con un disparador que
+     * sigue siendo posible.
+     *
+     * <p>Lo que verifica: un participante en {@code dia_programa = 0} —el estado inicial de
+     * TODA cuenta recien aprobada, porque el Dia 1 nunca puede ser hoy (D-66)— puede crear su
+     * habito propio, y el horario que se persiste arranca el dia 1. Que la fila entre de verdad
+     * importa aca y no en un test unitario: {@code horarios_habito.dia_inicio} tiene
+     * {@code CHECK (dia_inicio BETWEEN 1 AND 90)} en el baseline, asi que un 0 tampoco habria
+     * pasado la base.
+     */
     @Test
-    @DisplayName("Atomicidad: si el HorarioHabito es invalido, tampoco queda el Habito (rollback de toda la transaccion)")
-    void siElHorarioEsInvalidoNoQuedaNingunHabitoHuerfano() {
-        // dia_programa = 0 (DEFAULT real de participantes_programa, antes de activar el
-        // programa): HorarioHabito.crear rechaza diaInicio fuera de 1..90 (domain/HorarioHabito.
-        // java), y ese throw tiene que deshacer tambien el savePort.save(habito) anterior — si
-        // no, queda un habito PERSONAL sin ningun horario, exactamente el bug original.
+    @DisplayName("Dia 0: el habito personal se crea y su horario arranca el dia 1 (E-137)")
+    void enDia0ElHabitoSeCreaYSuHorarioArrancaElDia1() {
         seedParticipante(0);
 
+        Habito habito = crearUseCase.crear(comando(LocalTime.of(6, 0), LocalTime.of(22, 0)));
+
+        assertThat(contarHabitosDe(participanteId)).as("el habito debe quedar persistido").isEqualTo(1L);
+        Integer diaInicio = jdbcTemplate.queryForObject(
+                "SELECT dia_inicio FROM renaser.horarios_habito WHERE habito_id = ?", Integer.class,
+                habito.id().value());
+        assertThat(diaInicio).as("lo que se crea en dia 0 arranca el dia 1 (D-103/D-115)").isEqualTo(1);
+    }
+
+    /**
+     * La garantia de atomicidad que este archivo existe para proteger: {@code Habito} y
+     * {@code HorarioHabito} se guardan en la MISMA transaccion, y si el segundo paso falla no
+     * puede quedar un habito PERSONAL sin horario — el bug original de
+     * docs/informes/habits-personal-con-horario.md.
+     *
+     * <p>El fallo se inyecta en el puerto de salida y no con una entrada invalida a proposito:
+     * despues de D-115 <b>ningun comando aceptado puede construir un {@code HorarioHabito}
+     * invalido</b> (el dia siempre queda en 1..90, y {@code CrearHabitoPersonalCommand} ya rechaza
+     * {@code horaLimite <= horaDisparo} antes de llegar al servicio). Lo que queda por cubrir es
+     * justamente el fallo de infraestructura en el segundo guardado, que es lo que
+     * {@code @Transactional} tiene que deshacer. Se usa un espia —no un mock— para que los otros
+     * tests de esta clase sigan corriendo contra el adaptador real.
+     */
+    @Test
+    @DisplayName("Atomicidad: si el horario no se puede guardar, tampoco queda el Habito (rollback)")
+    void siElHorarioNoSePuedeGuardarNoQuedaNingunHabitoHuerfano() {
+        seedParticipante(23);
+        doThrow(new IllegalStateException("fallo simulado al guardar el horario"))
+                .when(saveHorarioPort).save(any());
+
         assertThatThrownBy(() -> crearUseCase.crear(comando(LocalTime.of(6, 0), LocalTime.of(22, 0))))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(IllegalStateException.class);
 
         assertThat(contarHabitosDe(participanteId))
-                .as("ningun habito debe quedar persistido si su horario no pudo crearse")
+                .as("ningun habito debe quedar persistido si su horario no pudo guardarse")
                 .isZero();
     }
 }

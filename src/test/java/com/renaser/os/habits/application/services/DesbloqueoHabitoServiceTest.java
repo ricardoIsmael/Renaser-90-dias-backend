@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.application.ports.in.desbloqueo.CambiarEstadoHabitoDelPlanUseCase.CambiarEstadoHabitoCommand;
 import com.renaser.os.habits.application.ports.in.desbloqueo.ConsultarDesbloqueosHabitoUseCase.PlanDesbloqueo;
 import com.renaser.os.habits.application.ports.in.desbloqueo.ElegirHabitoUseCase.ElegirHabitoCommand;
 import com.renaser.os.habits.application.ports.out.desbloqueo.LoadDesbloqueoHabitoPort;
@@ -25,7 +26,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -60,6 +63,11 @@ class DesbloqueoHabitoServiceTest {
     private static Habito habitoDeSistemaActivo() {
         return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Meditar", TipoHabito.CHECKBOX, "MENTE",
                 ExigenciaEvidencia.OPCIONAL, CLOCK.now());
+    }
+
+    private static Habito habitoPersonalDe(UserId dueno) {
+        return Habito.crearPersonal(HabitoId.of(UUID.randomUUID()), dueno, "Mi reto", TipoHabito.CHECKBOX,
+                "CUERPO", PlantillaHabitoPersonal.OTRO, "etiqueta", CLOCK.now());
     }
 
     // ---- consultar (comportamiento preexistente, sin cambios de contrato) ----
@@ -120,17 +128,113 @@ class DesbloqueoHabitoServiceTest {
         verify(savePort).elegirSiFalta(actor, habito.id(), 1, CLOCK.now(), CLOCK.now());
     }
 
+    // ---- habitos PERSONAL en el plan (E-138) ----
+
+    /**
+     * E-138. Este metodo se llamaba {@code elegirHabitoPersonalRechazado} y afirmaba lo contrario:
+     * que un habito PERSONAL siempre se rechazaba con
+     * {@code IllegalArgumentException("Solo se eligen habitos del catalogo, no habitos personales")}.
+     * Ese rechazo dejaba al interruptor ACTIVO/PAUSADO sin backend para los habitos propios,
+     * porque el movil asegura la fila con este caso de uso antes de mandar el PATCH (D-99) y
+     * `desbloqueos_habito` es la UNICA tabla donde vive la pausa.
+     */
     @Test
-    void elegirHabitoPersonalRechazado() {
+    void elegirElHabitoPersonalPropioLoAgregaAlPlan() {
         UserId actor = UserId.of(UUID.randomUUID());
-        Habito personal = Habito.crearPersonal(HabitoId.of(UUID.randomUUID()), actor, "Mi reto", TipoHabito.CHECKBOX,
-                "CUERPO", PlantillaHabitoPersonal.OTRO, "etiqueta", CLOCK.now());
+        Habito personal = habitoPersonalDe(actor);
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(personal.id())).thenReturn(Optional.of(personal));
+        DesbloqueoHabito esperado = DesbloqueoHabito.rehydrate(actor, personal.id(), 10, CLOCK.now(), CLOCK.now(),
+                CLOCK.now());
+        when(loadPort.deParticipanteYHabito(actor, personal.id())).thenReturn(Optional.of(esperado));
+
+        DesbloqueoHabito resultado = service.elegir(new ElegirHabitoCommand(actor, personal.id(), null));
+
+        assertThat(resultado).isEqualTo(esperado);
+        verify(savePort).elegirSiFalta(actor, personal.id(), 10, CLOCK.now(), CLOCK.now());
+    }
+
+    /**
+     * Lo que el rechazo viejo si protegia, ahora explicito: el habito propio de OTRO aprendiz.
+     * 404 y no 403 a proposito — un 403 confirmaria que ese id existe.
+     */
+    @Test
+    void elegirElHabitoPersonalDeOtroAprendizNoSeEncuentra() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        UserId otro = UserId.of(UUID.randomUUID());
+        Habito ajeno = habitoPersonalDe(otro);
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(ajeno.id())).thenReturn(Optional.of(ajeno));
+
+        assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, ajeno.id(), null)))
+                .isInstanceOf(NoSuchElementException.class);
+    }
+
+    /** Baja logica de un habito propio (`habitos.activo = false`): no vuelve a entrar al plan. */
+    @Test
+    void elegirUnHabitoPersonalDadoDeBajaRechazado() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito personal = habitoPersonalDe(actor);
+        personal.desactivar(CLOCK.now());
         when(progresoPort.deParticipante(actor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
         when(loadHabitoPort.byId(personal.id())).thenReturn(Optional.of(personal));
 
         assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, personal.id(), null)))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /**
+     * La secuencia EXACTA que dispara el interruptor del Plan sobre un habito propio: PUT
+     * ({@code elegir}, asegura la fila) y despues PATCH ({@code cambiarEstado}). Contra el codigo
+     * viejo se caia en el primer paso con un 400.
+     */
+    @Test
+    void elInterruptorPausaUnHabitoPersonalPropioHastaUnaFecha() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito personal = habitoPersonalDe(actor);
+        LocalDate hastaElDomingo = LocalDate.of(2026, 8, 30);
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(personal.id())).thenReturn(Optional.of(personal));
+        DesbloqueoHabito fila = DesbloqueoHabito.rehydrate(actor, personal.id(), 10, CLOCK.now(), CLOCK.now(),
+                CLOCK.now());
+        when(loadPort.deParticipanteYHabito(actor, personal.id())).thenReturn(Optional.of(fila));
+        when(savePort.save(fila)).thenReturn(fila);
+
+        service.elegir(new ElegirHabitoCommand(actor, personal.id(), null));
+        DesbloqueoHabito pausado = service.cambiarEstado(
+                new CambiarEstadoHabitoCommand(actor, personal.id(), false, hastaElDomingo));
+
+        assertThat(pausado.estaPausado()).isTrue();
+        assertThat(pausado.pausadoHasta()).isEqualTo(hastaElDomingo);
+        // Sigue pausado el ultimo dia (inclusive) y vuelve solo al siguiente, igual que un habito
+        // de catalogo: la regla de V31 no cambia por ser un habito propio.
+        assertThat(pausado.estaPausadoEl(hastaElDomingo)).isTrue();
+        assertThat(pausado.estaPausadoEl(hastaElDomingo.plusDays(1))).isFalse();
+        verify(savePort).save(fila);
+    }
+
+    /** Contraparte: el mismo interruptor lo vuelve a encender. */
+    @Test
+    void elInterruptorReactivaUnHabitoPersonalPausado() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito personal = habitoPersonalDe(actor);
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(personal.id())).thenReturn(Optional.of(personal));
+        DesbloqueoHabito fila = DesbloqueoHabito.rehydrate(actor, personal.id(), 10, CLOCK.now(), CLOCK.now(),
+                CLOCK.now(), CLOCK.now(), LocalDate.of(2026, 8, 30));
+        when(loadPort.deParticipanteYHabito(actor, personal.id())).thenReturn(Optional.of(fila));
+        when(savePort.save(fila)).thenReturn(fila);
+
+        DesbloqueoHabito activo = service.cambiarEstado(
+                new CambiarEstadoHabitoCommand(actor, personal.id(), true, null));
+
+        assertThat(activo.estaPausado()).isFalse();
+        assertThat(activo.pausadoHasta()).isNull();
     }
 
     @Test

@@ -21,6 +21,11 @@ import java.time.LocalDate;
  * <p>Un habito OBLIGATORIO ({@code habitos.desactivable = false}, V18) no se puede pausar:
  * devuelve 409, no 403 — no es un problema de permisos, es que la operacion no aplica a ese
  * habito para nadie.
+ *
+ * <p>Vale igual para un habito del catalogo y para uno PERSONAL propio: la pausa es un atributo
+ * de la fila de {@code desbloqueos_habito}, y desde E-138 un habito personal tambien puede tener
+ * la suya. Un habito personal siempre es {@code desactivable}, asi que nunca cae en el 409.
+ * Exige que la fila exista (404 si no) — el movil la asegura antes con el PUT (D-99).
  */
 public interface CambiarEstadoHabitoDelPlanUseCase {
 

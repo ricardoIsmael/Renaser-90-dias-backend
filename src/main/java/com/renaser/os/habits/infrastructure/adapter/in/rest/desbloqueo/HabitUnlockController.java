@@ -63,6 +63,10 @@ public class HabitUnlockController {
      * <p>El cuerpo es opcional: sin el, el habito arranca hoy, igual que antes de que este
      * endpoint aceptara un dia. Con {@code {"unlockDay": 2}} el aprendiz lo deja agendado para
      * el dia 2 del programa y hasta entonces no le genera registros.
+     *
+     * <p>Sirve tanto para un habito del catalogo como para uno PERSONAL propio (E-138). Es la
+     * primera mitad de la secuencia del interruptor del Plan (D-99): este PUT asegura la fila y
+     * el PATCH de abajo la pausa o la reactiva.
      */
     @RequiresPermission(Permission.USE_APP)
     @PutMapping("/{habitId}")

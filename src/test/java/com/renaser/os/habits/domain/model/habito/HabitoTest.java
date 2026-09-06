@@ -1,5 +1,6 @@
 package com.renaser.os.habits.domain.model.habito;
 
+import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -82,6 +83,27 @@ class HabitoTest {
         assertThat(habito.esOpcional()).isTrue();
         assertThat(habito.obligatorioEnIntoxicacion()).isTrue();
         assertThat(habito.actualizadoEn()).isEqualTo(despues);
+    }
+
+    /**
+     * E-138: {@code esPersonalDe} es la pregunta que decide si un habito puede entrar en el plan
+     * de alguien ({@code DesbloqueoHabitoService.elegir}). Los tres casos importan por separado:
+     * el catalogo NO tiene dueno (y por eso no es "personal de" nadie, ni siquiera comparando
+     * contra null), el propio si, y el de otro aprendiz no.
+     */
+    @Test
+    void esPersonalDeDistingueElHabitoPropioDelAjenoYDelCatalogo() {
+        UserId dueno = UserId.of(UUID.randomUUID());
+        UserId otro = UserId.of(UUID.randomUUID());
+        Habito propio = Habito.crearPersonal(HabitoId.of(UUID.randomUUID()), dueno, "Correr 5km",
+                TipoHabito.CHECKBOX, "CUERPO", PlantillaHabitoPersonal.CORRER, "Meta", AHORA);
+        Habito deCatalogo = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Titulo", TipoHabito.CHECKBOX,
+                detalles(), AHORA);
+
+        assertThat(propio.esPersonalDe(dueno)).isTrue();
+        assertThat(propio.esPersonalDe(otro)).isFalse();
+        assertThat(deCatalogo.esPersonalDe(dueno)).isFalse();
+        assertThat(deCatalogo.esPersonalDe(null)).isFalse();
     }
 
     /**

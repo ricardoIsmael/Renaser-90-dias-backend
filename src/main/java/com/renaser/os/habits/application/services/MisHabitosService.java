@@ -84,7 +84,7 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
         Map<HabitoId, Integer> desbloqueoPorHabito = horarios.stream()
                 .collect(Collectors.toMap(HorarioHabito::habitoId, HorarioHabito::diaInicio, Math::min));
 
-        int diaDelAprendiz = requireProgreso(actor).diaPrograma();
+        int diaDelAprendiz = primerDiaPlanificable(requireProgreso(actor).diaPrograma());
 
         return habitos.stream()
                 .map(h -> {
@@ -93,6 +93,26 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
                             Math.max(0, desbloqueo - diaDelAprendiz));
                 })
                 .toList();
+    }
+
+    /**
+     * El dia contra el que se mide todo en este servicio: el {@code diaPrograma} del aprendiz, o
+     * el {@link #PRIMER_DIA} si todavia esta en el dia 0.
+     *
+     * <p><b>Por que el dia 0 cuenta como 1 (D-103).</b> "Hoy se organiza mañana" (D-91/D-98): el
+     * Dia 1 nunca puede ser hoy ({@code ParticipacionPrograma.activarPrograma} solo acepta
+     * [hoy+1, hoy+3]), asi que TODO aprendiz recien aprobado pasa su primera jornada en dia 0. Si
+     * ese dia se mide contra 0, los 13 habitos del catalogo que arrancan el dia 1 viajan con
+     * {@code diasParaDesbloqueo = 1} y {@code bloqueado = true} — con candado, sin hora editable y
+     * sin interruptor —, que es justo lo contrario de lo que D-103 decidio: <i>"quien eligio
+     * empezar mañana tiene que poder armar su plan hoy"</i>. {@code DesbloqueoHabitoService}
+     * ({@code resolverDiaDesbloqueo}) ya aplica este mismo {@code Math.max(1, dia)} desde D-103;
+     * aca faltaba, y por eso el plan se veia entero bajo llave el dia previo a empezar.
+     *
+     * <p>Solo cambia algo en el dia 0: para cualquier {@code dia >= 1} devuelve el mismo valor.
+     */
+    private static int primerDiaPlanificable(int diaPrograma) {
+        return Math.max(PRIMER_DIA, diaPrograma);
     }
 
     /**
@@ -121,11 +141,21 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
      * exactamente el bug que este cambio cierra.
      *
      * <p><b>{@code diaInicio}/{@code tipoDia} elegidos</b> (ver informe para la traza completa
-     * contra {@code aplicaEnDia}): {@code diaInicio = progreso.diaPrograma()} (aplica desde HOY,
-     * el dia de programa del participante en el momento de la creacion, nunca en el pasado),
-     * {@code diaFin = null} (abierto, no vence), {@code tipoDia = TipoDia.TODOS} (aplica
+     * contra {@code aplicaEnDia}): {@code diaInicio = primerDiaPlanificable(diaPrograma)} (aplica
+     * desde HOY, el dia de programa del participante en el momento de la creacion, nunca en el
+     * pasado), {@code diaFin = null} (abierto, no vence), {@code tipoDia = TipoDia.TODOS} (aplica
      * cualquier dia de la semana — un habito personal no tiene el concepto de "solo domingo" ni
      * "solo dia de disciplina" que si tiene el catalogo).
+     *
+     * <p><b>Dia 0 (E-137).</b> Antes esto pasaba {@code progreso.diaPrograma()} tal cual, y para
+     * un aprendiz recien aprobado —que forzosamente esta en dia 0, porque el Dia 1 nunca puede ser
+     * hoy— {@link HorarioHabito#crear} lo rechazaba con {@code "diaInicio fuera de rango 1..90:
+     * 0"}: el alta entera se caia con un 400 que hablaba de un campo que el cliente jamas mando.
+     * El propio informe {@code docs/informes/habits-personal-con-horario.md} lo dejo anotado como
+     * hueco abierto ("¿bloquear antes con un mensaje claro? ¿usar diaInicio = 1?") por ser una
+     * decision de negocio sin confirmar; <b>D-103 la confirmo</b> para la operacion hermana
+     * ({@code DesbloqueoHabitoService.resolverDiaDesbloqueo}, mismo {@code Math.max(1, dia)}), asi
+     * que aca se aplica la misma: lo que se crea en dia 0 arranca el dia 1.
      */
     @Override
     @Transactional
@@ -137,8 +167,8 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
         Habito guardado = savePort.save(habito);
 
         HorarioHabitoId horarioId = HorarioHabitoId.of(idGenerator.newId());
-        HorarioHabito horario = HorarioHabito.crear(horarioId, id, progreso.diaPrograma(), null, TipoDia.TODOS,
-                command.horaDisparo(), command.horaLimite(), clock.now());
+        HorarioHabito horario = HorarioHabito.crear(horarioId, id, primerDiaPlanificable(progreso.diaPrograma()),
+                null, TipoDia.TODOS, command.horaDisparo(), command.horaLimite(), clock.now());
         saveHorarioPort.save(horario);
 
         return guardado;
