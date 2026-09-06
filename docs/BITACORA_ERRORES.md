@@ -2211,6 +2211,47 @@ vez**, aunque toquen modulos que no se cruzan.
   build entero. La senal que lo distingue es **"0 pruebas ejecutadas"**: un problema real de codigo
   falla DESPUES de correr pruebas, y nombra cual.
 
+**Quinto sintoma, la version masiva, vista el 2026-09-05 al montar el CI (D-114).** El mismo
+choque, pero a escala, y por eso es el mas alarmante de todos: `./mvnw clean verify` termina con
+
+```
+[ERROR] Tests run: 2086, Failures: 36, Errors: 349, Skipped: 0
+```
+
+**349 errores repartidos por TODOS los modulos** — `habits`, `rocks`, `rag`, `onboarding`, `users`,
+`points`, `support`, `notifications`, `phasecontracts` —, incluidas pruebas de dominio puro que no
+tocan infraestructura. Parece que alguien rompio el proyecto entero. Contando por tipo:
+
+```
+305 java.lang.NoClassDefFoundError
+223 java.lang.ClassNotFoundException
+164 org.mockito.exceptions.base.MockitoException
+```
+
+y las clases "que faltan" son cosas tan basicas como `RegistroRadarId`, `SemanaPrograma`,
+`PorcentajeHabitos` o `CatalogoHerramientasAgente`.
+
+**La verificacion que lo cierra en dos comandos**, y que distingue esto de una rotura real: al
+terminar el build, la clase esta **en el fuente Y en `target/`**.
+
+```bash
+ls src/main/java/com/renaser/os/habits/domain/model/radar/RegistroRadarId.java   # existe
+ls target/classes/com/renaser/os/habits/domain/model/radar/RegistroRadarId.class # existe tambien
+```
+
+Si las dos existen despues de la corrida, no falta ninguna clase: **faltaba mientras surefire la
+buscaba**, porque otro build estaba reescribiendo `target/` en ese momento. En esa maquina habia,
+ademas de la app levantada desde IntelliJ, otros dos `mvnw` que arrancaron mientras este corria.
+
+**Contraprueba, para no dejarlo en hipotesis:** la misma revision del codigo, compilada sobre una
+copia aislada del checkout (`target/` propio, sin nadie mas escribiendo), dio **2421 pruebas con 3
+fallos** — y esos 3 son E-125, un bug real de zona horaria. De 349 errores a 0 sin tocar una linea
+de codigo.
+
+**La leccion practica:** ante un numero de errores absurdamente grande y repartido por modulos que
+no tienen nada que ver entre si, la primera hipotesis no es el codigo, es el `target/` compartido.
+Un error real se concentra; una colision de builds se esparce.
+
 ## E-105 — La pantalla de habitos se apagaba todas las noches: `GET /habit-tracks/today` pedia el dia del servidor (2026-09-05)
 
 **Sintoma:** a partir de las 19:00 hora de Lima, `GET /api/v1/habit-tracks/today` devuelve **`[]`**
@@ -3396,96 +3437,29 @@ package-private en el adaptador, igual que ya se acepto duplicar `CLAVE_PREFIJO`
 ("Expecting value to be false but was true"), pero **eso si fue flakiness**: paso al reejecutar la
 clase sola. Son dos cosas distintas y conviene no confundirlas.
 
+**Confirmado desde una segunda sesion (la de infraestructura de CI, D-114), con dos datos que la
+primera no tenia:**
+
+1. **No lo causa el `pom.xml` nuevo.** Como el bug aparecio el mismo dia en que se agregaron JaCoCo,
+   failsafe y Spring Cloud AWS, lo primero fue descartarlos: se corrio esa sola clase sobre una copia
+   aislada del checkout con el **`pom.xml` de `HEAD`**, sin ninguno de esos cambios. **Mismos 3
+   fallos, mismas lineas.** Es preexistente y depende solo de la hora.
+
+   ```bash
+   git show HEAD:pom.xml > pom.xml    # sobre una copia aislada
+   ./mvnw -B -ntp test -Dtest=ControlCuotaRedisAdapterTest
+   # -> Tests run: 5, Failures: 3   (identico)
+   ```
+
+2. **Los runners de GitHub Actions corren en UTC.** El workflow `.github/workflows/ci.yml` que se
+   agrego el mismo dia corre en cada push y cada PR, asi que va a ver esta ventana igual que una
+   maquina de Lima: **el CI se va a poner rojo todas las noches por este motivo, no por el codigo del
+   PR**. Queda anotado en `docs/DESPLIEGUE_Y_CI.md` §3.2 como lo primero a mirar ante un fallo
+   nocturno inexplicable.
+
 **Como evitar que vuelva a pasar** — es la regla 03 ("escribir el test que hubiera atrapado el bug")
 leida al reves: cuando se corrige un bug de zona horaria en produccion, **hay que revisar si el test
 duplicaba el mismo calculo**. Si lo duplica, quedan dos fuentes de verdad y solo se arreglo una; el
 test sigue verde en la franja comoda del dia y miente sobre lo que verifica. La franja peligrosa en
 este proyecto es **00:00-05:00 UTC**, que en Lima es la tarde-noche del dia anterior.
 
----
-
-## E-125 — `ControlCuotaRedisAdapterTest` falla todas las noches entre las 19:00 y la medianoche de Lima (2026-09-05) — **ABIERTO, NO CORREGIDO**
-
-**Sintoma exacto.** Tres de las cinco pruebas de la clase fallan, y solo en esa franja horaria:
-
-```
-[ERROR] Tests run: 5, Failures: 3, Errors: 0, Skipped: 0 <<< FAILURE! --
-        in com.renaser.os.rag.infrastructure.adapter.out.redis.ControlCuotaRedisAdapterTest
-
-[ERROR]   ControlCuotaRedisAdapterTest.elTtlSeFijaUnaSolaVezYNoSeRenuevaEnConsumosPosteriores:58
-Expecting actual:
-  -2L
-to be greater than:
-  0L
-
-[ERROR]   ControlCuotaRedisAdapterTest.liberarSobreUnaClaveExistenteLaDecrementaSinTocarElTtl:109
-expected: "1"
- but was: null
-
-[ERROR]   ControlCuotaRedisAdapterTest.unaClaveEnvenenadaSinTtlSeAutoreparaEnElSiguienteConsumo:80
-Expecting actual:
-  -1L
-to be greater than:
-  0L
-```
-
-Los tres numeros dicen lo mismo con distintas palabras: **la clave que la prueba va a leer no es la
-que el adaptador escribio.** En Redis, un TTL de `-2` significa "la clave no existe" y un `get` de
-una clave inexistente devuelve `null`.
-
-**Causa real: la prueba y el adaptador arman la clave con zonas horarias distintas.**
-
-```java
-// ControlCuotaRedisAdapter (produccion)
-private static final ZoneId ZONA_PADRON = ZoneId.of("America/Lima");
-private LocalDate hoyDelPadron() { return clock.now().atZone(ZONA_PADRON).toLocalDate(); }
-
-// ControlCuotaRedisAdapterTest, linea 147
-return CLAVE_PREFIJO + actorId.value() + ":" + LocalDate.now(ZoneOffset.UTC);
-```
-
-Lima es UTC-5. Entre las **19:00 y las 23:59 hora de Lima** ya es el dia siguiente en UTC, asi que
-el adaptador escribe `renasia:cuota:<id>:2026-09-05` y la prueba lee
-`renasia:cuota:<id>:2026-09-06`. Fuera de esa franja las dos fechas coinciden y las cinco pruebas
-pasan.
-
-**Es exactamente la familia de E-91, E-105 y E-106**, y lo que `.claude/rules/02-tiempo-zonas-y-schedulers.md`
-§3 advierte palabra por palabra: *"Todo test de un comportamiento diario debe incluir un caso con el
-reloj en una hora UTC que caiga en el dia local anterior"*. Aca no hay `FixedClock` que lo esconda:
-la prueba usa el reloj real (lo dice su propio Javadoc) y por eso el resultado depende de **a que
-hora se corre el build**. Pasa 19 horas por dia y falla 5.
-
-**Verificacion de que NO lo causo ningun cambio de configuracion.** Se detecto al montar la
-infraestructura de CI (D-114) y lo primero fue descartar el `pom.xml` nuevo. Se corrio la misma
-clase sobre una copia aislada del repositorio con el **`pom.xml` original de `HEAD`** (sin JaCoCo,
-sin failsafe, sin Spring Cloud AWS): **mismos 3 fallos, mismas lineas**. El bug es preexistente y
-depende solo de la hora.
-
-```bash
-git show HEAD:pom.xml > pom.xml   # sobre una copia aislada
-./mvnw -B -ntp test -Dtest=ControlCuotaRedisAdapterTest
-# -> Tests run: 5, Failures: 3   (identico)
-```
-
-**NO se corrigio**, por alcance: el cambio que lo encontro era de infraestructura de build
-(`pom.xml`, `Dockerfile`, `.github/`, documentacion) y esto es una prueba del modulo `rag`. Se
-reporta en vez de arreglarse de contrabando, como pide `.claude/rules/00-commits-y-alcance.md`.
-
-**El arreglo, cuando se haga, es de una linea:** que la prueba use la misma zona que el adaptador.
-
-```java
-private static final ZoneId ZONA_PADRON = ZoneId.of("America/Lima");
-...
-return CLAVE_PREFIJO + actorId.value() + ":" + LocalDate.now(ZONA_PADRON);
-```
-
-**Consecuencia inmediata que conviene tener presente:** el workflow de CI recien agregado
-(`.github/workflows/ci.yml`) corre en runners de GitHub, **que estan en UTC**. Ahi la fecha UTC y la
-de Lima difieren durante las mismas 5 horas, asi que el CI va a ponerse rojo todas las noches por
-este motivo y no por el codigo del PR. Es el primer candidato a revisar ante un fallo nocturno
-inexplicable.
-
-**Como evitar que vuelva a pasar:** ninguna prueba deberia reconstruir a mano una clave que
-produccion arma con una zona horaria. Si el literal tiene que duplicarse porque el campo es
-`private` (que es lo que dice el comentario de `CLAVE_PREFIJO` en esa misma clase), **la zona se
-duplica con el**, no se reemplaza por UTC "que da igual". Nunca da igual: da igual 19 horas por dia.
