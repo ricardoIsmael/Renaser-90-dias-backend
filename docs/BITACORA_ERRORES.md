@@ -4922,3 +4922,79 @@ que había un ciclo se conservó porque es correcto por sí mismo, pero el comen
    para todo salvo justo para lo que el aprendiz había cambiado.
 3. **Una regla de calendario duplicada es una bomba de tiempo silenciosa.** Si dos lugares calculan
    la misma semana por su cuenta, el día que se separen nada va a fallar — solo va a estar mal.
+
+---
+
+## E-146 — "Solo hoy" mandaba una fecha fuera de la semana que la pantalla dibuja, y la etiqueta pedida resultó ser mentira (2026-09-06) — **RESUELTO en el frontend**
+
+**Sintoma exacto, reportado por el dueño** (con la pausa ya leyéndose de vuelta, E-145): *"solo
+funciona con la segunda opción, no con la primera de solo hoy"*. Elegir **"Hasta que yo lo
+reactive"** apagaba el hábito; elegir **"Solo hoy"** no hacía nada visible.
+
+**Causa.** `opcionesDePausa()` calculaba la primera opción con la fecha del **dispositivo**
+(`aFechaIso(new Date())`), y eso está mal por lo que la pantalla **es**: el Plan no registra el día
+que uno está viviendo, **planifica hacia adelante** — hoy y todo lo anterior no son editables
+(`ULTIMO_INDICE_NO_PLANIFICABLE`). "Hoy" nunca es un día que se pueda tocar ahí.
+
+El caso en que explotó lo deja a la vista: el reporte llegó un **domingo**, y un domingo la pantalla
+dibuja la semana SIGUIENTE (E-137), del lunes 7 al domingo 13. "Solo hoy" mandaba el **6**, que no
+es ninguna de las siete pestañas:
+
+```
+HOY: 2026-09-06 (domingo)
+SEMANA MOSTRADA: LUN=09-07 MAR=09-08 MIÉ=09-09 JUE=09-10 VIE=09-11 SÁB=09-12 DOM=09-13
+```
+
+El backend guardaba la pausa correctamente (hasta el 6) y la pantalla no apagaba ningún día, porque
+ninguno caía dentro del plazo. **"Hasta que yo lo reactive" funcionaba porque no lleva fecha** — de
+ahí que fallara exactamente una de las dos opciones, que fue la pista que lo destapó.
+
+**Solución.** Las opciones pasan a ser relativas al **día que la persona está mirando**: se llaman
+por esa pestaña y mandan **su** fecha real.
+
+### El segundo hallazgo: la etiqueta que el dueño pidió no se podía cumplir
+
+El pedido textual fue *"cambia el texto por el día: solo el lunes, solo el martes, así
+sucesivamente"*. Se implementó así y **al verificarlo resultó ser falso**:
+
+```
+elijo MAR + "Solo el martes"  ->  quedan encendidos: MIÉ,JUE,VIE,SÁB,DOM
+```
+
+Apagaba **lunes y martes**. Y no era un error del cliente: es lo que el backend hace. La pausa que
+`desbloqueos_habito` sabe guardar es un **rango que arranca cuando se toca el botón** —
+`pausado_en` es `clock.now()`, y `estaPausadoEl` solo compara contra el extremo de arriba
+(`pausadoHasta == null || !fecha.isAfter(pausadoHasta)`). **No existe forma de expresar "salteá ESE
+día y ninguno más".**
+
+Así que la etiqueta dice **"Hasta el martes"**, que es exactamente lo que ocurre. Preferir la
+etiqueta pedida habría dejado un texto que le miente a la persona sobre lo que acaba de hacer.
+
+**Lo que queda abierto, a la vista:** pausar **un solo día suelto** a mitad de semana no se puede
+hoy. No es de esta pantalla: haría falta que el backend acepte un `pausadoDesde` además del
+`pausadoHasta` (la columna `pausado_en` existe pero se llena con `now()`, no con una fecha elegida).
+Queda planteado, sin tocar.
+
+**Verificacion.** En el navegador, contra el código real, cruzando **cada opción de cada día** con
+el mapeo que apaga los días. Cada etiqueta corresponde exactamente con lo que queda apagado:
+
+| Pestaña elegida | Opción | Días que quedan encendidos |
+|---|---|---|
+| LUN | "Hasta el lunes" | MAR…DOM |
+| MAR | "Hasta el martes" | MIÉ…DOM |
+| SÁB | "Hasta el sábado" | DOM |
+| cualquiera | "Hasta el domingo" | ninguno |
+| DOM | (no se ofrece "Hasta el domingo" dos veces) | — |
+
+**Como evitar que vuelva a pasar:**
+
+1. **En una pantalla de planificación, "hoy" casi nunca es la respuesta correcta.** Si la pantalla
+   deja elegir un día, las acciones tienen que colgar del **día elegido**, no del reloj. El bug
+   estuvo latente desde que existe la opción y solo se hizo visible un domingo, que es cuando "hoy"
+   y "la semana mostrada" dejan de solaparse.
+2. **Una etiqueta es una afirmación sobre lo que el sistema hace, y hay que verificarla como
+   tal.** "Solo el martes" compilaba, se veía bien y era falsa. Se descubrió cruzando el texto del
+   botón con el efecto real, no leyendo el código.
+3. **Antes de ofrecer una opción, comprobar que el modelo de datos la sabe expresar.** Acá el
+   backend solo guarda el fin del rango; ofrecer "solo ese día" era prometer algo que la base no
+   puede representar.
