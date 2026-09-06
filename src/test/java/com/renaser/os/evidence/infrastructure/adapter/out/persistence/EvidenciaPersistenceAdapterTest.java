@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -258,6 +259,81 @@ class EvidenciaPersistenceAdapterTest {
                 10);
 
         assertThat(resultado).extracting(e -> e.id().value()).containsExactly(miEvidencia.id().value());
+    }
+
+    // ---- registrosHabitoConEvidencia (D-113): el batch que alimenta GET /habit-tracks/today ----
+
+    /**
+     * Un registro de habito real, con su habito de sistema, porque {@code evidencias.registro_habito_id}
+     * tiene FK contra {@code registros_habito}: sin fila de verdad el INSERT ni siquiera entra.
+     */
+    private UUID seedRegistroHabito() {
+        UUID habitoId = UUID.randomUUID();
+        // Titulo derivado del id: `habitos_titulo_sistema_uk` es unico entre habitos de sistema y el
+        // baseline ya siembra el catalogo real, asi que un titulo fijo choca con el seed o consigo mismo.
+        entityManager.createNativeQuery("""
+                        INSERT INTO renaser.habitos (id, titulo, categoria_clave)
+                        VALUES (:id, :titulo, (SELECT clave FROM renaser.categorias_habito LIMIT 1))
+                        """)
+                .setParameter("id", habitoId)
+                .setParameter("titulo", "Habito de prueba " + habitoId)
+                .executeUpdate();
+        UUID registroId = UUID.randomUUID();
+        entityManager.createNativeQuery("""
+                        INSERT INTO renaser.registros_habito
+                            (id, participante_id, habito_id, fecha_ejecucion, dia_programa, tipo_dia)
+                        VALUES (:id, :pid, :hid, CURRENT_DATE, 20, CAST('DISCIPLINA' AS renaser.tipo_dia))
+                        """)
+                .setParameter("id", registroId)
+                .setParameter("pid", participanteId.value())
+                .setParameter("hid", habitoId)
+                .executeUpdate();
+        return registroId;
+    }
+
+    private Evidencia evidenciaDeRegistro(UUID registroHabitoId) {
+        return Evidencia.registrar(nuevoId(), participanteId,
+                new DestinoEvidencia.RegistroHabito(registroHabitoId), TipoEvidencia.TEXTO, null, null, "hecho",
+                null, null, null, false, CLOCK.now(), CLOCK);
+    }
+
+    @Test
+    @DisplayName("devuelve solo los registros del lote que tienen evidencia, sin importar cuantos se pregunten")
+    void registrosHabitoConEvidenciaDevuelveSoloLosQueTienen() {
+        UUID conEvidencia = seedRegistroHabito();
+        UUID sinEvidencia = seedRegistroHabito();
+        adapter.save(evidenciaDeRegistro(conEvidencia));
+
+        Set<UUID> resultado = adapter.registrosHabitoConEvidencia(List.of(conEvidencia, sinEvidencia));
+
+        assertThat(resultado).containsExactly(conEvidencia);
+    }
+
+    @Test
+    @DisplayName("un registro con varias evidencias aparece UNA vez (DISTINCT)")
+    void registrosHabitoConEvidenciaNoRepiteElMismoRegistro() {
+        UUID registroId = seedRegistroHabito();
+        adapter.save(evidenciaDeRegistro(registroId));
+        adapter.save(evidenciaDeRegistro(registroId));
+
+        Set<UUID> resultado = adapter.registrosHabitoConEvidencia(List.of(registroId));
+
+        assertThat(resultado).containsExactly(registroId);
+    }
+
+    @Test
+    @DisplayName("no confunde destinos: la evidencia de una roca no marca ningun registro de habito")
+    void registrosHabitoConEvidenciaIgnoraLaEvidenciaDeOtrosDestinos() {
+        UUID registroId = seedRegistroHabito();
+        adapter.save(evidenciaRocaTexto(false));
+
+        assertThat(adapter.registrosHabitoConEvidencia(List.of(registroId))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("coleccion vacia: conjunto vacio, sin ir a la base con un IN () invalido")
+    void registrosHabitoConEvidenciaConListaVaciaDevuelveVacio() {
+        assertThat(adapter.registrosHabitoConEvidencia(List.of())).isEmpty();
     }
 
     // ---- CHECKs de la tabla real, probados con INSERT nativo (el dominio no permite construirlos) ----

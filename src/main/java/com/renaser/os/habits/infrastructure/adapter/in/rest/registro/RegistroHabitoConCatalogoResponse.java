@@ -28,6 +28,15 @@ import java.util.UUID;
  *   ninguna ventana ni conocer la zona horaria del aprendiz. {@code null} si el habito no tiene
  *   ninguna hora configurada — ese no vence nunca.</li>
  * </ul>
+ *
+ * <p><b>Agregado 2026-09-05 (D-113):</b> {@code tieneEvidencia} — si ese track ya tiene al menos
+ * una evidencia subida, en cualquier estado de validacion. Tambien aditivo. Es el campo que le
+ * saca al movil el cruce contra {@code GET /api/v1/evidence}: ese listado devuelve UNA pagina de
+ * 20 filas, ordenada por fecha de creacion descendente, sin filtro de dia y mezclando evidencia de
+ * habito, de roca y de espiritu, asi que el dia que el aprendiz supere esas 20 filas la evidencia
+ * de un habito de hoy cae fuera de la pagina y el chip vuelve a decir "SUBIR" sobre un archivo que
+ * ya esta guardado. Con este campo la respuesta es exacta y no depende de cuantas filas entren en
+ * una pagina. Ver {@code evidence.api.RegistrosConEvidenciaFinder}.
  */
 public record RegistroHabitoConCatalogoResponse(String id, UUID habitoId, LocalDate fechaEjecucion, int diaPrograma,
                                                   String tipoDia, boolean esOpcional, String estado,
@@ -35,7 +44,8 @@ public record RegistroHabitoConCatalogoResponse(String id, UUID habitoId, LocalD
                                                   Integer calificacionProductividad, Instant completadoEn,
                                                   String tituloHabito, String tipoHabito, GuiaResumenResponse guia,
                                                   LocalTime horaDisparo, LocalTime horaLimite, Integer puntosEnJuego,
-                                                  Integer puntosMaximos, Instant plazoEvidencia) {
+                                                  Integer puntosMaximos, Instant plazoEvidencia,
+                                                  boolean tieneEvidencia) {
 
     public static RegistroHabitoConCatalogoResponse from(TrackDelDiaConCatalogo vista) {
         var r = vista.registro();
@@ -46,6 +56,7 @@ public record RegistroHabitoConCatalogoResponse(String id, UUID habitoId, LocalD
                 vista.tipoHabito() != null ? vista.tipoHabito().name() : null,
                 vista.guia() != null ? GuiaResumenResponse.from(vista.guia()) : null, vista.horaDisparo(),
                 vista.horaLimite(), enJuego != null ? enJuego.siCompletaAhora() : null,
-                enJuego != null ? enJuego.maximo() : null, enJuego != null ? enJuego.plazo() : null);
+                enJuego != null ? enJuego.maximo() : null, enJuego != null ? enJuego.plazo() : null,
+                vista.tieneEvidencia());
     }
 }

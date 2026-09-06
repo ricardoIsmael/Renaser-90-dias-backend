@@ -12,8 +12,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 @Component
 class EvidenciaPersistenceAdapter implements LoadEvidenciaPort, SaveEvidenciaPort {
@@ -53,6 +56,20 @@ class EvidenciaPersistenceAdapter implements LoadEvidenciaPort, SaveEvidenciaPor
         return repository.pendientesLote(EstadoValidacionJpa.PENDIENTE, hasta, PageRequest.of(0, limite)).stream()
                 .map(mapper::toDomain)
                 .toList();
+    }
+
+    /**
+     * Corta en seco con la coleccion vacia: un {@code IN ()} sin elementos no es SQL valido y
+     * Hibernate lo traduce a un predicado siempre falso, pero igual va y vuelve a la base para
+     * nada. Este metodo corre en cada carga de {@code GET /habit-tracks/today} — el dia que un
+     * aprendiz no tenga ningun habito, que no cueste una consulta.
+     */
+    @Override
+    public Set<UUID> registrosHabitoConEvidencia(Collection<UUID> registrosHabitoIds) {
+        if (registrosHabitoIds == null || registrosHabitoIds.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(repository.registrosHabitoConEvidencia(registrosHabitoIds));
     }
 
     @Override

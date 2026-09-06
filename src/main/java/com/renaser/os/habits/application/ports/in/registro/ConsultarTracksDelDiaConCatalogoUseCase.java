@@ -49,6 +49,14 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
      * ya esta en un estado terminal — lo que esta hecho, vencido o fallido no tiene nada en
      * juego.
      *
+     * <p>{@code tieneEvidencia} (2026-09-05, D-113): si ese registro ya tiene al menos una
+     * evidencia subida, en cualquier estado de validacion. Lo resuelve el servidor por la misma
+     * razon que {@code puntosEnJuego} — porque el cliente no puede hacerlo bien. El movil venia
+     * cruzando {@code GET /api/v1/evidence} contra estos ids, y ese listado es UNA pagina de 20
+     * filas sin filtro de fecha que mezcla los tres destinos: apenas el aprendiz supera esas 20
+     * filas, la evidencia de un habito de hoy queda fuera de la pagina y la pantalla le ofrece
+     * "SUBIR" algo que ya subio. Ver {@code evidence.api.RegistrosConEvidenciaFinder}.
+     *
      * <p>NO trae {@code claveSistema}, a proposito: el movil ya la recibe por
      * {@code MiHabitoResponse.systemKey} de {@code GET /api/v1/habits} y une catalogo y track
      * por {@code habitoId}. Repetirla aca seria un segundo lugar por donde el mismo dato puede
@@ -56,7 +64,7 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
      */
     record TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
                                    GuiaResumen guia, LocalTime horaDisparo, LocalTime horaLimite,
-                                   PuntosEnJuego puntosEnJuego) {
+                                   PuntosEnJuego puntosEnJuego, boolean tieneEvidencia) {
     }
 
     record GuiaResumen(String mantraTitulo, String mantraIntro, String queHacer, String comoHacerlo) {

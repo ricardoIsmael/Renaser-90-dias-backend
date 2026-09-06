@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.evidence.api.RegistrosConEvidenciaFinder;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
@@ -29,6 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -40,7 +42,10 @@ import java.util.stream.Collectors;
  *
  * <p><b>Nunca N+1:</b> habitos/horarios/preferencias/guias se piden UNA vez cada uno,
  * por el conjunto de {@code habitoId} de los registros del dia (tipicamente 20-40),
- * no una consulta por registro.
+ * no una consulta por registro. Desde D-113 son cinco consultas de lote y no cuatro: la
+ * quinta le pregunta a {@code evidence} cuales de esos registros ya tienen evidencia
+ * ({@code RegistrosConEvidenciaFinder}), para que el cliente no tenga que reconstruirlo
+ * cruzando dos endpoints paginados.
  */
 @Service
 public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCatalogoUseCase {
@@ -53,6 +58,8 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     private final LoadGuiaHabitoPort loadGuiaPort;
     /** Para resolver la ventana de entrega en la zona del participante y con ella los puntos en juego. */
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
+    /** API publica de {@code evidence} (D-41): {@code habits} nunca consulta {@code evidencias} de frente. */
+    private final RegistrosConEvidenciaFinder registrosConEvidenciaFinder;
     private final Clock clock;
 
     public TracksDelDiaProyeccionService(ConsultarTracksDelDiaUseCase consultarTracksUseCase,
@@ -60,7 +67,8 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
                                           LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
                                           LoadPreferenciaHorarioPort loadPreferenciaPort,
                                           LoadGuiaHabitoPort loadGuiaPort,
-                                          ConsultarProgresoParticipanteHabitsPort progresoPort, Clock clock) {
+                                          ConsultarProgresoParticipanteHabitsPort progresoPort,
+                                          RegistrosConEvidenciaFinder registrosConEvidenciaFinder, Clock clock) {
         this.consultarTracksUseCase = consultarTracksUseCase;
         this.generarTracksUseCase = generarTracksUseCase;
         this.loadHabitoPort = loadHabitoPort;
@@ -68,6 +76,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         this.loadPreferenciaPort = loadPreferenciaPort;
         this.loadGuiaPort = loadGuiaPort;
         this.progresoPort = progresoPort;
+        this.registrosConEvidenciaFinder = registrosConEvidenciaFinder;
         this.clock = clock;
     }
 
@@ -110,13 +119,18 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
                 .porParticipanteYHabitos(participanteId, habitoIds).stream()
                 .collect(Collectors.toMap(PreferenciaHorario::habitoId, p -> p));
 
+        // Una sola consulta por TODO el dia, igual que las cuatro de arriba — nunca una por registro.
+        Set<UUID> conEvidencia = registrosConEvidenciaFinder.deEntre(
+                registros.stream().map(r -> r.id().value()).toList());
+
         MomentoDelParticipante momento = momentoDe(participanteId);
         return registros.stream()
                 .map(registro -> construirVista(registro, new CatalogoDeHabito(
                         habitosPorId.get(registro.habitoId()),
                         horariosPorHabito.getOrDefault(registro.habitoId(), List.of()),
                         guiasPorHabito.getOrDefault(registro.habitoId(), List.of()),
-                        preferenciasPorHabito.get(registro.habitoId())), momento))
+                        preferenciasPorHabito.get(registro.habitoId())), momento,
+                        conEvidencia.contains(registro.id().value())))
                 .toList();
     }
 
@@ -135,7 +149,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     }
 
     private static TrackDelDiaConCatalogo construirVista(RegistroHabito registro, CatalogoDeHabito catalogo,
-                                                          MomentoDelParticipante momento) {
+                                                          MomentoDelParticipante momento, boolean tieneEvidencia) {
         Habito habito = catalogo.habito();
         String titulo = habito != null ? habito.titulo() : null;
         var tipo = habito != null ? habito.tipo() : null;
@@ -144,7 +158,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
                 .filter(h -> h.aplicaEnDia(registro.diaPrograma(), registro.tipoDia())).findFirst().orElse(null);
         HorarioResuelto horario = HorarioResuelto.de(horarioVigente, catalogo.preferencia());
         return new TrackDelDiaConCatalogo(registro, titulo, tipo, guia, horario.horaDisparo(), horario.horaLimite(),
-                puntosEnJuegoDe(registro, catalogo, horario, momento));
+                puntosEnJuegoDe(registro, catalogo, horario, momento), tieneEvidencia);
     }
 
     /**
