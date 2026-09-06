@@ -2245,7 +2245,7 @@ ademas de la app levantada desde IntelliJ, otros dos `mvnw` que arrancaron mient
 
 **Contraprueba, para no dejarlo en hipotesis:** la misma revision del codigo, compilada sobre una
 copia aislada del checkout (`target/` propio, sin nadie mas escribiendo), dio **2421 pruebas con 3
-fallos** — y esos 3 son E-125, un bug real de zona horaria. De 349 errores a 0 sin tocar una linea
+fallos** — y esos 3 son E-126, un bug real de zona horaria. De 349 errores a 0 sin tocar una linea
 de codigo.
 
 **La leccion practica:** ante un numero de errores absurdamente grande y repartido por modulos que
@@ -3380,7 +3380,7 @@ un build que no imprimio nada, y de ahi salio la mitad de la confusion. Filtrar 
 
 ---
 
-## E-126 — `ControlCuotaRedisAdapterTest` falla TODAS las noches a partir de las 19:00 de Lima: el test arma la clave en UTC (2026-09-05) — **ABIERTO, no arreglado (fuera de alcance)**
+## E-126 — `ControlCuotaRedisAdapterTest` falla TODAS las noches a partir de las 19:00 de Lima: el test arma la clave en UTC (2026-09-05) — **RESUELTO**
 
 **Sintoma exacto:** `./mvnw clean test` en verde a las 18:50 y en rojo a las 19:20, **sin un solo
 cambio de codigo entre las dos corridas**. Tres fallos, los tres en la misma clase:
@@ -3425,13 +3425,43 @@ Verificado en vivo en el momento del fallo: `date` daba `Sat Sep 5 19:21 HPS` y 
 las 19:00 y pasa siempre antes. Por eso puede convivir mucho tiempo con un CI "en verde" — depende
 de a que hora se corra.
 
-**Por que NO se arreglo aca:** aparecio mientras se cerraban E-120/E-121, en otro modulo (`rag`) y
-sin relacion con ese trabajo. Regla 00: un segundo bug encontrado de paso se **reporta**, no se
-arregla en el mismo cambio.
+**Por que no se arreglo en su momento:** aparecio mientras se cerraban E-120/E-121, en otro modulo
+(`rag`) y sin relacion con ese trabajo. Regla 00: un segundo bug encontrado de paso se **reporta**,
+no se arregla en el mismo cambio. Se tomo despues, como tarea propia.
 
-**El arreglo, cuando se tome:** el helper del test debe usar la misma zona que el adaptador
-(`America/Lima`), no `ZoneOffset.UTC`. Mejor todavia, no duplicar el calculo: exponer la clave como
-package-private en el adaptador, igual que ya se acepto duplicar `CLAVE_PREFIJO` a mano.
+**Solucion aplicada (2026-09-05, rama `claude/exciting-franklin-643f14`):** el helper del test dejo
+de recalcular la fecha por su cuenta y ahora la deriva **por el mismo camino que el adaptador** —
+el puerto `Clock` y la zona del padron:
+
+```java
+private static final ZoneId ZONA_PADRON = ZoneId.of("America/Lima");   // espejo del adaptador
+@Autowired private Clock clock;
+
+private String claveDeHoy(UserId actorId) {
+    LocalDate hoyDelPadron = clock.now().atZone(ZONA_PADRON).toLocalDate();
+    return CLAVE_PREFIJO + actorId.value() + ":" + hoyDelPadron;
+}
+```
+
+Se eligio pasar por `Clock` y no el minimo `LocalDate.now(ZONA_PADRON)` a proposito: con el `Clock`
+inyectado, test y adaptador comparten **una sola** expresion, asi que tampoco divergen si algun dia
+este contexto monta un `FixedClock`. El metodo dejo de ser `static` por eso. La alternativa que
+proponia esta entrada (exponer la clave package-private desde el adaptador) se descarto: obliga a
+abrir la API del adaptador de produccion para comodidad del test.
+
+**Como se verifico** — a proposito **dentro de la franja que rompe**, 19:39-19:45 hora de Lima
+(`date` = `Sat Sep 5 19:39 HPS`, `date -u` = `Sun Sep 6 00:39 UTC`: las dos fechas distintas):
+
+| Corrida | Codigo | Resultado |
+|---|---|---|
+| 1 — reproduccion | el test **viejo**, sin tocar | `Tests run: 5, Failures: 3` — los tres fallos exactos de arriba: TTL `-2`, TTL `-1`, `expected "1" but was null` |
+| 2 — arreglo | el test **nuevo** | `Tests run: 5, Failures: 0` |
+| 3 — suite completa | `./mvnw clean verify` | `Tests run: 2407, Failures: 0, Errors: 0, Skipped: 0` + `BUILD SUCCESS` |
+
+La corrida 1 es la que le da valor a la 2: prueba que en ese mismo instante el codigo viejo fallaba,
+asi que el verde de la 2 es del arreglo y no de la hora. **Fuera de la franja no se volvio a correr**
+(habria que esperar a pasada la medianoche de Lima), pero ahi el test ya pasaba antes — la franja
+cubierta es justamente la unica en la que fallaba.
 
 **En el mismo build fallo tambien** `CodigoVerificacionEmailRedisAdapterTest.unCodigoVencidoYaNoSePuedeVerificar`
 ("Expecting value to be false but was true"), pero **eso si fue flakiness**: paso al reejecutar la

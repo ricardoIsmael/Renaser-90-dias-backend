@@ -127,15 +127,27 @@ punto del paso.
 
 ### 3.2 Lo primero a mirar si el CI se pone rojo de noche
 
-**Hay un test que falla todos los días entre las 19:00 y la medianoche de Lima, y no tiene nada que
-ver con el PR:** `ControlCuotaRedisAdapterTest` arma la clave de Redis con `ZoneOffset.UTC` mientras
-el adaptador de producción la arma con `America/Lima`. En esa franja las dos fechas ya no coinciden
-y 3 de sus 5 pruebas fallan. Está documentado con la evidencia completa en **E-126**, sigue
-**abierto**, y el arreglo es una línea en el test.
+> **Corregido 2026-09-05.** Esta sección decía que `ControlCuotaRedisAdapterTest` fallaba todas las
+> noches y que E-126 seguía **abierto**. **Ya no**: E-126 está cerrado — el helper del test dejó de
+> recalcular la fecha en UTC y ahora la deriva por el puerto `Clock` en `America/Lima`, igual que el
+> adaptador. Verificado dentro de la franja que rompía (19:39–19:45 de Lima): el test viejo daba
+> `Tests run: 5, Failures: 3` y el nuevo `Failures: 0`. Se deja el aviso reescrito abajo porque la
+> *familia* de fallos sigue siendo real aunque este caso concreto esté resuelto.
 
-Importa especialmente acá porque **los runners de GitHub corren en UTC**, así que el CI va a ver esa
-ventana igual. Si un build nocturno falla y el único error está en esa clase, no es el cambio: es
-E-126.
+**Los runners de GitHub corren en UTC.** Eso significa que entre las **00:00 y las 05:00 UTC** un
+build ve una fecha de calendario distinta a la que ve el padrón, que vive en `America/Lima` (UTC−5):
+para el runner ya es mañana mientras para el aprendiz todavía es hoy.
+
+Si un build nocturno se pone rojo y los fallos son todos de una misma clase que compara fechas,
+la primera hipótesis **no es el cambio del PR**: es que ese test reconstruye a mano una fecha que
+producción deriva en la zona del padrón. Es la familia de **E-91, E-105, E-106 y E-126**. La señal
+más rápida de reconocerla: el mismo commit pasa de día y falla de noche, sin ningún cambio de código
+entre las dos corridas.
+
+El arreglo es siempre el mismo — que el test derive el valor por el **mismo camino que producción**
+(`clock.now().atZone(zona).toLocalDate()`), en vez de recalcularlo con `LocalDate.now(...)`. Barrido
+del 2026-09-05: `ControlCuotaRedisAdapterTest` era el único test del repo que caía en esto contra el
+reloj real; el resto usa `FixedClock` (determinista) o ya replica la zona de producción.
 
 ---
 
