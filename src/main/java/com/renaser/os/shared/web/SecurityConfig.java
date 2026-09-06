@@ -163,6 +163,31 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").authenticated()
 
                         // ---------------------------------------------------------------------
+                        // EL RESTO DE LO QUE TOCA DATOS DE UNA PERSONA (2026-09-06).
+                        //
+                        // Estas dieciseis rutas quedaron fuera de la primera lista, que se armo
+                        // leyendo las llamadas del frontend: varias no se usan todavia desde la
+                        // app, y por eso no aparecieron. Pero "no se usa" no es "no se alcanza" —
+                        // con el backend detras de CloudFront, cualquiera puede llamarlas.
+                        //
+                        // Dos son las que apuran el cambio: `journal/today` es el diario personal
+                        // del aprendiz y `espejo-sombra` son sus informes del Espejo. Es el dato
+                        // mas intimo que guarda el producto, y se alcanzaba poniendo un UUID en un
+                        // header. `phase-contracts` es la firma del Pacto de Sangre: sin esto,
+                        // alguien podia firmarlo en nombre de otro.
+                        // ---------------------------------------------------------------------
+                        .requestMatchers("/api/v1/journal/**", "/api/v1/espejo-sombra/**",
+                                "/api/v1/radar/**", "/api/v1/profile/**").authenticated()
+                        .requestMatchers("/api/v1/phase-contracts/**", "/api/v1/points/**",
+                                "/api/v1/weekly-habit-days/**").authenticated()
+                        .requestMatchers("/api/v1/notifications/**", "/api/v1/notification-preferences/**",
+                                "/api/v1/push-tokens/**").authenticated()
+                        .requestMatchers("/api/v1/calendar/**", "/api/v1/support-tickets/**",
+                                "/api/v1/testimonios/**").authenticated()
+                        .requestMatchers("/api/v1/audio-therapy/**", "/api/v1/academia/**",
+                                "/api/v1/enforcer-events/**").authenticated()
+
+                        // ---------------------------------------------------------------------
                         // EL RESTO sigue abierto: son rutas que la app movil todavia no consume.
                         // Ya NO incluyen `/api/v1/admin/**`, que se cerro arriba al salir a
                         // internet. Lo que queda son endpoints sueltos que no exponen datos de
