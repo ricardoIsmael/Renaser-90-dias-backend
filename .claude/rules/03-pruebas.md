@@ -2,16 +2,30 @@
 
 ## La regla que no se negocia
 
-**Toda tarea que toque código termina con `./mvnw clean test` ejecutado y en verde.** No se reporta
+**Toda tarea que toque código termina con `./mvnw clean verify` ejecutado y en verde.** No se reporta
 nada como terminado sin haber corrido las pruebas.
+
+> **Corregido 2026-09-05 (D-114).** Acá decía `./mvnw clean test`. Desde que existe
+> `maven-failsafe-plugin`, `test` deja fuera las 10 clases `*IT.java` (Testcontainers contra
+> Postgres y Redis reales) y no genera el reporte de cobertura. `verify` corre las dos cosas.
 
 - Si una prueba falla, **se reporta el fallo con su salida**. Nunca se declara terminado algo que no
   pasó, ni se omite mencionar un test roto.
 - Si algo quedó sin probar (faltan credenciales, Docker, un dato), **se dice explícitamente qué
   quedó sin verificar y por qué**.
-- `JAVA_HOME` debe apuntar al JDK 25 (`C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot`).
-  Si Maven dice `release version 25 not supported`, es eso — no el código. (Corregido 2026-09-05,
-  E-103: acá decía `C:\Program Files\Java\jdk-25.0.2`, una ruta que no existe en esta máquina.)
+- `JAVA_HOME` debe apuntar al JDK 25: **`C:\Program Files\Java\jdk-25.0.2`**. Si Maven dice
+  `release version 25 not supported`, es eso — no el código.
+  > **Corregido 2026-09-05 (E-111).** Acá decía `C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot`,
+  > y afirmaba que E-103 había corregido la ruta *desde* `C:\Program Files\Java\jdk-25.0.2`. Era al
+  > revés: no existe ninguna carpeta `Eclipse Adoptium` en esta máquina, y E-103 cambió la ruta
+  > buena por una rota. Verificado con `ls` y `"$JAVA_HOME/bin/java" -version` (`25.0.2+10-LTS-69`).
+- **Con `JAVA_HOME` mal, `./mvnw clean test` termina en `exit 0` sin correr una sola prueba** (E-111).
+  Por eso la verificación no es el código de salida sino la línea **`Tests run:`** de la salida: si no
+  aparece, no se probó nada. Hay **dos** líneas de resumen: la de surefire (unitarias, 2421 al
+  2026-09-05) y la de failsafe (integración, 21). El CI las suma y falla si no aparece ninguna.
+- **Dos builds no pueden compartir el mismo `target/`** (E-104), y una app levantada desde el IDE
+  también lo bloquea (`Failed to delete ... target`). Si hay que compilar con el repo ocupado, se
+  trabaja en un `git worktree` propio o sobre una copia aparte del checkout.
 
 ## Qué se prueba y dónde
 
