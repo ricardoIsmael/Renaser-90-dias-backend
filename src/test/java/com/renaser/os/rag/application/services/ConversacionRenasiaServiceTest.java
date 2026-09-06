@@ -23,6 +23,7 @@ import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
+import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -38,6 +39,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 
 import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -196,6 +198,29 @@ class ConversacionRenasiaServiceTest {
         assertThat(eventos.get(1)).isInstanceOf(EventoRenasia.Fin.class);
         verify(controlCuotaRenasiaPort).liberar(activo);
         // Solo se guardo la pregunta del usuario: nunca una respuesta vacia del asistente.
+        verify(saveMensajeRenasiaPort, times(1)).save(any());
+    }
+
+    /**
+     * Auditoria NFR 2026-09-06: cuando el que no puede es el PROVEEDOR (cuota agotada, saturado),
+     * el texto tiene que decir "en unos minutos" — "en unos segundos" invita a insistir contra
+     * una cuota que no vuelve. El resto del comportamiento (liberar cuota, no guardar respuesta
+     * vacia) es el mismo que ante cualquier otro fallo del stream.
+     */
+    @Test
+    void preguntarAvisaQueElProveedorEstaSaturadoConSuPropioMensaje() {
+        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
+        when(chatIAPort.responder(any())).thenReturn(Flux.error(
+                new ProveedorIaNoDisponibleException("cuota agotada", Duration.ofSeconds(60))));
+
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(eventos).hasSize(2);
+        assertThat(((EventoRenasia.Error) eventos.get(0)).mensaje())
+                .isEqualTo(ConversacionRenasiaService.MENSAJE_PROVEEDOR_SATURADO);
+        assertThat(eventos.get(1)).isInstanceOf(EventoRenasia.Fin.class);
+        verify(controlCuotaRenasiaPort).liberar(activo);
         verify(saveMensajeRenasiaPort, times(1)).save(any());
     }
 

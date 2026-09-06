@@ -163,6 +163,23 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").authenticated()
 
                         // ---------------------------------------------------------------------
+                        // LO QUE SE ESCAPO POR UN MATCHER EXACTO (auditoria NFR 2026-09-06).
+                        //
+                        // Arriba, `"/api/v1/habits"` es una coincidencia EXACTA: cubre GET y
+                        // POST del catalogo, pero NO `/api/v1/habits/{id}/rename` (PUT renombrar,
+                        // DELETE quitar del plan). Y `"/api/v1/users/me/**"` cubre lo propio, pero
+                        // NO `POST /api/v1/users/invite` ni `PATCH /api/v1/users/{id}/role` — que
+                        // son INVITAR USUARIOS y CAMBIAR ROLES. Su guard (`requireRoleManager`)
+                        // verifica el rol del UUID que llega en `X-Actor-Id`, no que quien llama
+                        // sea ese usuario; y los UUID no son secretos. Era el mismo agujero que se
+                        // cerro esta manana en `/api/v1/admin/**`, en dos rutas mas.
+                        //
+                        // Ninguna ruta publica vive bajo estos prefijos (el alta es
+                        // `/account-requests`, la activacion y el reset son `/auth/**`).
+                        // ---------------------------------------------------------------------
+                        .requestMatchers("/api/v1/habits/**", "/api/v1/users/**").authenticated()
+
+                        // ---------------------------------------------------------------------
                         // EL RESTO DE LO QUE TOCA DATOS DE UNA PERSONA (2026-09-06).
                         //
                         // Estas dieciseis rutas quedaron fuera de la primera lista, que se armo

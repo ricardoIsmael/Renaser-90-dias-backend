@@ -38,7 +38,14 @@ class GoogleGenAiEmbeddingAdapter implements EmbeddingPort {
 
     @Override
     public List<Float> generar(String texto) {
-        float[] vector = embeddingModel.embed(texto);
+        float[] vector;
+        try {
+            vector = embeddingModel.embed(texto);
+        } catch (RuntimeException error) {
+            // Un 429 de cuota o un 5xx de Google salian de aca crudos y terminaban en 500. Ahora
+            // son ProveedorIaNoDisponibleException -> 503 + Retry-After (auditoria NFR 2026-09-06).
+            throw TraduccionErroresGoogleGenAi.traducir(error);
+        }
         if (vector.length != ChunkConocimiento.DIMENSION_EMBEDDING) {
             throw new IllegalStateException(
                     "El modelo de embeddings devolvio " + vector.length + " dimensiones, se esperaban "

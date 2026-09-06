@@ -6,6 +6,7 @@ import com.renaser.os.shared.domain.EnvioEmailFallidoException;
 import com.renaser.os.shared.domain.IdentidadProveedorInvalidaException;
 import com.renaser.os.shared.domain.IdentidadYaVinculadaException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.RegistroPendienteSocialInvalidoException;
 import com.renaser.os.shared.domain.SesionNoIniciadaException;
@@ -15,6 +16,7 @@ import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -128,6 +130,27 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<ApiErrorResponse> handleRateLimit(RateLimitExceededException ex) {
         return respond(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+    }
+
+    /**
+     * El proveedor de IA no puede atender ahora (cuota agotada, saturado, timeout): <b>503</b>
+     * con {@code Retry-After}, no 500. Auditoria NFR 2026-09-06.
+     *
+     * <p>Es 503 y no 429 a proposito: el 429 de esta API ya significa "VOS agotaste tu cuota
+     * diaria de preguntas" y el movil lo muestra asi ({@code RenasiaCuotaExcedidaError}). Que la
+     * cuota agotada sea la NUESTRA con Google es otra cosa — el aprendiz no hizo nada de mas — y
+     * mostrarle "se te acabaron las preguntas del dia" seria mentirle. 503 = "no podemos ahora".
+     *
+     * <p>El {@code Retry-After} lo decide quien conoce el motivo (el adaptador que hablo con
+     * Google): 60 s si fue cuota, 10 s si fue un fallo transitorio. Este handler solo lo copia.
+     */
+    @ExceptionHandler(ProveedorIaNoDisponibleException.class)
+    public ResponseEntity<ApiErrorResponse> handleProveedorIaNoDisponible(ProveedorIaNoDisponibleException ex) {
+        long segundos = Math.max(1, ex.reintentarEn().toSeconds());
+        log.warn("503 -> proveedor de IA no disponible (Retry-After {}s): {}", segundos, ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(segundos))
+                .body(ApiErrorResponse.of(ex.getMessage()));
     }
 
     /**

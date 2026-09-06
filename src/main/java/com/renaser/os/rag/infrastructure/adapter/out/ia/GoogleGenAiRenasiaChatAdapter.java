@@ -115,6 +115,10 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
                 .user(consulta.pregunta())
                 .stream()
                 .content()
+                // El stream ya arranco con 200, asi que aca no hay status que cambiar: lo que
+                // importa es que el servicio reciba un tipo que sepa distinguir ("saturado, volve
+                // en unos minutos" vs "fallo generico") y que el error del SDK no suba crudo.
+                .onErrorMap(TraduccionErroresGoogleGenAi::traducir)
                 .map(GoogleGenAiRenasiaChatAdapter::comoTexto)
                 .concatWithValues(new EventoRenasia.Fin());
     }

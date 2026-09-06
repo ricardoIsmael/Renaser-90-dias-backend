@@ -22,13 +22,20 @@ import jakarta.validation.constraints.Size;
  * <p>Para {@code COMPANION}, {@code courseId} y {@code scope} se ignoran (los descarta el
  * comando): el acompanante no tiene seccion de ambito en su prompt.
  */
-public record PreguntarRenasiaRequest(@NotBlank String question,
+public record PreguntarRenasiaRequest(
+        // Acotada (auditoria NFR 2026-09-06): sin tope, un cliente podia mandar un prompt de
+        // megabytes que se embebia, se guardaba y se le enviaba entero al modelo — costo y
+        // latencia a cargo de la cuota compartida. 4.000 caracteres son unas 600 palabras, muy
+        // por encima de cualquier pregunta real de chat.
+        @NotBlank @Size(max = LARGO_MAXIMO_PREGUNTA) String question,
                                       @Pattern(regexp = "COMPANION|COURSE_TUTOR",
                                                message = "agent debe ser COMPANION o COURSE_TUTOR") String agent,
                                       @Size(max = 120) String courseId,
                                       @Size(max = 300) String scope) {
 
     /** Sin {@code agent} = el acompanante (compatibilidad con clientes anteriores a D-102). */
+    public static final int LARGO_MAXIMO_PREGUNTA = 4000;
+
     public AgenteConversacional agente() {
         return agent == null ? AgenteConversacional.COMPANION : AgenteConversacional.valueOf(agent);
     }

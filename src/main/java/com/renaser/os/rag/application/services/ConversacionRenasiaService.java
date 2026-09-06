@@ -31,6 +31,7 @@ import com.renaser.os.users.api.UserSummaryFinder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
 import reactor.core.publisher.Flux;
 
 import java.time.Instant;
@@ -94,6 +95,12 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     /** Texto apto para mostrar cuando el modelo falla; el detalle real va al log. */
     public static final String MENSAJE_ERROR_MODELO =
             "No pude responder en este momento. Intenta de nuevo en unos segundos.";
+    /**
+     * Cuando el que no puede es el PROVEEDOR (cuota agotada, saturado): decirle "en unos segundos"
+     * seria mentir y lo haria insistir contra una cuota que no vuelve. Auditoria NFR 2026-09-06.
+     */
+    public static final String MENSAJE_PROVEEDOR_SATURADO =
+            "El asistente esta saturado en este momento. Intenta de nuevo en unos minutos.";
 
     private final UserSummaryFinder userSummaryFinder;
     private final ControlCuotaRenasiaPort controlCuotaRenasiaPort;
@@ -172,7 +179,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                 // D-100: el fallo del modelo deja de ser invisible. Antes el controller lo convertia
                 // en un `fin` pelado y el aprendiz veia su pregunta sin ninguna respuesta ni motivo.
                 // Se emite un `error` apto para mostrar y despues el `fin` que el contrato SSE exige.
-                .onErrorResume(error -> Flux.just(new EventoRenasia.Error(MENSAJE_ERROR_MODELO),
+                .onErrorResume(error -> Flux.just(new EventoRenasia.Error(mensajeParaLaPersona(error)),
                         new EventoRenasia.Fin()));
     }
 
@@ -281,5 +288,14 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      * docs/MODULO_RAG.md D-47). Tampoco el id del actor (es el `sub` de Supabase). */
     private void logFalloDeStreaming(Throwable error) {
         log.warn("Fallo el streaming de respuesta del asistente", error);
+    }
+
+    /**
+     * El stream ya arranco con 200 cuando el modelo falla, asi que el unico canal para avisar es
+     * el texto del evento de error. Se distingue "el proveedor no puede ahora" del resto para que
+     * el mensaje no invite a reintentar enseguida algo que no va a funcionar.
+     */
+    private static String mensajeParaLaPersona(Throwable error) {
+        return error instanceof ProveedorIaNoDisponibleException ? MENSAJE_PROVEEDOR_SATURADO : MENSAJE_ERROR_MODELO;
     }
 }

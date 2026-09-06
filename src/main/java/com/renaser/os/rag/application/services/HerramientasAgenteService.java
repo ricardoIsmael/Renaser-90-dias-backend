@@ -81,9 +81,23 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
             return ResultadoHerramienta.exito("Hoy no tiene ningun habito generado.");
         }
         StringBuilder texto = new StringBuilder();
+        int totalEnJuego = 0;
+        int pendientes = 0;
         for (HabitoDelDia habito : habitos) {
             texto.append(lineaDe(habito)).append('\n');
+            if (habito.sigueEnJuego()) {
+                totalEnJuego += habito.puntosEnJuego();
+                pendientes++;
+            }
         }
+        // El total va en la MISMA respuesta (auditoria NFR 2026-09-06): "que me falta y cuanto
+        // vale" es una pregunta frecuente, y sin esta linea el modelo encadenaba una segunda
+        // herramienta (consultar_puntos_en_juego) para sumar lo que ya tenia adelante — un viaje
+        // de ida y vuelta mas a Gemini, o sea uno o dos segundos mas de espera para la persona.
+        // La herramienta de puntos sigue existiendo para la pregunta directa; esto solo evita
+        // que haga falta llamar a las dos.
+        texto.append("Total en juego: ").append(totalEnJuego).append(" puntos en ").append(pendientes)
+                .append(" habito(s) que todavia puede entregar.");
         return ResultadoHerramienta.exito(texto.toString().trim());
     }
 

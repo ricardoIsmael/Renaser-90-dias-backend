@@ -1,5 +1,8 @@
 package com.renaser.os.rag.infrastructure.adapter.out.ia;
 
+import com.google.genai.types.HttpOptions;
+import com.google.genai.types.HttpRetryOptions;
+
 import com.google.genai.Client;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.google.genai.GoogleGenAiChatModel;
@@ -54,8 +57,35 @@ import org.springframework.context.annotation.Configuration;
 class GoogleGenAiClientesConfig {
 
     @Bean
-    Client googleGenAiClient(@Value("${spring.ai.google.genai.api-key}") String apiKey) {
-        return Client.builder().apiKey(apiKey).build();
+    Client googleGenAiClient(@Value("${spring.ai.google.genai.api-key}") String apiKey,
+                             @Value("${renaser.ia.google.timeout-ms:60000}") int timeoutMs) {
+        // Auditoria NFR 2026-09-06. Sin esto el cliente venia con DOS problemas invisibles:
+        //
+        // (1) NINGUN timeout. Una llamada a Gemini que se colgara retenia el hilo virtual y la
+        //     conexion SSE del chat sin limite. 60 s cubre una respuesta larga con herramientas y
+        //     sigue por debajo del timeout async de MVC (120 s, application.yaml), que es el que
+        //     corta la conexion del lado del servidor.
+        //
+        // (2) El SDK REINTENTA SOLO aunque nadie lo configure: `ApiClient` instala un
+        //     `RetryInterceptor` con `HttpRetryOptions.builder().build()` si no le pasan nada,
+        //     y sus defaults (verificados en el bytecode de google-genai 1.58.0) son 5 intentos,
+        //     1 s -> 60 s con base 2, sobre 408/429/500/502/503/504. Es decir: ante un 429 de
+        //     cuota agotada, cada mensaje del chat golpeaba a Google 5 veces con ~15 s de esperas
+        //     entre medio, gastando mas cuota y colgando al aprendiz, para fallar igual. Aca se
+        //     deja 1 reintento rapido para los fallos que SI se recuperan en un instante (5xx,
+        //     timeout) y se saca el 429 de la lista: una cuota no vuelve en dos segundos, y esa
+        //     espera la decide el cliente con el Retry-After (TraduccionErroresGoogleGenAi).
+        HttpRetryOptions reintentos = HttpRetryOptions.builder()
+                .attempts(2)
+                .initialDelay(0.5)
+                .maxDelay(2.0)
+                .httpStatusCodes(408, 500, 502, 503, 504)
+                .build();
+        HttpOptions opciones = HttpOptions.builder()
+                .timeout(timeoutMs)
+                .retryOptions(reintentos)
+                .build();
+        return Client.builder().apiKey(apiKey).httpOptions(opciones).build();
     }
 
     /**

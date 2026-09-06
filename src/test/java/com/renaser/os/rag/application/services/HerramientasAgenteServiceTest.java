@@ -86,7 +86,10 @@ class HerramientasAgenteServiceTest {
                 InvocacionHerramienta.sinArgumentos(CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA)));
 
         assertThat(texto).contains(REGISTRO.toString()).contains("Meditacion").contains("estado=PENDIENTE")
-                .contains("puntos_en_juego=10 de 10").contains("vence=");
+                .contains("puntos_en_juego=10 de 10").contains("vence=")
+                // El total viaja en la misma respuesta para que el modelo no encadene una
+                // segunda herramienta (un viaje mas a Gemini) para sumar lo que ya tiene.
+                .contains("Total en juego: 10 puntos en 1 habito(s)");
     }
 
     @Test

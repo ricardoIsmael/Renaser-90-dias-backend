@@ -4998,3 +4998,77 @@ el mapeo que apaga los días. Cada etiqueta corresponde exactamente con lo que q
 3. **Antes de ofrecer una opción, comprobar que el modelo de datos la sabe expresar.** Acá el
    backend solo guarda el fin del rango; ofrecer "solo ese día" era prometer algo que la base no
    puede representar.
+
+---
+
+## E-147 — El cliente de Google reintentaba solo, sin timeout, y el retry de Spring AI nunca se activaba: un 429 de cuota tardaba ~15 s en fallar y salía como 500 (2026-09-06) — **RESUELTO**
+
+**Sintoma exacto.** Con la cuota gratuita de Gemini agotada (ver `sparkie-indexacion/LEEME.md`), una
+pregunta al asistente:
+
+- tardaba **muchos segundos** en fallar en vez de fallar al instante,
+- salia al cliente como **`500 Internal Server Error`** cuando el fallo era en la busqueda de
+  contexto (embedding, que corre de forma sincrona antes del stream),
+- y dentro del stream terminaba con el mensaje generico *"Intenta de nuevo en unos segundos"* —
+  que era exactamente lo que NO habia que hacer contra una cuota agotada.
+
+**Lo que se creia, y por que estaba mal.** `GoogleGenAiClientesConfig` pasaba
+`RetryUtils.DEFAULT_RETRY_TEMPLATE` al modelo de chat y al de embeddings, asi que la hipotesis
+inicial fue *"Spring AI reintenta 10 veces con backoff de hasta 3 minutos"*. Se verifico en el
+bytecode (`javap` sobre `spring-ai-retry-2.0.0.jar`) y **no es asi para este stack**: el template
+es `maxRetries(10)`, `delay 2 s`, `multiplier 5`, `maxDelay 180 s`… pero **solo sobre
+`TransientAiException` y `ResourceAccessException`**, y el modulo `spring-ai-google-genai` **no
+traduce** las excepciones de su SDK a esos tipos (ni una referencia a `TransientAiException` en
+todo el jar). Un 429 llega como `com.google.genai.errors.ClientException`, que para ese template no
+es transitoria. **Ese retry nunca se activaba.** Diagnosticar contra el codigo que uno cree que
+corre, y no contra el que corre, habria producido un arreglo equivocado.
+
+**La causa real, en dos partes:**
+
+1. **El SDK de Google reintenta por su cuenta aunque nadie lo configure.** `ApiClient` hace
+   `httpOptions.retryOptions().orElse(HttpRetryOptions.builder().build())` y con eso instala un
+   `RetryInterceptor` **siempre**. Sus defaults (bytecode de `google-genai 1.58.0`): **5 intentos,
+   1 s → 60 s con base 2, sobre 408/429/500/502/503/504**. Ante un 429 de cuota: cinco golpes a
+   Google con 1+2+4+8 s de espera entre medio, para fallar igual — gastando mas cuota y colgando a
+   la persona ~15 s.
+2. **Sin timeout HTTP** en el cliente (`Client.builder().apiKey(k).build()` pelado), y sin
+   `spring.mvc.async.request-timeout`: una llamada colgada retenia el hilo virtual y la conexion
+   SSE hasta el default del contenedor (Tomcat, 30 s), que ademas partia respuestas largas.
+
+Y arriba de todo eso, `GlobalExceptionHandler` no conocia ninguna excepcion de IA: lo que subia
+crudo era 500.
+
+**Solucion.**
+
+- `GoogleGenAiClientesConfig`: `HttpOptions` con `timeout` de 60 s (`renaser.ia.google.timeout-ms`)
+  y `HttpRetryOptions` explicito: **2 intentos, 0,5 s → 2 s, solo 408/5xx**. El 429 se saca de la
+  lista a proposito: una cuota no vuelve en dos segundos, y cuanto esperar lo decide el cliente con
+  el `Retry-After`.
+- `TraduccionErroresGoogleGenAi` (adaptador): `ApiException` 429 → `ProveedorIaNoDisponibleException`
+  (60 s); 408/5xx y timeouts (`GenAiIOException`, `SocketTimeoutException`…) → la misma con 10 s;
+  un 400 se deja pasar tal cual, porque es un bug NUESTRO en la solicitud y tiene que sonar como tal.
+  Busca la `ApiException` en toda la cadena de causas, no solo arriba.
+- `ProveedorIaNoDisponibleException` en `shared/domain` (solo `java.time`) y en
+  `GlobalExceptionHandler` → **503 + `Retry-After`**. Es 503 y no 429 porque el 429 de esta API ya
+  significa "VOS agotaste tu cuota diaria" y el movil lo muestra asi.
+- En el stream (donde ya salio el 200), `ConversacionRenasiaService` distingue esa excepcion y
+  emite *"El asistente esta saturado… en unos minutos"* en vez de *"en unos segundos"*.
+- `spring.mvc.async.request-timeout: 120s`.
+
+**Verificacion.** Pruebas unitarias sin ningun modelo, con las excepciones reales del SDK
+construidas a mano: traduccion (7 casos), adaptador de embeddings (3), adaptador de chat (1, con
+`ChatModel` simulado emitiendo `Flux.error`), handler web (1, `@WebMvcTest` → 503 + `Retry-After: 60`),
+servicio (1, mensaje propio + cuota liberada). Suite completa en verde — cifras en
+`docs/informes/auditoria-nfr-2026-09-06.md`. **Sin verificar en vivo:** provocar un 429 real
+implicaria agotar la cuota de produccion a proposito.
+
+**Como evitar que vuelva a pasar:**
+
+1. **Un retry que no se ve en el codigo puede existir igual.** Antes de razonar sobre "cuantas veces
+   reintenta esto", abrir el cliente: un SDK puede traer el suyo con defaults propios, y un
+   template configurado puede no aplicar a las excepciones que de verdad llegan. Las dos cosas
+   pasaron a la vez aca.
+2. **Todo cliente HTTP hacia afuera lleva timeout explicito.** Sin excepcion. "El default del SDK"
+   no es una respuesta: en este caso era *ninguno*.
+3. **Cuota agotada no se reintenta.** Reintentar un 429 de cuota es la forma mas rapida de agotarla
+   mas; se devuelve `Retry-After` y se deja que el cliente espere.

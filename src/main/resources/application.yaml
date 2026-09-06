@@ -29,6 +29,16 @@ spring:
   threads:
     virtual:
       enabled: true
+  # Timeout de las respuestas ASINCRONAS de MVC, que es lo que usa el chat del asistente
+  # (`Flux<String>` por SSE en RenasiaController). Sin esto rige el default del contenedor —
+  # Tomcat corta un request async a los 30 s — y una respuesta larga con herramientas se
+  # partia a mitad sin ningun error del lado del servidor: el cliente veia el stream cerrarse
+  # sin `fin`. Se deja por encima del timeout HTTP del cliente de Google (60 s, en
+  # GoogleGenAiClientesConfig) con margen para dos llamadas de herramienta seguidas, que son
+  # dos viajes al modelo. (auditoria NFR 2026-09-06)
+  mvc:
+    async:
+      request-timeout: ${MVC_ASYNC_REQUEST_TIMEOUT:120s}
   # C-1 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): con hilos
   # virtuales habilitados, Spring Boot usa un SimpleAsyncTaskExecutor sin tope propio para
   # @Async — sin `simple.concurrency-limit`, cada despacho (hoy solo onboarding, la
