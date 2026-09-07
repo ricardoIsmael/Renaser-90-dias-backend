@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,6 +17,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class DesbloqueoHabitoPausaTest {
 
+    /** La zona del participante, nunca la del servidor (E-91). 15:00Z son las 10:00 en Lima. */
+    private static final ZoneId ZONA = ZoneId.of("America/Lima");
     private static final Instant AHORA = Instant.parse("2026-09-04T15:00:00Z");
     private static final Instant DESPUES = AHORA.plusSeconds(3600);
 
@@ -101,8 +104,8 @@ class DesbloqueoHabitoPausaTest {
 
         d.pausar(true, DOMINGO, AHORA);
 
-        assertThat(d.estaPausadoEl(VIERNES)).isTrue();
-        assertThat(d.estaPausadoEl(DOMINGO)).as("el ultimo dia todavia cuenta como pausado").isTrue();
+        assertThat(d.estaPausadoEl(VIERNES, ZONA)).isTrue();
+        assertThat(d.estaPausadoEl(DOMINGO, ZONA)).as("el ultimo dia todavia cuenta como pausado").isTrue();
     }
 
     /**
@@ -116,7 +119,7 @@ class DesbloqueoHabitoPausaTest {
 
         d.pausar(true, DOMINGO, AHORA);
 
-        assertThat(d.estaPausadoEl(LUNES)).isFalse();
+        assertThat(d.estaPausadoEl(LUNES, ZONA)).isFalse();
         assertThat(d.estaPausado()).as("la pausa sigue REGISTRADA; lo que cambio es el calendario").isTrue();
     }
 
@@ -126,8 +129,8 @@ class DesbloqueoHabitoPausaTest {
 
         d.pausar(true, AHORA);
 
-        assertThat(d.estaPausadoEl(VIERNES)).isTrue();
-        assertThat(d.estaPausadoEl(LUNES.plusYears(1))).isTrue();
+        assertThat(d.estaPausadoEl(VIERNES, ZONA)).isTrue();
+        assertThat(d.estaPausadoEl(LUNES.plusYears(1), ZONA)).isTrue();
         assertThat(d.pausadoHasta()).isNull();
     }
 
@@ -151,7 +154,7 @@ class DesbloqueoHabitoPausaTest {
 
         assertThat(d.estaPausado()).isFalse();
         assertThat(d.pausadoHasta()).isNull();
-        assertThat(d.estaPausadoEl(VIERNES)).isFalse();
+        assertThat(d.estaPausadoEl(VIERNES, ZONA)).isFalse();
     }
 
     @Test
@@ -161,9 +164,29 @@ class DesbloqueoHabitoPausaTest {
                 .hasMessageContaining("obligatorio");
     }
 
+    /**
+     * LA REGRESION. Hasta el 2026-09-07 `estaPausadoEl` no miraba `pausadoEn`, asi que devolvia
+     * true para toda fecha <= `pausadoHasta` — incluidas las ANTERIORES a la pausa. Sintoma que
+     * reporto el dueno: pausar "hasta el domingo" apagaba tambien el lunes, el martes y el
+     * miercoles de esa semana. Si esto vuelve a ponerse en verde con la comparacion de abajo
+     * borrada, el bug volvio.
+     */
+    @Test
+    void unaPausaNoApagaLosDiasANTERIORESaHaberlaPuesto() {
+        DesbloqueoHabito d = activo();
+
+        d.pausar(true, DOMINGO, AHORA);
+
+        assertThat(d.estaPausadoEl(VIERNES.minusDays(1), ZONA))
+                .as("el dia anterior a tocar el boton no estaba pausado")
+                .isFalse();
+        assertThat(d.estaPausadoEl(VIERNES.minusDays(3), ZONA)).isFalse();
+        assertThat(d.estaPausadoEl(VIERNES, ZONA)).as("el dia en que se pauso, si").isTrue();
+    }
+
     @Test
     void unDesbloqueoActivoNoEstaPausadoNingunDia() {
-        assertThat(activo().estaPausadoEl(VIERNES)).isFalse();
+        assertThat(activo().estaPausadoEl(VIERNES, ZONA)).isFalse();
         assertThat(activo().pausadoHasta()).isNull();
     }
 }

@@ -10,6 +10,7 @@ import lombok.experimental.Accessors;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 
 /**
  * En que dia de programa se desbloquea un habito para este participante (tabla
@@ -69,7 +70,7 @@ public final class DesbloqueoHabito {
 
     /**
      * Si hay una pausa REGISTRADA, sin mirar el calendario. Para saber si el habito va HOY hay que
-     * usar {@link #estaPausadoEl(LocalDate)}: una pausa con fecha de fin ya cumplida sigue teniendo
+     * usar {@link #estaPausadoEl(LocalDate, ZoneId)}: una pausa con fecha de fin ya cumplida sigue teniendo
      * {@code pausadoEn} con valor, pero el habito ya volvio.
      */
     public boolean estaPausado() {
@@ -84,13 +85,28 @@ public final class DesbloqueoHabito {
      * aprendiz vuelva a entrar (misma regla que .claude/rules/02: derivar, no acumular). Una pausa
      * "hasta el domingo" termina el domingo aunque el backend haya estado caido toda la semana.
      *
-     * @param hoyEnSuZona fecha del participante en SU zona horaria, nunca la del servidor (E-91).
+     * <p><b>Corregido 2026-09-07.</b> Esto NO era un rango: se comparaba solo contra el extremo de
+     * arriba, asi que devolvia {@code true} para TODA fecha anterior o igual a {@code pausadoHasta}
+     * -- incluidas las de antes de que la pausa existiera. Sintoma reportado por el dueno: pausar
+     * "hasta el jueves" apagaba tambien el lunes, el martes y el miercoles. V31 describe la pausa
+     * como un rango que arranca al tocar el boton; el codigo solo implementaba la mitad de arriba.
+     *
+     * <p>El limite de abajo NO necesito columna nueva: es {@code pausadoEn}, que V23 ya guarda
+     * justamente para eso. Lo unico que hacia falta era leerlo, y para pasarlo a dia del calendario
+     * hace falta la zona -- por eso entra por parametro y no se toma del servidor (E-91).
+     *
+     * @param diaEnSuZona fecha del participante en SU zona horaria, nunca la del servidor (E-91).
+     * @param zonaDelParticipante `participantes_programa.timezone`, la misma con la que se calculo
+     *                            {@code diaEnSuZona}.
      */
-    public boolean estaPausadoEl(LocalDate hoyEnSuZona) {
+    public boolean estaPausadoEl(LocalDate diaEnSuZona, ZoneId zonaDelParticipante) {
         if (pausadoEn == null) {
             return false;
         }
-        return pausadoHasta == null || !hoyEnSuZona.isAfter(pausadoHasta);
+        if (diaEnSuZona.isBefore(pausadoEn.atZone(zonaDelParticipante).toLocalDate())) {
+            return false;
+        }
+        return pausadoHasta == null || !diaEnSuZona.isAfter(pausadoHasta);
     }
 
     /** Ultimo dia de la pausa, o {@code null} si es indefinida o si no hay pausa. */
