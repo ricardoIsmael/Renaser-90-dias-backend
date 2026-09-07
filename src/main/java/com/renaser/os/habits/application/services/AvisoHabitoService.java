@@ -4,8 +4,8 @@ import com.renaser.os.habits.api.AvisoHabitoDebidoEvent;
 import com.renaser.os.habits.application.ports.in.aviso.DespacharAvisosHabitoUseCase;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.aviso.AvisoHabito;
@@ -149,7 +149,7 @@ public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
             horarios.computeIfAbsent(horario.habitoId(), clave -> new ArrayList<>()).add(horario);
         }
         Map<HabitoId, PreferenciaHorario> preferencias = loadPreferenciaPort
-                .porParticipanteYHabitos(participanteId, habitoIds).stream()
+                .porParticipanteHabitosYFecha(participanteId, habitoIds, registros.getFirst().fechaEjecucion()).stream()
                 .collect(Collectors.toMap(PreferenciaHorario::habitoId, preferencia -> preferencia));
         return new AgendaDelDia(habitos, horarios, preferencias);
     }

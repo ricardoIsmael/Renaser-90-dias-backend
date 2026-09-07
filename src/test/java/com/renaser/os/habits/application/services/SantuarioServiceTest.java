@@ -5,9 +5,9 @@ import com.renaser.os.habits.application.ports.in.santuario.IniciarSesionBloqueo
 import com.renaser.os.habits.application.ports.in.santuario.RomperSesionBloqueoUseCase.RomperSesionBloqueoCommand;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
@@ -131,7 +131,7 @@ class SantuarioServiceTest {
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadSesionPort.porRegistro(registro.id())).thenReturn(Optional.empty());
         when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
-        when(loadPreferenciaPort.porParticipanteYHabito(dueno, habito.id())).thenReturn(Optional.empty());
+        when(loadPreferenciaPort.porParticipanteHabitoYFecha(dueno, habito.id(), registro.fechaEjecucion())).thenReturn(Optional.empty());
         when(progresoPort.deParticipante(dueno)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
 

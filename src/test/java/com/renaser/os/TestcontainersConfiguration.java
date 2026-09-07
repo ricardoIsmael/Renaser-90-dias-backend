@@ -23,6 +23,7 @@ public class TestcontainersConfiguration {
     @Bean
     @ServiceConnection
     PostgreSQLContainer postgresContainer() {
+        requireCloudWhenRequested();
         return new PostgreSQLContainer(DockerImageName.parse("pgvector/pgvector:pg16")
                 .asCompatibleSubstituteFor("postgres"));
     }
@@ -30,6 +31,22 @@ public class TestcontainersConfiguration {
     @Bean
     @ServiceConnection
     RedisContainer redisContainer() {
+        requireCloudWhenRequested();
         return new RedisContainer(DockerImageName.parse("redis:7-alpine"));
     }
+
+    private static void requireCloudWhenRequested() {
+        if (Boolean.getBoolean("renaser.tests.cloud-required")) {
+            String version = org.testcontainers.DockerClientFactory.instance().client().infoCmd().exec().getServerVersion();
+            requireCloudVersion(version);
+        }
+    }
+
+    static void requireCloudVersion(String version) {
+        if (version == null || !version.toLowerCase(java.util.Locale.ROOT).contains("testcontainerscloud")) {
+            throw new IllegalStateException("Se requieren contenedores en Testcontainers Cloud; "
+                    + "se cancela antes de crear contenedores en Docker local");
+        }
+    }
+
 }

@@ -3,8 +3,8 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.HistorialCambioHorarioPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadCambioHorarioPendientePort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
@@ -16,6 +16,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.habits.domain.model.preferencia.CuotaEdicionHorario;
+import com.renaser.os.habits.domain.model.preferencia.HorarioPorFecha;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.shared.domain.Clock;
@@ -28,6 +29,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -85,6 +87,10 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         Habito habito = requireHabito(command.habitoId());
         requireOrdenHorario(command.horaDisparo(), command.horaLimite());
+        if (habito.participanteId() != null && !habito.participanteId().equals(command.actorId())) {
+            throw new NotAuthorizedException("Solo puedes editar tus propios habitos");
+        }
+        if (!habito.activo()) throw new IllegalArgumentException("El habito no esta activo");
 
         ZoneId zona = ZoneId.of(progreso.timezone());
         Instant ahora = clock.now();
@@ -104,18 +110,20 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     private ContextoCuota resolverContextoCuota(EditarPreferenciaHorarioCommand command, Habito habito,
                                                  int diaPrograma, ZoneId zona, Instant ahora) {
         LocalDate hoy = ahora.atZone(zona).toLocalDate();
-        // D-91: el dia en curso NO se toca, sin excepciones. Todo cambio rige desde manana, asi que
+        // D-91: el dia en curso NO se toca, sin excepciones. Solo se aceptan fechas futuras;
         // la cuota se mide contra la semana de programa de la FECHA EFECTIVA, no la de hoy: pedir un
         // cambio el ultimo dia de una semana consume el cupo de la semana siguiente, que es cuando
         // el cambio va a existir de verdad.
-        LocalDate fechaEfectiva = hoy.plusDays(1);
-        int diaEfectivo = diaPrograma + 1;
+        LocalDate fechaEfectiva = command.fecha() == null ? hoy.plusDays(1) : command.fecha();
+        HorarioPorFecha.requirePlanificable(fechaEfectiva, hoy);
+        int diaEfectivo = Math.toIntExact(diaPrograma + ChronoUnit.DAYS.between(hoy, fechaEfectiva));
 
         boolean semanaLibreGlobal = CuotaEdicionHorario.esSemanaDeAcomodoLibre(diaEfectivo);
         int libreHasta = Math.max(FREE_SCHEDULE_EDITS_UNTIL_DAY,
                 habito.diaLimiteEdicionLibre() != null ? habito.diaLimiteEdicionLibre() : FREE_SCHEDULE_EDITS_UNTIL_DAY);
         boolean habitoLibre = diaEfectivo <= libreHasta;
-        VentanaVigenteHoy vigente = resolverVentanaVigenteHoy(command, zona, ahora);
+        VentanaVigenteHoy vigente = command.fecha() == null ? resolverVentanaVigenteHoy(command, zona, ahora)
+                : new VentanaVigenteHoy(null, null, false);
 
         List<HabitoId> tocados = List.of();
         if (!semanaLibreGlobal) {
@@ -146,6 +154,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
                         && !pendiente.fechaEfectiva().isAfter(finSemana))
                 .map(CambioHorarioPendiente::habitoId)
                 .forEach(comprometidos::add);
+        comprometidos.addAll(loadPreferenciaPort.habitosConHorarioEntre(actorId, inicioSemana, finSemana));
         return List.copyOf(comprometidos);
     }
 
@@ -156,13 +165,16 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         }
     }
 
-    /**
-     * D-91: ya no hay rama inmediata. Todo cambio se programa, y la promocion nocturna
-     * ({@code PromocionCambioHorarioService}) lo hace regir al dia siguiente — que es tambien
-     * donde se cobra el cupo y se escribe la bitacora. La preferencia vigente se crea igual, con
-     * lo que rige HOY, para que el dia en curso no se mueva ni un minuto.
-     */
+    /** Con fecha guarda una excepcion puntual. Sin fecha conserva el cambio general diferido legado. */
     private void aplicarEdicion(EditarPreferenciaHorarioCommand command, ContextoCuota contexto, Instant ahora) {
+        if (command.fecha() != null) {
+            var preferencia = PreferenciaHorario.crear(command.actorId(), command.habitoId(),
+                    command.horaDisparo(), command.horaLimite(), ahora);
+            preferencia.actualizarRecordatorio(command.recordatorioActivo(), command.minutosRecordatorio(), ahora);
+            var horario = new HorarioPorFecha(command.fecha(), preferencia);
+            savePreferenciaPort.saveParaFecha(horario);
+            return;
+        }
         asegurarPreferenciaVigente(command, contexto.ventanaVigente(), ahora);
         CambioHorarioPendiente pendiente = CambioHorarioPendiente.programar(command.actorId(), command.habitoId(),
                 command.horaDisparo(), command.horaLimite(), command.recordatorioActivo(),

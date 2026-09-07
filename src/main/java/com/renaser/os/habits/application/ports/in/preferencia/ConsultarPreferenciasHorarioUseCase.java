@@ -17,6 +17,8 @@ public interface ConsultarPreferenciasHorarioUseCase {
     /** Autoservicio estricto: solo el propio participante, y solo si no esta suspendido. */
     ResumenPreferenciasHorario consultar(UserId actorId);
 
+    ResumenPreferenciasHorario consultar(UserId actorId, LocalDate fecha);
+
     /**
      * {@code cuota}: la misma que devuelve el PATCH, con los mismos literales de {@code periodo}
      * ("FREE"/"WEEK", D-36) — el cliente no tiene que reconciliar dos formas del mismo dato.
@@ -25,7 +27,7 @@ public interface ConsultarPreferenciasHorarioUseCase {
     }
 
     /**
-     * {@code horaDisparo}/{@code horaLimite} son lo VIGENTE HOY (preferencia propia si la hay, si
+     * {@code horaDisparo}/{@code horaLimite} son lo vigente en la fecha consultada (hoy por defecto) (preferencia propia si la hay, si
      * no el default del catalogo). {@code personalizado} distingue "elegi este horario" de "es el
      * que vino de fabrica". {@code cambioProgramado} es {@code null} salvo que haya un cambio
      * diferido esperando su fecha.

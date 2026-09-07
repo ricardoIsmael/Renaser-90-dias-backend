@@ -6,19 +6,20 @@ import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseC
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ExpirarRegistrosVencidosUseCase;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
+import com.renaser.os.habits.application.ports.out.desbloqueo.LoadDesbloqueoHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
-import com.renaser.os.habits.application.ports.out.desbloqueo.LoadDesbloqueoHabitoPort;
 import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.horario.HorarioResuelto;
 import com.renaser.os.habits.domain.model.politica.ContextoCompletar;
 import com.renaser.os.habits.domain.model.politica.DecisionPolitica;
 import com.renaser.os.habits.domain.model.politica.GestoCompletar;
@@ -52,9 +53,11 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Servicio del agregado `registro/` — el corazon del modulo. Integra
@@ -188,8 +191,12 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
                 // reanudacion se deriva del calendario, no la ejecuta ningun cron.
                 .filter(d -> d.estaPausadoEl(fecha) || d.diaDesbloqueo() > progreso.diaPrograma())
                 .map(DesbloqueoHabito::habitoId)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
 
+        var preferencias = horaDeCorte == null ? Map.<HabitoId, PreferenciaHorario>of()
+                : loadPreferenciaPort.porParticipanteHabitosYFecha(participanteId,
+                        catalogo.stream().map(Habito::id).toList(), fecha).stream()
+                        .collect(Collectors.toMap(PreferenciaHorario::habitoId, p -> p));
         List<RegistroHabito> generados = new ArrayList<>();
         for (Habito habito : catalogo) {
             if (fueraDelPlanDeHoy.contains(habito.id())) {
@@ -200,7 +207,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
             }
             boolean aplicaHoy = loadHorarioPort.porHabito(habito.id()).stream()
                     .filter(h -> h.aplicaEnDia(progreso.diaPrograma(), tipoDia))
-                    .anyMatch(h -> sigueAlcanzable(h, horaDeCorte));
+                    .anyMatch(h -> sigueAlcanzable(h, preferencias.get(habito.id()), horaDeCorte));
             if (!aplicaHoy) {
                 continue;
             }
@@ -217,9 +224,10 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
      * dia) o si esa hora todavia no paso. Con {@code horaDeCorte} nulo no se filtra nada:
      * es el caso del barrido nocturno, que genera el dia entero por adelantado.
      */
-    private boolean sigueAlcanzable(HorarioHabito horario, LocalTime horaDeCorte) {
-        return horaDeCorte == null || horario.horaLimite() == null
-                || horario.horaLimite().isAfter(horaDeCorte);
+    private boolean sigueAlcanzable(HorarioHabito horario, PreferenciaHorario preferencia, LocalTime horaDeCorte) {
+        var resuelto = HorarioResuelto.de(horario, preferencia);
+        return horaDeCorte == null || resuelto.horaLimite() == null
+                || resuelto.horaLimite().isAfter(horaDeCorte);
     }
 
     @Override
@@ -331,8 +339,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         LocalTime horaDisparo = vigente != null ? vigente.horaDisparo() : null;
         LocalTime horaLimite = vigente != null ? vigente.horaLimite() : null;
 
-        Optional<PreferenciaHorario> pref = loadPreferenciaPort.porParticipanteYHabito(registro.participanteId(),
-                habito.id());
+        Optional<PreferenciaHorario> pref = loadPreferenciaPort.porParticipanteHabitoYFecha(registro.participanteId(),
+                habito.id(), registro.fechaEjecucion());
         if (pref.isPresent()) {
             if (pref.get().horaDisparo() != null) {
                 horaDisparo = pref.get().horaDisparo();

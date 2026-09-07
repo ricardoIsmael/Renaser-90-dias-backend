@@ -3,9 +3,9 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.habits.api.AvisoHabitoDebidoEvent;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.aviso.CalculadoraAvisosHabito;
@@ -104,7 +104,7 @@ class AvisoHabitoServiceTest {
         when(loadHorarioPort.porHabitos(anyCollection())).thenReturn(List.of(
                 HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), HABITO, 1, null, TipoDia.TODOS,
                         LocalTime.of(21, 0), LocalTime.of(22, 0), MADRUGADA_UTC)));
-        when(loadPreferenciaPort.porParticipanteYHabitos(any(), anyCollection())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), anyCollection(), any())).thenReturn(List.of());
     }
 
     @Test

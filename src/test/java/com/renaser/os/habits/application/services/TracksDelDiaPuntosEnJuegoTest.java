@@ -7,9 +7,9 @@ import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUs
 import com.renaser.os.habits.application.ports.out.guia.LoadGuiaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
@@ -110,7 +110,7 @@ class TracksDelDiaPuntosEnJuegoTest {
                 : List.of(HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), HABITO, 1, null, TipoDia.TODOS,
                         disparo, limite, MADRUGADA_UTC)));
         when(loadGuiaPort.porHabitos(any())).thenReturn(List.of());
-        when(loadPreferenciaPort.porParticipanteYHabitos(any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
     }
 
     @Test

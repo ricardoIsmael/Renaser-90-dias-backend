@@ -7,8 +7,8 @@ import com.renaser.os.habits.application.ports.in.santuario.IniciarSesionBloqueo
 import com.renaser.os.habits.application.ports.in.santuario.RomperSesionBloqueoUseCase;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
@@ -187,8 +187,8 @@ public class SantuarioService implements IniciarSesionBloqueoUseCase, CompletarS
         LocalTime horaDisparo = vigente != null ? vigente.horaDisparo() : null;
         LocalTime horaLimite = vigente != null ? vigente.horaLimite() : null;
 
-        Optional<PreferenciaHorario> pref = loadPreferenciaPort.porParticipanteYHabito(registro.participanteId(),
-                habito.id());
+        Optional<PreferenciaHorario> pref = loadPreferenciaPort.porParticipanteHabitoYFecha(registro.participanteId(),
+                habito.id(), registro.fechaEjecucion());
         if (pref.isPresent()) {
             if (pref.get().horaDisparo() != null) {
                 horaDisparo = pref.get().horaDisparo();

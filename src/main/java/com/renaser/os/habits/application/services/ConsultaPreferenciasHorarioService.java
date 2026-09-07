@@ -3,8 +3,8 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.habits.application.ports.in.preferencia.ConsultarPreferenciasHorarioUseCase;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.HistorialCambioHorarioPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadCambioHorarioPendientePort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
@@ -24,7 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -70,11 +72,19 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
     @Override
     @Transactional(readOnly = true)
     public ResumenPreferenciasHorario consultar(UserId actorId) {
+        return consultar(actorId, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ResumenPreferenciasHorario consultar(UserId actorId, LocalDate fecha) {
         ProgresoParticipanteHabits progreso = requireProgreso(actorId);
         LocalDate hoy = clock.now().atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+        LocalDate objetivo = fecha == null ? hoy : fecha;
+        int diaObjetivo = Math.toIntExact(progreso.diaPrograma() + ChronoUnit.DAYS.between(hoy, objetivo));
         List<Habito> habitos = habitosActivosDe(actorId);
-        return new ResumenPreferenciasHorario(horariosDe(actorId, habitos, hoy, progreso.diaPrograma()),
-                cuotaDe(actorId, hoy, progreso.diaPrograma()));
+        return new ResumenPreferenciasHorario(horariosDe(actorId, habitos, objetivo, diaObjetivo),
+                cuotaDe(actorId, objetivo, diaObjetivo));
     }
 
     /** Mismo criterio que {@code RegistroService.generar}: catalogo activo + personales del aprendiz. */
@@ -91,9 +101,10 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
         Set<HabitoId> ids = habitos.stream().map(Habito::id).collect(Collectors.toSet());
         Map<HabitoId, List<HorarioHabito>> horarios = loadHorarioPort.porHabitos(ids).stream()
                 .collect(Collectors.groupingBy(HorarioHabito::habitoId));
-        Map<HabitoId, PreferenciaHorario> preferencias = loadPreferenciaPort.porParticipanteYHabitos(actorId, ids)
+        Map<HabitoId, PreferenciaHorario> preferencias = loadPreferenciaPort.porParticipanteHabitosYFecha(actorId, ids, hoy)
                 .stream().collect(Collectors.toMap(PreferenciaHorario::habitoId, p -> p));
         Map<HabitoId, CambioHorarioPendiente> programados = loadCambioPendientePort.deParticipante(actorId).stream()
+                .filter(c -> c.fechaEfectiva().isAfter(hoy))
                 .collect(Collectors.toMap(CambioHorarioPendiente::habitoId, c -> c));
         TipoDia tipoDia = TipoDia.delDia(hoy);
 
@@ -136,18 +147,19 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
         return dePreferencia != null ? dePreferencia : deCatalogo;
     }
 
-    /**
-     * Misma cuenta que informa el PATCH: en la semana de acomodo no se consulta el historial
-     * (no hay cupo que gastar); pasada esa semana, cuenta habitos DISTINTOS tocados desde el
-     * inicio de la semana de programa. Un cambio todavia programado no figura aca — recien
-     * cobra cupo el dia que pasa a regir (ver {@code PromocionCambioHorarioService}); el
-     * cliente lo ve igual en {@code cambioProgramado}.
-     */
+    /** Cuenta habitos distintos ya cambiados o reservados en la semana de la fecha consultada. */
     private CuotaEdicion cuotaDe(UserId actorId, LocalDate hoy, int diaPrograma) {
         boolean semanaLibre = CuotaEdicionHorario.esSemanaDeAcomodoLibre(diaPrograma);
-        int usados = semanaLibre ? 0
-                : historialPort.distintosHabitosCambiadosDesde(actorId,
-                        CuotaEdicionHorario.inicioSemanaPrograma(hoy, diaPrograma)).size();
+        LocalDate inicio = CuotaEdicionHorario.inicioSemanaPrograma(hoy, diaPrograma);
+        Set<HabitoId> comprometidos = new HashSet<>();
+        if (!semanaLibre) {
+            comprometidos.addAll(historialPort.distintosHabitosCambiadosDesde(actorId, inicio));
+            comprometidos.addAll(loadPreferenciaPort.habitosConHorarioEntre(actorId, inicio, inicio.plusDays(6)));
+            loadCambioPendientePort.deParticipante(actorId).stream()
+                    .filter(p -> !p.fechaEfectiva().isBefore(inicio) && !p.fechaEfectiva().isAfter(inicio.plusDays(6)))
+                    .map(CambioHorarioPendiente::habitoId).forEach(comprometidos::add);
+        }
+        int usados = comprometidos.size();
         CuotaEdicionHorario cuota = CuotaEdicionHorario.de(usados, semanaLibre);
         return new CuotaEdicion(cuota.usados(), cuota.restantes(), cuota.limite(), cuota.periodo());
     }

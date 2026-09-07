@@ -116,7 +116,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         Map<HabitoId, List<GuiaHabito>> guiasPorHabito = agruparPorHabito(loadGuiaPort.porHabitos(habitoIds),
                 GuiaHabito::habitoId);
         Map<HabitoId, PreferenciaHorario> preferenciasPorHabito = loadPreferenciaPort
-                .porParticipanteYHabitos(participanteId, habitoIds).stream()
+                .porParticipanteHabitosYFecha(participanteId, habitoIds, fecha).stream()
                 .collect(Collectors.toMap(PreferenciaHorario::habitoId, p -> p));
 
         // Una sola consulta por TODO el dia, igual que las cuatro de arriba — nunca una por registro.

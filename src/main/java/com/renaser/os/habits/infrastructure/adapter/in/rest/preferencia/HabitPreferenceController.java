@@ -1,21 +1,24 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia;
 
 import com.renaser.os.habits.application.ports.in.preferencia.ConsultarPreferenciasHorarioUseCase;
-import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase.EditarPreferenciaHorarioCommand;
+import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 /**
@@ -39,8 +42,11 @@ public class HabitPreferenceController {
 
     @RequiresPermission(Permission.USE_APP)
     @GetMapping
-    public HabitPreferencesResponse consultar(@ActorAutenticado UserId actor) {
-        return HabitPreferencesResponse.from(consultarUseCase.consultar(actor));
+    public HabitPreferencesResponse consultar(@ActorAutenticado UserId actor,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate date) {
+        return HabitPreferencesResponse.from(consultarUseCase.consultar(actor, date), date);
     }
 
     @RequiresPermission(Permission.USE_APP)
@@ -49,7 +55,7 @@ public class HabitPreferenceController {
                                            @RequestBody @Valid UpdateHabitPreferenceRequest request) {
         var resultado = editarUseCase.editar(new EditarPreferenciaHorarioCommand(actor,
                 HabitoId.of(habitId), request.triggerTime(), request.limitTime(), request.reminderEnabled(),
-                request.reminderMinutesBefore()));
+                request.reminderMinutesBefore(), request.date()));
         return HabitPreferenceResponse.from(resultado);
     }
 }

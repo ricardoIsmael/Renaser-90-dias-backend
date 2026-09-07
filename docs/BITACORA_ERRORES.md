@@ -5374,3 +5374,13 @@ Todo lo que se probo antes de eso habia salido bien y no era el problema: la con
 5. **Y la de fondo: un cambio de infraestructura en produccion no se hace de madrugada, con usuarios activos y con el dueno por irse a dormir.** La ventana de 45 s que se queria eliminar costaba, como mucho, un minuto por despliegue. Intentar eliminarla costo siete horas de caida.
 
 **Lo que quedo pendiente**, si algun dia se retoma: la configuracion de nginx probada (con `X-Forwarded-For` correcto, WebSocket para `/ws`, `proxy_read_timeout` de 180 s para el chat y `proxy_buffering off` para el streaming) funcionaba. Lo unico que falta es una instancia que aguante los dos contenedores a la vez.
+
+
+## E-156 — Editar la hora de un hábito para un día afecta los demás (2026-09-07)
+
+- **Síntoma reportado:** "cuando yo edita un habito la hora para un dia exacto y luego vou a otro dia prebalece el editar del nuevo habito, no se respeta por el dia".
+- **Causa:** Plan seleccionaba día pero guardaba solo hábito+hora. La preferencia general y el estado de React tenían una única hora para toda la semana.
+- **Corrección:** V37 y lectura/escritura por fecha; consumidores diarios usan la fecha del registro; Plan captura y consulta la fecha elegida y descarta respuestas de otra selección. Se conserva el horario general para el resto de días.
+- **Prevención:** regresión con dos fechas editadas, recarga, otro participante y mismo día de la semana siguiente; pruebas de respuesta lenta y error de carga. Backend primero: el frontend exige que GET confirme la fecha.
+- **Incidencias de la implementación detectadas por las pruebas:** `Cannot invoke "java.lang.Integer.intValue()"` por ternario que desempaquetaba un recordatorio nulo en un pendiente legado; corregido preservando `Integer`. Una consulta fallida conservaba el arreglo del día anterior; ahora lo vacía. El fixture HTTP inicial omitía campos obligatorios de respuesta; se completó para validar el contrato real.
+- **Verificación parcial:** 79 pruebas de backend sin contenedores (incluidas arquitectura, autorización y contrato HTTP), 5 regresiones de frontend y TypeScript en verde. La primera pasada con Postgres confirmó aislamiento entre fechas y detectó el desempaquetado nulo descrito arriba, ya corregido. **Verificación completa:** pendiente de conexión a Testcontainers Cloud; ver `docs/PRUEBAS_EN_CLOUD.md`. No se da por completado `clean verify` hasta ejecutarlo.

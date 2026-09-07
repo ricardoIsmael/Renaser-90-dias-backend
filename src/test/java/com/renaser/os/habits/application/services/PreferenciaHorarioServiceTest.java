@@ -4,9 +4,9 @@ import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaH
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase.ResultadoEdicionPreferencia;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.HistorialCambioHorarioPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadCambioHorarioPendientePort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
@@ -97,7 +97,7 @@ class PreferenciaHorarioServiceTest {
 
         assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor,
                 HabitoId.of(UUID.randomUUID()), LocalTime.of(7, 0), LocalTime.of(9,
-                        0), true, null))).isInstanceOf(NotAuthorizedException.class);
+                        0), true, null, null))).isInstanceOf(NotAuthorizedException.class);
     }
 
     @Test
@@ -109,7 +109,7 @@ class PreferenciaHorarioServiceTest {
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
 
         assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
-                LocalTime.of(9, 0), LocalTime.of(7, 0), true, null))).isInstanceOf(IllegalArgumentException.class);
+                LocalTime.of(9, 0), LocalTime.of(7, 0), true, null, null))).isInstanceOf(IllegalArgumentException.class);
     }
 
     /** D-91: hasta el dia 7 tampoco se aplica en el acto — lo unico libre es el cupo, no el dia. */
@@ -124,7 +124,7 @@ class PreferenciaHorarioServiceTest {
         when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
 
         ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
-                LocalTime.of(7, 0), LocalTime.of(9, 0), true, 15));
+                LocalTime.of(7, 0), LocalTime.of(9, 0), true, 15, null));
 
         assertThat(resultado.diferido()).isTrue();
         assertThat(resultado.fechaEfectivaDiferido()).isNotNull();
@@ -152,7 +152,7 @@ class PreferenciaHorarioServiceTest {
                 List.of(HabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()), habitoYaTocado.id()));
 
         assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
-                LocalTime.of(7, 0), LocalTime.of(9, 0), true, null))).isInstanceOf(IllegalStateException.class);
+                LocalTime.of(7, 0), LocalTime.of(9, 0), true, null, null))).isInstanceOf(IllegalStateException.class);
         verify(savePreferenciaPort, never()).save(any());
     }
 
@@ -170,7 +170,7 @@ class PreferenciaHorarioServiceTest {
                         habito.id())); // ya tocado, cupo "lleno" pero es el mismo
 
         ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
-                LocalTime.of(7, 0), LocalTime.of(9, 0), true, null));
+                LocalTime.of(7, 0), LocalTime.of(9, 0), true, null, null));
 
         assertThat(resultado.diferido()).isTrue();
         verify(savePreferenciaPort).save(any(PreferenciaHorario.class));
@@ -193,7 +193,7 @@ class PreferenciaHorarioServiceTest {
         when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.of(prefActual));
 
         ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
-                LocalTime.of(7, 0), LocalTime.of(9, 0), true, null));
+                LocalTime.of(7, 0), LocalTime.of(9, 0), true, null, null));
 
         assertThat(resultado.diferido()).isTrue();
         assertThat(resultado.fechaEfectivaDiferido()).isEqualTo(LocalDate.of(2026, 8, 25));
@@ -225,7 +225,7 @@ class PreferenciaHorarioServiceTest {
                         LocalTime.of(8, 0), LocalTime.of(10, 0), CLOCK.now())));
 
         ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
-                LocalTime.of(7, 0), LocalTime.of(9, 0), true, null));
+                LocalTime.of(7, 0), LocalTime.of(9, 0), true, null, null));
 
         assertThat(resultado.diferido()).isTrue();
         ArgumentCaptor<PreferenciaHorario> padre = ArgumentCaptor.forClass(PreferenciaHorario.class);
@@ -252,7 +252,7 @@ class PreferenciaHorarioServiceTest {
         when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
 
         ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
-                LocalTime.of(23, 0), null, false, null));
+                LocalTime.of(23, 0), null, false, null, null));
 
         assertThat(resultado.diferido()).isTrue();
         verify(saveCambioPendientePort).save(any());
@@ -279,7 +279,7 @@ class PreferenciaHorarioServiceTest {
                 pendienteDe(actor, manana), pendienteDe(actor, manana), pendienteDe(actor, manana)));
 
         assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
-                LocalTime.of(7, 0), null, false, null))).isInstanceOf(IllegalStateException.class);
+                LocalTime.of(7, 0), null, false, null, null))).isInstanceOf(IllegalStateException.class);
         verify(saveCambioPendientePort, never()).save(any());
     }
 
@@ -287,4 +287,53 @@ class PreferenciaHorarioServiceTest {
         return CambioHorarioPendiente.programar(actor, HabitoId.of(UUID.randomUUID()), LocalTime.of(8, 0), null,
                 false, null, fechaEfectiva, CLOCK.now());
     }
+    @Test
+    void fechaExactaNoReemplazaLaPreferenciaGeneralNiElPendiente() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(
+                new ProgresoParticipanteHabits(1, "America/Lima", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        LocalDate fecha = LocalDate.of(2026, 8, 26);
+        var resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
+                LocalTime.of(9, 0), null, false, null, fecha));
+        var captor = ArgumentCaptor.forClass(com.renaser.os.habits.domain.model.preferencia.HorarioPorFecha.class);
+        verify(savePreferenciaPort).saveParaFecha(captor.capture());
+        assertThat(captor.getValue().fecha()).isEqualTo(fecha);
+        assertThat(captor.getValue().preferencia().horaDisparo()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(resultado.fechaEfectivaDiferido()).isEqualTo(fecha);
+        verify(savePreferenciaPort, never()).save(any());
+        verify(saveCambioPendientePort, never()).save(any());
+    }
+
+    @Test
+    void laCuotaCuentaFechasReservadasDeLaSemanaObjetivo() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(
+                new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        LocalDate fecha = LocalDate.of(2026, 8, 26);
+        LocalDate inicio = LocalDate.of(2026, 8, 22);
+        when(loadPreferenciaPort.habitosConHorarioEntre(actor, inicio, inicio.plusDays(6)))
+                .thenReturn(List.of(HabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()),
+                        HabitoId.of(UUID.randomUUID())));
+        assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
+                LocalTime.of(9, 0), null, false, null, fecha))).isInstanceOf(IllegalStateException.class);
+        verify(savePreferenciaPort, never()).saveParaFecha(any());
+    }
+
+    @Test
+    void rechazaFechaDeHoyEnLaZonaDelParticipante() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(
+                new ProgresoParticipanteHabits(1, "America/Lima", RolParticipante.TRAINEE, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
+                LocalTime.of(9, 0), null, false, null, LocalDate.of(2026, 8, 24))))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(savePreferenciaPort, never()).saveParaFecha(any());
+    }
+
 }

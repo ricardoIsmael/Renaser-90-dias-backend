@@ -16,18 +16,18 @@ import java.util.UUID;
  * igual venga de donde venga.
  */
 public record HabitPreferencesResponse(List<HabitPreferenceItemResponse> habits,
-                                        ScheduleEditQuotaResponse scheduleEdits) {
+                                        ScheduleEditQuotaResponse scheduleEdits, LocalDate date) {
 
-    public static HabitPreferencesResponse from(ResumenPreferenciasHorario resumen) {
+    public static HabitPreferencesResponse from(ResumenPreferenciasHorario resumen, LocalDate date) {
         var cuota = resumen.cuota();
         return new HabitPreferencesResponse(
                 resumen.habitos().stream().map(HabitPreferenceItemResponse::from).toList(),
                 new ScheduleEditQuotaResponse(cuota.cambiosUsados(), cuota.cambiosRestantes(),
-                        cuota.cambiosLimite(), cuota.periodo()));
+                        cuota.cambiosLimite(), cuota.periodo()), date);
     }
 
     /**
-     * {@code triggerTime}/{@code limitTime}: lo que rige HOY. {@code customized}: si el horario sale de
+     * {@code triggerTime}/{@code limitTime}: lo que rige en la fecha consultada. {@code customized}: si el horario sale de
      * una preferencia propia o del catalogo. {@code pendingChange}: {@code null} si no hay nada programado.
      */
     public record HabitPreferenceItemResponse(UUID habitId, String title, LocalTime triggerTime, LocalTime limitTime,
