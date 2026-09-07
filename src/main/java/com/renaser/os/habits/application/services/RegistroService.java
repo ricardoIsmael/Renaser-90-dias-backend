@@ -185,16 +185,32 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         // PAUSADO o todavia no le toca. Un habito sin fila en `desbloqueos_habito` se sigue
         // generando como siempre. Filtrar por "esta en el plan" habria dejado a TODO el padron
         // sin habitos de un dia para el otro, porque hoy esa tabla esta vacia para todos.
+        ZoneId zona = ZoneId.of(progreso.timezone());
         Set<HabitoId> fueraDelPlanDeHoy = loadDesbloqueoPort.deParticipante(participanteId).stream()
                 // `estaPausadoEl(fecha)` y no `estaPausado()`: desde V31 una pausa puede tener
                 // fecha de fin, y pasada esa fecha el habito vuelve a generarse SOLO — la
                 // reanudacion se deriva del calendario, no la ejecuta ningun cron.
-                .filter(d -> d.estaPausadoEl(fecha) || d.diaDesbloqueo() > progreso.diaPrograma())
+                //
+                // La zona entra por parametro desde 2026-09-07: la pausa tambien tiene extremo de
+                // ABAJO (`pausadoEn`), y sin el apagaba retroactivamente todos los dias anteriores.
+                .filter(d -> d.estaPausadoEl(fecha, zona) || d.diaDesbloqueo() > progreso.diaPrograma())
                 .map(DesbloqueoHabito::habitoId)
                 .collect(Collectors.toSet());
 
-        var preferencias = horaDeCorte == null ? Map.<HabitoId, PreferenciaHorario>of()
-                : loadPreferenciaPort.porParticipanteHabitosYFecha(participanteId,
+        // V38: los que el aprendiz apago para ESE dia. Se suman al mismo conjunto de descarte
+        // porque responden la misma pregunta que la pausa y el dia de desbloqueo — "¿va hoy?" —, y
+        // asi el bucle de abajo sigue teniendo un solo lugar donde mirar.
+        fueraDelPlanDeHoy.addAll(loadPreferenciaPort.habitosApagadosEn(participanteId, fecha));
+
+        // Las preferencias se cargan SIEMPRE, tambien con `horaDeCorte` nulo.
+        //
+        // Antes el barrido nocturno recibia un mapa vacio, y era inocuo mientras lo unico que se
+        // hacia con el fuera descartar por hora de cierre (`sigueAlcanzable` no filtra nada sin
+        // corte). Dejo de serlo el dia que el horario por fecha empezo a decidir cosas: el cron de
+        // las 05:02 UTC es la via por la que se generan los tracks de TODO el padron, asi que un
+        // horario que solo se lee en el camino a demanda funciona probandolo a mano por HTTP y no
+        // funciona en produccion para nadie.
+        var preferencias = loadPreferenciaPort.porParticipanteHabitosYFecha(participanteId,
                         catalogo.stream().map(Habito::id).toList(), fecha).stream()
                         .collect(Collectors.toMap(PreferenciaHorario::habitoId, p -> p));
         List<RegistroHabito> generados = new ArrayList<>();
