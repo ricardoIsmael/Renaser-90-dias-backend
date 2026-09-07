@@ -1,6 +1,7 @@
 package com.renaser.os.habits.application.ports.out.preferencia;
 
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.shared.domain.UserId;
 
@@ -32,4 +33,10 @@ public interface LoadPreferenciaHorarioPort {
      * conocer un campo que a la mayoria no le importa.
      */
     List<HabitoId> habitosApagadosEn(UserId participanteId, LocalDate fecha);
+
+    /**
+     * Los siete dias de un habito con hora propia por dia de semana (V39). Solo devuelve los dias
+     * que TIENEN fila: los demas se rigen por el horario general, y decir eso es del que lee.
+     */
+    List<HorarioSemanal> horarioSemanalDe(UserId participanteId, HabitoId habitoId);
 }

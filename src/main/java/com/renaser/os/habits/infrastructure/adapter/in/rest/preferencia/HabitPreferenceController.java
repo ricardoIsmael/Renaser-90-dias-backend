@@ -1,6 +1,7 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia;
 
 import com.renaser.os.habits.application.ports.in.preferencia.CambiarEstadoHabitoEnFechaUseCase;
+import com.renaser.os.habits.application.ports.in.preferencia.EditarHorarioSemanalUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.ConsultarPreferenciasHorarioUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase.EditarPreferenciaHorarioCommand;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
@@ -13,7 +14,9 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -37,13 +41,16 @@ public class HabitPreferenceController {
     private final EditarPreferenciaHorarioUseCase editarUseCase;
     private final ConsultarPreferenciasHorarioUseCase consultarUseCase;
     private final CambiarEstadoHabitoEnFechaUseCase cambiarEstadoEnFechaUseCase;
+    private final EditarHorarioSemanalUseCase horarioSemanalUseCase;
 
     public HabitPreferenceController(EditarPreferenciaHorarioUseCase editarUseCase,
                                       ConsultarPreferenciasHorarioUseCase consultarUseCase,
-                                      CambiarEstadoHabitoEnFechaUseCase cambiarEstadoEnFechaUseCase) {
+                                      CambiarEstadoHabitoEnFechaUseCase cambiarEstadoEnFechaUseCase,
+                                      EditarHorarioSemanalUseCase horarioSemanalUseCase) {
         this.editarUseCase = editarUseCase;
         this.consultarUseCase = consultarUseCase;
         this.cambiarEstadoEnFechaUseCase = cambiarEstadoEnFechaUseCase;
+        this.horarioSemanalUseCase = horarioSemanalUseCase;
     }
 
     @RequiresPermission(Permission.USE_APP)
@@ -79,5 +86,34 @@ public class HabitPreferenceController {
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestBody @Valid UpdateHabitDayRequest request) {
         cambiarEstadoEnFechaUseCase.cambiarEstadoEnFecha(actor, HabitoId.of(habitId), date, request.active());
+    }
+
+    /**
+     * "Los lunes a las 5 y los martes a las 4" (V39). Los SIETE dias, ya resueltos: la pantalla no
+     * mezcla lo propio con lo general porque esa mezcla es la precedencia y vive acá.
+     */
+    @RequiresPermission(Permission.USE_APP)
+    @GetMapping("/{habitId}/weekdays")
+    public WeekdayScheduleResponse consultarSemana(@ActorAutenticado UserId actor, @PathVariable UUID habitId) {
+        return WeekdayScheduleResponse.from(horarioSemanalUseCase.consultar(actor, HabitoId.of(habitId)));
+    }
+
+    /** `{weekday}` es el nombre de `DayOfWeek`: MONDAY..SUNDAY, igual que `activeWeekdays`. */
+    @RequiresPermission(Permission.USE_APP)
+    @PutMapping("/{habitId}/weekdays/{weekday}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void fijarDiaDeLaSemana(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
+            @PathVariable DayOfWeek weekday, @RequestBody @Valid WeekdayScheduleRequest request) {
+        horarioSemanalUseCase.fijar(actor, HabitoId.of(habitId), weekday, request.triggerTime(),
+                request.limitTime());
+    }
+
+    /** Ese día vuelve a regirse por el horario general. Idempotente: borrar lo que no está es 204. */
+    @RequiresPermission(Permission.USE_APP)
+    @DeleteMapping("/{habitId}/weekdays/{weekday}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void quitarDiaDeLaSemana(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
+            @PathVariable DayOfWeek weekday) {
+        horarioSemanalUseCase.quitar(actor, HabitoId.of(habitId), weekday);
     }
 }

@@ -1,6 +1,7 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia;
 
 import com.renaser.os.habits.application.ports.in.preferencia.CambiarEstadoHabitoEnFechaUseCase;
+import com.renaser.os.habits.application.ports.in.preferencia.EditarHorarioSemanalUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.ConsultarPreferenciasHorarioUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase.EditarPreferenciaHorarioCommand;
@@ -33,6 +34,7 @@ class HabitPreferenceControllerTest {
     @MockitoBean EditarPreferenciaHorarioUseCase editar;
     @MockitoBean ConsultarPreferenciasHorarioUseCase consultar;
     @MockitoBean CambiarEstadoHabitoEnFechaUseCase cambiarEstadoEnFecha;
+    @MockitoBean EditarHorarioSemanalUseCase horarioSemanal;
     @MockitoBean UserSummaryFinder users;
     private final UserId actor = UserId.of(UUID.randomUUID());
     private final HabitoId habito = HabitoId.of(UUID.randomUUID());

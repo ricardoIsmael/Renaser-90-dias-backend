@@ -1,6 +1,7 @@
 package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.application.ports.in.preferencia.CambiarEstadoHabitoEnFechaUseCase;
+import com.renaser.os.habits.application.ports.in.preferencia.EditarHorarioSemanalUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
@@ -18,6 +19,7 @@ import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.habits.domain.model.preferencia.CuotaEdicionHorario;
 import com.renaser.os.habits.domain.model.preferencia.HorarioPorFecha;
+import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.shared.domain.Clock;
@@ -26,16 +28,19 @@ import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Hueco #12 — edicion de horario personal (`preferencias_horario`/`cambios_horario_pendientes`).
@@ -43,7 +48,8 @@ import java.util.Set;
  * javadoc de {@link EditarPreferenciaHorarioUseCase} para lo que quedo afuera.
  */
 @Service
-public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCase, CambiarEstadoHabitoEnFechaUseCase {
+public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCase, CambiarEstadoHabitoEnFechaUseCase,
+        EditarHorarioSemanalUseCase {
 
     /** limits.ts — semana 1 de acomodo, sin cupo. */
     public static final int FREE_SCHEDULE_EDITS_UNTIL_DAY = CuotaEdicionHorario.DIAS_DE_ACOMODO_LIBRE;
@@ -322,6 +328,62 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         // que permite volver a encenderlo y que quede como estaba.
         var preferencia = PreferenciaHorario.crear(actorId, habitoId, null, null, ahora);
         savePreferenciaPort.saveParaFecha(new HorarioPorFecha(fecha, preferencia, false));
+    }
+
+    /**
+     * La hora de UN dia de la semana (V39). No pasa por la cuota — ver el javadoc del caso de uso:
+     * la cuota se mide contra una fecha efectiva y un patron semanal no tiene una.
+     */
+    @Override
+    @Transactional
+    public void fijar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, LocalTime horaDisparo,
+                      LocalTime horaLimite) {
+        requireHabito(habitoId);
+        Instant ahora = clock.now();
+        var preferencia = PreferenciaHorario.crear(actorId, habitoId, horaDisparo, horaLimite, ahora);
+        // El agregado valida que la hora limite sea posterior a la de disparo, igual que en el
+        // resto del modulo: la regla vive en el dominio, no en el controlador.
+        savePreferenciaPort.saveParaDiaSemana(actorId, habitoId, new HorarioSemanal(diaSemana, preferencia));
+    }
+
+    @Override
+    @Transactional
+    public void quitar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana) {
+        requireHabito(habitoId);
+        savePreferenciaPort.borrarParaDiaSemana(actorId, habitoId, diaSemana);
+    }
+
+    /**
+     * Los siete dias resueltos. Se compone acá y no en la pantalla: si el cliente tuviera que
+     * mezclar "lo propio de ese dia" con "lo general", habria dos implementaciones de la misma
+     * precedencia y tarde o temprano se separan.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<DiaDeLaSemana> consultar(UserId actorId, HabitoId habitoId) {
+        Habito habito = requireHabito(habitoId);
+        var propios = loadPreferenciaPort.horarioSemanalDe(actorId, habitoId).stream()
+                .collect(Collectors.toMap(HorarioSemanal::diaSemana, HorarioSemanal::preferencia));
+        var general = loadPreferenciaPort.porParticipanteYHabito(actorId, habitoId).orElse(null);
+        var delCatalogo = loadHorarioPort.porHabito(habito.id()).stream().findFirst().orElse(null);
+        LocalTime disparoGeneral = general != null && general.horaDisparo() != null ? general.horaDisparo()
+                : delCatalogo != null ? delCatalogo.horaDisparo() : null;
+        LocalTime limiteGeneral = general != null && general.horaLimite() != null ? general.horaLimite()
+                : delCatalogo != null ? delCatalogo.horaLimite() : null;
+
+        List<DiaDeLaSemana> dias = new ArrayList<>();
+        for (DayOfWeek dia : DayOfWeek.values()) {
+            var propio = propios.get(dia);
+            if (propio == null) {
+                dias.add(new DiaDeLaSemana(dia, disparoGeneral, limiteGeneral, false));
+            } else {
+                // Respaldo por CAMPO, igual que en el adaptador: una fila que solo fija la hora de
+                // disparo conserva la hora limite general.
+                dias.add(new DiaDeLaSemana(dia, propio.horaDisparo(),
+                        propio.horaLimite() != null ? propio.horaLimite() : limiteGeneral, true));
+            }
+        }
+        return dias;
     }
 
     private Habito requireHabito(HabitoId id) {
