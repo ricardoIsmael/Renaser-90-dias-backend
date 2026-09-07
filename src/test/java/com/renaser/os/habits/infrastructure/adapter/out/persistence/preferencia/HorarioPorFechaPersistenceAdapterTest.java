@@ -208,4 +208,32 @@ class HorarioPorFechaPersistenceAdapterTest {
                 .as("otro participante no tiene preferencia propia, asi que no resuelve nada")
                 .isEmpty();
     }
+
+    /**
+     * V40 — "los martes no". Apagar un dia de la semana NO le toca la hora: el dia queda apagado,
+     * no sin horario, y volver a encenderlo lo devuelve a la que regia.
+     */
+    @Test
+    void apagarUnDiaDeLaSemanaNoLeBorraLaHora() {
+        horarioGeneral(LocalTime.of(9, 0));
+        save.saveParaDiaSemana(actor, habito, new HorarioSemanal(DayOfWeek.TUESDAY,
+                PreferenciaHorario.crear(actor, habito, null, null, clock.now()), false));
+
+        assertThat(resueltaEl(proximo(DayOfWeek.TUESDAY)))
+                .as("la hora sigue siendo la general: apagar no es borrar el horario")
+                .isEqualTo(LocalTime.of(9, 0));
+        assertThat(load.habitosApagadosEnDiaSemana(actor, DayOfWeek.TUESDAY)).containsExactly(habito);
+        assertThat(load.habitosApagadosEnDiaSemana(actor, DayOfWeek.MONDAY))
+                .as("solo el martes: apagar un dia no apaga los otros")
+                .isEmpty();
+    }
+
+    /** Un dia con hora propia sigue contando como encendido. */
+    @Test
+    void unDiaConHoraPropiaNoFiguraEntreLosApagados() {
+        horarioGeneral(LocalTime.of(9, 0));
+        horarioDelDia(DayOfWeek.MONDAY, LocalTime.of(5, 0));
+
+        assertThat(load.habitosApagadosEnDiaSemana(actor, DayOfWeek.MONDAY)).isEmpty();
+    }
 }

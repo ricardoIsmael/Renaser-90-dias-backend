@@ -201,6 +201,11 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         // porque responden la misma pregunta que la pausa y el dia de desbloqueo — "¿va hoy?" —, y
         // asi el bucle de abajo sigue teniendo un solo lugar donde mirar.
         fueraDelPlanDeHoy.addAll(loadPreferenciaPort.habitosApagadosEn(participanteId, fecha));
+        // V40: y los que apago para ESE dia de la semana, todas las semanas. `fecha` ya viene en la
+        // zona del participante, asi que el dia sale de ella y NO se recalcula en ningun otro lado
+        // — ahi es por donde volveria a entrar E-91.
+        fueraDelPlanDeHoy.addAll(
+                loadPreferenciaPort.habitosApagadosEnDiaSemana(participanteId, fecha.getDayOfWeek()));
 
         // Las preferencias se cargan SIEMPRE, tambien con `horaDeCorte` nulo.
         //

@@ -346,6 +346,26 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         savePreferenciaPort.saveParaDiaSemana(actorId, habitoId, new HorarioSemanal(diaSemana, preferencia));
     }
 
+    /**
+     * Apaga el hábito ese día de la semana. La regla del obligatorio es la misma que la de la
+     * pausa, y por el mismo motivo: si los del programa se pudieran sacar un día, "obligatorio" no
+     * querría decir nada. Vive acá y no en un CHECK porque cruza dos tablas.
+     */
+    @Override
+    @Transactional
+    public void apagar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana) {
+        Habito habito = requireHabito(habitoId);
+        if (!habito.desactivable()) {
+            throw new IllegalStateException("Este habito es obligatorio y no se puede apagar");
+        }
+        Instant ahora = clock.now();
+        // Sin hora: apagar un día NO toca el horario, que se sigue heredando del general. Es lo
+        // que permite volver a encenderlo y que quede como estaba.
+        var preferencia = PreferenciaHorario.crear(actorId, habitoId, null, null, ahora);
+        savePreferenciaPort.saveParaDiaSemana(actorId, habitoId,
+                new HorarioSemanal(diaSemana, preferencia, false));
+    }
+
     @Override
     @Transactional
     public void quitar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana) {
@@ -363,7 +383,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     public List<DiaDeLaSemana> consultar(UserId actorId, HabitoId habitoId) {
         Habito habito = requireHabito(habitoId);
         var propios = loadPreferenciaPort.horarioSemanalDe(actorId, habitoId).stream()
-                .collect(Collectors.toMap(HorarioSemanal::diaSemana, HorarioSemanal::preferencia));
+                .collect(Collectors.toMap(HorarioSemanal::diaSemana, h -> h));
         var general = loadPreferenciaPort.porParticipanteYHabito(actorId, habitoId).orElse(null);
         var delCatalogo = loadHorarioPort.porHabito(habito.id()).stream().findFirst().orElse(null);
         LocalTime disparoGeneral = general != null && general.horaDisparo() != null ? general.horaDisparo()
@@ -375,12 +395,15 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         for (DayOfWeek dia : DayOfWeek.values()) {
             var propio = propios.get(dia);
             if (propio == null) {
-                dias.add(new DiaDeLaSemana(dia, disparoGeneral, limiteGeneral, false));
+                dias.add(new DiaDeLaSemana(dia, disparoGeneral, limiteGeneral, false, true));
             } else {
                 // Respaldo por CAMPO, igual que en el adaptador: una fila que solo fija la hora de
-                // disparo conserva la hora limite general.
-                dias.add(new DiaDeLaSemana(dia, propio.horaDisparo(),
-                        propio.horaLimite() != null ? propio.horaLimite() : limiteGeneral, true));
+                // disparo conserva la hora limite general. Y una que solo APAGA no trae hora, asi
+                // que muestra la general — el dia esta apagado, no sin horario.
+                dias.add(new DiaDeLaSemana(dia,
+                        propio.preferencia().horaDisparo() != null ? propio.preferencia().horaDisparo() : disparoGeneral,
+                        propio.preferencia().horaLimite() != null ? propio.preferencia().horaLimite() : limiteGeneral,
+                        true, propio.activo()));
             }
         }
         return dias;

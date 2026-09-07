@@ -97,6 +97,11 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
         for (var p : semanalRepository.findByParticipanteIdAndHabitoIdInAndDiaSemana(
                 participanteId.value(), ids, diaIso)) {
             HabitoId id = HabitoId.of(p.getHabitoId());
+            // V40: una fila que solo APAGA el día no trae hora, y no tiene que pisar la que regía.
+            // Sin este corte, apagar los martes le borraría el horario a los martes.
+            if (p.getHoraDisparo() == null) {
+                continue;
+            }
             var anterior = efectivos.get(id);
             efectivos.put(id, PreferenciaHorario.rehydrate(participanteId, id, p.getHoraDisparo(),
                     p.getHoraLimite() != null ? p.getHoraLimite() : (anterior != null ? anterior.horaLimite() : null),
@@ -144,7 +149,8 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
         return semanalRepository.findByParticipanteIdAndHabitoId(participanteId.value(), habitoId.value()).stream()
                 .map(p -> new HorarioSemanal(DayOfWeek.of(p.getDiaSemana()),
                         PreferenciaHorario.rehydrate(participanteId, habitoId, p.getHoraDisparo(), p.getHoraLimite(),
-                                false, null, p.getCreadoEn(), p.getActualizadoEn())))
+                                false, null, p.getCreadoEn(), p.getActualizadoEn()),
+                        p.isActivo()))
                 .toList();
     }
 
@@ -155,8 +161,14 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
                 (short) horario.diaSemana().getValue());
         var creadoEn = semanalRepository.findById(key).map(HorarioSemanalJpaEntity::getCreadoEn).orElse(p.creadoEn());
         semanalRepository.saveAndFlush(new HorarioSemanalJpaEntity(participanteId.value(), habitoId.value(),
-                (short) horario.diaSemana().getValue(), p.horaDisparo(), p.horaLimite(), creadoEn,
-                p.actualizadoEn()));
+                (short) horario.diaSemana().getValue(), p.horaDisparo(), horario.activo(), p.horaLimite(),
+                creadoEn, p.actualizadoEn()));
+    }
+
+    @Override
+    public List<HabitoId> habitosApagadosEnDiaSemana(UserId participanteId, DayOfWeek diaSemana) {
+        return semanalRepository.apagadosEnDiaSemana(participanteId.value(), (short) diaSemana.getValue())
+                .stream().map(HabitoId::of).toList();
     }
 
     @Override

@@ -26,7 +26,18 @@ public interface EditarHorarioSemanalUseCase {
     /** Fija la hora de ese dia. Si ya habia una, la reemplaza. */
     void fijar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, LocalTime horaDisparo, LocalTime horaLimite);
 
-    /** Quita la hora propia de ese dia: vuelve a regirse por el horario general. Idempotente. */
+    /**
+     * Apaga el habito ESE dia de la semana, todas las semanas (V40).
+     *
+     * <p>Un habito con {@code habitos.desactivable = false} no se puede apagar — misma regla y
+     * mismo motivo que la pausa de `habit-unlocks`: si los obligatorios se pudieran sacar un dia,
+     * "obligatorio" no querria decir nada. Es la acotacion a la objecion de V31, que rechazo los
+     * patrones semanales porque "crean un agujero PERMANENTE y silencioso en un programa de 90
+     * dias".
+     */
+    void apagar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana);
+
+    /** Quita la hora propia o el apagado de ese dia: vuelve al horario general. Idempotente. */
     void quitar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana);
 
     /** Los SIETE dias ya resueltos, para que la pantalla no reimplemente la precedencia. */
@@ -35,6 +46,7 @@ public interface EditarHorarioSemanalUseCase {
     /**
      * @param propio {@code true} si ese dia tiene hora propia; {@code false} si hereda la general.
      */
-    record DiaDeLaSemana(DayOfWeek diaSemana, LocalTime horaDisparo, LocalTime horaLimite, boolean propio) {
+    record DiaDeLaSemana(DayOfWeek diaSemana, LocalTime horaDisparo, LocalTime horaLimite, boolean propio,
+                          boolean activo) {
     }
 }

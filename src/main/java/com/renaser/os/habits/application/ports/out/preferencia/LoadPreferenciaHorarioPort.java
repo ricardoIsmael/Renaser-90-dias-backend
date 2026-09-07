@@ -5,6 +5,7 @@ import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.shared.domain.UserId;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -39,4 +40,12 @@ public interface LoadPreferenciaHorarioPort {
      * que TIENEN fila: los demas se rigen por el horario general, y decir eso es del que lee.
      */
     List<HorarioSemanal> horarioSemanalDe(UserId participanteId, HabitoId habitoId);
+
+    /**
+     * Los habitos que el aprendiz APAGO para ese dia de la semana, todas las semanas (V40).
+     *
+     * Hermano de {@link #habitosApagadosEn(UserId, LocalDate)}, que es por fecha y no se repite.
+     * Los dos responden "va hoy?" y el generador los junta en el mismo conjunto de descarte.
+     */
+    List<HabitoId> habitosApagadosEnDiaSemana(UserId participanteId, DayOfWeek diaSemana);
 }

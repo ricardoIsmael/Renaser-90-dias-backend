@@ -32,6 +32,9 @@ public class HorarioSemanalJpaEntity {
 
     private LocalTime horaDisparo;
 
+    /** V40: false = ese dia el habito NO va, ninguna semana. */
+    private boolean activo;
+
     private LocalTime horaLimite;
 
     private Instant creadoEn;

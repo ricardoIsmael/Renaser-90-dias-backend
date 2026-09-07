@@ -12,6 +12,9 @@ import java.util.List;
  * pinta la fila de dias leyendo una lista, sin mezclar "lo propio" con "lo general" — esa mezcla es
  * la precedencia, y vive en el servidor para que no existan dos implementaciones de la misma regla.
  *
+ * <p>{@code active} es {@code false} cuando el aprendiz apago ese dia de la semana (V40). Viene con
+ * la hora igual: el dia esta apagado, no sin horario, y encenderlo lo devuelve a esa hora.
+ *
  * <p>{@code weekday} como nombre de {@link java.time.DayOfWeek} ({@code "MONDAY"}..{@code "SUNDAY"}),
  * igual que {@code activeWeekdays} en {@code GET /api/v1/habits}: mismo vocabulario en todo el cable.
  */
@@ -23,11 +26,11 @@ public record WeekdayScheduleResponse(List<WeekdayScheduleItemResponse> weekdays
 
     /** {@code custom}: {@code true} si ese dia tiene hora propia; {@code false} si hereda la general. */
     public record WeekdayScheduleItemResponse(String weekday, LocalTime triggerTime, LocalTime limitTime,
-                                               boolean custom) {
+                                               boolean custom, boolean active) {
 
         static WeekdayScheduleItemResponse from(DiaDeLaSemana d) {
             return new WeekdayScheduleItemResponse(d.diaSemana().name(), d.horaDisparo(), d.horaLimite(),
-                    d.propio());
+                    d.propio(), d.activo());
         }
     }
 }
