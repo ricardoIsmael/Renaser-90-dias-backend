@@ -51,7 +51,7 @@ public class MisHabitosController {
                                                     @RequestBody @Valid CreatePersonalHabitRequest request) {
         var habito = crearUseCase.crear(new CrearHabitoPersonalCommand(actor, request.title(),
                 request.habitType().toDomain(), request.category().toClave(), request.template(),
-                request.goalLabel(), request.triggerTime(), request.limitTime()));
+                request.goalLabel(), request.iconKey(), request.triggerTime(), request.limitTime()));
         // Un habito PERSONAL nace con horario TODOS (ver MisHabitosService.crear), asi que sus dias
         // salen del propio dominio en vez de repetirse aca.
         return ResponseEntity.status(HttpStatus.CREATED)

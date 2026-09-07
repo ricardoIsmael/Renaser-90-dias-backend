@@ -85,7 +85,7 @@ class MisHabitosServiceTest {
 
     private CrearHabitoPersonalCommand comando(LocalTime disparo, LocalTime limite) {
         return new CrearHabitoPersonalCommand(actor, "Correr 5km", TipoHabito.CHECKBOX, "CUERPO",
-                PlantillaHabitoPersonal.CORRER, "meta", disparo, limite);
+                PlantillaHabitoPersonal.CORRER, "meta", null, disparo, limite);
     }
 
     // ---- consultar (comportamiento preexistente, sin cambios de contrato) ----

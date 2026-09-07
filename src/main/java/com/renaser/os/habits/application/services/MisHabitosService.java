@@ -163,7 +163,8 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         HabitoId id = HabitoId.of(idGenerator.newId());
         Habito habito = Habito.crearPersonal(id, command.actorId(), command.titulo(), command.tipo(),
-                command.categoriaClave(), command.plantilla(), command.etiquetaMeta(), clock.now());
+                command.categoriaClave(), command.plantilla(), command.etiquetaMeta(), command.iconoClave(),
+                clock.now());
         Habito guardado = savePort.save(habito);
 
         HorarioHabitoId horarioId = HorarioHabitoId.of(idGenerator.newId());

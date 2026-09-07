@@ -101,7 +101,7 @@ class PausaHabitoPersonalIT {
         });
         habitoPersonal = crearUseCase.crear(new CrearHabitoPersonalCommand(participanteId, "Correr 5km",
                 TipoHabito.CHECKBOX, "CUERPO", PlantillaHabitoPersonal.CORRER, "Terminar una carrera",
-                LocalTime.of(6, 0), LocalTime.of(22, 0)));
+                null, LocalTime.of(6, 0), LocalTime.of(22, 0)));
     }
 
     @AfterEach

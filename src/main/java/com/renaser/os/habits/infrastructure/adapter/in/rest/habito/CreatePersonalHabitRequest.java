@@ -25,6 +25,6 @@ import java.time.LocalTime;
  */
 public record CreatePersonalHabitRequest(@NotBlank @Size(max = 120) String title, @NotNull HabitTypeDto habitType,
                                           @NotNull HabitCategoryDto category, PlantillaHabitoPersonal template,
-                                          @Size(max = 200) String goalLabel, @NotNull LocalTime triggerTime,
-                                          LocalTime limitTime) {
+                                          @Size(max = 200) String goalLabel, @Size(max = 40) String iconKey,
+                                          @NotNull LocalTime triggerTime, LocalTime limitTime) {
 }

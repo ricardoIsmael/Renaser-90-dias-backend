@@ -36,10 +36,15 @@ public interface CrearHabitoPersonalUseCase {
     record CrearHabitoPersonalCommand(@NotNull UserId actorId, @NotBlank @Size(max = 120) String titulo,
                                        @NotNull TipoHabito tipo, @NotBlank String categoriaClave,
                                        PlantillaHabitoPersonal plantilla, @Size(max = 200) String etiquetaMeta,
+                                       @Size(max = 40) String iconoClave,
                                        @NotNull LocalTime horaDisparo, LocalTime horaLimite) {
         public CrearHabitoPersonalCommand {
+            // El ORDEN importa: `validateConstructorArgs` empareja estos valores con los
+            // componentes del record por POSICION. Olvidar uno corre todos los de atras y las
+            // anotaciones terminan validando el campo equivocado — `@NotNull` sobre la hora se
+            // evaluaba contra el icono, y el alta rechazaba altas correctas.
             SelfValidating.validateConstructorArgs(CrearHabitoPersonalCommand.class, actorId, titulo, tipo,
-                    categoriaClave, plantilla, etiquetaMeta, horaDisparo, horaLimite);
+                    categoriaClave, plantilla, etiquetaMeta, iconoClave, horaDisparo, horaLimite);
             // Nivel 2 de validacion (CLAUDE.MD §5.4.3): estructuralmente imposible construir un
             // comando con el habito ya vencido. La misma regla vive tambien en
             // HorarioHabito.crear (el agregado de dominio) — defensa en profundidad, no
