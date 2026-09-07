@@ -35,6 +35,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.util.NoSuchElementException;
@@ -197,11 +199,49 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
                 new Credencial(passwordEncoder.encode(contrasenaEnClaro), clock.now()));
     }
 
+    /**
+     * Valida el token de verificacion SIN gastarlo, y programa que se gaste recien cuando la
+     * transaccion haya comiteado de verdad.
+     *
+     * <p><b>Por que asi (E-152).</b> Antes esto llamaba a {@code consumir} —que borra el token en
+     * la misma operacion— al principio del alta. Redis no participa de la transaccion de
+     * Postgres, asi que cuando el guardado fallaba la base se deshacia entera <b>pero el token
+     * quedaba gastado igual</b>. La persona reintentaba y le decia "el codigo no es valido o ya
+     * vencio" sin haber hecho nada mal: paso 14 veces la noche del 6 de septiembre, como secuela
+     * del fallo de IPv6 (E-151).
+     *
+     * <p><b>Y por que no alcanza con mover el consumo al final del metodo:</b> el fallo de aquella
+     * noche ocurrio <b>durante el commit</b> (Hibernate vuelca los INSERT al cerrar la
+     * transaccion, no al invocar {@code save}). Cualquier consumo dentro del metodo, aunque fuera
+     * la ultima linea, seguiria ocurriendo antes de ese commit y quemaria el token igual. Por eso
+     * se cuelga de {@code afterCommit}.
+     *
+     * <p><b>La carrera que esto abre, y por que esta contenida:</b> entre la validacion y el
+     * consumo, dos altas simultaneas con el mismo token pasarian las dos. Lo corta la unicidad del
+     * email — {@code rejectIfEmailYaRegistrado} y el UNIQUE de {@code usuarios.email} —, asi que
+     * la segunda no crea nada. Es el caso del doble clic, y termina en una sola cuenta.
+     */
     private void requireEmailVerificado(String email, String verificationToken) {
-        String emailVerificado = tokenVerificacionEmailPort.consumir(verificationToken).orElse(null);
+        String emailVerificado = tokenVerificacionEmailPort.emailDe(verificationToken).orElse(null);
         if (emailVerificado == null || !emailVerificado.equalsIgnoreCase(email)) {
             throw new TokenVerificacionEmailInvalidoException();
         }
+        consumirTokenAlConfirmar(verificationToken);
+    }
+
+    private void consumirTokenAlConfirmar(String verificationToken) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            // Sin transaccion alrededor no hay commit al que engancharse, y dejar el token vivo
+            // seria peor: se consume ya, que es el comportamiento de siempre.
+            tokenVerificacionEmailPort.consumir(verificationToken);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                tokenVerificacionEmailPort.consumir(verificationToken);
+            }
+        });
     }
 
     @Override

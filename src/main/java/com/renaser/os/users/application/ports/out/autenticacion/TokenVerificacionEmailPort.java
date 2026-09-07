@@ -17,6 +17,19 @@ public interface TokenVerificacionEmailPort {
     String generar(String email, Duration vigencia);
 
     /**
+     * Busca el token SIN borrarlo, solo para validar antes de hacer trabajo que puede fallar.
+     *
+     * <p><b>Por que existe (E-152).</b> El alta consumia el token al principio, y como Redis no
+     * participa de la transaccion de Postgres, cuando el guardado fallaba la base se deshacia
+     * <b>pero el token quedaba gastado</b>. La persona reintentaba con su codigo y le decia "el
+     * codigo no es valido o ya vencio", sin haber hecho nada mal. Con esto se valida primero sin
+     * efecto y se consume {@link #consumir} recien cuando la transaccion ya comiteo.
+     *
+     * @return el email que este token certifica verificado, o vacio si el token no es valido
+     */
+    Optional<String> emailDe(String token);
+
+    /**
      * Busca el token y lo borra en la MISMA operacion atomica (GETDEL): un solo uso, igual que
      * {@link TokenResetContrasenaPort#consumir}. Vacio si no existe, ya vencio, o ya se
      * consumio antes.

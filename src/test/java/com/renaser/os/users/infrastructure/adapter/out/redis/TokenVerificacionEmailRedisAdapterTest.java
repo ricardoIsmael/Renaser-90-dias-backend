@@ -51,6 +51,34 @@ class TokenVerificacionEmailRedisAdapterTest {
         assertThat(tokenVerificacionEmailPort.consumir("token-que-nunca-se-genero")).isEmpty();
     }
 
+    /**
+     * E-152: {@code emailDe} tiene que poder leerse sin gastar el token. Es lo que permite validar
+     * el alta antes de hacer trabajo que puede fallar, y consumirlo recien cuando la transaccion
+     * comiteo. Si esta lectura borrara, volveriamos al bug: un alta fallida dejaba a la persona
+     * sin su codigo, con el mensaje "el codigo no es valido o ya vencio".
+     */
+    @Test
+    void emailDeLeeSinGastarElToken() {
+        String email = "verificado@renaser.dev";
+        String token = tokenVerificacionEmailPort.generar(email, Duration.ofMinutes(30));
+
+        assertThat(tokenVerificacionEmailPort.emailDe(token)).contains(email);
+        assertThat(tokenVerificacionEmailPort.emailDe(token))
+                .as("leer dos veces sigue dando lo mismo: no borra")
+                .contains(email);
+        assertThat(tokenVerificacionEmailPort.consumir(token))
+                .as("y despues todavia se puede consumir")
+                .contains(email);
+        assertThat(tokenVerificacionEmailPort.emailDe(token))
+                .as("recien ahi queda vacio")
+                .isEmpty();
+    }
+
+    @Test
+    void emailDeConUnTokenQueNuncaExistioDevuelveVacio() {
+        assertThat(tokenVerificacionEmailPort.emailDe("token-que-nunca-se-genero")).isEmpty();
+    }
+
     @Test
     void unTokenVencidoYaNoSePuedeConsumir() throws InterruptedException {
         String token = tokenVerificacionEmailPort.generar("verificado@renaser.dev", Duration.ofMillis(500));

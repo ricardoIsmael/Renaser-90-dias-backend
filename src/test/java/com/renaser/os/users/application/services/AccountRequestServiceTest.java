@@ -25,6 +25,8 @@ import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -151,7 +153,7 @@ class AccountRequestServiceTest {
     @Test
     @DisplayName("2026-08-27: submit consume el token de verificacion y arma la solicitud")
     void submitConTokenValidoArmaLaSolicitud() {
-        when(tokenVerificacionEmailPort.consumir("token-valido")).thenReturn(Optional.of("solicitante@renaser.dev"));
+        when(tokenVerificacionEmailPort.emailDe("token-valido")).thenReturn(Optional.of("solicitante@renaser.dev"));
 
         service.submit(comandoDeAlta("token-valido"));
 
@@ -159,11 +161,41 @@ class AccountRequestServiceTest {
         verify(tokenVerificacionEmailPort).consumir("token-valido");
     }
 
+    /**
+     * Regresion de E-152. El token de verificacion vive en Redis, que NO participa de la
+     * transaccion de Postgres. Cuando el alta se consumia al principio y el guardado fallaba, la
+     * base se deshacia entera pero el token quedaba gastado: la persona reintentaba y le decia
+     * "el codigo no es valido o ya vencio" sin haber hecho nada mal. Paso 14 veces la noche del
+     * 6 de septiembre, como secuela del fallo de IPv6 (E-151).
+     *
+     * <p>Lo que se fija aca: con una transaccion abierta, al terminar {@code submit} el token
+     * TODAVIA no se consumio. Se consume recien cuando esa transaccion comitea. Si el commit
+     * fallara, nunca se consume y el codigo de la persona sigue sirviendo.
+     */
+    @Test
+    @DisplayName("E-152: el token se consume al COMITEAR, no antes — un fallo al guardar no quema el codigo")
+    void elTokenSeConsumeReciénAlComitear() {
+        when(tokenVerificacionEmailPort.emailDe("token-valido")).thenReturn(Optional.of("solicitante@renaser.dev"));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.submit(comandoDeAlta("token-valido"));
+
+            verify(tokenVerificacionEmailPort, never())
+                    .consumir(any());
+
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+            verify(tokenVerificacionEmailPort).consumir("token-valido");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
     @Test
     @DisplayName("2026-08-27: submit crea el usuario YA en el alta (INACTIVE) con su contrasena hasheada, "
             + "no recien al aprobar")
     void submitCreaElUsuarioInactivoConSuCredencial() {
-        when(tokenVerificacionEmailPort.consumir("token-valido")).thenReturn(Optional.of("solicitante@renaser.dev"));
+        when(tokenVerificacionEmailPort.emailDe("token-valido")).thenReturn(Optional.of("solicitante@renaser.dev"));
 
         service.submit(comandoDeAlta("token-valido"));
 
@@ -181,7 +213,7 @@ class AccountRequestServiceTest {
     @DisplayName("2026-08-27: submit rechaza un token que nunca se emitio, ya vencio, o ya se uso — "
             + "y no llega a crear ni el usuario ni la solicitud")
     void submitRechazaUnTokenInvalido() {
-        when(tokenVerificacionEmailPort.consumir("token-invalido")).thenReturn(Optional.empty());
+        when(tokenVerificacionEmailPort.emailDe("token-invalido")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.submit(comandoDeAlta("token-invalido")))
                 .isInstanceOf(com.renaser.os.shared.domain.TokenVerificacionEmailInvalidoException.class);
@@ -195,7 +227,7 @@ class AccountRequestServiceTest {
     @DisplayName("2026-08-27: submit rechaza un token que verifica un email DISTINTO al del comando — "
             + "alguien verifico un correo y trato de usar el token para dar de alta otro")
     void submitRechazaUnTokenQueVerificaOtroEmail() {
-        when(tokenVerificacionEmailPort.consumir("token-de-otro-email"))
+        when(tokenVerificacionEmailPort.emailDe("token-de-otro-email"))
                 .thenReturn(Optional.of("otro-email-verificado@renaser.dev"));
 
         assertThatThrownBy(() -> service.submit(comandoDeAlta("token-de-otro-email")))
@@ -297,7 +329,7 @@ class AccountRequestServiceTest {
     @Test
     @DisplayName("A-7: submit propaga el origen social del comando a la solicitud que persiste")
     void submitPersisteElOrigenSocialDelComando() {
-        when(tokenVerificacionEmailPort.consumir("token-social")).thenReturn(Optional.of("social@renaser.dev"));
+        when(tokenVerificacionEmailPort.emailDe("token-social")).thenReturn(Optional.of("social@renaser.dev"));
 
         service.submit(com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase
                 .SubmitAccountRequestCommand.porProveedorSocial("social@renaser.dev", "Sofia Social", "555-0001",

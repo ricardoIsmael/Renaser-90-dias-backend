@@ -32,6 +32,14 @@ class TokenVerificacionEmailRedisAdapter implements TokenVerificacionEmailPort {
     }
 
     @Override
+    public Optional<String> emailDe(String token) {
+        if (token == null || token.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(redisTemplate.opsForValue().get(clave(token)));
+    }
+
+    @Override
     public Optional<String> consumir(String token) {
         if (token == null || token.isBlank()) {
             return Optional.empty();
