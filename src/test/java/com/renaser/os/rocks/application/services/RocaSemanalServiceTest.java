@@ -79,13 +79,16 @@ class RocaSemanalServiceTest {
     }
 
     private List<RocaMaestra> tresMaestras() {
+        // meta = null: la roca semanal solo necesita la identidad de su maestra, no su parte
+        // medible (V35). Dejarlas cualitativas mantiene el fixture en lo minimo que hace falta.
+        Instant ahora = Instant.now();
         return List.of(
                 RocaMaestra.rehydrate(RocaMaestraId.of(UUID.randomUUID()), actorId, EjeObjetivo.CUERPO,
-                        "obj cuerpo", Instant.now()),
+                        "obj cuerpo", null, ahora, ahora),
                 RocaMaestra.rehydrate(RocaMaestraId.of(UUID.randomUUID()), actorId, EjeObjetivo.TRABAJO,
-                        "obj trabajo", Instant.now()),
+                        "obj trabajo", null, ahora, ahora),
                 RocaMaestra.rehydrate(RocaMaestraId.of(UUID.randomUUID()), actorId, EjeObjetivo.RELACIONES,
-                        "obj relaciones", Instant.now()));
+                        "obj relaciones", null, ahora, ahora));
     }
 
     private static ItemRocaSemanal item(EjeObjetivo eje) {
@@ -171,7 +174,8 @@ class RocaSemanalServiceTest {
                 null, null, null, FixedClock.at(Instant.parse("2026-08-18T13:00:00Z")));
         when(loadRocaSemanalPort.byId(existente.id())).thenReturn(Optional.of(existente));
         when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(
-                List.of(RocaMaestra.rehydrate(maestraId, actorId, EjeObjetivo.CUERPO, "obj", Instant.now())));
+                List.of(RocaMaestra.rehydrate(maestraId, actorId, EjeObjetivo.CUERPO, "obj", null,
+                        Instant.now(), Instant.now())));
 
         var command = new EditarRocaSemanalCommand(actorId, existente.id(), "nuevo", null, null, null, null);
         assertThatThrownBy(() -> service.editar(command)).isInstanceOf(NotAuthorizedException.class);
@@ -188,7 +192,8 @@ class RocaSemanalServiceTest {
                 null, null, null, CLOCK);
         when(loadRocaSemanalPort.byId(existente.id())).thenReturn(Optional.of(existente));
         when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(
-                List.of(RocaMaestra.rehydrate(maestraId, actorId, EjeObjetivo.CUERPO, "obj", Instant.now())));
+                List.of(RocaMaestra.rehydrate(maestraId, actorId, EjeObjetivo.CUERPO, "obj", null,
+                        Instant.now(), Instant.now())));
         when(saveRocaSemanalPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.cerrar(new CerrarSemanaCommand(actorId, existente.id(), 7, "bloqueo", "correccion"));

@@ -52,8 +52,11 @@ class RocaMaestraPersistenceAdapterTest {
     }
 
     private RocaMaestra maestra(EjeObjetivo eje) {
+        // meta = null: lo que prueba esta clase es el ida y vuelta de la roca contra Postgres,
+        // no la parte medible (V35). El caso con meta lo cubre el propio mapper.
+        Instant ahora = Instant.now();
         return RocaMaestra.rehydrate(RocaMaestraId.of(UUID.randomUUID()), participanteId, eje,
-                "objetivo " + eje, Instant.now());
+                "objetivo " + eje, null, ahora, ahora);
     }
 
     @Test

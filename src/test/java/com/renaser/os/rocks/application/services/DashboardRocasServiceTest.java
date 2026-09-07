@@ -86,13 +86,15 @@ class DashboardRocasServiceTest {
 
     private static List<RocaMaestra> tresMaestras(UserId participante) {
         Instant ahora = CLOCK.now();
+        // meta = null: el dashboard no muestra la parte medible del objetivo (V35), asi que
+        // estas rocas son cualitativas a proposito — es el caso mas pobre que tiene que andar.
         return List.of(
                 new RocaMaestra(RocaMaestraId.of(UUID.randomUUID()), participante, EjeObjetivo.CUERPO,
-                        "objetivo cuerpo", ahora),
+                        "objetivo cuerpo", null, ahora, ahora),
                 new RocaMaestra(RocaMaestraId.of(UUID.randomUUID()), participante, EjeObjetivo.TRABAJO,
-                        "objetivo trabajo", ahora),
+                        "objetivo trabajo", null, ahora, ahora),
                 new RocaMaestra(RocaMaestraId.of(UUID.randomUUID()), participante, EjeObjetivo.RELACIONES,
-                        "objetivo relaciones", ahora));
+                        "objetivo relaciones", null, ahora, ahora));
     }
 
     @Test
