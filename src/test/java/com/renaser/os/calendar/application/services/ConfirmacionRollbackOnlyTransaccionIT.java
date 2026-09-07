@@ -22,6 +22,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -51,7 +52,22 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 @Import({TestcontainersConfiguration.class, ConfirmacionRollbackOnlyTransaccionIT.RecordatorioQueFallaConfig.class})
 class ConfirmacionRollbackOnlyTransaccionIT {
 
-    private static final Instant INICIA_EN = Instant.parse("2026-09-05T19:00:00Z");
+    /**
+     * Ocurrencia del evento del fixture, <b>anclada al reloj y no escrita a mano</b>.
+     *
+     * <p>Antes decia {@code Instant.parse("2026-09-05T19:00:00Z")}, y eso era una bomba de tiempo.
+     * Esta prueba corre con el <b>reloj real</b> (es un IT, no usa {@code FixedClock}), y
+     * {@code ConfirmacionService.confirmar} rechaza toda ocurrencia anterior al arranque del dia
+     * de hoy en UTC menos {@code MARGEN_OCURRENCIA_PASADA_HORAS} (12 h). Con esa fecha fija la
+     * prueba pasaba mientras "hoy" fuera el 5 o el 6 de septiembre de 2026 y <b>empezaba a fallar
+     * sola el 7</b>, sin que nadie tocara una linea.
+     *
+     * <p>Dos horas hacia adelante: siempre dentro de la ventana permitida, corra cuando corra la
+     * suite, y ademas es el caso realista — se confirma asistencia a un evento que todavia no
+     * ocurrio. El instante se calcula una sola vez y toda la clase lo comparte, asi el INSERT del
+     * fixture y la confirmacion hablan de la misma ocurrencia.
+     */
+    private static final Instant INICIA_EN = Instant.now().truncatedTo(ChronoUnit.HOURS).plus(2, ChronoUnit.HOURS);
 
     @Autowired
     private ConfirmarAsistenciaUseCase confirmarAsistenciaUseCase;
