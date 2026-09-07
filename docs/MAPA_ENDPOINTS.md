@@ -106,6 +106,8 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | GET | `/api/v1/rocks/today` |
 | GET | `/api/v1/rocks/tomorrow` |
 | GET | `/api/v1/rocks/master` |
+| GET | `/api/v1/rocks/monthly` |
+| PUT | `/api/v1/rocks/monthly/{eje}/{numeroMes}` |
 | GET · POST | `/api/v1/rocks/weekly` |
 | PATCH | `/api/v1/rocks/weekly/{id}` |
 | PATCH | `/api/v1/rocks/weekly/{id}/review` |
