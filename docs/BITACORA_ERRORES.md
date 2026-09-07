@@ -5161,7 +5161,17 @@ propiedad → bean es de Boot y quedó verificado en el bytecode de `ServletWebS
 
 ---
 
-## E-150 — `unTokenVencidoYaNoSePuedeConsumir` falla solo dentro de la suite completa (2026-09-06) — **DIAGNOSTICADO, prueba sin corregir**
+## E-150 — `unTokenVencidoYaNoSePuedeConsumir` falla solo dentro de la suite completa (2026-09-06) — **DIAGNOSTICADO, prueba sin corregir. REAPARECIÓ el 2026-09-07**
+
+> **Al 2026-09-07 sigue abierto y ya volvió a pasar**, en la corrida completa del nivel mensual:
+> `Expecting an empty Optional but was containing value: e690715c-…`. Se reintentó aislada, pasó
+> 5 de 5, y la suite completa volvió a quedar verde — el protocolo del punto 2 de abajo funciona,
+> pero cuesta una corrida de seis minutos cada vez que ocurre.
+>
+> El arreglo se escribió y se verificó (espera activa sobre un testigo aparte, porque sondear
+> `consumir` haría pasar la prueba por el motivo equivocado: es GETDEL y la primera lectura borra
+> el token). **Se revirtió a pedido del dueño**, junto con otros cambios, mientras se descartaba
+> una sospecha que resultó infundada. Queda pendiente volver a aplicarlo.
 
 **Sintoma exacto**, corriendo `./mvnw clean verify` entero justo antes de mergear a `master`:
 
@@ -5208,3 +5218,120 @@ suite se volvió a correr entera y quedó en verde antes de mergear.
 3. **Ojo con relojes de dos dominios en la misma aserción.** Si el que vence es Redis (o Postgres, o
    el contenedor) y el que espera es la JVM, son dos relojes distintos: el margen tiene que ser
    holgado o la espera tiene que ser activa.
+
+---
+
+## E-151 — Con conexión IPv6 nadie podía registrarse: `invalid input syntax for type inet` (2026-09-06) — **RESUELTO**
+
+**Síntoma exacto**, en los registros del contenedor, 13 veces entre las 01:19 y las 01:30 UTC del 7 de septiembre:
+
+```
+org.postgresql.util.PSQLException: ERROR: invalid input syntax for type inet: "[2803:9810:6075:9310:c63b:3904:e158:3228]"
+  Where: unnamed portal parameter $6 = '...'
+    at org.hibernate.engine.jdbc.mutation.internal.AbstractMutationExecutor.execute
+    [insert into renaser.solicitudes_cuenta (... ip_solicitud ...)]
+→ DataIntegrityViolationException → 409 "violacion de integridad en la base"
+```
+
+**Lo que veía el aprendiz:** el alta fallaba. Nada más. Cuatro direcciones IPv6 distintas afectadas, o sea **al menos cuatro personas que no pudieron entrar esa noche**.
+
+**Causa real: una regresión de E-149, del día anterior.** Al poner `server.forward-headers-strategy=framework` para que los límites por IP fueran por persona y no un contador global, `getRemoteAddr()` pasó a devolver la IP real del cliente. Con IPv4 no cambió nada. Con **IPv6 sí**: el `ForwardedHeaderFilter` de Spring reconstruye la dirección como **host de URI**, y en un URI un IPv6 va **entre corchetes**. Postgres rechaza esa forma en una columna `inet`.
+
+**Por qué pasó desapercibido:** en IPv4 —la conexión de quien desplegó y de la mayoría de las pruebas— todo seguía funcionando. El fallo era invisible salvo que probaras desde una red IPv6, que en Perú y Bolivia es común en datos móviles.
+
+**Solución.** `shared/web/DireccionIpDelCliente`: normaliza la dirección en el **borde**, quitando corchetes y el identificador de zona (`fe80::1%eth0`), antes de que entre al sistema. Se normaliza ahí y no en el repositorio porque la IP entra por **nueve** lugares (alta, login, reset, verificación de correo, social) y varios la usan para contar límites: si se normalizara solo al guardar, los contadores compararían `[2803:...]` contra `2803:...` y el límite por IP dejaría de acertar **sin avisar**.
+
+**Secuela que costó más que el error:** ver E-152. Cada intento fallido quemaba el código de verificación de la persona, y de tanto pedir uno nuevo tres aprendices se pasaron del límite de 5 por hora y hubo que destrabarlas a mano borrando su contador en Redis.
+
+**Cómo evitar que vuelva a pasar:**
+
+1. **Toda prueba de una IP tiene que incluir un caso IPv6.** La prueba de E-149 verificaba `X-Forwarded-For` con una IPv4 y por eso no atrapó nada. Ahora `AccountRequestControllerIpRealTest` tiene los dos casos, y el de IPv6 falla contra el código anterior al arreglo.
+2. **Cuando un cambio toca cómo se obtiene un dato del transporte, revisar TODAS las formas que ese dato puede tener**, no solo la común. Una dirección puede ser IPv4, IPv6, IPv6 entre corchetes, con puerto o con zona.
+3. **Un `DataIntegrityViolationException` que sale como 409 esconde la causa.** El 409 decía "violación de integridad" y no "tu IP no se pudo guardar". Cuando el síntoma sea un 409 inexplicable en un alta, mirar el `Caused by` del log antes que cualquier otra cosa.
+
+---
+
+## E-152 — Un alta fallida quemaba el código de verificación de la persona (2026-09-06) — **RESUELTO**
+
+**Síntoma exacto**, 14 veces la misma noche, cuatro de ellas en ráfaga entre las 01:29:57 y las 01:29:59 UTC:
+
+```
+400 -> "El codigo no es valido o ya vencio"
+```
+
+…a personas que acababan de recibir su código y no habían hecho nada mal.
+
+**Causa real.** `AccountRequestService.submit` consumía el token de verificación **al principio**, con `consumir`, que en Redis es GETDEL: lo lee y lo borra en la misma operación. Redis **no participa de la transacción de Postgres**. Entonces, cuando el guardado fallaba —esa noche, por E-151— la base deshacía todo **pero el token ya estaba gastado**. La persona reintentaba con su código y el sistema le decía que no valía.
+
+**Y por qué no alcanzaba con mover el consumo al final del método:** el fallo de aquella noche ocurría **durante el commit**. Hibernate vuelca los INSERT al cerrar la transacción, no al invocar `save()`. Cualquier consumo dentro del método, aunque fuera la última línea, seguiría ocurriendo antes de ese commit y quemaría el token igual.
+
+**Solución.** Se agregó `TokenVerificacionEmailPort.emailDe(token)`, una lectura que **no borra**, para validar; y el consumo se colgó de `afterCommit` con `TransactionSynchronizationManager`. Si la transacción no comitea, el código de la persona sigue sirviendo.
+
+**La carrera que esto abre, y por qué está contenida:** entre la validación y el consumo, dos altas simultáneas con el mismo token pasarían las dos. Lo corta la unicidad del correo (`rejectIfEmailYaRegistrado` más el UNIQUE de `usuarios.email`), así que la segunda no crea nada. Es el caso del doble clic y termina en una sola cuenta.
+
+**Cómo evitar que vuelva a pasar:**
+
+1. **Un efecto irreversible fuera de la transacción no va antes del commit.** Redis, S3, un correo, una llamada a un tercero: si la base puede deshacerse y eso no, va en `afterCommit`. Vale para todo el repo, no solo para este token.
+2. **Cuidado con validar consumiendo.** Si la única lectura disponible destruye lo que lee, hace falta una lectura no destructiva para validar, o el error se cobra el dato del usuario.
+3. **Un fallo técnico no debe costarle al usuario un recurso limitado.** Acá le costaba un código de los 5 por hora, y por eso el error de una capa terminó bloqueando gente en otra.
+
+---
+
+## E-153 — Sin espera entre reenvíos, los 5 códigos de la hora se gastaban en segundos (2026-09-06) — **RESUELTO**
+
+**Síntoma exacto:** tres aprendices bloqueadas para registrarse, con estos contadores en Redis (`reset-password:rl:email-verification:email:*`), contra un límite de 5 por hora:
+
+```
+luisajandel@gmail.com      = 18
+yenny01159@gmail.com       = 15
+severinafortuna79@gmail.com = 16
+```
+
+Hubo que destrabarlas a mano borrando la clave, y recién entonces pudieron entrar.
+
+**Causa real, en dos partes.** La de fondo fue E-151 + E-152: el alta fallaba y les quemaba el código, así que pedían otro. Pero lo que convirtió eso en un bloqueo fue que **no había ninguna espera entre un envío y el siguiente**: los 5 códigos de la hora se podían pedir en cinco segundos apretando "reenviar".
+
+**Lo que se verificó antes de tocar nada.** Los límites que ya había **son el estándar de la industria** y no había que subirlos: 5 por correo por hora, 10-20 por IP, 5 intentos de tipeo, vigencia de 5-10 minutos. Lo que faltaba era la espera, que es lo que las mismas fuentes recomiendan y lo que corta entre el 60 y el 70 % de los reenvíos inútiles.
+
+**Solución.** `VerificacionEmailService.ESPERA_ENTRE_ENVIOS` = 30 s, con el mismo contador atómico que los otros límites (máximo 1, ventana de 30 s), y el mensaje del 429 pasó a decir cuántos segundos faltan en vez de un "límite excedido" que no explica nada.
+
+Dos decisiones dentro del arreglo:
+
+- **La espera cuenta por correo, no por IP.** Dos personas en la misma casa o el mismo local comparten IP, y hacer esperar a una por lo que pidió la otra sería castigar a quien no hizo nada. El abuso desde una IP ya lo cubre su propio límite.
+- **Se revisa ANTES que los límites por hora.** Si fuera al revés, cada clic impaciente gastaría uno de los 5 envíos antes de rebotar, y el remedio provocaría el bloqueo que viene a evitar. Hay una prueba que fija ese orden.
+
+**Verificado en producción**: dos peticiones seguidas a `POST /auth/email-verification/send` con un dominio reservado (`example.com`, que no llega a ninguna persona) dan 202 y después `429 {"message":"Espera 30 segundos antes de pedir otro codigo"}`.
+
+**Cómo evitar que vuelva a pasar:**
+
+1. **Un límite por ventana sin espera entre intentos no protege a nadie: solo bloquea.** Los dos van juntos.
+2. **Un 429 tiene que decir cuánto falta.** Si no, la persona reintenta, gasta más y se hunde más.
+3. **Cuando haya que destrabar a alguien, el contador vive en `reset-password:rl:email-verification:email:<correo>`.** Borrar esa clave lo libera al instante; la ventana se rehace sola a la hora.
+4. El contador **distingue mayúsculas**: `Nombre@gmail.com` y `nombre@gmail.com` cuentan aparte. No bloquea de más —hace el límite más flojo— pero conviene normalizar el correo antes de contar.
+
+---
+
+## E-154 — Una fecha escrita a mano en un fixture rompió todo `verify` al cambiar el día (2026-09-07) — **RESUELTO**
+
+**Síntoma exacto**, en las dos pruebas de la clase:
+
+```
+[ERROR] ConfirmacionRollbackOnlyTransaccionIT.confirmarSinFalloSigueFuncionandoIgual:121
+  IllegalState No puedes confirmar asistencia a una ocurrencia de dias pasados
+[ERROR] ConfirmacionRollbackOnlyTransaccionIT.confirmarSobreviveAUnFalloAlCancelarAvisos:107
+  Expecting code not to raise a throwable but caught "java.lang.IllegalStateException: ..."
+```
+
+**Causa real.** El fixture tenía `private static final Instant INICIA_EN = Instant.parse("2026-09-05T19:00:00Z")`. Esa prueba corre con el **reloj real** (es un IT, no usa `FixedClock`), y `ConfirmacionService.confirmar` rechaza toda ocurrencia anterior al arranque del día de hoy en UTC menos `MARGEN_OCURRENCIA_PASADA_HORAS` (12 h). Con esa fecha fija la prueba pasaba mientras "hoy" fuera el 5 o el 6 de septiembre y **empezaba a fallar sola el 7**, sin que nadie tocara una línea.
+
+**Cuándo falló por primera vez:** a las 00:20 UTC del 7 de septiembre, o sea **apenas UTC cambió de día**. La hora local en Lima era todavía el 6, lo que hizo el diagnóstico más confuso: "ayer andaba".
+
+**Lo que costó de más:** se sospechó de un cambio propio y se revirtió trabajo bueno para descartarlo. La fecha estaba en el repo desde el 2 de septiembre (commit `2c60f78`), no la había puesto ese cambio. **Verificarlo es un `git log -S` de diez segundos** y hubiera evitado la vuelta entera.
+
+**Solución.** `Instant.now().truncatedTo(ChronoUnit.HOURS).plus(2, ChronoUnit.HOURS)`: siempre dentro de la ventana permitida, corra cuando corra la suite, y además es el caso realista, porque se confirma asistencia a un evento que todavía no ocurrió.
+
+**Cómo evitar que vuelva a pasar:**
+
+1. **Una fecha absoluta en un fixture que corre con el reloj real no es un dato: es una fecha de vencimiento.** Si la prueba no fija el reloj con `FixedClock`, su fecha se calcula relativa a `now()`.
+2. **Antes de culpar al cambio propio, `git log -S "<el valor sospechoso>"`.** Dice quién lo puso y cuándo, en segundos.
+3. **Se revisaron los demás ITs con fechas fijas.** Los de `habits`, `evidence` y `onboarding` usan `FixedClock` y están a salvo; `PausaHabitoPersonalIT` pasa sus fechas como entradas explícitas y compara contra ellas, no contra hoy, así que tampoco vence. El único afectado era este.

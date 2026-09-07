@@ -26,7 +26,13 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 
 ---
 
-## 1. Lo que YA EXISTE — 144 endpoints
+## 1. Lo que YA EXISTE
+
+> **Corregido 2026-09-07.** El titulo decia "144 endpoints" y llevaba tiempo desactualizado
+> (`CLAUDE.md` §12 habla de 219). Se saca el numero en vez de poner otro que vuelva a
+> envejecer: el conteo real lo da `EndpointAuthorizationDeclarationTest`, que recorre los
+> controllers por reflexion y falla si alguno no declara su permiso. Esa prueba es la fuente
+> de verdad; esta tabla es el mapa para trabajar.
 
 ### `users` — identidad, altas, roles
 
@@ -106,6 +112,7 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | GET | `/api/v1/rocks/today` |
 | GET | `/api/v1/rocks/tomorrow` |
 | GET | `/api/v1/rocks/master` |
+| PUT | `/api/v1/rocks/master/{eje}` |
 | GET | `/api/v1/rocks/monthly` |
 | PUT | `/api/v1/rocks/monthly/{eje}/{numeroMes}` |
 | GET · POST | `/api/v1/rocks/weekly` |
