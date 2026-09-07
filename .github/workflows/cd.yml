@@ -238,8 +238,16 @@ jobs:
           VOLVER="docker rm -f $CONTENEDOR; docker run -d --name $CONTENEDOR --network $RED -p $PUERTO:$PUERTO --restart unless-stopped -e SPRING_PROFILES_ACTIVE=prod -e AWS_REGION=$REGION $ANTERIOR"
           echo "== Imagen que estaba corriendo: $ANTERIOR =="
 
-          # Aca empiezan los segundos de caida. Con una sola instancia y sin balanceador no hay
-          # forma de evitarlos: no hay a donde mandar el trafico mientras se cambia el contenedor.
+          # Aca empiezan los segundos de caida (~45 s: lo que tarda la aplicacion en responder).
+          #
+          # NO se intente arreglar esto con azul/verde sin agrandar la instancia antes. Se probo el
+          # 2026-09-07 y salio muy mal (E-155): el plan exige los DOS contenedores corriendo a la
+          # vez unos 45 s, y esta t3.small tiene 1.909 MB de RAM con un solo backend usando ~1.150.
+          # Al levantar el segundo se agoto la memoria, murio el agente de SSM y produccion quedo
+          # caida SIETE HORAS, sin canal para mandar el arreglo. La configuracion de nginx que se
+          # probo era correcta; lo que no daba era la maquina.
+          #
+          # Para hacerlo bien hace falta primero una instancia mas grande (t3.medium, 4 GB).
           echo "== 3/5 Reemplazando el contenedor =="
           docker rm -f "$CONTENEDOR" >/dev/null 2>&1 || true
           docker run -d \
