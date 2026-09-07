@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -32,5 +33,14 @@ public class RocaMaestraJpaEntity {
 
     private String objetivo;
 
+    /** Meta / avance / unidad de V35. Las tres van juntas o las tres en null — lo impone el CHECK. */
+    private BigDecimal meta;
+
+    private BigDecimal avance;
+
+    private String unidad;
+
     private Instant creadoEn;
+
+    private Instant actualizadoEn;
 }

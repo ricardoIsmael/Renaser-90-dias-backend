@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.infrastructure.adapter.out.persistence.rocamaestra;
 
+import com.renaser.os.rocks.application.ports.out.rocamaestra.GuardarRocaMaestraPort;
 import com.renaser.os.rocks.application.ports.out.rocamaestra.LoadRocaMaestraPort;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
@@ -10,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Component
-class RocaMaestraPersistenceAdapter implements LoadRocaMaestraPort {
+class RocaMaestraPersistenceAdapter implements LoadRocaMaestraPort, GuardarRocaMaestraPort {
 
     private final SpringDataRocaMaestraRepository repository;
     private final RocaMaestraPersistenceMapper mapper;
@@ -29,5 +30,10 @@ class RocaMaestraPersistenceAdapter implements LoadRocaMaestraPort {
     public Optional<RocaMaestra> deParticipanteYEje(UserId participanteId, EjeObjetivo eje) {
         return repository.findByParticipanteIdAndEje(participanteId.value(), mapper.toJpaEje(eje))
                 .map(mapper::toDomain);
+    }
+
+    @Override
+    public RocaMaestra guardar(RocaMaestra rocaMaestra) {
+        return mapper.toDomain(repository.save(mapper.toEntity(rocaMaestra)));
     }
 }
