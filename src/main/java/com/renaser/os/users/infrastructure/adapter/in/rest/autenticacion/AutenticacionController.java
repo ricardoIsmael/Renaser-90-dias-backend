@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.autenticacion;
 
+import com.renaser.os.shared.web.DireccionIpDelCliente;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.web.security.PublicEndpoint;
 import com.renaser.os.shared.web.security.RequiresPermission;
@@ -81,7 +82,7 @@ public class AutenticacionController {
     public UserResponse login(@RequestBody @Valid LoginRequest request, HttpServletRequest servletRequest,
                                HttpServletResponse servletResponse) {
         User actor = iniciarSesionUseCase.iniciarSesion(new IniciarSesionCommand(request.email(),
-                request.contrasena(), servletRequest.getRemoteAddr()));
+                request.contrasena(), DireccionIpDelCliente.de(servletRequest)));
         sesionWeb.establecer(actor.id(), servletRequest, servletResponse);
         return UserResponse.from(actor);
     }
@@ -108,7 +109,7 @@ public class AutenticacionController {
     public ResponseEntity<Void> solicitarResetContrasena(@RequestBody @Valid SolicitarResetContrasenaRequest request,
                                                            HttpServletRequest servletRequest) {
         solicitarResetContrasenaUseCase.solicitar(
-                new SolicitarResetContrasenaCommand(request.email(), servletRequest.getRemoteAddr()));
+                new SolicitarResetContrasenaCommand(request.email(), DireccionIpDelCliente.de(servletRequest)));
         return ResponseEntity.status(HttpStatus.ACCEPTED).build();
     }
 
@@ -153,7 +154,7 @@ public class AutenticacionController {
                                           HttpServletRequest servletRequest, HttpServletResponse servletResponse) {
         ResultadoLoginSocial resultado = iniciarSesionConProveedorUseCase.iniciarSesion(
                 new IniciarSesionConProveedorCommand(request.proveedor(), request.code(), request.codeVerifier(),
-                        request.redirectUri(), servletRequest.getRemoteAddr()));
+                        request.redirectUri(), DireccionIpDelCliente.de(servletRequest)));
         return switch (resultado) {
             case ResultadoLoginSocial.SesionIniciada sesion -> {
                 sesionWeb.establecer(sesion.usuario().id(), servletRequest, servletResponse);
@@ -194,7 +195,7 @@ public class AutenticacionController {
             @RequestBody @Valid CompletarRegistroSocialRequest request, HttpServletRequest servletRequest) {
         AccountRequestId solicitudId = completarRegistroSocialUseCase.completar(new CompletarRegistroSocialCommand(
                 request.registroPendienteToken(), request.fullName(), request.phone(), request.city(),
-                servletRequest.getRemoteAddr()));
+                DireccionIpDelCliente.de(servletRequest)));
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(new AccountRequestIdResponse(solicitudId.value()));
     }
 

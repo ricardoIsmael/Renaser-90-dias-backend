@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.autenticacion;
 
+import com.renaser.os.shared.web.DireccionIpDelCliente;
 import com.renaser.os.shared.web.security.PublicEndpoint;
 import com.renaser.os.users.application.ports.in.autenticacion.SolicitarCodigoResetContrasenaUseCase;
 import com.renaser.os.users.application.ports.in.autenticacion.SolicitarCodigoResetContrasenaUseCase.SolicitarCodigoResetContrasenaCommand;
@@ -47,7 +48,7 @@ public class ResetContrasenaPorCodigoController {
     public ResponseEntity<Void> solicitarCodigo(@RequestBody @Valid SolicitarResetContrasenaRequest request,
                                                 HttpServletRequest servletRequest) {
         solicitarCodigoUseCase.solicitarCodigo(
-                new SolicitarCodigoResetContrasenaCommand(request.email(), servletRequest.getRemoteAddr()));
+                new SolicitarCodigoResetContrasenaCommand(request.email(), DireccionIpDelCliente.de(servletRequest)));
         return ResponseEntity.status(HttpStatus.ACCEPTED).build();
     }
 

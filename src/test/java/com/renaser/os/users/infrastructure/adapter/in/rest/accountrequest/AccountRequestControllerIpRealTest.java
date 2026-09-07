@@ -104,4 +104,32 @@ class AccountRequestControllerIpRealTest {
         verify(consultarEmailRegistradoUseCase).estaRegistrado(eq("alguien@ejemplo.com"), ip.capture());
         assertThat(ip.getValue()).isEqualTo("203.0.113.9");
     }
+
+    /**
+     * Regresion de E-151. Con un cliente IPv6, el {@code ForwardedHeaderFilter} reconstruye la
+     * direccion como host de URI y {@code getRemoteAddr()} la devuelve <b>entre corchetes</b>.
+     * Postgres rechaza esa forma en una columna {@code inet}
+     * ({@code invalid input syntax for type inet: "[2803:...]"}) y el alta explotaba: nadie con
+     * conexion IPv6 podia registrarse, mientras que en IPv4 todo seguia funcionando.
+     *
+     * <p>Esta prueba falla contra el codigo anterior al arreglo — que es la unica forma de que
+     * sirva de algo.
+     */
+    @Test
+    @DisplayName("un cliente IPv6 llega sin corchetes, que es lo unico que acepta una columna inet")
+    void laIpDeUnClienteIpv6LlegaSinCorchetes() throws Exception {
+        when(consultarEmailRegistradoUseCase.estaRegistrado(eq("ipv6@ejemplo.com"), anyString())).thenReturn(false);
+
+        mockMvc.perform(post("/api/v1/account-requests/exists")
+                        .header("X-Forwarded-For", "2803:9810:6075:9310:c63b:3904:e158:3228, 130.176.0.1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"ipv6@ejemplo.com\"}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<String> ip = ArgumentCaptor.forClass(String.class);
+        verify(consultarEmailRegistradoUseCase).estaRegistrado(eq("ipv6@ejemplo.com"), ip.capture());
+        assertThat(ip.getValue())
+                .as("sin corchetes: Postgres rechaza \"[2803:...]\" en una columna inet")
+                .isEqualTo("2803:9810:6075:9310:c63b:3904:e158:3228");
+    }
 }

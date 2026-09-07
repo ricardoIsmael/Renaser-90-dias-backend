@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.accountrequest;
 
+import com.renaser.os.shared.web.DireccionIpDelCliente;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -90,7 +91,7 @@ public class AccountRequestController {
     public DisponibilidadEmailResponse checkEmail(@RequestBody @Valid ConsultarEmailRequest request,
                                                    HttpServletRequest httpRequest) {
         return new DisponibilidadEmailResponse(
-                !consultarEmailRegistradoUseCase.estaRegistrado(request.email(), httpRequest.getRemoteAddr()));
+                !consultarEmailRegistradoUseCase.estaRegistrado(request.email(), DireccionIpDelCliente.de(httpRequest)));
     }
 
     /**
@@ -102,7 +103,7 @@ public class AccountRequestController {
     public ExistenciaCuentaResponse exists(@RequestBody @Valid ConsultarEmailRequest request,
                                             HttpServletRequest httpRequest) {
         return new ExistenciaCuentaResponse(
-                consultarEmailRegistradoUseCase.estaRegistrado(request.email(), httpRequest.getRemoteAddr()));
+                consultarEmailRegistradoUseCase.estaRegistrado(request.email(), DireccionIpDelCliente.de(httpRequest)));
     }
 
     /** PUBLIC_ENDPOINT. ¿El dominio del correo puede recibir correo? Aviso, nunca un bloqueo. */
@@ -119,7 +120,7 @@ public class AccountRequestController {
         AccountRequestId id = submitUseCase.submit(SubmitAccountRequestCommand.porFormulario(
                 request.email(), request.fullName(), request.phone(),
                 request.city(), request.verificationToken(), request.contrasena(),
-                httpRequest.getRemoteAddr()));
+                DireccionIpDelCliente.de(httpRequest)));
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(new AccountRequestIdResponse(id.value()));
     }
 

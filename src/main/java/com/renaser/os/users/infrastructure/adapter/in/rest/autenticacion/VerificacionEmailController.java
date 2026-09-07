@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.autenticacion;
 
+import com.renaser.os.shared.web.DireccionIpDelCliente;
 import com.renaser.os.shared.web.security.PublicEndpoint;
 import com.renaser.os.users.application.ports.in.autenticacion.ConfirmarCodigoVerificacionEmailUseCase;
 import com.renaser.os.users.application.ports.in.autenticacion.ConfirmarCodigoVerificacionEmailUseCase.ConfirmarCodigoVerificacionEmailCommand;
@@ -37,7 +38,7 @@ public class VerificacionEmailController {
     public ResponseEntity<Void> enviar(@RequestBody @Valid EnviarCodigoVerificacionEmailRequest request,
                                         HttpServletRequest servletRequest) {
         enviarUseCase.enviar(new EnviarCodigoVerificacionEmailCommand(request.email(),
-                servletRequest.getRemoteAddr()));
+                DireccionIpDelCliente.de(servletRequest)));
         return ResponseEntity.status(HttpStatus.ACCEPTED).build();
     }
 
