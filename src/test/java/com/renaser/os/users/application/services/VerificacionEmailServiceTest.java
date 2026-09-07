@@ -69,6 +69,45 @@ class VerificacionEmailServiceTest {
         verify(enviarEmailPort, never()).enviarCodigoVerificacionEmail(any(), any());
     }
 
+    /**
+     * E-153. Sin espera entre envios, los 5 codigos de la hora se podian pedir en cinco segundos
+     * apretando "reenviar", y la persona quedaba bloqueada una hora sin entender por que. Paso de
+     * verdad: tres aprendices llegaron a 16, 15 y 10 pedidos la noche del 6 de septiembre.
+     */
+    @Test
+    @DisplayName("E-153: dentro de los 30 segundos del envio anterior, rebota y no manda otro codigo")
+    void enviarRechazaSiNoPasaronLos30Segundos() {
+        when(limitarSolicitudesResetPort.registrarIntento(eq("email-verification:espera:alguien@renaser.dev"),
+                eq(VerificacionEmailService.ESPERA_ENTRE_ENVIOS), eq(1))).thenReturn(false);
+
+        assertThatThrownBy(() -> service.enviar(new EnviarCodigoVerificacionEmailCommand("alguien@renaser.dev", null)))
+                .isInstanceOf(RateLimitExceededException.class)
+                .hasMessageContaining("30");
+
+        verify(codigoVerificacionEmailPort, never()).generarCodigo(any(), any());
+        verify(enviarEmailPort, never()).enviarCodigoVerificacionEmail(any(), any());
+    }
+
+    /**
+     * El orden importa: si la espera se revisara despues del limite por hora, cada clic impaciente
+     * gastaria uno de los 5 envios antes de rebotar, y el remedio provocaria el bloqueo que viene
+     * a evitar.
+     */
+    @Test
+    @DisplayName("E-153: rebotar por la espera NO gasta uno de los 5 envios de la hora")
+    void laEsperaSeRevisaAntesQueElLimitePorHora() {
+        when(limitarSolicitudesResetPort.registrarIntento(eq("email-verification:espera:alguien@renaser.dev"),
+                any(), eq(1))).thenReturn(false);
+
+        assertThatThrownBy(() -> service.enviar(new EnviarCodigoVerificacionEmailCommand("alguien@renaser.dev",
+                "1.2.3.4"))).isInstanceOf(RateLimitExceededException.class);
+
+        verify(limitarSolicitudesResetPort, never()).registrarIntento(
+                eq("email-verification:email:alguien@renaser.dev"), any(), anyInt());
+        verify(limitarSolicitudesResetPort, never()).registrarIntento(
+                eq("email-verification:ip:1.2.3.4"), any(), anyInt());
+    }
+
     @Test
     @DisplayName("supera el limite por IP: no llega a generar ningun codigo")
     void enviarRechazaSiSuperaElLimitePorIp() {

@@ -54,6 +54,24 @@ class VerificacionEmailService implements EnviarCodigoVerificacionEmailUseCase, 
     static final int LIMITE_POR_EMAIL = 5;
     static final int LIMITE_POR_IP = 20;
 
+    /**
+     * Espera obligatoria entre un envio de codigo y el siguiente, para el MISMO correo.
+     *
+     * <p><b>Por que existe (E-153).</b> Los limites de arriba son los estandar de la industria
+     * (5 por correo y 10-20 por IP, por hora) y no habia que tocarlos. Lo que faltaba era esto:
+     * sin ninguna espera, los 5 codigos de la hora se podian pedir <b>en cinco segundos</b>
+     * apretando "reenviar", y la persona quedaba bloqueada una hora entera sin entender por que.
+     * Paso la noche del 6 de septiembre: tres aprendices llegaron a 16, 15 y 10 pedidos
+     * —muy por encima del limite— porque un fallo del alta las obligaba a reintentar, y hubo que
+     * destrabarlas a mano. La recomendacion habitual es una espera de 30 segundos, que corta
+     * entre el 60 y el 70 por ciento de los reenvios inutiles.
+     *
+     * <p>Se cuenta solo por correo y no por IP: dos personas en la misma casa o en el mismo
+     * local comparten IP, y hacer esperar a una por lo que pidio la otra seria castigar a quien
+     * no hizo nada. El abuso desde una IP ya lo cubre {@link #LIMITE_POR_IP}.
+     */
+    static final Duration ESPERA_ENTRE_ENVIOS = Duration.ofSeconds(30);
+
     private final CodigoVerificacionEmailPort codigoVerificacionEmailPort;
     private final TokenVerificacionEmailPort tokenVerificacionEmailPort;
     private final LimitarSolicitudesResetPort limitarSolicitudesResetPort;
@@ -87,7 +105,25 @@ class VerificacionEmailService implements EnviarCodigoVerificacionEmailUseCase, 
         return new ResultadoVerificacion(token);
     }
 
+    /**
+     * La espera se chequea ANTES que los limites por hora, a proposito: si se hiciera al reves,
+     * cada clic impaciente gastaria uno de los 5 envios de la hora antes de rebotar, y el
+     * remedio terminaria provocando el bloqueo que viene a evitar.
+     *
+     * <p>Se implementa con el mismo contador atomico que los demas limites, con maximo 1 y
+     * ventana de 30 s: el primer envio pasa, cualquiera dentro de esos 30 s rebota, y la clave
+     * caduca sola. No hace falta un puerto nuevo.
+     */
+    private void rejectIfEsperaEntreEnviosNoCumplida(String email) {
+        if (!limitarSolicitudesResetPort.registrarIntento("email-verification:espera:" + email,
+                ESPERA_ENTRE_ENVIOS, 1)) {
+            throw new RateLimitExceededException("Espera " + ESPERA_ENTRE_ENVIOS.toSeconds()
+                    + " segundos antes de pedir otro codigo");
+        }
+    }
+
     private void rejectIfRateLimitExceeded(String email, String requestIp) {
+        rejectIfEsperaEntreEnviosNoCumplida(email);
         if (!limitarSolicitudesResetPort.registrarIntento("email-verification:email:" + email, VENTANA_RATE_LIMIT,
                 LIMITE_POR_EMAIL)) {
             throw new RateLimitExceededException("Limite de solicitudes de verificacion de correo excedido");
