@@ -31,11 +31,14 @@ public record HabitPreferencesResponse(List<HabitPreferenceItemResponse> habits,
      * una preferencia propia o del catalogo. {@code pendingChange}: {@code null} si no hay nada programado.
      */
     public record HabitPreferenceItemResponse(UUID habitId, String title, LocalTime triggerTime, LocalTime limitTime,
-                                               boolean customized, PendingScheduleChangeResponse pendingChange) {
+                                               boolean customized, boolean reminderEnabled,
+                                               Integer reminderMinutesBefore,
+                                               PendingScheduleChangeResponse pendingChange) {
 
         static HabitPreferenceItemResponse from(HorarioDeHabito h) {
             return new HabitPreferenceItemResponse(h.habitoId().value(), h.titulo(), h.horaDisparo(), h.horaLimite(),
-                    h.personalizado(), PendingScheduleChangeResponse.from(h.cambioProgramado()));
+                    h.personalizado(), h.recordatorioActivo(), h.minutosRecordatorio(),
+                    PendingScheduleChangeResponse.from(h.cambioProgramado()));
         }
     }
 

@@ -126,6 +126,8 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
                 : new CambioProgramado(programado.horaDisparo(), programado.horaLimite(),
                         programado.fechaEfectiva());
         return new HorarioDeHabito(habito.id(), habito.titulo(), horaDisparo, horaLimite, preferencia != null,
+                preferencia != null && preferencia.recordatorioActivo(),
+                preferencia != null ? preferencia.minutosRecordatorio() : null,
                 cambio);
     }
 

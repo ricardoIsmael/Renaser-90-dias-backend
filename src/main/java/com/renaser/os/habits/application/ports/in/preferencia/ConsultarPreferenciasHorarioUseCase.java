@@ -32,8 +32,15 @@ public interface ConsultarPreferenciasHorarioUseCase {
      * que vino de fabrica". {@code cambioProgramado} es {@code null} salvo que haya un cambio
      * diferido esperando su fecha.
      */
+    /**
+     * `recordatorioActivo`/`minutosRecordatorio` se agregaron el 2026-09-07. El PATCH ya los
+     * ESCRIBIA desde siempre y este GET no los devolvia, asi que no habia forma de leer de vuelta
+     * si la persona tenia recordatorio: el movil los mandaba en `false`/`null` en cada guardado
+     * porque no tenia nada mejor, y con eso apagaba el recordatorio cada vez que se tocaba la hora.
+     */
     record HorarioDeHabito(HabitoId habitoId, String titulo, LocalTime horaDisparo, LocalTime horaLimite,
-                            boolean personalizado, CambioProgramado cambioProgramado) {
+                            boolean personalizado, boolean recordatorioActivo, Integer minutosRecordatorio,
+                            CambioProgramado cambioProgramado) {
     }
 
     record CambioProgramado(LocalTime horaDisparo, LocalTime horaLimite, LocalDate fechaEfectiva) {
