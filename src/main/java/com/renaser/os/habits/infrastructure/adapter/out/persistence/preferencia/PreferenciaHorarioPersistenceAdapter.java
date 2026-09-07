@@ -83,6 +83,11 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
         var ids = habitoIds.stream().map(HabitoId::value).toList();
         for (var p : fechasRepository.findByParticipanteIdAndHabitoIdInAndFecha(participanteId.value(), ids, fecha)) {
             HabitoId id = HabitoId.of(p.getHabitoId());
+            // V38: una fila que solo APAGA el dia no trae hora, y no tiene que pisar la que ya
+            // regia. Sin este corte, apagar el jueves le borraria el horario al jueves.
+            if (p.getHoraDisparo() == null) {
+                continue;
+            }
             efectivos.put(id, PreferenciaHorario.rehydrate(participanteId, id, p.getHoraDisparo(), p.getHoraLimite(),
                     p.isRecordatorioActivo(), p.getMinutosRecordatorio() == null ? null : p.getMinutosRecordatorio().intValue(),
                     p.getCreadoEn(), p.getActualizadoEn()));
@@ -96,8 +101,24 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
         var key = new HorarioPorFechaPk(p.participanteId().value(), p.habitoId().value(), horario.fecha());
         var creadoEn = fechasRepository.findById(key).map(HorarioPorFechaJpaEntity::getCreadoEn).orElse(p.creadoEn());
         fechasRepository.saveAndFlush(new HorarioPorFechaJpaEntity(p.participanteId().value(), p.habitoId().value(),
-                horario.fecha(), p.horaDisparo(), p.horaLimite(), p.recordatorioActivo(),
+                horario.fecha(), p.horaDisparo(), horario.activo(), p.horaLimite(), p.recordatorioActivo(),
                 p.minutosRecordatorio() == null ? null : p.minutosRecordatorio().shortValue(), creadoEn, p.actualizadoEn()));
+    }
+
+    @Override
+    public void borrarParaFecha(UserId participanteId, HabitoId habitoId, LocalDate fecha) {
+        var key = new HorarioPorFechaPk(participanteId.value(), habitoId.value(), fecha);
+        // `existsById` antes de borrar: volver a encender algo que nunca se apago es una operacion
+        // legitima y no tiene que reventar. Idempotente, igual que el DELETE de `habit-unlocks`.
+        if (fechasRepository.existsById(key)) {
+            fechasRepository.deleteById(key);
+            fechasRepository.flush();
+        }
+    }
+
+    @Override
+    public List<HabitoId> habitosApagadosEn(UserId participanteId, LocalDate fecha) {
+        return fechasRepository.apagadosEn(participanteId.value(), fecha).stream().map(HabitoId::of).toList();
     }
 
     @Override

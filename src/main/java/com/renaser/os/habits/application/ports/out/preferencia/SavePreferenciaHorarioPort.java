@@ -1,11 +1,18 @@
 package com.renaser.os.habits.application.ports.out.preferencia;
 
+import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.preferencia.HorarioPorFecha;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
+import com.renaser.os.shared.domain.UserId;
+
+import java.time.LocalDate;
 
 public interface SavePreferenciaHorarioPort {
 
     PreferenciaHorario save(PreferenciaHorario preferencia);
 
     void saveParaFecha(HorarioPorFecha horario);
+
+    /** Borra la excepcion de esa fecha: el dia vuelve a regirse por lo general. Idempotente. */
+    void borrarParaFecha(UserId participanteId, HabitoId habitoId, LocalDate fecha);
 }

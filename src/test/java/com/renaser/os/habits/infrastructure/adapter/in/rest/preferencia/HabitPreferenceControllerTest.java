@@ -1,5 +1,6 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia;
 
+import com.renaser.os.habits.application.ports.in.preferencia.CambiarEstadoHabitoEnFechaUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.ConsultarPreferenciasHorarioUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase.EditarPreferenciaHorarioCommand;
@@ -31,6 +32,7 @@ class HabitPreferenceControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean EditarPreferenciaHorarioUseCase editar;
     @MockitoBean ConsultarPreferenciasHorarioUseCase consultar;
+    @MockitoBean CambiarEstadoHabitoEnFechaUseCase cambiarEstadoEnFecha;
     @MockitoBean UserSummaryFinder users;
     private final UserId actor = UserId.of(UUID.randomUUID());
     private final HabitoId habito = HabitoId.of(UUID.randomUUID());
@@ -97,5 +99,53 @@ class HabitPreferenceControllerTest {
                     """))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(editar, consultar);
+    }
+
+    /**
+     * El interruptor de un dia va por su propia ruta y con `active` como unico campo: ni hora, ni
+     * cuota, ni la restriccion de "solo fechas futuras" que si aplica a mover el horario.
+     */
+    @Test
+    void apagarUnDiaLlegaAlCasoDeUsoConEsaFecha() throws Exception {
+        actor(UserStatus.ACTIVE);
+
+        mvc.perform(patch("/api/v1/habit-preferences/{id}/days/{date}", habito.value(), "2026-09-09")
+                .header("X-Actor-Id", actor.toString())
+                .contentType("application/json").content("""
+                    {"active":false}
+                    """))
+                .andExpect(status().isNoContent());
+
+        verify(cambiarEstadoEnFecha).cambiarEstadoEnFecha(actor, habito, fecha, false);
+    }
+
+    @Test
+    void volverAEncenderUnDiaTambienLlegaAlCasoDeUso() throws Exception {
+        actor(UserStatus.ACTIVE);
+
+        mvc.perform(patch("/api/v1/habit-preferences/{id}/days/{date}", habito.value(), "2026-09-09")
+                .header("X-Actor-Id", actor.toString())
+                .contentType("application/json").content("""
+                    {"active":true}
+                    """))
+                .andExpect(status().isNoContent());
+
+        verify(cambiarEstadoEnFecha).cambiarEstadoEnFecha(actor, habito, fecha, true);
+    }
+
+    /**
+     * `active` es `Boolean` y no `boolean` justamente para que omitirlo de un 400 de VALIDACION y
+     * no uno opaco de deserializacion — el bug del 2026-09-03 con `reminderEnabled`.
+     */
+    @Test
+    void omitirActiveNoEscribeNada() throws Exception {
+        actor(UserStatus.ACTIVE);
+
+        mvc.perform(patch("/api/v1/habit-preferences/{id}/days/{date}", habito.value(), "2026-09-09")
+                .header("X-Actor-Id", actor.toString())
+                .contentType("application/json").content("{}"))
+                .andExpect(status().is4xxClientError());
+
+        verifyNoInteractions(cambiarEstadoEnFecha);
     }
 }

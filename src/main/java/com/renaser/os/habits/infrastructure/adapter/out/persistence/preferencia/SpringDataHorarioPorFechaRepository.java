@@ -14,4 +14,12 @@ interface SpringDataHorarioPorFechaRepository extends JpaRepository<HorarioPorFe
     @Query("SELECT DISTINCT h.habitoId FROM HorarioPorFechaJpaEntity h "
             + "WHERE h.participanteId = :participanteId AND h.fecha BETWEEN :desde AND :hasta")
     List<UUID> habitosEntre(UUID participanteId, LocalDate desde, LocalDate hasta);
+
+    /**
+     * Los que el aprendiz apago ESE dia (V38). Devuelve solo ids y en UNA consulta a proposito: la
+     * llama el barrido nocturno, que recorre todo el padron.
+     */
+    @Query("SELECT h.habitoId FROM HorarioPorFechaJpaEntity h "
+            + "WHERE h.participanteId = :participanteId AND h.fecha = :fecha AND h.activo = false")
+    List<UUID> apagadosEn(UUID participanteId, LocalDate fecha);
 }

@@ -23,4 +23,13 @@ public interface LoadPreferenciaHorarioPort {
                                                         LocalDate fecha);
 
     List<HabitoId> habitosConHorarioEntre(UserId participanteId, LocalDate desde, LocalDate hasta);
+
+    /**
+     * Los habitos que el aprendiz APAGO para esa fecha (V38). Va por separado y no dentro de
+     * {@link #porParticipanteHabitosYFecha} a proposito: "a que hora va" y "si va" son dos
+     * preguntas distintas, y la segunda ya tiene su lugar en el generador junto a la pausa y al
+     * dia de desbloqueo. Meterla en `PreferenciaHorario` habria obligado a todos sus lectores a
+     * conocer un campo que a la mayoria no le importa.
+     */
+    List<HabitoId> habitosApagadosEn(UserId participanteId, LocalDate fecha);
 }

@@ -1,5 +1,6 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia;
 
+import com.renaser.os.habits.application.ports.in.preferencia.CambiarEstadoHabitoEnFechaUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.ConsultarPreferenciasHorarioUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase.EditarPreferenciaHorarioCommand;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
@@ -9,6 +10,7 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
@@ -33,11 +36,14 @@ public class HabitPreferenceController {
 
     private final EditarPreferenciaHorarioUseCase editarUseCase;
     private final ConsultarPreferenciasHorarioUseCase consultarUseCase;
+    private final CambiarEstadoHabitoEnFechaUseCase cambiarEstadoEnFechaUseCase;
 
     public HabitPreferenceController(EditarPreferenciaHorarioUseCase editarUseCase,
-                                      ConsultarPreferenciasHorarioUseCase consultarUseCase) {
+                                      ConsultarPreferenciasHorarioUseCase consultarUseCase,
+                                      CambiarEstadoHabitoEnFechaUseCase cambiarEstadoEnFechaUseCase) {
         this.editarUseCase = editarUseCase;
         this.consultarUseCase = consultarUseCase;
+        this.cambiarEstadoEnFechaUseCase = cambiarEstadoEnFechaUseCase;
     }
 
     @RequiresPermission(Permission.USE_APP)
@@ -57,5 +63,21 @@ public class HabitPreferenceController {
                 HabitoId.of(habitId), request.triggerTime(), request.limitTime(), request.reminderEnabled(),
                 request.reminderMinutesBefore(), request.date()));
         return HabitPreferenceResponse.from(resultado);
+    }
+
+    /**
+     * El interruptor de UN dia: {@code PATCH /api/v1/habit-preferences/{habitId}/days/{date}}.
+     *
+     * <p>Ruta aparte y no un campo del PATCH de arriba porque son dos operaciones con reglas
+     * distintas — cuota, dia en curso y hora obligatoria (ver `CambiarEstadoHabitoEnFechaUseCase`).
+     * Devuelve 204: no hay nada nuevo que el cliente no sepa ya.
+     */
+    @RequiresPermission(Permission.USE_APP)
+    @PatchMapping("/{habitId}/days/{date}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cambiarEstadoDelDia(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestBody @Valid UpdateHabitDayRequest request) {
+        cambiarEstadoEnFechaUseCase.cambiarEstadoEnFecha(actor, HabitoId.of(habitId), date, request.active());
     }
 }

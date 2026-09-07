@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.application.ports.in.preferencia.CambiarEstadoHabitoEnFechaUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
@@ -42,7 +43,7 @@ import java.util.Set;
  * javadoc de {@link EditarPreferenciaHorarioUseCase} para lo que quedo afuera.
  */
 @Service
-public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCase {
+public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCase, CambiarEstadoHabitoEnFechaUseCase {
 
     /** limits.ts — semana 1 de acomodo, sin cupo. */
     public static final int FREE_SCHEDULE_EDITS_UNTIL_DAY = CuotaEdicionHorario.DIAS_DE_ACOMODO_LIBRE;
@@ -288,6 +289,39 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
      * difería, y esa decision ya no existe — se difiere siempre.
      */
     private record VentanaVigenteHoy(LocalTime horaDisparo, LocalTime horaLimite, boolean conPreferenciaPropia) {
+    }
+
+    /**
+     * El interruptor de un dia (V38). No pasa por la cuota de `CuotaEdicionHorario` a proposito:
+     * apagar no es acomodar el horario, es el hermano de la pausa de `habit-unlocks`, que nunca
+     * cobro cupo. Ver el javadoc del caso de uso.
+     */
+    @Override
+    @Transactional
+    public void cambiarEstadoEnFecha(UserId actorId, HabitoId habitoId, LocalDate fecha, boolean activo) {
+        Habito habito = requireHabito(habitoId);
+        ProgresoParticipanteHabits progreso = requireProgreso(actorId);
+        LocalDate hoy = clock.now().atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+        HorarioPorFecha.requireApagable(fecha, hoy);
+
+        if (activo) {
+            // Volver a lo normal es BORRAR la excepcion, no escribir una fila que diga "si". Una
+            // fila `activo = true` sin hora ni siquiera pasa el CHECK de V38, y con hora congelaria
+            // ese dia si despues cambia el horario general.
+            savePreferenciaPort.borrarParaFecha(actorId, habitoId, fecha);
+            return;
+        }
+        if (!habito.desactivable()) {
+            // Misma regla y mismo motivo que `DesbloqueoHabito.pausar`: la invariante cruza dos
+            // tablas, asi que no puede vivir en un CHECK. Si los obligatorios se pudieran apagar un
+            // dia, "obligatorio" no querria decir nada.
+            throw new IllegalStateException("Este habito es obligatorio y no se puede apagar");
+        }
+        Instant ahora = clock.now();
+        // Sin hora: apagar un dia NO toca el horario, que se sigue heredando de lo general. Es lo
+        // que permite volver a encenderlo y que quede como estaba.
+        var preferencia = PreferenciaHorario.crear(actorId, habitoId, null, null, ahora);
+        savePreferenciaPort.saveParaFecha(new HorarioPorFecha(fecha, preferencia, false));
     }
 
     private Habito requireHabito(HabitoId id) {

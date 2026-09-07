@@ -32,6 +32,9 @@ public class HorarioPorFechaJpaEntity {
 
     private LocalTime horaDisparo;
 
+    /** V38: false = ese dia el habito NO va. Ver `HorarioPorFecha`. */
+    private boolean activo;
+
     private LocalTime horaLimite;
 
     private boolean recordatorioActivo;
