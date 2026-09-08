@@ -488,8 +488,21 @@ cableadas.
 
 | Perfil | De dónde sale la configuración |
 |---|---|
-| local / test | `application.yaml` con sus defaults, más `optional:file:.env` si existe. **Sin hablar con AWS.** |
+| local / test | `application.yaml` con sus defaults, más `optional:file:.env` si existe, **más las variables de entorno del IDE**. Sin hablar con AWS. |
 | `prod` | `application-prod.yaml` agrega `spring.config.import: aws-parameterstore:/renaser/prod/` |
+
+> **En esta máquina, las variables de entorno para correr en local están cargadas en el IDE**
+> (la *run configuration* de IntelliJ), **no en el `.env`**. El `.env` del checkout tiene solo las
+> tres de Web Push, así que a simple vista parece que el backend está sin configurar — y no lo está.
+>
+> **Por qué importa:** ya pasó que se diagnosticara "falta la credencial" mirando el `.env`, cuando
+> el valor estaba puesto y la app arrancaba bien desde el IDE. Y al revés: **arrancar desde la
+> terminal con `./mvnw spring-boot:run` no hereda esas variables**, porque viven en la
+> configuración de ejecución de IntelliJ y no en el shell. Si algo funciona en el IDE y falla en la
+> terminal, ése es el primer lugar donde mirar, antes que el código.
+>
+> Spring resuelve `${VARIABLE:default}` desde el entorno del proceso, así que las tres fuentes
+> conviven: `.env` → entorno del IDE → defaults de `application.yaml`.
 
 Que el arranque local **no necesite credenciales de AWS** es una propiedad valiosa del repositorio
 (todos los adaptadores externos tienen `NoOp`) y se conservó. Para lograrlo hizo falta una cosa que
