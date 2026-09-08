@@ -15,11 +15,16 @@ import java.util.List;
  * precedencia va de mas especifico a mas general: fecha exacta &gt; dia de semana &gt; cambio
  * general vigente &gt; preferencia general &gt; catalogo.
  *
- * <p><b>Hoy NO consume el cupo semanal de {@code CuotaEdicionHorario}</b>, y es una decision
- * consciente, no un olvido: la cuota se mide contra una FECHA EFECTIVA ("este cambio rige desde el
- * dia X") y un patron semanal no tiene una. Inventarle una seria elegir una semantica de cuota sin
- * que nadie la haya pedido. Queda anotado como agujero conocido: quien quiera esquivar el cupo de
- * 3 cambios por semana puede hacerlo por esta via.
+ * <p><b>Fijar la hora SI consume el cupo semanal</b> de {@code CuotaEdicionHorario}, con la proxima
+ * ocurrencia de ese dia como fecha efectiva.
+ *
+ * <p>Este javadoc decia lo contrario hasta el 2026-09-07: que no cobraba cupo porque "un patron
+ * semanal no tiene fecha efectiva". Era falso — la tiene, y es la proxima vez que caiga ese dia —,
+ * y el efecto era un agujero: para esquivar el limite de 3 habitos por semana alcanzaba con pedir
+ * el cambio por dia de semana en vez de por horario general.
+ *
+ * <p>{@link #apagar} sigue siendo gratis, y eso si es deliberado: apagar un dia es hermano de la
+ * pausa de {@code habit-unlocks}, que nunca cobro cupo, y no es "reacomodar el horario".
  */
 public interface EditarHorarioSemanalUseCase {
 

@@ -105,10 +105,11 @@ puede mover de hora, **no sacar**.
 sin generar le va a parecer que falta. Con el backend adelante, la app vieja sigue funcionando
 (todos los campos nuevos son aditivos y los esquemas zod usan `.passthrough()`), pero al revés no.
 
-**2. La cuota no cubre esta vía.** `CuotaEdicionHorario` limita a 3 hábitos por semana pasados los
-primeros 7 días, y el horario por día de semana **no la consume**: la cuota se mide contra una fecha
-efectiva y un patrón semanal no tiene una. Está anotado en el propio caso de uso. Quien quiera
-esquivar el cupo puede hacerlo por acá.
+**2. ~~La cuota no cubre esta vía.~~ CERRADO el mismo día.** El argumento con el que se había
+dejado afuera —"un patrón semanal no tiene fecha efectiva"— era falso: la tiene, y es la próxima vez
+que caiga ese día. Fijar la hora de un día ahora consume el cupo semanal y queda registrado en
+`historial_cambios_horario`, así que cuenta para los siguientes. Apagar un día sigue siendo gratis,
+y eso sí es deliberado: es hermano de la pausa, que nunca cobró cupo.
 
 **3. Sin probar en producción real:** el barrido nocturno con estos datos. Está cubierto por pruebas
 —incluida una que corre contra Postgres real por el mismo método que usa el cron— pero nunca corrió

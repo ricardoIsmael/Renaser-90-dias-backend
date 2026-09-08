@@ -338,8 +338,9 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     @Transactional
     public void fijar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, LocalTime horaDisparo,
                       LocalTime horaLimite) {
-        requireHabito(habitoId);
+        Habito habito = requireHabito(habitoId);
         Instant ahora = clock.now();
+        cobrarCupo(actorId, habitoId, habito, diaSemana, ahora);
         var preferencia = PreferenciaHorario.crear(actorId, habitoId, horaDisparo, horaLimite, ahora);
         // El agregado valida que la hora limite sea posterior a la de disparo, igual que en el
         // resto del modulo: la regla vive en el dominio, no en el controlador.
@@ -371,6 +372,44 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     public void quitar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana) {
         requireHabito(habitoId);
         savePreferenciaPort.borrarParaDiaSemana(actorId, habitoId, diaSemana);
+    }
+
+    /**
+     * Cobra el cupo semanal por fijar la hora de un dia (V39).
+     *
+     * > **Agregado 2026-09-07, cerrando un agujero que yo mismo habia dejado abierto.** El caso de
+     * > uso decia que esta via no consumia cupo porque "la cuota se mide contra una FECHA EFECTIVA
+     * > y un patron semanal no tiene una". Eso era falso: un patron semanal SI tiene fecha
+     * > efectiva, y es la proxima vez que caiga ese dia. Sin esto, para esquivar el limite de
+     * > {@value #WEEKLY_SCHEDULE_EDIT_LIMIT} habitos por semana alcanzaba con pedir el cambio por
+     * > dia de semana en vez de por horario general.
+     *
+     * Se cobra la HORA y no el interruptor: apagar un dia es hermano de la pausa de
+     * `habit-unlocks`, que nunca cobro cupo, y no es "reacomodar el horario".
+     *
+     * La fecha efectiva es estrictamente FUTURA, igual que en el camino general: el dia en curso no
+     * se reacomoda (D-91), asi que fijar "los lunes" un lunes rige desde el lunes siguiente.
+     */
+    private void cobrarCupo(UserId actorId, HabitoId habitoId, Habito habito, DayOfWeek diaSemana, Instant ahora) {
+        ProgresoParticipanteHabits progreso = requireProgreso(actorId);
+        LocalDate hoy = ahora.atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+        LocalDate fechaEfectiva = hoy.plusDays(1);
+        while (fechaEfectiva.getDayOfWeek() != diaSemana) {
+            fechaEfectiva = fechaEfectiva.plusDays(1);
+        }
+        int diaEfectivo = Math.toIntExact(progreso.diaPrograma() + ChronoUnit.DAYS.between(hoy, fechaEfectiva));
+
+        if (!CuotaEdicionHorario.esSemanaDeAcomodoLibre(diaEfectivo)) {
+            int libreHasta = Math.max(FREE_SCHEDULE_EDITS_UNTIL_DAY,
+                    habito.diaLimiteEdicionLibre() != null ? habito.diaLimiteEdicionLibre()
+                            : FREE_SCHEDULE_EDITS_UNTIL_DAY);
+            LocalDate inicioSemana = CuotaEdicionHorario.inicioSemanaPrograma(fechaEfectiva, diaEfectivo);
+            requireCupoDisponible(habitoId, diaEfectivo <= libreHasta,
+                    habitosConCupoComprometido(actorId, inicioSemana));
+        }
+        // Queda registrado para que la proxima consulta de cupo lo vea: sin esto el limite se
+        // evaluaria siempre contra una semana vacia y no limitaria nada.
+        historialPort.registrar(actorId, habitoId, fechaEfectiva, null, null, ahora);
     }
 
     /**
