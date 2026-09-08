@@ -100,8 +100,12 @@ class PreferenciaHorarioServiceTest {
                         0), true, null, null))).isInstanceOf(NotAuthorizedException.class);
     }
 
+    /**
+     * D-122: lo que se rechaza ya no es el cierre (ese se acomoda solo a las 23:50), sino arrancar
+     * despues de las 23:40 — mas tarde no queda tiempo de completar antes del cambio de dia.
+     */
     @Test
-    void rechazaHoraLimiteAntesQueHoraDisparo() {
+    void rechazaUnArranqueDespuesDeLas2340() {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(
@@ -109,7 +113,8 @@ class PreferenciaHorarioServiceTest {
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
 
         assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
-                LocalTime.of(9, 0), LocalTime.of(7, 0), true, null, null))).isInstanceOf(IllegalArgumentException.class);
+                LocalTime.of(23, 45), null, true, null, null)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("23:40");
     }
 
     /** D-91: hasta el dia 7 tampoco se aplica en el acto — lo unico libre es el cupo, no el dia. */

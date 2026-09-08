@@ -30,11 +30,29 @@ class HorarioPorFechaTest {
         }
     }
 
+    /**
+     * D-122: por el camino normal ya no hay nada que rechazar — `PreferenciaHorario.crear` acomoda
+     * el cierre al ultimo instante util del dia antes de que este record lo vea.
+     */
     @Test
-    void rechazaCierreAnteriorALaHoraDeInicio() {
+    void unCierreAnteriorAlInicioLlegaYaAcomodado() {
         var pref = PreferenciaHorario.crear(UserId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()),
                 LocalTime.of(9, 0), LocalTime.of(8, 0), Instant.EPOCH);
-        assertThatThrownBy(() -> new HorarioPorFecha(hoy.plusDays(1), pref))
-                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(new HorarioPorFecha(hoy.plusDays(1), pref).preferencia().horaLimite())
+                .isEqualTo(LocalTime.of(23, 50));
+    }
+
+    /**
+     * La guarda defensiva sigue viva para lo unico que la puede disparar: una fila REHIDRATADA de
+     * la base, que no pasa por el ajuste (una escrita antes de D-122, por ejemplo).
+     */
+    @Test
+    void unaFilaViejaDeLaBaseConLaVentanaVaciaSigueSiendoRechazada() {
+        var cruda = PreferenciaHorario.rehydrate(UserId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()),
+                LocalTime.of(9, 0), LocalTime.of(8, 0), true, null, Instant.EPOCH, Instant.EPOCH);
+
+        assertThatThrownBy(() -> new HorarioPorFecha(hoy.plusDays(1), cruda))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("horaLimite");
     }
 }

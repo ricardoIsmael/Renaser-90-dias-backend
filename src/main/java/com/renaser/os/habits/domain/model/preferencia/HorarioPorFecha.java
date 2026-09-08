@@ -1,5 +1,6 @@
 package com.renaser.os.habits.domain.model.preferencia;
 
+import com.renaser.os.habits.domain.model.horario.VentanaDelDia;
 import java.time.LocalDate;
 import java.util.Objects;
 
@@ -21,10 +22,9 @@ public record HorarioPorFecha(LocalDate fecha, PreferenciaHorario preferencia, b
         if (activo) {
             Objects.requireNonNull(preferencia.horaDisparo(), "horaDisparo es obligatoria");
         }
-        if (preferencia.horaDisparo() != null && preferencia.horaLimite() != null
-                && !preferencia.horaDisparo().isBefore(preferencia.horaLimite())) {
-            throw new IllegalArgumentException("horaLimite debe ser posterior a horaDisparo");
-        }
+        // D-122: la regla vive en VentanaDelDia, no copiada aca. Lo que se escribe ya viene
+        // normalizado por PreferenciaHorario; esto solo cubre una fila rehidratada de la base.
+        VentanaDelDia.requireVentanaNoVacia(preferencia.horaDisparo(), preferencia.horaLimite());
     }
 
     /** Firma historica (V37): una excepcion de horario siempre dejaba el habito encendido. */

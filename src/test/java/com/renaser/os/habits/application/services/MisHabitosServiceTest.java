@@ -306,16 +306,28 @@ class MisHabitosServiceTest {
         verifyNoInteractions(savePort, saveHorarioPort, progresoPort);
     }
 
+    /**
+     * D-122 (2026-09-08). Estos dos decian ...EsRechazadoPorElComando. El alta de un habito propio
+     * de turno noche (22:00, cerrando "a las 6") ya no se rechaza: el comando acomoda el cierre al
+     * ultimo instante util del dia. El aprendiz que trabaja de noche era justo el caso que la
+     * regla vieja dejaba afuera.
+     */
     @Test
-    void crearHabitoPersonalConHoraLimiteAnteriorAHoraDisparoEsRechazadoPorElComando() {
-        assertThatThrownBy(() -> comando(LocalTime.of(22, 0), LocalTime.of(6, 0)))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("horaLimite");
-        verifyNoInteractions(savePort, saveHorarioPort, progresoPort);
+    void crearHabitoPersonalConCierrePasadaLaMedianocheLoAcomodaElComando() {
+        assertThat(comando(LocalTime.of(22, 0), LocalTime.of(6, 0)).horaLimite())
+                .isEqualTo(LocalTime.of(23, 50));
     }
 
     @Test
-    void crearHabitoPersonalConHoraLimiteIgualAHoraDisparoEsRechazadoPorElComando() {
-        assertThatThrownBy(() -> comando(DISPARO, DISPARO)).isInstanceOf(IllegalArgumentException.class);
+    void crearHabitoPersonalConCierreIgualAlArranqueLoAcomodaElComando() {
+        assertThat(comando(DISPARO, DISPARO).horaLimite()).isEqualTo(LocalTime.of(23, 50));
+    }
+
+    /** El tope del otro lado: arrancar tan tarde que no quepa sigue siendo un rechazo. */
+    @Test
+    void crearHabitoPersonalQueArrancaDespuesDeLas2340EsRechazadoPorElComando() {
+        assertThatThrownBy(() -> comando(LocalTime.of(23, 45), null))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("23:40");
         verifyNoInteractions(savePort, saveHorarioPort, progresoPort);
     }
 

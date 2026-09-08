@@ -43,10 +43,21 @@ class HorarioSemanalTest {
                 .hasMessageContaining("horaDisparo");
     }
 
+    /** D-122: ya no se rechaza — `PreferenciaHorario.crear` acomoda el cierre antes de llegar aca. */
     @Test
-    void laHoraLimiteTieneQueSerPosteriorALaDeDisparo() {
-        assertThatThrownBy(() -> new HorarioSemanal(DayOfWeek.TUESDAY,
-                preferencia(LocalTime.of(7, 0), LocalTime.of(6, 0))))
+    void unCierreAnteriorALaHoraDeDisparoLlegaYaAcomodado() {
+        var martes = new HorarioSemanal(DayOfWeek.TUESDAY, preferencia(LocalTime.of(7, 0), LocalTime.of(6, 0)));
+
+        assertThat(martes.preferencia().horaLimite()).isEqualTo(LocalTime.of(23, 50));
+    }
+
+    /** La guarda defensiva, con lo unico que la dispara: una fila rehidratada de la base. */
+    @Test
+    void unaFilaViejaDeLaBaseConLaVentanaVaciaSigueSiendoRechazada() {
+        var cruda = PreferenciaHorario.rehydrate(actor, habito, LocalTime.of(7, 0), LocalTime.of(6, 0), true, null,
+                AHORA, AHORA);
+
+        assertThatThrownBy(() -> new HorarioSemanal(DayOfWeek.TUESDAY, cruda))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("horaLimite");
     }

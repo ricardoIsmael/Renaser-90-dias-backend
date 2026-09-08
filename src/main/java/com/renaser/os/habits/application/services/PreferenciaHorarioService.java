@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.domain.model.horario.VentanaDelDia;
 import com.renaser.os.habits.application.ports.in.preferencia.CambiarEstadoHabitoEnFechaUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarHorarioSemanalUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
@@ -93,7 +94,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     public ResultadoEdicionPreferencia editar(EditarPreferenciaHorarioCommand command) {
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         Habito habito = requireHabito(command.habitoId());
-        requireOrdenHorario(command.horaDisparo(), command.horaLimite());
+        VentanaDelDia.requireHoraDisparoDentroDelDia(command.horaDisparo());
         if (habito.participanteId() != null && !habito.participanteId().equals(command.actorId())) {
             throw new NotAuthorizedException("Solo puedes editar tus propios habitos");
         }
@@ -248,16 +249,6 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
 
     private static LocalTime primeraNoNula(LocalTime dePreferencia, LocalTime deCatalogo) {
         return dePreferencia != null ? dePreferencia : deCatalogo;
-    }
-
-    /** Sin hora de cierre no hay orden que validar: el habito no vence dentro del dia. */
-    private static void requireOrdenHorario(LocalTime horaDisparo, LocalTime horaLimite) {
-        if (horaLimite == null) {
-            return;
-        }
-        if (!horaDisparo.isBefore(horaLimite)) {
-            throw new IllegalArgumentException("horaLimite debe ser posterior a horaDisparo");
-        }
     }
 
     /**

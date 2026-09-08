@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.ports.in.habito;
 
+import com.renaser.os.habits.domain.model.horario.VentanaDelDia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.PlantillaHabitoPersonal;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
@@ -46,14 +47,11 @@ public interface CrearHabitoPersonalUseCase {
             SelfValidating.validateConstructorArgs(CrearHabitoPersonalCommand.class, actorId, titulo, tipo,
                     categoriaClave, plantilla, etiquetaMeta, iconoClave, horaDisparo, horaLimite);
             // Nivel 2 de validacion (CLAUDE.MD §5.4.3): estructuralmente imposible construir un
-            // comando con el habito ya vencido. La misma regla vive tambien en
-            // HorarioHabito.crear (el agregado de dominio) — defensa en profundidad, no
-            // duplicacion decorativa: este comando es el unico punto de entrada HTTP, pero el
-            // agregado protege el invariante para CUALQUIER llamador (ej. un futuro admin que
-            // edite el horario de un habito personal).
-            if (horaLimite != null && !horaLimite.isAfter(horaDisparo)) {
-                throw new IllegalArgumentException("horaLimite debe ser posterior a horaDisparo");
-            }
+            // comando con una ventana que no cabe en el dia. La regla es UNA sola y vive en
+            // VentanaDelDia (D-122); aca se aplica sobre los componentes del record, asi que el
+            // comando ya nace normalizado y nadie aguas abajo tiene que volver a acordarse.
+            horaDisparo = VentanaDelDia.requireHoraDisparoDentroDelDia(horaDisparo);
+            horaLimite = VentanaDelDia.horaLimiteAjustada(horaDisparo, horaLimite);
         }
     }
 }
