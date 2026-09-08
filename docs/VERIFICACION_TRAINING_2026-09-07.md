@@ -126,3 +126,57 @@ noche conviene mirar el log del scheduler.
 Muestra el horario general, el de cada día de la semana, las excepciones por fecha, las pausas, los
 registros de hoy y los hábitos propios. **No afirma que nada esté bien**: muestra lo que hay, para
 compararlo con lo que la pantalla dijo que hizo.
+
+---
+
+# Adenda — verificación por FLUJOS (2026-09-08)
+
+Lo de arriba probó 22 casos. Un caso responde "¿este endpoint hace lo suyo?"; un flujo responde
+"¿la secuencia que hace una persona termina donde esa persona creía?". Son preguntas distintas, y
+casi todos los defectos de esta pantalla vivían en la segunda: el check que no guardaba, las
+pastillas de días que el guardado ignoraba y la vista semanal del §4 pasaban los tres una prueba de
+"responde 200".
+
+`scripts/flujos-training.sh` — **9 flujos, 37 comprobaciones**. Cada paso mira la base **y mira que
+lo de al lado no se haya movido**. Copia las filas del participante en cuatro tablas al empezar y
+las repone al terminar, pase lo que pase (`trap EXIT`).
+
+| Flujo | Qué recorre | |
+|---|---|---|
+| 1 | Abro la app y entro a Training | 3/3 |
+| 2 | «Los lunes me levanto más temprano» | 5/5 |
+| 3 | «Los miércoles no lo hago» — y me arrepiento | 6/6 |
+| 4 | Intento sacarme un hábito **obligatorio** | 4/4 |
+| 5 | «Este martes puntual no puedo» (no se repite) | 4/4 |
+| 6 | La pantalla pinta la semana entera | 4/4 |
+| 7 | Cambio la hora y dejo un recordatorio | 4/4 |
+| 8 | Datos mal formados no ensucian la base | 5/5 |
+| 9 | Sin sesión no se lee ni se escribe nada | 2/2 |
+
+**Primera corrida: 36/37.** El que falló fue el 7 y era un defecto real — el recordatorio volvía
+encendido y sin los minutos. Está en la bitácora como **E-159**, con la corrección. **Segunda
+corrida, con el arreglo: 37/37**, y suite completa en 2570 pruebas, 0 fallos.
+
+## Lo que el flujo 2 confirmó y el §6.2 dejaba abierto
+
+Fijar la hora de un día de la semana **consume el cupo** (queda en `historial_cambios_horario`) y
+**apagar un día no lo consume**. Ya no es una afirmación de diseño: se ejecuta y se comprueba en la
+base en cada corrida.
+
+## Residuo conocido de E-159
+
+En la base de dev quedó `DESPERTAR` con `recordatorio_activo = true` y `minutos_recordatorio =
+NULL`, de una prueba anterior al arreglo. **No hay que limpiarlo:** el cliente lee null como 0 —"a
+la hora exacta"—, así que la fila es coherente. Lo único que se perdió es la intención de quien
+hubiera pedido una antelación distinta **antes** del arreglo. Si en producción aparecen filas así,
+significan eso, no corrupción.
+
+## Cómo repetirlo
+
+```bash
+RENASER_EMAIL=... RENASER_PASS=... ./scripts/flujos-training.sh http://localhost:8080
+```
+
+Las credenciales van por variable de entorno: no se escriben en disco ni quedan en el historial del
+shell si se exportan antes. Correlo contra dev, nunca contra producción — escribe de verdad, y sólo
+después repone.

@@ -22,10 +22,16 @@ DB_CONTENEDOR="${DB_CONTENEDOR:-renaser-db}"
 DB_USUARIO="${DB_USUARIO:-postgres}"
 DB_NOMBRE="${DB_NOMBRE:-renaser}"
 
-q() { docker exec "$DB_CONTENEDOR" psql -U "$DB_USUARIO" -d "$DB_NOMBRE" -Atc "$1" 2>&1; }
+# El shell puede estar dentro de un contenedor distrobox mientras docker vive en el host. Se
+# resuelve una vez y todo lo demas usa $DOCKER, para que corra igual en las dos situaciones.
+if docker ps >/dev/null 2>&1; then DOCKER=(docker)
+elif distrobox-host-exec docker ps >/dev/null 2>&1; then DOCKER=(distrobox-host-exec docker)
+else echo "No llego a docker ni desde aca ni por el host."; exit 1; fi
+
+q() { "${DOCKER[@]}" exec "$DB_CONTENEDOR" psql -U "$DB_USUARIO" -d "$DB_NOMBRE" -Atc "$1" 2>&1; }
 titulo() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 
-if ! docker exec "$DB_CONTENEDOR" true 2>/dev/null; then
+if ! "${DOCKER[@]}" exec "$DB_CONTENEDOR" true 2>/dev/null; then
   echo "No encuentro el contenedor '$DB_CONTENEDOR'. Levantalo con: docker compose up -d"
   exit 1
 fi
@@ -39,10 +45,20 @@ q "select case when count(*) = 0 then 'sin fallidas' else count(*)||' FALLIDAS' 
    from public.flyway_schema_history where not success;"
 
 titulo "BACKEND"
-if ss -ltn 2>/dev/null | grep -q ':8080'; then echo "arriba en :8080"; else echo "CAIDO"; fi
+# `ss` dentro del contenedor no ve los puertos del host: se pregunta por HTTP, que cruza igual.
+if [ "$(curl -s -o /dev/null -w '%{http_code}' -m 3 http://localhost:8080/api/v1/habits)" != "000" ]
+then echo "arriba en :8080"; else echo "CAIDO"; fi
 
 titulo "HORA GENERAL  (preferencias_horario — una para toda la semana)"
-q "select h.titulo||'  ->  '||p.hora_disparo||coalesce('  hasta '||p.hora_limite,'')
+# `||` con un NULL da NULL, y la fila salia como una linea EN BLANCO: el script parecia decir
+# "no hay nada" cuando si habia fila, solo que sin hora. Justo la mentira que vino a cazar.
+# `preferencias_horario` puede tener hora nula a proposito (E-54: la fila padre de un cambio
+# diferido se crea con lo vigente, que a veces es nada), asi que se dice explicitamente.
+q "select h.titulo||'  ->  '||coalesce(p.hora_disparo::text,'(sin hora propia; rige el catalogo)')
+     ||coalesce('  hasta '||p.hora_limite,'')
+     ||case when p.recordatorio_activo
+            then '  · aviso '||coalesce(p.minutos_recordatorio::text||' min antes','a la hora')
+            else '' end
    from renaser.preferencias_horario p join renaser.habitos h on h.id = p.habito_id
    where h.titulo ilike '$COMO' order by h.titulo;" | sed 's/^/  /'
 
@@ -55,7 +71,7 @@ q "select h.titulo||'  '||
    where h.titulo ilike '$COMO' order by h.titulo, s.dia_semana;" | sed 's/^/  /'
 
 titulo "EXCEPCIONES POR FECHA  (V37/V38 — un dia puntual, no se repite)"
-q "select h.titulo||'  '||f.fecha||
+q "select h.titulo||'  '||f.fecha::text||
      case when f.activo then '  ->  '||coalesce(f.hora_disparo::text,'(sin hora)') else '  ->  APAGADO' end
    from renaser.horarios_habito_por_fecha f join renaser.habitos h on h.id = f.habito_id
    where h.titulo ilike '$COMO' order by f.fecha;" | sed 's/^/  /'
