@@ -5409,3 +5409,25 @@ Todo lo que se probo antes de eso habia salido bien y no era el problema: la con
 - **Corrección:** el recordatorio se aplica **hoy**; las horas se siguen difiriendo. D-91 protege la ventana del día en curso —a qué hora te toca—, no la antelación del aviso, que cuelga de la hora que esté rigiendo, sea la vieja o la nueva. `asegurarPreferenciaVigente` pasó a llamarse `asegurarPreferenciaYRecordatorio` y carga la preferencia existente en lugar de salir temprano, así que **las horas quedan intactas en los dos caminos**. `PromocionCambioHorarioService` reescribe los mismos valores: idempotente.
 - **Prevención:** el test que se puso rojo era `siLaVentanaDeHoyYaArrancoElCambioQuedaDiferidoParaManana`, con `verify(savePreferenciaPort, never()).save(any())`. Esa aserción **no describía el invariante, describía la implementación**: lo que el día en curso protege son las horas, no que no se escriba la fila. Ahora captura lo guardado y verifica las horas viejas (08:00/10:00) más el recordatorio pedido. Lección: un `never()` sobre un puerto de escritura casi siempre es un invariante mal escrito — decí *qué* no puede cambiar, no *que no se escriba*.
 - **Verificación:** 2570 pruebas en verde. Falta re-correr el FLUJO 7 contra el servidor con el arreglo.
+
+---
+
+## E-160 — La JVM tiene permiso para usar más memoria de la que la máquina tiene (2026-09-07)
+
+- **Síntoma:** producción caída sin ningún error en el log de la aplicación. El contenedor desaparece y CloudFront devuelve `504 Gateway Timeout`. En el journal del host:
+
+  ```
+  RenaserHikari:h invoked oom-killer: gfp_mask=0x140cca(GFP_HIGHUSER_MOVABLE|__GFP_COMP)
+  oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),...,global_oom,task=java,pid=120784
+  Out of memory: Killed process 120784 (java) total-vm:4199428kB, anon-rss:1065728kB
+  ```
+
+- **Causa:** el contenedor corre con `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75.0` y **sin límite de memoria de Docker** (`HostConfig.Memory=0`). Sin límite de cgroup, la JVM ve la máquina entera y se autoriza el 75 % de ella: `MaxHeapSize = 1.503.657.984` (**1.434 MB**). La instancia es una `t3.small` de **1.909 MB y sin swap**, de la que el sistema, `dockerd`, `containerd`, `redis` y el agente de SSM ya se llevan ~250 MB fijos. Es decir: **el techo del heap está por encima de lo que la máquina puede dar.** Mientras nada empuje al proceso a crecer, aguanta; en cuanto algo lo empuja, el kernel dispara el OOM-killer y el proceso más grande es siempre la JVM.
+- **La confusión que hay que evitar:** `constraint=CONSTRAINT_NONE` + `global_oom` significa que se quedó sin memoria **el host**, no el contenedor. Por eso `docker inspect` muestra `OOMKilled=false` y parece que Docker no tuvo nada que ver — es exactamente al revés: si hubiera habido un límite de contenedor, la JVM se habría dimensionado dentro de él y esto no pasaría.
+- **Cómo reconocerlo rápido:** SSM en `ConnectionLost` con la instancia `running` y los status checks en `ok` es, casi siempre, presión de memoria (ver E-155). Lo primero al recuperar el acceso es `free -m` y `journalctl | grep -i oom`, no los logs de la aplicación: la aplicación no llegó a loguear nada porque la mataron desde afuera.
+- **Estado:** **abierto, sin corregir.** Medido el 2026-09-07 con el servicio arriba: `java` en 1.005 MB de 1.865 GiB (54 %), 70 MB libres, 527 MB disponibles, **swap en 0**. Doce horas sin reiniciarse, pero con el mismo techo mal puesto.
+- **Corrección propuesta** (no aplicada, requiere reinicio del contenedor y por lo tanto la ventana de ~45 s):
+  1. Bajar `MaxRAMPercentage` de 75 a ~40 (≈760 MB de heap) y ponerle `--memory=1300m` al contenedor, para que la JVM se dimensione contra un límite real y no contra la máquina entera.
+  2. Agregar **2 GB de swap**. No requiere reiniciar nada y convierte "el proceso muere" en "el proceso va más lento": el kernel pagina en vez de matar.
+  3. `t3.medium` (4 GB) solo si además se quiere despliegue sin caída — ver E-155, donde el intento de azul/verde sobre esta misma instancia costó siete horas de caída justamente por esto.
+- **Prevención:** ningún contenedor de la aplicación debe correr sin `--memory`. Un límite de cgroup no es una restricción: es **la información que la JVM necesita** para no pedir más de lo que hay. Sin él, `MaxRAMPercentage` se calcula contra la RAM total del host y el número que uno cree estar poniendo no es el que la JVM entiende.
