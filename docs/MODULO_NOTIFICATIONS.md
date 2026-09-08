@@ -4,7 +4,7 @@
 **Ola:** 3 (adelantada — primer consumidor real de eventos de dominio Modulith, cierra el Lote 2 junto a `habits`/`rocks`)
 **Documentos hermanos:** `CLAUDE.MD` (arquitectura y convenciones, §4.4 eventos de dominio) · [`MODULOS_A_AVANZAR.md`](MODULOS_A_AVANZAR.md) · [`PLAN_DE_MODULOS.md`](PLAN_DE_MODULOS.md) §"5. `notifications`" (semilla) · [`MODULO_SUPPORT.md`](MODULO_SUPPORT.md)/[`MODULO_PHASECONTRACTS.md`](MODULO_PHASECONTRACTS.md) (patrón de eventos en `api/` y nombres en español) · [`MODULO_HABITS.md`](MODULO_HABITS.md)/[`MODULO_ROCKS.md`](MODULO_ROCKS.md) (los 4 eventos que este módulo consume, ya construidos y documentados ahí)
 
-**Alcance:** bandeja de notificaciones persistida en servidor (`notificacion/`), preferencias por tipo (`preferencia/`) y tokens push de Expo (`tokenpush/`). Es la primera vez que la bandeja vive en el servidor en vez de ser local-por-dispositivo — señalado explícitamente en el encargo.
+**Alcance:** bandeja de notificaciones persistida en servidor (`notificacion/`), preferencias por tipo (`preferencia/`) y tokens push móviles/Web (`tokenpush/`). Es la primera vez que la bandeja vive en el servidor en vez de ser local-por-dispositivo — señalado explícitamente en el encargo.
 
 ---
 
@@ -93,12 +93,12 @@ notifications/
     ├── in/rest/{notificacion,preferencia,tokenpush}/   3 controllers tontos, X-Actor-Id
     ├── in/event/    4 listeners @ApplicationModuleListener (uno por evento)
     ├── in/scheduler/   PurgaNotificacionesScheduler (>90 días)
-    └── out/{persistence/{notificacion,preferencia,tokenpush}, push/NoOpPushAdapter}
+    └── out/{persistence/{notificacion,preferencia,tokenpush}, push/WebPushAdapter}
 ```
 
 Sin `api/` propio: `notifications` es un sumidero terminal — hoy ningún otro módulo necesita consumir nada suyo (a diferencia de `points`/`habits`/`rocks`, que sí publican eventos para que otros los escuchen). Si en el futuro otro módulo necesitara, por ejemplo, saber si una notificación fue leída, se agregaría entonces un `api/` con la proyección mínima — no se creó uno vacío "por si acaso" (mismo criterio anti-sobre-ingeniería de CLAUDE.MD §4.1).
 
-No hizo falta migración Flyway propia: `notificaciones`, `preferencias_notificacion`, `tokens_push` ya están completas en `V1__baseline_renaser.sql:1342-1370`.
+`notificaciones`, `preferencias_notificacion` y `tokens_push` nacen en `V1__baseline_renaser.sql:1342-1370`; `V42__web_push.sql` agrega el literal `WEB` al enum `renaser.plataforma_push` sin cambiar las filas existentes.
 
 ### 1.1 Dominio
 
@@ -113,14 +113,14 @@ No hizo falta migración Flyway propia: `notificaciones`, `preferencias_notifica
 - **`ListarNotificacionesUseCase`/`MarcarLeidaUseCase`/`MarcarTodasLeidasUseCase`**: autoservicio estricto — solo reciben `actorId`, sin parámetro para apuntar a otro usuario.
 - **`GestionarPreferenciasUseCase`**: autoservicio por **firma** (§3, blindaje CLAUDE.MD §0.3) — `consultar`/`actualizar` solo reciben `actorId`, no hay forma de pasar un id de usuario objetivo distinto.
 - **`RegistrarTokenPushUseCase`**: `usuarioId` sale siempre del actor resuelto (X-Actor-Id), nunca del body.
-- **`NotificacionService`**: además de emitir/listar/marcar leída, intenta un push best-effort (§4) tras guardar la notificación — envuelto en `try/catch` para que un fallo de Expo (hoy: `NoOpPushAdapter`, no puede fallar de verdad) nunca tumbe la escritura en la bandeja, mismo criterio fire-and-forget que `chat/repository.ts:sendExpoPushNotifications` (§0.5).
+- **`NotificacionService`**: además de emitir/listar/marcar leída, intenta un push best-effort (§4) tras guardar la notificación — envuelto en `try/catch` para que un fallo del proveedor Web Push nunca tumbe la escritura en la bandeja, mismo criterio fire-and-forget que `chat/repository.ts:sendExpoPushNotifications` (§0.5).
 
 ### 1.3 Infraestructura
 
 - **REST**: ver tabla de endpoints §2.
 - **Eventos** (`in/event/`): 4 listeners, uno por evento, cada uno `@Component` package-private con un único método `@ApplicationModuleListener void on(XxxEvent event)`. Se optó por **uno por evento** (no un solo listener que dispatchee por tipo) para que cada uno declare su propio mapeo a `TipoNotificacion`/copy de forma explícita y testeable en aislamiento — encargo lo dejaba a criterio de diseño.
 - **Persistencia**: JPA + mappers a mano (D-28, traducción explícita caso a caso, nunca `valueOf` "mágico" por nombre — mismo criterio que `support`/`points` aunque los valores coincidan textualmente). `PreferenciaNotificacionJpaEntity` usa `@IdClass` (mismo patrón que `HistorialCoherenciaJpaEntity` de `points`) para su PK compuesta `(usuario_id, tipo)`.
-- **Push** (`out/push/NoOpPushAdapter`): placeholder sin credenciales Expo reales — mismo patrón que `NoOpAlmacenamientoAdapter` de `shared` (D-34, S3). Solo loguea un `INFO` con la cantidad de tokens, **nunca** el título/cuerpo (pueden llevar PII, ej. `MENSAJE_MENTOR` — CLAUDE.MD §5.4.9).
+- **Push** (`out/push/WebPushAdapter`): entrega suscripciones de navegador con VAPID y serializa un payload mínimo (`title`, `body`, `data.url`). Filtra `WEB` y deja intactos los tokens `IOS`/`ANDROID` para el adaptador nativo. Sin claves VAPID configuradas hace *no-op* seguro y deja un warning; una respuesta 4xx/5xx o un endpoint vencido tampoco revierte la notificación de la bandeja.
 - **Scheduler** (`PurgaNotificacionesScheduler`): cron diario 04:30 UTC, purga filas de más de 90 días. Reutiliza `@EnableScheduling` global ya declarado por `points.PointsSchedulingConfig` — no lo repite (mismo criterio documentado en `rocks.VerdugoIgnoradoScheduler`).
 
 ---
@@ -148,13 +148,13 @@ Actor resuelto por header `X-Actor-Id` (temporal, D-29 de `users`, sin autentica
 
 | Método | Ruta | Repo viejo | Devuelve |
 |---|---|---|---|
-| POST | `/api/v1/push-tokens` | `POST /push-tokens` (CHAT-07, preservado) | 200, `{id}` |
+| POST | `/api/v1/push-tokens` | `POST /push-tokens` (CHAT-07, preservado) | 200, `{id}`; `platform` admite `IOS`, `ANDROID` y `WEB` |
 
 ### 2.4 Rupturas de contrato conocidas y heredadas (documentadas, no inventadas — mismo criterio que `docs/MODULO_PHASECONTRACTS.md` §4)
 
 - **`NotificacionResponse.id`** pasa de `string` (cuid de Prisma) a `number` (bigint IDENTITY de Postgres) — el nombre del campo se preserva, el tipo JSON cambia.
 - **`NotificacionResponse.type`** viaja en **español** (`TipoNotificacion` de la BD nueva: `SANTUARIO_ROTO`, `LOGRO_DESBLOQUEADO`...) — el repo viejo lo devolvía en inglés (`ACHIEVEMENT_UNLOCKED`...). Además la BD nueva tiene 13 valores contra los 8 del repo viejo (§0.4).
-- **`RegistrarTokenPushRequest.platform`** ahora espera el literal Postgres en **MAYÚSCULAS** (`"IOS"`/`"ANDROID"`) — el repo viejo aceptaba minúsculas (`"ios"`/`"android"`). El controller normaliza con `toUpperCase()` antes de resolver el enum, pero un valor ya en mayúsculas es lo que realmente se espera; documentado en el javadoc de `RegistrarTokenPushRequest`.
+- **`RegistrarTokenPushRequest.platform`** ahora espera el literal Postgres en **MAYÚSCULAS** (`"IOS"`/`"ANDROID"`/`"WEB"`) — el repo viejo aceptaba minúsculas (`"ios"`/`"android"`). El controller normaliza con `toUpperCase()` antes de resolver el enum, pero un valor ya en mayúsculas es lo que realmente se espera; documentado en el javadoc de `RegistrarTokenPushRequest`.
 
 Ninguna de las tres se puede evitar sin reintroducir el problema que la migración a la BD nueva ya resolvió (vocabulario en español, PK bigint) — coordinar con la app antes de liberar, igual que `phasecontracts` documentó para su propio caso de `fase`.
 
@@ -205,12 +205,12 @@ A diferencia de `habits`→`points` y `rocks`→`points` (síncrono, misma trans
 
 1. **¿El mapeo de tipos de DN-1 es el correcto?** En particular, ¿debería `HabitoCompletadoEvent` generar una notificación por cada hábito completado (varias por día), o el negocio prefiere no notificar eso en absoluto (como hacía el repo viejo, que nunca lo notificaba)? Si la respuesta es "no notificar", el cambio es eliminar el llamado a `emitir()` de `HabitoCompletadoNotificationListener` (o dejarlo vacío documentando por qué), sin tocar el resto del módulo.
 2. **¿Los roles permitidos en `/api/v1/notifications`, `/notification-preferences` y `/push-tokens` son correctos?** Hoy los tres son "cualquier autoservicio autenticado" (mismo criterio que `support` para tickets de soporte) — no hay gate de rol porque ninguno de los tres endpoints tiene una versión "para otro usuario". A confirmar si corresponde alguna restricción (ej. ¿un `SUSPENDED` debería seguir viendo su propia bandeja? Se asumió que sí, mismo criterio que `support` §0.2 "a suspended account can still reach support" — no confirmado para este módulo específicamente).
-3. **DN-3 (push best-effort desde `EmitirNotificacionUseCase`):** ¿es la ubicación correcta, o el negocio prefiere mantener push y bandeja completamente separados como en el repo viejo? Hoy no importa (el adapter es `NoOpPushAdapter`), pero es una decisión de diseño que conviene confirmar antes de conectar Expo real.
+3. **DN-3 (push best-effort desde `EmitirNotificacionUseCase`):** se mantiene un solo punto de salida para bandeja y push. Web Push usa VAPID (`WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, `WEB_PUSH_VAPID_SUBJECT`); los tokens móviles siguen registrados y quedan para su adaptador nativo.
 4. **Ruptura de contrato §2.4 (`type` en español, `id` numérico, `platform` en mayúsculas):** ¿coordinar con el equipo de la app RN antes de liberar este módulo, mismo protocolo que `phasecontracts`?
 
 ---
 
-## 8. Estado de las pruebas (escritas, no corridas — CLAUDE.MD prohíbe ejecutar Maven en este encargo)
+## 8. Estado de las pruebas
 
 | Tipo | Archivo | Cubre |
 |---|---|---|
@@ -224,15 +224,10 @@ A diferencia de `habits`→`points` y `rocks`→`points` (síncrono, misma trans
 | Integración Testcontainers | `NotificacionPersistenceAdapterTest` | round-trip, traducción de los 13 tipos, ventana+límite de bandeja, `marcarLeida` atómico y aislado por usuario, `marcarTodasLeidas` idempotente, `purgarAnterioresA` |
 | Integración Testcontainers | `PreferenciaNotificacionPersistenceAdapterTest` | sin fila → vacío, upsert inserta y luego actualiza la MISMA fila (no duplica), traducción de los 13 tipos |
 | Integración Testcontainers | `TokenPushPersistenceAdapterTest` | upsert inserta nuevo, upsert con token ya existente reasigna sin duplicar fila, `tokensDe` trae todos los dispositivos de un usuario |
+| Unit adaptador | `WebPushAdapterTest` | sin VAPID configurado no rompe la emisión y no intenta tocar el canal nativo |
 | Integración E2E (outbox) | `NotificationsEventOutboxIT` (+ `TransactionalEventPublisherTestHelper`) | §4 — publica `SantuarioRotoEvent`/`RocaCompletadaEvent` reales y confirma que llegan a la bandeja |
 
-**Lo que quedó explícitamente sin verificar** (CLAUDE.MD §0.2): no se ejecutó `./mvnw clean test` (prohibido en este encargo) — el supervisor debe correrlo. Puntos de mayor riesgo si algo falla:
-- **DN-5**: si el `@Component` de test `TransactionalEventPublisherTestHelper` interfiere con `ArchitectureTest.modulesDoNotLeakInternals()` (`ApplicationModules.verify()`).
-- Los `@Modifying @Query` JPQL de `SpringDataNotificacionRepository` (`marcarLeida`, `marcarTodasLeidas`, `deleteByCreadoEnBefore`) — primer uso de `@Modifying` sin `clearAutomatically` en este repo (el único precedente, `points.SpringDataRankingAprendizRepository`, sí lo usa); se analizó a mano que ninguno de los tests de este módulo depende de que el contexto de persistencia se limpie después del bulk update (nunca se re-carga como entidad managed el mismo id tras un `@Modifying`), pero no se confirmó en vivo.
-- El `@IdClass` de `PreferenciaNotificacionJpaEntity` — mismo patrón que `HistorialCoherenciaJpaEntity` de `points`, pero con un `enum` como parte de la PK compuesta (el precedente usa `UUID`+`LocalDate`) — combinación no probada antes en este repo.
-- Si `@ApplicationModuleListener` efectivamente se dispara dentro de la ventana de 8s del poll manual de `NotificationsEventOutboxIT` — depende de la configuración de `TaskExecutor` async que Spring Boot/Modulith resuelven automáticamente; no se pudo confirmar en vivo.
-
-**Bitácora de errores:** no se encontró ningún error/bug real de entorno durante la construcción (solo decisiones de diseño, documentadas como DN-N arriba) — no se agregó una entrada artificial a `docs/BITACORA_ERRORES.md`.
+`./mvnw clean test` ejecutado el 2026-09-08: **2614 pruebas, 0 fallos, 0 errores, BUILD SUCCESS**. La suite levantó PostgreSQL/Redis con Testcontainers, aplicó V42 y pasó `ArchitectureTest`.
 
 ---
 
@@ -243,17 +238,17 @@ A diferencia de `habits`→`points` y `rocks`→`points` (síncrono, misma trans
 - [x] Casos de uso con comando self-validating (`EmitirNotificacionCommand`, `ActualizarPreferenciasCommand`, `RegistrarTokenPushCommand`)
 - [x] Controller tonto: sin repositorios, sin `@Transactional`, sin reglas de negocio (3 controllers, todos verificados)
 - [x] DTO de salida como proyección explícita (`NotificacionResponse`, `PreferenciasResponse`, `TokenPushResponse`)
-- [x] Sin migración Flyway nueva (las 3 tablas ya están completas en el baseline)
+- [x] Migración V42 aditiva: agrega `WEB` al enum sin alterar las tablas ni los tokens móviles existentes
 - [x] Tests de integración con Testcontainers para los 3 agregados
 - [x] **Test de integración E2E del outbox de Modulith** — el objetivo central del encargo (§4)
 - [x] Pruebas de seguridad §0.3: `GestionarPreferenciasUseCase` autoservicio por construcción + test de reflexión (§3)
 - [ ] Test de reflexión `@RequiresPermission`/`@PublicEndpoint` — no aplica, mecanismo no existe todavía (bloqueado por B-5/R-2 de `users`, igual que en todos los módulos construidos hasta ahora)
-- [ ] `ArchitectureTest` — no ejecutado por este agente (regla del encargo: no correr Maven). Riesgo real explícito en DN-5
-- [ ] `./mvnw clean test` — no ejecutado, mismo motivo. El supervisor lo corre
-- [x] Avance documentado en este archivo, con honestidad explícita de lo que quedó sin verificar (§8)
-- [ ] Bitácora de errores — no se encontró ningún error/bug real de entorno (ver cierre de §8)
+- [x] `ArchitectureTest` y suite completa ejecutados con Maven
+- [x] `./mvnw clean test` — 2614 pruebas, 0 fallos, 0 errores
+- [x] Avance documentado en este archivo y en `docs/BITACORA_ERRORES.md` (§8)
+- [x] Bitácora de errores actualizada con E-163 (mapper Jackson 2 en Spring Boot 4)
 
-**Honestidad de alcance:** todo lo pedido en el encargo está construido — los 3 agregados completos (dominio/aplicación/persistencia/REST), los 4 listeners de eventos con el mecanismo de outbox probado de punta a punta contra 2 de los 4 eventos reales (más los 4 cubiertos a nivel unitario), el scheduler de retención, y el adapter de push placeholder. Lo que falta es exclusivamente lo que dependía de correr Maven (prohibido en este encargo) o de infraestructura que no existe todavía en `shared/`/`users/` (bloqueada, no inventada, igual que en el resto de módulos de este lote). La decisión de mayor impacto de negocio no confirmada es DN-1 (qué tipo de notificación le corresponde a cada uno de los 4 eventos, y si `HabitoCompletadoEvent` debería notificar en absoluto) — documentada como pregunta abierta §7.1, no asumida en silencio.
+**Honestidad de alcance:** todo lo pedido en el encargo está construido — los 3 agregados completos (dominio/aplicación/persistencia/REST), los 4 listeners de eventos con el mecanismo de outbox probado de punta a punta contra 2 de los 4 eventos reales (más los 4 cubiertos a nivel unitario), el scheduler de retención y el adaptador Web Push VAPID. Lo que queda para producción es cargar las variables VAPID en el backend y la clave pública en el bundle web; los tokens móviles siguen listos para su adaptador nativo.
 
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 

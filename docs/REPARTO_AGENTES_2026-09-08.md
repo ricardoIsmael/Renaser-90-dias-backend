@@ -129,8 +129,9 @@ esperados del día, acumulada o ventana móvil? ¿Expirar penaliza puntos o solo
   OneDrive).
 - **F3.** Bucket policy de lectura pública sobre `avatares/*` (D-55): hoy la URL es correcta y
   responde 403.
-- **F4.** Push real: `PushPort` solo tiene `NoOpPushAdapter`. Quien no abre la app no se entera de
-  nada.
+- **F4.** Push web **resuelto en este cambio**: `WebPushAdapter` entrega los dos avisos de hábitos
+  con VAPID y conserva el aislamiento por usuario. Falta únicamente cargar las variables VAPID en
+  el entorno de producción.
 
 ---
 

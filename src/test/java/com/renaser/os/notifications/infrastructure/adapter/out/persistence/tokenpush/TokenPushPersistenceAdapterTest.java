@@ -59,7 +59,8 @@ class TokenPushPersistenceAdapterTest {
                         CLOCK));
 
         assertThat(registrado.id()).isNotNull();
-        assertThat(adapter.tokensDe(UserId.of(usuarioId))).containsExactly("expo-tok-nuevo");
+        assertThat(adapter.tokensDe(UserId.of(usuarioId))).extracting(TokenPush::token)
+                .containsExactly("expo-tok-nuevo");
     }
 
     @Test
@@ -75,7 +76,8 @@ class TokenPushPersistenceAdapterTest {
 
         assertThat(segundo.id()).isEqualTo(primero.id()); // misma fila, no duplico
         assertThat(adapter.tokensDe(UserId.of(usuarioId))).isEmpty(); // ya no es del primero
-        assertThat(adapter.tokensDe(UserId.of(otroUsuarioId))).containsExactly("expo-tok-compartido");
+        assertThat(adapter.tokensDe(UserId.of(otroUsuarioId))).extracting(TokenPush::token)
+                .containsExactly("expo-tok-compartido");
     }
 
     @Test
@@ -85,6 +87,7 @@ class TokenPushPersistenceAdapterTest {
         adapter.upsertPorToken(
                 TokenPush.registrar(nuevoId(), UserId.of(usuarioId), "tok-b", PlataformaPush.ANDROID, CLOCK));
 
-        assertThat(adapter.tokensDe(UserId.of(usuarioId))).containsExactlyInAnyOrder("tok-a", "tok-b");
+        assertThat(adapter.tokensDe(UserId.of(usuarioId))).extracting(TokenPush::token)
+                .containsExactlyInAnyOrder("tok-a", "tok-b");
     }
 }

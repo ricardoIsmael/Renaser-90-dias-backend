@@ -1,16 +1,16 @@
 package com.renaser.os.notifications.application.ports.out.push;
 
+import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
+
 import java.util.List;
 
 /**
- * Puerto hacia el proveedor de push (Expo, en el repo viejo: {@code chat/repository.ts:sendExpoPushNotifications}).
- * Hoy solo tiene el adaptador placeholder {@code NoOpPushAdapter} (sin credenciales Expo reales
- * todavia) — mismo patron que {@code shared/infrastructure/storage/NoOpAlmacenamientoAdapter}
- * para S3 (D-34): el puerto ya queda listo para el dia que exista el adaptador real.
+ * Puerto hacia los proveedores de push. El adaptador web entrega Web Push con VAPID; los canales
+ * nativos conservan su registro para que el adaptador móvil pueda incorporarse sin cambiar este
+ * caso de uso.
  */
 public interface PushPort {
 
-    /** Best-effort: quien llame no debe asumir que esto garantiza entrega (Expo es HTTP externo,
-     * puede fallar parcial o totalmente). Sin tokens, no hace nada. */
-    void enviar(List<String> tokens, String titulo, String cuerpo);
+    /** Best-effort: quien llame no debe asumir que esto garantiza entrega a un proveedor externo. */
+    void enviar(List<TokenPush> tokens, String titulo, String cuerpo);
 }

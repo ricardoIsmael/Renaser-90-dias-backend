@@ -165,6 +165,13 @@ spring:
       - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
 
 renaser:
+  notifications:
+    web-push:
+      # La publica va al bundle web; la privada queda solo en el backend. Ambas se generan una
+      # vez y se conservan estables para que las suscripciones no se invaliden.
+      vapid-public-key: ${WEB_PUSH_VAPID_PUBLIC_KEY:}
+      vapid-private-key: ${WEB_PUSH_VAPID_PRIVATE_KEY:}
+      vapid-subject: ${WEB_PUSH_VAPID_SUBJECT:mailto:soporte@renaser.com}
   # Ventanas de lock de los schedulers que NO son seguros con varias instancias (C-5) mas
   # los que se agregaron despues con el mismo criterio (habits-generar-tracks-del-dia).
   # lock-at-most-for: si el proceso muere sin soltar el lock, este es el tiempo que el barrido

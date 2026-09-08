@@ -26,6 +26,7 @@ class TokenPushPersistenceMapper {
         return switch (plataforma) {
             case IOS -> PlataformaPushJpa.IOS;
             case ANDROID -> PlataformaPushJpa.ANDROID;
+            case WEB -> PlataformaPushJpa.WEB;
         };
     }
 
@@ -36,6 +37,7 @@ class TokenPushPersistenceMapper {
         return switch (jpa) {
             case IOS -> PlataformaPush.IOS;
             case ANDROID -> PlataformaPush.ANDROID;
+            case WEB -> PlataformaPush.WEB;
         };
     }
 }

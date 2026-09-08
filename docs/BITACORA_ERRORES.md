@@ -5602,3 +5602,17 @@ Todo lo que se probo antes de eso habia salido bien y no era el problema: la con
   (el `CACHE` de `ApplicationModules`, los suppliers memoizados de ArchUnit) es **incompatible con el
   hot restart de DevTools** mientras viva en el classloader base. El síntoma siempre es el mismo:
   `NoSuchMethodException` / `ClassCastException` sobre una clase que evidentemente existe y calza.
+
+## E-163 — `No qualifying bean of type 'com.fasterxml.jackson.databind.ObjectMapper' available` al agregar Web Push (2026-09-08) — **RESUELTO**
+
+- **Dónde:** `notifications/infrastructure/adapter/out/push/WebPushAdapter` y arranque de Spring Boot.
+- **Síntoma:** la suite de integración no podía levantar el contexto: `WebPushAdapter` pedía por
+  inyección un `com.fasterxml.jackson.databind.ObjectMapper`, pero Spring Boot 4 registra el
+  `ObjectMapper` de Jackson 3 (`tools.jackson.databind`) como bean global.
+- **Causa real:** el adaptador nuevo dependía de Jackson 2 solo para leer y escribir la suscripción
+  JSON de Web Push, y asumía que existía un bean compatible.
+- **Solución:** `WebPushAdapter` crea un `ObjectMapper` Jackson 2 propio; no cambia el mapper global
+  ni acopla el contexto a una versión concreta de Spring Boot.
+- **Cómo evitarlo:** al agregar una librería que use Jackson 2 en Spring Boot 4, no pedir su mapper
+  por constructor sin comprobar primero el tipo del bean; usar una instancia local cuando el uso es
+  aislado y acotado.

@@ -3,5 +3,6 @@ package com.renaser.os.notifications.infrastructure.adapter.out.persistence.toke
 /** Espejo de {@code com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush}. */
 public enum PlataformaPushJpa {
     IOS,
-    ANDROID
+    ANDROID,
+    WEB
 }
