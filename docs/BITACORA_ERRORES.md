@@ -5669,3 +5669,41 @@ Todo lo que se probo antes de eso habia salido bien y no era el problema: la con
 - **Verificación:** el test corrió tres veces seguidas en verde. Con un flaky eso prueba poco por sí
   solo, y conviene decirlo: lo que sostiene el arreglo es el mecanismo —borrada la fila, no queda
   otro competidor—, no las tres corridas.
+
+
+---
+
+## E-165 — Diagnóstico equivocado: se reportó un 500 por EXIF nulo que nunca existió (2026-09-08) — **DESCARTADO**
+
+Se anotó acá un bug que **no existe**. Queda registrado igual, porque el error fue de método y ése
+sí se repite.
+
+**Lo que se afirmó.** Que `POST /api/v1/rocks/{id}/evidence` con `{"tipo":"FOTO","timestampExif":null}`
+respondía **500**, porque `RocaDiariaService.requireExifDentroDeMargen` hace
+`Duration.between(timestampExif, ahora)` sin comprobar null y `Duration.between` hace
+`requireNonNull`.
+
+**Por qué es falso.** Ese método **nunca puede recibir null**. El constructor compacto de
+`CompletarRocaDiariaCommand` ya lo rechaza antes, y el controller construye el comando, así que el
+cliente recibe un **400** limpio:
+
+```
+timestampExif es obligatorio para evidencia de tipo FOTO (Ley VI)
+```
+
+**Cómo se descubrió.** Escribiendo el test de regresión. Falló con *error*, no con *fallo de
+aserción*: la excepción saltó al construir el comando, **fuera** del `assertThatThrownBy`. Ese
+detalle —error y no failure— es la señal de que la excepción llega antes de donde uno cree.
+
+**Cómo evitar que vuelva a pasar.**
+
+- **Leer un método aislado no alcanza para afirmar que algo revienta: hay que seguir a quién lo
+  llama.** Acá se leyó `requireExifDentroDeMargen`, se vio que faltaba el null-check y se dio por
+  cierto el 500 sin mirar el constructor del comando, que está en otro archivo y valida antes.
+- **En este repo los `record` de comando validan en su constructor compacto.** Antes de agregar una
+  guardia en un servicio, revisar si el comando ya la tiene: `CompletarRocaDiariaCommand` valida
+  `contenidoTexto` para TEXTO, `bucket`+`rutaStorage` para lo no textual, `timestampExif` para FOTO
+  y la coherencia del GPS. Una guardia repetida ahí abajo es código muerto.
+- **El test de regresión hizo su trabajo, y por eso se escribe primero.** La regla de que el test
+  tiene que fallar contra el código viejo también sirve para lo contrario: cuando falla contra el
+  código *nuevo* por un motivo inesperado, lo que está mal es el diagnóstico.
