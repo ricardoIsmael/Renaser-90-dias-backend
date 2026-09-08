@@ -386,9 +386,25 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
                 .collect(Collectors.toMap(HorarioSemanal::diaSemana, h -> h));
         var general = loadPreferenciaPort.porParticipanteYHabito(actorId, habitoId).orElse(null);
         var delCatalogo = loadHorarioPort.porHabito(habito.id()).stream().findFirst().orElse(null);
-        LocalTime disparoGeneral = general != null && general.horaDisparo() != null ? general.horaDisparo()
+
+        // El CAMBIO PENDIENTE ya vigente tambien manda, igual que en
+        // `PreferenciaHorarioPersistenceAdapter.porParticipanteHabitosYFecha`.
+        //
+        // > Encontrado probando contra el servidor el 2026-09-07: sin esto, `GET /weekdays` decia
+        // > "sin hora" para el miercoles mientras `GET ?date=<un miercoles>` resolvia 05:00. Dos
+        // > respuestas distintas a la misma pregunta, y la pantalla mostraba la equivocada -- un
+        // > dia en blanco para un habito que ese dia si corre.
+        ProgresoParticipanteHabits progreso = requireProgreso(actorId);
+        LocalDate hoy = clock.now().atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+        var pendiente = loadCambioPendientePort.porParticipanteYHabito(actorId, habitoId)
+                .filter(c -> !c.fechaEfectiva().isAfter(hoy))
+                .orElse(null);
+
+        LocalTime disparoGeneral = pendiente != null && pendiente.horaDisparo() != null ? pendiente.horaDisparo()
+                : general != null && general.horaDisparo() != null ? general.horaDisparo()
                 : delCatalogo != null ? delCatalogo.horaDisparo() : null;
-        LocalTime limiteGeneral = general != null && general.horaLimite() != null ? general.horaLimite()
+        LocalTime limiteGeneral = pendiente != null && pendiente.horaLimite() != null ? pendiente.horaLimite()
+                : general != null && general.horaLimite() != null ? general.horaLimite()
                 : delCatalogo != null ? delCatalogo.horaLimite() : null;
 
         List<DiaDeLaSemana> dias = new ArrayList<>();
