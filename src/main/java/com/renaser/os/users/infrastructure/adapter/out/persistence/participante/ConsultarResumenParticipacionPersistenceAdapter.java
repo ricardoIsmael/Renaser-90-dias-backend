@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.out.persistence.participante;
 
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.ParticipacionPrograma;
@@ -40,11 +41,12 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                    COALESCE(pp.dia_programa, 0) AS dia_programa,
                    pp.fecha_inicio,
                    COALESCE(pp.timezone, 'America/Lima') AS timezone,
-                   COALESCE(pp.fase::text, 'FASE_1_RENACER') AS fase,
                    pp.celula_id,
                    pp.mentor_id,
                    u.rol,
-                   u.estado
+                   u.estado,
+                   pp.programa_activado_en,
+                   COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa
             FROM renaser.usuarios u
             LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
             WHERE u.id = ?1
@@ -67,7 +69,10 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             """;
 
     private static final String QUERY_ACTIVOS_POR_ROL_CON_DIA = """
-            SELECT u.id, pp.dia_programa
+            SELECT u.id, pp.dia_programa, pp.fecha_inicio,
+                   COALESCE(pp.timezone, 'America/Lima') AS timezone,
+                   pp.programa_activado_en,
+                   COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa
             FROM renaser.usuarios u
             LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
             WHERE u.estado = 'ACTIVO' AND u.rol = ANY (CAST(?1 AS renaser.rol_usuario[]))
@@ -88,8 +93,10 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
     private static final String QUERY_LISTAR_APRENDICES = """
             SELECT u.id, u.nombre_completo, u.email, u.estado,
                    COALESCE(pp.dia_programa, 0) AS dia_programa,
-                   COALESCE(pp.fase::text, 'FASE_1_RENACER') AS fase,
-                   pp.celula_id, pp.mentor_id
+                   pp.celula_id, pp.mentor_id, pp.fecha_inicio,
+                   COALESCE(pp.timezone, 'America/Lima') AS timezone,
+                   pp.programa_activado_en,
+                   COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa
             FROM renaser.usuarios u
             LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
             WHERE u.rol = 'APRENDIZ'
@@ -102,9 +109,11 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             """;
 
     private final EntityManager entityManager;
+    private final Clock clock;
 
-    ConsultarResumenParticipacionPersistenceAdapter(EntityManager entityManager) {
+    ConsultarResumenParticipacionPersistenceAdapter(EntityManager entityManager, Clock clock) {
         this.entityManager = entityManager;
+        this.clock = clock;
     }
 
     @Override
@@ -176,7 +185,9 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                 .getResultList();
         return filas.stream()
                 .map(fila -> new ParticipacionProgramaFinder.UsuarioConDiaPrograma(UserId.of(aUuid(fila[0])),
-                        fila[1] == null ? null : ((Number) fila[1]).intValue()))
+                        fila[1] == null ? null
+                                : diaVigente((Number) fila[1], aLocalDate(fila[2]), aZona(fila[3]), fila[4],
+                                        (Number) fila[5])))
                 .collect(Collectors.toList());
     }
 
@@ -231,13 +242,13 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
         String fullName = String.valueOf(fila[1]);
         String email = String.valueOf(fila[2]);
         boolean suspendido = "SUSPENDIDO".equals(String.valueOf(fila[3]));
-        int diaPrograma = ((Number) fila[4]).intValue();
-        FasePrograma fase = mapearFase(String.valueOf(fila[5]));
-        UUID celulaId = fila[6] == null ? null : aUuid(fila[6]);
-        UserId mentorId = fila[7] == null ? null : UserId.of(aUuid(fila[7]));
+        UUID celulaId = fila[5] == null ? null : aUuid(fila[5]);
+        UserId mentorId = fila[6] == null ? null : UserId.of(aUuid(fila[6]));
+        int diaPrograma = diaVigente((Number) fila[4], aLocalDate(fila[7]), aZona(fila[8]), fila[9],
+                (Number) fila[10]);
         return new ResumenTraineeAdmin(id, fullName, email,
                 suspendido ? UserStatus.SUSPENDED : UserStatus.ACTIVE,
-                diaPrograma, fase, celulaId, mentorId);
+                diaPrograma, FasePrograma.paraDiaPrograma(diaPrograma), celulaId, mentorId);
     }
 
     /**
@@ -247,16 +258,54 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
      */
     private ParticipacionPrograma aResumen(UserId usuarioId, Object[] fila) {
         boolean inscrito = Boolean.TRUE.equals(fila[0]);
-        int diaPrograma = ((Number) fila[1]).intValue();
         LocalDate fechaInicio = inscrito ? aLocalDate(fila[2]) : null;
-        ZoneId zona = fila[3] == null ? ZONA_POR_DEFECTO : ZoneId.of(String.valueOf(fila[3]));
-        FasePrograma fase = mapearFase(String.valueOf(fila[4]));
-        UUID celulaId = fila[5] == null ? null : aUuid(fila[5]);
-        UserId mentorId = fila[6] == null ? null : UserId.of(aUuid(fila[6]));
-        UserRole rol = mapearRol(String.valueOf(fila[7]));
-        boolean suspendido = "SUSPENDIDO".equals(String.valueOf(fila[8]));
-        return new ParticipacionPrograma(usuarioId, inscrito, diaPrograma, fechaInicio, zona, fase, celulaId,
-                mentorId, rol, suspendido);
+        ZoneId zona = aZona(fila[3]);
+        UUID celulaId = fila[4] == null ? null : aUuid(fila[4]);
+        UserId mentorId = fila[5] == null ? null : UserId.of(aUuid(fila[5]));
+        UserRole rol = mapearRol(String.valueOf(fila[6]));
+        boolean suspendido = "SUSPENDIDO".equals(String.valueOf(fila[7]));
+        int diaPrograma = diaVigente((Number) fila[1], fechaInicio, zona, fila[8], (Number) fila[9]);
+        return new ParticipacionPrograma(usuarioId, inscrito, diaPrograma, fechaInicio, zona,
+                FasePrograma.paraDiaPrograma(diaPrograma), celulaId, mentorId, rol, suspendido);
+    }
+
+    /**
+     * <b>El dia de programa que se DEVUELVE, derivado de las fechas</b> (A-1, 2026-09-08).
+     *
+     * <p>Antes esta proyeccion devolvia {@code participantes_programa.dia_programa} crudo, y esa
+     * columna la escribe UNICAMENTE {@code AvanzarDiaProgramaScheduler}. V20 hizo el dia derivado
+     * "en el dominio", pero el camino de lectura —{@code GET /api/v1/home}, el panel admin y los
+     * 7 modulos que consumen {@code ParticipacionProgramaFinder}— seguia leyendo lo ultimo que
+     * alguien hubiera guardado. Efecto real (E-91 otra vez, por otra puerta): si el backend no
+     * estuvo arriba en el minuto :05 de la hora que cruza la medianoche del participante, la app
+     * muestra <b>dia 0</b> todo el dia aunque el dominio sepa que va por el 2. Derivar aca lo
+     * vuelve independiente de que el barrido haya corrido.
+     *
+     * <p><b>Cuando NO se deriva</b>: mientras el reloj no arranco (sin {@code programa_activado_en},
+     * o con {@code fecha_inicio} en el futuro) manda la columna, no un 0. Es la misma distincion
+     * que hace {@code ParticipacionPrograma.sincronizarDiaDelPrograma}: un participante
+     * pre-activacion conserva el dia que un ADMIN le haya fijado a mano.
+     *
+     * <p>La cuenta NO se copia aca: la hace {@code ParticipacionPrograma.diaProgramaDerivado},
+     * el mismo metodo que usa el barrido.
+     */
+    private int diaVigente(Number diaAlmacenado, LocalDate fechaInicio, ZoneId zona, Object programaActivadoEn,
+                           Number diasAjuste) {
+        int almacenado = diaAlmacenado == null ? 0 : diaAlmacenado.intValue();
+        if (programaActivadoEn == null || fechaInicio == null) {
+            return almacenado;
+        }
+        LocalDate hoyEnSuZona = clock.now().atZone(zona).toLocalDate();
+        if (fechaInicio.isAfter(hoyEnSuZona)) {
+            return almacenado;
+        }
+        return com.renaser.os.users.domain.model.participante.ParticipacionPrograma.diaProgramaDerivado(
+                fechaInicio, hoyEnSuZona, diasAjuste == null ? 0 : diasAjuste.intValue(), true);
+    }
+
+    /** `timezone` es NULL para quien no tiene fila de programa: mismo default que la columna. */
+    private static ZoneId aZona(Object valor) {
+        return valor == null ? ZONA_POR_DEFECTO : ZoneId.of(String.valueOf(valor));
     }
 
     private static LocalDate aLocalDate(Object valor) {
@@ -280,15 +329,6 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
     }
 
     /** Espejo de FaseProgramaJpa (este mismo paquete). */
-    private static FasePrograma mapearFase(String faseCruda) {
-        return switch (faseCruda) {
-            case "FASE_1_RENACER" -> FasePrograma.PHASE_1_REBIRTH;
-            case "FASE_2_DESARROLLO" -> FasePrograma.PHASE_2_DEVELOPMENT;
-            case "FASE_3_GUERRERO_ALQUIMISTA" -> FasePrograma.PHASE_3_ALCHEMIST_WARRIOR;
-            case "FASE_4_ASCENSION" -> FasePrograma.PHASE_4_ASCENSION;
-            default -> throw new IllegalStateException("Fase de programa desconocida: " + faseCruda);
-        };
-    }
 
     /** Espejo de `users/infrastructure/adapter/out/persistence/user/RolUsuarioJpa.java`. */
     private static UserRole mapearRol(String rolCrudo) {

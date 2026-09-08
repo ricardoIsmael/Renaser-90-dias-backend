@@ -86,17 +86,29 @@ public final class Habito {
     }
 
     /** El {@code id} entra por parametro: lo genera el caso de uso con el puerto {@code IdGenerator}. */
+    /** Firma historica: un habito propio sin icono elegido cae en el de su categoria. */
     public static Habito crearPersonal(HabitoId id, UserId participanteId, String titulo, TipoHabito tipo,
                                         String categoriaClave, PlantillaHabitoPersonal plantilla, String etiquetaMeta,
                                         Instant ahora) {
+        return crearPersonal(id, participanteId, titulo, tipo, categoriaClave, plantilla, etiquetaMeta, null, ahora);
+    }
+
+    /**
+     * Con icono elegido por el aprendiz (2026-09-07). `icono_clave` existe en la tabla desde el
+     * baseline y el alta personal nunca la escribia: los habitos propios nacian sin icono y el
+     * movil les ponia el de la categoria, o sea el mismo para todos los de una dimension.
+     */
+    public static Habito crearPersonal(HabitoId id, UserId participanteId, String titulo, TipoHabito tipo,
+                                        String categoriaClave, PlantillaHabitoPersonal plantilla, String etiquetaMeta,
+                                        String iconoClave, Instant ahora) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio para un habito PERSONAL");
         // desactivable = true: un habito propio SIEMPRE lo puede quitar su dueno. Los unicos no
         // desactivables son los cuatro del catalogo que marca V18__habitos_desactivable.sql.
         // diaLimiteEdicionLibre = null: no aplica a un habito personal (es del catalogo de sistema).
         return new Habito(id, AmbitoHabito.PERSONAL, participanteId, requireTitulo(titulo), null, tipo,
-                requireCategoria(categoriaClave), null, null, ExigenciaEvidencia.OPCIONAL, false, false, true, false,
-                null, null, plantilla, etiquetaMeta, true, ahora, ahora);
+                requireCategoria(categoriaClave), iconoClave, null, ExigenciaEvidencia.OPCIONAL, false, false, true,
+                false, null, null, plantilla, etiquetaMeta, true, ahora, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */

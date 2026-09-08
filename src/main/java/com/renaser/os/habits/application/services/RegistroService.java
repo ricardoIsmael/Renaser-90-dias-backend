@@ -6,19 +6,20 @@ import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseC
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ExpirarRegistrosVencidosUseCase;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
+import com.renaser.os.habits.application.ports.out.desbloqueo.LoadDesbloqueoHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
-import com.renaser.os.habits.application.ports.out.desbloqueo.LoadDesbloqueoHabitoPort;
 import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.horario.HorarioResuelto;
 import com.renaser.os.habits.domain.model.politica.ContextoCompletar;
 import com.renaser.os.habits.domain.model.politica.DecisionPolitica;
 import com.renaser.os.habits.domain.model.politica.GestoCompletar;
@@ -52,9 +53,11 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Servicio del agregado `registro/` — el corazon del modulo. Integra
@@ -182,14 +185,39 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         // PAUSADO o todavia no le toca. Un habito sin fila en `desbloqueos_habito` se sigue
         // generando como siempre. Filtrar por "esta en el plan" habria dejado a TODO el padron
         // sin habitos de un dia para el otro, porque hoy esa tabla esta vacia para todos.
+        ZoneId zona = ZoneId.of(progreso.timezone());
         Set<HabitoId> fueraDelPlanDeHoy = loadDesbloqueoPort.deParticipante(participanteId).stream()
                 // `estaPausadoEl(fecha)` y no `estaPausado()`: desde V31 una pausa puede tener
                 // fecha de fin, y pasada esa fecha el habito vuelve a generarse SOLO — la
                 // reanudacion se deriva del calendario, no la ejecuta ningun cron.
-                .filter(d -> d.estaPausadoEl(fecha) || d.diaDesbloqueo() > progreso.diaPrograma())
+                //
+                // La zona entra por parametro desde 2026-09-07: la pausa tambien tiene extremo de
+                // ABAJO (`pausadoEn`), y sin el apagaba retroactivamente todos los dias anteriores.
+                .filter(d -> d.estaPausadoEl(fecha, zona) || d.diaDesbloqueo() > progreso.diaPrograma())
                 .map(DesbloqueoHabito::habitoId)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
 
+        // V38: los que el aprendiz apago para ESE dia. Se suman al mismo conjunto de descarte
+        // porque responden la misma pregunta que la pausa y el dia de desbloqueo — "¿va hoy?" —, y
+        // asi el bucle de abajo sigue teniendo un solo lugar donde mirar.
+        fueraDelPlanDeHoy.addAll(loadPreferenciaPort.habitosApagadosEn(participanteId, fecha));
+        // V40: y los que apago para ESE dia de la semana, todas las semanas. `fecha` ya viene en la
+        // zona del participante, asi que el dia sale de ella y NO se recalcula en ningun otro lado
+        // — ahi es por donde volveria a entrar E-91.
+        fueraDelPlanDeHoy.addAll(
+                loadPreferenciaPort.habitosApagadosEnDiaSemana(participanteId, fecha.getDayOfWeek()));
+
+        // Las preferencias se cargan SIEMPRE, tambien con `horaDeCorte` nulo.
+        //
+        // Antes el barrido nocturno recibia un mapa vacio, y era inocuo mientras lo unico que se
+        // hacia con el fuera descartar por hora de cierre (`sigueAlcanzable` no filtra nada sin
+        // corte). Dejo de serlo el dia que el horario por fecha empezo a decidir cosas: el cron de
+        // las 05:02 UTC es la via por la que se generan los tracks de TODO el padron, asi que un
+        // horario que solo se lee en el camino a demanda funciona probandolo a mano por HTTP y no
+        // funciona en produccion para nadie.
+        var preferencias = loadPreferenciaPort.porParticipanteHabitosYFecha(participanteId,
+                        catalogo.stream().map(Habito::id).toList(), fecha).stream()
+                        .collect(Collectors.toMap(PreferenciaHorario::habitoId, p -> p));
         List<RegistroHabito> generados = new ArrayList<>();
         for (Habito habito : catalogo) {
             if (fueraDelPlanDeHoy.contains(habito.id())) {
@@ -200,7 +228,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
             }
             boolean aplicaHoy = loadHorarioPort.porHabito(habito.id()).stream()
                     .filter(h -> h.aplicaEnDia(progreso.diaPrograma(), tipoDia))
-                    .anyMatch(h -> sigueAlcanzable(h, horaDeCorte));
+                    .anyMatch(h -> sigueAlcanzable(h, preferencias.get(habito.id()), horaDeCorte));
             if (!aplicaHoy) {
                 continue;
             }
@@ -217,9 +245,10 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
      * dia) o si esa hora todavia no paso. Con {@code horaDeCorte} nulo no se filtra nada:
      * es el caso del barrido nocturno, que genera el dia entero por adelantado.
      */
-    private boolean sigueAlcanzable(HorarioHabito horario, LocalTime horaDeCorte) {
-        return horaDeCorte == null || horario.horaLimite() == null
-                || horario.horaLimite().isAfter(horaDeCorte);
+    private boolean sigueAlcanzable(HorarioHabito horario, PreferenciaHorario preferencia, LocalTime horaDeCorte) {
+        var resuelto = HorarioResuelto.de(horario, preferencia);
+        return horaDeCorte == null || resuelto.horaLimite() == null
+                || resuelto.horaLimite().isAfter(horaDeCorte);
     }
 
     @Override
@@ -331,8 +360,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         LocalTime horaDisparo = vigente != null ? vigente.horaDisparo() : null;
         LocalTime horaLimite = vigente != null ? vigente.horaLimite() : null;
 
-        Optional<PreferenciaHorario> pref = loadPreferenciaPort.porParticipanteYHabito(registro.participanteId(),
-                habito.id());
+        Optional<PreferenciaHorario> pref = loadPreferenciaPort.porParticipanteHabitoYFecha(registro.participanteId(),
+                habito.id(), registro.fechaEjecucion());
         if (pref.isPresent()) {
             if (pref.get().horaDisparo() != null) {
                 horaDisparo = pref.get().horaDisparo();

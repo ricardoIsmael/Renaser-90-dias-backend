@@ -27,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -212,8 +213,8 @@ class DesbloqueoHabitoServiceTest {
         assertThat(pausado.pausadoHasta()).isEqualTo(hastaElDomingo);
         // Sigue pausado el ultimo dia (inclusive) y vuelve solo al siguiente, igual que un habito
         // de catalogo: la regla de V31 no cambia por ser un habito propio.
-        assertThat(pausado.estaPausadoEl(hastaElDomingo)).isTrue();
-        assertThat(pausado.estaPausadoEl(hastaElDomingo.plusDays(1))).isFalse();
+        assertThat(pausado.estaPausadoEl(hastaElDomingo, ZoneId.of("America/Lima"))).isTrue();
+        assertThat(pausado.estaPausadoEl(hastaElDomingo.plusDays(1), ZoneId.of("America/Lima"))).isFalse();
         verify(savePort).save(fila);
     }
 

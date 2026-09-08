@@ -112,7 +112,7 @@ class TracksDelDiaProyeccionServiceTest {
         when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(horario));
         when(loadGuiaPort.porHabitos(any())).thenReturn(List.of(guiaTemprana, guiaTardia));
-        when(loadPreferenciaPort.porParticipanteYHabitos(any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
 
         List<TrackDelDiaConCatalogo> resultado = service.consultar(actor, actor, registro.fechaEjecucion());
 
@@ -126,7 +126,7 @@ class TracksDelDiaProyeccionServiceTest {
         verify(loadHabitoPort, times(1)).porIds(any());
         verify(loadHorarioPort, times(1)).porHabitos(any());
         verify(loadGuiaPort, times(1)).porHabitos(any());
-        verify(loadPreferenciaPort, times(1)).porParticipanteYHabitos(any(), any());
+        verify(loadPreferenciaPort, times(1)).porParticipanteHabitosYFecha(any(), any(), any());
     }
 
     @Test
@@ -144,7 +144,7 @@ class TracksDelDiaProyeccionServiceTest {
         when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(horario));
         when(loadGuiaPort.porHabitos(any())).thenReturn(List.of());
-        when(loadPreferenciaPort.porParticipanteYHabitos(any(), any())).thenReturn(List.of(preferencia));
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of(preferencia));
 
         TrackDelDiaConCatalogo vista = service.consultar(actor, actor, registro.fechaEjecucion()).get(0);
 

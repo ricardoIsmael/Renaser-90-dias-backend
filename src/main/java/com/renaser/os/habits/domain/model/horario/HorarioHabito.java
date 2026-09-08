@@ -50,9 +50,9 @@ public final class HorarioHabito {
         if (diaFin != null && diaFin < diaInicio) {
             throw new IllegalArgumentException("diaFin no puede ser anterior a diaInicio");
         }
-        requireHorasCoherentes(horaDisparo, horaLimite);
-        return new HorarioHabito(id, habitoId, diaInicio, diaFin, tipoDia, horaDisparo,
-                horaLimite, ahora, ahora);
+        LocalTime disparo = VentanaDelDia.requireHoraDisparoDentroDelDia(horaDisparo);
+        return new HorarioHabito(id, habitoId, diaInicio, diaFin, tipoDia, disparo,
+                VentanaDelDia.horaLimiteAjustada(disparo, horaLimite), ahora, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */
@@ -70,25 +70,11 @@ public final class HorarioHabito {
     }
 
     public void actualizarHoras(LocalTime horaDisparo, LocalTime horaLimite, Instant ahora) {
-        requireHorasCoherentes(horaDisparo, horaLimite);
-        this.horaDisparo = horaDisparo;
-        this.horaLimite = horaLimite;
+        this.horaDisparo = VentanaDelDia.requireHoraDisparoDentroDelDia(horaDisparo);
+        this.horaLimite = VentanaDelDia.horaLimiteAjustada(this.horaDisparo, horaLimite);
         this.actualizadoEn = ahora;
     }
 
-    /**
-     * Invariante del agregado, no solo una anotacion de DTO (CLAUDE.MD §5.3, encargo
-     * "habits-personal-con-horario"): si las dos horas vienen cargadas, la de limite tiene
-     * que ser posterior a la de disparo — si no, el habito nace vencido y nunca se puede
-     * completar. {@code horaDisparo} nulo (horario "todo el dia") sigue permitido, igual que
-     * hoy: esto no endurece el caso ya usado por el catalogo admin, solo cierra el caso
-     * absurdo de limite &lt;= disparo cuando ambas vienen cargadas.
-     */
-    private static void requireHorasCoherentes(LocalTime horaDisparo, LocalTime horaLimite) {
-        if (horaDisparo != null && horaLimite != null && !horaLimite.isAfter(horaDisparo)) {
-            throw new IllegalArgumentException("horaLimite debe ser posterior a horaDisparo");
-        }
-    }
 
     /** Edicion administrativa del rango de dias/tipo de dia (panel admin, hueco #11). */
     public void actualizarRango(int diaInicio, Integer diaFin, TipoDia tipoDia, Instant ahora) {

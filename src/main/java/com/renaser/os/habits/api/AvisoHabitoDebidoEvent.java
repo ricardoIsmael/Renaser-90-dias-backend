@@ -14,11 +14,10 @@ import java.util.UUID;
  * `habits` decide QUE avisar y CUANDO, `notifications` decide COMO se entrega. Este modulo no
  * conoce la bandeja ni el push.
  *
- * <p><b>Estado actual del push (decision del dueno, 2026-09-05):</b> el aviso genera la
- * notificacion REAL y visible dentro de la app (fila en {@code notificaciones}); el push al
- * telefono NO. {@code PushPort} solo tiene {@code NoOpPushAdapter} — no hay FCM ni Expo
- * conectado, y conectarlo queda explicitamente fuera de alcance. El dia que exista un adaptador
- * real, este evento ya llega al lugar correcto y no hay que tocar `habits`.
+ * <p><b>Entrega push (2026-09-08):</b> el aviso genera la notificacion REAL y visible dentro de
+ * la app (fila en {@code notificaciones}) y tambien puede entregarse por Web Push si la persona
+ * registro su navegador. {@code habits} solo publica este evento: no conoce VAPID, navegadores ni
+ * proveedores externos.
  *
  * @param tipoAviso        espejo de {@code TipoAvisoHabito} como String, por el mismo motivo que
  *                         {@code HabitoDelDiaResumen.estado}: no filtrar un tipo interno de

@@ -1,0 +1,182 @@
+# Verificación de Training contra el servidor real — 2026-09-07
+
+Prueba de punta a punta contra el backend corriendo (`192.168.18.46:8080`) y la base de dev, con la
+cuenta del dueño. No es la suite automática: es el sistema real respondiendo a peticiones reales.
+
+Todo lo que sigue **se ejecutó**; ningún resultado está estimado.
+
+## Resumen
+
+| | |
+|---|---|
+| Casos ejecutados | 22 |
+| Pasaron | 21 |
+| Encontraron un defecto | 1 (corregido, ver §4) |
+| Suite automática después del arreglo | 56 pruebas, 0 fallos |
+
+**Recomendación: se puede subir**, con las tres salvedades de §6.
+
+---
+
+## 1. Sesión y estado de la cuenta
+
+| Caso | Esperado | Obtenido |
+|---|---|---|
+| `POST /auth/login` | 200 + token en cabecera `X-Auth-Token` | ✅ |
+| `GET /home` | día de programa real | ✅ `diaPrograma = 0`, `fase = PHASE_1_REBIRTH`, `inscrito = true` |
+
+`diaPrograma = 0` confirma que el **"DÍA 1 DE 90"** que mostraba la app era un valor inventado por el
+cliente cuando la carga fallaba (`?? 1`), no un dato del servidor. Ya corregido: sin dato muestra
+`DÍA — DE 90`.
+
+## 2. Hora por día de la semana (V39) — el pedido central
+
+Configuración en la base para `DESPERTAR`: jueves 06:00, viernes 07:00, sábado 06:00, domingo 06:00.
+Más un cambio general a 05:00 con fecha efectiva 2026-09-08.
+
+Se pidió `GET /habit-preferences?date=` para ocho fechas consecutivas:
+
+| Fecha | Resolvió | Por qué |
+|---|---|---|
+| lun 2026-09-07 (hoy) | sin hora | el cambio a 05:00 rige **desde mañana** — D-91, el día en curso no se reacomoda |
+| mar 2026-09-08 | 05:00 | ya rige el cambio general |
+| mié 2026-09-09 | 05:00 | ídem |
+| **jue 2026-09-10** | **06:00** | hora propia del jueves |
+| **vie 2026-09-11** | **07:00** | hora propia del viernes |
+| **sáb 2026-09-12** | **06:00** | hora propia |
+| **dom 2026-09-13** | **06:00** | hora propia |
+| lun 2026-09-14 | 05:00 | vuelve al general |
+
+La cadena completa resolviendo bien: **fecha exacta > día de semana > cambio pendiente vigente >
+preferencia general > catálogo**. Y el día en curso respetando D-91 sin que nadie lo pidiera acá.
+
+## 3. Apagar y volver a encender un día (V40)
+
+| Paso | Resultado |
+|---|---|
+| `DELETE /weekdays/WEDNESDAY/active` | 204 |
+| `GET /weekdays` después | `activo=false`, `propio=true` |
+| Fila en la base | `activo=false`, `hora_disparo=NULL` |
+| `DELETE /weekdays/WEDNESDAY` (volver a encender) | 204 |
+| `GET /weekdays` después | `activo=true`, `propio=false` |
+
+Apagar **no borra la hora** y volver a encender deja el día como estaba. Idempotente en las dos
+direcciones.
+
+## 4. El defecto que apareció, y su corrección
+
+**Síntoma.** Para el mismo miércoles, dos endpoints daban respuestas distintas:
+
+```
+GET /habit-preferences/{id}/weekdays   ->  MIÉ: sin hora
+GET /habit-preferences?date=2026-09-09 ->  MIÉ: 05:00
+```
+
+**Causa.** La vista semanal componía el respaldo con la preferencia general y el catálogo, y **se
+salteaba el cambio general pendiente ya vigente**, que la resolución por fecha sí considera. Dos
+implementaciones de la misma precedencia, separadas.
+
+**Consecuencia real.** La app habría pintado el miércoles en blanco (`·`) para un hábito que ese día
+sí corre a las 05:00. La clase exacta de mentira silenciosa que este trabajo vino a eliminar.
+
+**Corrección.** `consultar` ahora carga el cambio pendiente y lo aplica cuando su fecha efectiva ya
+pasó, con el mismo criterio que el adaptador. Verificado: 56 pruebas en verde después del cambio.
+
+## 5. Casos adversos
+
+Todos devolvieron lo esperado:
+
+| Caso | Esperado | Obtenido |
+|---|---|---|
+| Apagar un hábito **obligatorio** del programa | 409 | ✅ 409 |
+| Día de la semana inventado (`LUNES` en vez de `MONDAY`) | 400 | ✅ 400 |
+| Hora límite anterior a la de disparo | 400 | ✅ 400 |
+| `triggerTime` ausente | 400 | ✅ 400 |
+| Sin token de sesión | 401/403 | ✅ 403 |
+| Hábito inexistente | 404 | ✅ 404 |
+| Borrar un día que no tiene hora propia | 204 (idempotente) | ✅ 204 |
+
+El 409 del obligatorio confirma el candado que acota la objeción de V31: un hábito del programa se
+puede mover de hora, **no sacar**.
+
+## 6. Salvedades antes de producción
+
+**1. Orden de despliegue: backend primero.** La app publicada no conoce los días apagados; un hábito
+sin generar le va a parecer que falta. Con el backend adelante, la app vieja sigue funcionando
+(todos los campos nuevos son aditivos y los esquemas zod usan `.passthrough()`), pero al revés no.
+
+**2. ~~La cuota no cubre esta vía.~~ CERRADO el mismo día.** El argumento con el que se había
+dejado afuera —"un patrón semanal no tiene fecha efectiva"— era falso: la tiene, y es la próxima vez
+que caiga ese día. Fijar la hora de un día ahora consume el cupo semanal y queda registrado en
+`historial_cambios_horario`, así que cuenta para los siguientes. Apagar un día sigue siendo gratis,
+y eso sí es deliberado: es hermano de la pausa, que nunca cobró cupo.
+
+**3. Sin probar en producción real:** el barrido nocturno con estos datos. Está cubierto por pruebas
+—incluida una que corre contra Postgres real por el mismo método que usa el cron— pero nunca corrió
+un 05:02 UTC con filas de `horario_semanal_habito` en la base. Es el riesgo #1 del plan y la primera
+noche conviene mirar el log del scheduler.
+
+## 7. Cómo repetir esto
+
+```bash
+./scripts/verificar-training.sh            # foto de la base
+./scripts/verificar-training.sh DESPERTAR  # filtrado por hábito
+```
+
+Muestra el horario general, el de cada día de la semana, las excepciones por fecha, las pausas, los
+registros de hoy y los hábitos propios. **No afirma que nada esté bien**: muestra lo que hay, para
+compararlo con lo que la pantalla dijo que hizo.
+
+---
+
+# Adenda — verificación por FLUJOS (2026-09-08)
+
+Lo de arriba probó 22 casos. Un caso responde "¿este endpoint hace lo suyo?"; un flujo responde
+"¿la secuencia que hace una persona termina donde esa persona creía?". Son preguntas distintas, y
+casi todos los defectos de esta pantalla vivían en la segunda: el check que no guardaba, las
+pastillas de días que el guardado ignoraba y la vista semanal del §4 pasaban los tres una prueba de
+"responde 200".
+
+`scripts/flujos-training.sh` — **9 flujos, 37 comprobaciones**. Cada paso mira la base **y mira que
+lo de al lado no se haya movido**. Copia las filas del participante en cuatro tablas al empezar y
+las repone al terminar, pase lo que pase (`trap EXIT`).
+
+| Flujo | Qué recorre | |
+|---|---|---|
+| 1 | Abro la app y entro a Training | 3/3 |
+| 2 | «Los lunes me levanto más temprano» | 5/5 |
+| 3 | «Los miércoles no lo hago» — y me arrepiento | 6/6 |
+| 4 | Intento sacarme un hábito **obligatorio** | 4/4 |
+| 5 | «Este martes puntual no puedo» (no se repite) | 4/4 |
+| 6 | La pantalla pinta la semana entera | 4/4 |
+| 7 | Cambio la hora y dejo un recordatorio | 4/4 |
+| 8 | Datos mal formados no ensucian la base | 5/5 |
+| 9 | Sin sesión no se lee ni se escribe nada | 2/2 |
+
+**Primera corrida: 36/37.** El que falló fue el 7 y era un defecto real — el recordatorio volvía
+encendido y sin los minutos. Está en la bitácora como **E-159**, con la corrección. **Segunda
+corrida, con el arreglo: 37/37**, y suite completa en 2570 pruebas, 0 fallos.
+
+## Lo que el flujo 2 confirmó y el §6.2 dejaba abierto
+
+Fijar la hora de un día de la semana **consume el cupo** (queda en `historial_cambios_horario`) y
+**apagar un día no lo consume**. Ya no es una afirmación de diseño: se ejecuta y se comprueba en la
+base en cada corrida.
+
+## Residuo conocido de E-159
+
+En la base de dev quedó `DESPERTAR` con `recordatorio_activo = true` y `minutos_recordatorio =
+NULL`, de una prueba anterior al arreglo. **No hay que limpiarlo:** el cliente lee null como 0 —"a
+la hora exacta"—, así que la fila es coherente. Lo único que se perdió es la intención de quien
+hubiera pedido una antelación distinta **antes** del arreglo. Si en producción aparecen filas así,
+significan eso, no corrupción.
+
+## Cómo repetirlo
+
+```bash
+RENASER_EMAIL=... RENASER_PASS=... ./scripts/flujos-training.sh http://localhost:8080
+```
+
+Las credenciales van por variable de entorno: no se escriben en disco ni quedan en el historial del
+shell si se exportan antes. Correlo contra dev, nunca contra producción — escribe de verdad, y sólo
+después repone.

@@ -1,5 +1,6 @@
 package com.renaser.os.habits.domain.model.preferencia;
 
+import com.renaser.os.habits.domain.model.horario.VentanaDelDia;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.UserId;
 import lombok.AccessLevel;
@@ -40,7 +41,11 @@ public final class CambioHorarioPendiente {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Objects.requireNonNull(habitoId, "habitoId es obligatorio");
         Objects.requireNonNull(fechaEfectiva, "fechaEfectiva es obligatoria");
-        return new CambioHorarioPendiente(participanteId, habitoId, horaDisparo, horaLimite, recordatorioActivo,
+        // D-122: el cambio diferido se normaliza al programarlo, no al promoverlo. Si no, la
+        // ventana que se guarda hoy y la que rige maniana serian dos datos distintos (E-159).
+        LocalTime disparo = VentanaDelDia.requireHoraDisparoDentroDelDia(horaDisparo);
+        return new CambioHorarioPendiente(participanteId, habitoId, disparo,
+                VentanaDelDia.horaLimiteAjustada(disparo, horaLimite), recordatorioActivo,
                 minutosRecordatorio, fechaEfectiva, ahora);
     }
 

@@ -1,5 +1,12 @@
 # Pruebas
 
+## Ejecución en esta laptop (2026-09-07)
+
+Por indicación del usuario, los contenedores de pruebas deben correr en Testcontainers Cloud;
+Maven y Java permanecen locales. Usar `./scripts/test-cloud.sh` para `clean verify`.
+Si falta conexión/token, no volver a Docker local: completar las verificaciones sin contenedores
+que sean útiles e informar qué integración queda pendiente. Ver `docs/PRUEBAS_EN_CLOUD.md`.
+
 ## La regla que no se negocia
 
 **Toda tarea que toque código termina con `./mvnw clean verify` ejecutado y en verde.** No se reporta

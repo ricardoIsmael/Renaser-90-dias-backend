@@ -1,5 +1,6 @@
 package com.renaser.os.habits.domain.model.preferencia;
 
+import com.renaser.os.habits.domain.model.horario.VentanaDelDia;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.UserId;
 import lombok.AccessLevel;
@@ -40,7 +41,9 @@ public final class PreferenciaHorario {
                                             LocalTime horaLimite, Instant ahora) {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Objects.requireNonNull(habitoId, "habitoId es obligatorio");
-        return new PreferenciaHorario(participanteId, habitoId, horaDisparo, horaLimite, true, null, ahora, ahora);
+        LocalTime disparo = VentanaDelDia.requireHoraDisparoDentroDelDia(horaDisparo);
+        return new PreferenciaHorario(participanteId, habitoId, disparo,
+                VentanaDelDia.horaLimiteAjustada(disparo, horaLimite), true, null, ahora, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */
@@ -52,8 +55,8 @@ public final class PreferenciaHorario {
     }
 
     public void aplicarAhora(LocalTime horaDisparo, LocalTime horaLimite, Instant ahora) {
-        this.horaDisparo = horaDisparo;
-        this.horaLimite = horaLimite;
+        this.horaDisparo = VentanaDelDia.requireHoraDisparoDentroDelDia(horaDisparo);
+        this.horaLimite = VentanaDelDia.horaLimiteAjustada(this.horaDisparo, horaLimite);
         this.actualizadoEn = ahora;
     }
 

@@ -7,6 +7,9 @@ import com.renaser.os.habits.application.ports.out.habito.SaveHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.SaveHorarioHabitoPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
+import com.renaser.os.habits.application.ports.out.preferencia.SavePreferenciaHorarioPort;
+import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
+import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
@@ -21,11 +24,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -44,18 +49,21 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
     private final SaveHorarioHabitoPort saveHorarioPort;
     private final LoadHorarioHabitoPort loadHorarioPort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
+    private final SavePreferenciaHorarioPort savePreferenciaPort;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
     public MisHabitosService(LoadHabitoPort loadPort, SaveHabitoPort savePort,
                               SaveHorarioHabitoPort saveHorarioPort, LoadHorarioHabitoPort loadHorarioPort,
-                              ConsultarProgresoParticipanteHabitsPort progresoPort, Clock clock,
+                              ConsultarProgresoParticipanteHabitsPort progresoPort,
+                              SavePreferenciaHorarioPort savePreferenciaPort, Clock clock,
                               IdGenerator idGenerator) {
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.saveHorarioPort = saveHorarioPort;
         this.loadHorarioPort = loadHorarioPort;
         this.progresoPort = progresoPort;
+        this.savePreferenciaPort = savePreferenciaPort;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
@@ -163,15 +171,46 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         HabitoId id = HabitoId.of(idGenerator.newId());
         Habito habito = Habito.crearPersonal(id, command.actorId(), command.titulo(), command.tipo(),
-                command.categoriaClave(), command.plantilla(), command.etiquetaMeta(), clock.now());
+                command.categoriaClave(), command.plantilla(), command.etiquetaMeta(), command.iconoClave(),
+                clock.now());
         Habito guardado = savePort.save(habito);
 
         HorarioHabitoId horarioId = HorarioHabitoId.of(idGenerator.newId());
         HorarioHabito horario = HorarioHabito.crear(horarioId, id, primerDiaPlanificable(progreso.diaPrograma()),
                 null, TipoDia.TODOS, command.horaDisparo(), command.horaLimite(), clock.now());
         saveHorarioPort.save(horario);
+        apagarLosDiasNoElegidos(command.actorId(), id, command.diasActivos());
 
         return guardado;
+    }
+
+    /**
+     * "Este habito lo hago lunes, miercoles y viernes" — desde el alta y no en dos pasos.
+     *
+     * <p><b>Por que apagando y no con un `tipoDia` nuevo.</b> {@code TipoDia} tiene cuatro valores
+     * (TODOS, DISCIPLINA, DOMINGO, INTOXICACION) y NO es un conjunto libre de dias: no existe un
+     * valor que diga "lunes, miercoles y viernes", y agregarlo obligaria a inventar uno por cada
+     * combinacion. El mecanismo que si lo expresa ya existe desde V40 —{@code
+     * horario_semanal_habito.activo}, el mismo que usa "apagar un dia de la semana"— y el barrido
+     * diario ya lo respeta ({@code RegistroService} filtra por {@code habitosApagadosEnDiaSemana}).
+     * Asi que el horario del catalogo sigue siendo TODOS y lo que se guarda es que esos dias estan
+     * apagados para ESTE participante.
+     *
+     * <p>Se escribe por el puerto y no llamando a {@code PreferenciaHorarioService.apagar} para no
+     * cruzar dos servicios de aplicacion: la guarda que aquel aplica —el habito tiene que ser
+     * desactivable— aca es siempre cierta, porque un habito PERSONAL nace {@code desactivable} por
+     * definicion ({@code Habito.crearPersonal}).
+     */
+    private void apagarLosDiasNoElegidos(UserId actorId, HabitoId habitoId, Set<DayOfWeek> diasActivos) {
+        Instant ahora = clock.now();
+        for (DayOfWeek dia : DayOfWeek.values()) {
+            if (diasActivos.contains(dia)) {
+                continue;
+            }
+            // Sin horas: apagar un dia no fija horario propio, se sigue heredando del general.
+            var sinHorario = PreferenciaHorario.crear(actorId, habitoId, null, null, ahora);
+            savePreferenciaPort.saveParaDiaSemana(actorId, habitoId, new HorarioSemanal(dia, sinHorario, false));
+        }
     }
 
     private ProgresoParticipanteHabits requireProgreso(UserId participanteId) {

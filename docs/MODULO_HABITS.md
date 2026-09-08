@@ -365,6 +365,9 @@ Cuatro piezas nuevas, todas construidas sobre lo que ya existía en `preferencia
 
 ### 12.1 `habit-preferences` — editar el horario personal de un hábito
 
+> **Actualizado 2026-09-07 (D-121):** Plan envía una fecha exacta y el horario solo rige ese día.
+> La descripción histórica de abajo corresponde a peticiones sin `date`. El contrato nuevo está en §22.
+
 `PATCH /api/v1/habit-preferences/{habitId}` (ruta literal del contrato viejo, D-36), `EditarPreferenciaHorarioUseCase`/`PreferenciaHorarioService`. Traducción de `updateHabitPreference` (repo viejo, `service.ts:2021`, `limits.ts`):
 
 - **`FREE_SCHEDULE_EDITS_UNTIL_DAY = 7`**: hasta el día 7 de programa (o el propio `Habito.diaLimiteEdicionLibre` si es mayor — columna `dia_limite_edicion_libre` del baseline, **ahora mapeada** en `Habito`/`HabitoJpaEntity`/`HabitoPersistenceMapper`, cerrando parte de D-H5), los cambios inmediatos son ilimitados.
@@ -954,3 +957,36 @@ cambio). Convertirlas a un `record` de comando es trabajo aparte, con su propia 
 **Pendiente que no es de este cambio:** `ArchitectureTest.MODULOS_SIN_MIGRAR_A_IDGENERATOR` todavía
 lista `com.renaser.os.habits..`; sacarlo de esa lista corresponde a quien cierre la migración de los
 módulos restantes (el archivo no se toca por módulo, para no pisar el trabajo en paralelo).
+
+
+## 22. Horarios por fecha (D-121, E-156) — 2026-09-07
+
+`PATCH /api/v1/habit-preferences/{habitId}` admite `date: "yyyy-MM-dd"`, junto con las horas y los
+campos de recordatorio existentes. Con fecha guarda una excepción en `horarios_habito_por_fecha`
+(V37), identificada por participante, hábito y fecha. Repetir el PATCH del mismo día reemplaza
+solo esa fila. No modifica `preferencias_horario` ni `cambios_horario_pendientes`.
+
+Solo acepta fechas posteriores a hoy en la zona del participante, hábitos activos y hábitos
+personales del propio usuario. Mantiene el cupo de hábitos distintos por semana de programa,
+contando también las fechas reservadas. La respuesta conserva `deferred: true` y devuelve la
+fecha solicitada en `deferredEffectiveDate`: el horario está guardado para ese día futuro.
+
+`GET /api/v1/habit-preferences?date=yyyy-MM-dd` devuelve las horas resueltas para esa fecha y la
+repite en `date`. Sin parámetro consulta hoy. Precedencia: excepción de esa fecha, cambio general
+cuya fecha efectiva ya llegó, preferencia general y, como respaldo por campo, horario de catálogo.
+El día de programa y el tipo de día se calculan para la fecha consultada.
+
+Tracks, avisos, generación con corte horario, completación y Santuario leen la preferencia usando
+la fecha de ejecución. La excepción no se promueve al horario general durante la madrugada.
+Los cambios generales antiguos siguen funcionando; no se intenta adivinar qué fechas pretendía
+editar el usuario antes de esta corrección.
+
+En Plan la selección semanal determina la fecha enviada en GET/PATCH. El selector conserva la
+fecha capturada al abrirse y las respuestas tardías de otro día se descartan. Un error de lectura
+no muestra horarios del día anterior. Si el backend no devuelve la fecha solicitada, no habilita
+la edición, para evitar que un backend antiguo ignore `date` y guarde un cambio general.
+Desplegar el backend con V37 antes del frontend.
+
+Pruebas nuevas: `HorarioPorFechaTest`, `HorarioPorFechaPersistenceAdapterTest`,
+`HabitPreferenceControllerTest` y regresiones de los servicios. En el frontend:
+`npm run test:habits` y `npx tsc --noEmit`.

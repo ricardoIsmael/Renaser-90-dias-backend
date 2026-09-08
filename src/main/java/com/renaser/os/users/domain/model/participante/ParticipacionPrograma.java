@@ -211,8 +211,25 @@ public final class ParticipacionPrograma {
      * incrementaba: una cuenta no se puede "atrasar" por una corrida que no ocurrio.
      */
     public int diaProgramaDerivado(LocalDate hoyEnZonaParticipante) {
+        return diaProgramaDerivado(fechaInicio, hoyEnZonaParticipante, diasAjuste, estaActivado());
+    }
+
+    /**
+     * La MISMA cuenta que {@link #diaProgramaDerivado(LocalDate)} pero sobre datos sueltos,
+     * para el camino de LECTURA (A-1, 2026-09-08): los consumidores leen
+     * `participantes_programa` por proyeccion (`users.api.ParticipacionPrograma`) y no
+     * cargan este agregado, asi que sin esto no tenian forma de derivar y se quedaban con la
+     * columna materializada.
+     *
+     * <p><b>Por que existe y no se copio la formula en el adaptador:</b> el dia es una regla
+     * de negocio, y este repo ya pago el precio de tenerla en dos lugares — la columna
+     * generada `fecha_graduacion_esperada` (V22) se desincronizo en cuanto aparecio
+     * {@link #diasAjuste}. Una sola cuenta, dos llamadores.
+     */
+    public static int diaProgramaDerivado(LocalDate fechaInicio, LocalDate hoyEnZonaParticipante,
+                                          int diasAjuste, boolean activado) {
         Objects.requireNonNull(hoyEnZonaParticipante, "hoyEnZonaParticipante es obligatorio");
-        if (!estaActivado() || fechaInicio.isAfter(hoyEnZonaParticipante)) {
+        if (!activado || fechaInicio == null || fechaInicio.isAfter(hoyEnZonaParticipante)) {
             return 0;
         }
         long transcurridos = ChronoUnit.DAYS.between(fechaInicio, hoyEnZonaParticipante) + 1;

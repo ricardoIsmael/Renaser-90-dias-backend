@@ -78,7 +78,7 @@ class TokenPushPersistenceAdapter implements UpsertTokenPushPort, LoadTokenPushP
     }
 
     @Override
-    public List<String> tokensDe(UserId usuarioId) {
-        return repository.findByUsuarioId(usuarioId.value()).stream().map(TokenPushJpaEntity::getToken).toList();
+    public List<TokenPush> tokensDe(UserId usuarioId) {
+        return repository.findByUsuarioId(usuarioId.value()).stream().map(mapper::toDomain).toList();
     }
 }

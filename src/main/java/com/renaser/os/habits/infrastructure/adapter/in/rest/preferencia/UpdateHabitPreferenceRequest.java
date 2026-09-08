@@ -2,6 +2,7 @@ package com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia;
 
 import jakarta.validation.constraints.NotNull;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 
 /**
@@ -14,5 +15,5 @@ import java.time.LocalTime;
  * habito no se puede ubicar en la jornada.
  */
 public record UpdateHabitPreferenceRequest(@NotNull LocalTime triggerTime, LocalTime limitTime,
-                                            boolean reminderEnabled, Integer reminderMinutesBefore) {
+                                            boolean reminderEnabled, Integer reminderMinutesBefore, LocalDate date) {
 }

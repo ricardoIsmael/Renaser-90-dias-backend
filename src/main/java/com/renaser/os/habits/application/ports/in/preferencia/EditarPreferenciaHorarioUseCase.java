@@ -17,41 +17,26 @@ import java.time.LocalTime;
 public interface EditarPreferenciaHorarioUseCase {
 
     /**
-     * <b>D-91 — el dia en curso no se edita, nunca.</b> Todo cambio de horario queda PROGRAMADO
-     * para el dia siguiente, sin importar la hora a la que se pida ni si la ventana del habito
-     * ya arranco. La regla del producto es "el dia se cierra a la medianoche": para que un
-     * horario rija el dia D hay que pedirlo antes de que termine el dia D-1.
-     *
-     * <p>Antes de D-91 el cambio se aplicaba en el acto si la hora de disparo todavia no habia
-     * llegado, y solo se difería si ya habia pasado. Eso permitia reacomodar el dia en curso,
-     * que es justamente lo que el dueño pidio impedir.
-     *
-     * <p>Nunca se rechaza por la hora: "no se improvisa el dia" no puede volverse "perdiste la
-     * decision". El pedido se guarda y {@code PromocionCambioHorarioService} lo hace regir esa
-     * noche. Un segundo pedido sobre el mismo habito el mismo dia pisa al anterior (la PK de
-     * {@code cambios_horario_pendientes} es participante+habito), asi que el aprendiz puede
-     * cambiar de opinion todas las veces que quiera antes de la medianoche.
-     *
-     * <p>Si se rechaza por CUPO: hasta el dia 7 de programa (o el limite propio del habito, el
-     * que sea mayor) los cambios son ilimitados; despues cuesta cupo semanal —
-     * {@code WEEKLY_SCHEDULE_EDIT_LIMIT} habitos DISTINTOS por semana, y agotado lanza
-     * {@link IllegalStateException}. El cupo se mide contra la semana de la FECHA EFECTIVA y
-     * cuenta tambien los cambios ya programados que van a regir en esa semana.
+     * Con {@code fecha}, guarda el horario exclusivamente para esa fecha futura, en la zona del
+     * participante. No altera el horario general ni los cambios de otras fechas. La cuota cuenta
+     * habitos distintos de la semana de programa correspondiente a esa fecha.
+     * Sin fecha mantiene el contrato legado: cambio general a partir de manana.
+     * El dia actual y los anteriores no se editan (D-91).
      */
     ResultadoEdicionPreferencia editar(EditarPreferenciaHorarioCommand command);
 
     record EditarPreferenciaHorarioCommand(@NotNull UserId actorId, @NotNull HabitoId habitoId,
                                             @NotNull LocalTime horaDisparo, LocalTime horaLimite,
-                                            boolean recordatorioActivo, Integer minutosRecordatorio) {
+                                            boolean recordatorioActivo, Integer minutosRecordatorio, LocalDate fecha) {
         public EditarPreferenciaHorarioCommand {
             SelfValidating.validateConstructorArgs(EditarPreferenciaHorarioCommand.class, actorId, habitoId,
-                    horaDisparo, horaLimite, recordatorioActivo, minutosRecordatorio);
+                    horaDisparo, horaLimite, recordatorioActivo, minutosRecordatorio, fecha);
         }
     }
 
     /**
      * {@code diferido}: el cambio quedo programado, no rige hoy — {@code horaDisparo}/
-     * {@code horaLimite} son entonces lo que regira desde {@code fechaEfectivaDiferido},
+     * {@code horaLimite} son entonces lo que regira en {@code fechaEfectivaDiferido} (o desde ella en la ruta legada),
      * no lo vigente hoy. {@code periodo}: "FREE" (sin cupo) o "WEEK" (con cupo) — mismo
      * literal que el contrato viejo (D-36).
      */

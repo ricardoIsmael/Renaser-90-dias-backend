@@ -3,9 +3,9 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.habits.application.ports.in.preferencia.ConsultarPreferenciasHorarioUseCase.ResumenPreferenciasHorario;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.HistorialCambioHorarioPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadCambioHorarioPendientePort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
@@ -110,7 +110,7 @@ class ConsultaPreferenciasHorarioServiceTest {
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
                 HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null, TipoDia.TODOS,
                         LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now())));
-        when(loadPreferenciaPort.porParticipanteYHabitos(any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
         when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
 
         var vista = service.consultar(actor).habitos().get(0);
@@ -130,7 +130,7 @@ class ConsultaPreferenciasHorarioServiceTest {
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
                 HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null, TipoDia.TODOS,
                         LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now())));
-        when(loadPreferenciaPort.porParticipanteYHabitos(any(), any())).thenReturn(
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(
                 List.of(PreferenciaHorario.crear(actor, habito.id(), LocalTime.of(7, 30), LocalTime.of(9, 30),
                         CLOCK.now())));
         when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
@@ -148,7 +148,7 @@ class ConsultaPreferenciasHorarioServiceTest {
         Habito habito = habito("Meditar");
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
-        when(loadPreferenciaPort.porParticipanteYHabitos(any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
         when(loadCambioPendientePort.deParticipante(actor)).thenReturn(
                 List.of(CambioHorarioPendiente.programar(actor, habito.id(), LocalTime.of(5, 0), LocalTime.of(7, 0),
                         true, 10, LocalDate.of(2026, 8, 25), CLOCK.now())));
@@ -194,13 +194,13 @@ class ConsultaPreferenciasHorarioServiceTest {
         conProgreso(3, false);
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito("uno"), habito("dos"), habito("tres")));
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
-        when(loadPreferenciaPort.porParticipanteYHabitos(any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
         when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
 
         assertThat(service.consultar(actor).habitos()).hasSize(3);
 
         verify(loadHorarioPort, times(1)).porHabitos(any());
-        verify(loadPreferenciaPort, times(1)).porParticipanteYHabitos(any(), any());
+        verify(loadPreferenciaPort, times(1)).porParticipanteHabitosYFecha(any(), any(), any());
         verify(loadCambioPendientePort, times(1)).deParticipante(actor);
         verify(loadHorarioPort, never()).porHabito(any());
     }

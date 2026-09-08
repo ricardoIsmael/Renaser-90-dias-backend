@@ -210,6 +210,42 @@ class RelojProgramaServiceTest {
     }
 
     /**
+     * A-2 (2026-09-08). Un participante que falla NO puede detener el barrido
+     * (`.claude/rules/02-tiempo-zonas-y-schedulers.md` §4).
+     *
+     * <p>Contra el codigo viejo esto ni siquiera llegaba a la aserccion: la excepcion subia
+     * por {@code avanzarParticipantesActivos} y se llevaba puesta la corrida entera. En
+     * produccion eso significa que UNA fila rota deja a TODO el padron sin avanzar de dia,
+     * cada hora, con el unico rastro de un stacktrace en el log del scheduler — el mismo
+     * sintoma que "sigo en el dia 0" pero con causa distinta a E-91.
+     */
+    @Test
+    void unParticipanteQueFallaNoDetieneElBarrido() {
+        ParticipacionPrograma rompe = participacionPendienteDeAvance();
+        ParticipacionPrograma sigueDespues = participacionPendienteDeAvance();
+
+        when(listarParticipantesConProgramaActivoPort.pagina(0, 500))
+                .thenReturn(new ArrayList<>(List.of(rompe, sigueDespues)));
+        when(saveParticipacionProgramaPort.save(rompe))
+                .thenThrow(new IllegalStateException("fila corrupta en la base"));
+        when(saveParticipacionProgramaPort.save(sigueDespues)).thenAnswer(inv -> inv.getArgument(0));
+
+        var resultado = service.avanzarParticipantesActivos();
+
+        assertThat(resultado.evaluados()).isEqualTo(2);
+        assertThat(resultado.avanzados()).isEqualTo(1);
+        assertThat(sigueDespues.diaPrograma()).isEqualTo(6);
+    }
+
+    /** Activado hace 5 dias, sincronizado por ultima vez ayer: en esta corrida tiene que avanzar. */
+    private static ParticipacionPrograma participacionPendienteDeAvance() {
+        return ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null, null, 5,
+                com.renaser.os.users.api.FasePrograma.PHASE_1_REBIRTH, CLOCK.today().minusDays(5), CLOCK.now(),
+                java.time.ZoneId.of("America/Lima"), false, 0, CLOCK.now(), CLOCK.now(), null, null, null,
+                CLOCK.today().minusDays(1));
+    }
+
+    /**
      * Regresion del bug del 2026-09-03 (BITACORA E-91). Una cuenta de America/Lima con
      * `fecha_inicio` = HOY tiene que estar en el dia 1 durante TODO ese dia, corra el
      * barrido a la hora que corra.

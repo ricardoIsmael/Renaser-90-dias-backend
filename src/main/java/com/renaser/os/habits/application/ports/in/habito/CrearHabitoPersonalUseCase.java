@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.ports.in.habito;
 
+import com.renaser.os.habits.domain.model.horario.VentanaDelDia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.PlantillaHabitoPersonal;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
@@ -10,7 +11,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.util.EnumSet;
+import java.util.Set;
 
 /**
  * Alta de un habito PROPIO del aprendiz (ambito PERSONAL, tabla {@code habitos} unificada,
@@ -36,19 +40,27 @@ public interface CrearHabitoPersonalUseCase {
     record CrearHabitoPersonalCommand(@NotNull UserId actorId, @NotBlank @Size(max = 120) String titulo,
                                        @NotNull TipoHabito tipo, @NotBlank String categoriaClave,
                                        PlantillaHabitoPersonal plantilla, @Size(max = 200) String etiquetaMeta,
-                                       @NotNull LocalTime horaDisparo, LocalTime horaLimite) {
+                                       @Size(max = 40) String iconoClave,
+                                       @NotNull LocalTime horaDisparo, LocalTime horaLimite,
+                                       Set<DayOfWeek> diasActivos) {
         public CrearHabitoPersonalCommand {
+            // El ORDEN importa: `validateConstructorArgs` empareja estos valores con los
+            // componentes del record por POSICION. Olvidar uno corre todos los de atras y las
+            // anotaciones terminan validando el campo equivocado — `@NotNull` sobre la hora se
+            // evaluaba contra el icono, y el alta rechazaba altas correctas.
             SelfValidating.validateConstructorArgs(CrearHabitoPersonalCommand.class, actorId, titulo, tipo,
-                    categoriaClave, plantilla, etiquetaMeta, horaDisparo, horaLimite);
+                    categoriaClave, plantilla, etiquetaMeta, iconoClave, horaDisparo, horaLimite, diasActivos);
+            // Vacio o null = los siete dias. Es lo que mandaban los clientes antes de que este
+            // campo existiera, asi que el default no cambia el comportamiento de nadie.
+            diasActivos = diasActivos == null || diasActivos.isEmpty()
+                    ? EnumSet.allOf(DayOfWeek.class)
+                    : EnumSet.copyOf(diasActivos);
             // Nivel 2 de validacion (CLAUDE.MD §5.4.3): estructuralmente imposible construir un
-            // comando con el habito ya vencido. La misma regla vive tambien en
-            // HorarioHabito.crear (el agregado de dominio) — defensa en profundidad, no
-            // duplicacion decorativa: este comando es el unico punto de entrada HTTP, pero el
-            // agregado protege el invariante para CUALQUIER llamador (ej. un futuro admin que
-            // edite el horario de un habito personal).
-            if (horaLimite != null && !horaLimite.isAfter(horaDisparo)) {
-                throw new IllegalArgumentException("horaLimite debe ser posterior a horaDisparo");
-            }
+            // comando con una ventana que no cabe en el dia. La regla es UNA sola y vive en
+            // VentanaDelDia (D-122); aca se aplica sobre los componentes del record, asi que el
+            // comando ya nace normalizado y nadie aguas abajo tiene que volver a acordarse.
+            horaDisparo = VentanaDelDia.requireHoraDisparoDentroDelDia(horaDisparo);
+            horaLimite = VentanaDelDia.horaLimiteAjustada(horaDisparo, horaLimite);
         }
     }
 }

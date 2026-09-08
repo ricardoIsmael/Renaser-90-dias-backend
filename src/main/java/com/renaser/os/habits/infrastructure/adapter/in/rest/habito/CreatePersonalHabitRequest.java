@@ -7,7 +7,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.util.Set;
 
 /**
  * Alta de un habito PROPIO del aprendiz. Deliberadamente SIN {@code ambito} ni
@@ -25,6 +27,7 @@ import java.time.LocalTime;
  */
 public record CreatePersonalHabitRequest(@NotBlank @Size(max = 120) String title, @NotNull HabitTypeDto habitType,
                                           @NotNull HabitCategoryDto category, PlantillaHabitoPersonal template,
-                                          @Size(max = 200) String goalLabel, @NotNull LocalTime triggerTime,
-                                          LocalTime limitTime) {
+                                          @Size(max = 200) String goalLabel, @Size(max = 40) String iconKey,
+                                          @NotNull LocalTime triggerTime, LocalTime limitTime,
+                                          Set<DayOfWeek> activeWeekdays) {
 }

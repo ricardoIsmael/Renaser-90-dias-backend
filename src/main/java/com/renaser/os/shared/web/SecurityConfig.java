@@ -146,6 +146,9 @@ public class SecurityConfig {
                                 "/api/v1/me/cell/**").authenticated()
                         .requestMatchers("/api/v1/onboarding/**", "/api/v1/rocks/**",
                                 "/api/v1/spirit-audio/**").authenticated()
+                        // El Mapa de Renacimiento es contenido del propio aprendiz: sin sesion no
+                        // se lee ni se escribe (V41, fase 3 del plan del Mapa).
+                        .requestMatchers("/api/v1/mapa-renacimiento/**").authenticated()
                         .requestMatchers("/api/v1/tickets/**", "/api/v1/ranking/**").authenticated()
                         // Renasia ya lo exigia desde 2026-09-03, por el mismo motivo.
                         .requestMatchers("/api/v1/renasia/**").authenticated()

@@ -12,11 +12,11 @@ import org.springframework.stereotype.Component;
  * (pedido del dueno, 2026-09-05). Reparto de siempre: `habits` decide QUE avisar y CUANDO,
  * este modulo decide COMO se entrega.
  *
- * <p><b>Notificacion en la app si, push al telefono no</b> — decision explicita del dueno. La
- * fila en {@code notificaciones} es visible desde la bandeja; el push sale por
- * {@code PushPort}, que hoy solo tiene {@code NoOpPushAdapter} (sin FCM ni Expo conectado) y
- * por lo tanto no hace nada. No hay que tocar nada de este flujo el dia que exista el
- * adaptador real: {@code NotificacionService.emitir} ya llama al puerto.
+ * <p><b>Notificacion en la app y Web Push</b>. La fila en {@code notificaciones} es visible desde
+ * la bandeja; el push sale por {@code PushPort}. {@code WebPushAdapter} entrega las suscripciones
+ * de navegador con VAPID y deja intactos los tokens nativos para su adaptador correspondiente.
+ * Un fallo externo nunca revierte la fila de la bandeja: {@code NotificacionService.emitir} ya
+ * trata el push como best-effort.
  *
  * <p><b>Tipo {@code RECORDATORIO_HABITO}</b>: existe en el baseline desde V1 y es exactamente
  * este caso, asi que no hizo falta ningun valor de enum nuevo ni ninguna migracion. Como

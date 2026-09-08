@@ -82,8 +82,10 @@ En orden, porque hay dependencias:
 3. **`EMAIL_PROVEEDOR=smtp`** + las cuatro variables de SMTP, o nadie puede registrarse.
 4. `CORS_ORIGENES` con el dominio real de la app.
 5. `GOOGLE_OAUTH_CLIENT_ID` — sin él no anda el login social.
-6. Push (`PushPort` solo tiene `NoOpPushAdapter`): **los avisos solo se ven dentro de la app**, así
-   que justo el que no la abre no se entera.
+6. Push web: **resuelto el 2026-09-08**. `WebPushAdapter` entrega los dos avisos de hábitos a
+   navegadores con suscripción VAPID; la app móvil conserva su canal local. Para producción hay que
+   configurar las tres variables `WEB_PUSH_VAPID_*` en el backend y la pública en
+   `EXPO_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY` del frontend.
 
 ---
 

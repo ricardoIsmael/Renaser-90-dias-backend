@@ -6,19 +6,19 @@ import com.renaser.os.habits.application.politica.PoliticaSantuario;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
+import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
 import com.renaser.os.habits.domain.model.habito.AmbitoHabito;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
-import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.habits.domain.model.politica.GestoCompletar;
@@ -181,7 +181,7 @@ class RegistroServiceTest {
         when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
-        when(loadPreferenciaPort.porParticipanteYHabito(dueno, habito.id())).thenReturn(Optional.empty());
+        when(loadPreferenciaPort.porParticipanteHabitoYFecha(dueno, habito.id(), registro.fechaEjecucion())).thenReturn(Optional.empty());
         when(progresoPort.deParticipante(dueno)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
 
@@ -251,7 +251,7 @@ class RegistroServiceTest {
         when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
-        when(loadPreferenciaPort.porParticipanteYHabito(dueno, habito.id())).thenReturn(Optional.empty());
+        when(loadPreferenciaPort.porParticipanteHabitoYFecha(dueno, habito.id(), registro.fechaEjecucion())).thenReturn(Optional.empty());
         when(progresoPort.deParticipante(dueno)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
         when(publicacionMuroFinder.publicoEntre(eq(dueno), any(), any())).thenReturn(true);
@@ -300,7 +300,7 @@ class RegistroServiceTest {
         when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
-        when(loadPreferenciaPort.porParticipanteYHabito(dueno, habito.id())).thenReturn(Optional.empty());
+        when(loadPreferenciaPort.porParticipanteHabitoYFecha(dueno, habito.id(), registro.fechaEjecucion())).thenReturn(Optional.empty());
         when(progresoPort.deParticipante(dueno)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
 
@@ -338,7 +338,7 @@ class RegistroServiceTest {
         when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
-        when(loadPreferenciaPort.porParticipanteYHabito(dueno, habito.id())).thenReturn(Optional.empty());
+        when(loadPreferenciaPort.porParticipanteHabitoYFecha(dueno, habito.id(), registro.fechaEjecucion())).thenReturn(Optional.empty());
         when(progresoPort.deParticipante(dueno)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
 
@@ -363,7 +363,7 @@ class RegistroServiceTest {
         when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of(horario));
-        when(loadPreferenciaPort.porParticipanteYHabito(dueno, habito.id())).thenReturn(Optional.empty());
+        when(loadPreferenciaPort.porParticipanteHabitoYFecha(dueno, habito.id(), registro.fechaEjecucion())).thenReturn(Optional.empty());
         when(progresoPort.deParticipante(dueno)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
         when(ajustarPuntosPort.ajustar(any(), any(), anyInt(), any()))

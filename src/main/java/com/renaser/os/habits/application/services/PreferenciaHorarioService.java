@@ -1,10 +1,13 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.domain.model.horario.VentanaDelDia;
+import com.renaser.os.habits.application.ports.in.preferencia.CambiarEstadoHabitoEnFechaUseCase;
+import com.renaser.os.habits.application.ports.in.preferencia.EditarHorarioSemanalUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.HistorialCambioHorarioPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadCambioHorarioPendientePort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
@@ -16,6 +19,8 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.habits.domain.model.preferencia.CuotaEdicionHorario;
+import com.renaser.os.habits.domain.model.preferencia.HorarioPorFecha;
+import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.shared.domain.Clock;
@@ -24,15 +29,19 @@ import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Hueco #12 — edicion de horario personal (`preferencias_horario`/`cambios_horario_pendientes`).
@@ -40,7 +49,8 @@ import java.util.Set;
  * javadoc de {@link EditarPreferenciaHorarioUseCase} para lo que quedo afuera.
  */
 @Service
-public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCase {
+public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCase, CambiarEstadoHabitoEnFechaUseCase,
+        EditarHorarioSemanalUseCase {
 
     /** limits.ts — semana 1 de acomodo, sin cupo. */
     public static final int FREE_SCHEDULE_EDITS_UNTIL_DAY = CuotaEdicionHorario.DIAS_DE_ACOMODO_LIBRE;
@@ -84,7 +94,11 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     public ResultadoEdicionPreferencia editar(EditarPreferenciaHorarioCommand command) {
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         Habito habito = requireHabito(command.habitoId());
-        requireOrdenHorario(command.horaDisparo(), command.horaLimite());
+        VentanaDelDia.requireHoraDisparoDentroDelDia(command.horaDisparo());
+        if (habito.participanteId() != null && !habito.participanteId().equals(command.actorId())) {
+            throw new NotAuthorizedException("Solo puedes editar tus propios habitos");
+        }
+        if (!habito.activo()) throw new IllegalArgumentException("El habito no esta activo");
 
         ZoneId zona = ZoneId.of(progreso.timezone());
         Instant ahora = clock.now();
@@ -104,18 +118,20 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     private ContextoCuota resolverContextoCuota(EditarPreferenciaHorarioCommand command, Habito habito,
                                                  int diaPrograma, ZoneId zona, Instant ahora) {
         LocalDate hoy = ahora.atZone(zona).toLocalDate();
-        // D-91: el dia en curso NO se toca, sin excepciones. Todo cambio rige desde manana, asi que
+        // D-91: el dia en curso NO se toca, sin excepciones. Solo se aceptan fechas futuras;
         // la cuota se mide contra la semana de programa de la FECHA EFECTIVA, no la de hoy: pedir un
         // cambio el ultimo dia de una semana consume el cupo de la semana siguiente, que es cuando
         // el cambio va a existir de verdad.
-        LocalDate fechaEfectiva = hoy.plusDays(1);
-        int diaEfectivo = diaPrograma + 1;
+        LocalDate fechaEfectiva = command.fecha() == null ? hoy.plusDays(1) : command.fecha();
+        HorarioPorFecha.requirePlanificable(fechaEfectiva, hoy);
+        int diaEfectivo = Math.toIntExact(diaPrograma + ChronoUnit.DAYS.between(hoy, fechaEfectiva));
 
         boolean semanaLibreGlobal = CuotaEdicionHorario.esSemanaDeAcomodoLibre(diaEfectivo);
         int libreHasta = Math.max(FREE_SCHEDULE_EDITS_UNTIL_DAY,
                 habito.diaLimiteEdicionLibre() != null ? habito.diaLimiteEdicionLibre() : FREE_SCHEDULE_EDITS_UNTIL_DAY);
         boolean habitoLibre = diaEfectivo <= libreHasta;
-        VentanaVigenteHoy vigente = resolverVentanaVigenteHoy(command, zona, ahora);
+        VentanaVigenteHoy vigente = command.fecha() == null ? resolverVentanaVigenteHoy(command, zona, ahora)
+                : new VentanaVigenteHoy(null, null, false);
 
         List<HabitoId> tocados = List.of();
         if (!semanaLibreGlobal) {
@@ -146,6 +162,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
                         && !pendiente.fechaEfectiva().isAfter(finSemana))
                 .map(CambioHorarioPendiente::habitoId)
                 .forEach(comprometidos::add);
+        comprometidos.addAll(loadPreferenciaPort.habitosConHorarioEntre(actorId, inicioSemana, finSemana));
         return List.copyOf(comprometidos);
     }
 
@@ -156,14 +173,17 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         }
     }
 
-    /**
-     * D-91: ya no hay rama inmediata. Todo cambio se programa, y la promocion nocturna
-     * ({@code PromocionCambioHorarioService}) lo hace regir al dia siguiente — que es tambien
-     * donde se cobra el cupo y se escribe la bitacora. La preferencia vigente se crea igual, con
-     * lo que rige HOY, para que el dia en curso no se mueva ni un minuto.
-     */
+    /** Con fecha guarda una excepcion puntual. Sin fecha conserva el cambio general diferido legado. */
     private void aplicarEdicion(EditarPreferenciaHorarioCommand command, ContextoCuota contexto, Instant ahora) {
-        asegurarPreferenciaVigente(command, contexto.ventanaVigente(), ahora);
+        if (command.fecha() != null) {
+            var preferencia = PreferenciaHorario.crear(command.actorId(), command.habitoId(),
+                    command.horaDisparo(), command.horaLimite(), ahora);
+            preferencia.actualizarRecordatorio(command.recordatorioActivo(), command.minutosRecordatorio(), ahora);
+            var horario = new HorarioPorFecha(command.fecha(), preferencia);
+            savePreferenciaPort.saveParaFecha(horario);
+            return;
+        }
+        asegurarPreferenciaYRecordatorio(command, contexto.ventanaVigente(), ahora);
         CambioHorarioPendiente pendiente = CambioHorarioPendiente.programar(command.actorId(), command.habitoId(),
                 command.horaDisparo(), command.horaLimite(), command.recordatorioActivo(),
                 command.minutosRecordatorio(), contexto.fechaEfectivaDiferido(), ahora);
@@ -173,17 +193,30 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     /**
      * E-54: `cambios_horario_pendientes` tiene FK compuesta a `preferencias_horario`, y la rama
      * diferida no creaba la fila padre — el primer cambio diferido de un habito nunca editado
-     * violaba la FK. Se crea con lo que YA rige hoy, nunca con lo pedido: un cambio diferido no
-     * puede tocar el dia en curso ("no se improvisa el dia"). Los valores pedidos los escribe la
-     * promocion nocturna ({@code PromocionCambioHorarioService}), el dia que corresponde.
+     * violaba la FK. Se crea con lo que YA rige hoy, nunca con las HORAS pedidas: un cambio diferido
+     * no puede tocar el dia en curso ("no se improvisa el dia"). Esas horas las escribe la promocion
+     * nocturna ({@code PromocionCambioHorarioService}), el dia que corresponde.
+     *
+     * E-159: el RECORDATORIO si se aplica hoy, y por eso este metodo tambien lo escribe. D-91
+     * protege la ventana del dia en curso —a que hora te toca—, no cuantos minutos antes queres que
+     * te avisen: el aviso cuelga de la hora que este rigiendo, sea la vieja o la nueva. Diferirlo
+     * ademas se leia mal: {@code construirVista} saca el recordatorio solo de la preferencia y
+     * {@code CambioProgramado} no lo lleva, asi que entre el PATCH y la promocion la app releia
+     * `reminderEnabled=true` con `reminderMinutesBefore=null`. En un telefono sin el conjunto local
+     * de avisos (reinstalacion, segundo dispositivo) eso degradaba "avisame 15 minutos antes" a "a
+     * la hora exacta", en silencio. La promocion vuelve a escribir estos mismos valores: idempotente.
+     *
+     * Las horas siguen intactas en los dos caminos — al que ya tenia preferencia se le carga el
+     * objeto existente y solo se le toca el recordatorio.
      */
-    private void asegurarPreferenciaVigente(EditarPreferenciaHorarioCommand command, VentanaVigenteHoy vigente,
-                                             Instant ahora) {
-        if (vigente.conPreferenciaPropia()) {
-            return;
-        }
-        savePreferenciaPort.save(PreferenciaHorario.crear(command.actorId(), command.habitoId(),
-                vigente.horaDisparo(), vigente.horaLimite(), ahora));
+    private void asegurarPreferenciaYRecordatorio(EditarPreferenciaHorarioCommand command, VentanaVigenteHoy vigente,
+                                                    Instant ahora) {
+        PreferenciaHorario preferencia = loadPreferenciaPort
+                .porParticipanteYHabito(command.actorId(), command.habitoId())
+                .orElseGet(() -> PreferenciaHorario.crear(command.actorId(), command.habitoId(),
+                        vigente.horaDisparo(), vigente.horaLimite(), ahora));
+        preferencia.actualizarRecordatorio(command.recordatorioActivo(), command.minutosRecordatorio(), ahora);
+        savePreferenciaPort.save(preferencia);
     }
 
     /**
@@ -216,16 +249,6 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
 
     private static LocalTime primeraNoNula(LocalTime dePreferencia, LocalTime deCatalogo) {
         return dePreferencia != null ? dePreferencia : deCatalogo;
-    }
-
-    /** Sin hora de cierre no hay orden que validar: el habito no vence dentro del dia. */
-    private static void requireOrdenHorario(LocalTime horaDisparo, LocalTime horaLimite) {
-        if (horaLimite == null) {
-            return;
-        }
-        if (!horaDisparo.isBefore(horaLimite)) {
-            throw new IllegalArgumentException("horaLimite debe ser posterior a horaDisparo");
-        }
     }
 
     /**
@@ -276,6 +299,173 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
      * difería, y esa decision ya no existe — se difiere siempre.
      */
     private record VentanaVigenteHoy(LocalTime horaDisparo, LocalTime horaLimite, boolean conPreferenciaPropia) {
+    }
+
+    /**
+     * El interruptor de un dia (V38). No pasa por la cuota de `CuotaEdicionHorario` a proposito:
+     * apagar no es acomodar el horario, es el hermano de la pausa de `habit-unlocks`, que nunca
+     * cobro cupo. Ver el javadoc del caso de uso.
+     */
+    @Override
+    @Transactional
+    public void cambiarEstadoEnFecha(UserId actorId, HabitoId habitoId, LocalDate fecha, boolean activo) {
+        Habito habito = requireHabito(habitoId);
+        ProgresoParticipanteHabits progreso = requireProgreso(actorId);
+        LocalDate hoy = clock.now().atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+        HorarioPorFecha.requireApagable(fecha, hoy);
+
+        if (activo) {
+            // Volver a lo normal es BORRAR la excepcion, no escribir una fila que diga "si". Una
+            // fila `activo = true` sin hora ni siquiera pasa el CHECK de V38, y con hora congelaria
+            // ese dia si despues cambia el horario general.
+            savePreferenciaPort.borrarParaFecha(actorId, habitoId, fecha);
+            return;
+        }
+        if (!habito.desactivable()) {
+            // Misma regla y mismo motivo que `DesbloqueoHabito.pausar`: la invariante cruza dos
+            // tablas, asi que no puede vivir en un CHECK. Si los obligatorios se pudieran apagar un
+            // dia, "obligatorio" no querria decir nada.
+            throw new IllegalStateException("Este habito es obligatorio y no se puede apagar");
+        }
+        Instant ahora = clock.now();
+        // Sin hora: apagar un dia NO toca el horario, que se sigue heredando de lo general. Es lo
+        // que permite volver a encenderlo y que quede como estaba.
+        var preferencia = PreferenciaHorario.crear(actorId, habitoId, null, null, ahora);
+        savePreferenciaPort.saveParaFecha(new HorarioPorFecha(fecha, preferencia, false));
+    }
+
+    /**
+     * La hora de UN dia de la semana (V39). No pasa por la cuota — ver el javadoc del caso de uso:
+     * la cuota se mide contra una fecha efectiva y un patron semanal no tiene una.
+     */
+    @Override
+    @Transactional
+    public void fijar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, LocalTime horaDisparo,
+                      LocalTime horaLimite) {
+        Habito habito = requireHabito(habitoId);
+        Instant ahora = clock.now();
+        cobrarCupo(actorId, habitoId, habito, diaSemana, ahora);
+        var preferencia = PreferenciaHorario.crear(actorId, habitoId, horaDisparo, horaLimite, ahora);
+        // El agregado valida que la hora limite sea posterior a la de disparo, igual que en el
+        // resto del modulo: la regla vive en el dominio, no en el controlador.
+        savePreferenciaPort.saveParaDiaSemana(actorId, habitoId, new HorarioSemanal(diaSemana, preferencia));
+    }
+
+    /**
+     * Apaga el hábito ese día de la semana. La regla del obligatorio es la misma que la de la
+     * pausa, y por el mismo motivo: si los del programa se pudieran sacar un día, "obligatorio" no
+     * querría decir nada. Vive acá y no en un CHECK porque cruza dos tablas.
+     */
+    @Override
+    @Transactional
+    public void apagar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana) {
+        Habito habito = requireHabito(habitoId);
+        if (!habito.desactivable()) {
+            throw new IllegalStateException("Este habito es obligatorio y no se puede apagar");
+        }
+        Instant ahora = clock.now();
+        // Sin hora: apagar un día NO toca el horario, que se sigue heredando del general. Es lo
+        // que permite volver a encenderlo y que quede como estaba.
+        var preferencia = PreferenciaHorario.crear(actorId, habitoId, null, null, ahora);
+        savePreferenciaPort.saveParaDiaSemana(actorId, habitoId,
+                new HorarioSemanal(diaSemana, preferencia, false));
+    }
+
+    @Override
+    @Transactional
+    public void quitar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana) {
+        requireHabito(habitoId);
+        savePreferenciaPort.borrarParaDiaSemana(actorId, habitoId, diaSemana);
+    }
+
+    /**
+     * Cobra el cupo semanal por fijar la hora de un dia (V39).
+     *
+     * > **Agregado 2026-09-07, cerrando un agujero que yo mismo habia dejado abierto.** El caso de
+     * > uso decia que esta via no consumia cupo porque "la cuota se mide contra una FECHA EFECTIVA
+     * > y un patron semanal no tiene una". Eso era falso: un patron semanal SI tiene fecha
+     * > efectiva, y es la proxima vez que caiga ese dia. Sin esto, para esquivar el limite de
+     * > {@value #WEEKLY_SCHEDULE_EDIT_LIMIT} habitos por semana alcanzaba con pedir el cambio por
+     * > dia de semana en vez de por horario general.
+     *
+     * Se cobra la HORA y no el interruptor: apagar un dia es hermano de la pausa de
+     * `habit-unlocks`, que nunca cobro cupo, y no es "reacomodar el horario".
+     *
+     * La fecha efectiva es estrictamente FUTURA, igual que en el camino general: el dia en curso no
+     * se reacomoda (D-91), asi que fijar "los lunes" un lunes rige desde el lunes siguiente.
+     */
+    private void cobrarCupo(UserId actorId, HabitoId habitoId, Habito habito, DayOfWeek diaSemana, Instant ahora) {
+        ProgresoParticipanteHabits progreso = requireProgreso(actorId);
+        LocalDate hoy = ahora.atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+        LocalDate fechaEfectiva = hoy.plusDays(1);
+        while (fechaEfectiva.getDayOfWeek() != diaSemana) {
+            fechaEfectiva = fechaEfectiva.plusDays(1);
+        }
+        int diaEfectivo = Math.toIntExact(progreso.diaPrograma() + ChronoUnit.DAYS.between(hoy, fechaEfectiva));
+
+        if (!CuotaEdicionHorario.esSemanaDeAcomodoLibre(diaEfectivo)) {
+            int libreHasta = Math.max(FREE_SCHEDULE_EDITS_UNTIL_DAY,
+                    habito.diaLimiteEdicionLibre() != null ? habito.diaLimiteEdicionLibre()
+                            : FREE_SCHEDULE_EDITS_UNTIL_DAY);
+            LocalDate inicioSemana = CuotaEdicionHorario.inicioSemanaPrograma(fechaEfectiva, diaEfectivo);
+            requireCupoDisponible(habitoId, diaEfectivo <= libreHasta,
+                    habitosConCupoComprometido(actorId, inicioSemana));
+        }
+        // Queda registrado para que la proxima consulta de cupo lo vea: sin esto el limite se
+        // evaluaria siempre contra una semana vacia y no limitaria nada.
+        historialPort.registrar(actorId, habitoId, fechaEfectiva, null, null, ahora);
+    }
+
+    /**
+     * Los siete dias resueltos. Se compone acá y no en la pantalla: si el cliente tuviera que
+     * mezclar "lo propio de ese dia" con "lo general", habria dos implementaciones de la misma
+     * precedencia y tarde o temprano se separan.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<DiaDeLaSemana> consultar(UserId actorId, HabitoId habitoId) {
+        Habito habito = requireHabito(habitoId);
+        var propios = loadPreferenciaPort.horarioSemanalDe(actorId, habitoId).stream()
+                .collect(Collectors.toMap(HorarioSemanal::diaSemana, h -> h));
+        var general = loadPreferenciaPort.porParticipanteYHabito(actorId, habitoId).orElse(null);
+        var delCatalogo = loadHorarioPort.porHabito(habito.id()).stream().findFirst().orElse(null);
+
+        // El CAMBIO PENDIENTE ya vigente tambien manda, igual que en
+        // `PreferenciaHorarioPersistenceAdapter.porParticipanteHabitosYFecha`.
+        //
+        // > Encontrado probando contra el servidor el 2026-09-07: sin esto, `GET /weekdays` decia
+        // > "sin hora" para el miercoles mientras `GET ?date=<un miercoles>` resolvia 05:00. Dos
+        // > respuestas distintas a la misma pregunta, y la pantalla mostraba la equivocada -- un
+        // > dia en blanco para un habito que ese dia si corre.
+        ProgresoParticipanteHabits progreso = requireProgreso(actorId);
+        LocalDate hoy = clock.now().atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+        var pendiente = loadCambioPendientePort.porParticipanteYHabito(actorId, habitoId)
+                .filter(c -> !c.fechaEfectiva().isAfter(hoy))
+                .orElse(null);
+
+        LocalTime disparoGeneral = pendiente != null && pendiente.horaDisparo() != null ? pendiente.horaDisparo()
+                : general != null && general.horaDisparo() != null ? general.horaDisparo()
+                : delCatalogo != null ? delCatalogo.horaDisparo() : null;
+        LocalTime limiteGeneral = pendiente != null && pendiente.horaLimite() != null ? pendiente.horaLimite()
+                : general != null && general.horaLimite() != null ? general.horaLimite()
+                : delCatalogo != null ? delCatalogo.horaLimite() : null;
+
+        List<DiaDeLaSemana> dias = new ArrayList<>();
+        for (DayOfWeek dia : DayOfWeek.values()) {
+            var propio = propios.get(dia);
+            if (propio == null) {
+                dias.add(new DiaDeLaSemana(dia, disparoGeneral, limiteGeneral, false, true));
+            } else {
+                // Respaldo por CAMPO, igual que en el adaptador: una fila que solo fija la hora de
+                // disparo conserva la hora limite general. Y una que solo APAGA no trae hora, asi
+                // que muestra la general — el dia esta apagado, no sin horario.
+                dias.add(new DiaDeLaSemana(dia,
+                        propio.preferencia().horaDisparo() != null ? propio.preferencia().horaDisparo() : disparoGeneral,
+                        propio.preferencia().horaLimite() != null ? propio.preferencia().horaLimite() : limiteGeneral,
+                        true, propio.activo()));
+            }
+        }
+        return dias;
     }
 
     private Habito requireHabito(HabitoId id) {

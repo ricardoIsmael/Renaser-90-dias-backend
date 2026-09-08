@@ -81,21 +81,37 @@ class HorarioHabitoTest {
         assertThat(horario.horaLimite()).isNull();
     }
 
-    // ---- invariante horaLimite posterior a horaDisparo (habits-personal-con-horario) ----
+    // ---- la ventana cabe dentro del dia (D-122, 2026-09-08) ----
+    //
+    // Estos tres decian ...Falla y esperaban IllegalArgumentException. Cambiaron con D-122: un
+    // cierre que se pasa de la medianoche ya no traba al aprendiz que trabaja de noche, se acomoda
+    // al ultimo instante util del dia. Lo que SI sigue fallando es arrancar despues de las 23:40,
+    // que es la decision equivalente tomada del otro lado (ver `noSePuedeArrancarDespuesDeLas2340`).
 
     @Test
-    void crearConHoraLimiteAnteriorAHoraDisparoFalla() {
-        assertThatThrownBy(() -> HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
+    void crearConCierrePasadaLaMedianocheLoAcomodaAlFinalDelDia() {
+        HorarioHabito horario = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
                 HabitoId.of(UUID.randomUUID()), 1, null, TipoDia.TODOS, LocalTime.of(22, 0), LocalTime.of(6, 0),
-                AHORA)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("horaLimite");
+                AHORA);
+
+        assertThat(horario.horaDisparo()).isEqualTo(LocalTime.of(22, 0));
+        assertThat(horario.horaLimite()).isEqualTo(LocalTime.of(23, 50));
     }
 
     @Test
-    void crearConHoraLimiteIgualAHoraDisparoFalla() {
+    void crearConCierreIgualAlArranqueLoAcomoda() {
         LocalTime misma = LocalTime.of(8, 0);
+        HorarioHabito horario = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), 1, null, TipoDia.TODOS, misma, misma, AHORA);
+
+        assertThat(horario.horaLimite()).isEqualTo(LocalTime.of(23, 50));
+    }
+
+    @Test
+    void noSePuedeArrancarDespuesDeLas2340() {
         assertThatThrownBy(() -> HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
-                HabitoId.of(UUID.randomUUID()), 1, null, TipoDia.TODOS, misma, misma, AHORA))
-                .isInstanceOf(IllegalArgumentException.class);
+                HabitoId.of(UUID.randomUUID()), 1, null, TipoDia.TODOS, LocalTime.of(23, 45), null, AHORA))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("23:40");
     }
 
     @Test
@@ -108,12 +124,28 @@ class HorarioHabitoTest {
     }
 
     @Test
-    void actualizarHorasConHoraLimiteAnteriorAHoraDisparoFalla() {
+    void actualizarHorasConCierrePasadaLaMedianocheLoAcomoda() {
         HorarioHabito horario = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
                 HabitoId.of(UUID.randomUUID()), 1, null, TipoDia.DISCIPLINA, LocalTime.of(6, 0), LocalTime.of(9, 0),
                 AHORA);
 
-        assertThatThrownBy(() -> horario.actualizarHoras(LocalTime.of(20, 0), LocalTime.of(5, 0),
+        horario.actualizarHoras(LocalTime.of(20, 0), LocalTime.of(5, 0), AHORA.plusSeconds(1));
+
+        assertThat(horario.horaDisparo()).isEqualTo(LocalTime.of(20, 0));
+        assertThat(horario.horaLimite()).isEqualTo(LocalTime.of(23, 50));
+    }
+
+    /**
+     * Lo que el test anterior cubria ademas del rechazo: que un intento invalido no deje el
+     * agregado mutado a medias. Se conserva con el caso que SIGUE fallando tras D-122.
+     */
+    @Test
+    void unArranqueFueraDeRangoNoDejaElHorarioMutadoAMedias() {
+        HorarioHabito horario = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), 1, null, TipoDia.DISCIPLINA, LocalTime.of(6, 0), LocalTime.of(9, 0),
+                AHORA);
+
+        assertThatThrownBy(() -> horario.actualizarHoras(LocalTime.of(23, 45), LocalTime.of(23, 50),
                 AHORA.plusSeconds(1))).isInstanceOf(IllegalArgumentException.class);
         // El estado previo no debe quedar mutado a mitad de camino por el intento fallido.
         assertThat(horario.horaDisparo()).isEqualTo(LocalTime.of(6, 0));

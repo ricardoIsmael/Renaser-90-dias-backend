@@ -32,12 +32,20 @@ import java.util.List;
  * habitos de DOMINGO aparecian tambien de lunes a sabado. Se mandan como nombres de
  * {@link DayOfWeek} ({@code "MONDAY"}..{@code "SUNDAY"}) y en orden de la semana, no como un
  * booleano "solo domingo": el dia que aparezca otro tipo de dia el contrato no cambia.
+ *
+ * <p>{@code iconKey} expone {@code Habito.iconoClave} — el icono CURADO de cada habito
+ * ({@code SLEEP}, {@code WATER}, {@code RITUAL_MORNING}, {@code PHONE_OFF}...), que la base ya
+ * guarda desde el baseline y que hasta ahora no salia por ninguna API. Sin el, el movil solo podia
+ * derivar un icono de la CATEGORIA, y como todos los habitos de una dimension comparten categoria,
+ * los pintaba a todos iguales: los seis de CUERPO con el mismo simbolo. Es una clave, no un emoji:
+ * el cliente decide como dibujarla, y el dia que cambie el diseno no hay que migrar la base.
+ * {@code null} en los habitos PERSONAL, que no traen icono propio.
  */
 public record MiHabitoResponse(String id, String title, String description, HabitTypeDto habitType,
                                 HabitCategoryDto category, HabitEvidenceRequirementDto evidenceRequirement,
                                 boolean isOptional, boolean isSystemHabit, boolean isDeactivatable,
-                                String systemKey, List<String> activeWeekdays, int unlockDay,
-                                int daysUntilUnlock, boolean locked) {
+                                String systemKey, String iconKey, List<String> activeWeekdays,
+                                int unlockDay, int daysUntilUnlock, boolean locked) {
 
     public static MiHabitoResponse from(HabitoConDias vista) {
         return new MiHabitoResponse(vista.habito().id().value().toString(), vista.habito().titulo(),
@@ -45,7 +53,8 @@ public record MiHabitoResponse(String id, String title, String description, Habi
                 HabitCategoryDto.fromClave(vista.habito().categoriaClave()),
                 HabitEvidenceRequirementDto.from(vista.habito().exigenciaEvidencia()),
                 vista.habito().esOpcional(), vista.habito().esDeSistema(), vista.habito().desactivable(),
-                vista.habito().claveSistema(), diasOrdenados(vista.diasSemana()), vista.diaDesbloqueo(),
+                vista.habito().claveSistema(), vista.habito().iconoClave(),
+                diasOrdenados(vista.diasSemana()), vista.diaDesbloqueo(),
                 vista.diasParaDesbloqueo(), vista.bloqueado());
     }
 
@@ -65,7 +74,7 @@ public record MiHabitoResponse(String id, String title, String description, Habi
         return new MiHabitoResponse(habito.id().value().toString(), habito.titulo(), habito.descripcion(),
                 HabitTypeDto.from(habito.tipo()), HabitCategoryDto.fromClave(habito.categoriaClave()),
                 HabitEvidenceRequirementDto.from(habito.exigenciaEvidencia()), habito.esOpcional(),
-                habito.esDeSistema(), habito.desactivable(), habito.claveSistema(),
+                habito.esDeSistema(), habito.desactivable(), habito.claveSistema(), habito.iconoClave(),
                 diasOrdenados(diasSemana), PRIMER_DIA, 0, false);
     }
 }

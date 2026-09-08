@@ -8,6 +8,9 @@ import com.renaser.os.notifications.application.ports.out.push.PushPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPushPort;
 import com.renaser.os.notifications.domain.model.notificacion.Notificacion;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
+import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
+import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
+import com.renaser.os.notifications.domain.model.tokenpush.TokenPushId;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -131,7 +134,8 @@ class NotificacionServiceTest {
     void fallaDePushNoTumbaLaEmision() {
         UserId usuario = usuario();
         when(loadPreferenciasPort.habilitadaPara(any(), any())).thenReturn(Optional.empty());
-        when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of("tok-1"));
+        when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(TokenPush.registrar(
+                TokenPushId.of(UUID.randomUUID()), usuario, "tok-1", PlataformaPush.ANDROID, CLOCK)));
         doThrow(new RuntimeException("Expo caido")).when(pushPort).enviar(anyList(), any(), any());
 
         Optional<Notificacion> resultado = service.emitir(

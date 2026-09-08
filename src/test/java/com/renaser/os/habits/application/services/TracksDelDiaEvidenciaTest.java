@@ -101,7 +101,7 @@ class TracksDelDiaEvidenciaTest {
         when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
         when(loadGuiaPort.porHabitos(any())).thenReturn(List.of());
-        when(loadPreferenciaPort.porParticipanteYHabitos(any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
     }
 
     @Test

@@ -12,7 +12,8 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Token de push (Expo) de un dispositivo (tabla {@code tokens_push}). {@code token} es
+ * Suscripción de push de un dispositivo (Expo para móvil o Web Push para navegador; tabla
+ * {@code tokens_push}). {@code token} es
  * globalmente UNICO en el esquema (V1__baseline_renaser.sql:1345) — un mismo token
  * registrado de nuevo (reinstalacion, cambio de usuario en el mismo dispositivo)
  * REEMPLAZA el dueno anterior, nunca duplica fila. Espejo 1:1 de
