@@ -108,6 +108,18 @@ public class HabitPreferenceController {
                 request.limitTime());
     }
 
+    /**
+     * Apaga el hábito ESE día de la semana, todas las semanas (V40). `409` si es obligatorio del
+     * programa, con el mismo criterio que la pausa: no es un permiso, la operación no aplica.
+     */
+    @RequiresPermission(Permission.USE_APP)
+    @DeleteMapping("/{habitId}/weekdays/{weekday}/active")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void apagarDiaDeLaSemana(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
+            @PathVariable DayOfWeek weekday) {
+        horarioSemanalUseCase.apagar(actor, HabitoId.of(habitId), weekday);
+    }
+
     /** Ese día vuelve a regirse por el horario general. Idempotente: borrar lo que no está es 204. */
     @RequiresPermission(Permission.USE_APP)
     @DeleteMapping("/{habitId}/weekdays/{weekday}")
