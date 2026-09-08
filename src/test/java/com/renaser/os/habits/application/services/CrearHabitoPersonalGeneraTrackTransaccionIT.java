@@ -101,7 +101,7 @@ class CrearHabitoPersonalGeneraTrackTransaccionIT {
 
     private CrearHabitoPersonalCommand comando(LocalTime disparo, LocalTime limite) {
         return new CrearHabitoPersonalCommand(participanteId, "Correr 5km", TipoHabito.CHECKBOX, "CUERPO",
-                PlantillaHabitoPersonal.CORRER, "Terminar una carrera de 5km", null, disparo, limite);
+                PlantillaHabitoPersonal.CORRER, "Terminar una carrera de 5km", null, disparo, limite, null);
     }
 
     private long contarHabitosDe(UserId participanteId) {

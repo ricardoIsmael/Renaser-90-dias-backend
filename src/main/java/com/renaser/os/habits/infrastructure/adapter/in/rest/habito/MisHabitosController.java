@@ -49,12 +49,13 @@ public class MisHabitosController {
     @PostMapping
     public ResponseEntity<MiHabitoResponse> crear(@ActorAutenticado UserId actor,
                                                     @RequestBody @Valid CreatePersonalHabitRequest request) {
-        var habito = crearUseCase.crear(new CrearHabitoPersonalCommand(actor, request.title(),
-                request.habitType().toDomain(), request.category().toClave(), request.template(),
-                request.goalLabel(), request.iconKey(), request.triggerTime(), request.limitTime()));
-        // Un habito PERSONAL nace con horario TODOS (ver MisHabitosService.crear), asi que sus dias
-        // salen del propio dominio en vez de repetirse aca.
+        var comando = new CrearHabitoPersonalCommand(actor, request.title(), request.habitType().toDomain(),
+                request.category().toClave(), request.template(), request.goalLabel(), request.iconKey(),
+                request.triggerTime(), request.limitTime(), request.activeWeekdays());
+        var habito = crearUseCase.crear(comando);
+        // El horario del catalogo sigue siendo TODOS; los dias que corre de verdad son los que
+        // eligio el aprendiz, y el comando ya resolvio el default de "todos" cuando no manda nada.
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(MiHabitoResponse.from(habito, TipoDia.TODOS.diasDeLaSemana()));
+                .body(MiHabitoResponse.from(habito, comando.diasActivos()));
     }
 }

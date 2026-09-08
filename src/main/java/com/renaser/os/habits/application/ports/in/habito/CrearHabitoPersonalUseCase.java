@@ -11,7 +11,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.util.EnumSet;
+import java.util.Set;
 
 /**
  * Alta de un habito PROPIO del aprendiz (ambito PERSONAL, tabla {@code habitos} unificada,
@@ -38,14 +41,20 @@ public interface CrearHabitoPersonalUseCase {
                                        @NotNull TipoHabito tipo, @NotBlank String categoriaClave,
                                        PlantillaHabitoPersonal plantilla, @Size(max = 200) String etiquetaMeta,
                                        @Size(max = 40) String iconoClave,
-                                       @NotNull LocalTime horaDisparo, LocalTime horaLimite) {
+                                       @NotNull LocalTime horaDisparo, LocalTime horaLimite,
+                                       Set<DayOfWeek> diasActivos) {
         public CrearHabitoPersonalCommand {
             // El ORDEN importa: `validateConstructorArgs` empareja estos valores con los
             // componentes del record por POSICION. Olvidar uno corre todos los de atras y las
             // anotaciones terminan validando el campo equivocado — `@NotNull` sobre la hora se
             // evaluaba contra el icono, y el alta rechazaba altas correctas.
             SelfValidating.validateConstructorArgs(CrearHabitoPersonalCommand.class, actorId, titulo, tipo,
-                    categoriaClave, plantilla, etiquetaMeta, iconoClave, horaDisparo, horaLimite);
+                    categoriaClave, plantilla, etiquetaMeta, iconoClave, horaDisparo, horaLimite, diasActivos);
+            // Vacio o null = los siete dias. Es lo que mandaban los clientes antes de que este
+            // campo existiera, asi que el default no cambia el comportamiento de nadie.
+            diasActivos = diasActivos == null || diasActivos.isEmpty()
+                    ? EnumSet.allOf(DayOfWeek.class)
+                    : EnumSet.copyOf(diasActivos);
             // Nivel 2 de validacion (CLAUDE.MD §5.4.3): estructuralmente imposible construir un
             // comando con una ventana que no cabe en el dia. La regla es UNA sola y vive en
             // VentanaDelDia (D-122); aca se aplica sobre los componentes del record, asi que el

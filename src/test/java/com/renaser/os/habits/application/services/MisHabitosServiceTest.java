@@ -64,6 +64,8 @@ class MisHabitosServiceTest {
     @Mock
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
     @Mock
+    private com.renaser.os.habits.application.ports.out.preferencia.SavePreferenciaHorarioPort savePreferenciaPort;
+    @Mock
     private IdGenerator idGenerator;
 
     private final UserId actor = UserId.of(UUID.randomUUID());
@@ -72,8 +74,8 @@ class MisHabitosServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new MisHabitosService(loadPort, savePort, saveHorarioPort, loadHorarioPort, progresoPort, CLOCK,
-                idGenerator);
+        service = new MisHabitosService(loadPort, savePort, saveHorarioPort, loadHorarioPort, progresoPort,
+                savePreferenciaPort, CLOCK, idGenerator);
         lenient().when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
         // `consultar` necesita el dia de programa desde que calcula el desbloqueo de cada habito
         // (dia 2: el mismo escenario en el que el dueño reporto ver habitos que aun no le tocaban).
@@ -84,8 +86,13 @@ class MisHabitosServiceTest {
     }
 
     private CrearHabitoPersonalCommand comando(LocalTime disparo, LocalTime limite) {
+        return comando(disparo, limite, null);
+    }
+
+    private CrearHabitoPersonalCommand comando(LocalTime disparo, LocalTime limite,
+                                                java.util.Set<java.time.DayOfWeek> dias) {
         return new CrearHabitoPersonalCommand(actor, "Correr 5km", TipoHabito.CHECKBOX, "CUERPO",
-                PlantillaHabitoPersonal.CORRER, "meta", null, disparo, limite);
+                PlantillaHabitoPersonal.CORRER, "meta", null, disparo, limite, dias);
     }
 
     // ---- consultar (comportamiento preexistente, sin cambios de contrato) ----
@@ -360,6 +367,50 @@ class MisHabitosServiceTest {
         assertThat(captor.getValue().diaInicio()).as("el dia 0 arranca el dia 1, como en D-103").isEqualTo(1);
     }
 
+    // ---- "este habito lo hago lunes, miercoles y viernes" (2026-09-08) ----
+    //
+    // Hasta ahora un habito propio nacia con TipoDia.TODOS y corria los siete dias; para dejarlo en
+    // tres habia que crearlo y despues apagar cuatro dias a mano, uno por uno. Ahora los dias
+    // viajan en el alta.
+    //
+    // El mecanismo NO es un `tipoDia` nuevo: ese enum tiene cuatro valores y ninguno dice "lunes,
+    // miercoles y viernes". Se usa el que ya existe desde V40 —`horario_semanal_habito.activo`—,
+    // que es el mismo que respeta el barrido diario.
+
+    @Test
+    void unHabitoPersonalPuedeCorrerSoloLosDiasElegidos() {
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(10)));
+        when(idGenerator.newId()).thenReturn(UUID.randomUUID(), UUID.randomUUID());
+
+        service.crear(comando(DISPARO, LIMITE,
+                java.util.Set.of(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.WEDNESDAY,
+                        java.time.DayOfWeek.FRIDAY)));
+
+        var apagados = org.mockito.ArgumentCaptor
+                .forClass(com.renaser.os.habits.domain.model.preferencia.HorarioSemanal.class);
+        org.mockito.Mockito.verify(savePreferenciaPort, org.mockito.Mockito.times(4))
+                .saveParaDiaSemana(org.mockito.ArgumentMatchers.eq(actor),
+                        org.mockito.ArgumentMatchers.any(), apagados.capture());
+        assertThat(apagados.getAllValues()).allSatisfy(h -> assertThat(h.activo()).isFalse());
+        assertThat(apagados.getAllValues())
+                .extracting(com.renaser.os.habits.domain.model.preferencia.HorarioSemanal::diaSemana)
+                .containsExactlyInAnyOrder(java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.THURSDAY,
+                        java.time.DayOfWeek.SATURDAY, java.time.DayOfWeek.SUNDAY);
+    }
+
+    /** Sin dias, los siete: es lo que mandaban los clientes antes de que el campo existiera. */
+    @Test
+    void unHabitoPersonalSinDiasElegidosSigueCorriendoLosSiete() {
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(10)));
+        when(idGenerator.newId()).thenReturn(UUID.randomUUID(), UUID.randomUUID());
+
+        service.crear(comando(DISPARO, LIMITE));
+
+        org.mockito.Mockito.verify(savePreferenciaPort, org.mockito.Mockito.never())
+                .saveParaDiaSemana(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any());
+    }
+
     /**
      * Regla 02 / regla 03: el dia 0 NO puede depender de la hora del servidor. Con el reloj a las
      * 02:00 UTC el servidor ya esta en el 7 de septiembre mientras que en Lima (UTC-5) todavia es
@@ -369,7 +420,8 @@ class MisHabitosServiceTest {
     @Test
     void enDia0ElHabitoPersonalSeCreaIgualConElRelojEnLaMadrugadaUtc() {
         MisHabitosService servicioDeMadrugada = new MisHabitosService(loadPort, savePort, saveHorarioPort,
-                loadHorarioPort, progresoPort, FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator);
+                loadHorarioPort, progresoPort, savePreferenciaPort,
+                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator);
         when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(0)));
         when(idGenerator.newId()).thenReturn(UUID.randomUUID(), UUID.randomUUID());
 
