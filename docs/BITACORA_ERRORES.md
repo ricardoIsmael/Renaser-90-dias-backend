@@ -5431,3 +5431,174 @@ Todo lo que se probo antes de eso habia salido bien y no era el problema: la con
   2. Agregar **2 GB de swap**. No requiere reiniciar nada y convierte "el proceso muere" en "el proceso va más lento": el kernel pagina en vez de matar.
   3. `t3.medium` (4 GB) solo si además se quiere despliegue sin caída — ver E-155, donde el intento de azul/verde sobre esta misma instancia costó siete horas de caída justamente por esto.
 - **Prevención:** ningún contenedor de la aplicación debe correr sin `--memory`. Un límite de cgroup no es una restricción: es **la información que la JVM necesita** para no pedir más de lo que hay. Sin él, `MaxRAMPercentage` se calcula contra la RAM total del host y el número que uno cree estar poniendo no es el que la JVM entiende.
+
+---
+
+## E-161 — "Sigo en el día 0": el día se derivaba bien y se leía mal (2026-09-08) — **RESUELTO**
+
+- **Síntoma reportado**, palabras del dueño: *"mi cuenta con el correo ricardoismael777 comenzaba hoy
+  pero sigo en el día 0 ¿qué fue bro? ¿se malogró esto si ya estaba solucionado esta parte?"*. La
+  cuenta `96f7c5bf-00a5-4c76-93a3-69821ed5a20b` tenía `fecha_inicio = 2026-09-07` (ver E-137), o sea
+  el 2026-09-08 tenía que verse el **día 2**, y `GET /api/v1/home` devolvía `diaPrograma = 0`.
+
+- **Lo primero que hay que descartar, y que acá NO era: E-91 no se rompió.** El cálculo del dominio
+  (`ParticipacionPrograma.diaProgramaDerivado`) estaba intacto, el cron seguía siendo horario, y el
+  barrido selecciona a TODOS los activados (`programa_activado_en IS NOT NULL`) — sin filtro por día,
+  así que una fila en 0 sí entraba. Lo verificado en vivo: producción arriba, el backend local
+  respondiendo 200 en `/actuator/health` a las 09:27 y **conexión rehusada tres minutos después**.
+
+- **Causa real — son dos defectos independientes:**
+
+  1. **El camino de LECTURA nunca derivó nada.** V20 hizo el día derivado *en el dominio*, pero
+     `ConsultarResumenParticipacionPersistenceAdapter` devuelve `COALESCE(pp.dia_programa, 0)`, y esa
+     columna la escribe ÚNICAMENTE `AvanzarDiaProgramaScheduler`. O sea: el dominio sabía que iba por
+     el día 2 y la app mostraba lo último que alguien hubiera guardado. Si el backend no estuvo
+     arriba en el minuto `:05` de la hora que cruza la medianoche del participante, la pantalla dice
+     **día 0 todo el día**. Afecta a `GET /api/v1/home`, al panel admin de aprendices y a los 7
+     módulos que consumen `ParticipacionProgramaFinder`. **V20 arregló QUÉ se calcula; no arregló
+     CUÁNDO se publica.**
+  2. **Un participante que fallaba detenía el barrido entero.**
+     `RelojProgramaService.avanzarParticipantesActivos` recorría el padrón sin `try/catch` por fila,
+     contra lo que exige `.claude/rules/02-tiempo-zonas-y-schedulers.md` §4. Una sola `timezone`
+     inválida dejaba a TODO el padrón sin avanzar, cada hora, con el único rastro de un stacktrace en
+     el log del scheduler.
+
+- **Por qué pasó CI y una verificación manual.** `VERIFICACION_TRAINING_2026-09-07.md` §1 anotó
+  `diaPrograma = 0` el mismo 2026-09-07 y lo dio por correcto — se estaba verificando otra cosa (que
+  el "DÍA 1 DE 90" de la app era un `?? 1` inventado por el cliente), y nadie preguntó por qué el
+  servidor decía 0 el día en que el programa arrancaba. **La pregunta que faltó: ¿este 0 es el
+  correcto, o es el que deja una columna que nadie escribió?**
+
+- **Corrección:**
+
+  | Defecto | Cambio |
+  |---|---|
+  | 1 | `ParticipacionPrograma.diaProgramaDerivado(fechaInicio, hoy, diasAjuste, activado)` — la MISMA cuenta, ahora también sobre datos sueltos. El adaptador la llama con las columnas y el `Clock`; **la fórmula no se copió**, que es como se desincronizó la columna generada `fecha_graduacion_esperada` (V22) |
+  | 1 | La **fase** pasa a derivarse del día devuelto en vez de leerse de `pp.fase`. Es la regla que D-67 ya exige en el dominio; leer la columna dejaba viva justo la incoherencia "día nuevo, fase vieja" |
+  | 2 | `sincronizarUno(participacion)` con `try/catch` + `log.error`: la fila que falla se cuenta y se sigue. Como el día es derivado, la corrida siguiente la pone al día sola |
+
+- **Lo que NO cambió, a propósito:** mientras el reloj no arrancó (sin `programa_activado_en`, o con
+  `fecha_inicio` en el futuro) sigue mandando la columna, no un 0 derivado. Es la misma distinción
+  que hace `sincronizarDiaDelPrograma`: un participante pre-activación conserva el día que un ADMIN
+  le haya fijado a mano.
+
+- **Cómo evitar que vuelva a pasar:**
+  - **Seis pruebas nuevas, todas rojas contra el código viejo.** Cinco en
+    `ConsultarResumenParticipacionPersistenceAdapterTest` (Postgres real): el día derivado sin que el
+    barrido haya corrido, la fase siguiendo al día derivado, los `dias_ajuste_programa` descontándose,
+    la columna mandando mientras el programa no arrancó, y el panel admin + el barrido por rol
+    derivando igual. Una en `RelojProgramaServiceTest`: un participante que explota no detiene el
+    barrido. **El reloj de las de Postgres se fija a las 02:00 UTC** — que en Lima todavía es el día
+    anterior (regla 03); a las 10:00 UTC el bug se esconde.
+  - **Un fixture incoherente tapaba parte de esto.**
+    `devuelveInscritoConTodosLosCamposDeUnAprendizConFilaDeParticipante` afirmaba `dia_programa = 20`
+    **y** `fase = PHASE_1_REBIRTH` a la vez, cuando el día 20 cae en la fase 2. El INSERT no escribía
+    `fase` y la columna se quedaba en su default; el test verificaba que el adaptador devolviera esa
+    contradicción. Corregido a `PHASE_2_DEVELOPMENT`.
+  - **La lección general, que es la de E-91 una vuelta más arriba:** *derivar en el dominio no sirve
+    de nada si el que lee no deriva.* Materializar una cuenta en una columna está bien mientras la
+    lectura pueda recalcularla; si la lectura depende de que un cron haya corrido, el valor que ve el
+    usuario depende de que la máquina haya estado prendida — y eso no es una regla de negocio.
+
+- **Verificación:** `./mvnw clean verify` en verde — **2576 pruebas unitarias** (eran 2570) y **25 de
+  integración**, 0 fallos, 5:33 min. **Los contenedores corrieron en Docker local, NO en
+  Testcontainers Cloud**: `~/.config/renaser/testcontainers-cloud.token` está vacío (0 bytes) y el
+  agente no estaba levantado (`docs/PRUEBAS_EN_CLOUD.md`).
+
+---
+
+## E-162 — `InconsistentClassPathException` al completar un hábito: DevTools recarga las clases y Modulith se queda con las viejas (2026-09-08)
+
+- **Síntoma:** al subir una evidencia, en el log del backend (no en la respuesta HTTP) aparece:
+
+  ```
+  ERROR 21735 --- [renaser-backend] [cTaskExecutor-1] .a.i.SimpleAsyncUncaughtExceptionHandler :
+  Unexpected exception occurred invoking async method: void com.renaser.os.notifications.infrastructure.adapter.in.event.HabitoCompletadoNotificationListener.on(com.renaser.os.habits.api.HabitoCompletadoEvent)
+
+  com.tngtech.archunit.base.ArchUnitException$InconsistentClassPathException: Can't resolve method com.renaser.os.notifications.infrastructure.adapter.in.event.HabitoCompletadoNotificationListener.on(com.renaser.os.habits.api.HabitoCompletadoEvent)
+  	at com.tngtech.archunit.core.domain.JavaMethod$ReflectMethodSupplier.get(JavaMethod.java:139)
+  	...
+  	at org.springframework.modulith.observability.support.DefaultObservedModule.isEventListenerInvocation(DefaultObservedModule.java:223)
+  	at org.springframework.modulith.observability.support.ModuleEntryInterceptor.invoke(ModuleEntryInterceptor.java:134)
+  Caused by: java.lang.NoSuchMethodException: com.renaser.os.notifications.infrastructure.adapter.in.event.HabitoCompletadoNotificationListener.on(com.renaser.os.habits.api.HabitoCompletadoEvent)
+  ```
+
+- **Lo primero que hay que descartar, y que acá NO era:** no tiene nada que ver con la base de datos.
+  No es una clave primaria vencida ni duplicada, no es el outbox, no es el registro de hábito y no es
+  la evidencia. `getDeclaredMethod` es reflexión de Java: el "método que no se puede resolver" es un
+  método Java, no una fila. **El método existe** — `javap` sobre
+  `target/classes/.../HabitoCompletadoNotificationListener.class` muestra
+  `void on(com.renaser.os.habits.api.HabitoCompletadoEvent)`.
+
+- **Causa real — tres piezas que solo se juntan corriendo desde el IDE:**
+
+  1. **DevTools está en el classpath de ejecución** (`spring-boot-devtools-4.1.1.jar`, scope `runtime`)
+     y `target/classes` entra como **directorio**. Eso activa el `RestartClassLoader`: al recompilar
+     desde IntelliJ, el contexto se reinicia y **cada clase `com.renaser.os.*` pasa a ser un objeto
+     `Class` nuevo**. Los jars, en cambio, siguen en el classloader **base**, que no se tira.
+  2. **`ApplicationModules` (spring-modulith-core) tiene un `private static final Map ... CACHE`**, y
+     ese jar vive en el classloader base → **el modelo de ArchUnit sobrevive al reinicio**, apuntando a
+     clases de la generación anterior.
+  3. **ArchUnit resuelve con el context classloader y memoiza para siempre**
+     (`Suppliers$NonSerializableMemoizingSupplier`, visible en el stack).
+     `ReflectMethodSupplier.get()` hace `owner.reflect().getDeclaredMethod(nombre, params.reflect())`,
+     y **`getDeclaredMethod` compara los parámetros por identidad de `Class`, no por nombre**.
+
+  Resultado: la clase dueña queda resuelta en la generación N y el parámetro `HabitoCompletadoEvent`
+  en la generación M. Los dos se llaman igual, los dos tienen el método — y el lookup falla igual.
+
+- **Evidencia medida en vivo** (PID 21735, arrancado 09:33; `.class` recompilados 10:17; error 10:25):
+
+  ```
+  $ jcmd 21735 VM.class_hierarchy com.renaser.os.habits.api.HabitoCompletadoEvent
+    com.renaser.os.habits.api.HabitoCompletadoEvent/0x00007fb9903a12b0
+    com.renaser.os.habits.api.HabitoCompletadoEvent/0x00007fba0c00af60
+    com.renaser.os.habits.api.HabitoCompletadoEvent/0x00007fba70000f40
+  ```
+
+  **Tres copias de la misma clase en la misma JVM.** Después de forzar `jcmd GC.run` siguen las tres:
+  no son basura, están **fuertemente referenciadas** por esos cachés estáticos. Total retenido:
+  **3 `RestartClassLoader` vivos, 8048 clases, 44,8 MB de metaspace** que no se liberan y crecen con
+  cada recompilación (emparenta con E-160: el techo de memoria de esta app ya está justo).
+
+- **En qué afecta — y en qué NO:**
+
+  - **La subida de evidencia terminó bien.** `@ApplicationModuleListener` es `AFTER_COMMIT` + `@Async`:
+    que el listener se haya ejecutado **es la prueba** de que la transacción de `RegistroService`
+    commiteó — registro completado y puntos otorgados incluidos.
+  - **La notificación se emitió.** Verificado con `javap -c -l` sobre el jar: en
+    `ModuleEntryInterceptor.invoke` la línea **123 es `invocation.proceed()`** y la línea **134 es
+    `observation.stop()`, dentro del `finally`**. El cuerpo del listener ya corrió; lo que reventó es
+    el cálculo de los tags de la métrica, después.
+  - **El outbox no queda colgado.** El stack muestra el orden de la cadena:
+    `AsyncExecutionInterceptor` → `ModuleEntryInterceptor` → (`@Transactional` → `CompletionRegisteringAdvisor`
+    → target). Todo lo que está por dentro ya devolvió bien, así que la fila de `event_publication` se
+    completó (con `completion-mode: DELETE`, se borró). **No hay reentrega ni notificación duplicada.**
+  - **Lo único que se pierde** es la métrica/traza de esa entrada de módulo, más un stack alarmante en
+    el log.
+  - **Es un problema exclusivo de desarrollo.** En producción se corre el jar empaquetado, sin DevTools
+    y con un solo classloader: ahí no puede pasar.
+  - **Le pasa a los 10 `@ApplicationModuleListener`**, no solo a este (los 5 de `notifications`, los 2
+    de `chat`, los de `habits`). Cuál falla depende de qué `JavaClass` alcanzó a memoizarse en cada
+    generación, por eso parece intermitente.
+
+- **Solución inmediata:** **Stop + Run** de la aplicación (reinicio completo, no el hot restart). El
+  error desaparece hasta la próxima recompilación en caliente.
+
+- **Cómo evitarlo (ninguna aplicada todavía, hay que elegir):**
+
+  1. Mandar los jars que cachean clases de la app al restart classloader, para que su caché muera con
+     cada reinicio — mantiene el hot restart:
+     `spring.devtools.restart.include.modulith=/spring-modulith-.*\.jar` y
+     `spring.devtools.restart.include.archunit=/archunit.*\.jar`.
+  2. Apagar la observabilidad de módulos **solo en desarrollo** — no existe propiedad de on/off, hay
+     que excluir la autoconfiguración:
+     `org.springframework.modulith.observability.autoconfigure.ModuleObservabilityAutoConfiguration`.
+     **Ojo:** el `spring.autoconfigure.exclude` de `application.yaml` aplica también a producción, así
+     que va en un perfil de desarrollo, no en el archivo base.
+  3. `spring.devtools.restart.enabled=false` (se pierde el hot restart).
+
+- **La regla general:** toda librería que guarde objetos `Class` de la aplicación en un `static`
+  (el `CACHE` de `ApplicationModules`, los suppliers memoizados de ArchUnit) es **incompatible con el
+  hot restart de DevTools** mientras viva en el classloader base. El síntoma siempre es el mismo:
+  `NoSuchMethodException` / `ClassCastException` sobre una clase que evidentemente existe y calza.

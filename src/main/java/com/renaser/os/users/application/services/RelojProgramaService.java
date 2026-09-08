@@ -10,6 +10,8 @@ import com.renaser.os.users.application.ports.out.participante.LoadParticipacion
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.user.User;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +29,8 @@ import java.util.NoSuchElementException;
 @Service
 public class RelojProgramaService
         implements ActivateProgramUseCase, ConsultarActivacionProgramaUseCase, AvanzarDiaProgramaUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(RelojProgramaService.class);
 
     /** Tamaño de pagina del barrido nocturno — ni tan chico que sean miles de
      * round-trips a la base, ni tan grande que cargue medio padron a memoria de una. */
@@ -86,6 +90,13 @@ public class RelojProgramaService
      * en su propia transaccion implicita, asi que un fallo a mitad del barrido deja lo ya
      * guardado guardado — y como el dia es DERIVADO de las fechas (V20), no incremental,
      * reintentar nunca duplica ni saltea un dia.
+     *
+     * <p><b>Un participante que falla no detiene el barrido</b> (A-2, 2026-09-08;
+     * `.claude/rules/02-tiempo-zonas-y-schedulers.md` §4). Sin el try/catch por fila, una sola
+     * `timezone` invalida o una fila incoherente tiraba la corrida ENTERA: nadie avanzaba de dia,
+     * cada hora, y el unico rastro era una excepcion en el log del scheduler. El fallo se cuenta
+     * y se sigue; lo que no se pudo guardar se pone al dia solo en la corrida siguiente, porque
+     * el dia es derivado.
      */
     @Override
     public ResultadoAvance avanzarParticipantesActivos() {
@@ -97,15 +108,29 @@ public class RelojProgramaService
             lote = listarParticipantesConProgramaActivoPort.pagina(offset, TAMANO_LOTE);
             for (ParticipacionPrograma participacion : lote) {
                 evaluados++;
-                LocalDate hoyEnSuZona = clock.now().atZone(participacion.timezone()).toLocalDate();
-                if (participacion.sincronizarDiaDelPrograma(hoyEnSuZona, clock)) {
-                    saveParticipacionProgramaPort.save(participacion);
+                if (sincronizarUno(participacion)) {
                     avanzados++;
                 }
             }
             offset += TAMANO_LOTE;
         } while (lote.size() == TAMANO_LOTE);
         return new ResultadoAvance(evaluados, avanzados);
+    }
+
+    /** Devuelve {@code true} solo si esta fila cambio y se guardo. Ver el javadoc de arriba. */
+    private boolean sincronizarUno(ParticipacionPrograma participacion) {
+        try {
+            LocalDate hoyEnSuZona = clock.now().atZone(participacion.timezone()).toLocalDate();
+            if (!participacion.sincronizarDiaDelPrograma(hoyEnSuZona, clock)) {
+                return false;
+            }
+            saveParticipacionProgramaPort.save(participacion);
+            return true;
+        } catch (RuntimeException e) {
+            log.error("[users.RelojPrograma] no se pudo sincronizar el dia del participante {}: {}",
+                    participacion.participanteId(), e.toString(), e);
+            return false;
+        }
     }
 
     private ParticipacionPrograma requireParticipacionDe(UserId usuarioId) {
