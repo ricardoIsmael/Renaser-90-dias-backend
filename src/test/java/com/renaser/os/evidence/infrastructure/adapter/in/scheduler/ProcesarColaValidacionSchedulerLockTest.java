@@ -10,6 +10,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -50,11 +51,14 @@ class ProcesarColaValidacionSchedulerLockTest {
     private ProcesarColaValidacionScheduler scheduler;
     @Autowired
     private CasoDeUsoFalso casoDeUsoFalso;
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Test
     @DisplayName("C-5: dos ejecuciones concurrentes del barrido bloqueado producen una sola ejecución efectiva")
     void dosEjecucionesConcurrentesProducenUnaSolaEjecucionEfectiva() throws InterruptedException {
         casoDeUsoFalso.invocaciones().set(0);
+        liberarElLockAntesDeCompetir();
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch listos = new CountDownLatch(2);
         CountDownLatch arranquen = new CountDownLatch(1);
@@ -84,6 +88,30 @@ class ProcesarColaValidacionSchedulerLockTest {
         assertThat(casoDeUsoFalso.invocaciones().get())
                 .as("solo UNA de las dos ejecuciones concurrentes debe correr el caso de uso real")
                 .isEqualTo(1);
+    }
+
+    /**
+     * Borra la fila de ShedLock antes de que compitan los dos hilos.
+     *
+     * <p><b>Por que hace falta.</b> Este test corre dentro de un contexto de Spring con
+     * {@code @EnableScheduling} activo (D-P4), asi que el cron REAL del barrido —{@code
+     * @Scheduled(cron = "0 * * * * *")}, cada minuto— tambien compite por el mismo lock. Y
+     * {@code lockAtLeastFor} vale {@code PT10S}: ShedLock retiene la fila diez segundos DESPUES de
+     * terminar el trabajo, para protegerse de relojes desfasados entre instancias.
+     *
+     * <p>El resultado era un fallo intermitente: si el cron disparaba en los diez segundos previos,
+     * el lock seguia tomado, los dos hilos del test quedaban afuera y el contador daba <b>0</b> en
+     * vez de 1. La invocacion del cron no se veia porque {@code invocaciones().set(0)} justo antes
+     * la borraba — quedaba el efecto sin la causa. Ventana de ~10 s cada 60: pasa en local y falla
+     * en CI, que arranca mas lento.
+     *
+     * <p><b>Por que NO se resuelve esperando</b> (con {@code Thread.sleep} o Awaitility): pasados
+     * los diez segundos el lock se libera y el resultado pasa a depender de cuando dispare el cron
+     * — el test dejaria de fallar y tambien dejaria de probar lo que dice probar. Lo que hay que
+     * quitar es el tercer competidor, no la aserccion.
+     */
+    private void liberarElLockAntesDeCompetir() {
+        jdbcTemplate.update("DELETE FROM renaser.shedlock WHERE name = ?", "evidence-procesar-cola-validacion");
     }
 
     private static void awaitSilenciosamente(CountDownLatch latch) {

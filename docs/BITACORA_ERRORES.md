@@ -5616,3 +5616,56 @@ Todo lo que se probo antes de eso habia salido bien y no era el problema: la con
 - **Cómo evitarlo:** al agregar una librería que use Jackson 2 en Spring Boot 4, no pedir su mapper
   por constructor sin comprobar primero el tipo del bean; usar una instancia local cuando el uso es
   aislado y acotado.
+
+---
+
+## E-164 — Un test de ShedLock fallaba solo en CI: competía con el cron real de su propio contexto (2026-09-08) — **RESUELTO**
+
+- **Síntoma exacto**, en el CI del PR y nunca en local:
+
+  ```
+  ProcesarColaValidacionSchedulerLockTest.dosEjecucionesConcurrentesProducenUnaSolaEjecucionEfectiva:86
+  [solo UNA de las dos ejecuciones concurrentes debe correr el caso de uso real]
+  expected: 1
+  but was: 0
+  ```
+
+  Uno solo de 2614. `./mvnw clean verify` en la laptop pasaba en verde.
+
+- **Causa real — hay un tercer competidor que el test no sabía que existía.** El test levanta un
+  `@SpringBootTest` completo, y `@EnableScheduling` está declarado globalmente (D-P4), así que
+  **el cron real del barrido también corre dentro del contexto de prueba**:
+  `@Scheduled(cron = "0 * * * * *")`, cada minuto. Y el lock lleva `lockAtLeastFor: PT10S`, o sea
+  que ShedLock **retiene la fila diez segundos DESPUÉS de terminar el trabajo** — protección
+  legítima contra relojes desfasados entre instancias.
+
+  Si el cron disparaba en los diez segundos previos al test, la fila seguía tomada, los dos hilos
+  quedaban afuera y el contador daba **0**. La invocación del cron no se veía porque
+  `invocaciones().set(0)`, la primera línea del test, la borraba: quedaba **el efecto sin la
+  causa**, y de ahí que el `0` pareciera "no corrió ninguno" en vez de "ya corrió otro".
+
+- **Por qué en CI y no en local.** La ventana es de ~10 s de cada 60. El runner arranca el contexto
+  más lento, así que el test cae en otro punto del minuto. No es "CI es raro": es la misma lotería
+  con un dado distinto.
+
+- **La corrección que NO se hizo, y por qué.** La sugerencia automática del PR era `Thread.sleep` +
+  Awaitility hasta que la aserción pasara. Eso empeora las cosas: pasados los diez segundos el lock
+  se libera y el resultado depende de cuándo dispare el cron — el test dejaría de fallar **y
+  también de probar lo que dice probar**. Ante un fallo de concurrencia, esperar más solo sirve si
+  el trabajo estaba encolado; si el lock está tomado, no se suelta por esperar.
+
+- **Solución aplicada:** borrar la fila de `renaser.shedlock` de ese barrido justo antes de soltar
+  el latch, para que los dos hilos compitan sobre un lock limpio. La aserción sigue siendo
+  `isEqualTo(1)`. Si el cron dispara *durante* la prueba, lo rechaza el lock que ya tiene el hilo
+  ganador, así que el resultado sigue siendo 1.
+
+- **Cómo evitar que vuelva a pasar:** **un test de concurrencia sobre ShedLock tiene que empezar
+  limpiando su propia fila.** Mientras `@EnableScheduling` sea global, cualquier `@SpringBootTest`
+  que toque un barrido con `@SchedulerLock` compite con el cron de verdad — y con `lockAtLeastFor`
+  la interferencia sobrevive al trabajo que la causó. Es la misma familia que E-150
+  (`unTokenVencidoYaNoSePuedeConsumir`, que falla solo dentro de la suite completa): **estado
+  compartido entre pruebas que se ve como un fallo de lógica.**
+
+- **Verificación:** el test corrió tres veces seguidas en verde. Con un flaky eso prueba poco por sí
+  solo, y conviene decirlo: lo que sostiene el arreglo es el mecanismo —borrada la fila, no queda
+  otro competidor—, no las tres corridas.
