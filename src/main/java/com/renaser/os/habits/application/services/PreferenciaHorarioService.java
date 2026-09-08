@@ -182,7 +182,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
             savePreferenciaPort.saveParaFecha(horario);
             return;
         }
-        asegurarPreferenciaVigente(command, contexto.ventanaVigente(), ahora);
+        asegurarPreferenciaYRecordatorio(command, contexto.ventanaVigente(), ahora);
         CambioHorarioPendiente pendiente = CambioHorarioPendiente.programar(command.actorId(), command.habitoId(),
                 command.horaDisparo(), command.horaLimite(), command.recordatorioActivo(),
                 command.minutosRecordatorio(), contexto.fechaEfectivaDiferido(), ahora);
@@ -192,17 +192,30 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     /**
      * E-54: `cambios_horario_pendientes` tiene FK compuesta a `preferencias_horario`, y la rama
      * diferida no creaba la fila padre — el primer cambio diferido de un habito nunca editado
-     * violaba la FK. Se crea con lo que YA rige hoy, nunca con lo pedido: un cambio diferido no
-     * puede tocar el dia en curso ("no se improvisa el dia"). Los valores pedidos los escribe la
-     * promocion nocturna ({@code PromocionCambioHorarioService}), el dia que corresponde.
+     * violaba la FK. Se crea con lo que YA rige hoy, nunca con las HORAS pedidas: un cambio diferido
+     * no puede tocar el dia en curso ("no se improvisa el dia"). Esas horas las escribe la promocion
+     * nocturna ({@code PromocionCambioHorarioService}), el dia que corresponde.
+     *
+     * E-159: el RECORDATORIO si se aplica hoy, y por eso este metodo tambien lo escribe. D-91
+     * protege la ventana del dia en curso —a que hora te toca—, no cuantos minutos antes queres que
+     * te avisen: el aviso cuelga de la hora que este rigiendo, sea la vieja o la nueva. Diferirlo
+     * ademas se leia mal: {@code construirVista} saca el recordatorio solo de la preferencia y
+     * {@code CambioProgramado} no lo lleva, asi que entre el PATCH y la promocion la app releia
+     * `reminderEnabled=true` con `reminderMinutesBefore=null`. En un telefono sin el conjunto local
+     * de avisos (reinstalacion, segundo dispositivo) eso degradaba "avisame 15 minutos antes" a "a
+     * la hora exacta", en silencio. La promocion vuelve a escribir estos mismos valores: idempotente.
+     *
+     * Las horas siguen intactas en los dos caminos — al que ya tenia preferencia se le carga el
+     * objeto existente y solo se le toca el recordatorio.
      */
-    private void asegurarPreferenciaVigente(EditarPreferenciaHorarioCommand command, VentanaVigenteHoy vigente,
-                                             Instant ahora) {
-        if (vigente.conPreferenciaPropia()) {
-            return;
-        }
-        savePreferenciaPort.save(PreferenciaHorario.crear(command.actorId(), command.habitoId(),
-                vigente.horaDisparo(), vigente.horaLimite(), ahora));
+    private void asegurarPreferenciaYRecordatorio(EditarPreferenciaHorarioCommand command, VentanaVigenteHoy vigente,
+                                                    Instant ahora) {
+        PreferenciaHorario preferencia = loadPreferenciaPort
+                .porParticipanteYHabito(command.actorId(), command.habitoId())
+                .orElseGet(() -> PreferenciaHorario.crear(command.actorId(), command.habitoId(),
+                        vigente.horaDisparo(), vigente.horaLimite(), ahora));
+        preferencia.actualizarRecordatorio(command.recordatorioActivo(), command.minutosRecordatorio(), ahora);
+        savePreferenciaPort.save(preferencia);
     }
 
     /**

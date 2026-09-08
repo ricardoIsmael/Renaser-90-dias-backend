@@ -193,13 +193,22 @@ class PreferenciaHorarioServiceTest {
         when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.of(prefActual));
 
         ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
-                LocalTime.of(7, 0), LocalTime.of(9, 0), true, null, null));
+                LocalTime.of(7, 0), LocalTime.of(9, 0), true, 15, null));
 
         assertThat(resultado.diferido()).isTrue();
         assertThat(resultado.fechaEfectivaDiferido()).isEqualTo(LocalDate.of(2026, 8, 25));
         verify(saveCambioPendientePort).save(any());
-        verify(savePreferenciaPort, never()).save(any());
         verify(historialPort, never()).registrar(any(), any(), any(), any(), any(), any());
+
+        // E-159: lo que el dia en curso protege son las HORAS, no el recordatorio. Antes esto era
+        // `verify(savePreferenciaPort, never())`, que ademas de las horas congelaba el aviso hasta
+        // la promocion nocturna y dejaba `reminderEnabled=true` con los minutos en null.
+        ArgumentCaptor<PreferenciaHorario> guardada = ArgumentCaptor.forClass(PreferenciaHorario.class);
+        verify(savePreferenciaPort).save(guardada.capture());
+        assertThat(guardada.getValue().horaDisparo()).isEqualTo(LocalTime.of(8, 0));
+        assertThat(guardada.getValue().horaLimite()).isEqualTo(LocalTime.of(10, 0));
+        assertThat(guardada.getValue().recordatorioActivo()).isTrue();
+        assertThat(guardada.getValue().minutosRecordatorio()).isEqualTo(15);
     }
 
     /**
