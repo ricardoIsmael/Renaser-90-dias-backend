@@ -52,6 +52,6 @@ public class RocaMaestraController {
     public RocaMaestraResponse definir(@ActorAutenticado UserId actor, @PathVariable EjeObjetivo eje,
                                         @Valid @RequestBody DefinirRocaMaestraRequest request) {
         return RocaMaestraResponse.from(definirUseCase.definir(new DefinirRocaMaestraCommand(
-                actor, eje, request.objetivo(), request.meta(), request.avance(), request.unidad())));
+                actor, eje, request.objetivo(), request.meta(), request.avance(), request.unidad(), request.lineaBase())));
     }
 }

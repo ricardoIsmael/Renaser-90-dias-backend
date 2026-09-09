@@ -32,16 +32,23 @@ public interface DefinirRocaMaestraUseCase {
                                       @NotBlank @Size(max = RocaMaestra.MAX_OBJETIVO) String objetivo,
                                       BigDecimal meta,
                                       BigDecimal avance,
-                                      @Size(max = 20) String unidad) {
+                                      @Size(max = 20) String unidad,
+                                      BigDecimal lineaBase) {
 
         public DefinirRocaMaestraCommand {
             SelfValidating.validateConstructorArgs(DefinirRocaMaestraCommand.class, actorId, eje, objetivo,
-                    meta, avance, unidad);
+                    meta, avance, unidad, lineaBase);
             boolean algunNumero = meta != null || avance != null || unidad != null;
             boolean todosLosNumeros = meta != null && avance != null && unidad != null;
             if (algunNumero && !todosLosNumeros) {
                 throw new IllegalArgumentException(
                         "Para una meta medible hacen falta las tres: meta, avance y unidad");
+            }
+            // `lineaBase` es opcional (E-166), pero sola no significa nada: sin meta no hay camino
+            // que medir. Se rechaza para que el error salga acá y no como violación de CHECK.
+            if (lineaBase != null && meta == null) {
+                throw new IllegalArgumentException(
+                        "La linea base solo tiene sentido junto a una meta medible");
             }
         }
 

@@ -40,6 +40,12 @@ public class RocaMaestraJpaEntity {
 
     private String unidad;
 
+    /**
+     * Desde donde arranco (V43). NULL en las filas anteriores a esa migracion, y ahi el dominio
+     * conserva la formula vieja del porcentaje. Ver E-166.
+     */
+    private BigDecimal lineaBase;
+
     private Instant creadoEn;
 
     private Instant actualizadoEn;

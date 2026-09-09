@@ -34,6 +34,8 @@ class RocaMensualPersistenceMapper {
         if (e.getMeta() == null) {
             return null;
         }
-        return new MetaCuantitativa(e.getMeta(), e.getAvance(), e.getUnidad());
+        // Sin linea base: `rocas_mensuales` no tiene esa columna (V43 solo toco `rocas_maestras`),
+        // asi que el mes conserva la formula avance/meta. Ver E-166.
+        return new MetaCuantitativa(e.getMeta(), e.getAvance(), e.getUnidad(), null);
     }
 }

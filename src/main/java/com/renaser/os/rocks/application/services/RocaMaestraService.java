@@ -54,7 +54,7 @@ public class RocaMaestraService implements ConsultarRocasMaestrasUseCase, Defini
     public RocaMaestra definir(DefinirRocaMaestraCommand command) {
         requireProgreso(command.actorId());
         MetaCuantitativa meta = command.tieneMeta()
-                ? new MetaCuantitativa(command.meta(), command.avance(), command.unidad())
+                ? new MetaCuantitativa(command.meta(), command.avance(), command.unidad(), command.lineaBase())
                 : null;
 
         return guardarRocaMaestraPort.guardar(

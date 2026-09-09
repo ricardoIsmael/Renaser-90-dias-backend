@@ -92,7 +92,7 @@ class RocaMaestraControllerTest {
         when(definirUseCase.definir(any())).thenAnswer(invocacion -> {
             DefinirRocaMaestraCommand comando = invocacion.getArgument(0);
             MetaCuantitativa meta = comando.tieneMeta()
-                    ? new MetaCuantitativa(comando.meta(), comando.avance(), comando.unidad())
+                    ? new MetaCuantitativa(comando.meta(), comando.avance(), comando.unidad(), comando.lineaBase())
                     : null;
             return RocaMaestra.definir(RocaMaestraId.of(UUID.randomUUID()), comando.actorId(), comando.eje(),
                     comando.objetivo(), meta, AHORA);

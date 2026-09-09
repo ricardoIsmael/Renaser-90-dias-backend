@@ -5710,7 +5710,7 @@ detalle —error y no failure— es la señal de que la excepción llega antes d
 
 ---
 
-## E-166 — Una meta que baja muestra 100 % de avance desde el primer día (2026-09-09) — **ABIERTO**
+## E-166 — Una meta que baja muestra 100 % de avance desde el primer día (2026-09-09) — **RESUELTO**
 
 **Síntoma.** Con la roca maestra *"Al Día 90 pesaré 75 kg, partiendo de 82 kg"* (`meta = 75`,
 `avance = 82`, `unidad = kg`), `GET /api/v1/rocks/master` devuelve:
@@ -5740,17 +5740,43 @@ por encima de la meta, así que ve 100 % desde el primer día y hasta que cruza 
 **Detectado** probando el Mapa de punta a punta en el desplegado (`docs/PRUEBA_MAPA_2026-09-09.md`
 del frontend), no por un test: no hay ninguno que cubra una meta descendente.
 
-**Por qué sigue abierto.** Medir una meta que baja necesita el **punto de partida**:
-`(base − avance) / (base − meta)`. Y `rocas_maestras` no lo guarda — `avance` es el valor actual y
-pisa al inicial en cuanto la persona lo actualiza. Arreglarlo es columna nueva, migración, y decidir
-qué se hace con las filas ya cargadas. **Es una decisión de producto y se pregunta antes de tocar.**
+**Solución aplicada (autorizada por el dueño el 2026-09-09).** Columna nueva `linea_base` en
+`rocas_maestras` (`V43`), y el porcentaje pasa a medir **el camino recorrido**:
 
-**Cómo evitar que vuelva a pasar.** Cuando se cierre, el test tiene que cubrir los tres casos, no
-solo el que funciona hoy:
+```
+|avance − lineaBase| / |objetivo − lineaBase|
+```
 
-- meta ascendente (facturar 5000 → 15 000),
-- meta descendente (pesar 82 → 75),
-- avance que ya cruzó la meta, en las dos direcciones.
+Así funciona igual en las dos direcciones. "82 → 75 kg" da 0 % el primer día, 50 % a los 78,5 y
+100 % al llegar. Y de paso corrige un caso que nadie había mirado: "facturar 15 000 partiendo de
+5000" daba **33 % el primer día** por los 5000 que la persona ya facturaba antes de empezar; ahora
+da 0 %, porque el avance del programa todavía es cero.
+
+Alejarse de la meta (engordar, endeudarse más) da **0 %, nunca negativo**.
+
+**Qué pasa con las filas anteriores.** `linea_base` es **nullable** y ahí el dominio conserva la
+fórmula vieja. No hay forma honesta de inventarles el punto de partida: usar `avance` diría que
+nadie avanzó nunca, y usar 0 que todos arrancaron de cero. Se corrigen solas la próxima vez que el
+aprendiz edite su objetivo, porque el Mapa ya manda el dato. **Nada se rompe y todo lo nuevo se mide
+bien.**
+
+**Lo que NO se cambió, y hay que saberlo.** `MetaCuantitativa` exige `objetivo > 0` (y el CHECK
+`roca_maestra_meta_positiva` de V35 también), así que **"reducir la deuda a 0" se sigue rechazando**.
+Con línea base esa meta ya tiene sentido, pero levantar la restricción es otra decisión: hay que
+cambiar el CHECK y confirmar que 0 es una meta válida para el negocio. Queda planteado.
+
+`rocas_mensuales` **no** recibió la columna: el nivel mensual sigue con la fórmula vieja. No se
+amplió el alcance sin pedirlo.
+
+**Cómo se evita que vuelva a pasar.** `MetaCuantitativaTest` cubre ahora los seis casos, y los
+cuatro primeros **fallan contra el código viejo**:
+
+- meta descendente en el día 1 (82 → 75 arranca en 0, no en 100),
+- meta descendente avanzando (78,5 → 50 %; 75 → 100 %; 70 → 100 %, no más),
+- alejarse de la meta (85 con base 82 → 0 %, nunca negativo),
+- meta ascendente medida desde su base (5000 → 15 000 arranca en 0, no en 33 %),
+- sin línea base, la fórmula vieja intacta (las filas anteriores a V43),
+- `lineaBase == meta` rechazado: sin distancia no hay avance que medir, y sería una división por cero.
 
 La lección general: **un porcentaje calculado sobre dos números sin saber hacia dónde mejora el
 indicador es una suposición, no un cálculo.** Si un dominio admite metas en las dos direcciones, la

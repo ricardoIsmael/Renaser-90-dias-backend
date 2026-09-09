@@ -89,7 +89,7 @@ class RocaMensualControllerTest {
         when(definirUseCase.definir(any())).thenAnswer(invocacion -> {
             DefinirRocaMensualCommand comando = invocacion.getArgument(0);
             MetaCuantitativa meta = comando.tieneMeta()
-                    ? new MetaCuantitativa(comando.meta(), comando.avance(), comando.unidad())
+                    ? new MetaCuantitativa(comando.meta(), comando.avance(), comando.unidad(), null)
                     : null;
             return RocaMensual.definir(RocaMensualId.of(UUID.randomUUID()),
                     RocaMaestraId.of(UUID.randomUUID()), comando.numeroMes(), comando.titulo(), meta, AHORA);

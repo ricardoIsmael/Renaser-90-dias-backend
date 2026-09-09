@@ -84,7 +84,7 @@ class RocaMaestraServiceTest {
     private static DefinirRocaMaestraCommand comando(UserId actor) {
         return new DefinirRocaMaestraCommand(actor, EjeObjetivo.TRABAJO,
                 "Facturar 30.000 USD en contratos high-ticket", new BigDecimal("30000"), new BigDecimal("19500"),
-                "USD");
+                "USD", null);
     }
 
     @Test
@@ -187,7 +187,7 @@ class RocaMaestraServiceTest {
         when(loadRocaMaestraPort.deParticipanteYEje(id, EjeObjetivo.RELACIONES)).thenReturn(Optional.empty());
 
         service.definir(new DefinirRocaMaestraCommand(id, EjeObjetivo.RELACIONES,
-                "Recuperar la confianza con mi hijo", null, null, null));
+                "Recuperar la confianza con mi hijo", null, null, null, null));
 
         ArgumentCaptor<RocaMaestra> guardada = ArgumentCaptor.forClass(RocaMaestra.class);
         verify(guardarRocaMaestraPort).guardar(guardada.capture());
@@ -200,7 +200,7 @@ class RocaMaestraServiceTest {
         UserId id = actor();
 
         assertThatThrownBy(() -> new DefinirRocaMaestraCommand(id, EjeObjetivo.TRABAJO, "Facturar",
-                new BigDecimal("30000"), new BigDecimal("0"), null))
+                new BigDecimal("30000"), new BigDecimal("0"), null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

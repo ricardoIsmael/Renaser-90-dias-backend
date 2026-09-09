@@ -18,7 +18,8 @@ import java.util.UUID;
  * recalcula, tarde o temprano dos pantallas muestran numeros distintos para el mismo dato.
  */
 public record RocaMaestraResponse(UUID id, String eje, String objetivo, BigDecimal meta, BigDecimal avance,
-                                   String unidad, Integer porcentaje, Instant creadoEn, Instant actualizadoEn) {
+                                   String unidad, BigDecimal lineaBase, Integer porcentaje, Instant creadoEn,
+                                   Instant actualizadoEn) {
 
     public static RocaMaestraResponse from(RocaMaestra r) {
         MetaCuantitativa meta = r.meta();
@@ -26,6 +27,7 @@ public record RocaMaestraResponse(UUID id, String eje, String objetivo, BigDecim
                 meta == null ? null : meta.objetivo(),
                 meta == null ? null : meta.avance(),
                 meta == null ? null : meta.unidad(),
+                meta == null ? null : meta.lineaBase(),
                 meta == null ? null : meta.porcentaje(),
                 r.creadoEn(), r.actualizadoEn());
     }

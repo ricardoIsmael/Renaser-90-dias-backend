@@ -79,7 +79,7 @@ class RocaMensualTest {
     @DisplayName("corregirlo conserva identidad, maestra, mes y fecha de creacion: es el mismo tramo")
     void redefinirConservaIdentidad() {
         RocaMensual corregido = conMeta().redefinir("Facturar 12.000 USD este mes",
-                new MetaCuantitativa(new BigDecimal("12000"), new BigDecimal("6000"), "USD"), HOY);
+                new MetaCuantitativa(new BigDecimal("12000"), new BigDecimal("6000"), "USD", null), HOY);
 
         assertThat(corregido.id()).isEqualTo(ID);
         assertThat(corregido.rocaMaestraId()).as("sigue colgando del mismo objetivo de 90 dias").isEqualTo(MAESTRA);

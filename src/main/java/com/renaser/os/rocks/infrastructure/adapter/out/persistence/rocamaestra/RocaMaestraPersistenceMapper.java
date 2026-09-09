@@ -21,6 +21,7 @@ class RocaMaestraPersistenceMapper {
                 meta == null ? null : meta.objetivo(),
                 meta == null ? null : meta.avance(),
                 meta == null ? null : meta.unidad(),
+                meta == null ? null : meta.lineaBase(),
                 r.creadoEn(), r.actualizadoEn());
     }
 
@@ -34,7 +35,7 @@ class RocaMaestraPersistenceMapper {
         if (e.getMeta() == null) {
             return null;
         }
-        return new MetaCuantitativa(e.getMeta(), e.getAvance(), e.getUnidad());
+        return new MetaCuantitativa(e.getMeta(), e.getAvance(), e.getUnidad(), e.getLineaBase());
     }
 
     EjeObjetivoJpa toJpaEje(EjeObjetivo eje) {

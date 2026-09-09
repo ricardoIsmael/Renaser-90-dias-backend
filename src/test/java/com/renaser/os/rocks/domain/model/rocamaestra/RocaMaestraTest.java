@@ -49,7 +49,7 @@ class RocaMaestraTest {
     @DisplayName("corregirla conserva identidad y fecha de creacion: es la misma meta, no una nueva")
     void redefinirConservaIdentidad() {
         RocaMaestra corregida = conMeta().redefinir("Facturar 45.000 USD",
-                new MetaCuantitativa(new BigDecimal("45000"), new BigDecimal("19500"), "USD"), HOY);
+                new MetaCuantitativa(new BigDecimal("45000"), new BigDecimal("19500"), "USD", null), HOY);
 
         assertThat(corregida.id()).isEqualTo(ID);
         assertThat(corregida.creadoEn()).as("la fecha de creacion no se mueve").isEqualTo(AYER);

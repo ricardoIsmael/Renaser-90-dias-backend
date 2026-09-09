@@ -60,7 +60,7 @@ public class RocaMensualService implements ConsultarRocasMensualesUseCase, Defin
         requireProgreso(command.actorId());
         RocaMaestra maestra = requireMaestraDelEje(command);
         MetaCuantitativa meta = command.tieneMeta()
-                ? new MetaCuantitativa(command.meta(), command.avance(), command.unidad())
+                ? new MetaCuantitativa(command.meta(), command.avance(), command.unidad(), null)
                 : null;
 
         return guardarRocaMensualPort.guardar(
