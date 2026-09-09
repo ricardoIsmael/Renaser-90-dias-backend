@@ -168,13 +168,27 @@ Queda a nuestro cargo **solo lo que es del negocio**: verificar la contraseña, 
 ### 4.1 Configuración
 
 ```yaml
-spring.session:
-  store-type: redis
-  timeout: 30d                    # inactividad
-  redis.repository-type: indexed  # habilita "cerrar todas las sesiones de este usuario"
+spring:
+  session:
+    timeout: 30d                    # inactividad
+    data:
+      redis:
+        repository-type: indexed    # habilita "cerrar todas las sesiones de este usuario"
+        namespace: renaser:session:v2
 ```
 
 `indexed` no es el valor por defecto y es el que importa: sin él, Redis no mantiene el índice por usuario y revocar en bloque al suspender a alguien (§7.4) no se puede hacer sin recorrer todo.
+
+Spring Session usa Java Serialization por defecto. El backend lo reemplaza con el bean
+`springSessionDefaultRedisSerializer`, que serializa en JSON usando los módulos de Spring Security y
+su validador de tipos. El namespace `renaser:session:v2` separa las sesiones nuevas de las que
+quedaron en el formato anterior; el primer despliegue de esta configuración pide iniciar sesión
+otra vez. El namespace se puede cambiar con `REDIS_SESSION_NAMESPACE`, pero no se debe apuntar al
+namespace anterior mientras todavía existan sesiones serializadas con JDK.
+
+La conexión se configura con `REDIS_HOST`, `REDIS_PORT`, `REDIS_USERNAME`, `REDIS_PASSWORD` y
+`REDIS_SSL_ENABLED`. En producción las credenciales se guardan como parámetros de AWS Systems
+Manager; el tráfico debe quedarse en la red privada o usar TLS según el servicio Redis elegido.
 
 Los 30 días de inactividad son deliberadamente largos: es una app de hábitos que se abre a diario, y forzar el login cada semana solo empuja a la gente a poner contraseñas peores.
 

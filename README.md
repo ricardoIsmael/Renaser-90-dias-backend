@@ -291,7 +291,7 @@ docker compose up -d              # Postgres + pgvector, Redis
 
 > **`clean test` ya no es el gate completo.** Desde que existe `maven-failsafe-plugin`, las 10 pruebas de integración (`*IT.java`, Testcontainers contra Postgres y Redis reales) corren en `verify`, no en `test`, y el reporte de cobertura también se genera ahí.
 
-Variables de entorno relevantes (ver `src/main/resources/application.yaml`): `DB_URL`/`DB_USERNAME`/`DB_PASSWORD`, `REDIS_HOST`/`REDIS_PORT`, `GOOGLE_GENAI_API_KEY` (opcional — sin ella, `rag`/`evidence`/`onboarding` usan adaptadores NoOp sin romper nada), `AWS_S3_BUCKET`/`AWS_REGION`, `CORS_ORIGENES`, `RENASIA_LIMITE_DIARIO`.
+Variables de entorno relevantes (ver `src/main/resources/application.yaml`): `DB_URL`/`DB_USERNAME`/`DB_PASSWORD`, `REDIS_HOST`/`REDIS_PORT`/`REDIS_USERNAME`/`REDIS_PASSWORD`/`REDIS_SSL_ENABLED`/`REDIS_SESSION_NAMESPACE`, `GOOGLE_GENAI_API_KEY` (opcional — sin ella, `rag`/`evidence`/`onboarding` usan adaptadores NoOp sin romper nada), `AWS_S3_BUCKET`/`AWS_REGION`, `CORS_ORIGENES`, `RENASIA_LIMITE_DIARIO`.
 
 > **Corregido 2026-09-05.** Esta lista incluía `SUPABASE_JWKS_URL`, una variable que no existe en `application.yaml` ni en el código: Supabase quedó descartado el 2026-08-31 (`CLAUDE.md` §11) y la identidad es propia (`docs/MODULO_AUTH.md`).
 

@@ -21,12 +21,26 @@ services:
     image: redis:7-alpine
     container_name: renaser-redis
     restart: unless-stopped
+    environment:
+      # Si REDIS_PASSWORD esta definido en .env, el mismo valor lo toma la app desde
+      # application.yaml y este contenedor arranca con requirepass. Vacio conserva el modo local
+      # sin autenticacion para no obligar a cada checkout a tener un secreto.
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          exec redis-server --requirepass "$$REDIS_PASSWORD"
+        else
+          exec redis-server
+        fi
     ports:
       - "6379:6379"
     volumes:
       - renaser_redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping; else redis-cli ping; fi"]
       interval: 5s
       timeout: 5s
       retries: 10

@@ -69,6 +69,29 @@ class CodigoVerificacionEmailRedisAdapterTest {
     }
 
     @Test
+    @DisplayName("un codigo correcto solo puede consumirse una vez bajo concurrencia")
+    void unCodigoCorrectoEsDeUnSoloUsoBajoConcurrencia() throws InterruptedException {
+        String email = "codigo2-concurrente@renaser.dev";
+        String codigo = codigoVerificacionEmailPort.generarCodigo(email, Duration.ofMinutes(10));
+        int solicitudes = 20;
+
+        ExecutorService pool = Executors.newFixedThreadPool(solicitudes);
+        List<Future<Boolean>> resultados;
+        try {
+            List<Callable<Boolean>> tareas = IntStream.range(0, solicitudes)
+                    .<Callable<Boolean>>mapToObj(i -> () ->
+                            codigoVerificacionEmailPort.verificarCodigo(email, codigo, 5))
+                    .toList();
+            resultados = pool.invokeAll(tareas, 30, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdown();
+        }
+
+        long exitosos = resultados.stream().filter(CodigoVerificacionEmailRedisAdapterTest::obtenerResultado).count();
+        assertThat(exitosos).isEqualTo(1);
+    }
+
+    @Test
     void unCodigoIncorrectoNoTieneExito() {
         String email = "codigo3@renaser.dev";
         codigoVerificacionEmailPort.generarCodigo(email, Duration.ofMinutes(10));

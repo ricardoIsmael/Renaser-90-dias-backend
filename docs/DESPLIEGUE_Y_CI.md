@@ -60,6 +60,12 @@ docker compose up -d          # Postgres 16 + pgvector (:5433) y Redis 7 (:6379)
 ./mvnw spring-boot:run        # levanta en :8080
 ```
 
+El `redis` del compose admite autenticación sin otra configuración: si `REDIS_PASSWORD` está en
+`.env`, el contenedor arranca con `requirepass` y Spring usa el mismo valor. Si queda vacío, se
+mantiene el modo local sin contraseña. En producción no se debe publicar el puerto de Redis; el
+servidor y la aplicación tienen que compartir la misma credencial y, cuando el proveedor lo
+requiera, TLS (`REDIS_SSL_ENABLED=true`).
+
 **`JAVA_HOME` tiene que apuntar al JDK 25:**
 
 ```bash
@@ -584,6 +590,10 @@ va cifrado.
 | `DB_PASSWORD` | **SecureString** | Contraseña de Postgres |
 | `REDIS_HOST` | String | Host de Redis (sesiones, cuotas, pub/sub de chat) |
 | `REDIS_PORT` | String | Puerto de Redis |
+| `REDIS_USERNAME` | String | Usuario ACL de Redis, si el servidor lo exige |
+| `REDIS_PASSWORD` | **SecureString** | Contraseña de Redis; no dejarla en texto plano |
+| `REDIS_SSL_ENABLED` | String | `true` cuando el proveedor de Redis exige TLS; `false` para el contenedor privado local |
+| `REDIS_SESSION_NAMESPACE` | String | Namespace de Spring Session; por defecto `renaser:session:v2` |
 | `CORS_ORIGENES` | String | Orígenes permitidos, separados por coma. El default son tres `localhost` |
 | `RESET_PASSWORD_URL` | String | **Hoy el default es `https://TODO-frontend-no-definido.renaser.dev/...`** — el dominio del frontend no está decidido |
 | `ACTIVATE_ACCOUNT_URL` | String | Ídem: default con `TODO-` adentro |

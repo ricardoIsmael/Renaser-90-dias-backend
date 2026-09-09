@@ -20,11 +20,10 @@ import java.util.List;
  * nuevo, y su TTL se iguala al que le queda a {@code codigo} en el primer fallo.
  *
  * <p><b>Corregido (C-8, docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html):</b>
- * {@code registrarIntentoFallido} hacia {@code INCR} y DESPUES leia+copiaba el TTL de
- * {@code codigo} en comandos separados; si el proceso moria entre uno y otro, la clave de
- * intentos quedaba SIN TTL. Ahora ambos pasos corren dentro de un unico script Lua
- * ({@code INCR} + copiar el TTL de {@code codigo} SOLO si {@code intentos} todavia no tiene uno
- * propio), atomico de punta a punta y con auto-reparacion si una clave ya quedo envenenada.
+ * {@code verificarCodigo} leia el codigo y despues lo borraba en comandos separados; dos
+ * solicitudes simultaneas podian validar el mismo codigo correcto. Ahora la comparacion, el
+ * consumo, el incremento de intentos y la copia del TTL corren dentro de un unico script Lua,
+ * atomico de punta a punta y con auto-reparacion si una clave de intentos ya quedo envenenada.
  */
 final class AlmacenCodigoNumericoRedis {
 
@@ -32,21 +31,32 @@ final class AlmacenCodigoNumericoRedis {
     private static final int DIGITOS = 6;
 
     /**
-     * {@code KEYS[1]}: la clave del codigo. {@code KEYS[2]}: la clave de intentos.
-     * Incrementa {@code intentos} de forma atomica y, SOLO si esa clave todavia no tiene
-     * TTL, le copia el TTL restante de {@code codigo} (si {@code codigo} ya no tiene uno
-     * vivo — no deberia pasar, porque el llamador ya confirmo que existe antes de invocar
-     * esto — no se fija nada, para no dejar un TTL inventado).
+     * {@code KEYS[1]}: codigo. {@code KEYS[2]}: intentos. {@code ARGV[1]}: codigo recibido.
+     * {@code ARGV[2]}: maximo de intentos. El resultado es 1 si el codigo se consumio y 0 en
+     * cualquier otro caso.
      */
-    private static final RedisScript<Long> INCREMENTAR_INTENTOS_CON_TTL_DEL_CODIGO = new DefaultRedisScript<>(
-            "local actual = redis.call('INCR', KEYS[2]) "
+    private static final RedisScript<Long> VERIFICAR_Y_CONSUMIR = new DefaultRedisScript<>(
+            "local guardado = redis.call('GET', KEYS[1]) "
+                    + "if not guardado then "
+                    + "return 0 "
+                    + "end "
+                    + "if guardado == ARGV[1] then "
+                    + "redis.call('DEL', KEYS[1]) "
+                    + "redis.call('DEL', KEYS[2]) "
+                    + "return 1 "
+                    + "end "
+                    + "local intentos = redis.call('INCR', KEYS[2]) "
                     + "if redis.call('TTL', KEYS[2]) == -1 then "
                     + "local ttlCodigo = redis.call('TTL', KEYS[1]) "
                     + "if ttlCodigo > 0 then "
                     + "redis.call('EXPIRE', KEYS[2], ttlCodigo) "
                     + "end "
                     + "end "
-                    + "return actual",
+                    + "if intentos >= tonumber(ARGV[2]) then "
+                    + "redis.call('DEL', KEYS[1]) "
+                    + "redis.call('DEL', KEYS[2]) "
+                    + "end "
+                    + "return 0",
             Long.class);
 
     private final StringRedisTemplate redisTemplate;
@@ -70,34 +80,9 @@ final class AlmacenCodigoNumericoRedis {
     }
 
     boolean verificarCodigo(String email, String codigo, int maxIntentos) {
-        String claveCodigo = claveCodigo(email);
-        String guardado = redisTemplate.opsForValue().get(claveCodigo);
-        if (guardado == null) {
-            return false;
-        }
-        if (guardado.equals(codigo)) {
-            redisTemplate.delete(claveCodigo);
-            redisTemplate.delete(claveIntentos(email));
-            return true;
-        }
-        registrarIntentoFallido(email, claveCodigo, maxIntentos);
-        return false;
-    }
-
-    private void registrarIntentoFallido(String email, String claveCodigo, int maxIntentos) {
-        String claveIntentos = claveIntentos(email);
-        Long intentos = redisTemplate.execute(INCREMENTAR_INTENTOS_CON_TTL_DEL_CODIGO,
-                List.of(claveCodigo, claveIntentos));
-        if (intentos == null) {
-            return;
-        }
-        if (intentos >= maxIntentos) {
-            // Se agotaron los intentos: se invalida el codigo entero (no solo se deja de
-            // aceptar) para forzar pedir uno nuevo, en vez de dejarlo "vivo" hasta que venza
-            // el TTL mientras alguien lo sigue adivinando.
-            redisTemplate.delete(claveCodigo);
-            redisTemplate.delete(claveIntentos);
-        }
+        Long consumido = redisTemplate.execute(VERIFICAR_Y_CONSUMIR,
+                List.of(claveCodigo(email), claveIntentos(email)), codigo, String.valueOf(maxIntentos));
+        return consumido != null && consumido == 1L;
     }
 
     private String codigoAleatorio() {

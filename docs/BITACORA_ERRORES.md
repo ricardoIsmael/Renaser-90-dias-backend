@@ -5781,3 +5781,34 @@ cuatro primeros **fallan contra el código viejo**:
 La lección general: **un porcentaje calculado sobre dos números sin saber hacia dónde mejora el
 indicador es una suposición, no un cálculo.** Si un dominio admite metas en las dos direcciones, la
 dirección es parte del dato.
+
+## E-167 — Spring Session guardaba autenticación con Java Serialization en Redis (2026-09-09) — **RESUELTO**
+
+- **Dónde:** `shared/infrastructure/session`, `application.yaml`, Spring Session sobre Redis.
+- **Síntoma:** *(preventivo)* no había error visible mientras Redis fuera privado, pero las sesiones se
+  persistían con el serializador JDK por defecto de Spring Session. Si un atacante pudiera escribir
+  bytes en Redis, la lectura de la sesión abriría la superficie conocida de deserialización Java.
+- **Causa real:** Spring Session usa `JdkSerializationRedisSerializer` si no existe un bean llamado
+  exactamente `springSessionDefaultRedisSerializer`.
+- **Solución:** se agregó ese bean con `JacksonJsonRedisSerializer`, `JsonMapper` y
+  `SecurityJacksonModules.getModules(...)`. También se configuró un namespace nuevo
+  (`renaser:session:v2`) para no intentar leer las sesiones antiguas en formato JDK, y se dejaron
+  usuario, contraseña y TLS de Redis parametrizables por entorno.
+- **Cómo evitarlo:** toda aplicación que persista `SecurityContext` en Redis debe definir el bean
+  con el nombre que Spring Session reconoce, usar los módulos de Spring Security y mantener Redis
+  fuera de la red pública; las credenciales y TLS deben coordinarse con el servidor Redis del
+  entorno. La prueba `RedisSessionConfigTest` comprueba la serialización JSON y el round-trip del
+  `SecurityContext`.
+
+## E-168 — Un código correcto podía validarse dos veces en paralelo (2026-09-09) — **RESUELTO**
+
+- **Dónde:** `users/infrastructure/adapter/out/redis/AlmacenCodigoNumericoRedis`.
+- **Síntoma:** *(preventivo)* dos solicitudes concurrentes que leían el mismo código correcto
+  antes del `DEL` podían devolver éxito las dos, aunque el código debía ser de un solo uso.
+- **Causa real:** la lectura, la comparación y el borrado eran comandos Redis separados.
+- **Solución:** se reemplazaron por un script Lua que compara y consume el código, elimina el
+  contador y registra los intentos incorrectos dentro de la misma operación atómica. Se agregó
+  una prueba concurrente que exige exactamente un éxito.
+- **Cómo evitarlo:** cualquier credencial efímera que Redis deba consumir una sola vez tiene que
+  verificarse y eliminarse en una operación atómica (`GETDEL` o script Lua), no con un `GET` seguido
+  de un `DEL`.

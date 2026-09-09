@@ -75,6 +75,13 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # En local quedan vacios para el redis:7-alpine del compose; en prod llegan desde
+      # Parameter Store. El username solo hace falta si Redis usa ACL y ssl.enabled solo si el
+      # proveedor expone TLS.
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:false}
       # Auditoria NFR 2026-09-06 (2a pasada). Sin esto rige el default de Lettuce: 60 s por
       # comando. Desde que casi toda la API exige sesion (que vive en Redis), un Redis caido
       # dejaba CADA request colgado un minuto antes de fallar — incluido /actuator/health, que es
@@ -102,6 +109,9 @@ spring:
     data:
       redis:
         repository-type: indexed
+        # Namespace nuevo para no intentar leer sesiones antiguas serializadas con JDK. El
+        # cambio invalida las sesiones existentes y obliga a iniciar sesion una vez.
+        namespace: ${REDIS_SESSION_NAMESPACE:renaser:session:v2}
   # C-18 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html,
   # docs/informes/auditoria-fixes/C-18.md): open-in-view estaba activo por default (sin esta
   # clave) y mantenia la sesion de Hibernate abierta durante todo el renderizado de la
