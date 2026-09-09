@@ -5707,3 +5707,51 @@ detalle —error y no failure— es la señal de que la excepción llega antes d
 - **El test de regresión hizo su trabajo, y por eso se escribe primero.** La regla de que el test
   tiene que fallar contra el código viejo también sirve para lo contrario: cuando falla contra el
   código *nuevo* por un motivo inesperado, lo que está mal es el diagnóstico.
+
+---
+
+## E-166 — Una meta que baja muestra 100 % de avance desde el primer día (2026-09-09) — **ABIERTO**
+
+**Síntoma.** Con la roca maestra *"Al Día 90 pesaré 75 kg, partiendo de 82 kg"* (`meta = 75`,
+`avance = 82`, `unidad = kg`), `GET /api/v1/rocks/master` devuelve:
+
+```json
+{"eje":"CUERPO","meta":75,"avance":82,"unidad":"kg","porcentaje":100}
+```
+
+Y el Plan muestra **"Avance cuantitativo: 100 % CUMPLIDO"** el día 1, junto a
+*"Llevas: 82 kg · Meta: 75 kg"* — dos datos que se contradicen a la vista.
+
+**Causa real.** `MetaCuantitativa.porcentaje()`:
+
+```java
+int calculado = avance.multiply(BigDecimal.valueOf(PORCENTAJE_MAXIMO))
+        .divide(objetivo, 0, RoundingMode.DOWN)
+        .intValue();
+return Math.min(calculado, PORCENTAJE_MAXIMO);
+```
+
+82 × 100 ÷ 75 = 109 → acotado a 100. **La fórmula asume que más es mejor.** Hay objetivos donde
+menos es mejor, y el propio Mapa los ofrece: `peso` y `deuda` están entre los tipos de resultado.
+
+No es un caso de borde: quien quiere bajar de peso o reducir deuda arranca **siempre** con el avance
+por encima de la meta, así que ve 100 % desde el primer día y hasta que cruza la meta.
+
+**Detectado** probando el Mapa de punta a punta en el desplegado (`docs/PRUEBA_MAPA_2026-09-09.md`
+del frontend), no por un test: no hay ninguno que cubra una meta descendente.
+
+**Por qué sigue abierto.** Medir una meta que baja necesita el **punto de partida**:
+`(base − avance) / (base − meta)`. Y `rocas_maestras` no lo guarda — `avance` es el valor actual y
+pisa al inicial en cuanto la persona lo actualiza. Arreglarlo es columna nueva, migración, y decidir
+qué se hace con las filas ya cargadas. **Es una decisión de producto y se pregunta antes de tocar.**
+
+**Cómo evitar que vuelva a pasar.** Cuando se cierre, el test tiene que cubrir los tres casos, no
+solo el que funciona hoy:
+
+- meta ascendente (facturar 5000 → 15 000),
+- meta descendente (pesar 82 → 75),
+- avance que ya cruzó la meta, en las dos direcciones.
+
+La lección general: **un porcentaje calculado sobre dos números sin saber hacia dónde mejora el
+indicador es una suposición, no un cálculo.** Si un dominio admite metas en las dos direcciones, la
+dirección es parte del dato.
