@@ -28,8 +28,15 @@ public record MetaCuantitativa(BigDecimal objetivo, BigDecimal avance, String un
     public MetaCuantitativa {
         Objects.requireNonNull(objetivo, "la meta es obligatoria");
         Objects.requireNonNull(avance, "el avance es obligatorio");
-        if (objetivo.signum() <= 0) {
-            throw new IllegalArgumentException("La meta tiene que ser mayor que cero");
+        if (objetivo.signum() < 0) {
+            throw new IllegalArgumentException("La meta no puede ser negativa");
+        }
+        if (objetivo.signum() == 0 && lineaBase == null) {
+            // Llegar a cero es una meta legitima -saldar una deuda, dejar de fumar- pero solo se
+            // puede medir sabiendo desde donde se arranco: sin punto de partida el porcentaje seria
+            // `avance / 0`. Con linea base, `|avance - base| / |0 - base|` funciona perfecto.
+            throw new IllegalArgumentException(
+                    "Una meta de cero necesita punto de partida: sin el no hay avance que medir");
         }
         if (avance.signum() < 0) {
             throw new IllegalArgumentException("El avance no puede ser negativo");
@@ -55,6 +62,7 @@ public record MetaCuantitativa(BigDecimal objetivo, BigDecimal avance, String un
     }
 
     /** Meta recien definida, sin nada acumulado todavia. */
+    /** Meta ascendente clasica: se arranca en cero y se sube. No admite objetivo cero. */
     public static MetaCuantitativa nueva(BigDecimal objetivo, String unidad) {
         return new MetaCuantitativa(objetivo, BigDecimal.ZERO, unidad, null);
     }

@@ -1,7 +1,6 @@
 package com.renaser.os.rocks.infrastructure.adapter.in.rest.rocamaestra;
 
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -21,7 +20,12 @@ import java.math.BigDecimal;
  */
 public record DefinirRocaMaestraRequest(
         @NotBlank @Size(max = RocaMaestra.MAX_OBJETIVO) String objetivo,
-        @DecimalMin(value = "0.01") @Digits(integer = 12, fraction = 2) BigDecimal meta,
+        /**
+         * Puede ser <b>0</b> desde V44: saldar una deuda es una meta legitima. Se admite acá y lo
+         * valida el dominio, que es el que sabe la condicion —cero exige punto de partida— y puede
+         * explicarla. Un {@code @DecimalMin} solo diria "debe ser mayor que 0.01", que es falso.
+         */
+        @PositiveOrZero @Digits(integer = 12, fraction = 2) BigDecimal meta,
         @PositiveOrZero @Digits(integer = 12, fraction = 2) BigDecimal avance,
         @Size(max = 20) String unidad,
         /**

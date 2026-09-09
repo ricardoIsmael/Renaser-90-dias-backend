@@ -147,4 +147,44 @@ class MetaCuantitativaTest {
         assertThat(desde("82", "82", "75").conAvance(new BigDecimal("80")).lineaBase())
                 .isEqualByComparingTo("82");
     }
+
+    // ==========================================================================================
+    // V44 · Saldar una deuda: la meta puede ser cero si se sabe desde donde se arranco
+    // ==========================================================================================
+
+    @Test
+    @DisplayName("V44: saldar una deuda -meta 0- se mide contra el punto de partida")
+    void metaCeroConLineaBaseSeMide() {
+        MetaCuantitativa deuda = new MetaCuantitativa(BigDecimal.ZERO, new BigDecimal("8000"),
+                "S/", new BigDecimal("8000"));
+        assertThat(deuda.esDescendente()).isTrue();
+        assertThat(deuda.porcentaje()).isZero();
+        assertThat(deuda.conAvance(new BigDecimal("6000")).porcentaje()).isEqualTo(25);
+        assertThat(deuda.conAvance(new BigDecimal("4000")).porcentaje()).isEqualTo(50);
+        assertThat(deuda.conAvance(BigDecimal.ZERO).porcentaje()).isEqualTo(100);
+    }
+
+    @Test
+    @DisplayName("V44: endeudarse mas que al empezar sigue siendo 0 %, no negativo")
+    void endeudarseMasEsCero() {
+        MetaCuantitativa deuda = new MetaCuantitativa(BigDecimal.ZERO, new BigDecimal("9500"),
+                "S/", new BigDecimal("8000"));
+        assertThat(deuda.porcentaje()).isZero();
+    }
+
+    @Test
+    @DisplayName("V44: una meta de cero SIN punto de partida se rechaza, seria dividir por cero")
+    void metaCeroSinLineaBaseSeRechaza() {
+        assertThatThrownBy(() -> new MetaCuantitativa(BigDecimal.ZERO, new BigDecimal("8000"), "S/", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("necesita punto de partida");
+    }
+
+    @Test
+    @DisplayName("V44: una meta negativa se sigue rechazando")
+    void metaNegativaSeRechaza() {
+        assertThatThrownBy(() -> new MetaCuantitativa(new BigDecimal("-1"), BigDecimal.ZERO, "S/", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("no puede ser negativa");
+    }
 }
