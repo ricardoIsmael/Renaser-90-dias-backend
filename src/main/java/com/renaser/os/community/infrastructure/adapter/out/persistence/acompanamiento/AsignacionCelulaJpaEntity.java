@@ -2,6 +2,7 @@ package com.renaser.os.community.infrastructure.adapter.out.persistence.acompana
 
 import com.renaser.os.community.domain.model.acompanamiento.FuncionAcompanamiento;
 import com.renaser.os.community.domain.model.acompanamiento.MotivoAsignacion;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -53,5 +54,19 @@ public class AsignacionCelulaJpaEntity {
 
     private String claveOperacion;
 
+    /**
+     * La escribe la BASE, no Java: {@code creado_en timestamptz NOT NULL DEFAULT now()} (V45).
+     *
+     * <p>{@code insertable = false} no es cosmetico. Sin el, Hibernate incluye la columna en el
+     * INSERT con el {@code null} que trae el mapper, y un DEFAULT <b>no</b> se aplica cuando la
+     * sentencia manda NULL explicito: la fila choca contra el NOT NULL y falla TODA escritura por
+     * este adaptador. Rotacion, traslado y asignacion administrativa incluidas.
+     *
+     * <p>Se lo comio la suite entera porque las pruebas de esos tres casos de uso corren contra
+     * {@code AcompanamientoEnMemoria}, un doble que nunca toca Postgres; y las asignaciones que
+     * existian en la base las habia puesto el backfill de V45 en SQL, sin pasar por aca. El camino
+     * de escritura de Java no lo ejercitaba nada hasta {@code AsignacionCelulaConcurrenciaIT}.
+     */
+    @Column(insertable = false, updatable = false)
     private Instant creadoEn;
 }

@@ -5,6 +5,7 @@ import com.renaser.os.community.application.ports.out.acompanamiento.SavePolitic
 import com.renaser.os.community.domain.model.acompanamiento.PoliticaMentoria;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
+import com.renaser.os.shared.domain.Clock;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -13,9 +14,11 @@ import java.util.Optional;
 class PoliticaMentoriaPersistenceAdapter implements LoadPoliticaMentoriaPort, SavePoliticaMentoriaPort {
 
     private final SpringDataPoliticaMentoriaRepository repository;
+    private final Clock clock;
 
-    PoliticaMentoriaPersistenceAdapter(SpringDataPoliticaMentoriaRepository repository) {
+    PoliticaMentoriaPersistenceAdapter(SpringDataPoliticaMentoriaRepository repository, Clock clock) {
         this.repository = repository;
+        this.clock = clock;
     }
 
     @Override
@@ -50,7 +53,8 @@ class PoliticaMentoriaPersistenceAdapter implements LoadPoliticaMentoriaPort, Sa
                 (short) politica.diasSinActividadAlerta(),
                 politica.celulaRecepcionId() == null ? null : politica.celulaRecepcionId().value(),
                 politica.version(),
+                // creado_en lo pone la base (insertable = false); actualizado_en, este reloj.
                 null,
-                null);
+                clock.now());
     }
 }
