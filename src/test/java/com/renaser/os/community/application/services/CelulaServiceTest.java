@@ -333,6 +333,96 @@ class CelulaServiceTest {
         assertThat(disponibles.get(0).nombreCompleto()).isEqualTo("Aprendiz Libre");
     }
 
+    // ─── V48: el administrador arma el grupo con nombre y periodo ─────────────────────
+
+    @Test
+    @DisplayName("crear(): el periodo que escribio el administrador llega hasta el agregado")
+    void crearConPeriodoLoGuarda() {
+        CohorteId cohorteId = CohorteId.of(UUID.randomUUID());
+        cohorteActiva(cohorteId);
+        when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var command = new CrearCelulaCommand(admin, "Fenix", cohorteId, null,
+                java.time.LocalDate.of(2026, 9, 1), java.time.LocalDate.of(2026, 9, 30));
+        var detalle = service.crear(command);
+
+        assertThat(detalle.celula().periodo())
+                .isEqualTo(new com.renaser.os.community.domain.model.celula.PeriodoGrupo(
+                        java.time.LocalDate.of(2026, 9, 1), java.time.LocalDate.of(2026, 9, 30)));
+        assertThat(detalle.celula().vencidoEn(java.time.LocalDate.of(2026, 9, 30)))
+                .as("el 30 todavia es del grupo")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("crear(): sin fechas el grupo nace sin periodo, como todas las celulas previas a V48")
+    void crearSinPeriodoSigueSiendoValido() {
+        CohorteId cohorteId = CohorteId.of(UUID.randomUUID());
+        cohorteActiva(cohorteId);
+        when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var detalle = service.crear(new CrearCelulaCommand(admin, "Celula 1", cohorteId, null));
+
+        assertThat(detalle.celula().tienePeriodo()).isFalse();
+    }
+
+    /** El descuido que {@code tocaPeriodo} existe para evitar: renombrar no puede dejar sin cierre
+     * a un grupo que si lo tenia. */
+    @Test
+    @DisplayName("actualizar(): un PATCH que solo cambia el nombre NO le borra el periodo")
+    void actualizarSinTocarElPeriodoNoLoBorra() {
+        Celula celula = celulaConPeriodo();
+        when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
+        cohorteActiva(celula.cohorteId());
+        when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var detalle = service.actualizar(new ActualizarCelulaCommand(admin, celula.id(), "Fenix II", null, true));
+
+        assertThat(detalle.celula().nombre()).isEqualTo("Fenix II");
+        assertThat(detalle.celula().tienePeriodo()).isTrue();
+    }
+
+    @Test
+    @DisplayName("actualizar(): con tocaPeriodo se reemplaza el periodo por el nuevo")
+    void actualizarConTocaPeriodoLoReemplaza() {
+        Celula celula = celulaConPeriodo();
+        when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
+        cohorteActiva(celula.cohorteId());
+        when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var detalle = service.actualizar(new ActualizarCelulaCommand(admin, celula.id(), null, null, false,
+                java.time.LocalDate.of(2026, 10, 1), java.time.LocalDate.of(2026, 10, 31), true));
+
+        assertThat(detalle.celula().periodo().fin()).isEqualTo(java.time.LocalDate.of(2026, 10, 31));
+    }
+
+    @Test
+    @DisplayName("Un comando con una sola fecha no se construye: el periodo va entero o no va")
+    void unPeriodoAMediasNoLlegaAlServicio() {
+        CohorteId cohorteId = CohorteId.of(UUID.randomUUID());
+
+        assertThatThrownBy(() -> new CrearCelulaCommand(admin, "Fenix", cohorteId, null,
+                java.time.LocalDate.of(2026, 9, 1), null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(saveCelulaPort, never()).save(any());
+    }
+
+    private Celula celulaConPeriodo() {
+        return Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Fenix", null, CohorteId.of(UUID.randomUUID()),
+                null, null, CLOCK.now(), CLOCK.now(),
+                com.renaser.os.community.domain.model.acompanamiento.TipoCelula.REGULAR, null,
+                new com.renaser.os.community.domain.model.celula.PeriodoGrupo(
+                        java.time.LocalDate.of(2026, 9, 1), java.time.LocalDate.of(2026, 9, 30)));
+    }
+
+    private void cohorteActiva(CohorteId cohorteId) {
+        when(loadCohortePort.porId(cohorteId)).thenReturn(Optional.of(
+                com.renaser.os.community.domain.model.cohorte.Cohorte.rehydrate(cohorteId, "Cohorte 1",
+                        java.time.LocalDate.of(2026, 9, 1), null,
+                        com.renaser.os.community.domain.model.cohorte.EstadoCohorte.ACTIVA, CLOCK.now(),
+                        CLOCK.now())));
+    }
+
     // ─── CLAUDE.MD sec. 0.3: 403 por rol y 403 por cuenta SUSPENDIDA, metodo por metodo ──
     // `requireAdmin`/`requireActorActivo` ya estaban en los 16 metodos; faltaba probarlos
     // en 25 de las 30 combinaciones (solo estaban cubiertos crear/asignar-aprendiz/

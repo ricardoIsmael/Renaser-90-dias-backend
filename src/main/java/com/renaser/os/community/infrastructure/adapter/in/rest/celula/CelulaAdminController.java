@@ -131,7 +131,8 @@ public class CelulaAdminController {
     public ResponseEntity<CelulaDetalleResponse> crear(@ActorAutenticado UserId actorId,
                                                          @RequestBody @Valid CrearCelulaRequest request) {
         var detalle = crearUseCase.crear(new CrearCelulaCommand(actorId, request.name(),
-                CohorteId.of(request.cohortId()), request.videoCallUrl()));
+                CohorteId.of(request.cohortId()), request.videoCallUrl(), request.periodStart(),
+                request.periodEnd()));
         return ResponseEntity.status(HttpStatus.CREATED).body(CelulaDetalleResponse.from(detalle));
     }
 
@@ -140,7 +141,8 @@ public class CelulaAdminController {
     public CelulaDetalleResponse actualizar(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                              @RequestBody ActualizarCelulaRequest request) {
         return CelulaDetalleResponse.from(actualizarUseCase.actualizar(new ActualizarCelulaCommand(actorId,
-                CelulaId.of(id), request.name(), request.videoCallUrl(), true)));
+                CelulaId.of(id), request.name(), request.videoCallUrl(), true, request.periodStartAplicado(),
+                request.periodEndAplicado(), request.tocaPeriodo())));
     }
 
     @RequiresPermission(Permission.MANAGE_CELLS)

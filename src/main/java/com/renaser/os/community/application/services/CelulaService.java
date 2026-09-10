@@ -105,7 +105,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         requireCohorte(command.cohorteId());
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
         Celula celula = Celula.crear(CelulaId.of(idGenerator.newId()), command.nombre(), command.cohorteId(),
-                command.urlVideollamada(), clock.now());
+                command.urlVideollamada(), command.periodo(), clock.now());
         Celula guardada = saveCelulaPort.save(celula);
         events.publishEvent(new CelulaCreadaEvent(guardada.id().value(), clock.now()));
         return aDetalle(guardada);
@@ -118,7 +118,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         Celula celula = requireCelula(command.celulaId());
         requireCohorteNoCompletada(celula.cohorteId());
         celula.actualizarDatos(command.nombre(), command.urlVideollamada(), command.tocaUrlVideollamada(),
-                clock.now());
+                command.periodo(), command.tocaPeriodo(), clock.now());
         return aDetalle(saveCelulaPort.save(celula));
     }
 

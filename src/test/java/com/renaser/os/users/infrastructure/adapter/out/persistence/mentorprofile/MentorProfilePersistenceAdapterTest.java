@@ -6,6 +6,7 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.out.mentorprofile.LoadMentorProfilePort;
 import com.renaser.os.users.application.ports.out.mentorprofile.SaveMentorProfilePort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
+import com.renaser.os.users.domain.model.mentorprofile.EspecialidadMentor;
 import com.renaser.os.users.domain.model.mentorprofile.MentorLevel;
 import com.renaser.os.users.domain.model.mentorprofile.MentorOperationalStatus;
 import com.renaser.os.users.domain.model.mentorprofile.MentorProfile;
@@ -41,13 +42,14 @@ class MentorProfilePersistenceAdapterTest {
     private SaveMentorProfilePort saveMentorProfilePort;
 
     @Test
-    void guardaYRecuperaUnPerfilDeMentorConSusTresEnumsTraducidos() {
+    void guardaYRecuperaUnPerfilDeMentorConSusEnumsTraducidos() {
         UserId mentorId = crearMentorEnBaseDeDatos();
 
         MentorProfile profile = MentorProfile.create(mentorId, CLOCK);
         profile.promoteTo(MentorLevel.N2, CLOCK);
         profile.changeOperationalStatus(MentorOperationalStatus.YELLOW, CLOCK);
         profile.updateBio("Mentor de la celula Fenix", CLOCK);
+        profile.cambiarEspecialidad(EspecialidadMentor.NEGOCIO, CLOCK);
 
         saveMentorProfilePort.save(profile);
 
@@ -55,6 +57,18 @@ class MentorProfilePersistenceAdapterTest {
         assertThat(loaded.level()).isEqualTo(MentorLevel.N2);
         assertThat(loaded.operationalStatus()).isEqualTo(MentorOperationalStatus.YELLOW);
         assertThat(loaded.bio()).isEqualTo("Mentor de la celula Fenix");
+        assertThat(loaded.especialidad()).isEqualTo(EspecialidadMentor.NEGOCIO);
+    }
+
+    /** V48 dejo la columna nulable a proposito: los perfiles que ya existian no tienen ninguna, y
+     * leerlos no puede fallar. */
+    @Test
+    void unPerfilSinEspecialidadSeLeeSinReventar() {
+        UserId mentorId = crearMentorEnBaseDeDatos();
+
+        saveMentorProfilePort.save(MentorProfile.create(mentorId, CLOCK));
+
+        assertThat(loadMentorProfilePort.byUserId(mentorId).orElseThrow().especialidad()).isNull();
     }
 
     private UserId crearMentorEnBaseDeDatos() {

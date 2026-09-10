@@ -33,12 +33,12 @@ public class MentorProfileController {
         this.setMentorOperationalStatusUseCase = setMentorOperationalStatusUseCase;
     }
 
-    @RequiresPermission(value = Permission.MANAGE_MENTOR_PROFILE, scope = "editar SOLO la bio tambien lo puede el propio mentor; nivel y estado operativo no")
+    @RequiresPermission(value = Permission.MANAGE_MENTOR_PROFILE, scope = "editar SOLO la bio tambien lo puede el propio mentor; nivel, estado operativo y especialidad no")
     @PatchMapping
     public ResponseEntity<Void> update(@PathVariable UUID mentorId, @ActorAutenticado UserId actor,
                                         @RequestBody UpdateMentorProfileRequest request) {
         updateMentorProfileUseCase.update(new UpdateMentorProfileCommand(UserId.of(mentorId), request.newLevel(),
-                request.newOperationalStatus(), request.newBio(), actor));
+                request.newOperationalStatus(), request.newBio(), actor, request.especialidad()));
         return ResponseEntity.noContent().build();
     }
 

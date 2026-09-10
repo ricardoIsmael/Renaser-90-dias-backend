@@ -48,6 +48,13 @@ public class MentorProfileService implements UpdateMentorProfileUseCase, SetMent
         if (command.newOperationalStatus() != null) {
             profile.changeOperationalStatus(command.newOperationalStatus(), clock);
         }
+        // Guard propio y no el de arriba (V48): el mensaje del otro enumera "nivel o estado
+        // operativo" y hay un test que lo compara letra por letra. Compartirlo obligaria a
+        // reescribirlo, y al mentor le llegaria un error que no nombra lo que intento cambiar.
+        if (command.especialidad() != null) {
+            requireEspecialidadManager(actor);
+            profile.cambiarEspecialidad(command.especialidad(), clock);
+        }
         if (command.newBio() != null) {
             requireSelfOrRoleManager(actor, command.mentorUserId());
             profile.updateBio(command.newBio(), clock);
@@ -85,6 +92,17 @@ public class MentorProfileService implements UpdateMentorProfileUseCase, SetMent
     private void requireRoleManager(User actor) {
         if (!actor.canManageRoles()) {
             throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST cambian nivel o estado operativo de un mentor");
+        }
+    }
+
+    /**
+     * La especialidad la declara quien administra, no el propio mentor: es el criterio con el que
+     * el administrador elige a quien poner en cada grupo (V48), asi que autodeclararla seria
+     * elegirse a si mismo. La bio, que es como se presenta, si es suya.
+     */
+    private void requireEspecialidadManager(User actor) {
+        if (!actor.canManageRoles()) {
+            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST declaran la especialidad de un mentor");
         }
     }
 

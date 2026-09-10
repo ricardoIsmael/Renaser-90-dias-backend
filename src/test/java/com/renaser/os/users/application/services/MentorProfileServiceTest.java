@@ -11,6 +11,7 @@ import com.renaser.os.users.application.ports.in.mentorprofile.SetMentorOperatio
 import com.renaser.os.users.application.ports.in.mentorprofile.UpdateMentorProfileUseCase.UpdateMentorProfileCommand;
 import com.renaser.os.users.application.ports.out.mentorprofile.LoadMentorProfilePort;
 import com.renaser.os.users.application.ports.out.mentorprofile.SaveMentorProfilePort;
+import com.renaser.os.users.domain.model.mentorprofile.EspecialidadMentor;
 import com.renaser.os.users.domain.model.mentorprofile.MentorLevel;
 import com.renaser.os.users.domain.model.mentorprofile.MentorOperationalStatus;
 import com.renaser.os.users.domain.model.mentorprofile.MentorProfile;
@@ -129,6 +130,59 @@ class MentorProfileServiceTest {
                 .isInstanceOf(NotAuthorizedException.class)
                 .hasMessage("Solo ADMIN/ALCHEMIST cambian nivel o estado operativo de un mentor");
         verify(saveMentorProfilePort, never()).save(any());
+    }
+
+    // ─── V48: especialidad del mentor ────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("un ADMIN declara la especialidad de un mentor")
+    void unAdminDeclaraLaEspecialidad() {
+        actor(UserRole.ADMIN);
+        MentorProfile perfil = perfilExistente();
+
+        service.update(new UpdateMentorProfileCommand(mentorId, null, null, null, actorId,
+                EspecialidadMentor.RELACIONES));
+
+        assertThat(perfil.especialidad()).isEqualTo(EspecialidadMentor.RELACIONES);
+        assertThat(perfil.updatedAt()).isEqualTo(AHORA);
+        verify(saveMentorProfilePort).save(perfil);
+    }
+
+    /**
+     * La especialidad es el criterio con el que el administrador elige a quien poner en cada grupo
+     * (V48): si el propio mentor pudiera declararla, se estaria eligiendo a si mismo. La bio, que
+     * es como se presenta, si sigue siendo suya.
+     */
+    @Test
+    @DisplayName("el propio mentor NO se declara la especialidad, aunque si puede editar su bio")
+    void elMentorNoSeDeclaraLaEspecialidad() {
+        User elMismo = User.rehydrate(mentorId, new Email(mentorId.value() + "@renaser.dev"), UserRole.MENTOR,
+                UserStatus.ACTIVE, "Mentor de si mismo", null, null, null, null);
+        when(requireActiveUserGuard.of(mentorId)).thenReturn(elMismo);
+        MentorProfile perfil = perfilExistente();
+
+        assertThatThrownBy(() -> service.update(
+                new UpdateMentorProfileCommand(mentorId, null, null, null, mentorId, EspecialidadMentor.NEGOCIO)))
+                .isInstanceOf(NotAuthorizedException.class)
+                .hasMessage("Solo ADMIN/ALCHEMIST declaran la especialidad de un mentor");
+        assertThat(perfil.especialidad()).isNull();
+        verify(saveMentorProfilePort, never()).save(any());
+    }
+
+    /** El campo nuevo no puede haber corrido a los viejos: el comando los empareja por POSICION. */
+    @Test
+    @DisplayName("un comando sin especialidad no la toca, y sigue promoviendo de nivel")
+    void sinEspecialidadElRestoSigueIgual() {
+        actor(UserRole.ADMIN);
+        MentorProfile perfil = perfilExistente();
+        perfil.cambiarEspecialidad(EspecialidadMentor.MENTE, clock);
+
+        service.update(new UpdateMentorProfileCommand(mentorId, MentorLevel.N2, null, null, actorId));
+
+        assertThat(perfil.level()).isEqualTo(MentorLevel.N2);
+        assertThat(perfil.especialidad())
+                .as("null en el comando es 'no cambiar', nunca 'borrar'")
+                .isEqualTo(EspecialidadMentor.MENTE);
     }
 
     // ─── helpers ─────────────────────────────────────────────────────────────────────

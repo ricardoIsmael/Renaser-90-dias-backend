@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.experimental.Accessors;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Objects;
 
 /**
@@ -42,6 +43,15 @@ public final class Celula {
     private TipoCelula tipo;
     /** Override de capacidad de esta celula. {@code null} = usar la de la politica de su cohorte. */
     private Integer capacidadMaxima;
+    /**
+     * V48. Desde cuando y hasta cuando vive el grupo que armo el administrador.
+     *
+     * <p>{@code null} = grupo SIN periodo, que no caduca. No es un caso raro ni un estado a
+     * medias: es lo que son todas las celulas anteriores a V48, y la migracion las dejo asi a
+     * proposito para no ponerle fecha de muerte a grupos que nadie programo. Por eso los metodos
+     * de consulta de abajo tienen que responder para ese caso, y no pueden delegar a ciegas.
+     */
+    private PeriodoGrupo periodo;
 
     /**
      * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
@@ -51,11 +61,17 @@ public final class Celula {
      */
     public static Celula crear(CelulaId id, String nombre, CohorteId cohorteId, String urlVideollamada,
                                 Instant ahora) {
+        return crear(id, nombre, cohorteId, urlVideollamada, null, ahora);
+    }
+
+    /** V48: la misma alta, con el periodo que el administrador escribio. {@code periodo} nulo = sin periodo. */
+    public static Celula crear(CelulaId id, String nombre, CohorteId cohorteId, String urlVideollamada,
+                                PeriodoGrupo periodo, Instant ahora) {
         Objects.requireNonNull(id, "id es obligatorio");
         requireNombreValido(nombre);
         Objects.requireNonNull(cohorteId, "cohorteId es obligatorio");
         return new Celula(id, nombre, null, cohorteId, urlVideollamada, null, ahora, ahora,
-                TipoCelula.REGULAR, null);
+                TipoCelula.REGULAR, null, periodo);
     }
 
     /**
@@ -69,16 +85,72 @@ public final class Celula {
                 actualizadoEn, TipoCelula.REGULAR, null);
     }
 
-    /** Solo para el adaptador de persistencia. */
+    /** Solo para el adaptador de persistencia. Sobrecarga previa a V48: grupo sin periodo. */
     public static Celula rehydrate(CelulaId id, String nombre, UserId mentorId, CohorteId cohorteId,
                                     String urlVideollamada, Instant proximaSesionEn, Instant creadoEn,
                                     Instant actualizadoEn, TipoCelula tipo, Integer capacidadMaxima) {
+        return rehydrate(id, nombre, mentorId, cohorteId, urlVideollamada, proximaSesionEn, creadoEn,
+                actualizadoEn, tipo, capacidadMaxima, null);
+    }
+
+    /** Solo para el adaptador de persistencia. */
+    public static Celula rehydrate(CelulaId id, String nombre, UserId mentorId, CohorteId cohorteId,
+                                    String urlVideollamada, Instant proximaSesionEn, Instant creadoEn,
+                                    Instant actualizadoEn, TipoCelula tipo, Integer capacidadMaxima,
+                                    PeriodoGrupo periodo) {
         return new Celula(id, nombre, mentorId, cohorteId, urlVideollamada, proximaSesionEn, creadoEn,
-                actualizadoEn, tipo != null ? tipo : TipoCelula.REGULAR, capacidadMaxima);
+                actualizadoEn, tipo != null ? tipo : TipoCelula.REGULAR, capacidadMaxima, periodo);
+    }
+
+    /**
+     * El periodo que sale de las dos fechas sueltas de un comando o de una fila: <b>las dos o
+     * ninguna</b>.
+     *
+     * <p>Una sola fecha no es medio periodo, es un error de quien lo mando: sin inicio no se sabe
+     * desde cuando cuenta y sin fin no se sabe cuando cierra, y guardarlo asi deja al grupo en un
+     * limbo que ninguna consulta resuelve. Es la misma regla que el CHECK
+     * {@code celulas_periodo_completo_o_ausente} (V48) sostiene desde la base; aca se rechaza
+     * antes, para que el error salga con nombre y no como violacion de constraint.
+     */
+    public static PeriodoGrupo periodoDe(LocalDate inicio, LocalDate fin) {
+        if (inicio == null && fin == null) {
+            return null;
+        }
+        if (inicio == null || fin == null) {
+            throw new IllegalArgumentException(
+                    "El periodo del grupo va con las dos fechas o con ninguna: inicio=" + inicio + ", fin=" + fin);
+        }
+        return new PeriodoGrupo(inicio, fin);
     }
 
     public boolean esRecepcion() {
         return tipo == TipoCelula.RECEPCION;
+    }
+
+    public boolean tienePeriodo() {
+        return periodo != null;
+    }
+
+    /**
+     * Si el grupo ya cerro ese dia. <b>Un grupo sin periodo NUNCA esta vencido</b> — de otro modo
+     * esta migracion apagaria de golpe todas las celulas anteriores a V48, que no tienen fechas.
+     *
+     * <p>El {@code dia} viene por parametro y no de {@code LocalDate.now()}: el dia tiene que ser
+     * el de quien mira, en su zona. A las 02:00 UTC del dia 1, en Lima todavia es el ultimo dia
+     * del mes anterior y el grupo sigue vivo (E-91, regla 02).
+     */
+    public boolean vencidoEn(LocalDate dia) {
+        return periodo != null && periodo.vencidoEn(dia);
+    }
+
+    /** Si todavia no arranco. Un grupo sin periodo tampoco es futuro: ya esta corriendo. */
+    public boolean futuroEn(LocalDate dia) {
+        return periodo != null && periodo.futuroEn(dia);
+    }
+
+    /** Si ese dia el grupo se ve desde la app del alumno. Sin periodo, siempre. */
+    public boolean vigenteEn(LocalDate dia) {
+        return periodo == null || periodo.contiene(dia);
     }
 
     /**
@@ -92,11 +164,24 @@ public final class Celula {
     }
 
     public void actualizarDatos(String nombre, String urlVideollamada, boolean tocaUrl, Instant ahora) {
+        actualizarDatos(nombre, urlVideollamada, tocaUrl, null, false, ahora);
+    }
+
+    /**
+     * V48. {@code tocaPeriodo} distingue "no vino" de "vino null para borrarlo", igual que
+     * {@code tocaUrl}. Sin esa distincion, un PATCH que solo cambia el nombre le borraria el
+     * periodo al grupo sin que nadie lo pidiera.
+     */
+    public void actualizarDatos(String nombre, String urlVideollamada, boolean tocaUrl, PeriodoGrupo periodo,
+                                 boolean tocaPeriodo, Instant ahora) {
         String nombreEfectivo = nombre != null ? nombre : this.nombre;
         requireNombreValido(nombreEfectivo);
         this.nombre = nombreEfectivo;
         if (tocaUrl) {
             this.urlVideollamada = urlVideollamada;
+        }
+        if (tocaPeriodo) {
+            this.periodo = periodo;
         }
         this.actualizadoEn = ahora;
     }

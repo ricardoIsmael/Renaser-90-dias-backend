@@ -13,6 +13,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -48,4 +49,18 @@ public class CelulaJpaEntity {
 
     /** V45. Override de capacidad; NULL = usar la de la politica de la cohorte. */
     private Integer capacidadMaxima;
+
+    /**
+     * V48. Primer y ULTIMO dia del grupo, los dos inclusive. Son `date` y no `timestamptz` a
+     * proposito: lo que el administrador escribe es "del 1 al 30", un dia de calendario, no un
+     * instante que dependa de la zona del servidor.
+     *
+     * <p>Las dos NULL = grupo sin periodo (no caduca), que es lo que son todas las celulas
+     * anteriores a V48. Van juntas o no van: el CHECK `celulas_periodo_completo_o_ausente` no
+     * admite una sola. Nulables, asi que a diferencia de `creado_en`/`actualizado_en` no hay
+     * DEFAULT que un NULL explicito pueda pisar.
+     */
+    private LocalDate periodoInicio;
+
+    private LocalDate periodoFin;
 }

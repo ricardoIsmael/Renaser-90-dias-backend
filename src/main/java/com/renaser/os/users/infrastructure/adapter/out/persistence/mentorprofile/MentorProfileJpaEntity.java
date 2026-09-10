@@ -38,4 +38,9 @@ public class MentorProfileJpaEntity {
     private Instant creadoEn;
 
     private Instant actualizadoEn;
+
+    /** V48. NULL = sin declarar todavia; asi quedaron los perfiles que ya existian. */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    private EspecialidadMentorJpa especialidad;
 }

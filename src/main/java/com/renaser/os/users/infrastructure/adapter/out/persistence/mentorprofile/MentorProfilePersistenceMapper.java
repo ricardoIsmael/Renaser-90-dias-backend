@@ -1,6 +1,7 @@
 package com.renaser.os.users.infrastructure.adapter.out.persistence.mentorprofile;
 
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.domain.model.mentorprofile.EspecialidadMentor;
 import com.renaser.os.users.domain.model.mentorprofile.MentorLevel;
 import com.renaser.os.users.domain.model.mentorprofile.MentorOperationalStatus;
 import com.renaser.os.users.domain.model.mentorprofile.MentorProfile;
@@ -16,7 +17,8 @@ class MentorProfilePersistenceMapper {
                 toDomainStatus(e.getEstadoOperativo()),
                 e.getBio(),
                 e.getCreadoEn(),
-                e.getActualizadoEn());
+                e.getActualizadoEn(),
+                toDomainEspecialidad(e.getEspecialidad()));
     }
 
     MentorProfileJpaEntity toEntity(MentorProfile p) {
@@ -26,7 +28,8 @@ class MentorProfilePersistenceMapper {
                 toJpaStatus(p.operationalStatus()),
                 p.bio(),
                 p.createdAt(),
-                p.updatedAt());
+                p.updatedAt(),
+                toJpaEspecialidad(p.especialidad()));
     }
 
     private NivelMentorJpa toJpaLevel(MentorLevel level) {
@@ -51,5 +54,14 @@ class MentorProfilePersistenceMapper {
             case AMARILLO -> MentorOperationalStatus.YELLOW;
             case ROJO -> MentorOperationalStatus.RED;
         };
+    }
+
+    /** A diferencia de los otros tres, esta columna es NULABLE: null = sin declarar (V48). */
+    private EspecialidadMentorJpa toJpaEspecialidad(EspecialidadMentor especialidad) {
+        return especialidad != null ? EspecialidadMentorJpa.valueOf(especialidad.name()) : null;
+    }
+
+    private EspecialidadMentor toDomainEspecialidad(EspecialidadMentorJpa jpa) {
+        return jpa != null ? EspecialidadMentor.valueOf(jpa.name()) : null;
     }
 }
