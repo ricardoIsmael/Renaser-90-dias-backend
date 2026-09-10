@@ -77,6 +77,9 @@ class AcompanamientoFinderService implements AcompanamientoFinder {
     @Override
     @Transactional(readOnly = true)
     public List<UserId> integrantesVigentes(UUID grupoId, Instant instante) {
+        if (!grupoOperativoEn(grupoId, instante)) {
+            return List.of();
+        }
         return asignacionesDe(grupoId).stream()
                 .filter(a -> a.vigenteEn(instante))
                 .map(AsignacionCelula::usuarioId)
@@ -87,7 +90,8 @@ class AcompanamientoFinderService implements AcompanamientoFinder {
     @Override
     @Transactional(readOnly = true)
     public boolean esIntegranteVigente(UUID grupoId, UserId usuarioId, Instant instante) {
-        return asignacionesDe(grupoId).stream()
+        return grupoOperativoEn(grupoId, instante)
+                && asignacionesDe(grupoId).stream()
                 .filter(a -> a.usuarioId().equals(usuarioId))
                 .anyMatch(a -> a.vigenteEn(instante));
     }
@@ -95,11 +99,46 @@ class AcompanamientoFinderService implements AcompanamientoFinder {
     @Override
     @Transactional(readOnly = true)
     public boolean acompanaVigente(UserId actorId, UUID grupoId, Instant instante) {
-        return asignacionesDe(grupoId).stream()
+        return grupoOperativoEn(grupoId, instante)
+                && asignacionesDe(grupoId).stream()
                 .filter(a -> a.usuarioId().equals(actorId))
                 // Ser APRENDIZ del grupo no es acompanarlo.
                 .filter(a -> !a.funcion().consumeCupo())
                 .anyMatch(a -> a.vigenteEn(instante));
+    }
+
+    /**
+     * Si el grupo esta DENTRO de su periodo ese instante. Sin periodo, siempre — asi quedaron
+     * todas las celulas anteriores a V48 y no se les pone fecha de muerte.
+     *
+     * <p><b>Por que las tres preguntas de pertenencia pasan por aca (SDD 003, ARF-18 / V17).</b>
+     * Cerrar el periodo de un grupo NO cierra sus filas de {@code asignaciones_celula} —son dos
+     * hechos distintos y el historial tiene que conservarse—, asi que mirar solo la asignacion
+     * dejaba el chat de un grupo terminado abierto y a su exmentor leyendo la semana de sus
+     * exalumnos. Poner la condicion aca y no en un job hace que la revocacion sea inmediata e
+     * idempotente: no depende de que ningun barrido haya corrido, que es justo lo que el
+     * requisito pide. Un grupo PROGRAMADO tampoco pasa: existir no es estar corriendo.
+     *
+     * <p>Lo que NO se filtra son los tramos historicos ({@code tramosDeMentor},
+     * {@code tramosDeAprendices}) ni {@code aprendicesVigentes}: la evaluacion de un mes tiene que
+     * poder mirar un grupo que ya cerro, o el mentor perderia la nota del mes que si acompaño.
+     */
+    private boolean grupoOperativoEn(UUID grupoId, Instant instante) {
+        return loadCelulaPort.porId(CelulaId.of(grupoId))
+                .map(celula -> celula.vigenteEn(diaDelPrograma(celula, instante)))
+                .orElse(false);
+    }
+
+    /**
+     * El dia del GRUPO, en la zona de la politica de su cohorte. No es la del servidor ni la del
+     * telefono: si la decidiera el cliente, dos aprendices en husos distintos verian cerrar el
+     * mismo grupo en dias distintos (plan.md §3).
+     */
+    private java.time.LocalDate diaDelPrograma(Celula celula, Instant instante) {
+        String zona = loadPoliticaMentoriaPort.porCohorte(celula.cohorteId())
+                .orElseGet(() -> PoliticaMentoria.porDefecto(celula.cohorteId()))
+                .zonaHoraria();
+        return instante.atZone(java.time.ZoneId.of(zona)).toLocalDate();
     }
 
     @Override
@@ -118,6 +157,10 @@ class AcompanamientoFinderService implements AcompanamientoFinder {
         List<GrupoAcompanado> acompanados = new java.util.ArrayList<>();
         for (Celula celula : loadCelulaPort.todas()) {
             if (celula.esRecepcion()) {
+                continue;
+            }
+            // Un grupo fuera de su periodo no genera avisos de inactividad: no esta corriendo.
+            if (!celula.vigenteEn(diaDelPrograma(celula, instante))) {
                 continue;
             }
             PoliticaMentoria politica = loadPoliticaMentoriaPort.porCohorte(celula.cohorteId())

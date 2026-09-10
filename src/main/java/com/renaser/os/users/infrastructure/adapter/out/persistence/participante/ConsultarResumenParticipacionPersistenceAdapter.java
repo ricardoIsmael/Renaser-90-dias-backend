@@ -90,6 +90,21 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             """;
 
     /** Panel admin de aprendices (gap #7): todos los TRAINEE, con o sin fila de programa. */
+    /**
+     * {@code ?3} llega null cuando no hay busqueda y el {@code OR ?3 IS NULL} deja pasar todo: un
+     * solo SQL en vez de concatenar el WHERE segun los filtros, que es como se cuela una inyeccion
+     * o un plan distinto por combinacion. {@code ?4} hace lo mismo con "solo sin grupo".
+     */
+    private static final String FILTRO_APRENDICES = """
+            FROM renaser.usuarios u
+            LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
+            WHERE u.rol = 'APRENDIZ'
+              AND (CAST(?3 AS text) IS NULL
+                   OR u.nombre_completo ILIKE '%' || CAST(?3 AS text) || '%'
+                   OR u.email ILIKE '%' || CAST(?3 AS text) || '%')
+              AND (?4 = FALSE OR pp.celula_id IS NULL)
+            """;
+
     private static final String QUERY_LISTAR_APRENDICES = """
             SELECT u.id, u.nombre_completo, u.email, u.estado,
                    COALESCE(pp.dia_programa, 0) AS dia_programa,
@@ -97,16 +112,12 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                    COALESCE(pp.timezone, 'America/Lima') AS timezone,
                    pp.programa_activado_en,
                    COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa
-            FROM renaser.usuarios u
-            LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
-            WHERE u.rol = 'APRENDIZ'
-            ORDER BY u.nombre_completo
+            """ + FILTRO_APRENDICES + """
+            ORDER BY u.nombre_completo, u.id
             LIMIT ?1 OFFSET ?2
             """;
 
-    private static final String QUERY_CONTAR_APRENDICES = """
-            SELECT COUNT(*) FROM renaser.usuarios WHERE rol = 'APRENDIZ'
-            """;
+    private static final String QUERY_CONTAR_APRENDICES = "SELECT COUNT(*) " + FILTRO_APRENDICES;
 
     private final EntityManager entityManager;
     private final Clock clock;
@@ -223,18 +234,30 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
 
     @Override
     @SuppressWarnings("unchecked")
-    public List<ResumenTraineeAdmin> listarAprendices(int offset, int limit) {
+    public List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda,
+                                                       boolean soloSinGrupo) {
         List<Object[]> filas = entityManager.createNativeQuery(QUERY_LISTAR_APRENDICES)
                 .setParameter(1, limit)
                 .setParameter(2, offset)
+                .setParameter(3, normalizar(busqueda))
+                .setParameter(4, soloSinGrupo)
                 .getResultList();
         return filas.stream().map(this::aResumenTraineeAdmin).collect(Collectors.toList());
     }
 
     @Override
-    public long contarAprendices() {
-        Number total = (Number) entityManager.createNativeQuery(QUERY_CONTAR_APRENDICES).getSingleResult();
+    public long contarAprendices(String busqueda, boolean soloSinGrupo) {
+        Number total = (Number) entityManager.createNativeQuery(QUERY_CONTAR_APRENDICES)
+                .setParameter(3, normalizar(busqueda))
+                .setParameter(4, soloSinGrupo)
+                .getSingleResult();
         return total.longValue();
+    }
+
+    /** Vacio y solo-espacios se tratan como "sin busqueda": si no, el ILIKE '%%' pasa igual pero
+     * el total dejaria de coincidir con lo que ve quien borro el texto del buscador. */
+    private static String normalizar(String busqueda) {
+        return busqueda == null || busqueda.isBlank() ? null : busqueda.trim();
     }
 
     private ResumenTraineeAdmin aResumenTraineeAdmin(Object[] fila) {

@@ -39,10 +39,18 @@ public interface ConsultarResumenParticipacionPort {
      * Panel admin de aprendices (gap #7 de docs/PLAN_INTEGRACION_FRONTEND.md): pagina de
      * TODOS los usuarios con rol TRAINEE (cualquier estado), con su resumen de programa
      * si tienen fila en `participantes_programa` (siempre deberian, ver D-33, pero LEFT
-     * JOIN de todas formas por robustez). Sin filtros: el encargo solo pide "listar,
-     * detalle, editar dia" — se agregan filtros el dia que se pidan explicitamente.
+     * JOIN de todas formas por robustez).
+     *
+     * <p><b>Los filtros llegan con el SDD 003, pedidos explicitamente.</b> {@code busqueda} recorta
+     * por nombre o correo EN LA BASE, no sobre la pagina ya descargada: buscar en el movil sobre
+     * los veinte que vinieron esconde al que esta en la pagina cuatro y hace creer que no existe
+     * (ARF-02, V28). {@code soloSinGrupo} es la otra cola operativa de la pantalla de resumen:
+     * quien no tiene grupo vigente es justamente a quien hay que ubicar.
+     *
+     * @param busqueda    {@code null} o vacio = sin recorte. Se compara sin distinguir mayusculas.
+     * @param soloSinGrupo {@code true} = solo los que no tienen celula asignada.
      */
-    List<ResumenTraineeAdmin> listarAprendices(int offset, int limit);
+    List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo);
 
-    long contarAprendices();
+    long contarAprendices(String busqueda, boolean soloSinGrupo);
 }

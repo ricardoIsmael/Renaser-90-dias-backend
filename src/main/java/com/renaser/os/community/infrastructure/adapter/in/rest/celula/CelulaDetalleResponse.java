@@ -9,7 +9,8 @@ import java.util.List;
 /** {@code periodStart}/{@code periodEnd}: ver la nota de {@link CelulaResponse}. */
 public record CelulaDetalleResponse(String id, String name, String cohortId, String videoCallUrl,
                                      String nextSessionAt, PerfilBasicoResponse mentor,
-                                     List<PerfilBasicoResponse> members, String periodStart, String periodEnd) {
+                                     List<PerfilBasicoResponse> members, String periodStart, String periodEnd,
+                                     String status, String type, int learnerCount, Integer capacity) {
 
     public static CelulaDetalleResponse from(CelulaDetalle detalle) {
         Celula c = detalle.celula();
@@ -19,6 +20,7 @@ public record CelulaDetalleResponse(String id, String name, String cohortId, Str
                 PerfilBasicoResponse.from(detalle.mentor()),
                 detalle.miembros().stream().map(PerfilBasicoResponse::from).toList(),
                 periodo != null ? periodo.inicio().toString() : null,
-                periodo != null ? periodo.fin().toString() : null);
+                periodo != null ? periodo.fin().toString() : null,
+                detalle.estado().name(), c.tipo().name(), detalle.aprendicesVigentes(), detalle.cupoMaximo());
     }
 }

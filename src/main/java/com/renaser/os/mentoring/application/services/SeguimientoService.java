@@ -10,6 +10,7 @@ import com.renaser.os.habits.api.ObligacionHabito;
 import com.renaser.os.habits.api.ObligacionesHistoricasFinder;
 import com.renaser.os.mentoring.application.ports.in.ConsultarEvaluacionPropiaUseCase;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSeguimientoSemanalUseCase;
+import com.renaser.os.mentoring.application.ports.in.ConsultarSemanaAdministrativaUseCase;
 import com.renaser.os.points.api.CalculoCumplimientoPort;
 import com.renaser.os.points.api.EvaluacionCumplimiento;
 import com.renaser.os.points.api.ObligacionEvidencia;
@@ -19,6 +20,8 @@ import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.stereotype.Service;
@@ -49,7 +52,8 @@ import java.util.UUID;
  * evidencias.
  */
 @Service
-public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase, ConsultarEvaluacionPropiaUseCase {
+public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase,
+        ConsultarSemanaAdministrativaUseCase, ConsultarEvaluacionPropiaUseCase {
 
     private static final String COBERTURA_COMPLETA = "COMPLETA";
     private static final String COBERTURA_SIN_DATOS = "SIN_DATOS";
@@ -102,14 +106,41 @@ public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase, C
 
         GrupoBasico grupo = acompanamientoFinder.grupo(consulta.grupoId())
                 .orElseThrow(() -> new NoSuchElementException("Grupo no encontrado"));
-        ParticipacionPrograma participacion = participacionProgramaFinder.deParticipante(alumnoId)
-                .orElseThrow(() -> new NoSuchElementException("Alumno no encontrado"));
 
-        // La semana se ancla en la zona DEL ALUMNO, no en la del servidor ni en la del mentor:
+        ParticipacionPrograma delAlumno = participacionProgramaFinder.deParticipante(alumnoId)
+                .orElseThrow(() -> new NoSuchElementException("Alumno no encontrado"));
+        return armarSemana(alumnoId, delAlumno, grupo.grupoId(), consulta.inicioDeSemana(), ahora);
+    }
+
+    /**
+     * Lectura administrativa de la misma semana. La autorizacion es OTRA —rol, no relacion— y por
+     * eso vive en su propio metodo: el guard del mentor de {@link #semanaDe} no se toca ni se
+     * parametriza, que es como se abren los agujeros que despues nadie encuentra (ARF-15).
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public SemanaDelAlumno semanaDe(ConsultaSemanaAdministrativa consulta) {
+        requireAdminActivo(consulta.actorId());
+        UserId alumnoId = UserId.of(consulta.alumnoId());
+        ParticipacionPrograma delAlumno = participacionProgramaFinder.deParticipante(alumnoId)
+                .orElseThrow(() -> new NoSuchElementException("Alumno no encontrado"));
+        // Sin grupo vigente igual tiene semana: el administrador mira a la persona. El grupo viaja
+        // null y la pantalla lo dice, en vez de fingir que no hay datos.
+        return armarSemana(alumnoId, delAlumno, delAlumno.celulaId(), consulta.inicioDeSemana(), clock.now());
+    }
+
+    /**
+     * El armado compartido. Que sea UNO solo es el requisito, no una comodidad: si el
+     * administrador y el mentor calcularan por su cuenta, verian dos versiones del mismo dia y
+     * ninguna pantalla podria decir cual es la buena (V22).
+     */
+    private SemanaDelAlumno armarSemana(UserId alumnoId, ParticipacionPrograma participacion, UUID grupoId,
+                                         LocalDate inicioPedido, Instant ahora) {
+        // La semana se ancla en la zona DEL ALUMNO, no en la del servidor ni en la de quien mira:
         // sus dias son los que se estan mirando.
         ZoneId zona = participacion.zona();
-        LocalDate lunes = (consulta.inicioDeSemana() != null
-                ? consulta.inicioDeSemana()
+        LocalDate lunes = (inicioPedido != null
+                ? inicioPedido
                 : ahora.atZone(zona).toLocalDate()).with(DayOfWeek.MONDAY);
         LocalDate domingo = lunes.plusDays(6);
 
@@ -123,10 +154,25 @@ public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase, C
         // padron de ese periodo no se haya generado. Es SIN_DATOS, que es otra cosa.
         String cobertura = obligaciones.isEmpty() ? COBERTURA_SIN_DATOS : COBERTURA_COMPLETA;
 
-        return new SemanaDelAlumno(grupo.grupoId(), alumnoId.value(), nombre, lunes, domingo,
+        return new SemanaDelAlumno(grupoId, alumnoId.value(), nombre, lunes, domingo,
                 participacion.inscrito() ? participacion.diaPrograma() : null, zona.getId(),
                 armarDias(lunes, domingo, obligaciones, entregas), resumir(obligaciones, entregas),
                 cobertura, ahora);
+    }
+
+    /**
+     * Rol administrativo, cuenta activa. Se resuelve con {@code users.api} y no importando el
+     * guard interno de `users`: ese es suyo y no es API publica (ARF-15).
+     */
+    private void requireAdminActivo(UserId actorId) {
+        UserSummary actor = userSummaryFinder.findById(actorId)
+                .orElseThrow(() -> new NoSuchElementException("Actor no encontrado: " + actorId));
+        if (actor.status() != UserStatus.ACTIVE) {
+            throw new NotAuthorizedException("La cuenta esta suspendida");
+        }
+        if (actor.role() != UserRole.ADMIN && actor.role() != UserRole.ALCHEMIST) {
+            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST consultan la semana de cualquier aprendiz");
+        }
     }
 
     private List<DiaDelAlumno> armarDias(LocalDate lunes, LocalDate domingo, List<ObligacionHabito> obligaciones,

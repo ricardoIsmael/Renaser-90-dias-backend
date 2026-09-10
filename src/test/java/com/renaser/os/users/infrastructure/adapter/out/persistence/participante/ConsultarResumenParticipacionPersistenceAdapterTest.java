@@ -331,7 +331,7 @@ class ConsultarResumenParticipacionPersistenceAdapterTest {
 
         var adapterFijo = adapterConRelojFijo();
 
-        assertThat(adapterFijo.listarAprendices(0, 100))
+        assertThat(adapterFijo.listarAprendices(0, 100, null, false))
                 .filteredOn(a -> a.id().equals(id))
                 .singleElement()
                 .satisfies(a -> assertThat(a.diaPrograma()).isEqualTo(2));

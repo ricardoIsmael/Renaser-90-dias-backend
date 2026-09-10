@@ -1,5 +1,6 @@
 package com.renaser.os.users.domain.model.mentorprofile;
 
+import com.renaser.os.users.api.EspecialidadMentor;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;

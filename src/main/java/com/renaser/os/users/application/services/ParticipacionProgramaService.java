@@ -234,8 +234,10 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     public PaginaTrainees listar(ListTraineesCommand command) {
         requireAdminGuard.requireAdminActivo(command.actorId());
         var contenido = consultarResumenParticipacionPort.listarAprendices(command.page() * command.size(),
-                command.size());
-        long total = consultarResumenParticipacionPort.contarAprendices();
+                command.size(), command.busqueda(), command.soloSinGrupo());
+        // El total se cuenta CON los mismos filtros: si contara el padron entero, la pantalla
+        // diria "1 de 340" y el paginador ofreceria paginas que no existen.
+        long total = consultarResumenParticipacionPort.contarAprendices(command.busqueda(), command.soloSinGrupo());
         return new PaginaTrainees(contenido, total, command.page(), command.size());
     }
 

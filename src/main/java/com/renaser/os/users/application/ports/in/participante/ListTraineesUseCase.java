@@ -13,7 +13,16 @@ public interface ListTraineesUseCase {
 
     PaginaTrainees listar(ListTraineesCommand command);
 
-    record ListTraineesCommand(UserId actorId, int page, int size) {
+    /**
+     * @param busqueda     nombre o correo, resuelto EN LA BASE. {@code null} = sin recorte.
+     * @param soloSinGrupo la cola operativa de la pantalla de resumen: a quien hay que ubicar.
+     */
+    record ListTraineesCommand(UserId actorId, int page, int size, String busqueda, boolean soloSinGrupo) {
+
+        /** Sobrecarga previa al SDD 003: listado completo, sin filtros. */
+        public ListTraineesCommand(UserId actorId, int page, int size) {
+            this(actorId, page, size, null, false);
+        }
 
         public ListTraineesCommand {
             Objects.requireNonNull(actorId, "actorId es obligatorio");

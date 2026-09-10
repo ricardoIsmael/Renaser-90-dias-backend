@@ -6,7 +6,7 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.out.mentorprofile.LoadMentorProfilePort;
 import com.renaser.os.users.application.ports.out.mentorprofile.SaveMentorProfilePort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
-import com.renaser.os.users.domain.model.mentorprofile.EspecialidadMentor;
+import com.renaser.os.users.api.EspecialidadMentor;
 import com.renaser.os.users.domain.model.mentorprofile.MentorLevel;
 import com.renaser.os.users.domain.model.mentorprofile.MentorOperationalStatus;
 import com.renaser.os.users.domain.model.mentorprofile.MentorProfile;

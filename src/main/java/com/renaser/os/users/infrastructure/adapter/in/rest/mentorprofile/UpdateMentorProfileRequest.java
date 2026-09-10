@@ -1,6 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.mentorprofile;
 
-import com.renaser.os.users.domain.model.mentorprofile.EspecialidadMentor;
+import com.renaser.os.users.api.EspecialidadMentor;
 import com.renaser.os.users.domain.model.mentorprofile.MentorLevel;
 import com.renaser.os.users.domain.model.mentorprofile.MentorOperationalStatus;
 

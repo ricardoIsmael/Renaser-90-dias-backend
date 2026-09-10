@@ -2,6 +2,7 @@ package com.renaser.os.community.application.ports.in.celula;
 
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.EspecialidadMentor;
 
 import java.util.List;
 
@@ -32,7 +33,14 @@ public interface ConsultarCandidatosCelulaUseCase {
      * suelta que no existe en `participantes_programa`. */
     List<AprendizCandidato> aprendicesDisponibles(UserId actorId);
 
-    record MentorCandidato(UserId userId, String nombreCompleto, String avatarUrl, CelulaId celulaActual) {
+    /**
+     * @param especialidad NEGOCIO / MENTE / RELACIONES, o {@code null} si el mentor no la declaro.
+     *                     El administrador elige el mentor del grupo POR esto (SDD 003, ARF-05),
+     *                     asi que el selector la necesita; null se muestra "Sin especialidad
+     *                     definida" y no se sustituye por ninguna de las tres.
+     */
+    record MentorCandidato(UserId userId, String nombreCompleto, String avatarUrl, CelulaId celulaActual,
+                            EspecialidadMentor especialidad) {
     }
 
     record AprendizCandidato(UserId userId, String nombreCompleto, String avatarUrl) {

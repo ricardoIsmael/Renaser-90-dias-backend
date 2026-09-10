@@ -4,8 +4,6 @@ import com.renaser.os.community.api.CelulaCreadaEvent;
 import com.renaser.os.community.api.CelulaFinder;
 import com.renaser.os.community.api.CelulaFinder.CelulaParticipanteResumen;
 import com.renaser.os.community.application.ports.in.celula.ActualizarCelulaUseCase;
-import com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase;
-import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.ConsultarCandidatosCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.ConsultarCelulasUseCase;
 import com.renaser.os.community.application.ports.in.celula.ConsultarDashboardCelulasUseCase;
@@ -13,11 +11,10 @@ import com.renaser.os.community.application.ports.in.celula.ConsultarMiCelulaUse
 import com.renaser.os.community.application.ports.in.celula.CrearCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.EliminarCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.ProgramarSesionCelulaUseCase;
-import com.renaser.os.community.application.ports.in.celula.QuitarAprendizCelulaUseCase;
-import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUseCase;
 import com.renaser.os.community.application.ports.out.celula.EliminarCelulaPort;
-import com.renaser.os.community.application.ports.out.celula.ExistePerfilMentorPort;
 import com.renaser.os.community.application.ports.out.celula.LoadCelulaPort;
+import com.renaser.os.community.application.ports.out.acompanamiento.LoadAsignacionesPort;
+import com.renaser.os.community.application.ports.out.acompanamiento.LoadPoliticaMentoriaPort;
 import com.renaser.os.community.application.ports.out.celula.SaveCelulaPort;
 import com.renaser.os.community.application.ports.out.cohorte.LoadCohortePort;
 import com.renaser.os.community.application.ports.out.participante.ConsultarCelulaDeParticipantePort;
@@ -26,7 +23,9 @@ import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsu
 import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort.PerfilUsuario;
 import com.renaser.os.community.domain.model.acompanamiento.PoliticaMentoria;
 import com.renaser.os.community.domain.model.celula.Celula;
+import com.renaser.os.community.domain.model.acompanamiento.ConjuntoAsignaciones;
 import com.renaser.os.community.domain.model.celula.CelulaId;
+import com.renaser.os.community.domain.model.celula.EstadoGrupo;
 import com.renaser.os.community.domain.model.cohorte.Cohorte;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
@@ -34,11 +33,12 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.users.api.AsignacionCelulaPort;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
-import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.EspecialidadMentor;
+import com.renaser.os.users.api.PerfilMentorFinder;
+import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -54,46 +54,55 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
-public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCase, AsignarMentorCelulaUseCase,
-        QuitarMentorCelulaUseCase, ProgramarSesionCelulaUseCase, EliminarCelulaUseCase, ConsultarCelulasUseCase,
-        ConsultarMiCelulaUseCase, ConsultarDashboardCelulasUseCase, ConsultarCandidatosCelulaUseCase, CelulaFinder,
-        AsignarAprendizCelulaUseCase, QuitarAprendizCelulaUseCase {
+/**
+ * Alta, edicion y lecturas del grupo como ENTIDAD: nombre, cohorte, periodo, cupo y sesion.
+ *
+ * <p>Quien esta DENTRO del grupo ya no se decide aca: eso es
+ * {@link ComposicionDeCelulaService}, porque agregar a alguien no es escribir un puntero sino
+ * abrir un intervalo, mover el cupo y avisarle al chat. Separarlos deja esta clase en lo que su
+ * nombre promete y evita que un cambio de composicion se cuele como un {@code save} mas.
+ */
+public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCase, ProgramarSesionCelulaUseCase,
+        EliminarCelulaUseCase, ConsultarCelulasUseCase, ConsultarMiCelulaUseCase, ConsultarDashboardCelulasUseCase,
+        ConsultarCandidatosCelulaUseCase, CelulaFinder {
 
     private final LoadCelulaPort loadCelulaPort;
     private final SaveCelulaPort saveCelulaPort;
     private final EliminarCelulaPort eliminarCelulaPort;
     private final LoadCohortePort loadCohortePort;
-    private final ExistePerfilMentorPort existePerfilMentorPort;
     private final ConsultarMiembrosCelulaPort consultarMiembrosCelulaPort;
     private final ConsultarCelulaDeParticipantePort consultarCelulaDeParticipantePort;
     private final ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort;
     private final UserSummaryFinder userSummaryFinder;
     private final ParticipacionProgramaFinder participacionProgramaFinder;
-    private final AsignacionCelulaPort asignacionCelulaPort;
+    private final PerfilMentorFinder perfilMentorFinder;
+    private final LoadAsignacionesPort loadAsignacionesPort;
+    private final LoadPoliticaMentoriaPort loadPoliticaMentoriaPort;
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
     public CelulaService(LoadCelulaPort loadCelulaPort, SaveCelulaPort saveCelulaPort,
                           EliminarCelulaPort eliminarCelulaPort, LoadCohortePort loadCohortePort,
-                          ExistePerfilMentorPort existePerfilMentorPort,
                           ConsultarMiembrosCelulaPort consultarMiembrosCelulaPort,
                           ConsultarCelulaDeParticipantePort consultarCelulaDeParticipantePort,
                           ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort, UserSummaryFinder userSummaryFinder,
                           ParticipacionProgramaFinder participacionProgramaFinder,
-                          AsignacionCelulaPort asignacionCelulaPort, ApplicationEventPublisher events,
+                          PerfilMentorFinder perfilMentorFinder, LoadAsignacionesPort loadAsignacionesPort,
+                          LoadPoliticaMentoriaPort loadPoliticaMentoriaPort, ApplicationEventPublisher events,
                           Clock clock, IdGenerator idGenerator) {
         this.loadCelulaPort = loadCelulaPort;
         this.saveCelulaPort = saveCelulaPort;
         this.eliminarCelulaPort = eliminarCelulaPort;
         this.loadCohortePort = loadCohortePort;
-        this.existePerfilMentorPort = existePerfilMentorPort;
         this.consultarMiembrosCelulaPort = consultarMiembrosCelulaPort;
         this.consultarCelulaDeParticipantePort = consultarCelulaDeParticipantePort;
         this.consultarPerfilUsuarioPort = consultarPerfilUsuarioPort;
         this.userSummaryFinder = userSummaryFinder;
         this.participacionProgramaFinder = participacionProgramaFinder;
-        this.asignacionCelulaPort = asignacionCelulaPort;
+        this.perfilMentorFinder = perfilMentorFinder;
+        this.loadAsignacionesPort = loadAsignacionesPort;
+        this.loadPoliticaMentoriaPort = loadPoliticaMentoriaPort;
         this.events = events;
         this.clock = clock;
         this.idGenerator = idGenerator;
@@ -107,6 +116,10 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
         Celula celula = Celula.crear(CelulaId.of(idGenerator.newId()), command.nombre(), command.cohorteId(),
                 command.urlVideollamada(), command.periodo(), clock.now());
+        celula.marcarComo(command.tipoEfectivo(), clock.now());
+        if (command.capacidad() != null) {
+            celula.cambiarCapacidad(command.capacidad(), clock.now());
+        }
         Celula guardada = saveCelulaPort.save(celula);
         events.publishEvent(new CelulaCreadaEvent(guardada.id().value(), clock.now()));
         return aDetalle(guardada);
@@ -120,73 +133,10 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         requireCohorteNoCompletada(celula.cohorteId());
         celula.actualizarDatos(command.nombre(), command.urlVideollamada(), command.tocaUrlVideollamada(),
                 command.periodo(), command.tocaPeriodo(), clock.now());
+        if (command.tocaCapacidad()) {
+            celula.cambiarCapacidad(command.capacidad(), clock.now());
+        }
         return aDetalle(saveCelulaPort.save(celula));
-    }
-
-    @Override
-    @Transactional
-    public CelulaDetalle asignar(AsignarMentorCelulaCommand command) {
-        requireAdmin(command.actorId());
-        Celula celula = requireCelula(command.celulaId());
-        UserSummary lider = userSummaryFinder.findById(command.mentorId())
-                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado: " + command.mentorId()));
-        if (lider.status() != UserStatus.ACTIVE) {
-            throw new IllegalArgumentException("El usuario seleccionado no esta activo");
-        }
-        if (lider.role() != UserRole.MENTOR && lider.role() != UserRole.ADMIN && lider.role() != UserRole.ALCHEMIST) {
-            throw new IllegalArgumentException("El usuario seleccionado no puede liderar una celula");
-        }
-        if (!existePerfilMentorPort.existe(command.mentorId())) {
-            throw new IllegalStateException(
-                    "El usuario todavia no tiene un perfil de mentor (perfiles_mentor) — debe crearse desde "
-                            + "el modulo de usuarios antes de poder liderar una celula");
-        }
-        Optional<Celula> otraCelula = loadCelulaPort.porMentor(command.mentorId());
-        if (otraCelula.isPresent() && !otraCelula.get().id().equals(celula.id())) {
-            throw new IllegalStateException("Ese mentor ya lidera otra celula");
-        }
-        celula.asignarMentor(command.mentorId(), clock.now());
-        return aDetalle(saveCelulaPort.save(celula));
-    }
-
-    @Override
-    @Transactional
-    public CelulaDetalle quitar(QuitarMentorCelulaCommand command) {
-        requireAdmin(command.actorId());
-        Celula celula = requireCelula(command.celulaId());
-        celula.quitarMentor(clock.now());
-        return aDetalle(saveCelulaPort.save(celula));
-    }
-
-    /**
-     * Gap #25: `community` valida que la celula exista y que el destinatario sea un
-     * TRAINEE activo (mismo criterio que {@link #asignar} valida rol/estado del mentor
-     * antes de delegar en `users`, que es dueno de la columna pero no de estas
-     * invariantes de asignacion).
-     */
-    @Override
-    @Transactional
-    public CelulaDetalle asignar(AsignarAprendizCelulaCommand command) {
-        requireAdmin(command.actorId());
-        Celula celula = requireCelula(command.celulaId());
-        UserSummary trainee = userSummaryFinder.findById(command.traineeId())
-                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado: " + command.traineeId()));
-        if (trainee.status() != UserStatus.ACTIVE) {
-            throw new IllegalArgumentException("El aprendiz seleccionado no esta activo");
-        }
-        if (trainee.role() != UserRole.TRAINEE) {
-            throw new IllegalArgumentException("Solo se puede asignar celula a un aprendiz");
-        }
-        asignacionCelulaPort.asignarCelula(command.actorId(), command.traineeId(), command.celulaId().value());
-        return aDetalle(celula);
-    }
-
-    /** Contraparte de {@link #asignar(AsignarAprendizCelulaCommand)}. */
-    @Override
-    @Transactional
-    public void quitar(QuitarAprendizCelulaCommand command) {
-        requireAdmin(command.actorId());
-        asignacionCelulaPort.quitarCelula(command.actorId(), command.traineeId());
     }
 
     @Override
@@ -243,7 +193,8 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         PerfilBasico mentor = celula.mentorId() != null ? perfilBasico(celula.mentorId()) : null;
         List<PerfilBasico> miembros = consultarMiembrosCelulaPort.deCelula(celula.id()).stream()
                 .map(this::perfilBasico).toList();
-        return new CelulaDetalle(celula, mentor, miembros);
+        return new CelulaDetalle(celula, mentor, miembros, celula.estadoEn(hoyDelPrograma()),
+                aprendicesVigentes(celula), cupoMaximo(celula));
     }
 
     @Override
@@ -305,8 +256,9 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     public List<MentorCandidato> mentoresDisponibles(UserId actorId) {
         requireAdmin(actorId);
         Set<UserId> yaLideran = mentoresQueYaLideran();
-        return mentoresActivos().stream().filter(id -> !yaLideran.contains(id)).map(id -> aMentorCandidato(id, null))
-                .toList();
+        List<UserId> disponibles = mentoresActivos().stream().filter(id -> !yaLideran.contains(id)).toList();
+        Map<UserId, EspecialidadMentor> especialidades = especialidadesDe(disponibles);
+        return disponibles.stream().map(id -> aMentorCandidato(id, null, especialidades.get(id))).toList();
     }
 
     /** #25: TODOS los mentores ACTIVOS, marcando con {@code celulaActual} a quien ya
@@ -321,7 +273,11 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
                 celulaPorMentor.put(celula.mentorId(), celula.id());
             }
         }
-        return mentoresActivos().stream().map(id -> aMentorCandidato(id, celulaPorMentor.get(id))).toList();
+        List<UserId> todos = mentoresActivos();
+        Map<UserId, EspecialidadMentor> especialidades = especialidadesDe(todos);
+        return todos.stream()
+                .map(id -> aMentorCandidato(id, celulaPorMentor.get(id), especialidades.get(id)))
+                .toList();
     }
 
     /** #25: aprendices ACTIVOS sin celula asignada — alcance GLOBAL (ver javadoc de
@@ -362,16 +318,49 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         return yaLideran;
     }
 
-    private MentorCandidato aMentorCandidato(UserId id, CelulaId celulaActual) {
+    private MentorCandidato aMentorCandidato(UserId id, CelulaId celulaActual, EspecialidadMentor especialidad) {
         UserSummary resumen = userSummaryFinder.findById(id).orElse(null);
         return new MentorCandidato(id, resumen != null ? resumen.fullName() : null,
-                resumen != null ? resumen.avatarUrl() : null, celulaActual);
+                resumen != null ? resumen.avatarUrl() : null, celulaActual, especialidad);
+    }
+
+    /**
+     * Las especialidades en UNA consulta. El selector pide decenas de mentores de golpe y
+     * preguntar de a uno seria el mismo N+1 que este panel ya se saco de encima en el resto de
+     * los pickers. Un mentor sin perfil no aparece en el mapa y su especialidad queda null, que
+     * es exactamente lo que hay que mostrar.
+     */
+    private Map<UserId, EspecialidadMentor> especialidadesDe(List<UserId> mentorIds) {
+        Map<UserId, EspecialidadMentor> especialidades = new HashMap<>();
+        perfilMentorFinder.porUsuarios(mentorIds)
+                .forEach((id, perfil) -> especialidades.put(id, perfil.especialidad()));
+        return especialidades;
     }
 
     private CelulaResumen aResumen(Celula celula) {
         int cantidad = consultarMiembrosCelulaPort.contarMiembros(celula.id());
         PerfilBasico mentor = celula.mentorId() != null ? perfilBasico(celula.mentorId()) : null;
-        return new CelulaResumen(celula, cantidad, mentor);
+        return new CelulaResumen(celula, cantidad, mentor, celula.estadoEn(hoyDelPrograma()),
+                aprendicesVigentes(celula), cupoMaximo(celula));
+    }
+
+    /**
+     * Ocupacion real leida del HISTORIAL, no del contador de la proyeccion: el cupo se mide en
+     * aprendices vigentes y mentor/soporte no ocupan lugar. {@code cantidadMiembros} sigue
+     * saliendo del puntero porque responde otra pregunta —cuantos figuran asignados— y hay
+     * pantallas que ya la usan.
+     */
+    private int aprendicesVigentes(Celula celula) {
+        return ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(celula.id()))
+                .aprendicesVigentesEn(celula.id(), clock.now()).size();
+    }
+
+    /** {@code null} en recepcion: no tiene tope comercial (D-05). */
+    private Integer cupoMaximo(Celula celula) {
+        int capacidadPolitica = loadPoliticaMentoriaPort.porCohorte(celula.cohorteId())
+                .orElseGet(() -> PoliticaMentoria.porDefecto(celula.cohorteId()))
+                .capacidadCelula();
+        return celula.cupo(capacidadPolitica).maximo().orElse(null);
     }
 
     private PerfilBasico perfilBasico(UserId usuarioId) {

@@ -154,6 +154,46 @@ public final class Celula {
     }
 
     /**
+     * Los cuatro estados en una sola respuesta, para que la pantalla no tenga que combinar tres
+     * booleanos y equivocarse en la unica combinacion que importa: sin periodo NO es vigente por
+     * casualidad, lo es porque no caduca.
+     */
+    public EstadoGrupo estadoEn(LocalDate dia) {
+        if (periodo == null) {
+            return EstadoGrupo.SIN_PERIODO;
+        }
+        if (periodo.futuroEn(dia)) {
+            return EstadoGrupo.PROGRAMADO;
+        }
+        return periodo.vencidoEn(dia) ? EstadoGrupo.CERRADO : EstadoGrupo.VIGENTE;
+    }
+
+    /**
+     * Cambia el tope de aprendices. {@code null} devuelve el grupo a la capacidad de la politica
+     * de su cohorte en vez de dejarlo sin tope: un grupo regular siempre tiene uno.
+     *
+     * <p>Bajar la capacidad por debajo de la ocupacion actual NO expulsa a nadie —eso lo resuelve
+     * {@link CupoCelula#excedente}: bloquea altas hasta que el grupo vuelva bajo el limite.
+     */
+    public void cambiarCapacidad(Integer capacidadMaxima, Instant ahora) {
+        if (capacidadMaxima != null) {
+            // Valida el rango 10-15 en el mismo lugar que lo valida el cupo, no en un if suelto.
+            CupoCelula.regular(capacidadMaxima);
+        }
+        this.capacidadMaxima = capacidadMaxima;
+        this.actualizadoEn = ahora;
+    }
+
+    /**
+     * RECEPCION o REGULAR. Se cambia al crear, no despues: convertir un grupo estable en
+     * recepcion a mitad de camino le quitaria el tope con gente adentro.
+     */
+    public void marcarComo(TipoCelula tipo, Instant ahora) {
+        this.tipo = Objects.requireNonNull(tipo, "tipo es obligatorio");
+        this.actualizadoEn = ahora;
+    }
+
+    /**
      * El cupo efectivo. La recepcion no tiene tope (D-05); un grupo regular usa su override
      * y, si no lo tiene, el de la politica de su cohorte.
      */
