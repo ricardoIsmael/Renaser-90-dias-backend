@@ -5800,6 +5800,113 @@ dirección es parte del dato.
   entorno. La prueba `RedisSessionConfigTest` comprueba la serialización JSON y el round-trip del
   `SecurityContext`.
 
+## E-176 — Una prueba se puso roja sola cuando el calendario alcanzó sus fechas (2026-09-11) — **RESUELTO**
+
+- **Dónde:** `habits/.../PausaHabitoPersonalIT`.
+- **Síntoma:** `mvnw clean verify` en rojo sin que nadie tocara el código. Dos pruebas de la pausa
+  fallaban afirmando que un hábito pausado seguía generando track.
+- **Causa real:** las tres fechas eran constantes fijas —8, 9 y 10 de septiembre— que estaban en el
+  futuro cuando se escribió la prueba. Desde el arreglo de **E-91**, una pausa es un rango que
+  arranca al tocar el botón y no se aplica hacia atrás; al llegar el 10, "pausar hoy y preguntar por
+  el 8" dejó de significar *dentro de la pausa* y pasó a significar *dos días antes de que
+  existiera*. La producción respondía bien.
+- **Lo más revelador:** la semántica correcta YA tenía prueba —`DesbloqueoHabitoPausaTest
+  .unaPausaNoApagaLosDiasANTERIORESaHaberlaPuesto`—. Las dos afirmaban lo contrario y convivieron en
+  verde solo mientras el calendario dejó que las dos parecieran ciertas.
+- **Solución:** reloj fijo (`FixedClock`) en vez de mover las fechas a `hoy.plusDays(n)`: con fechas
+  relativas el mismo fallo vuelve en la ventana de medianoche y el día de la semana cambia en cada
+  corrida. La zona del participante va explícita en la semilla, porque es la que convierte
+  `pausado_en` a día del calendario.
+- **Cómo evitarlo:** una prueba con fechas literales futuras es una bomba de tiempo. O se congela el
+  reloj, o las fechas se derivan del reloj congelado — nunca constantes que "todavía" son futuras.
+  Y si dos pruebas afirman cosas opuestas sobre la misma regla, una está mintiendo aunque las dos
+  estén en verde.
+
+## E-175 — Toda escritura de acompañamiento fallaba por una marca de auditoría en NULL (2026-09-11) — **RESUELTO**
+
+- **Dónde:** `community/.../AsignacionCelulaJpaEntity` y `PoliticaMentoriaPersistenceAdapter`.
+- **Síntoma:** `null value in column "creado_en" ... violates not-null constraint` en **toda**
+  escritura por esos adaptadores: rotación, traslado, asignación administrativa, y el endpoint con
+  el que un administrador cambia la capacidad de una cohorte.
+- **Causa real:** el mapper pasaba `null` en `creadoEn`, y **un `DEFAULT` de Postgres NO se aplica
+  cuando el INSERT manda NULL explícito**. La columna es `NOT NULL DEFAULT now()`, así que la fila
+  chocaba siempre.
+- **Por qué no lo vio nadie:** los casos de uso se prueban contra `AcompanamientoEnMemoria`, un doble
+  que nunca toca Postgres, y las filas que ya existían las había puesto el backfill de V45 en SQL.
+  **El camino de escritura de Java no lo ejercitaba ninguna prueba.**
+- **Solución:** `@Column(insertable = false)` — la base sella la creación, que es quien tiene el reloj
+  bueno. `actualizado_en` va sin `updatable = false` y lo sella el adaptador: con él se quedaría para
+  siempre en la hora del alta, mintiendo sobre lo único que promete su nombre.
+- **Cómo evitarlo:** un agregado cuyo camino de escritura solo se prueba con dobles en memoria no
+  está probado. Cuando una tabla tiene columnas que llena la base, o el mapper las omite
+  (`insertable = false`) o el agregado las lleva — pasar `null` es la tercera opción y es la que
+  falla. Y siempre que exista un adaptador nuevo, una prueba que escriba de verdad contra Postgres.
+
+## E-173 — Los mensajes directos no mostraban el nombre, por culpa del chat global (2026-09-11) — **RESUELTO**
+
+- **Dónde:** `chat/.../MiembroService.listar` y `ConversacionService.listar`.
+- **Síntoma:** la bandeja mostraba "Conversación directa" en todas las filas. Con dos chats así, dos
+  filas idénticas y ninguna forma de saber cuál era cuál.
+- **Causa real, en dos capas.** La primera: el listado no decía con quién era cada conversación, así
+  que el móvil solo podía adivinar el nombre mirando quién mandó el último mensaje — si lo mandabas
+  tú, o el chat estaba vacío, no había forma. La segunda apareció al arreglar la primera: se mandó
+  solo el `otherParticipantId` para que el cliente lo resolviera contra `GET /chat/members`, y ese
+  endpoint **empieza con `requireGlobal()`**, así que sin conversación GLOBAL responde 404. La
+  bandeja de DMs se quedaba sin nombres por culpa de otra conversación sin relación con ella.
+- **Solución:** el resumen manda el nombre ya resuelto (`UserSummaryFinder.findByIds` en lote). Y
+  `V47` crea la conversación GLOBAL para las instalaciones que ya tenían usuarios — se creaba de
+  forma perezosa solo al registrarse alguien, así que en una base con usuarios anteriores a ese
+  camino no nacía nunca.
+- **Cómo evitarlo:** antes de apoyar una funcionalidad en un endpoint que ya existe, comprobar que
+  ese endpoint FUNCIONA en el entorno real, no que existe. El primer arreglo era correcto y era
+  inútil, porque la premisa —"el cliente ya pide el directorio"— era falsa. Y una funcionalidad no
+  debería depender de que otra, sin relación con ella, esté inicializada.
+
+## E-172 — Un hábito fuera de plazo quedaba bloqueado para siempre (2026-09-11) — **RESUELTO**
+
+- **Dónde:** `habits/.../RegistroService.completar` y `EstadoRegistro.puedeCompletarse`.
+- **Síntoma:** `409 El habito expiro — no se puede completar`. Y peor: EXPIRADO era terminal, así que
+  el hábito quedaba bloqueado **para siempre** — DESPERTAR estaba justo así y no había forma de
+  registrarlo nunca más.
+- **Causa real:** el guard trataba llegar tarde como algo que impide registrar, cuando la tardanza
+  ya se cobra en puntos. `ResultadoOtorgamiento` tenía escrita la fase EXPIRADO con **0 puntos** y
+  era inalcanzable porque el `throw` cortaba antes. Se cobraba dos veces por lo mismo.
+- **Solución:** la entrega tardía se guarda con esos 0 puntos y motivo `LATE_HABIT`. FALLIDO sigue
+  cerrado —lo marca el barrido cuando el día CIERRA, y un día cerrado es un veredicto—, con prueba
+  de esa dirección para que "dejar registrar tarde" no se lleve esa puerta por delante.
+- **Cómo evitarlo:** cuando una penalización ya existe en un sitio, bloquear además la acción es
+  cobrar dos veces. Y si el código tiene una rama escrita que ningún camino alcanza —aquí, la fase
+  EXPIRADO— eso es una señal: alguien modeló el caso y otro lo cortó antes.
+
+## E-171 — Pausar un hábito no retiraba la obligación de HOY (2026-09-11) — **RESUELTO**
+
+- **Dónde:** `habits/.../DesbloqueoHabitoService.cambiarEstado`.
+- **Síntoma:** el dueño del proyecto apagaba un hábito a media mañana y lo seguía viendo en su día y
+  en evidencias; a la noche el barrido lo marcaba fallado. El botón decía "solo hoy" y hoy contaba
+  igual. Confirmado con datos reales: "Ducha fría" pausada hoy con su track de hoy en PENDIENTE.
+- **Causa real:** `cambiarEstado` solo escribía en `desbloqueos_habito`. Pausar apagaba la generación
+  **futura**, pero el track de hoy ya lo había creado el barrido de las 05:02.
+- **Solución:** al pausar se retiran las obligaciones **PENDIENTE** del rango. Solo las abiertas:
+  COMPLETADO se queda (lo hiciste, es tuyo) y FALLIDO/EXPIRADO también — si pausar borrara lo ya
+  vencido, cualquiera limpiaría sus fallos pausando después de fallar.
+- **Cómo evitarlo:** una acción que cambia una regla a futuro casi siempre tiene una contraparte
+  sobre lo que la regla anterior ya produjo. Preguntarse siempre "¿y lo que ya se generó?".
+
+## E-170 — Editar una migración ya aplicada tumbó el arranque (2026-09-11) — **RESUELTO**
+
+- **Dónde:** `V47__conversacion_global_para_usuarios_existentes.sql`.
+- **Síntoma:** `Migration checksum mismatch for migration version 47` y la aplicación sin arrancar.
+- **Causa real:** la migración se creó, el dueño reinició —Flyway la aplicó— y **después** se editó
+  el archivo para acotarla. Flyway guarda un checksum del contenido: al no coincidir se niega a
+  arrancar, y hace bien, porque no puede saber si la base refleja el archivo.
+- **Solución:** se comprobó primero que el efecto en la base fuera el que produce la versión final
+  (lo era: GLOBAL creada y 5 usuarios unidos) y recién entonces `flyway:repair`. Detalle que costó
+  dos intentos: la tabla de historial vive en `public`, no en `renaser`, y con el esquema equivocado
+  el plugin dice "la tabla no existe" en vez de fallar.
+- **Cómo evitarlo:** una migración es inmutable desde que corre **en cualquier sitio**. Si hay que
+  cambiarla y ya se aplicó, o se crea la siguiente, o se avisa antes de tocarla. En un entorno
+  compartido esto tumba el arranque de todos hasta que alguien ejecute el repair.
+
 ## E-169 — El staff puede inscribirse al programa y despues no puede operarlo (2026-09-09) — **RESUELTO 2026-09-11**
 
 - **Donde:** `rocks/.../RocaMaestraService:81`, `RocaSemanalService:182`, `RocaDiariaService:365`,
