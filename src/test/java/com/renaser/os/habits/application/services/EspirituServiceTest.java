@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.shared.GuardDeRol;
 import com.renaser.os.habits.application.ports.in.espiritu.CompletarPastillaRenacerUseCase;
 import com.renaser.os.habits.application.ports.in.espiritu.ConsultarEstadoEspirituUseCase.EstadoEspiritu;
 import com.renaser.os.habits.application.ports.in.espiritu.EntregarResumenEspirituUseCase.EntregarResumenEspirituCommand;
@@ -89,7 +90,7 @@ class EspirituServiceTest {
     void consultarRechazaSuspendido() {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, true)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service.consultar(actor)).isInstanceOf(NotAuthorizedException.class);
     }
@@ -98,7 +99,7 @@ class EspirituServiceTest {
     void consultarRechazaRolDistintoDeTrainee() {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.MENTOR, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.MENTOR, false, false)));
 
         assertThatThrownBy(() -> service.consultar(actor)).isInstanceOf(NotAuthorizedException.class);
     }
@@ -107,7 +108,7 @@ class EspirituServiceTest {
     void entregarRechazaSuspendido() {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, true)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service.entregar(new EntregarResumenEspirituCommand(actor, 1, "resumen")))
                 .isInstanceOf(NotAuthorizedException.class);
@@ -117,7 +118,7 @@ class EspirituServiceTest {
     void entregarRechazaRolDistintoDeTrainee() {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.ADMIN, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.ADMIN, false, false)));
 
         assertThatThrownBy(() -> service.entregar(new EntregarResumenEspirituCommand(actor, 1, "resumen")))
                 .isInstanceOf(NotAuthorizedException.class);
@@ -128,7 +129,7 @@ class EspirituServiceTest {
         UserId actor = trainee();
         // diaPrograma 8 -> audioDay 1 (AUDIO_UNLOCK_START_DAY = 7)
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadPort.ultimoDe(actor)).thenReturn(Optional.empty());
         when(audioCatalogPort.porDia(1)).thenReturn(
                 Optional.of(new AudioEspiritu(1, "Dia 1", "drive-1", "audio/mpeg", 1000, RUTA_AUDIO)));
@@ -145,7 +146,7 @@ class EspirituServiceTest {
         UserId actor = trainee();
         // diaPrograma 5 -> audioDay -2, todavia no arranca Espiritu
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadPort.ultimoDe(actor)).thenReturn(Optional.empty());
         when(loadPort.todosDe(actor)).thenReturn(List.of());
         when(audioCatalogPort.todos()).thenReturn(List.of());
@@ -159,7 +160,7 @@ class EspirituServiceTest {
     void entregaATiempoDevuelveOnTimeVerdadero() {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false, false)));
         RegistroEspiritu registro = RegistroEspiritu.desbloquear(RegistroEspirituId.of(UUID.randomUUID()), actor, 1,
                 CLOCK.now(), CLOCK.now().plusSeconds(3600), CLOCK.now());
         when(loadPort.ultimoDe(actor)).thenReturn(Optional.of(registro));
@@ -176,7 +177,7 @@ class EspirituServiceTest {
     void entregarReflejaEnElHabitoPastillaRenacer() {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false, false)));
         RegistroEspiritu registro = RegistroEspiritu.desbloquear(RegistroEspirituId.of(UUID.randomUUID()), actor, 1,
                 CLOCK.now(), CLOCK.now().plusSeconds(3600), CLOCK.now());
         when(loadPort.ultimoDe(actor)).thenReturn(Optional.of(registro));
@@ -192,7 +193,7 @@ class EspirituServiceTest {
     void unaFallaAlReflejarEnPastillaRenacerNoTumbaLaEntrega() {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false, false)));
         RegistroEspiritu registro = RegistroEspiritu.desbloquear(RegistroEspirituId.of(UUID.randomUUID()), actor, 1,
                 CLOCK.now(), CLOCK.now().plusSeconds(3600), CLOCK.now());
         when(loadPort.ultimoDe(actor)).thenReturn(Optional.of(registro));
@@ -211,7 +212,7 @@ class EspirituServiceTest {
     void firmaLaUrlDelAudioSoloParaElDiaEnCurso() {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(9, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(9, "UTC", RolParticipante.TRAINEE, false, false)));
         RegistroEspiritu enCurso = RegistroEspiritu.desbloquear(RegistroEspirituId.of(UUID.randomUUID()), actor, 1,
                 CLOCK.now(), CLOCK.now().plusSeconds(3600), CLOCK.now());
         when(loadPort.ultimoDe(actor)).thenReturn(Optional.of(enCurso));
@@ -238,7 +239,7 @@ class EspirituServiceTest {
     void sinRutaDeAlmacenamientoElDiaEnCursoVaSinAudio() {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(9, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(9, "UTC", RolParticipante.TRAINEE, false, false)));
         RegistroEspiritu enCurso = RegistroEspiritu.desbloquear(RegistroEspirituId.of(UUID.randomUUID()), actor, 1,
                 CLOCK.now(), CLOCK.now().plusSeconds(3600), CLOCK.now());
         when(loadPort.ultimoDe(actor)).thenReturn(Optional.of(enCurso));
@@ -257,7 +258,7 @@ class EspirituServiceTest {
     void entregarUnDiaNoDesbloqueadoLanza() {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadPort.ultimoDe(actor)).thenReturn(Optional.empty());
         when(loadPort.porParticipanteYDia(actor, 5)).thenReturn(Optional.empty());
 
@@ -270,7 +271,7 @@ class EspirituServiceTest {
     void consultarNoPropagaLaViolacionDeUnicidadDeUnaCreacionConcurrente() {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadPort.ultimoDe(actor)).thenReturn(Optional.empty());
         when(audioCatalogPort.porDia(1)).thenReturn(
                 Optional.of(new AudioEspiritu(1, "Dia 1", "drive-1", "audio/mpeg", 1000, RUTA_AUDIO)));
@@ -286,7 +287,7 @@ class EspirituServiceTest {
     void vistaMarcaComoLockedUnDiaDelCatalogoSinTrack() {
         UserId actor = trainee();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadPort.ultimoDe(actor)).thenReturn(Optional.empty());
         when(loadPort.todosDe(actor)).thenReturn(List.of());
         when(audioCatalogPort.todos()).thenReturn(
@@ -297,5 +298,23 @@ class EspirituServiceTest {
         assertThat(estado.dias()).hasSize(1);
         assertThat(estado.dias().get(0).estado()).isEqualTo("LOCKED");
         assertThat(estado.diaActual()).isNull();
+    }
+
+    /**
+     * E-169: un MENTOR que activó su seguimiento personal opera su programa como cualquiera.
+     *
+     * <p>Es el reverso exacto del caso de arriba, y se construye sobre su mismo fixture para que
+     * la única diferencia sea el dato que importa: `programaActivado`. Antes de esto,
+     * {@code POST /api/v1/mentor/activate-tracking} inscribía al staff y después el guard lo
+     * echaba — la inscripción estaba construida y el uso prohibido.
+     */
+    @Test
+    @DisplayName("E-169: un MENTOR con su programa ACTIVADO ya no lo rechaza el guard de rol")
+    void staffConProgramaActivadoOperaSuPrograma() {
+        UserId actor = trainee();
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.MENTOR, false, true)));
+
+        GuardDeRol.noRechaza(() -> service.consultar(actor), "Espiritu es exclusivo de aprendices");
     }
 }

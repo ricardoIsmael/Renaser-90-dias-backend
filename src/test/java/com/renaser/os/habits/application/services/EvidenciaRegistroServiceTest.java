@@ -75,7 +75,7 @@ class EvidenciaRegistroServiceTest {
     }
 
     private static ProgresoParticipanteHabits progreso(boolean suspendido) {
-        return new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, suspendido);
+        return new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, suspendido, false);
     }
 
     private SubirEvidenciaRegistroCommand comandoTexto(UserId actor, RegistroHabito registro) {

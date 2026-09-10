@@ -89,7 +89,7 @@ class AvisoHabitoServiceTest {
 
     private void participanteEnLima(boolean suspendido) {
         when(progresoPort.deParticipante(PARTICIPANTE)).thenReturn(Optional.of(
-                new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, suspendido)));
+                new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, suspendido, false)));
     }
 
     /** Habito de 21:00 a 22:00 hora de Lima, con un track PENDIENTE del dia local del aprendiz. */

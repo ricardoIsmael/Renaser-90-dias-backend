@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.application.services;
 
+import com.renaser.os.shared.GuardDeRol;
 import com.renaser.os.rocks.application.ports.in.rocasemanal.CerrarSemanaUseCase.CerrarSemanaCommand;
 import com.renaser.os.rocks.application.ports.in.rocasemanal.CrearPlanSemanalUseCase.CrearPlanSemanalCommand;
 import com.renaser.os.rocks.application.ports.in.rocasemanal.CrearPlanSemanalUseCase.ItemRocaSemanal;
@@ -75,7 +76,14 @@ class RocaSemanalServiceTest {
     private static ProgresoParticipanteRocks progreso(RolParticipante rol, boolean suspendido) {
         // diaPrograma=20 debe ser consistente con fechaInicio respecto de CLOCK ("hoy" = 2026-08-23):
         // dia 1 = fechaInicio, asi que fechaInicio = hoy - 19 dias.
-        return new ProgresoParticipanteRocks(20, LocalDate.of(2026, 8, 4), ZoneOffset.UTC, rol, suspendido);
+        return new ProgresoParticipanteRocks(20, LocalDate.of(2026, 8, 4), ZoneOffset.UTC, rol, suspendido, false);
+    }
+
+    /** Igual que {@link #progreso} pero con el programa ANDANDO: el caso de E-169. */
+    private static ProgresoParticipanteRocks progresoActivado(RolParticipante rol, boolean suspendido) {
+        // diaPrograma=20 debe ser consistente con fechaInicio respecto de CLOCK ("hoy" = 2026-08-23):
+        // dia 1 = fechaInicio, asi que fechaInicio = hoy - 19 dias.
+        return new ProgresoParticipanteRocks(20, LocalDate.of(2026, 8, 4), ZoneOffset.UTC, rol, suspendido, true);
     }
 
     private List<RocaMaestra> tresMaestras() {
@@ -201,5 +209,23 @@ class RocaSemanalServiceTest {
 
         assertThat(resultado.autoevaluacionFin()).isEqualTo(9);
         assertThat(resultado.bloqueoPrincipal()).isEqualTo("bloqueo2");
+    }
+
+    /**
+     * E-169: un MENTOR que activo su seguimiento personal opera su programa como cualquiera.
+     *
+     * <p>Es el reverso exacto del caso de rechazo, y se construye sobre su mismo fixture para que
+     * la unica diferencia sea el dato que importa. Antes de esto,
+     * {@code POST /api/v1/mentor/activate-tracking} inscribia al staff y despues el guard lo
+     * echaba: la inscripcion estaba construida y el uso prohibido.
+     */
+    @Test
+    @DisplayName("E-169: un MENTOR con su programa ACTIVADO ya no lo rechaza el guard de rol")
+    void staffConProgramaActivadoOperaSuPrograma() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progresoActivado(RolParticipante.MENTOR, false)));
+
+        var command = new CrearPlanSemanalCommand(actorId,
+                List.of(item(EjeObjetivo.CUERPO), item(EjeObjetivo.TRABAJO), item(EjeObjetivo.RELACIONES)));
+        GuardDeRol.noRechaza(() -> service.crear(command), "Solo un aprendiz opera sus propias rocas");
     }
 }

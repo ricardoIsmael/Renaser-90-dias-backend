@@ -65,7 +65,7 @@ class EleccionDiaSemanalServiceTest {
     void diaCeroRechazado() {
         UserId actor = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, false, false)));
 
         assertThatThrownBy(() -> service.elegir(new ElegirDiaSemanalCommand(actor, HabitoId.of(UUID.randomUUID()),
                 LocalDate.of(2026, 8, 25)))).isInstanceOf(NotAuthorizedException.class);
@@ -77,7 +77,7 @@ class EleccionDiaSemanalServiceTest {
         Habito habito = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Otro", TipoHabito.CHECKBOX, "MENTE",
                 ExigenciaEvidencia.OPCIONAL, CLOCK.now());
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
 
         assertThatThrownBy(() -> service.elegir(new ElegirDiaSemanalCommand(actor, habito.id(),
@@ -89,7 +89,7 @@ class EleccionDiaSemanalServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habitoDeEleccionSemanal();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
 
         assertThatThrownBy(() -> service.elegir(new ElegirDiaSemanalCommand(actor, habito.id(),
@@ -101,7 +101,7 @@ class EleccionDiaSemanalServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habitoDeEleccionSemanal();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
 
         EleccionDiaSemanal eleccion = service.elegir(new ElegirDiaSemanalCommand(actor, habito.id(),

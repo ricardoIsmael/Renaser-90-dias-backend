@@ -95,7 +95,7 @@ class TracksDelDiaPuntosEnJuegoTest {
 
     private void participanteEnLima() {
         when(progresoPort.deParticipante(PARTICIPANTE)).thenReturn(Optional.of(
-                new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+                new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false, false)));
     }
 
     private static RegistroHabito registro(EstadoRegistro estado) {

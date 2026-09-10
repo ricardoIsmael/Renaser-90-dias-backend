@@ -85,7 +85,7 @@ class CatalogoAcademyServiceTest {
 
     private static ProgresoParticipanteAcademy progresoTrainee(int diaPrograma) {
         return new ProgresoParticipanteAcademy(diaPrograma, ZoneId.of("America/Lima"), RolParticipante.TRAINEE,
-                false);
+                false, false);
     }
 
     @Test
@@ -110,7 +110,7 @@ class CatalogoAcademyServiceTest {
     @DisplayName("misCursos: cuenta suspendida -> 403")
     void misCursosSuspendidoNoAutorizado() {
         when(progresoPort.deParticipante(ACTOR_ID))
-                .thenReturn(Optional.of(new ProgresoParticipanteAcademy(0, null, RolParticipante.TRAINEE, true)));
+                .thenReturn(Optional.of(new ProgresoParticipanteAcademy(0, null, RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service.misCursos(ACTOR_ID)).isInstanceOf(NotAuthorizedException.class);
     }
@@ -236,7 +236,7 @@ class CatalogoAcademyServiceTest {
     @DisplayName("cursosBloqueados: rol distinto de TRAINEE -> lista vacia, nunca error")
     void cursosBloqueadosVacioParaNoTrainee() {
         when(progresoPort.deParticipante(ACTOR_ID))
-                .thenReturn(Optional.of(new ProgresoParticipanteAcademy(null, null, RolParticipante.MENTOR, false)));
+                .thenReturn(Optional.of(new ProgresoParticipanteAcademy(null, null, RolParticipante.MENTOR, false, false)));
 
         List<CursoBloqueado> resultado = service.cursosBloqueados(ACTOR_ID);
 
@@ -248,7 +248,7 @@ class CatalogoAcademyServiceTest {
     @DisplayName("cursosBloqueados: cuenta suspendida -> 403")
     void cursosBloqueadosSuspendidoNoAutorizado() {
         when(progresoPort.deParticipante(ACTOR_ID))
-                .thenReturn(Optional.of(new ProgresoParticipanteAcademy(0, null, RolParticipante.TRAINEE, true)));
+                .thenReturn(Optional.of(new ProgresoParticipanteAcademy(0, null, RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service.cursosBloqueados(ACTOR_ID)).isInstanceOf(NotAuthorizedException.class);
     }

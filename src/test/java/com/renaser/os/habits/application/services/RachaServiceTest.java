@@ -150,7 +150,7 @@ class RachaServiceTest {
         when(loadRegistroPort.byId(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(progresoPort.deParticipante(participante)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadRachaPort.activaDe(participante)).thenReturn(Optional.of(
                 RachaSinCelular.iniciar(RachaSinCelularId.of(UUID.randomUUID()), participante, registro.id(), 24,
                         CLOCK.now())));
@@ -163,7 +163,7 @@ class RachaServiceTest {
     void cerrarRechazaActorSinRachaActiva() {
         UserId participante = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(participante)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadRachaPort.activaDeParaEscritura(participante)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.cerrar(cerrarConEvidencia(participante)))
@@ -174,7 +174,7 @@ class RachaServiceTest {
     void cerrarSuspendidoRechazado() {
         UserId participante = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(participante)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, true)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service.cerrar(cerrarConEvidencia(participante)))
                 .isInstanceOf(NotAuthorizedException.class);
@@ -191,7 +191,7 @@ class RachaServiceTest {
                 registro.id(), 24, CLOCK.now().minus(Duration.ofHours(24)));
 
         when(progresoPort.deParticipante(participante)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadRachaPort.activaDeParaEscritura(participante)).thenReturn(Optional.of(racha));
         when(loadRegistroPort.byId(registro.id())).thenReturn(Optional.of(registro));
         when(ajustarPuntosPort.ajustar(any(), any(), anyInt(), any()))
@@ -216,7 +216,7 @@ class RachaServiceTest {
                 CLOCK.now().minus(Duration.ofHours(4))); // hito parcial, no ciclo completo
 
         when(progresoPort.deParticipante(participante)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadRachaPort.activaDeParaEscritura(participante)).thenReturn(Optional.of(racha));
         when(loadRegistroPort.byId(registro.id())).thenReturn(Optional.of(registro));
 
@@ -234,7 +234,7 @@ class RachaServiceTest {
         RachaSinCelular racha = RachaSinCelular.iniciar(RachaSinCelularId.of(UUID.randomUUID()), participante,
                 RegistroHabitoId.of(UUID.randomUUID()), 24, CLOCK.now());
         when(progresoPort.deParticipante(participante)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadRachaPort.activaDe(participante)).thenReturn(Optional.of(racha));
         when(almacenamientoPort.firmarSubida(any(), any(), any())).thenReturn(URI.create("https://example.com/x"));
 
@@ -249,7 +249,7 @@ class RachaServiceTest {
     void solicitarUrlSinRachaActivaLanza() {
         UserId participante = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(participante)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadRachaPort.activaDe(participante)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.solicitarUrl(new SolicitarUrlAdjuntoRachaCommand(participante, "image/jpeg")))
@@ -267,7 +267,7 @@ class RachaServiceTest {
                 registro.id(), 24, CLOCK.now().minus(Duration.ofHours(2)));
 
         when(progresoPort.deParticipante(participante)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadRachaPort.activaDeParaEscritura(participante)).thenReturn(Optional.of(racha));
         when(loadRegistroPort.byId(registro.id())).thenReturn(Optional.of(registro));
 
@@ -304,7 +304,7 @@ class RachaServiceTest {
         // es justamente lo que C-6 aisla (esa fila queda a medio camino, sin tocar las demas).
         for (UserId p : List.of(p1, p2, p3)) {
             lenient().when(progresoPort.deParticipante(p)).thenReturn(
-                    Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                    Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         }
         lenient().when(loadRegistroPort.byId(registro1.id())).thenReturn(Optional.of(registro1));
         lenient().when(loadRegistroPort.byId(registro2.id())).thenReturn(Optional.of(registro2));

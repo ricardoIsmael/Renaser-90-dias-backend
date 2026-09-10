@@ -80,7 +80,7 @@ class MisHabitosServiceTest {
         // `consultar` necesita el dia de programa desde que calcula el desbloqueo de cada habito
         // (dia 2: el mismo escenario en el que el dueño reporto ver habitos que aun no le tocaban).
         lenient().when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(2, "America/Lima", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(2, "America/Lima", RolParticipante.TRAINEE, false, false)));
         lenient().when(savePort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveHorarioPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -237,7 +237,7 @@ class MisHabitosServiceTest {
     @Test
     void crearHabitoPersonalSuspendidoRechazado() {
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, true)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service.crear(comando(DISPARO, LIMITE))).isInstanceOf(NotAuthorizedException.class);
 
@@ -257,7 +257,7 @@ class MisHabitosServiceTest {
     @Test
     void creaUnHabitoPersonalConIdentidadDelActorSinImportarQueNoSePidaEnElComando() {
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         UUID idGenerado = UUID.randomUUID();
         when(idGenerator.newId()).thenReturn(idGenerado);
 
@@ -279,7 +279,7 @@ class MisHabitosServiceTest {
     @Test
     void crearHabitoPersonalCreaTambienElHorarioConElDiaDeProgramaActualYTipoDiaTodos() {
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(23, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(23, "UTC", RolParticipante.TRAINEE, false, false)));
         when(idGenerator.newId()).thenReturn(UUID.randomUUID(), UUID.randomUUID());
 
         service.crear(comando(DISPARO, LIMITE));
@@ -297,7 +297,7 @@ class MisHabitosServiceTest {
     @Test
     void crearHabitoPersonalSinHoraLimiteEsValido() {
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(idGenerator.newId()).thenReturn(UUID.randomUUID(), UUID.randomUUID());
 
         service.crear(comando(DISPARO, null));
@@ -345,7 +345,7 @@ class MisHabitosServiceTest {
     // contra el codigo viejo, que medía todo contra el 0 crudo.
 
     private static ProgresoParticipanteHabits enDia(int dia) {
-        return new ProgresoParticipanteHabits(dia, "America/Lima", RolParticipante.TRAINEE, false);
+        return new ProgresoParticipanteHabits(dia, "America/Lima", RolParticipante.TRAINEE, false, false);
     }
 
     /**

@@ -79,7 +79,7 @@ class PostDiarioComunidadHabitoServiceTest {
 
     private void mockParticipanteEnLima(UserId participanteId) {
         when(progresoPort.deParticipante(participanteId)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false, false)));
     }
 
     @Test
@@ -177,7 +177,7 @@ class PostDiarioComunidadHabitoServiceTest {
         when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
                 .thenReturn(Optional.of(habitoPostDiario()));
         when(progresoPort.deParticipante(autor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, true)));
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, true, false)));
 
         service().alPublicarEnElMuro(autor, Instant.parse("2026-08-24T15:00:00Z"));
 

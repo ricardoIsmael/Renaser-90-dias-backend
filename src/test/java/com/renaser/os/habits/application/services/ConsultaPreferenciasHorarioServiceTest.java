@@ -80,7 +80,7 @@ class ConsultaPreferenciasHorarioServiceTest {
     private void conProgreso(int diaPrograma, boolean suspendido) {
         when(progresoPort.deParticipante(actor)).thenReturn(
                 java.util.Optional.of(new ProgresoParticipanteHabits(diaPrograma, "UTC", RolParticipante.TRAINEE,
-                        suspendido)));
+                        suspendido, false)));
     }
 
     @Test

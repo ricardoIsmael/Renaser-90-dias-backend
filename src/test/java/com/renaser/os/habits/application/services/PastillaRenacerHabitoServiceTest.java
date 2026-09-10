@@ -73,7 +73,7 @@ class PastillaRenacerHabitoServiceTest {
 
     private void mockProgresoActivo(UserId participanteId) {
         when(progresoPort.deParticipante(participanteId))
-                .thenReturn(Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false)));
+                .thenReturn(Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, false, false)));
     }
 
     @Test
@@ -173,7 +173,7 @@ class PastillaRenacerHabitoServiceTest {
         UserId participanteId = participante();
         when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER)).thenReturn(Optional.of(habitoPastilla()));
         when(progresoPort.deParticipante(participanteId))
-                .thenReturn(Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, true)));
+                .thenReturn(Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service().completarDeHoy(participanteId, RESUMEN))
                 .isInstanceOf(NotAuthorizedException.class);

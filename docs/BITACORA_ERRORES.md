@@ -5800,7 +5800,7 @@ dirección es parte del dato.
   entorno. La prueba `RedisSessionConfigTest` comprueba la serialización JSON y el round-trip del
   `SecurityContext`.
 
-## E-169 — El staff puede inscribirse al programa y despues no puede operarlo (2026-09-09) — **ABIERTO, sin corregir**
+## E-169 — El staff puede inscribirse al programa y despues no puede operarlo (2026-09-09) — **RESUELTO 2026-09-11**
 
 - **Donde:** `rocks/.../RocaMaestraService:81`, `RocaSemanalService:182`, `RocaDiariaService:365`,
   `DashboardRocasService:223`, `VerdugoService:119`; `habits/.../EspirituService:350`,
@@ -5827,6 +5827,23 @@ dirección es parte del dato.
   participacion activa"* en diez servicios es una regla de negocio que el dueno del proyecto
   tiene que confirmar (regla 00: no inventar reglas de negocio). Detectado al ejecutar la tarea
   TL-03 del SDD 002 del rol Lider de Mentores.
+- **Arreglo (2026-09-11), confirmado por el dueno del proyecto:** los once guards pasan de
+  `rol != TRAINEE` a `rol != TRAINEE && !programaActivado`. Se lleva
+  `participantes_programa.programa_activado_en IS NOT NULL` hasta los tres puertos locales de
+  progreso (`rocks`, `habits`, `academy`) y sus adaptadores, que ya lo tenian a mano en
+  `users.api.ParticipacionPrograma.activado()`.
+- **Por que NO se redujo a `!programaActivado` a secas,** que era lo primero que uno escribe: ese
+  campo no significa "esta inscrito" sino "el reloj de sus 90 dias arranco", y un TRAINEE recien
+  aprobado lo tiene en `null` hasta que completa primer login + Ficha + Terminos. El cambio corto
+  habria dejado a esos aprendices fuera de su propio programa. Se comprobo contra la base antes de
+  elegir: de las cinco filas de `participantes_programa`, los cuatro APRENDIZ estaban sin activar y
+  solo el MENTOR activado. Asi el cambio es **estrictamente aditivo**: nadie que hoy pase, deja de
+  pasar.
+- **Pruebas:** once regresiones nuevas, una por guard, con `GuardDeRol.noRechaza`. Ninguno de los
+  once tenia prueba antes — por eso la contradiccion pudo vivir tanto. El helper exige el mensaje
+  EXACTO del guard y no "cualquier NotAuthorizedException": lo enseno `RocaSemanalService`, que
+  despues del rol todavia exige `ROCKS_LOCKED` — otra puerta, legitima, que un helper mas tosco
+  confundia con un rechazo por rol.
 - **Como evitar que vuelva a pasar:** cuando un permiso dice *"esto es para el rol X"* y un guard
   dice *"esto es solo para el rol Y"*, uno de los dos miente. Un permiso nuevo en
   `shared/domain/Permission` deberia venir siempre con la lista de guards que lo hacen cumplir

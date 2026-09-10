@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.application.services;
 
+import com.renaser.os.shared.GuardDeRol;
 import com.renaser.os.rocks.application.ports.in.dashboard.ConsultarDashboardRocasUseCase.DashboardRocas;
 import com.renaser.os.rocks.application.ports.in.rocadiaria.ConsultarRocasDeHoyUseCase;
 import com.renaser.os.rocks.application.ports.in.rocamaestra.ConsultarRocasMaestrasUseCase;
@@ -81,7 +82,12 @@ class DashboardRocasServiceTest {
     }
 
     private static ProgresoParticipanteRocks progreso(int diaPrograma, RolParticipante rol, boolean suspendido) {
-        return new ProgresoParticipanteRocks(diaPrograma, FECHA_INICIO, ZoneOffset.UTC, rol, suspendido);
+        return new ProgresoParticipanteRocks(diaPrograma, FECHA_INICIO, ZoneOffset.UTC, rol, suspendido, false);
+    }
+
+    /** Igual que {@link #progreso} pero con el programa ANDANDO: el caso de E-169. */
+    private static ProgresoParticipanteRocks progresoActivado(int diaPrograma, RolParticipante rol, boolean suspendido) {
+        return new ProgresoParticipanteRocks(diaPrograma, FECHA_INICIO, ZoneOffset.UTC, rol, suspendido, true);
     }
 
     private static List<RocaMaestra> tresMaestras(UserId participante) {
@@ -119,7 +125,7 @@ class DashboardRocasServiceTest {
     void programaNoIniciadoDevuelveContratoVacio() {
         LocalDate fechaFutura = CLOCK.now().atZone(ZoneOffset.UTC).toLocalDate().plusDays(10);
         ProgresoParticipanteRocks progreso = new ProgresoParticipanteRocks(0, fechaFutura, ZoneOffset.UTC,
-                RolParticipante.TRAINEE, false);
+                RolParticipante.TRAINEE, false, false);
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso));
         when(rocasMaestrasUseCase.misRocasMaestras(actorId)).thenReturn(tresMaestras(actorId));
 
@@ -219,5 +225,21 @@ class DashboardRocasServiceTest {
                 .orElseThrow(() -> new AssertionError("se esperaba al menos un dia futuro en la grilla"));
         assertThat(futuro.completadas()).isNull();
         assertThat(futuro.total()).isNull();
+    }
+
+    /**
+     * E-169: un MENTOR que activo su seguimiento personal opera su programa como cualquiera.
+     *
+     * <p>Es el reverso exacto del caso de rechazo, y se construye sobre su mismo fixture para que
+     * la unica diferencia sea el dato que importa. Antes de esto,
+     * {@code POST /api/v1/mentor/activate-tracking} inscribia al staff y despues el guard lo
+     * echaba: la inscripcion estaba construida y el uso prohibido.
+     */
+    @Test
+    @DisplayName("E-169: un MENTOR con su programa ACTIVADO ya no lo rechaza el guard de rol")
+    void staffConProgramaActivadoOperaSuPrograma() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progresoActivado(40, RolParticipante.MENTOR, false)));
+
+        GuardDeRol.noRechaza(() -> service.dashboard(actorId), "Solo un aprendiz opera sus propias rocas");
     }
 }

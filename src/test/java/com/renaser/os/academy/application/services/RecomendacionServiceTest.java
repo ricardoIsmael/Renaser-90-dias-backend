@@ -1,5 +1,7 @@
 package com.renaser.os.academy.application.services;
 
+import com.renaser.os.shared.GuardDeRol;
+import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.academy.application.ports.in.recomendacion.ConsultarRecomendacionDiariaUseCase.Disponible;
 import com.renaser.os.academy.application.ports.in.recomendacion.ConsultarRecomendacionDiariaUseCase.NoDisponible;
 import com.renaser.os.academy.application.ports.in.recomendacion.ConsultarRecomendacionDiariaUseCase.RecomendacionDiaria;
@@ -33,6 +35,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -65,7 +68,7 @@ class RecomendacionServiceTest {
     @DisplayName("con cache del dia -> la devuelve sin llamar al puerto de IA")
     void conCacheDevuelveSinLlamarIa() {
         when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
-                Optional.of(new ProgresoParticipanteAcademy(10, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteAcademy(10, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, false)));
         LocalDate hoy = CLOCK.now().atZone(ZoneId.of("America/Lima")).toLocalDate();
         RecomendacionAcademia cache = new RecomendacionAcademia(ACTOR_ID, hoy, LeccionId.of("l1"), "porque si",
                 CLOCK.now());
@@ -88,7 +91,7 @@ class RecomendacionServiceTest {
     @DisplayName("sin cache y el puerto de IA (NoOp) no recomienda nada -> NoDisponible")
     void sinCacheYSinRecomendacionIa() {
         when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
-                Optional.of(new ProgresoParticipanteAcademy(10, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteAcademy(10, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, false)));
         LocalDate hoy = CLOCK.now().atZone(ZoneId.of("America/Lima")).toLocalDate();
         when(loadRecomendacionPort.delDia(ACTOR_ID, hoy)).thenReturn(Optional.empty());
         when(recomendarClasePort.recomendar(ACTOR_ID)).thenReturn(Optional.empty());
@@ -97,5 +100,29 @@ class RecomendacionServiceTest {
 
         assertThat(resultado).isInstanceOf(NoDisponible.class);
         verify(saveRecomendacionPort, never()).guardar(org.mockito.ArgumentMatchers.any());
+    }
+
+    /**
+     * E-169, las dos caras: un MENTOR sin activar sigue fuera; con el programa activado, entra.
+     *
+     * <p>Esta clase no tenia caso de rechazo por rol del que partir -- el guard existia desde
+     * siempre y nunca se probo. Por eso van las DOS direcciones juntas: una sola de ellas se
+     * puede satisfacer por accidente (basta con que el guard desaparezca, o con que nunca deje
+     * pasar a nadie), y el par no.
+     */
+    @Test
+    @DisplayName("E-169: MENTOR sin activar -> rechazado; MENTOR con programa ACTIVADO -> pasa")
+    void staffSoloOperaSuProgramaSiLoActivo() {
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
+                Optional.of(new ProgresoParticipanteAcademy(10, ZoneId.of("America/Lima"),
+                        RolParticipante.MENTOR, false, false)));
+        assertThatThrownBy(() -> service().recomendacion(ACTOR_ID))
+                .as("sin activar el seguimiento personal no opera nada")
+                .isInstanceOf(NotAuthorizedException.class);
+
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
+                Optional.of(new ProgresoParticipanteAcademy(10, ZoneId.of("America/Lima"),
+                        RolParticipante.MENTOR, false, true)));
+        GuardDeRol.noRechaza(() -> service().recomendacion(ACTOR_ID), "Solo un aprendiz recibe recomendaciones de Academia Adaptativa");
     }
 }

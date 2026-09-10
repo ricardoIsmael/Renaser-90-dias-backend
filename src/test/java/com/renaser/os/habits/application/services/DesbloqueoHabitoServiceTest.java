@@ -77,7 +77,7 @@ class DesbloqueoHabitoServiceTest {
     void suspendidoRechazado() {
         UserId actor = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, true)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service.consultar(actor)).isInstanceOf(NotAuthorizedException.class);
     }
@@ -86,7 +86,7 @@ class DesbloqueoHabitoServiceTest {
     void sinDesbloqueosDevuelveEnabledFalso() {
         UserId actor = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadPort.deParticipante(actor)).thenReturn(List.of());
 
         PlanDesbloqueo plan = service.consultar(actor);
@@ -100,7 +100,7 @@ class DesbloqueoHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         HabitoId habito = HabitoId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadPort.deParticipante(actor)).thenReturn(
                 List.of(DesbloqueoHabito.rehydrate(actor, habito, 5, CLOCK.now(), CLOCK.now(), CLOCK.now())));
 
@@ -119,7 +119,7 @@ class DesbloqueoHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habitoDeSistemaActivo();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadPort.deParticipanteYHabito(actor, habito.id())).thenReturn(Optional.of(
                 DesbloqueoHabito.rehydrate(actor, habito.id(), 1, CLOCK.now(), CLOCK.now(), CLOCK.now())));
@@ -144,7 +144,7 @@ class DesbloqueoHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito personal = habitoPersonalDe(actor);
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(personal.id())).thenReturn(Optional.of(personal));
         DesbloqueoHabito esperado = DesbloqueoHabito.rehydrate(actor, personal.id(), 10, CLOCK.now(), CLOCK.now(),
                 CLOCK.now());
@@ -166,7 +166,7 @@ class DesbloqueoHabitoServiceTest {
         UserId otro = UserId.of(UUID.randomUUID());
         Habito ajeno = habitoPersonalDe(otro);
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(ajeno.id())).thenReturn(Optional.of(ajeno));
 
         assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, ajeno.id(), null)))
@@ -180,7 +180,7 @@ class DesbloqueoHabitoServiceTest {
         Habito personal = habitoPersonalDe(actor);
         personal.desactivar(CLOCK.now());
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(personal.id())).thenReturn(Optional.of(personal));
 
         assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, personal.id(), null)))
@@ -198,7 +198,7 @@ class DesbloqueoHabitoServiceTest {
         Habito personal = habitoPersonalDe(actor);
         LocalDate hastaElDomingo = LocalDate.of(2026, 8, 30);
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(personal.id())).thenReturn(Optional.of(personal));
         DesbloqueoHabito fila = DesbloqueoHabito.rehydrate(actor, personal.id(), 10, CLOCK.now(), CLOCK.now(),
                 CLOCK.now());
@@ -224,7 +224,7 @@ class DesbloqueoHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito personal = habitoPersonalDe(actor);
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(personal.id())).thenReturn(Optional.of(personal));
         DesbloqueoHabito fila = DesbloqueoHabito.rehydrate(actor, personal.id(), 10, CLOCK.now(), CLOCK.now(),
                 CLOCK.now(), CLOCK.now(), LocalDate.of(2026, 8, 30));
@@ -244,7 +244,7 @@ class DesbloqueoHabitoServiceTest {
         Habito habito = habitoDeSistemaActivo();
         habito.desactivar(CLOCK.now());
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
 
         assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, habito.id(), null)))
@@ -256,7 +256,7 @@ class DesbloqueoHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habitoDeSistemaActivo();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         DesbloqueoHabito esperado = DesbloqueoHabito.rehydrate(actor, habito.id(), 10, CLOCK.now(), CLOCK.now(),
                 CLOCK.now());
@@ -273,7 +273,7 @@ class DesbloqueoHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habitoDeSistemaActivo();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         DesbloqueoHabito primero = DesbloqueoHabito.rehydrate(actor, habito.id(), 10, CLOCK.now(), CLOCK.now(),
                 CLOCK.now());
@@ -294,7 +294,7 @@ class DesbloqueoHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habitoDeSistemaActivo();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(1, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(1, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         DesbloqueoHabito esperado = DesbloqueoHabito.rehydrate(actor, habito.id(), 2, CLOCK.now(), CLOCK.now(),
                 CLOCK.now());
@@ -311,7 +311,7 @@ class DesbloqueoHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habitoDeSistemaActivo();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadPort.deParticipanteYHabito(actor, habito.id())).thenReturn(Optional.of(
                 DesbloqueoHabito.rehydrate(actor, habito.id(), 10, CLOCK.now(), CLOCK.now(), CLOCK.now())));
@@ -326,7 +326,7 @@ class DesbloqueoHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habitoDeSistemaActivo();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
 
         assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, habito.id(), 3)))

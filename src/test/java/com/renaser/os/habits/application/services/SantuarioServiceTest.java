@@ -116,7 +116,7 @@ class SantuarioServiceTest {
         when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(checkbox.id())).thenReturn(Optional.of(checkbox));
         when(progresoPort.deParticipante(dueno)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
 
         assertThatThrownBy(() -> service.iniciar(new IniciarSesionBloqueoCommand(dueno, registro.id())))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -133,7 +133,7 @@ class SantuarioServiceTest {
         when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
         when(loadPreferenciaPort.porParticipanteHabitoYFecha(dueno, habito.id(), registro.fechaEjecucion())).thenReturn(Optional.empty());
         when(progresoPort.deParticipante(dueno)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
 
         SesionBloqueo sesion = service.iniciar(new IniciarSesionBloqueoCommand(dueno, registro.id()));
 
@@ -153,7 +153,7 @@ class SantuarioServiceTest {
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadSesionPort.porRegistro(registro.id())).thenReturn(Optional.of(sesion));
         when(progresoPort.deParticipante(dueno)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(ajustarPuntosPort.ajustar(any(), any(), org.mockito.ArgumentMatchers.anyInt(), any()))
                 .thenReturn(new ResumenAjustePuntos(dueno, -10, 90));
 

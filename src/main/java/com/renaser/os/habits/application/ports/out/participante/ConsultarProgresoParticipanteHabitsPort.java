@@ -25,7 +25,18 @@ public interface ConsultarProgresoParticipanteHabitsPort {
     List<UserId> participantesInscritosActivos();
 
     /** diaPrograma/timezone: participantes_programa. rol/suspendido: usuarios. */
-    record ProgresoParticipanteHabits(int diaPrograma, String timezone, RolParticipante rol, boolean suspendido) {
+
+    /**
+     * `participantes_programa.programa_activado_en IS NOT NULL` — el reloj de los 90 dias
+     * arrancó. NO significa "esta inscrito": un TRAINEE recien aprobado tiene fila y este campo
+     * en `null` hasta que completa primer login + Ficha + Terminos.
+     *
+     * <p>Existe para E-169: el staff que activa su seguimiento personal
+     * (`POST /api/v1/mentor/activate-tracking`) queda con este campo puesto, y es lo unico que
+     * distingue a un mentor que SI cursa el programa de uno que no.
+     */
+    record ProgresoParticipanteHabits(int diaPrograma, String timezone, RolParticipante rol, boolean suspendido,
+                                       boolean programaActivado) {
     }
 
     /** Espejo LOCAL de `rol_usuario` — a proposito NO el UserRole de `users.domain`. */

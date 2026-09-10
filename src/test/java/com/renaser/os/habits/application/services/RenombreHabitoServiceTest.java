@@ -68,7 +68,7 @@ class RenombreHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habitoRenombrable("DAILY_CLASS");
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
 
         assertThatThrownBy(() -> service.renombrar(new RenombrarHabitoCommand(actor, habito.id(), "Jugo de papaya",
@@ -80,7 +80,7 @@ class RenombreHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habitoRenombrable("GREEN_JUICE");
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(1, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(1, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
 
         assertThatThrownBy(() -> service.renombrar(new RenombrarHabitoCommand(actor, habito.id(), "Jugo de papaya",
@@ -92,7 +92,7 @@ class RenombreHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habitoRenombrable("WARM_LEMON_WATER");
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
 
@@ -108,7 +108,7 @@ class RenombreHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habitoRenombrable("GREEN_JUICE");
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
 
         service.quitar(new QuitarRenombreHabitoCommand(actor, habito.id()));
@@ -120,7 +120,7 @@ class RenombreHabitoServiceTest {
     void suspendidoRechazado() {
         UserId actor = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, true)));
+                Optional.of(new ProgresoParticipanteHabits(0, "UTC", RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service.renombrar(new RenombrarHabitoCommand(actor, HabitoId.of(UUID.randomUUID()),
                 "titulo", "motivo"))).isInstanceOf(NotAuthorizedException.class);

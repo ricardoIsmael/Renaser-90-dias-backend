@@ -93,7 +93,7 @@ class PreferenciaHorarioServiceTest {
     void rechazaSuspendido() {
         UserId actor = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, true)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor,
                 HabitoId.of(UUID.randomUUID()), LocalTime.of(7, 0), LocalTime.of(9,
@@ -109,7 +109,7 @@ class PreferenciaHorarioServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
 
         assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
@@ -123,7 +123,7 @@ class PreferenciaHorarioServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false))); // dia 3 <= 7
+                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false, false))); // dia 3 <= 7
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFecha(any(), any(), any())).thenReturn(Optional.empty());
         when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
@@ -150,7 +150,7 @@ class PreferenciaHorarioServiceTest {
         Habito habito = habito();
         Habito habitoYaTocado = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false))); // dia 10 > 7
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false))); // dia 10 > 7
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFecha(any(), any(), any())).thenReturn(Optional.empty());
         when(historialPort.distintosHabitosCambiadosDesde(any(), any())).thenReturn(
@@ -166,7 +166,7 @@ class PreferenciaHorarioServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFecha(any(), any(), any())).thenReturn(Optional.empty());
         when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
@@ -186,7 +186,7 @@ class PreferenciaHorarioServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         RegistroHabito registroDeHoy = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), actor,
                 habito.id(), LocalDate.of(2026, 8, 24), 3, TipoDia.DISCIPLINA, false, CLOCK.now());
@@ -226,7 +226,7 @@ class PreferenciaHorarioServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         RegistroHabito registroDeHoy = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), actor,
                 habito.id(), LocalDate.of(2026, 8, 24), 3, TipoDia.DISCIPLINA, false, CLOCK.now());
@@ -260,7 +260,7 @@ class PreferenciaHorarioServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFecha(any(), any(), any())).thenReturn(Optional.empty());
         when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
@@ -283,7 +283,7 @@ class PreferenciaHorarioServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         // Historial vacio: nada rigio todavia esta semana.
         when(historialPort.distintosHabitosCambiadosDesde(any(), any())).thenReturn(List.of());
@@ -306,7 +306,7 @@ class PreferenciaHorarioServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(
-                new ProgresoParticipanteHabits(1, "America/Lima", RolParticipante.TRAINEE, false)));
+                new ProgresoParticipanteHabits(1, "America/Lima", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         LocalDate fecha = LocalDate.of(2026, 8, 26);
         var resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
@@ -325,7 +325,7 @@ class PreferenciaHorarioServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(
-                new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         LocalDate fecha = LocalDate.of(2026, 8, 26);
         LocalDate inicio = LocalDate.of(2026, 8, 22);
@@ -342,7 +342,7 @@ class PreferenciaHorarioServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(
-                new ProgresoParticipanteHabits(1, "America/Lima", RolParticipante.TRAINEE, false)));
+                new ProgresoParticipanteHabits(1, "America/Lima", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
                 LocalTime.of(9, 0), null, false, null, LocalDate.of(2026, 8, 24))))

@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.shared.GuardDeRol;
 import com.renaser.os.habits.application.ports.in.audioterapia.ConsultarAudioterapiaSemanalUseCase.AudioDeLaSemana;
 import com.renaser.os.habits.application.ports.in.audioterapia.ConsultarAudioterapiaSemanalUseCase.EsperandoContenido;
 import com.renaser.os.habits.application.ports.in.audioterapia.ConsultarAudioterapiaSemanalUseCase.EstadoAudioterapia;
@@ -23,6 +24,7 @@ import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -77,7 +79,7 @@ class AudioterapiaServiceTest {
     private void progresoDia(int diaPrograma) {
         when(progresoPort.deParticipante(trainee)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(diaPrograma, "America/Lima", RolParticipante.TRAINEE,
-                        false)));
+                        false, false)));
     }
 
     @Test
@@ -183,7 +185,7 @@ class AudioterapiaServiceTest {
                         progresoPort, almacenamientoPort);
                 lenient().when(progresoPort.deParticipante(trainee)).thenReturn(
                         Optional.of(new ProgresoParticipanteHabits(dia, "America/Lima", RolParticipante.TRAINEE,
-                                false)));
+                                false, false)));
                 lenient().when(catalogoPort.todasOrdenadas()).thenReturn(catalogo);
 
                 int semanaEsperada = semana;
@@ -225,7 +227,7 @@ class AudioterapiaServiceTest {
     @Test
     void consultarRechazaSuspendido() {
         when(progresoPort.deParticipante(trainee)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(20, "UTC", RolParticipante.TRAINEE, true)));
+                Optional.of(new ProgresoParticipanteHabits(20, "UTC", RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service.consultar(trainee)).isInstanceOf(NotAuthorizedException.class);
     }
@@ -233,8 +235,25 @@ class AudioterapiaServiceTest {
     @Test
     void consultarRechazaRolDistintoDeTrainee() {
         when(progresoPort.deParticipante(trainee)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(20, "UTC", RolParticipante.MENTOR, false)));
+                Optional.of(new ProgresoParticipanteHabits(20, "UTC", RolParticipante.MENTOR, false, false)));
 
         assertThatThrownBy(() -> service.consultar(trainee)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    /**
+     * E-169: un MENTOR que activó su seguimiento personal opera su programa como cualquiera.
+     *
+     * <p>Es el reverso exacto del caso de arriba, y se construye sobre su mismo fixture para que
+     * la única diferencia sea el dato que importa: `programaActivado`. Antes de esto,
+     * {@code POST /api/v1/mentor/activate-tracking} inscribía al staff y después el guard lo
+     * echaba — la inscripción estaba construida y el uso prohibido.
+     */
+    @Test
+    @DisplayName("E-169: un MENTOR con su programa ACTIVADO ya no lo rechaza el guard de rol")
+    void staffConProgramaActivadoOperaSuPrograma() {
+        when(progresoPort.deParticipante(trainee)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(20, "UTC", RolParticipante.MENTOR, false, true)));
+
+        GuardDeRol.noRechaza(() -> service.consultar(trainee), "Audioterapia semanal es exclusiva de aprendices");
     }
 }
