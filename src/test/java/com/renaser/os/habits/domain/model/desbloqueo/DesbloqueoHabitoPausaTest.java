@@ -94,6 +94,8 @@ class DesbloqueoHabitoPausaTest {
 
     // ---- V31: pausa con fecha de fin ("pausalo hasta el domingo") ----
 
+    /** El dia ANTERIOR a que se toque el boton. AHORA cae el viernes 4 en Lima. */
+    private static final LocalDate JUEVES = LocalDate.of(2026, 9, 3);
     private static final LocalDate VIERNES = LocalDate.of(2026, 9, 4);
     private static final LocalDate DOMINGO = LocalDate.of(2026, 9, 6);
     private static final LocalDate LUNES = LocalDate.of(2026, 9, 7);
@@ -188,5 +190,25 @@ class DesbloqueoHabitoPausaTest {
     void unDesbloqueoActivoNoEstaPausadoNingunDia() {
         assertThat(activo().estaPausadoEl(VIERNES, ZONA)).isFalse();
         assertThat(activo().pausadoHasta()).isNull();
+    }
+
+    /**
+     * Una pausa INDEFINIDA tampoco mira hacia atras.
+     *
+     * <p>El extremo de abajo con fecha de fin ya lo cubre
+     * {@link #unaPausaNoApagaLosDiasANTERIORESaHaberlaPuesto}; esto no lo repite. Lo que agrega es
+     * el caso sin fecha de fin, que es donde la intuicion falla: "indefinida" suena a "siempre", y
+     * en un {@code estaPausadoEl} escrito de la forma obvia —{@code pausadoHasta == null} devuelve
+     * true y listo— se apagaria tambien todo el pasado del aprendiz. El orden de las guardas es lo
+     * que lo evita, y esta prueba lo fija.
+     */
+    @Test
+    void unaPausaIndefinidaTampocoApagaLosDiasANTERIORES() {
+        DesbloqueoHabito d = activo();
+
+        d.pausar(true, AHORA);
+
+        assertThat(d.estaPausadoEl(JUEVES, ZONA)).isFalse();
+        assertThat(d.estaPausadoEl(VIERNES, ZONA)).isTrue();
     }
 }
