@@ -69,7 +69,7 @@ class HomeAgregadoServiceTest {
     private ParticipacionPrograma participacionInscrita() {
         return new ParticipacionPrograma(actor, true, 12, LocalDate.of(2026, 5, 1), LIMA,
                 FasePrograma.PHASE_1_REBIRTH, UUID.randomUUID(), UserId.of(UUID.randomUUID()), UserRole.TRAINEE,
-                false);
+                false, true);
     }
 
     @Test

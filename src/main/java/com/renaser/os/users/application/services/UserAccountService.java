@@ -252,6 +252,20 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
     }
 
     @Override
+    public Optional<UserSummary> findByEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return loadUserPort.byEmail(new Email(email.trim())).map(UserAccountService::aResumen);
+        } catch (IllegalArgumentException e) {
+            // Un correo mal escrito es "no existe", no un 500: quien escribe la lista de guias
+            // recibe el mismo rechazo legible que si el usuario no estuviera.
+            return Optional.empty();
+        }
+    }
+
+    @Override
     public Map<UserId, UserSummary> findByIds(Collection<UserId> ids) {
         if (ids.isEmpty()) {
             return Map.of();

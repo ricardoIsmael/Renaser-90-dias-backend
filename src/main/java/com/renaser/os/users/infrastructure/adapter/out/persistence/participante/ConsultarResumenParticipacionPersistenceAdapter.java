@@ -265,8 +265,10 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
         UserRole rol = mapearRol(String.valueOf(fila[6]));
         boolean suspendido = "SUSPENDIDO".equals(String.valueOf(fila[7]));
         int diaPrograma = diaVigente((Number) fila[1], fechaInicio, zona, fila[8], (Number) fila[9]);
+        // fila[8] es programa_activado_en: NULL = aprobado pero sin Terminos firmados.
+        boolean activado = inscrito && fila[8] != null;
         return new ParticipacionPrograma(usuarioId, inscrito, diaPrograma, fechaInicio, zona,
-                FasePrograma.paraDiaPrograma(diaPrograma), celulaId, mentorId, rol, suspendido);
+                FasePrograma.paraDiaPrograma(diaPrograma), celulaId, mentorId, rol, suspendido, activado);
     }
 
     /**

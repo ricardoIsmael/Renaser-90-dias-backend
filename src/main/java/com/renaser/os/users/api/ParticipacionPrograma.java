@@ -39,6 +39,11 @@ import java.util.UUID;
  * @param mentorId       `participantes_programa.mentor_id`, null si no inscrito o sin mentor asignado
  * @param rol            `usuarios.rol` — existe para CUALQUIER usuario, inscrito o no
  * @param suspendido     `usuarios.estado = 'SUSPENDIDO'` — idem
+ * @param activado       `participantes_programa.programa_activado_en IS NOT NULL`. Es distinto
+ *                       de {@code inscrito}: una cuenta aprobada tiene fila pero el reloj no
+ *                       arranca hasta que firma los Terminos, y el cron nocturno la saltea.
+ *                       El acompañamiento lo necesita para no meter a recepcion a alguien
+ *                       cuyo programa todavia no empezo (plan.md §4.1).
  */
 public record ParticipacionPrograma(
         UserId participanteId,
@@ -50,5 +55,6 @@ public record ParticipacionPrograma(
         UUID celulaId,
         UserId mentorId,
         UserRole rol,
-        boolean suspendido) {
+        boolean suspendido,
+        boolean activado) {
 }

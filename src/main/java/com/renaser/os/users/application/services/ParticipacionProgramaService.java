@@ -324,6 +324,29 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
         remove(new RemoveTraineeCellCommand(actorId, traineeId));
     }
 
+    /**
+     * Sin guard de administrador: lo llama `community` dentro de la transaccion de un traslado
+     * o una rotacion, que ya resolvio la autorizacion (o es un job de la politica de la
+     * cohorte, que no tiene actor humano). Ver el javadoc del puerto.
+     */
+    @Override
+    @Transactional
+    public void sincronizarAcompanamiento(UserId traineeId, UUID celulaId, UserId mentorId) {
+        ParticipacionPrograma participacion = loadParticipacionProgramaPort.byParticipanteId(traineeId)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Participante no inscripto en el programa: " + traineeId));
+
+        if (celulaId != null) {
+            participacion.asignarCelula(celulaId, clock);
+        } else {
+            participacion.quitarCelula(clock);
+        }
+        // null limpia el puntero: un grupo sin mentor no debe seguir apuntando al anterior,
+        // porque ese puntero es el que autoriza la lectura de evidencias del aprendiz.
+        participacion.sincronizarMentor(mentorId, clock);
+        saveParticipacionProgramaPort.save(participacion);
+    }
+
     private User requireUsuario(UserId id) {
         return loadUserPort.byId(id).orElseThrow(() -> new NoSuchElementException("Usuario no encontrado: " + id));
     }

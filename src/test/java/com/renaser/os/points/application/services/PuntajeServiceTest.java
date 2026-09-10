@@ -86,7 +86,7 @@ class PuntajeServiceTest {
     }
 
     private static ParticipacionPrograma inscrito(UserId id) {
-        return new ParticipacionPrograma(id, true, 17, null, null, null, null, null, UserRole.TRAINEE, false);
+        return new ParticipacionPrograma(id, true, 17, null, null, null, null, null, UserRole.TRAINEE, false, true);
     }
 
     private static UserSummary activo(UserId id) {

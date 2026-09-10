@@ -17,4 +17,14 @@ public interface UserSummaryFinder {
      * Los ids inexistentes simplemente no aparecen en el mapa.
      */
     Map<UserId, UserSummary> findByIds(Collection<UserId> ids);
+
+    /**
+     * Resolucion por correo, para que un administrador pueda designar a alguien sin conocer su
+     * UUID (contracts.md: los guias se nombran por {@code userId} O {@code email}).
+     *
+     * <p>Vacio si no existe. NO crea la cuenta ni invita a nadie: designar una funcion es una
+     * cosa y dar de alta un usuario es otra, y confundirlas convertiria un error de tipeo en una
+     * cuenta fantasma.
+     */
+    Optional<UserSummary> findByEmail(String email);
 }

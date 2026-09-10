@@ -150,6 +150,13 @@ public class SecurityConfig {
                         // se lee ni se escribe (V41, fase 3 del plan del Mapa).
                         .requestMatchers("/api/v1/mapa-renacimiento/**").authenticated()
                         .requestMatchers("/api/v1/tickets/**", "/api/v1/ranking/**").authenticated()
+                        // Acompanamiento (SDD 001). Faltaba: sin esta linea las rutas caian fuera
+                        // de la lista y llegaban al controller sin sesion, que respondia 400 al no
+                        // poder resolver el actor. No filtraba datos —sin actor no hay nada que
+                        // devolver— pero el cliente no puede distinguir un 400 de "peticion mal
+                        // formada", y la defensa quedaba en una sola capa. Lo encontro la prueba
+                        // de extremo a extremo, no un test unitario: todos pasaban en verde.
+                        .requestMatchers("/api/v1/mentor/**").authenticated()
                         // Renasia ya lo exigia desde 2026-09-03, por el mismo motivo.
                         .requestMatchers("/api/v1/renasia/**").authenticated()
 

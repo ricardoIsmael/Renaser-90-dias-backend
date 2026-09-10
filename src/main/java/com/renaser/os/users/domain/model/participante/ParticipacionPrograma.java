@@ -368,6 +368,17 @@ public final class ParticipacionPrograma {
     }
 
     /**
+     * Contraparte de {@link #asignarMentor} que SI admite {@code null}, para el traslado y la
+     * rotacion: un grupo puede quedar sin mentor y cubierto por soporte, y en ese caso el
+     * puntero tiene que quedar vacio. Dejar el mentor anterior seria peor que no tener
+     * ninguno — es el valor que decide quien puede leer la evidencia de este participante.
+     */
+    public void sincronizarMentor(UserId nuevoMentorId, Clock clock) {
+        this.mentorId = nuevoMentorId;
+        this.actualizadoEn = clock.now();
+    }
+
+    /**
      * Panel admin de celulas (gap #25, docs/PLAN_INTEGRACION_FRONTEND.md §5). `users` es
      * dueño de la columna `participantes_programa.celula_id`, pero NO de la existencia de
      * la celula misma (eso vive en `community.domain.model.celula.Celula`, otro modulo) —
