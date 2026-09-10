@@ -12,8 +12,10 @@ import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
 import com.renaser.os.chat.application.ports.out.participante.AgregarParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ContarNoLeidosPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
+import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigentePort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
+import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.Participante;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
@@ -47,6 +49,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     private final SaveConversacionPort saveConversacionPort;
     private final AgregarParticipantePort agregarParticipantePort;
     private final EsParticipantePort esParticipantePort;
+    private final PertenenciaVigentePort pertenenciaVigentePort;
     private final MarcarLeidoPort marcarLeidoPort;
     private final ContarNoLeidosPort contarNoLeidosPort;
     private final LoadMensajePort loadMensajePort;
@@ -63,7 +66,8 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
 
     public ConversacionService(LoadConversacionPort loadConversacionPort, SaveConversacionPort saveConversacionPort,
                                 AgregarParticipantePort agregarParticipantePort,
-                                EsParticipantePort esParticipantePort, MarcarLeidoPort marcarLeidoPort,
+                                EsParticipantePort esParticipantePort,
+                                PertenenciaVigentePort pertenenciaVigentePort, MarcarLeidoPort marcarLeidoPort,
                                 ContarNoLeidosPort contarNoLeidosPort, LoadMensajePort loadMensajePort,
                                 UserSummaryFinder userSummaryFinder, Clock clock, IdGenerator idGenerator,
                                 PlatformTransactionManager transactionManager) {
@@ -71,6 +75,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         this.saveConversacionPort = saveConversacionPort;
         this.agregarParticipantePort = agregarParticipantePort;
         this.esParticipantePort = esParticipantePort;
+        this.pertenenciaVigentePort = pertenenciaVigentePort;
         this.marcarLeidoPort = marcarLeidoPort;
         this.contarNoLeidosPort = contarNoLeidosPort;
         this.loadMensajePort = loadMensajePort;
@@ -152,8 +157,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     @Transactional
     public void marcarLeido(MarcarLeidoCommand command) {
         requireActivo(command.actorId());
-        requireConversacion(command.conversacionId());
-        requireParticipante(command.conversacionId(), command.actorId());
+        requireParticipante(requireConversacion(command.conversacionId()), command.actorId());
         marcarLeidoPort.marcarLeido(command.conversacionId(), command.actorId(), clock.now());
     }
 
@@ -187,8 +191,26 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         return saveConversacionPort.save(global.renombrada(command.nuevoNombre()));
     }
 
-    private void requireParticipante(ConversacionId conversacionId, UserId usuarioId) {
-        if (!esParticipantePort.esParticipante(conversacionId, usuarioId)) {
+    /**
+     * Autorizacion de una conversacion.
+     *
+     * <p>Para un grupo NO alcanza con {@code participantes_conversacion}: esa tabla es una
+     * proyeccion, y una proyeccion vieja no se limita a mostrar de menos — concede acceso de
+     * mas. Un mentor que roto el mes pasado conservaria su fila y con ella la puerta abierta al
+     * chat de gente que ya no acompana. Por eso el grupo se revalida contra la pertenencia
+     * vigente y la proyeccion queda para listar rapido (plan.md §6).
+     *
+     * <p>Los directos y el GLOBAL siguen con su politica de siempre: nadie pierde un DM porque
+     * alguien roto.
+     */
+    private void requireParticipante(Conversacion conversacion, UserId usuarioId) {
+        if (conversacion.tipo() == TipoConversacion.CELULA) {
+            if (!pertenenciaVigentePort.perteneceAlGrupo(conversacion.celulaId(), usuarioId)) {
+                throw new NotAuthorizedException("Tu asignacion cambio: ya no perteneces a ese grupo");
+            }
+            return;
+        }
+        if (!esParticipantePort.esParticipante(conversacion.id(), usuarioId)) {
             throw new NotAuthorizedException("No sos participante de esta conversacion");
         }
     }

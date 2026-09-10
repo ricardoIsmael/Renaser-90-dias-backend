@@ -10,6 +10,7 @@ import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.RequiresPermission;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -70,5 +71,28 @@ public class EvidenciaController {
                 desde != null ? Instant.parse(desde) : null, hasta != null ? Instant.parse(hasta) : null,
                 cursor != null ? Instant.parse(cursor) : null);
         return EvidenciaPageResponse.from(listarUseCase.listar(comando));
+    }
+
+    /**
+     * {@code GET /api/v1/evidence/{id}/url} — URL temporal para abrir el archivo.
+     *
+     * <p>Endpoint aparte y no un campo del detalle: firmar cuesta y una URL prefirmada es una
+     * llave que funciona sola. Emitir una por cada fila del listado seria repartir decenas de
+     * llaves por pantallazo, casi todas sin usarse.
+     *
+     * <p>204 cuando la evidencia es de texto: no hay archivo que abrir, y su contenido ya viene
+     * en el detalle.
+     */
+    @RequiresPermission(value = Permission.USE_APP,
+            scope = "EvidenciaService.requireDuenoOAdmin: dueno, mentor asignado o admin. Se firma DESPUES de autorizar")
+    @GetMapping("/{id}/url")
+    public ResponseEntity<UrlEvidenciaResponse> url(@ActorAutenticado UserId actor, @PathVariable UUID id) {
+        return consultarUseCase.urlDeLectura(actor, EvidenciaId.of(id))
+                .map(u -> ResponseEntity.ok(new UrlEvidenciaResponse(u.url(), u.venceEn())))
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    /** @param expiresAt cuando deja de servir, para que el cliente no la cachee de mas. */
+    public record UrlEvidenciaResponse(String url, java.time.Instant expiresAt) {
     }
 }

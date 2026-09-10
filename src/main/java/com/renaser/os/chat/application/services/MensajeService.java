@@ -10,8 +10,11 @@ import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
 import com.renaser.os.chat.application.ports.out.mensaje.PublicarMensajeFanoutPort;
 import com.renaser.os.chat.application.ports.out.mensaje.SaveMensajePort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
+import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigentePort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
+import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
+import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
@@ -49,6 +52,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
 
     private final LoadConversacionPort loadConversacionPort;
     private final EsParticipantePort esParticipantePort;
+    private final PertenenciaVigentePort pertenenciaVigentePort;
     private final MarcarLeidoPort marcarLeidoPort;
     private final SaveMensajePort saveMensajePort;
     private final LoadMensajePort loadMensajePort;
@@ -59,12 +63,14 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     private final IdGenerator idGenerator;
 
     public MensajeService(LoadConversacionPort loadConversacionPort, EsParticipantePort esParticipantePort,
+                           PertenenciaVigentePort pertenenciaVigentePort,
                            MarcarLeidoPort marcarLeidoPort, SaveMensajePort saveMensajePort,
                            LoadMensajePort loadMensajePort, PublicarMensajeFanoutPort publicarMensajeFanoutPort,
                            UserSummaryFinder userSummaryFinder, AlmacenamientoPort almacenamientoPort,
                            Clock clock, IdGenerator idGenerator) {
         this.loadConversacionPort = loadConversacionPort;
         this.esParticipantePort = esParticipantePort;
+        this.pertenenciaVigentePort = pertenenciaVigentePort;
         this.marcarLeidoPort = marcarLeidoPort;
         this.saveMensajePort = saveMensajePort;
         this.loadMensajePort = loadMensajePort;
@@ -79,8 +85,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     @Transactional
     public Mensaje enviar(EnviarMensajeCommand command) {
         requireActivo(command.actorId());
-        requireConversacion(command.conversacionId());
-        requireParticipante(command.conversacionId(), command.actorId());
+        requireParticipante(requireConversacion(command.conversacionId()), command.actorId());
         if (command.respuestaAId() != null) {
             requireRespuestaEnMismaConversacion(command.respuestaAId(), command.conversacionId());
         }
@@ -129,8 +134,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     @Override
     public UrlSubidaMediaChat solicitarUrl(SolicitarUrlSubidaMediaChatCommand command) {
         requireActivo(command.actorId());
-        requireConversacion(command.conversacionId());
-        requireParticipante(command.conversacionId(), command.actorId());
+        requireParticipante(requireConversacion(command.conversacionId()), command.actorId());
         String ruta = rutaDeMedia(command.conversacionId(), command.tipoContenido());
         URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
         return new UrlSubidaMediaChat(url, Mensaje.BUCKET_DEFAULT, ruta);
@@ -163,8 +167,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     @Override
     public PaginaMensajes listar(UserId actorId, ConversacionId conversacionId, Instant cursor, int limite) {
         requireActivo(actorId);
-        requireConversacion(conversacionId);
-        requireParticipante(conversacionId, actorId);
+        requireParticipante(requireConversacion(conversacionId), actorId);
 
         int limiteEfectivo = limite <= 0 ? LIMITE_POR_DEFECTO : Math.min(limite, LIMITE_MAXIMO);
         List<Mensaje> pagina = loadMensajePort.pagina(conversacionId, cursor, limiteEfectivo + 1);
@@ -250,14 +253,34 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         }
     }
 
-    private void requireParticipante(ConversacionId conversacionId, UserId usuarioId) {
-        if (!esParticipantePort.esParticipante(conversacionId, usuarioId)) {
+    /**
+     * Autorizacion de una conversacion.
+     *
+     * <p>Para un grupo NO alcanza con {@code participantes_conversacion}: esa tabla es una
+     * proyeccion, y una proyeccion vieja no se limita a mostrar de menos — concede acceso de
+     * mas. Un mentor que roto el mes pasado conservaria su fila y con ella la puerta abierta al
+     * chat de gente que ya no acompana. Por eso el grupo se revalida contra la pertenencia
+     * vigente y la proyeccion queda para listar rapido (plan.md §6).
+     *
+     * <p>Los directos y el GLOBAL siguen con su politica de siempre: nadie pierde un DM porque
+     * alguien roto.
+     */
+    private void requireParticipante(Conversacion conversacion, UserId usuarioId) {
+        if (conversacion.tipo() == TipoConversacion.CELULA) {
+            if (!pertenenciaVigentePort.perteneceAlGrupo(conversacion.celulaId(), usuarioId)) {
+                throw new NotAuthorizedException("Tu asignacion cambio: ya no perteneces a ese grupo");
+            }
+            return;
+        }
+        if (!esParticipantePort.esParticipante(conversacion.id(), usuarioId)) {
             throw new NotAuthorizedException("No sos participante de esta conversacion");
         }
     }
 
-    private void requireConversacion(ConversacionId id) {
-        loadConversacionPort.porId(id)
+    /** Devuelve la conversacion cargada: el guard de participacion la necesita para saber si es
+     * de grupo, y volver a pedirla seria una consulta de mas por cada mensaje. */
+    private Conversacion requireConversacion(ConversacionId id) {
+        return loadConversacionPort.porId(id)
                 .orElseThrow(() -> new NoSuchElementException("Conversacion no encontrada: " + id));
     }
 

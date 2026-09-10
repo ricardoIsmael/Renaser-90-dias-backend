@@ -65,4 +65,21 @@ interface SpringDataEvidenciaRepository extends JpaRepository<EvidenciaJpaEntity
             + "ORDER BY e.subidaEn ASC")
     List<EvidenciaJpaEntity> pendientesLote(@Param("estado") EstadoValidacionJpa estado, @Param("hasta") Instant hasta,
                                              Pageable pageable);
+
+    /**
+     * Entregas de esos registros, una fila por evidencia, ordenadas por fecha de subida.
+     *
+     * <p>La reduccion a "una entrega por obligacion" se hace en memoria y no con GROUP BY: hace
+     * falta el id de la evidencia MAS TEMPRANA junto con su fecha, y eso en JPQL obliga a una
+     * subconsulta correlacionada por registro. Con las 20-40 obligaciones de una semana de diez
+     * alumnos, agrupar en Java sobre una lectura ordenada es mas simple y mas barato que pelear
+     * el SQL. Se resuelve contra {@code evidencias_registro_idx}.
+     */
+    @Query("""
+            SELECT e.registroHabitoId, e.id, e.subidaEn, e.estadoValidacion
+            FROM EvidenciaJpaEntity e
+            WHERE e.registroHabitoId IN :ids
+            ORDER BY e.registroHabitoId, e.subidaEn ASC
+            """)
+    List<Object[]> entregasDeRegistros(@Param("ids") Collection<UUID> ids);
 }

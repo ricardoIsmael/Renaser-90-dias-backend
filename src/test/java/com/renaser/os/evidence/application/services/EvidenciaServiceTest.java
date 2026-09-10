@@ -77,10 +77,13 @@ class EvidenciaServiceTest {
 
     private EvidenciaService service;
 
+    @Mock
+    private com.renaser.os.shared.application.ports.out.AlmacenamientoPort almacenamientoPort;
+
     @BeforeEach
     void setUp() {
         service = new EvidenciaService(loadEvidenciaPort, saveEvidenciaPort, validacionIAPort, userSummaryFinder,
-                participacionFinder, ajustarPuntosPort, CLOCK, idGenerator);
+                participacionFinder, ajustarPuntosPort, almacenamientoPort, CLOCK, idGenerator);
         lenient().when(saveEvidenciaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         // lenient: la mayoria de los casos no llega a registrar (cortan antes, en autorizacion).
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
@@ -395,7 +398,7 @@ class EvidenciaServiceTest {
 
     private ParticipacionPrograma participacionDe(UserId participanteId, UserId mentorId) {
         return new ParticipacionPrograma(participanteId, true, 20, LocalDate.of(2026, 1, 1),
-                ZoneId.of("America/Lima"), FasePrograma.initial(), null, mentorId, UserRole.TRAINEE, false);
+                ZoneId.of("America/Lima"), FasePrograma.initial(), null, mentorId, UserRole.TRAINEE, false, true);
     }
 
     @Test
@@ -435,13 +438,109 @@ class EvidenciaServiceTest {
     }
 
     @Test
-    @DisplayName("un MENTOR sin participanteId no puede listar: no hay 'todos mis aprendices' en este alcance")
-    void mentorSinParticipanteIdEsRechazado() {
+    @DisplayName("la URL se firma DESPUES de autorizar: a un mentor ajeno no se le emite ninguna")
+    void noSeFirmaAntesDeAutorizar() {
+        UserId mentor = UserId.of(UUID.randomUUID());
+        UserId aprendiz = UserId.of(UUID.randomUUID());
+        EvidenciaId id = EvidenciaId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(mentor)).thenReturn(Optional.of(activo(mentor, UserRole.MENTOR)));
+        when(participacionFinder.deParticipante(aprendiz))
+                .thenReturn(Optional.of(participacionDe(aprendiz, UserId.of(UUID.randomUUID()))));
+        when(loadEvidenciaPort.byId(id)).thenReturn(Optional.of(evidenciaDe(aprendiz)));
+
+        assertThatThrownBy(() -> service.urlDeLectura(mentor, id)).isInstanceOf(NotAuthorizedException.class);
+        // Lo que importa: NO se llamo al almacenamiento. Una URL prefirmada abre el archivo sin
+        // volver a pasar por el backend, asi que emitirla ya es dar acceso.
+        verify(almacenamientoPort, org.mockito.Mockito.never())
+                .firmarLectura(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("una evidencia de TEXTO no tiene archivo: no se firma nada")
+    void textoNoTieneUrl() {
+        UserId dueno = UserId.of(UUID.randomUUID());
+        EvidenciaId id = EvidenciaId.of(UUID.randomUUID());
+        // Sin stub de usuarios: al dueño no se le pregunta el rol, se le reconoce por serlo.
+        when(loadEvidenciaPort.byId(id)).thenReturn(Optional.of(evidenciaDe(dueno)));
+
+        assertThat(service.urlDeLectura(dueno, id)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("el mentor asignado abre la evidencia de SU aprendiz por id")
+    void mentorAsignadoAbreLaEvidenciaDeSuAprendiz() {
+        UserId mentor = UserId.of(UUID.randomUUID());
+        UserId aprendiz = UserId.of(UUID.randomUUID());
+        EvidenciaId id = EvidenciaId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(mentor)).thenReturn(Optional.of(activo(mentor, UserRole.MENTOR)));
+        when(participacionFinder.deParticipante(aprendiz))
+                .thenReturn(Optional.of(participacionDe(aprendiz, mentor)));
+        when(loadEvidenciaPort.byId(id)).thenReturn(Optional.of(evidenciaDe(aprendiz)));
+
+        assertThat(service.porId(mentor, id)).isNotNull();
+    }
+
+    @Test
+    @DisplayName("un mentor NO asignado a ese aprendiz sigue sin poder abrirla")
+    void mentorNoAsignadoNoAbreLaEvidencia() {
+        UserId mentor = UserId.of(UUID.randomUUID());
+        UserId aprendiz = UserId.of(UUID.randomUUID());
+        EvidenciaId id = EvidenciaId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(mentor)).thenReturn(Optional.of(activo(mentor, UserRole.MENTOR)));
+        when(participacionFinder.deParticipante(aprendiz))
+                .thenReturn(Optional.of(participacionDe(aprendiz, UserId.of(UUID.randomUUID()))));
+        when(loadEvidenciaPort.byId(id)).thenReturn(Optional.of(evidenciaDe(aprendiz)));
+
+        assertThatThrownBy(() -> service.porId(mentor, id)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("un MENTOR sin participanteId ve LA SUYA, igual que cualquier otro rol")
+    void mentorSinParticipanteIdVeLaPropia() {
+        /*
+         * Antes esto devolvia 403. La intencion era buena —evitar un "todos mis aprendices"
+         * que este alcance no tiene— pero el efecto era otro: un mentor que ademas cursa el
+         * programa no podia ver su propia evidencia por ningun camino. Sin filtro daba 403, y
+         * pasando su propio id daba 403 tambien, porque requireMentorAsignado terminaba
+         * preguntando si el mentor es su propio mentor.
+         *
+         * Ausencia de filtro ahora significa "lo mio", que es el mismo default de todos los
+         * demas roles y NO abre nada: para ver la evidencia de un aprendiz sigue haciendo falta
+         * nombrarlo y estar asignado a el (los dos tests de abajo).
+         */
         UserId mentor = UserId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(mentor)).thenReturn(Optional.of(activo(mentor, UserRole.MENTOR)));
+        when(loadEvidenciaPort.buscar(any(), any(), org.mockito.ArgumentMatchers.eq(20))).thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.listar(new ListarEvidenciaComando(mentor, null, null, null, null, null, null)))
-                .isInstanceOf(NotAuthorizedException.class);
+        service.listar(new ListarEvidenciaComando(mentor, null, null, null, null, null, null));
+
+        verify(loadEvidenciaPort).buscar(new FiltroEvidencia(mentor, null, null, null, null), null, 20);
+    }
+
+    @Test
+    @DisplayName("autoconsulta explicita: el mentor pide su propio id y no se le exige estar asignado a si mismo")
+    void mentorPideSuPropiaEvidenciaPorId() {
+        UserId mentor = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(mentor)).thenReturn(Optional.of(activo(mentor, UserRole.MENTOR)));
+        when(loadEvidenciaPort.buscar(any(), any(), org.mockito.ArgumentMatchers.eq(20))).thenReturn(List.of());
+
+        service.listar(new ListarEvidenciaComando(mentor, mentor, null, null, null, null, null));
+
+        verify(loadEvidenciaPort).buscar(new FiltroEvidencia(mentor, null, null, null, null), null, 20);
+        // No se consulta la asignacion: preguntarse si uno es su propio mentor no tiene sentido.
+        verify(participacionFinder, org.mockito.Mockito.never()).deParticipante(mentor);
+    }
+
+    @Test
+    @DisplayName("la autoconsulta no eleva permisos: seguir sin poder ver la de un aprendiz ajeno")
+    void laAutoconsultaNoAbreLaAjena() {
+        UserId mentor = UserId.of(UUID.randomUUID());
+        UserId ajeno = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(mentor)).thenReturn(Optional.of(activo(mentor, UserRole.MENTOR)));
+        when(participacionFinder.deParticipante(ajeno)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.listar(new ListarEvidenciaComando(mentor, ajeno, null, null, null, null,
+                null))).isInstanceOf(NotAuthorizedException.class);
     }
 
     @Test

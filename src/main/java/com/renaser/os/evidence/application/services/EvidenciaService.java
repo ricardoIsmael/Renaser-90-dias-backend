@@ -23,6 +23,10 @@ import com.renaser.os.points.api.AjustarPuntosPort;
 import com.renaser.os.points.api.MotivoPuntos;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
+import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
+import com.renaser.os.evidence.api.TipoEvidencia;
+import java.time.Duration;
+import java.util.Optional;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.ParticipacionPrograma;
@@ -55,25 +59,30 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
     private static final int TAMANO_LOTE = 25;
     private static final int TAMANO_PAGINA = 20;
 
+    /** Corta: alcanza para abrir el archivo y no para repartir la llave. */
+    private static final Duration VALIDEZ_URL_LECTURA = Duration.ofMinutes(10);
+
     private final LoadEvidenciaPort loadEvidenciaPort;
     private final SaveEvidenciaPort saveEvidenciaPort;
     private final ValidacionIAPort validacionIAPort;
     private final UserSummaryFinder userSummaryFinder;
     private final ParticipacionProgramaFinder participacionFinder;
     private final AjustarPuntosPort ajustarPuntosPort;
+    private final AlmacenamientoPort almacenamientoPort;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
     public EvidenciaService(LoadEvidenciaPort loadEvidenciaPort, SaveEvidenciaPort saveEvidenciaPort,
                              ValidacionIAPort validacionIAPort, UserSummaryFinder userSummaryFinder,
                              ParticipacionProgramaFinder participacionFinder, AjustarPuntosPort ajustarPuntosPort,
-                             Clock clock, IdGenerator idGenerator) {
+                             AlmacenamientoPort almacenamientoPort, Clock clock, IdGenerator idGenerator) {
         this.loadEvidenciaPort = loadEvidenciaPort;
         this.saveEvidenciaPort = saveEvidenciaPort;
         this.validacionIAPort = validacionIAPort;
         this.userSummaryFinder = userSummaryFinder;
         this.participacionFinder = participacionFinder;
         this.ajustarPuntosPort = ajustarPuntosPort;
+        this.almacenamientoPort = almacenamientoPort;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
@@ -101,6 +110,29 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
         Evidencia evidencia = requireEvidencia(evidenciaId);
         requireDuenoOAdmin(actorId, evidencia);
         return evidencia;
+    }
+
+    /**
+     * Autoriza primero, firma despues. Nunca al reves: una URL prefirmada abre el archivo sin
+     * volver a pasar por el backend, asi que emitirla es dar acceso — y darlo antes de saber si
+     * corresponde es exactamente el agujero que esta comprobacion evita.
+     *
+     * <p>Sin {@code @Transactional}: firmar es trabajo del adaptador de almacenamiento y no debe
+     * correr reteniendo una conexion. Las lecturas van en la transaccion implicita del repositorio.
+     */
+    @Override
+    public Optional<UrlDeEvidencia> urlDeLectura(UserId actorId, EvidenciaId evidenciaId) {
+        Evidencia evidencia = requireEvidencia(evidenciaId);
+        requireDuenoOAdmin(actorId, evidencia);
+
+        if (evidencia.tipo() == TipoEvidencia.TEXTO || evidencia.rutaStorage() == null) {
+            // No hay archivo: la evidencia ES su texto, y ya viaja en el detalle.
+            return Optional.empty();
+        }
+        Instant vence = clock.now().plus(VALIDEZ_URL_LECTURA);
+        return Optional.of(new UrlDeEvidencia(
+                almacenamientoPort.firmarLectura(evidencia.rutaStorage(), VALIDEZ_URL_LECTURA).toString(),
+                vence));
     }
 
     @Override
@@ -259,9 +291,18 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
             return new FiltroEvidencia(participanteId, estado, tipoDestino, desde, hasta);
         }
         if (actor.role() == UserRole.MENTOR) {
-            if (participanteId == null) {
-                throw new NotAuthorizedException(
-                        "Un mentor debe indicar participanteId: no hay listado sin acotar por aprendiz");
+            /*
+             * Autoconsulta primero. Un mentor tambien puede cursar el programa (D-07), y hasta
+             * ahora no tenia ninguna forma de ver su propia evidencia: sin filtro se le exigia
+             * un participanteId, y si mandaba el suyo se comprobaba si el mentor esta asignado
+             * a si mismo — que nunca es cierto. Le devolvia 403 por leer lo suyo.
+             *
+             * Que la ausencia de filtro signifique "lo mio" no abre nada: es el mismo default
+             * de todos los demas roles, y sigue sin existir un "todos mis aprendices" — para
+             * ver la evidencia de un aprendiz hay que nombrarlo y estar asignado a el.
+             */
+            if (participanteId == null || participanteId.equals(actor.id())) {
+                return new FiltroEvidencia(actor.id(), estado, tipoDestino, desde, hasta);
             }
             requireMentorAsignado(actor.id(), participanteId);
             return new FiltroEvidencia(participanteId, estado, tipoDestino, desde, hasta);
@@ -306,8 +347,22 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
                 .orElseThrow(() -> new NoSuchElementException("Evidencia no encontrada: " + id));
     }
 
+    /**
+     * Quién puede abrir UNA evidencia: su dueño, el mentor asignado a esa persona, o un
+     * administrador.
+     *
+     * <p>El mentor entró acá porque sin él la pantalla de seguimiento no puede abrir el archivo
+     * que ella misma dice que existe: {@code listar} ya le devuelve la evidencia de su aprendiz,
+     * y pedir el detalle daba 403. Es la misma comprobación de {@code listar} —estar asignado a
+     * ese aprendiz, no "tener rol MENTOR"—, que es la distinción de E-38.
+     */
     private void requireDuenoOAdmin(UserId actorId, Evidencia evidencia) {
         if (actorId.equals(evidencia.participanteId())) {
+            return;
+        }
+        UserSummary actor = requireActorActivo(actorId);
+        if (actor.role() == UserRole.MENTOR) {
+            requireMentorAsignado(actorId, evidencia.participanteId());
             return;
         }
         requireAdmin(actorId);

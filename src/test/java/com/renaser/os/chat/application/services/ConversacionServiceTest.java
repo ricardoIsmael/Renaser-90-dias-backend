@@ -10,6 +10,7 @@ import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
 import com.renaser.os.chat.application.ports.out.participante.AgregarParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ContarNoLeidosPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
+import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigentePort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
@@ -61,6 +62,14 @@ class ConversacionServiceTest {
     private AgregarParticipantePort agregarParticipantePort;
     @Mock
     private EsParticipantePort esParticipantePort;
+
+    /**
+     * Las conversaciones de grupo revalidan la pertenencia contra `community` en vez de confiar en
+     * la proyeccion. Estas pruebas trabajan con DIRECTAS y GLOBAL, que no pasan por ahi, asi que
+     * el doble no necesita comportamiento — pero tiene que existir.
+     */
+    @Mock
+    private PertenenciaVigentePort pertenenciaVigentePort;
     @Mock
     private MarcarLeidoPort marcarLeidoPort;
     @Mock
@@ -86,7 +95,8 @@ class ConversacionServiceTest {
     @BeforeEach
     void setUp() {
         service = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
-                esParticipantePort, marcarLeidoPort, contarNoLeidosPort, loadMensajePort, userSummaryFinder,
+                esParticipantePort, pertenenciaVigentePort, marcarLeidoPort, contarNoLeidosPort, loadMensajePort,
+                userSummaryFinder,
                 CLOCK, idGenerator, transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(

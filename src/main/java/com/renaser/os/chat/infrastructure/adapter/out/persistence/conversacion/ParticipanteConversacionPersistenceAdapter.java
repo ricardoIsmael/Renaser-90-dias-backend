@@ -1,6 +1,7 @@
 package com.renaser.os.chat.infrastructure.adapter.out.persistence.conversacion;
 
 import com.renaser.os.chat.application.ports.out.participante.AgregarParticipantePort;
+import com.renaser.os.chat.application.ports.out.participante.QuitarParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ContarNoLeidosPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ListarUsuariosDeConversacionPort;
@@ -19,8 +20,8 @@ import java.util.UUID;
 
 @Component
 class ParticipanteConversacionPersistenceAdapter
-        implements AgregarParticipantePort, EsParticipantePort, MarcarLeidoPort, ContarNoLeidosPort,
-        ListarUsuariosDeConversacionPort {
+        implements AgregarParticipantePort, QuitarParticipantePort, EsParticipantePort, MarcarLeidoPort,
+        ContarNoLeidosPort, ListarUsuariosDeConversacionPort {
 
     private final SpringDataParticipanteConversacionRepository repository;
 
@@ -71,5 +72,15 @@ class ParticipanteConversacionPersistenceAdapter
     @Override
     public List<UserId> usuariosDe(ConversacionId conversacionId) {
         return repository.usuarioIdsDeConversacion(conversacionId.value()).stream().map(UserId::of).toList();
+    }
+
+    /**
+     * Borra SOLO la fila de participacion. Los mensajes cuelgan de la conversacion, no de esta
+     * tabla, asi que la historia del grupo queda intacta — que es exactamente lo que se quiere:
+     * el nuevo mentor lee lo que paso antes de llegar.
+     */
+    @Override
+    public void quitar(ConversacionId conversacionId, UserId usuarioId) {
+        repository.deleteById(new ParticipanteConversacionId(conversacionId.value(), usuarioId.value()));
     }
 }
