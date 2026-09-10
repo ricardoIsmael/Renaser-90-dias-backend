@@ -204,15 +204,23 @@ class ConversacionServiceTest {
         when(contarNoLeidosPort.contarNoLeidos(eq(activo), any())).thenReturn(Map.of());
         when(listarUsuariosPort.otroParticipanteDeDirectas(any(), eq(activo)))
                 .thenReturn(Map.of(directa.id(), otroActivo));
+        when(userSummaryFinder.findByIds(any())).thenReturn(Map.of(otroActivo,
+                new UserSummary(otroActivo, "Otro", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
 
         List<ConversacionResumen> resumenes = service.listar(activo);
 
         assertThat(resumenes)
                 .filteredOn(r -> r.conversacion().id().equals(directa.id()))
                 .singleElement()
-                .satisfies(r -> assertThat(r.otroParticipante())
-                        .as("el chat 1 a 1 dice con quien es, aunque no haya ni un mensaje")
-                        .isEqualTo(otroActivo));
+                .satisfies(r -> {
+                    assertThat(r.otroParticipante())
+                            .as("el chat 1 a 1 dice con quien es, aunque no haya ni un mensaje")
+                            .isEqualTo(otroActivo);
+                    /* Y con su NOMBRE. Mandar solo el id obligaba al cliente a resolverlo contra
+                       `GET /chat/members`, que exige la conversacion GLOBAL y sin ella da 404: la
+                       bandeja de DMs se quedaba sin nombres por culpa de otra conversacion. */
+                    assertThat(r.otroParticipanteNombre()).isEqualTo("Otro");
+                });
         assertThat(resumenes)
                 .filteredOn(r -> r.conversacion().id().equals(grupo.id()))
                 .singleElement()

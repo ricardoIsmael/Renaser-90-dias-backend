@@ -149,9 +149,19 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         /* Con quien habla en cada DIRECTA, en UNA consulta. Se pide para todas y se usa solo en
            las DIRECTAS: filtrar antes obligaria a recorrer dos veces para ahorrar nada. */
         Map<ConversacionId, UserId> otros = listarUsuariosPort.otroParticipanteDeDirectas(ids, actorId);
+        /* Los nombres, EN LOTE y aca. Dejarselos al cliente contra el directorio de miembros fue
+           el primer intento y no servia: ese directorio exige que exista la conversacion GLOBAL y
+           donde no existe responde 404, con lo que la bandeja de DMs se quedaba sin nombres por
+           culpa de otra conversacion. Una bandeja de mensajes directos tiene que nombrarse sola. */
+        Map<UserId, UserSummary> perfiles = userSummaryFinder.findByIds(otros.values().stream().distinct().toList());
         return conversaciones.stream()
-                .map(c -> new ConversacionResumen(c, ultimos.get(c.id()), noLeidos.getOrDefault(c.id(), 0L),
-                        c.tipo() == TipoConversacion.DIRECTA ? otros.get(c.id()) : null))
+                .map(c -> {
+                    UserId otro = c.tipo() == TipoConversacion.DIRECTA ? otros.get(c.id()) : null;
+                    UserSummary perfil = otro != null ? perfiles.get(otro) : null;
+                    return new ConversacionResumen(c, ultimos.get(c.id()), noLeidos.getOrDefault(c.id(), 0L),
+                            otro, perfil != null ? perfil.fullName() : null,
+                            perfil != null ? perfil.avatarUrl() : null);
+                })
                 .sorted(Comparator.comparing(ConversacionService::actividadDe).reversed())
                 .toList();
     }

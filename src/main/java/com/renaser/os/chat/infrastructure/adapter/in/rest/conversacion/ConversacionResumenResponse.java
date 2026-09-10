@@ -5,17 +5,19 @@ import com.renaser.os.chat.infrastructure.adapter.in.rest.mensaje.MensajeRespons
 
 /**
  * @param otherParticipantId con quien es el chat, cuando es 1 a 1. {@code null} en grupos. El
- *                           cliente resuelve el nombre contra el directorio que ya pide
- *                           ({@code GET /chat/members}); aca va solo el id para no repetir la
- *                           resolucion de nombres en dos sitios.
+ * @param otherParticipantName su nombre, ya resuelto. NO se deja que el cliente lo busque en
+ *                             {@code GET /chat/members}: ese directorio exige que exista la
+ *                             conversacion GLOBAL y sin ella responde 404.
  */
 public record ConversacionResumenResponse(ConversacionResponse conversation, MensajeResponse lastMessage,
-                                           long unreadCount, String otherParticipantId) {
+                                           long unreadCount, String otherParticipantId,
+                                           String otherParticipantName, String otherParticipantAvatarUrl) {
 
     public static ConversacionResumenResponse from(ConversacionResumen resumen) {
         return new ConversacionResumenResponse(ConversacionResponse.from(resumen.conversacion()),
                 resumen.ultimoMensaje() != null ? MensajeResponse.from(resumen.ultimoMensaje()) : null,
                 resumen.noLeidos(),
-                resumen.otroParticipante() != null ? resumen.otroParticipante().value().toString() : null);
+                resumen.otroParticipante() != null ? resumen.otroParticipante().value().toString() : null,
+                resumen.otroParticipanteNombre(), resumen.otroParticipanteAvatar());
     }
 }
