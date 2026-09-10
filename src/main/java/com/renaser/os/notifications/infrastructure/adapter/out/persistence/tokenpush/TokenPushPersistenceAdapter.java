@@ -1,5 +1,6 @@
 package com.renaser.os.notifications.infrastructure.adapter.out.persistence.tokenpush;
 
+import com.renaser.os.notifications.application.ports.out.push.DesactivarTokenPushPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPushPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.UpsertTokenPushPort;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
@@ -13,7 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Component
-class TokenPushPersistenceAdapter implements UpsertTokenPushPort, LoadTokenPushPort {
+class TokenPushPersistenceAdapter implements UpsertTokenPushPort, LoadTokenPushPort, DesactivarTokenPushPort {
 
     /**
      * C-10 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): el UPSERT
@@ -80,5 +81,14 @@ class TokenPushPersistenceAdapter implements UpsertTokenPushPort, LoadTokenPushP
     @Override
     public List<TokenPush> tokensDe(UserId usuarioId) {
         return repository.findByUsuarioId(usuarioId.value()).stream().map(mapper::toDomain).toList();
+    }
+
+    /**
+     * Borra la fila del token. Idempotente por definicion: borrar lo que ya no esta no falla, y
+     * dos entregas fallidas del mismo token en el mismo lote no se pisan.
+     */
+    @Override
+    public void desactivar(com.renaser.os.notifications.domain.model.tokenpush.TokenPushId tokenId) {
+        repository.deleteById(tokenId.value());
     }
 }

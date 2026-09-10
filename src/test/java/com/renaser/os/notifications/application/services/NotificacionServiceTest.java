@@ -4,6 +4,7 @@ import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNoti
 import com.renaser.os.notifications.application.ports.out.notificacion.LoadNotificacionPort;
 import com.renaser.os.notifications.application.ports.out.notificacion.SaveNotificacionPort;
 import com.renaser.os.notifications.application.ports.out.preferencia.LoadPreferenciasPort;
+import com.renaser.os.notifications.application.ports.out.push.DesactivarTokenPushPort;
 import com.renaser.os.notifications.application.ports.out.push.PushPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPushPort;
 import com.renaser.os.notifications.domain.model.notificacion.Notificacion;
@@ -60,6 +61,9 @@ class NotificacionServiceTest {
     private LoadTokenPushPort loadTokenPushPort;
     @Mock
     private PushPort pushPort;
+
+    @Mock
+    private DesactivarTokenPushPort desactivarTokenPushPort;
     @Mock
     private UserSummaryFinder userSummaryFinder;
     /** No necesita stubbing: TransactionTemplate.execute con getTransaction()==null solo corre
@@ -72,7 +76,8 @@ class NotificacionServiceTest {
     @BeforeEach
     void setUp() {
         service = new NotificacionService(loadNotificacionPort, saveNotificacionPort, loadPreferenciasPort,
-                loadTokenPushPort, pushPort, new ActorNotificacionesGuard(userSummaryFinder), CLOCK,
+                loadTokenPushPort, pushPort, desactivarTokenPushPort,
+                new ActorNotificacionesGuard(userSummaryFinder), CLOCK,
                 transactionManager);
         lenient().when(userSummaryFinder.findById(any())).thenAnswer(inv -> Optional.of(
                 new UserSummary(inv.getArgument(0), "Test", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
@@ -136,7 +141,7 @@ class NotificacionServiceTest {
         when(loadPreferenciasPort.habilitadaPara(any(), any())).thenReturn(Optional.empty());
         when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(TokenPush.registrar(
                 TokenPushId.of(UUID.randomUUID()), usuario, "tok-1", PlataformaPush.ANDROID, CLOCK)));
-        doThrow(new RuntimeException("Expo caido")).when(pushPort).enviar(anyList(), any(), any());
+        doThrow(new RuntimeException("Expo caido")).when(pushPort).enviar(anyList(), any(), any(), any());
 
         Optional<Notificacion> resultado = service.emitir(
                 new EmitirNotificacionCommand(usuario, TipoNotificacion.ANUNCIO_SISTEMA, "T", "C", null, null));
@@ -251,6 +256,6 @@ class NotificacionServiceTest {
                         origenEventoId));
 
         assertThat(resultado).isEmpty();
-        verify(pushPort, never()).enviar(anyList(), any(), any());
+        verify(pushPort, never()).enviar(anyList(), any(), any(), any());
     }
 }

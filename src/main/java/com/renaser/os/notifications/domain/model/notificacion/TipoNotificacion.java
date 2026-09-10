@@ -19,5 +19,7 @@ public enum TipoNotificacion {
     TICKET_RESPONDIDO,
     TICKET_ABIERTO,
     SANTUARIO_ROTO,
-    HABITO_PERSONAL_MODIFICADO
+    HABITO_PERSONAL_MODIFICADO,
+    /** V46: el mentor debería mirar a un aprendiz suyo (ausencia o evidencia vencida). */
+    ACOMPANAMIENTO_ALUMNO
 }

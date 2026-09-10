@@ -15,5 +15,7 @@ public enum TipoNotificacionJpa {
     TICKET_RESPONDIDO,
     TICKET_ABIERTO,
     SANTUARIO_ROTO,
-    HABITO_PERSONAL_MODIFICADO
+    HABITO_PERSONAL_MODIFICADO,
+    /** V46. Espejo del valor homonimo del enum de Postgres. */
+    ACOMPANAMIENTO_ALUMNO
 }

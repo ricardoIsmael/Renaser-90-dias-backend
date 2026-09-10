@@ -7,7 +7,9 @@ import com.renaser.os.notifications.application.ports.in.notificacion.MarcarToda
 import com.renaser.os.notifications.application.ports.out.notificacion.LoadNotificacionPort;
 import com.renaser.os.notifications.application.ports.out.notificacion.SaveNotificacionPort;
 import com.renaser.os.notifications.application.ports.out.preferencia.LoadPreferenciasPort;
+import com.renaser.os.notifications.application.ports.out.push.DesactivarTokenPushPort;
 import com.renaser.os.notifications.application.ports.out.push.PushPort;
+import com.renaser.os.notifications.application.ports.out.push.ResultadoEnvioPush;
 import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPushPort;
 import com.renaser.os.notifications.domain.model.notificacion.Notificacion;
 import com.renaser.os.notifications.domain.model.preferencia.PreferenciaNotificacion;
@@ -39,6 +41,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
     private final LoadPreferenciasPort loadPreferenciasPort;
     private final LoadTokenPushPort loadTokenPushPort;
     private final PushPort pushPort;
+    private final DesactivarTokenPushPort desactivarTokenPushPort;
     private final ActorNotificacionesGuard actorGuard;
     private final Clock clock;
     /**
@@ -55,13 +58,15 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
 
     public NotificacionService(LoadNotificacionPort loadNotificacionPort, SaveNotificacionPort saveNotificacionPort,
                                 LoadPreferenciasPort loadPreferenciasPort, LoadTokenPushPort loadTokenPushPort,
-                                PushPort pushPort, ActorNotificacionesGuard actorGuard, Clock clock,
+                                PushPort pushPort, DesactivarTokenPushPort desactivarTokenPushPort,
+                                ActorNotificacionesGuard actorGuard, Clock clock,
                                 PlatformTransactionManager transactionManager) {
         this.loadNotificacionPort = loadNotificacionPort;
         this.saveNotificacionPort = saveNotificacionPort;
         this.loadPreferenciasPort = loadPreferenciasPort;
         this.loadTokenPushPort = loadTokenPushPort;
         this.pushPort = pushPort;
+        this.desactivarTokenPushPort = desactivarTokenPushPort;
         this.actorGuard = actorGuard;
         this.clock = clock;
         this.transaccionPropia = new TransactionTemplate(transactionManager);
@@ -111,14 +116,40 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
 
     /** Best-effort, nunca tumba la emision: el registro en la bandeja (arriba) es el contrato
      * real, el push es un empujon adicional (mismo criterio "fire-and-forget" que el repo viejo
-     * aplicaba a Expo — `chat/repository.ts:sendExpoPushNotifications` no propaga sus fallos). */
+     * aplicaba a Expo — `chat/repository.ts:sendExpoPushNotifications` no propaga sus fallos).
+     *
+     * <p>Lo que SI cambia respecto de "fire and forget": ahora se mira el resultado. Un token que
+     * el proveedor declara muerto se desactiva —reintentarlo es tirar trabajo para siempre— y un
+     * fallo temporal queda registrado para que soporte pueda verlo. La entrega sigue sin
+     * garantizarse; lo que ya no se acepta es no enterarse (plan.md §9). */
     private void intentarPush(EmitirNotificacionCommand command) {
         try {
             var tokens = loadTokenPushPort.tokensDe(command.usuarioId());
-            pushPort.enviar(tokens, command.titulo(), command.cuerpo());
+            List<ResultadoEnvioPush> resultados = pushPort.enviar(tokens, command.titulo(), command.cuerpo(),
+                    command.rutaApp());
+            procesarResultados(command, resultados);
         } catch (RuntimeException e) {
             log.warn("[notifications.NotificacionService] push best-effort fallo para tipo {}: {}", command.tipo(),
                     e.getMessage());
+        }
+    }
+
+    private void procesarResultados(EmitirNotificacionCommand command, List<ResultadoEnvioPush> resultados) {
+        for (ResultadoEnvioPush resultado : resultados) {
+            switch (resultado.estado()) {
+                case TOKEN_INVALIDO -> {
+                    log.info("[notifications.NotificacionService] token {} desactivado: {}",
+                            resultado.tokenId(), resultado.detalle());
+                    desactivarTokenPushPort.desactivar(resultado.tokenId());
+                }
+                case FALLO_TEMPORAL -> log.warn(
+                        "[notifications.NotificacionService] fallo temporal enviando {} al token {}: {}",
+                        command.tipo(), resultado.tokenId(), resultado.detalle());
+                case SIN_TRANSPORTE -> log.warn(
+                        "[notifications.NotificacionService] sin transporte para el token {}: {}",
+                        resultado.tokenId(), resultado.detalle());
+                case ENTREGADO -> { }
+            }
         }
     }
 
