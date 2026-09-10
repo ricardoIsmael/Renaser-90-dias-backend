@@ -88,6 +88,13 @@ public class AcompanamientoService
             if (grupo.isEmpty()) {
                 continue;
             }
+            /* Un grupo con el periodo cerrado tampoco aparece en el contexto del mentor. La fila
+               de asignacion puede seguir VIVA —cerrar el periodo del grupo no cierra las
+               asignaciones—, asi que sin esto un grupo terminado se seguiria mostrando como "el
+               que acompano ahora". Mismo criterio que `CelulaService.miCelula` para el alumno. */
+            if (grupo.get().vencidoEn(hoyDelPrograma())) {
+                continue;
+            }
             // Una consulta por grupo, no una por miembro: el resto se resuelve en memoria.
             ConjuntoAsignaciones composicion = composicionPorGrupo.computeIfAbsent(mia.celulaId(),
                     id -> ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(id)));
@@ -191,6 +198,11 @@ public class AcompanamientoService
      */
     private static boolean esDeAcompanamiento(AsignacionCelula asignacion) {
         return !asignacion.funcion().consumeCupo();
+    }
+
+    /** Ver el javadoc gemelo en {@code CelulaService}: la zona del programa, no la del servidor. */
+    private java.time.LocalDate hoyDelPrograma() {
+        return clock.now().atZone(java.time.ZoneId.of(PoliticaMentoria.ZONA_POR_DEFECTO)).toLocalDate();
     }
 
     private AsignacionResumen resumir(AsignacionCelula mia, Celula grupo, ConjuntoAsignaciones composicion,

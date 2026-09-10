@@ -24,6 +24,7 @@ import com.renaser.os.community.application.ports.out.participante.ConsultarCelu
 import com.renaser.os.community.application.ports.out.participante.ConsultarMiembrosCelulaPort;
 import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort;
 import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort.PerfilUsuario;
+import com.renaser.os.community.domain.model.acompanamiento.PoliticaMentoria;
 import com.renaser.os.community.domain.model.celula.Celula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.Cohorte;
@@ -253,6 +254,18 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
             return Optional.empty();
         }
         Celula celula = requireCelula(celulaId);
+        /* Un grupo cuyo periodo ya cerro deja de verse desde la app del alumno. Decision del
+           dueno del proyecto (2026-09-11): el administrador arma el grupo del mes siguiente y
+           mientras tanto el alumno no tiene grupo, en vez de quedarse mirando uno terminado.
+
+           La fila de `asignaciones_celula` puede seguir VIVA: cerrar el periodo del grupo no
+           cierra las asignaciones. Por eso el filtro va por el periodo del GRUPO y no por la
+           vigencia de la asignacion, que responde otra pregunta.
+
+           Solo el admin lo sigue viendo, por `/api/v1/admin/cells`, que no pasa por aca. */
+        if (celula.vencidoEn(hoyDelPrograma())) {
+            return Optional.empty();
+        }
         Cohorte cohorte = requireCohorte(celula.cohorteId());
         PerfilBasico mentor = celula.mentorId() != null ? perfilBasico(celula.mentorId()) : null;
         int cantidadMiembros = consultarMiembrosCelulaPort.contarMiembros(celulaId);
@@ -371,6 +384,18 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         if (requireCohorte(cohorteId).estado() == EstadoCohorte.COMPLETADA) {
             throw new NotAuthorizedException("No se pueden modificar celulas de una cohorte completada");
         }
+    }
+
+    /**
+     * Que dia es hoy para decidir si un grupo cerro.
+     *
+     * <p>Un grupo es del programa, no de una persona: no hay "la zona del participante" a la que
+     * acudir para esta pregunta, y usar la del servidor haria que un despliegue en otra region
+     * moviera la fecha de cierre de todos los grupos a la vez. Se fija la del programa, la misma
+     * que {@code PoliticaMentoria.ZONA_POR_DEFECTO}.
+     */
+    private java.time.LocalDate hoyDelPrograma() {
+        return clock.now().atZone(java.time.ZoneId.of(PoliticaMentoria.ZONA_POR_DEFECTO)).toLocalDate();
     }
 
     private Celula requireCelula(CelulaId id) {

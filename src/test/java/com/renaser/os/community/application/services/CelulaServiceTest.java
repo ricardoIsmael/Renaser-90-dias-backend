@@ -17,6 +17,8 @@ import com.renaser.os.community.application.ports.out.participante.ConsultarCelu
 import com.renaser.os.community.application.ports.out.participante.ConsultarMiembrosCelulaPort;
 import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort;
 import com.renaser.os.community.domain.model.celula.Celula;
+import java.time.LocalDate;
+import com.renaser.os.community.domain.model.celula.PeriodoGrupo;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.shared.domain.FixedClock;
@@ -104,6 +106,12 @@ class CelulaServiceTest {
                 .thenReturn(Optional.of(new UserSummary(trainee, "Aprendiz", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(adminSuspendido)).thenReturn(Optional.of(new UserSummary(
                 adminSuspendido, "Admin suspendido", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
+    }
+
+    private static com.renaser.os.community.domain.model.cohorte.Cohorte cohorteExistente(CohorteId id) {
+        return com.renaser.os.community.domain.model.cohorte.Cohorte.rehydrate(id, "Cohorte Agosto",
+                LocalDate.of(2026, 8, 1), null,
+                com.renaser.os.community.domain.model.cohorte.EstadoCohorte.ACTIVA, CLOCK.now(), CLOCK.now());
     }
 
     private Celula celulaExistente() {
@@ -614,5 +622,51 @@ class CelulaServiceTest {
     void aprendicesDisponiblesConAdminSuspendidoFalla() {
         assertThatThrownBy(() -> service.aprendicesDisponibles(adminSuspendido))
                 .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    /**
+     * Un grupo cuyo periodo ya cerro desaparece de la app del alumno.
+     *
+     * <p>El reloj de estas pruebas esta en el 24 de agosto de 2026; el grupo cerro el 31 de julio.
+     * La asignacion del alumno sigue VIVA a proposito —cerrar el periodo del grupo no cierra las
+     * asignaciones—, que es justo el caso que sin el filtro seguiria mostrando un grupo terminado.
+     */
+    @Test
+    @DisplayName("miCelula(): un grupo con el periodo cerrado ya no se ve")
+    void miCelulaConPeriodoCerradoNoSeVe() {
+        Celula cerrada = Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Fenix", null,
+                CohorteId.of(UUID.randomUUID()), null, null, CLOCK.now(), CLOCK.now(), null, null,
+                new PeriodoGrupo(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 31)));
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(trainee)).thenReturn(Optional.of(cerrada.id()));
+        when(loadCelulaPort.porId(cerrada.id())).thenReturn(Optional.of(cerrada));
+
+        assertThat(service.miCelula(trainee)).isEmpty();
+    }
+
+    /** El reverso: mientras el periodo sigue vivo, el grupo se ve como siempre. */
+    @Test
+    @DisplayName("miCelula(): con el periodo vigente el grupo se sigue viendo")
+    void miCelulaConPeriodoVigenteSeVe() {
+        Celula vigente = Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Fenix", null,
+                CohorteId.of(UUID.randomUUID()), null, null, CLOCK.now(), CLOCK.now(), null, null,
+                new PeriodoGrupo(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31)));
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(trainee)).thenReturn(Optional.of(vigente.id()));
+        when(loadCelulaPort.porId(vigente.id())).thenReturn(Optional.of(vigente));
+        when(loadCohortePort.porId(vigente.cohorteId())).thenReturn(Optional.of(cohorteExistente(vigente.cohorteId())));
+
+        assertThat(service.miCelula(trainee)).isPresent();
+    }
+
+    /** Y un grupo SIN periodo no caduca: es el caso de todas las celulas anteriores a V48. */
+    @Test
+    @DisplayName("miCelula(): un grupo sin periodo no caduca nunca")
+    void miCelulaSinPeriodoNoCaduca() {
+        Celula sinPeriodo = celulaExistente();
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(trainee)).thenReturn(Optional.of(sinPeriodo.id()));
+        when(loadCelulaPort.porId(sinPeriodo.id())).thenReturn(Optional.of(sinPeriodo));
+        when(loadCohortePort.porId(sinPeriodo.cohorteId()))
+                .thenReturn(Optional.of(cohorteExistente(sinPeriodo.cohorteId())));
+
+        assertThat(service.miCelula(trainee)).isPresent();
     }
 }
