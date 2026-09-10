@@ -11,6 +11,8 @@ import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -29,13 +31,21 @@ import java.util.Optional;
  * que los 219 endpoints DIJERAN que permiso exigen, pero ningun filtro ni interceptor lo
  * hacia cumplir — cualquiera con cualquier rol podia llamar cualquier endpoint.
  *
- * <p><b>Alcance, decidido por el dueño del proyecto (2026-09-01): solo TRAINEE se verifica de
- * verdad.</b> Para MENTOR, MENTOR_LEAD, ADMIN y ALCHEMIST este interceptor no hace nada —ni
- * siquiera el chequeo de cuenta suspendida— y la request sigue exactamente el mismo camino
- * que tenia antes de este cambio, resuelto por los guards de cada servicio. Es un
- * falla-abierto deliberado, documentado en {@code UserRole.can(Permission)} y en
- * {@code docs/ENDPOINTS_FALTANTES.md} fila A-1: definir que puede hacer cada uno de esos 4
+ * <p><b>Alcance.</b> TRAINEE se verifica de verdad desde 2026-09-01. MENTOR_LEAD se verifica
+ * desde 2026-09-09, pero <b>en modo sombra por defecto</b> (SDD 002, decision DL-08). MENTOR,
+ * ADMIN y ALCHEMIST siguen sin verificarse —ni siquiera el chequeo de cuenta suspendida— y su
+ * request sigue el mismo camino de siempre, resuelto por los guards de cada servicio. Ese
+ * falla-abierto esta documentado en {@code UserRole.can(Permission)} y en
+ * {@code docs/ENDPOINTS_FALTANTES.md} fila A-1: definir que puede hacer cada uno de esos 3
  * roles es una regla de negocio que el dueño del proyecto todavia no dicto (CLAUDE.MD §0.6).
+ *
+ * <p><b>Que es el modo sombra y por que existe.</b> Hasta hoy MENTOR_LEAD pasaba por aca sin
+ * que se le mirara un solo permiso. Encender el cumplimiento de golpe convierte en 403 todo
+ * endpoint que use y que falte en su matriz — incluidos los de su propio programa de 90 dias.
+ * Por eso el paso intermedio: con {@code renaser.security.mentor-lead-enforcement=false} (el
+ * valor por defecto) el interceptor <b>evalua y registra</b> lo que denegaria, y deja pasar.
+ * Cuando el registro este limpio en uso real, se pone en {@code true} y el cumplimiento es
+ * real. Volver atras es cambiar la propiedad, sin tocar la matriz ni desplegar codigo nuevo.
  *
  * <p><b>No reemplaza al guard del servicio, lo adelanta.</b> Los guards existentes
  * ({@code requireAdminActivo}, {@code requireActorPuedePublicar}, etc.) siguen ahi — son la
@@ -58,10 +68,17 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
 
     private static final String HEADER_ACTOR_ID = "X-Actor-Id";
 
+    private static final Logger log = LoggerFactory.getLogger(PermissionEnforcementInterceptor.class);
+
     private final ObjectProvider<UserSummaryFinder> userSummaryFinderProvider;
 
-    PermissionEnforcementInterceptor(ObjectProvider<UserSummaryFinder> userSummaryFinderProvider) {
+    /** false = modo sombra para MENTOR_LEAD (registra, no deniega). Ver el javadoc de la clase. */
+    private final boolean cumplimientoMentorLead;
+
+    PermissionEnforcementInterceptor(ObjectProvider<UserSummaryFinder> userSummaryFinderProvider,
+                                      boolean cumplimientoMentorLead) {
         this.userSummaryFinderProvider = userSummaryFinderProvider;
+        this.cumplimientoMentorLead = cumplimientoMentorLead;
     }
 
     @Override
@@ -98,8 +115,11 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
         }
 
         UserSummary resumen = actor.get();
+        if (resumen.role() == UserRole.MENTOR_LEAD) {
+            return verificarMentorLead(request, response, resumen, requerido);
+        }
         if (resumen.role() != UserRole.TRAINEE) {
-            return true; // ver javadoc de la clase: falla-abierto deliberado para los otros 4 roles
+            return true; // ver javadoc de la clase: falla-abierto deliberado para MENTOR/ADMIN/ALCHEMIST
         }
 
         if (resumen.status() == UserStatus.SUSPENDED && !requerido.toleraCuentaSuspendida()) {
@@ -111,6 +131,32 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Misma evaluacion que para TRAINEE, pero el desenlace depende de
+     * {@code renaser.security.mentor-lead-enforcement} (SDD 002, DL-08). En modo sombra se
+     * registra <b>que endpoint y que permiso</b> habrian denegado — nunca quien es el usuario ni
+     * su rol: es el mismo criterio del cuerpo del 403, que no nombra el permiso que falto porque
+     * eso le sirve a quien esta sondeando el API. El id del actor no se loguea; con el metodo,
+     * la ruta y el permiso alcanza para corregir la matriz.
+     */
+    private boolean verificarMentorLead(HttpServletRequest request, HttpServletResponse response,
+                                         UserSummary resumen, Permission requerido) throws IOException {
+        boolean suspendidoSinTolerancia =
+                resumen.status() == UserStatus.SUSPENDED && !requerido.toleraCuentaSuspendida();
+        String motivo = suspendidoSinTolerancia ? "Cuenta suspendida"
+                : (resumen.role().can(requerido) ? null : "No autorizado");
+        if (motivo == null) {
+            return true;
+        }
+        if (!cumplimientoMentorLead) {
+            log.warn("MENTOR_LEAD modo sombra: se habria denegado {} {} por {} (permiso {})",
+                    request.getMethod(), request.getRequestURI(), motivo, requerido);
+            return true;
+        }
+        denegar(response, motivo);
+        return false;
     }
 
     private boolean esPublico(HandlerMethod handlerMethod) {

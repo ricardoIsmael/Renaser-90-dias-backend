@@ -5800,6 +5800,38 @@ dirección es parte del dato.
   entorno. La prueba `RedisSessionConfigTest` comprueba la serialización JSON y el round-trip del
   `SecurityContext`.
 
+## E-169 — El staff puede inscribirse al programa y despues no puede operarlo (2026-09-09) — **ABIERTO, sin corregir**
+
+- **Donde:** `rocks/.../RocaMaestraService:81`, `RocaSemanalService:182`, `RocaDiariaService:365`,
+  `DashboardRocasService:223`, `VerdugoService:119`; `habits/.../EspirituService:350`,
+  `RadarService:106`, `AudioterapiaService:116`; `academy/.../RecomendacionService:107`,
+  `ClaseDiariaService:85`.
+- **Sintoma:** un usuario con rol MENTOR, MENTOR_LEAD, ADMIN o ALCHEMIST activa su seguimiento
+  personal con `POST /api/v1/mentor/activate-tracking`, queda con fila en
+  `participantes_programa`, y al operar recibe 403 con estos mensajes literales:
+  `Solo un aprendiz opera sus propias rocas`, `Espiritu es exclusivo de aprendices`,
+  `El Codigo Renaser es exclusivo de aprendices`, `Audioterapia semanal es exclusiva de aprendices`,
+  `Solo un aprendiz registra sus propios eventos Verdugo`,
+  `Solo un aprendiz recibe recomendaciones de Academia Adaptativa`,
+  `La clase diaria no esta disponible para tu cuenta`.
+- **Causa real:** los diez guards comparan el **rol** contra `RolParticipante.TRAINEE` en vez de
+  preguntar si el actor **tiene una participacion activa**. La forma es siempre la misma:
+  `if (progreso.rol() != RolParticipante.TRAINEE) throw new NotAuthorizedException(...)`.
+- **Por que es una contradiccion y no una decision:** `Permission.TRACK_PROGRAM_AS_STAFF` existe
+  justamente para que el staff curse el programa
+  (`ParticipacionProgramaService:67` — *"El seguimiento personal opcional es solo para
+  MENTOR/MENTOR_LEAD/ADMIN/ALCHEMIST"*), y la especificacion del cliente §2.2 describe un
+  *Conmutador de Roles* entre el perfil operativo y el personal. La inscripcion esta construida;
+  el uso, no.
+- **Estado:** **no se corrige por cuenta propia.** Cambiar `rol != TRAINEE` por *"tiene
+  participacion activa"* en diez servicios es una regla de negocio que el dueno del proyecto
+  tiene que confirmar (regla 00: no inventar reglas de negocio). Detectado al ejecutar la tarea
+  TL-03 del SDD 002 del rol Lider de Mentores.
+- **Como evitar que vuelva a pasar:** cuando un permiso dice *"esto es para el rol X"* y un guard
+  dice *"esto es solo para el rol Y"*, uno de los dos miente. Un permiso nuevo en
+  `shared/domain/Permission` deberia venir siempre con la lista de guards que lo hacen cumplir
+  — el javadoc de `TRACK_PROGRAM_AS_STAFF` la tenia, y aun asi nadie contrasto la otra punta.
+
 ## E-168 — Un código correcto podía validarse dos veces en paralelo (2026-09-09) — **RESUELTO**
 
 - **Dónde:** `users/infrastructure/adapter/out/redis/AlmacenCodigoNumericoRedis`.

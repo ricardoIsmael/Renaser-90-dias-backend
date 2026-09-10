@@ -175,6 +175,16 @@ spring:
       - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
 
 renaser:
+  security:
+    # Paso 3 de DL-08 (SDD 002, rol Lider de Mentores). En false, MENTOR_LEAD pasa por
+    # PermissionEnforcementInterceptor en MODO SOMBRA: se evalua su matriz de permisos y se
+    # REGISTRA en el log lo que se habria denegado, pero la request sigue. En true, deniega de
+    # verdad. Arranca apagado a proposito: hasta el 2026-09-09 este rol no pasaba por ninguna
+    # verificacion, y encender el cumplimiento de golpe convierte en 403 cualquier endpoint que
+    # use y que falte en su matriz -- incluidos los de su propio programa de 90 dias. Se pone en
+    # true recien cuando el log del modo sombra este limpio en uso real; volver atras es cambiar
+    # esta linea, no desplegar codigo.
+    mentor-lead-enforcement: ${MENTOR_LEAD_ENFORCEMENT:false}
   notifications:
     web-push:
       # La publica va al bundle web; la privada queda solo en el backend. Ambas se generan una

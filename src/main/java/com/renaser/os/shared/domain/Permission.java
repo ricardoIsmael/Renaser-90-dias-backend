@@ -265,7 +265,74 @@ public enum Permission {
      * ({@code UserRole.canManageRoles()}). Es el unico permiso que CLAUDE.MD §5.3.2 ya
      * nombraba antes de esta enum.
      */
-    MANAGE_ROLES;
+    MANAGE_ROLES,
+
+    // ---------------------------------------------------------------------------------
+    // leadership — el cuerpo de mentores (SDD 002, rol MENTOR_LEAD)
+    // ---------------------------------------------------------------------------------
+
+    /**
+     * Ver el padron de mentores y la ficha de uno: identidad, nivel, estado operativo,
+     * cuantos aprendices lleva, que celula acompana y como viene atendiendo sus tickets.
+     *
+     * <p><b>De donde sale:</b> de la matriz de roles de la especificacion del cliente
+     * ({@code docs/spec/Especificacion_Requisitos_Renaser_OS.docx} §2.3, <i>"Supervision Global
+     * de Celulas y Mentores: visibilidad integral de todas las celulas activas, asignacion de
+     * mentores y volumen de aprendices por celula"</i>), no de una lista deseada.
+     *
+     * <p>No es {@link #MANAGE_STAFF}: eso es el panel de personal de ADMIN, con alta, baja,
+     * suspension y edicion de perfil. Este permiso es de <b>lectura</b> y solo sobre mentores.
+     *
+     * <p>Roles que lo satisfacen: MENTOR_LEAD, ADMIN, ALCHEMIST.
+     */
+    VIEW_MENTOR_CORPS,
+
+    /**
+     * Registrar una observacion sobre un mentor — reconocimiento, sugerencia o alerta — y,
+     * opcionalmente, enviarsela por el chat directo que ya existe.
+     *
+     * <p><b>De donde sale:</b> HU-05 de la especificacion del cliente, <i>"puedo ... intervenir
+     * directamente con feedback al mentor responsable"</i>.
+     *
+     * <p>La restriccion de que el destinatario sea un MENTOR es de <b>relacion</b>, no de rol
+     * del actor, y se queda en el caso de uso.
+     *
+     * <p>Roles que lo satisfacen: MENTOR_LEAD, ADMIN, ALCHEMIST.
+     */
+    FOLLOW_UP_MENTOR,
+
+    /**
+     * Leer el reporte del cuerpo de mentores de un periodo: carga, atencion de tickets,
+     * cumplimiento y observaciones registradas.
+     *
+     * <p><b>De donde sale:</b> §2.3, <i>"Metricas de Rendimiento y SLAs de Mentoria"</i>.
+     *
+     * <p>Se le da nombre propio y no se colapsa con {@link #VIEW_MENTOR_CORPS} porque el
+     * reporte agrega datos de varios modulos y es la superficie que mas facil se ensancha:
+     * conviene poder quitarselo a un rol sin quitarle el padron.
+     *
+     * <p>Roles que lo satisfacen: MENTOR_LEAD, ADMIN, ALCHEMIST.
+     */
+    VIEW_MENTOR_REPORT,
+
+    /**
+     * Mover el semaforo operativo de un mentor (VERDE/AMARILLO/ROJO de {@code perfiles_mentor}).
+     *
+     * <p><b>Se separa a proposito de {@link #MANAGE_MENTOR_PROFILE}</b>, que hasta ahora cubria
+     * nivel y estado operativo juntos con un solo guard
+     * ({@code MentorProfileService.requireRoleManager} -> <i>"Solo ADMIN/ALCHEMIST cambian nivel
+     * o estado operativo de un mentor"</i>). Decision del dueno del proyecto del 2026-09-09
+     * (SDD 002, DL-09): el semaforo es la herramienta de seguimiento del lider; el
+     * <b>nivel N0-N3 es una promocion</b> y sigue siendo de ADMIN/ALCHEMIST. La especificacion
+     * del cliente §2.5 reserva al ALCHEMIST el ascenso entre <i>roles de usuario</i>, que es
+     * otra cosa y no se toca.
+     *
+     * <p>Ojo con el nombre: este semaforo es el del <b>mentor</b>. El semaforo diario del
+     * <b>aprendiz</b> (Verde &ge;80 %, RF-24/RF-25) es otro concepto y todavia no existe.
+     *
+     * <p>Roles que lo satisfacen: MENTOR_LEAD, ADMIN, ALCHEMIST.
+     */
+    SET_MENTOR_OPERATIONAL_STATUS;
 
     /**
      * Si una cuenta SUSPENDIDA sigue teniendo este permiso. Por defecto, no — una cuenta
