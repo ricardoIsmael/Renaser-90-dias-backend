@@ -1,8 +1,13 @@
 package com.renaser.os.community.infrastructure.adapter.out.persistence.celula;
 
+import com.renaser.os.community.domain.model.acompanamiento.TipoCelula;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -35,4 +40,12 @@ public class CelulaJpaEntity {
     private Instant creadoEn;
 
     private Instant actualizadoEn;
+
+    /** V45. RECEPCION o REGULAR. */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    private TipoCelula tipo;
+
+    /** V45. Override de capacidad; NULL = usar la de la politica de la cohorte. */
+    private Integer capacidadMaxima;
 }

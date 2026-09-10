@@ -1,5 +1,7 @@
 package com.renaser.os.community.domain.model.celula;
 
+import com.renaser.os.community.domain.model.acompanamiento.CupoCelula;
+import com.renaser.os.community.domain.model.acompanamiento.TipoCelula;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.shared.domain.UserId;
 import lombok.AccessLevel;
@@ -36,6 +38,10 @@ public final class Celula {
     private Instant proximaSesionEn;
     private final Instant creadoEn;
     private Instant actualizadoEn;
+    /** RECEPCION o REGULAR (V45). Recepcion no tiene tope comercial y puede no tener mentor. */
+    private TipoCelula tipo;
+    /** Override de capacidad de esta celula. {@code null} = usar la de la politica de su cohorte. */
+    private Integer capacidadMaxima;
 
     /**
      * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
@@ -48,14 +54,41 @@ public final class Celula {
         Objects.requireNonNull(id, "id es obligatorio");
         requireNombreValido(nombre);
         Objects.requireNonNull(cohorteId, "cohorteId es obligatorio");
-        return new Celula(id, nombre, null, cohorteId, urlVideollamada, null, ahora, ahora);
+        return new Celula(id, nombre, null, cohorteId, urlVideollamada, null, ahora, ahora,
+                TipoCelula.REGULAR, null);
+    }
+
+    /**
+     * Solo para el adaptador de persistencia. Sobrecarga previa a V45: asume REGULAR sin
+     * override. Se conserva para no obligar a tocar los llamadores que no saben de tipos.
+     */
+    public static Celula rehydrate(CelulaId id, String nombre, UserId mentorId, CohorteId cohorteId,
+                                    String urlVideollamada, Instant proximaSesionEn, Instant creadoEn,
+                                    Instant actualizadoEn) {
+        return rehydrate(id, nombre, mentorId, cohorteId, urlVideollamada, proximaSesionEn, creadoEn,
+                actualizadoEn, TipoCelula.REGULAR, null);
     }
 
     /** Solo para el adaptador de persistencia. */
     public static Celula rehydrate(CelulaId id, String nombre, UserId mentorId, CohorteId cohorteId,
                                     String urlVideollamada, Instant proximaSesionEn, Instant creadoEn,
-                                    Instant actualizadoEn) {
-        return new Celula(id, nombre, mentorId, cohorteId, urlVideollamada, proximaSesionEn, creadoEn, actualizadoEn);
+                                    Instant actualizadoEn, TipoCelula tipo, Integer capacidadMaxima) {
+        return new Celula(id, nombre, mentorId, cohorteId, urlVideollamada, proximaSesionEn, creadoEn,
+                actualizadoEn, tipo != null ? tipo : TipoCelula.REGULAR, capacidadMaxima);
+    }
+
+    public boolean esRecepcion() {
+        return tipo == TipoCelula.RECEPCION;
+    }
+
+    /**
+     * El cupo efectivo. La recepcion no tiene tope (D-05); un grupo regular usa su override
+     * y, si no lo tiene, el de la politica de su cohorte.
+     */
+    public CupoCelula cupo(int capacidadDeLaPolitica) {
+        return esRecepcion()
+                ? CupoCelula.recepcion()
+                : CupoCelula.regular(capacidadMaxima != null ? capacidadMaxima : capacidadDeLaPolitica);
     }
 
     public void actualizarDatos(String nombre, String urlVideollamada, boolean tocaUrl, Instant ahora) {

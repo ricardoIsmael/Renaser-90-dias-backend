@@ -12,11 +12,13 @@ class CelulaPersistenceMapper {
     Celula toDomain(CelulaJpaEntity e) {
         return Celula.rehydrate(CelulaId.of(e.getId()), e.getNombre(),
                 e.getMentorId() != null ? UserId.of(e.getMentorId()) : null, CohorteId.of(e.getCohorteId()),
-                e.getUrlVideollamada(), e.getProximaSesionEn(), e.getCreadoEn(), e.getActualizadoEn());
+                e.getUrlVideollamada(), e.getProximaSesionEn(), e.getCreadoEn(), e.getActualizadoEn(),
+                e.getTipo(), e.getCapacidadMaxima());
     }
 
     CelulaJpaEntity toEntity(Celula c) {
         return new CelulaJpaEntity(c.id().value(), c.nombre(), c.mentorId() != null ? c.mentorId().value() : null,
-                c.cohorteId().value(), c.urlVideollamada(), c.proximaSesionEn(), c.creadoEn(), c.actualizadoEn());
+                c.cohorteId().value(), c.urlVideollamada(), c.proximaSesionEn(), c.creadoEn(), c.actualizadoEn(),
+                c.tipo(), c.capacidadMaxima());
     }
 }
