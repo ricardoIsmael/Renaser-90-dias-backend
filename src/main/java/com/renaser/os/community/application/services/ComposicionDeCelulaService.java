@@ -124,7 +124,12 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
         }
 
         CelulaId origen = grupoVigenteDe(delAprendiz, ahora).orElse(null);
-        requireCupoDisponible(destino, ahora);
+        /* Si ya esta EN el destino —entro por la bienvenida automatica, con otra clave— no se le
+           cobra plaza: el cupo cuenta ocupantes, y el ya es uno. Sin esta condicion, reasignar a
+           alguien dentro de un grupo lleno lo rechazaba por falta de cupo que el mismo ocupa. */
+        if (!destino.id().equals(origen)) {
+            requireCupoDisponible(destino, ahora);
+        }
 
         cerrarPertenenciaVigente(delAprendiz, ahora, MotivoAsignacion.ADMINISTRATIVO);
         abrir(destino.id(), command.traineeId(), FuncionAcompanamiento.APRENDIZ, ahora,
@@ -181,7 +186,7 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
            403 del seguimiento semanal como su baja del chat. Cambiar solo `celulas.mentor_id`
            dejaba a un exmentor leyendo a los alumnos del grupo que ya no acompaña. */
         cerrarMentorVigente(celula.id(), ahora);
-        cerrarMentorEnOtrosGrupos(command.mentorId(), ahora);
+        cerrarMentorEnOtrosGrupos(command.mentorId(), celula.id(), ahora);
 
         abrir(celula.id(), command.mentorId(), FuncionAcompanamiento.MENTOR, ahora,
                 MotivoAsignacion.ADMINISTRATIVO, command.actorId(), clave);
@@ -256,10 +261,19 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
                 });
     }
 
-    /** Un mentor lidera a lo sumo un grupo: si venia de otro, ese otro queda sin mentor. */
-    private void cerrarMentorEnOtrosGrupos(UserId mentorId, Instant ahora) {
+    /**
+     * Un mentor lidera a lo sumo un grupo: si venia de otro, ese otro queda sin mentor.
+     *
+     * <p>{@code recienCerrado} se excluye a proposito. {@link #cerrarMentorVigente} acaba de cerrar
+     * las filas de ESE grupo, pero la lectura por usuario devuelve instancias nuevas leidas otra
+     * vez, que todavia se ven abiertas: cerrarlas de nuevo revienta —{@code AsignacionCelula.cerrar}
+     * no tolera un segundo cierre, y con razon— y ademas dejaria el grupo recien asignado sin
+     * mentor en el mismo comando que se lo puso.
+     */
+    private void cerrarMentorEnOtrosGrupos(UserId mentorId, CelulaId recienCerrado, Instant ahora) {
         loadAsignacionesPort.porUsuario(mentorId).stream()
                 .filter(a -> a.funcion() == FuncionAcompanamiento.MENTOR)
+                .filter(a -> !a.celulaId().equals(recienCerrado))
                 .filter(a -> a.vigenteEn(ahora))
                 .forEach(otra -> {
                     otra.cerrar(ahora, MotivoAsignacion.ADMINISTRATIVO);

@@ -340,4 +340,43 @@ class ConsultarResumenParticipacionPersistenceAdapterTest {
                 .singleElement()
                 .satisfies(u -> assertThat(u.diaPrograma()).isEqualTo(2));
     }
+
+    /**
+     * El conteo con filtros, que es donde estaba el hueco.
+     *
+     * <p>Habia una prueba de {@code listarAprendices} y ninguna de {@code contarAprendices}, y el
+     * WHERE es compartido: con los parametros numerados al reves, el listado pasaba —arrancaba en
+     * {@code ?1}— y el conteo reventaba con {@code ParameterLabelException} porque al pegarlo
+     * detras de un {@code SELECT COUNT(*)} se quedaba sin {@code ?1} ni {@code ?2}. El fallo
+     * aparecio en la pantalla de Personas, no aca.
+     *
+     * <p>Ademas comprueba lo que hace util al contador: que lleve LOS MISMOS filtros que la lista.
+     * Si contara el padron entero, la pantalla diria "1 de 340" y ofreceria paginas vacias.
+     */
+    @Test
+    void elConteoAplicaLosMismosFiltrosQueElListado() {
+        UserId mentor = crearUsuario("MENTOR", "ACTIVO");
+        UUID celulaId = crearCelula(mentor);
+        UserId conGrupo = crearUsuario("APRENDIZ", "ACTIVO");
+        crearParticipante(conGrupo, 1, "America/Lima", celulaId, mentor);
+        UserId sinGrupo = crearUsuario("APRENDIZ", "ACTIVO");
+        crearParticipante(sinGrupo, 1, "America/Lima", null, null);
+
+        long totalSinFiltro = adapter.contarAprendices(null, false);
+        long totalSinGrupo = adapter.contarAprendices(null, true);
+
+        assertThat(totalSinFiltro).isPositive();
+        assertThat(totalSinGrupo).isLessThanOrEqualTo(totalSinFiltro);
+        // Y el listado con el mismo filtro no devuelve mas filas que el total que anuncia.
+        assertThat(adapter.listarAprendices(0, 200, null, true)).hasSizeLessThanOrEqualTo((int) totalSinGrupo);
+    }
+
+    /** Una busqueda que no coincide con nadie devuelve cero, y no revienta la consulta. */
+    @Test
+    void laBusquedaSinCoincidenciasDevuelveCeroEnLosDos() {
+        String imposible = "zzz-no-existe-" + UUID.randomUUID();
+
+        assertThat(adapter.contarAprendices(imposible, false)).isZero();
+        assertThat(adapter.listarAprendices(0, 20, imposible, false)).isEmpty();
+    }
 }

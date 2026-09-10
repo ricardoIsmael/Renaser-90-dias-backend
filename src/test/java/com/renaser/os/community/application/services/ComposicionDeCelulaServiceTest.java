@@ -212,6 +212,50 @@ class ComposicionDeCelulaServiceTest {
     }
 
     @Test
+    @DisplayName("asignar(aprendiz): reasignar dentro de un grupo LLENO no le cobra la plaza que ya ocupa")
+    void reasignarDentroDelMismoGrupoNoLoRechazaPorCupo() {
+        Celula destino = grupo();
+        int capacidad = PoliticaMentoria.porDefecto(destino.cohorteId()).capacidadCelula();
+        List<AsignacionCelula> composicion = new java.util.ArrayList<>();
+        // El ya esta adentro, con OTRA clave: entro por la bienvenida automatica, no por el panel.
+        AsignacionCelula suya = pertenenciaAbierta(destino.id(), aprendiz, FuncionAcompanamiento.APRENDIZ,
+                "recepcion-alta|" + aprendiz.value());
+        composicion.add(suya);
+        for (int i = 0; i < capacidad - 1; i++) {
+            composicion.add(pertenenciaAbierta(destino.id(), UserId.of(UUID.randomUUID()),
+                    FuncionAcompanamiento.APRENDIZ, "ocupado-" + i));
+        }
+        when(loadAsignacionesPort.porCelula(destino.id())).thenReturn(composicion);
+        when(loadAsignacionesPort.porUsuario(aprendiz)).thenReturn(List.of(suya));
+
+        service.asignar(new AsignarAprendizCelulaCommand(admin, destino.id(), aprendiz));
+
+        // Sin la condicion, esto reventaba con "no tiene cupo disponible" por su propia plaza.
+        assertThat(suya.vigente()).isFalse();
+        verify(saveAsignacionPort, org.mockito.Mockito.atLeastOnce()).save(any());
+    }
+
+    @Test
+    @DisplayName("asignar(mentor): el mentor que YA lidera este grupo no se cierra dos veces")
+    void reasignarAlMismoMentorNoCierraDosVecesSuFila() {
+        Celula destino = grupo();
+        AsignacionCelula suya = pertenenciaAbierta(destino.id(), mentor, FuncionAcompanamiento.MENTOR,
+                "mentor-viejo");
+        when(loadAsignacionesPort.porCelula(destino.id())).thenReturn(List.of(suya));
+        // `porUsuario` devuelve OTRA instancia de la misma fila, todavia abierta: es lo que pasa en
+        // produccion, porque el cierre anterior no se ha vaciado a la base.
+        when(loadAsignacionesPort.porUsuario(mentor)).thenReturn(List.of(
+                pertenenciaAbierta(destino.id(), mentor, FuncionAcompanamiento.MENTOR, "mentor-viejo")));
+        when(existePerfilMentorPort.existe(mentor)).thenReturn(true);
+        when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // Sin el filtro por grupo, el segundo cierre lanzaba y el comando dejaba el grupo sin mentor.
+        service.asignar(new AsignarMentorCelulaCommand(admin, destino.id(), mentor));
+
+        assertThat(destino.mentorId()).isEqualTo(mentor);
+    }
+
+    @Test
     @DisplayName("asignar(aprendiz): un MENTOR no puede -> 403 y no escribe nada")
     void altaComoMentorEsRechazada() {
         Celula destino = grupo();

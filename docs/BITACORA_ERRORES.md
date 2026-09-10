@@ -6037,3 +6037,37 @@ contra el cual medir la fase, y mostrar la fase 1 a quien no empezo seria peor q
 **Como evitarlo.** Antes de escribir `rol == TRAINEE`, preguntar que se esta comprobando de verdad.
 Casi siempre es participacion, no rol. La lista de roles que pueden hacer algo es una decision de
 producto; la de quien tiene el programa corriendo es un dato.
+
+## E-180 · El ingreso automatico a la bienvenida no metia a nadie, en silencio
+
+**Sintoma.** Ninguno visible. Quien se registraba quedaba sin grupo de bienvenida y el log decia
+`no hay grupo de recepcion vigente`, que es un mensaje legitimo — asi que parecia una tarea
+pendiente del administrador y no un fallo.
+
+**Causa.** `SpringDataCelulaRepository.recepcionesVigentesEn` era JPQL con un literal de enum:
+`WHERE c.tipo = com.renaser.os.community.domain.model.acompanamiento.TipoCelula.RECEPCION`. La
+columna esta mapeada `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` y, para ese literal, Hibernate genera
+`cast(? as tipocelula)` —el nombre simple del enum Java en minusculas—, mientras que el tipo real
+de Postgres es `renaser.tipo_celula`. Cada llamada moria con
+`PSQLException: type "tipocelula" does not exist`.
+
+**Por que no lo vio nadie.** El unico consumidor es `IngresoARecepcionService`, y ahi "no hay
+recepcion vigente" es un caso valido y esperado. La excepcion se propagaba dentro del listener
+asincrono de Modulith, se registraba y el resultado externo era indistinguible de "el administrador
+todavia no abrio la bienvenida". Ninguna prueba tocaba el metodo: el servicio se prueba con un
+doble del puerto, y el adaptador no tenia prueba propia.
+
+Se encontro leyendo el stack trace de un `./mvnw verify` que **termino en BUILD SUCCESS**.
+
+**Correccion.** Consulta nativa con el CAST escrito a mano contra `renaser.tipo_celula`, igual que
+la solucion de E-171. Se reviso el resto del codigo: era la unica JPQL con literal de enum sobre
+una columna NAMED_ENUM.
+
+**Como evitarlo.**
+1. **Un literal de enum en JPQL sobre una columna `NAMED_ENUM` no funciona en este proyecto.** Se
+   pasa el valor como parametro o se escribe la consulta nativa con su CAST.
+2. Un caso "no hay nada" que es legitimo **esconde** el fallo que devuelve lo mismo. Cuando la
+   ausencia es un resultado valido, el adaptador necesita su propia prueba contra la base: el
+   doble del puerto nunca ejecuta el SQL.
+3. BUILD SUCCESS con un stack trace de Postgres en el log no es verde. Vale la pena leer el log
+   completo aunque el build pase.
