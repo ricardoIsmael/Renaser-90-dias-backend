@@ -47,4 +47,20 @@ interface SpringDataCelulaRepository extends JpaRepository<CelulaJpaEntity, UUID
 
         LocalDate getFinDelPeriodo();
     }
+
+    /**
+     * El grupo de RECEPCION cuyo periodo contiene ese dia.
+     *
+     * <p>Orden por {@code periodoInicio DESC}: si hay varios abiertos a la vez gana el que empezo
+     * mas tarde, que es el que le deja mas dias de bienvenida a quien entra hoy. Con el criterio
+     * contrario, alguien que se registra el ultimo dia de un grupo viejo se queda sin recepcion.
+     */
+    @Query("""
+            SELECT c FROM CelulaJpaEntity c
+            WHERE c.tipo = com.renaser.os.community.domain.model.acompanamiento.TipoCelula.RECEPCION
+              AND c.periodoInicio IS NOT NULL
+              AND :dia BETWEEN c.periodoInicio AND c.periodoFin
+            ORDER BY c.periodoInicio DESC
+            """)
+    List<CelulaJpaEntity> recepcionesVigentesEn(@Param("dia") LocalDate dia);
 }
