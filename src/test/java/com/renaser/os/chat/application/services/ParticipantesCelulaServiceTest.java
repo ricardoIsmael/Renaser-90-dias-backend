@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -100,7 +101,22 @@ class ParticipantesCelulaServiceTest {
             }
         };
 
-        ListarUsuariosDeConversacionPort listar = conversacionId -> List.copyOf(enLaConversacion);
+        /* Clase anonima y ya no un lambda: el puerto crecio un segundo metodo
+           (`otroParticipanteDeDirectas`) y dejo de ser funcional. Esta prueba no usa ese metodo,
+           asi que devuelve vacio en vez de lanzar: lo que mide es la sincronizacion de
+           participantes al rotar, y un `UnsupportedOperationException` acá solo dejaria una mina
+           para el dia que alguien amplie el escenario. */
+        ListarUsuariosDeConversacionPort listar = new ListarUsuariosDeConversacionPort() {
+            @Override
+            public List<UserId> usuariosDe(ConversacionId conversacionId) {
+                return List.copyOf(enLaConversacion);
+            }
+
+            @Override
+            public Map<ConversacionId, UserId> otroParticipanteDeDirectas(List<ConversacionId> ids, UserId actorId) {
+                return Map.of();
+            }
+        };
 
         AgregarParticipantePort agregar = participante -> {
             enLaConversacion.add(participante.usuarioId());

@@ -19,6 +19,25 @@ interface SpringDataParticipanteConversacionRepository
     List<UUID> usuarioIdsDeConversacion(@Param("conversacionId") UUID conversacionId);
 
     /**
+     * Los participantes que NO son el actor, en las conversaciones indicadas. La proyeccion trae
+     * el par (conversacion, usuario) porque quien llama necesita saber a que fila pertenece cada
+     * nombre; devolver solo los usuarios obligaria a una segunda consulta para reconstruirlo.
+     */
+    @Query("""
+            SELECT p.conversacionId AS conversacionId, p.usuarioId AS usuarioId
+            FROM ParticipanteConversacionJpaEntity p
+            WHERE p.conversacionId IN :conversacionIds AND p.usuarioId <> :actorId
+            """)
+    List<OtroParticipanteProjection> otrosParticipantes(@Param("conversacionIds") List<UUID> conversacionIds,
+                                                         @Param("actorId") UUID actorId);
+
+    interface OtroParticipanteProjection {
+        UUID getConversacionId();
+
+        UUID getUsuarioId();
+    }
+
+    /**
      * Conteo de no-leidos EN UNA SOLA consulta por lote (nunca N+1 — CLAUDE.MD del
      * encargo): un mensaje cuenta como no-leido si es mas reciente que
      * {@code ultimo_leido_en} del participante, o si el participante nunca marco lectura.

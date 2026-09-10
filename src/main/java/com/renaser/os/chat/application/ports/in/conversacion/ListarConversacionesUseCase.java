@@ -13,6 +13,13 @@ public interface ListarConversacionesUseCase {
     List<ConversacionResumen> listar(UserId actorId);
 
     /** {@code ultimoMensaje} es null si la conversacion todavia no tiene ningun mensaje. */
-    record ConversacionResumen(Conversacion conversacion, Mensaje ultimoMensaje, long noLeidos) {
+    /**
+     * @param otroParticipante con quien habla el actor cuando la conversacion es DIRECTA; {@code
+     *                         null} en grupos, que ya tienen nombre propio. Sin este dato el
+     *                         cliente solo podia nombrar la conversacion si el ultimo mensaje era
+     *                         del otro, y una bandeja llena de "Conversacion directa" no se usa.
+     */
+    record ConversacionResumen(Conversacion conversacion, Mensaje ultimoMensaje, long noLeidos,
+                                UserId otroParticipante) {
     }
 }

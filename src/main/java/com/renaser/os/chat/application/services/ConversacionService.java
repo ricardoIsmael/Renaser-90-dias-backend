@@ -13,6 +13,7 @@ import com.renaser.os.chat.application.ports.out.participante.AgregarParticipant
 import com.renaser.os.chat.application.ports.out.participante.ContarNoLeidosPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigentePort;
+import com.renaser.os.chat.application.ports.out.participante.ListarUsuariosDeConversacionPort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
@@ -53,6 +54,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     private final MarcarLeidoPort marcarLeidoPort;
     private final ContarNoLeidosPort contarNoLeidosPort;
     private final LoadMensajePort loadMensajePort;
+    private final ListarUsuariosDeConversacionPort listarUsuariosPort;
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
     private final IdGenerator idGenerator;
@@ -69,6 +71,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
                                 EsParticipantePort esParticipantePort,
                                 PertenenciaVigentePort pertenenciaVigentePort, MarcarLeidoPort marcarLeidoPort,
                                 ContarNoLeidosPort contarNoLeidosPort, LoadMensajePort loadMensajePort,
+                                ListarUsuariosDeConversacionPort listarUsuariosPort,
                                 UserSummaryFinder userSummaryFinder, Clock clock, IdGenerator idGenerator,
                                 PlatformTransactionManager transactionManager) {
         this.loadConversacionPort = loadConversacionPort;
@@ -79,6 +82,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         this.marcarLeidoPort = marcarLeidoPort;
         this.contarNoLeidosPort = contarNoLeidosPort;
         this.loadMensajePort = loadMensajePort;
+        this.listarUsuariosPort = listarUsuariosPort;
         this.userSummaryFinder = userSummaryFinder;
         this.clock = clock;
         this.idGenerator = idGenerator;
@@ -142,8 +146,12 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         List<ConversacionId> ids = conversaciones.stream().map(Conversacion::id).toList();
         Map<ConversacionId, Mensaje> ultimos = loadMensajePort.ultimosPorConversacion(ids);
         Map<ConversacionId, Long> noLeidos = contarNoLeidosPort.contarNoLeidos(actorId, ids);
+        /* Con quien habla en cada DIRECTA, en UNA consulta. Se pide para todas y se usa solo en
+           las DIRECTAS: filtrar antes obligaria a recorrer dos veces para ahorrar nada. */
+        Map<ConversacionId, UserId> otros = listarUsuariosPort.otroParticipanteDeDirectas(ids, actorId);
         return conversaciones.stream()
-                .map(c -> new ConversacionResumen(c, ultimos.get(c.id()), noLeidos.getOrDefault(c.id(), 0L)))
+                .map(c -> new ConversacionResumen(c, ultimos.get(c.id()), noLeidos.getOrDefault(c.id(), 0L),
+                        c.tipo() == TipoConversacion.DIRECTA ? otros.get(c.id()) : null))
                 .sorted(Comparator.comparing(ConversacionService::actividadDe).reversed())
                 .toList();
     }
