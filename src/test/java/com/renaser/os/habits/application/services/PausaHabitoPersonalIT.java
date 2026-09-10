@@ -230,4 +230,121 @@ class PausaHabitoPersonalIT {
             return FixedClock.at(AHORA);
         }
     }
+
+    /**
+     * Pausar retira la obligación de HOY que ya estaba generada — contra Postgres de verdad.
+     *
+     * <p>El agujero que reportó el dueño del proyecto: apagaba un hábito a media mañana y lo
+     * seguía viendo en su día y en evidencias, porque el track ya lo había creado el barrido de
+     * las 05:02. A la noche el barrido lo marcaba fallado: el botón decía "solo hoy" y hoy
+     * contaba igual.
+     *
+     * <p>Hace falta la base y no alcanza un mock: lo que se comprueba es que el DELETE con filtro
+     * de estado en JPQL borre la fila correcta y solo esa.
+     */
+    @Test
+    @DisplayName("Pausar borra el track PENDIENTE de hoy que ya estaba generado (contra Postgres)")
+    void pausarRetiraElTrackPendienteDeHoy() {
+        elegirUseCase.elegir(new ElegirHabitoCommand(participanteId, habitoPersonal.id(), null));
+        assertThat(generarPara(DIA_DENTRO_DE_LA_PAUSA))
+                .as("precondicion: el track del dia existe antes de pausar")
+                .contains(habitoPersonal.id().value());
+        assertThat(tracksEn(DIA_DENTRO_DE_LA_PAUSA)).isEqualTo(1L);
+
+        cambiarEstadoUseCase.cambiarEstado(
+                new CambiarEstadoHabitoCommand(participanteId, habitoPersonal.id(), false, DIA_DENTRO_DE_LA_PAUSA));
+
+        assertThat(tracksEn(DIA_DENTRO_DE_LA_PAUSA))
+                .as("apagado hoy, hoy ya no tiene obligacion: ni en el dia ni en evidencias")
+                .isZero();
+    }
+
+    /**
+     * Lo que YA hiciste no se borra al pausar.
+     *
+     * <p>Sin esta prueba, "pausar limpia el día" se podría satisfacer borrando todo, y entonces
+     * apagar un hábito a la noche te quitaría el cumplimiento que ganaste por la mañana. La regla
+     * es retirar lo que sigue ABIERTO, no reescribir lo que pasó — la misma que impide limpiar un
+     * fallo pausando después de fallar.
+     */
+    @Test
+    @DisplayName("Pausar NO borra lo ya COMPLETADO: lo que hiciste es tuyo")
+    void pausarNoBorraLoYaCumplido() {
+        elegirUseCase.elegir(new ElegirHabitoCommand(participanteId, habitoPersonal.id(), null));
+        generarPara(DIA_DENTRO_DE_LA_PAUSA);
+        jdbcTemplate.update("""
+                UPDATE renaser.registros_habito SET estado = CAST('COMPLETADO' AS renaser.estado_registro)
+                WHERE participante_id = ? AND habito_id = ? AND fecha_ejecucion = ?
+                """, participanteId.value(), habitoPersonal.id().value(), DIA_DENTRO_DE_LA_PAUSA);
+
+        cambiarEstadoUseCase.cambiarEstado(
+                new CambiarEstadoHabitoCommand(participanteId, habitoPersonal.id(), false, DIA_DENTRO_DE_LA_PAUSA));
+
+        assertThat(tracksEn(DIA_DENTRO_DE_LA_PAUSA))
+                .as("el cumplimiento ganado se queda")
+                .isEqualTo(1L);
+    }
+
+    /**
+     * Pausar no toca la planificación. Es la otra mitad de la pregunta del dueño del proyecto:
+     * "planifico la semana, hoy lo apago, ¿mañana vuelve con lo que configuré?".
+     *
+     * <p>Sí: la hora, el límite y el recordatorio viven en `preferencias_horario`, y la pausa solo
+     * escribe en `desbloqueos_habito` y borra obligaciones abiertas. Apagar un hábito es decir
+     * "hoy no", no "olvida cómo lo tenía".
+     */
+    @Test
+    @DisplayName("Pausar conserva la planificacion: manana vuelve con la hora que configuraste")
+    void pausarConservaLaPlanificacionSemanal() {
+        elegirUseCase.elegir(new ElegirHabitoCommand(participanteId, habitoPersonal.id(), null));
+        jdbcTemplate.update("""
+                INSERT INTO renaser.preferencias_horario
+                    (participante_id, habito_id, hora_disparo, hora_limite, recordatorio_activo, minutos_recordatorio)
+                VALUES (?, ?, TIME '07:15', TIME '21:45', true, 30)
+                """, participanteId.value(), habitoPersonal.id().value());
+
+        cambiarEstadoUseCase.cambiarEstado(
+                new CambiarEstadoHabitoCommand(participanteId, habitoPersonal.id(), false, DIA_DENTRO_DE_LA_PAUSA));
+
+        /* Se leen columna por columna y no con un `queryForMap`: el mapa devuelve los tipos
+           crudos del driver -- `smallint` llega como Integer, no como Short -- y una prueba que
+           falla por el tipo del envoltorio no dice nada sobre lo que quiere demostrar. */
+        assertThat(jdbcTemplate.queryForObject(SQL_PREFERENCIA, String.class, "hora_disparo",
+                participanteId.value(), habitoPersonal.id().value()))
+                .as("la hora que configuraste sobrevive a la pausa")
+                .isEqualTo("07:15:00");
+        assertThat(jdbcTemplate.queryForObject(SQL_PREFERENCIA, String.class, "hora_limite",
+                participanteId.value(), habitoPersonal.id().value()))
+                .isEqualTo("21:45:00");
+        assertThat(jdbcTemplate.queryForObject(SQL_PREFERENCIA, Integer.class, "minutos_recordatorio",
+                participanteId.value(), habitoPersonal.id().value()))
+                .as("y el recordatorio tambien")
+                .isEqualTo(30);
+
+        // Y el dia siguiente al plazo vuelve solo, con esa misma configuracion detras.
+        assertThat(generarPara(DIA_SIGUIENTE_A_LA_PAUSA)).contains(habitoPersonal.id().value());
+    }
+
+    /**
+     * Una sola consulta parametrizada por NOMBRE de columna. El nombre no viaja como parametro
+     * JDBC —no se puede— sino resuelto con un CASE, para no armar SQL concatenando texto ni
+     * repetir tres consultas casi iguales.
+     */
+    private static final String SQL_PREFERENCIA = """
+            SELECT CASE ?
+                     WHEN 'hora_disparo'         THEN hora_disparo::text
+                     WHEN 'hora_limite'          THEN hora_limite::text
+                     WHEN 'minutos_recordatorio' THEN minutos_recordatorio::text
+                   END
+            FROM renaser.preferencias_horario
+            WHERE participante_id = ? AND habito_id = ?
+            """;
+
+    private long tracksEn(LocalDate fecha) {
+        Long total = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM renaser.registros_habito
+                WHERE participante_id = ? AND habito_id = ? AND fecha_ejecucion = ?
+                """, Long.class, participanteId.value(), habitoPersonal.id().value(), fecha);
+        return total == null ? 0 : total;
+    }
 }

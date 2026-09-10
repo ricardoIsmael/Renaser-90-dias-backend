@@ -6,6 +6,7 @@ import com.renaser.os.habits.application.ports.in.desbloqueo.ElegirHabitoUseCase
 import com.renaser.os.habits.application.ports.out.desbloqueo.LoadDesbloqueoHabitoPort;
 import com.renaser.os.habits.application.ports.out.desbloqueo.SaveDesbloqueoHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
+import com.renaser.os.habits.application.ports.out.registro.RetirarObligacionesPausadasPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
@@ -20,6 +21,7 @@ import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -37,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /** NOTA: pruebas escritas en esta pasada, no verificadas con {@code ./mvnw} (regla del encargo). */
@@ -53,12 +56,15 @@ class DesbloqueoHabitoServiceTest {
     private SaveDesbloqueoHabitoPort savePort;
     @Mock
     private LoadHabitoPort loadHabitoPort;
+    @Mock
+    private RetirarObligacionesPausadasPort retirarPort;
 
     private DesbloqueoHabitoService service;
 
     @BeforeEach
     void setUp() {
-        service = new DesbloqueoHabitoService(progresoPort, loadPort, savePort, loadHabitoPort, CLOCK);
+        service = new DesbloqueoHabitoService(progresoPort, loadPort, savePort, loadHabitoPort, retirarPort,
+                CLOCK);
     }
 
     private static Habito habitoDeSistemaActivo() {
@@ -343,5 +349,60 @@ class DesbloqueoHabitoServiceTest {
                 .isInstanceOf(ConstraintViolationException.class);
         assertThatThrownBy(() -> new ElegirHabitoCommand(actor, habitoId, 0))
                 .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    /**
+     * Pausar retira la obligacion de HOY que ya estaba generada.
+     *
+     * <p>Este es el agujero que reporto el dueno del proyecto: apagaba un habito a media manana y
+     * lo seguia viendo en su dia y en evidencias, porque el track ya lo habia creado el barrido de
+     * las 05:02. A la noche el barrido lo marcaba fallado. El boton decia "solo hoy" y hoy contaba
+     * igual.
+     *
+     * <p>Se comprueba tambien la ZONA: el participante esta en Lima (UTC-5) y el reloj marca las
+     * 02:00Z, o sea que alli todavia es el dia ANTERIOR. Con `LocalDate.now()` del servidor el
+     * borrado se correria una casilla y retiraria el dia equivocado -- que es E-91 entrando por la
+     * puerta de al lado.
+     */
+    @Test
+    @DisplayName("Pausar retira la obligacion de hoy que ya estaba generada, en la zona del participante")
+    void pausarRetiraLaObligacionDeHoyQueYaEstabaGenerada() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito personal = habitoPersonalDe(actor);
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "America/Lima", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.byId(personal.id())).thenReturn(Optional.of(personal));
+        DesbloqueoHabito fila = DesbloqueoHabito.rehydrate(actor, personal.id(), 10, CLOCK.now(), CLOCK.now(),
+                CLOCK.now());
+        when(loadPort.deParticipanteYHabito(actor, personal.id())).thenReturn(Optional.of(fila));
+        when(savePort.save(fila)).thenReturn(fila);
+        LocalDate soloHoy = CLOCK.now().atZone(ZoneId.of("America/Lima")).toLocalDate();
+
+        service.cambiarEstado(new CambiarEstadoHabitoCommand(actor, personal.id(), false, soloHoy));
+
+        verify(retirarPort).retirarPendientes(actor, personal.id(), soloHoy, soloHoy);
+    }
+
+    /**
+     * Reactivar NO retira nada. Es el reverso, y sin el la prueba de arriba pasaria igual con un
+     * servicio que llamara al puerto siempre: lo que se afirma es que la retirada esta atada a
+     * pausar, no que exista una llamada en algun sitio.
+     */
+    @Test
+    @DisplayName("Reactivar no retira ninguna obligacion: el habito vuelve, no se borra nada")
+    void reactivarNoRetiraNada() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito personal = habitoPersonalDe(actor);
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "America/Lima", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.byId(personal.id())).thenReturn(Optional.of(personal));
+        DesbloqueoHabito fila = DesbloqueoHabito.rehydrate(actor, personal.id(), 10, CLOCK.now(), CLOCK.now(),
+                CLOCK.now(), CLOCK.now(), LocalDate.of(2026, 8, 30));
+        when(loadPort.deParticipanteYHabito(actor, personal.id())).thenReturn(Optional.of(fila));
+        when(savePort.save(fila)).thenReturn(fila);
+
+        service.cambiarEstado(new CambiarEstadoHabitoCommand(actor, personal.id(), true, null));
+
+        verifyNoInteractions(retirarPort);
     }
 }

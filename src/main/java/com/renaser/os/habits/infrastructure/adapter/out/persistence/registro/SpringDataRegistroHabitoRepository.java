@@ -1,6 +1,7 @@
 package com.renaser.os.habits.infrastructure.adapter.out.persistence.registro;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -96,4 +97,30 @@ interface SpringDataRegistroHabitoRepository extends JpaRepository<RegistroHabit
     List<Object[]> obligacionesEntre(@Param("participantes") Collection<UUID> participantes,
                                       @Param("desde") LocalDate desde,
                                       @Param("hasta") LocalDate hasta);
+
+    /**
+     * Borra las obligaciones PENDIENTE de un habito en un rango. `hasta` nulo = sin tope.
+     *
+     * <p><b>Nativa y no JPQL.</b> `estado` es un enum de Postgres mapeado con
+     * {@code NAMED_ENUM}, y comparar el literal en JPQL hace que Hibernate genere un cast a
+     * `estadoregistrojpa`, un tipo que no existe en la base. El CAST explicito al enum real es lo
+     * que ya usa el resto del repositorio.
+     *
+     * <p>El filtro de estado va en la CONSULTA y no en Java: traer las filas para descartarlas
+     * despues seria cargar el dia entero de alguien para borrar una. Y solo PENDIENTE, nunca
+     * COMPLETADO ni FALLIDO -- ver el javadoc del puerto.
+     */
+    @Modifying
+    @Query(value = """
+            DELETE FROM renaser.registros_habito
+            WHERE participante_id = :participanteId
+              AND habito_id = :habitoId
+              AND estado = CAST('PENDIENTE' AS renaser.estado_registro)
+              AND fecha_ejecucion >= :desde
+              AND (CAST(:hasta AS date) IS NULL OR fecha_ejecucion <= CAST(:hasta AS date))
+            """, nativeQuery = true)
+    int borrarPendientesEnRango(@Param("participanteId") UUID participanteId,
+                                 @Param("habitoId") UUID habitoId,
+                                 @Param("desde") LocalDate desde,
+                                 @Param("hasta") LocalDate hasta);
 }
