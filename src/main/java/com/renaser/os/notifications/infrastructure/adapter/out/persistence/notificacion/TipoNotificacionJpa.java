@@ -17,5 +17,6 @@ public enum TipoNotificacionJpa {
     SANTUARIO_ROTO,
     HABITO_PERSONAL_MODIFICADO,
     /** V46. Espejo del valor homonimo del enum de Postgres. */
-    ACOMPANAMIENTO_ALUMNO
+    ACOMPANAMIENTO_ALUMNO,
+    GRUPO_POR_VENCER
 }

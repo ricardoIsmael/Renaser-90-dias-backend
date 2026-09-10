@@ -21,5 +21,8 @@ public enum TipoNotificacion {
     SANTUARIO_ROTO,
     HABITO_PERSONAL_MODIFICADO,
     /** V46: el mentor debería mirar a un aprendiz suyo (ausencia o evidencia vencida). */
-    ACOMPANAMIENTO_ALUMNO
+    ACOMPANAMIENTO_ALUMNO,
+
+    /** A un grupo programado se le acaba el periodo y el administrador tiene que reprogramarlo. */
+    GRUPO_POR_VENCER
 }
