@@ -6,6 +6,7 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -22,7 +23,19 @@ import java.util.List;
  * saltea. El lock solo evita el trabajo duplicado entre instancias; la corrección no depende
  * de él.
  */
+/**
+ * <b>APAGADO desde 2026-09-11.</b> El cliente cambio el modelo: los grupos ya no rotan solos,
+ * los arma el administrador con un periodo (ver `V48` y el CRUD de `/api/v1/admin/cells`). Si
+ * este job siguiera corriendo moveria a gente que el admin coloco a mano, que es exactamente lo
+ * que se dejo de querer.
+ *
+ * <p>Se apaga por CONFIGURACION y no se borra el codigo. Es una decision, no una limpieza
+ * pendiente: la logica de rotacion esta probada y volver a pedirla es plausible -- ya cambiaron
+ * de idea una vez. Encenderlo otra vez es poner `renaser.scheduling.rotacion-mentores.enabled`
+ * en true, no rehacerlo.
+ */
 @Component
+@ConditionalOnProperty(name = "renaser.scheduling.rotacion-mentores.enabled", havingValue = "true", matchIfMissing = false)
 class RotarMentoresScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(RotarMentoresScheduler.class);
