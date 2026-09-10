@@ -19,15 +19,21 @@ public record ContextoMentorResponse(PersonalProgram personalProgram, boolean ca
                 new PersonalProgram(contexto.participaEnPrograma(), contexto.diaDePrograma()),
                 contexto.puedeAcompanar(),
                 new Capabilities(contexto.capacidades().programaObligatorio(),
-                        contexto.capacidades().puedeActivarPrograma(), contexto.capacidades().acompanar()),
+                        contexto.capacidades().puedeActivarPrograma(), contexto.capacidades().acompanar(),
+                        contexto.capacidades().administrar()),
                 contexto.asignaciones().stream().map(Assignment::from).toList());
     }
 
     /**
      * @param programRequired el cliente NO puede dejar pasar sin onboarding. Falso para el
      *                        staff: acompañar no exige cursar (D-07).
+     * @param canAdminister   si la app muestra la entrada a Administracion (SDD 003, ARF-01). Es
+     *                        una capacidad de INTERFAZ derivada de los guards reales, no un
+     *                        permiso nuevo ni la matriz de {@code UserRole.can}. Quien autoriza
+     *                        sigue siendo cada endpoint.
      */
-    public record Capabilities(boolean programRequired, boolean canStartProgram, boolean canAccompany) {
+    public record Capabilities(boolean programRequired, boolean canStartProgram, boolean canAccompany,
+                                boolean canAdminister) {
     }
 
     /** {@code day} es null cuando no participa: no se manda 0, que significaría otra cosa. */

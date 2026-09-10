@@ -70,9 +70,16 @@ class ContratoServiceTest {
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
     }
 
+    /** Por defecto el programa esta ACTIVADO: es el caso normal de un aprendiz y de un staff que
+     * decidio cursar. El caso sin activar se pide explicito con {@link #progresoSinActivar}. */
     private void progreso(int diaPrograma, RolParticipante rol, boolean suspendido) {
         when(progresoPort.deParticipante(participanteId))
-                .thenReturn(Optional.of(new ProgresoParticipante(diaPrograma, rol, suspendido)));
+                .thenReturn(Optional.of(new ProgresoParticipante(diaPrograma, rol, suspendido, true)));
+    }
+
+    private void progresoSinActivar(int diaPrograma, RolParticipante rol) {
+        when(progresoPort.deParticipante(participanteId))
+                .thenReturn(Optional.of(new ProgresoParticipante(diaPrograma, rol, false, false)));
     }
 
     // ── firmar ──────────────────────────────────────────────────────────────
@@ -106,9 +113,23 @@ class ContratoServiceTest {
     }
 
     @Test
-    @DisplayName("firmar(): rol sin permiso (MENTOR) -> NotAuthorizedException, nunca guarda")
-    void firmarConRolSinPermiso() {
-        progreso(20, RolParticipante.MENTOR, false);
+    @DisplayName("firmar(): ADMIN que activo su programa -> firma su propio contrato (SDD 003, ARF-16)")
+    void firmarComoAdminQueCursa() {
+        progreso(20, RolParticipante.ADMIN, false);
+        when(loadContratoPort.porParticipanteYFase(participanteId, FasePrograma.FASE_2_DESARROLLO))
+                .thenReturn(Optional.empty());
+        when(saveContratoPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ContratoFase resultado = service.firmar(new FirmarContratoCommand(participanteId));
+
+        assertThat(resultado.fase()).isEqualTo(FasePrograma.FASE_2_DESARROLLO);
+        verify(saveContratoPort).save(any());
+    }
+
+    @Test
+    @DisplayName("firmar(): staff SIN programa activado -> NotAuthorizedException, nunca guarda")
+    void firmarComoStaffSinProgramaActivado() {
+        progresoSinActivar(20, RolParticipante.ADMIN);
 
         assertThatThrownBy(() -> service.firmar(new FirmarContratoCommand(participanteId)))
                 .isInstanceOf(NotAuthorizedException.class);
@@ -182,9 +203,9 @@ class ContratoServiceTest {
     }
 
     @Test
-    @DisplayName("consultarPendiente(): rol sin permiso (ADMIN) -> NotAuthorizedException")
-    void consultarPendienteConRolSinPermiso() {
-        progreso(20, RolParticipante.ADMIN, false);
+    @DisplayName("consultarPendiente(): ALQUIMISTA sin programa activado -> NotAuthorizedException")
+    void consultarPendienteStaffSinProgramaActivado() {
+        progresoSinActivar(20, RolParticipante.ALCHEMIST);
 
         assertThatThrownBy(() -> service.consultarPendiente(participanteId))
                 .isInstanceOf(NotAuthorizedException.class);
@@ -209,9 +230,9 @@ class ContratoServiceTest {
     }
 
     @Test
-    @DisplayName("consultarDeParticipante(): rol sin permiso -> NotAuthorizedException")
-    void consultarDeParticipanteConRolSinPermiso() {
-        progreso(70, RolParticipante.ALCHEMIST, false);
+    @DisplayName("consultarDeParticipante(): staff sin programa activado -> NotAuthorizedException")
+    void consultarDeParticipanteStaffSinProgramaActivado() {
+        progresoSinActivar(70, RolParticipante.ALCHEMIST);
 
         assertThatThrownBy(() -> service.consultarDeParticipante(participanteId))
                 .isInstanceOf(NotAuthorizedException.class);
@@ -243,9 +264,9 @@ class ContratoServiceTest {
     }
 
     @Test
-    @DisplayName("obtenerUrlSubida(): rol sin permiso -> NotAuthorizedException")
-    void obtenerUrlSubidaConRolSinPermiso() {
-        progreso(20, RolParticipante.MENTOR, false);
+    @DisplayName("obtenerUrlSubida(): staff sin programa activado -> NotAuthorizedException")
+    void obtenerUrlSubidaStaffSinProgramaActivado() {
+        progresoSinActivar(20, RolParticipante.MENTOR);
 
         assertThatThrownBy(() -> service.obtenerUrlSubida(new ObtenerUrlFirmaContratoCommand(participanteId)))
                 .isInstanceOf(NotAuthorizedException.class);

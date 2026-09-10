@@ -48,8 +48,12 @@ public class TraineeAdminController {
     @GetMapping
     public TraineePageResponse listar(@ActorAutenticado UserId actor,
                                        @RequestParam(defaultValue = "0") int page,
-                                       @RequestParam(defaultValue = "20") int size) {
-        var pagina = listTraineesUseCase.listar(new ListTraineesCommand(actor, page, size));
+                                       @RequestParam(defaultValue = "20") int size,
+                                       @RequestParam(required = false) String q,
+                                       @RequestParam(defaultValue = "false") boolean withoutGroup) {
+        // q y withoutGroup se resuelven en la BASE, no sobre la pagina: buscar sobre los veinte
+        // ya descargados esconde al que esta mas atras (SDD 003, ARF-02 / V28).
+        var pagina = listTraineesUseCase.listar(new ListTraineesCommand(actor, page, size, q, withoutGroup));
         return TraineePageResponse.from(pagina);
     }
 

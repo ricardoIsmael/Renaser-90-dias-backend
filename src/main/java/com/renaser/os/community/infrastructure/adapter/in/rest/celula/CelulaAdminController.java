@@ -132,7 +132,7 @@ public class CelulaAdminController {
                                                          @RequestBody @Valid CrearCelulaRequest request) {
         var detalle = crearUseCase.crear(new CrearCelulaCommand(actorId, request.name(),
                 CohorteId.of(request.cohortId()), request.videoCallUrl(), request.periodStart(),
-                request.periodEnd()));
+                request.periodEnd(), request.tipo(), request.capacity()));
         return ResponseEntity.status(HttpStatus.CREATED).body(CelulaDetalleResponse.from(detalle));
     }
 
@@ -142,7 +142,8 @@ public class CelulaAdminController {
                                              @RequestBody ActualizarCelulaRequest request) {
         return CelulaDetalleResponse.from(actualizarUseCase.actualizar(new ActualizarCelulaCommand(actorId,
                 CelulaId.of(id), request.name(), request.videoCallUrl(), true, request.periodStartAplicado(),
-                request.periodEndAplicado(), request.tocaPeriodo())));
+                request.periodEndAplicado(), request.tocaPeriodo(), request.capacidadAplicada(),
+                request.tocaCapacidad())));
     }
 
     @RequiresPermission(Permission.MANAGE_CELLS)
@@ -170,14 +171,16 @@ public class CelulaAdminController {
                 CelulaId.of(id), UserId.of(request.traineeId()))));
     }
 
-    /** #25: contraparte de {@link #asignarAprendiz}. {@code id} de celula no hace falta
-     * para la escritura (la columna se limpia por `traineeId`), se mantiene en la ruta
-     * por consistencia con el resto de este controller (todo cuelga de `/cells/{id}`). */
+    /** #25: contraparte de {@link #asignarAprendiz}. El {@code id} del grupo ya NO es decorativo:
+     * el caso de uso comprueba que el aprendiz pertenezca a ESE grupo antes de darle de baja
+     * (SDD 003, ARF-06) — pedir la baja desde el grupo equivocado devuelve 422 en vez de borrarle
+     * la pertenencia real. */
     @RequiresPermission(Permission.MANAGE_CELLS)
     @DeleteMapping("/{id}/trainees/{traineeId}")
     public ResponseEntity<Void> quitarAprendiz(@ActorAutenticado UserId actorId,
                                                 @PathVariable UUID id, @PathVariable UUID traineeId) {
-        quitarAprendizUseCase.quitar(new QuitarAprendizCelulaCommand(actorId, UserId.of(traineeId)));
+        quitarAprendizUseCase.quitar(new QuitarAprendizCelulaCommand(actorId, CelulaId.of(id),
+                UserId.of(traineeId)));
         return ResponseEntity.noContent().build();
     }
 

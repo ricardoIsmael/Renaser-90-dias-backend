@@ -42,8 +42,17 @@ public interface ConsultarContextoAcompanamientoUseCase {
      *                            Es lo que decide si la app puede dejar pasar sin programa.
      * @param puedeActivarPrograma tiene rol para iniciarlo y todavía no lo hizo. Falso tanto para
      *                             quien ya lo activó como para quien no puede.
+     * @param administrar         si puede abrir Administracion (SDD 003, ARF-01/15). Sale de la
+     *                            MISMA condicion que ya exigen los guards administrativos —rol
+     *                            ADMIN/ALQUIMISTA y cuenta activa—, no de {@code UserRole.can},
+     *                            que para esos dos roles todavia responde {@code true} a todo y
+     *                            serializarlo seria publicar una matriz que nadie audito.
+     *                            <b>Decide que se MUESTRA, nunca que se puede hacer:</b> cada
+     *                            endpoint vuelve a autorizar, asi que un cliente que lo falsee ve
+     *                            pantallas vacias, no datos de nadie.
      */
-    record Capacidades(boolean programaObligatorio, boolean puedeActivarPrograma, boolean acompanar) {
+    record Capacidades(boolean programaObligatorio, boolean puedeActivarPrograma, boolean acompanar,
+                        boolean administrar) {
     }
 
     /**

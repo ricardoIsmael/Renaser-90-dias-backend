@@ -1,5 +1,6 @@
 package com.renaser.os.users.domain.model.mentorprofile;
 
+import com.renaser.os.users.api.EspecialidadMentor;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import lombok.AccessLevel;

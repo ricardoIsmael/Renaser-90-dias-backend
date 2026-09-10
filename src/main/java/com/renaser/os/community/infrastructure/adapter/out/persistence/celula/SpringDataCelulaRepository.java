@@ -51,16 +51,28 @@ interface SpringDataCelulaRepository extends JpaRepository<CelulaJpaEntity, UUID
     /**
      * El grupo de RECEPCION cuyo periodo contiene ese dia.
      *
-     * <p>Orden por {@code periodoInicio DESC}: si hay varios abiertos a la vez gana el que empezo
+     * <p>Orden por {@code periodo_inicio DESC}: si hay varios abiertos a la vez gana el que empezo
      * mas tarde, que es el que le deja mas dias de bienvenida a quien entra hoy. Con el criterio
      * contrario, alguien que se registra el ultimo dia de un grupo viejo se queda sin recepcion.
+     *
+     * <blockquote><b>NATIVA, y el CAST va escrito a mano. E-180.</b> Esta consulta era JPQL con el
+     * literal {@code c.tipo = ...TipoCelula.RECEPCION}. La columna esta mapeada
+     * {@code @JdbcTypeCode(SqlTypes.NAMED_ENUM)}, y para ese literal Hibernate genera
+     * {@code cast(? as tipocelula)} —el nombre simple del enum Java en minusculas— cuando el tipo
+     * de Postgres se llama {@code renaser.tipo_celula}. Resultado: {@code PSQLException: type
+     * "tipocelula" does not exist} en CADA llamada.
+     *
+     * <p>Y no rompia ninguna prueba, porque el unico consumidor es el ingreso automatico a la
+     * bienvenida, que trata "no hay recepcion" como un caso valido. O sea: la automatica no metia a
+     * nadie en ningun grupo y el sistema lo reportaba como si simplemente no hubiera bienvenida
+     * abierta. Es exactamente el mismo defecto que E-171 con {@code estadoregistrojpa}.</blockquote>
      */
-    @Query("""
-            SELECT c FROM CelulaJpaEntity c
-            WHERE c.tipo = com.renaser.os.community.domain.model.acompanamiento.TipoCelula.RECEPCION
-              AND c.periodoInicio IS NOT NULL
-              AND :dia BETWEEN c.periodoInicio AND c.periodoFin
-            ORDER BY c.periodoInicio DESC
+    @Query(nativeQuery = true, value = """
+            SELECT * FROM renaser.celulas c
+            WHERE c.tipo = CAST('RECEPCION' AS renaser.tipo_celula)
+              AND c.periodo_inicio IS NOT NULL
+              AND CAST(:dia AS date) BETWEEN c.periodo_inicio AND c.periodo_fin
+            ORDER BY c.periodo_inicio DESC
             """)
     List<CelulaJpaEntity> recepcionesVigentesEn(@Param("dia") LocalDate dia);
 }

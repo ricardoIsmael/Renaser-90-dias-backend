@@ -102,9 +102,11 @@ public class AcompanamientoService
         }
 
         UserRole rol = participacion.map(ParticipacionPrograma::rol).orElse(UserRole.TRAINEE);
+        boolean suspendido = participacion.map(ParticipacionPrograma::suspendido).orElse(true);
         boolean acompana = !asignaciones.isEmpty();
         return new ContextoAcompanamiento(participa, diaDePrograma, acompana,
-                new Capacidades(rol == UserRole.TRAINEE, esStaff(rol) && !participa, acompana),
+                new Capacidades(rol == UserRole.TRAINEE, esStaff(rol) && !participa, acompana,
+                        esAdministrador(rol) && !suspendido),
                 asignaciones);
     }
 
@@ -189,6 +191,20 @@ public class AcompanamientoService
     private static boolean esStaff(UserRole rol) {
         return rol == UserRole.MENTOR || rol == UserRole.MENTOR_LEAD
                 || rol == UserRole.ADMIN || rol == UserRole.ALCHEMIST;
+    }
+
+    /**
+     * Roles con acceso a Administracion. Se derivan de la condicion que ya exigen los guards
+     * administrativos ({@code CelulaService.requireRolAdmin}, {@code RequireAdminGuard},
+     * {@code HabitoAdminGuard}...), que es la unica fuente honesta: {@code UserRole.can} devuelve
+     * {@code true} a todo para estos dos roles y publicarlo como capacidad seria inventar una
+     * matriz (ARF-15).
+     *
+     * <p>ALQUIMISTA no esta por encima de ADMIN: los guards inspeccionados aceptan a los dos por
+     * igual y este alcance no crea una jerarquia que el backend no sostiene.
+     */
+    private static boolean esAdministrador(UserRole rol) {
+        return rol == UserRole.ADMIN || rol == UserRole.ALCHEMIST;
     }
 
     /**

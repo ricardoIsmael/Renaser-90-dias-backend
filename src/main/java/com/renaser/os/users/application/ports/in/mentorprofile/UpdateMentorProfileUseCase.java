@@ -2,7 +2,7 @@ package com.renaser.os.users.application.ports.in.mentorprofile;
 
 import com.renaser.os.shared.application.SelfValidating;
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.users.domain.model.mentorprofile.EspecialidadMentor;
+import com.renaser.os.users.api.EspecialidadMentor;
 import com.renaser.os.users.domain.model.mentorprofile.MentorLevel;
 import com.renaser.os.users.domain.model.mentorprofile.MentorOperationalStatus;
 import jakarta.validation.constraints.NotNull;

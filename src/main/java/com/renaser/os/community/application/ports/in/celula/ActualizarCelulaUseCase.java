@@ -26,7 +26,8 @@ public interface ActualizarCelulaUseCase {
      */
     record ActualizarCelulaCommand(@NotNull UserId actorId, @NotNull CelulaId celulaId, String nombre,
                                     String urlVideollamada, boolean tocaUrlVideollamada, LocalDate periodoInicio,
-                                    LocalDate periodoFin, boolean tocaPeriodo) {
+                                    LocalDate periodoFin, boolean tocaPeriodo, Integer capacidad,
+                                    boolean tocaCapacidad) {
 
         public ActualizarCelulaCommand {
             // El ORDEN importa: `validateConstructorArgs` empareja estos valores con los
@@ -34,7 +35,8 @@ public interface ActualizarCelulaUseCase {
             // — meterlos en el medio corre todos los de atras y las anotaciones terminan validando
             // el campo equivocado.
             SelfValidating.validateConstructorArgs(ActualizarCelulaCommand.class, actorId, celulaId, nombre,
-                    urlVideollamada, tocaUrlVideollamada, periodoInicio, periodoFin, tocaPeriodo);
+                    urlVideollamada, tocaUrlVideollamada, periodoInicio, periodoFin, tocaPeriodo, capacidad,
+                    tocaCapacidad);
             // Nivel 2 (CLAUDE.MD sec. 5.4.3): un periodo a medias o al reves no llega a construir
             // el comando. La regla es UNA sola y vive en el agregado, no duplicada aca.
             Celula.periodoDe(periodoInicio, periodoFin);
@@ -44,7 +46,15 @@ public interface ActualizarCelulaUseCase {
          * llamadores que no lo mandan, mismo criterio que las factorias de {@link Celula}. */
         public ActualizarCelulaCommand(UserId actorId, CelulaId celulaId, String nombre, String urlVideollamada,
                                         boolean tocaUrlVideollamada) {
-            this(actorId, celulaId, nombre, urlVideollamada, tocaUrlVideollamada, null, null, false);
+            this(actorId, celulaId, nombre, urlVideollamada, tocaUrlVideollamada, null, null, false, null, false);
+        }
+
+        /** Sobrecarga previa al SDD 003: no toca la capacidad. */
+        public ActualizarCelulaCommand(UserId actorId, CelulaId celulaId, String nombre, String urlVideollamada,
+                                        boolean tocaUrlVideollamada, LocalDate periodoInicio, LocalDate periodoFin,
+                                        boolean tocaPeriodo) {
+            this(actorId, celulaId, nombre, urlVideollamada, tocaUrlVideollamada, periodoInicio, periodoFin,
+                    tocaPeriodo, null, false);
         }
 
         /** El periodo ya armado, o {@code null} — que con {@code tocaPeriodo} en true significa

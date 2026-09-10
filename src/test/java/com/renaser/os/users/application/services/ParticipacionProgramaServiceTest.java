@@ -258,8 +258,8 @@ class ParticipacionProgramaServiceTest {
     void listarTraineesAceptaAdminActivo() {
         UserId actorId = UserId.of(UUID.randomUUID());
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN, UserStatus.ACTIVE)));
-        when(consultarResumenParticipacionPort.listarAprendices(0, 20)).thenReturn(java.util.List.of());
-        when(consultarResumenParticipacionPort.contarAprendices()).thenReturn(0L);
+        when(consultarResumenParticipacionPort.listarAprendices(0, 20, null, false)).thenReturn(java.util.List.of());
+        when(consultarResumenParticipacionPort.contarAprendices(null, false)).thenReturn(0L);
 
         var pagina = service.listar(new ListTraineesCommand(actorId, 0, 20));
 

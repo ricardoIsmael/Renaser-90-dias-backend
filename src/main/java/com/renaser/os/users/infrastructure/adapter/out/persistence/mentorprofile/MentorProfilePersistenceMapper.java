@@ -1,7 +1,7 @@
 package com.renaser.os.users.infrastructure.adapter.out.persistence.mentorprofile;
 
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.users.domain.model.mentorprofile.EspecialidadMentor;
+import com.renaser.os.users.api.EspecialidadMentor;
 import com.renaser.os.users.domain.model.mentorprofile.MentorLevel;
 import com.renaser.os.users.domain.model.mentorprofile.MentorOperationalStatus;
 import com.renaser.os.users.domain.model.mentorprofile.MentorProfile;

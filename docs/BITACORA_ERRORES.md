@@ -5968,3 +5968,106 @@ dirección es parte del dato.
 - **Cómo evitarlo:** cualquier credencial efímera que Redis deba consumir una sola vez tiene que
   verificarse y eliminarse en una operación atómica (`GETDEL` o script Lua), no con un `GET` seguido
   de un `DEL`.
+
+---
+
+## E-177 · Componer un grupo escribia un puntero y nadie mas se enteraba
+
+**Sintoma.** El administrador armaba un grupo desde el panel y el grupo quedaba "vacio" en todo lo
+demas: el chat no incorporaba a los aprendices, el seguimiento semanal del mentor devolvia 403
+sobre ellos y la evaluacion mensual no los contaba. En el panel se veian perfectamente.
+
+**Causa.** `CelulaService.asignar(AsignarAprendizCelulaCommand)` hacia UNA escritura:
+`asignacionCelulaPort.asignarCelula(...)`, que toca `participantes_programa.celula_id` — el puntero
+al presente. No abria intervalo en `asignaciones_celula`, que es el historial y la fuente de verdad
+de tres lecturas distintas: `AcompanamientoFinder.integrantesVigentes` (chat),
+`acompanaVigente` (seguimiento) y `tramosDeAprendices` (evaluacion). Las tres consultaban una tabla
+donde no habia nada.
+
+Lo mismo con el mentor: `celula.asignarMentor(...)` movia `celulas.mentor_id` y ya. Un mentor
+saliente conservaba el acceso a la semana de sus exalumnos porque su intervalo nunca se cerraba.
+
+**Correccion.** `ComposicionDeCelulaService` reune los cinco efectos en una operacion: cerrar el
+intervalo anterior conservandolo, abrir el nuevo, sincronizar los punteros, publicar
+`ComposicionDeCelulaCambiadaEvent` de cada grupo tocado y validar cupo y solapamientos.
+`ComposicionDeCelulaIT` lo prueba contra Postgres real; su ultimo caso —el grupo tiene integrantes
+vigentes despues del alta— falla contra el codigo anterior.
+
+**Como evitarlo.** Cuando un modelo tiene HISTORIAL y PUNTERO conviviendo, escribir solo el puntero
+compila, pasa las pruebas de la clase que lo escribe y rompe a los consumidores del historial, que
+viven en otros modulos. La regla: si una tabla existe porque otra no alcanzaba, ninguna escritura
+puede tocar solo una de las dos. Y la prueba que lo demuestra no es "se llamo al puerto" con un
+doble, sino "la consulta del consumidor devuelve la fila" contra la base.
+
+## E-178 · Cerrar el periodo de un grupo no le quitaba el chat a nadie
+
+**Sintoma.** Un grupo cuyo periodo termino seguia teniendo conversacion activa, y su exmentor
+seguia pudiendo leer la semana de sus exalumnos.
+
+**Causa.** `AcompanamientoFinderService` respondia `esIntegranteVigente` / `integrantesVigentes` /
+`acompanaVigente` mirando SOLO el intervalo de `asignaciones_celula`. Y cerrar el periodo del grupo
+no cierra sus asignaciones —son dos hechos distintos y el historial tiene que conservarse—, asi que
+las filas seguian abiertas y las tres preguntas seguian respondiendo que si.
+
+La tentacion era un job que al cerrar el grupo cerrara sus asignaciones. Se descarto: el dia que
+ese barrido no corriera, el acceso quedaria concedido sin que nadie lo notara, y ademas borraria la
+informacion de cuando cada persona pertenecio realmente.
+
+**Correccion.** Las tres preguntas pasan ademas por `Celula.vigenteEn(dia)`, con el dia calculado
+en la zona de la politica de la cohorte. La revocacion es inmediata e idempotente: no depende de
+ningun proceso. Lo que NO se filtra son los tramos historicos ni `aprendicesVigentes`, o el mentor
+perderia la evaluacion del mes que si acompaño.
+
+**Como evitarlo.** Una autorizacion que depende de que un job haya corrido no es una autorizacion,
+es una carrera. Si el estado se puede DERIVAR del calendario, se deriva en la lectura.
+
+## E-179 · Un ADMIN que cursaba el programa no podia firmar su contrato de fase
+
+**Sintoma.** Un administrador activaba su programa de 90 dias —opcional pero permitido—, recorria
+onboarding, mapa, objetivos y habitos, y al llegar al contrato de fase recibia 403 sin explicacion.
+
+**Causa.** `ContratoService` permitia firmar solo a TRAINEE y consultar solo a TRAINEE/MENTOR. Es
+la misma familia que E-169: un guard que compara contra `TRAINEE` literal donde la pregunta real
+era "esta cursando".
+
+**Correccion.** Las dos listas admiten los cinco roles, y `requireProgreso` exige ademas
+`programaActivado` para todo el que no sea aprendiz — sin el reloj corriendo no hay dia de programa
+contra el cual medir la fase, y mostrar la fase 1 a quien no empezo seria peor que el 403.
+
+**Como evitarlo.** Antes de escribir `rol == TRAINEE`, preguntar que se esta comprobando de verdad.
+Casi siempre es participacion, no rol. La lista de roles que pueden hacer algo es una decision de
+producto; la de quien tiene el programa corriendo es un dato.
+
+## E-180 · El ingreso automatico a la bienvenida no metia a nadie, en silencio
+
+**Sintoma.** Ninguno visible. Quien se registraba quedaba sin grupo de bienvenida y el log decia
+`no hay grupo de recepcion vigente`, que es un mensaje legitimo — asi que parecia una tarea
+pendiente del administrador y no un fallo.
+
+**Causa.** `SpringDataCelulaRepository.recepcionesVigentesEn` era JPQL con un literal de enum:
+`WHERE c.tipo = com.renaser.os.community.domain.model.acompanamiento.TipoCelula.RECEPCION`. La
+columna esta mapeada `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` y, para ese literal, Hibernate genera
+`cast(? as tipocelula)` —el nombre simple del enum Java en minusculas—, mientras que el tipo real
+de Postgres es `renaser.tipo_celula`. Cada llamada moria con
+`PSQLException: type "tipocelula" does not exist`.
+
+**Por que no lo vio nadie.** El unico consumidor es `IngresoARecepcionService`, y ahi "no hay
+recepcion vigente" es un caso valido y esperado. La excepcion se propagaba dentro del listener
+asincrono de Modulith, se registraba y el resultado externo era indistinguible de "el administrador
+todavia no abrio la bienvenida". Ninguna prueba tocaba el metodo: el servicio se prueba con un
+doble del puerto, y el adaptador no tenia prueba propia.
+
+Se encontro leyendo el stack trace de un `./mvnw verify` que **termino en BUILD SUCCESS**.
+
+**Correccion.** Consulta nativa con el CAST escrito a mano contra `renaser.tipo_celula`, igual que
+la solucion de E-171. Se reviso el resto del codigo: era la unica JPQL con literal de enum sobre
+una columna NAMED_ENUM.
+
+**Como evitarlo.**
+1. **Un literal de enum en JPQL sobre una columna `NAMED_ENUM` no funciona en este proyecto.** Se
+   pasa el valor como parametro o se escribe la consulta nativa con su CAST.
+2. Un caso "no hay nada" que es legitimo **esconde** el fallo que devuelve lo mismo. Cuando la
+   ausencia es un resultado valido, el adaptador necesita su propia prueba contra la base: el
+   doble del puerto nunca ejecuta el SQL.
+3. BUILD SUCCESS con un stack trace de Postgres en el log no es verde. Vale la pena leer el log
+   completo aunque el build pase.

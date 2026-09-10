@@ -1,5 +1,8 @@
 package com.renaser.os.community.infrastructure.adapter.in.rest.celula;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+
 import java.time.LocalDate;
 
 /**
@@ -13,7 +16,18 @@ import java.time.LocalDate;
  * escribirla: borrar el periodo de un grupo se pide, no se cae de un descuido.
  */
 public record ActualizarCelulaRequest(String name, String videoCallUrl, LocalDate periodStart, LocalDate periodEnd,
-                                       Boolean clearPeriod) {
+                                       Boolean clearPeriod, @Min(10) @Max(15) Integer capacity,
+                                       Boolean resetCapacity) {
+
+    /** Misma disciplina que el periodo: si el PATCH no dice nada de la capacidad, no se toca.
+     * {@code resetCapacity} la devuelve a la de la politica de la cohorte. */
+    public boolean tocaCapacidad() {
+        return capacity != null || Boolean.TRUE.equals(resetCapacity);
+    }
+
+    public Integer capacidadAplicada() {
+        return Boolean.TRUE.equals(resetCapacity) ? null : capacity;
+    }
 
     /** Si este PATCH tiene algo que decir sobre el periodo. Si no, el grupo se queda con el suyo. */
     public boolean tocaPeriodo() {

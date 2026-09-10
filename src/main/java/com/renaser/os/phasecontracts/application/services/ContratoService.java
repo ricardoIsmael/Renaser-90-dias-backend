@@ -36,9 +36,27 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
     private static final Duration VALIDEZ_URL_SUBIDA = Duration.ofMinutes(10);
     private static final Duration VALIDEZ_URL_LECTURA = Duration.ofMinutes(15);
 
-    private static final Set<RolParticipante> ROLES_PUEDEN_FIRMAR = Set.of(RolParticipante.TRAINEE);
-    private static final Set<RolParticipante> ROLES_PUEDEN_CONSULTAR =
-            Set.of(RolParticipante.TRAINEE, RolParticipante.MENTOR);
+    /**
+     * Quien puede consultar y firmar SU PROPIO contrato de fase.
+     *
+     * <blockquote><b>Ampliado por el SDD 003 (ARF-16).</b> Antes firmaba solo TRAINEE y consultaba
+     * TRAINEE/MENTOR. El efecto era que un ADMIN o un ALQUIMISTA que decidia hacer el programa de
+     * 90 dias —que es opcional para el staff, no prohibido— recorria onboarding, mapa, objetivos y
+     * habitos y se estrellaba con un 403 en el contrato de fase, sin poder avanzar ni entender por
+     * que. Es la misma familia de E-169: guards que comparan contra TRAINEE literal donde la
+     * pregunta real era "esta cursando".</blockquote>
+     *
+     * <p>Que el rol este en esta lista NO alcanza: {@link #requireProgreso} exige ademas que el
+     * programa propio este ACTIVADO para todo el que no sea aprendiz. Sin esa segunda condicion,
+     * un administrador que nunca curso podria firmar un contrato de una fase que no esta viviendo.
+     *
+     * <p>Ninguna de las dos listas habilita firmar por otra persona: los dos casos de uso operan
+     * siempre sobre el actor autenticado, nunca sobre un id recibido.
+     */
+    private static final Set<RolParticipante> ROLES_PUEDEN_FIRMAR = Set.of(RolParticipante.TRAINEE,
+            RolParticipante.MENTOR, RolParticipante.MENTOR_LEAD, RolParticipante.ADMIN,
+            RolParticipante.ALCHEMIST);
+    private static final Set<RolParticipante> ROLES_PUEDEN_CONSULTAR = ROLES_PUEDEN_FIRMAR;
 
     private final LoadContratoPort loadContratoPort;
     private final SaveContratoPort saveContratoPort;
@@ -130,6 +148,14 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
         }
         if (!rolesPermitidos.contains(progreso.rol())) {
             throw new NotAuthorizedException("Rol sin permiso para esta operacion: " + progreso.rol());
+        }
+        /* Para el aprendiz el programa es obligatorio y el reloj arranca solo; para el resto es
+           opcional, y sin activarlo no hay dia de programa contra el cual medir la fase. Devolver
+           el contrato igual mostraria la fase 1 a alguien que no empezo. Mismo guard que E-169
+           dejo en rocks/habits/academy. */
+        if (progreso.rol() != RolParticipante.TRAINEE && !progreso.programaActivado()) {
+            throw new NotAuthorizedException(
+                    "Tu programa personal todavia no esta activado: no hay contrato de fase que firmar");
         }
         return progreso;
     }

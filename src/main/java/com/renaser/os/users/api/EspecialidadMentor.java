@@ -1,4 +1,4 @@
-package com.renaser.os.users.domain.model.mentorprofile;
+package com.renaser.os.users.api;
 
 /**
  * En que se especializa un mentor (tipo `especialidad_mentor`, V48). Las tres que nombro el
