@@ -166,4 +166,116 @@ class DespachadorPushTest {
                 .isTrue();
         assertThat(ResultadoEnvioPush.entregado(TokenPushId.of(UUID.randomUUID())).reintentable()).isFalse();
     }
+
+    /** Devuelve la secuencia que se le dé, un estado por intento, y cuenta cuántas veces la llamaron. */
+    private static final class TransporteSecuencia implements TransportePush {
+
+        private final List<Estado> secuencia;
+        int intentos = 0;
+
+        TransporteSecuencia(Estado... secuencia) {
+            this.secuencia = List.of(secuencia);
+        }
+
+        @Override
+        public boolean atiende(PlataformaPush plataforma) {
+            return true;
+        }
+
+        @Override
+        public String nombre() {
+            return "secuencia";
+        }
+
+        @Override
+        public ResultadoEnvioPush entregar(TokenPush token, String titulo, String cuerpo, String rutaApp) {
+            Estado estado = secuencia.get(Math.min(intentos, secuencia.size() - 1));
+            intentos++;
+            return new ResultadoEnvioPush(token.id(), estado, null);
+        }
+    }
+
+    /** Anota cuánto se pidió esperar, sin esperar de verdad. */
+    private static final class EsperaFingida implements DespachadorPush.Espera {
+
+        final List<Long> esperas = new ArrayList<>();
+
+        @Override
+        public void milisegundos(long ms) {
+            esperas.add(ms);
+        }
+    }
+
+    @Test
+    @DisplayName("un fallo temporal se reintenta, y si el segundo intento entrega el resultado es ENTREGADO")
+    void reintentaLoTemporal() {
+        TransporteSecuencia transporte = new TransporteSecuencia(Estado.FALLO_TEMPORAL, Estado.ENTREGADO);
+        EsperaFingida espera = new EsperaFingida();
+        DespachadorPush despachador = new DespachadorPush(List.of(transporte), espera);
+
+        List<ResultadoEnvioPush> resultados = despachador.enviar(
+                List.of(token(PlataformaPush.ANDROID)), "t", "c", null);
+
+        assertThat(resultados).singleElement()
+                .satisfies(r -> assertThat(r.estado()).isEqualTo(Estado.ENTREGADO));
+        assertThat(transporte.intentos).isEqualTo(2);
+        assertThat(espera.esperas).containsExactly(250L);
+    }
+
+    @Test
+    @DisplayName("la espera crece entre reintentos y se detiene en dos: no reintenta para siempre")
+    void laEsperaCreceYEstaAcotada() {
+        TransporteSecuencia transporte = new TransporteSecuencia(Estado.FALLO_TEMPORAL);
+        EsperaFingida espera = new EsperaFingida();
+        DespachadorPush despachador = new DespachadorPush(List.of(transporte), espera);
+
+        List<ResultadoEnvioPush> resultados = despachador.enviar(
+                List.of(token(PlataformaPush.IOS)), "t", "c", null);
+
+        // 1 intento + 2 reintentos. Si alguien agrega un tercero sin pensarlo, esto lo dice.
+        assertThat(transporte.intentos).isEqualTo(3);
+        assertThat(espera.esperas).containsExactly(250L, 750L);
+        assertThat(resultados).singleElement()
+                .satisfies(r -> assertThat(r.estado()).isEqualTo(Estado.FALLO_TEMPORAL));
+    }
+
+    @Test
+    @DisplayName("un token invalido NO se reintenta: la app se desinstalo, insistir es tirar trabajo")
+    void noReintentaElTokenInvalido() {
+        TransporteSecuencia transporte = new TransporteSecuencia(Estado.TOKEN_INVALIDO);
+        EsperaFingida espera = new EsperaFingida();
+        DespachadorPush despachador = new DespachadorPush(List.of(transporte), espera);
+
+        despachador.enviar(List.of(token(PlataformaPush.ANDROID)), "t", "c", null);
+
+        assertThat(transporte.intentos).isEqualTo(1);
+        assertThat(espera.esperas).isEmpty();
+    }
+
+    @Test
+    @DisplayName("un envio entregado no se repite: dos banners son peor que el fallo")
+    void noReintentaLoEntregado() {
+        TransporteSecuencia transporte = new TransporteSecuencia(Estado.ENTREGADO);
+        EsperaFingida espera = new EsperaFingida();
+        DespachadorPush despachador = new DespachadorPush(List.of(transporte), espera);
+
+        despachador.enviar(List.of(token(PlataformaPush.WEB)), "t", "c", null);
+
+        assertThat(transporte.intentos).isEqualTo(1);
+        assertThat(espera.esperas).isEmpty();
+    }
+
+    @Test
+    @DisplayName("el fallo temporal de un token no consume los reintentos del siguiente")
+    void cadaTokenTieneSusPropiosReintentos() {
+        TransporteSecuencia transporte = new TransporteSecuencia(Estado.FALLO_TEMPORAL);
+        EsperaFingida espera = new EsperaFingida();
+        DespachadorPush despachador = new DespachadorPush(List.of(transporte), espera);
+
+        despachador.enviar(
+                List.of(token(PlataformaPush.ANDROID), token(PlataformaPush.IOS)), "t", "c", null);
+
+        assertThat(transporte.intentos).isEqualTo(6);
+        assertThat(espera.esperas).containsExactly(250L, 750L, 250L, 750L);
+    }
 }

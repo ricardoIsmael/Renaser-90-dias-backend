@@ -22,6 +22,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
@@ -98,7 +100,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
                     command.origenEventoId(), command.tipo());
             return Optional.empty();
         }
-        intentarPush(command);
+        pushDespuesDelCommit(command);
         return guardada;
     }
 
@@ -122,6 +124,33 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
      * el proveedor declara muerto se desactiva —reintentarlo es tirar trabajo para siempre— y un
      * fallo temporal queda registrado para que soporte pueda verlo. La entrega sigue sin
      * garantizarse; lo que ya no se acepta es no enterarse (plan.md §9). */
+    /**
+     * El push sale DESPUÉS de que esta transacción cierre, no dentro.
+     *
+     * <p>El envío es una llamada HTTP a un proveedor externo, con su timeout y ahora también con
+     * reintentos ({@code DespachadorPush}). Hacerla dentro de la transacción retiene una conexión
+     * del pool todo ese rato — y bajo un pico del proveedor, tantas conexiones como avisos haya
+     * en vuelo. El pool se agota por una notificación, que es lo menos crítico del sistema.
+     *
+     * <p>La fila no depende de esto: {@link #guardarIdempotente} ya la confirmó en su propia
+     * transacción, así que mover el push más tarde no puede dejar una notificación sin guardar.
+     *
+     * <p>Si no hay transacción activa —una llamada directa en una prueba— se envía en el momento.
+     * Registrar la sincronización sin transacción lanza, y perder el push por eso sería peor.
+     */
+    private void pushDespuesDelCommit(EmitirNotificacionCommand command) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            intentarPush(command);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                intentarPush(command);
+            }
+        });
+    }
+
     private void intentarPush(EmitirNotificacionCommand command) {
         try {
             var tokens = loadTokenPushPort.tokensDe(command.usuarioId());
