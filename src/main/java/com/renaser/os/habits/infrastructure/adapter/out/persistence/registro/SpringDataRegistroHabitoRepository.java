@@ -69,4 +69,31 @@ interface SpringDataRegistroHabitoRepository extends JpaRepository<RegistroHabit
             + "WHERE r.participanteId = :participanteId AND r.estado = :estado")
     Instant minCompletadoEnPorParticipanteYEstado(@Param("participanteId") UUID participanteId,
                                                    @Param("estado") EstadoRegistroJpa estado);
+
+    /**
+     * Obligaciones historicas de varios participantes en un rango de fechas, con la exigencia
+     * de evidencia del habito al que pertenecen.
+     *
+     * <p>Proyecta columnas y no entidades: la pregunta no necesita respuesta_texto, calificacion
+     * ni la entrada de diario, y traerlas seria cargar bytes para tirarlos. Se resuelve contra
+     * {@code registros_dia_idx} ({@code participante_id, fecha_ejecucion}), que ya existe desde
+     * el baseline.
+     *
+     * <p>El JOIN con el habito es por {@code exigencia_evidencia} y {@code titulo}: son del
+     * catalogo, no del registro, y sin ellos no se puede saber si esa obligacion pedia archivo.
+     * {@code es_opcional} se toma del REGISTRO —no del habito— porque es el snapshot de si ese
+     * dia concreto era exigible.
+     */
+    @Query("""
+            SELECT r.id, r.participanteId, r.fechaEjecucion, r.diaPrograma, h.titulo, r.estado,
+                   h.exigenciaEvidencia, r.esOpcional
+            FROM RegistroHabitoJpaEntity r
+            JOIN HabitoJpaEntity h ON h.id = r.habitoId
+            WHERE r.participanteId IN :participantes
+              AND r.fechaEjecucion BETWEEN :desde AND :hasta
+            ORDER BY r.participanteId, r.fechaEjecucion, h.titulo
+            """)
+    List<Object[]> obligacionesEntre(@Param("participantes") Collection<UUID> participantes,
+                                      @Param("desde") LocalDate desde,
+                                      @Param("hasta") LocalDate hasta);
 }
