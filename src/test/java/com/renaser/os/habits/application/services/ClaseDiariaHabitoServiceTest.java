@@ -76,7 +76,7 @@ class ClaseDiariaHabitoServiceTest {
 
     private void mockProgresoActivo(UserId participanteId) {
         when(progresoPort.deParticipante(participanteId))
-                .thenReturn(Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                .thenReturn(Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
     }
 
     @Test
@@ -156,7 +156,7 @@ class ClaseDiariaHabitoServiceTest {
     void completarDeHoyRechazaSuspendido() {
         UserId participanteId = participante();
         when(progresoPort.deParticipante(participanteId)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, true)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, true, false)));
         when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.of(habitoDailyClass()));
 
         assertThatThrownBy(() -> service().completarDeHoy(

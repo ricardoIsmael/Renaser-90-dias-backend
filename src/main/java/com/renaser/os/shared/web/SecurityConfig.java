@@ -3,6 +3,7 @@ package com.renaser.os.shared.web;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
@@ -113,7 +114,26 @@ public class SecurityConfig {
                                 "/api/v1/auth/social/complete").permitAll()
                         .requestMatchers("/api/v1/auth/password/**",
                                 "/api/v1/auth/email-verification/**").permitAll()
-                        .requestMatchers("/api/v1/account-requests/**").permitAll()
+                        // El alta y sus pasos previos: por definicion no puede haber sesion
+                        // todavia. Se enumeran uno a uno y POR METODO porque `POST
+                        // /account-requests` (pedir cuenta) y `GET /account-requests` (la bandeja
+                        // del ADMIN) comparten ruta: un unico matcher por patron abria la bandeja.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/account-requests",
+                                "/api/v1/account-requests/check-email",
+                                "/api/v1/account-requests/exists",
+                                "/api/v1/account-requests/verify-email").permitAll()
+                        // El solicitante consulta su propia solicitud antes de tener cuenta: la
+                        // credencial es la posesion del UUID, que no es adivinable.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/account-requests/*/status").permitAll()
+                        // Listar, aprobar, rechazar y borrar son operaciones de ADMIN.
+                        //
+                        // Sin esta linea caian en el `permitAll()` de arriba y
+                        // `ActorAutenticadoArgumentResolver` resolvia el actor desde `X-Actor-Id`:
+                        // con el UUID de un administrador —que viaja en respuestas normales de la
+                        // API, el propio login lo devuelve— se aprobaban cuentas sin credencial
+                        // alguna. Comprobado contra el backend local el 2026-09-11: un
+                        // `POST /{id}/approve` SIN sesion devolvia 204 y dejaba la cuenta ACTIVA.
+                        .requestMatchers("/api/v1/account-requests/**").authenticated()
 
                         // ---------------------------------------------------------------------
                         // LO QUE CONSUME LA APP MOVIL: exige sesion real (2026-09-05).
@@ -150,6 +170,13 @@ public class SecurityConfig {
                         // se lee ni se escribe (V41, fase 3 del plan del Mapa).
                         .requestMatchers("/api/v1/mapa-renacimiento/**").authenticated()
                         .requestMatchers("/api/v1/tickets/**", "/api/v1/ranking/**").authenticated()
+                        // Acompanamiento (SDD 001). Faltaba: sin esta linea las rutas caian fuera
+                        // de la lista y llegaban al controller sin sesion, que respondia 400 al no
+                        // poder resolver el actor. No filtraba datos —sin actor no hay nada que
+                        // devolver— pero el cliente no puede distinguir un 400 de "peticion mal
+                        // formada", y la defensa quedaba en una sola capa. Lo encontro la prueba
+                        // de extremo a extremo, no un test unitario: todos pasaban en verde.
+                        .requestMatchers("/api/v1/mentor/**").authenticated()
                         // Renasia ya lo exigia desde 2026-09-03, por el mismo motivo.
                         .requestMatchers("/api/v1/renasia/**").authenticated()
 
@@ -211,8 +238,8 @@ public class SecurityConfig {
                         // EL RESTO sigue abierto: son rutas que la app movil todavia no consume.
                         // Ya NO incluyen `/api/v1/admin/**`, que se cerro arriba al salir a
                         // internet. Lo que queda son endpoints sueltos que no exponen datos de
-                        // otras personas; el candidato mas visible a cerrarse despues es
-                        // `/api/v1/account-requests/**`, que hoy resuelve el actor por header.
+                        // otras personas. `/api/v1/account-requests/**` ya NO esta entre
+                        // ellos: su bandeja se cerro arriba el 2026-09-11.
                         // ---------------------------------------------------------------------
                         .anyRequest().permitAll());
         return http.build();

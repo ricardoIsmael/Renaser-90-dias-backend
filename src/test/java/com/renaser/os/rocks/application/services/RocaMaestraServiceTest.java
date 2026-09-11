@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.application.services;
 
+import com.renaser.os.shared.GuardDeRol;
 import com.renaser.os.rocks.application.ports.in.rocamaestra.DefinirRocaMaestraUseCase.DefinirRocaMaestraCommand;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort.ProgresoParticipanteRocks;
@@ -72,7 +73,12 @@ class RocaMaestraServiceTest {
     }
 
     private static ProgresoParticipanteRocks progreso(RolParticipante rol, boolean suspendido) {
-        return new ProgresoParticipanteRocks(10, LocalDate.of(2026, 8, 1), ZoneOffset.UTC, rol, suspendido);
+        return new ProgresoParticipanteRocks(10, LocalDate.of(2026, 8, 1), ZoneOffset.UTC, rol, suspendido, false);
+    }
+
+    /** Igual que {@link #progreso} pero con el programa ANDANDO: el caso de E-169. */
+    private static ProgresoParticipanteRocks progresoActivado(RolParticipante rol, boolean suspendido) {
+        return new ProgresoParticipanteRocks(10, LocalDate.of(2026, 8, 1), ZoneOffset.UTC, rol, suspendido, true);
     }
 
     private UserId traineeActivo() {
@@ -202,5 +208,22 @@ class RocaMaestraServiceTest {
         assertThatThrownBy(() -> new DefinirRocaMaestraCommand(id, EjeObjetivo.TRABAJO, "Facturar",
                 new BigDecimal("30000"), new BigDecimal("0"), null, null))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /**
+     * E-169: un MENTOR que activo su seguimiento personal opera su programa como cualquiera.
+     *
+     * <p>Es el reverso exacto del caso de rechazo, y se construye sobre su mismo fixture para que
+     * la unica diferencia sea el dato que importa. Antes de esto,
+     * {@code POST /api/v1/mentor/activate-tracking} inscribia al staff y despues el guard lo
+     * echaba: la inscripcion estaba construida y el uso prohibido.
+     */
+    @Test
+    @DisplayName("E-169: un MENTOR con su programa ACTIVADO ya no lo rechaza el guard de rol")
+    void staffConProgramaActivadoOperaSuPrograma() {
+        UserId id = actor();
+        when(progresoPort.deParticipante(id)).thenReturn(Optional.of(progresoActivado(RolParticipante.MENTOR, false)));
+
+        GuardDeRol.noRechaza(() -> service.misRocasMaestras(id), "Solo un aprendiz opera sus propias rocas");
     }
 }

@@ -35,7 +35,8 @@ class ConsultarProgresoParticipanteRocksPersistenceAdapter implements ConsultarP
 
     private static ProgresoParticipanteRocks aProgreso(ParticipacionPrograma participacion) {
         return new ProgresoParticipanteRocks(participacion.diaPrograma(), participacion.fechaInicio(),
-                participacion.zona(), mapearRol(participacion.rol()), participacion.suspendido());
+                participacion.zona(), mapearRol(participacion.rol()), participacion.suspendido(),
+                participacion.activado());
     }
 
     private static RolParticipante mapearRol(UserRole rol) {

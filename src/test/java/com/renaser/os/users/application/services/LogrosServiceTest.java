@@ -58,7 +58,7 @@ class LogrosServiceTest {
 
     private static ParticipacionPrograma inscripto(UserId id, int diaPrograma) {
         return new ParticipacionPrograma(id, true, diaPrograma, java.time.LocalDate.now(), ZoneId.of("America/Lima"),
-                FasePrograma.PHASE_1_REBIRTH, null, null, UserRole.TRAINEE, false);
+                FasePrograma.PHASE_1_REBIRTH, null, null, UserRole.TRAINEE, false, true);
     }
 
     @Test
@@ -132,7 +132,7 @@ class LogrosServiceTest {
         when(participacionProgramaFinder.deParticipante(staffId))
                 .thenReturn(Optional.of(new ParticipacionPrograma(staffId, false, 0, null,
                         ZoneId.of("America/Lima"), FasePrograma.PHASE_1_REBIRTH, null, null, UserRole.MENTOR,
-                        false)));
+                        false, true)));
 
         assertThatThrownBy(() -> service.getLogros(new GetLogrosQuery(staffId)))
                 .isInstanceOf(java.util.NoSuchElementException.class);

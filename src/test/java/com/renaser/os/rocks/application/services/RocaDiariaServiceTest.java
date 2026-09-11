@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.application.services;
 
+import com.renaser.os.shared.GuardDeRol;
 import com.renaser.os.community.api.PublicarEnMuroPort;
 import com.renaser.os.evidence.api.RegistrarEvidenciaPort;
 import com.renaser.os.evidence.api.RegistrarEvidenciaPort.EvidenciaRegistrada;
@@ -99,7 +100,12 @@ class RocaDiariaServiceTest {
     }
 
     private static ProgresoParticipanteRocks progreso(RolParticipante rol, boolean suspendido) {
-        return new ProgresoParticipanteRocks(20, LocalDate.of(2026, 1, 5), ZoneOffset.UTC, rol, suspendido);
+        return new ProgresoParticipanteRocks(20, LocalDate.of(2026, 1, 5), ZoneOffset.UTC, rol, suspendido, false);
+    }
+
+    /** Igual que {@link #progreso} pero con el programa ANDANDO: el caso de E-169. */
+    private static ProgresoParticipanteRocks progresoActivado(RolParticipante rol, boolean suspendido) {
+        return new ProgresoParticipanteRocks(20, LocalDate.of(2026, 1, 5), ZoneOffset.UTC, rol, suspendido, true);
     }
 
     private RocaDiaria rocaVerde(LocalTime horaFin) {
@@ -275,5 +281,22 @@ class RocaDiariaServiceTest {
 
         assertThat(url.bucket()).isEqualTo("renaser-files");
         assertThat(url.url().toString()).isEqualTo("https://s3.example/rocas/x");
+    }
+
+    /**
+     * E-169: un MENTOR que activo su seguimiento personal opera su programa como cualquiera.
+     *
+     * <p>Es el reverso exacto del caso de rechazo, y se construye sobre su mismo fixture para que
+     * la unica diferencia sea el dato que importa. Antes de esto,
+     * {@code POST /api/v1/mentor/activate-tracking} inscribia al staff y despues el guard lo
+     * echaba: la inscripcion estaba construida y el uso prohibido.
+     */
+    @Test
+    @DisplayName("E-169: un MENTOR con su programa ACTIVADO ya no lo rechaza el guard de rol")
+    void staffConProgramaActivadoOperaSuPrograma() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progresoActivado(RolParticipante.MENTOR, false)));
+
+        GuardDeRol.noRechaza(() -> service.completar(comandoTexto(RocaDiariaId.of(UUID.randomUUID()))), "Solo un aprendiz opera sus propias rocas")
+                ;
     }
 }

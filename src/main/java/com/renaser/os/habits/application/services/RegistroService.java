@@ -252,7 +252,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     }
 
     @Override
-    @Transactional(noRollbackFor = RegistroExpiradoException.class)
+    @Transactional
     public RegistroHabito completar(CompletarRegistroCommand command) {
         RegistroHabito registro = requireRegistro(command.registroId());
         requireSelf(command.actorId(), registro.participanteId());
@@ -268,17 +268,15 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
 
         Instant ahora = clock.now();
         VentanaEntrega ventana = resolverVentana(registro, habito);
-        if (ventana != null && ventana.vencida(ahora)) {
-            // C-9: sin el noRollbackFor de arriba, este throw revierte el save de la linea
-            // anterior y el registro queda PENDIENTE para siempre (el aprendiz reintenta y
-            // vuelve a chocar con el mismo 409 hasta el cron de las 05:00). El tipo propio
-            // (en vez de IllegalStateException a secas) acota el noRollbackFor a ESTE punto
-            // exacto — no a los otros guard clauses de RegistroHabito.completar(), que si
-            // deben revertir su escritura si fallan (ver javadoc de RegistroExpiradoException).
-            registro.expirar(ahora);
-            saveRegistroPort.save(registro);
-            throw new RegistroExpiradoException("El habito expiro — no se puede completar");
-        }
+        /* Aca vivia un `expirar()` + 409 "El habito expiro — no se puede completar". Se quita por
+           pedido del dueno del proyecto, y la razon aguanta sola: registrar tarde es informacion,
+           y perderla no ayuda a nadie. Quien se desperto a las 10 y lo anota a las 11 HIZO el
+           habito; lo unico que no hizo fue llegar a tiempo, y eso ya se cobra donde corresponde
+           -- `ResultadoOtorgamiento` devuelve 0 puntos en fase EXPIRADO. Bloquear ademas el
+           registro cobraba dos veces por la misma tardanza.
+
+           Con el throw desaparece tambien el motivo del `noRollbackFor` que tenia este metodo
+           (C-9): ya no hay una escritura que salvar de su propia excepcion. */
 
         // D-97: un habito SIN horario (ni disparo ni cierre, ni de catalogo ni de preferencia —
         // hoy DESPERTAR) se evidencia con el solo hecho de registrarlo, y la hora de la accion es
@@ -291,8 +289,14 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
             ResultadoOtorgamiento resultado = ResultadoOtorgamiento.calcular(ventana.instanteAncla(), ahora,
                     ventana.extension());
             puntos = resultado.puntos();
-            motivo = resultado.fase() == FaseOtorgamiento.EXTENDIDO ? MotivoPuntos.HABIT_EXTENDED
-                    : MotivoPuntos.HABIT_COMPLETED;
+            motivo = switch (resultado.fase()) {
+                case EXTENDIDO -> MotivoPuntos.HABIT_EXTENDED;
+                // Fuera de plazo: 0 puntos y queda ETIQUETADO como tarde. Sin esta rama, una
+                // entrega vencida se guardaria como HABIT_COMPLETED con 0 puntos y nadie podria
+                // distinguirla despues de un habito que valia cero por otro motivo.
+                case EXPIRADO -> MotivoPuntos.LATE_HABIT;
+                default -> MotivoPuntos.HABIT_COMPLETED;
+            };
         }
 
         registro.completar(puntos, command.respuestaTexto(), command.calificacionProductividad(), null, ahora);

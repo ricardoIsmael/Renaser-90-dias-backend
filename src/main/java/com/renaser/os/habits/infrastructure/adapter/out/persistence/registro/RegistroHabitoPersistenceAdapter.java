@@ -2,12 +2,14 @@ package com.renaser.os.habits.infrastructure.adapter.out.persistence.registro;
 
 import com.renaser.os.users.api.HabitoLogrosFinder;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
+import com.renaser.os.habits.application.ports.out.registro.RetirarObligacionesPausadasPort;
 import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.UserId;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -18,7 +20,7 @@ import java.util.Optional;
 /** Implementa ademas {@link HabitoLogrosFinder}, el contrato PUBLICO hacia otros modulos
  * — mismo patron que {@code EntradaDiarioPersistenceAdapter} de este mismo modulo. */
 @Component
-class RegistroHabitoPersistenceAdapter implements LoadRegistroHabitoPort, SaveRegistroHabitoPort, HabitoLogrosFinder {
+class RegistroHabitoPersistenceAdapter implements LoadRegistroHabitoPort, SaveRegistroHabitoPort, HabitoLogrosFinder, RetirarObligacionesPausadasPort {
 
     private final SpringDataRegistroHabitoRepository repository;
     private final RegistroHabitoPersistenceMapper mapper;
@@ -73,5 +75,11 @@ class RegistroHabitoPersistenceAdapter implements LoadRegistroHabitoPort, SaveRe
     public Optional<Instant> primerHabitoCompletadoEn(UserId participanteId) {
         return Optional.ofNullable(
                 repository.minCompletadoEnPorParticipanteYEstado(participanteId.value(), EstadoRegistroJpa.COMPLETADO));
+    }
+
+    @Override
+    @Transactional
+    public int retirarPendientes(UserId participanteId, HabitoId habitoId, LocalDate desde, LocalDate hasta) {
+        return repository.borrarPendientesEnRango(participanteId.value(), habitoId.value(), desde, hasta);
     }
 }

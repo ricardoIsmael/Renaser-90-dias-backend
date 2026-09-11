@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.shared.GuardDeRol;
 import com.renaser.os.habits.application.ports.in.radar.ConsultarHistorialRadarUseCase.HistorialRadarPage;
 import com.renaser.os.habits.application.ports.in.radar.RegistrarCheckInRadarUseCase.RegistrarCheckInRadarCommand;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
@@ -14,6 +15,7 @@ import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -60,7 +62,7 @@ class RadarServiceTest {
     }
 
     private static ProgresoParticipanteHabits trainee() {
-        return new ProgresoParticipanteHabits(5, "America/Argentina/Buenos_Aires", RolParticipante.TRAINEE, false);
+        return new ProgresoParticipanteHabits(5, "America/Argentina/Buenos_Aires", RolParticipante.TRAINEE, false, false);
     }
 
     private static RegistrarCheckInRadarCommand comando(UserId actorId, UserId participanteId) {
@@ -93,7 +95,7 @@ class RadarServiceTest {
     void registrarRechazaParticipanteSuspendido() {
         UserId dueno = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(dueno)).thenReturn(Optional.of(
-                new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, true)));
+                new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service.registrar(comando(dueno, dueno)))
                 .isInstanceOf(NotAuthorizedException.class);
@@ -105,7 +107,7 @@ class RadarServiceTest {
     void registrarRechazaRolQueNoEsTrainee() {
         UserId dueno = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(dueno)).thenReturn(Optional.of(
-                new ProgresoParticipanteHabits(5, "UTC", RolParticipante.MENTOR, false)));
+                new ProgresoParticipanteHabits(5, "UTC", RolParticipante.MENTOR, false, false)));
 
         assertThatThrownBy(() -> service.registrar(comando(dueno, dueno)))
                 .isInstanceOf(NotAuthorizedException.class);
@@ -207,5 +209,28 @@ class RadarServiceTest {
         service.historial(dueno, dueno, cursor, 20);
 
         verify(loadPort).historialDeParticipante(dueno, cursor, 20);
+    }
+
+    /**
+     * E-169: un MENTOR que activó su seguimiento personal opera su programa como cualquiera.
+     *
+     * <p>Es el reverso exacto del caso de arriba, y se construye sobre su mismo fixture para que
+     * la única diferencia sea el dato que importa: `programaActivado`. Antes de esto,
+     * {@code POST /api/v1/mentor/activate-tracking} inscribía al staff y después el guard lo
+     * echaba — la inscripción estaba construida y el uso prohibido.
+     */
+    @Test
+    @DisplayName("E-169: un MENTOR con su programa ACTIVADO ya no lo rechaza el guard de rol")
+    void staffConProgramaActivadoOperaSuPrograma() {
+        UserId dueno = UserId.of(UUID.randomUUID());
+        when(progresoPort.deParticipante(dueno)).thenReturn(Optional.of(
+                new ProgresoParticipanteHabits(5, "UTC", RolParticipante.MENTOR, false, true)));
+
+        GuardDeRol.noRechaza(() -> service.registrar(comando(dueno, dueno)),
+                "El Codigo Renaser es exclusivo de aprendices");
+
+        // El `verify(never())` del caso de rechazo se cae aca a proposito: ahora SI guarda, y eso
+        // es exactamente el arreglo. Se afirma lo contrario que alla, sobre el mismo fixture.
+        verify(savePort).save(any());
     }
 }

@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.application.services;
 
+import com.renaser.os.shared.GuardDeRol;
 import com.renaser.os.rocks.application.ports.in.verdugo.RegistrarEventoVerdugoUseCase.RegistrarEventoVerdugoCommand;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort.ProgresoParticipanteRocks;
@@ -79,7 +80,12 @@ class VerdugoServiceTest {
     }
 
     private static ProgresoParticipanteRocks progreso(RolParticipante rol, boolean suspendido) {
-        return new ProgresoParticipanteRocks(20, LocalDate.of(2026, 1, 5), ZoneOffset.UTC, rol, suspendido);
+        return new ProgresoParticipanteRocks(20, LocalDate.of(2026, 1, 5), ZoneOffset.UTC, rol, suspendido, false);
+    }
+
+    /** Igual que {@link #progreso} pero con el programa ANDANDO: el caso de E-169. */
+    private static ProgresoParticipanteRocks progresoActivado(RolParticipante rol, boolean suspendido) {
+        return new ProgresoParticipanteRocks(20, LocalDate.of(2026, 1, 5), ZoneOffset.UTC, rol, suspendido, true);
     }
 
     private static ProgresoParticipanteRocks progreso(boolean suspendido) {
@@ -184,5 +190,23 @@ class VerdugoServiceTest {
 
         verify(saveEventoVerdugoPort).save(pendiente2);
         assertThat(pendiente2.resultado()).isEqualTo(ResultadoVerdugo.IGNORADO);
+    }
+
+    /**
+     * E-169: un MENTOR que activo su seguimiento personal opera su programa como cualquiera.
+     *
+     * <p>Es el reverso exacto del caso de rechazo, y se construye sobre su mismo fixture para que
+     * la unica diferencia sea el dato que importa. Antes de esto,
+     * {@code POST /api/v1/mentor/activate-tracking} inscribia al staff y despues el guard lo
+     * echaba: la inscripcion estaba construida y el uso prohibido.
+     */
+    @Test
+    @DisplayName("E-169: un MENTOR con su programa ACTIVADO ya no lo rechaza el guard de rol")
+    void staffConProgramaActivadoOperaSuPrograma() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progresoActivado(RolParticipante.MENTOR, false)));
+
+        var command = new RegistrarEventoVerdugoCommand(actorId, DestinoVerdugo.ROCA_DIARIA, UUID.randomUUID(),
+                CLOCK.now(), ResultadoVerdugo.COMPLETADO);
+        GuardDeRol.noRechaza(() -> service.registrar(command), "Solo un aprendiz registra sus propios eventos Verdugo");
     }
 }

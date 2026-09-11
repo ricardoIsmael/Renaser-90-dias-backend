@@ -36,14 +36,23 @@ import static org.mockito.Mockito.when;
  * CLAUDE.MD §0.3: toda prueba de autorizacion negativa vive aca — un TRAINEE sin el permiso
  * tiene que recibir 403, un SUSPENDED tiene que recibir 403 aunque el permiso lo tendria, y un
  * rol sin matriz definida (hueco temporal A-1) tiene que seguir pasando como pasaba antes.
+ *
+ * <p>Desde el SDD 002 (DL-08) cubre ademas MENTOR_LEAD, que si tiene matriz pero arranca en
+ * <b>modo sombra</b>: con el interruptor apagado se evalua y se deja pasar; con el encendido,
+ * deniega. Las dos ramas se prueban aca, para que activar el paso 3 no sea un salto a ciegas.
  */
 @SuppressWarnings("unchecked")
 class PermissionEnforcementInterceptorTest {
 
     private final UserSummaryFinder userSummaryFinder = mock(UserSummaryFinder.class);
     private final ObjectProvider<UserSummaryFinder> provider = mock(ObjectProvider.class);
+    /** El de produccion hoy: MENTOR_LEAD en modo sombra (SDD 002, DL-08, paso 2). */
     private final PermissionEnforcementInterceptor interceptor =
-            new PermissionEnforcementInterceptor(provider);
+            new PermissionEnforcementInterceptor(provider, false);
+
+    /** El mismo con el paso 3 encendido, para probar el cumplimiento antes de activarlo. */
+    private final PermissionEnforcementInterceptor interceptorConCumplimiento =
+            new PermissionEnforcementInterceptor(provider, true);
 
     @BeforeEach
     void configurarProviderDisponible() {
@@ -183,6 +192,95 @@ class PermissionEnforcementInterceptorTest {
         assertThat(continua).isTrue();
     }
 
+    // ─── MENTOR_LEAD: matriz real, modo sombra y cumplimiento (SDD 002, DL-08) ───────
+
+    @Test
+    @DisplayName("MENTOR_LEAD contra un endpoint de administracion: en modo sombra pasa, pero ya se evaluo")
+    void mentorLeadEnModoSombraPasaAunqueNoTengaElPermiso() throws Exception {
+        UUID actorId = actorConRol(UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
+
+        boolean continua = ejecutarPreHandle(actorId, "exigeManageStaff");
+
+        assertThat(continua).isTrue();
+        assertThat(ultimaRespuesta.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("MENTOR_LEAD contra un endpoint de administracion: con el cumplimiento encendido recibe 403")
+    void mentorLeadConCumplimientoRecibe403EnAdministracion() throws Exception {
+        UUID actorId = actorConRol(UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
+
+        boolean continua = ejecutarPreHandleCon(interceptorConCumplimiento, actorId, "exigeManageStaff");
+
+        assertThat(continua).isFalse();
+        assertThat(ultimaRespuesta.getStatus()).isEqualTo(403);
+    }
+
+    @Test
+    @DisplayName("MENTOR_LEAD SI puede ver el padron de mentores, con el cumplimiento encendido")
+    void mentorLeadPuedeVerElPadronDeMentores() throws Exception {
+        UUID actorId = actorConRol(UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
+
+        boolean continua = ejecutarPreHandleCon(interceptorConCumplimiento, actorId, "exigeVerPadronDeMentores");
+
+        assertThat(continua).isTrue();
+    }
+
+    @Test
+    @DisplayName("MENTOR_LEAD conserva USE_APP: cerrar el falla-abierto no le rompe su propia app")
+    void mentorLeadConservaUseApp() throws Exception {
+        UUID actorId = actorConRol(UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
+
+        boolean continua = ejecutarPreHandleCon(interceptorConCumplimiento, actorId, "exigeUseApp");
+
+        assertThat(continua).isTrue();
+    }
+
+    @Test
+    @DisplayName("un MENTOR_LEAD suspendido recibe 403 con el cumplimiento encendido, aunque el permiso lo tendria")
+    void mentorLeadSuspendidoRecibe403() throws Exception {
+        UUID actorId = actorConRol(UserRole.MENTOR_LEAD, UserStatus.SUSPENDED);
+
+        boolean continua = ejecutarPreHandleCon(interceptorConCumplimiento, actorId, "exigeUseApp");
+
+        assertThat(continua).isFalse();
+        assertThat(ultimaRespuesta.getStatus()).isEqualTo(403);
+    }
+
+    @Test
+    @DisplayName("un MENTOR_LEAD suspendido sigue pudiendo abrir un ticket de soporte (reclamar su suspension)")
+    void mentorLeadSuspendidoPuedeAbrirTicketDeSoporte() throws Exception {
+        UUID actorId = actorConRol(UserRole.MENTOR_LEAD, UserStatus.SUSPENDED);
+
+        boolean continua = ejecutarPreHandleCon(interceptorConCumplimiento, actorId, "exigeOpenSupportTicket");
+
+        assertThat(continua).isTrue();
+    }
+
+    @Test
+    @DisplayName("un MENTOR no llega al padron de mentores: no es su rol, aunque su matriz siga sin definirse")
+    void unMentorNoEsUnLiderDeMentores() throws Exception {
+        UUID actorId = actorConRol(UserRole.MENTOR, UserStatus.ACTIVE);
+
+        // MENTOR sigue en falla-abierto (A-1), asi que el interceptor lo deja pasar: quien lo
+        // frena es el guard del servicio. Este test fija ese limite a proposito, para que se vea
+        // que la matriz de MENTOR sigue siendo deuda y no quede la ilusion de que esta cerrada.
+        boolean continua = ejecutarPreHandleCon(interceptorConCumplimiento, actorId, "exigeVerPadronDeMentores");
+
+        assertThat(continua).isTrue();
+    }
+
+    @Test
+    @DisplayName("un TRAINEE no llega al padron de mentores: 403 del interceptor")
+    void unTraineeNoLlegaAlPadronDeMentores() throws Exception {
+        UUID actorId = actorTrainee(UserStatus.ACTIVE);
+
+        boolean continua = ejecutarPreHandle(actorId, "exigeVerPadronDeMentores");
+
+        assertThat(continua).isFalse();
+        assertThat(ultimaRespuesta.getStatus()).isEqualTo(403);
+    }
+
     // ─── resiliencia frente a un @WebMvcTest de otro modulo sin UserSummaryFinder ─────
 
     @Test
@@ -242,11 +340,23 @@ class PermissionEnforcementInterceptorTest {
         return actorId;
     }
 
+    private UUID actorConRol(UserRole rol, UserStatus status) {
+        UUID actorId = UUID.randomUUID();
+        when(userSummaryFinder.findById(UserId.of(actorId))).thenReturn(
+                Optional.of(new UserSummary(UserId.of(actorId), "X", null, rol, status)));
+        return actorId;
+    }
+
     private boolean ejecutarPreHandle(UUID actorId, String metodo) throws Exception {
+        return ejecutarPreHandleCon(interceptor, actorId, metodo);
+    }
+
+    private boolean ejecutarPreHandleCon(PermissionEnforcementInterceptor cual, UUID actorId, String metodo)
+            throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-Actor-Id", actorId.toString());
         ultimaRespuesta = new MockHttpServletResponse();
-        return interceptor.preHandle(request, ultimaRespuesta, handlerMethodFor(metodo));
+        return cual.preHandle(request, ultimaRespuesta, handlerMethodFor(metodo));
     }
 
     private static HandlerMethod handlerMethodFor(String nombreMetodo) throws NoSuchMethodException {
@@ -271,6 +381,10 @@ class PermissionEnforcementInterceptorTest {
 
         @RequiresPermission(Permission.MANAGE_STAFF)
         public void exigeManageStaff() {
+        }
+
+        @RequiresPermission(Permission.VIEW_MENTOR_CORPS)
+        public void exigeVerPadronDeMentores() {
         }
 
         @PublicEndpoint("prueba")

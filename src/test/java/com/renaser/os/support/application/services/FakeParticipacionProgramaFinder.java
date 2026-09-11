@@ -36,7 +36,7 @@ class FakeParticipacionProgramaFinder implements ParticipacionProgramaFinder {
         }
         return Optional.of(new ParticipacionPrograma(participanteId, true, 10, LocalDate.of(2026, 8, 1),
                 ZoneId.of("America/Lima"), FasePrograma.PHASE_1_REBIRTH, null,
-                mentorPorAprendiz.get(participanteId), UserRole.TRAINEE, false));
+                mentorPorAprendiz.get(participanteId), UserRole.TRAINEE, false, true));
     }
 
     @Override

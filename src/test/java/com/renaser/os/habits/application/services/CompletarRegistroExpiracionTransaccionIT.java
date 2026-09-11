@@ -30,12 +30,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Regresion de C-9 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html):
- * "expirar y lanzar" revertia la expiracion que {@code completar()} recien habia
- * guardado, porque el {@code throw} corria dentro de la MISMA transaccion que el
- * {@code save} — Postgres deshacia los dos juntos y el registro quedaba PENDIENTE
- * para siempre (el aprendiz reintenta y vuelve a chocar con el mismo 409 hasta el
- * cron de las 05:00).
+ * Un habito fuera de plazo SE PUEDE REGISTRAR igual.
+ *
+ * <p><b>Antes no.</b> Pasada la ventana, `completar()` marcaba EXPIRADO y respondia
+ * {@code 409 El habito expiro -- no se puede completar}. El dueno del proyecto lo pidio al reves
+ * y tiene razon: registrar tarde es informacion, y perderla no ayuda a nadie. Quien se desperto a
+ * las 10 y lo anota a las 11 HIZO el habito; lo unico que no hizo fue llegar a tiempo, y eso ya
+ * se cobra donde corresponde -- {@code ResultadoOtorgamiento} devuelve 0 puntos en fase EXPIRADO.
+ * Bloquear ademas el registro cobraba dos veces por la misma tardanza.
+ *
+ * <p><b>Que fue de C-9.</b> Esta clase nacio como regresion de C-9: "expirar y lanzar" revertia
+ * la expiracion que `completar()` acababa de guardar, porque el `throw` corria dentro de la misma
+ * transaccion que el `save`. Ese defecto ya no puede existir -- no queda ningun `throw` del que
+ * salvar una escritura -- y con el se fue tambien el `noRollbackFor` que lo parcheaba. Se
+ * conservan las pruebas contra Postgres real porque lo que ahora hay que demostrar es lo
+ * contrario: que la fila queda COMPLETADA de verdad, y con cero puntos.
  *
  * <p>Requiere Postgres real: el defecto es un rollback real de una transaccion real
  * ({@code @Transactional} de Spring sobre un {@code PlatformTransactionManager} JPA
@@ -130,32 +139,64 @@ class CompletarRegistroExpiracionTransaccionIT {
                 id.value());
     }
 
-    @Test
-    @DisplayName("C-9: completar() sobre un registro vencido lanza, pero la expiracion queda persistida en Postgres")
-    void completarSobreRegistroVencidoPersisteLaExpiracionPeseAlThrow() {
-        RegistroHabitoId id = seedRegistroPendienteMuyVencido();
-
-        assertThatThrownBy(() -> completarUseCase.completar(
-                new CompletarRegistroCommand(participanteId, id, null, null)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("expiro");
-
-        // El corazon de C-9: sin el arreglo, esta consulta devolveria PENDIENTE (el rollback
-        // de la transaccion revertia el save de la expiracion junto con el throw).
-        assertThat(estadoEnBaseDe(id)).as("la expiracion sobrevive al throw, no la revierte el rollback")
-                .isEqualTo("EXPIRADO");
+    private int puntosEnBaseDe(RegistroHabitoId id) {
+        Integer p = jdbcTemplate.queryForObject(
+                "SELECT puntos_otorgados FROM renaser.registros_habito WHERE id = ?", Integer.class, id.value());
+        return p == null ? -1 : p;
     }
 
     @Test
-    @DisplayName("C-9: un segundo intento sobre el mismo registro ya EXPIRADO no revive el PENDIENTE")
-    void segundoIntentoSigueViendoloExpirado() {
+    @DisplayName("Un registro vencido SE COMPLETA, y paga cero: la tardanza se cobra en puntos, no bloqueando")
+    void unRegistroVencidoSeCompletaConCeroPuntos() {
         RegistroHabitoId id = seedRegistroPendienteMuyVencido();
 
-        assertThatThrownBy(() -> completarUseCase.completar(new CompletarRegistroCommand(participanteId, id, null,
-                null))).isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> completarUseCase.completar(new CompletarRegistroCommand(participanteId, id, null,
-                null))).isInstanceOf(IllegalStateException.class);
+        completarUseCase.completar(new CompletarRegistroCommand(participanteId, id, null, null));
 
-        assertThat(estadoEnBaseDe(id)).isEqualTo("EXPIRADO");
+        assertThat(estadoEnBaseDe(id))
+                .as("la fila queda COMPLETADA: lo hizo, aunque tarde")
+                .isEqualTo("COMPLETADO");
+        assertThat(puntosEnBaseDe(id))
+                .as("y paga cero, que es donde SI corresponde cobrar la tardanza")
+                .isZero();
+    }
+
+    /**
+     * El caso que reporto el dueno del proyecto: DESPERTAR ya estaba en EXPIRADO --lo dejo asi un
+     * intento anterior o el barrido-- y no habia forma de registrarlo nunca mas.
+     */
+    @Test
+    @DisplayName("Un registro que YA estaba EXPIRADO tambien se puede completar")
+    void unRegistroYaExpiradoTambienSePuedeCompletar() {
+        RegistroHabitoId id = seedRegistroPendienteMuyVencido();
+        jdbcTemplate.update("""
+                UPDATE renaser.registros_habito SET estado = CAST('EXPIRADO' AS renaser.estado_registro)
+                WHERE id = ?
+                """, id.value());
+
+        completarUseCase.completar(new CompletarRegistroCommand(participanteId, id, null, null));
+
+        assertThat(estadoEnBaseDe(id)).isEqualTo("COMPLETADO");
+        assertThat(puntosEnBaseDe(id)).isZero();
+    }
+
+    /**
+     * FALLIDO sigue cerrado, y esa es la linea. Lo marca el barrido cuando el dia CIERRA: un dia
+     * cerrado es un veredicto, y dejar completarlo despues seria reescribir el pasado. Sin esta
+     * prueba, "dejar registrar tarde" se podria satisfacer abriendo tambien esa puerta.
+     */
+    @Test
+    @DisplayName("Un registro FALLIDO no se puede completar: el dia ya cerro")
+    void unRegistroFallidoSigueCerrado() {
+        RegistroHabitoId id = seedRegistroPendienteMuyVencido();
+        jdbcTemplate.update("""
+                UPDATE renaser.registros_habito SET estado = CAST('FALLIDO' AS renaser.estado_registro)
+                WHERE id = ?
+                """, id.value());
+
+        assertThatThrownBy(() -> completarUseCase.completar(
+                new CompletarRegistroCommand(participanteId, id, null, null)))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(estadoEnBaseDe(id)).isEqualTo("FALLIDO");
     }
 }

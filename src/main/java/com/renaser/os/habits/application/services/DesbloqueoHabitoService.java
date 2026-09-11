@@ -12,6 +12,7 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.application.ports.out.registro.RetirarObligacionesPausadasPort;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -19,6 +20,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -36,15 +39,18 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
     private final LoadDesbloqueoHabitoPort loadPort;
     private final SaveDesbloqueoHabitoPort savePort;
     private final LoadHabitoPort loadHabitoPort;
+    private final RetirarObligacionesPausadasPort retirarPort;
     private final Clock clock;
 
     public DesbloqueoHabitoService(ConsultarProgresoParticipanteHabitsPort progresoPort,
                                     LoadDesbloqueoHabitoPort loadPort, SaveDesbloqueoHabitoPort savePort,
-                                    LoadHabitoPort loadHabitoPort, Clock clock) {
+                                    LoadHabitoPort loadHabitoPort,
+                                    RetirarObligacionesPausadasPort retirarPort, Clock clock) {
         this.progresoPort = progresoPort;
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.loadHabitoPort = loadHabitoPort;
+        this.retirarPort = retirarPort;
         this.clock = clock;
     }
 
@@ -101,7 +107,7 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
     @Override
     @Transactional
     public DesbloqueoHabito cambiarEstado(CambiarEstadoHabitoCommand command) {
-        requireProgreso(command.actorId());
+        ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         Habito habito = requireHabito(command.habitoId());
         DesbloqueoHabito desbloqueo = loadPort.deParticipanteYHabito(command.actorId(), command.habitoId())
                 .orElseThrow(() -> new NoSuchElementException(
@@ -110,7 +116,23 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
         if (command.activo()) {
             desbloqueo.reactivar(clock.now());
         } else {
-            desbloqueo.pausar(habito.desactivable(), command.pausadoHasta(), clock.now());
+            Instant ahora = clock.now();
+            desbloqueo.pausar(habito.desactivable(), command.pausadoHasta(), ahora);
+            /* Pausar apagaba la generacion FUTURA, pero el track de HOY ya estaba creado -- lo
+               hace el barrido de las 05:02 o la primera apertura de la app -- y se quedaba en
+               PENDIENTE. La persona apagaba el habito a las 10:00, lo seguia viendo en su dia y
+               en evidencias, y a la noche el barrido lo marcaba fallado. El boton decia "solo
+               hoy" y hoy contaba igual.
+
+               El dia de corte sale del reloj EN LA ZONA DEL PARTICIPANTE, no del servidor: con
+               `LocalDate.now()` el borrado se corre una casilla para quien esta en otro huso, que
+               es E-91 entrando por la puerta de al lado.
+
+               Solo se retira lo que sigue ABIERTO. Ver el javadoc del puerto: borrar lo ya
+               vencido dejaria limpiar fallos pausando despues de fallar. */
+            LocalDate desdeHoy = ahora.atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+            retirarPort.retirarPendientes(command.actorId(), command.habitoId(), desdeHoy,
+                    command.pausadoHasta());
         }
         return savePort.save(desbloqueo);
     }

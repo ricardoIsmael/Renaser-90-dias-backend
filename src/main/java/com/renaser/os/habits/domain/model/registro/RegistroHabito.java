@@ -99,7 +99,16 @@ public final class RegistroHabito {
      */
     public void completar(int puntos, String respuestaTexto, Integer calificacionProductividad,
                            java.util.UUID entradaDiarioId, Instant ahora) {
-        requireNoTerminal();
+        /* Aca habia un `requireNoTerminal()`. Se quita porque EXPIRADO es terminal segun
+           `esTerminal()` --y lo sigue siendo para el resto del sistema, que usa esa pregunta para
+           "esto ya no se toca"-- pero SI se puede completar desde que registrar tarde dejo de
+           bloquearse. La comprobacion de abajo es la que manda para este gesto, y es mas estricta
+           que aquella para los otros dos estados terminales: COMPLETADO y FALLIDO siguen fuera.
+
+           No se toca `esTerminal()` en cambio: la usan `ClaseDiariaHabitoService`,
+           `PostDiarioComunidadHabitoService` y la agenda del dia con el sentido de "hecho, vencido
+           o fallido no tiene nada pendiente", y ahi EXPIRADO si pertenece. Ensanchar esa pregunta
+           para arreglar este gesto habria cambiado tres comportamientos que nadie pidio. */
         if (!estado.puedeCompletarse()) {
             throw new IllegalStateException("Este registro no puede completarse: " + estado);
         }

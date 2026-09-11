@@ -72,7 +72,7 @@ class LeccionesVisiblesAcademyServiceTest {
     }
 
     private static ProgresoParticipanteAcademy progreso(RolParticipante rol, int diaPrograma, boolean suspendido) {
-        return new ProgresoParticipanteAcademy(diaPrograma, ZoneId.of("America/Lima"), rol, suspendido);
+        return new ProgresoParticipanteAcademy(diaPrograma, ZoneId.of("America/Lima"), rol, suspendido, false);
     }
 
     @Test

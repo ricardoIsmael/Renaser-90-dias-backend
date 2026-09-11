@@ -1,6 +1,7 @@
 package com.renaser.os.chat.infrastructure.adapter.out.persistence.conversacion;
 
 import com.renaser.os.chat.application.ports.out.participante.AgregarParticipantePort;
+import com.renaser.os.chat.application.ports.out.participante.QuitarParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ContarNoLeidosPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ListarUsuariosDeConversacionPort;
@@ -15,12 +16,13 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 @Component
 class ParticipanteConversacionPersistenceAdapter
-        implements AgregarParticipantePort, EsParticipantePort, MarcarLeidoPort, ContarNoLeidosPort,
-        ListarUsuariosDeConversacionPort {
+        implements AgregarParticipantePort, QuitarParticipantePort, EsParticipantePort, MarcarLeidoPort,
+        ContarNoLeidosPort, ListarUsuariosDeConversacionPort {
 
     private final SpringDataParticipanteConversacionRepository repository;
 
@@ -71,5 +73,34 @@ class ParticipanteConversacionPersistenceAdapter
     @Override
     public List<UserId> usuariosDe(ConversacionId conversacionId) {
         return repository.usuarioIdsDeConversacion(conversacionId.value()).stream().map(UserId::of).toList();
+    }
+
+    @Override
+    public Map<ConversacionId, UserId> otroParticipanteDeDirectas(List<ConversacionId> conversacionIds,
+                                                                   UserId actorId) {
+        if (conversacionIds == null || conversacionIds.isEmpty()) {
+            return Map.of();
+        }
+        return repository.otrosParticipantes(conversacionIds.stream().map(ConversacionId::value).toList(),
+                        actorId.value())
+                .stream()
+                /* `toMap` con funcion de fusion y no la version de dos argumentos: esa LANZA ante
+                   una clave repetida. Una conversacion DIRECTA tiene un solo "otro", pero esta
+                   consulta no distingue tipos —filtrar por tipo aca obligaria a unir con la tabla
+                   de conversaciones para nada—, asi que un grupo devuelve varias filas. Se queda
+                   con una y quien llama la ignora por no ser DIRECTA. */
+                .collect(Collectors.toMap(fila -> ConversacionId.of(fila.getConversacionId()),
+                        fila -> UserId.of(fila.getUsuarioId()),
+                        (primero, siguiente) -> primero));
+    }
+
+    /**
+     * Borra SOLO la fila de participacion. Los mensajes cuelgan de la conversacion, no de esta
+     * tabla, asi que la historia del grupo queda intacta — que es exactamente lo que se quiere:
+     * el nuevo mentor lee lo que paso antes de llegar.
+     */
+    @Override
+    public void quitar(ConversacionId conversacionId, UserId usuarioId) {
+        repository.deleteById(new ParticipanteConversacionId(conversacionId.value(), usuarioId.value()));
     }
 }

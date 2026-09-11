@@ -1,5 +1,7 @@
 package com.renaser.os.evidence.infrastructure.adapter.out.persistence;
 
+import com.renaser.os.evidence.api.EntregaDeEvidencia;
+import com.renaser.os.evidence.api.EstadoValidacion;
 import com.renaser.os.evidence.application.ports.out.evidencia.LoadEvidenciaPort;
 import com.renaser.os.evidence.application.ports.out.evidencia.SaveEvidenciaPort;
 import com.renaser.os.evidence.domain.model.evidencia.Evidencia;
@@ -13,7 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -87,5 +91,46 @@ class EvidenciaPersistenceAdapter implements LoadEvidenciaPort, SaveEvidenciaPor
         Specification<EvidenciaJpaEntity> spec = EvidenciaSpecifications.filtro(filtro, cursor);
         Pageable pageable = PageRequest.of(0, limite + 1, Sort.by(Sort.Direction.DESC, "creadoEn"));
         return repository.findAll(spec, pageable).getContent().stream().map(mapper::toDomain).toList();
+    }
+
+    /**
+     * Reduce la lectura ordenada a una entrega por obligacion: se queda con la PRIMERA subida y,
+     * si alguna de las filas de ese registro esta aprobada, propaga esa aprobacion. Reenviar tres
+     * veces el mismo archivo sigue siendo una entrega (plan.md §8).
+     */
+    @Override
+    public Map<UUID, EntregaDeEvidencia> entregasDeRegistros(
+            Collection<UUID> registrosHabitoIds) {
+        if (registrosHabitoIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, EntregaDeEvidencia> porRegistro =
+                new LinkedHashMap<>();
+        for (Object[] fila : repository.entregasDeRegistros(registrosHabitoIds)) {
+            UUID registroId = (UUID) fila[0];
+            UUID evidenciaId = (UUID) fila[1];
+            Instant subidaEn = (Instant) fila[2];
+            EstadoValidacion estado = traducirEstadoValidacion(fila[3]);
+
+            EntregaDeEvidencia previa = porRegistro.get(registroId);
+            if (previa == null) {
+                porRegistro.put(registroId, new EntregaDeEvidencia(
+                        registroId, evidenciaId, subidaEn, estado, 1));
+                continue;
+            }
+            // La consulta viene ordenada por subidaEn, asi que `previa` ya es la mas temprana:
+            // solo se acumula el conteo y, si esta llego aprobada, se conserva esa aprobacion.
+            EstadoValidacion mejor =
+                    previa.verificada() || estado == EstadoValidacion.VALIDA
+                            ? EstadoValidacion.VALIDA
+                            : previa.estadoRevision();
+            porRegistro.put(registroId, new EntregaDeEvidencia(
+                    registroId, previa.evidenciaId(), previa.primeraEntregaEn(), mejor, previa.archivos() + 1));
+        }
+        return porRegistro;
+    }
+
+    private static EstadoValidacion traducirEstadoValidacion(Object valor) {
+        return EstadoValidacion.valueOf(String.valueOf(valor));
     }
 }

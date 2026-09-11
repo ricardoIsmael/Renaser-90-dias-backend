@@ -10,6 +10,8 @@ import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
 import com.renaser.os.chat.application.ports.out.participante.AgregarParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ContarNoLeidosPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
+import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigentePort;
+import com.renaser.os.chat.application.ports.out.participante.ListarUsuariosDeConversacionPort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
@@ -61,12 +63,22 @@ class ConversacionServiceTest {
     private AgregarParticipantePort agregarParticipantePort;
     @Mock
     private EsParticipantePort esParticipantePort;
+
+    /**
+     * Las conversaciones de grupo revalidan la pertenencia contra `community` en vez de confiar en
+     * la proyeccion. Estas pruebas trabajan con DIRECTAS y GLOBAL, que no pasan por ahi, asi que
+     * el doble no necesita comportamiento — pero tiene que existir.
+     */
+    @Mock
+    private PertenenciaVigentePort pertenenciaVigentePort;
     @Mock
     private MarcarLeidoPort marcarLeidoPort;
     @Mock
     private ContarNoLeidosPort contarNoLeidosPort;
     @Mock
     private LoadMensajePort loadMensajePort;
+    @Mock
+    private ListarUsuariosDeConversacionPort listarUsuariosPort;
     @Mock
     private UserSummaryFinder userSummaryFinder;
     @Mock
@@ -86,7 +98,8 @@ class ConversacionServiceTest {
     @BeforeEach
     void setUp() {
         service = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
-                esParticipantePort, marcarLeidoPort, contarNoLeidosPort, loadMensajePort, userSummaryFinder,
+                esParticipantePort, pertenenciaVigentePort, marcarLeidoPort, contarNoLeidosPort, loadMensajePort,
+                listarUsuariosPort, userSummaryFinder,
                 CLOCK, idGenerator, transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
@@ -169,6 +182,53 @@ class ConversacionServiceTest {
         // Nunca N+1: una sola llamada al puerto de conteo en lote, no una por conversacion.
         verify(contarNoLeidosPort, times(1)).contarNoLeidos(any(), any());
         verify(loadMensajePort, times(1)).ultimosPorConversacion(any());
+    }
+
+    /**
+     * El listado dice CON QUIEN es cada chat directo.
+     *
+     * <p>Sin esto, el movil solo podia nombrar la conversacion cuando el ultimo mensaje lo habia
+     * mandado el otro: si lo mandabas tu, o si el chat estaba vacio, la fila decia "Conversacion
+     * directa". Con dos chats asi, la bandeja mostraba dos filas identicas.
+     *
+     * <p>Se comprueba tambien que un GRUPO no lo lleve: ya tiene nombre propio, y mandar el roster
+     * de cada conversacion en un listado seria repartir mas datos personales de los que la
+     * pantalla usa.
+     */
+    @Test
+    void elListadoDiceConQuienEsCadaChatDirectoYNoLoInventaEnLosGrupos() {
+        Conversacion directa = Conversacion.crearDirecta(ConversacionId.of(UUID.randomUUID()), "clave", CLOCK.now());
+        Conversacion grupo = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
+        when(loadConversacionPort.misConversaciones(activo)).thenReturn(List.of(directa, grupo));
+        when(loadMensajePort.ultimosPorConversacion(any())).thenReturn(Map.of());
+        when(contarNoLeidosPort.contarNoLeidos(eq(activo), any())).thenReturn(Map.of());
+        when(listarUsuariosPort.otroParticipanteDeDirectas(any(), eq(activo)))
+                .thenReturn(Map.of(directa.id(), otroActivo));
+        when(userSummaryFinder.findByIds(any())).thenReturn(Map.of(otroActivo,
+                new UserSummary(otroActivo, "Otro", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+
+        List<ConversacionResumen> resumenes = service.listar(activo);
+
+        assertThat(resumenes)
+                .filteredOn(r -> r.conversacion().id().equals(directa.id()))
+                .singleElement()
+                .satisfies(r -> {
+                    assertThat(r.otroParticipante())
+                            .as("el chat 1 a 1 dice con quien es, aunque no haya ni un mensaje")
+                            .isEqualTo(otroActivo);
+                    /* Y con su NOMBRE. Mandar solo el id obligaba al cliente a resolverlo contra
+                       `GET /chat/members`, que exige la conversacion GLOBAL y sin ella da 404: la
+                       bandeja de DMs se quedaba sin nombres por culpa de otra conversacion. */
+                    assertThat(r.otroParticipanteNombre()).isEqualTo("Otro");
+                });
+        assertThat(resumenes)
+                .filteredOn(r -> r.conversacion().id().equals(grupo.id()))
+                .singleElement()
+                .satisfies(r -> assertThat(r.otroParticipante())
+                        .as("un grupo no tiene 'el otro'")
+                        .isNull());
+        // Nunca N+1: una sola consulta en lote para todas las conversaciones del actor.
+        verify(listarUsuariosPort, times(1)).otroParticipanteDeDirectas(any(), any());
     }
 
     @Test

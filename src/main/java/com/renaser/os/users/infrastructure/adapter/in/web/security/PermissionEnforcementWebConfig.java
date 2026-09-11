@@ -2,6 +2,7 @@ package com.renaser.os.users.infrastructure.adapter.in.web.security;
 
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -28,13 +29,23 @@ class PermissionEnforcementWebConfig implements WebMvcConfigurer {
 
     private final ObjectProvider<UserSummaryFinder> userSummaryFinderProvider;
 
-    PermissionEnforcementWebConfig(ObjectProvider<UserSummaryFinder> userSummaryFinderProvider) {
+    /**
+     * Interruptor del paso 3 de DL-08 (SDD 002). Por defecto <b>false</b>: MENTOR_LEAD se evalua
+     * en modo sombra. Se pone en true recien cuando el registro del modo sombra este limpio en
+     * uso real, y volver atras es cambiar esta propiedad — no desplegar codigo.
+     */
+    private final boolean cumplimientoMentorLead;
+
+    PermissionEnforcementWebConfig(ObjectProvider<UserSummaryFinder> userSummaryFinderProvider,
+                                    @Value("${renaser.security.mentor-lead-enforcement:false}")
+                                    boolean cumplimientoMentorLead) {
         this.userSummaryFinderProvider = userSummaryFinderProvider;
+        this.cumplimientoMentorLead = cumplimientoMentorLead;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(new PermissionEnforcementInterceptor(userSummaryFinderProvider))
+        registry.addInterceptor(new PermissionEnforcementInterceptor(userSummaryFinderProvider, cumplimientoMentorLead))
                 .addPathPatterns("/api/v1/**");
     }
 }

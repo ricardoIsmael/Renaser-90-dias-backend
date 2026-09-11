@@ -102,7 +102,15 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
         if (progreso.suspendido()) {
             throw new NotAuthorizedException("Cuenta suspendida");
         }
-        if (progreso.rol() != RolParticipante.TRAINEE) {
+        /* E-169: la puerta no es el ROL, es tener el programa andando. `TRACK_PROGRAM_AS_STAFF`
+           y `POST /api/v1/mentor/activate-tracking` existen para que el staff curse los 90 dias;
+           preguntar solo por el rol dejaba la inscripcion construida y el uso prohibido.
+
+           Se conserva la rama del rol en vez de reducirlo a `!programaActivado`: un TRAINEE recien
+           aprobado tiene `programa_activado_en` en null hasta que termina primer login + Ficha +
+           Terminos, y el cambio corto lo habria dejado fuera de su propio programa. Asi el cambio
+           es ESTRICTAMENTE aditivo: nadie que hoy pase, deja de pasar. */
+        if (progreso.rol() != RolParticipante.TRAINEE && !progreso.programaActivado()) {
             throw new NotAuthorizedException("El Codigo Renaser es exclusivo de aprendices");
         }
     }

@@ -1,5 +1,6 @@
 package com.renaser.os.academy.application.services;
 
+import com.renaser.os.shared.GuardDeRol;
 import com.renaser.os.academy.application.ports.in.clasediaria.CompletarClaseDiariaUseCase;
 import com.renaser.os.academy.application.ports.in.clasediaria.CompletarClaseDiariaUseCase.ClaseDiariaCompletada;
 import com.renaser.os.academy.application.ports.in.clasediaria.CompletarClaseDiariaUseCase.CompletarClaseDiariaCommand;
@@ -84,7 +85,7 @@ class ClaseDiariaServiceTest {
     @DisplayName("dia_programa 0 -> NoIniciado")
     void diaCeroNoIniciado() {
         when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
-                Optional.of(new ProgresoParticipanteAcademy(0, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteAcademy(0, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, false)));
 
         ClaseDiariaResolution resolucion = service().claseDeHoy(ACTOR_ID);
 
@@ -95,7 +96,7 @@ class ClaseDiariaServiceTest {
     @DisplayName("sin ningun curso/seccion desbloqueada para el dia -> Proximamente")
     void sinContenidoProximamente() {
         when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
-                Optional.of(new ProgresoParticipanteAcademy(5, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteAcademy(5, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, false)));
         when(loadCursoPort.listarTodos()).thenReturn(List.of());
 
         ClaseDiariaResolution resolucion = service().claseDeHoy(ACTOR_ID);
@@ -108,7 +109,7 @@ class ClaseDiariaServiceTest {
     @DisplayName("elige la seccion con dia_desbloqueo mas reciente que ya alcanzo, y dentro de ella la leccion \"clase\"")
     void eligeSeccionMasRecienteYLeccionClase() {
         when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
-                Optional.of(new ProgresoParticipanteAcademy(20, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteAcademy(20, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, false)));
 
         Curso curso = curso("c1", 1);
         when(loadCursoPort.listarTodos()).thenReturn(List.of(curso));
@@ -136,7 +137,7 @@ class ClaseDiariaServiceTest {
      * {@code Disponible} con {@code leccionId="l2"}. */
     private void mockClaseDisponibleHoy() {
         when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
-                Optional.of(new ProgresoParticipanteAcademy(20, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteAcademy(20, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, false)));
 
         Curso curso = curso("c1", 1);
         when(loadCursoPort.listarTodos()).thenReturn(List.of(curso));
@@ -212,7 +213,7 @@ class ClaseDiariaServiceTest {
     @DisplayName("completar(): sin clase diaria disponible hoy (NoIniciado) -> IllegalStateException (409), sin tocar habits")
     void completarRechazaSiNoHayClaseDisponible() {
         when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
-                Optional.of(new ProgresoParticipanteAcademy(0, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteAcademy(0, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, false)));
 
         assertThatThrownBy(() -> service().completar(
                 new CompletarClaseDiariaCommand(ACTOR_ID, LeccionId.of("l2"), "Resumen valido de la clase de hoy")))
@@ -225,7 +226,7 @@ class ClaseDiariaServiceTest {
     @DisplayName("completar(): cuenta suspendida -> NotAuthorizedException (CLAUDE.MD §0.3), sin tocar habits")
     void completarRechazaSuspendido() {
         when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
-                Optional.of(new ProgresoParticipanteAcademy(20, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, true)));
+                Optional.of(new ProgresoParticipanteAcademy(20, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service().completar(
                 new CompletarClaseDiariaCommand(ACTOR_ID, LeccionId.of("l2"), "Resumen valido de la clase de hoy")))
@@ -263,5 +264,29 @@ class ClaseDiariaServiceTest {
                 .isEqualTo(CompletarClaseDiariaHabitoUseCase.RESUMEN_MIN_LENGTH).isEqualTo(15);
         assertThat(CompletarClaseDiariaUseCase.RESUMEN_MAX_LENGTH)
                 .isEqualTo(CompletarClaseDiariaHabitoUseCase.RESUMEN_MAX_LENGTH).isEqualTo(2000);
+    }
+
+    /**
+     * E-169, las dos caras: un MENTOR sin activar sigue fuera; con el programa activado, entra.
+     *
+     * <p>Esta clase no tenia caso de rechazo por rol del que partir -- el guard existia desde
+     * siempre y nunca se probo. Por eso van las DOS direcciones juntas: una sola de ellas se
+     * puede satisfacer por accidente (basta con que el guard desaparezca, o con que nunca deje
+     * pasar a nadie), y el par no.
+     */
+    @Test
+    @DisplayName("E-169: MENTOR sin activar -> rechazado; MENTOR con programa ACTIVADO -> pasa")
+    void staffSoloOperaSuProgramaSiLoActivo() {
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
+                Optional.of(new ProgresoParticipanteAcademy(10, ZoneId.of("America/Lima"),
+                        RolParticipante.MENTOR, false, false)));
+        assertThatThrownBy(() -> service().claseDeHoy(ACTOR_ID))
+                .as("sin activar el seguimiento personal no opera nada")
+                .isInstanceOf(NotAuthorizedException.class);
+
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
+                Optional.of(new ProgresoParticipanteAcademy(10, ZoneId.of("America/Lima"),
+                        RolParticipante.MENTOR, false, true)));
+        GuardDeRol.noRechaza(() -> service().claseDeHoy(ACTOR_ID), "Solo un aprendiz tiene clase diaria");
     }
 }

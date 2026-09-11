@@ -1,13 +1,19 @@
 package com.renaser.os.community.infrastructure.adapter.out.persistence.celula;
 
+import com.renaser.os.community.domain.model.acompanamiento.TipoCelula;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -35,4 +41,26 @@ public class CelulaJpaEntity {
     private Instant creadoEn;
 
     private Instant actualizadoEn;
+
+    /** V45. RECEPCION o REGULAR. */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    private TipoCelula tipo;
+
+    /** V45. Override de capacidad; NULL = usar la de la politica de la cohorte. */
+    private Integer capacidadMaxima;
+
+    /**
+     * V48. Primer y ULTIMO dia del grupo, los dos inclusive. Son `date` y no `timestamptz` a
+     * proposito: lo que el administrador escribe es "del 1 al 30", un dia de calendario, no un
+     * instante que dependa de la zona del servidor.
+     *
+     * <p>Las dos NULL = grupo sin periodo (no caduca), que es lo que son todas las celulas
+     * anteriores a V48. Van juntas o no van: el CHECK `celulas_periodo_completo_o_ausente` no
+     * admite una sola. Nulables, asi que a diferencia de `creado_en`/`actualizado_en` no hay
+     * DEFAULT que un NULL explicito pueda pisar.
+     */
+    private LocalDate periodoInicio;
+
+    private LocalDate periodoFin;
 }

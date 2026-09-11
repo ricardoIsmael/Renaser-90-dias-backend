@@ -5,12 +5,18 @@ import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
 import java.util.List;
 
 /**
- * Puerto hacia los proveedores de push. El adaptador web entrega Web Push con VAPID; los canales
- * nativos conservan su registro para que el adaptador móvil pueda incorporarse sin cambiar este
- * caso de uso.
+ * Puerto hacia los proveedores de push. Un solo despachador reparte cada token al
+ * {@link TransportePush} de su plataforma.
+ *
+ * <p>Sigue siendo best-effort: nadie debe asumir que esto garantiza que el mensaje llegó al
+ * teléfono. Lo que ya no es aceptable es no enterarse de nada — de ahí que devuelva resultados.
  */
 public interface PushPort {
 
-    /** Best-effort: quien llame no debe asumir que esto garantiza entrega a un proveedor externo. */
-    void enviar(List<TokenPush> tokens, String titulo, String cuerpo);
+    /**
+     * @param rutaApp destino dentro de la app al tocar la notificación. Puede ser {@code null}.
+     * @return un resultado por token. Nunca lanza: un proveedor caído no puede tumbar la emisión,
+     *         que ya guardó la notificación en la bandeja.
+     */
+    List<ResultadoEnvioPush> enviar(List<TokenPush> tokens, String titulo, String cuerpo, String rutaApp);
 }

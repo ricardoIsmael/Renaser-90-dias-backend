@@ -1,5 +1,6 @@
 package com.renaser.os.evidence.application.ports.out.evidencia;
 
+import com.renaser.os.evidence.api.EntregaDeEvidencia;
 import com.renaser.os.evidence.api.EstadoValidacion;
 import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase.TipoDestino;
 import com.renaser.os.evidence.domain.model.evidencia.Evidencia;
@@ -9,6 +10,7 @@ import com.renaser.os.shared.domain.UserId;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -66,4 +68,7 @@ public interface LoadEvidenciaPort {
     record FiltroEvidencia(UserId participanteId, EstadoValidacion estado, TipoDestino tipoDestino, Instant desde,
                             Instant hasta) {
     }
+
+    /** Una entrada por registro con al menos una evidencia; la entrega mas temprana de cada uno. */
+    Map<UUID, EntregaDeEvidencia> entregasDeRegistros(Collection<UUID> registrosHabitoIds);
 }

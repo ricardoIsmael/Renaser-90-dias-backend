@@ -36,6 +36,8 @@ class PreferenciaNotificacionPersistenceMapper {
             case TICKET_ABIERTO -> TipoNotificacionJpa.TICKET_ABIERTO;
             case SANTUARIO_ROTO -> TipoNotificacionJpa.SANTUARIO_ROTO;
             case HABITO_PERSONAL_MODIFICADO -> TipoNotificacionJpa.HABITO_PERSONAL_MODIFICADO;
+            case ACOMPANAMIENTO_ALUMNO -> TipoNotificacionJpa.ACOMPANAMIENTO_ALUMNO;
+            case GRUPO_POR_VENCER -> TipoNotificacionJpa.GRUPO_POR_VENCER;
         };
     }
 
@@ -54,6 +56,8 @@ class PreferenciaNotificacionPersistenceMapper {
             case TICKET_ABIERTO -> TipoNotificacion.TICKET_ABIERTO;
             case SANTUARIO_ROTO -> TipoNotificacion.SANTUARIO_ROTO;
             case HABITO_PERSONAL_MODIFICADO -> TipoNotificacion.HABITO_PERSONAL_MODIFICADO;
+            case ACOMPANAMIENTO_ALUMNO -> TipoNotificacion.ACOMPANAMIENTO_ALUMNO;
+            case GRUPO_POR_VENCER -> TipoNotificacion.GRUPO_POR_VENCER;
         };
     }
 }

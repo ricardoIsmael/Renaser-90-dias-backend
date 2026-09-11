@@ -7,7 +7,9 @@ import com.renaser.os.notifications.application.ports.in.notificacion.MarcarToda
 import com.renaser.os.notifications.application.ports.out.notificacion.LoadNotificacionPort;
 import com.renaser.os.notifications.application.ports.out.notificacion.SaveNotificacionPort;
 import com.renaser.os.notifications.application.ports.out.preferencia.LoadPreferenciasPort;
+import com.renaser.os.notifications.application.ports.out.push.DesactivarTokenPushPort;
 import com.renaser.os.notifications.application.ports.out.push.PushPort;
+import com.renaser.os.notifications.application.ports.out.push.ResultadoEnvioPush;
 import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPushPort;
 import com.renaser.os.notifications.domain.model.notificacion.Notificacion;
 import com.renaser.os.notifications.domain.model.preferencia.PreferenciaNotificacion;
@@ -20,6 +22,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
@@ -39,6 +43,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
     private final LoadPreferenciasPort loadPreferenciasPort;
     private final LoadTokenPushPort loadTokenPushPort;
     private final PushPort pushPort;
+    private final DesactivarTokenPushPort desactivarTokenPushPort;
     private final ActorNotificacionesGuard actorGuard;
     private final Clock clock;
     /**
@@ -55,13 +60,15 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
 
     public NotificacionService(LoadNotificacionPort loadNotificacionPort, SaveNotificacionPort saveNotificacionPort,
                                 LoadPreferenciasPort loadPreferenciasPort, LoadTokenPushPort loadTokenPushPort,
-                                PushPort pushPort, ActorNotificacionesGuard actorGuard, Clock clock,
+                                PushPort pushPort, DesactivarTokenPushPort desactivarTokenPushPort,
+                                ActorNotificacionesGuard actorGuard, Clock clock,
                                 PlatformTransactionManager transactionManager) {
         this.loadNotificacionPort = loadNotificacionPort;
         this.saveNotificacionPort = saveNotificacionPort;
         this.loadPreferenciasPort = loadPreferenciasPort;
         this.loadTokenPushPort = loadTokenPushPort;
         this.pushPort = pushPort;
+        this.desactivarTokenPushPort = desactivarTokenPushPort;
         this.actorGuard = actorGuard;
         this.clock = clock;
         this.transaccionPropia = new TransactionTemplate(transactionManager);
@@ -93,7 +100,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
                     command.origenEventoId(), command.tipo());
             return Optional.empty();
         }
-        intentarPush(command);
+        pushDespuesDelCommit(command);
         return guardada;
     }
 
@@ -111,14 +118,67 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
 
     /** Best-effort, nunca tumba la emision: el registro en la bandeja (arriba) es el contrato
      * real, el push es un empujon adicional (mismo criterio "fire-and-forget" que el repo viejo
-     * aplicaba a Expo — `chat/repository.ts:sendExpoPushNotifications` no propaga sus fallos). */
+     * aplicaba a Expo — `chat/repository.ts:sendExpoPushNotifications` no propaga sus fallos).
+     *
+     * <p>Lo que SI cambia respecto de "fire and forget": ahora se mira el resultado. Un token que
+     * el proveedor declara muerto se desactiva —reintentarlo es tirar trabajo para siempre— y un
+     * fallo temporal queda registrado para que soporte pueda verlo. La entrega sigue sin
+     * garantizarse; lo que ya no se acepta es no enterarse (plan.md §9). */
+    /**
+     * El push sale DESPUÉS de que esta transacción cierre, no dentro.
+     *
+     * <p>El envío es una llamada HTTP a un proveedor externo, con su timeout y ahora también con
+     * reintentos ({@code DespachadorPush}). Hacerla dentro de la transacción retiene una conexión
+     * del pool todo ese rato — y bajo un pico del proveedor, tantas conexiones como avisos haya
+     * en vuelo. El pool se agota por una notificación, que es lo menos crítico del sistema.
+     *
+     * <p>La fila no depende de esto: {@link #guardarIdempotente} ya la confirmó en su propia
+     * transacción, así que mover el push más tarde no puede dejar una notificación sin guardar.
+     *
+     * <p>Si no hay transacción activa —una llamada directa en una prueba— se envía en el momento.
+     * Registrar la sincronización sin transacción lanza, y perder el push por eso sería peor.
+     */
+    private void pushDespuesDelCommit(EmitirNotificacionCommand command) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            intentarPush(command);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                intentarPush(command);
+            }
+        });
+    }
+
     private void intentarPush(EmitirNotificacionCommand command) {
         try {
             var tokens = loadTokenPushPort.tokensDe(command.usuarioId());
-            pushPort.enviar(tokens, command.titulo(), command.cuerpo());
+            List<ResultadoEnvioPush> resultados = pushPort.enviar(tokens, command.titulo(), command.cuerpo(),
+                    command.rutaApp());
+            procesarResultados(command, resultados);
         } catch (RuntimeException e) {
             log.warn("[notifications.NotificacionService] push best-effort fallo para tipo {}: {}", command.tipo(),
                     e.getMessage());
+        }
+    }
+
+    private void procesarResultados(EmitirNotificacionCommand command, List<ResultadoEnvioPush> resultados) {
+        for (ResultadoEnvioPush resultado : resultados) {
+            switch (resultado.estado()) {
+                case TOKEN_INVALIDO -> {
+                    log.info("[notifications.NotificacionService] token {} desactivado: {}",
+                            resultado.tokenId(), resultado.detalle());
+                    desactivarTokenPushPort.desactivar(resultado.tokenId());
+                }
+                case FALLO_TEMPORAL -> log.warn(
+                        "[notifications.NotificacionService] fallo temporal enviando {} al token {}: {}",
+                        command.tipo(), resultado.tokenId(), resultado.detalle());
+                case SIN_TRANSPORTE -> log.warn(
+                        "[notifications.NotificacionService] sin transporte para el token {}: {}",
+                        resultado.tokenId(), resultado.detalle());
+                case ENTREGADO -> { }
+            }
         }
     }
 

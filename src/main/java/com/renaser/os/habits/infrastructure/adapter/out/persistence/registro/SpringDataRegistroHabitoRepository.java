@@ -1,6 +1,7 @@
 package com.renaser.os.habits.infrastructure.adapter.out.persistence.registro;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -69,4 +70,57 @@ interface SpringDataRegistroHabitoRepository extends JpaRepository<RegistroHabit
             + "WHERE r.participanteId = :participanteId AND r.estado = :estado")
     Instant minCompletadoEnPorParticipanteYEstado(@Param("participanteId") UUID participanteId,
                                                    @Param("estado") EstadoRegistroJpa estado);
+
+    /**
+     * Obligaciones historicas de varios participantes en un rango de fechas, con la exigencia
+     * de evidencia del habito al que pertenecen.
+     *
+     * <p>Proyecta columnas y no entidades: la pregunta no necesita respuesta_texto, calificacion
+     * ni la entrada de diario, y traerlas seria cargar bytes para tirarlos. Se resuelve contra
+     * {@code registros_dia_idx} ({@code participante_id, fecha_ejecucion}), que ya existe desde
+     * el baseline.
+     *
+     * <p>El JOIN con el habito es por {@code exigencia_evidencia} y {@code titulo}: son del
+     * catalogo, no del registro, y sin ellos no se puede saber si esa obligacion pedia archivo.
+     * {@code es_opcional} se toma del REGISTRO —no del habito— porque es el snapshot de si ese
+     * dia concreto era exigible.
+     */
+    @Query("""
+            SELECT r.id, r.participanteId, r.fechaEjecucion, r.diaPrograma, h.titulo, r.estado,
+                   h.exigenciaEvidencia, r.esOpcional
+            FROM RegistroHabitoJpaEntity r
+            JOIN HabitoJpaEntity h ON h.id = r.habitoId
+            WHERE r.participanteId IN :participantes
+              AND r.fechaEjecucion BETWEEN :desde AND :hasta
+            ORDER BY r.participanteId, r.fechaEjecucion, h.titulo
+            """)
+    List<Object[]> obligacionesEntre(@Param("participantes") Collection<UUID> participantes,
+                                      @Param("desde") LocalDate desde,
+                                      @Param("hasta") LocalDate hasta);
+
+    /**
+     * Borra las obligaciones PENDIENTE de un habito en un rango. `hasta` nulo = sin tope.
+     *
+     * <p><b>Nativa y no JPQL.</b> `estado` es un enum de Postgres mapeado con
+     * {@code NAMED_ENUM}, y comparar el literal en JPQL hace que Hibernate genere un cast a
+     * `estadoregistrojpa`, un tipo que no existe en la base. El CAST explicito al enum real es lo
+     * que ya usa el resto del repositorio.
+     *
+     * <p>El filtro de estado va en la CONSULTA y no en Java: traer las filas para descartarlas
+     * despues seria cargar el dia entero de alguien para borrar una. Y solo PENDIENTE, nunca
+     * COMPLETADO ni FALLIDO -- ver el javadoc del puerto.
+     */
+    @Modifying
+    @Query(value = """
+            DELETE FROM renaser.registros_habito
+            WHERE participante_id = :participanteId
+              AND habito_id = :habitoId
+              AND estado = CAST('PENDIENTE' AS renaser.estado_registro)
+              AND fecha_ejecucion >= :desde
+              AND (CAST(:hasta AS date) IS NULL OR fecha_ejecucion <= CAST(:hasta AS date))
+            """, nativeQuery = true)
+    int borrarPendientesEnRango(@Param("participanteId") UUID participanteId,
+                                 @Param("habitoId") UUID habitoId,
+                                 @Param("desde") LocalDate desde,
+                                 @Param("hasta") LocalDate hasta);
 }

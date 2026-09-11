@@ -3,6 +3,8 @@ package com.renaser.os.users.application.services;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.application.ports.in.mentorprofile.SetMentorOperationalStatusUseCase;
 import com.renaser.os.users.application.ports.in.mentorprofile.UpdateMentorProfileUseCase;
 import com.renaser.os.users.application.ports.out.mentorprofile.LoadMentorProfilePort;
 import com.renaser.os.users.application.ports.out.mentorprofile.SaveMentorProfilePort;
@@ -15,7 +17,7 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 
 @Service
-public class MentorProfileService implements UpdateMentorProfileUseCase {
+public class MentorProfileService implements UpdateMentorProfileUseCase, SetMentorOperationalStatusUseCase {
 
     private final LoadMentorProfilePort loadMentorProfilePort;
     private final SaveMentorProfilePort saveMentorProfilePort;
@@ -46,6 +48,13 @@ public class MentorProfileService implements UpdateMentorProfileUseCase {
         if (command.newOperationalStatus() != null) {
             profile.changeOperationalStatus(command.newOperationalStatus(), clock);
         }
+        // Guard propio y no el de arriba (V48): el mensaje del otro enumera "nivel o estado
+        // operativo" y hay un test que lo compara letra por letra. Compartirlo obligaria a
+        // reescribirlo, y al mentor le llegaria un error que no nombra lo que intento cambiar.
+        if (command.especialidad() != null) {
+            requireEspecialidadManager(actor);
+            profile.cambiarEspecialidad(command.especialidad(), clock);
+        }
         if (command.newBio() != null) {
             requireSelfOrRoleManager(actor, command.mentorUserId());
             profile.updateBio(command.newBio(), clock);
@@ -53,9 +62,47 @@ public class MentorProfileService implements UpdateMentorProfileUseCase {
         saveMentorProfilePort.save(profile);
     }
 
+    /**
+     * El semaforo operativo, y solo el semaforo. El nivel N0-N3 no se toca por aca: para eso
+     * esta {@link #update(UpdateMentorProfileCommand)}, que sigue exigiendo ADMIN/ALCHEMIST.
+     */
+    @Override
+    @Transactional
+    public void setOperationalStatus(SetMentorOperationalStatusCommand command) {
+        User actor = requireActiveUserGuard.of(command.actorId());
+        requirePuedeMoverElSemaforo(actor);
+        MentorProfile profile = requireProfile(command.mentorUserId());
+        profile.changeOperationalStatus(command.newStatus(), clock);
+        saveMentorProfilePort.save(profile);
+    }
+
+    /**
+     * Se enumeran los roles a mano en vez de preguntar {@code actor.role().can(...)} a proposito:
+     * {@code UserRole.can} todavia falla-abierto para MENTOR, ADMIN y ALCHEMIST (deuda A-1), asi
+     * que preguntarle aca dejaria pasar tambien a un MENTOR. El guard del servicio es la segunda
+     * linea de defensa (CLAUDE.MD §5.3.4) y tiene que ser explicito.
+     */
+    private void requirePuedeMoverElSemaforo(User actor) {
+        if (actor.role() != UserRole.MENTOR_LEAD && !actor.canManageRoles()) {
+            throw new NotAuthorizedException(
+                    "Solo MENTOR_LEAD/ADMIN/ALCHEMIST cambian el estado operativo de un mentor");
+        }
+    }
+
     private void requireRoleManager(User actor) {
         if (!actor.canManageRoles()) {
             throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST cambian nivel o estado operativo de un mentor");
+        }
+    }
+
+    /**
+     * La especialidad la declara quien administra, no el propio mentor: es el criterio con el que
+     * el administrador elige a quien poner en cada grupo (V48), asi que autodeclararla seria
+     * elegirse a si mismo. La bio, que es como se presenta, si es suya.
+     */
+    private void requireEspecialidadManager(User actor) {
+        if (!actor.canManageRoles()) {
+            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST declaran la especialidad de un mentor");
         }
     }
 

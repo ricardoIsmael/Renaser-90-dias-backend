@@ -90,6 +90,32 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             """;
 
     /** Panel admin de aprendices (gap #7): todos los TRAINEE, con o sin fila de programa. */
+    /**
+     * El WHERE compartido por el listado y el conteo. Se escribe UNA vez a proposito: dos copias
+     * se desincronizan y la pantalla termina diciendo "1 de 340" con una sola fila en la lista.
+     *
+     * <p>{@code ?1} llega null cuando no hay busqueda y el {@code IS NULL} deja pasar todo: un solo
+     * SQL en vez de concatenar el WHERE segun los filtros, que es como se cuela una inyeccion o un
+     * plan distinto por combinacion. {@code ?2} hace lo mismo con "solo sin grupo".
+     *
+     * <blockquote><b>Los filtros van PRIMERO y la paginacion despues, y no al reves.</b> Con la
+     * numeracion invertida —filtros en {@code ?3}/{@code ?4}— el listado funcionaba y el conteo
+     * reventaba con {@code ParameterLabelException: Ordinal parameter labels start from '?3'}: al
+     * pegar este fragmento detras de un {@code SELECT COUNT(*)} sin LIMIT ni OFFSET, la consulta se
+     * quedaba sin {@code ?1} ni {@code ?2}, y Hibernate exige que la numeracion arranque en 1 y sea
+     * contigua. Salio en la pantalla de Personas, no en las pruebas: el doble del EntityManager no
+     * valida etiquetas.</blockquote>
+     */
+    private static final String FILTRO_APRENDICES = """
+            FROM renaser.usuarios u
+            LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
+            WHERE u.rol = 'APRENDIZ'
+              AND (CAST(?1 AS text) IS NULL
+                   OR u.nombre_completo ILIKE '%' || CAST(?1 AS text) || '%'
+                   OR u.email ILIKE '%' || CAST(?1 AS text) || '%')
+              AND (?2 = FALSE OR pp.celula_id IS NULL)
+            """;
+
     private static final String QUERY_LISTAR_APRENDICES = """
             SELECT u.id, u.nombre_completo, u.email, u.estado,
                    COALESCE(pp.dia_programa, 0) AS dia_programa,
@@ -97,16 +123,12 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                    COALESCE(pp.timezone, 'America/Lima') AS timezone,
                    pp.programa_activado_en,
                    COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa
-            FROM renaser.usuarios u
-            LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
-            WHERE u.rol = 'APRENDIZ'
-            ORDER BY u.nombre_completo
-            LIMIT ?1 OFFSET ?2
+            """ + FILTRO_APRENDICES + """
+            ORDER BY u.nombre_completo, u.id
+            LIMIT ?3 OFFSET ?4
             """;
 
-    private static final String QUERY_CONTAR_APRENDICES = """
-            SELECT COUNT(*) FROM renaser.usuarios WHERE rol = 'APRENDIZ'
-            """;
+    private static final String QUERY_CONTAR_APRENDICES = "SELECT COUNT(*) " + FILTRO_APRENDICES;
 
     private final EntityManager entityManager;
     private final Clock clock;
@@ -223,18 +245,30 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
 
     @Override
     @SuppressWarnings("unchecked")
-    public List<ResumenTraineeAdmin> listarAprendices(int offset, int limit) {
+    public List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda,
+                                                       boolean soloSinGrupo) {
         List<Object[]> filas = entityManager.createNativeQuery(QUERY_LISTAR_APRENDICES)
-                .setParameter(1, limit)
-                .setParameter(2, offset)
+                .setParameter(1, normalizar(busqueda))
+                .setParameter(2, soloSinGrupo)
+                .setParameter(3, limit)
+                .setParameter(4, offset)
                 .getResultList();
         return filas.stream().map(this::aResumenTraineeAdmin).collect(Collectors.toList());
     }
 
     @Override
-    public long contarAprendices() {
-        Number total = (Number) entityManager.createNativeQuery(QUERY_CONTAR_APRENDICES).getSingleResult();
+    public long contarAprendices(String busqueda, boolean soloSinGrupo) {
+        Number total = (Number) entityManager.createNativeQuery(QUERY_CONTAR_APRENDICES)
+                .setParameter(1, normalizar(busqueda))
+                .setParameter(2, soloSinGrupo)
+                .getSingleResult();
         return total.longValue();
+    }
+
+    /** Vacio y solo-espacios se tratan como "sin busqueda": si no, el ILIKE '%%' pasa igual pero
+     * el total dejaria de coincidir con lo que ve quien borro el texto del buscador. */
+    private static String normalizar(String busqueda) {
+        return busqueda == null || busqueda.isBlank() ? null : busqueda.trim();
     }
 
     private ResumenTraineeAdmin aResumenTraineeAdmin(Object[] fila) {
@@ -265,8 +299,10 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
         UserRole rol = mapearRol(String.valueOf(fila[6]));
         boolean suspendido = "SUSPENDIDO".equals(String.valueOf(fila[7]));
         int diaPrograma = diaVigente((Number) fila[1], fechaInicio, zona, fila[8], (Number) fila[9]);
+        // fila[8] es programa_activado_en: NULL = aprobado pero sin Terminos firmados.
+        boolean activado = inscrito && fila[8] != null;
         return new ParticipacionPrograma(usuarioId, inscrito, diaPrograma, fechaInicio, zona,
-                FasePrograma.paraDiaPrograma(diaPrograma), celulaId, mentorId, rol, suspendido);
+                FasePrograma.paraDiaPrograma(diaPrograma), celulaId, mentorId, rol, suspendido, activado);
     }
 
     /**

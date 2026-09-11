@@ -6,6 +6,8 @@ import com.renaser.os.users.application.ports.out.mentorprofile.SaveMentorProfil
 import com.renaser.os.users.domain.model.mentorprofile.MentorProfile;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 @Component
@@ -23,6 +25,12 @@ class MentorProfilePersistenceAdapter implements LoadMentorProfilePort, SaveMent
     @Override
     public Optional<MentorProfile> byUserId(UserId userId) {
         return repository.findById(userId.value()).map(mapper::toDomain);
+    }
+
+    @Override
+    public List<MentorProfile> byUserIds(Collection<UserId> userIds) {
+        List<java.util.UUID> ids = userIds.stream().map(UserId::value).toList();
+        return repository.findAllById(ids).stream().map(mapper::toDomain).toList();
     }
 
     @Override

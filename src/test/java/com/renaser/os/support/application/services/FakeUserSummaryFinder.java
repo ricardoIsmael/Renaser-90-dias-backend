@@ -38,4 +38,10 @@ class FakeUserSummaryFinder implements UserSummaryFinder {
         return encontrados;
     }
 
+
+    /** No se usa en estas pruebas: la resolucion por correo es cosa de la administracion de guias. */
+    @Override
+    public Optional<UserSummary> findByEmail(String email) {
+        return Optional.empty();
+    }
 }

@@ -5800,6 +5800,162 @@ dirección es parte del dato.
   entorno. La prueba `RedisSessionConfigTest` comprueba la serialización JSON y el round-trip del
   `SecurityContext`.
 
+## E-176 — Una prueba se puso roja sola cuando el calendario alcanzó sus fechas (2026-09-11) — **RESUELTO**
+
+- **Dónde:** `habits/.../PausaHabitoPersonalIT`.
+- **Síntoma:** `mvnw clean verify` en rojo sin que nadie tocara el código. Dos pruebas de la pausa
+  fallaban afirmando que un hábito pausado seguía generando track.
+- **Causa real:** las tres fechas eran constantes fijas —8, 9 y 10 de septiembre— que estaban en el
+  futuro cuando se escribió la prueba. Desde el arreglo de **E-91**, una pausa es un rango que
+  arranca al tocar el botón y no se aplica hacia atrás; al llegar el 10, "pausar hoy y preguntar por
+  el 8" dejó de significar *dentro de la pausa* y pasó a significar *dos días antes de que
+  existiera*. La producción respondía bien.
+- **Lo más revelador:** la semántica correcta YA tenía prueba —`DesbloqueoHabitoPausaTest
+  .unaPausaNoApagaLosDiasANTERIORESaHaberlaPuesto`—. Las dos afirmaban lo contrario y convivieron en
+  verde solo mientras el calendario dejó que las dos parecieran ciertas.
+- **Solución:** reloj fijo (`FixedClock`) en vez de mover las fechas a `hoy.plusDays(n)`: con fechas
+  relativas el mismo fallo vuelve en la ventana de medianoche y el día de la semana cambia en cada
+  corrida. La zona del participante va explícita en la semilla, porque es la que convierte
+  `pausado_en` a día del calendario.
+- **Cómo evitarlo:** una prueba con fechas literales futuras es una bomba de tiempo. O se congela el
+  reloj, o las fechas se derivan del reloj congelado — nunca constantes que "todavía" son futuras.
+  Y si dos pruebas afirman cosas opuestas sobre la misma regla, una está mintiendo aunque las dos
+  estén en verde.
+
+## E-175 — Toda escritura de acompañamiento fallaba por una marca de auditoría en NULL (2026-09-11) — **RESUELTO**
+
+- **Dónde:** `community/.../AsignacionCelulaJpaEntity` y `PoliticaMentoriaPersistenceAdapter`.
+- **Síntoma:** `null value in column "creado_en" ... violates not-null constraint` en **toda**
+  escritura por esos adaptadores: rotación, traslado, asignación administrativa, y el endpoint con
+  el que un administrador cambia la capacidad de una cohorte.
+- **Causa real:** el mapper pasaba `null` en `creadoEn`, y **un `DEFAULT` de Postgres NO se aplica
+  cuando el INSERT manda NULL explícito**. La columna es `NOT NULL DEFAULT now()`, así que la fila
+  chocaba siempre.
+- **Por qué no lo vio nadie:** los casos de uso se prueban contra `AcompanamientoEnMemoria`, un doble
+  que nunca toca Postgres, y las filas que ya existían las había puesto el backfill de V45 en SQL.
+  **El camino de escritura de Java no lo ejercitaba ninguna prueba.**
+- **Solución:** `@Column(insertable = false)` — la base sella la creación, que es quien tiene el reloj
+  bueno. `actualizado_en` va sin `updatable = false` y lo sella el adaptador: con él se quedaría para
+  siempre en la hora del alta, mintiendo sobre lo único que promete su nombre.
+- **Cómo evitarlo:** un agregado cuyo camino de escritura solo se prueba con dobles en memoria no
+  está probado. Cuando una tabla tiene columnas que llena la base, o el mapper las omite
+  (`insertable = false`) o el agregado las lleva — pasar `null` es la tercera opción y es la que
+  falla. Y siempre que exista un adaptador nuevo, una prueba que escriba de verdad contra Postgres.
+
+## E-173 — Los mensajes directos no mostraban el nombre, por culpa del chat global (2026-09-11) — **RESUELTO**
+
+- **Dónde:** `chat/.../MiembroService.listar` y `ConversacionService.listar`.
+- **Síntoma:** la bandeja mostraba "Conversación directa" en todas las filas. Con dos chats así, dos
+  filas idénticas y ninguna forma de saber cuál era cuál.
+- **Causa real, en dos capas.** La primera: el listado no decía con quién era cada conversación, así
+  que el móvil solo podía adivinar el nombre mirando quién mandó el último mensaje — si lo mandabas
+  tú, o el chat estaba vacío, no había forma. La segunda apareció al arreglar la primera: se mandó
+  solo el `otherParticipantId` para que el cliente lo resolviera contra `GET /chat/members`, y ese
+  endpoint **empieza con `requireGlobal()`**, así que sin conversación GLOBAL responde 404. La
+  bandeja de DMs se quedaba sin nombres por culpa de otra conversación sin relación con ella.
+- **Solución:** el resumen manda el nombre ya resuelto (`UserSummaryFinder.findByIds` en lote). Y
+  `V47` crea la conversación GLOBAL para las instalaciones que ya tenían usuarios — se creaba de
+  forma perezosa solo al registrarse alguien, así que en una base con usuarios anteriores a ese
+  camino no nacía nunca.
+- **Cómo evitarlo:** antes de apoyar una funcionalidad en un endpoint que ya existe, comprobar que
+  ese endpoint FUNCIONA en el entorno real, no que existe. El primer arreglo era correcto y era
+  inútil, porque la premisa —"el cliente ya pide el directorio"— era falsa. Y una funcionalidad no
+  debería depender de que otra, sin relación con ella, esté inicializada.
+
+## E-172 — Un hábito fuera de plazo quedaba bloqueado para siempre (2026-09-11) — **RESUELTO**
+
+- **Dónde:** `habits/.../RegistroService.completar` y `EstadoRegistro.puedeCompletarse`.
+- **Síntoma:** `409 El habito expiro — no se puede completar`. Y peor: EXPIRADO era terminal, así que
+  el hábito quedaba bloqueado **para siempre** — DESPERTAR estaba justo así y no había forma de
+  registrarlo nunca más.
+- **Causa real:** el guard trataba llegar tarde como algo que impide registrar, cuando la tardanza
+  ya se cobra en puntos. `ResultadoOtorgamiento` tenía escrita la fase EXPIRADO con **0 puntos** y
+  era inalcanzable porque el `throw` cortaba antes. Se cobraba dos veces por lo mismo.
+- **Solución:** la entrega tardía se guarda con esos 0 puntos y motivo `LATE_HABIT`. FALLIDO sigue
+  cerrado —lo marca el barrido cuando el día CIERRA, y un día cerrado es un veredicto—, con prueba
+  de esa dirección para que "dejar registrar tarde" no se lleve esa puerta por delante.
+- **Cómo evitarlo:** cuando una penalización ya existe en un sitio, bloquear además la acción es
+  cobrar dos veces. Y si el código tiene una rama escrita que ningún camino alcanza —aquí, la fase
+  EXPIRADO— eso es una señal: alguien modeló el caso y otro lo cortó antes.
+
+## E-171 — Pausar un hábito no retiraba la obligación de HOY (2026-09-11) — **RESUELTO**
+
+- **Dónde:** `habits/.../DesbloqueoHabitoService.cambiarEstado`.
+- **Síntoma:** el dueño del proyecto apagaba un hábito a media mañana y lo seguía viendo en su día y
+  en evidencias; a la noche el barrido lo marcaba fallado. El botón decía "solo hoy" y hoy contaba
+  igual. Confirmado con datos reales: "Ducha fría" pausada hoy con su track de hoy en PENDIENTE.
+- **Causa real:** `cambiarEstado` solo escribía en `desbloqueos_habito`. Pausar apagaba la generación
+  **futura**, pero el track de hoy ya lo había creado el barrido de las 05:02.
+- **Solución:** al pausar se retiran las obligaciones **PENDIENTE** del rango. Solo las abiertas:
+  COMPLETADO se queda (lo hiciste, es tuyo) y FALLIDO/EXPIRADO también — si pausar borrara lo ya
+  vencido, cualquiera limpiaría sus fallos pausando después de fallar.
+- **Cómo evitarlo:** una acción que cambia una regla a futuro casi siempre tiene una contraparte
+  sobre lo que la regla anterior ya produjo. Preguntarse siempre "¿y lo que ya se generó?".
+
+## E-170 — Editar una migración ya aplicada tumbó el arranque (2026-09-11) — **RESUELTO**
+
+- **Dónde:** `V47__conversacion_global_para_usuarios_existentes.sql`.
+- **Síntoma:** `Migration checksum mismatch for migration version 47` y la aplicación sin arrancar.
+- **Causa real:** la migración se creó, el dueño reinició —Flyway la aplicó— y **después** se editó
+  el archivo para acotarla. Flyway guarda un checksum del contenido: al no coincidir se niega a
+  arrancar, y hace bien, porque no puede saber si la base refleja el archivo.
+- **Solución:** se comprobó primero que el efecto en la base fuera el que produce la versión final
+  (lo era: GLOBAL creada y 5 usuarios unidos) y recién entonces `flyway:repair`. Detalle que costó
+  dos intentos: la tabla de historial vive en `public`, no en `renaser`, y con el esquema equivocado
+  el plugin dice "la tabla no existe" en vez de fallar.
+- **Cómo evitarlo:** una migración es inmutable desde que corre **en cualquier sitio**. Si hay que
+  cambiarla y ya se aplicó, o se crea la siguiente, o se avisa antes de tocarla. En un entorno
+  compartido esto tumba el arranque de todos hasta que alguien ejecute el repair.
+
+## E-169 — El staff puede inscribirse al programa y despues no puede operarlo (2026-09-09) — **RESUELTO 2026-09-11**
+
+- **Donde:** `rocks/.../RocaMaestraService:81`, `RocaSemanalService:182`, `RocaDiariaService:365`,
+  `DashboardRocasService:223`, `VerdugoService:119`; `habits/.../EspirituService:350`,
+  `RadarService:106`, `AudioterapiaService:116`; `academy/.../RecomendacionService:107`,
+  `ClaseDiariaService:85`.
+- **Sintoma:** un usuario con rol MENTOR, MENTOR_LEAD, ADMIN o ALCHEMIST activa su seguimiento
+  personal con `POST /api/v1/mentor/activate-tracking`, queda con fila en
+  `participantes_programa`, y al operar recibe 403 con estos mensajes literales:
+  `Solo un aprendiz opera sus propias rocas`, `Espiritu es exclusivo de aprendices`,
+  `El Codigo Renaser es exclusivo de aprendices`, `Audioterapia semanal es exclusiva de aprendices`,
+  `Solo un aprendiz registra sus propios eventos Verdugo`,
+  `Solo un aprendiz recibe recomendaciones de Academia Adaptativa`,
+  `La clase diaria no esta disponible para tu cuenta`.
+- **Causa real:** los diez guards comparan el **rol** contra `RolParticipante.TRAINEE` en vez de
+  preguntar si el actor **tiene una participacion activa**. La forma es siempre la misma:
+  `if (progreso.rol() != RolParticipante.TRAINEE) throw new NotAuthorizedException(...)`.
+- **Por que es una contradiccion y no una decision:** `Permission.TRACK_PROGRAM_AS_STAFF` existe
+  justamente para que el staff curse el programa
+  (`ParticipacionProgramaService:67` — *"El seguimiento personal opcional es solo para
+  MENTOR/MENTOR_LEAD/ADMIN/ALCHEMIST"*), y la especificacion del cliente §2.2 describe un
+  *Conmutador de Roles* entre el perfil operativo y el personal. La inscripcion esta construida;
+  el uso, no.
+- **Estado:** **no se corrige por cuenta propia.** Cambiar `rol != TRAINEE` por *"tiene
+  participacion activa"* en diez servicios es una regla de negocio que el dueno del proyecto
+  tiene que confirmar (regla 00: no inventar reglas de negocio). Detectado al ejecutar la tarea
+  TL-03 del SDD 002 del rol Lider de Mentores.
+- **Arreglo (2026-09-11), confirmado por el dueno del proyecto:** los once guards pasan de
+  `rol != TRAINEE` a `rol != TRAINEE && !programaActivado`. Se lleva
+  `participantes_programa.programa_activado_en IS NOT NULL` hasta los tres puertos locales de
+  progreso (`rocks`, `habits`, `academy`) y sus adaptadores, que ya lo tenian a mano en
+  `users.api.ParticipacionPrograma.activado()`.
+- **Por que NO se redujo a `!programaActivado` a secas,** que era lo primero que uno escribe: ese
+  campo no significa "esta inscrito" sino "el reloj de sus 90 dias arranco", y un TRAINEE recien
+  aprobado lo tiene en `null` hasta que completa primer login + Ficha + Terminos. El cambio corto
+  habria dejado a esos aprendices fuera de su propio programa. Se comprobo contra la base antes de
+  elegir: de las cinco filas de `participantes_programa`, los cuatro APRENDIZ estaban sin activar y
+  solo el MENTOR activado. Asi el cambio es **estrictamente aditivo**: nadie que hoy pase, deja de
+  pasar.
+- **Pruebas:** once regresiones nuevas, una por guard, con `GuardDeRol.noRechaza`. Ninguno de los
+  once tenia prueba antes — por eso la contradiccion pudo vivir tanto. El helper exige el mensaje
+  EXACTO del guard y no "cualquier NotAuthorizedException": lo enseno `RocaSemanalService`, que
+  despues del rol todavia exige `ROCKS_LOCKED` — otra puerta, legitima, que un helper mas tosco
+  confundia con un rechazo por rol.
+- **Como evitar que vuelva a pasar:** cuando un permiso dice *"esto es para el rol X"* y un guard
+  dice *"esto es solo para el rol Y"*, uno de los dos miente. Un permiso nuevo en
+  `shared/domain/Permission` deberia venir siempre con la lista de guards que lo hacen cumplir
+  — el javadoc de `TRACK_PROGRAM_AS_STAFF` la tenia, y aun asi nadie contrasto la otra punta.
+
 ## E-168 — Un código correcto podía validarse dos veces en paralelo (2026-09-09) — **RESUELTO**
 
 - **Dónde:** `users/infrastructure/adapter/out/redis/AlmacenCodigoNumericoRedis`.
@@ -5812,3 +5968,172 @@ dirección es parte del dato.
 - **Cómo evitarlo:** cualquier credencial efímera que Redis deba consumir una sola vez tiene que
   verificarse y eliminarse en una operación atómica (`GETDEL` o script Lua), no con un `GET` seguido
   de un `DEL`.
+
+---
+
+## E-177 · Componer un grupo escribia un puntero y nadie mas se enteraba
+
+**Sintoma.** El administrador armaba un grupo desde el panel y el grupo quedaba "vacio" en todo lo
+demas: el chat no incorporaba a los aprendices, el seguimiento semanal del mentor devolvia 403
+sobre ellos y la evaluacion mensual no los contaba. En el panel se veian perfectamente.
+
+**Causa.** `CelulaService.asignar(AsignarAprendizCelulaCommand)` hacia UNA escritura:
+`asignacionCelulaPort.asignarCelula(...)`, que toca `participantes_programa.celula_id` — el puntero
+al presente. No abria intervalo en `asignaciones_celula`, que es el historial y la fuente de verdad
+de tres lecturas distintas: `AcompanamientoFinder.integrantesVigentes` (chat),
+`acompanaVigente` (seguimiento) y `tramosDeAprendices` (evaluacion). Las tres consultaban una tabla
+donde no habia nada.
+
+Lo mismo con el mentor: `celula.asignarMentor(...)` movia `celulas.mentor_id` y ya. Un mentor
+saliente conservaba el acceso a la semana de sus exalumnos porque su intervalo nunca se cerraba.
+
+**Correccion.** `ComposicionDeCelulaService` reune los cinco efectos en una operacion: cerrar el
+intervalo anterior conservandolo, abrir el nuevo, sincronizar los punteros, publicar
+`ComposicionDeCelulaCambiadaEvent` de cada grupo tocado y validar cupo y solapamientos.
+`ComposicionDeCelulaIT` lo prueba contra Postgres real; su ultimo caso —el grupo tiene integrantes
+vigentes despues del alta— falla contra el codigo anterior.
+
+**Como evitarlo.** Cuando un modelo tiene HISTORIAL y PUNTERO conviviendo, escribir solo el puntero
+compila, pasa las pruebas de la clase que lo escribe y rompe a los consumidores del historial, que
+viven en otros modulos. La regla: si una tabla existe porque otra no alcanzaba, ninguna escritura
+puede tocar solo una de las dos. Y la prueba que lo demuestra no es "se llamo al puerto" con un
+doble, sino "la consulta del consumidor devuelve la fila" contra la base.
+
+## E-178 · Cerrar el periodo de un grupo no le quitaba el chat a nadie
+
+**Sintoma.** Un grupo cuyo periodo termino seguia teniendo conversacion activa, y su exmentor
+seguia pudiendo leer la semana de sus exalumnos.
+
+**Causa.** `AcompanamientoFinderService` respondia `esIntegranteVigente` / `integrantesVigentes` /
+`acompanaVigente` mirando SOLO el intervalo de `asignaciones_celula`. Y cerrar el periodo del grupo
+no cierra sus asignaciones —son dos hechos distintos y el historial tiene que conservarse—, asi que
+las filas seguian abiertas y las tres preguntas seguian respondiendo que si.
+
+La tentacion era un job que al cerrar el grupo cerrara sus asignaciones. Se descarto: el dia que
+ese barrido no corriera, el acceso quedaria concedido sin que nadie lo notara, y ademas borraria la
+informacion de cuando cada persona pertenecio realmente.
+
+**Correccion.** Las tres preguntas pasan ademas por `Celula.vigenteEn(dia)`, con el dia calculado
+en la zona de la politica de la cohorte. La revocacion es inmediata e idempotente: no depende de
+ningun proceso. Lo que NO se filtra son los tramos historicos ni `aprendicesVigentes`, o el mentor
+perderia la evaluacion del mes que si acompaño.
+
+**Como evitarlo.** Una autorizacion que depende de que un job haya corrido no es una autorizacion,
+es una carrera. Si el estado se puede DERIVAR del calendario, se deriva en la lectura.
+
+## E-179 · Un ADMIN que cursaba el programa no podia firmar su contrato de fase
+
+**Sintoma.** Un administrador activaba su programa de 90 dias —opcional pero permitido—, recorria
+onboarding, mapa, objetivos y habitos, y al llegar al contrato de fase recibia 403 sin explicacion.
+
+**Causa.** `ContratoService` permitia firmar solo a TRAINEE y consultar solo a TRAINEE/MENTOR. Es
+la misma familia que E-169: un guard que compara contra `TRAINEE` literal donde la pregunta real
+era "esta cursando".
+
+**Correccion.** Las dos listas admiten los cinco roles, y `requireProgreso` exige ademas
+`programaActivado` para todo el que no sea aprendiz — sin el reloj corriendo no hay dia de programa
+contra el cual medir la fase, y mostrar la fase 1 a quien no empezo seria peor que el 403.
+
+**Como evitarlo.** Antes de escribir `rol == TRAINEE`, preguntar que se esta comprobando de verdad.
+Casi siempre es participacion, no rol. La lista de roles que pueden hacer algo es una decision de
+producto; la de quien tiene el programa corriendo es un dato.
+
+## E-180 · El ingreso automatico a la bienvenida no metia a nadie, en silencio
+
+**Sintoma.** Ninguno visible. Quien se registraba quedaba sin grupo de bienvenida y el log decia
+`no hay grupo de recepcion vigente`, que es un mensaje legitimo — asi que parecia una tarea
+pendiente del administrador y no un fallo.
+
+**Causa.** `SpringDataCelulaRepository.recepcionesVigentesEn` era JPQL con un literal de enum:
+`WHERE c.tipo = com.renaser.os.community.domain.model.acompanamiento.TipoCelula.RECEPCION`. La
+columna esta mapeada `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` y, para ese literal, Hibernate genera
+`cast(? as tipocelula)` —el nombre simple del enum Java en minusculas—, mientras que el tipo real
+de Postgres es `renaser.tipo_celula`. Cada llamada moria con
+`PSQLException: type "tipocelula" does not exist`.
+
+**Por que no lo vio nadie.** El unico consumidor es `IngresoARecepcionService`, y ahi "no hay
+recepcion vigente" es un caso valido y esperado. La excepcion se propagaba dentro del listener
+asincrono de Modulith, se registraba y el resultado externo era indistinguible de "el administrador
+todavia no abrio la bienvenida". Ninguna prueba tocaba el metodo: el servicio se prueba con un
+doble del puerto, y el adaptador no tenia prueba propia.
+
+Se encontro leyendo el stack trace de un `./mvnw verify` que **termino en BUILD SUCCESS**.
+
+**Correccion.** Consulta nativa con el CAST escrito a mano contra `renaser.tipo_celula`, igual que
+la solucion de E-171. Se reviso el resto del codigo: era la unica JPQL con literal de enum sobre
+una columna NAMED_ENUM.
+
+**Como evitarlo.**
+1. **Un literal de enum en JPQL sobre una columna `NAMED_ENUM` no funciona en este proyecto.** Se
+   pasa el valor como parametro o se escribe la consulta nativa con su CAST.
+2. Un caso "no hay nada" que es legitimo **esconde** el fallo que devuelve lo mismo. Cuando la
+   ausencia es un resultado valido, el adaptador necesita su propia prueba contra la base: el
+   doble del puerto nunca ejecuta el SQL.
+3. BUILD SUCCESS con un stack trace de Postgres en el log no es verde. Vale la pena leer el log
+   completo aunque el build pase.
+
+---
+
+## E-181 · Se aprobaban cuentas sin credencial, con solo el UUID de un admin en una cabecera
+
+**Sintoma.** Ninguno. Todo funcionaba: el registro, la bandeja, la aprobacion. No habia error que
+investigar — que es justamente por que sobrevivio.
+
+**Causa.** `SecurityConfig` tenia una sola linea para todo el recurso:
+
+```java
+.requestMatchers("/api/v1/account-requests/**").permitAll()
+```
+
+El patron cubre el alta (que debe ser publica, no hay cuenta todavia) pero tambien `GET
+/account-requests`, `POST /{id}/approve`, `POST /{id}/reject` y `DELETE /{id}`, que son operaciones
+de ADMIN. Y como `ActorAutenticadoArgumentResolver` cae al header `X-Actor-Id` cuando no hay sesion,
+el actor se resolvia desde un valor que manda el cliente.
+
+Los UUID de usuario **no son secretos**: el propio login devuelve el `id` en el cuerpo.
+
+**Comprobado, no deducido** (2026-09-11, backend local):
+
+```
+GET  /api/v1/account-requests?status=PENDING   -H "X-Actor-Id: <uuid-admin>"  -> 200
+POST /api/v1/account-requests/{id}/approve     -H "X-Actor-Id: <uuid-admin>"  -> 204
+```
+
+El 204 dejo una cuenta creada y `ACTIVO` en la base. Sin sesion, sin token, sin contrasena.
+
+**Por que no lo vio nadie.** Tres capas que parecian cubrirlo y no cubrian:
+
+1. `@RequiresPermission(APPROVE_ACCOUNT_REQUEST)` esta declarado en los cuatro handlers — pero
+   **declara, no ejecuta**: conectarlo a un filtro es la fase 4 de `MODULO_AUTH.md §9`. El
+   `EndpointAuthorizationDeclarationTest` verifica que la anotacion EXISTA, no que se aplique.
+2. La autorizacion real la hacia `User.canManageRoles()` dentro del caso de uso, que comprueba el
+   ROL del actor — y el actor era exactamente lo que el atacante elegia.
+3. La decision de dejarlo abierto se tomo con un motivo cierto en su momento: *"la version
+   desplegada no tiene panel administrativo"*. La premisa caduco cuando el panel entro en el
+   despliegue, y nada en el codigo avisa de eso.
+
+**Correccion.** Matchers POR METODO. El caso dificil es que `POST /account-requests` (pedir cuenta)
+y `GET /account-requests` (la bandeja) comparten ruta, asi que un unico patron no puede separarlos:
+
+```java
+.requestMatchers(HttpMethod.POST, "/api/v1/account-requests",
+        ".../check-email", ".../exists", ".../verify-email").permitAll()
+.requestMatchers(HttpMethod.GET, "/api/v1/account-requests/*/status").permitAll()
+.requestMatchers("/api/v1/account-requests/**").authenticated()
+```
+
+`AccountRequestControllerAutenticacionTest` fija las dos mitades: las cuatro de ADMIN dan 403 sin
+sesion y no tocan su caso de uso, y las publicas siguen abiertas. Cerrar de mas rompe el registro;
+cerrar de menos reabre el agujero.
+
+**Como evitarlo.**
+1. **Un `permitAll()` sobre `/**` es una decision sobre metodos que no se escribieron.** Cuando una
+   ruta publica y una privada comparten prefijo —y aqui compartian la ruta ENTERA— el matcher por
+   patron abre las dos.
+2. **Una anotacion que declara no es una anotacion que aplica.** Si la aplicacion esta pendiente,
+   el unico guard real es el que corre; conviene que el nombre del test diga cual de las dos cosas
+   verifica.
+3. **Un riesgo aceptado lleva pegada una premisa, y la premisa caduca.** "No hay panel" dejo de ser
+   cierto sin que nadie tocara `SecurityConfig`. Al anotar un riesgo aceptado conviene escribir que
+   tendria que cambiar para revisarlo — no solo por que se acepta hoy.
+4. Un UUID que viaja en respuestas de la API **no es una credencial**.

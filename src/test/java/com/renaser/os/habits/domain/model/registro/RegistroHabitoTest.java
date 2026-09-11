@@ -81,14 +81,31 @@ class RegistroHabitoTest {
         assertThat(r.estado()).isEqualTo(EstadoRegistro.EXPIRADO);
     }
 
+    /**
+     * <b>Cambiado 2026-09-11.</b> Esta prueba se llamaba {@code expiradoNuncaMasSeCompleta} y
+     * afirmaba lo contrario. La regla la cambio el dueno del proyecto: registrar tarde es
+     * informacion, y perderla no ayuda a nadie. Quien se desperto a las 10 y lo anota a las 11
+     * HIZO el habito; lo unico que no hizo fue llegar a tiempo, y eso se cobra en puntos --
+     * {@code ResultadoOtorgamiento} da 0 en fase EXPIRADO-- y no bloqueando el registro.
+     *
+     * <p>Los puntos los decide QUIEN LLAMA, no el agregado: aca se pasa 0 a proposito para no
+     * sugerir que completar tarde pague. La regla de cuanto paga vive en
+     * {@code ResultadoOtorgamientoTest}.
+     */
     @Test
-    void expiradoNuncaMasSeCompleta() {
+    void expiradoTodaviaSePuedeCompletar() {
         RegistroHabito r = nuevoPendiente();
         r.expirar(CLOCK.now());
-        assertThatThrownBy(() -> r.completar(10, null, null, null, CLOCK.now()))
-                .isInstanceOf(IllegalStateException.class);
+
+        r.completar(0, null, null, null, CLOCK.now());
+
+        assertThat(r.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
+        assertThat(r.puntosOtorgados()).isZero();
     }
 
+    /** FALLIDO SIGUE cerrado: lo marca el barrido cuando el dia cierra, y un dia cerrado es un
+     *  veredicto. Es la prueba que impide que "dejar registrar tarde" se lleve tambien esta
+     *  puerta por delante. */
     @Test
     void falladoNuncaMasSeCompleta() {
         RegistroHabito r = nuevoPendiente();

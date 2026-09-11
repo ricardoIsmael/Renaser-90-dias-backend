@@ -1,15 +1,10 @@
 package com.renaser.os.community.application.services;
 
 import com.renaser.os.community.application.ports.in.celula.ActualizarCelulaUseCase.ActualizarCelulaCommand;
-import com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase.AsignarAprendizCelulaCommand;
-import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase.AsignarMentorCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.EliminarCelulaUseCase.EliminarCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.ProgramarSesionCelulaUseCase.ProgramarSesionCelulaCommand;
-import com.renaser.os.community.application.ports.in.celula.QuitarAprendizCelulaUseCase.QuitarAprendizCelulaCommand;
-import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUseCase.QuitarMentorCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.CrearCelulaUseCase.CrearCelulaCommand;
 import com.renaser.os.community.application.ports.out.celula.EliminarCelulaPort;
-import com.renaser.os.community.application.ports.out.celula.ExistePerfilMentorPort;
 import com.renaser.os.community.application.ports.out.celula.LoadCelulaPort;
 import com.renaser.os.community.application.ports.out.celula.SaveCelulaPort;
 import com.renaser.os.community.application.ports.out.cohorte.LoadCohortePort;
@@ -17,13 +12,14 @@ import com.renaser.os.community.application.ports.out.participante.ConsultarCelu
 import com.renaser.os.community.application.ports.out.participante.ConsultarMiembrosCelulaPort;
 import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort;
 import com.renaser.os.community.domain.model.celula.Celula;
+import java.time.LocalDate;
+import com.renaser.os.community.domain.model.celula.PeriodoGrupo;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.users.api.AsignacionCelulaPort;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -64,8 +60,6 @@ class CelulaServiceTest {
     @Mock
     private LoadCohortePort loadCohortePort;
     @Mock
-    private ExistePerfilMentorPort existePerfilMentorPort;
-    @Mock
     private ConsultarMiembrosCelulaPort consultarMiembrosCelulaPort;
     @Mock
     private ConsultarCelulaDeParticipantePort consultarCelulaDeParticipantePort;
@@ -76,7 +70,11 @@ class CelulaServiceTest {
     @Mock
     private ParticipacionProgramaFinder participacionProgramaFinder;
     @Mock
-    private AsignacionCelulaPort asignacionCelulaPort;
+    private com.renaser.os.users.api.PerfilMentorFinder perfilMentorFinder;
+    @Mock
+    private com.renaser.os.community.application.ports.out.acompanamiento.LoadAsignacionesPort loadAsignacionesPort;
+    @Mock
+    private com.renaser.os.community.application.ports.out.acompanamiento.LoadPoliticaMentoriaPort loadPoliticaMentoriaPort;
     @Mock
     private org.springframework.context.ApplicationEventPublisher events;
     @Mock
@@ -92,9 +90,12 @@ class CelulaServiceTest {
     @BeforeEach
     void setUp() {
         service = new CelulaService(loadCelulaPort, saveCelulaPort, eliminarCelulaPort, loadCohortePort,
-                existePerfilMentorPort, consultarMiembrosCelulaPort, consultarCelulaDeParticipantePort,
-                consultarPerfilUsuarioPort, userSummaryFinder, participacionProgramaFinder, asignacionCelulaPort,
-                events, CLOCK, idGenerator);
+                consultarMiembrosCelulaPort, consultarCelulaDeParticipantePort, consultarPerfilUsuarioPort,
+                userSummaryFinder, participacionProgramaFinder, perfilMentorFinder, loadAsignacionesPort,
+                loadPoliticaMentoriaPort, events, CLOCK, idGenerator);
+        lenient().when(loadAsignacionesPort.porCelula(any())).thenReturn(java.util.List.of());
+        lenient().when(loadPoliticaMentoriaPort.porCohorte(any())).thenReturn(Optional.empty());
+        lenient().when(perfilMentorFinder.porUsuarios(any())).thenReturn(java.util.Map.of());
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
@@ -104,6 +105,12 @@ class CelulaServiceTest {
                 .thenReturn(Optional.of(new UserSummary(trainee, "Aprendiz", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(adminSuspendido)).thenReturn(Optional.of(new UserSummary(
                 adminSuspendido, "Admin suspendido", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
+    }
+
+    private static com.renaser.os.community.domain.model.cohorte.Cohorte cohorteExistente(CohorteId id) {
+        return com.renaser.os.community.domain.model.cohorte.Cohorte.rehydrate(id, "Cohorte Agosto",
+                LocalDate.of(2026, 8, 1), null,
+                com.renaser.os.community.domain.model.cohorte.EstadoCohorte.ACTIVA, CLOCK.now(), CLOCK.now());
     }
 
     private Celula celulaExistente() {
@@ -117,91 +124,14 @@ class CelulaServiceTest {
         assertThatThrownBy(() -> service.crear(command)).isInstanceOf(NotAuthorizedException.class);
     }
 
-    @Test
-    void asignarMentorSinPerfilPropioFalla() {
-        Celula celula = celulaExistente();
-        when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
-        when(existePerfilMentorPort.existe(mentor)).thenReturn(false);
-        var command = new AsignarMentorCelulaCommand(admin, celula.id(), mentor);
-        assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(IllegalStateException.class);
-        verify(saveCelulaPort, never()).save(any());
-    }
 
-    @Test
-    void asignarUnTraineeComoLiderFalla() {
-        Celula celula = celulaExistente();
-        when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
-        var command = new AsignarMentorCelulaCommand(admin, celula.id(), trainee);
-        assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(IllegalArgumentException.class);
-    }
 
-    @Test
-    void asignarMentorYaLiderDeOtraCelulaFalla() {
-        Celula celula = celulaExistente();
-        Celula otraCelula = celulaExistente();
-        when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
-        when(existePerfilMentorPort.existe(mentor)).thenReturn(true);
-        when(loadCelulaPort.porMentor(mentor)).thenReturn(Optional.of(otraCelula));
-        var command = new AsignarMentorCelulaCommand(admin, celula.id(), mentor);
-        assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(IllegalStateException.class);
-    }
 
-    @Test
-    void asignarMentorElegibleFunciona() {
-        Celula celula = celulaExistente();
-        when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
-        when(existePerfilMentorPort.existe(mentor)).thenReturn(true);
-        when(loadCelulaPort.porMentor(mentor)).thenReturn(Optional.empty());
-        when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        var command = new AsignarMentorCelulaCommand(admin, celula.id(), mentor);
-        var detalle = service.asignar(command);
-        assertThat(detalle.celula().mentorId()).isEqualTo(mentor);
-    }
 
-    @Test
-    void asignarAprendizComoMentorEsRechazado() {
-        Celula celula = celulaExistente();
-        var command = new AsignarAprendizCelulaCommand(mentor, celula.id(), trainee);
-        assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(NotAuthorizedException.class);
-        verify(asignacionCelulaPort, never()).asignarCelula(any(), any(), any());
-    }
 
-    @Test
-    void asignarUnMentorComoAprendizFalla() {
-        Celula celula = celulaExistente();
-        when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
-        var command = new AsignarAprendizCelulaCommand(admin, celula.id(), mentor);
-        assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(IllegalArgumentException.class);
-        verify(asignacionCelulaPort, never()).asignarCelula(any(), any(), any());
-    }
 
-    @Test
-    void asignarAprendizElegibleDelegaEnUsers() {
-        Celula celula = celulaExistente();
-        when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
-        var command = new AsignarAprendizCelulaCommand(admin, celula.id(), trainee);
 
-        service.asignar(command);
-
-        verify(asignacionCelulaPort).asignarCelula(admin, trainee, celula.id().value());
-    }
-
-    @Test
-    void quitarAprendizComoMentorEsRechazado() {
-        var command = new QuitarAprendizCelulaCommand(mentor, trainee);
-        assertThatThrownBy(() -> service.quitar(command)).isInstanceOf(NotAuthorizedException.class);
-        verify(asignacionCelulaPort, never()).quitarCelula(any(), any());
-    }
-
-    @Test
-    void quitarAprendizDelegaEnUsers() {
-        var command = new QuitarAprendizCelulaCommand(admin, trainee);
-
-        service.quitar(command);
-
-        verify(asignacionCelulaPort).quitarCelula(admin, trainee);
-    }
 
     @Test
     void miCelulaSinCelulaAsignadaEsVacio() {
@@ -333,6 +263,96 @@ class CelulaServiceTest {
         assertThat(disponibles.get(0).nombreCompleto()).isEqualTo("Aprendiz Libre");
     }
 
+    // ─── V48: el administrador arma el grupo con nombre y periodo ─────────────────────
+
+    @Test
+    @DisplayName("crear(): el periodo que escribio el administrador llega hasta el agregado")
+    void crearConPeriodoLoGuarda() {
+        CohorteId cohorteId = CohorteId.of(UUID.randomUUID());
+        cohorteActiva(cohorteId);
+        when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var command = new CrearCelulaCommand(admin, "Fenix", cohorteId, null,
+                java.time.LocalDate.of(2026, 9, 1), java.time.LocalDate.of(2026, 9, 30));
+        var detalle = service.crear(command);
+
+        assertThat(detalle.celula().periodo())
+                .isEqualTo(new com.renaser.os.community.domain.model.celula.PeriodoGrupo(
+                        java.time.LocalDate.of(2026, 9, 1), java.time.LocalDate.of(2026, 9, 30)));
+        assertThat(detalle.celula().vencidoEn(java.time.LocalDate.of(2026, 9, 30)))
+                .as("el 30 todavia es del grupo")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("crear(): sin fechas el grupo nace sin periodo, como todas las celulas previas a V48")
+    void crearSinPeriodoSigueSiendoValido() {
+        CohorteId cohorteId = CohorteId.of(UUID.randomUUID());
+        cohorteActiva(cohorteId);
+        when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var detalle = service.crear(new CrearCelulaCommand(admin, "Celula 1", cohorteId, null));
+
+        assertThat(detalle.celula().tienePeriodo()).isFalse();
+    }
+
+    /** El descuido que {@code tocaPeriodo} existe para evitar: renombrar no puede dejar sin cierre
+     * a un grupo que si lo tenia. */
+    @Test
+    @DisplayName("actualizar(): un PATCH que solo cambia el nombre NO le borra el periodo")
+    void actualizarSinTocarElPeriodoNoLoBorra() {
+        Celula celula = celulaConPeriodo();
+        when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
+        cohorteActiva(celula.cohorteId());
+        when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var detalle = service.actualizar(new ActualizarCelulaCommand(admin, celula.id(), "Fenix II", null, true));
+
+        assertThat(detalle.celula().nombre()).isEqualTo("Fenix II");
+        assertThat(detalle.celula().tienePeriodo()).isTrue();
+    }
+
+    @Test
+    @DisplayName("actualizar(): con tocaPeriodo se reemplaza el periodo por el nuevo")
+    void actualizarConTocaPeriodoLoReemplaza() {
+        Celula celula = celulaConPeriodo();
+        when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
+        cohorteActiva(celula.cohorteId());
+        when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var detalle = service.actualizar(new ActualizarCelulaCommand(admin, celula.id(), null, null, false,
+                java.time.LocalDate.of(2026, 10, 1), java.time.LocalDate.of(2026, 10, 31), true));
+
+        assertThat(detalle.celula().periodo().fin()).isEqualTo(java.time.LocalDate.of(2026, 10, 31));
+    }
+
+    @Test
+    @DisplayName("Un comando con una sola fecha no se construye: el periodo va entero o no va")
+    void unPeriodoAMediasNoLlegaAlServicio() {
+        CohorteId cohorteId = CohorteId.of(UUID.randomUUID());
+
+        assertThatThrownBy(() -> new CrearCelulaCommand(admin, "Fenix", cohorteId, null,
+                java.time.LocalDate.of(2026, 9, 1), null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(saveCelulaPort, never()).save(any());
+    }
+
+    private Celula celulaConPeriodo() {
+        return Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Fenix", null, CohorteId.of(UUID.randomUUID()),
+                null, null, CLOCK.now(), CLOCK.now(),
+                com.renaser.os.community.domain.model.acompanamiento.TipoCelula.REGULAR, null,
+                new com.renaser.os.community.domain.model.celula.PeriodoGrupo(
+                        java.time.LocalDate.of(2026, 9, 1), java.time.LocalDate.of(2026, 9, 30)));
+    }
+
+    private void cohorteActiva(CohorteId cohorteId) {
+        when(loadCohortePort.porId(cohorteId)).thenReturn(Optional.of(
+                com.renaser.os.community.domain.model.cohorte.Cohorte.rehydrate(cohorteId, "Cohorte 1",
+                        java.time.LocalDate.of(2026, 9, 1), null,
+                        com.renaser.os.community.domain.model.cohorte.EstadoCohorte.ACTIVA, CLOCK.now(),
+                        CLOCK.now())));
+    }
+
     // ─── CLAUDE.MD sec. 0.3: 403 por rol y 403 por cuenta SUSPENDIDA, metodo por metodo ──
     // `requireAdmin`/`requireActorActivo` ya estaban en los 16 metodos; faltaba probarlos
     // en 25 de las 30 combinaciones (solo estaban cubiertos crear/asignar-aprendiz/
@@ -346,21 +366,7 @@ class CelulaServiceTest {
         verify(saveCelulaPort, never()).save(any());
     }
 
-    @Test
-    @DisplayName("asignar(mentor): rol sin permiso (MENTOR) -> 403, nunca guarda")
-    void asignarMentorComoMentorEsRechazado() {
-        var command = new AsignarMentorCelulaCommand(mentor, CelulaId.of(UUID.randomUUID()), mentor);
-        assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(NotAuthorizedException.class);
-        verify(saveCelulaPort, never()).save(any());
-    }
 
-    @Test
-    @DisplayName("quitar(mentor): rol sin permiso (MENTOR) -> 403, nunca guarda")
-    void quitarMentorComoMentorEsRechazado() {
-        var command = new QuitarMentorCelulaCommand(mentor, CelulaId.of(UUID.randomUUID()));
-        assertThatThrownBy(() -> service.quitar(command)).isInstanceOf(NotAuthorizedException.class);
-        verify(saveCelulaPort, never()).save(any());
-    }
 
     @Test
     @DisplayName("programar(): rol sin permiso (MENTOR) -> 403, nunca guarda")
@@ -424,37 +430,9 @@ class CelulaServiceTest {
         verify(saveCelulaPort, never()).save(any());
     }
 
-    @Test
-    @DisplayName("asignar(mentor): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
-    void asignarMentorConAdminSuspendidoFalla() {
-        var command = new AsignarMentorCelulaCommand(adminSuspendido, CelulaId.of(UUID.randomUUID()), mentor);
-        assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(NotAuthorizedException.class);
-        verify(saveCelulaPort, never()).save(any());
-    }
 
-    @Test
-    @DisplayName("quitar(mentor): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
-    void quitarMentorConAdminSuspendidoFalla() {
-        var command = new QuitarMentorCelulaCommand(adminSuspendido, CelulaId.of(UUID.randomUUID()));
-        assertThatThrownBy(() -> service.quitar(command)).isInstanceOf(NotAuthorizedException.class);
-        verify(saveCelulaPort, never()).save(any());
-    }
 
-    @Test
-    @DisplayName("asignar(aprendiz): cuenta SUSPENDIDA -> 403, nunca delega en `users`")
-    void asignarAprendizConAdminSuspendidoFalla() {
-        var command = new AsignarAprendizCelulaCommand(adminSuspendido, CelulaId.of(UUID.randomUUID()), trainee);
-        assertThatThrownBy(() -> service.asignar(command)).isInstanceOf(NotAuthorizedException.class);
-        verify(asignacionCelulaPort, never()).asignarCelula(any(), any(), any());
-    }
 
-    @Test
-    @DisplayName("quitar(aprendiz): cuenta SUSPENDIDA -> 403, nunca delega en `users`")
-    void quitarAprendizConAdminSuspendidoFalla() {
-        var command = new QuitarAprendizCelulaCommand(adminSuspendido, trainee);
-        assertThatThrownBy(() -> service.quitar(command)).isInstanceOf(NotAuthorizedException.class);
-        verify(asignacionCelulaPort, never()).quitarCelula(any(), any());
-    }
 
     @Test
     @DisplayName("programar(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
@@ -524,5 +502,51 @@ class CelulaServiceTest {
     void aprendicesDisponiblesConAdminSuspendidoFalla() {
         assertThatThrownBy(() -> service.aprendicesDisponibles(adminSuspendido))
                 .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    /**
+     * Un grupo cuyo periodo ya cerro desaparece de la app del alumno.
+     *
+     * <p>El reloj de estas pruebas esta en el 24 de agosto de 2026; el grupo cerro el 31 de julio.
+     * La asignacion del alumno sigue VIVA a proposito —cerrar el periodo del grupo no cierra las
+     * asignaciones—, que es justo el caso que sin el filtro seguiria mostrando un grupo terminado.
+     */
+    @Test
+    @DisplayName("miCelula(): un grupo con el periodo cerrado ya no se ve")
+    void miCelulaConPeriodoCerradoNoSeVe() {
+        Celula cerrada = Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Fenix", null,
+                CohorteId.of(UUID.randomUUID()), null, null, CLOCK.now(), CLOCK.now(), null, null,
+                new PeriodoGrupo(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 31)));
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(trainee)).thenReturn(Optional.of(cerrada.id()));
+        when(loadCelulaPort.porId(cerrada.id())).thenReturn(Optional.of(cerrada));
+
+        assertThat(service.miCelula(trainee)).isEmpty();
+    }
+
+    /** El reverso: mientras el periodo sigue vivo, el grupo se ve como siempre. */
+    @Test
+    @DisplayName("miCelula(): con el periodo vigente el grupo se sigue viendo")
+    void miCelulaConPeriodoVigenteSeVe() {
+        Celula vigente = Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Fenix", null,
+                CohorteId.of(UUID.randomUUID()), null, null, CLOCK.now(), CLOCK.now(), null, null,
+                new PeriodoGrupo(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31)));
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(trainee)).thenReturn(Optional.of(vigente.id()));
+        when(loadCelulaPort.porId(vigente.id())).thenReturn(Optional.of(vigente));
+        when(loadCohortePort.porId(vigente.cohorteId())).thenReturn(Optional.of(cohorteExistente(vigente.cohorteId())));
+
+        assertThat(service.miCelula(trainee)).isPresent();
+    }
+
+    /** Y un grupo SIN periodo no caduca: es el caso de todas las celulas anteriores a V48. */
+    @Test
+    @DisplayName("miCelula(): un grupo sin periodo no caduca nunca")
+    void miCelulaSinPeriodoNoCaduca() {
+        Celula sinPeriodo = celulaExistente();
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(trainee)).thenReturn(Optional.of(sinPeriodo.id()));
+        when(loadCelulaPort.porId(sinPeriodo.id())).thenReturn(Optional.of(sinPeriodo));
+        when(loadCohortePort.porId(sinPeriodo.cohorteId()))
+                .thenReturn(Optional.of(cohorteExistente(sinPeriodo.cohorteId())));
+
+        assertThat(service.miCelula(trainee)).isPresent();
     }
 }

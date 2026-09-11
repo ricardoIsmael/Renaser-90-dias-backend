@@ -59,7 +59,7 @@ class BitacoraNocturnaServiceTest {
     void suspendidoRechazado() {
         UserId actor = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, true)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service.escribir(new EscribirBitacoraNocturnaCommand(actor, "hoy fue un buen dia",
                 null, null))).isInstanceOf(NotAuthorizedException.class);
@@ -77,7 +77,7 @@ class BitacoraNocturnaServiceTest {
     void escribePorPrimeraVezCreaLaEntrada() {
         UserId actor = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadPort.porParticipanteFechaYTipo(actor, LocalDate.of(2026, 8, 26), TipoEntradaDiario.BITACORA_NOCTURNA))
                 .thenReturn(Optional.empty());
 
@@ -92,7 +92,7 @@ class BitacoraNocturnaServiceTest {
     void escribirDeNuevoElMismoDiaPisaElContenidoAnterior() {
         UserId actor = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
         EntradaDiario existente = EntradaDiario.escribir(EntradaDiarioId.of(UUID.randomUUID()), actor,
                 LocalDate.of(2026, 8, 26), TipoEntradaDiario.BITACORA_NOCTURNA, "primer intento", CLOCK.now());
         when(loadPort.porParticipanteFechaYTipo(actor, LocalDate.of(2026, 8, 26), TipoEntradaDiario.BITACORA_NOCTURNA))

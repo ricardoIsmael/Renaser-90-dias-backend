@@ -160,7 +160,7 @@ class RegistroServiceTest {
         when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(progresoPort.deParticipante(dueno)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false, false)));
 
         assertThatThrownBy(() -> service.completar(
                 new CompletarRegistroCommand(dueno, registro.id(), "texto suelto sin pasar por la clase", null)))
@@ -183,7 +183,7 @@ class RegistroServiceTest {
         when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
         when(loadPreferenciaPort.porParticipanteHabitoYFecha(dueno, habito.id(), registro.fechaEjecucion())).thenReturn(Optional.empty());
         when(progresoPort.deParticipante(dueno)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false, false)));
 
         RegistroHabito resultado = service.completar(new CompletarRegistroCommand(dueno, registro.id(),
                 "Entendi que la disciplina se construye a diario", null, GestoCompletar.PROPIO_DEL_HABITO));
@@ -206,7 +206,7 @@ class RegistroServiceTest {
     void consultarDelegaAlPuertoParaElPropioParticipante() {
         UserId participante = participante();
         when(progresoPort.deParticipante(participante)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadRegistroPort.porParticipanteYFecha(participante, LocalDate.of(2026, 8, 24)))
                 .thenReturn(List.of());
         List<RegistroHabito> resultado = service.consultar(participante, participante, LocalDate.of(2026, 8, 24));
@@ -228,7 +228,7 @@ class RegistroServiceTest {
         when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(progresoPort.deParticipante(dueno)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false, false)));
         when(publicacionMuroFinder.publicoEntre(eq(dueno), any(), any())).thenReturn(false);
 
         assertThatThrownBy(() -> service.completar(
@@ -253,7 +253,7 @@ class RegistroServiceTest {
         when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
         when(loadPreferenciaPort.porParticipanteHabitoYFecha(dueno, habito.id(), registro.fechaEjecucion())).thenReturn(Optional.empty());
         when(progresoPort.deParticipante(dueno)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false, false)));
         when(publicacionMuroFinder.publicoEntre(eq(dueno), any(), any())).thenReturn(true);
 
         RegistroHabito resultado = service.completar(
@@ -279,7 +279,7 @@ class RegistroServiceTest {
         when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(progresoPort.deParticipante(dueno)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false, false)));
         when(publicacionMuroFinder.publicoEntre(any(), any(), any())).thenReturn(false);
 
         assertThatThrownBy(() -> service.completar(
@@ -302,7 +302,7 @@ class RegistroServiceTest {
         when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
         when(loadPreferenciaPort.porParticipanteHabitoYFecha(dueno, habito.id(), registro.fechaEjecucion())).thenReturn(Optional.empty());
         when(progresoPort.deParticipante(dueno)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false, false)));
 
         service.completar(new CompletarRegistroCommand(dueno, registro.id(), null, null));
 
@@ -340,7 +340,7 @@ class RegistroServiceTest {
         when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
         when(loadPreferenciaPort.porParticipanteHabitoYFecha(dueno, habito.id(), registro.fechaEjecucion())).thenReturn(Optional.empty());
         when(progresoPort.deParticipante(dueno)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
 
         RegistroHabito resultado = service.completar(
                 new CompletarRegistroCommand(dueno, registro.id(), "listo", null));
@@ -365,7 +365,7 @@ class RegistroServiceTest {
         when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of(horario));
         when(loadPreferenciaPort.porParticipanteHabitoYFecha(dueno, habito.id(), registro.fechaEjecucion())).thenReturn(Optional.empty());
         when(progresoPort.deParticipante(dueno)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
         when(ajustarPuntosPort.ajustar(any(), any(), anyInt(), any()))
                 .thenReturn(new ResumenAjustePuntos(dueno, 10, 110));
 
@@ -385,7 +385,7 @@ class RegistroServiceTest {
         when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
         when(loadHabitoPort.byId(bloqueo.id())).thenReturn(Optional.of(bloqueo));
         when(progresoPort.deParticipante(dueno)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
 
         assertThatThrownBy(() -> service.completar(
                 new CompletarRegistroCommand(dueno, registro.id(), null, null)))
@@ -446,7 +446,7 @@ class RegistroServiceTest {
         UserId participante = participante();
         Habito habito = habitoCheckbox();
         when(progresoPort.deParticipante(participante)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(1, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(1, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
         when(loadHabitoPort.personalesActivosDe(participante)).thenReturn(List.of());
         when(loadDesbloqueoPort.deParticipante(participante)).thenReturn(List.of(
@@ -465,7 +465,7 @@ class RegistroServiceTest {
         UserId participante = participante();
         Habito habito = habitoCheckbox();
         when(progresoPort.deParticipante(participante)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(2, "UTC", RolParticipante.TRAINEE, false)));
+                Optional.of(new ProgresoParticipanteHabits(2, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
         when(loadHabitoPort.personalesActivosDe(participante)).thenReturn(List.of());
         when(loadDesbloqueoPort.deParticipante(participante)).thenReturn(List.of(

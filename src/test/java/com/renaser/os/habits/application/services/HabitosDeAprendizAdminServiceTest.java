@@ -77,7 +77,7 @@ class HabitosDeAprendizAdminServiceTest {
         lenient().when(userSummaryFinder.findById(adminSuspendido)).thenReturn(Optional.of(new UserSummary(
                 adminSuspendido, "Admin suspendido", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
         lenient().when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(
-                new ProgresoParticipanteHabits(30, "America/Lima", RolParticipante.TRAINEE, false)));
+                new ProgresoParticipanteHabits(30, "America/Lima", RolParticipante.TRAINEE, false, false)));
         lenient().when(historialPort.distintosHabitosCambiadosDesde(eq(aprendiz), any())).thenReturn(List.of());
         lenient().when(leerHabitosPort.deAprendiz(eq(aprendiz), anyInt(), any(), any())).thenReturn(List.of());
     }
@@ -116,7 +116,7 @@ class HabitosDeAprendizAdminServiceTest {
     @Test
     void unAprendizSuspendidoIgualSePuedeAuditar() {
         when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(
-                new ProgresoParticipanteHabits(30, "America/Lima", RolParticipante.TRAINEE, true)));
+                new ProgresoParticipanteHabits(30, "America/Lima", RolParticipante.TRAINEE, true, false)));
 
         var vista = service.consultar(new ConsultarHabitosDeAprendizCommand(admin, aprendiz));
 
@@ -202,7 +202,7 @@ class HabitosDeAprendizAdminServiceTest {
     @Test
     void enLaSemanaDeAcomodoElPeriodoEsFree() {
         when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(
-                new ProgresoParticipanteHabits(3, "America/Lima", RolParticipante.TRAINEE, false)));
+                new ProgresoParticipanteHabits(3, "America/Lima", RolParticipante.TRAINEE, false, false)));
 
         var vista = service.consultar(new ConsultarHabitosDeAprendizCommand(admin, aprendiz));
 

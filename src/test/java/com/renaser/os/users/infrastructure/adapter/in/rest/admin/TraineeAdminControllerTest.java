@@ -65,7 +65,7 @@ class TraineeAdminControllerTest {
                 UserStatus.ACTIVE, "Aprendiz Fixture", null, null, null, null);
         var participacion = new ParticipacionPrograma(traineeId, true, 34, LocalDate.of(2026, 9, 3),
                 ZoneId.of("America/Lima"), FasePrograma.PHASE_3_ALCHEMIST_WARRIOR, null, null,
-                UserRole.TRAINEE, false);
+                UserRole.TRAINEE, false, true);
         return new TraineeDetail(user, participacion, ultimoAjuste);
     }
 

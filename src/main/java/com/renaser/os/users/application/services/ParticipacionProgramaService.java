@@ -234,8 +234,10 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     public PaginaTrainees listar(ListTraineesCommand command) {
         requireAdminGuard.requireAdminActivo(command.actorId());
         var contenido = consultarResumenParticipacionPort.listarAprendices(command.page() * command.size(),
-                command.size());
-        long total = consultarResumenParticipacionPort.contarAprendices();
+                command.size(), command.busqueda(), command.soloSinGrupo());
+        // El total se cuenta CON los mismos filtros: si contara el padron entero, la pantalla
+        // diria "1 de 340" y el paginador ofreceria paginas que no existen.
+        long total = consultarResumenParticipacionPort.contarAprendices(command.busqueda(), command.soloSinGrupo());
         return new PaginaTrainees(contenido, total, command.page(), command.size());
     }
 
@@ -322,6 +324,29 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     @Override
     public void quitarCelula(UserId actorId, UserId traineeId) {
         remove(new RemoveTraineeCellCommand(actorId, traineeId));
+    }
+
+    /**
+     * Sin guard de administrador: lo llama `community` dentro de la transaccion de un traslado
+     * o una rotacion, que ya resolvio la autorizacion (o es un job de la politica de la
+     * cohorte, que no tiene actor humano). Ver el javadoc del puerto.
+     */
+    @Override
+    @Transactional
+    public void sincronizarAcompanamiento(UserId traineeId, UUID celulaId, UserId mentorId) {
+        ParticipacionPrograma participacion = loadParticipacionProgramaPort.byParticipanteId(traineeId)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Participante no inscripto en el programa: " + traineeId));
+
+        if (celulaId != null) {
+            participacion.asignarCelula(celulaId, clock);
+        } else {
+            participacion.quitarCelula(clock);
+        }
+        // null limpia el puntero: un grupo sin mentor no debe seguir apuntando al anterior,
+        // porque ese puntero es el que autoriza la lectura de evidencias del aprendiz.
+        participacion.sincronizarMentor(mentorId, clock);
+        saveParticipacionProgramaPort.save(participacion);
     }
 
     private User requireUsuario(UserId id) {

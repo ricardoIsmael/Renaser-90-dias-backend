@@ -1,7 +1,8 @@
 package com.renaser.os.notifications.infrastructure.adapter.out.push;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.renaser.os.notifications.application.ports.out.push.PushPort;
+import com.renaser.os.notifications.application.ports.out.push.ResultadoEnvioPush;
+import com.renaser.os.notifications.application.ports.out.push.TransportePush;
 import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
 import nl.martijndwars.webpush.Notification;
@@ -29,7 +30,7 @@ import java.util.Map;
  * claro. Eso permite arrancar localmente sin secretos, pero nunca simula una entrega exitosa.</p>
  */
 @Component
-public class WebPushAdapter implements PushPort {
+public class WebPushAdapter implements TransportePush {
 
     private static final Logger log = LoggerFactory.getLogger(WebPushAdapter.class);
 
@@ -52,45 +53,72 @@ public class WebPushAdapter implements PushPort {
     }
 
     @Override
-    public void enviar(List<TokenPush> tokens, String titulo, String cuerpo) {
-        if (tokens == null || tokens.isEmpty()) return;
-        for (TokenPush token : tokens) {
-            if (token.plataforma() == PlataformaPush.WEB) {
-                enviarWeb(token, titulo, cuerpo);
-            }
-        }
+    public boolean atiende(PlataformaPush plataforma) {
+        return plataforma == PlataformaPush.WEB;
     }
 
-    private void enviarWeb(TokenPush token, String titulo, String cuerpo) {
+    @Override
+    public String nombre() {
+        return "web-push";
+    }
+
+    /**
+     * La entrega web, ahora devolviendo qué pasó en vez de tragárselo.
+     *
+     * <p>El comportamiento no cambia —sigue siendo best-effort y la bandeja sigue siendo el
+     * contrato real—, pero un endpoint vencido ya no se reintenta para siempre en silencio: el
+     * proveedor responde 404 o 410 para una suscripción muerta, y eso se traduce a token inválido.
+     *
+     * @param rutaApp destino al tocar la notificación. Antes iba fijo en "/", así que un aviso de
+     *                acompañamiento abría el inicio en vez del alumno.
+     */
+    @Override
+    public ResultadoEnvioPush entregar(TokenPush token, String titulo, String cuerpo, String rutaApp) {
         if (vapidPublicKey.isBlank() || vapidPrivateKey.isBlank() || vapidSubject.isBlank()) {
             log.warn("[notifications.WebPushAdapter] WEB_PUSH_VAPID_* no configurado; no se envia push web");
-            return;
+            return ResultadoEnvioPush.sinTransporte(token.id(), PlataformaPush.WEB.name());
         }
         try {
             WebSubscription suscripcion = objectMapper.readValue(token.token(), WebSubscription.class);
             if (suscripcion.endpoint() == null || suscripcion.endpoint().isBlank()
                     || suscripcion.keys() == null || suscripcion.keys().p256dh() == null
                     || suscripcion.keys().auth() == null) {
-                log.warn("[notifications.WebPushAdapter] suscripcion web invalida; se omite");
-                return;
+                return ResultadoEnvioPush.invalido(token.id(), "Suscripcion web incompleta");
             }
             Subscription subscription = new Subscription(suscripcion.endpoint(),
                     new Subscription.Keys(suscripcion.keys().p256dh(), suscripcion.keys().auth()));
             String payload = objectMapper.writeValueAsString(Map.of(
                     "title", titulo,
                     "body", cuerpo,
-                    "data", Map.of("url", "/")));
+                    "data", Map.of("url", rutaApp == null || rutaApp.isBlank() ? "/" : rutaApp)));
             HttpResponse response = servicio().send(new Notification(subscription, payload));
             int status = response.getStatusLine().getStatusCode();
             EntityUtils.consumeQuietly(response.getEntity());
-            if (status >= 400) {
-                log.warn("[notifications.WebPushAdapter] proveedor web respondio {}", status);
-            }
+            return interpretar(token, status);
         } catch (Exception e) {
             // Push es best-effort: la fila de la bandeja ya se guardo y no se revierte por un
             // endpoint de navegador vencido o por una caida temporal del proveedor.
             log.warn("[notifications.WebPushAdapter] fallo el envio web: {}", e.getMessage());
+            return ResultadoEnvioPush.temporal(token.id(), e.getMessage());
         }
+    }
+
+    /**
+     * 404 y 410 son la forma que tiene Web Push de decir "esa suscripcion ya no existe" — el
+     * navegador se desinstalo o el usuario revoco el permiso. Reintentarlas es tirar trabajo.
+     */
+    private static ResultadoEnvioPush interpretar(TokenPush token, int status) {
+        if (status == 404 || status == 410) {
+            return ResultadoEnvioPush.invalido(token.id(), "HTTP " + status);
+        }
+        if (status == 429 || status >= 500) {
+            return ResultadoEnvioPush.temporal(token.id(), "HTTP " + status);
+        }
+        if (status >= 400) {
+            log.warn("[notifications.WebPushAdapter] proveedor web respondio {}", status);
+            return ResultadoEnvioPush.invalido(token.id(), "HTTP " + status);
+        }
+        return ResultadoEnvioPush.entregado(token.id());
     }
 
     private PushService servicio() throws GeneralSecurityException {
