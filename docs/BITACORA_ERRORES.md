@@ -6071,3 +6071,69 @@ una columna NAMED_ENUM.
    doble del puerto nunca ejecuta el SQL.
 3. BUILD SUCCESS con un stack trace de Postgres en el log no es verde. Vale la pena leer el log
    completo aunque el build pase.
+
+---
+
+## E-181 · Se aprobaban cuentas sin credencial, con solo el UUID de un admin en una cabecera
+
+**Sintoma.** Ninguno. Todo funcionaba: el registro, la bandeja, la aprobacion. No habia error que
+investigar — que es justamente por que sobrevivio.
+
+**Causa.** `SecurityConfig` tenia una sola linea para todo el recurso:
+
+```java
+.requestMatchers("/api/v1/account-requests/**").permitAll()
+```
+
+El patron cubre el alta (que debe ser publica, no hay cuenta todavia) pero tambien `GET
+/account-requests`, `POST /{id}/approve`, `POST /{id}/reject` y `DELETE /{id}`, que son operaciones
+de ADMIN. Y como `ActorAutenticadoArgumentResolver` cae al header `X-Actor-Id` cuando no hay sesion,
+el actor se resolvia desde un valor que manda el cliente.
+
+Los UUID de usuario **no son secretos**: el propio login devuelve el `id` en el cuerpo.
+
+**Comprobado, no deducido** (2026-09-11, backend local):
+
+```
+GET  /api/v1/account-requests?status=PENDING   -H "X-Actor-Id: <uuid-admin>"  -> 200
+POST /api/v1/account-requests/{id}/approve     -H "X-Actor-Id: <uuid-admin>"  -> 204
+```
+
+El 204 dejo una cuenta creada y `ACTIVO` en la base. Sin sesion, sin token, sin contrasena.
+
+**Por que no lo vio nadie.** Tres capas que parecian cubrirlo y no cubrian:
+
+1. `@RequiresPermission(APPROVE_ACCOUNT_REQUEST)` esta declarado en los cuatro handlers — pero
+   **declara, no ejecuta**: conectarlo a un filtro es la fase 4 de `MODULO_AUTH.md §9`. El
+   `EndpointAuthorizationDeclarationTest` verifica que la anotacion EXISTA, no que se aplique.
+2. La autorizacion real la hacia `User.canManageRoles()` dentro del caso de uso, que comprueba el
+   ROL del actor — y el actor era exactamente lo que el atacante elegia.
+3. La decision de dejarlo abierto se tomo con un motivo cierto en su momento: *"la version
+   desplegada no tiene panel administrativo"*. La premisa caduco cuando el panel entro en el
+   despliegue, y nada en el codigo avisa de eso.
+
+**Correccion.** Matchers POR METODO. El caso dificil es que `POST /account-requests` (pedir cuenta)
+y `GET /account-requests` (la bandeja) comparten ruta, asi que un unico patron no puede separarlos:
+
+```java
+.requestMatchers(HttpMethod.POST, "/api/v1/account-requests",
+        ".../check-email", ".../exists", ".../verify-email").permitAll()
+.requestMatchers(HttpMethod.GET, "/api/v1/account-requests/*/status").permitAll()
+.requestMatchers("/api/v1/account-requests/**").authenticated()
+```
+
+`AccountRequestControllerAutenticacionTest` fija las dos mitades: las cuatro de ADMIN dan 403 sin
+sesion y no tocan su caso de uso, y las publicas siguen abiertas. Cerrar de mas rompe el registro;
+cerrar de menos reabre el agujero.
+
+**Como evitarlo.**
+1. **Un `permitAll()` sobre `/**` es una decision sobre metodos que no se escribieron.** Cuando una
+   ruta publica y una privada comparten prefijo —y aqui compartian la ruta ENTERA— el matcher por
+   patron abre las dos.
+2. **Una anotacion que declara no es una anotacion que aplica.** Si la aplicacion esta pendiente,
+   el unico guard real es el que corre; conviene que el nombre del test diga cual de las dos cosas
+   verifica.
+3. **Un riesgo aceptado lleva pegada una premisa, y la premisa caduca.** "No hay panel" dejo de ser
+   cierto sin que nadie tocara `SecurityConfig`. Al anotar un riesgo aceptado conviene escribir que
+   tendria que cambiar para revisarlo — no solo por que se acepta hoy.
+4. Un UUID que viaja en respuestas de la API **no es una credencial**.
