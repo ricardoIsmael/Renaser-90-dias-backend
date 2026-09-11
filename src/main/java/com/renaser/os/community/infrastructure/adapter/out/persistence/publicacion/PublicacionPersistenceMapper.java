@@ -17,12 +17,13 @@ class PublicacionPersistenceMapper {
 
     Publicacion toDomain(PublicacionJpaEntity e, List<MediaPublicacion> media) {
         return Publicacion.rehydrate(PublicacionId.of(e.getId()), UserId.of(e.getAutorId()), toDomainTipo(e.getTipo()),
-                e.getCategoriaClave(), e.getTexto(), media, e.isOculta(), e.getCreadoEn(), e.getActualizadoEn());
+                e.getCategoriaClave(), e.getTexto(), media, e.isOculta(), e.getCreadoEn(), e.getActualizadoEn(),
+                e.getDiaPrograma());
     }
 
     PublicacionJpaEntity toEntity(Publicacion p) {
         return new PublicacionJpaEntity(p.id().value(), p.autorId().value(), toJpaTipo(p.tipo()), p.categoriaClave(),
-                p.texto(), p.oculta(), p.creadoEn(), p.actualizadoEn());
+                p.texto(), p.oculta(), p.creadoEn(), p.actualizadoEn(), p.diaPrograma());
     }
 
     TipoPublicacionJpa toJpaTipo(TipoPublicacion tipo) {

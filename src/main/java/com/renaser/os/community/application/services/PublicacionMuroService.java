@@ -32,6 +32,8 @@ import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
+import com.renaser.os.users.api.ParticipacionPrograma;
+import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -73,6 +75,14 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    /**
+     * Para sellar el dia de programa del autor en la publicacion (V51).
+     *
+     * <p>Se inyecta el contrato publico de `users` directamente, sin puerto propio, siguiendo lo
+     * que esta clase ya hace con {@link UserSummaryFinder}: son las dos caras de lo mismo —datos
+     * del autor que este modulo no es dueno de consultar por su cuenta.
+     */
+    private final ParticipacionProgramaFinder participacionFinder;
 
     public PublicacionMuroService(LoadPublicacionPort loadPublicacionPort, SavePublicacionPort savePublicacionPort,
                                    EliminarPublicacionPort eliminarPublicacionPort,
@@ -80,7 +90,8 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
                                    ConsultarCategoriasMuroUseCase categoriasUseCase,
                                    ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort,
                                    AlmacenamientoPort almacenamientoPort, UserSummaryFinder userSummaryFinder,
-                                   ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator) {
+                                   ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator,
+                                   ParticipacionProgramaFinder participacionFinder) {
         this.loadPublicacionPort = loadPublicacionPort;
         this.savePublicacionPort = savePublicacionPort;
         this.eliminarPublicacionPort = eliminarPublicacionPort;
@@ -93,6 +104,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         this.events = events;
         this.clock = clock;
         this.idGenerator = idGenerator;
+        this.participacionFinder = participacionFinder;
     }
 
     @Override
@@ -105,7 +117,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         List<MediaPublicacion> media = aMedia(command.media());
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
         Publicacion publicacion = Publicacion.publicar(PublicacionId.of(idGenerator.newId()), command.autorId(),
-                command.texto(), media, command.categoriaClave(), clock.now());
+                command.texto(), media, command.categoriaClave(), clock.now(), diaDePrograma(command.autorId()));
         Publicacion guardada = savePublicacionPort.save(publicacion);
         events.publishEvent(new PublicacionCreadaEvent(guardada.id().value(), guardada.autorId(),
                 guardada.categoriaClave(), clock.now()));
@@ -312,11 +324,34 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         MediaPublicacion media = new MediaPublicacion(comando.bucket(), comando.ruta(), comando.mime(), 0);
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
         Publicacion publicacion = Publicacion.publicarAutomatica(PublicacionId.of(idGenerator.newId()),
-                comando.autorId(), comando.texto(), List.of(media), clock.now());
+                comando.autorId(), comando.texto(), List.of(media), clock.now(), diaDePrograma(comando.autorId()));
         Publicacion guardada = savePublicacionPort.save(publicacion);
         events.publishEvent(new PublicacionCreadaEvent(guardada.id().value(), guardada.autorId(),
                 guardada.categoriaClave(), clock.now()));
         return guardada.id().value();
+    }
+
+    /**
+     * El dia de programa del autor AHORA, para dejarlo sellado en la publicacion.
+     *
+     * <p>Devuelve {@code null} —y no 0— en los tres casos en que no hay dia que contar: el autor no
+     * esta inscrito, no activo el programa todavia, o su dia cae fuera de 1..90. {@code null} dice
+     * "no corresponde"; el 0 era exactamente la mentira que el Muro venia mostrando.
+     *
+     * <p>Que esto falle no puede impedir publicar: una consulta caida no vale una publicacion
+     * perdida. Se degrada a {@code null}, que la insignia sabe no dibujar.
+     */
+    private Integer diaDePrograma(UserId autorId) {
+        try {
+            return participacionFinder.deParticipante(autorId)
+                    .filter(ParticipacionPrograma::inscrito)
+                    .filter(ParticipacionPrograma::activado)
+                    .map(ParticipacionPrograma::diaPrograma)
+                    .filter(dia -> dia >= 1 && dia <= 90)
+                    .orElse(null);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private PaginaPublicaciones aPagina(List<Publicacion> filasConExtra, UserId actorId) {

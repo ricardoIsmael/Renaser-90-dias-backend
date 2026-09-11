@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -59,11 +60,37 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
     public RegistroRadar registrar(RegistrarCheckInRadarCommand command) {
         requireSelf(command.actorId(), command.participanteId());
         requireParticipanteHabilitado(command.participanteId());
+        Instant ahora = clock.now();
+        /* Un Codigo Renaser por hora: si ya hay uno en la franja en curso, se devuelve ESE en vez
+           de crear otro.
+
+           El Codigo Renaser dejo de ser un log libre cuando paso a tener doce franjas fijas (una
+           por hora, dias 1 a 7): dos filas en la misma hora no son dos registros, son el mismo
+           duplicado por un doble toque o por dos dispositivos a la vez. Devolver el existente hace
+           que reintentar sea inofensivo — el cliente recibe un 200 con el registro de esa hora y
+           cierra el formulario, que es exactamente lo que la persona espera.
+
+           Esto es una COMPROBACION, no una garantia: entre leer y escribir hay una ventana. La
+           garantia la pone el indice unico de V52. */
+        Optional<RegistroRadar> deEstaHora = loadPort.ultimoDeParticipante(command.participanteId())
+                .filter(previo -> mismaHora(previo.creadoEn(), ahora));
+        if (deEstaHora.isPresent()) {
+            return deEstaHora.get();
+        }
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
         RegistroRadar registro = RegistroRadar.registrar(RegistroRadarId.of(idGenerator.newId()),
                 command.participanteId(), command.queHago(), command.quePienso(), command.queSiento(),
-                command.nivelEnergia(), command.queEvito(), clock.now());
+                command.nivelEnergia(), command.queEvito(), ahora);
         return savePort.save(registro);
+    }
+
+    /**
+     * Misma franja horaria. Se trunca en UTC igual que el indice unico de V52 — no en la zona del
+     * participante — para que la comprobacion y la garantia partan la hora en el mismo instante.
+     * Que sea UTC no cambia nada en Lima, que es UTC-5 exacto.
+     */
+    private static boolean mismaHora(Instant a, Instant b) {
+        return a.truncatedTo(ChronoUnit.HOURS).equals(b.truncatedTo(ChronoUnit.HOURS));
     }
 
     @Override

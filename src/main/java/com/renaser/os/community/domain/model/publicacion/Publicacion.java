@@ -45,6 +45,18 @@ public final class Publicacion {
     private boolean oculta;
     private final Instant creadoEn;
     private Instant actualizadoEn;
+    /**
+     * Dia de programa del AUTOR en el momento de publicar (1..90), o {@code null} si no tenia
+     * programa activo.
+     *
+     * <p>Se guarda, no se deriva al leer. Derivarlo desde {@code participantes_programa} haria que
+     * una publicacion vieja cambiara de dia cada vez que se ajusta el programa de su autor
+     * ({@code dias_ajuste_programa} existe para eso). Lo que la publicacion cuenta es donde estaba
+     * esa persona ESE dia, y eso no se reescribe despues. Ver V51.
+     *
+     * <p>{@code final}: el dia en que algo se publico no cambia. Editar el texto no lo mueve.
+     */
+    private final Integer diaPrograma;
 
     /** La existencia/actividad de `categoriaClave` NO se valida aca: es una consulta a
      * `categorias_muro` que el dominio no puede hacer (CLAUDE.MD sec. 5.1) — la comprueba
@@ -56,12 +68,27 @@ public final class Publicacion {
      * en vez de tener que caer a {@link #rehydrate} para lograrlo. */
     public static Publicacion publicar(PublicacionId id, UserId autorId, String texto,
                                         List<MediaPublicacion> media, String categoriaClave, Instant ahora) {
+        return publicar(id, autorId, texto, media, categoriaClave, ahora, null);
+    }
+
+    /**
+     * Igual que {@link #publicar}, con el dia de programa del autor.
+     *
+     * <p>Es una sobrecarga y no un parametro mas en la firma de siempre a proposito: el dia lo
+     * resuelve el caso de uso contra otro modulo, y hacerlo obligatorio habria obligado a inventar
+     * un dia en los trece sitios que ya construyen publicaciones —tests incluidos— donde el
+     * programa del autor no viene al caso. {@code null} significa "no tenia programa", que es un
+     * estado real (staff que nunca lo arranco), no un hueco por llenar.
+     */
+    public static Publicacion publicar(PublicacionId id, UserId autorId, String texto,
+                                        List<MediaPublicacion> media, String categoriaClave, Instant ahora,
+                                        Integer diaPrograma) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(autorId, "autorId es obligatorio");
         requireTextoValido(texto);
         List<MediaPublicacion> mediaOrdenada = requireMediaValida(media);
         return new Publicacion(id, autorId, TipoPublicacion.MANUAL, categoriaClave, texto.trim(),
-                mediaOrdenada, false, ahora, ahora);
+                mediaOrdenada, false, ahora, ahora, requireDiaValido(diaPrograma));
     }
 
     /**
@@ -78,20 +105,51 @@ public final class Publicacion {
      */
     public static Publicacion publicarAutomatica(PublicacionId id, UserId autorId, String texto,
                                                   List<MediaPublicacion> media, Instant ahora) {
+        return publicarAutomatica(id, autorId, texto, media, ahora, null);
+    }
+
+    /** Igual que {@link #publicarAutomatica}, con el dia de programa del autor. */
+    public static Publicacion publicarAutomatica(PublicacionId id, UserId autorId, String texto,
+                                                  List<MediaPublicacion> media, Instant ahora,
+                                                  Integer diaPrograma) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(autorId, "autorId es obligatorio");
         requireTextoValido(texto);
         List<MediaPublicacion> mediaOrdenada = requireMediaValida(media);
         return new Publicacion(id, autorId, TipoPublicacion.HITO_AUTOMATICO, null, texto.trim(),
-                mediaOrdenada, false, ahora, ahora);
+                mediaOrdenada, false, ahora, ahora, requireDiaValido(diaPrograma));
     }
 
     /** Solo para el adaptador de persistencia. */
     public static Publicacion rehydrate(PublicacionId id, UserId autorId, TipoPublicacion tipo,
                                          String categoriaClave, String texto, List<MediaPublicacion> media,
                                          boolean oculta, Instant creadoEn, Instant actualizadoEn) {
+        return rehydrate(id, autorId, tipo, categoriaClave, texto, media, oculta, creadoEn, actualizadoEn, null);
+    }
+
+    /** Solo para el adaptador de persistencia, con el dia guardado en la fila. */
+    public static Publicacion rehydrate(PublicacionId id, UserId autorId, TipoPublicacion tipo,
+                                         String categoriaClave, String texto, List<MediaPublicacion> media,
+                                         boolean oculta, Instant creadoEn, Instant actualizadoEn,
+                                         Integer diaPrograma) {
+        // Sin validar el dia: una fila vieja con un valor raro no debe impedir LEER el Muro. La
+        // cota se aplica al escribir, que es donde se puede corregir.
         return new Publicacion(id, autorId, tipo, categoriaClave, texto, List.copyOf(media), oculta, creadoEn,
-                actualizadoEn);
+                actualizadoEn, diaPrograma);
+    }
+
+    /**
+     * El dia va de 1 a 90 o no va. Un 0 —que es lo que el Muro mostraba en todas las
+     * publicaciones— no es un dia del programa: es la ausencia del dato disfrazada de dato.
+     */
+    private static Integer requireDiaValido(Integer dia) {
+        if (dia == null) {
+            return null;
+        }
+        if (dia < 1 || dia > 90) {
+            throw new IllegalArgumentException("diaPrograma va de 1 a 90, llego " + dia);
+        }
+        return dia;
     }
 
     /** Solo el autor edita (lo comprueba el caso de uso) — sin bypass de moderacion:
