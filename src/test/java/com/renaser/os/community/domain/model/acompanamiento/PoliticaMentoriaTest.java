@@ -22,21 +22,21 @@ class PoliticaMentoriaTest {
 
         assertThat(politica.capacidadCelula()).isEqualTo(10);
         assertThat(politica.cadenciaRotacion()).isEqualTo(CadenciaRotacion.MENSUAL);
-        assertThat(politica.diaTraslado()).isEqualTo(4);
+        assertThat(politica.diaTraslado()).isEqualTo(8);
         assertThat(politica.diasSinActividadAlerta()).isEqualTo(3);
         assertThat(politica.zonaHoraria()).isEqualTo("America/Lima");
         assertThat(politica.persistida()).isFalse();
     }
 
     @Test
-    @DisplayName("los dias 1 a 3 son recepcion; desde el 4 corresponde el grupo estable (P-01)")
+    @DisplayName("los dias 1 a 7 son recepcion; desde el 8 corresponde el grupo estable (P-01)")
     void diaDeTraslado() {
         PoliticaMentoria politica = PoliticaMentoria.porDefecto(COHORTE);
 
         assertThat(politica.correspondeTraslado(0)).isFalse();
         assertThat(politica.correspondeTraslado(1)).isFalse();
-        assertThat(politica.correspondeTraslado(3)).isFalse();
-        assertThat(politica.correspondeTraslado(4)).isTrue();
+        assertThat(politica.correspondeTraslado(7)).isFalse();
+        assertThat(politica.correspondeTraslado(8)).isTrue();
         assertThat(politica.correspondeTraslado(30)).isTrue();
     }
 
