@@ -105,8 +105,39 @@ class RecepcionVigenteIT {
         assertThat(puerto.recepcionVigenteEn(LocalDate.now())).isEmpty();
     }
 
+    @Test
+    @DisplayName("Una recepcion SIN fechas es permanente: siempre vigente")
+    void recepcionSinFechasEsPermanente() {
+        UUID permanente = recepcionSinPeriodo("Bienvenida permanente");
+
+        assertThat(puerto.recepcionVigenteEn(LocalDate.now()))
+                .map(CelulaId::value)
+                .contains(permanente);
+    }
+
+    @Test
+    @DisplayName("Una recepcion fechada y vigente hoy gana sobre la permanente")
+    void laFechadaVigenteGanaSobreLaPermanente() {
+        recepcionSinPeriodo("Bienvenida permanente");
+        UUID especial = recepcion("Bienvenida de un evento", -1, 5);
+
+        assertThat(puerto.recepcionVigenteEn(LocalDate.now()))
+                .map(CelulaId::value)
+                .contains(especial);
+    }
+
     private UUID recepcion(String nombre, int desde, int hasta) {
         return celula(nombre, "RECEPCION", desde, hasta);
+    }
+
+    private UUID recepcionSinPeriodo(String nombre) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update("""
+                INSERT INTO renaser.celulas (id, nombre, cohorte_id, tipo, periodo_inicio, periodo_fin)
+                VALUES (?, ?, ?, CAST('RECEPCION' AS renaser.tipo_celula), NULL, NULL)
+                """, id, nombre, cohorteId);
+        celulas.add(id);
+        return id;
     }
 
     private UUID regular(String nombre, int desde, int hasta) {
