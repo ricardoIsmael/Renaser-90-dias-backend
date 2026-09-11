@@ -15,9 +15,15 @@ import java.util.Map;
  * aca, nunca en dominio ni persistencia (mismo criterio que `support`/`rocks`,
  * ver TicketSoporteResponse.toWireEstado).
  */
+/**
+ * {@code programDay} es el dia de programa del AUTOR al publicar, o {@code null} si no tenia
+ * programa activo. Se agrego en V51: hasta entonces el Muro no lo publicaba en ninguna forma y el
+ * movil pintaba "Dia 0" en todas las publicaciones, con un valor escrito a mano.
+ */
 public record WallPostResponse(String id, String authorId, String authorName, String authorAvatarUrl, String type,
                                 String category, String text, List<MediaItemResponse> media, String createdAt,
-                                Map<String, Integer> reactionCounts, List<String> myReactions, int commentCount) {
+                                Map<String, Integer> reactionCounts, List<String> myReactions, int commentCount,
+                                Integer programDay) {
 
     public static WallPostResponse from(PublicacionVista vista) {
         Publicacion p = vista.publicacion();
@@ -26,7 +32,7 @@ public record WallPostResponse(String id, String authorId, String authorName, St
                 vista.autorAvatarUrl(), toWireTipoPublicacion(p.tipo()), p.categoriaClave(), p.texto(),
                 vista.media().stream().map(MediaItemResponse::from).toList(), p.creadoEn().toString(),
                 Map.of("LIKE", vista.likes(), "DISLIKE", vista.dislikes()), misReacciones,
-                vista.cantidadComentarios());
+                vista.cantidadComentarios(), p.diaPrograma());
     }
 
     private static String toWireTipoPublicacion(TipoPublicacion tipo) {

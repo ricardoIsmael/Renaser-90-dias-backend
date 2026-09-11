@@ -31,6 +31,7 @@ import com.renaser.os.shared.infrastructure.storage.NoOpAlmacenamientoAdapter;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -82,6 +83,8 @@ class PublicacionMuroServiceTest {
     @Mock
     private UserSummaryFinder userSummaryFinder;
     @Mock
+    private ParticipacionProgramaFinder participacionFinder;
+    @Mock
     private ApplicationEventPublisher events;
     @Mock
     private IdGenerator idGenerator;
@@ -98,7 +101,8 @@ class PublicacionMuroServiceTest {
     void setUp() {
         service = new PublicacionMuroService(loadPublicacionPort, savePublicacionPort, eliminarPublicacionPort,
                 loadComentarioPort, reaccionMuroPort, categoriasUseCase, consultarPerfilUsuarioPort,
-                new NoOpAlmacenamientoAdapter(), userSummaryFinder, events, CLOCK, idGenerator);
+                new NoOpAlmacenamientoAdapter(), userSummaryFinder, events, CLOCK, idGenerator,
+                participacionFinder);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(autor))
                 .thenReturn(Optional.of(new UserSummary(autor, "Autor", null, UserRole.TRAINEE, UserStatus.ACTIVE)));

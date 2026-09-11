@@ -39,4 +39,7 @@ public class PublicacionJpaEntity {
     private Instant creadoEn;
 
     private Instant actualizadoEn;
+
+    /** V51. `Integer` y no `int`: la columna es nullable y un 0 no es un dia del programa. */
+    private Integer diaPrograma;
 }
