@@ -29,7 +29,12 @@ import java.util.Objects;
 public final class PoliticaMentoria {
 
     public static final int CAPACIDAD_POR_DEFECTO = 10;
-    public static final int DIA_TRASLADO_POR_DEFECTO = 4;
+    // La bienvenida cubre los dias 1..(DIA_TRASLADO_POR_DEFECTO - 1) del programa de cada persona.
+    // 8 => recepcion los dias 1..7, traslado a grupo estable el dia 8. Es el default que usa el
+    // TRASLADO cuando una cohorte no tiene fila de politica propia —produccion arranca asi—, asi que
+    // este numero, y no el DEFAULT de la columna, es el que manda mientras nadie configure una
+    // politica a mano. La migracion V50 deja la base diciendo lo mismo.
+    public static final int DIA_TRASLADO_POR_DEFECTO = 8;
     public static final int DIAS_SIN_ACTIVIDAD_POR_DEFECTO = 3;
     public static final String ZONA_POR_DEFECTO = "America/Lima";
 

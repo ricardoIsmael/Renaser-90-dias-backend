@@ -45,9 +45,9 @@ class PlanificadorDeTrasladoTest {
     }
 
     @Test
-    @DisplayName("dias 1 a 3: recepcion")
-    void diasUnoATresVanARecepcion() {
-        for (int dia = 1; dia <= 3; dia++) {
+    @DisplayName("dias 1 a 7: recepcion (el default es dia_traslado = 8)")
+    void diasUnoASieteVanARecepcion() {
+        for (int dia = 1; dia <= 7; dia++) {
             var decision = PlanificadorDeTraslado.decidir(enNingunLado(dia), POLITICA, RECEPCION, grupos(0, 0));
             assertThat(decision.destino()).as("dia %d", dia).isEqualTo(DestinoTraslado.RECEPCION);
             assertThat(decision.grupoDestino()).isEqualTo(RECEPCION);
@@ -55,10 +55,10 @@ class PlanificadorDeTrasladoTest {
     }
 
     @Test
-    @DisplayName("dia 4: pasa al grupo estable")
-    void diaCuatroPasaAGrupoEstable() {
+    @DisplayName("dia 8: pasa al grupo estable")
+    void diaOchoPasaAGrupoEstable() {
         var decision = PlanificadorDeTraslado.decidir(
-                new SituacionAprendiz(4, true, RECEPCION, TipoCelula.RECEPCION), POLITICA, RECEPCION, grupos(0, 0));
+                new SituacionAprendiz(8, true, RECEPCION, TipoCelula.RECEPCION), POLITICA, RECEPCION, grupos(0, 0));
 
         assertThat(decision.destino()).isEqualTo(DestinoTraslado.GRUPO_ESTABLE);
     }
@@ -93,19 +93,19 @@ class PlanificadorDeTrasladoTest {
     @Test
     @DisplayName("elige el grupo con menos gente; ante empate, el de id menor: siempre el mismo")
     void eleccionDeterminista() {
-        assertThat(PlanificadorDeTraslado.decidir(enNingunLado(4), POLITICA, RECEPCION, grupos(5, 2)).grupoDestino())
+        assertThat(PlanificadorDeTraslado.decidir(enNingunLado(8), POLITICA, RECEPCION, grupos(5, 2)).grupoDestino())
                 .isEqualTo(GRUPO_B);
-        assertThat(PlanificadorDeTraslado.decidir(enNingunLado(4), POLITICA, RECEPCION, grupos(2, 5)).grupoDestino())
+        assertThat(PlanificadorDeTraslado.decidir(enNingunLado(8), POLITICA, RECEPCION, grupos(2, 5)).grupoDestino())
                 .isEqualTo(GRUPO_A);
         // Empate: gana el id menor, no "el primero que devolvio la base".
-        assertThat(PlanificadorDeTraslado.decidir(enNingunLado(4), POLITICA, RECEPCION, grupos(3, 3)).grupoDestino())
+        assertThat(PlanificadorDeTraslado.decidir(enNingunLado(8), POLITICA, RECEPCION, grupos(3, 3)).grupoDestino())
                 .isEqualTo(GRUPO_A);
     }
 
     @Test
     @DisplayName("un grupo lleno no recibe: se busca otro")
     void grupoLlenoNoRecibe() {
-        var decision = PlanificadorDeTraslado.decidir(enNingunLado(4), POLITICA, RECEPCION, grupos(10, 7));
+        var decision = PlanificadorDeTraslado.decidir(enNingunLado(8), POLITICA, RECEPCION, grupos(10, 7));
 
         assertThat(decision.grupoDestino()).isEqualTo(GRUPO_B);
     }
@@ -114,7 +114,7 @@ class PlanificadorDeTrasladoTest {
     @DisplayName("todos llenos: ESPERANDO_GRUPO y sigue en recepcion, nunca sin chat (P-04)")
     void todosLlenosEsperaSinPerderChat() {
         var decision = PlanificadorDeTraslado.decidir(
-                new SituacionAprendiz(4, true, RECEPCION, TipoCelula.RECEPCION), POLITICA, RECEPCION, grupos(10, 10));
+                new SituacionAprendiz(8, true, RECEPCION, TipoCelula.RECEPCION), POLITICA, RECEPCION, grupos(10, 10));
 
         assertThat(decision.destino()).isEqualTo(DestinoTraslado.ESPERANDO_GRUPO);
         assertThat(decision.grupoDestino()).isNull();
@@ -124,7 +124,7 @@ class PlanificadorDeTrasladoTest {
     @Test
     @DisplayName("sobreocupado por bajar la capacidad: tampoco recibe, pero nadie sale (RF-28)")
     void grupoSobreocupadoNoRecibe() {
-        var decision = PlanificadorDeTraslado.decidir(enNingunLado(4), POLITICA, RECEPCION,
+        var decision = PlanificadorDeTraslado.decidir(enNingunLado(8), POLITICA, RECEPCION,
                 List.of(new GrupoCandidato(GRUPO_A, 12, 10), new GrupoCandidato(GRUPO_B, 9, 10)));
 
         assertThat(decision.grupoDestino()).isEqualTo(GRUPO_B);
