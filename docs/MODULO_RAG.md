@@ -1,7 +1,15 @@
 # Módulo `rag` / `renasia` — diseño y decisiones
 
 **Fecha:** 2026-08-25
-**Estado:** diseñado, **no construido todavía**. Es el último de los 14 módulos.
+**Estado:** **construido** (verificado el 2026-09-14: 5 endpoints, 7 casos de uso, 184 pruebas).
+Renasia y Sparkie tienen adaptadores reales de Google GenAI detrás de `renaser.ia.proveedor=google`;
+el Espejo Sombra (`GenerarInsightSemanalPort`) y el clasificador de riesgo
+(`EvaluarRiesgoMensajePort`, D-82) siguen en `NoOp`.
+
+> La cabecera decía «diseñado, **no construido todavía**. Es el último de los 14 módulos»
+> desde el 2026-08-25. Quedó vieja en las dos mitades: el módulo se construyó, y hoy son 16
+> módulos, no 14. Corregido el 2026-09-14.
+
 **Insumo:** análisis del esquema real (BD congelada, D-40) + decisiones de negocio confirmadas por el dueño del proyecto el 2026-08-25.
 
 ---
@@ -118,6 +126,49 @@ Ya existían `NivelRiesgo`/`Severidad`/`EvaluacionRiesgo` en `rag/domain/model/s
 **Deliberadamente NO incluido:** el mapeo de `EvaluacionRiesgo` a modo de respuesta (qué apaga herramientas, qué escala a mentor, qué entra en crisis) y los criterios de detección en sí — ambos son reglas sin confirmar (CLAUDE.MD §0.6) que tiene que firmar el dueño del producto y un profesional con licencia, respectivamente. Este puerto **no está conectado** a `ConversacionRenasiaService` ni a ningún caso de uso todavía.
 
 **Por qué el `NoOp` devuelve `sinSenales()` y no un nivel alto "por las dudas":** `NivelRiesgo.CRITICO` dispara modo crisis siempre, sin importar la severidad — usarlo como default de un adaptador que nunca leyó el mensaje convertiría, el día que alguien lo conecte sin releer el javadoc, TODA conversación con Renasia en una falsa alarma de crisis permanente. `sinSenales()` es el mismo criterio que el resto de los `NoOp` del módulo: un placeholder inerte, no una mentira sobre haber evaluado algo. Queda pendiente, documentado en el javadoc de la clase: si hace falta un tercer estado "indeterminado" en `NivelRiesgo` (pregunta que el propio enum deja abierta) y, después, el mapeo completo a modo de respuesta — ninguna de las dos cosas se resuelve acá.
+
+### D-123 — Qué va en el prompt y qué se convierte en herramienta (2026-09-14)
+
+Regla para no seguir discutiéndolo cada vez que el agente necesita un dato nuevo.
+
+> **Las herramientas son para lo que el modelo *decide* buscar y para lo que *escribe*. El prompt
+> es para lo que el modelo *siempre* necesita saber.**
+
+**Lo que decide NO es si el dato es por usuario.** Los dos lo son. El prompt de sistema es un
+`PromptTemplate` de Spring AI que se renderiza **en cada petición**, y ya inyecta datos por
+usuario: `prompts/renasia-sistema.st` tiene `{contexto}`, que son los fragmentos recuperados para
+esa persona y filtrados por lo que puede ver hoy (D-81). Agregar un segundo marcador es agregar
+una línea, no una función.
+
+Lo que decide es la frecuencia y el coste:
+
+| | Prompt | Herramienta |
+|---|---|---|
+| Se necesita | Casi siempre | A veces |
+| Tamaño | Pequeño y acotado | Puede ser grande |
+| ¿Escribe? | Nunca | Sí |
+| Coste por uso | Ninguno | **Un turno completo con el modelo** |
+
+El coste de una herramienta no es teórico: el modelo contesta "necesito llamar a X", vuelve al
+servidor, el servidor ejecuta, vuelve al modelo, y **recién entonces** responde. Son dos llamadas
+al modelo en vez de una — uno o dos segundos más de espera para la persona, por un dato que el
+servidor ya tenía antes de empezar.
+
+Este módulo ya aplicó el criterio una vez, y está comentado en `HerramientasAgenteService`:
+`consultar_habitos_del_dia` devuelve el total en la MISMA respuesta para que el modelo no encadene
+`consultar_puntos_en_juego` — se ahorró un viaje de ida y vuelta a Gemini.
+
+**Cómo cae cada caso pendiente hoy:**
+
+| Dato | Dónde va | Por qué |
+|---|---|---|
+| Día de programa, fase, racha | **Prompt**, como `{diaPrograma}` | Un dato por persona, chico, que hace falta casi siempre. Hoy `renasia-sistema.st:47` promete que el agente lo sabe y **nada se lo suministra**: `ChatIAPort.Consulta` no lo lleva |
+| Si un hábito exige evidencia | **Herramienta existente** | Es un dato POR HÁBITO, y `consultar_habitos_del_dia` ya devuelve una línea por hábito. Se amplía `HabitoDelDia`; no se crea una herramienta nueva |
+| Marcar un hábito | **Herramienta** (ya está) | Escribe |
+| Conducta ante crisis | **Prompt** | Es una regla de conducta, no un dato |
+
+**Corolario:** no se agregan herramientas "por si acaso". Cada definición viaja en cada petición
+—ocupa contexto— y le da al modelo una opción más entre las que dudar. Hoy son tres y alcanzan.
 
 ---
 
