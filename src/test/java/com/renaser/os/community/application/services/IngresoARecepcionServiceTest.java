@@ -1,5 +1,6 @@
 package com.renaser.os.community.application.services;
 
+import com.renaser.os.community.api.ComposicionDeCelulaCambiadaEvent;
 import com.renaser.os.community.application.ports.out.acompanamiento.LoadAsignacionesPort;
 import com.renaser.os.community.application.ports.out.acompanamiento.SaveAsignacionPort;
 import com.renaser.os.community.application.ports.out.celula.ConsultarRecepcionVigentePort;
@@ -10,6 +11,7 @@ import com.renaser.os.community.domain.model.acompanamiento.MotivoAsignacion;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AsignacionCelulaPort;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
@@ -31,6 +33,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>Es lo único automático que queda del acompañamiento, así que lo que más importa aquí es
  * cuándo NO actúa: sobre alguien que no es aprendiz, sobre quien ya tiene grupo, y cuando no hay
  * recepción abierta.
+ *
+ * <p><b>Y qué escribe cuando SÍ actúa.</b> Hasta el 2026-09-14 esta prueba solo miraba el
+ * {@code SaveAsignacionPort}, y por eso no vio nunca que entrar a un grupo son tres escrituras:
+ * el intervalo, los punteros de proyección que lee la app, y el aviso que reconcilia el chat.
+ * Faltaban las dos últimas —ver el javadoc de {@link IngresoARecepcionService}— y la bienvenida
+ * automática escribía una fila que no leía nadie. Los casos de abajo cubren las tres juntas,
+ * porque van juntas o no van.
  */
 class IngresoARecepcionServiceTest {
 
@@ -38,9 +47,21 @@ class IngresoARecepcionServiceTest {
     private static final CelulaId RECEPCION = CelulaId.of(UUID.randomUUID());
 
     private final List<AsignacionCelula> guardadas = new ArrayList<>();
+    private final List<Sincronizacion> sincronizadas = new ArrayList<>();
+    private final List<Object> publicados = new ArrayList<>();
+
+    /** Lo que se escribió en `participantes_programa` para un aprendiz. */
+    private record Sincronizacion(UserId aprendiz, UUID celulaId, UserId mentorId) {
+    }
 
     private IngresoARecepcionService servicio(UserRole rol, Optional<CelulaId> recepcion,
                                                List<AsignacionCelula> yaTiene) {
+        return servicio(rol, recepcion, yaTiene, List.of());
+    }
+
+    private IngresoARecepcionService servicio(UserRole rol, Optional<CelulaId> recepcion,
+                                               List<AsignacionCelula> yaTiene,
+                                               List<AsignacionCelula> delGrupo) {
         ConsultarRecepcionVigentePort recepcionPort = dia -> recepcion;
         LoadAsignacionesPort load = new LoadAsignacionesPort() {
             @Override
@@ -50,7 +71,7 @@ class IngresoARecepcionServiceTest {
 
             @Override
             public List<AsignacionCelula> porCelula(CelulaId celulaId) {
-                return List.of();
+                return delGrupo;
             }
 
             @Override
@@ -63,8 +84,9 @@ class IngresoARecepcionServiceTest {
             return a;
         };
         ParticipacionProgramaFinder finder = new FinderDeRol(rol);
-        return new IngresoARecepcionService(recepcionPort, load, save, finder,
-                () -> UUID.randomUUID(), FixedClock.at(AHORA));
+        AsignacionCelulaPort punteros = new PunterosEspia(sincronizadas);
+        return new IngresoARecepcionService(recepcionPort, load, save, finder, punteros,
+                publicados::add, () -> UUID.randomUUID(), FixedClock.at(AHORA));
     }
 
     @Test
@@ -79,12 +101,73 @@ class IngresoARecepcionServiceTest {
         });
     }
 
+    /**
+     * La regresión que da sentido a toda esta corrección. `GET /me/cell` resuelve el grupo por
+     * `participantes_programa.celula_id`, no por el historial: sin esta escritura la persona
+     * entraba a la bienvenida y su app seguía diciendo que no tenía grupo.
+     */
+    @Test
+    @DisplayName("Entrar sincroniza el puntero que lee la app, no solo el historial")
+    void entrarSincronizaElPuntero() {
+        UserId aprendiz = UserId.of(UUID.randomUUID());
+
+        servicio(UserRole.TRAINEE, Optional.of(RECEPCION), List.of()).ingresar(aprendiz);
+
+        assertThat(sincronizadas).singleElement().satisfies(s -> {
+            assertThat(s.aprendiz()).isEqualTo(aprendiz);
+            assertThat(s.celulaId()).isEqualTo(RECEPCION.value());
+        });
+    }
+
+    /** El puntero de mentor sale del intervalo vigente del grupo, que es la fuente de verdad. */
+    @Test
+    @DisplayName("Si la bienvenida ya tiene mentor, el aprendiz queda apuntandolo")
+    void entrarApuntaAlMentorDelGrupo() {
+        UserId mentor = UserId.of(UUID.randomUUID());
+        AsignacionCelula delMentor = AsignacionCelula.abrir(AsignacionId.of(UUID.randomUUID()),
+                RECEPCION, mentor, FuncionAcompanamiento.MENTOR, AHORA.minusSeconds(86_400),
+                MotivoAsignacion.ADMINISTRATIVO, null, "mentor-de-la-bienvenida");
+
+        servicio(UserRole.TRAINEE, Optional.of(RECEPCION), List.of(), List.of(delMentor))
+                .ingresar(UserId.of(UUID.randomUUID()));
+
+        assertThat(sincronizadas).singleElement()
+                .satisfies(s -> assertThat(s.mentorId()).isEqualTo(mentor));
+    }
+
+    /**
+     * Una bienvenida sin mentor es válida (D-05). El puntero queda en null y no en cualquier cosa:
+     * es quien decide a quién se le autoriza la evidencia del aprendiz.
+     */
+    @Test
+    @DisplayName("Una bienvenida sin mentor deja el puntero de mentor en null")
+    void sinMentorElPunteroQuedaVacio() {
+        servicio(UserRole.TRAINEE, Optional.of(RECEPCION), List.of()).ingresar(UserId.of(UUID.randomUUID()));
+
+        assertThat(sincronizadas).singleElement()
+                .satisfies(s -> assertThat(s.mentorId()).isNull());
+    }
+
+    /** El chat reconcilia su lista de participantes con este aviso: sin publicarlo, quien entra
+     * por la bienvenida no aparece en la conversación del grupo. */
+    @Test
+    @DisplayName("Entrar avisa del cambio de composicion para que el chat lo incorpore")
+    void entrarAvisaAlChat() {
+        servicio(UserRole.TRAINEE, Optional.of(RECEPCION), List.of()).ingresar(UserId.of(UUID.randomUUID()));
+
+        assertThat(publicados).singleElement()
+                .isInstanceOfSatisfying(ComposicionDeCelulaCambiadaEvent.class,
+                        e -> assertThat(e.celulaId()).isEqualTo(RECEPCION.value()));
+    }
+
     @Test
     @DisplayName("Un MENTOR que se registra NO entra: acompana, no cursa la bienvenida")
     void unMentorNoEntra() {
         servicio(UserRole.MENTOR, Optional.of(RECEPCION), List.of()).ingresar(UserId.of(UUID.randomUUID()));
 
         assertThat(guardadas).isEmpty();
+        assertThat(sincronizadas).isEmpty();
+        assertThat(publicados).isEmpty();
     }
 
     /**
@@ -97,6 +180,8 @@ class IngresoARecepcionServiceTest {
         servicio(UserRole.TRAINEE, Optional.empty(), List.of()).ingresar(UserId.of(UUID.randomUUID()));
 
         assertThat(guardadas).isEmpty();
+        assertThat(sincronizadas).isEmpty();
+        assertThat(publicados).isEmpty();
     }
 
     /**
@@ -114,11 +199,14 @@ class IngresoARecepcionServiceTest {
         servicio(UserRole.TRAINEE, Optional.of(RECEPCION), List.of(yaAsignado)).ingresar(aprendiz);
 
         assertThat(guardadas).isEmpty();
+        assertThat(sincronizadas).isEmpty();
+        assertThat(publicados).isEmpty();
     }
 
     /**
      * El outbox de Modulith es at-least-once: el mismo registro puede reentregarse. La clave se
-     * deriva del USUARIO y no del instante, asi que la segunda vuelta no abre otro intervalo.
+     * deriva del USUARIO y no del instante, asi que la segunda vuelta no abre otro intervalo — ni
+     * vuelve a escribir los punteros ni a avisar al chat.
      */
     @Test
     @DisplayName("Reentregar el mismo registro no abre un segundo intervalo")
@@ -130,6 +218,28 @@ class IngresoARecepcionServiceTest {
         servicio.ingresar(aprendiz);
 
         assertThat(guardadas).hasSize(1);
+        assertThat(sincronizadas).hasSize(1);
+        assertThat(publicados).hasSize(1);
+    }
+
+    /** Espía de los punteros de `participantes_programa`: anota lo que se le pide escribir. */
+    private record PunterosEspia(List<Sincronizacion> anotadas) implements AsignacionCelulaPort {
+
+        @Override
+        public void asignarCelula(UserId actorId, UserId traineeId, UUID celulaId) {
+            throw new AssertionError("El ingreso automatico no tiene actor humano: va por "
+                    + "sincronizarAcompanamiento, no por asignarCelula");
+        }
+
+        @Override
+        public void quitarCelula(UserId actorId, UserId traineeId) {
+            throw new AssertionError("El ingreso a la bienvenida no quita a nadie de su grupo");
+        }
+
+        @Override
+        public void sincronizarAcompanamiento(UserId traineeId, UUID celulaId, UserId mentorId) {
+            anotadas.add(new Sincronizacion(traineeId, celulaId, mentorId));
+        }
     }
 
     /** Doble mínimo del finder: solo se le pregunta el rol. */
