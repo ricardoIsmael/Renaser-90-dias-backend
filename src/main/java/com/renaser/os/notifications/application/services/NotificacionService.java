@@ -104,14 +104,40 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
         return guardada;
     }
 
-    /** Aisla el INSERT en su propia transaccion (ver javadoc de {@link #transaccionPropia}) para
+    /**
+     * Aisla el INSERT en su propia transaccion (ver javadoc de {@link #transaccionPropia}) para
      * poder atrapar la violacion de {@code notificaciones_origen_evento_uk} sin abortar la
      * transaccion de {@link #emitir}. Solo puede chocar cuando {@code origenEventoId} no es
-     * null -- el indice es parcial (C-7/V16). */
+     * null -- el indice es parcial (C-7/V16).
+     *
+     * <p><b>Se PREGUNTA antes de insertar (2026-09-14), y no solo se atrapa el choque.</b> El
+     * resultado funcional era correcto -- nunca se duplico una fila -- pero el camino normal era
+     * el ruidoso: Hibernate registra el error de SQL en WARN <i>antes</i> de que Spring lo
+     * traduzca a {@link DataIntegrityViolationException} y este {@code catch} lo absorba. Con
+     * {@code DespacharAvisosHabitoScheduler} corriendo cada 5 minutos sobre una ventana de aviso
+     * que dura mas que eso, el mismo aviso se reintenta en cada vuelta y el log de produccion se
+     * llenaba de
+     * {@code duplicate key value violates unique constraint "notificaciones_origen_evento_uk"}
+     * cada cinco minutos, por participante y por habito.
+     *
+     * <p>Se agrava con las antelaciones escritas a mano: una de "1 dia antes" mantiene esa ventana
+     * abierta 24 h, o sea 288 vueltas del barrido con su WARN cada una.
+     *
+     * <p><b>La comprobacion no reemplaza al indice ni a este {@code catch}</b>: entre el SELECT y
+     * el INSERT cabe otra transaccion. El indice sigue siendo la garantia real; esto solo saca el
+     * caso normal del camino de la excepcion. Cuesta un SELECT por indice unico, que es lo mismo
+     * que ya hacia el INSERT para descubrir el choque.
+     */
     private Optional<Notificacion> guardarIdempotente(Notificacion notificacion) {
+        if (loadNotificacionPort.existePorOrigen(notificacion.usuarioId(), notificacion.tipo(),
+                notificacion.origenEventoId())) {
+            return Optional.empty();
+        }
         try {
             return Optional.of(transaccionPropia.execute(status -> saveNotificacionPort.guardar(notificacion)));
-        } catch (DataIntegrityViolationException redeliveryDelMismoEvento) {
+        } catch (DataIntegrityViolationException carreraConOtraInstancia) {
+            // Ahora SI es una carrera de verdad y no el camino de todos los dias: dos instancias
+            // procesando el mismo evento a la vez. Sigue sin duplicar nada.
             return Optional.empty();
         }
     }
