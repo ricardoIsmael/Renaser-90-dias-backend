@@ -3,11 +3,13 @@ package com.renaser.os.notifications.infrastructure.adapter.out.persistence.noti
 import com.renaser.os.notifications.application.ports.out.notificacion.LoadNotificacionPort;
 import com.renaser.os.notifications.application.ports.out.notificacion.SaveNotificacionPort;
 import com.renaser.os.notifications.domain.model.notificacion.Notificacion;
+import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.UUID;
 import java.util.List;
 
 @Component
@@ -40,6 +42,17 @@ class NotificacionPersistenceAdapter implements LoadNotificacionPort, SaveNotifi
     @Override
     public long contarNoLeidas(UserId usuarioId, Instant desde) {
         return repository.countByUsuarioIdAndLeidaEnIsNullAndCreadoEnGreaterThanEqual(usuarioId.value(), desde);
+    }
+
+    @Override
+    public boolean existePorOrigen(UserId usuarioId, TipoNotificacion tipo, UUID origenEventoId) {
+        // Sin origen no hay deduplicacion que consultar: el indice unico es PARCIAL y solo cubre
+        // las filas con `origen_evento_id` no nulo (C-7/V16).
+        if (origenEventoId == null) {
+            return false;
+        }
+        return repository.existsByUsuarioIdAndTipoAndOrigenEventoId(usuarioId.value(),
+                TipoNotificacionJpa.valueOf(tipo.name()), origenEventoId);
     }
 
     @Override

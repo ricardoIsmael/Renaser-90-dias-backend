@@ -18,6 +18,9 @@ interface SpringDataNotificacionRepository extends JpaRepository<NotificacionJpa
 
     boolean existsByIdAndUsuarioId(Long id, UUID usuarioId);
 
+    /** La tripleta del indice unico `notificaciones_origen_evento_uk` (C-7/V16). */
+    boolean existsByUsuarioIdAndTipoAndOrigenEventoId(UUID usuarioId, TipoNotificacionJpa tipo, UUID origenEventoId);
+
     long countByUsuarioIdAndLeidaEnIsNullAndCreadoEnGreaterThanEqual(UUID usuarioId, Instant desde);
 
     /** UPDATE atomico: solo mueve leidaEn si sigue null y es del usuario — ver
