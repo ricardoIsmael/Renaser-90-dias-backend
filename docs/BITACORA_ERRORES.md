@@ -6182,3 +6182,50 @@ que el usuario ya veia, menos la linea del enlace.
 3. **Prevencion ejecutable:** `CompartirPublicacionServiceTest.elTextoNoLlevaNingunaUrlFirmadaAdentro`
    afirma que el texto persistido no contiene `http` ni `X-Amz`. Si alguien vuelve a meter una URL
    en el texto, el test lo dice.
+
+---
+
+## E-183 · Un "Hola" al asistente marcó un hábito como completado, por una instrucción del día anterior
+
+**Síntoma.** El 2026-09-15, probando el chat del acompañante, se le escribió literalmente `Hola`. El
+agente respondió:
+
+> *"¡Hola! **He marcado tu "Jugo verde" como completado**; recuerda subir la evidencia desde la
+> pantalla de "Hoy" en la app. Estás en el día 8 de tu programa, dentro de la fase 2."*
+
+Y no era una frase: el registro quedó en `COMPLETADO` en la base, once segundos después del saludo.
+
+```sql
+select h.titulo, r.estado, r.completado_en from renaser.registros_habito r ...
+JUGO VERDE | COMPLETADO | 2026-09-15 19:22:24.924145+00
+```
+
+**Causa.** `ConversacionRenasiaService.ultimosTurnosCronologicos` tomaba los últimos 10 mensajes tal
+cual y se los mandaba al modelo. El día anterior, alguien había escrito *"Marca como completado el
+habito Jugo verde"* y **el modelo nunca llegó a responder** —la respuesta del proveedor tarda entre
+12 y 30 segundos y esa vez se cortó—, pero el mensaje del usuario **sí quedó guardado**, porque se
+persiste antes de llamar al modelo.
+
+Al día siguiente ese pedido viajó de nuevo al modelo como si fuera parte de la conversación. Para el
+modelo, un mensaje de usuario sin respuesta detrás **es una instrucción que sigue pendiente**; con
+herramientas de escritura disponibles (`HerramientaToolCallback`), la ejecutó.
+
+Lo puntual: la persona no pidió nada ese día. Escribió un saludo.
+
+**Solución.** A la memoria que viaja al modelo entran **solo los turnos que fueron respondidos**: un
+mensaje de usuario que no tiene un mensaje de asistente inmediatamente después se descarta
+(`soloTurnosRespondidos`). No se borra nada — el mensaje sigue en `mensajes_renasia` y se sigue
+viendo en el historial de la pantalla, que es la conversación real de la persona. Lo único que
+cambia es qué se le manda al modelo.
+
+**Cómo evitar que vuelva a pasar.**
+1. **Un intento fallido no es un turno de conversación.** Si se guarda la pregunta antes de llamar al
+   modelo —y hay que guardarla, para no perderla si el stream se corta—, entonces al reconstruir la
+   memoria hay que distinguir lo que se respondió de lo que no. Está ejecutable en dos pruebas de
+   `ConversacionRenasiaServiceTest`, verificadas contra el código viejo: sin el filtro, las dos fallan.
+2. **Con herramientas de escritura, el contexto deja de ser inocuo.** Cualquier cosa que se le
+   mande al modelo puede terminar en un `INSERT` o un `UPDATE`. Antes de agregar material al
+   contexto —resúmenes, notas, mensajes viejos— hay que preguntarse si se leería como una orden.
+3. Queda **sin resolver** la otra mitad: el agente nombra los hábitos por el título del catálogo y
+   no por el renombre personal (D-127), así que le dice "Jugo verde" a quien en su app ve "Batido de
+   papaya".

@@ -20,6 +20,7 @@ import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.FuenteMensaje;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
+import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasiaId;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
@@ -267,7 +268,39 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         List<MensajeRenasia> recientes = new java.util.ArrayList<>(
                 loadMensajeRenasiaPort.pagina(actorId, agente, null, TURNOS_DE_MEMORIA));
         java.util.Collections.reverse(recientes);
-        return List.copyOf(recientes);
+        return soloTurnosRespondidos(recientes);
+    }
+
+    /**
+     * <b>A la memoria solo entran los turnos que fueron respondidos</b> (2026-09-15, D-132).
+     *
+     * <p>El caso real que lo motiva: alguien escribio <i>"marca como completado el habito jugo
+     * verde"</i>, el modelo no llego a contestar —la respuesta tarda entre 12 y 30 segundos y esa
+     * vez se corto—, y el mensaje quedo guardado igual. Al dia siguiente, un <i>"Hola"</i> volvio
+     * a mandar ese pedido al modelo como si fuera parte de la conversacion: el agente lo leyo como
+     * una instruccion pendiente, <b>llamo a la herramienta y cerro el habito</b>. Un saludo marco
+     * un habito que nadie pidio marcar ese dia. Verificado en la base el 2026-09-15: el registro
+     * quedo en COMPLETADO a los 11 segundos del saludo.
+     *
+     * <p>Un mensaje de usuario sin respuesta <b>no es un turno de conversacion</b>: es un intento
+     * que fallo. Dejarlo en el contexto es pedirle al modelo que adivine si sigue vigente — y con
+     * herramientas de escritura disponibles, esa adivinanza escribe en la base.
+     *
+     * <p>No se borra nada: el mensaje sigue en {@code mensajes_renasia} y se sigue viendo en el
+     * historial de la pantalla, que es la conversacion real de la persona. Lo que cambia es
+     * unicamente <b>que se le manda al modelo</b>.
+     */
+    private static List<MensajeRenasia> soloTurnosRespondidos(List<MensajeRenasia> cronologicos) {
+        List<MensajeRenasia> completos = new java.util.ArrayList<>(cronologicos.size());
+        for (int i = 0; i < cronologicos.size(); i++) {
+            MensajeRenasia mensaje = cronologicos.get(i);
+            boolean loSiguienteEsLaRespuesta = i + 1 < cronologicos.size()
+                    && cronologicos.get(i + 1).rol() == RolMensaje.ASISTENTE;
+            if (mensaje.rol() != RolMensaje.USUARIO || loSiguienteEsLaRespuesta) {
+                completos.add(mensaje);
+            }
+        }
+        return List.copyOf(completos);
     }
 
     private ConversacionRenasia buscarOCrearConversacion(UserId actorId) {

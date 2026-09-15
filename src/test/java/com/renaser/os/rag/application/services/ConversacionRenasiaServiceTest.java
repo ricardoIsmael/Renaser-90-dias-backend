@@ -255,6 +255,57 @@ class ConversacionRenasiaServiceTest {
     }
 
     /**
+     * D-132. <b>El caso real, verificado en la base el 2026-09-15:</b> alguien escribio "marca como
+     * completado el habito jugo verde", el modelo no alcanzo a responder y el mensaje quedo
+     * guardado igual. Al dia siguiente un simple "Hola" volvio a mandarle ese pedido al modelo como
+     * parte de la conversacion, el agente lo leyo como instruccion pendiente, llamo a la
+     * herramienta y <b>cerro el habito</b>. Un saludo marco un habito que nadie pidio marcar.
+     *
+     * <p>Un mensaje de usuario sin respuesta no es un turno: es un intento que fallo. No entra a la
+     * memoria que viaja al modelo — aunque siga guardado y visible en el historial de la pantalla.
+     */
+    @Test
+    void unMensajeSinResponderNoViajaAlModeloComoSiFueraUnaInstruccionPendiente() {
+        stubCaminoFeliz();
+        MensajeRenasia pregunta = MensajeRenasia.escribirDeUsuario(MensajeRenasiaId.of(UUID.randomUUID()), activo,
+                COMPANION, "hola", CLOCK.now().minusSeconds(40));
+        MensajeRenasia respuesta = MensajeRenasia.escribirDeAsistente(MensajeRenasiaId.of(UUID.randomUUID()), activo,
+                COMPANION, "hola, como estas", List.of(), CLOCK.now().minusSeconds(30));
+        MensajeRenasia instruccionSinResponder = MensajeRenasia.escribirDeUsuario(
+                MensajeRenasiaId.of(UUID.randomUUID()), activo, COMPANION,
+                "marca como completado el habito jugo verde", CLOCK.now().minusSeconds(20));
+        when(loadMensajeRenasiaPort.pagina(eq(activo), eq(COMPANION), any(), eq(10)))
+                .thenReturn(List.of(instruccionSinResponder, respuesta, pregunta));
+
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "Hola", null, null))
+                .collectList().block();
+
+        Consulta consulta = consultaEnviadaAlModelo();
+        assertThat(consulta.historial()).containsExactly(pregunta, respuesta);
+        assertThat(consulta.historial()).doesNotContain(instruccionSinResponder);
+    }
+
+    /** Un intento fallido en el MEDIO tampoco viaja: la persona reintento y esa segunda si fue
+     * respondida, pero la primera sigue siendo un pedido que nadie contesto. */
+    @Test
+    void tampocoViajaUnIntentoFallidoQueQuedoEnElMedio() {
+        stubCaminoFeliz();
+        MensajeRenasia fallido = MensajeRenasia.escribirDeUsuario(MensajeRenasiaId.of(UUID.randomUUID()), activo,
+                COMPANION, "borra mi roca de hoy", CLOCK.now().minusSeconds(60));
+        MensajeRenasia reintento = MensajeRenasia.escribirDeUsuario(MensajeRenasiaId.of(UUID.randomUUID()), activo,
+                COMPANION, "que tengo hoy?", CLOCK.now().minusSeconds(50));
+        MensajeRenasia contestada = MensajeRenasia.escribirDeAsistente(MensajeRenasiaId.of(UUID.randomUUID()), activo,
+                COMPANION, "tenes tres habitos", List.of(), CLOCK.now().minusSeconds(40));
+        when(loadMensajeRenasiaPort.pagina(eq(activo), eq(COMPANION), any(), eq(10)))
+                .thenReturn(List.of(contestada, reintento, fallido));
+
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "gracias", null, null))
+                .collectList().block();
+
+        assertThat(consultaEnviadaAlModelo().historial()).containsExactly(reintento, contestada);
+    }
+
+    /**
      * D-102: la memoria es POR AGENTE. Lo que la persona hablo con el acompanante no le llega al
      * tutor de cursos como turnos previos (ni al reves) — seria exactamente "juntarlos en un mismo",
      * lo que el dueno pidio no hacer.
