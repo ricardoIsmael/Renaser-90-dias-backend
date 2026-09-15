@@ -21,6 +21,8 @@ import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
+import com.renaser.os.habits.application.ports.out.renombre.LoadRenombreHabitoPort;
+import com.renaser.os.habits.domain.model.renombre.RenombreHabito;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,6 +71,8 @@ class TracksDelDiaProyeccionServiceTest {
      * comportamiento del campo se prueba en {@link TracksDelDiaEvidenciaTest}. */
     @Mock
     private RegistrosConEvidenciaFinder registrosConEvidenciaFinder;
+    @Mock
+    private LoadRenombreHabitoPort loadRenombrePort;
 
     private TracksDelDiaProyeccionService service;
 
@@ -76,7 +80,7 @@ class TracksDelDiaProyeccionServiceTest {
     void setUp() {
         service = new TracksDelDiaProyeccionService(consultarTracksUseCase, generarTracksUseCase, loadHabitoPort,
                 loadHorarioPort, loadPreferenciaPort, loadGuiaPort, progresoPort, registrosConEvidenciaFinder,
-                FixedClock.at(AHORA));
+                loadRenombrePort, FixedClock.at(AHORA));
     }
 
     private static Habito habito(String titulo) {
@@ -93,6 +97,55 @@ class TracksDelDiaProyeccionServiceTest {
 
         assertThat(resultado).isEmpty();
         verify(loadHabitoPort, org.mockito.Mockito.never()).porIds(any());
+    }
+
+    /**
+     * D-133. El titulo que sale de aca es el que ve la persona, y el que usa el asistente cuando
+     * habla de sus habitos. Antes salia siempre el del catalogo: quien habia reemplazado el jugo
+     * verde por "Batido de papaya" veia un nombre en la pantalla y el agente le hablaba de otro —y
+     * el agente puede COMPLETAR habitos, asi que esa persona no tenia como saber si le toco el
+     * correcto.
+     */
+    @Test
+    void elTituloEsElNombrePropioCuandoLaPersonaReemplazoElHabito() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito("JUGO VERDE");
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), actor, habito.id(),
+                LocalDate.of(2026, 8, 24), 10, TipoDia.DISCIPLINA, false, AHORA);
+
+        when(consultarTracksUseCase.consultar(actor, actor, registro.fechaEjecucion())).thenReturn(List.of(registro));
+        when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
+        when(loadGuiaPort.porHabitos(any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
+        when(loadRenombrePort.deParticipante(actor)).thenReturn(List.of(
+                RenombreHabito.crear(actor, habito.id(), "Batido de papaya", "Gastritis", AHORA)));
+
+        List<TrackDelDiaConCatalogo> resultado = service.consultar(actor, actor, registro.fechaEjecucion());
+
+        assertThat(resultado.get(0).tituloHabito()).isEqualTo("Batido de papaya");
+        // Una sola consulta de renombres para todo el dia, no una por registro (D-43).
+        verify(loadRenombrePort, times(1)).deParticipante(actor);
+    }
+
+    /** Sin renombre manda el catalogo, como siempre: el cambio no le toca nada a quien no renombro. */
+    @Test
+    void sinRenombreSigueMandandoElTituloDelCatalogo() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito("JUGO VERDE");
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), actor, habito.id(),
+                LocalDate.of(2026, 8, 24), 10, TipoDia.DISCIPLINA, false, AHORA);
+
+        when(consultarTracksUseCase.consultar(actor, actor, registro.fechaEjecucion())).thenReturn(List.of(registro));
+        when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
+        when(loadGuiaPort.porHabitos(any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
+        when(loadRenombrePort.deParticipante(actor)).thenReturn(List.of());
+
+        List<TrackDelDiaConCatalogo> resultado = service.consultar(actor, actor, registro.fechaEjecucion());
+
+        assertThat(resultado.get(0).tituloHabito()).isEqualTo("JUGO VERDE");
     }
 
     @Test

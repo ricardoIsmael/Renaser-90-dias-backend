@@ -5,12 +5,15 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 interface SpringDataRenombreHabitoRepository extends JpaRepository<RenombreHabitoJpaEntity, RenombreHabitoPk> {
 
     Optional<RenombreHabitoJpaEntity> findByParticipanteIdAndHabitoId(UUID participanteId, UUID habitoId);
+
+    List<RenombreHabitoJpaEntity> findByParticipanteId(UUID participanteId);
 
     @Modifying
     @Query("DELETE FROM RenombreHabitoJpaEntity r WHERE r.participanteId = :participanteId AND r.habitoId = :habitoId")

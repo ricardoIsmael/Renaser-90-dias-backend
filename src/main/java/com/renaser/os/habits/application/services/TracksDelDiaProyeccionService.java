@@ -9,6 +9,7 @@ import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
+import com.renaser.os.habits.application.ports.out.renombre.LoadRenombreHabitoPort;
 import com.renaser.os.habits.domain.model.guia.GuiaHabito;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
@@ -19,6 +20,7 @@ import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.PuntosEnJuego;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.VentanaEntrega;
+import com.renaser.os.habits.domain.model.renombre.RenombreHabito;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -61,6 +63,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     /** API publica de {@code evidence} (D-41): {@code habits} nunca consulta {@code evidencias} de frente. */
     private final RegistrosConEvidenciaFinder registrosConEvidenciaFinder;
+    private final LoadRenombreHabitoPort loadRenombrePort;
     private final Clock clock;
 
     public TracksDelDiaProyeccionService(ConsultarTracksDelDiaUseCase consultarTracksUseCase,
@@ -69,7 +72,8 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
                                           LoadPreferenciaHorarioPort loadPreferenciaPort,
                                           LoadGuiaHabitoPort loadGuiaPort,
                                           ConsultarProgresoParticipanteHabitsPort progresoPort,
-                                          RegistrosConEvidenciaFinder registrosConEvidenciaFinder, Clock clock) {
+                                          RegistrosConEvidenciaFinder registrosConEvidenciaFinder,
+                                          LoadRenombreHabitoPort loadRenombrePort, Clock clock) {
         this.consultarTracksUseCase = consultarTracksUseCase;
         this.generarTracksUseCase = generarTracksUseCase;
         this.loadHabitoPort = loadHabitoPort;
@@ -78,6 +82,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         this.loadGuiaPort = loadGuiaPort;
         this.progresoPort = progresoPort;
         this.registrosConEvidenciaFinder = registrosConEvidenciaFinder;
+        this.loadRenombrePort = loadRenombrePort;
         this.clock = clock;
     }
 
@@ -124,13 +129,19 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         Set<UUID> conEvidencia = registrosConEvidenciaFinder.deEntre(
                 registros.stream().map(r -> r.id().value()).toList());
 
+        // Los renombres del participante, en UNA consulta como todo lo demas de este metodo
+        // (D-133). Sin esto, la agenda del dia --y con ella la app y el asistente-- nombraba los
+        // habitos por el titulo del catalogo aunque la persona los hubiera reemplazado.
+        Map<HabitoId, RenombreHabito> renombresPorHabito = loadRenombrePort.deParticipante(participanteId).stream()
+                .collect(Collectors.toMap(RenombreHabito::habitoId, r -> r));
         MomentoDelParticipante momento = momentoDe(participanteId);
         return registros.stream()
                 .map(registro -> construirVista(registro, new CatalogoDeHabito(
                         habitosPorId.get(registro.habitoId()),
                         horariosPorHabito.getOrDefault(registro.habitoId(), List.of()),
                         guiasPorHabito.getOrDefault(registro.habitoId(), List.of()),
-                        preferenciasPorHabito.get(registro.habitoId())), momento,
+                        preferenciasPorHabito.get(registro.habitoId()),
+                        renombresPorHabito.get(registro.habitoId())), momento,
                         conEvidencia.contains(registro.id().value())))
                 .toList();
     }
@@ -152,7 +163,12 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     private static TrackDelDiaConCatalogo construirVista(RegistroHabito registro, CatalogoDeHabito catalogo,
                                                           MomentoDelParticipante momento, boolean tieneEvidencia) {
         Habito habito = catalogo.habito();
-        String titulo = habito != null ? habito.titulo() : null;
+        // El nombre que la persona ve, no el del catalogo (D-133): si reemplazo el jugo verde por
+        // "Batido de papaya", eso es lo que tiene que decir la app, el recordatorio y el asistente.
+        // Que el agente hablara del "Jugo verde" mientras la pantalla decia otra cosa era, ademas
+        // de confuso, peligroso: el agente puede COMPLETAR habitos, y la persona no tenia como
+        // saber si le toco el correcto.
+        String titulo = tituloVisible(habito, catalogo.renombre());
         var tipo = habito != null ? habito.tipo() : null;
         GuiaResumen guia = resolverGuia(catalogo.guias(), registro.diaPrograma());
         HorarioHabito horarioVigente = catalogo.horarios().stream()
@@ -200,7 +216,16 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     /** Todo lo del catalogo que le toca a UN registro, ya resuelto del batch. Existe para que
      * {@code construirVista} no tenga que recibir cinco parametros sueltos. */
     private record CatalogoDeHabito(Habito habito, List<HorarioHabito> horarios, List<GuiaHabito> guias,
-                                     PreferenciaHorario preferencia) {
+                                     PreferenciaHorario preferencia, RenombreHabito renombre) {
+    }
+
+    /** El titulo propio si la persona lo puso; si no, el del catalogo. {@code null} solo si el
+     * habito ya no existe, que es el mismo caso que ya contemplaba el codigo anterior. */
+    private static String tituloVisible(Habito habito, RenombreHabito renombre) {
+        if (renombre != null) {
+            return renombre.tituloPersonal();
+        }
+        return habito != null ? habito.titulo() : null;
     }
 
     /** Contra que instante y en que zona se mide la ventana de entrega de este participante. */

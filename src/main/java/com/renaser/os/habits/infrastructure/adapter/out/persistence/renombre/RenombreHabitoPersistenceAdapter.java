@@ -7,6 +7,7 @@ import com.renaser.os.habits.domain.model.renombre.RenombreHabito;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 
 @Component
@@ -25,6 +26,11 @@ class RenombreHabitoPersistenceAdapter implements LoadRenombreHabitoPort, SaveRe
     public Optional<RenombreHabito> porParticipanteYHabito(UserId participanteId, HabitoId habitoId) {
         return repository.findByParticipanteIdAndHabitoId(participanteId.value(), habitoId.value())
                 .map(mapper::toDomain);
+    }
+
+    @Override
+    public List<RenombreHabito> deParticipante(UserId participanteId) {
+        return repository.findByParticipanteId(participanteId.value()).stream().map(mapper::toDomain).toList();
     }
 
     @Override

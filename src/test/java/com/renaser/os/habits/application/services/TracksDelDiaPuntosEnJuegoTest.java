@@ -90,6 +90,9 @@ class TracksDelDiaPuntosEnJuegoTest {
     private TracksDelDiaProyeccionService servicio() {
         return new TracksDelDiaProyeccionService(consultarTracksUseCase, generarTracksUseCase, loadHabitoPort,
                 loadHorarioPort, loadPreferenciaPort, loadGuiaPort, progresoPort, registrosConEvidenciaFinder,
+                // Sin renombres: estas pruebas no miran el titulo (D-133). Mockito devuelve lista vacia.
+                org.mockito.Mockito.mock(
+                        com.renaser.os.habits.application.ports.out.renombre.LoadRenombreHabitoPort.class),
                 FixedClock.at(MADRUGADA_UTC));
     }
 

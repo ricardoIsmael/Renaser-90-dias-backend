@@ -6226,6 +6226,46 @@ cambia es qué se le manda al modelo.
 2. **Con herramientas de escritura, el contexto deja de ser inocuo.** Cualquier cosa que se le
    mande al modelo puede terminar en un `INSERT` o un `UPDATE`. Antes de agregar material al
    contexto —resúmenes, notas, mensajes viejos— hay que preguntarse si se leería como una orden.
-3. Queda **sin resolver** la otra mitad: el agente nombra los hábitos por el título del catálogo y
-   no por el renombre personal (D-127), así que le dice "Jugo verde" a quien en su app ve "Batido de
-   papaya".
+3. La otra mitad —el agente nombrando los hábitos por el título del catálogo y no por el renombre
+   personal— quedó resuelta el mismo día: ver [`E-184`](#e-184--el-asistente-y-la-app-llamaban-al-hábito-por-el-título-del-catálogo-y-no-por-el-nombre-que-la-persona-le-puso).
+   > **Corregido 2026-09-15.** Este punto decía *"Queda **sin resolver** la otra mitad… así que le
+   > dice «Jugo verde» a quien en su app ve «Batido de papaya»"*. Se arregló en D-133; se deja
+   > anotado acá porque el síntoma se descubrió probando E-183 y quien llegue por ese camino tiene
+   > que encontrar el final.
+
+---
+
+## E-184 · El asistente y la app llamaban al hábito por el título del catálogo, no por el nombre que la persona le puso
+
+**Síntoma.** Alguien que reemplazó `JUGO VERDE` por `Batido de papaya` —lo que D-127 existe para
+permitir— seguía leyendo **`JUGO VERDE`** en todo lo que sale de la agenda del día: la respuesta del
+asistente (*"He marcado tu «Jugo verde» como completado"*, citada en E-183), `GET /api/v1/habit-tracks/today`
+y los recordatorios. El nombre propio solo se veía en la pantalla de Plan, porque el frontend lo
+guardaba **en el teléfono** (`storage/renombreDeHabito.ts`) y lo superponía al dibujar.
+
+**Causa.** `TracksDelDiaProyeccionService.construirVista` armaba el título con `habito.titulo()` —el
+del catálogo— y nunca consultaba `renombres_habito`. La tabla se escribía (el `PUT .../rename`
+funcionaba y la fila quedaba guardada) pero **no la leía nadie más que el propio endpoint de
+renombre**: un dato correcto en la base que ninguna lectura usaba.
+
+Esa proyección es la fuente de la agenda del día para **todos** los consumidores, así que el mismo
+descuido salía por tres bocas distintas. Y la del asistente es la que importa: el agente **puede
+completar hábitos**, y al nombrarlos distinto que la pantalla, la persona no tenía forma de saber si
+le tocó el correcto.
+
+**Solución.** El renombre entra en la proyección: `LoadRenombreHabitoPort.deParticipante(UserId)`
+—**una** consulta por día, en lote, como las otras cinco de ese método— y `tituloVisible(habito,
+renombre)` decide el rótulo. Sin renombre manda el catálogo, letra por letra igual que antes.
+
+**Cómo evitar que vuelva a pasar.**
+1. **Una escritura sin lectura no es una función terminada.** El renombre estaba "hecho" —endpoint,
+   dominio, migración, pruebas— y aun así no servía para lo que se pidió, porque el dato no llegaba
+   a ninguna vista. Al cerrar una función conviene listar **quién lee** lo que se acaba de escribir,
+   no solo que se haya guardado bien.
+2. **Ojo con el espejo local del cliente**: que la pantalla mostrara el nombre correcto escondió el
+   bug del lado del servidor. Un valor que el cliente puede resolver solo tapa que el backend no lo
+   esté devolviendo, hasta que aparece un segundo consumidor —acá, el agente— que no tiene ese
+   espejo.
+3. Ejecutable en `TracksDelDiaProyeccionServiceTest`: una prueba fija que el nombre propio gana, y
+   **otra fija que sin renombre no cambia nada**. La primera falla contra el código viejo
+   (`elTituloEsElNombrePropioCuandoLaPersonaReemplazoElHabito`, verificado).
