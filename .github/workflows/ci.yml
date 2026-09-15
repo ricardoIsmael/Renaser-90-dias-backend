@@ -7,9 +7,20 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    # `master` queda FUERA a proposito (2026-09-15): desde que el CD llama a este mismo workflow
+    # como primer job, un push a master ya corre la suite adentro del CD. Sin esta exclusion
+    # correria dos veces, 45 minutos cada una, para verificar exactamente lo mismo. Las PR hacia
+    # master si la corren (evento `pull_request`, abajo), que es donde el resultado sirve para
+    # bloquear el merge.
+    branches-ignore: [master]
   pull_request:
   workflow_dispatch:
+  # Permite que otro workflow lo invoque como job propio. Lo usa `cd.yml` para no poder desplegar
+  # sin CI verde: antes los dos se disparaban en paralelo con el mismo push a master, y como el
+  # CD construye con `-DskipTests`, terminaba y desplegaba ANTES de que el CI supiera si las
+  # pruebas pasaban. Si el CI se ponia rojo, la imagen ya estaba en ECR y el contenedor ya habia
+  # sido reemplazado.
+  workflow_call:
 
 # Si se empuja dos veces seguidas a la misma rama, cancela la corrida vieja: la suite tarda
 # varios minutos y no tiene sentido pagar dos veces por un commit que ya quedo atras.

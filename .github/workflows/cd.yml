@@ -34,10 +34,33 @@ permissions:
   contents: read
 
 jobs:
+  # EL GATE. Sin esto, un push a master disparaba CI y CD en paralelo: el CD construye la imagen
+  # con `-DskipTests` (ver el comentario del Dockerfile) y con cache de capas, asi que terminaba
+  # y desplegaba a produccion antes de que el CI llegara a saber si la suite pasaba. Un CI rojo
+  # no frenaba nada: la imagen ya estaba publicada y el contenedor de la EC2 ya reemplazado.
+  #
+  # Hoy eso no se notaba porque el CD se saltea entero mientras falten las variables de AWS. El
+  # agujero se abria SOLO el dia que alguien las cargara, sin tocar una linea de codigo.
+  #
+  # Se invoca el CI como job propio (`workflow_call`) en vez de usar `workflow_run` porque
+  # `workflow_run` cambia el significado de `github.sha`: las etiquetas de la imagen, el checkout
+  # y el comentario del comando SSM apuntan al commit, y habria que corregir los cuatro lugares
+  # sin equivocarse. Asi el SHA sigue siendo el del push que disparo el despliegue.
+  pruebas:
+    name: Suite completa antes de desplegar
+    uses: ./.github/workflows/ci.yml
+    # Explicito y minimo: el CI no necesita el `id-token: write` que este workflow declara arriba
+    # para OIDC, y no hay motivo para prestarle la llave de AWS a un job que solo compila y prueba.
+    permissions:
+      contents: read
+
   publicar-imagen:
     name: Construir y publicar en ECR
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Sin CI verde no se publica. Si la suite falla o se cancela, este job no arranca y el de
+    # despliegue tampoco, porque depende de este.
+    needs: pruebas
 
     # Lo que el job de despliegue necesita saber: si hubo publicacion, y que imagen exacta se
     # publico. La referencia viaja completa (registro + repositorio + SHA) para que el job de
