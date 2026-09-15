@@ -55,7 +55,19 @@ Esta es la sección importante. Todo lo de acá existe como código, compila, y 
 
 ### 3.1 La coherencia y la racha diaria no se calculan (D-83)
 
-**Es el hueco más grande del producto.**
+> **Corregido el 2026-09-15.** Esta sección se abría con *"Es el hueco más grande del producto"* y
+> daba por muerta toda la cadena. Ya no es cierto para las dos primeras filas:
+>
+> - **La racha** se deriva de los días con hábito cumplido desde el 2026-09-14 (commit `69e7053`).
+> - **La coherencia** se calcula desde el 2026-09-15 (**D-128**): acciones diarias cumplidas sobre
+>   planificadas en la ventana de 7 días, y una semana sin planificar ya **no vale 100** — no tiene
+>   dato. La app muestra `—`.
+>
+> Lo que sigue vigente: `RegistrarCoherenciaDiariaUseCase` **sigue sin llamadores** (la coherencia
+> se deriva en la lectura, no se acumula), `historial_coherencia` **sigue vacía**, expirar un hábito
+> **sigue sin restar puntos**, y el **ranking por célula sigue ordenando por la columna**
+> `puntajes_participante.coherencia`, que nadie escribe — o sea que sigue ordenando a todos por la
+> misma constante. Ese es hoy el hueco que queda, y es el más visible de los cuatro.
 
 | Pieza | Estado | Evidencia |
 |---|---|---|

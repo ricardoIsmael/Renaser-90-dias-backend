@@ -47,7 +47,10 @@ class PorcentajeRocasService implements PorcentajeRocasFinder {
         Map<UserId, BigDecimal> resultado = new LinkedHashMap<>();
         for (UserId participante : participantes) {
             List<DiaRocas> dias = conteosPorParticipante.getOrDefault(participante, List.of());
-            resultado.put(participante, PorcentajeRocas.calcular(dias));
+            // Sin clave en el mapa = sin dato, y NO un cero ni un cien (D-128). El contrato del
+            // puerto ya lo decia para la consulta; ahora tambien vale para el resultado: quien no
+            // planifico una sola accion en la ventana no tiene porcentaje que mostrar.
+            PorcentajeRocas.calcular(dias).ifPresent(porcentaje -> resultado.put(participante, porcentaje));
         }
         return resultado;
     }

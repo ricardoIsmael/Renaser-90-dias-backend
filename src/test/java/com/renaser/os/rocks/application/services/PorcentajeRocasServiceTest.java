@@ -67,14 +67,17 @@ class PorcentajeRocasServiceTest {
                 .thenReturn(Map.of(
                         a, List.of(new DiaRocas(hasta, 3, 3)),
                         b, List.of(new DiaRocas(hasta, 3, 0))));
-        // c: el puerto no devuelve entrada -> el servicio debe asumir ventana vacía (100), no explotar.
+        // c: el puerto no devuelve entrada -> el servicio lo deja FUERA del mapa, no explota.
 
         Map<UserId, BigDecimal> resultado = service.porcentajePorParticipante(List.of(a, b, c), hasta);
 
-        assertThat(resultado).hasSize(3);
+        // D-128 (2026-09-15): acá se esperaba `hasSize(3)` y `c` con "100.0". Un participante sin
+        // una sola acción planificada en la ventana NO tiene coherencia 100: no tiene dato, y por
+        // eso no tiene clave. Ese 100 era el que la app mostraba como "Nivel de excelencia".
+        assertThat(resultado).hasSize(2);
         assertThat(resultado.get(a)).isEqualByComparingTo("100.0");
         assertThat(resultado.get(b)).isEqualByComparingTo("0.0");
-        assertThat(resultado.get(c)).isEqualByComparingTo("100.0");
+        assertThat(resultado).doesNotContainKey(c);
         verify(cargarConteoDiarioRocasPort, times(1))
                 .conteoDiarioPorParticipante(eq(List.of(a, b, c)), eq(desdeEsperado), eq(hasta));
     }
@@ -93,13 +96,20 @@ class PorcentajeRocasServiceTest {
                 .conteoDiarioPorParticipante(eq(List.of(a)), eq(LocalDate.of(2026, 3, 4)), eq(hasta));
     }
 
+    /**
+     * D-128. Este test se llamaba {@code todoParticipanteDelPedidoApareceEnElResultado_inclusoSinDatos}
+     * y esperaba que quien no tuviera datos apareciera con <b>100.0</b>. Es exactamente al revés:
+     * sin una sola acción planificada no hay porcentaje, y el mapa no lo incluye. Quien lee decide
+     * qué mostrar —la app dice "—"—, pero nadie puede confundirlo con una semana perfecta.
+     */
     @Test
-    void todoParticipanteDelPedidoApareceEnElResultado_inclusoSinDatos() {
+    void quienNoPlanificoNingunaAccionNoTienePorcentaje() {
         UserId sinDatos = nuevoParticipante();
         when(cargarConteoDiarioRocasPort.conteoDiarioPorParticipante(any(), any(), any())).thenReturn(Map.of());
 
         Map<UserId, BigDecimal> resultado = service.porcentajePorParticipante(List.of(sinDatos), LocalDate.of(2026, 8, 24));
 
-        assertThat(resultado).containsEntry(sinDatos, new BigDecimal("100.0"));
+        assertThat(resultado).doesNotContainKey(sinDatos);
+        assertThat(resultado).isEmpty();
     }
 }

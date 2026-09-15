@@ -58,10 +58,17 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
         requireGenerable(tipo);
 
         List<CandidatoRanking> candidatos = loadRankingCandidatosPort.aprendicesActivosConPuntaje();
-        Map<UserId, BigDecimal> puntajesGenerales = tipo == TipoRanking.GENERAL
-                ? puntajesGeneralesDe(candidatos, fecha)
-                : Map.of();
-        List<PosicionRanking> posiciones = ordenarYNumerar(tipo, fecha, candidatos, puntajesGenerales);
+        // GENERAL y CELL son excluyentes, asi que comparten mapa y una sola consulta en lote.
+        // CELL ordena por COHERENCIA, y desde D-128 esa coherencia es el porcentaje de acciones
+        // diarias cumplidas de la semana --lo mismo que muestra la pantalla Hoy--, no la columna
+        // `puntajes_participante.coherencia`, que nadie escribe nunca y dejaba a los 30 aprendices
+        // ordenados por el mismo 100.
+        Map<UserId, BigDecimal> puntajesCalculados = switch (tipo) {
+            case GENERAL -> puntajesGeneralesDe(candidatos, fecha);
+            case CELL -> porcentajeRocasFinder.porcentajePorParticipante(idsDe(candidatos), fecha);
+            default -> Map.of();
+        };
+        List<PosicionRanking> posiciones = ordenarYNumerar(tipo, fecha, candidatos, puntajesCalculados);
 
         saveRankingSnapshotPort.reemplazar(tipo, fecha, posiciones);
     }
@@ -73,8 +80,14 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
      * la formula vive en el dominio ({@link PuntajeGeneral}) y lo unico que se resuelve en
      * lote es el dato crudo de cada modulo.
      */
+    /** Los ids, en el mismo orden, para las consultas EN LOTE de los finders (D-43: nunca una por
+     * participante — ese bucle fue el incidente de "Too many database connections opened"). */
+    private static List<UserId> idsDe(List<CandidatoRanking> candidatos) {
+        return candidatos.stream().map(CandidatoRanking::participanteId).toList();
+    }
+
     private Map<UserId, BigDecimal> puntajesGeneralesDe(List<CandidatoRanking> candidatos, LocalDate fecha) {
-        List<UserId> participantes = candidatos.stream().map(CandidatoRanking::participanteId).toList();
+        List<UserId> participantes = idsDe(candidatos);
         if (participantes.isEmpty()) {
             return Map.of();
         }
@@ -110,9 +123,9 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
 
     private List<PosicionRanking> ordenarYNumerar(TipoRanking tipo, LocalDate fecha,
                                                     List<CandidatoRanking> candidatos,
-                                                    Map<UserId, BigDecimal> puntajesGenerales) {
+                                                    Map<UserId, BigDecimal> puntajesCalculados) {
         List<CandidatoRanking> ordenados = candidatos.stream()
-                .sorted(Comparator.comparing((CandidatoRanking c) -> puntajeDe(tipo, c, puntajesGenerales))
+                .sorted(Comparator.comparing((CandidatoRanking c) -> puntajeDe(tipo, c, puntajesCalculados))
                         .reversed()
                         // desempate estable: mismo score no debe reordenar aleatoriamente entre corridas.
                         .thenComparing(c -> c.participanteId().value()))
@@ -122,17 +135,19 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
         for (int i = 0; i < ordenados.size(); i++) {
             CandidatoRanking candidato = ordenados.get(i);
             posiciones.add(new PosicionRanking(fecha, tipo, candidato.participanteId(), i + 1,
-                    puntajeDe(tipo, candidato, puntajesGenerales)));
+                    puntajeDe(tipo, candidato, puntajesCalculados)));
         }
         return posiciones;
     }
 
     private BigDecimal puntajeDe(TipoRanking tipo, CandidatoRanking candidato,
-                                  Map<UserId, BigDecimal> puntajesGenerales) {
+                                  Map<UserId, BigDecimal> puntajesCalculados) {
         return switch (tipo) {
             case LEAGUE -> BigDecimal.valueOf(candidato.puntosLiga());
-            case CELL -> candidato.coherencia();
-            case GENERAL -> puntajesGenerales.getOrDefault(candidato.participanteId(), PuntajeGeneral.SIN_DATO);
+            // Sin acciones planificadas no hay coherencia (D-128): va al fondo con SIN_DATO, que es
+            // lo mismo que hace GENERAL. Antes leia `candidato.coherencia()`, la columna muerta.
+            case CELL -> puntajesCalculados.getOrDefault(candidato.participanteId(), PuntajeGeneral.SIN_DATO);
+            case GENERAL -> puntajesCalculados.getOrDefault(candidato.participanteId(), PuntajeGeneral.SIN_DATO);
             case COHORT -> throw new UnsupportedOperationException(unsupportedMessage(tipo));
         };
     }

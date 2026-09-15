@@ -6,6 +6,7 @@ import com.renaser.os.points.api.HabitosDelDiaFinder;
 import com.renaser.os.points.api.NotificacionesNoLeidasFinder;
 import com.renaser.os.points.api.ProximoEventoFinder;
 import com.renaser.os.points.api.RocaDelDiaResumen;
+import com.renaser.os.points.api.PorcentajeRocasFinder;
 import com.renaser.os.points.api.RocasDelDiaFinder;
 import com.renaser.os.points.application.ports.in.home.ConsultarResumenHomeUseCase;
 import com.renaser.os.points.application.ports.in.puntaje.ConsultarPuntajeUseCase;
@@ -20,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -80,6 +82,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
     private final RocasDelDiaFinder rocasDelDiaFinder;
     private final ProximoEventoFinder proximoEventoFinder;
     private final NotificacionesNoLeidasFinder notificacionesNoLeidasFinder;
+    private final PorcentajeRocasFinder porcentajeRocasFinder;
     private final Clock clock;
 
     public HomeAgregadoService(ConsultarPuntajeUseCase consultarPuntajeUseCase,
@@ -89,6 +92,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
                                 RocasDelDiaFinder rocasDelDiaFinder,
                                 ProximoEventoFinder proximoEventoFinder,
                                 NotificacionesNoLeidasFinder notificacionesNoLeidasFinder,
+                                PorcentajeRocasFinder porcentajeRocasFinder,
                                 Clock clock) {
         this.consultarPuntajeUseCase = consultarPuntajeUseCase;
         this.participacionProgramaFinder = participacionProgramaFinder;
@@ -97,6 +101,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
         this.rocasDelDiaFinder = rocasDelDiaFinder;
         this.proximoEventoFinder = proximoEventoFinder;
         this.notificacionesNoLeidasFinder = notificacionesNoLeidasFinder;
+        this.porcentajeRocasFinder = porcentajeRocasFinder;
         this.clock = clock;
     }
 
@@ -107,10 +112,30 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
 
         Racha racha = rachaDe(actorId, participacion);
 
-        return new ResumenHome(puntaje.puntosLiga(), puntaje.coherencia(), racha.actual(),
+        return new ResumenHome(puntaje.puntosLiga(), coherenciaDe(actorId, participacion.zona()), racha.actual(),
                 racha.maxima(), participacion.diaPrograma(), participacion.inscrito(),
                 participacion.fase(), habitosHoyDe(actorId, participacion.zona()), rocasHoyDe(actorId),
                 proximoEventoDe(actorId), notificacionesNoLeidasDe(actorId), BLOQUEOS);
+    }
+
+    /**
+     * <b>La coherencia que se muestra</b> (D-128): el porcentaje de acciones diarias cumplidas
+     * sobre las planificadas en la semana, calculado por {@code rocks}
+     * ({@link PorcentajeRocasFinder}, ventana de 7 dias).
+     *
+     * <p><b>Devuelve {@code null} cuando no hay dato</b>, y eso es una respuesta, no un hueco:
+     * quien no planifico una sola accion en la semana no tiene coherencia que mostrar. Antes acá
+     * iba {@code puntaje.coherencia()}, la columna {@code puntajes_participante.coherencia}, que
+     * <b>nadie escribia nunca</b>: quedaba en su valor inicial 100 y la app le decia
+     * "100 % · Nivel de excelencia" a todo el mundo, incluido quien no habia hecho nada.
+     *
+     * <p>El "hasta" es HOY EN LA ZONA DEL PARTICIPANTE y no {@code clock.today()} (regla 02 §1):
+     * con el servidor en UTC y el padron en Lima, entre las 00:00 y las 05:00 UTC la fecha del
+     * proceso ya es la del dia siguiente y la ventana de 7 dias se correria una jornada entera.
+     */
+    private BigDecimal coherenciaDe(UserId actorId, ZoneId zona) {
+        LocalDate hoyEnSuZona = clock.now().atZone(zona).toLocalDate();
+        return porcentajeRocasFinder.porcentajePorParticipante(List.of(actorId), hoyEnSuZona).get(actorId);
     }
 
     private ParticipacionPrograma requireParticipacion(UserId actorId) {
