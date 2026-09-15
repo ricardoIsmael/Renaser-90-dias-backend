@@ -101,7 +101,13 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
         return ResultadoHerramienta.exito(texto.toString().trim());
     }
 
-    /** Una linea por habito: el modelo la parafrasea, asi que dice lo que hace falta y nada mas. */
+    /** Una linea por habito: el modelo la parafrasea, asi que dice lo que hace falta y nada mas.
+     *
+     * <p>{@code exige_evidencia} se agrego el 2026-09-14. Sin el, el agente marcaba un habito como
+     * hecho sin poder avisar de que ademas hay que subir una foto, y la persona se enteraba dias
+     * despues por un aviso al mentor de evidencia vencida que nadie le habia pedido. El agente no
+     * puede subirla —el chat no recibe archivos—, asi que lo unico que hace con este dato es
+     * decirlo y mandar a la pantalla de Hoy. */
     private static String lineaDe(HabitoDelDia habito) {
         StringBuilder linea = new StringBuilder()
                 .append("id=").append(habito.registroId())
@@ -113,6 +119,12 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
         }
         if (habito.plazo() != null) {
             linea.append(" | vence=").append(habito.plazo());
+        }
+        /* Solo se nombra cuando ES cierto: una linea que dijera `exige_evidencia=false` en cada
+           habito gastaria contexto en repetir lo normal, y el modelo parafrasea lo que ve. Con la
+           marca presente solo en los que la piden, mencionarla es leer, no razonar. */
+        if (habito.exigeEvidencia()) {
+            linea.append(" | exige_evidencia=si");
         }
         return linea.toString();
     }

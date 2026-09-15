@@ -53,6 +53,7 @@ public class AgendaDelDiaFinderService implements AgendaDelDiaFinder {
         PuntosEnJuego enJuego = vista.puntosEnJuego();
         return new HabitoEnJuegoResumen(vista.registro().id().value(), vista.tituloHabito(),
                 vista.registro().estado().name(), enJuego != null ? enJuego.siCompletaAhora() : null,
-                enJuego != null ? enJuego.maximo() : null, enJuego != null ? enJuego.plazo() : null);
+                enJuego != null ? enJuego.maximo() : null, enJuego != null ? enJuego.plazo() : null,
+                vista.exigeEvidencia());
     }
 }

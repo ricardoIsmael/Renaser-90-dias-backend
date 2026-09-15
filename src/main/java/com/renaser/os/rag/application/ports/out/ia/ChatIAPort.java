@@ -1,5 +1,6 @@
 package com.renaser.os.rag.application.ports.out.ia;
 
+import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
@@ -59,7 +60,7 @@ public interface ChatIAPort {
      */
     record Consulta(AgenteConversacional agente, UserId actorId, String pregunta, List<String> contexto,
                     String ambito, List<MensajeRenasia> historial,
-                    List<DefinicionHerramienta> herramientas) {
+                    List<DefinicionHerramienta> herramientas, SituacionDelAprendiz situacion) {
 
         public Consulta {
             Objects.requireNonNull(agente, "agente no puede ser null");
@@ -68,6 +69,10 @@ public interface ChatIAPort {
             contexto = List.copyOf(Objects.requireNonNull(contexto, "contexto no puede ser null"));
             historial = List.copyOf(Objects.requireNonNull(historial, "historial no puede ser null"));
             herramientas = List.copyOf(Objects.requireNonNull(herramientas, "herramientas no puede ser null"));
+            // `situacion` SI puede ser null, a proposito: quien conversa puede no ser un
+            // participante del programa (un mentor, un administrador, alguien que todavia no lo
+            // activo). En ese caso el agente no habla de dias, que es lo correcto — no los tiene.
+            // Exigirla aqui obligaria a inventar un dia 0 y el prompt lo leeria como un dato.
         }
     }
 }

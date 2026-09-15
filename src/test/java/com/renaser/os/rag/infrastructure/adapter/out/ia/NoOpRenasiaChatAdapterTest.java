@@ -23,7 +23,8 @@ class NoOpRenasiaChatAdapterTest {
         // Solo reactor-core (sin reactor-test, no declarado como dependencia propia del pom):
         // .collectList().block() alcanza para verificar un Flux finito y corto como este.
         var eventos = new NoOpRenasiaChatAdapter()
-                .responder(new Consulta(agente, UserId.of(UUID.randomUUID()), "hola", List.of(), null, List.of(), List.of()))
+                .responder(new Consulta(agente, UserId.of(UUID.randomUUID()), "hola", List.of(), null, List.of(),
+                        List.of(), null))
                 .collectList().block();
 
         assertThat(eventos).hasSize(2);

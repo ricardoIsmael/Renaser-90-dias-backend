@@ -43,17 +43,69 @@ class HerramientasAgenteServiceTest {
     @Mock
     private ConsultarAgendaHabitosPort agendaHabitosPort;
 
+    /**
+     * La razon de ser de la bandera: el agente no puede subir la evidencia —por el chat no entran
+     * archivos— asi que lo unico que puede hacer con este dato es nombrarlo. Sin el, marcaba el
+     * habito como hecho en silencio y la persona se enteraba dias despues por un aviso al mentor
+     * de evidencia vencida que nadie le habia pedido.
+     */
+    @Test
+    @DisplayName("Un habito que pide evidencia llega marcado en la linea que lee el modelo")
+    void elQuePideEvidenciaSeNombra() {
+        when(agendaHabitosPort.deHoyDe(APRENDIZ)).thenReturn(List.of(habitoConEvidencia("Jugo verde", 6)));
+
+        String salida = contenidoDe(servicio().ejecutar(APRENDIZ, new InvocacionHerramienta(
+                CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA, Map.of())));
+
+        assertThat(salida).contains("exige_evidencia=si");
+    }
+
+    /**
+     * Y solo cuando es cierto. Repetir `exige_evidencia=no` en cada habito gastaria contexto en
+     * decir lo normal, y el modelo parafrasea lo que ve: con la marca presente solo donde
+     * corresponde, mencionarla es leer y no razonar.
+     */
+    @Test
+    @DisplayName("El que NO pide evidencia no arrastra ninguna marca")
+    void elQueNoPideEvidenciaNoDiceNada() {
+        when(agendaHabitosPort.deHoyDe(APRENDIZ)).thenReturn(List.of(habitoVivo("Escritura libre", 6)));
+
+        String salida = contenidoDe(servicio().ejecutar(APRENDIZ, new InvocacionHerramienta(
+                CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA, Map.of())));
+
+        assertThat(salida).doesNotContain("exige_evidencia");
+    }
+
+    /** Pedir evidencia no cambia lo que paga ni si se puede entregar: son ejes distintos. */
+    @Test
+    @DisplayName("Exigir evidencia no altera los puntos en juego del habito")
+    void exigirEvidenciaNoTocaLosPuntos() {
+        when(agendaHabitosPort.deHoyDe(APRENDIZ)).thenReturn(List.of(habitoConEvidencia("Jugo verde", 6)));
+
+        String salida = contenidoDe(servicio().ejecutar(APRENDIZ, new InvocacionHerramienta(
+                CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA, Map.of())));
+
+        assertThat(salida).contains("puntos_en_juego=6 de 10")
+                .contains("Total en juego: 6 puntos en 1 habito(s)");
+    }
+
     private HerramientasAgenteService servicio() {
         return new HerramientasAgenteService(agendaHabitosPort);
     }
 
     private static HabitoDelDia habitoVivo(String titulo, int puntos) {
         return new HabitoDelDia(REGISTRO, titulo, "PENDIENTE", puntos, 10,
-                Instant.parse("2026-09-06T05:00:00Z"));
+                Instant.parse("2026-09-06T05:00:00Z"), false);
+    }
+
+    /** Uno que ademas pide foto: el agente no puede subirla, solo nombrarla. */
+    private static HabitoDelDia habitoConEvidencia(String titulo, int puntos) {
+        return new HabitoDelDia(REGISTRO, titulo, "PENDIENTE", puntos, 10,
+                Instant.parse("2026-09-06T05:00:00Z"), true);
     }
 
     private static HabitoDelDia habitoCompletado(String titulo) {
-        return new HabitoDelDia(UUID.randomUUID(), titulo, "COMPLETADO", null, null, null);
+        return new HabitoDelDia(UUID.randomUUID(), titulo, "COMPLETADO", null, null, null, false);
     }
 
     private static String contenidoDe(ResultadoHerramienta resultado) {

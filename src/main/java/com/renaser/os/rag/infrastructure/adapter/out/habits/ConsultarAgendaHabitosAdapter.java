@@ -40,6 +40,6 @@ class ConsultarAgendaHabitosAdapter implements ConsultarAgendaHabitosPort {
 
     private static HabitoDelDia aHabitoDelDia(HabitoEnJuegoResumen resumen) {
         return new HabitoDelDia(resumen.registroId(), resumen.titulo(), resumen.estado(), resumen.puntosEnJuego(),
-                resumen.puntosMaximos(), resumen.plazo());
+                resumen.puntosMaximos(), resumen.plazo(), resumen.exigeEvidencia());
     }
 }

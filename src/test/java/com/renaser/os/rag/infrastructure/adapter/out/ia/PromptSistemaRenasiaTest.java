@@ -22,9 +22,19 @@ class PromptSistemaRenasiaTest {
 
     private static final String RECURSO = GoogleGenAiRenasiaChatAdapter.RECURSO_PROMPT_ACOMPANANTE;
 
-    /** Solo {@code contexto}: si el archivo volviera a tener {@code {ambito}}, el render fallaria aca. */
+    /**
+     * Las DOS variables que el adaptador le pasa, y solo esas. Si el archivo ganara una tercera
+     * sin que {@code GoogleGenAiRenasiaChatAdapter.promptSistema} la provea, el render fallaria
+     * aca con "Not all variables were replaced" — que es exactamente lo que paso el 2026-09-14 al
+     * agregar {@code situacion} y es el hueco que esta clase existe para cerrar.
+     */
     private static String renderizar(String contexto) {
-        return new PromptTemplate(new ClassPathResource(RECURSO)).render(Map.of("contexto", contexto));
+        return renderizar(contexto, "Hoy es su dia 11 de 90, en la fase 2 de 4.");
+    }
+
+    private static String renderizar(String contexto, String situacion) {
+        return new PromptTemplate(new ClassPathResource(RECURSO))
+                .render(Map.of("contexto", contexto, "situacion", situacion));
     }
 
     @Test
@@ -34,6 +44,30 @@ class PromptSistemaRenasiaTest {
 
         assertThat(render).contains("La leccion 3 habla del ritual de manana.");
         assertThat(render).doesNotContain("{contexto}");
+    }
+
+    /**
+     * {@code situacion} la arma el servidor a partir del dia de programa y entra al prompt sin
+     * pasar por ninguna herramienta (D-123). Que se sustituya de verdad es lo unico que separa a
+     * un agente que sabe donde esta la persona de uno que dice que no lo sabe.
+     */
+    @Test
+    @DisplayName("el prompt real sustituye la situacion de la persona")
+    void renderizaLaSituacionDeLaPersona() {
+        String render = renderizar("(vacio)", "Hoy es su dia 17 de 90, en la fase 2 de 4.");
+
+        assertThat(render).contains("Hoy es su dia 17 de 90, en la fase 2 de 4.");
+        assertThat(render).doesNotContain("{situacion}");
+    }
+
+    /** El caso de quien no cursa: la seccion se llena con una frase, nunca queda hueca. */
+    @Test
+    @DisplayName("sin dia de programa, la seccion se llena igual")
+    void renderizaSinDiaDePrograma() {
+        String render = renderizar("(vacio)", "(quien te escribe no esta cursando el programa)");
+
+        assertThat(render).contains("no esta cursando el programa");
+        assertThat(render).doesNotContain("{situacion}");
     }
 
     @Test
