@@ -281,19 +281,12 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     }
 
     /** #25: aprendices ACTIVOS sin celula asignada — alcance GLOBAL (ver javadoc de
-     * {@link ConsultarCandidatosCelulaUseCase#aprendicesDisponibles}). Recorre las
-     * celulas existentes (acotadas, no crecen con la cantidad de aprendices) para armar
-     * el conjunto de "ya asignados" en vez de consultar participante por participante —
-     * mismo criterio anti-N+1 que {@code PorcentajeRocasFinder} (D-43). */
+     * {@link ConsultarCandidatosCelulaUseCase#aprendicesDisponibles}). A quienes se puede
+     * ofrecer lo decide {@link #aprendicesQueSePuedenAgregarAUnGrupo()}. */
     @Override
     public List<AprendizCandidato> aprendicesDisponibles(UserId actorId) {
         requireAdmin(actorId);
-        Set<UserId> yaAsignados = new HashSet<>();
-        for (Celula celula : loadCelulaPort.todas()) {
-            yaAsignados.addAll(participacionProgramaFinder.miembrosDeCelula(celula.id().value()));
-        }
-        List<UserId> aprendicesActivos = participacionProgramaFinder.usuariosActivosConRol(Set.of(UserRole.TRAINEE));
-        List<UserId> disponibles = aprendicesActivos.stream().filter(id -> !yaAsignados.contains(id)).toList();
+        List<UserId> disponibles = aprendicesQueSePuedenAgregarAUnGrupo();
         Map<UserId, UserSummary> resumenes = userSummaryFinder.findByIds(disponibles);
         return disponibles.stream()
                 .map(id -> {
@@ -301,6 +294,46 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
                     return new AprendizCandidato(id, resumen != null ? resumen.fullName() : null,
                             resumen != null ? resumen.avatarUrl() : null);
                 })
+                .toList();
+    }
+
+    /**
+     * Los candidatos del selector: aprendices ACTIVOS, <b>inscritos en el programa</b>, que hoy no
+     * son miembros de ningun grupo.
+     *
+     * <p><b>El filtro por inscripcion es nuevo</b> (E-186, 2026-09-15). Antes se ofrecia a todo
+     * aprendiz ACTIVO sin grupo, incluidos los que no tienen fila en {@code participantes_programa}.
+     * A esos, {@code POST /api/v1/admin/cells/&#123;id&#125;/trainees} les responde <b>404</b>:
+     * {@code ParticipacionProgramaService.sincronizarAcompanamiento} no encuentra la participacion
+     * y lanza {@code NoSuchElementException}. El administrador tocaba un candidato de la lista que
+     * el propio panel le ofrecia y le salia "No se pudo agregar". El repo frontend ya lo tenia
+     * documentado, y lo esquivaba sembrando participaciones a mano
+     * ({@code e2e/admin-alquimista/soporte/escenarios.sql}).
+     *
+     * <p><b>Por que se arregla del lado de la OFERTA y no del de la escritura.</b> Hacer que
+     * agregar "funcione" significaria crear la fila de {@code participantes_programa} desde aca, y
+     * esa fila necesita {@code fecha_inicio} y {@code programa_activado_en} — fechas que solo sabe
+     * quien da de alta a la persona ({@code ApproveAccountRequestUseCase} /
+     * {@code InviteAndCreateUserUseCase}). Inventarlas seria inventar una regla de negocio, y
+     * ademas {@code community} no es dueno de esa tabla. Un aprendiz sin programa no es alguien a
+     * quien falte agregar a un grupo: es alguien a quien falta <b>inscribir</b>, y eso se hace en
+     * otra pantalla.
+     *
+     * <p><b>Sigue sin haber N+1</b> (D-43): {@code participantesInscritosActivos()} es UNA consulta
+     * en lote, igual que {@code usuariosActivosConRol}, y el recorrido de celulas ya existente es
+     * acotado (no crece con la cantidad de aprendices). No se pregunta por participante. Tampoco
+     * hizo falta un metodo nuevo en el puerto: {@code users.api.ParticipacionProgramaFinder} ya lo
+     * exponia.
+     */
+    private List<UserId> aprendicesQueSePuedenAgregarAUnGrupo() {
+        Set<UserId> yaAsignados = new HashSet<>();
+        for (Celula celula : loadCelulaPort.todas()) {
+            yaAsignados.addAll(participacionProgramaFinder.miembrosDeCelula(celula.id().value()));
+        }
+        Set<UserId> inscritos = new HashSet<>(participacionProgramaFinder.participantesInscritosActivos());
+        return participacionProgramaFinder.usuariosActivosConRol(Set.of(UserRole.TRAINEE)).stream()
+                .filter(inscritos::contains)
+                .filter(id -> !yaAsignados.contains(id))
                 .toList();
     }
 

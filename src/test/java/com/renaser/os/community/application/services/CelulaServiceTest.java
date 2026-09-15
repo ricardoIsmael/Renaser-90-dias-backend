@@ -253,6 +253,10 @@ class CelulaServiceTest {
                 .thenReturn(java.util.List.of(aprendizAsignado));
         when(participacionProgramaFinder.usuariosActivosConRol(java.util.Set.of(UserRole.TRAINEE)))
                 .thenReturn(java.util.List.of(aprendizAsignado, aprendizLibre));
+        // E-186: los dos estan inscritos en el programa. Antes esta premisa era implicita y por eso
+        // el caso "activo pero sin participacion" no lo cubria nadie.
+        when(participacionProgramaFinder.participantesInscritosActivos())
+                .thenReturn(java.util.List.of(aprendizAsignado, aprendizLibre));
         when(userSummaryFinder.findByIds(java.util.List.of(aprendizLibre))).thenReturn(java.util.Map.of(aprendizLibre,
                 new UserSummary(aprendizLibre, "Aprendiz Libre", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
 
@@ -261,6 +265,39 @@ class CelulaServiceTest {
         assertThat(disponibles).hasSize(1);
         assertThat(disponibles.get(0).userId()).isEqualTo(aprendizLibre);
         assertThat(disponibles.get(0).nombreCompleto()).isEqualTo("Aprendiz Libre");
+    }
+
+    /**
+     * <b>E-186: no se ofrece a quien despues no se puede agregar.</b>
+     *
+     * <p>Un aprendiz ACTIVO sin fila en {@code participantes_programa} pasaba el filtro viejo
+     * —esta activo y no tiene grupo— y llegaba al selector. Al elegirlo,
+     * {@code POST /api/v1/admin/cells/&#123;id&#125;/trainees} respondia 404 y el panel decia
+     * "No se pudo agregar". La lista y el endpoint no se hacian la misma pregunta.
+     *
+     * <p>Contra el codigo viejo este caso falla: {@code sinPrograma} tambien salia en la lista.
+     */
+    @Test
+    @DisplayName("aprendicesDisponibles(): un aprendiz ACTIVO sin participacion en el programa NO se ofrece")
+    void aprendicesDisponiblesExcluyeAQuienNoTieneParticipacionEnElPrograma() {
+        UserId sinPrograma = UserId.of(UUID.randomUUID());
+        UserId conPrograma = UserId.of(UUID.randomUUID());
+        when(loadCelulaPort.todas()).thenReturn(java.util.List.of());
+        when(participacionProgramaFinder.usuariosActivosConRol(java.util.Set.of(UserRole.TRAINEE)))
+                .thenReturn(java.util.List.of(sinPrograma, conPrograma));
+        when(participacionProgramaFinder.participantesInscritosActivos())
+                .thenReturn(java.util.List.of(conPrograma));
+        /* findByIds se stubea con any() A PROPOSITO: con el codigo viejo llega la lista de DOS, y un
+           stub por argumento exacto haria fallar el caso por desajuste de Mockito en vez de por lo
+           que de verdad se quiere fijar. Asi el rojo contra el codigo viejo es la asercion: la lista
+           trae dos candidatos cuando solo uno se puede agregar. */
+        when(userSummaryFinder.findByIds(any()))
+                .thenReturn(java.util.Map.of(conPrograma, new UserSummary(conPrograma, "Aprendiz Inscripto", null,
+                        UserRole.TRAINEE, UserStatus.ACTIVE)));
+
+        var disponibles = service.aprendicesDisponibles(admin);
+
+        assertThat(disponibles).extracting(c -> c.userId()).containsExactly(conPrograma);
     }
 
     // ─── V48: el administrador arma el grupo con nombre y periodo ─────────────────────

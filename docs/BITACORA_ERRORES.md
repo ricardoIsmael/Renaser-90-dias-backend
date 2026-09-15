@@ -6269,3 +6269,112 @@ renombre)` decide el rótulo. Sin renombre manda el catálogo, letra por letra i
 3. Ejecutable en `TracksDelDiaProyeccionServiceTest`: una prueba fija que el nombre propio gana, y
    **otra fija que sin renombre no cambia nada**. La primera falla contra el código viejo
    (`elTituloEsElNombrePropioCuandoLaPersonaReemplazoElHabito`, verificado).
+
+---
+
+## E-185 · El padrón de Personas ordenaba por nombre, así que los usuarios nuevos "no cargaban"
+
+**Síntoma.** Reportado por el dueño como **"no cargan los usuarios nuevos"**: se daba de alta a alguien
+y no aparecía en la pantalla de Personas. La lista trae 20 por vez con "Ver más"; con 26 aprendices en
+el padrón, **seis no salían nunca** en la primera tanda, y el alta recién hecha caía donde la pusiera
+el abecedario — casi siempre fuera de la vista.
+
+**Causa.** No era la carga, era el **orden**.
+`ConsultarResumenParticipacionPersistenceAdapter.QUERY_LISTAR_APRENDICES` terminaba en
+
+```sql
+ORDER BY u.nombre_completo, u.id
+```
+
+El abecedario no tiene ninguna relación con lo que el administrador acaba de hacer. Y el caso es
+justamente el peor: para encontrar a alguien por el buscador hay que saber cómo se escribe su nombre,
+que es lo único que todavía no se sabe de memoria de una persona recién dada de alta.
+
+**Solución.** `ORDER BY u.creado_en DESC, u.id` (D-134). `usuarios.creado_en` ya existía desde `V1`
+(`timestamptz NOT NULL DEFAULT now()`), así que no hizo falta tocar la base ni decidir dónde van los
+nulos. `QUERY_CONTAR_APRENDICES` **no** se tocó: no lleva ORDER BY y ordenar no cambia cuántas filas
+hay.
+
+Dos cosas que se decidieron **no** hacer:
+
+- **No** un `ORDER BY (u.creado_en > now() - interval '7 days') DESC, u.nombre_completo`. Taparía el
+  síntoma conservando el abecedario, pero cuánto dura "reciente" es una regla de negocio que nadie
+  confirmó; elegir siete días sería inventarla.
+- **No** se agregó índice. El padrón son decenas de filas y una migración pide su propia
+  justificación (regla 04).
+
+**Cómo evitar que vuelva a pasar.**
+
+1. **Un orden por defecto es una decisión de producto, no un detalle de la consulta.** Cuando una
+   lista pagina, el `ORDER BY` decide **qué existe en la práctica**: lo que cae después de la primera
+   tanda, para el usuario, no está. Al escribir un listado paginado conviene preguntarse *"¿qué vino a
+   buscar acá quien abre esta pantalla?"* — en un padrón de administración, casi siempre lo último que
+   pasó.
+2. **El desempate no es decorativo.** `creado_en` **no es única**: Postgres le da a `now()` el instante
+   de la **transacción**, así que una siembra que inserta a todos juntos escribe la misma marca en cada
+   fila. Sin segunda clave, dos páginas seguidas pueden repetir a una persona y saltearse a otra. Todo
+   `ORDER BY` de una consulta paginada termina en una columna única.
+3. Ejecutable, en dos niveles:
+   - `OrdenDelPadronTest` (unitaria, sin contenedor): captura el SQL que el adaptador le manda al
+     `EntityManager` y fija que la primera clave es `u.creado_en DESC` y la última `u.id`. Corre
+     siempre, incluso sin runtime de contenedores.
+   - `ConsultarResumenParticipacionPersistenceAdapterTest#elPadronEmpiezaPorElAltaMasReciente`
+     (Testcontainers): dos aprendices donde el alta **nueva** se llama "Zzz" y la vieja "Aaa". Contra
+     el código viejo, pedir una sola fila devolvía a "Aaa".
+4. **Ojo con la prueba E2E que se apoya en el orden.** `E16`
+   (`e2e/admin-alquimista/E15-E17-permisos-y-resiliencia.spec.ts`, repo frontend) pide la página 0 y la
+   1 y exige que quien salió en la 1 **no** estuviera en la 0. No depende de que el orden sea
+   alfabético, sí de que sea **total y determinista** — que es exactamente lo que conserva el desempate
+   por `u.id`.
+
+---
+
+## E-186 · El selector de aprendices ofrecía gente que después el endpoint rechazaba con 404
+
+**Síntoma.** En el panel de grupos, el administrador elegía un candidato de la lista que el propio
+panel le ofrecía y la pantalla respondía **"No se pudo agregar"**. Por debajo,
+`POST /api/v1/admin/cells/{id}/trainees` devolvía **404**.
+
+**Causa.** Dos preguntas distintas que tenían que ser la misma.
+
+- `CelulaService.aprendicesDisponibles` ofrecía **todo** aprendiz `ACTIVO` que no estuviera en ninguna
+  célula — sin mirar si tenía fila en `participantes_programa`.
+- Agregarlo pasa por `ParticipacionProgramaService.sincronizarAcompanamiento`, que hace
+  `loadParticipacionProgramaPort.byParticipanteId(...)` y lanza
+  `NoSuchElementException: Participante no inscripto en el programa: <uuid>` — el 404.
+
+Un aprendiz **activo pero no inscrito** existe de verdad: el programa es opcional para varios roles y
+la fila de `participantes_programa` nace en el alta, no en el rol.
+
+Estaba **documentado en el repo frontend desde antes**, y esquivado en vez de arreglado:
+`e2e/admin-alquimista/soporte/escenarios.sql` siembra participaciones a mano precisamente porque
+*"`POST /admin/cells/{id}/trainees` responde 404 a un aprendiz sin fila de programa, y
+`aprendices-disponibles` lo ofrece igual —así que E04 lo elegía de la lista y moría—"*.
+
+**Solución.** Se arregla del lado de la **oferta**: el selector intersecta con
+`ParticipacionProgramaFinder.participantesInscritosActivos()`, que ya existía en `users.api` y es
+**una sola consulta en lote** (sin método nuevo en el puerto, sin romper el anti-N+1 de D-43).
+
+**Por qué no del lado de la escritura** (D-135): que agregar "funcione" obligaría a crear la fila de
+`participantes_programa` desde `community`, y esa fila necesita `fecha_inicio` y
+`programa_activado_en` — fechas que solo sabe quien da de alta a la persona. Inventarlas sería
+inventar una regla de negocio, y además esa tabla no es de `community`. Alguien sin programa no es
+alguien a quien falte **agregar a un grupo**: es alguien a quien falta **inscribir**, y eso se hace en
+otra pantalla.
+
+**Cómo evitar que vuelva a pasar.**
+
+1. **Un selector y el endpoint que lo consume tienen que hacerse la MISMA pregunta.** Si la lista dice
+   "estos se pueden agregar", el criterio del listado y la precondición de la escritura son el mismo
+   predicado. Cuando se escriben en módulos distintos —acá el listado en `community` y la precondición
+   en `users`— se separan sin que nadie lo note: los dos siguen pasando sus pruebas por separado.
+2. **Un `orElseThrow` en el camino de escritura es una precondición no publicada.** Vale la pena
+   preguntarse quién más tendría que conocerla; si la respuesta es "el picker que llena ese formulario",
+   hay que exponerla por el puerto en vez de dejar que cada uno se entere por la excepción.
+3. **Un `.sql` de pruebas que compensa un bug es un bug reportado en el lugar equivocado.** El comentario
+   de `escenarios.sql` describía la causa con precisión y sembraba el dato que la tapaba. Cuando una
+   siembra existe "porque si no, el backend falla", lo que corresponde es abrir el error, no ajustar
+   la siembra.
+4. Ejecutable en `CelulaServiceTest`:
+   `aprendicesDisponiblesExcluyeAQuienNoTieneParticipacionEnElPrograma` — falla contra el código viejo,
+   donde el aprendiz sin participación también salía en la lista.

@@ -26,11 +26,16 @@ public interface ConsultarCandidatosCelulaUseCase {
      * ocultarlos). */
     List<MentorCandidato> mentores(UserId actorId);
 
-    /** Usuarios ACTIVOS con rol TRAINEE que hoy no son miembro de ninguna celula.
-     * Alcance GLOBAL, no por cohorte: un aprendiz sin celula no tiene forma de saber a
-     * que cohorte "pertenece" todavia (esa relacion nace recien cuando se lo asigna a
-     * una celula) — ver docs/MODULO_COMMUNITY.md, no se inventa una columna de cohorte
-     * suelta que no existe en `participantes_programa`. */
+    /** Usuarios ACTIVOS con rol TRAINEE, <b>inscritos en el programa</b>, que hoy no son
+     * miembro de ninguna celula. Alcance GLOBAL, no por cohorte: un aprendiz sin celula no
+     * tiene forma de saber a que cohorte "pertenece" todavia (esa relacion nace recien
+     * cuando se lo asigna a una celula) — ver docs/MODULO_COMMUNITY.md, no se inventa una
+     * columna de cohorte suelta que no existe en `participantes_programa`.
+     *
+     * <p><b>Corregido 2026-09-15 (E-186).</b> Aca decia "Usuarios ACTIVOS con rol TRAINEE
+     * que hoy no son miembro de ninguna celula", sin la inscripcion. El selector ofrecia
+     * gente a la que {@code POST /admin/cells/&#123;id&#125;/trainees} responde 404 por no
+     * tener fila en `participantes_programa`, y el admin veia "No se pudo agregar". */
     List<AprendizCandidato> aprendicesDisponibles(UserId actorId);
 
     /**

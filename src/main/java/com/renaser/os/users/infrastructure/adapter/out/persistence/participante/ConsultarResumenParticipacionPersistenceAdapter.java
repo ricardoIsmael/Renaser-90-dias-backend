@@ -116,6 +116,45 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
               AND (?2 = FALSE OR pp.celula_id IS NULL)
             """;
 
+    /**
+     * <b>El padron se ordena por ALTA MAS RECIENTE, no por abecedario</b> (E-185, 2026-09-15).
+     *
+     * <p><b>Corregido 2026-09-15.</b> Aca decia {@code ORDER BY u.nombre_completo, u.id}. Con 26
+     * aprendices y una pantalla que trae 20 por vez, seis no entraban nunca en la primera tanda, y
+     * un alta nueva caia donde la pusiera el abecedario. El dueno lo reporto como "no cargan los
+     * usuarios nuevos": lo que fallaba no era la carga sino el ORDEN. A quien se acaba de dar de
+     * alta no se lo encuentra sin buscarlo a mano, y su nombre es justo lo que todavia no se sabe
+     * de memoria.
+     *
+     * <p><b>Por que la fecha de alta y no "los recientes arriba, el resto alfabetico".</b> Un
+     * {@code ORDER BY (u.creado_en > now() - interval '7 days') DESC, u.nombre_completo} tambien
+     * taparia el sintoma, pero cuanto dura "reciente" es una regla de negocio que nadie decidio:
+     * elegir siete dias seria inventarla. La fecha de alta no necesita que nadie fije nada — el
+     * ultimo que entro es el ultimo que entro, y manana sigue siendolo.
+     *
+     * <p><b>Lo que se pierde, y por que se acepta.</b> Se va el recorrido alfabetico. La pantalla
+     * tiene buscador, y la busqueda va contra la BASE y no contra lo ya descargado — es
+     * exactamente lo que fija la prueba E16 del repo frontend
+     * ({@code e2e/admin-alquimista/E15-E17-permisos-y-resiliencia.spec.ts}) — asi que buscar por
+     * nombre sigue funcionando igual. "El que acabo de crear", en cambio, no tenia ninguna otra
+     * forma de aparecer.
+     *
+     * <p><b>El desempate por {@code u.id} no es decorativo, y por eso se conserva.</b>
+     * {@code creado_en} no es unica: una siembra que inserta a todos dentro de una transaccion les
+     * pone el MISMO {@code now()} — en Postgres es el instante de la transaccion, no el de cada
+     * fila. Sin segunda clave el orden entre empatados lo elige el plan en cada consulta, y dos
+     * paginas seguidas podrian repetir a una persona y saltearse a otra. E16 se apoya justo en
+     * eso: pide la pagina 0 y la 1, y exige que quien salio en la 1 no estuviera en la 0.
+     *
+     * <p><b>Que NO cambia:</b> {@link #QUERY_CONTAR_APRENDICES} no lleva ORDER BY y no se toca —
+     * ordenar no altera cuantas filas hay. El WHERE sigue siendo el mismo
+     * {@link #FILTRO_APRENDICES} compartido, que es lo que evita que la lista y el total se
+     * desincronicen.
+     *
+     * <p>{@code usuarios.creado_en} es {@code NOT NULL DEFAULT now()} desde V1, asi que no hay que
+     * decidir donde van los nulos: no hay. Tampoco se agrega indice — el padron son decenas de
+     * filas, y un indice nuevo pide su propia migracion justificada (regla 04).
+     */
     private static final String QUERY_LISTAR_APRENDICES = """
             SELECT u.id, u.nombre_completo, u.email, u.estado,
                    COALESCE(pp.dia_programa, 0) AS dia_programa,
@@ -124,7 +163,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                    pp.programa_activado_en,
                    COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa
             """ + FILTRO_APRENDICES + """
-            ORDER BY u.nombre_completo, u.id
+            ORDER BY u.creado_en DESC, u.id
             LIMIT ?3 OFFSET ?4
             """;
 

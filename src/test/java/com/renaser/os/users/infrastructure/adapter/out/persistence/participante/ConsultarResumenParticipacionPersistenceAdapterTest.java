@@ -6,6 +6,7 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase.ResumenTraineeAdmin;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -369,6 +370,69 @@ class ConsultarResumenParticipacionPersistenceAdapterTest {
         assertThat(totalSinGrupo).isLessThanOrEqualTo(totalSinFiltro);
         // Y el listado con el mismo filtro no devuelve mas filas que el total que anuncia.
         assertThat(adapter.listarAprendices(0, 200, null, true)).hasSizeLessThanOrEqualTo((int) totalSinGrupo);
+    }
+
+    /**
+     * <b>El alta mas reciente sale en la PRIMERA tanda, aunque el abecedario la mandara al final</b>
+     * (E-185, 2026-09-15).
+     *
+     * <p>Este es el test que hubiera atrapado el bug. El fixture es el caso exacto que lo producia:
+     * dos aprendices donde el alta NUEVA se llama "Zzz" y la vieja "Aaa". Con el
+     * {@code ORDER BY u.nombre_completo} anterior, pedir una sola fila devolvia a "Aaa" y el recien
+     * dado de alta no aparecia hasta varias paginas despues — que es lo que el dueno vio como "no
+     * cargan los usuarios nuevos".
+     *
+     * <p>{@code creado_en} se escribe EXPLICITO y no se deja en su default: dentro de una
+     * transaccion {@code now()} es el mismo instante para las dos filas, asi que un fixture que
+     * confiara en el default empataria siempre y no probaria nada.
+     */
+    @Test
+    void elPadronEmpiezaPorElAltaMasReciente() {
+        UserId vieja = crearAprendizDadoDeAltaEn("Aaa Alfabeticamente Primera", "2020-01-01T12:00:00Z");
+        UserId reciente = crearAprendizDadoDeAltaEn("Zzz Alfabeticamente Ultima", "2026-09-15T12:00:00Z");
+
+        var primeraTanda = adapter.listarAprendices(0, 1, "Alfabeticamente", false);
+
+        assertThat(primeraTanda).extracting(ResumenTraineeAdmin::id).containsExactly(reciente);
+        // Y la vieja no se pierde: sigue estando, en la pagina siguiente.
+        assertThat(adapter.listarAprendices(1, 1, "Alfabeticamente", false))
+                .extracting(ResumenTraineeAdmin::id).containsExactly(vieja);
+    }
+
+    /**
+     * La premisa de la que depende E16 en el repo frontend
+     * ({@code e2e/admin-alquimista/E15-E17-permisos-y-resiliencia.spec.ts}): paginar de verdad, sin
+     * repetir ni saltear. Con {@code creado_en} EMPATADO —el caso de la siembra, que inserta a
+     * todos en una transaccion— el orden lo sostiene solo el desempate por {@code u.id}.
+     */
+    @Test
+    void conAltasEnElMismoInstanteLasPaginasSiguenSinRepetirNiSaltear() {
+        String marca = "Empate" + UUID.randomUUID().toString().substring(0, 8);
+        for (int i = 0; i < 6; i++) {
+            crearAprendizDadoDeAltaEn(marca + " " + i, "2026-09-15T12:00:00Z");
+        }
+
+        var pagina0 = adapter.listarAprendices(0, 3, marca, false);
+        var pagina1 = adapter.listarAprendices(3, 3, marca, false);
+
+        assertThat(pagina0).hasSize(3);
+        assertThat(pagina1).hasSize(3);
+        assertThat(pagina0).extracting(ResumenTraineeAdmin::id)
+                .doesNotContainAnyElementsOf(pagina1.stream().map(ResumenTraineeAdmin::id).toList());
+    }
+
+    private UserId crearAprendizDadoDeAltaEn(String nombreCompleto, String creadoEn) {
+        UserId id = UserId.of(UUID.randomUUID());
+        entityManager.createNativeQuery("""
+                        INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado, creado_en)
+                        VALUES (:id, :email, :nombre, CAST('APRENDIZ' AS renaser.rol_usuario), 'ACTIVO', CAST(:creadoEn AS timestamptz))
+                        """)
+                .setParameter("id", id.value())
+                .setParameter("email", id + "@renaser.test")
+                .setParameter("nombre", nombreCompleto)
+                .setParameter("creadoEn", creadoEn)
+                .executeUpdate();
+        return id;
     }
 
     /** Una busqueda que no coincide con nadie devuelve cero, y no revienta la consulta. */
