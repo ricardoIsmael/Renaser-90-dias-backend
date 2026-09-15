@@ -32,8 +32,21 @@ public class RenombreHabitoService implements RenombrarHabitoUseCase, QuitarReno
 
     /** JUGO VERDE / AGUA TIBIA CON LIMON — las dos bebidas, renameableKeys.ts. */
     public static final List<String> CLAVES_RENOMBRABLES = List.of("GREEN_JUICE", "WARM_LEMON_WATER");
-    /** Solo el dia 0 — antes de que el programa arranque (renameableKeys.ts). */
-    public static final int RENAME_ALLOWED_UNTIL_PROGRAM_DAY = 0;
+    /**
+     * <b>Se puede reemplazar cualquier dia del programa</b> (decision del dueño, 2026-09-15, D-127).
+     *
+     * <p>Antes habia una ventana: {@code RENAME_ALLOWED_UNTIL_PROGRAM_DAY = 0}, portada de
+     * `renameableKeys.ts` del repo viejo — solo antes de que el programa arrancara. El motivo por
+     * el que existe este renombre la desmiente: las dos bebidas se reemplazan porque hay personas
+     * que <b>no las toleran</b> (gastritis, reflujo, diabetes), y eso no se descubre el dia 0, se
+     * descubre tomandolas. Con la ventana cerrada, a quien reaccionaba el dia 12 le quedaban 78
+     * dias de incumplir un habito que no podia hacer — y tampoco podia deshacer un reemplazo
+     * puesto, porque {@code quitar} miraba la misma ventana.
+     *
+     * <p>Lo que NO cambia: sigue siendo individual (nadie mas ve el cambio), sigue limitado a las
+     * dos claves de {@link #CLAVES_RENOMBRABLES}, y sigue exigiendo un motivo escrito, asi que
+     * queda registrado quien lo cambio y por que.
+     */
 
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final LoadHabitoPort loadHabitoPort;
@@ -53,8 +66,8 @@ public class RenombreHabitoService implements RenombrarHabitoUseCase, QuitarReno
     @Override
     @Transactional
     public RenombreHabito renombrar(RenombrarHabitoCommand command) {
-        ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
-        Habito habito = requireRenombrable(command.habitoId(), progreso.diaPrograma());
+        requireProgreso(command.actorId());
+        Habito habito = requireRenombrable(command.habitoId());
 
         Instant ahora = clock.now();
         Optional<RenombreHabito> existente = loadPort.porParticipanteYHabito(command.actorId(), command.habitoId());
@@ -69,20 +82,20 @@ public class RenombreHabitoService implements RenombrarHabitoUseCase, QuitarReno
     @Override
     @Transactional
     public void quitar(QuitarRenombreHabitoCommand command) {
-        ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
-        requireRenombrable(command.habitoId(), progreso.diaPrograma());
+        requireProgreso(command.actorId());
+        requireRenombrable(command.habitoId());
         savePort.borrar(command.actorId(), command.habitoId());
     }
 
-    private Habito requireRenombrable(HabitoId habitoId, int diaPrograma) {
+    /**
+     * Que el habito sea de los reemplazables. {@code requireProgreso} sigue corriendo antes en los
+     * dos casos de uso —es el que rechaza a una cuenta suspendida y al que no esta inscripto—,
+     * pero su dia de programa ya no se mira: ver el javadoc de {@link #CLAVES_RENOMBRABLES}.
+     */
+    private Habito requireRenombrable(HabitoId habitoId) {
         Habito habito = requireHabito(habitoId);
         if (habito.claveSistema() == null || !CLAVES_RENOMBRABLES.contains(habito.claveSistema())) {
             throw new IllegalArgumentException("Este habito no se puede reemplazar");
-        }
-        if (diaPrograma > RENAME_ALLOWED_UNTIL_PROGRAM_DAY) {
-            throw new IllegalStateException(
-                    "Solo puedes reemplazarlo antes de que empiece tu formacion (hasta el dia "
-                            + RENAME_ALLOWED_UNTIL_PROGRAM_DAY + ")");
         }
         return habito;
     }

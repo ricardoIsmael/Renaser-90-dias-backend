@@ -75,16 +75,41 @@ class RenombreHabitoServiceTest {
                 "Gastritis"))).isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * D-127 (2026-09-15): se puede reemplazar CUALQUIER dia. Este test decia lo contrario
+     * —{@code rechazaFueraDeLaVentanaDelDiaCero}, esperaba {@code IllegalStateException} en el dia
+     * 1— porque el servicio portaba la ventana de `renameableKeys.ts`. La razon de ser del
+     * renombre la desmiente: nadie descubre el dia 0 que el jugo verde le cae mal.
+     */
     @Test
-    void rechazaFueraDeLaVentanaDelDiaCero() {
+    void renombraTambienConElProgramaEmpezado() {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habitoRenombrable("GREEN_JUICE");
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(1, "UTC", RolParticipante.TRAINEE, false, false)));
+                Optional.of(new ProgresoParticipanteHabits(12, "UTC", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(loadPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
+
+        RenombreHabito renombre = service.renombrar(new RenombrarHabitoCommand(actor, habito.id(), "Jugo de papaya",
+                "Gastritis"));
+
+        assertThat(renombre.tituloPersonal()).isEqualTo("Jugo de papaya");
+        verify(savePort).save(any(RenombreHabito.class));
+    }
+
+    /** Y tambien se puede DESHACER con el programa empezado, que es la otra mitad de D-127:
+     * {@code quitar} miraba la misma ventana, asi que un reemplazo puesto quedaba para siempre. */
+    @Test
+    void quitarTambienFuncionaConElProgramaEmpezado() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habitoRenombrable("WARM_LEMON_WATER");
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(45, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
 
-        assertThatThrownBy(() -> service.renombrar(new RenombrarHabitoCommand(actor, habito.id(), "Jugo de papaya",
-                "Gastritis"))).isInstanceOf(IllegalStateException.class);
+        service.quitar(new QuitarRenombreHabitoCommand(actor, habito.id()));
+
+        verify(savePort).borrar(actor, habito.id());
     }
 
     @Test
