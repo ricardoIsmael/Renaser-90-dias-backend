@@ -98,6 +98,12 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | GET | `/api/v1/radar/history` |
 | GET | `/api/v1/habit-preferences` |
 | PATCH | `/api/v1/habit-preferences/{habitId}` |
+| GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/habits` |
+| GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/radar` |
+
+> Las dos rutas `mentor/...` (2026-09-15, D-126) las sirve `habits` y no `mentoring`, porque el dato es
+> de este módulo: devuelven **exactamente la misma respuesta** que `/admin/trainees/{id}/habits` y que
+> `/radar/history`, con otro guard — acompañante vigente del grupo **y** alumno de ese grupo.
 
 > `phone-free/complete` y `/break` **no llevan `{id}`** — el backend resuelve la racha activa por actor.
 > `habit-preferences`: horario personal de cada hábito, cuota semanal de cambios y cambios programados —

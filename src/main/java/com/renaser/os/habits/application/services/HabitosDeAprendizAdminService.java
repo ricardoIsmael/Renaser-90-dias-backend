@@ -52,16 +52,30 @@ public class HabitosDeAprendizAdminService implements ConsultarHabitosDeAprendiz
     public VistaHabitosDeAprendiz consultar(ConsultarHabitosDeAprendizCommand command) {
         ProgresoParticipanteHabits progreso = requireAprendiz(command.aprendizId());
         guard.requireAdmin(command.actorId());
+        return vistaDe(command.aprendizId(), progreso);
+    }
 
+    /**
+     * La vista, YA AUTORIZADA por quien llama (2026-09-15). Existe separada de {@link #consultar}
+     * para que el acompanamiento —el mentor mirando a su alumno,
+     * {@link AcompanamientoDeAlumnoService}— arme exactamente la misma vista con SU propio guard.
+     *
+     * <p>La alternativa era aflojar {@code guard.requireAdmin} para que aceptara tambien a un
+     * mentor, y eso es justo lo que este repo tiene prohibido: un guard que sirve a dos
+     * autorizaciones distintas es como se abren los agujeros que despues nadie encuentra (ARF-15,
+     * ver el comentario gemelo en {@code mentoring.SeguimientoService}). Dos puertas y dos guards,
+     * pero una sola forma de armar el dato: dos formas del mismo dato se desincronizan.
+     */
+    VistaHabitosDeAprendiz vistaDe(UserId aprendizId, ProgresoParticipanteHabits progreso) {
         ZoneId zona = ZoneId.of(progreso.timezone());
         LocalDate hoy = clock.now().atZone(zona).toLocalDate();
 
         List<HabitoDeAprendiz> habitos = leerHabitosPort
-                .deAprendiz(command.aprendizId(), progreso.diaPrograma(), tipoDiaDe(hoy), lunesDe(hoy))
+                .deAprendiz(aprendizId, progreso.diaPrograma(), tipoDiaDe(hoy), lunesDe(hoy))
                 .stream().map(HabitosDeAprendizAdminService::aVista).toList();
 
-        return new VistaHabitosDeAprendiz(command.aprendizId(), progreso.diaPrograma(), hoy, progreso.timezone(),
-                cuotaDeLaSemana(command.aprendizId(), progreso.diaPrograma(), hoy), habitos);
+        return new VistaHabitosDeAprendiz(aprendizId, progreso.diaPrograma(), hoy, progreso.timezone(),
+                cuotaDeLaSemana(aprendizId, progreso.diaPrograma(), hoy), habitos);
     }
 
     /**
@@ -73,8 +87,10 @@ public class HabitosDeAprendizAdminService implements ConsultarHabitosDeAprendiz
      *
      * <p>La suspension del APRENDIZ no se chequea a proposito — un operador tiene que poder
      * auditar justamente a quien acaba de suspender. La del ACTOR si: la cubre el guard.
+     * <p>Package-private desde 2026-09-15 por el mismo motivo que {@link #vistaDe}: el
+     * acompanamiento necesita el mismo 404 antes de armar la vista.
      */
-    private ProgresoParticipanteHabits requireAprendiz(UserId aprendizId) {
+    ProgresoParticipanteHabits requireAprendiz(UserId aprendizId) {
         return progresoPort.deParticipante(aprendizId)
                 .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + aprendizId));
     }

@@ -109,8 +109,14 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
         return new HistorialRadarPage(pagina, siguienteCursor);
     }
 
-    /** Pagina llena => puede haber mas, misma heuristica que radar.ts:384-387 (sin conteo extra). */
-    private static Instant siguienteCursor(List<RegistroRadar> pagina, int tamanoPagina) {
+    /**
+     * Pagina llena => puede haber mas, misma heuristica que radar.ts:384-387 (sin conteo extra).
+     *
+     * <p>Package-private desde 2026-09-15: la lectura del acompañante
+     * ({@code AcompanamientoDeAlumnoService}) pagina el mismo historial y tiene que cortar igual.
+     * Copiar estas cuatro lineas alla habria dejado dos heuristicas capaces de desincronizarse.
+     */
+    static Instant siguienteCursor(List<RegistroRadar> pagina, int tamanoPagina) {
         if (pagina.size() < tamanoPagina) {
             return null;
         }
