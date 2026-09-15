@@ -101,20 +101,53 @@ class RankingServiceTest {
         assertThat(posiciones.get(2).participanteId()).isEqualTo(a); // 50
     }
 
+    /**
+     * D-128: la coherencia que ordena este ranking sale del porcentaje de acciones diarias de la
+     * semana ({@code PorcentajeRocasFinder}), no del campo {@code coherencia} del candidato —que
+     * viene de {@code puntajes_participante}, una columna que nadie escribe—. Por eso los valores
+     * se stubean en el finder; los del candidato quedan al reves a proposito, para que el test
+     * falle si alguien vuelve a leerlos.
+     */
     @Test
-    @DisplayName("CELL ordena por coherencia descendente, no por puntosLiga")
+    @DisplayName("CELL ordena por la coherencia derivada, no por puntosLiga ni por la columna muerta")
     void cellOrdenaPorCoherencia() {
         UserId a = id();
         UserId b = id();
         when(loadRankingCandidatosPort.aprendicesActivosConPuntaje()).thenReturn(List.of(
-                new CandidatoRanking(a, "A", 1000, BigDecimal.valueOf(10)),
-                new CandidatoRanking(b, "B", 1, BigDecimal.valueOf(90))));
+                new CandidatoRanking(a, "A", 1000, BigDecimal.valueOf(90)),
+                new CandidatoRanking(b, "B", 1, BigDecimal.valueOf(10))));
+        when(porcentajeRocasFinder.porcentajePorParticipante(anyCollection(), eq(FECHA)))
+                .thenReturn(Map.of(a, BigDecimal.valueOf(10), b, BigDecimal.valueOf(90)));
 
         service.generar(TipoRanking.CELL, FECHA);
 
         ArgumentCaptor<List<PosicionRanking>> captor = ArgumentCaptor.forClass(List.class);
         verify(saveRankingSnapshotPort).reemplazar(eq(TipoRanking.CELL), eq(FECHA), captor.capture());
-        assertThat(captor.getValue().get(0).participanteId()).isEqualTo(b); // coherencia 90 > 10
+        assertThat(captor.getValue().get(0).participanteId()).isEqualTo(b); // 90 % de acciones > 10 %
+        assertThat(captor.getValue().get(0).puntaje()).isEqualByComparingTo("90");
+    }
+
+    /**
+     * Quien no planifico ninguna accion no tiene coherencia (D-128): va al fondo con SIN_DATO, y
+     * NO adelante con el 100 de la columna vieja.
+     */
+    @Test
+    @DisplayName("CELL manda al fondo a quien no tiene acciones planificadas")
+    void cellDejaUltimoAQuienNoTieneDato() {
+        UserId conDato = id();
+        UserId sinDato = id();
+        when(loadRankingCandidatosPort.aprendicesActivosConPuntaje()).thenReturn(List.of(
+                new CandidatoRanking(sinDato, "Sin dato", 0, BigDecimal.valueOf(100)),
+                new CandidatoRanking(conDato, "Con dato", 0, BigDecimal.ZERO)));
+        when(porcentajeRocasFinder.porcentajePorParticipante(anyCollection(), eq(FECHA)))
+                .thenReturn(Map.of(conDato, BigDecimal.valueOf(25)));
+
+        service.generar(TipoRanking.CELL, FECHA);
+
+        ArgumentCaptor<List<PosicionRanking>> captor = ArgumentCaptor.forClass(List.class);
+        verify(saveRankingSnapshotPort).reemplazar(eq(TipoRanking.CELL), eq(FECHA), captor.capture());
+        assertThat(captor.getValue().get(0).participanteId()).isEqualTo(conDato);
+        assertThat(captor.getValue().get(1).participanteId()).isEqualTo(sinDato);
     }
 
     @Test
@@ -150,7 +183,7 @@ class RankingServiceTest {
 
     @Test
     @DisplayName("GENERAL: al aprendiz sin datos no se lo castiga con 0, vale 100")
-    void generalSinDatosVale100() {
+    void generalSinDatosValeCeroYNoCien() {
         UserId a = id();
         when(loadRankingCandidatosPort.aprendicesActivosConPuntaje())
                 .thenReturn(List.of(new CandidatoRanking(a, "A", 0, BigDecimal.ZERO)));
@@ -162,7 +195,9 @@ class RankingServiceTest {
 
         ArgumentCaptor<List<PosicionRanking>> captor = ArgumentCaptor.forClass(List.class);
         verify(saveRankingSnapshotPort).reemplazar(eq(TipoRanking.GENERAL), eq(FECHA), captor.capture());
-        assertThat(captor.getValue().get(0).puntaje()).isEqualByComparingTo("100.0");
+        // D-131: sin un solo modulo con dato el puntaje es CERO y va al fondo. Este test se
+        // llamaba `generalSinDatosVale100` y esperaba 100.0, que ponia primero a quien no tenia nada.
+        assertThat(captor.getValue().get(0).puntaje()).isEqualByComparingTo("0");
     }
 
     @Test

@@ -116,6 +116,12 @@ class BancoDeMentoria {
     final CalculoCumplimientoPort calculo = CalculoCumplimiento::evaluar;
 
     final UserSummaryFinder usuarios = new UserSummaryFinder() {
+            @Override
+            public java.util.List<com.renaser.os.users.api.UserSummary> aprendicesActivos() {
+                // Ninguna de estas pruebas usa el padron: el ranking es su unico consumidor (D-130).
+                return java.util.List.of();
+            }
+
         @Override
         public Optional<UserSummary> findById(UserId id) {
             return Optional.of(perfil(id));

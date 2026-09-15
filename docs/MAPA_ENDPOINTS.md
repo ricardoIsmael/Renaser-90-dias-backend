@@ -143,6 +143,7 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 |---|---|
 | GET | `/api/v1/points/{participanteId}` |
 | POST | `/api/v1/points/adjustments` |
+| POST | `/api/v1/admin/ranking/snapshots?date=YYYY-MM-DD` |
 | GET | `/api/v1/ranking/{tipo}` — `tipo` ∈ `LEAGUE`, `CELL` (`GENERAL`/`COHORT` todavía no) |
 
 ### `academy`

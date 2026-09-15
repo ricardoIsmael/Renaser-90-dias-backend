@@ -82,12 +82,45 @@ class RankingPersistenceAdapterTest {
         return id;
     }
 
+    /**
+     * D-130. Este test se llamaba {@code aprendicesActivosConPuntajeFiltraPorRolYEstado} y exigia
+     * que apareciera EXACTAMENTE el unico aprendiz con fila de puntaje. Esa era justamente la
+     * regla que dejaba el ranking vacio: se entraba por haber sumado puntos, no por estar en el
+     * programa. Ahora entra todo el padron activo, y quien no sumo nada entra con cero.
+     *
+     * <p>Se afirma por pertenencia y no con {@code containsExactly}: el esquema de prueba es
+     * compartido y puede traer aprendices de otros casos — lo que este test fija es quien entra y
+     * quien no, no cuantos hay.
+     */
     @Test
-    void aprendicesActivosConPuntajeFiltraPorRolYEstado() {
+    void entranTodosLosAprendicesActivos_conPuntajeOSinEl() {
+        UUID sinPuntaje = crearUsuarioSinParticipante("APRENDIZ", "ACTIVO");
+        jdbcTemplate.update("INSERT INTO renaser.participantes_programa (usuario_id) VALUES (?)", sinPuntaje);
+
         List<CandidatoRanking> candidatos = adapterCandidatos.aprendicesActivosConPuntaje();
 
         assertThat(candidatos).extracting(CandidatoRanking::participanteId)
-                .containsExactly(UserId.of(aprendizActivoId));
+                .contains(UserId.of(aprendizActivoId), UserId.of(sinPuntaje));
+        assertThat(candidatos)
+                .filteredOn(c -> c.participanteId().equals(UserId.of(sinPuntaje)))
+                .singleElement()
+                .satisfies(c -> assertThat(c.puntosLiga()).isZero());
+        assertThat(candidatos)
+                .filteredOn(c -> c.participanteId().equals(UserId.of(aprendizActivoId)))
+                .singleElement()
+                .satisfies(c -> assertThat(c.puntosLiga()).isEqualTo(130));
+    }
+
+    /** Lo que NO cambia: el staff no compite, y una cuenta suspendida deja de figurar. */
+    @Test
+    void niElStaffNiLosSuspendidosCompiten() {
+        UUID suspendido = crearParticipante("APRENDIZ", "SUSPENDIDO", 999, "99.00");
+        UUID mentor = crearParticipante("MENTOR", "ACTIVO", 500, "50.00");
+
+        List<CandidatoRanking> candidatos = adapterCandidatos.aprendicesActivosConPuntaje();
+
+        assertThat(candidatos).extracting(CandidatoRanking::participanteId)
+                .doesNotContain(UserId.of(suspendido), UserId.of(mentor));
     }
 
     @Test

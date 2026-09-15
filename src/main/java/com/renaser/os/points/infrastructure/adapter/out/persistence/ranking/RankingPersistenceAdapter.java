@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 @Component
@@ -55,38 +56,47 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
     }
 
     /**
-     * Dos consultas en total, no una por aprendiz: se traen todos los puntajes y se
-     * resuelven los nombres/roles EN LOTE contra `users`. El filtro por rol y estado
-     * queda del lado de `users`, que es su dueno.
+     * <b>Compite TODO el padron de aprendices activos</b>, haya sumado puntos o no (D-130).
+     *
+     * <blockquote><b>Corregido el 2026-09-15.</b> Antes esto arrancaba de
+     * {@code puntajes_participante} y se quedaba con los que ademas fueran aprendices activos. El
+     * problema es cuando se crea esa fila: la primera vez que alguien SUMA puntos. Un aprendiz
+     * recien incorporado no tenia fila, asi que <b>no existia para el ranking</b> — y una cohorte
+     * entera que todavia no hizo nada daba una tabla vacia. Comprobado en la base local del dueño:
+     * 25 aprendices activos, 1 sola fila de puntaje, y esa era de una cuenta ADMIN que ni siquiera
+     * compite. El corte salia con cero filas.</blockquote>
+     *
+     * <p>Nadie tiene que "activarse" para aparecer: se entra al ranking por estar en el programa.
+     * Quien no tiene fila de puntaje entra con <b>cero</b>, que es lo que efectivamente lleva
+     * hecho.
+     *
+     * <p>Dos consultas en total, no una por aprendiz: el padron sale EN LOTE de {@code users}
+     * —dueño del rol y del estado, que por eso no se filtran aca— y los puntajes de una sola
+     * consulta.
      */
     @Override
     public List<CandidatoRanking> aprendicesActivosConPuntaje() {
-        List<PuntajeCrudo> puntajes = jdbcTemplate.query(SQL_PUNTAJES, (rs, rowNum) -> new PuntajeCrudo(
-                UserId.of(rs.getObject("participante_id", UUID.class)),
-                rs.getInt("puntos_liga"),
-                rs.getBigDecimal("coherencia")));
-        if (puntajes.isEmpty()) {
+        List<UserSummary> padron = userSummaryFinder.aprendicesActivos();
+        if (padron.isEmpty()) {
             return List.of();
         }
-        Map<UserId, UserSummary> resumenes = userSummaryFinder.findByIds(
-                puntajes.stream().map(PuntajeCrudo::participanteId).toList());
-        return puntajes.stream()
-                .filter(puntaje -> compiteEnElRanking(resumenes.get(puntaje.participanteId())))
-                .map(puntaje -> aCandidato(puntaje, resumenes.get(puntaje.participanteId())))
+        Map<UserId, PuntajeCrudo> puntajes = jdbcTemplate.query(SQL_PUNTAJES, (rs, rowNum) -> new PuntajeCrudo(
+                        UserId.of(rs.getObject("participante_id", UUID.class)),
+                        rs.getInt("puntos_liga"),
+                        rs.getBigDecimal("coherencia")))
+                .stream()
+                .collect(Collectors.toMap(PuntajeCrudo::participanteId, p -> p));
+        return padron.stream()
+                .map(aprendiz -> aCandidato(puntajes.get(aprendiz.id()), aprendiz))
                 .toList();
     }
 
-    /**
-     * Solo el aprendiz activo compite: el staff no entra al ranking, y una cuenta suspendida
-     * deja de figurar. {@code null} = el puntaje quedo huerfano (el usuario ya no existe).
-     */
-    private static boolean compiteEnElRanking(UserSummary resumen) {
-        return resumen != null && resumen.role() == UserRole.TRAINEE && resumen.status() == UserStatus.ACTIVE;
-    }
-
+    /** {@code puntaje} nulo = todavia no sumo nada: entra con cero, no se lo deja afuera (D-130). */
     private static CandidatoRanking aCandidato(PuntajeCrudo puntaje, UserSummary resumen) {
-        return new CandidatoRanking(puntaje.participanteId(), resumen.fullName(),
-                puntaje.puntosLiga(), puntaje.coherencia());
+        if (puntaje == null) {
+            return new CandidatoRanking(resumen.id(), resumen.fullName(), 0, java.math.BigDecimal.ZERO);
+        }
+        return new CandidatoRanking(resumen.id(), resumen.fullName(), puntaje.puntosLiga(), puntaje.coherencia());
     }
 
     private record PuntajeCrudo(UserId participanteId, int puntosLiga, java.math.BigDecimal coherencia) {

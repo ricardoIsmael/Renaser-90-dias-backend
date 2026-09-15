@@ -97,8 +97,8 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
 
         Map<UserId, BigDecimal> puntajes = new LinkedHashMap<>(participantes.size());
         for (UserId participante : participantes) {
-            puntajes.put(participante, PuntajeGeneral.calcular(habitos.get(participante),
-                    rocas.get(participante), cursos.get(participante)));
+            PuntajeGeneral.calcular(habitos.get(participante), rocas.get(participante),
+                    cursos.get(participante)).ifPresent(puntaje -> puntajes.put(participante, puntaje));
         }
         return puntajes;
     }
@@ -144,10 +144,16 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
                                   Map<UserId, BigDecimal> puntajesCalculados) {
         return switch (tipo) {
             case LEAGUE -> BigDecimal.valueOf(candidato.puntosLiga());
-            // Sin acciones planificadas no hay coherencia (D-128): va al fondo con SIN_DATO, que es
-            // lo mismo que hace GENERAL. Antes leia `candidato.coherencia()`, la columna muerta.
-            case CELL -> puntajesCalculados.getOrDefault(candidato.participanteId(), PuntajeGeneral.SIN_DATO);
-            case GENERAL -> puntajesCalculados.getOrDefault(candidato.participanteId(), PuntajeGeneral.SIN_DATO);
+            // Sin acciones planificadas no hay coherencia (D-128), y en una tabla ordenada eso va
+            // ABAJO: cero, no `PuntajeGeneral.SIN_DATO` --que vale 100 y pondria primero a quien
+            // todavia no hizo nada--. La pantalla si distingue los dos casos: sin dato muestra un
+            // guion y cero muestra 0 %. Acá hay que ponerlos en algun orden, y el unico orden
+            // defendible es que no adelanten a quien si cumplio. Antes leia `candidato.coherencia()`,
+            // la columna que nadie escribe.
+            case CELL -> puntajesCalculados.getOrDefault(candidato.participanteId(), BigDecimal.ZERO);
+            // Mismo criterio que CELL (D-131): sin un solo modulo con dato va al fondo con cero, no
+            // adelante con el 100 que rellenaba `SIN_DATO`.
+            case GENERAL -> puntajesCalculados.getOrDefault(candidato.participanteId(), BigDecimal.ZERO);
             case COHORT -> throw new UnsupportedOperationException(unsupportedMessage(tipo));
         };
     }

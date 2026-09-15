@@ -105,6 +105,12 @@ class ConfiguracionMentoriaServiceTest {
             public Optional<UserSummary> findByEmail(String email) {
                 return Optional.ofNullable(porEmail.get(email));
             }
+
+            @Override
+            public java.util.List<UserSummary> aprendicesActivos() {
+                // Ninguna de estas pruebas usa el padron: el ranking es el unico consumidor (D-130).
+                return java.util.List.of();
+            }
         };
         SavePoliticaMentoriaPort guardar = politica -> {
             guardada = politica;

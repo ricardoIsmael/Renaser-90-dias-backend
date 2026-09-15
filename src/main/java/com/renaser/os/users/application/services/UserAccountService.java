@@ -3,6 +3,7 @@ package com.renaser.os.users.application.services;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import com.renaser.os.users.application.ports.in.user.GetMyFullProfileUseCase;
@@ -33,6 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Collection;
 import java.util.Map;
@@ -47,6 +50,10 @@ import java.util.Optional;
 @Service
 public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProfileUseCase,
         GetMyFullProfileUseCase, UpdateMyProfileUseCase, UpdateUserRoleUseCase, UserSummaryFinder {
+
+    /** Tamanio de pagina al recorrer el padron (D-130). Ni tantos round-trips ni medio padron
+     * en memoria de una: mismo criterio que el barrido del reloj en `RelojProgramaService`. */
+    private static final int TAMANO_PAGINA_PADRON = 500;
 
     private static final Logger log = LoggerFactory.getLogger(UserAccountService.class);
 
@@ -262,6 +269,25 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
             // Un correo mal escrito es "no existe", no un 500: quien escribe la lista de guias
             // recibe el mismo rechazo legible que si el usuario no estuviera.
             return Optional.empty();
+        }
+    }
+
+    /**
+     * El padron de aprendices activos (D-130). Pagina de a {@value #TAMANO_PAGINA_PADRON} contra
+     * {@code LoadUserPort.byRoles} en vez de traer todo de una: el metodo se llama desde el corte
+     * del ranking, que corre sobre el padron entero, y ese es exactamente el lugar donde una
+     * consulta sin limite se vuelve un problema el dia que el padron crezca.
+     */
+    @Override
+    public List<UserSummary> aprendicesActivos() {
+        List<UserSummary> padron = new ArrayList<>();
+        for (int pagina = 0; ; pagina++) {
+            List<User> lote = loadUserPort.byRoles(List.of(UserRole.TRAINEE), UserStatus.ACTIVE, pagina,
+                    TAMANO_PAGINA_PADRON);
+            lote.stream().map(UserAccountService::aResumen).forEach(padron::add);
+            if (lote.size() < TAMANO_PAGINA_PADRON) {
+                return padron;
+            }
         }
     }
 
