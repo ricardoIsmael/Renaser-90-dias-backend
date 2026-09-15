@@ -57,6 +57,17 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
      * filas, la evidencia de un habito de hoy queda fuera de la pagina y la pantalla le ofrece
      * "SUBIR" algo que ya subio. Ver {@code evidence.api.RegistrosConEvidenciaFinder}.
      *
+     * <p>{@code exigeEvidencia} (2026-09-14): si el CATALOGO pide evidencia para este habito. No
+     * confundir con {@code tieneEvidencia}, que dice si YA subio una — son la pregunta y la
+     * respuesta, y hacen falta las dos para poder decir "este pide foto y todavia no la subiste".
+     *
+     * <p>Nace porque el agente conversacional no lo sabia: marcaba un habito como hecho sin poder
+     * mencionar que ademas hay que subir evidencia, y la persona se enteraba dias despues por un
+     * aviso al mentor de evidencia vencida que a ella nadie le habia pedido. Completar NO la
+     * exige —ni desde la app ni desde el agente, ver {@code RegistroService.completar}, que no
+     * mira la exigencia en ninguna de sus cuatro guardas—, asi que esto es informacion, no un
+     * candado nuevo. Cambiar eso seria otra decision y no esta tomada.
+     *
      * <p>NO trae {@code claveSistema}, a proposito: el movil ya la recibe por
      * {@code MiHabitoResponse.systemKey} de {@code GET /api/v1/habits} y une catalogo y track
      * por {@code habitoId}. Repetirla aca seria un segundo lugar por donde el mismo dato puede
@@ -64,7 +75,8 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
      */
     record TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
                                    GuiaResumen guia, LocalTime horaDisparo, LocalTime horaLimite,
-                                   PuntosEnJuego puntosEnJuego, boolean tieneEvidencia) {
+                                   PuntosEnJuego puntosEnJuego, boolean tieneEvidencia,
+                                   boolean exigeEvidencia) {
     }
 
     record GuiaResumen(String mantraTitulo, String mantraIntro, String queHacer, String comoHacerlo) {

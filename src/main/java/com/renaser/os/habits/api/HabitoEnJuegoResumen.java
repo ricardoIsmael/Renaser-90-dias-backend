@@ -20,7 +20,10 @@ import java.util.UUID;
  *                       terminal (no hay nada en juego en lo que ya se hizo o se perdio)
  * @param puntosMaximos  el techo de la escala, para poder decir "6 de 10" sin conocer la constante
  * @param plazo          instante en que se bloquea, o {@code null} si el habito no vence
+ * @param exigeEvidencia si el catalogo pide evidencia para este habito (2026-09-14). Que la
+ *                       EXIJA no impide completarlo: {@code RegistroService.completar} no mira
+ *                       esta bandera. Existe para poder decirlo, no para bloquear
  */
 public record HabitoEnJuegoResumen(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
-                                    Integer puntosMaximos, Instant plazo) {
+                                    Integer puntosMaximos, Instant plazo, boolean exigeEvidencia) {
 }

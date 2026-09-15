@@ -37,11 +37,15 @@ public interface ConsultarAgendaHabitosPort {
     int completar(UserId actorId, UUID registroId);
 
     /**
-     * @param puntosEnJuego {@code null} cuando ya esta en estado terminal (nada en juego)
-     * @param plazo         {@code null} cuando el habito no vence
+     * @param puntosEnJuego  {@code null} cuando ya esta en estado terminal (nada en juego)
+     * @param plazo          {@code null} cuando el habito no vence
+     * @param exigeEvidencia si el habito pide evidencia. El agente NO puede subirla —el chat no
+     *                       recibe fotos ni audios— asi que su unico uso es decirlo y mandar a la
+     *                       pantalla de Hoy. Marcar como hecho sigue funcionando igual con o sin
+     *                       ella: quien completa desde la app tampoco la entrega en ese paso
      */
     record HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego, Integer puntosMaximos,
-                         Instant plazo) {
+                         Instant plazo, boolean exigeEvidencia) {
 
         /** Un habito con puntos en juego es, por definicion, uno que todavia se puede entregar. */
         public boolean sigueEnJuego() {

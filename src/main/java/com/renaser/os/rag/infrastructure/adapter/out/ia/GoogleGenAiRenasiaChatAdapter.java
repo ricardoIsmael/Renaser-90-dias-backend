@@ -3,6 +3,7 @@ package com.renaser.os.rag.infrastructure.adapter.out.ia;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
+import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
@@ -149,7 +150,9 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
     private String promptSistema(Consulta consulta) {
         String contexto = formatearContexto(consulta.contexto());
         return switch (consulta.agente()) {
-            case COMPANION -> promptAcompanante.render(Map.of("contexto", contexto));
+            case COMPANION -> promptAcompanante.render(Map.of(
+                    "contexto", contexto,
+                    "situacion", formatearSituacion(consulta.situacion())));
             case COURSE_TUTOR -> promptTutorCursos.render(Map.of(
                     "contexto", contexto,
                     "ambito", formatearAmbito(consulta.ambito())));
@@ -174,6 +177,27 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
                         ? new AssistantMessage(m.contenido())
                         : new UserMessage(m.contenido()))
                 .toList();
+    }
+
+    /**
+     * Donde esta parada la persona, para el prompt del acompanante.
+     *
+     * <p>Va en el prompt y no en una herramienta porque hace falta en casi toda conversacion, y
+     * cada herramienta cuesta un turno completo con el modelo (D-123). El dato ya estaba resuelto
+     * del lado del servidor antes de empezar: cobrarle a la persona uno o dos segundos de espera
+     * por preguntarlo seria pagar dos veces por lo mismo.
+     *
+     * <p>{@code null} es un caso normal: un mentor, un administrador o alguien que todavia no
+     * activo el programa no tiene dia. Se dice asi, en una frase que el modelo puede leer, en vez
+     * de omitir la seccion — si el marcador quedara vacio, el prompt afirmaria implicitamente que
+     * hay un dia y el modelo intentaria encontrarlo.
+     */
+    private static String formatearSituacion(SituacionDelAprendiz situacion) {
+        if (situacion == null) {
+            return "(quien te escribe no esta cursando el programa de 90 dias: no tiene dia ni fase. "
+                    + "No hables de su dia ni se lo preguntes.)";
+        }
+        return "Hoy es su dia " + situacion.diaPrograma() + " de 90, en la fase " + situacion.fase() + " de 4.";
     }
 
     private static String formatearContexto(List<String> contexto) {

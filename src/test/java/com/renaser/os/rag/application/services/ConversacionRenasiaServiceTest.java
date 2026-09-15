@@ -1,5 +1,6 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase.PreguntarRenasiaCommand;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort;
@@ -94,6 +95,8 @@ class ConversacionRenasiaServiceTest {
     @Mock
     private EjecutarHerramientaAgenteUseCase herramientasUseCase;
     @Mock
+    private ConsultarSituacionDelAprendizPort situacionPort;
+    @Mock
     private IdGenerator idGenerator;
 
     private ConversacionRenasiaService service;
@@ -106,10 +109,13 @@ class ConversacionRenasiaServiceTest {
         service = new ConversacionRenasiaService(userSummaryFinder, controlCuotaRenasiaPort,
                 loadConversacionRenasiaPort, saveConversacionRenasiaPort, loadMensajeRenasiaPort,
                 saveMensajeRenasiaPort, vectorStorePort, consultarLeccionesVisiblesPort, chatIAPort,
-                herramientasUseCase, CLOCK, idGenerator);
+                herramientasUseCase, situacionPort, CLOCK, idGenerator);
         // lenient: no todos los casos llegan a generar un id (varios cortan antes, en autorizacion o cuota).
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(herramientasUseCase.disponibles(any())).thenReturn(List.of());
+        // Por defecto, quien conversa no esta cursando: el puerto devuelve vacio y `situacion`
+        // viaja en null. Los casos que necesitan un dia lo declaran ellos.
+        lenient().when(situacionPort.de(any())).thenReturn(Optional.empty());
         lenient().when(consultarLeccionesVisiblesPort.visiblesParaActor(any())).thenReturn(Set.of());
         lenient().when(consultarLeccionesVisiblesPort.visiblesParaActorEnCurso(any(), any())).thenReturn(Set.of());
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(

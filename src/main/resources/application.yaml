@@ -348,5 +348,16 @@ renaser:
 # deja llegar al 8080 desde los rangos de CloudFront (y la IP del dueno): falsearlo exige
 # saltarse CloudFront, que es el pendiente de la cabecera secreta de origen (informe, 2.3).
 # ---------------------------------------------------------------------------------------------
+# Spring AI registra "Aggregation Error" con la pila entera CADA vez que un stream del
+# modelo termina en error — y lo hace CUATRO veces por peticion, una por cada operador
+# suyo que la ve pasar. Un solo 503 de Google llenaba el log con ~600 lineas.
+#
+# No se pierde nada callandolo: `ConversacionRenasiaService.logFalloDeStreaming` ya
+# registra el mismo fallo, una vez, y ademas sabe distinguir lo transitorio de un defecto
+# real. Este logger no aporta una segunda opinion, aporta el mismo hecho cuatro veces.
+logging:
+  level:
+    org.springframework.ai.chat.model.MessageAggregator: "OFF"
+
 server:
   forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:framework}

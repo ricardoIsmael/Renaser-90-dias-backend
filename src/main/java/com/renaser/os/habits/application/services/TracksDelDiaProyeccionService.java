@@ -10,6 +10,7 @@ import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.domain.model.guia.GuiaHabito;
+import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
@@ -157,8 +158,11 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         HorarioHabito horarioVigente = catalogo.horarios().stream()
                 .filter(h -> h.aplicaEnDia(registro.diaPrograma(), registro.tipoDia())).findFirst().orElse(null);
         HorarioResuelto horario = HorarioResuelto.de(horarioVigente, catalogo.preferencia());
+        // Sin habito en el catalogo no se puede afirmar que exija evidencia: `false` dice "no me
+        // consta", que es lo unico cierto. Mismo criterio que `titulo` y `tipo` de aca arriba.
+        boolean exigeEvidencia = habito != null && habito.exigenciaEvidencia() == ExigenciaEvidencia.OBLIGATORIA;
         return new TrackDelDiaConCatalogo(registro, titulo, tipo, guia, horario.horaDisparo(), horario.horaLimite(),
-                puntosEnJuegoDe(registro, catalogo, horario, momento), tieneEvidencia);
+                puntosEnJuegoDe(registro, catalogo, horario, momento), tieneEvidencia, exigeEvidencia);
     }
 
     /**

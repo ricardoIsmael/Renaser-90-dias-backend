@@ -13,6 +13,7 @@ import com.renaser.os.rag.application.ports.out.conversacion.SaveConversacionRen
 import com.renaser.os.rag.application.ports.out.conversacion.SaveMensajeRenasiaPort;
 import com.renaser.os.rag.application.ports.out.cuota.ControlCuotaRenasiaPort;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
+import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort.Consulta;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
@@ -115,6 +116,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      * definiciones: la ejecucion la dispara el adaptador del proveedor cuando el modelo pida una,
      * y hoy no hay ninguno conectado. */
     private final EjecutarHerramientaAgenteUseCase herramientasUseCase;
+    private final ConsultarSituacionDelAprendizPort situacionPort;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
@@ -126,6 +128,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                                        SaveMensajeRenasiaPort saveMensajeRenasiaPort, VectorStorePort vectorStorePort,
                                        ConsultarLeccionesVisiblesPort consultarLeccionesVisiblesPort,
                                        ChatIAPort chatIAPort, EjecutarHerramientaAgenteUseCase herramientasUseCase,
+                                       ConsultarSituacionDelAprendizPort situacionPort,
                                        Clock clock, IdGenerator idGenerator) {
         this.userSummaryFinder = userSummaryFinder;
         this.controlCuotaRenasiaPort = controlCuotaRenasiaPort;
@@ -137,6 +140,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         this.consultarLeccionesVisiblesPort = consultarLeccionesVisiblesPort;
         this.chatIAPort = chatIAPort;
         this.herramientasUseCase = herramientasUseCase;
+        this.situacionPort = situacionPort;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
@@ -168,7 +172,8 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
 
         StringBuilder respuestaCompleta = new StringBuilder();
         return chatIAPort.responder(new Consulta(command.agente(), command.actorId(), command.pregunta(), contexto,
-                        command.ambito(), historial, herramientasUseCase.disponibles(command.agente())))
+                        command.ambito(), historial, herramientasUseCase.disponibles(command.agente()),
+                        situacionPort.de(command.actorId()).orElse(null)))
                 .doOnNext(evento -> acumularTexto(evento, respuestaCompleta))
                 .concatMap(evento -> agregarFuentesAntesDeFin(evento, fragmentos))
                 .doOnComplete(() -> persistirRespuestaAsistente(command, respuestaCompleta.toString(), fragmentos))
@@ -285,8 +290,23 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     }
 
     /** Nunca se loguea la pregunta ni la respuesta: es dato personal (CLAUDE.MD sec. 5.4.9,
-     * docs/MODULO_RAG.md D-47). Tampoco el id del actor (es el `sub` de Supabase). */
+     * docs/MODULO_RAG.md D-47). Tampoco el id del actor (es el `sub` de Supabase).
+     *
+     * <p><b>Sin traza cuando el proveedor esta caido o saturado (2026-09-14).</b> Un 503 de Google
+     * ("this model is currently experiencing high demand") no es un defecto nuestro: es una
+     * condicion transitoria que este servicio YA maneja — la traduce, se la explica a la persona y
+     * libera la cuota. Imprimir 150 lineas de pila de Reactor por cada una no agrega ni un dato
+     * accionable, y entierra los errores que si lo son.
+     *
+     * <p>Lo mismo que se hizo con el ruido de avisos duplicados: lo esperado se resume en una
+     * linea, lo inesperado conserva la traza entera. Si algun dia falla por un defecto real —un
+     * NPE, un contrato roto— la pila sigue apareciendo completa, que es cuando hace falta. */
     private void logFalloDeStreaming(Throwable error) {
+        if (error instanceof ProveedorIaNoDisponibleException) {
+            log.warn("El proveedor de IA no respondio ({}). El aprendiz recibio el aviso y su cuota se libero.",
+                    error.getMessage());
+            return;
+        }
         log.warn("Fallo el streaming de respuesta del asistente", error);
     }
 
