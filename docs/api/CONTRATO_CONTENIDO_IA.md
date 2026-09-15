@@ -295,7 +295,33 @@ curl -s "http://localhost:8080/api/v1/chat/conversations/33333333-3333-3333-3333
   -H "X-Actor-Id: 11111111-1111-1111-1111-111111111111"
 ```
 
-### 2.6 WebSocket — STOMP en vivo
+### 2.6 `POST /api/v1/chat/conversations/{conversationId}/messages/share-wall-post` — compartir una publicación del Muro
+
+- **Path var:** `conversationId` (UUID).
+- **Body** (`CompartirPublicacionRequest`) — **solo el id, nada más**:
+  ```json
+  { "postId": "44444444-4444-4444-4444-444444444444" }
+  ```
+  - `postId`: `@NotNull`, tipo `UUID` (no `String`) — un id mal formado lo rechaza Jackson con **400** antes de entrar al controller.
+  - **No hay campo para el texto, ni para el nombre del autor, ni para la foto.** Los tres los resuelve el servidor: el texto y la referencia a la imagen contra `community.api.PublicacionMuroFinder.paraCompartir`, y el nombre contra `users.api.UserSummaryFinder`. Mismo criterio que el `role` ausente de `SubmitAccountRequestCommand` (CLAUDE.MD §5.3.3): lo que el cliente manda en un texto que queda persistido para siempre no se puede auditar después.
+- **201 CREATED** → el **mismo `MensajeResponse`** que §2.4. Para el cliente el resultado es un mensaje más de la conversación, no un recurso nuevo.
+- **Qué mensaje se guarda:**
+  - `type`: `IMAGE` si la publicación tiene imagen, `TEXT` si no.
+  - `mediaBucket`/`mediaPath`/`mediaMime`: los del objeto **original del Muro** — no se copia un solo byte de S3. La URL de lectura se vuelve a firmar en cada `GET .../messages`, como cualquier otra foto de chat.
+  - `text`: `📌 [Compartido del Muro por {autor}]` y, si la publicación tiene texto, un salto de línea más el texto entre comillas. Si el autor no se puede resolver contra `users`, se usa `Comunidad Renaser` — el mismo valor que ya mostraba la app.
+- **Errores:** **404** `"Publicacion no encontrada: <id>"`; y los mismos **404** de conversación inexistente / **403** de no-participante que §2.4, porque la autorización es literalmente la de enviar un mensaje (el caso de uso delega en `EnviarMensajeUseCase`, no reescribe el guard).
+- **Ojo con el orden:** la publicación se lee antes de que corra el guard de participación, así que un no-participante que además manda un `postId` inexistente recibe 404 y no 403. Es deliberado (la alternativa era duplicar el guard) y no filtra nada: la existencia de una publicación del Muro ya es visible en `GET /api/v1/wall`.
+
+> **Por qué existe este endpoint.** Corrige un bug real: `handleShareToConversation` de la app armaba el mensaje en el cliente y le pegaba **la URL firmada de S3 como texto** (`\n📷 Ver foto: https://...`). Esa URL trae `X-Amz-Expires=900` — **quince minutos** —, así que la foto compartida moría a los quince minutos y el enlace roto quedaba guardado para siempre en una fila que no caduca. Es exactamente lo que el javadoc de `chat.MensajeEnriquecido` ya advertía: *"una URL firmada vence y guardarla dejaría la foto en 403 para siempre"*.
+
+```bash
+curl -s -X POST http://localhost:8080/api/v1/chat/conversations/33333333-3333-3333-3333-333333333333/messages/share-wall-post \
+  -H "X-Actor-Id: 11111111-1111-1111-1111-111111111111" \
+  -H "Content-Type: application/json" \
+  -d '{"postId": "44444444-4444-4444-4444-444444444444"}'
+```
+
+### 2.7 WebSocket — STOMP en vivo
 
 - **Endpoint de conexión:** `ws://localhost:8080/ws` (STOMP puro sobre WebSocket nativo — `setAllowedOriginPatterns("*")`, **sin SockJS**: `registry.addEndpoint("/ws")` sin `.withSockJS()`).
 - **Autorización del handshake** (`ActorHandshakeInterceptor`): igual que REST, exige el header **`X-Actor-Id`** en la request HTTP inicial del handshake (no un query param). Sin header, o con un valor que no es UUID → el handshake se rechaza con **403** antes de completar el upgrade a WebSocket. El UUID capturado queda en los atributos de la sesión (`actorId`), para que las suscripciones posteriores lo usen.

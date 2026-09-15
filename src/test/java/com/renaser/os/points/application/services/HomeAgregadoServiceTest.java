@@ -1,5 +1,6 @@
 package com.renaser.os.points.application.services;
 
+import com.renaser.os.points.api.DiasConHabitoCumplidoFinder;
 import com.renaser.os.points.api.HabitoDelDiaResumen;
 import com.renaser.os.points.api.HabitosDelDiaFinder;
 import com.renaser.os.points.api.NotificacionesNoLeidasFinder;
@@ -34,6 +35,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -53,6 +55,8 @@ class HomeAgregadoServiceTest {
     @Mock
     private HabitosDelDiaFinder habitosDelDiaFinder;
     @Mock
+    private DiasConHabitoCumplidoFinder diasConHabitoCumplidoFinder;
+    @Mock
     private RocasDelDiaFinder rocasDelDiaFinder;
     @Mock
     private ProximoEventoFinder proximoEventoFinder;
@@ -63,7 +67,14 @@ class HomeAgregadoServiceTest {
 
     private HomeAgregadoService nuevoServicio() {
         return new HomeAgregadoService(consultarPuntajeUseCase, participacionProgramaFinder, habitosDelDiaFinder,
-                rocasDelDiaFinder, proximoEventoFinder, notificacionesNoLeidasFinder, CLOCK);
+                diasConHabitoCumplidoFinder, rocasDelDiaFinder, proximoEventoFinder, notificacionesNoLeidasFinder,
+                CLOCK);
+    }
+
+    private HomeAgregadoService nuevoServicioCon(FixedClock reloj) {
+        return new HomeAgregadoService(consultarPuntajeUseCase, participacionProgramaFinder, habitosDelDiaFinder,
+                diasConHabitoCumplidoFinder, rocasDelDiaFinder, proximoEventoFinder, notificacionesNoLeidasFinder,
+                reloj);
     }
 
     private ParticipacionPrograma participacionInscrita() {
@@ -92,13 +103,18 @@ class HomeAgregadoServiceTest {
         when(proximoEventoFinder.proximoEventoDe(actor))
                 .thenReturn(Optional.of(new ProximoEventoFinder.ProximoEvento(eventoId, "Retiro", inicioEvento)));
         when(notificacionesNoLeidasFinder.contarNoLeidas(actor)).thenReturn(3L);
+        // Tres dias seguidos terminando hoy. El puntaje guardado dice 4/9 y ya no se usa.
+        when(diasConHabitoCumplidoFinder.entre(eq(actor), any(), eq(HOY_LIMA))).thenReturn(List.of(
+                HOY_LIMA.minusDays(2), HOY_LIMA.minusDays(1), HOY_LIMA));
 
         ResumenHome resumen = service.consultar(actor);
 
         assertThat(resumen.puntosLiga()).isEqualTo(150);
         assertThat(resumen.coherencia()).isEqualByComparingTo("87.50");
-        assertThat(resumen.rachaActual()).isEqualTo(4);
-        assertThat(resumen.rachaMaxima()).isEqualTo(9);
+        // DERIVADA de los dias con habito cumplido, no leida de `puntaje` (que dice 4 y 9): la fila
+        // guardada vale 0 para todo el mundo porque nadie invoca a quien la avanza.
+        assertThat(resumen.rachaActual()).isEqualTo(3);
+        assertThat(resumen.rachaMaxima()).isEqualTo(3);
         assertThat(resumen.diaPrograma()).isEqualTo(12);
         assertThat(resumen.inscrito()).isTrue();
         assertThat(resumen.fase()).isEqualTo(FasePrograma.PHASE_1_REBIRTH);
@@ -110,6 +126,48 @@ class HomeAgregadoServiceTest {
         assertThat(resumen.proximoEvento().titulo()).isEqualTo("Retiro");
         assertThat(resumen.proximoEvento().iniciaEn()).isEqualTo(inicioEvento);
         assertThat(resumen.notificacionesNoLeidas()).isEqualTo(3L);
+    }
+
+    @Test
+    @DisplayName("la racha se cuenta en el dia LOCAL del participante, no en el del servidor")
+    void laRachaUsaElDiaLocalDelParticipante() {
+        /*
+         * Este test existe por `.claude/rules/02` §3, que lo pide con nombre y apellido: el resto
+         * del archivo fija el reloj a las 10:00 UTC, una hora que en Lima cae el MISMO dia
+         * calendario y por eso no puede distinguir si el codigo usa la zona del participante o la
+         * del servidor.
+         *
+         * Aca son las 03:00 UTC del 27: en Lima (UTC-5) todavia son las 22:00 del **26**. Si
+         * `rachaDe` usara la fecha del servidor pediria hasta el 27 y contaria el 26 como "anteayer",
+         * devolviendo 0. Es exactamente la forma del bug E-91.
+         */
+        FixedClock relojDeMadrugada = FixedClock.at(Instant.parse("2026-08-27T03:00:00Z"));
+        HomeAgregadoService service = nuevoServicioCon(relojDeMadrugada);
+        when(consultarPuntajeUseCase.consultar(actor, actor)).thenReturn(
+                PuntajeParticipante.rehydrate(actor, new BigDecimal("50.00"), 10, 0, 0, relojDeMadrugada.now()));
+        when(participacionProgramaFinder.deParticipante(actor)).thenReturn(Optional.of(participacionInscrita()));
+        when(diasConHabitoCumplidoFinder.entre(eq(actor), any(), eq(HOY_LIMA))).thenReturn(
+                List.of(HOY_LIMA.minusDays(1), HOY_LIMA));
+
+        ResumenHome resumen = service.consultar(actor);
+
+        assertThat(resumen.rachaActual()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("sin dias cumplidos la racha es 0, no la que quedo guardada en el puntaje")
+    void sinActividadLaRachaEsCero() {
+        HomeAgregadoService service = nuevoServicio();
+        when(consultarPuntajeUseCase.consultar(actor, actor)).thenReturn(
+                PuntajeParticipante.rehydrate(actor, new BigDecimal("50.00"), 10, 7, 12, CLOCK.now()));
+        when(participacionProgramaFinder.deParticipante(actor)).thenReturn(Optional.of(participacionInscrita()));
+        when(diasConHabitoCumplidoFinder.entre(eq(actor), any(), eq(HOY_LIMA))).thenReturn(List.of());
+
+        ResumenHome resumen = service.consultar(actor);
+
+        // El puntaje guardado dice 7/12. Se ignora a proposito: esa fila no la actualiza nadie.
+        assertThat(resumen.rachaActual()).isZero();
+        assertThat(resumen.rachaMaxima()).isZero();
     }
 
     @Test

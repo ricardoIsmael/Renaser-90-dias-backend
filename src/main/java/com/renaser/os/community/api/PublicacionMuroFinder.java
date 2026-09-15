@@ -3,6 +3,8 @@ package com.renaser.os.community.api;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Contrato publico de `community` para que OTRO modulo pregunte si alguien publico en el
@@ -50,4 +52,27 @@ public interface PublicacionMuroFinder {
      * </ul>
      */
     boolean publicoEntre(UserId autorId, Instant desde, Instant hasta);
+
+    /**
+     * La publicacion lista para que otro modulo la comparta, o vacio si no existe.
+     *
+     * <p><b>Se agrega un metodo en vez de cambiar el de arriba</b>, siguiendo lo que este mismo
+     * contrato ya deja escrito para el caso de los comentarios: <i>"se agrega un metodo aca — no se
+     * cambia el significado de este en silencio"</i>.
+     *
+     * <p><b>Su consumidor es `chat`</b>, para compartir una publicacion del Muro en una
+     * conversacion. Devuelve la REFERENCIA al objeto de S3 (bucket + ruta), no una URL firmada:
+     * el motivo esta explicado en {@link PublicacionParaCompartir}, y es la correccion de un bug
+     * por el que la foto compartida moria a los 15 minutos.
+     *
+     * <p><b>Es una consulta, no una autorizacion</b>, igual que {@link #publicoEntre}: responde por
+     * una publicacion que existe. Quien llama ya autorizo a su actor — en `chat`, comprobando que
+     * sea participante de la conversacion donde va a compartir.
+     *
+     * <p><b>Devuelve tambien las ocultas</b>, por el mismo criterio que {@link #publicoEntre}:
+     * ocultar es moderacion con semantica propia y no es asunto de este metodo. Si el dueno
+     * decide que una publicacion oculta no debe poder compartirse, se filtra <b>en el caso de uso
+     * de `chat`</b>, donde esa regla es visible, y no en silencio aca.
+     */
+    Optional<PublicacionParaCompartir> paraCompartir(UUID publicacionId);
 }

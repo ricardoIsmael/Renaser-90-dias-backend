@@ -2,6 +2,7 @@ package com.renaser.os.community.application.services;
 
 import com.renaser.os.community.api.PublicacionCreadaEvent;
 import com.renaser.os.community.api.PublicacionMuroFinder;
+import com.renaser.os.community.api.PublicacionParaCompartir;
 import com.renaser.os.community.api.PublicarEnMuroPort;
 import com.renaser.os.community.api.PublicarEnMuroPort.PublicarDesdeEvidenciaComando;
 import com.renaser.os.community.application.ports.in.categoria.ConsultarCategoriasMuroUseCase;
@@ -269,6 +270,32 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Transactional(readOnly = true)
     public boolean publicoEntre(UserId autorId, Instant desde, Instant hasta) {
         return loadPublicacionPort.existeDeAutorEntre(autorId, desde, hasta);
+    }
+
+    /**
+     * Sin {@code requireActorActivo}: a diferencia de {@link #ultimoAutor}, esto NO expone datos de
+     * otra persona al cliente — devuelve una referencia de S3 que viaja de modulo a modulo y nunca
+     * sale al telefono. Quien llama (`chat`) ya autorizo a su actor como participante de la
+     * conversacion donde va a compartir.
+     *
+     * <p>Se toma la PRIMERA media de la publicacion. Una publicacion admite hasta 10 (MEDIA_MAX) y
+     * un mensaje de chat, una sola: compartir manda la primera, que es la que el Muro muestra como
+     * portada. Mandar las diez serian diez mensajes, y eso es una decision de producto que nadie
+     * pidio.
+     */
+    @Override
+    public Optional<PublicacionParaCompartir> paraCompartir(UUID publicacionId) {
+        return loadPublicacionPort.porId(PublicacionId.of(publicacionId))
+                .map(publicacion -> {
+                    MediaPublicacion portada = publicacion.media().isEmpty() ? null : publicacion.media().get(0);
+                    return new PublicacionParaCompartir(
+                            publicacion.id().value(),
+                            publicacion.autorId(),
+                            publicacion.texto(),
+                            portada == null ? null : portada.bucket(),
+                            portada == null ? null : portada.ruta(),
+                            portada == null ? null : portada.mime());
+                });
     }
 
     /** Mismo guard que {@link #feed}: expone el nombre completo de otra persona, asi que

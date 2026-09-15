@@ -1,5 +1,7 @@
 package com.renaser.os.chat.infrastructure.adapter.in.rest.mensaje;
 
+import com.renaser.os.chat.application.ports.in.mensaje.CompartirPublicacionUseCase;
+import com.renaser.os.chat.application.ports.in.mensaje.CompartirPublicacionUseCase.CompartirPublicacionCommand;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.EnviarMensajeCommand;
 import com.renaser.os.chat.application.ports.in.mensaje.ListarMensajesUseCase;
@@ -30,10 +32,13 @@ public class MensajeController {
 
     private final EnviarMensajeUseCase enviarUseCase;
     private final ListarMensajesUseCase listarUseCase;
+    private final CompartirPublicacionUseCase compartirPublicacionUseCase;
 
-    public MensajeController(EnviarMensajeUseCase enviarUseCase, ListarMensajesUseCase listarUseCase) {
+    public MensajeController(EnviarMensajeUseCase enviarUseCase, ListarMensajesUseCase listarUseCase,
+                              CompartirPublicacionUseCase compartirPublicacionUseCase) {
         this.enviarUseCase = enviarUseCase;
         this.listarUseCase = listarUseCase;
+        this.compartirPublicacionUseCase = compartirPublicacionUseCase;
     }
 
     @RequiresPermission(value = Permission.USE_APP, scope = "participante de la conversacion")
@@ -46,6 +51,26 @@ public class MensajeController {
                 request.mediaBucket(), request.mediaPath(), request.mediaMime(), request.mediaBytes(),
                 request.mediaDurationSeconds(),
                 request.replyToId() != null ? MensajeId.of(UUID.fromString(request.replyToId())) : null));
+        return ResponseEntity.status(HttpStatus.CREATED).body(MensajeResponse.from(mensaje));
+    }
+
+    /**
+     * Comparte una publicacion del Muro en esta conversacion. Devuelve el MISMO
+     * {@link MensajeResponse} y el mismo 201 que {@link #enviar}: para el cliente el resultado es
+     * un mensaje mas de la conversacion, no un recurso nuevo.
+     *
+     * <p>Existe como endpoint propio, y no como un {@code POST .../messages} que el cliente arma
+     * solo, porque el texto y la referencia a la foto los tiene que resolver el servidor — el
+     * motivo completo esta en {@link CompartirPublicacionUseCase}.
+     */
+    @RequiresPermission(value = Permission.USE_APP, scope = "participante de la conversacion")
+    @PostMapping("/share-wall-post")
+    public ResponseEntity<MensajeResponse> compartirPublicacion(@ActorAutenticado UserId actorId,
+                                                                 @PathVariable UUID conversationId,
+                                                                 @RequestBody @Valid
+                                                                 CompartirPublicacionRequest request) {
+        var mensaje = compartirPublicacionUseCase.compartir(new CompartirPublicacionCommand(actorId,
+                ConversacionId.of(conversationId), request.postId()));
         return ResponseEntity.status(HttpStatus.CREATED).body(MensajeResponse.from(mensaje));
     }
 

@@ -6137,3 +6137,48 @@ cerrar de menos reabre el agujero.
    cierto sin que nadie tocara `SecurityConfig`. Al anotar un riesgo aceptado conviene escribir que
    tendria que cambiar para revisarlo — no solo por que se acepta hoy.
 4. Un UUID que viaja en respuestas de la API **no es una credencial**.
+
+---
+
+## E-182 · La foto compartida del Muro en un chat moria a los 15 minutos, y el enlace roto quedaba guardado para siempre
+
+**Sintoma.** Compartir una publicacion del Muro en una conversacion "funcionaba": el mensaje
+aparecia con la foto y el destinatario la veia. Al dia siguiente, el mismo mensaje mostraba un
+enlace muerto. El texto del mensaje era, literalmente:
+
+```
+📌 [Compartido del Muro por Maria Quispe]
+"Dia 12 cumplido"
+📷 Ver foto: https://s3-renaser90dias.s3.amazonaws.com/muro/abc/foto.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=900&X-Amz-Signature=...
+```
+
+**Causa.** `handleShareToConversation` (`ComunidadScreen.tsx`) armaba el mensaje **en el cliente** y
+pegaba como texto la URL que el feed del Muro le habia dado. Esa URL es **prefirmada**, con
+`X-Amz-Expires=900` — quince minutos. El mensaje, en cambio, es una fila de `mensajes` que no
+caduca nunca. Guardar una credencial de 15 minutos dentro de un dato permanente: a los 900 segundos
+la firma vence y S3 responde 403 para siempre.
+
+Lo puntual es que **ya estaba escrito que esto iba a pasar**, en el javadoc de
+`chat.MensajeEnriquecido`: *"Se firma en cada lectura y no se guarda: lo persistido es la clave del
+objeto (`mediaRuta`), porque una URL firmada vence y guardarla dejaria la foto en 403 para siempre
+(mismo criterio y mismo defecto ya cometido en el Muro, E-79)"*. El chat hacia lo correcto para sus
+propias fotos; compartir del Muro esquivaba ese camino porque el mensaje lo armaba el telefono.
+
+**Solucion.** El servidor arma el mensaje: `POST .../messages/share-wall-post` con **solo**
+`{postId}`. `community.api.PublicacionMuroFinder.paraCompartir` devuelve la **referencia al objeto**
+(`mediaBucket` + `mediaRuta` + `mediaMime`), nunca una URL, y `chat` guarda el mensaje como media de
+verdad — con lo cual la URL se vuelve a firmar en cada `GET .../messages`, igual que cualquier otra
+foto de chat. La foto no caduca nunca y no se copia un solo byte en S3. El texto conserva el formato
+que el usuario ya veia, menos la linea del enlace.
+
+**Como evitar que vuelva a pasar.**
+1. **Una URL firmada no se persiste jamas, en ningun campo de ninguna tabla.** Lo que se guarda es
+   la clave del objeto; la URL se firma al leer. Es la tercera vez que aparece la misma familia de
+   defecto: E-79 (Muro), el aviso preventivo del javadoc de `MensajeEnriquecido`, y este.
+2. **Si el cliente arma un texto que el servidor va a persistir, el defecto es de diseno, no del
+   cliente.** Aca ademas venia con un segundo problema: el nombre del autor tambien lo mandaba el
+   telefono, asi que cualquiera podia firmar un mensaje con el nombre de otro. Ahora `chat` lo
+   resuelve contra `users.api`.
+3. **Prevencion ejecutable:** `CompartirPublicacionServiceTest.elTextoNoLlevaNingunaUrlFirmadaAdentro`
+   afirma que el texto persistido no contiene `http` ni `X-Amz`. Si alguien vuelve a meter una URL
+   en el texto, el test lo dice.

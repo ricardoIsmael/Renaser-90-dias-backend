@@ -49,7 +49,7 @@ Los tres tests unitarios existentes (`AccountRequestServiceTest`, `UserAccountSe
 | Agregado | Casos de uso |
 |---|---|
 | `conversacion` | CrearConversacionDirecta (busca-o-crea), ListarConversaciones (con último mensaje + no-leídos, en lote), MarcarLeido, UnirseAConversacionGlobal (interno, disparado por evento), CrearConversacionCelula (interno, disparado por evento) |
-| `mensaje` | EnviarMensaje, ListarMensajes (paginación keyset) |
+| `mensaje` | EnviarMensaje, ListarMensajes (paginación keyset), CompartirPublicacion (del Muro, delega en EnviarMensaje) |
 
 ### 3.3 Endpoints REST
 
@@ -59,6 +59,7 @@ Los tres tests unitarios existentes (`AccountRequestServiceTest`, `UserAccountSe
 | GET | `/api/v1/chat/conversations` | mis conversaciones, con `unreadCount` y `lastMessage` |
 | POST | `/api/v1/chat/conversations/{id}/read` | marca leído hasta ahora |
 | POST | `/api/v1/chat/conversations/{conversationId}/messages` | enviar, 201 |
+| POST | `/api/v1/chat/conversations/{conversationId}/messages/share-wall-post` | `{postId}` → comparte una publicación del Muro, 201 con el mismo `MensajeResponse` que enviar |
 | GET | `/api/v1/chat/conversations/{conversationId}/messages?cursor=&limit=` | paginación keyset por `creado_en`, descendente |
 
 Todos reciben el actor por `X-Actor-Id` (mismo patrón temporal que el resto de los módulos ya construidos, sin JWT — bloqueante del usuario documentado en `docs/MODULOS_A_AVANZAR.md`).

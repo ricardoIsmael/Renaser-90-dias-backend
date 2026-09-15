@@ -196,6 +196,7 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | POST | `/api/v1/chat/conversations/direct` — body `{otherUserId}` |
 | POST | `/api/v1/chat/conversations/{id}/read` |
 | GET · POST | `/api/v1/chat/conversations/{conversationId}/messages` |
+| POST | `/api/v1/chat/conversations/{conversationId}/messages/share-wall-post` — body `{postId}` |
 | WS | `/ws` → suscripción a `/topic/conversaciones/{id}` (STOMP, con autorización en el handshake) |
 
 > El prefijo es `/api/v1/chat/...`, no `/api/v1/conversations/...`. Marcar leído es **POST**, no PUT.

@@ -1,5 +1,6 @@
 package com.renaser.os.points.application.services;
 
+import com.renaser.os.points.api.DiasConHabitoCumplidoFinder;
 import com.renaser.os.points.api.HabitoDelDiaResumen;
 import com.renaser.os.points.api.HabitosDelDiaFinder;
 import com.renaser.os.points.api.NotificacionesNoLeidasFinder;
@@ -9,6 +10,7 @@ import com.renaser.os.points.api.RocasDelDiaFinder;
 import com.renaser.os.points.application.ports.in.home.ConsultarResumenHomeUseCase;
 import com.renaser.os.points.application.ports.in.puntaje.ConsultarPuntajeUseCase;
 import com.renaser.os.points.domain.model.puntaje.PuntajeParticipante;
+import com.renaser.os.points.domain.model.puntaje.Racha;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -74,6 +76,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
     private final ConsultarPuntajeUseCase consultarPuntajeUseCase;
     private final ParticipacionProgramaFinder participacionProgramaFinder;
     private final HabitosDelDiaFinder habitosDelDiaFinder;
+    private final DiasConHabitoCumplidoFinder diasConHabitoCumplidoFinder;
     private final RocasDelDiaFinder rocasDelDiaFinder;
     private final ProximoEventoFinder proximoEventoFinder;
     private final NotificacionesNoLeidasFinder notificacionesNoLeidasFinder;
@@ -82,6 +85,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
     public HomeAgregadoService(ConsultarPuntajeUseCase consultarPuntajeUseCase,
                                 ParticipacionProgramaFinder participacionProgramaFinder,
                                 HabitosDelDiaFinder habitosDelDiaFinder,
+                                DiasConHabitoCumplidoFinder diasConHabitoCumplidoFinder,
                                 RocasDelDiaFinder rocasDelDiaFinder,
                                 ProximoEventoFinder proximoEventoFinder,
                                 NotificacionesNoLeidasFinder notificacionesNoLeidasFinder,
@@ -89,6 +93,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
         this.consultarPuntajeUseCase = consultarPuntajeUseCase;
         this.participacionProgramaFinder = participacionProgramaFinder;
         this.habitosDelDiaFinder = habitosDelDiaFinder;
+        this.diasConHabitoCumplidoFinder = diasConHabitoCumplidoFinder;
         this.rocasDelDiaFinder = rocasDelDiaFinder;
         this.proximoEventoFinder = proximoEventoFinder;
         this.notificacionesNoLeidasFinder = notificacionesNoLeidasFinder;
@@ -100,8 +105,10 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
         PuntajeParticipante puntaje = consultarPuntajeUseCase.consultar(actorId, actorId);
         ParticipacionPrograma participacion = requireParticipacion(actorId);
 
-        return new ResumenHome(puntaje.puntosLiga(), puntaje.coherencia(), puntaje.rachaActual(),
-                puntaje.rachaMaxima(), participacion.diaPrograma(), participacion.inscrito(),
+        Racha racha = rachaDe(actorId, participacion);
+
+        return new ResumenHome(puntaje.puntosLiga(), puntaje.coherencia(), racha.actual(),
+                racha.maxima(), participacion.diaPrograma(), participacion.inscrito(),
                 participacion.fase(), habitosHoyDe(actorId, participacion.zona()), rocasHoyDe(actorId),
                 proximoEventoDe(actorId), notificacionesNoLeidasDe(actorId), BLOQUEOS);
     }
@@ -109,6 +116,38 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
     private ParticipacionPrograma requireParticipacion(UserId actorId) {
         return participacionProgramaFinder.deParticipante(actorId)
                 .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + actorId));
+    }
+
+    /**
+     * La racha que se MUESTRA: dias seguidos con al menos un habito cumplido.
+     *
+     * <p><b>Se deriva, no se lee de la fila de puntaje.</b> {@code puntaje.rachaActual()} vale 0
+     * para todo el mundo porque quien la avanza ({@code RegistrarCoherenciaDiariaUseCase}) no tiene
+     * un solo llamador en el backend — verificado el 2026-09-14. Mostrar ese 0 era decirle a un
+     * aprendiz con 30 dias seguidos que no tiene racha.
+     *
+     * <p><b>Lo que NO hace, a proposito:</b> no toca
+     * {@link PuntajeParticipante#actualizarRachaTrasDia}, que es lo que gobierna el bono de puntos.
+     * Si esto escribiera la racha, empezarian a otorgarse bonos que hoy no se otorgan, como efecto
+     * colateral de un cambio de pantalla. Aca se responde <i>que se muestra</i>; el premio sigue
+     * siendo una decision aparte.
+     *
+     * <p>La ventana arranca en la fecha de inicio del programa: una racha no puede empezar antes de
+     * que el programa empiece. Sin inscripcion se miran los ultimos 90 dias, que es el largo del
+     * programa entero.
+     *
+     * <p>Misma politica de falla parcial que el resto de los widgets: si el finder se cae, Inicio
+     * se dibuja igual con la racha en cero en vez de devolver un 500.
+     */
+    private Racha rachaDe(UserId actorId, ParticipacionPrograma participacion) {
+        try {
+            LocalDate hoy = LocalDate.ofInstant(clock.now(), participacion.zona());
+            LocalDate desde = participacion.fechaInicio() != null ? participacion.fechaInicio() : hoy.minusDays(90);
+            return Racha.derivarDe(diasConHabitoCumplidoFinder.entre(actorId, desde, hoy), hoy);
+        } catch (NoSuchElementException | NotAuthorizedException e) {
+            logWidgetDegradado("racha", e);
+            return Racha.NINGUNA;
+        }
     }
 
     private ResumenHome.HabitosHoyResumen habitosHoyDe(UserId actorId, ZoneId zonaDelParticipante) {
