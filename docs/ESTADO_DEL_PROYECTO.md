@@ -101,8 +101,12 @@ producción así.**
 ### 3.4 Columnas y features huérfanas
 
 - `participantes_programa.habitos_escalonados_en` — existe en la base, **nadie la lee ni la escribe**.
-- `programa_completado`, `dia_post_programa`, `programa_completado_en` — sin ningún setter ni caso de
-  uso. La graduación no se marca nunca.
+- `dia_post_programa` — se fija en 0 al graduarse y **nadie lo avanza**: qué pasa el día 91 sigue
+  sin decidirse ([`FEATURE_POST_PROGRAM.md`](FEATURE_POST_PROGRAM.md) §5).
+  > **Corregido 2026-09-15 (D-125).** Acá decía que `programa_completado`, `dia_post_programa` y
+  > `programa_completado_en` estaban los tres "sin ningún setter ni caso de uso" y que "la
+  > graduación no se marca nunca". Era cierto hasta ese día: ahora la marca el barrido horario del
+  > reloj al llegar al día 90, sin condiciones.
 - El algoritmo de **escalonamiento por lotes** del repo viejo (`habitStaggering.ts`, ~1470 líneas) no
   se portó. `ElegirHabitoUseCase` es un alta simple con desbloqueo inmediato.
 

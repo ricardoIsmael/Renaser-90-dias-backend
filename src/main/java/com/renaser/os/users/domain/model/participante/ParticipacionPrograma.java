@@ -75,7 +75,12 @@ public final class ParticipacionPrograma {
     private LocalDate fechaInicio;
     private Instant programaActivadoEn;
     private ZoneId timezone;
+    /** `programa_completado` — la graduacion, ver {@link #graduarSiLlegoAlDiaNoventa}. */
     private boolean programaCompletado;
+    /** `dia_post_programa` — dias vividos DESPUES del dia 90. Queda en 0 al graduarse
+     * (regla confirmada 2026-09-14) y hoy nadie lo avanza: cuando exista el
+     * post-programa, ese contador tambien tiene que DERIVARSE de las fechas
+     * (regla 02 §2), no incrementarse desde un cron. */
     private int diaPostPrograma;
     private final Instant creadoEn;
     private Instant actualizadoEn;
@@ -84,8 +89,10 @@ public final class ParticipacionPrograma {
     private TipoMeta tipoMeta;
     /** `nombre_reto_personal` — self-editable via {@link #renombrarRetoPersonal}. */
     private String nombreRetoPersonal;
-    /** `programa_completado_en` — ver docs/FEATURE_POST_PROGRAM.md. Sin setter propio
-     * todavia: ningun caso de uso de este agregado marca la graduacion hoy. */
+    /** `programa_completado_en` — ver docs/FEATURE_POST_PROGRAM.md. Lo escribe
+     * {@link #graduarSiLlegoAlDiaNoventa}, desde el barrido del reloj, una sola vez.
+     * (Hasta el 2026-09-15 este javadoc decia "ningun caso de uso marca la graduacion
+     * hoy": era cierto — los tres campos existian sin un solo escritor.) */
     private Instant programaCompletadoEn;
     /** `dia_programa_avanzado_el` — idempotencia del cron nocturno (QA-33, D-66): el
      * dia LOCAL (zona del participante) en que se avanzo por ultima vez `diaPrograma`.
@@ -348,12 +355,48 @@ public final class ParticipacionPrograma {
             return false;
         }
         int derivado = diaProgramaDerivado(hoyEnZonaParticipante);
+        boolean graduo = graduarSiLlegoAlDiaNoventa(derivado, clock);
         if (derivado == diaPrograma && hoyEnZonaParticipante.equals(diaProgramaAvanzadoEl)) {
-            return false;
+            return graduo;
         }
         this.diaPrograma = derivado;
         this.diaProgramaAvanzadoEl = hoyEnZonaParticipante;
         this.fase = FasePrograma.paraDiaPrograma(derivado);
+        this.actualizadoEn = clock.now();
+        return true;
+    }
+
+    /**
+     * <b>La graduacion</b> — reglas confirmadas por el dueño del proyecto el 2026-09-14
+     * (docs/FEATURE_POST_PROGRAM.md): se gradua <b>al llegar al dia 90, sin condiciones</b>
+     * (no se miran habitos cumplidos, ni puntos, ni firmas de fase), {@link #diaPostPrograma}
+     * queda en <b>0</b>, y los habitos <b>se le siguen generando</b> — nada del barrido de
+     * `habits` mira esta bandera, y el padron del reloj se pagina por `programa_activado_en`,
+     * no por `programa_completado`.
+     *
+     * <p><b>Derivada, no incrementada</b> (regla 02 §2). La condicion es el dia DERIVADO de las
+     * fechas, no un evento que haya que cazar el dia exacto: si el barrido no corrio el dia 90,
+     * el derivado del dia 95 sigue siendo 90 —viene acotado— y la primera corrida que ocurra
+     * gradua igual. Una graduacion no se pierde por una noche con el backend caido. Y como solo
+     * escribe mientras {@code programaCompletado} sea falso, correr el barrido cada hora durante
+     * 90 dias deja exactamente una escritura.
+     *
+     * <p><b>No se des-gradua.</b> Un retroceso posterior ({@link #fijarDia}, que puede dejar el
+     * dia derivado por debajo de 90) NO borra la graduacion: {@code programaCompletadoEn} es la
+     * fecha en que algo paso, no un calculo. La regla confirmada dice cuando se gradua y no
+     * contempla revertirlo; inventar la vuelta atras seria inventar una regla de negocio.
+     *
+     * @return {@code true} solo si esta llamada marco la graduacion. El barrido lo necesita para
+     *         guardar la fila aunque el dia ya estuviera en 90 desde antes — que es justamente el
+     *         caso de las filas de hoy, con dia 90 y la bandera en falso porque nadie la escribia.
+     */
+    private boolean graduarSiLlegoAlDiaNoventa(int diaDerivado, Clock clock) {
+        if (programaCompletado || diaDerivado < DURACION_PROGRAMA_DIAS) {
+            return false;
+        }
+        this.programaCompletado = true;
+        this.programaCompletadoEn = clock.now();
+        this.diaPostPrograma = 0;
         this.actualizadoEn = clock.now();
         return true;
     }

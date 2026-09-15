@@ -15,10 +15,11 @@ public interface AvanzarDiaProgramaUseCase {
 
     /**
      * @param evaluados cuantos participantes activados se revisaron
-     * @param avanzados cuantos de ellos efectivamente sumaron un dia (los demas ya
-     *                  habian sido avanzados hoy, estaban pausados —imposible en este
-     *                  filtro, ya activados—, no habian llegado a su fecha de inicio, o
-     *                  ya estaban en el dia 90)
+     * @param avanzados cuantos de ellos efectivamente cambiaron y se guardaron: sumaron un
+     *                  dia, o se graduaron al llegar al 90. Los demas ya habian sido
+     *                  avanzados hoy, estaban pausados —imposible en este filtro, ya
+     *                  activados—, no habian llegado a su fecha de inicio, o ya estaban en
+     *                  el dia 90 Y graduados
      */
     record ResultadoAvance(int evaluados, int avanzados) {
     }

@@ -91,6 +91,11 @@ public class RelojProgramaService
      * guardado guardado — y como el dia es DERIVADO de las fechas (V20), no incremental,
      * reintentar nunca duplica ni saltea un dia.
      *
+     * <p><b>Tambien marca la graduacion</b> (2026-09-15): llegar al dia 90 es un cambio de estado
+     * mas del reloj, derivado de las mismas fechas, asi que lo decide el agregado dentro de
+     * {@code sincronizarDiaDelPrograma} — ver {@code ParticipacionPrograma}. No hay un segundo
+     * cron ni un segundo barrido del padron.
+     *
      * <p><b>Un participante que falla no detiene el barrido</b> (A-2, 2026-09-08;
      * `.claude/rules/02-tiempo-zonas-y-schedulers.md` §4). Sin el try/catch por fila, una sola
      * `timezone` invalida o una fila incoherente tiraba la corrida ENTERA: nadie avanzaba de dia,
@@ -117,14 +122,25 @@ public class RelojProgramaService
         return new ResultadoAvance(evaluados, avanzados);
     }
 
-    /** Devuelve {@code true} solo si esta fila cambio y se guardo. Ver el javadoc de arriba. */
+    /**
+     * Devuelve {@code true} solo si esta fila cambio y se guardo. Ver el javadoc de arriba.
+     *
+     * <p>La graduacion se registra en INFO y no en DEBUG como el resto del barrido: es el unico
+     * evento de negocio del cron —pasa una vez por participante en 90 dias— y es lo que se va a
+     * buscar en el log el dia que alguien pregunte "¿se gradúo o no?".
+     */
     private boolean sincronizarUno(ParticipacionPrograma participacion) {
         try {
             LocalDate hoyEnSuZona = clock.now().atZone(participacion.timezone()).toLocalDate();
+            boolean yaEstabaGraduado = participacion.programaCompletado();
             if (!participacion.sincronizarDiaDelPrograma(hoyEnSuZona, clock)) {
                 return false;
             }
             saveParticipacionProgramaPort.save(participacion);
+            if (!yaEstabaGraduado && participacion.programaCompletado()) {
+                log.info("[users.RelojPrograma] participante {} graduado: llego al dia {} el {} en su zona",
+                        participacion.participanteId(), participacion.diaPrograma(), hoyEnSuZona);
+            }
             return true;
         } catch (RuntimeException e) {
             log.error("[users.RelojPrograma] no se pudo sincronizar el dia del participante {}: {}",

@@ -385,11 +385,16 @@ class ParticipacionProgramaTest {
         assertThat(p.diaPrograma()).isEqualTo(4);
     }
 
+    /** El fixture arranca YA graduado desde el 2026-09-15: asi este test sigue verificando una
+     * sola cosa —que el dia no pasa de 90— y no se mezcla con la graduacion, que tiene sus
+     * propios tests abajo. Con `programaCompletado` en falso, la primera corrida devolveria
+     * `true` (marcaria la graduacion), que es justo lo que verifica
+     * {@link #unaFilaQueYaEstabaEnElDiaNoventaSeGraduaEnLaCorridaSiguiente}. */
     @Test
     void sincronizarRespetaElTopeDeNoventa() {
         ParticipacionPrograma p = ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null, null, 90,
                 FasePrograma.PHASE_4_ASCENSION, LocalDate.of(2026, 1, 1), CLOCK.now(), ZoneId.of("America/Lima"),
-                false, 0, CLOCK.now(), CLOCK.now(), null, null, null, CLOCK.today());
+                true, 0, CLOCK.now(), CLOCK.now(), null, null, CLOCK.now(), CLOCK.today());
 
         boolean cambio = p.sincronizarDiaDelPrograma(CLOCK.today(), CLOCK);
 
@@ -414,6 +419,116 @@ class ParticipacionProgramaTest {
         ParticipacionPrograma p = traineePausado();
 
         assertThatThrownBy(() -> p.sincronizarDiaDelPrograma(null, CLOCK)).isInstanceOf(NullPointerException.class);
+    }
+
+    // --- graduacion al dia 90 (reglas confirmadas por el dueño el 2026-09-14) ---
+
+    /**
+     * Sin condiciones: llegar al dia 90 alcanza. No se miran habitos, ni puntos, ni firmas —
+     * ver docs/FEATURE_POST_PROGRAM.md. Y `dia_post_programa` queda en 0.
+     */
+    @Test
+    void sincronizarGraduaAlLlegarAlDiaNoventa() {
+        ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
+
+        boolean cambio = p.sincronizarDiaDelPrograma(p.fechaInicio().plusDays(89), CLOCK);
+
+        assertThat(cambio).isTrue();
+        assertThat(p.diaPrograma()).isEqualTo(90);
+        assertThat(p.programaCompletado()).isTrue();
+        assertThat(p.programaCompletadoEn()).isEqualTo(CLOCK.now());
+        assertThat(p.diaPostPrograma()).isZero();
+    }
+
+    /** El dia 89 no gradua a nadie, por bien que venga el aprendiz. */
+    @Test
+    void sincronizarNoGraduaAntesDelDiaNoventa() {
+        ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
+
+        p.sincronizarDiaDelPrograma(p.fechaInicio().plusDays(88), CLOCK);
+
+        assertThat(p.diaPrograma()).isEqualTo(89);
+        assertThat(p.programaCompletado()).isFalse();
+        assertThat(p.programaCompletadoEn()).isNull();
+    }
+
+    /**
+     * La graduacion es DERIVADA, no un evento que haya que cazar el dia exacto (regla 02 §2).
+     * Cinco dias sin que el barrido corriera —el backend caido— no le cuestan la graduacion a
+     * nadie: la primera corrida que ocurra la marca igual. Atada al instante "hoy se cumplen
+     * 90", este participante no se graduaba nunca.
+     */
+    @Test
+    void graduaAunqueNadieHayaCorridoElBarridoElDiaNoventa() {
+        ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
+
+        p.sincronizarDiaDelPrograma(p.fechaInicio().plusDays(94), CLOCK);
+
+        assertThat(p.diaPrograma()).isEqualTo(90);
+        assertThat(p.programaCompletado()).isTrue();
+    }
+
+    /** El barrido corre cada hora: la fecha de graduacion no se puede mover en cada corrida. */
+    @Test
+    void laGraduacionSeEscribeUnaSolaVezAunqueElBarridoSigaCorriendo() {
+        ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
+        LocalDate diaNoventa = p.fechaInicio().plusDays(89);
+        p.sincronizarDiaDelPrograma(diaNoventa, CLOCK);
+        Instant graduadoEn = p.programaCompletadoEn();
+        FixedClock unaHoraDespues = FixedClock.at(CLOCK.now().plusSeconds(3600));
+
+        boolean segundaCorridaElMismoDia = p.sincronizarDiaDelPrograma(diaNoventa, unaHoraDespues);
+
+        assertThat(segundaCorridaElMismoDia).isFalse();
+        assertThat(p.programaCompletadoEn()).isEqualTo(graduadoEn);
+
+        p.sincronizarDiaDelPrograma(diaNoventa.plusDays(1), FixedClock.at(CLOCK.now().plusSeconds(86400)));
+
+        assertThat(p.programaCompletadoEn()).isEqualTo(graduadoEn);
+        assertThat(p.diaPrograma()).isEqualTo(90);
+    }
+
+    /**
+     * Las filas que hay hoy en la base: dia 90 materializado y la bandera en falso, porque
+     * nadie la escribia. La primera corrida del barrido tiene que graduarlas y devolver
+     * {@code true} —si devolviera false, el barrido no guardaria la fila y se quedarian sin
+     * graduar para siempre— aunque el dia no cambie y ya se hayan sincronizado hoy.
+     */
+    @Test
+    void unaFilaQueYaEstabaEnElDiaNoventaSeGraduaEnLaCorridaSiguiente() {
+        ParticipacionPrograma p = ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null, null, 90,
+                FasePrograma.PHASE_4_ASCENSION, CLOCK.today().minusDays(89), CLOCK.now(), ZoneId.of("America/Lima"),
+                false, 0, CLOCK.now(), CLOCK.now(), null, null, null, CLOCK.today());
+
+        boolean cambio = p.sincronizarDiaDelPrograma(CLOCK.today(), CLOCK);
+
+        assertThat(cambio).isTrue();
+        assertThat(p.programaCompletado()).isTrue();
+        assertThat(p.diaPrograma()).isEqualTo(90);
+    }
+
+    /**
+     * Retroceder a un graduado NO le borra la graduacion: `programa_completado_en` es la fecha
+     * en que algo paso, no un calculo. La regla confirmada dice cuando se gradua y no contempla
+     * revertirlo — des-graduar seria inventar una regla de negocio.
+     */
+    @Test
+    void retrocederAUnGraduadoNoLeBorraLaGraduacion() {
+        ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
+        LocalDate diaNoventa = p.fechaInicio().plusDays(89);
+        p.sincronizarDiaDelPrograma(diaNoventa, CLOCK);
+        assertThat(p.programaCompletado()).isTrue();
+
+        p.fijarDia(84, relojEn(diaNoventa, p));
+        p.sincronizarDiaDelPrograma(diaNoventa, relojEn(diaNoventa, p));
+
+        assertThat(p.diaPrograma()).isEqualTo(84);
+        assertThat(p.programaCompletado()).isTrue();
     }
 
     // --- fijarDia: retroceder y que el reloj SIGA desde ahi (V20) ---------

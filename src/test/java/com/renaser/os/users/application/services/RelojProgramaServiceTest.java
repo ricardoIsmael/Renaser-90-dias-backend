@@ -279,6 +279,50 @@ class RelojProgramaServiceTest {
         assertThat(recienActivado.diaProgramaAvanzadoEl()).isEqualTo(inicio);
     }
 
+    /**
+     * La graduacion es del PARTICIPANTE, no del servidor (regla 02 §1 y §3, misma familia que
+     * E-91). Este aprendiz de Lima cumple su dia 90 el 2026-09-15 en SU zona. A las 03:00 UTC de
+     * ese dia todavia son las 22:00 del 14 en Lima: le falta un dia, y graduarlo ahi seria
+     * graduarlo antes de tiempo —exactamente lo que haria un barrido que mirara {@code
+     * clock.today()}, la fecha del proceso—. Veinticuatro horas mas tarde, si.
+     *
+     * <p>El reloj se fija a proposito entre las 00:00 y las 05:00 UTC: es la franja donde la
+     * fecha del servidor y la del participante NO coinciden, y la unica que distingue las dos
+     * implementaciones. Con el reloj a las 10:00 UTC, como el resto de esta clase, un barrido
+     * zona-ciego pasaria el test igual.
+     */
+    @Test
+    void graduaPorElDiaDelParticipanteYNoPorLaFechaDelServidor() {
+        var lima = java.time.ZoneId.of("America/Lima");
+        var diaNoventaEnLima = java.time.LocalDate.of(2026, 9, 15);
+        var inicio = diaNoventaEnLima.minusDays(89);
+        var vispera = FixedClock.at(Instant.parse("2026-09-15T03:00:00Z"));
+        ParticipacionPrograma p = ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null, null, 88,
+                com.renaser.os.users.api.FasePrograma.PHASE_4_ASCENSION, inicio,
+                inicio.atStartOfDay(lima).toInstant(), lima, false, 0, vispera.now(), vispera.now(), null, null,
+                null, diaNoventaEnLima.minusDays(2));
+        when(listarParticipantesConProgramaActivoPort.pagina(0, 500)).thenReturn(new ArrayList<>(List.of(p)));
+        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        servicioCon(vispera).avanzarParticipantesActivos();
+
+        assertThat(p.diaPrograma()).isEqualTo(89);
+        assertThat(p.programaCompletado()).isFalse();
+
+        servicioCon(FixedClock.at(Instant.parse("2026-09-16T03:00:00Z"))).avanzarParticipantesActivos();
+
+        assertThat(p.diaPrograma()).isEqualTo(90);
+        assertThat(p.programaCompletado()).isTrue();
+        assertThat(p.diaPostPrograma()).isZero();
+    }
+
+    /** Mismo servicio que arma {@code setUp}, con otro reloj: los tests de zona horaria lo
+     * necesitan posicionado en un instante concreto, no en el de la clase. */
+    private RelojProgramaService servicioCon(FixedClock reloj) {
+        return new RelojProgramaService(new RequireActiveUserGuard(loadUserPort), loadParticipacionProgramaPort,
+                saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort, reloj);
+    }
+
     /** Verifica que el barrido SI pida una segunda pagina cuando la primera viene llena
      * (500 filas) — la señal de que no esta cargando "todos" de una sola consulta. */
     @Test
