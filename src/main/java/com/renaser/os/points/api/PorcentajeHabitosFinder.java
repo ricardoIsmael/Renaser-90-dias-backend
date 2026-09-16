@@ -44,14 +44,13 @@ public interface PorcentajeHabitosFinder {
      *                      devuelve un mapa vacio sin consultar la base)
      * @param hasta         ultimo dia (UTC, inclusive) de la ventana de 7 dias cerrados —
      *                      la ventana real consultada es [hasta - 6, hasta]
-     * @return              el mapa devuelto tiene UNA entrada por CADA participante pedido — nunca
-     *                      se omite uno (a diferencia de {@code COALESCE(hp.pct, 100)} en la funcion
-     *                      SQL vieja, donde el LEFT JOIN simplemente no trae fila y el caller debe
-     *                      saber aplicar el default). Un participante sin ningun registro calificable
-     *                      en la ventana aparece en el mapa con el valor explicito 100.0 ("recien
-     *                      empezo", no se lo castiga) — {@code points} puede confiar en que
-     *                      {@code resultado.get(participanteId)} nunca es {@code null} para ningun
-     *                      id de la coleccion pedida.
+     * @return              porcentaje con escala 1 por participante, <b>solo para quienes tuvieron
+     *                      al menos un dia con habitos calificables en la ventana</b>. Sin clave =
+     *                      sin dato, y {@code points} lo saca del promedio ({@code PuntajeGeneral},
+     *                      D-131). Hasta el 2026-09-16 rellenaba con {@code 100.0} ("recien empezo,
+     *                      no se lo castiga", como el {@code COALESCE(hp.pct, 100)} de la funcion SQL
+     *                      vieja); en una tabla ordenada eso ponia a quien no habia hecho nada por
+     *                      delante de quien cumplia. Mismo contrato que {@code PorcentajeRocasFinder}.
      */
     Map<UserId, BigDecimal> porcentajePorParticipante(Collection<UserId> participantes, LocalDate hasta);
 }

@@ -88,8 +88,8 @@ class PorcentajeCursosServiceTest {
     }
 
     @Test
-    @DisplayName("sin cursos accesibles -> 100.0, sin importar el progreso")
-    void sinCursosAccesiblesDa100() {
+    @DisplayName("sin cursos accesibles -> no aparece en el mapa, sin importar el progreso")
+    void sinCursosAccesiblesNoAparece() {
         UserId trainee = UserId.of(UUID.randomUUID());
         when(participacionFinder.usuariosActivosConDiaPrograma(Set.of(UserRole.TRAINEE)))
                 .thenReturn(List.of(new UsuarioConDiaPrograma(trainee, 0)));
@@ -99,7 +99,7 @@ class PorcentajeCursosServiceTest {
 
         Map<UserId, BigDecimal> resultado = service.porcentajePorParticipante(List.of(trainee));
 
-        assertThat(resultado.get(trainee)).isEqualByComparingTo("100.0");
+        assertThat(resultado).doesNotContainKey(trainee);
     }
 
     @Test
@@ -150,8 +150,8 @@ class PorcentajeCursosServiceTest {
 
         Map<UserId, BigDecimal> resultado = service.porcentajePorParticipante(List.of(trainee));
 
-        // Sin cursos accesibles (el unico esta bloqueado por dia) -> 100.0, no 60.0.
-        assertThat(resultado.get(trainee)).isEqualByComparingTo("100.0");
+        // Sin cursos accesibles (el unico esta bloqueado por dia) -> sin dato, no 60.0 ni 100.0.
+        assertThat(resultado).doesNotContainKey(trainee);
     }
 
     @Test

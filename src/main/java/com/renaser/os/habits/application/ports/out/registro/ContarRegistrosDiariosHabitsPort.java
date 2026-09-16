@@ -18,7 +18,8 @@ import java.util.Map;
  *
  * <p>Participantes sin ningun registro en la ventana simplemente no aparecen en
  * el mapa devuelto (o aparecen con lista vacia) — el llamador decide que hacer
- * con "sin datos" (ver {@code PorcentajeHabitos#SIN_DIAS_CALIFICABLES}).
+ * con "sin datos" (desde el 2026-09-16, {@code PorcentajeHabitos.calcular} devuelve vacio y el
+ * participante no entra al ranking con un 100 que no gano).
  */
 public interface ContarRegistrosDiariosHabitsPort {
 

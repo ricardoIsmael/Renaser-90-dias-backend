@@ -57,7 +57,9 @@ public interface PorcentajeCursosFinder {
      * @param participantes usuarios a consultar (se ignoran duplicados; los que no sean
      *                       TRAINEE activo no aparecen en el resultado)
      * @return porcentaje (0.0-100.0, escala 1, {@link java.math.RoundingMode#HALF_UP}) por
-     *         participante, solo para quienes calificaron
+     *         participante, solo para quienes calificaron. Desde el 2026-09-16 tampoco aparece
+     *         quien no tiene ningun curso accesible: antes se le rellenaba {@code 100.0}, y eso
+     *         —sumado al 100 de habitos— ponia a un aprendiz en dia 0 al frente del Ranking General.
      */
     Map<UserId, BigDecimal> porcentajePorParticipante(Collection<UserId> participantes);
 }

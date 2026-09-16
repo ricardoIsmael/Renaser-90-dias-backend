@@ -41,7 +41,7 @@ import java.util.stream.Collectors;
  *       (usuario, curso) para TODOS los solicitados de una vez.</li>
  * </ol>
  *
- * <p>El calculo en si (regla "sin cursos accesibles → 100.0", escala 1) es
+ * <p>El calculo en si (regla "sin cursos accesibles → sin dato", escala 1) es
  * DOMINIO PURO ({@link PorcentajeCursos}) — esta clase solo trae los crudos,
  * arma el conjunto de cursos accesibles por participante reusando
  * {@link Curso#visibleEnCatalogoPara} (el MISMO gate que el catalogo del
@@ -87,7 +87,8 @@ public class PorcentajeCursosService implements PorcentajeCursosFinder {
             int total = sumarPorCursosAccesibles(accesibles, totalLeccionesPorCurso);
             int completadas = sumarPorCursosAccesibles(accesibles,
                     completadasPorUsuario.getOrDefault(usuarioId, Map.of()));
-            resultado.put(usuarioId, PorcentajeCursos.calcular(total, completadas));
+            // Sin clave en el mapa = sin dato (2026-09-16): sin cursos accesibles no hay porcentaje.
+            PorcentajeCursos.calcular(total, completadas).ifPresent(pct -> resultado.put(usuarioId, pct));
         }
         return resultado;
     }

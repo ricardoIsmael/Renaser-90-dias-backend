@@ -10,9 +10,9 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * D-43 — implementa {@link PorcentajeHabitosFinder} con UNA sola consulta en
@@ -42,12 +42,17 @@ public class PorcentajeHabitosService implements PorcentajeHabitosFinder {
         Map<UserId, List<ConteoDiarioHabitos>> conteosPorParticipante =
                 contarPort.contarPorParticipanteYDia(participantes, desde, hasta);
 
-        return participantes.stream()
-                .distinct()
-                .collect(Collectors.toMap(
-                        participanteId -> participanteId,
-                        participanteId -> PorcentajeHabitos
-                                .calcular(conteosPorParticipante.getOrDefault(participanteId, List.of()))
-                                .valor()));
+        Map<UserId, BigDecimal> resultado = new LinkedHashMap<>();
+        for (UserId participanteId : participantes) {
+            if (resultado.containsKey(participanteId)) {
+                continue;
+            }
+            // Sin clave en el mapa = sin dato, y NO un cien (2026-09-16, mismo criterio que rocas
+            // desde D-128): quien no tuvo un solo dia con habitos calificables en la ventana no
+            // tiene porcentaje que aportar al ranking.
+            PorcentajeHabitos.calcular(conteosPorParticipante.getOrDefault(participanteId, List.of()))
+                    .ifPresent(porcentaje -> resultado.put(participanteId, porcentaje.valor()));
+        }
+        return resultado;
     }
 }

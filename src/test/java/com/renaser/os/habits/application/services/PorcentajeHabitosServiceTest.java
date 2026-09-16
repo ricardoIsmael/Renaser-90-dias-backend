@@ -39,9 +39,8 @@ class PorcentajeHabitosServiceTest {
         Set<UserId> participantes = Set.of(participanteConDatos, participanteSinDatos);
 
         // participanteConDatos: un solo dia, 100% completado -> 100.0
-        // participanteSinDatos: ausente del mapa devuelto por el puerto -> "sin datos" -> 100.0
-        // (mismo valor final por motivos distintos: es a proposito que el test no dependa de la
-        // coincidencia — ver calculaPorcentajeDistintoDeCienCuandoHayDatosParciales)
+        // participanteSinDatos: ausente del mapa devuelto por el puerto -> "sin datos" -> NO aparece
+        // (hasta el 2026-09-16 aparecia con 100.0, y ese 100 lo ponia primero en el ranking)
         when(contarPort.contarPorParticipanteYDia(eq(participantes), eq(DESDE_ESPERADO), eq(HASTA)))
                 .thenReturn(Map.of(participanteConDatos, List.of(new ConteoDiarioHabitos(HASTA, 2, 2, 0))));
 
@@ -49,9 +48,9 @@ class PorcentajeHabitosServiceTest {
 
         Map<UserId, BigDecimal> resultado = service.porcentajePorParticipante(participantes, HASTA);
 
-        assertThat(resultado).hasSize(2);
+        assertThat(resultado).hasSize(1);
         assertThat(resultado.get(participanteConDatos)).isEqualByComparingTo(new BigDecimal("100.0"));
-        assertThat(resultado.get(participanteSinDatos)).isEqualByComparingTo(new BigDecimal("100.0"));
+        assertThat(resultado).doesNotContainKey(participanteSinDatos);
         verify(contarPort).contarPorParticipanteYDia(any(), any(), any());
     }
 

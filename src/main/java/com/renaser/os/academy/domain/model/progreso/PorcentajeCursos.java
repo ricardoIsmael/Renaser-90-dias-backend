@@ -2,6 +2,7 @@ package com.renaser.os.academy.domain.model.progreso;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Optional;
 
 /**
  * Calculo puro del "cursosPct" del Ranking General de Comunidad (50% habitos
@@ -16,8 +17,12 @@ import java.math.RoundingMode;
  * {@code cursos_pct} de {@code prisma/migrations/general_ranking_scores_function.sql}
  * (RenaserBack) que la reemplazo en produccion:
  * <ul>
- *   <li>Sin cursos accesibles (total = 0) → {@link #SIN_CURSOS_ACCESIBLES} (100.0). No
- *       se castiga a quien todavia no tiene nada que cursar.</li>
+ *   <li>Sin cursos accesibles (total = 0) → <b>sin dato</b> ({@link Optional#empty()}).
+ *       <blockquote><b>Corregido el 2026-09-16.</b> Aca devolvia {@code 100.0} ("no se castiga
+ *       a quien todavia no tiene nada que cursar"), fiel al SQL viejo. Pero en una tabla ORDENADA
+ *       un 100 no es neutral: junto con el 100 que hasta hoy tambien rellenaba habitos, ponia a
+ *       un aprendiz en dia 0 al frente del Ranking General. Mismo criterio que D-128 (rocas) y
+ *       D-131 ({@code PuntajeGeneral}): el modulo sin dato sale del promedio.</blockquote></li>
  *   <li>Con cursos accesibles: {@code round(completadas / total * 1000) / 10} — la
  *       MISMA formula SQL, literal, en {@link BigDecimal} con escala 1
  *       ({@link RoundingMode#HALF_UP}, equivalente al {@code round()} de Postgres
@@ -38,9 +43,6 @@ import java.math.RoundingMode;
  */
 public final class PorcentajeCursos {
 
-    /** Escala 1 explicita — mismo criterio que {@code cursos_pct}/el score final de
-     * `general_ranking_scores_function.sql` (RenaserBack): {@code 100.0}, no {@code 100}. */
-    public static final BigDecimal SIN_CURSOS_ACCESIBLES = new BigDecimal("100.0");
 
     private static final BigDecimal MIL = BigDecimal.valueOf(1000);
     private static final BigDecimal DIEZ = BigDecimal.TEN;
@@ -51,11 +53,12 @@ public final class PorcentajeCursos {
     /**
      * @param totalLeccionesAccesibles lecciones de TODOS los cursos accesibles para el participante
      * @param leccionesCompletadas cuantas de esas ya completo (subconjunto de las accesibles)
-     * @return porcentaje con escala 1, espejo exacto de {@code round(completadas/total*1000)/10}
+     * @return porcentaje con escala 1, espejo exacto de {@code round(completadas/total*1000)/10};
+     *         o {@link Optional#empty()} sin cursos accesibles — no hay de que calcular un porcentaje
      */
-    public static BigDecimal calcular(int totalLeccionesAccesibles, int leccionesCompletadas) {
+    public static Optional<BigDecimal> calcular(int totalLeccionesAccesibles, int leccionesCompletadas) {
         if (totalLeccionesAccesibles <= 0) {
-            return SIN_CURSOS_ACCESIBLES;
+            return Optional.empty();
         }
         // Paso 1: (completadas * 1000) / total, redondeado a entero (HALF_UP == round() de Postgres
         // para no negativos) — asi se redondea UNA sola vez, sobre la misma magnitud que el SQL.
@@ -64,6 +67,6 @@ public final class PorcentajeCursos {
                 .divide(BigDecimal.valueOf(totalLeccionesAccesibles), 0, RoundingMode.HALF_UP);
         // Paso 2: /10 — un entero dividido por 10 siempre es representable exacto con 1 decimal,
         // no hace falta redondear de nuevo (UNNECESSARY documenta esa garantia, no la asume en silencio).
-        return redondeadoEntero.divide(DIEZ, 1, RoundingMode.UNNECESSARY);
+        return Optional.of(redondeadoEntero.divide(DIEZ, 1, RoundingMode.UNNECESSARY));
     }
 }

@@ -20,11 +20,11 @@ class PorcentajeHabitosTest {
     private static final LocalDate DIA_2 = LocalDate.of(2026, 8, 19);
 
     @Test
-    @DisplayName("ventana sin ningun dia calificable -> 100 (coherence.ts:127, 'recien empezo')")
+    @DisplayName("ventana sin ningun dia calificable -> sin dato, no un 100 que ponga primero a quien no hizo nada")
     void ventanaVacia() {
-        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of());
-
-        assertThat(resultado.valor()).isEqualByComparingTo(new BigDecimal("100.0"));
+        // Hasta el 2026-09-16 esto valia 100.0 (coherence.ts:127, "recien empezo"). En el Ranking
+        // General ese 100 pesaba la mitad del puntaje y ponia al dia 0 al frente de la tabla.
+        assertThat(PorcentajeHabitos.calcular(List.of())).isEmpty();
     }
 
     @Test
@@ -32,7 +32,7 @@ class PorcentajeHabitosTest {
     void unSoloDiaPerfecto() {
         var conteo = new ConteoDiarioHabitos(DIA_1, 4, 4, 0);
 
-        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(conteo));
+        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(conteo)).orElseThrow();
 
         assertThat(resultado.valor()).isEqualByComparingTo(new BigDecimal("100.0"));
     }
@@ -44,7 +44,7 @@ class PorcentajeHabitosTest {
         // calificables = 5 - 2 = 3; completados = 3 -> 100%, los 2 opcionales no bajan el score.
         var conteo = new ConteoDiarioHabitos(DIA_1, 5, 3, 2);
 
-        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(conteo));
+        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(conteo)).orElseThrow();
 
         assertThat(resultado.valor()).isEqualByComparingTo(new BigDecimal("100.0"));
     }
@@ -52,12 +52,11 @@ class PorcentajeHabitosTest {
     @Test
     @DisplayName("dia sin nada calificable (todo opcional sin completar) se excluye de la ventana, no cuenta como 0%")
     void diaSinCalificablesSeExcluyeDeLaVentana() {
-        // calificables = 2 - 2 = 0 -> el dia no entra al promedio; sin otros dias, ventana "vacia" -> 100.
+        // calificables = 2 - 2 = 0 -> el dia no entra al promedio; sin otros dias, la ventana queda
+        // "vacia" y eso es sin dato (no un 0 % que castigue, ni el 100 que regia hasta el 2026-09-16).
         var conteo = new ConteoDiarioHabitos(DIA_1, 2, 0, 2);
 
-        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(conteo));
-
-        assertThat(resultado.valor()).isEqualByComparingTo(new BigDecimal("100.0"));
+        assertThat(PorcentajeHabitos.calcular(List.of(conteo))).isEmpty();
     }
 
     @Test
@@ -66,7 +65,7 @@ class PorcentajeHabitosTest {
         // 3/8 = 37.5% exacto -> Math.round(37.5) = 38 en JS y en Java (round-half-up, positivos)
         var conteo = new ConteoDiarioHabitos(DIA_1, 8, 3, 0);
 
-        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(conteo));
+        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(conteo)).orElseThrow();
 
         assertThat(resultado.valor()).isEqualByComparingTo(new BigDecimal("38.0"));
     }
@@ -86,7 +85,7 @@ class PorcentajeHabitosTest {
         var dia1 = new ConteoDiarioHabitos(DIA_1, 3, 2, 0);
         var dia2 = new ConteoDiarioHabitos(DIA_2, 6, 1, 0);
 
-        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(dia1, dia2));
+        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(dia1, dia2)).orElseThrow();
 
         assertThat(resultado.valor()).isEqualByComparingTo(new BigDecimal("42.0"));
     }
@@ -102,7 +101,7 @@ class PorcentajeHabitosTest {
         var dia2 = new ConteoDiarioHabitos(DIA_2, 3, 2, 0);
         var dia3 = new ConteoDiarioHabitos(LocalDate.of(2026, 8, 20), 1, 1, 0);
 
-        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(dia1, dia2, dia3));
+        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(dia1, dia2, dia3)).orElseThrow();
 
         assertThat(resultado.valor()).isEqualByComparingTo(new BigDecimal("66.7"));
     }
@@ -114,7 +113,7 @@ class PorcentajeHabitosTest {
         var dia2 = new ConteoDiarioHabitos(LocalDate.of(2026, 8, 19), 1, 1, 0);
         var dia3 = new ConteoDiarioHabitos(LocalDate.of(2026, 8, 20), 3, 2, 0); // round(2/3*100) = 67
 
-        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(dia1, dia2, dia3));
+        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(dia1, dia2, dia3)).orElseThrow();
 
         assertThat(resultado.valor()).isEqualByComparingTo(new BigDecimal("89.0"));
     }
@@ -127,7 +126,7 @@ class PorcentajeHabitosTest {
         var dia2 = new ConteoDiarioHabitos(LocalDate.of(2026, 8, 19), 2, 1, 0);
         var dia3 = new ConteoDiarioHabitos(LocalDate.of(2026, 8, 20), 2, 1, 0);
 
-        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(dia1, dia2, dia3));
+        PorcentajeHabitos resultado = PorcentajeHabitos.calcular(List.of(dia1, dia2, dia3)).orElseThrow();
 
         assertThat(resultado.valor()).isEqualByComparingTo(new BigDecimal("33.3"));
     }
