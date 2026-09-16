@@ -163,11 +163,20 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
      *
      * <p>Misma politica de falla parcial que el resto de los widgets: si el finder se cae, Inicio
      * se dibuja igual con la racha en cero en vez de devolver un 500.
+     *
+     * <p><b>Un programa que todavia no empezo no tiene racha.</b> A quien se inscribe hoy le queda
+     * la {@code fechaInicio} en manana, y pedirle al finder "desde manana hasta hoy" es un rango al
+     * reves: lanza {@code IllegalArgumentException}, que no es una falla del widget sino un error
+     * de programacion, y por eso no se atrapa abajo — tumbaba el {@code /home} entero de cada
+     * cuenta nueva durante su primer dia (2026-09-16, en produccion). Se corta antes de preguntar.
      */
     private Racha rachaDe(UserId actorId, ParticipacionPrograma participacion) {
         try {
             LocalDate hoy = LocalDate.ofInstant(clock.now(), participacion.zona());
             LocalDate desde = participacion.fechaInicio() != null ? participacion.fechaInicio() : hoy.minusDays(90);
+            if (desde.isAfter(hoy)) {
+                return Racha.NINGUNA;
+            }
             return Racha.derivarDe(diasConHabitoCumplidoFinder.entre(actorId, desde, hoy), hoy);
         } catch (NoSuchElementException | NotAuthorizedException e) {
             logWidgetDegradado("racha", e);

@@ -183,6 +183,33 @@ class HomeAgregadoServiceTest {
     }
 
     @Test
+    @DisplayName("un programa que todavia no empezo no tiene racha, y no se le pide al finder un rango al reves")
+    void programaQueTodaviaNoEmpezoNoTieneRacha() {
+        /*
+         * La forma exacta del fallo del 2026-09-16 en produccion: cuenta creada ese dia, con
+         * `fechaInicio` en el futuro. `rachaDe` pedia "desde el inicio hasta hoy" y el finder lanzaba
+         * IllegalArgumentException("El rango va al reves"), que no esta entre las excepciones que
+         * degradan el widget: el /home entero respondia 400 y la app mostraba ese texto en rojo.
+         *
+         * El inicio se elige entre manana y dentro de 3 dias (`ParticipacionPrograma.opcionesDeActivacion`);
+         * se prueba el mas lejano porque es el que deja a la cuenta mas dias en este estado.
+         */
+        HomeAgregadoService service = nuevoServicio();
+        when(consultarPuntajeUseCase.consultar(actor, actor)).thenReturn(
+                PuntajeParticipante.rehydrate(actor, new BigDecimal("100.00"), 100, 0, 0, CLOCK.now()));
+        ParticipacionPrograma empiezaEnTresDias = new ParticipacionPrograma(actor, true, 0, HOY_LIMA.plusDays(3), LIMA,
+                FasePrograma.PHASE_1_REBIRTH, UUID.randomUUID(), UserId.of(UUID.randomUUID()), UserRole.TRAINEE,
+                false, true);
+        when(participacionProgramaFinder.deParticipante(actor)).thenReturn(Optional.of(empiezaEnTresDias));
+
+        ResumenHome resumen = service.consultar(actor);
+
+        assertThat(resumen.rachaActual()).isZero();
+        assertThat(resumen.rachaMaxima()).isZero();
+        verify(diasConHabitoCumplidoFinder, never()).entre(any(), any(), any());
+    }
+
+    @Test
     @DisplayName("sin dias cumplidos la racha es 0, no la que quedo guardada en el puntaje")
     void sinActividadLaRachaEsCero() {
         HomeAgregadoService service = nuevoServicio();
