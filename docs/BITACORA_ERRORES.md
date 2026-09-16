@@ -6378,3 +6378,114 @@ otra pantalla.
 4. Ejecutable en `CelulaServiceTest`:
    `aprendicesDisponiblesExcluyeAQuienNoTieneParticipacionEnElPrograma` — falla contra el código viejo,
    donde el aprendiz sin participación también salía en la lista.
+
+---
+
+## E-187 · `unsafe use of new value "SOPORTE" of enum type` al agregar un tipo de conversación
+
+**Síntoma.** Al escribir la migración del chat de soporte (D-136), agregar el valor al enum y ampliar
+el `CHECK` que lo nombra **en el mismo archivo** de Flyway falla con el mensaje literal:
+
+```
+ERROR:  unsafe use of new value "SOPORTE" of enum type renaser.tipo_conversacion
+HINT:   New enum values must be committed before they can be used.
+```
+
+**Causa.** Desde PostgreSQL 12, `ALTER TYPE ... ADD VALUE` **puede correr** dentro de un bloque
+transaccional, pero el valor nuevo **no se puede usar** hasta que esa transacción comitea. Flyway
+corre cada migración en una transacción, así que el `ALTER TABLE ... ADD CONSTRAINT tipo_coherente
+CHECK (... tipo = 'SOPORTE' ...)` de la línea siguiente usa un valor que todavía no está comiteado.
+Nombrar el valor en la expresión del CHECK cuenta como usarlo: Postgres tiene que convertir el
+literal con `enum_in`, y ahí salta el chequeo.
+
+`V46` y `V49` ya dejaban escrito *"ADD VALUE va solo, antes que nada"*, pero los dos casos anteriores
+no necesitaban usar el valor en la misma migración — este sí.
+
+**Solución.** Dos migraciones en vez de una: `V53` declara el valor y `V54` —ya con `V53` comiteada—
+reescribe el `CHECK`. Cada una en su propia transacción, que es lo que Flyway hace por defecto.
+
+**Y por qué no alcanzaba con solo agregar el valor:** `conversaciones` tiene el `CHECK
+tipo_coherente` (V1:1286-1290) que enumera los tres tipos uno por uno. Con el valor agregado pero el
+CHECK sin tocar, **todo INSERT de una conversación de soporte muere** con
+`new row for relation "conversaciones" violates check constraint "tipo_coherente"`: el enum nuevo
+existía y no servía para nada.
+
+**Cómo evitar que vuelva a pasar.** Ejecutable, en `ChatPersistenceAdapterTest` contra Postgres real:
+`guardaUnaConversacionDeSoporteYLaEncuentraEntreLasDeSoporte` y
+`laBaseImpideUnSegundoSoporteParaElMismoAprendiz`. Verificado quitando `V54`: los dos se ponen en
+rojo con el mensaje del CHECK. Y la regla general para la próxima vez: **un valor nuevo de enum casi
+nunca viaja solo — hay que buscar los `CHECK` que enumeran los valores viejos**, porque el CHECK no
+se entera de que el enum creció.
+
+---
+
+## E-188 · Sacar una migración del `src` no la saca del build: `target/classes` se queda con la copia vieja
+
+**Síntoma.** Verificando E-187 —"¿qué pasa si borro `V54`?"— se movió el archivo fuera de
+`src/main/resources/db/migration/` y se corrió `./mvnw -o test -Dtest=ChatPersistenceAdapterTest`.
+Flyway informó **`Successfully applied 53 migrations ... now at version v54`** y los tests siguieron
+**verdes**, sobre un schema que el propio log declaraba `Current version of schema "public":
+<< Empty Schema >>` — o sea una base recién creada. La conclusión que se sacó de eso —"el CHECK no
+hacía falta"— era falsa.
+
+**Causa.** `maven-resources-plugin` **copia** de `src/main/resources` a `target/classes`, pero no
+borra de `target/classes` lo que ya no está en el origen. La copia de `V54` de una corrida anterior
+seguía en `target/classes/db/migration/`, y Flyway lee del classpath, no del `src`.
+
+**Solución.** Borrar también la copia de `target/classes` (`rm target/classes/db/migration/V54__*.sql`)
+antes de repetir. Ahí sí: `now at version v53` y los dos tests de soporte en rojo con
+`violates check constraint "tipo_coherente"`, que era el resultado esperado.
+
+**Cómo evitar que vuelva a pasar.** Toda comprobación del tipo *"si quito X, ¿esto se rompe?"* sobre
+un archivo de `src/main/resources` se hace con `clean` o borrando la copia de `target/`. Vale igual
+para migraciones, `application.yaml` y cualquier recurso: **el que manda es `target/classes`.** Está
+emparentado con E-104 (dos builds compartiendo el mismo `target/`): la misma carpeta, el mismo tipo
+de mentira.
+
+---
+
+## E-189 · Una prueba de integración falla solo entre las 00:00 y las 05:00 UTC, por el fixture
+
+**Síntoma.** `./mvnw clean verify` en verde durante todo el día, y a las 00:53 UTC:
+
+```
+AvisoDeGrupoPorVencerIT.avisaSoloDeLosQueEstanPorVencer:96
+[contando hoy: del dia 0 al dia 3 son 4]
+expected: 4L
+ but was: 5L
+```
+
+**Causa.** El fixture sembraba el período con la fecha de **Postgres**:
+
+```sql
+INSERT INTO renaser.celulas (..., periodo_inicio, periodo_fin)
+VALUES (..., CURRENT_DATE - 20, CURRENT_DATE + ?)
+```
+
+y el código que la prueba ejercita cuenta los días contra la zona del **programa**:
+
+```java
+LocalDate hoy = clock.now().atZone(ZONA_DEL_PROGRAMA).toLocalDate();  // AvisosDeVencimientoService:56
+```
+
+`CURRENT_DATE` es la fecha del servidor, en UTC. Entre las 00:00 y las 05:00 UTC, Lima va un día
+atrás, así que un grupo sembrado para cerrar "en 3 días" queda a **4** días de la fecha de Lima y el
+conteo da 5 en vez de 4. Medido esa noche contra la base: `CURRENT_DATE` = `2026-09-16`,
+`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')::date` = `2026-09-15`, diferencia 1.
+
+**El código de producción no tenía nada malo.** Usa la zona del programa, que es justo lo que
+`.claude/rules/02` exige. El que estaba mal era el fixture.
+
+**Solución.** El fixture arma el período contra la fecha de Lima,
+`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')::date`, y queda coherente con lo que mide el
+dominio.
+
+**Cómo evitar que vuelva a pasar.**
+1. **Un fixture que siembra fechas tiene que usar la MISMA zona que el código que las lee.**
+   `CURRENT_DATE` en una prueba de un comportamiento diario es una bomba de tiempo: pasa 19 de cada
+   24 horas. Es la misma familia de E-91 y E-105, pero del lado del fixture.
+2. Es la advertencia literal de `.claude/rules/02` ("Cuidado con la hora que se fija"), esta vez con
+   el reloj del motor de base en vez del de Java.
+3. **Un build verde no prueba que no haya un bug horario**: prueba que a esa hora no se veía. Quedan
+   otras cinco clases de prueba que siembran con `CURRENT_DATE`; ninguna falló esa noche, pero no
+   están verificadas contra la franja 00:00–05:00 UTC.

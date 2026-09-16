@@ -1,5 +1,6 @@
 package com.renaser.os.chat.domain.model.conversacion;
 
+import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -16,6 +17,8 @@ class ConversacionTest {
     private static final Instant AHORA = Instant.parse("2026-08-25T10:00:00Z");
     private static final ConversacionId ID = ConversacionId.of(
             UUID.fromString("33333333-3333-3333-3333-333333333333"));
+    private static final UserId APRENDIZ = UserId.of(UUID.fromString("44444444-4444-4444-4444-444444444444"));
+    private static final UserId STAFF = UserId.of(UUID.fromString("55555555-5555-5555-5555-555555555555"));
 
     @Test
     void crearCelulaExigeCelulaId() {
@@ -132,5 +135,84 @@ class ConversacionTest {
 
         assertThatThrownBy(() -> celula.renombrada("Nuevo nombre")).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> directa.renombrada("Nuevo nombre")).isInstanceOf(IllegalStateException.class);
+    }
+
+    // ── Chat de soporte por aprendiz (D-136) ────────────────────────────────────────────────
+
+    @Test
+    void crearSoporteGuardaLaClaveCanonicaDelAprendizYNingunaCelula() {
+        Conversacion c = Conversacion.crearSoporte(ID, APRENDIZ, "Soporte - Ana", AHORA);
+
+        assertThat(c.tipo()).isEqualTo(TipoConversacion.SOPORTE);
+        assertThat(c.claveDirecta()).isEqualTo("soporte:" + APRENDIZ.value());
+        assertThat(c.celulaId()).isNull();
+        assertThat(c.nombre()).isEqualTo("Soporte - Ana");
+    }
+
+    /** La clave es lo que hace que el UNIQUE de `clave_directa` impida un segundo soporte para la
+     * misma persona: si dejara de ser determinista, la base dejaria de proteger nada. */
+    @Test
+    void laClaveDeSoporteEsSiempreLaMismaParaElMismoAprendiz() {
+        assertThat(Conversacion.claveSoporteDe(APRENDIZ)).isEqualTo(Conversacion.claveSoporteDe(APRENDIZ));
+        assertThat(Conversacion.claveSoporteDe(APRENDIZ)).isNotEqualTo(Conversacion.claveSoporteDe(STAFF));
+    }
+
+    /** Las claves de DM son `<uuid>_<uuid>`: no pueden chocar con `soporte:<uuid>` en la columna
+     * que las dos comparten. */
+    @Test
+    void laClaveDeSoporteNoColisionaConLaDeUnMensajeDirecto() {
+        assertThat(Conversacion.claveSoporteDe(APRENDIZ))
+                .isNotEqualTo(Conversacion.claveDirectaDe(APRENDIZ, STAFF));
+        assertThat(Conversacion.claveDirectaDe(APRENDIZ, STAFF)).doesNotStartWith("soporte:");
+    }
+
+    @Test
+    void crearSoporteExigeAprendizYNombre() {
+        assertThatThrownBy(() -> Conversacion.crearSoporte(ID, null, "Soporte", AHORA))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> Conversacion.crearSoporte(ID, APRENDIZ, "   ", AHORA))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Conversacion.crearSoporte(ID, APRENDIZ, null, AHORA))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /** Quien no se puede ir. El staff si; el aprendiz dueño no. */
+    @Test
+    void elSoporteReconoceASuAprendizYNoConfundeAlStaff() {
+        Conversacion soporte = Conversacion.crearSoporte(ID, APRENDIZ, "Soporte - Ana", AHORA);
+
+        assertThat(soporte.esAprendizDeSoporte(APRENDIZ)).isTrue();
+        assertThat(soporte.esAprendizDeSoporte(STAFF)).isFalse();
+        assertThat(soporte.esAprendizDeSoporte(null)).isFalse();
+    }
+
+    /** Un DM no tiene "aprendiz dueño": preguntarselo tiene que dar `false`, no un falso positivo
+     * por parecerse la clave. */
+    @Test
+    void unaConversacionQueNoEsDeSoporteNoTieneAprendizDueno() {
+        Conversacion directa = Conversacion.crearDirecta(ID, Conversacion.claveSoporteDe(APRENDIZ), AHORA);
+
+        assertThat(directa.esAprendizDeSoporte(APRENDIZ)).isFalse();
+    }
+
+    @Test
+    void rehydrateRechazaUnSoporteSinClave() {
+        assertThatThrownBy(() -> Conversacion.rehydrate(ConversacionId.of(UUID.randomUUID()),
+                TipoConversacion.SOPORTE, null, null, "Soporte", AHORA))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rehydrateRechazaUnSoporteConCelulaId() {
+        assertThatThrownBy(() -> Conversacion.rehydrate(ConversacionId.of(UUID.randomUUID()),
+                TipoConversacion.SOPORTE, UUID.randomUUID(), "soporte:x", "Soporte", AHORA))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void renombradaRechazaUnSoporte() {
+        Conversacion soporte = Conversacion.crearSoporte(ID, APRENDIZ, "Soporte - Ana", AHORA);
+
+        assertThatThrownBy(() -> soporte.renombrada("Otro")).isInstanceOf(IllegalStateException.class);
     }
 }

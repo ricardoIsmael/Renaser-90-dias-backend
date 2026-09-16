@@ -13,9 +13,9 @@ import java.util.UUID;
 
 /**
  * Una conversacion de chat (tabla `conversaciones`). Replica en dominio el CHECK
- * `tipo_coherente` de la base (V1__baseline_renaser.sql:1286-1290) ANTES de llegar a
- * Postgres, para que un dato invalido explote como 400 (dominio), no como 500
- * (violacion de CHECK) — CLAUDE.MD sec. 5.4.4.
+ * `tipo_coherente` de la base (V1__baseline_renaser.sql:1286-1290, ampliado por
+ * V54 con la rama SOPORTE) ANTES de llegar a Postgres, para que un dato invalido
+ * explote como 400 (dominio), no como 500 (violacion de CHECK) — CLAUDE.MD sec. 5.4.4.
  *
  * <p>`celulaId` viaja como UUID plano: es el id de una `Celula` de `community`, modulo que
  * `chat` no puede importar directamente (CLAUDE.MD sec. 5.1 — solo la API publica de otro
@@ -26,6 +26,10 @@ import java.util.UUID;
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @EqualsAndHashCode(of = "id")
 public final class Conversacion {
+
+    /** Ver {@link #claveSoporteDe}. Constante y no un literal suelto: es formato de datos
+     * persistidos, y cambiarlo dejaria huerfanas las conversaciones ya creadas. */
+    private static final String PREFIJO_SOPORTE = "soporte:";
 
     private final ConversacionId id;
     private final TipoConversacion tipo;
@@ -62,6 +66,25 @@ public final class Conversacion {
     }
 
     /**
+     * El chat de soporte de un aprendiz (D-136). La identidad de negocio es el aprendiz, y por
+     * eso se guarda en {@code claveDirecta}: esa columna ya trae el UNIQUE
+     * ({@code conversaciones_clave_directa_key}) que impide una segunda conversacion de soporte
+     * para la misma persona. La unicidad la garantiza la base, no un chequeo del servicio que
+     * dos peticiones simultaneas podrian pasar las dos.
+     *
+     * <p>El {@code nombre} entra por parametro y no se arma aca porque el dominio de `chat` no
+     * conoce el nombre de nadie: quien lo resuelve es el caso de uso, contra `users.api`.
+     */
+    public static Conversacion crearSoporte(ConversacionId id, UserId aprendizId, String nombre, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
+        Objects.requireNonNull(aprendizId, "aprendizId es obligatorio para una conversacion de soporte");
+        if (nombre == null || nombre.isBlank()) {
+            throw new IllegalArgumentException("El nombre es obligatorio para una conversacion de soporte");
+        }
+        return new Conversacion(id, TipoConversacion.SOPORTE, null, claveSoporteDe(aprendizId), nombre.strip(), ahora);
+    }
+
+    /**
      * Devuelve una instancia nueva con {@code nombre} cambiado (CLAUDE.MD sec. 5.4.7:
      * "cambiar" = instancia nueva, nunca mutar). Solo GLOBAL tiene sentido renombrar —
      * es la unica de las tres que llega con un {@code nombre} propio (ver
@@ -92,6 +115,7 @@ public final class Conversacion {
             case CELULA -> celulaId != null && claveDirecta == null;
             case DIRECTA -> claveDirecta != null && celulaId == null;
             case GLOBAL -> celulaId == null && claveDirecta == null;
+            case SOPORTE -> claveDirecta != null && celulaId == null;
         };
         if (!coherente) {
             throw new IllegalArgumentException("Conversacion inconsistente: tipo=" + tipo + " celulaId=" + celulaId
@@ -108,6 +132,30 @@ public final class Conversacion {
         String sa = a.value().toString();
         String sb = b.value().toString();
         return sa.compareTo(sb) <= 0 ? sa + "_" + sb : sb + "_" + sa;
+    }
+
+    /**
+     * Clave canonica del chat de soporte de un aprendiz: {@code soporte:<uuid del aprendiz>}.
+     *
+     * <p>Comparte columna con {@link #claveDirectaDe} y no colisiona con ella: una clave de DM es
+     * {@code <uuid>_<uuid>} y nunca empieza con este prefijo. Compartirla es lo que hace que el
+     * UNIQUE ya existente sirva de candado, sin columna nueva.
+     */
+    public static String claveSoporteDe(UserId aprendizId) {
+        return PREFIJO_SOPORTE + aprendizId.value();
+    }
+
+    /**
+     * Si {@code usuarioId} es el aprendiz dueño de este soporte — el unico que NO se puede ir
+     * (regla del dueño del proyecto: el staff sale si quiere, el aprendiz no).
+     *
+     * <p>Compara hacia adelante (arma la clave y la contrasta) en vez de descomponer la que hay
+     * guardada: asi no existe el caso "clave con formato raro" ni un {@code UUID.fromString} que
+     * pueda lanzar.
+     */
+    public boolean esAprendizDeSoporte(UserId usuarioId) {
+        return tipo == TipoConversacion.SOPORTE && usuarioId != null
+                && claveSoporteDe(usuarioId).equals(claveDirecta);
     }
 
     @Override

@@ -51,7 +51,7 @@ class AvisoDeGrupoPorVencerIT {
         cohorteId = UUID.randomUUID();
         jdbcTemplate.update("""
                 INSERT INTO renaser.cohortes (id, nombre, fecha_inicio)
-                VALUES (?, 'Cohorte aviso', CURRENT_DATE)
+                VALUES (?, 'Cohorte aviso', (CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')::date)
                 """, cohorteId);
     }
 
@@ -61,12 +61,26 @@ class AvisoDeGrupoPorVencerIT {
         jdbcTemplate.update("DELETE FROM renaser.cohortes WHERE id = ?", cohorteId);
     }
 
+    /**
+     * El periodo se arma contra la fecha de LIMA, no contra {@code CURRENT_DATE}.
+     *
+     * <p>{@code CURRENT_DATE} es la fecha de Postgres —el servidor, en UTC— y el codigo que esta
+     * prueba ejercita cuenta los dias contra la zona del programa
+     * ({@code AvisosDeVencimientoService}: {@code clock.now().atZone(ZONA_DEL_PROGRAMA)}). Entre
+     * las 00:00 y las 05:00 UTC esas dos fechas son DISTINTAS: Lima va un dia atras. Con el
+     * fixture en UTC, un grupo sembrado para cerrar "en 3 dias" quedaba a 4 dias de la fecha de
+     * Lima y la prueba fallaba por uno — <b>sin que el codigo de produccion tuviera nada malo</b>.
+     *
+     * <p>Es exactamente el caso que advierte {@code .claude/rules/02}: el bug estaba en el
+     * fixture, no en el dominio, y solo se veia en una franja horaria. Verificado el 2026-09-16 a
+     * las 00:53 UTC (19:53 en Lima): {@code CURRENT_DATE} decia 2026-09-16 y Lima, 2026-09-15.
+     */
     private UUID celula(String nombre, int diasHastaElCierre) {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("""
                 INSERT INTO renaser.celulas (id, nombre, cohorte_id, tipo, periodo_inicio, periodo_fin)
                 VALUES (?, ?, ?, CAST('REGULAR' AS renaser.tipo_celula),
-                        CURRENT_DATE - 20, CURRENT_DATE + ?)
+                        (CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')::date - 20, (CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')::date + ?)
                 """, id, nombre, cohorteId, diasHastaElCierre);
         return id;
     }

@@ -121,6 +121,38 @@ class ChatPersistenceAdapterTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    /**
+     * El chat de soporte contra Postgres real (D-136). Es lo unico que prueba las tres piezas
+     * juntas: el valor `SOPORTE` existe en el enum de la base (V53), el CHECK `tipo_coherente` lo
+     * acepta con `clave_directa` (V54), y Hibernate lo mapea sin traducirlo. Con mocks, las tres
+     * podrian estar rotas y el test seguiria verde.
+     */
+    @Test
+    void guardaUnaConversacionDeSoporteYLaEncuentraEntreLasDeSoporte() {
+        Conversacion soporte = saveConversacionPort.save(Conversacion.crearSoporte(
+                nuevaConversacionId(), usuarioA, "Soporte - Fixture", Instant.now()));
+        agregarParticipantePort.agregar(Participante.unirse(soporte.id(), usuarioA, Instant.now()));
+        agregarParticipantePort.agregar(Participante.unirse(soporte.id(), usuarioB, Instant.now()));
+
+        assertThat(loadConversacionPort.porClaveDirecta(Conversacion.claveSoporteDe(usuarioA)))
+                .map(Conversacion::id).contains(soporte.id());
+        assertThat(loadConversacionPort.deSoporte()).extracting(Conversacion::id).contains(soporte.id());
+        assertThat(listarUsuariosDeConversacionPort.usuariosDe(soporte.id()))
+                .containsExactlyInAnyOrder(usuarioA, usuarioB);
+    }
+
+    /** La idempotencia del soporte NO la decide el servicio: la decide este UNIQUE. Si alguien
+     * quitara el indice, este test se pone rojo antes de que se creen dos chats por aprendiz. */
+    @Test
+    void laBaseImpideUnSegundoSoporteParaElMismoAprendiz() {
+        saveConversacionPort.save(Conversacion.crearSoporte(
+                nuevaConversacionId(), usuarioA, "Soporte - Fixture", Instant.now()));
+
+        assertThatThrownBy(() -> saveConversacionPort.save(Conversacion.crearSoporte(
+                nuevaConversacionId(), usuarioA, "Soporte - Fixture otra vez", Instant.now())))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     @Test
     void agregarEsIdempotenteYNoPisaElUltimoLeidoYaRegistrado() {
         Conversacion global = saveConversacionPort.save(

@@ -15,7 +15,8 @@
 
 ## 1. Esquema real (`V1__baseline_renaser.sql:1274-1336`)
 
-- `conversaciones`: `tipo` (`CELULA`/`DIRECTA`/`GLOBAL`) con el CHECK `tipo_coherente` — cada tipo exige exactamente un campo identificador propio (`celula_id`, `clave_directa`, o ninguno para GLOBAL). Índice único parcial `conversacion_global_unica_uk` garantiza una sola fila `GLOBAL`.
+- `conversaciones`: `tipo` (`CELULA`/`DIRECTA`/`GLOBAL`/`SOPORTE`) con el CHECK `tipo_coherente` — cada tipo exige exactamente un campo identificador propio (`celula_id`, `clave_directa` para DIRECTA **y SOPORTE**, o ninguno para GLOBAL). Índice único parcial `conversacion_global_unica_uk` garantiza una sola fila `GLOBAL`.
+  > **Corregido 2026-09-16 (D-136).** Esta línea decía `tipo` (`CELULA`/`DIRECTA`/`GLOBAL`) y que el CHECK cubría esos tres. `V53` agregó el valor `SOPORTE` y `V54` amplió el CHECK con su rama — ver §8.
 - `participantes_conversacion`: PK compuesta `(conversacion_id, usuario_id)`, con `ultimo_leido_en` nullable — es la base del conteo de no-leídos.
 - `mensajes`: `tipo` (`TEXTO`/`IMAGEN`/`AUDIO`/`VIDEO`/`SISTEMA`), dos CHECK (`mensaje_con_contenido`, `media_completa`), `respuesta_a_id` auto-referencial (hilos), `oculto`/`eliminado_en` para moderación (sin caso de uso que los mute en esta pasada — ver §6).
 - `mensajes_bienvenida`: **no se tocó** — no hay caso de uso que la use (ver §6).
@@ -64,7 +65,8 @@ Los tres tests unitarios existentes (`AccountRequestServiceTest`, `UserAccountSe
 
 Todos reciben el actor por `X-Actor-Id` (mismo patrón temporal que el resto de los módulos ya construidos, sin JWT — bloqueante del usuario documentado en `docs/MODULOS_A_AVANZAR.md`).
 
-**D-36 aplicado:** `TipoConversacion`/`TipoMensaje` viven en español en dominio y base; el wire habla inglés (`CELL`/`DIRECT`/`GLOBAL`, `TEXT`/`IMAGE`/`AUDIO`/`VIDEO`/`SYSTEM`) — la traducción vive solo en `ConversacionResponse.toWireTipo`/`MensajeResponse.toWireTipo` (salida) y `MensajeController.parseTipoMensaje` (entrada), nunca en dominio ni persistencia.
+**D-36 aplicado:** `TipoConversacion`/`TipoMensaje` viven en español en dominio y base; el wire habla inglés (`CELL`/`DIRECT`/`GLOBAL`/`SUPPORT`, `TEXT`/`IMAGE`/`AUDIO`/`VIDEO`/`SYSTEM`) — la traducción vive solo en `ConversacionResponse.toWireTipo`/`MensajeResponse.toWireTipo` (salida) y `MensajeController.parseTipoMensaje` (entrada), nunca en dominio ni persistencia.
+> **Corregido 2026-09-16 (D-136).** Esta línea listaba solo `CELL`/`DIRECT`/`GLOBAL`. `SOPORTE` -> `SUPPORT` se suma en §8, y la lista de endpoints de arriba no incluye los dos de soporte (`POST .../{id}/leave` y `POST /api/v1/admin/chat/support-conversations/backfill`): están en §8.3.
 
 ### 3.4 WebSocket + Redis Pub/Sub
 
@@ -158,3 +160,131 @@ Alcance: solo lectura, `src/main/java/com/renaser/os/chat/`, contra las reglas d
 9. **Logging: cumple.** `domain/` no loguea. `RedisChatPublisher.java:47-51` (único log de `adapter/out` revisado) usa `WARN` con `mensaje.id()`/`conversacionId` — sin texto del mensaje, sin datos de usuario.
 
 **Conclusión:** el módulo `chat` es hexagonalmente correcto y ya viene con una autocrítica inusualmente completa en su propio Javadoc (invariantes de BD replicadas en dominio, decisiones de mapeo documentadas in situ). El único hallazgo con relevancia de seguridad real es H-1 (asimetría de resolución de actor REST vs. WebSocket), a resolver cuando se active `authenticated()` globalmente — no bloqueante hoy porque `permitAll()` sigue activo en todos los perfiles.
+
+---
+
+## 8. El chat de soporte por aprendiz (2026-09-16, D-136)
+
+**Qué pidió el dueño del proyecto, textual:** *"en comunidad miembros se visualizará un grupo de las
+personas, solo él y el staff de un administrador o alquimista, por cada uno que entra, automático
+debe de ser"*.
+
+Las cinco reglas, confirmadas por él y **no** ampliadas por cuenta propia:
+
+1. **Una** conversación por aprendiz. Adentro: el aprendiz y **todos** los usuarios `ACTIVO` con rol
+   `ADMIN` o `ALCHEMIST`. Nadie más — ni mentor, ni líder de mentores.
+2. Nace sola cuando el aprendiz **entra al programa**, no al registrarse sin aprobar.
+3. Un `ADMIN`/`ALCHEMIST` nuevo —o alguien que **pasa** a ese rol— se suma a las conversaciones de
+   soporte que ya existen.
+4. El staff **puede** salirse. El aprendiz **no**.
+5. Los aprendices que ya estaban también la reciben, por un endpoint de administración explícito.
+
+### 8.1 Por qué `UsuarioRegistradoEvent` es el evento correcto
+
+Es el único punto del código que marca "entró al programa", y lo es por construcción:
+
+| Camino | ¿Publica `UsuarioRegistradoEvent`? | ¿Hay fila en `participantes_programa`? |
+|---|---|---|
+| Registrarse (sin aprobar) | **No** — la fila de `usuarios` nace en `INACTIVE` y no se publica nada | No |
+| `AccountRequestService.approve` | Sí, **después** de `saveParticipacionProgramaPort.save(...)`, misma transacción | **Sí** |
+| `UserAccountService.invite` / `inviteStaff` | Sí | No (es staff) |
+
+Como `@ApplicationModuleListener` corre **después del commit**, cuando el listener se ejecuta la fila
+de `participantes_programa` ya existe y se puede consultar. El servicio igual **verifica
+`inscrito`** antes de crear nada: así el camino de invitación —que no crea participación— no genera
+un soporte para alguien que todavía no entró.
+
+Se descartó crear un evento nuevo (`AprendizIngresoAlProgramaEvent`) habiendo uno que ya marca ese
+instante: dos eventos para el mismo hecho se desincronizan en cuanto alguien agrega un tercer camino
+de alta y se acuerda de publicar solo uno.
+
+**Lo que sí hubo que agregar a `users`:** `RolDeUsuarioCambiadoEvent`, publicado por
+`UserAccountService.updateRole` **solo si el rol cambió de verdad**. Sin él, la regla 3 quedaba a
+medias: alguien promovido a ADMIN veía únicamente los soportes de los aprendices que entraran
+*después* de su ascenso. Cambiar de rol no publicaba nada hasta hoy.
+
+### 8.2 Por qué no hay tabla ni columna nueva
+
+Instrucción explícita del dueño ("no crear tablas de más") y, además, no hacían falta.
+
+- La identidad *"el soporte de tal aprendiz"* va en `conversaciones.clave_directa` con el valor
+  `'soporte:' || <uuid del aprendiz>`. Esa columna ya tiene índice **UNIQUE**
+  (`conversaciones_clave_directa_key`, V1:1282), así que **la base misma** impide dos conversaciones
+  de soporte para la misma persona. No colisiona con las claves de DM, que son `<uuid>_<uuid>`.
+- **Eso cambia dónde vive la garantía:** "buscar y si no existe crear" es un check-then-act que dos
+  entregas simultáneas del mismo evento pasan las dos. La lectura previa está solo para no intentar
+  el INSERT al pedo; quien realmente corta el duplicado es el UNIQUE, y el servicio atrapa la
+  `DataIntegrityViolationException` como "la creó otro primero".
+- Una columna `aprendiz_soporte_id uuid UNIQUE` habría quedado `NULL` en el 100% de las filas de los
+  otros tres tipos y habría duplicado un índice único que ya existía.
+
+Las **dos** migraciones (`V53` declara el valor `SOPORTE`, `V54` amplía el `CHECK tipo_coherente`)
+son dos y no una porque Postgres no deja usar un valor de enum en la transacción que lo crea — el
+mensaje literal y el detalle están en [`E-187`](BITACORA_ERRORES.md).
+
+### 8.3 Qué se construyó
+
+| Pieza | Dónde |
+|---|---|
+| `TipoConversacion.SOPORTE` + `crearSoporte` / `claveSoporteDe` / `esAprendizDeSoporte` | `domain/model/conversacion/` |
+| `IncorporarUsuarioAlSoporteUseCase` (una puerta; el dominio decide qué significa según el rol) | `application/ports/in/conversacion/` |
+| `RellenarConversacionesDeSoporteUseCase`, `SalirDeConversacionSoporteUseCase` | idem |
+| `LoadConversacionPort.deSoporte()` | `application/ports/out/conversacion/` |
+| `ConversacionSoporteService` | `application/services/` |
+| `UsuarioRegistradoSoporteListener`, `RolDeUsuarioCambiadoSoporteListener` | `adapter/in/event/` |
+| `ConversacionSoporteController` (`POST .../{id}/leave`, `POST /admin/chat/support-conversations/backfill`) | `adapter/in/rest/conversacion/` |
+
+**Wire (D-36):** `SOPORTE` viaja como **`SUPPORT`**, junto a `CELL`/`DIRECT`/`GLOBAL`. La traducción
+sigue viviendo solo en `ConversacionResponse.toWireTipo`, y ahora la fija un test
+(`ConversacionResponseTest`): el `switch` es exhaustivo, así que olvidarse no compila, pero
+equivocar la palabra no lo nota ningún compilador — lo nota el teléfono de alguien.
+
+### 8.4 Decisiones de este agregado (prefijo `CH-`)
+
+| # | Decisión |
+|---|---|
+| CH-10 | **El relleno es un endpoint, no un barrido al arrancar.** Una corrida masiva en el arranque crea N conversaciones en todo entorno que levante —incluido el de un desarrollador— y cuando alguien lo nota ya pasó. `POST /api/v1/admin/chat/support-conversations/backfill` lo dispara una persona, y la respuesta dice `traineesReviewed / created / alreadyExisted / failed`. Idempotente. |
+| CH-11 | **Nada reconcilia participantes, nunca.** Es la consecuencia directa de la regla 4: si el staff se puede ir, una sincronización *"dejalo como debería estar"* le desharía la salida en el próximo evento. Por eso el relleno **no toca** una conversación que ya existe aunque le falte alguien del staff, y `incorporar` solo **suma**. Es la diferencia con `ParticipantesCelulaService`, que sí reconcilia — ahí la composición la manda `community`, acá la manda la persona. |
+| CH-12 | **El `nombre` es una foto del momento de creación** (`"Soporte - <nombre del aprendiz>"`). Lleva el nombre porque quien más ve estas conversaciones es el staff, y sin nombre tendría 25 filas idénticas — el mismo problema que ya arregló el listado de mensajes directos. **Limitación conocida:** si la persona se cambia el nombre después, el título no se entera. Derivarlo en cada lectura obligaría a resolver el aprendiz de cada soporte al listar; no se hizo porque nadie lo pidió, y queda escrito acá en vez de quedar como olvido. |
+| CH-13 | **Salir es solo de un SOPORTE.** Irse de una CÉLULA, de un DM o de la GLOBAL son tres preguntas distintas que nadie contestó; el caso de uso rechaza cualquier otro tipo en vez de inventarles un significado. Salir borra la fila de participación y **nunca** los mensajes. |
+| CH-14 | **`Conversacion` pasó de 7 a 10 métodos públicos** (`crearSoporte`, `claveSoporteDe`, `esAprendizDeSoporte`), por encima del techo de 7 de `.claude/rules/01`. Es el costo de una raíz de agregado con una fábrica por tipo: la alternativa —un `crear(tipo, ...)` genérico con parámetros que sobran en tres de cada cuatro llamadas— es peor. Se deja anotado en vez de disimulado. |
+| CH-15 | **`deSoporte()` no pagina.** Hay una por aprendiz del padrón (25 al 2026-09-16) y quien llama necesita el conjunto entero para compararlo contra el padrón entero. Si el padrón creciera a miles, **este es el método que hay que paginar**. |
+
+### 8.5 Anti-N+1 (D-43)
+
+El relleno resuelve todo con **cuatro** consultas en lote, no cuatro por aprendiz: `aprendicesActivos()`,
+`participantesInscritosActivos()`, `deSoporte()` y `usuariosActivosConRol({ADMIN, ALCHEMIST})`. Lo
+único que se repite por persona son los `INSERT` de quien todavía no tenía su conversación. Lo fija
+un test que verifica `times(1)` en cada una y `never()` en `porClaveDirecta`, que es justamente la
+consulta por aprendiz.
+
+La intersección con `participantesInscritosActivos()` es el mismo recurso que usó D-135, y por el
+mismo motivo: `aprendicesActivos()` devuelve aprendices `ACTIVO` **tengan o no** fila de programa, y
+un aprendiz sin fila todavía no entró.
+
+### 8.6 Pruebas
+
+| Clase | Qué fija |
+|---|---|
+| `ConversacionTest` (+9 casos) | Clave canónica y determinista, que no colisione con la de un DM, `tipo_coherente` para SOPORTE en `rehydrate`, y quién es el aprendiz dueño |
+| `ConversacionSoporteServiceTest` (19) | Las cinco reglas, el anti-N+1, el barrido que no se detiene ante un fallo, y las autorizaciones negativas (suspendido, aprendiz que intenta salirse, no-administrador que intenta rellenar) |
+| `ConversacionResponseTest` (2) | El contrato del wire: `SUPPORT` |
+| `SoporteChatListenersTest` (2) | Los dos avisos llegan al caso de uso |
+| `ChatPersistenceAdapterTest` (+2) | Contra Postgres real: `V53` + `V54` + el mapeo de Hibernate funcionando juntos, y el UNIQUE rechazando el segundo soporte del mismo aprendiz |
+| `UserAccountServiceTest` (+2) | `users` avisa el cambio de rol, y **no** avisa si el rol no cambió |
+
+Todas se verificaron **revirtiendo la regla y viéndolas en rojo**. Ese ejercicio encontró un test
+decorativo: `elAprendizNoPuedeSalirseDeSuPropioSoporte` pasaba con y sin la regla, porque el rechazo
+le llegaba del guard de participación. Se corrigió declarando al aprendiz participante, y ahí sí
+distingue.
+
+**Sin caso de reloj en el rango 00:00–05:00 UTC** (`.claude/rules/02`): esta función no deriva
+ninguna fecha local. El reloj solo sella `creado_en`/`ultimo_leido_en`, que son instantes.
+
+### 8.7 Lo que queda pendiente
+
+- **El aprendiz suspendido y después reactivado** no dispara ningún evento hoy, así que si su soporte
+  no existía sigue sin existir hasta el próximo relleno. Se menciona porque es el hueco real que deja
+  el diseño por eventos, no porque se haya decidido dejarlo así.
+- **Cuándo se archiva el soporte de alguien que termina el programa** — nadie lo definió. Hoy la
+  conversación queda viva.

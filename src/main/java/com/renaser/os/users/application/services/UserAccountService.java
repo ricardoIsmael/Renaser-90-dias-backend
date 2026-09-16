@@ -23,6 +23,7 @@ import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.user.Credencial;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
+import com.renaser.os.users.api.RolDeUsuarioCambiadoEvent;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UsuarioRegistradoEvent;
 import org.slf4j.Logger;
@@ -232,14 +233,27 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
         saveUserPort.save(user);
     }
 
+    /**
+     * Cambia el rol y AVISA (D-136). El aviso es la parte nueva: antes el cambio de rol se
+     * guardaba y no se enteraba nadie, asi que un ascenso a ADMIN/ALCHEMIST dejaba a la persona
+     * afuera de los chats de soporte que ya existian.
+     *
+     * <p>Se publica solo si el rol cambio de verdad. Reasignar el mismo rol no es una novedad, y
+     * un evento por cada guardado sin cambio obligaria a cada consumidor a filtrarlo por su
+     * cuenta. El rol anterior se lee ANTES de {@code changeRole}, que muta el agregado en sitio.
+     */
     @Override
     @Transactional
     public void updateRole(UpdateUserRoleCommand command) {
         User target = requireUser(command.targetUserId());
         User actor = requireActiveUserGuard.of(command.actorId());
+        UserRole rolAnterior = target.role();
         target.changeRole(command.newRole(), actor);
         User saved = saveUserPort.save(target);
         ensureMentorProfileIfNeeded(saved);
+        if (rolAnterior != saved.role()) {
+            events.publishEvent(new RolDeUsuarioCambiadoEvent(saved.id(), rolAnterior, saved.role(), clock.now()));
+        }
     }
 
     /** Camino simple de §4.3: MENTOR nuevo (por invitacion o por cambio de rol) recibe un perfil vacio. */

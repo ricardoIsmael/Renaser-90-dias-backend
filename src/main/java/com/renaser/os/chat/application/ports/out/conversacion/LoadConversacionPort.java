@@ -18,6 +18,19 @@ public interface LoadConversacionPort {
 
     Optional<Conversacion> global();
 
+    /**
+     * Todas las conversaciones de soporte, EN UNA consulta (D-136).
+     *
+     * <p>Existe para los dos unicos usos que las necesitan en bloque y que sin esto serian un N+1
+     * (D-43): sumar a un ADMIN/ALCHEMIST nuevo a las que ya hay, y saber de una sola vez cuales de
+     * los aprendices del padron ya tienen la suya durante el relleno.
+     *
+     * <p>Sin paginar a proposito: hay exactamente una por aprendiz del padron (25 al 2026-09-16), y
+     * quien llama necesita el conjunto entero para comparar contra el padron entero. Si el padron
+     * creciera a miles, este es el metodo que hay que paginar.
+     */
+    List<Conversacion> deSoporte();
+
     /** Todas las conversaciones donde {@code usuarioId} es participante. */
     List<Conversacion> misConversaciones(UserId usuarioId);
 }

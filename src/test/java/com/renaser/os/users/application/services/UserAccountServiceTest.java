@@ -5,6 +5,7 @@ import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.RolDeUsuarioCambiadoEvent;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.application.ports.in.user.InviteAndCreateUserUseCase.InviteStaffCommand;
@@ -139,6 +140,42 @@ class UserAccountServiceTest {
         service.updateRole(new UpdateUserRoleCommand(targetId, UserRole.TRAINEE, actorId));
 
         verify(saveUserPort).save(any());
+    }
+
+    /**
+     * D-136: sin este aviso, quien asciende a ADMIN/ALCHEMIST queda afuera de todos los chats de
+     * soporte que ya existian y solo ve los de los aprendices que entren despues de su ascenso.
+     */
+    @Test
+    @DisplayName("cambiar el rol AVISA, con el rol anterior y el nuevo")
+    void updateRolePublicaElCambioDeRol() {
+        UserId targetId = id();
+        UserId actorId = id();
+        when(loadUserPort.byId(targetId)).thenReturn(Optional.of(activo(targetId, UserRole.MENTOR)));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+
+        service.updateRole(new UpdateUserRoleCommand(targetId, UserRole.ADMIN, actorId));
+
+        var evento = org.mockito.ArgumentCaptor.forClass(RolDeUsuarioCambiadoEvent.class);
+        verify(events).publishEvent(evento.capture());
+        assertThat(evento.getValue().usuarioId()).isEqualTo(targetId);
+        assertThat(evento.getValue().rolAnterior()).isEqualTo(UserRole.MENTOR);
+        assertThat(evento.getValue().rolNuevo()).isEqualTo(UserRole.ADMIN);
+    }
+
+    /** Reasignar el mismo rol no es una novedad: publicarlo obligaria a cada consumidor a
+     * filtrarlo por su cuenta, y el chat de soporte se pondria a recorrer el padron por nada. */
+    @Test
+    @DisplayName("reasignar el MISMO rol no publica ningun evento")
+    void updateRoleNoPublicaSiElRolNoCambio() {
+        UserId targetId = id();
+        UserId actorId = id();
+        when(loadUserPort.byId(targetId)).thenReturn(Optional.of(activo(targetId, UserRole.MENTOR)));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+
+        service.updateRole(new UpdateUserRoleCommand(targetId, UserRole.MENTOR, actorId));
+
+        verify(events, never()).publishEvent(any(RolDeUsuarioCambiadoEvent.class));
     }
 
     @Test

@@ -107,6 +107,11 @@ class MensajeServicePermisosDeGrupoTest {
             }
 
             @Override
+            public List<Conversacion> deSoporte() {
+                return List.of();
+            }
+
+            @Override
             public List<Conversacion> misConversaciones(UserId usuarioId) {
                 return List.of();
             }

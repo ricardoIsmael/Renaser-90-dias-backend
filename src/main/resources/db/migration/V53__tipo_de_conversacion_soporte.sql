@@ -1,0 +1,59 @@
+-- ============================================================================
+-- V53 — El chat de soporte de cada aprendiz: un valor mas en `tipo_conversacion`
+-- ============================================================================
+-- QUE PROBLEMA RESUELVE
+--
+-- El dueño del proyecto pidio que cada aprendiz tenga, apenas entra al programa, un chat propio
+-- con todo el staff administrativo adentro ("en comunidad miembros se visualizara un grupo de las
+-- personas, solo el y el staff de un administrador o alquimista, por cada uno que entra,
+-- automatico debe de ser"). Hoy `tipo_conversacion` solo conoce CELULA, DIRECTA y GLOBAL, y
+-- ninguna de las tres describe eso:
+--
+--   · DIRECTA es de DOS y la abre cualquiera de los dos; esta tiene N participantes, nace sola y
+--     el aprendiz no se puede ir de ella.
+--   · CELULA cuelga de `celulas.id` y rota con el grupo; el soporte no depende de ningun grupo, y
+--     un aprendiz sin celula tiene que tenerlo igual.
+--   · GLOBAL es una sola fila para todo el mundo (indice parcial `conversacion_global_unica_uk`).
+--
+-- POR QUE NO SE CREA NINGUNA TABLA NI NINGUNA COLUMNA
+--
+-- Instruccion explicita del dueño: "no crear tablas de mas". Y no hacen falta: `conversaciones` +
+-- `participantes_conversacion` ya guardan exactamente lo que este chat necesita (una fila de
+-- conversacion, N filas de participante, no-leidos por persona).
+--
+--   · La identidad "el soporte DE tal aprendiz" se guarda en `conversaciones.clave_directa`, con
+--     el valor `'soporte:' || <uuid del aprendiz>`. Esa columna es `text`, nullable, y ya tiene
+--     indice UNICO (`conversaciones_clave_directa_key`, V1:1282): la base misma impide una segunda
+--     conversacion de soporte para la misma persona, sin que el codigo dependa de un
+--     "buscar y si no existe crear" que dos peticiones simultaneas pasan las dos.
+--   · No colisiona con las claves de DM, que son `<uuid>_<uuid>` (`Conversacion.claveDirectaDe`) y
+--     nunca empiezan con `soporte:`.
+--   · Reusar la columna en vez de agregar `aprendiz_soporte_id uuid UNIQUE` evita una columna que
+--     estaria NULL en el 100% de las filas de los otros tres tipos y un segundo indice unico que
+--     diria lo mismo que el que ya existe.
+--
+-- POR QUE EL NOMBRE `SOPORTE` Y NO `SUPPORT`
+--
+-- D-36: los enums viven en espanol en la base y en el dominio; la traduccion al ingles del wire
+-- (`SUPPORT`) vive solo en `ConversacionResponse.toWireTipo`, igual que CELULA->CELL y
+-- DIRECTA->DIRECT. Un enum a medio traducir es peor que cualquiera de los dos idiomas.
+--
+-- POR QUE ESTA MIGRACION VA SOLA Y LA SIGUIENTE (V54) TOCA EL CHECK
+--
+-- `ALTER TYPE ... ADD VALUE` puede correr dentro de una transaccion desde PG 12, pero el valor
+-- nuevo NO se puede USAR hasta que esa transaccion comitee. Flyway corre cada migracion en una
+-- transaccion, asi que declarar el valor y ampliar el CHECK `tipo_coherente` (que nombra
+-- 'SOPORTE') en el MISMO archivo falla con:
+--
+--   ERROR: unsafe use of new value "SOPORTE" of enum type renaser.tipo_conversacion
+--   HINT:  New enum values must be committed before they can be used.
+--
+-- Verificado contra la base local de desarrollo (pgvector/pgvector:pg16) antes de escribir esto.
+-- Por eso son dos migraciones y no una: V53 declara, V54 —ya con V53 comiteada— usa. Es el mismo
+-- criterio que V46 y V49 dejaron escrito ("ADD VALUE va solo, antes que nada"), llevado al caso en
+-- que si hace falta usar el valor.
+--
+-- Migracion ADITIVA: no borra ni reescribe ninguna fila.
+-- ============================================================================
+
+ALTER TYPE renaser.tipo_conversacion ADD VALUE IF NOT EXISTS 'SOPORTE';

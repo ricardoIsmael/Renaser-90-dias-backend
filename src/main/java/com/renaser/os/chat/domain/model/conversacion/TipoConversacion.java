@@ -8,5 +8,16 @@ package com.renaser.os.chat.domain.model.conversacion;
 public enum TipoConversacion {
     CELULA,
     DIRECTA,
-    GLOBAL
+    GLOBAL,
+
+    /**
+     * El chat de soporte de UN aprendiz: el aprendiz mas todo el staff administrativo
+     * (ADMIN/ALCHEMIST activos), creado solo cuando la persona entra al programa
+     * (V53/V54, D-136). Viaja por HTTP como {@code SUPPORT}.
+     *
+     * <p>No es una DIRECTA con varios: una DIRECTA es de dos y la abre cualquiera de los dos.
+     * Esta nace sola, tiene a la casa entera adentro y el aprendiz no se puede ir. Tampoco es
+     * una CELULA: no cuelga de ningun grupo de `community` ni rota con el.
+     */
+    SOPORTE
 }

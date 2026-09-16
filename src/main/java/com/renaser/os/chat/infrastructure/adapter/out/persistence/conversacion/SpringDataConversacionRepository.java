@@ -15,5 +15,8 @@ interface SpringDataConversacionRepository extends JpaRepository<ConversacionJpa
     /** Unica por `conversacion_global_unica_uk` (indice parcial, V1__baseline_renaser.sql:1292). */
     Optional<ConversacionJpaEntity> findFirstByTipo(TipoConversacionJpa tipo);
 
+    /** Todas las de un tipo. Hoy solo la usa SOPORTE, que tiene una por aprendiz del padron. */
+    List<ConversacionJpaEntity> findByTipo(TipoConversacionJpa tipo);
+
     List<ConversacionJpaEntity> findByIdIn(List<UUID> ids);
 }

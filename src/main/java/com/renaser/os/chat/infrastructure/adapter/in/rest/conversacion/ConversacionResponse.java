@@ -3,7 +3,7 @@ package com.renaser.os.chat.infrastructure.adapter.in.rest.conversacion;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 
-/** {@code type} en ingles (CELL/DIRECT/GLOBAL) — la app publicada nunca ve
+/** {@code type} en ingles (CELL/DIRECT/GLOBAL/SUPPORT) — la app publicada nunca ve
  * `tipo_conversacion` en espanol; la traduccion (D-36) vive solo aca. */
 public record ConversacionResponse(String id, String type, String celulaId, String nombre, String createdAt) {
 
@@ -17,6 +17,7 @@ public record ConversacionResponse(String id, String type, String celulaId, Stri
             case CELULA -> "CELL";
             case DIRECTA -> "DIRECT";
             case GLOBAL -> "GLOBAL";
+            case SOPORTE -> "SUPPORT";
         };
     }
 }

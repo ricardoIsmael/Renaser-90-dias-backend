@@ -47,6 +47,11 @@ class ConversacionPersistenceAdapter implements LoadConversacionPort, SaveConver
     }
 
     @Override
+    public List<Conversacion> deSoporte() {
+        return repository.findByTipo(TipoConversacionJpa.SOPORTE).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
     public List<Conversacion> misConversaciones(UserId usuarioId) {
         List<UUID> ids = participanteRepository.conversacionIdsDeUsuario(usuarioId.value());
         if (ids.isEmpty()) {
