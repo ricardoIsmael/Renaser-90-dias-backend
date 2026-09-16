@@ -66,7 +66,7 @@ class SmtpEnviarEmailAdapterTest {
         adapter.enviarCodigoVerificacionEmail(DESTINATARIO, "483920");
 
         MimeMessage enviado = capturarEnviado();
-        assertThat(enviado.getSubject()).isEqualTo("Tu codigo de verificacion de Renaser");
+        assertThat(enviado.getSubject()).isEqualTo("Tu código de verificación de Renaser");
         assertThat(enviado.getAllRecipients()[0]).hasToString(DESTINATARIO);
         assertThat(contenido(enviado)).contains("483920");
     }
@@ -79,7 +79,7 @@ class SmtpEnviarEmailAdapterTest {
         adapter.enviarCodigoResetContrasena(DESTINATARIO, "483920");
 
         MimeMessage enviado = capturarEnviado();
-        assertThat(enviado.getSubject()).isEqualTo("Tu codigo para recuperar la contrasena de Renaser");
+        assertThat(enviado.getSubject()).isEqualTo("Tu código para recuperar la contraseña de Renaser");
         assertThat(enviado.getAllRecipients()[0]).hasToString(DESTINATARIO);
         String cuerpo = contenido(enviado);
         assertThat(cuerpo).contains("483920");

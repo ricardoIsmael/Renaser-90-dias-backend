@@ -18,6 +18,12 @@ package com.renaser.os.users.infrastructure.adapter.out.email;
  * <p><b>Alcance:</b> el texto es funcional y deliberadamente sobrio. La copia definitiva es
  * decision de producto, no del backend (CLAUDE.MD §0.6: no se inventan reglas de negocio) —
  * cambiarla despues no toca ni el puerto ni el caso de uso.
+ *
+ * <p><b>Registro (2026-09-16, pedido del dueno):</b> espanol neutro de Latinoamerica, en
+ * <b>tuteo</b> y <b>con tildes</b>. Antes estaba en voseo rioplatense ("si no fuiste vos, podes",
+ * "escribi", "elegi") y sin un solo acento, que a un aprendiz de Lima le suena ajeno — y el
+ * transporte ya manda UTF-8 justamente para que las tildes lleguen enteras. Los asuntos se
+ * validan letra por letra en {@code SmtpEnviarEmailAdapterTest}: cambiarlos aca es cambiarlos alla.
  */
 final class PlantillasEmail {
 
@@ -25,25 +31,25 @@ final class PlantillasEmail {
     }
 
     static MensajeEmail resetContrasena(String enlace) {
-        return new MensajeEmail("Recupera tu contrasena de Renaser",
-                conBoton("Recupera tu contrasena",
-                        "Recibimos un pedido para restablecer la contrasena de tu cuenta. "
-                                + "Si no fuiste vos, podes ignorar este correo.",
-                        "Elegir una contrasena nueva", enlace));
+        return new MensajeEmail("Recupera tu contraseña de Renaser",
+                conBoton("Recupera tu contraseña",
+                        "Recibimos una solicitud para restablecer la contraseña de tu cuenta. "
+                                + "Si no fuiste tú, puedes ignorar este correo.",
+                        "Elegir una contraseña nueva", enlace));
     }
 
     static MensajeEmail activacionCuenta(String enlace) {
         return new MensajeEmail("Tu cuenta de Renaser fue aprobada",
                 conBoton("Tu cuenta fue aprobada",
-                        "Ya podes activarla. Elegi tu contrasena y entra a la aplicacion.",
+                        "Ya puedes activarla. Elige tu contraseña y entra a la aplicación.",
                         "Activar mi cuenta", enlace));
     }
 
     static MensajeEmail codigoVerificacion(String codigo) {
-        return new MensajeEmail("Tu codigo de verificacion de Renaser",
+        return new MensajeEmail("Tu código de verificación de Renaser",
                 conDato("Verifica tu correo",
-                        "Escribi este codigo en la aplicacion para confirmar que esta casilla es tuya.",
-                        codigo, "El codigo vence en unos minutos y sirve una sola vez."));
+                        "Escribe este código en la aplicación para confirmar que este correo es tuyo.",
+                        codigo, "El código vence en unos minutos y sirve una sola vez."));
     }
 
     /**
@@ -52,18 +58,18 @@ final class PlantillasEmail {
      * cuenta, y un pedido que no hizo es senal de que alguien mas esta intentando entrar.
      */
     static MensajeEmail codigoResetContrasena(String codigo) {
-        return new MensajeEmail("Tu codigo para recuperar la contrasena de Renaser",
-                conDato("Recupera tu contrasena",
-                        "Escribi este codigo en la aplicacion para elegir una contrasena nueva. "
-                                + "Si no fuiste vos, podes ignorar este correo: sin el codigo nadie puede cambiarla.",
-                        codigo, "El codigo vence en unos minutos y sirve una sola vez."));
+        return new MensajeEmail("Tu código para recuperar la contraseña de Renaser",
+                conDato("Recupera tu contraseña",
+                        "Escribe este código en la aplicación para elegir una contraseña nueva. "
+                                + "Si no fuiste tú, puedes ignorar este correo: sin el código nadie puede cambiarla.",
+                        codigo, "El código vence en unos minutos y sirve una sola vez."));
     }
 
     static MensajeEmail invitacionStaff(String contrasenaTemporal) {
         return new MensajeEmail("Tu acceso a Renaser",
                 conDato("Te dimos acceso a Renaser",
-                        "Entra con tu correo y esta contrasena temporal.",
-                        contrasenaTemporal, "Cambiala apenas entres."));
+                        "Entra con tu correo y esta contraseña temporal.",
+                        contrasenaTemporal, "Cámbiala apenas entres."));
     }
 
     /** Link de un solo uso hacia el frontend. La URL base es configuracion, nunca se hardcodea. */
@@ -77,7 +83,7 @@ final class PlantillasEmail {
                 <a href="%s" style="display:inline-block;padding:12px 24px;border-radius:8px;\
                 background:#111;color:#fff;text-decoration:none;font-weight:500">%s</a>
                 <p style="margin:24px 0 0;font-size:13px;color:#666">\
-                Si el boton no funciona, copia este enlace:<br>%s</p>"""
+                Si el botón no funciona, copia este enlace:<br>%s</p>"""
                 .formatted(parrafo, enlace, textoBoton, enlace));
     }
 
