@@ -191,7 +191,19 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
      * distintas y podia responder un estado ya cambiado por otro. */
     private CelulaDetalle aDetalle(Celula celula) {
         PerfilBasico mentor = celula.mentorId() != null ? perfilBasico(celula.mentorId()) : null;
-        List<PerfilBasico> miembros = consultarMiembrosCelulaPort.deCelula(celula.id()).stream()
+        /* Los miembros salen del HISTORIAL de asignaciones, igual que el conteo de la linea de
+           abajo, y no del puntero `participantes_programa.celula_id`.
+
+           > **Corregido 2026-09-16 (D-139).** Salian del puntero. Como ese puntero nombra UN solo
+           > grupo y desde D-139 se puede pertenecer a varios, un aprendiz sumado a un grupo
+           > adicional quedaba CONTADO en `activeTraineesCount` --que ya leia el historial-- y a la
+           > vez AUSENTE de `members`. El grupo decia "3 aprendices" y mostraba dos. Un conteo y una
+           > lista que no se pueden contradecir tienen que salir de la misma fuente.
+
+           Verificado antes de cambiarlo: con los datos de hoy las dos fuentes dan lo mismo en los
+           tres grupos y no hay ningun puntero sin fila viva detras, asi que nadie desaparece. */
+        List<PerfilBasico> miembros = ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(celula.id()))
+                .aprendicesVigentesEn(celula.id(), clock.now()).stream()
                 .map(this::perfilBasico).toList();
         return new CelulaDetalle(celula, mentor, miembros, celula.estadoEn(hoyDelPrograma()),
                 aprendicesVigentes(celula), cupoMaximo(celula));
@@ -280,28 +292,45 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
                 .toList();
     }
 
-    /** #25: aprendices ACTIVOS sin celula asignada — alcance GLOBAL (ver javadoc de
+    /** #25: aprendices ACTIVOS e inscritos, CON grupo o sin el — alcance GLOBAL (ver javadoc de
      * {@link ConsultarCandidatosCelulaUseCase#aprendicesDisponibles}). A quienes se puede
-     * ofrecer lo decide {@link #aprendicesQueSePuedenAgregarAUnGrupo()}. */
+     * ofrecer lo decide {@link #aprendicesQueSePuedenAgregarAUnGrupo()}; de que grupo sale cada
+     * uno, {@link #celulaPorAprendiz()}. */
     @Override
     public List<AprendizCandidato> aprendicesDisponibles(UserId actorId) {
         requireAdmin(actorId);
+        Map<UserId, CelulaId> grupoDeCadaUno = celulaPorAprendiz();
         List<UserId> disponibles = aprendicesQueSePuedenAgregarAUnGrupo();
         Map<UserId, UserSummary> resumenes = userSummaryFinder.findByIds(disponibles);
         return disponibles.stream()
                 .map(id -> {
                     UserSummary resumen = resumenes.get(id);
                     return new AprendizCandidato(id, resumen != null ? resumen.fullName() : null,
-                            resumen != null ? resumen.avatarUrl() : null);
+                            resumen != null ? resumen.avatarUrl() : null, grupoDeCadaUno.get(id));
                 })
                 .toList();
     }
 
     /**
-     * Los candidatos del selector: aprendices ACTIVOS, <b>inscritos en el programa</b>, que hoy no
-     * son miembros de ningun grupo.
+     * Los candidatos del selector: aprendices ACTIVOS, <b>inscritos en el programa</b>, tengan hoy
+     * grupo o no.
      *
-     * <p><b>El filtro por inscripcion es nuevo</b> (E-186, 2026-09-15). Antes se ofrecia a todo
+     * <p><b>Tener grupo dejo de excluir</b> (E-190, 2026-09-16). Antes esta lista se quedaba solo
+     * con los que no eran miembros de ninguna celula, y por eso no habia forma de <b>mover</b> a
+     * nadie de grupo desde la pantalla: el que ya estaba en uno no aparecia en ningun selector. El
+     * dueno lo reporto como "no me deja agregar mas aprendices".
+     *
+     * <p><b>Mover ya estaba implementado; lo que faltaba era ofrecerlo.</b>
+     * {@code ComposicionDeCelulaService.asignar} cierra la pertenencia vigente
+     * ({@code cerrarPertenenciaVigente}) antes de abrir la nueva, y contempla incluso reasignar
+     * dentro de un grupo lleno sin cobrar plaza de mas (el aprendiz ya ocupa una). Esconder al
+     * candidato no protegia de nada: solo tapaba una operacion que el backend sabe hacer.
+     *
+     * <p><b>Que sigue excluyendo, y por que no se toca.</b> Rol TRAINEE, estado ACTIVO e
+     * inscripcion en el programa. El ultimo es E-186: sin fila en {@code participantes_programa}
+     * el alta responde <b>404</b>.
+     *
+     * <p><b>El filtro por inscripcion</b> (E-186, 2026-09-15). Antes se ofrecia a todo
      * aprendiz ACTIVO sin grupo, incluidos los que no tienen fila en {@code participantes_programa}.
      * A esos, {@code POST /api/v1/admin/cells/&#123;id&#125;/trainees} les responde <b>404</b>:
      * {@code ParticipacionProgramaService.sincronizarAcompanamiento} no encuentra la participacion
@@ -320,21 +349,36 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
      * otra pantalla.
      *
      * <p><b>Sigue sin haber N+1</b> (D-43): {@code participantesInscritosActivos()} es UNA consulta
-     * en lote, igual que {@code usuariosActivosConRol}, y el recorrido de celulas ya existente es
-     * acotado (no crece con la cantidad de aprendices). No se pregunta por participante. Tampoco
+     * en lote, igual que {@code usuariosActivosConRol}. No se pregunta por participante. Tampoco
      * hizo falta un metodo nuevo en el puerto: {@code users.api.ParticipacionProgramaFinder} ya lo
      * exponia.
      */
     private List<UserId> aprendicesQueSePuedenAgregarAUnGrupo() {
-        Set<UserId> yaAsignados = new HashSet<>();
-        for (Celula celula : loadCelulaPort.todas()) {
-            yaAsignados.addAll(participacionProgramaFinder.miembrosDeCelula(celula.id().value()));
-        }
         Set<UserId> inscritos = new HashSet<>(participacionProgramaFinder.participantesInscritosActivos());
         return participacionProgramaFinder.usuariosActivosConRol(Set.of(UserRole.TRAINEE)).stream()
                 .filter(inscritos::contains)
-                .filter(id -> !yaAsignados.contains(id))
                 .toList();
+    }
+
+    /**
+     * En que grupo esta hoy cada aprendiz, para marcar el traslado en el selector.
+     *
+     * <p>Es el MISMO recorrido que antes armaba el conjunto de excluidos: una consulta por celula,
+     * y las celulas son decenas — no crece con el padron, asi que no reabre el N+1 de D-43. Lo
+     * unico que cambia es que en vez de tirar la pertenencia se guarda de que grupo era.
+     *
+     * <p>Un aprendiz esta en un grupo como mucho, porque el dato es una sola columna
+     * ({@code participantes_programa.celula_id}); si dos celulas lo reclamaran, gana la ultima y
+     * la pantalla mostraria una de las dos, que es exactamente el sintoma que habria que mirar.
+     */
+    private Map<UserId, CelulaId> celulaPorAprendiz() {
+        Map<UserId, CelulaId> grupoDeCadaUno = new HashMap<>();
+        for (Celula celula : loadCelulaPort.todas()) {
+            for (UserId miembro : participacionProgramaFinder.miembrosDeCelula(celula.id().value())) {
+                grupoDeCadaUno.put(miembro, celula.id());
+            }
+        }
+        return grupoDeCadaUno;
     }
 
     private List<UserId> mentoresActivos() {

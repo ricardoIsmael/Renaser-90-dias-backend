@@ -13,6 +13,7 @@ import com.renaser.os.community.application.ports.out.acompanamiento.SaveAsignac
 import com.renaser.os.community.application.ports.out.celula.ExistePerfilMentorPort;
 import com.renaser.os.community.application.ports.out.celula.LoadCelulaPort;
 import com.renaser.os.community.application.ports.out.celula.SaveCelulaPort;
+import com.renaser.os.community.application.ports.out.participante.ConsultarCelulaDeParticipantePort;
 import com.renaser.os.community.domain.model.acompanamiento.AsignacionCelula;
 import com.renaser.os.community.domain.model.acompanamiento.AsignacionId;
 import com.renaser.os.community.domain.model.acompanamiento.AsignacionInvalidaException;
@@ -48,6 +49,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -76,6 +78,8 @@ class ComposicionDeCelulaServiceTest {
     @Mock
     private ExistePerfilMentorPort existePerfilMentorPort;
     @Mock
+    private ConsultarCelulaDeParticipantePort consultarCelulaDeParticipantePort;
+    @Mock
     private UserSummaryFinder userSummaryFinder;
     @Mock
     private AsignacionCelulaPort asignacionCelulaPort;
@@ -96,12 +100,14 @@ class ComposicionDeCelulaServiceTest {
     @BeforeEach
     void setUp() {
         service = new ComposicionDeCelulaService(loadCelulaPort, saveCelulaPort, loadAsignacionesPort,
-                saveAsignacionPort, loadPoliticaMentoriaPort, existePerfilMentorPort, userSummaryFinder,
+                saveAsignacionPort, loadPoliticaMentoriaPort, existePerfilMentorPort,
+                consultarCelulaDeParticipantePort, userSummaryFinder,
                 asignacionCelulaPort, consultarCelulas, eventos, CLOCK, idGenerator);
         lenient().when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
         lenient().when(loadPoliticaMentoriaPort.porCohorte(any())).thenReturn(Optional.empty());
         lenient().when(loadAsignacionesPort.porCelula(any())).thenReturn(List.of());
         lenient().when(loadAsignacionesPort.porUsuario(any())).thenReturn(List.of());
+        lenient().when(consultarCelulaDeParticipantePort.celulaDeUsuario(any())).thenReturn(Optional.empty());
         lenient().when(consultarCelulas.obtener(any(), any())).thenReturn(null);
         usuario(admin, UserRole.ADMIN, UserStatus.ACTIVE);
         usuario(adminSuspendido, UserRole.ADMIN, UserStatus.SUSPENDED);
@@ -289,6 +295,8 @@ class ComposicionDeCelulaServiceTest {
         Celula suGrupo = grupo();
         AsignacionCelula suya = pertenenciaAbierta(suGrupo.id(), aprendiz, FuncionAcompanamiento.APRENDIZ, "alta");
         when(loadAsignacionesPort.porUsuario(aprendiz)).thenReturn(List.of(suya));
+        // El puntero nombra a ESTE grupo, que es el caso de siempre: un solo grupo por aprendiz.
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(aprendiz)).thenReturn(Optional.of(suGrupo.id()));
 
         service.quitar(new QuitarAprendizCelulaCommand(admin, suGrupo.id(), aprendiz));
 
@@ -296,6 +304,64 @@ class ComposicionDeCelulaServiceTest {
         verify(saveAsignacionPort).save(suya);
         verify(asignacionCelulaPort).quitarCelula(admin, aprendiz);
         verify(eventos).publishEvent(new ComposicionDeCelulaCambiadaEvent(suGrupo.id().value(), CLOCK.now()));
+    }
+
+    /* La contracara: lo sacan del grupo que el puntero nombra, pero le queda otro. Antes el
+       puntero se vaciaba y la app le decia "todavia no tienes grupo" a alguien que seguia en uno.
+       Se elige el vigente MAS RECIENTE y no "el primero": el primero es el de bienvenida, que
+       dura los dias 1 a 7 y del que ya salio el dia 8 (V50). Falla contra el codigo anterior. */
+    @Test
+    void bajaDelGrupoDelPunteroLoPasaAlOtroGrupoVigente() {
+        Celula viejo = grupo();
+        Celula reciente = grupo();
+        AsignacionCelula enElViejo = pertenenciaAbierta(viejo.id(), aprendiz,
+                FuncionAcompanamiento.APRENDIZ, "alta-principal");
+        AsignacionCelula enElReciente = pertenenciaAbierta(reciente.id(), aprendiz,
+                FuncionAcompanamiento.APRENDIZ, "suma-a-grupo");
+        when(loadAsignacionesPort.porUsuario(aprendiz)).thenReturn(List.of(enElViejo, enElReciente));
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(aprendiz)).thenReturn(Optional.of(viejo.id()));
+
+        service.quitar(new QuitarAprendizCelulaCommand(admin, viejo.id(), aprendiz));
+
+        verify(asignacionCelulaPort, never()).quitarCelula(any(), any());
+        verify(asignacionCelulaPort).sincronizarAcompanamiento(eq(aprendiz), eq(reciente.id().value()), any());
+    }
+
+    /* Y si no le queda ninguno, el puntero SI se vacia: ahi la persona de verdad quedo sin grupo. */
+    @Test
+    void bajaDelUnicoGrupoSiVaciaElPuntero() {
+        Celula unico = grupo();
+        AsignacionCelula pertenencia = pertenenciaAbierta(unico.id(), aprendiz,
+                FuncionAcompanamiento.APRENDIZ, "alta-principal");
+        when(loadAsignacionesPort.porUsuario(aprendiz)).thenReturn(List.of(pertenencia));
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(aprendiz)).thenReturn(Optional.of(unico.id()));
+
+        service.quitar(new QuitarAprendizCelulaCommand(admin, unico.id(), aprendiz));
+
+        verify(asignacionCelulaPort).quitarCelula(admin, aprendiz);
+    }
+
+    @Test
+    @DisplayName("quitar(aprendiz) de un grupo ADICIONAL no le borra el puntero de su grupo principal")
+    void bajaDeUnGrupoAdicionalNoBorraElPunteroDelPrincipal() {
+        Celula principal = grupo();
+        Celula adicional = grupo();
+        AsignacionCelula enElPrincipal = pertenenciaAbierta(principal.id(), aprendiz,
+                FuncionAcompanamiento.APRENDIZ, "alta-principal");
+        AsignacionCelula enElAdicional = pertenenciaAbierta(adicional.id(), aprendiz,
+                FuncionAcompanamiento.APRENDIZ, "suma-a-grupo");
+        when(loadAsignacionesPort.porUsuario(aprendiz)).thenReturn(List.of(enElPrincipal, enElAdicional));
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(aprendiz)).thenReturn(Optional.of(principal.id()));
+
+        service.quitar(new QuitarAprendizCelulaCommand(admin, adicional.id(), aprendiz));
+
+        /* Sin la condicion de `limpiarPunteroSiNombraAEseGrupo`, sacarlo del grupo B le borraba
+           `participantes_programa.celula_id` —que nombra al A— y lo dejaba sin grupo en la app
+           aunque siguiera perteneciendo al A. Es el precio que habria tenido D-139 si el `quitar`
+           se hubiera quedado como estaba. */
+        verify(asignacionCelulaPort, never()).quitarCelula(any(), any());
+        assertThat(enElAdicional.vigente()).as("del adicional SI se lo saca").isFalse();
+        assertThat(enElPrincipal.vigente()).as("y en el principal sigue").isTrue();
     }
 
     @Test

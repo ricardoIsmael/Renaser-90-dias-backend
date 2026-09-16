@@ -118,6 +118,7 @@ Repo Next.js clonado en `C:\Users\Usuario\Documents\Backend90dias\RenaserBack`. 
 | CRUD | `/api/v1/admin/cells` | + `/mentor`, `/session` |
 | GET | `/api/v1/admin/cells/dashboard` | nuevo (#25, §8) — cross-cohorte, ADMIN/ALCHEMIST |
 | GET | `/api/v1/admin/cells/mentores-disponibles`, `/mentores`, `/aprendices-disponibles` | nuevo (#25, §8) — pickers del panel admin |
+| POST | `/api/v1/admin/cells/{id}/additional-trainees` | nuevo (D-139, §10) — suma sin trasladar |
 | GET | `/api/v1/me/cell`, `/api/v1/me/cell/members` | TRAINEE-únicamente |
 | GET/POST | `/api/v1/testimonios` | `wallPostId` en el body ⇒ promoción (admin) |
 
@@ -205,8 +206,9 @@ Construido usando `users.api.ParticipacionProgramaFinder.usuariosActivosConRol`/
 
 - **`GET /api/v1/admin/cells/dashboard`** (`ConsultarDashboardCelulasUseCase`) — todas las células, de cualquier cohorte, con su cohorte ya resuelta (`nombre`/`estado`). Ruta propia, no `GET /api/v1/admin/cells` a secas: ese endpoint ya existe y exige `cohortId` (`listarPorCohorte`); reutilizar la misma ruta sin parámetro habría hecho que un mismo endpoint devolviera dos shapes distintas según presencia de query param, lo que se prefirió evitar. Solo ADMIN/ALCHEMIST.
 - **`GET /api/v1/admin/cells/mentores-disponibles`** / **`/mentores`** (`ConsultarCandidatosCelulaUseCase`) — mentores ACTIVOS sin/con marca de célula actual. `LoadCelulaPort.todas()` resuelve quién ya lidera sin tocar `perfiles_mentor` (tabla ajena), mismo criterio que ya usaba `asignar()`.
-- **`GET /api/v1/admin/cells/aprendices-disponibles`** — aprendices ACTIVOS sin célula, **alcance GLOBAL, no por cohorte**: un aprendiz sin célula no tiene ninguna columna que diga a qué cohorte "pertenece" todavía (`participantes_programa` no tiene `cohorte_id`, solo `celula_id`) — esa relación nace recién al asignarlo. No se inventó una columna que no existe.
-- Construido recorriendo las células existentes (acotadas) para armar el conjunto de "ya asignados", nunca participante por participante — mismo criterio anti-N+1 que `PorcentajeRocasFinder` (D-43).
+- **`GET /api/v1/admin/cells/aprendices-disponibles`** — aprendices ACTIVOS **e inscritos en el programa**, tengan grupo o no, con `cellId` marcando el grupo actual de cada uno (`null` si no tiene). **Alcance GLOBAL, no por cohorte**: un aprendiz sin célula no tiene ninguna columna que diga a qué cohorte "pertenece" todavía (`participantes_programa` no tiene `cohorte_id`, solo `celula_id`) — esa relación nace recién al asignarlo. No se inventó una columna que no existe.
+  > **Corregido 2026-09-16 (D-139).** Esta línea decía *"aprendices ACTIVOS sin célula"*, y así estaba el código: al que ya tenía grupo no lo ofrecía ningún selector, de modo que **no había forma de mover a nadie de grupo** desde el panel. El dueño lo reportó como *"no me deja agregar más aprendices"*. Trasladar ya funcionaba por debajo (`ComposicionDeCelulaService.asignar` cierra la pertenencia vigente y abre la nueva, sin cobrar plaza de más al reasignar dentro del mismo grupo): lo único que faltaba era ofrecerlo. El filtro por **inscripción** (E-186) no se tocó.
+- Construido recorriendo las células existentes (acotadas) para armar **de qué grupo es cada aprendiz**, nunca participante por participante — mismo criterio anti-N+1 que `PorcentajeRocasFinder` (D-43). Es el mismo recorrido que antes armaba el conjunto de "ya asignados": lo único que cambió es que en vez de descartarlos, guarda su grupo.
 
 **Lo que sigue sin construir, documentado explícitamente:**
 
@@ -336,3 +338,69 @@ Los 9 handlers quedaron en una sola expresión con un solo caso de uso. `Asignar
 - **Test de reflexión de `@RequiresPermission`/`@PublicEndpoint`** — sigue bloqueado: el mecanismo no existe en `shared/` (§6).
 - **`TestimonioController` sigue con `X-Actor-Id`** (hallazgo 1 de la auditoría del 2026-08-28). No entra en el alcance de este encargo; sigue abierto.
 - **Partir `CelulaService`/`PublicacionMuroService`** (hallazgo 3 de esa misma auditoría) — sigue abierto.
+
+## 10. 2026-09-16 — Un aprendiz puede estar en varios grupos a la vez (D-139)
+
+Decisión del dueño, confirmada dos veces: *"un estudiante o aprendiz puede estar en varios grupos
+múltiples a la vez"*, con la instrucción explícita de **no romper nada, solo agregar esa parte**.
+
+### 10.1 Lo que ya existía y por qué no alcanzaba
+
+`POST /api/v1/admin/cells/{id}/trainees` (`ComposicionDeCelulaService.asignar`) es un **traslado**:
+antes de abrir la pertenencia nueva cierra todas las vigentes del aprendiz
+(`cerrarPertenenciaVigente`). Eso es deliberado y **queda intacto**.
+
+Y aunque no lo fuera, la base lo impedía: `asignaciones_un_grupo_por_aprendiz` (`V45`) era un
+`EXCLUDE USING gist (usuario_id WITH =, tstzrange(inicio, fin) WITH &&) WHERE (funcion = 'APRENDIZ')`,
+es decir "ninguna persona con dos pertenencias solapadas, ni siquiera en grupos distintos".
+
+### 10.2 Lo que se agregó
+
+- **`POST /api/v1/admin/cells/{id}/additional-trainees`** (`AltaAdicionalDeAprendizController` →
+  `SumarAprendizAGrupoUseCase` → `SumarAprendizAGrupoService`). Abre la pertenencia nueva y **no
+  cierra ninguna**. Permiso `MANAGE_CELLS`, el mismo del traslado. Devuelve el mismo
+  `CelulaDetalleResponse` del grupo destino, dentro de la misma transacción (CM-21).
+  Ruta y controller propios: el POST viejo tiene un efecto destructivo y no puede quedar
+  dependiendo de un campo del body que un cliente viejo no manda.
+- **`V56`** cambia la exclusión por `asignaciones_una_vez_en_cada_grupo`, que agrega
+  `celula_id WITH =`. Lo que se levanta es la exclusividad ENTRE grupos; lo que sigue prohibido es
+  estar dos veces en el MISMO grupo, que no es pertenecer a varios sino una membresía duplicada.
+  Las tres restricciones de mentor no se tocan.
+- **`ConjuntoAsignaciones.verificarPuedeSumar`**, hermano de `verificarPuedeAbrir`: cada caso de uso
+  pide por nombre la invariante que necesita, en vez de un booleano en el sitio de la llamada.
+- **Idempotencia en el código**, que es lo que queda cuando la exclusión se va: si ya tiene
+  pertenencia vigente a ese grupo, el comando es un no-op; y la `clave_operacion` es
+  `suma-a-grupo|<aprendiz>|<grupo>|<entradas previas>`, así que dos peticiones simultáneas calculan
+  la misma clave y la segunda muere contra `asignaciones_celula_operacion_uk`, mientras que una
+  reincorporación legítima —se lo sumó, se lo retiró, se lo vuelve a sumar— no choca contra su
+  propia fila cerrada.
+
+### 10.3 `participantes_programa.celula_id`: sigue nombrando al grupo principal
+
+Es **una sola columna** y la leen siete caminos: `GET /me/cell`, `GET /me/cell/members`, el conteo
+de miembros del panel (`CelulaService.aDetalle`/`aResumen`/`aCelulaConCohorte`), el picker
+`/aprendices-disponibles`, el ranking, la ficha del aprendiz y el calendario. Con dos grupos
+vigentes solo puede nombrar a uno.
+
+**Criterio elegido, el menos invasivo:** el alta adicional **no la mueve**. Solo la estrena cuando
+está vacía, porque entonces el grupo que se suma es el primero. Ningún lector cambia de respuesta
+para nadie que ya existía.
+
+**Consecuencia que hay que conocer:** el grupo adicional cuenta al aprendiz en
+`activeTraineesCount` (`aprendicesVigentes`, que lee el historial) pero **no lo lista** en
+`members` (que lee el puntero). El chat del grupo adicional **sí** lo incluye, porque reconcilia
+contra `AcompanamientoFinder.integrantesVigentes`. No se unificó: hacerlo cambia el significado de
+`members` para todos los grupos, incluidos los que hoy funcionan.
+
+### 10.4 Lo que NO se hizo, y las preguntas que quedan para el dueño
+
+- **Cuál es el grupo "principal"** cuando alguien está en varios, y si debería poder elegirse. Hoy
+  es simplemente el primero que ocupó la columna.
+- **Qué pasa al retirarlo del grupo principal** si sigue en otros: el puntero queda en `null` —la
+  app le dirá "todavía no tienes grupo"— aunque el historial lo tenga en el adicional. Promover
+  automáticamente otro grupo a principal sería inventar una regla que nadie decidió.
+- **De dónde saca el panel el candidato.** `GET /admin/cells/aprendices-disponibles` ofrece
+  aprendices **sin grupo** (D-135), así que hoy no ofrece a nadie para un alta adicional. A quién
+  hay que ofrecer —todos los inscritos, todos menos los de ESE grupo, un tope de grupos por
+  persona— es una decisión de producto, y por eso no se tocó ese selector.
+- **`members` del detalle de grupo** — ver §10.3.

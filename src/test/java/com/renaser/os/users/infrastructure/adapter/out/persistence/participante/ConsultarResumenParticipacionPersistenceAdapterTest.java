@@ -435,6 +435,57 @@ class ConsultarResumenParticipacionPersistenceAdapterTest {
         return id;
     }
 
+    /**
+     * <b>En "Personas" salen los cinco roles; en la cola "sin grupo", solo aprendices</b>
+     * (E-191, 2026-09-16).
+     *
+     * <p>Este es el test que hubiera atrapado el bug: el WHERE compartido arrancaba con
+     * {@code u.rol = 'APRENDIZ'} y las 7 cuentas de staff no aparecian NUNCA en la pantalla. Contra
+     * el codigo viejo, la primera asercion falla — el mentor no esta en el listado.
+     *
+     * <p>La segunda mitad fija la decision que va con el cambio: el mentor <b>no</b> se suma a
+     * {@code soloSinGrupo}, que es la cola operativa "a quien hay que ubicar". A un miembro de staff
+     * no se le puede asignar celula, asi que ahi seria un numero que no baja nunca.
+     *
+     * <p>Se filtra por una marca unica en el nombre en vez de contar el padron entero: el resto de
+     * las pruebas de esta clase siembran usuarios en la misma transaccion.
+     */
+    @Test
+    void elPadronTraeTodosLosRolesYLaColaSinGrupoSoloAprendices() {
+        String marca = "Padron" + UUID.randomUUID().toString().substring(0, 8);
+        UserId mentor = crearUsuarioLlamado("MENTOR", marca + " Mentor Sin Programa");
+        UserId aprendiz = crearUsuarioLlamado("APRENDIZ", marca + " Aprendiz Sin Grupo");
+        crearParticipante(aprendiz, 1, "America/Lima", null, null);
+
+        assertThat(adapter.listarAprendices(0, 20, marca, false))
+                .extracting(ResumenTraineeAdmin::id)
+                .containsExactlyInAnyOrder(mentor, aprendiz);
+        assertThat(adapter.listarAprendices(0, 20, marca, false))
+                .filteredOn(fila -> fila.id().equals(mentor))
+                .singleElement()
+                .satisfies(fila -> assertThat(fila.rol()).isEqualTo(UserRole.MENTOR));
+
+        assertThat(adapter.listarAprendices(0, 20, marca, true))
+                .extracting(ResumenTraineeAdmin::id)
+                .containsExactly(aprendiz);
+        assertThat(adapter.contarAprendices(marca, true)).isEqualTo(1);
+        assertThat(adapter.contarAprendices(marca, false)).isEqualTo(2);
+    }
+
+    private UserId crearUsuarioLlamado(String rolCrudo, String nombreCompleto) {
+        UserId id = UserId.of(UUID.randomUUID());
+        entityManager.createNativeQuery("""
+                        INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
+                        VALUES (:id, :email, :nombre, CAST(:rol AS renaser.rol_usuario), 'ACTIVO')
+                        """)
+                .setParameter("id", id.value())
+                .setParameter("email", id + "@renaser.test")
+                .setParameter("nombre", nombreCompleto)
+                .setParameter("rol", rolCrudo)
+                .executeUpdate();
+        return id;
+    }
+
     /** Una busqueda que no coincide con nadie devuelve cero, y no revienta la consulta. */
     @Test
     void laBusquedaSinCoincidenciasDevuelveCeroEnLosDos() {

@@ -9,11 +9,13 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.application.ports.in.participante.GetTraineeDetailUseCase;
 import com.renaser.os.users.application.ports.in.participante.GetTraineeDetailUseCase.TraineeDetail;
 import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase;
+import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase.ResumenTraineeAdmin;
 import com.renaser.os.users.application.ports.in.participante.SetTraineeProgramDayUseCase;
 import com.renaser.os.users.application.ports.in.participante.SetTraineeProgramDayUseCase.SetProgramDayCommand;
 import com.renaser.os.users.domain.model.ajustediaprograma.AjusteDiaPrograma;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -205,5 +207,38 @@ class TraineeAdminControllerTest {
         mockMvc.perform(get("/api/v1/admin/trainees/{id}", UUID.randomUUID())
                         .header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString()))
                 .andExpect(status().isForbidden());
+    }
+
+    // --- GET / (listado de Personas) --------------------------------------
+
+    /**
+     * <b>E-191: cada fila dice de que rol es.</b>
+     *
+     * <p>Mientras el listado fue solo de aprendices, el rol se deducia de "en que lista aparecio".
+     * Desde que trae los cinco roles, esa deduccion no existe y el dato tiene que viajar. La
+     * ortografia es la de la BASE —{@code LIDER_MENTORES}, no {@code MENTOR_LEAD}—, que es el
+     * contrato fijado para esta pantalla; contra el codigo viejo la clave {@code role} ni siquiera
+     * existia.
+     */
+    @Test
+    @DisplayName("listar(): cada fila viaja con su rol, con la etiqueta de la base")
+    void elListadoDicePorCadaFilaDeQueRolEs() throws Exception {
+        UserId mentor = UserId.of(UUID.randomUUID());
+        UserId aprendiz = UserId.of(UUID.randomUUID());
+        when(listTraineesUseCase.listar(any())).thenReturn(new ListTraineesUseCase.PaginaTrainees(
+                java.util.List.of(
+                        new ResumenTraineeAdmin(mentor, "Mentora Fixture", "mentora@renaser.com",
+                                UserStatus.ACTIVE, 0, FasePrograma.paraDiaPrograma(0), null, null,
+                                UserRole.MENTOR_LEAD),
+                        new ResumenTraineeAdmin(aprendiz, "Aprendiz Fixture", "aprendiz@renaser.com",
+                                UserStatus.ACTIVE, 34, FasePrograma.PHASE_3_ALCHEMIST_WARRIOR, null, null,
+                                UserRole.TRAINEE)),
+                2, 0, 20));
+
+        mockMvc.perform(get("/api/v1/admin/trainees")
+                        .header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].role").value("LIDER_MENTORES"))
+                .andExpect(jsonPath("$.content[1].role").value("APRENDIZ"));
     }
 }

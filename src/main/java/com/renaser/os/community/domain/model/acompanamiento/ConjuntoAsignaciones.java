@@ -62,6 +62,40 @@ public final class ConjuntoAsignaciones {
     }
 
     /**
+     * Lo mismo que {@link #verificarPuedeAbrir}, pero para el alta <b>adicional</b>: la
+     * pertenencia nueva CONVIVE con las que la persona ya tenga en otros grupos.
+     *
+     * <p><b>Por qué es un método aparte y no un parámetro de {@code verificarPuedeAbrir}.</b>
+     * Son dos operaciones de negocio distintas y cada una tiene su invariante. El traslado
+     * ({@code ComposicionDeCelulaService.asignar}) mueve a alguien: al terminar, la persona está
+     * en UN grupo, y comprobar la exclusividad es parte de lo que hace correcto ese comando. El
+     * alta adicional suma: al terminar, la persona está en los de antes MÁS este. Un booleano
+     * {@code permitirVarios} habría dejado la decisión en el sitio de la llamada, que es
+     * exactamente donde no se ve; así, cada caso de uso pide por nombre la regla que necesita y
+     * el traslado sigue rechazando lo que siempre rechazó.
+     *
+     * <p>Lo que sigue prohibido —y lo que la base repite desde {@code V56} con
+     * {@code asignaciones_una_vez_en_cada_grupo}— es estar DOS VECES en el MISMO grupo a la vez:
+     * eso no es pertenecer a varios grupos, es una membresía duplicada.
+     *
+     * @throws AsignacionInvalidaException si la persona ya pertenece a ESE grupo en ese periodo.
+     */
+    public void verificarPuedeSumar(AsignacionCelula candidata) {
+        if (candidata.funcion() != FuncionAcompanamiento.APRENDIZ) {
+            /* Sumar sin sacar es una regla de APRENDIZ y de nadie más: un mentor sigue liderando
+               un solo grupo, y un grupo sigue teniendo un solo mentor (V45, intactas). Delegar
+               acá evita que este método se convierta por descuido en la puerta de atrás que
+               saltea esas dos. */
+            verificarPuedeAbrir(candidata);
+            return;
+        }
+        solapadaDelMismoUsuarioEnLaMismaCelula(candidata).ifPresent(chocada -> {
+            throw new AsignacionInvalidaException("El aprendiz " + candidata.usuarioId()
+                    + " ya pertenece al grupo " + candidata.celulaId() + " en ese periodo");
+        });
+    }
+
+    /**
      * Repetir un comando con la misma clave devuelve la asignación que ya se creó, en vez de
      * abrir otro intervalo idéntico.
      */
@@ -138,6 +172,11 @@ public final class ConjuntoAsignaciones {
     private Optional<AsignacionCelula> solapadaDelMismoUsuarioEnOtraCelula(AsignacionCelula candidata) {
         return solapadaDelMismoUsuario(candidata)
                 .filter(a -> !a.celulaId().equals(candidata.celulaId()));
+    }
+
+    private Optional<AsignacionCelula> solapadaDelMismoUsuarioEnLaMismaCelula(AsignacionCelula candidata) {
+        return solapadaDelMismoUsuario(candidata)
+                .filter(a -> a.celulaId().equals(candidata.celulaId()));
     }
 
     private Optional<AsignacionCelula> solapadaDelMismoUsuario(AsignacionCelula candidata) {

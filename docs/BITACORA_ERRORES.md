@@ -6489,3 +6489,172 @@ dominio.
 3. **Un build verde no prueba que no haya un bug horario**: prueba que a esa hora no se veía. Quedan
    otras cinco clases de prueba que siembran con `CURRENT_DATE`; ninguna falló esa noche, pero no
    están verificadas contra la franja 00:00–05:00 UTC.
+
+---
+
+## E-190 · "No me deja agregar más aprendices": el selector escondía a todo el que ya tenía grupo
+
+**Síntoma.** El dueño, sobre el panel de grupos: *"no me deja agregar más aprendices"*. En la
+pantalla no hay ningún error — la lista de candidatos simplemente aparece **corta o vacía**, y la
+persona que se busca no está en ella: cuanto más ordenado esté el padrón —más gente ya ubicada en
+un grupo—, más vacío queda el selector.
+
+**Causa.** `CelulaService.aprendicesDisponibles` descartaba a todo aprendiz que fuera miembro de
+alguna célula:
+
+```java
+.filter(id -> !yaAsignados.contains(id))   // CelulaService, antes de 2026-09-16
+```
+
+El nombre del endpoint —`aprendices-disponibles`— describía la intención original (#25: "quién está
+libre"), pero la operación que el dueño necesitaba no es dar de alta a un aprendiz suelto: es
+**mover a uno de un grupo a otro**. Para eso, el único candidato posible es justamente el que ya
+tiene grupo, y era exactamente el que la lista ocultaba.
+
+**Lo que hace que esto sea un bug y no una funcionalidad faltante:** el traslado **ya estaba
+implementado y probado**. `ComposicionDeCelulaService.asignar(AsignarAprendizCelulaCommand)` cierra
+la pertenencia vigente (`cerrarPertenenciaVigente`) antes de abrir la nueva, publica
+`ComposicionDeCelulaCambiadaEvent` para el grupo de destino **y para el de origen**
+(`avisarComposicion`) y hasta contempla el caso de reasignar dentro de un grupo lleno sin cobrar
+plaza de más. El backend sabía mover; la pantalla no tenía cómo pedirlo.
+
+**Solución** (D-137). El selector deja de excluir por tener grupo y marca a cada candidato con
+`cellId` — el mismo patrón que ya usaba el picker de mentores (`GET /admin/cells/mentores`), que
+muestra a todos y señala al ocupado. Lo que **no** cambia: sigue exigiendo rol APRENDIZ, estado
+ACTIVO e inscripción en el programa (E-186 — sin la fila de `participantes_programa` el alta
+responde 404).
+
+**Cómo evitar que vuelva a pasar.**
+
+1. **Ocultar un candidato no es una validación, es una decisión de producto.** Si la escritura
+   acepta la operación, el listado que la alimenta no puede negarla por su cuenta: el resultado no
+   es un error, es una pantalla que miente por omisión y nadie sabe a quién reclamarle.
+2. **Un filtro que "protege" hay que leerlo al revés antes de escribirlo**: ¿de qué protege, y qué
+   operación legítima vuelve imposible? Acá no protegía de nada — `asignar` ya resolvía el traslado.
+3. **Cuando dos selectores resuelven el mismo problema, se parecen.** El de mentores ya había
+   tomado la decisión correcta (mostrar a todos, marcar al ocupado) y el de aprendices no la copió.
+   Un patrón resuelto en el módulo de al lado es la primera referencia a mirar.
+4. Ejecutable en `CelulaServiceTest`:
+   `aprendicesDisponiblesOfreceTambienAQuienYaTieneCelula` — falla contra el código viejo, donde la
+   lista traía un solo candidato. Y en
+   `AprendizCandidatoResponseTest`, que fija la clave `cellId` del contrato HTTP.
+
+---
+
+## E-191 · En "Personas" no aparecía ningún mentor: el padrón filtraba por rol APRENDIZ
+
+**Síntoma.** El dueño, sobre la pantalla de Personas del panel: *"también los mentores hacen el
+recorrido"*. Las 7 cuentas de staff (MENTOR, LIDER_MENTORES, ADMIN, ALQUIMISTA) **no aparecen
+nunca** en el listado, ni buscándolas por nombre o correo — la búsqueda va contra la base y tampoco
+las encuentra. El total tampoco las cuenta.
+
+**Causa.** El WHERE compartido por el listado y el conteo, en
+`ConsultarResumenParticipacionPersistenceAdapter`:
+
+```sql
+FROM renaser.usuarios u
+LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
+WHERE u.rol = 'APRENDIZ'          -- antes de 2026-09-16
+```
+
+El `LEFT JOIN` ya estaba bien puesto para que una persona sin fila de programa no desapareciera; lo
+que la sacaba era el filtro de rol, una línea más arriba.
+
+**Solución** (D-138). El filtro de rol sale del WHERE general y **se muda adentro de la rama de
+`soloSinGrupo`**, y la fila pasa a traer `u.rol` para que cada persona diga de qué rol es
+(`TraineeSummaryResponse.role`).
+
+**Por qué la cola "sin grupo" NO se abre a todos los roles.** `withoutGroup=true` es la cola
+operativa *"a quién hay que ubicar en un grupo"*, y la consume el contador de la pantalla de inicio
+(`usePendientesAdmin`, repo frontend). A un miembro de staff **no se le puede** asignar célula:
+`ComposicionDeCelulaService.requireAprendizElegible` rechaza cualquier rol que no sea aprendiz
+(*"Solo se puede asignar celula a un aprendiz"*). Contarlos ahí sumaría 7 personas que ninguna
+acción del panel puede sacar de la lista, y **un contador que no puede llegar a cero no es una cola,
+es ruido**. Cambiar lo que ese número significa es una decisión del dueño, no un efecto colateral de
+mostrar más filas.
+
+**Cómo evitar que vuelva a pasar.**
+
+1. **Un `LEFT JOIN` bien puesto no salva a nadie si el WHERE filtra por rol.** Es la misma familia
+   que el `INNER JOIN` que borraba del resultado a un ADMIN sin fila de programa —el caso que el
+   javadoc de este mismo adaptador dice haber roto en producción una vez—: el síntoma es idéntico,
+   alguien no aparece, y la causa está una línea más arriba de donde se la busca.
+2. **Al ampliar el alcance de un listado, revisar TODOS sus filtros uno por uno**, no solo el que se
+   viene a cambiar: los que quedan heredan un significado que nadie volvió a leer. Acá el heredado
+   era un contador del panel de inicio.
+3. Ejecutable en dos niveles:
+   `AlcanceDelPadronTest` (sin contenedores, corre siempre) fija las dos mitades juntas —el listado
+   no recorta por rol, la rama de `?2` sigue exigiendo APRENDIZ—, y
+   `ConsultarResumenParticipacionPersistenceAdapterTest#elPadronTraeTodosLosRolesYLaColaSinGrupoSoloAprendices`
+   lo comprueba contra Postgres real. Los dos fallan contra el código viejo.
+
+---
+
+## E-192 · Sacar a un aprendiz de un grupo adicional le borraba el grupo principal
+
+**Síntoma.** Con D-137 puesto —un aprendiz en el grupo A (principal) y en el B (adicional)—,
+`DELETE /api/v1/admin/cells/{B}/trainees/{aprendiz}` lo dejaba **sin grupo en la app**: `GET /me/cell`
+devolvía vacío y "mis compañeros" venía en lista vacía, aunque su pertenencia al A seguía viva en
+`asignaciones_celula`. No hay mensaje de error: el borrado es silencioso y sale bien.
+
+**Causa.** `ComposicionDeCelulaService.quitar` cerraba el intervalo del grupo indicado y después
+limpiaba el puntero **sin mirar a qué grupo apuntaba**:
+
+```java
+enEseGrupo.cerrar(ahora, MotivoAsignacion.ADMINISTRATIVO);
+saveAsignacionPort.save(enEseGrupo);
+asignacionCelulaPort.quitarCelula(command.actorId(), command.traineeId());  // ← siempre
+```
+
+Mientras un aprendiz tenía un solo grupo eso era correcto por construcción: el puntero siempre
+nombraba al grupo del que se lo estaba sacando. Desde que puede tener varios, deja de serlo — y
+`participantes_programa.celula_id` es UNA columna que nombra al grupo **principal**.
+
+**Solución.** El puntero solo se borra si nombraba a ESE grupo
+(`limpiarPunteroSiNombraAEseGrupo`). Para el mundo de un solo grupo no cambia nada; los únicos casos
+que dejan de escribir son los que ya estaban torcidos (puntero vacío, o apuntando a otro grupo).
+
+**Cómo evitar que vuelva a pasar.**
+1. **Prevención ejecutable:** `ComposicionDeCelulaServiceTest.bajaDeUnGrupoAdicionalNoBorraElPunteroDelPrincipal`
+   y `AprendizEnVariosGruposIT.retirarDelAdicionalNoLeBorraElPuntero`. Verificado revirtiendo el
+   arreglo: la primera se pone roja contra el código anterior.
+2. **La lección general:** cuando una relación pasa de 1:1 a 1:N, el peligro no está en el alta —que
+   es lo que uno mira— sino en la **baja**, que sigue borrando "el" valor como si solo hubiera uno.
+   Toda escritura de un puntero de proyección tiene que comprobar que el puntero se refiera al
+   objeto que la operación está tocando.
+
+---
+
+## E-193 · Volver a asignar a un aprendiz al grupo del que se lo sacó no hace nada, en silencio
+
+**Síntoma.** `POST /api/v1/admin/cells/{A}/trainees` con un aprendiz que **ya estuvo** en A y fue
+retirado responde **200 con el detalle del grupo**, y el aprendiz **no queda adentro**: ni fila nueva
+en `asignaciones_celula`, ni puntero. El administrador ve "listo" y el grupo sigue sin la persona.
+
+**Causa.** La idempotencia de `ComposicionDeCelulaService.asignar` mira la clave de operación **sin
+mirar si el intervalo sigue vigente**:
+
+```java
+String clave = claveDeAlta(command.traineeId(), destino.id());   // "alta-manual|<aprendiz>|<grupo>"
+if (delAprendiz.yaAplicada(clave).isPresent()) {
+    return detalle(command.actorId(), destino.id());             // ← también encuentra la CERRADA
+}
+```
+
+`loadAsignacionesPort.porUsuario` devuelve el historial completo, cerradas incluidas, y la clave se
+deriva solo del par persona-grupo. La fila vieja —ya cerrada— hace que el comando se crea repetido.
+Reabrirla con la misma clave tampoco sería posible: chocaría contra
+`asignaciones_celula_operacion_uk`, único por (clave, célula, usuario, función).
+
+**Estado: NO corregido.** Es un bug **anterior** a D-137 (existe desde que se escribió
+`ComposicionDeCelulaService`) y arreglarlo cambia el comportamiento del traslado, que en ese cambio
+tenía la instrucción explícita de quedar intacto. Se deja registrado y **no** se tocó.
+
+**Cómo se arreglaría** (para quien lo tome): mismo patrón que `SumarAprendizAGrupoService`, que ya
+nace sin el bug — la idempotencia pregunta por la **pertenencia vigente** a ese grupo, y la clave
+lleva el número de entradas previas (`suma-a-grupo|<aprendiz>|<grupo>|<n>`), de modo que una
+reincorporación legítima no choca contra su propia fila cerrada.
+
+**Cómo evitar que vuelva a pasar.** Una clave de idempotencia derivada solo de las **entidades**
+—y no del intento— convierte "ya lo hice una vez" en "no lo puedo volver a hacer nunca". Si la
+operación es repetible en el tiempo, la clave tiene que distinguir los intentos.

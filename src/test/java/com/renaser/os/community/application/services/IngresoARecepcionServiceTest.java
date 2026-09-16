@@ -185,8 +185,12 @@ class IngresoARecepcionServiceTest {
     }
 
     /**
-     * Si el administrador ya lo coloco a mano, su decision manda sobre la automatica. Ademas,
-     * insertar aqui chocaria contra `asignaciones_un_grupo_por_aprendiz`.
+     * Si el administrador ya lo coloco a mano, su decision manda sobre la automatica.
+     *
+     * <p>El motivo es ese y no la base. Hasta D-139 ademas chocaba contra
+     * `asignaciones_un_grupo_por_aprendiz`, pero V56 levanto esa exclusion: hoy la base aceptaria
+     * meterlo tambien en la recepcion. Quien impide pisarle el grupo que le pusieron a mano es
+     * este guard, no el motor — y por eso esta prueba pasa a ser la unica red que queda.
      */
     @Test
     @DisplayName("Quien ya tiene grupo vivo no se toca")

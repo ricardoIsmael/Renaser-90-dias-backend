@@ -23,10 +23,15 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 
 /**
- * Panel admin de aprendices (gap #7 de docs/PLAN_INTEGRACION_FRONTEND.md): listar,
+ * Panel admin de personas (gap #7 de docs/PLAN_INTEGRACION_FRONTEND.md): listar,
  * detalle, editar dia de programa. Solo ADMIN/ALCHEMIST — gate DENTRO del servicio
  * (CLAUDE.MD §5.4.6). Actor: resuelto desde la sesion, con respaldo temporal por el header
  * {@code X-Actor-Id} — ver nota de AccountRequestController.
+ *
+ * <p><b>La ruta sigue siendo {@code /admin/trainees} aunque ya devuelva todos los roles</b>
+ * (D-138, 2026-09-16). El nombre quedo corto, pero renombrar una ruta publicada rompe al cliente
+ * que la usa hoy, y el campo {@code role} de cada fila dice de quien se trata sin necesidad de
+ * adivinarlo por la URL.
  */
 @RestController
 @RequestMapping("/api/v1/admin/trainees")
@@ -53,6 +58,8 @@ public class TraineeAdminController {
                                        @RequestParam(defaultValue = "false") boolean withoutGroup) {
         // q y withoutGroup se resuelven en la BASE, no sobre la pagina: buscar sobre los veinte
         // ya descargados esconde al que esta mas atras (SDD 003, ARF-02 / V28).
+        // withoutGroup=true sigue devolviendo SOLO aprendices sin celula (D-138): es la cola de
+        // "a quien hay que ubicar", y el staff no se ubica en ningun grupo.
         var pagina = listTraineesUseCase.listar(new ListTraineesCommand(actor, page, size, q, withoutGroup));
         return TraineePageResponse.from(pagina);
     }

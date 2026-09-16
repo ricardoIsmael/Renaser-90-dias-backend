@@ -36,10 +36,15 @@ public interface ConsultarResumenParticipacionPort {
     int contarMiembrosDeCelula(UUID celulaId);
 
     /**
-     * Panel admin de aprendices (gap #7 de docs/PLAN_INTEGRACION_FRONTEND.md): pagina de
-     * TODOS los usuarios con rol TRAINEE (cualquier estado), con su resumen de programa
-     * si tienen fila en `participantes_programa` (siempre deberian, ver D-33, pero LEFT
-     * JOIN de todas formas por robustez).
+     * Panel admin de personas (gap #7 de docs/PLAN_INTEGRACION_FRONTEND.md): pagina de
+     * TODOS los usuarios (cualquier rol, cualquier estado), con su resumen de programa
+     * si tienen fila en `participantes_programa` (LEFT JOIN: para el staff normalmente no
+     * hay, y por eso el programa de esas filas llega en cero).
+     *
+     * <p><b>Corregido 2026-09-16 (D-138).</b> Aca decia "TODOS los usuarios con rol TRAINEE",
+     * y el SQL filtraba {@code u.rol = 'APRENDIZ'}: los 7 usuarios de staff no aparecian en la
+     * pantalla de Personas. Pedido del dueno — "tambien los mentores hacen el recorrido".
+     * {@code soloSinGrupo} es la unica parte que sigue mirando el rol, ver abajo.
      *
      * <p><b>Los filtros llegan con el SDD 003, pedidos explicitamente.</b> {@code busqueda} recorta
      * por nombre o correo EN LA BASE, no sobre la pagina ya descargada: buscar en el movil sobre
@@ -48,7 +53,10 @@ public interface ConsultarResumenParticipacionPort {
      * quien no tiene grupo vigente es justamente a quien hay que ubicar.
      *
      * @param busqueda    {@code null} o vacio = sin recorte. Se compara sin distinguir mayusculas.
-     * @param soloSinGrupo {@code true} = solo los que no tienen celula asignada.
+     * @param soloSinGrupo {@code true} = solo los <b>aprendices</b> que no tienen celula asignada.
+     *                     El rol quedo dentro de ESTE filtro cuando el listado se abrio a todos los
+     *                     roles (D-138): a un miembro de staff no se le puede asignar celula, asi
+     *                     que sumarlo a la cola daria un numero que no baja nunca.
      */
     List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo);
 

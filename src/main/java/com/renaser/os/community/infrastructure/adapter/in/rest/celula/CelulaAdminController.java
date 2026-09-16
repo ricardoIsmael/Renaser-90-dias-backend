@@ -104,7 +104,9 @@ public class CelulaAdminController {
         return candidatosUseCase.mentores(actorId).stream().map(MentorCandidatoResponse::from).toList();
     }
 
-    /** #25: aprendices ACTIVOS sin celula (alcance global, ver javadoc del caso de uso). */
+    /** #25: aprendices ACTIVOS e inscritos, con grupo o sin el — {@code cellId} marca cual, para
+     * que elegir a uno que ya tiene grupo se vea como el traslado que es (alcance global, ver
+     * javadoc del caso de uso). */
     @RequiresPermission(Permission.MANAGE_CELLS)
     @GetMapping("/aprendices-disponibles")
     public List<AprendizCandidatoResponse> aprendicesDisponibles(@ActorAutenticado UserId actorId) {

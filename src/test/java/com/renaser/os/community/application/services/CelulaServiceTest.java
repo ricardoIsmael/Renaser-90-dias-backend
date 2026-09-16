@@ -243,8 +243,24 @@ class CelulaServiceTest {
         assertThatThrownBy(() -> service.aprendicesDisponibles(mentor)).isInstanceOf(NotAuthorizedException.class);
     }
 
+    /**
+     * <b>E-190: tener grupo no puede sacar a nadie del selector.</b>
+     *
+     * <p>El filtro viejo se quedaba solo con los aprendices sin celula, y por eso no habia forma de
+     * <b>mover</b> a nadie de grupo desde la pantalla. El dueno lo reporto como "no me deja agregar
+     * mas aprendices". Mover ya funcionaba por debajo
+     * ({@code ComposicionDeCelulaService.asignar} cierra la pertenencia vigente y abre la nueva):
+     * lo unico que faltaba era ofrecerlo.
+     *
+     * <p>Contra el codigo viejo este caso falla dos veces: la lista traia UNO solo, y el que ya
+     * tenia grupo ni siquiera llegaba para poder decir de cual.
+     *
+     * <p>{@code findByIds} se stubea con {@code any()} a proposito — igual que en el caso de E-186,
+     * para que el rojo del codigo viejo sea la asercion y no un desajuste de Mockito.
+     */
     @Test
-    void aprendicesDisponiblesExcluyeAQuienesYaTienenCelula() {
+    @DisplayName("aprendicesDisponibles(): ofrece TAMBIEN al que ya esta en un grupo, diciendo en cual")
+    void aprendicesDisponiblesOfreceTambienAQuienYaTieneCelula() {
         UserId aprendizAsignado = UserId.of(UUID.randomUUID());
         UserId aprendizLibre = UserId.of(UUID.randomUUID());
         Celula celula = celulaExistente();
@@ -257,14 +273,26 @@ class CelulaServiceTest {
         // el caso "activo pero sin participacion" no lo cubria nadie.
         when(participacionProgramaFinder.participantesInscritosActivos())
                 .thenReturn(java.util.List.of(aprendizAsignado, aprendizLibre));
-        when(userSummaryFinder.findByIds(java.util.List.of(aprendizLibre))).thenReturn(java.util.Map.of(aprendizLibre,
-                new UserSummary(aprendizLibre, "Aprendiz Libre", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        when(userSummaryFinder.findByIds(any())).thenReturn(java.util.Map.of(
+                aprendizLibre, new UserSummary(aprendizLibre, "Aprendiz Libre", null, UserRole.TRAINEE,
+                        UserStatus.ACTIVE),
+                aprendizAsignado, new UserSummary(aprendizAsignado, "Aprendiz Con Grupo", null, UserRole.TRAINEE,
+                        UserStatus.ACTIVE)));
 
         var disponibles = service.aprendicesDisponibles(admin);
 
-        assertThat(disponibles).hasSize(1);
-        assertThat(disponibles.get(0).userId()).isEqualTo(aprendizLibre);
-        assertThat(disponibles.get(0).nombreCompleto()).isEqualTo("Aprendiz Libre");
+        assertThat(disponibles).extracting(c -> c.userId())
+                .containsExactlyInAnyOrder(aprendizAsignado, aprendizLibre);
+        // El grupo actual es lo que convierte "agregar" en "trasladar" a la vista del administrador.
+        assertThat(disponibles).filteredOn(c -> c.userId().equals(aprendizAsignado))
+                .singleElement()
+                .satisfies(c -> {
+                    assertThat(c.celulaActual()).isEqualTo(celula.id());
+                    assertThat(c.nombreCompleto()).isEqualTo("Aprendiz Con Grupo");
+                });
+        assertThat(disponibles).filteredOn(c -> c.userId().equals(aprendizLibre))
+                .singleElement()
+                .satisfies(c -> assertThat(c.celulaActual()).isNull());
     }
 
     /**

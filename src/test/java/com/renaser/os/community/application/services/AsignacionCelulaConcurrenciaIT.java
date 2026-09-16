@@ -41,8 +41,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p><b>Por qué esto no se puede probar con mocks, ni con la comprobación a mano que había.</b>
  * El dominio ya valida antes de escribir ({@code ConjuntoAsignaciones}), pero un check-then-insert
  * pierde la carrera: entre "miré y no había nadie" y "inserto" cabe otra transacción entera. La
- * defensa real son las tres restricciones {@code EXCLUDE USING gist} de V45, y una restricción
- * solo demuestra que funciona cuando dos transacciones de verdad se pelean la misma fila.
+ * defensa real son las tres restricciones {@code EXCLUDE USING gist} —las dos de mentor de V45 y
+ * {@code asignaciones_una_vez_en_cada_grupo}, que V56 puso en lugar de
+ * {@code asignaciones_un_grupo_por_aprendiz} (D-139)— y una restricción solo demuestra que
+ * funciona cuando dos transacciones de verdad se pelean la misma fila.
  *
  * <p>Hasta ahora T09 estaba verificada con {@code psql} a mano: nueve casos, una tarde, ningún
  * archivo. Eso comprueba que la restricción existía ESE día. Lo que no hacía era avisar el día que
@@ -234,9 +236,48 @@ class AsignacionCelulaConcurrenciaIT {
                 funcion, desde, MotivoAsignacion.ADMINISTRATIVO, null, claveOperacion));
     }
 
+    /**
+     * <b>Corregido 2026-09-16 (D-139).</b> Esta prueba se llamaba
+     * {@code unAprendizNoQuedaEnDosGruposAunqueLoIntentenALaVez} y afirmaba que de seis altas
+     * simultaneas del mismo aprendiz a seis grupos distintos ganaba UNA, porque
+     * {@code asignaciones_un_grupo_por_aprendiz} rechazaba las otras cinco. Esa ya no es la regla:
+     * el dueno decidio que un aprendiz puede pertenecer a varios grupos a la vez, {@code V56}
+     * levanto esa exclusion y la reemplazo por {@code asignaciones_una_vez_en_cada_grupo}.
+     *
+     * <p>Lo que la carrera tiene que demostrar ahora es lo que SIGUE siendo verdad: seis altas
+     * simultaneas al MISMO grupo, cada una con su clave de operacion —es decir, sin que
+     * {@code asignaciones_celula_operacion_uk} pueda salvarlas— dejan una sola membresia.
+     */
     @Test
-    @DisplayName("RF-08: seis traslados simultaneos del MISMO aprendiz a grupos distintos -> queda en UNO")
-    void unAprendizNoQuedaEnDosGruposAunqueLoIntentenALaVez() throws Exception {
+    @DisplayName("RF-08: seis altas simultaneas del MISMO aprendiz al MISMO grupo -> una sola membresia")
+    void unAprendizNoQuedaDosVecesEnElMismoGrupoAunqueLoIntentenALaVez() throws Exception {
+        UserId aprendiz = nuevoUsuario();
+        CelulaId grupo = CelulaId.of(celulas.getFirst());
+
+        List<Intento> intentos = enParalelo(IntStream.range(0, INTENTOS_CONCURRENTES)
+                .<Callable<Void>>mapToObj(i -> () -> {
+                    guardar(grupo, aprendiz, FuncionAcompanamiento.APRENDIZ, "op-" + i);
+                    return null;
+                })
+                .toList());
+
+        assertThat(ganadores(intentos))
+                .as("exactamente uno de los %s puede abrir intervalo vivo en ese grupo", INTENTOS_CONCURRENTES)
+                .isEqualTo(1);
+        perdieronEnLaBase(intentos, "asignaciones_una_vez_en_cada_grupo");
+        assertThat(filasVivasDe(aprendiz, FuncionAcompanamiento.APRENDIZ))
+                .as("y en la base queda una sola fila viva: nadie esta dos veces en el mismo grupo")
+                .isEqualTo(1);
+    }
+
+    /**
+     * La contracara de la anterior, y la que fija D-139 en la base: a grupos DISTINTOS entran
+     * todas. Sin esta prueba, volver a poner la exclusion vieja en una migracion futura no
+     * rompería nada en la suite — que es exactamente el agujero que esta clase existe para tapar.
+     */
+    @Test
+    @DisplayName("D-139: seis altas simultaneas del MISMO aprendiz a grupos DISTINTOS -> entran las seis")
+    void unAprendizSiPuedeQuedarEnVariosGruposALaVez() throws Exception {
         UserId aprendiz = nuevoUsuario();
 
         List<Intento> intentos = enParalelo(IntStream.range(0, INTENTOS_CONCURRENTES)
@@ -247,12 +288,11 @@ class AsignacionCelulaConcurrenciaIT {
                 .toList());
 
         assertThat(ganadores(intentos))
-                .as("exactamente uno de los %s puede abrir intervalo vivo", INTENTOS_CONCURRENTES)
-                .isEqualTo(1);
-        perdieronEnLaBase(intentos, "asignaciones_un_grupo_por_aprendiz");
+                .as("ninguna se pisa: son grupos distintos")
+                .isEqualTo(INTENTOS_CONCURRENTES);
         assertThat(filasVivasDe(aprendiz, FuncionAcompanamiento.APRENDIZ))
-                .as("y en la base queda una sola fila viva: nadie estudia en dos grupos a la vez")
-                .isEqualTo(1);
+                .as("y queda vivo en los %s grupos", INTENTOS_CONCURRENTES)
+                .isEqualTo(INTENTOS_CONCURRENTES);
     }
 
     @Test
@@ -350,8 +390,9 @@ class AsignacionCelulaConcurrenciaIT {
      * ahi es donde se pierde la garantia — un guard en Java no sobrevive a dos procesos.
      *
      * <p>Un {@code DROP CONSTRAINT} o un renombre en una migracion futura rompe esto por el
-     * nombre. Sin esta prueba, borrar {@code asignaciones_un_grupo_por_aprendiz} no tumbaria
-     * nada en toda la suite.
+     * nombre. Sin esta prueba, borrar {@code asignaciones_una_vez_en_cada_grupo} no tumbaria
+     * nada en toda la suite. Es lo que paso al reves con {@code V56}: el cambio de invariante de
+     * D-139 se vio primero aca.
      */
     @Test
     @DisplayName("Cada invariante la rechaza SU restriccion, nombrada: si alguien la borra, esto avisa")
@@ -361,9 +402,15 @@ class AsignacionCelulaConcurrenciaIT {
 
         UserId aprendiz = nuevoUsuario();
         guardar(grupoA, aprendiz, FuncionAcompanamiento.APRENDIZ, "clave-1");
+        /* Corregido 2026-09-16 (D-139). Aca se esperaba `asignaciones_un_grupo_por_aprendiz` sobre
+           un SEGUNDO grupo. V56 levanto esa exclusion: dos grupos ahora entran, y lo que queda
+           prohibido es estar dos veces en el MISMO. */
         assertThat(rechazoDe(() -> guardar(grupoB, aprendiz, FuncionAcompanamiento.APRENDIZ, "clave-2")))
-                .as("un aprendiz vivo en dos grupos")
-                .contains("asignaciones_un_grupo_por_aprendiz");
+                .as("un aprendiz vivo en dos grupos distintos ya es valido")
+                .isEmpty();
+        assertThat(rechazoDe(() -> guardar(grupoA, aprendiz, FuncionAcompanamiento.APRENDIZ, "clave-2-bis")))
+                .as("pero dos veces vivo en el mismo grupo, no")
+                .contains("asignaciones_una_vez_en_cada_grupo");
 
         UserId mentorA = nuevoUsuario();
         UserId mentorB = nuevoUsuario();

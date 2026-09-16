@@ -314,12 +314,20 @@ solo adiciones en puntos distintos de las mismas clases.
   usaba el reset de contraseña (se reutilizó tal como pedía el encargo, no se creó un
   segundo puerto de email). Suspender a un staff invoca `CerrarTodasLasSesionesUseCase`
   (MODULO_AUTH.md §7.4: revocación en el acto, no en 30s).
-- **Gap #7 — aprendices**: `GET /api/v1/admin/trainees` (paginado), `GET /{id}` (detalle:
+- **Gap #7 — personas**: `GET /api/v1/admin/trainees` (paginado), `GET /{id}` (detalle:
   `User` + `ParticipacionPrograma` vía `ConsultarResumenParticipacionPort`), `PUT
   /{id}/program-day`. Nuevo método de dominio `ParticipacionPrograma.fijarDia(int, Clock)`:
   misma invariante [0, 90] que ya imponía `avanzarDia` (no es una regla de negocio nueva,
   es la misma cota aplicada también al piso) — a diferencia de `avanzarDia` (incrementa de
   a 1, el paso normal del reloj), permite fijar el día exacto que pide un operador humano.
+  > **Corregido 2026-09-16 (D-138).** Este punto decía *"gap #7 — aprendices"*, y el listado
+  > filtraba `u.rol = 'APRENDIZ'`: las cuentas de staff no aparecían nunca en la pantalla de
+  > Personas. Pedido del dueño — *"también los mentores hacen el recorrido"*. `GET
+  > /api/v1/admin/trainees` devuelve hoy **todos los roles**, y cada fila trae `role` con la
+  > etiqueta de la base (`APRENDIZ`, `MENTOR`, `LIDER_MENTORES`, `ADMIN`, `ALQUIMISTA`). El
+  > parámetro `withoutGroup=true` **sigue devolviendo solo aprendices sin célula**: es la cola de
+  > "a quién hay que ubicar", y a un miembro de staff no se le puede asignar célula. La ruta
+  > conserva el nombre `/admin/trainees` para no romper al cliente que ya la consume.
 - **Gap #9 — solicitudes de cuenta**: `GET/DELETE /api/v1/account-requests` (admin,
   paginado) + `GET /api/v1/account-requests/{id}/status` **PUBLIC_ENDPOINT**. Decisión de
   diseño (el encargo pedía elegir entre email o id y documentarlo): se resuelve por el

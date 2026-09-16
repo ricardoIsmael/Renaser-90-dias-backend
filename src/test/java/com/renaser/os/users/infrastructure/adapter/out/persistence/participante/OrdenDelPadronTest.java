@@ -28,7 +28,7 @@ import static org.mockito.Mockito.when;
  * <p><b>Que cubre y que no.</b> Cubre el criterio de orden, que es la regla que se decidio. NO
  * cubre que el SQL sea valido ni que las etiquetas {@code ?n} esten bien numeradas: un doble del
  * {@code EntityManager} no valida nada de eso —ya paso, y por eso existe el comentario de
- * {@code FILTRO_APRENDICES}—. De eso se encarga
+ * {@code FILTRO_PADRON}—. De eso se encarga
  * {@code ConsultarResumenParticipacionPersistenceAdapterTest#elPadronEmpiezaPorElAltaMasReciente},
  * que corre el mismo ORDER BY contra Postgres de verdad.
  */

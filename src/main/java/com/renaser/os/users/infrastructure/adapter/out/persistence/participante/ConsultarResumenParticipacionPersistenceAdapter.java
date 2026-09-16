@@ -89,7 +89,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             SELECT COUNT(*) FROM renaser.participantes_programa WHERE celula_id = ?1
             """;
 
-    /** Panel admin de aprendices (gap #7): todos los TRAINEE, con o sin fila de programa. */
+    /** Panel admin de personas (gap #7): TODOS los usuarios, con o sin fila de programa. */
     /**
      * El WHERE compartido por el listado y el conteo. Se escribe UNA vez a proposito: dos copias
      * se desincronizan y la pantalla termina diciendo "1 de 340" con una sola fila en la lista.
@@ -97,6 +97,16 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
      * <p>{@code ?1} llega null cuando no hay busqueda y el {@code IS NULL} deja pasar todo: un solo
      * SQL en vez de concatenar el WHERE segun los filtros, que es como se cuela una inyeccion o un
      * plan distinto por combinacion. {@code ?2} hace lo mismo con "solo sin grupo".
+     *
+     * <blockquote><b>Corregido 2026-09-16 (E-191, D-138).</b> Aca arrancaba con
+     * {@code WHERE u.rol = 'APRENDIZ'}, asi que la pantalla "Personas" no mostraba <b>nunca</b> a
+     * las 7 cuentas de staff. El dueno: <i>"tambien los mentores hacen el recorrido"</i>. El filtro
+     * de rol no desaparecio: <b>se mudo adentro de la rama de {@code ?2}</b>, y ahi sigue diciendo
+     * APRENDIZ. Esa rama es la cola operativa "a quien hay que ubicar en un grupo", y un mentor no
+     * entra en ella: a un miembro de staff <b>no se le puede</b> asignar celula
+     * ({@code ComposicionDeCelulaService.requireAprendizElegible} rechaza cualquier rol que no sea
+     * aprendiz), asi que los 7 quedarian en esa cola para siempre, sin ninguna accion que los
+     * saque. Un contador que no puede llegar a cero no es una cola, es ruido.</blockquote>
      *
      * <blockquote><b>Los filtros van PRIMERO y la paginacion despues, y no al reves.</b> Con la
      * numeracion invertida —filtros en {@code ?3}/{@code ?4}— el listado funcionaba y el conteo
@@ -106,14 +116,13 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
      * contigua. Salio en la pantalla de Personas, no en las pruebas: el doble del EntityManager no
      * valida etiquetas.</blockquote>
      */
-    private static final String FILTRO_APRENDICES = """
+    private static final String FILTRO_PADRON = """
             FROM renaser.usuarios u
             LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
-            WHERE u.rol = 'APRENDIZ'
-              AND (CAST(?1 AS text) IS NULL
+            WHERE (CAST(?1 AS text) IS NULL
                    OR u.nombre_completo ILIKE '%' || CAST(?1 AS text) || '%'
                    OR u.email ILIKE '%' || CAST(?1 AS text) || '%')
-              AND (?2 = FALSE OR pp.celula_id IS NULL)
+              AND (?2 = FALSE OR (pp.celula_id IS NULL AND u.rol = 'APRENDIZ'))
             """;
 
     /**
@@ -148,12 +157,17 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
      *
      * <p><b>Que NO cambia:</b> {@link #QUERY_CONTAR_APRENDICES} no lleva ORDER BY y no se toca —
      * ordenar no altera cuantas filas hay. El WHERE sigue siendo el mismo
-     * {@link #FILTRO_APRENDICES} compartido, que es lo que evita que la lista y el total se
+     * {@link #FILTRO_PADRON} compartido, que es lo que evita que la lista y el total se
      * desincronicen.
      *
      * <p>{@code usuarios.creado_en} es {@code NOT NULL DEFAULT now()} desde V1, asi que no hay que
      * decidir donde van los nulos: no hay. Tampoco se agrega indice — el padron son decenas de
      * filas, y un indice nuevo pide su propia migracion justificada (regla 04).
+     *
+     * <p><b>{@code u.rol} viaja en la fila desde 2026-09-16</b> (D-138). Va <b>al final</b> del
+     * SELECT y no junto a {@code u.estado}, que seria su lugar natural, para no correr los indices
+     * del {@code Object[]} que lee {@link #aResumenTraineeAdmin}: renumerar diez posiciones por
+     * prolijidad es la clase de cambio que rompe una sola columna y no lo nota ninguna prueba.
      */
     private static final String QUERY_LISTAR_APRENDICES = """
             SELECT u.id, u.nombre_completo, u.email, u.estado,
@@ -161,13 +175,14 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                    pp.celula_id, pp.mentor_id, pp.fecha_inicio,
                    COALESCE(pp.timezone, 'America/Lima') AS timezone,
                    pp.programa_activado_en,
-                   COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa
-            """ + FILTRO_APRENDICES + """
+                   COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa,
+                   u.rol
+            """ + FILTRO_PADRON + """
             ORDER BY u.creado_en DESC, u.id
             LIMIT ?3 OFFSET ?4
             """;
 
-    private static final String QUERY_CONTAR_APRENDICES = "SELECT COUNT(*) " + FILTRO_APRENDICES;
+    private static final String QUERY_CONTAR_APRENDICES = "SELECT COUNT(*) " + FILTRO_PADRON;
 
     private final EntityManager entityManager;
     private final Clock clock;
@@ -319,9 +334,12 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
         UserId mentorId = fila[6] == null ? null : UserId.of(aUuid(fila[6]));
         int diaPrograma = diaVigente((Number) fila[4], aLocalDate(fila[7]), aZona(fila[8]), fila[9],
                 (Number) fila[10]);
+        // El rol se traduce ACA a UserRole, no viaja crudo: la etiqueta en espanol es un detalle de
+        // la base, y quien lo consuma no tiene por que saber como se escribe `rol_usuario`.
         return new ResumenTraineeAdmin(id, fullName, email,
                 suspendido ? UserStatus.SUSPENDED : UserStatus.ACTIVE,
-                diaPrograma, FasePrograma.paraDiaPrograma(diaPrograma), celulaId, mentorId);
+                diaPrograma, FasePrograma.paraDiaPrograma(diaPrograma), celulaId, mentorId,
+                mapearRol(String.valueOf(fila[11])));
     }
 
     /**

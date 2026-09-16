@@ -89,6 +89,50 @@ class ConjuntoAsignacionesTest {
     }
 
     @Test
+    @DisplayName("sumar SI deja al aprendiz en dos grupos a la vez: es otra operacion, no otro traslado")
+    void sumarPermiteUnSegundoGrupoVigente() {
+        UserId aprendiz = UserId.of(UUID.randomUUID());
+
+        ConjuntoAsignaciones actual = ConjuntoAsignaciones.de(List.of(
+                asignacion(GRUPO, aprendiz, FuncionAcompanamiento.APRENDIZ, SETIEMBRE, null)));
+
+        /* Exactamente el caso que `verificarPuedeAbrir` rechaza en la prueba de arriba. Las dos
+           tienen que seguir siendo verdad a la vez: el traslado exige exclusividad, el alta
+           adicional no (D-137). */
+        actual.verificarPuedeSumar(
+                asignacion(OTRO_GRUPO, aprendiz, FuncionAcompanamiento.APRENDIZ, OCTUBRE, null));
+    }
+
+    @Test
+    @DisplayName("sumar NO permite estar dos veces en el MISMO grupo a la vez")
+    void sumarNoPermiteMembresiaDuplicadaEnElMismoGrupo() {
+        UserId aprendiz = UserId.of(UUID.randomUUID());
+
+        ConjuntoAsignaciones actual = ConjuntoAsignaciones.de(List.of(
+                asignacion(GRUPO, aprendiz, FuncionAcompanamiento.APRENDIZ, SETIEMBRE, null)));
+
+        // Estar dos veces en el mismo grupo no es pertenecer a varios: es una membresia duplicada,
+        // y la base la sigue rechazando (V56, asignaciones_una_vez_en_cada_grupo).
+        assertThatThrownBy(() -> actual.verificarPuedeSumar(
+                asignacion(GRUPO, aprendiz, FuncionAcompanamiento.APRENDIZ, OCTUBRE, null)))
+                .isInstanceOf(AsignacionInvalidaException.class)
+                .hasMessageContaining("ya pertenece al grupo");
+    }
+
+    @Test
+    @DisplayName("sumar no es la puerta de atras del mentor: sigue liderando un solo grupo")
+    void sumarNoAflojaLasReglasDelMentor() {
+        UserId mentor = UserId.of(UUID.randomUUID());
+
+        ConjuntoAsignaciones actual = ConjuntoAsignaciones.de(List.of(
+                asignacion(GRUPO, mentor, FuncionAcompanamiento.MENTOR, SETIEMBRE, null)));
+
+        assertThatThrownBy(() -> actual.verificarPuedeSumar(
+                asignacion(OTRO_GRUPO, mentor, FuncionAcompanamiento.MENTOR, OCTUBRE, null)))
+                .isInstanceOf(AsignacionInvalidaException.class);
+    }
+
+    @Test
     @DisplayName("repetir la misma clave de operacion no abre otro intervalo")
     void claveDeOperacionEsIdempotente() {
         UserId aprendiz = UserId.of(UUID.randomUUID());

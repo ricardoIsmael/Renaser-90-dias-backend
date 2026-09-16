@@ -175,6 +175,8 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | GET · POST | `/api/v1/admin/cells` |
 | GET · PATCH · DELETE | `/api/v1/admin/cells/{id}` |
 | PUT · DELETE | `/api/v1/admin/cells/{id}/mentor` |
+| POST · DELETE | `/api/v1/admin/cells/{id}/trainees` · `/{traineeId}` |
+| POST | `/api/v1/admin/cells/{id}/additional-trainees` |
 | POST | `/api/v1/admin/cells/{id}/session` |
 | GET · POST | `/api/v1/admin/cohorts` |
 | GET · PATCH · DELETE | `/api/v1/admin/cohorts/{id}` |
@@ -184,6 +186,11 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | POST | `/api/v1/admin/wall-categories/reorder` |
 
 > `GET /admin/cells` **exige** `?cohortId=<uuid>`. Actualizar usa **PATCH** (no POST); asignar mentor usa **PUT** (no POST).
+
+> **Las dos altas de aprendiz NO son la misma** (D-139). `POST .../trainees` **traslada**: cierra la
+> pertenencia que el aprendiz tuviera y abre una sola en el destino. `POST .../additional-trainees`
+> **suma**: lo deja también en los grupos que ya tenía. La segunda no mueve
+> `participantes_programa.celula_id`, que sigue nombrando al grupo principal.
 
 ### `calendar`
 

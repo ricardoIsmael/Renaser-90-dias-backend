@@ -13,6 +13,7 @@ import com.renaser.os.community.application.ports.out.acompanamiento.SaveAsignac
 import com.renaser.os.community.application.ports.out.celula.ExistePerfilMentorPort;
 import com.renaser.os.community.application.ports.out.celula.LoadCelulaPort;
 import com.renaser.os.community.application.ports.out.celula.SaveCelulaPort;
+import com.renaser.os.community.application.ports.out.participante.ConsultarCelulaDeParticipantePort;
 import com.renaser.os.community.domain.model.acompanamiento.AsignacionCelula;
 import com.renaser.os.community.domain.model.acompanamiento.AsignacionId;
 import com.renaser.os.community.domain.model.acompanamiento.AsignacionInvalidaException;
@@ -37,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Comparator;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
@@ -61,6 +63,13 @@ import java.util.Optional;
  *   <li>respetar cupo y solapamientos, que ademas la base sostiene con indices.</li>
  * </ol>
  *
+ * <p><b>Esto es un TRASLADO</b> y lo sigue siendo: {@link #asignar(AsignarAprendizCelulaCommand)}
+ * cierra las pertenencias vigentes del aprendiz antes de abrir la del destino, a proposito. Desde
+ * D-139 un aprendiz tambien puede estar en varios grupos a la vez, pero eso entra por otra puerta
+ * —{@code SumarAprendizAGrupoService}, {@code POST /admin/cells/&#123;id&#125;/additional-trainees}—
+ * y no por un parametro de este metodo: quedaria un efecto destructivo dependiendo de un campo del
+ * body que un cliente viejo no manda.
+ *
  * <p>No copia {@code TrasladoService} ni {@code RotacionService}: comparte con ellos el dominio
  * ({@link ConjuntoAsignaciones}, {@link AsignacionCelula}) y el puerto de punteros, que es donde
  * viven las reglas. Lo que no comparte es la decision de A QUE grupo va cada persona — ahi esta la
@@ -76,6 +85,7 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
     private final SaveAsignacionPort saveAsignacionPort;
     private final LoadPoliticaMentoriaPort loadPoliticaMentoriaPort;
     private final ExistePerfilMentorPort existePerfilMentorPort;
+    private final ConsultarCelulaDeParticipantePort consultarCelulaDeParticipantePort;
     private final UserSummaryFinder userSummaryFinder;
     private final AsignacionCelulaPort asignacionCelulaPort;
     private final ConsultarCelulasUseCase consultarCelulas;
@@ -88,6 +98,7 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
                                        SaveAsignacionPort saveAsignacionPort,
                                        LoadPoliticaMentoriaPort loadPoliticaMentoriaPort,
                                        ExistePerfilMentorPort existePerfilMentorPort,
+                                       ConsultarCelulaDeParticipantePort consultarCelulaDeParticipantePort,
                                        UserSummaryFinder userSummaryFinder,
                                        AsignacionCelulaPort asignacionCelulaPort,
                                        ConsultarCelulasUseCase consultarCelulas,
@@ -98,6 +109,7 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
         this.saveAsignacionPort = saveAsignacionPort;
         this.loadPoliticaMentoriaPort = loadPoliticaMentoriaPort;
         this.existePerfilMentorPort = existePerfilMentorPort;
+        this.consultarCelulaDeParticipantePort = consultarCelulaDeParticipantePort;
         this.userSummaryFinder = userSummaryFinder;
         this.asignacionCelulaPort = asignacionCelulaPort;
         this.consultarCelulas = consultarCelulas;
@@ -162,8 +174,58 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
 
         enEseGrupo.cerrar(ahora, MotivoAsignacion.ADMINISTRATIVO);
         saveAsignacionPort.save(enEseGrupo);
-        asignacionCelulaPort.quitarCelula(command.actorId(), command.traineeId());
+        reubicarPunteroTrasLaBaja(command, vigentes, ahora);
         avisarComposicion(ahora, command.celulaId(), null);
+    }
+
+    /**
+     * El puntero solo se borra si apuntaba a ESE grupo.
+     *
+     * <p>Desde D-139 un aprendiz puede pertenecer a varios grupos a la vez, y
+     * {@code participantes_programa.celula_id} nombra a uno solo: el principal. Sin esta
+     * condicion, retirarlo de un grupo ADICIONAL le borraba el puntero de su grupo PRINCIPAL —
+     * es decir, sacarlo del grupo B lo dejaba sin grupo en la app aunque siguiera en el A—.
+     *
+     * <p>Para el mundo de un solo grupo no cambia nada: ahi el puntero siempre nombra al grupo del
+     * que se lo esta retirando. Los unicos casos que dejan de escribir son los que ya estaban
+     * torcidos: puntero vacio (borrarlo era un no-op) o puntero apuntando a otro grupo (borrarlo
+     * era destruir un dato ajeno a esta operacion).
+     */
+    /**
+     * Tras la baja, el puntero del aprendiz pasa a OTRO grupo vigente si le queda alguno; si no le
+     * queda ninguno, se vacia.
+     *
+     * <p><b>Por que no alcanza con vaciarlo.</b> {@code participantes_programa.celula_id} nombra
+     * el grupo con el que la persona se ve en la app —quien la acompana, su chat, su ficha— y es
+     * UNA sola columna. Desde que se puede pertenecer a varios grupos a la vez (D-139), sacarla
+     * del que el puntero nombraba y dejarlo en {@code null} le decia <i>"todavia no tienes
+     * grupo"</i> a alguien que sigue en otro. El dato existia y la pantalla mentia.
+     *
+     * <p><b>Por que el mas reciente.</b> El grupo inicial es de bienvenida y dura los dias 1 a 7;
+     * el dia 8 la persona pasa a uno estable (V50, {@code PoliticaMentoria.DIA_TRASLADO_POR_DEFECTO}).
+     * Quedarse con "el primero que ocupo la columna" seria quedarse con el de recepcion, del que
+     * ya salio. El vigente mas reciente es el que la persona reconoce como suyo.
+     *
+     * <p>No se elige entre varios candidatos por otra regla —ni cupo, ni tipo de celula— porque
+     * seria inventar una jerarquia que nadie definio.
+     */
+    private void reubicarPunteroTrasLaBaja(QuitarAprendizCelulaCommand command,
+                                            List<AsignacionCelula> vigentesAntesDeLaBaja, Instant ahora) {
+        boolean nombraAEseGrupo = consultarCelulaDeParticipantePort.celulaDeUsuario(command.traineeId())
+                .filter(command.celulaId()::equals)
+                .isPresent();
+        if (!nombraAEseGrupo) {
+            // El puntero nombraba a otro grupo: esta baja no lo toca (E-192).
+            return;
+        }
+        Optional<AsignacionCelula> queLeQueda = vigentesAntesDeLaBaja.stream()
+                .filter(a -> !a.celulaId().equals(command.celulaId()))
+                .max(Comparator.comparing(a -> a.periodo().inicio()));
+        if (queLeQueda.isPresent()) {
+            sincronizarAprendiz(command.traineeId(), queLeQueda.get().celulaId(), ahora);
+        } else {
+            asignacionCelulaPort.quitarCelula(command.actorId(), command.traineeId());
+        }
     }
 
     // ── Mentor ──────────────────────────────────────────────────────────────
