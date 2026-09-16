@@ -61,15 +61,12 @@ public final class Evidencia {
     private final Instant creadoEn;
 
     /**
-     * Registra una evidencia nueva — siempre nace {@code PENDIENTE}, 0 intentos de IA.
-     * Revalida las mismas invariantes que ya fallan rápido en
-     * {@code RegistrarEvidenciaPort.RegistrarEvidenciaComando} (CLAUDE.MD §5.4.3, nivel
-     * 3: la regla de negocio vive en el dominio, no solo en el comando de entrada).
+     * Registra una evidencia nueva — nace {@code PENDIENTE}, 0 intentos de IA.
      *
-     * <p>El {@code id} entra por parámetro, no se genera acá: la identidad viene del puerto
-     * {@code IdGenerator} que inyecta el caso de uso ({@code EvidenciaService.registrar}).
-     * Así {@code registrar} es referencialmente transparente y un test puede fijar el id que
-     * espera, en vez de tener que caer a {@link #rehydrate} para lograrlo.
+     * <p>Que nazca pendiente NO significa que alguien la vaya a revisar: desde el 2026-09-16 el
+     * caso de uso la da por valida en el mismo gesto ({@code EvidenciaService.registrar}). La
+     * invariante del agregado se deja como estaba a proposito — "recien creada, sin veredicto" es
+     * una verdad del dominio, y quien decide que no hace falta revisarla es la aplicacion.
      */
     public static Evidencia registrar(EvidenciaId id, UserId participanteId, DestinoEvidencia destino,
                                        TipoEvidencia tipo, String bucket, String rutaStorage, String contenidoTexto,
@@ -98,6 +95,27 @@ public final class Evidencia {
         return new Evidencia(id, participanteId, destino, tipo, bucket, rutaStorage, contenidoTexto, timestampExif,
                 subidaEn, gpsLat, gpsLng, esPrincipal, estadoValidacion, notasValidacion, intentosIa,
                 penalizacionAplicada, publicadaEnMuro, creadoEn);
+    }
+
+    /**
+     * Se da por valida sin revisarla (2026-09-16, decision del dueno).
+     *
+     * <p>Existe separada de {@link #aprobarPorIa()} porque <b>dicen cosas distintas</b>, aunque
+     * dejen el mismo estado: aquella afirma que algo miro la evidencia y la aprobo; esta afirma
+     * que se decidio no mirarla. Usar la otra dejaria escrito en el dominio que hubo un veredicto
+     * que nunca existio.
+     *
+     * <p>El motivo: la validacion por IA salio del alcance (D-76) y su adaptador es un
+     * {@code NoOp} que siempre devuelve {@code NO_DISPONIBLE}. Cada evidencia gastaba sus tres
+     * intentos contra una IA inexistente y caia en {@code REVISION_MANUAL}, de donde solo podia
+     * sacarla un administrador desde una pantalla que nunca se construyo. Medido en la base el
+     * 2026-09-16: <b>9 de 10 trabadas</b>, la mas vieja de ocho dias. No era un caso raro: era el
+     * final de TODAS.
+     */
+    public void darPorValidaSinRevision() {
+        requireEnPendiente();
+        this.estadoValidacion = EstadoValidacion.VALIDA;
+        this.notasValidacion = "Valida al subirla: la revision por IA salio del alcance (D-76)";
     }
 
     /** La IA (cuando exista, ver docs/MODULO_EVIDENCE.md) aprobó la evidencia. */

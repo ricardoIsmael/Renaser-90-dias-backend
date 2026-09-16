@@ -101,6 +101,16 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
                 comando.destino(), comando.tipo(), comando.bucket(), comando.rutaStorage(), comando.contenidoTexto(),
                 comando.timestampExif(), comando.gpsLat(), comando.gpsLng(), comando.esPrincipal(),
                 comando.subidaEn(), clock);
+        /* Queda valida en el mismo gesto de subirla (2026-09-16, decision del dueno): no hay
+           revision. La validacion por IA salio del alcance (D-76) y su adaptador siempre responde
+           NO_DISPONIBLE, asi que dejarla PENDIENTE la condenaba a gastar tres intentos contra una
+           IA inexistente y terminar en REVISION_MANUAL, donde se acumulaban sin que nadie pudiera
+           resolverlas: 9 de 10 trabadas al 2026-09-16, la mas vieja de ocho dias.
+
+           Se decide ACA y no en el agregado a proposito: "recien creada, sin veredicto" sigue
+           siendo la verdad del dominio; que no haga falta revisarla es una politica de la
+           aplicacion, y el dia que vuelva a haber revision se cambia esta linea y nada mas. */
+        evidencia.darPorValidaSinRevision();
         Evidencia guardada = saveEvidenciaPort.save(evidencia);
         return new EvidenciaRegistrada(guardada.id().value(), guardada.estadoValidacion());
     }

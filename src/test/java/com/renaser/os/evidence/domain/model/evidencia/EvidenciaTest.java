@@ -38,6 +38,22 @@ class EvidenciaTest {
                 null, null, true, CLOCK.now(), CLOCK);
     }
 
+    /**
+     * Una evidencia parada en {@code PENDIENTE}, que es donde arranca el arco de validacion.
+     *
+     * <p>Se construye con {@link Evidencia#rehydrate} y no con {@code registrar} porque desde el
+     * 2026-09-16 <b>el alta ya no pasa por ahi</b>: la evidencia nace {@code VALIDA} (la
+     * validacion por IA salio del alcance, D-76). Las transiciones que estas pruebas ejercitan
+     * NO se borraron y siguen importando — las filas que quedaron en {@code PENDIENTE} o
+     * {@code REVISION_MANUAL} antes del cambio se siguen resolviendo con ellas, y la revision
+     * manual sigue siendo una operacion valida del administrador. Lo unico que cambio es por
+     * donde se entra.
+     */
+    private Evidencia evidenciaPendiente() {
+        return Evidencia.rehydrate(ID, participante(), destinoRoca(), TipoEvidencia.TEXTO, null, null, "hecho", null,
+                CLOCK.now(), null, null, true, EstadoValidacion.PENDIENTE, null, 0, false, false, CLOCK.now());
+    }
+
     // ---- arco exclusivo (DestinoEvidencia sealed) ----
 
     @Test
@@ -130,14 +146,14 @@ class EvidenciaTest {
 
     @Test
     void aprobarPorIaPasaAValida() {
-        Evidencia e = evidenciaTexto();
+        Evidencia e = evidenciaPendiente();
         e.aprobarPorIa();
         assertThat(e.estadoValidacion()).isEqualTo(EstadoValidacion.VALIDA);
     }
 
     @Test
     void rechazarPorIaPasaARechazadaConNotas() {
-        Evidencia e = evidenciaTexto();
+        Evidencia e = evidenciaPendiente();
         e.rechazarPorIa("no coincide con el habito");
         assertThat(e.estadoValidacion()).isEqualTo(EstadoValidacion.RECHAZADA);
         assertThat(e.notasValidacion()).isEqualTo("no coincide con el habito");
@@ -146,7 +162,7 @@ class EvidenciaTest {
     @Test
     @DisplayName("3 intentos fallidos consecutivos -> REVISION_MANUAL (fallback humano)")
     void tresIntentosFallidosCaeARevisionManual() {
-        Evidencia e = evidenciaTexto();
+        Evidencia e = evidenciaPendiente();
         e.registrarIntentoFallido();
         assertThat(e.estadoValidacion()).isEqualTo(EstadoValidacion.PENDIENTE);
         assertThat(e.intentosIa()).isEqualTo(1);
@@ -162,14 +178,14 @@ class EvidenciaTest {
 
     @Test
     void noSePuedeAprobarUnaEvidenciaQueYaNoEstaPendiente() {
-        Evidencia e = evidenciaTexto();
+        Evidencia e = evidenciaPendiente();
         e.aprobarPorIa();
         assertThatThrownBy(e::aprobarPorIa).isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void revisarManualmenteAprueba() {
-        Evidencia e = evidenciaTexto();
+        Evidencia e = evidenciaPendiente();
         e.registrarIntentoFallido();
         e.registrarIntentoFallido();
         e.registrarIntentoFallido();
@@ -182,7 +198,7 @@ class EvidenciaTest {
 
     @Test
     void revisarManualmenteRechaza() {
-        Evidencia e = evidenciaTexto();
+        Evidencia e = evidenciaPendiente();
         e.registrarIntentoFallido();
         e.registrarIntentoFallido();
         e.registrarIntentoFallido();
@@ -230,7 +246,7 @@ class EvidenciaTest {
     @Test
     @DisplayName("anularVeredicto es idempotente: repetido sobre ANULADA_ADMIN no lanza, no pisa notas, devuelve false")
     void anularVeredictoEsIdempotente() {
-        Evidencia e = evidenciaTexto();
+        Evidencia e = evidenciaPendiente();
         e.aprobarPorIa();
         e.anularVeredicto("primera anulacion");
 
@@ -258,7 +274,7 @@ class EvidenciaTest {
     @Test
     @DisplayName("anularVeredicto devuelve false cuando no habia penalizacion aplicada")
     void anularVeredictoSinPenalizacionDevuelveFalse() {
-        Evidencia e = evidenciaTexto();
+        Evidencia e = evidenciaPendiente();
         e.aprobarPorIa();
 
         boolean requiereReversion = e.anularVeredicto("sin penalizacion de por medio");

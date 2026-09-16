@@ -33,6 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -121,15 +122,36 @@ class EvidenciaServiceTest {
         verify(saveEvidenciaPort, never()).save(any());
     }
 
+    /* 2026-09-16. Este test se llamaba `actorActivoRegistraEvidenciaPendiente` y esperaba
+       PENDIENTE. Cambio la politica, no el test: la validacion por IA salio del alcance (D-76) y
+       su adaptador siempre responde NO_DISPONIBLE, asi que quedar pendiente significaba gastar
+       tres intentos contra una IA inexistente y terminar en REVISION_MANUAL, donde nadie podia
+       resolverlas — 9 de 10 trabadas al 2026-09-16, la mas vieja de ocho dias. Por decision del
+       dueno, subirla alcanza. Este caso falla contra el codigo anterior. */
     @Test
-    void actorActivoRegistraEvidenciaPendiente() {
+    void actorActivoRegistraEvidenciaYaValida() {
         UserId participanteId = UserId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(participanteId)).thenReturn(Optional.of(activo(participanteId, UserRole.TRAINEE)));
 
         var resultado = service.registrar(comandoTexto(participanteId));
 
-        assertThat(resultado.estadoValidacion()).isEqualTo(EstadoValidacion.PENDIENTE);
+        assertThat(resultado.estadoValidacion()).isEqualTo(EstadoValidacion.VALIDA);
         verify(saveEvidenciaPort).save(any());
+    }
+
+    /* La otra mitad, y la que importa para no repetir el problema: si queda pendiente, la cola
+       del cron se la come y vuelve a acumularse en REVISION_MANUAL. */
+    @Test
+    void laEvidenciaRecienSubidaNoEntraEnLaColaDeValidacion() {
+        UserId participanteId = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(participanteId)).thenReturn(Optional.of(activo(participanteId, UserRole.TRAINEE)));
+
+        service.registrar(comandoTexto(participanteId));
+
+        ArgumentCaptor<Evidencia> guardada = ArgumentCaptor.forClass(Evidencia.class);
+        verify(saveEvidenciaPort).save(guardada.capture());
+        assertThat(guardada.getValue().estadoValidacion()).isEqualTo(EstadoValidacion.VALIDA);
+        assertThat(guardada.getValue().intentosIa()).isZero();
     }
 
     // ---- consulta: dueño vs. ajena (salvo admin) ----
