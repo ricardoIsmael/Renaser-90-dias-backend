@@ -48,13 +48,22 @@ public interface ConsultarCandidatosCelulaUseCase {
     List<AprendizCandidato> aprendicesDisponibles(UserId actorId);
 
     /**
-     * @param especialidad NEGOCIO / MENTE / RELACIONES, o {@code null} si el mentor no la declaro.
-     *                     El administrador elige el mentor del grupo POR esto (SDD 003, ARF-05),
-     *                     asi que el selector la necesita; null se muestra "Sin especialidad
-     *                     definida" y no se sustituye por ninguna de las tres.
+     * @param especialidad     NEGOCIO / MENTE / RELACIONES, o {@code null} si el mentor no la declaro.
+     *                         El administrador elige el mentor del grupo POR esto (SDD 003, ARF-05),
+     *                         asi que el selector la necesita; null se muestra "Sin especialidad
+     *                         definida" y no se sustituye por ninguna de las tres.
+     * @param celulasActuales  TODOS los grupos que el mentor lidera hoy, ordenados por nombre. Vacia
+     *                         si no lidera ninguno. Existe desde D-141: un mentor puede liderar
+     *                         varios a la vez, y hasta entonces esta respuesta solo podia nombrar
+     *                         uno.
+     * @param celulaActual     el primero de {@code celulasActuales}, o {@code null} si esta vacia.
+     *                         Se conserva para los clientes que ya lo leen, pero cuando el mentor
+     *                         lidera varios NO alcanza para decidir nada: preguntarle "¿lidera este
+     *                         grupo?" da una respuesta equivocada en cuanto el que busca no es el
+     *                         primero. Para eso esta {@code celulasActuales}.
      */
     record MentorCandidato(UserId userId, String nombreCompleto, String avatarUrl, CelulaId celulaActual,
-                            EspecialidadMentor especialidad) {
+                            List<CelulaId> celulasActuales, EspecialidadMentor especialidad) {
     }
 
     /**

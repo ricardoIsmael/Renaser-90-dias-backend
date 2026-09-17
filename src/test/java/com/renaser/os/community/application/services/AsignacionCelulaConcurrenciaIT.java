@@ -418,9 +418,21 @@ class AsignacionCelulaConcurrenciaIT {
         assertThat(rechazoDe(() -> guardar(grupoA, mentorB, FuncionAcompanamiento.MENTOR, "clave-4")))
                 .as("dos mentores vivos en el mismo grupo")
                 .contains("asignaciones_un_mentor_por_celula");
+        /* Corregido 2026-09-17 (D-141). Aca se esperaba `asignaciones_una_celula_por_mentor` sobre
+           un SEGUNDO grupo. V58 levanto esa exclusion —y tambien el `celulas.mentor_id UNIQUE` de
+           V1, que decia lo mismo en la otra tabla—: un mentor puede liderar varios grupos a la vez.
+           Lo que queda prohibido es que un GRUPO tenga dos mentores, que es la assertion de arriba
+           y sigue nombrando su restriccion. */
         assertThat(rechazoDe(() -> guardar(grupoB, mentorA, FuncionAcompanamiento.MENTOR, "clave-5")))
-                .as("un mentor vivo en dos grupos")
-                .contains("asignaciones_una_celula_por_mentor");
+                .as("un mentor vivo en dos grupos distintos ya es valido")
+                .isEmpty();
+        /* Y esta es la que sostiene la decision de V58 de NO agregar una restriccion de reemplazo,
+           al reves que V56 con el aprendiz: el mismo mentor repetido en su propio grupo ya lo
+           rechaza `asignaciones_un_mentor_por_celula`, porque mira el grupo y no de quien es la
+           fila. Si algun dia eso dejara de ser cierto, se entera aca y no en produccion. */
+        assertThat(rechazoDe(() -> guardar(grupoA, mentorA, FuncionAcompanamiento.MENTOR, "clave-5-bis")))
+                .as("pero el mismo mentor dos veces vivo en el mismo grupo, no")
+                .contains("asignaciones_un_mentor_por_celula");
 
         UserId otro = nuevoUsuario();
         guardar(grupoB, otro, FuncionAcompanamiento.APRENDIZ, "clave-repetida");

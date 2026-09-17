@@ -44,6 +44,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -52,6 +53,7 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 /**
@@ -270,26 +272,45 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         Set<UserId> yaLideran = mentoresQueYaLideran();
         List<UserId> disponibles = mentoresActivos().stream().filter(id -> !yaLideran.contains(id)).toList();
         Map<UserId, EspecialidadMentor> especialidades = especialidadesDe(disponibles);
-        return disponibles.stream().map(id -> aMentorCandidato(id, null, especialidades.get(id))).toList();
+        return disponibles.stream().map(id -> aMentorCandidato(id, List.of(), especialidades.get(id))).toList();
     }
 
-    /** #25: TODOS los mentores ACTIVOS, marcando con {@code celulaActual} a quien ya
-     * lidera una — el picker los muestra a todos en vez de ocultar a los ocupados
+    /** #25: TODOS los mentores ACTIVOS, marcando con {@code celulasActuales} los grupos que ya
+     * lideran — el picker los muestra a todos en vez de ocultar a los ocupados
      * (mismo criterio que el frontend ya documenta para este picker). */
     @Override
     public List<MentorCandidato> mentores(UserId actorId) {
         requireAdmin(actorId);
-        Map<UserId, CelulaId> celulaPorMentor = new HashMap<>();
-        for (Celula celula : loadCelulaPort.todas()) {
-            if (celula.mentorId() != null) {
-                celulaPorMentor.put(celula.mentorId(), celula.id());
-            }
-        }
+        Map<UserId, List<CelulaId>> celulasPorMentor = celulasPorMentor();
         List<UserId> todos = mentoresActivos();
         Map<UserId, EspecialidadMentor> especialidades = especialidadesDe(todos);
         return todos.stream()
-                .map(id -> aMentorCandidato(id, celulaPorMentor.get(id), especialidades.get(id)))
+                .map(id -> aMentorCandidato(id, celulasPorMentor.getOrDefault(id, List.of()),
+                        especialidades.get(id)))
                 .toList();
+    }
+
+    /**
+     * Los grupos de cada mentor, ordenados por nombre de grupo.
+     *
+     * <p><b>Corregido 2026-09-17 (D-141).</b> Acá había un {@code Map<UserId, CelulaId>} llenado
+     * con {@code put} dentro del recorrido de {@code todas()}: con un mentor al frente de dos
+     * grupos, el segundo {@code put} pisaba al primero y la respuesta nombraba uno cualquiera de
+     * los dos —cuál, dependía del orden en que la base devolviera las filas—. El picker de
+     * "Asignar mentor" compara ese id contra el grupo que está mirando para decidir entre "ya
+     * lidera este grupo" y "ya lidera otro grupo", así que le mentía justo cuando el mentor sí
+     * lideraba el grupo en pantalla pero no era el que había sobrevivido al pisón.
+     *
+     * <p>Se ordena por nombre para que {@code celulaActual} —el primero— sea siempre el mismo
+     * entre dos llamadas seguidas. Un orden arbitrario haría parpadear la etiqueta del picker sin
+     * que nada hubiera cambiado.
+     */
+    private Map<UserId, List<CelulaId>> celulasPorMentor() {
+        return loadCelulaPort.todas().stream()
+                .filter(celula -> celula.mentorId() != null)
+                .sorted(Comparator.comparing(Celula::nombre, Comparator.nullsLast(Comparator.naturalOrder())))
+                .collect(Collectors.groupingBy(Celula::mentorId,
+                        Collectors.mapping(Celula::id, Collectors.toList())));
     }
 
     /** #25: aprendices ACTIVOS e inscritos, CON grupo o sin el — alcance GLOBAL (ver javadoc de
@@ -395,10 +416,12 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         return yaLideran;
     }
 
-    private MentorCandidato aMentorCandidato(UserId id, CelulaId celulaActual, EspecialidadMentor especialidad) {
+    private MentorCandidato aMentorCandidato(UserId id, List<CelulaId> celulasActuales,
+                                             EspecialidadMentor especialidad) {
         UserSummary resumen = userSummaryFinder.findById(id).orElse(null);
+        CelulaId primera = celulasActuales.isEmpty() ? null : celulasActuales.get(0);
         return new MentorCandidato(id, resumen != null ? resumen.fullName() : null,
-                resumen != null ? resumen.avatarUrl() : null, celulaActual, especialidad);
+                resumen != null ? resumen.avatarUrl() : null, primera, celulasActuales, especialidad);
     }
 
     /**

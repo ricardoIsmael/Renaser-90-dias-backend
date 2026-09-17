@@ -118,6 +118,11 @@ class CelulaServiceTest {
                 CohorteId.of(UUID.randomUUID()), null, null, CLOCK.now(), CLOCK.now());
     }
 
+    private Celula celulaLlamada(String nombre) {
+        return Celula.rehydrate(CelulaId.of(UUID.randomUUID()), nombre, null,
+                CohorteId.of(UUID.randomUUID()), null, null, CLOCK.now(), CLOCK.now());
+    }
+
     @Test
     void crearComoMentorEsRechazado() {
         var command = new CrearCelulaCommand(mentor, "Celula 1", CohorteId.of(UUID.randomUUID()), null);
@@ -235,6 +240,31 @@ class CelulaServiceTest {
 
         assertThat(todos).hasSize(1);
         assertThat(todos.get(0).celulaActual()).isEqualTo(celulaConMentor.id());
+    }
+
+    @Test
+    @DisplayName("D-141: un mentor con dos grupos los devuelve LOS DOS, y siempre en el mismo orden")
+    void mentoresDevuelveTodosLosGruposDeQuienLideraVarios() {
+        Celula zeta = celulaLlamada("Zeta");
+        Celula alfa = celulaLlamada("Alfa");
+        zeta.asignarMentor(mentor, CLOCK.now());
+        alfa.asignarMentor(mentor, CLOCK.now());
+        // Llegan en orden inverso al alfabetico a proposito: el orden de la respuesta no puede
+        // depender del orden en que la base devuelva las filas.
+        when(loadCelulaPort.todas()).thenReturn(java.util.List.of(zeta, alfa));
+        when(participacionProgramaFinder.usuariosActivosConRol(java.util.Set.of(UserRole.MENTOR)))
+                .thenReturn(java.util.List.of(mentor));
+
+        var todos = service.mentores(admin);
+
+        /* Contra el codigo anterior a D-141 esto devolvia UN grupo: el mapa se llenaba con `put`
+           dentro del recorrido y el segundo pisaba al primero. El picker comparaba ese unico id
+           contra el grupo en pantalla, asi que a un mentor que SI lideraba el grupo que se estaba
+           mirando le ponia "ya lidera otro grupo" cuando el superviviente era el otro. */
+        assertThat(todos).hasSize(1);
+        assertThat(todos.get(0).celulasActuales()).containsExactly(alfa.id(), zeta.id());
+        assertThat(todos.get(0).celulaActual()).as("el primero por nombre, estable entre llamadas")
+                .isEqualTo(alfa.id());
     }
 
     @Test

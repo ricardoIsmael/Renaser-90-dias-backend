@@ -78,21 +78,32 @@ public final class ConjuntoAsignaciones {
      * {@code asignaciones_una_vez_en_cada_grupo}— es estar DOS VECES en el MISMO grupo a la vez:
      * eso no es pertenecer a varios grupos, es una membresía duplicada.
      *
-     * @throws AsignacionInvalidaException si la persona ya pertenece a ESE grupo en ese periodo.
+     * <p><b>Corregido 2026-09-17 (D-141).</b> Este método decía que sumar sin sacar «es una regla
+     * de APRENDIZ y de nadie más», y delegaba todo lo demás en {@link #verificarPuedeAbrir}. Desde
+     * que un mentor también puede liderar varios grupos a la vez, esa delegación rechazaba el alta
+     * adicional de MENTOR con «ya lidera el grupo X»: era el mismo negocio viejo, escrito en el
+     * dominio. Ahora cada función dice qué la invalida, y la diferencia queda a la vista.
+     *
+     * @throws AsignacionInvalidaException si la persona ya ocupa ESE grupo con ESA función.
      */
     public void verificarPuedeSumar(AsignacionCelula candidata) {
-        if (candidata.funcion() != FuncionAcompanamiento.APRENDIZ) {
-            /* Sumar sin sacar es una regla de APRENDIZ y de nadie más: un mentor sigue liderando
-               un solo grupo, y un grupo sigue teniendo un solo mentor (V45, intactas). Delegar
-               acá evita que este método se convierta por descuido en la puerta de atrás que
-               saltea esas dos. */
-            verificarPuedeAbrir(candidata);
-            return;
+        switch (candidata.funcion()) {
+            /* Un aprendiz puede estar en varios grupos, pero una sola vez en cada uno. */
+            case APRENDIZ -> solapadaDelMismoUsuarioEnLaMismaCelula(candidata).ifPresent(chocada -> {
+                throw new AsignacionInvalidaException("El aprendiz " + candidata.usuarioId()
+                        + " ya pertenece al grupo " + candidata.celulaId() + " en ese periodo");
+            });
+            /* Un mentor puede liderar varios grupos, pero un grupo sigue teniendo UN solo mentor.
+               Se mira el grupo y no al mentor: `solapadaEnCelula` rechaza igual que el lugar ya
+               esté ocupado por otro mentor o por este mismo repetido, que son el mismo choque. */
+            case MENTOR -> solapadaEnCelula(candidata).ifPresent(chocada -> {
+                throw new AsignacionInvalidaException("El grupo " + candidata.celulaId()
+                        + " ya tiene un mentor asignado en ese periodo (" + chocada.usuarioId() + ")");
+            });
+            /* GUIA y SOPORTE nunca tuvieron exclusión (V45: "pueden cubrir varios grupos a la vez
+               y ser varios por grupo"), así que para ellos abrir y sumar son lo mismo. */
+            default -> verificarPuedeAbrir(candidata);
         }
-        solapadaDelMismoUsuarioEnLaMismaCelula(candidata).ifPresent(chocada -> {
-            throw new AsignacionInvalidaException("El aprendiz " + candidata.usuarioId()
-                    + " ya pertenece al grupo " + candidata.celulaId() + " en ese periodo");
-        });
     }
 
     /**

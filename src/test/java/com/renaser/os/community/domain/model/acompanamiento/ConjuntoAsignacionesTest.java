@@ -120,16 +120,53 @@ class ConjuntoAsignacionesTest {
     }
 
     @Test
-    @DisplayName("sumar no es la puerta de atras del mentor: sigue liderando un solo grupo")
-    void sumarNoAflojaLasReglasDelMentor() {
+    @DisplayName("sumar SI deja al mentor al frente de dos grupos a la vez (D-141)")
+    void sumarPermiteAlMentorUnSegundoGrupo() {
         UserId mentor = UserId.of(UUID.randomUUID());
 
         ConjuntoAsignaciones actual = ConjuntoAsignaciones.de(List.of(
                 asignacion(GRUPO, mentor, FuncionAcompanamiento.MENTOR, SETIEMBRE, null)));
 
+        /* Esta prueba decia lo contrario hasta el 2026-09-17 ("sumar no es la puerta de atras del
+           mentor: sigue liderando un solo grupo") y era correcta mientras esa fue la regla. La
+           regla cambio por decision del dueno, asi que la prueba que la sostenia se invierte en
+           vez de borrarse: sigue siendo el mismo escenario, con el veredicto de hoy. */
+        actual.verificarPuedeSumar(
+                asignacion(OTRO_GRUPO, mentor, FuncionAcompanamiento.MENTOR, OCTUBRE, null));
+    }
+
+    @Test
+    @DisplayName("sumar NO pone un segundo mentor en un grupo que ya tiene uno")
+    void sumarNoPoneDosMentoresEnElMismoGrupo() {
+        UserId mentor = UserId.of(UUID.randomUUID());
+        UserId otroMentor = UserId.of(UUID.randomUUID());
+
+        ConjuntoAsignaciones actual = ConjuntoAsignaciones.de(List.of(
+                asignacion(GRUPO, mentor, FuncionAcompanamiento.MENTOR, SETIEMBRE, null)));
+
+        // Lo que D-141 levanta es "un grupo por mentor", NO "un mentor por grupo". La segunda
+        // sigue en pie, en el dominio y en la base (asignaciones_un_mentor_por_celula, V45).
         assertThatThrownBy(() -> actual.verificarPuedeSumar(
-                asignacion(OTRO_GRUPO, mentor, FuncionAcompanamiento.MENTOR, OCTUBRE, null)))
-                .isInstanceOf(AsignacionInvalidaException.class);
+                asignacion(GRUPO, otroMentor, FuncionAcompanamiento.MENTOR, OCTUBRE, null)))
+                .isInstanceOf(AsignacionInvalidaException.class)
+                .hasMessageContaining("ya tiene un mentor asignado");
+    }
+
+    @Test
+    @DisplayName("sumar tampoco deja al MISMO mentor dos veces vigente en su propio grupo")
+    void sumarNoDuplicaAlMentorEnSuPropioGrupo() {
+        UserId mentor = UserId.of(UUID.randomUUID());
+
+        ConjuntoAsignaciones actual = ConjuntoAsignaciones.de(List.of(
+                asignacion(GRUPO, mentor, FuncionAcompanamiento.MENTOR, SETIEMBRE, null)));
+
+        /* Es el caso que en el aprendiz obligo a V56 a crear una restriccion nueva. Con el mentor
+           no hizo falta: `asignaciones_un_mentor_por_celula` ya lo cubre, porque rechaza dos filas
+           MENTOR solapadas en un grupo sin mirar de quien son. Esta prueba fija esa cobertura. */
+        assertThatThrownBy(() -> actual.verificarPuedeSumar(
+                asignacion(GRUPO, mentor, FuncionAcompanamiento.MENTOR, OCTUBRE, null)))
+                .isInstanceOf(AsignacionInvalidaException.class)
+                .hasMessageContaining("ya tiene un mentor asignado");
     }
 
     @Test
