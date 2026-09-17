@@ -5,11 +5,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.renaser.os.chat.application.ports.out.mensaje.PublicarMensajeFanoutPort;
+import com.renaser.os.chat.application.ports.out.presencia.PublicarPresenciaFanoutPort;
+import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
+import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 /**
  * Adaptador del {@code FanoutPort} (PLAN_DE_MODULOS.md linea 133) sobre Redis Pub/Sub —
@@ -25,7 +30,7 @@ import org.springframework.stereotype.Component;
  * liviano), no justifica arrastrar el ObjectMapper de toda la app.
  */
 @Component
-class RedisChatPublisher implements PublicarMensajeFanoutPort {
+class RedisChatPublisher implements PublicarMensajeFanoutPort, PublicarPresenciaFanoutPort {
 
     private static final Logger log = LoggerFactory.getLogger(RedisChatPublisher.class);
     private static final String CANAL_PREFIJO = "chat:conversacion:";
@@ -49,6 +54,35 @@ class RedisChatPublisher implements PublicarMensajeFanoutPort {
         } catch (RuntimeException e) {
             log.warn("No se pudo publicar el mensaje {} en Redis (el mensaje ya esta guardado en Postgres)",
                     mensaje.id(), e);
+        }
+    }
+
+    /**
+     * El mismo canal que los mensajes, una publicacion por conversacion donde esa persona
+     * aparece. Asi el indicador "en linea" llega por la suscripcion que el cliente ya tiene
+     * abierta, sin un canal propio ni una autorizacion nueva que escribir.
+     *
+     * <p>Tambien fire-and-forget, y por un motivo mas fuerte que en los mensajes: aca no hay
+     * nada guardado que se pueda perder. Si Redis no responde, lo unico que no pasa es que el
+     * puntito se encienda solo — quien abra la conversacion lo leera igual por REST.
+     */
+    @Override
+    public void publicar(UserId usuarioId, boolean enLinea, List<ConversacionId> destinos) {
+        String payload;
+        try {
+            payload = objectMapper.writeValueAsString(
+                    PresenciaFanoutPayload.de(usuarioId.value(), enLinea));
+        } catch (JsonProcessingException e) {
+            log.warn("No se pudo serializar la presencia de {} para el fanout de Redis", usuarioId, e);
+            return;
+        }
+        for (ConversacionId destino : destinos) {
+            try {
+                redisTemplate.convertAndSend(CANAL_PREFIJO + destino.value(), payload);
+            } catch (RuntimeException e) {
+                // Una conversacion que falle no puede dejar sin aviso a las demas.
+                log.warn("No se pudo publicar la presencia de {} en la conversacion {}", usuarioId, destino, e);
+            }
         }
     }
 }

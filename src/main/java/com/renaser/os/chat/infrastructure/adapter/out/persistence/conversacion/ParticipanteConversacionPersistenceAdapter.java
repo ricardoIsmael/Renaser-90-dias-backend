@@ -3,6 +3,7 @@ package com.renaser.os.chat.infrastructure.adapter.out.persistence.conversacion;
 import com.renaser.os.chat.application.ports.out.participante.AgregarParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.QuitarParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ContarNoLeidosPort;
+import com.renaser.os.chat.application.ports.out.participante.ConversacionesDeUsuarioPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ListarUsuariosDeConversacionPort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
@@ -22,7 +23,7 @@ import java.util.UUID;
 @Component
 class ParticipanteConversacionPersistenceAdapter
         implements AgregarParticipantePort, QuitarParticipantePort, EsParticipantePort, MarcarLeidoPort,
-        ContarNoLeidosPort, ListarUsuariosDeConversacionPort {
+        ContarNoLeidosPort, ListarUsuariosDeConversacionPort, ConversacionesDeUsuarioPort {
 
     private final SpringDataParticipanteConversacionRepository repository;
 
@@ -68,6 +69,15 @@ class ParticipanteConversacionPersistenceAdapter
             resultado.put(ConversacionId.of(fila.getConversacionId()), fila.getConteo());
         }
         return resultado;
+    }
+
+    /**
+     * Apoyado en {@code conversacionIdsDeUsuario}, que ya existia en el repositorio: la consulta
+     * estaba escrita y sin puerto que la expusiera.
+     */
+    @Override
+    public List<ConversacionId> conversacionesDe(UserId usuarioId) {
+        return repository.conversacionIdsDeUsuario(usuarioId.value()).stream().map(ConversacionId::of).toList();
     }
 
     @Override
