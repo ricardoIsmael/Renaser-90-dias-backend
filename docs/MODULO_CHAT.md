@@ -288,3 +288,118 @@ ninguna fecha local. El reloj solo sella `creado_en`/`ultimo_leido_en`, que son 
   el diseño por eventos, no porque se haya decidido dejarlo así.
 - **Cuándo se archiva el soporte de alguien que termina el programa** — nadie lo definió. Hoy la
   conversación queda viva.
+
+---
+
+## 9. Presencia real: quién está conectado (2026-09-17, D-140)
+
+### 9.1 Qué había antes
+
+La app mostraba **`● En línea` escrito a mano** debajo del nombre de cualquier persona, en verde,
+en toda conversación directa. No era un dato incompleto ni desactualizado: era un literal en el
+JSX. El sistema **no tenía ninguna noción de presencia** — el campo `isOnline` existía en el tipo
+del cliente y no lo escribía ningún mapeador.
+
+Lo reportó el dueño el 2026-09-17, mirando el APK: *"el tema de en línea de los chat no funciona,
+también son datos escritos"*.
+
+### 9.2 Por qué la presencia NO vive en Postgres
+
+Es estado **efímero y compartido entre instancias**. Guardarlo en una tabla tiene un modo de fallo
+feo: si el backend se cae, la tabla queda afirmando que todos siguen conectados, y no hay quién la
+corrija. En Redis, con vencimiento, el mismo accidente se resuelve solo — la instancia muerta deja
+de refrescar y sus llaves vencen.
+
+- Una llave **por usuario** (`chat:presencia:{userId}`), no un conjunto: un `SET` no vence por
+  elemento, así que una instancia que muere sin limpiar dejaría a su gente dentro para siempre.
+- Vigencia **3 minutos**, refresco cada **45 s** desde cada instancia. Hay que perder tres refrescos
+  seguidos para que alguien conectado parpadee a "ausente", y una instancia caída se apaga sola en
+  ese plazo.
+- La lectura es un solo `MGET` para todo el roster (D-43, anti-N+1).
+
+### 9.3 Por qué el aviso viaja por el canal de la conversación
+
+Se reutiliza `chat:conversacion:{id}` → `/topic/conversaciones/{id}`, el mismo camino que los
+mensajes, en vez de abrir `/topic/presencia/{userId}`.
+
+**El motivo es de seguridad, no de comodidad.** `SubscripcionAutorizadaInterceptor` ya autoriza ese
+destino —participante, activo, y para un grupo revalidando contra la pertenencia vigente (§ E-37)—
+y esa guarda está auditada. Un canal nuevo habría exigido escribir una regla de autorización nueva
+("¿puedo ver la presencia de este usuario?") y ponerla a la par de la que ya existe. Reusar el canal
+deja el problema resuelto por construcción: a la presencia de alguien llega exactamente quien ya
+podía leer lo que esa persona escribe.
+
+Los dos eventos se distinguen por el campo **`event`** del payload (`MESSAGE` / `PRESENCE`), que se
+agregó a `MensajeFanoutPayload` en este mismo cambio.
+
+### 9.4 Se cuentan sockets, no personas
+
+`PresenciaDeSockets` lleva `sesión STOMP → usuario` y `usuario → cuántos sockets`. Solo el **primero**
+enciende y el **último** apaga. Sin esa cuenta, alguien con el teléfono y la web abiertos quedaría
+"ausente" al cerrar una pestaña, y una reconexión normal produciría un parpadeo apagado/encendido en
+la pantalla del otro.
+
+El mapa es de *sesión* a usuario porque `SessionDisconnectEvent` trae el id de sesión, no los
+atributos del handshake: sin haber guardado quién era esa sesión al conectarse, al cerrarse no habría
+a quién apagar.
+
+### 9.5 El refresco NO lleva ShedLock
+
+Es la excepción al patrón del proyecto (D-P4). Los demás schedulers se bloquean para correr en **una**
+instancia; este tiene que correr en **todas**, porque cada una refresca los sockets que solo ella
+tiene. Con lock, las instancias que lo perdieran dejarían caer la presencia de su propia gente.
+
+### 9.6 Qué se construyó
+
+| Pieza | Archivo |
+|---|---|
+| Puerto de presencia (Redis) | `application/ports/out/presencia/PresenciaPort` |
+| Puerto de fanout | `application/ports/out/presencia/PublicarPresenciaFanoutPort` |
+| Conversaciones de un usuario | `application/ports/out/participante/ConversacionesDeUsuarioPort` |
+| Casos de uso | `application/ports/in/presencia/{Consultar,Registrar}PresenciaUseCase` |
+| Servicio | `application/services/PresenciaService` |
+| Adaptador Redis | `infrastructure/adapter/out/redis/RedisPresenciaAdapter` |
+| Payload del fanout | `infrastructure/adapter/out/redis/PresenciaFanoutPayload` |
+| Eventos de socket | `infrastructure/adapter/in/websocket/PresenciaDeSockets` |
+| REST | `GET /api/v1/chat/conversations/{id}/presence` |
+
+`ConversacionesDeUsuarioPort` se apoya en `conversacionIdsDeUsuario`, que **ya existía** en
+`SpringDataParticipanteConversacionRepository`: la consulta estaba escrita y sin puerto que la
+expusiera.
+
+### 9.7 Por qué hace falta el endpoint REST además del socket
+
+Una suscripción entrega **cambios**, no estado. Sin la consulta inicial, quien abre el chat con la
+otra persona ya conectada no recibiría nada y la vería apagada hasta que el otro se fuera.
+
+El endpoint devuelve **solo los ids conectados**, nunca un "última vez". La columna
+`usuarios.ultima_actividad_en` existe desde `V1__baseline_renaser.sql:154` y **no la escribe nadie**;
+inventar ahí un "última vez" sería repetir exactamente el error que este trabajo vino a corregir.
+
+### 9.8 Autorización
+
+`PresenciaService.enLineaEn` repite la guarda de `MensajeService.requireParticipante`, incluida la
+revalidación de grupo contra `PertenenciaVigentePort`. Saber quién está conectado es menos que leer
+lo que escriben, pero es información del mismo grupo: un exmentor con la proyección vieja tampoco la
+ve. Hay prueba dedicada.
+
+### 9.9 Nunca falla hacia arriba
+
+Si Redis no responde, se loguea y se sigue: al consultar se contesta **"nadie en línea"** —la lectura
+prudente, que no afirma lo que no se pudo comprobar— y al conectarse el chat funciona igual. Lo peor
+que pasa es que el indicador no se encienda, o sea el comportamiento anterior a este cambio.
+
+### 9.10 Pruebas
+
+`PresenciaServiceTest`, 10 casos. Los que importan no son los del camino feliz sino estos tres:
+
+- sin nadie conectado **no devuelve a nadie** (lo contrario del literal que reemplaza);
+- un **exmentor** con la proyección vieja recibe `NotAuthorizedException`, no la lista;
+- con **Redis caído** se contesta "nadie", nunca una presencia inventada.
+
+### 9.11 Compatibilidad con la app publicada
+
+`MensajeFanoutPayload` ganó el campo `event`. La app **anterior a este cambio nunca abrió el socket**
+(conversaba solo por REST), así que no hay cliente viejo que se pueda romper. Y la app nueva tolera
+el payload **sin** `event` a propósito, para poder hablar con un backend todavía no desplegado: el
+teléfono se actualiza cuando la tienda quiere, no cuando uno despliega.

@@ -209,6 +209,7 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | GET | `/api/v1/chat/conversations` |
 | POST | `/api/v1/chat/conversations/direct` — body `{otherUserId}` |
 | POST | `/api/v1/chat/conversations/{id}/read` |
+| GET | `/api/v1/chat/conversations/{id}/presence` — nuevo (D-140): ids conectados ahora, para el indicador "en linea". Estado inicial; los cambios llegan por `/topic/conversaciones/{id}` |
 | GET · POST | `/api/v1/chat/conversations/{conversationId}/messages` |
 | POST | `/api/v1/chat/conversations/{conversationId}/messages/share-wall-post` — body `{postId}` |
 | WS | `/ws` → suscripción a `/topic/conversaciones/{id}` (STOMP, con autorización en el handshake) |
