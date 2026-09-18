@@ -85,6 +85,10 @@ public class WebPushAdapter implements TransportePush {
                     || suscripcion.keys().auth() == null) {
                 return ResultadoEnvioPush.invalido(token.id(), "Suscripcion web incompleta");
             }
+            if (!esDestinoDePushAceptable(suscripcion.endpoint())) {
+                // Invalido, no "fallo": el token no sirve y no tiene sentido reintentarlo.
+                return ResultadoEnvioPush.invalido(token.id(), "Endpoint de push no permitido");
+            }
             Subscription subscription = new Subscription(suscripcion.endpoint(),
                     new Subscription.Keys(suscripcion.keys().p256dh(), suscripcion.keys().auth()));
             String payload = objectMapper.writeValueAsString(Map.of(
@@ -136,5 +140,62 @@ public class WebPushAdapter implements TransportePush {
     }
 
     private record WebSubscriptionKeys(String p256dh, String auth) {
+    }
+
+    /**
+     * Que el destino del push sea una direccion publica de internet, por HTTPS.
+     *
+     * <p><b>El agujero que cierra (2026-09-18).</b> {@code endpoint} sale del JSON que el cliente
+     * registro como token y se usaba TAL CUAL como destino del POST saliente. Cualquier usuario
+     * autenticado podia registrar {@code {"endpoint":"http://169.254.169.254/..."}} y dispararlo
+     * generandose una notificacion a si mismo: el servicio de metadatos de la instancia EC2, desde
+     * dentro de la VPC. Es ciego —el cuerpo se descarta— pero {@code interpretar} devuelve un
+     * oraculo por codigo de estado, que alcanza para barrer la red interna.
+     *
+     * <p>Tres controles, de mas barato a mas caro:
+     * <ol>
+     *   <li>solo {@code https}: descarta el metadatos de AWS, que solo habla HTTP;</li>
+     *   <li>el host no puede ser una IP literal: un endpoint de push real siempre es un nombre;</li>
+     *   <li>ninguna de las direcciones a las que resuelve puede ser privada, de loopback,
+     *       link-local ni comodin.</li>
+     * </ol>
+     *
+     * <p><b>Lo que NO cubre, dicho sin vueltas:</b> entre esta comprobacion y el envio hay una
+     * ventana en la que el DNS puede cambiar de respuesta (rebinding). Cerrarla exige fijar la IP
+     * validada en el cliente HTTP, y {@code PushService} no expone donde hacerlo. El riesgo baja de
+     * "cualquiera apunta al metadatos" a "hace falta controlar un dominio y ganar una carrera", y
+     * queda anotado en vez de disimulado.
+     */
+    private static boolean esDestinoDePushAceptable(String endpoint) {
+        java.net.URI uri;
+        try {
+            uri = java.net.URI.create(endpoint);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+        if (!"https".equalsIgnoreCase(uri.getScheme())) {
+            return false;
+        }
+        String host = uri.getHost();
+        if (host == null || host.isBlank()) {
+            return false;
+        }
+        // Una IP literal nunca es un endpoint de push de un navegador; y los hosts entre corchetes
+        // (IPv6) los devuelve `getHost` con los corchetes, asi que se miran aparte.
+        if (host.startsWith("[") || host.matches("[0-9.]+")) {
+            return false;
+        }
+        try {
+            for (java.net.InetAddress direccion : java.net.InetAddress.getAllByName(host)) {
+                if (direccion.isAnyLocalAddress() || direccion.isLoopbackAddress()
+                        || direccion.isLinkLocalAddress() || direccion.isSiteLocalAddress()
+                        || direccion.isMulticastAddress()) {
+                    return false;
+                }
+            }
+        } catch (java.net.UnknownHostException e) {
+            return false;
+        }
+        return true;
     }
 }

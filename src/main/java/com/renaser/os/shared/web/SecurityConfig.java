@@ -162,8 +162,30 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/evidence", "/api/v1/evidence/**").authenticated()
                         .requestMatchers("/api/v1/classroom/**", "/api/v1/cursos/**",
                                 "/api/v1/lecciones/**").authenticated()
+                        /* `/api/v1/me/cells` es OTRA ruta, no una sub-ruta de `/me/cell`: el
+                           patron `/me/cell/**` NO la cubre. Entro sin matcher con D-142
+                           (2026-09-17) y quedo alcanzable sin sesion, con la identidad saliendo del
+                           header `X-Actor-Id` que escribe el cliente — o sea, los grupos y el
+                           padron de cualquier aprendiz con solo saber su UUID, que no es secreto.
+                           Se enumeran las dos formas a proposito en vez de acortar a `/me/cell*`:
+                           un comodin que abarque las dos volveria a depender de que nadie cree una
+                           tercera parecida. */
                         .requestMatchers("/api/v1/wall/**", "/api/v1/chat/**",
-                                "/api/v1/me/cell/**").authenticated()
+                                "/api/v1/me/cell/**", "/api/v1/me/cells", "/api/v1/me/cells/**")
+                        .authenticated()
+                        /* `/api/v1/participants/**` no aparecia en ninguna busqueda por prefijo
+                           porque su controller no declara `@RequestMapping` de clase: las rutas
+                           estan escritas enteras en cada metodo. Incluye
+                           `PUT /participants/{id}/mentor` con ASSIGN_MENTOR, cuyo guard comprueba
+                           el rol del UUID del header — reasignar mentores sin credencial. */
+                        .requestMatchers("/api/v1/participants/**").authenticated()
+                        /* `POST /auth/social/link` NO era un hueco: usa `sesionWeb.actorActual()`,
+                           que exige sesion de verdad y no acepta el respaldo de `X-Actor-Id`. Se
+                           agrega igual para que la regla sea uniforme —toda ruta de la API esta
+                           cubierta por el filtro— y para que `RutasCubiertasPorElFiltroTest` no
+                           tenga que llevar una lista de excepciones que alguien acabaria ampliando
+                           sin pensar. Sin cambio de comportamiento: ya exigia sesion. */
+                        .requestMatchers("/api/v1/auth/social/link").authenticated()
                         .requestMatchers("/api/v1/onboarding/**", "/api/v1/rocks/**",
                                 "/api/v1/spirit-audio/**").authenticated()
                         // El Mapa de Renacimiento es contenido del propio aprendiz: sin sesion no

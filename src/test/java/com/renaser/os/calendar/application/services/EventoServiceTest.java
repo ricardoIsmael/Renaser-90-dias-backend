@@ -23,6 +23,7 @@ import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -190,6 +191,54 @@ class EventoServiceTest {
 
         verify(almacenamientoPort).borrar("calendar/x/portada-1");
         verify(saveEventoPort).eliminar(eventoId);
+    }
+
+    /**
+     * La portada tiene que ser un objeto DE ESTE evento.
+     *
+     * <p>Antes de 2026-09-18, {@code confirmar} guardaba la ruta que mandara el cliente sin
+     * mirarla. Esa misma ruta se firma para lectura y se BORRA del bucket al eliminar el evento —y
+     * hay un solo bucket fisico—, asi que un MENTOR con permiso de calendario sobre sus propios
+     * eventos podia leer o borrar la evidencia, el avatar o la firma de contrato de cualquiera.
+     *
+     * <p>Las dos pruebas fallan contra el codigo anterior: la ruta ajena se guardaba sin chistar.
+     */
+    @Test
+    @DisplayName("La portada de OTRO evento se rechaza: es leer y borrar objetos ajenos")
+    void portadaDeOtroEventoSeRechaza() {
+        EventoId eventoId = EventoId.of(UUID.randomUUID());
+        Evento evento = eventoDePrueba(eventoId);
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolUsuario.ADMIN)));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(evento));
+
+        assertThatThrownBy(() -> service.confirmar(actorId, eventoId,
+                "firmas/" + UUID.randomUUID() + "/fase_2.svg"))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(saveEventoPort, org.mockito.Mockito.never()).guardar(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("La portada propia pasa, que es lo que emite el servidor")
+    void portadaDelPropioEventoPasa() {
+        EventoId eventoId = EventoId.of(UUID.randomUUID());
+        Evento evento = eventoDePrueba(eventoId);
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolUsuario.ADMIN)));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(evento));
+        when(saveEventoPort.guardar(org.mockito.ArgumentMatchers.any())).thenAnswer(inv -> inv.getArgument(0));
+        // `confirmar` devuelve la vista, que firma la portada para lectura.
+        when(almacenamientoPort.firmarLectura(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any())).thenReturn(java.net.URI.create("https://s3.test/portada"));
+
+        service.confirmar(actorId, eventoId, "calendar/" + eventoId + "/portada-123");
+
+        verify(saveEventoPort).guardar(org.mockito.ArgumentMatchers.any());
+    }
+
+    private Evento eventoDePrueba(EventoId eventoId) {
+        return Evento.crear(eventoId, "Sesion", null, Instant.parse("2026-09-01T19:00:00Z"), 60,
+                ZoneId.of("America/Lima"), TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS,
+                null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(), actorId,
+                CLOCK);
     }
 
     @Test

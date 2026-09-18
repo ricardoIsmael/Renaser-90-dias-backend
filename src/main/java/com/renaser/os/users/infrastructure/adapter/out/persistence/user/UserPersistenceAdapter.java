@@ -20,6 +20,21 @@ import java.util.UUID;
 
 @Component
 class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, DeleteUserPort {
+    /**
+     * Tope duro de filas por pagina (2026-09-18).
+     *
+     * <p>`page` y `size` viajaban crudos desde la query hasta `PageRequest.of`. Un solo
+     * `?size=1000000` devolvia el padron entero —nombre, correo, rol, estado— en una sola
+     * respuesta: eso no es una consulta paginada, es una exportacion de datos personales. El chat y
+     * el muro ya acotaban lo suyo (`MiembroService.LIMITE_MAXIMO`); estas dos lecturas, que son las
+     * que mas PII devuelven, no.
+     *
+     * <p>Se acota en el ADAPTADOR y no en el controller a proposito: es el ultimo punto por el que
+     * pasan todos los llamadores de esta consulta, asi que ningun camino nuevo puede saltearselo.
+     */
+    private static final int TAMANO_PAGINA_MAXIMO = 200;
+    private static final int TAMANO_PAGINA_POR_DEFECTO = 20;
+
 
     private final SpringDataUserRepository repository;
     private final UserPersistenceMapper mapper;
@@ -50,7 +65,7 @@ class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, DeleteUserPo
     @Override
     public List<User> byRoles(Collection<UserRole> roles, UserStatus statusFilter, int page, int size) {
         List<RolUsuarioJpa> rolesJpa = roles.stream().map(mapper::toJpaRolePublic).toList();
-        var pageable = PageRequest.of(page, size, Sort.by("nombreCompleto"));
+        var pageable = PageRequest.of(page, tamanoAcotado(size), Sort.by("nombreCompleto"));
         var entidades = statusFilter == null
                 ? repository.findByRolIn(rolesJpa, pageable)
                 : repository.findByRolInAndEstado(rolesJpa, mapper.toJpaStatusPublic(statusFilter), pageable);
@@ -98,5 +113,9 @@ class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, DeleteUserPo
         if (repository.existsById(id.value())) {
             repository.deleteById(id.value());
         }
+    }
+
+    private static int tamanoAcotado(int size) {
+        return size <= 0 ? TAMANO_PAGINA_POR_DEFECTO : Math.min(size, TAMANO_PAGINA_MAXIMO);
     }
 }

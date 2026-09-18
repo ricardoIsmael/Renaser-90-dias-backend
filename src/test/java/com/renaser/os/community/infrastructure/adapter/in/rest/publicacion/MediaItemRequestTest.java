@@ -17,6 +17,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * una URL") y no un valor concreto: es lo que hace que la prueba siga matando el defecto si
  * manana cambia el nombre del bucket o la region.
  */
+import java.util.UUID;
+
 class MediaItemRequestTest {
 
     private static final String CLAVE = "muro/fotos/256090d6-3be1-4326-b8d0-4b6a11190175/0a709f46-73d0-4f19-b3a0-d5c3f4e033b4";
@@ -98,5 +100,50 @@ class MediaItemRequestTest {
 
         assertThat(entrada.bucket()).isEqualTo(MediaPublicacion.BUCKET_DEFAULT);
         assertThat(entrada.mime()).isEqualTo("image/jpeg");
+    }
+
+    /**
+     * La clave de media tiene que ser DEL MURO.
+     *
+     * <p>Antes de 2026-09-18, {@code aClaveDeObjeto} devolvia tal cual cualquier cadena que no
+     * empezara con {@code http}. Esa cadena se guarda y {@code PublicacionMuroService} la pasa a
+     * {@code firmarLectura} para todo el que cargue el feed. Con UN SOLO bucket fisico y claves
+     * predecibles en los demas modulos, quien pudiera publicar obtenia una URL firmada de un objeto
+     * ajeno — por ejemplo la firma del Pacto de Sangre de otra persona.
+     *
+     * <p>Estos tres casos fallan contra el codigo anterior: los tres devolvian la clave intacta.
+     */
+    @org.junit.jupiter.api.Nested
+    @DisplayName("La clave tiene que apuntar dentro del muro")
+    class ClaveAcotadaAlMuro {
+
+        @Test
+        @DisplayName("una clave del muro pasa, como siempre")
+        void claveDelMuroPasa() {
+            assertThat(MediaItemRequest.aClaveDeObjeto("muro/fotos/" + UUID.randomUUID() + "/abc"))
+                    .startsWith("muro/fotos/");
+        }
+
+        @Test
+        @DisplayName("la firma del contrato de OTRA persona se rechaza")
+        void firmaAjenaSeRechaza() {
+            assertThatThrownBy(() -> MediaItemRequest.aClaveDeObjeto("firmas/" + UUID.randomUUID() + "/fase_2.svg"))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("el avatar de otra persona tambien")
+        void avatarAjenoSeRechaza() {
+            assertThatThrownBy(() -> MediaItemRequest.aClaveDeObjeto("avatares/" + UUID.randomUUID()))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("y una URL absoluta que apunte fuera del muro, tampoco cuela")
+        void urlAbsolutaFueraDelMuroSeRechaza() {
+            assertThatThrownBy(() -> MediaItemRequest.aClaveDeObjeto(
+                    "https://renaser-files.s3.amazonaws.com/firmas/" + UUID.randomUUID() + "/fase_1.svg"))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
     }
 }

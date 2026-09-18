@@ -271,12 +271,43 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
         Evento evento = requireEvento(eventoId);
         requirePropioSiMentor(progreso, evento, actorId, "editar");
 
-        evento.fijarPortada(ruta);
+        evento.fijarPortada(exigirPortadaDeEsteEvento(ruta, eventoId));
         Evento guardado = saveEventoPort.guardar(evento);
         return new EventoVista(guardado, coverUrlDe(guardado));
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────────────
+
+    /**
+     * La portada tiene que ser un objeto DE ESTE evento.
+     *
+     * <p><b>El agujero que cierra (2026-09-18).</b> {@code confirmar} guardaba la ruta que mandara
+     * el cliente, sin mirarla. Esa misma ruta se usa despues en DOS lugares peligrosos: se firma
+     * para lectura en {@code coverUrlDe}, y se BORRA del bucket en {@code eliminar}. Como hay un
+     * solo bucket fisico, un MENTOR con permiso de calendario sobre sus propios eventos podia leer
+     * o borrar cualquier objeto del sistema —evidencias, firmas de contrato, avatares— apuntando su
+     * portada ahi y despues eliminando el evento.
+     *
+     * <p>Se exige el evento y no solo el prefijo del modulo: la autorizacion que ya corrio arriba
+     * ({@code requirePropioSiMentor}) es sobre ESTE evento, asi que ese es exactamente el alcance
+     * que el actor tiene derecho a tocar. Coincide con lo que emite {@code solicitar}, que arma
+     * {@code <prefijo>/<eventoId>/portada-<instante>}: nada que el sistema haya firmado queda fuera.
+     *
+     * <p>{@code null} sigue siendo valido: es como se quita una portada.
+     *
+     * @throws IllegalArgumentException si la ruta apunta a otro evento o fuera del modulo.
+     */
+    private static String exigirPortadaDeEsteEvento(String ruta, EventoId eventoId) {
+        if (ruta == null) {
+            return null;
+        }
+        String esperado = PREFIJO_RUTA + "/" + eventoId + "/";
+        if (!ruta.startsWith(esperado)) {
+            throw new IllegalArgumentException(
+                    "La portada tiene que ser un objeto de este evento (" + esperado + ")");
+        }
+        return ruta;
+    }
 
     /** Resuelve la URL de LECTURA de la portada aca (no en el controller): el controller
      * nunca depende de un puerto `out` (ArchitectureTest.controllersDoNotTouchPersistence). */

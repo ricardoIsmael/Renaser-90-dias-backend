@@ -1,5 +1,6 @@
 package com.renaser.os.habits.infrastructure.adapter.in.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.renaser.os.habits.application.ports.in.registro.ExpirarRegistrosVencidosUseCase;
 import com.renaser.os.habits.application.ports.in.santuario.ExpirarRachasVencidasUseCase;
 import com.renaser.os.habits.application.ports.out.participante.ListarParticipantesActivosPort;
@@ -42,6 +43,11 @@ class ExpirarRegistrosScheduler {
 
     /** 05:00 UTC ~ 00:00 Lima — misma hora que el cron viejo (route.ts:4). */
     @Scheduled(cron = "0 0 5 * * *", zone = "UTC")
+    /* Sin cerrojo, dos instancias corren el mismo barrido a la vez. `C-5` lo exige
+       para todo @Scheduled que mute estado compartido, y este quedo afuera. */
+    @SchedulerLock(name = "habits-expirar-registros",
+            lockAtMostFor = "${renaser.scheduling.shedlock.habits-expirar-registros.lock-at-most-for:PT10M}",
+            lockAtLeastFor = "${renaser.scheduling.shedlock.habits-expirar-registros.lock-at-least-for:PT30S}")
     void ejecutar() {
         int registrosExpirados = expirarRegistrosUseCase.expirarPendientesAnterioresA(clock.today());
         int rachasExpiradas = expirarRachasUseCase.expirarVencidas(listarParticipantesPort.todos());

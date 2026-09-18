@@ -53,13 +53,40 @@ public record MediaItemRequest(@NotBlank String url, @NotBlank String mimeType) 
         // prefirmada -que nunca deberia llegar, pero llego en E-57- no entre como parte de la clave.
         String sinFirma = valor.split("\\?", 2)[0];
         if (!sinFirma.regionMatches(true, 0, "http", 0, 4)) {
-            return sinFirma; // ya es una clave: es lo que manda el cliente nuevo
+            return exigirClaveDelMuro(sinFirma); // ya es una clave: es lo que manda el cliente nuevo
         }
         String camino = caminoDe(sinFirma, valor);
         int marca = camino.indexOf(PREFIJO_MURO);
         // Sin la marca no se puede saber donde termina el bucket y empieza la clave, asi que se
         // devuelve el camino entero en vez de adivinar: es lo que hace `support` en el mismo caso.
-        return marca < 0 ? camino : camino.substring(marca);
+        return exigirClaveDelMuro(marca < 0 ? camino : camino.substring(marca));
+    }
+
+    /**
+     * La clave tiene que ser del MURO, y esto no es cosmetica.
+     *
+     * <p><b>El agujero que cierra (2026-09-18).</b> Antes se devolvia tal cual lo que mandara el
+     * cliente. Esa cadena se guarda en {@code medias_publicacion} y
+     * {@code PublicacionMuroService} la pasa a {@code firmarLectura} para todo el que cargue el
+     * feed. Como hay UN SOLO bucket fisico y las claves de los demas modulos son predecibles
+     * —{@code avatares/&lt;usuarioId&gt;}, {@code firmas/&lt;usuarioId&gt;/fase_&lt;n&gt;.svg},
+     * {@code rocas/&lt;usuarioId&gt;/&lt;rocaId&gt;}—, cualquiera con permiso de publicar obtenia una URL
+     * firmada de un objeto ajeno: por ejemplo la firma del Pacto de Sangre de otra persona.
+     *
+     * <p>El servidor genera siempre {@code muro/<carpeta>/<autorId>/<uuid>}
+     * ({@code PublicacionMuroService.rutaDeMedia}), asi que exigir el prefijo no rechaza nada que
+     * el propio sistema haya emitido. Dentro de {@code muro/} no se acota mas por autor a
+     * proposito: esos archivos ya son visibles en el feed para todo el grupo, asi que ahi no hay
+     * frontera que cruzar.
+     *
+     * @throws IllegalArgumentException si la clave apunta fuera del muro.
+     */
+    private static String exigirClaveDelMuro(String clave) {
+        if (clave == null || !clave.startsWith(PREFIJO_MURO)) {
+            throw new IllegalArgumentException(
+                    "La media de una publicacion tiene que ser un objeto del muro (" + PREFIJO_MURO + ")");
+        }
+        return clave;
     }
 
     private static String caminoDe(String sinFirma, String original) {

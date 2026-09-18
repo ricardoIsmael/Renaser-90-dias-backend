@@ -19,6 +19,21 @@ import java.util.Optional;
 @Component
 class AccountRequestPersistenceAdapter implements LoadAccountRequestPort, SaveAccountRequestPort,
         DeleteAccountRequestPort {
+    /**
+     * Tope duro de filas por pagina (2026-09-18).
+     *
+     * <p>`page` y `size` viajaban crudos desde la query hasta `PageRequest.of`. Un solo
+     * `?size=1000000` devolvia el padron entero —nombre, correo, rol, estado— en una sola
+     * respuesta: eso no es una consulta paginada, es una exportacion de datos personales. El chat y
+     * el muro ya acotaban lo suyo (`MiembroService.LIMITE_MAXIMO`); estas dos lecturas, que son las
+     * que mas PII devuelven, no.
+     *
+     * <p>Se acota en el ADAPTADOR y no en el controller a proposito: es el ultimo punto por el que
+     * pasan todos los llamadores de esta consulta, asi que ningun camino nuevo puede saltearselo.
+     */
+    private static final int TAMANO_PAGINA_MAXIMO = 200;
+    private static final int TAMANO_PAGINA_POR_DEFECTO = 20;
+
 
     private final SpringDataAccountRequestRepository repository;
     private final AccountRequestPersistenceMapper mapper;
@@ -54,7 +69,7 @@ class AccountRequestPersistenceAdapter implements LoadAccountRequestPort, SaveAc
     /** Panel admin de solicitudes de cuenta (gap #9). `statusFilter == null` = cualquier estado. */
     @Override
     public List<AccountRequest> pagina(AccountRequestStatus statusFilter, int page, int size) {
-        var pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "creadoEn"));
+        var pageable = PageRequest.of(page, tamanoAcotado(size), Sort.by(Sort.Direction.DESC, "creadoEn"));
         var entidades = statusFilter == null
                 ? repository.findAll(pageable).getContent()
                 : repository.findByEstado(mapper.toJpaStatusPublic(statusFilter), pageable);
@@ -79,5 +94,9 @@ class AccountRequestPersistenceAdapter implements LoadAccountRequestPort, SaveAc
     public AccountRequest save(AccountRequest accountRequest) {
         var saved = repository.save(mapper.toEntity(accountRequest));
         return mapper.toDomain(saved);
+    }
+
+    private static int tamanoAcotado(int size) {
+        return size <= 0 ? TAMANO_PAGINA_POR_DEFECTO : Math.min(size, TAMANO_PAGINA_MAXIMO);
     }
 }

@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.infrastructure.adapter.in.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.renaser.os.calendar.application.ports.in.recordatorio.DespacharRecordatoriosUseCase;
 import com.renaser.os.shared.domain.Clock;
 import org.slf4j.Logger;
@@ -26,6 +27,11 @@ class DespacharRecordatoriosScheduler {
     }
 
     @Scheduled(cron = "0 * * * * *", zone = "UTC")
+    /* Sin cerrojo, dos instancias corren el mismo barrido a la vez. `C-5` lo exige
+       para todo @Scheduled que mute estado compartido, y este quedo afuera. */
+    @SchedulerLock(name = "calendar-despachar-recordatorios",
+            lockAtMostFor = "${renaser.scheduling.shedlock.calendar-despachar-recordatorios.lock-at-most-for:PT10M}",
+            lockAtLeastFor = "${renaser.scheduling.shedlock.calendar-despachar-recordatorios.lock-at-least-for:PT30S}")
     void ejecutar() {
         int despachados = despacharUseCase.despachar(clock.now());
         if (despachados > 0) {

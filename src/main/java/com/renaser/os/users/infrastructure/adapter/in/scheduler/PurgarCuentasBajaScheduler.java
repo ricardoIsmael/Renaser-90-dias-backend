@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.in.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.renaser.os.users.application.ports.in.user.PurgeExpiredAccountsUseCase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +28,11 @@ public class PurgarCuentasBajaScheduler {
     }
 
     @Scheduled(cron = "0 15 4 * * *", zone = "UTC")
+    /* Sin cerrojo, dos instancias corren el mismo barrido a la vez. `C-5` lo exige
+       para todo @Scheduled que mute estado compartido, y este quedo afuera. */
+    @SchedulerLock(name = "users-purgar-cuentas-baja",
+            lockAtMostFor = "${renaser.scheduling.shedlock.users-purgar-cuentas-baja.lock-at-most-for:PT15M}",
+            lockAtLeastFor = "${renaser.scheduling.shedlock.users-purgar-cuentas-baja.lock-at-least-for:PT30S}")
     public void purgarVencidas() {
         var resultado = purgeExpiredAccountsUseCase.purgeExpired();
         log.info("[users.PurgarCuentasBajaScheduler] purgadas {} cuenta(s), {} fallida(s)",
