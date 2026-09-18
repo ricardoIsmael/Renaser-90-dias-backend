@@ -6658,3 +6658,77 @@ reincorporación legítima no choca contra su propia fila cerrada.
 **Cómo evitar que vuelva a pasar.** Una clave de idempotencia derivada solo de las **entidades**
 —y no del intento— convierte "ya lo hice una vez" en "no lo puedo volver a hacer nunca". Si la
 operación es repetible en el tiempo, la clave tiene que distinguir los intentos.
+
+---
+
+## E-194 · La foto de perfil se sube bien y la persona sigue viendo la vieja
+
+**Síntoma.** Reporte del dueño (2026-09-18): *"el cambiar foto… que se suba y cargue nomás esa parte,
+porque hasta ahora no funciona"*. La subida no falla: `POST /users/me/avatar/upload-url`, el `PUT` a
+S3 y `PATCH /users/me/avatar` responden los tres bien, y en el bucket queda la foto nueva. Lo que no
+cambia es lo que se ve en pantalla.
+
+**Causa.** La ruta del avatar es **siempre la misma** — `avatares/<usuarioId>`, la calcula
+`AvatarService.rutaDe` desde el actor —, así que cambiar de foto reescribe el mismo objeto y
+`urlPublica` devuelve una URL **idéntica carácter por carácter** a la anterior. Para cualquier caché
+que indexe por URL (la del navegador, la de `expo-image`, la de un CDN) eso no es una imagen nueva:
+es la que ya tiene guardada. No hay ningún error que reportar porque, desde el punto de vista de cada
+pieza, todas hicieron su trabajo.
+
+**Solución.** `confirmar` guarda la URL con `?v=<instante de la confirmación>`. La versión cambia
+**solo al confirmar**, así que entre dos cambios de foto el `avatarUrl` sigue siendo una constante que
+se lee de la base y los 20 avatares de un muro se siguen cacheando igual — que era lo que E-57
+protegía. Lo único que deja de cachearse es la foto que la persona acaba de reemplazar.
+
+**Cómo evitar que vuelva.** `AvatarServiceTest.dosConfirmacionesDanUrlsDistintas`, que **decía lo
+contrario** hasta hoy: exigía que dos confirmaciones dieran la misma URL. Esa prueba mezclaba dos
+preguntas distintas —*leer* el mismo avatar (misma URL, correcto) y *subir uno nuevo* (URL nueva)— y
+por eso el bug estaba fijado por una prueba en verde. Se invirtió dejando escrito qué afirmaba antes,
+y se conservó lo que de verdad protegía: que nunca sea una URL firmada que vence.
+
+> **De paso, una trampa de Mockito que costó una corrida.** La primera versión de esa prueba usaba un
+> `ArgumentCaptor<User>` para leer las dos URLs guardadas, y pasaba con el código viejo Y con el
+> nuevo. `User` es un agregado **mutable** y el servicio guarda dos veces la MISMA instancia: el
+> captor conserva dos referencias al mismo objeto, así que las dos muestran el último valor. Para
+> comparar estados intermedios de un agregado mutable hay que anotarlos **en el momento** de la
+> llamada (`doAnswer`), no capturarlos.
+
+---
+
+## E-195 · Los recordatorios de hábito llegan tarde y todos juntos
+
+**Síntoma.** Reporte del dueño (2026-09-18) con captura: un hábito puesto a las **06:30** llegó
+**06:44**, y los tres avisos —"En 30 min", "En 10 min" y el de la hora— aparecieron **juntos** en vez
+de a las 06:00, 06:20 y 06:30.
+
+**Causa.** No es el cálculo de la hora, que es correcto. Android tiene dos clases de alarma y
+`expo-notifications` elige sola, en `ExpoSchedulingDelegate.setupAlarm`:
+
+```kotlin
+if (SDK_INT < S || alarmManager.canScheduleExactAlarms()) setExactAndAllowWhileIdle(...)
+else                                                      setAndAllowWhileIdle(...)
+```
+
+La segunda es **inexacta**: el sistema puede posponerla y la entrega **en lote** con otras. Con el
+teléfono quieto de madrugada —justo el caso de una alarma para despertarse— ese lote sale recién en la
+siguiente ventana de mantenimiento de Doze, de ahí los 14 minutos y de ahí que las tres llegaran a la
+vez.
+
+La app apunta a `targetSdk 36`, así que la rama la decide `canScheduleExactAlarms()`, y eso devuelve
+`false` mientras el permiso no esté declarado. **No lo declaraba nadie**: ni `app.json` del frontend,
+ni el manifiesto propio de `expo-notifications`, que solo trae `POST_NOTIFICATIONS` y
+`RECEIVE_BOOT_COMPLETED`. O sea que **todos** los recordatorios eran inexactos desde siempre.
+
+**Solución.** `app.json` declara `android.permission.SCHEDULE_EXACT_ALARM`. No `USE_EXACT_ALARM`, que
+se concede solo pero la política de Google Play reserva a apps cuya función principal es reloj,
+temporizador o calendario — pedirlo arriesgaría la ficha de la tienda.
+
+**Lo que el permiso NO resuelve.** En Android 14+ se declara pero **no se concede solo**: la persona
+tiene que activar "Alarmas y recordatorios" para la app en los ajustes del sistema. Es condición
+necesaria, no suficiente, y queda pendiente guiarla hasta ese interruptor cuando active un
+recordatorio.
+
+**Cómo evitar que vuelva.** `alarmaExacta.test.ts` en el frontend: el permiso es una línea de
+configuración que no rompe nada al desaparecer, así que sin una prueba que lo exija, quitarlo
+devolvería las alarmas a "cuando Android quiera" y el síntoma tardaría semanas en volver a
+reportarse.

@@ -1,6 +1,7 @@
 package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.users.application.ports.in.user.ConfirmarAvatarUseCase;
 import com.renaser.os.users.application.ports.in.user.SolicitarUrlAvatarUseCase;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
@@ -39,12 +40,14 @@ class AvatarService implements SolicitarUrlAvatarUseCase, ConfirmarAvatarUseCase
     private final RequireActiveUserGuard requireActiveUserGuard;
     private final SaveUserPort saveUserPort;
     private final AlmacenamientoPort almacenamientoPort;
+    private final Clock clock;
 
     AvatarService(RequireActiveUserGuard requireActiveUserGuard, SaveUserPort saveUserPort,
-                  AlmacenamientoPort almacenamientoPort) {
+                  AlmacenamientoPort almacenamientoPort, Clock clock) {
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.saveUserPort = saveUserPort;
         this.almacenamientoPort = almacenamientoPort;
+        this.clock = clock;
     }
 
     /** La SUBIDA sigue prefirmada y corta: escribir en el bucket nunca es publico. */
@@ -60,14 +63,37 @@ class AvatarService implements SolicitarUrlAvatarUseCase, ConfirmarAvatarUseCase
      * Guarda la URL PERMANENTE del objeto, no una prefirmada. La ruta se recalcula desde el
      * actor y no se toma del body: asi el usuario solo puede publicar como avatar su propio
      * objeto, aunque mande otra cosa en {@code ruta}.
+     *
+     * <p><b>Y le agrega una version (2026-09-18).</b> La ruta de un avatar es SIEMPRE la misma
+     * ({@code avatares/<usuarioId>}), asi que cambiar de foto reescribe el mismo objeto y la URL
+     * publica queda identica a la anterior, caracter por caracter. Para cualquier cache que
+     * indexe por URL —la del navegador, la de {@code expo-image}, la del CDN— eso no es una
+     * imagen nueva: es la misma que ya tiene guardada. La foto se subia bien y la persona seguia
+     * viendo la vieja, que es el reporte del dueno del 2026-09-18: "que se suba y cargue, porque
+     * hasta ahora no funciona".
+     *
+     * <p>La version es el instante de la confirmacion, asi que cada cambio produce una URL
+     * distinta y todos los caches fallan a la vez. No se toca el objeto ni la ruta: {@code ?v=}
+     * es solo para el cache, S3 lo ignora.
      */
     @Override
     @Transactional
     public void confirmar(ConfirmarAvatarCommand command) {
         User actor = requireActiveUserGuard.of(command.actorId());
         URI url = almacenamientoPort.urlPublica(rutaDe(command.actorId().toString()));
-        actor.changeAvatar(url.toString());
+        actor.changeAvatar(conVersion(url.toString(), clock.now().toEpochMilli()));
         saveUserPort.save(actor);
+    }
+
+    /**
+     * Le agrega {@code v=<instante>} a la URL respetando la que ya trae.
+     *
+     * <p>El separador se elige mirando la URL y no se asume {@code ?}: {@code urlPublica} depende
+     * del adaptador de almacenamiento, y uno que ya devolviera una consulta —un CDN con
+     * parametros, por ejemplo— terminaria con dos {@code ?} y una URL invalida que nadie probo.
+     */
+    private static String conVersion(String url, long instante) {
+        return url + (url.contains("?") ? "&" : "?") + "v=" + instante;
     }
 
     private static String rutaDe(String actorId) {
