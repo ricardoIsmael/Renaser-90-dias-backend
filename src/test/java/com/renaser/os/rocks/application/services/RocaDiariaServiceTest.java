@@ -247,14 +247,35 @@ class RocaDiariaServiceTest {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         RocaDiaria verde = rocaVerde(null);
         when(loadRocaDiariaPort.byIdParaEscritura(verde.id())).thenReturn(Optional.of(verde));
+        /* Corregido 2026-09-18: el fixture decia "rocas/x/y", una ruta que NO pertenece al actor.
+           Pasaba porque nadie comprobaba el prefijo — o sea que esta prueba fijaba el
+           comportamiento inseguro. Ahora usa la clave que el servidor emite de verdad. */
+        String rutaPropia = "rocas/" + actorId.value() + "/" + verde.id().value();
         var command = new CompletarRocaDiariaCommand(actorId, verde.id(), TipoEvidenciaRoca.FOTO, "renaser-files",
-                "rocas/x/y", null, CLOCK.now(), null, null, true, true);
+                rutaPropia, null, CLOCK.now(), null, null, true, true);
 
         service.completar(command);
 
         verify(publicarEnMuroPort).publicarDesdeEvidencia(argThat(
-                c -> c.autorId().equals(actorId) && c.bucket().equals("renaser-files") && c.ruta().equals("rocas/x/y")
+                c -> c.autorId().equals(actorId) && c.bucket().equals("renaser-files") && c.ruta().equals(rutaPropia)
                         && c.mime().equals("image/jpeg") && c.texto().contains("verde")));
+    }
+
+    @Test
+    @DisplayName("La evidencia de una roca no puede apuntar al archivo de otra persona")
+    void evidenciaConRutaAjenaSeRechaza() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
+        RocaDiaria verde = rocaVerde(null);
+        when(loadRocaDiariaPort.byIdParaEscritura(verde.id())).thenReturn(Optional.of(verde));
+        /* Con `publishedToWall=true` esto llegaba al Muro y `aVista` firmaba la clave ajena para
+           CADA lector del feed: la firma del Pacto de Sangre de otra persona repartida al padron. */
+        var command = new CompletarRocaDiariaCommand(actorId, verde.id(), TipoEvidenciaRoca.CAPTURA, "renaser-files",
+                "firmas/" + java.util.UUID.randomUUID() + "/fase_1.svg", null, CLOCK.now(), null, null, true, true);
+
+        assertThatThrownBy(() -> service.completar(command))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(publicarEnMuroPort, org.mockito.Mockito.never())
+                .publicarDesdeEvidencia(org.mockito.ArgumentMatchers.any());
     }
 
     @Test

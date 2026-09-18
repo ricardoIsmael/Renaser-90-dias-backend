@@ -64,7 +64,8 @@ public class TicketSoporteService implements AbrirTicketSoporteUseCase, ListarTi
         requireActorExiste(command.usuarioId());
         CategoriaSoporte categoria = command.categoria() != null ? command.categoria() : CategoriaSoporte.OTRO;
         AdjuntoSoporte adjunto = command.adjuntoBucket() != null && command.adjuntoRuta() != null
-                ? new AdjuntoSoporte(command.adjuntoBucket(), command.adjuntoRuta())
+                ? new AdjuntoSoporte(command.adjuntoBucket(),
+                        exigirAdjuntoPropio(command.adjuntoRuta(), command.usuarioId()))
                 : null;
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
         TicketSoporte ticket = TicketSoporte.abrir(TicketSoporteId.of(idGenerator.newId()), command.usuarioId(),
@@ -153,5 +154,33 @@ public class TicketSoporteService implements AbrirTicketSoporteUseCase, ListarTi
     private static String extraerExtension(String nombreArchivo) {
         int dot = nombreArchivo.lastIndexOf('.');
         return dot >= 0 ? nombreArchivo.substring(dot) : "";
+    }
+
+    /**
+     * El adjunto del ticket tiene que ser un archivo del propio usuario.
+     *
+     * <p><b>El agujero que cierra (2026-09-18).</b> `abrir` guardaba la ruta del cuerpo sin
+     * compararla con el prefijo que esta MISMA clase arma al firmar la subida — las dos mitades del
+     * contrato vivian a cuarenta lineas de distancia y no se hablaban. La respuesta del 201 devuelve
+     * esa clave ya firmada para lectura, asi que una sola peticion entregaba, por ejemplo, la firma
+     * del Pacto de Sangre de otra persona; y `misTickets` la vuelve a firmar en cada lectura, de
+     * modo que la URL se renovaba indefinidamente.
+     *
+     * <p><b>Agravante propio de este modulo:</b> `OPEN_SUPPORT_TICKET` es el UNICO permiso que
+     * tolera una cuenta suspendida —a proposito, para que quien fue suspendido pueda reclamar—, asi
+     * que la primitiva sobrevivia a la suspension. Lo que se cierra es el adjunto arbitrario; abrir
+     * un ticket SIN adjunto sigue funcionando igual para una cuenta suspendida, que es lo que ese
+     * permiso protege.
+     */
+    private static String exigirAdjuntoPropio(String ruta, UserId usuarioId) {
+        if (ruta == null) {
+            return null;
+        }
+        String esperado = PREFIJO_RUTA + usuarioId.value() + "/";
+        if (!ruta.startsWith(esperado)) {
+            throw new IllegalArgumentException(
+                    "El adjunto tiene que ser un archivo propio (" + esperado + ")");
+        }
+        return ruta;
     }
 }

@@ -46,7 +46,11 @@ public class TestimonioController {
         return consultarUseCase.listarDestacados().stream().map(TestimonioResponse::from).toList();
     }
 
-    // TODO(auth fase 4): sin clasificar. Un solo handler con dos autorizaciones segun el body: sin wallPostId acepta actor null y no valida nada; con wallPostId exige PROMOTE_TESTIMONIAL. No es declarable hasta partirlo en dos endpoints.
+    /* Corregido 2026-09-18. Aca decia que este handler tiene "dos autorizaciones segun el body:
+       sin wallPostId acepta actor null y no valida nada". Esa rama era un agujero: cualquier
+       sesion escribia en la vitrina publica con nombre y rol elegidos. Ahora las DOS ramas exigen
+       ADMIN/ALCHEMIST, asi que la autorizacion ya no depende del cuerpo. Sigue sin `@RequiresPermission`
+       porque el handler cubre dos casos de uso; partirlo en dos endpoints queda pendiente. */
     @PostMapping
     public ResponseEntity<TestimonioResponse> crear(
             @ActorAutenticado(required = false) UserId actorId,
@@ -57,8 +61,10 @@ public class TestimonioController {
                     PublicacionId.of(UUID.fromString(request.wallPostId())), estrellas));
             return ResponseEntity.status(HttpStatus.CREATED).body(TestimonioResponse.from(vista));
         }
-        var vista = crearUseCase.crear(new CrearTestimonioCommand(actorId, request.nombre(), request.rol(),
-                request.texto(), estrellas));
+        // `requireActorId` y no el `actorId` nullable: desde que `crear` exige ADMIN/ALCHEMIST,
+        // entrar sin sesion no puede terminar en un NPE dentro del guard.
+        var vista = crearUseCase.crear(new CrearTestimonioCommand(requireActorId(actorId), request.nombre(),
+                request.rol(), request.texto(), estrellas));
         return ResponseEntity.status(HttpStatus.CREATED).body(TestimonioResponse.from(vista));
     }
 

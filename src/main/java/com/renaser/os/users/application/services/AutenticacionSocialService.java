@@ -1,5 +1,6 @@
 package com.renaser.os.users.application.services;
 
+import com.renaser.os.shared.domain.CredencialesInvalidasException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionConProveedorUseCase;
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
@@ -86,10 +87,32 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
         return retenerIdentidadPendiente(identidad, origen);
     }
 
+    /**
+     * El usuario detras del vinculo social, <b>y solo si su cuenta da acceso</b>.
+     *
+     * <p><b>El agujero que cierra (2026-09-18).</b> Este metodo hacia un {@code byId} y devolvia el
+     * usuario sin mirar su estado, mientras que el login por contrasena si lo comprueba
+     * ({@code AutenticacionService:76}, {@code credencial.cuentaHabilitada()}). Resultado: suspender
+     * una cuenta con Google o Apple ya vinculado <b>no la suspendia</b> — la persona volvia a entrar
+     * por {@code POST /api/v1/auth/social} y recuperaba una sesion valida. Revocar las sesiones al
+     * suspender ({@code StaffAdminService}) no alcanzaba: podia abrir una nueva.
+     *
+     * <p>Pesa mas de lo que parece por como esta hecho el control de permisos: el interceptor
+     * comprueba la suspension solo para TRAINEE y sale antes para MENTOR, ADMIN y ALCHEMIST, asi que
+     * un mentor suspendido que volviera por aca seguia leyendo el expediente de sus aprendices.
+     *
+     * <p>Se lanza {@link CredencialesInvalidasException} y no una excepcion propia de "suspendido",
+     * igual que en el login por contrasena: decirle al que llama que la cuenta existe pero esta
+     * suspendida es enumeracion de usuarios, que el resto de este modulo cuida a proposito.
+     */
     private User cargarUsuarioVinculado(UserId usuarioId) {
-        return loadUserPort.byId(usuarioId)
+        User usuario = loadUserPort.byId(usuarioId)
                 .orElseThrow(() -> new IllegalStateException(
                         "IdentidadExterna sin usuario correspondiente: " + usuarioId));
+        if (!usuario.status().allowsAccess()) {
+            throw new CredencialesInvalidasException();
+        }
+        return usuario;
     }
 
     /**

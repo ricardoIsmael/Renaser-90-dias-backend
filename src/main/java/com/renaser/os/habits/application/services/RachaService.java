@@ -166,7 +166,10 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
         // el que se completa y el que lleva los puntos (mismo criterio que phoneFree.ts).
         registrarEvidenciaPort.registrar(new RegistrarEvidenciaComando(racha.participanteId(),
                 new DestinoEvidencia.RegistroHabito(racha.registroHabitoId().value()), command.tipoEvidencia(),
-                command.bucket(), command.rutaStorage(), command.contenidoTexto(), command.timestampExif(), null,
+                command.bucket(),
+                exigirClavePropia(command.rutaStorage(),
+                        PREFIJO_RUTA + "/" + racha.participanteId() + "/" + racha.id()),
+                command.contenidoTexto(), command.timestampExif(), null,
                 null, false, ahora));
 
         if (completo) {
@@ -292,5 +295,37 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
             throw new NotAuthorizedException("Cuenta suspendida");
         }
         return progreso;
+    }
+
+    /**
+     * La clave de la evidencia tiene que ser la que ESTE servicio emitio.
+     *
+     * <p><b>El agujero que cierra (2026-09-18).</b> El `confirm` aceptaba `rutaStorage` del cliente
+     * sin compararla con el prefijo que el propio servicio arma diez lineas mas arriba al firmar la
+     * subida. Como hay UN SOLO bucket fisico —el campo `bucket` del cuerpo ni siquiera llega a S3,
+     * `firmarLectura` usa el de configuracion— y las claves de los demas modulos son deterministas,
+     * la fila quedaba apuntando a un objeto ajeno con `participante_id` = el atacante. Y entonces
+     * `EvidenciaService.requireDuenoOAdmin` lo reconocia como dueno, porque comprueba la propiedad
+     * de la FILA, que el atacante fabrico, y no la del OBJETO: `GET /api/v1/evidence/{id}/url` le
+     * devolvia firmada, por ejemplo, la firma del Pacto de Sangre de otra persona.
+     *
+     * <p>No rechaza nada que el sistema haya emitido: es exactamente lo que devuelve `solicitarUrl`.
+     * `null` sigue valiendo, que es como entra una evidencia de TEXTO.
+     *
+     * <p>Mismo corte que ya tenian `calendar` (`EventoService.exigirPortadaDeEsteEvento`) y
+     * `onboarding` (`MediaOnboarding.registrar`). Va en el servicio y no en el comando compartido
+     * porque el prefijo correcto depende del destino, y eso solo lo sabe quien llama.
+     *
+     * @throws IllegalArgumentException si la clave apunta fuera de lo que este actor subio.
+     */
+    private static String exigirClavePropia(String rutaStorage, String prefijoEsperado) {
+        if (rutaStorage == null) {
+            return null;
+        }
+        if (!rutaStorage.startsWith(prefijoEsperado)) {
+            throw new IllegalArgumentException(
+                    "La evidencia tiene que apuntar a un archivo propio (" + prefijoEsperado + ")");
+        }
+        return rutaStorage;
     }
 }

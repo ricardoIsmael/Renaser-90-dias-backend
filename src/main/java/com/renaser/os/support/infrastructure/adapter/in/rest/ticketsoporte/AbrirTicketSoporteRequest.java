@@ -39,7 +39,11 @@ public record AbrirTicketSoporteRequest(
         }
         int marca = attachmentUrl.indexOf("/" + BUCKET_HEREDADO + "/");
         if (marca < 0) {
-            return attachmentUrl;
+            /* Corregido 2026-09-18. Aca decia `return attachmentUrl`: sin la marca se devolvia la
+               URL ENTERA como clave de objeto. Es exactamente la forma de E-79 —una URL absoluta
+               entrando donde va una clave—, el bug que el Muro ya habia corregido. Devolver null
+               deja que el ticket se abra SIN adjunto en vez de persistir una clave inventada. */
+            return null;
         }
         return attachmentUrl.substring(marca + BUCKET_HEREDADO.length() + 2);
     }

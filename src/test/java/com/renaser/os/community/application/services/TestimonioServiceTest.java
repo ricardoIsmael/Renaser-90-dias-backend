@@ -75,11 +75,34 @@ class TestimonioServiceTest {
         lenient().when(saveTestimonioPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
+    /**
+     * <b>Invertida el 2026-09-18.</b> Se llamaba {@code crearSinSesionFunciona} y afirmaba que
+     * crear sin actor funciona y nace destacado. Describia el agujero con precision: cualquiera
+     * escribia en la vitrina publica. Ahora `crear` exige ADMIN/ALCHEMIST, igual que `promover`.
+     */
     @Test
-    void crearSinSesionFunciona() {
+    void crearSinSesionEsRechazado() {
         var command = new CrearTestimonioCommand(null, "Ana", null, "Cambio mi vida", 5);
-        var vista = service.crear(command);
-        assertThat(vista.testimonio().usuarioId()).isNull();
+        assertThatThrownBy(() -> service.crear(command)).isInstanceOf(Exception.class);
+        verify(saveTestimonioPort, never()).save(any());
+    }
+
+    @Test
+    void crearComoTraineeEsRechazado() {
+        UserId trainee = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(trainee))
+                .thenReturn(Optional.of(new UserSummary(trainee, "T", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        var command = new CrearTestimonioCommand(trainee, "Ana", null, "Cambio mi vida", 5);
+        assertThatThrownBy(() -> service.crear(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveTestimonioPort, never()).save(any());
+    }
+
+    @Test
+    void crearComoAdminSigueFuncionando() {
+        UserId admin = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(admin))
+                .thenReturn(Optional.of(new UserSummary(admin, "A", null, UserRole.ADMIN, UserStatus.ACTIVE)));
+        var vista = service.crear(new CrearTestimonioCommand(admin, "Ana", null, "Cambio mi vida", 5));
         assertThat(vista.testimonio().destacado()).isTrue();
     }
 

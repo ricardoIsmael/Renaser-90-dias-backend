@@ -286,6 +286,16 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Override
     public Optional<PublicacionParaCompartir> paraCompartir(UUID publicacionId) {
         return loadPublicacionPort.porId(PublicacionId.of(publicacionId))
+                /* La puerta de visibilidad, que faltaba (2026-09-18). Este era el UNICO read del
+                   servicio que no la cruzaba: sus cinco hermanos usan `requireVisible`/`requireOculta`.
+                   Ocultar es lo que hace DELETE /api/v1/wall/{id} —"borrar mi publicacion" desde la
+                   app— y tambien lo que hace un moderador. Sin este filtro, compartir al chat
+                   RESUCITABA el texto y la foto de una publicacion ya borrada o retirada, y
+                   `MensajeService.urlDeLectura` prefirmaba esa media para todo participante de la
+                   conversacion destino; con el auto-join de la GLOBAL, "todos". El javadoc de abajo
+                   decia que esto "nunca sale al telefono" — dejo de ser cierto cuando se cableo
+                   compartir al chat. */
+                .filter(publicacion -> !publicacion.oculta())
                 .map(publicacion -> {
                     MediaPublicacion portada = publicacion.media().isEmpty() ? null : publicacion.media().get(0);
                     return new PublicacionParaCompartir(
@@ -348,6 +358,18 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Transactional
     public UUID publicarDesdeEvidencia(PublicarDesdeEvidenciaComando comando) {
         requireActorPuedePublicar(comando.autorId());
+        /* La segunda puerta al Muro, que el arreglo del 2026-09-18 no cubria.
+           `MediaItemRequest.exigirClaveDelMuro` vive en el DTO REST, asi que solo protege
+           `POST /wall` y `PATCH /wall/{id}`. Este camino —completar una roca con
+           `publishedToWall=true`— entra por el puerto y llegaba sin ninguna comprobacion: la ruta
+           del cliente se guardaba tal cual y `aVista` la firma para CADA lector del feed, que es
+           global. O sea que la firma del Pacto de Sangre de una persona se repartia, firmada, a
+           todo el padron. Peor que el bug original, donde la fuga iba solo al atacante.
+
+           Se comprueba ACA y no en el constructor de `MediaPublicacion`: ese constructor tambien
+           corre al LEER de la base, asi que un check duro ahi romperia el feed para las
+           publicaciones de rocas ya persistidas. */
+        exigirRutaDelAutor(comando.ruta(), comando.autorId());
         MediaPublicacion media = new MediaPublicacion(comando.bucket(), comando.ruta(), comando.mime(), 0);
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
         Publicacion publicacion = Publicacion.publicarAutomatica(PublicacionId.of(idGenerator.newId()),
@@ -513,6 +535,24 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     private void requireActorHabilitado(UserId actorId) {
         if (!actorActivo(actorId)) {
             throw new NotAuthorizedException("Cuenta inexistente o suspendida");
+        }
+    }
+
+    /**
+     * La evidencia publicada tiene que ser un archivo del propio autor.
+     *
+     * <p>El prefijo es el que emite {@code RocaDiariaService.solicitarUrl}:
+     * {@code rocas/<autorId>/<rocaId>}. No rechaza nada que el sistema haya firmado.
+     *
+     * <p>El {@code bucket} del comando no sirve para decidir: {@code firmarLectura(ruta, validez)}
+     * ni siquiera lo recibe y el adaptador usa siempre el bucket de configuracion — hay uno solo
+     * fisico para todos los modulos. Por eso la unica frontera real es el prefijo de la CLAVE.
+     */
+    private static void exigirRutaDelAutor(String ruta, UserId autorId) {
+        String esperado = "rocas/" + autorId.value() + "/";
+        if (ruta == null || !ruta.startsWith(esperado)) {
+            throw new NotAuthorizedException(
+                    "La evidencia publicada tiene que ser un archivo propio (" + esperado + ")");
         }
     }
 }

@@ -92,6 +92,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
 
         Instant ahora = clock.now();
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
+        exigirMediaDeEstaConversacion(command.mediaRuta(), command.conversacionId());
         Mensaje mensaje = Mensaje.escribir(MensajeId.of(idGenerator.newId()), command.conversacionId(),
                 command.actorId(), command.tipo(), command.texto(), command.mediaBucket(), command.mediaRuta(),
                 command.mediaMime(), command.mediaBytes(), command.mediaDuracionS(), command.respuestaAId(),
@@ -289,6 +290,32 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
                 .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado: " + usuarioId));
         if (usuario.status() != UserStatus.ACTIVE) {
             throw new NotAuthorizedException("La cuenta esta suspendida");
+        }
+    }
+
+    /**
+     * La media de un mensaje tiene que ser de ESTA conversacion, o una publicacion del Muro.
+     *
+     * <p><b>El agujero que cierra (2026-09-18).</b> `mediaPath` llegaba del cuerpo y se guardaba sin
+     * mirarlo; `urlDeLectura` lo firma despues para quien lea la conversacion. Con UN SOLO bucket
+     * fisico —`firmarLectura(ruta, validez)` ni recibe bucket— y claves predecibles en los demas
+     * modulos, bastaba abrir un mensaje propio apuntando a `firmas/<victimaId>/fase_2.svg` y leerlo
+     * para recibir esa firma prefirmada. `Mensaje.escribir` solo comprobaba que bucket y ruta
+     * viajaran juntos.
+     *
+     * <p><b>El prefijo `muro/` se admite a proposito.</b> Compartir una publicacion
+     * ({@code CompartirPublicacionService}) entra por este mismo caso de uso con la ruta de la
+     * portada, que es del Muro y la derivo el servidor. Un guard que solo aceptara `chat/<id>/`
+     * romperia esa funcion — y es exactamente la clase de rotura que un arreglo apurado introduce.
+     */
+    private static void exigirMediaDeEstaConversacion(String mediaRuta, ConversacionId conversacionId) {
+        if (mediaRuta == null) {
+            return;
+        }
+        String propia = "chat/" + conversacionId.value() + "/";
+        if (!mediaRuta.startsWith(propia) && !mediaRuta.startsWith("muro/")) {
+            throw new IllegalArgumentException(
+                    "La media del mensaje tiene que ser de esta conversacion (" + propia + ")");
         }
     }
 }

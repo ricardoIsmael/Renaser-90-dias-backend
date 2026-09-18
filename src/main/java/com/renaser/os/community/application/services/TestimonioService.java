@@ -64,6 +64,22 @@ public class TestimonioService implements CrearTestimonioUseCase, PromoverPublic
     @Override
     @Transactional
     public TestimonioVista crear(CrearTestimonioCommand command) {
+        /* Misma autoridad que `promover`, y por la misma razon: las dos ramas escriben en la MISMA
+           vitrina publica.
+
+           Agujero cerrado el 2026-09-18. Este camino no ejecutaba ningun guard —ni rol, ni estado,
+           ni autoria— y el controller lo llamaba con `@ActorAutenticado(required = false)`. Como
+           `Testimonio.crear` fija `destacado = true` incondicionalmente y `GET /api/v1/testimonios`
+           lista justamente los destacados ordenados por fecha con tope 50, cualquier cuenta con
+           sesion —un aprendiz, el rol mas bajo— publicaba en la vitrina del producto con el
+           `nombre` y el `rol` que quisiera, atribuido a quien quisiera. Cincuenta peticiones
+           desplazaban a TODOS los testimonios legitimos, y era irreversible por API: `retirar()`
+           existe en el agregado pero ningun caso de uso lo expone.
+
+           La rama de al lado, `promover`, ya exigia ADMIN/ALCHEMIST, y el javadoc del propio
+           controller dice "solo ADMIN/ALCHEMIST". Esto no inventa una regla: hace que los dos
+           caminos al mismo efecto pidan lo mismo. */
+        requireAdmin(command.actorId());
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
         Testimonio testimonio = Testimonio.crear(TestimonioId.of(idGenerator.newId()), command.actorId(), null,
                 command.nombre(), command.rolTexto(), null, null, command.texto(), command.estrellas(), clock.now());

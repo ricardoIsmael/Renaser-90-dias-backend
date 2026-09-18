@@ -292,15 +292,17 @@ class PublicacionMuroServiceTest {
      * (rocks) publique en el Muro desde una evidencia ya subida. */
     @Test
     void publicarDesdeEvidenciaCreaUnaPublicacionHitoAutomatico() {
+        // Corregido 2026-09-18: "rocas/x/y" no pertenecia al autor. Es la clave real del servidor.
+        String rutaPropia = "rocas/" + autor.value() + "/" + UUID.randomUUID();
         var comando = new PublicarDesdeEvidenciaComando(autor, "Completo mi Roca: Meditar", "renaser-files",
-                "rocas/x/y", "image/jpeg");
+                rutaPropia, "image/jpeg");
 
         UUID id = service.publicarDesdeEvidencia(comando);
 
         assertThat(id).isNotNull();
         verify(savePublicacionPort).save(argThat(p -> p.tipo() == TipoPublicacion.HITO_AUTOMATICO
                 && p.autorId().equals(autor) && p.media().size() == 1
-                && p.media().get(0).bucket().equals("renaser-files") && p.media().get(0).ruta().equals("rocas/x/y")
+                && p.media().get(0).bucket().equals("renaser-files") && p.media().get(0).ruta().equals(rutaPropia)
                 && p.categoriaClave() == null));
         verify(events).publishEvent(any(PublicacionCreadaEvent.class));
     }
@@ -522,5 +524,20 @@ class PublicacionMuroServiceTest {
         assertThatThrownBy(() -> service.contarMisPublicaciones(suspendido))
                 .isInstanceOf(NotAuthorizedException.class);
         verify(loadPublicacionPort, never()).contarPorAutor(any());
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("La segunda puerta al Muro tambien rechaza una clave ajena")
+    void publicarDesdeEvidenciaRechazaRutaAjena() {
+        /* `MediaItemRequest.exigirClaveDelMuro` (2026-09-18) solo cubre los dos verbos REST. Esta es
+           la OTRA puerta a `medias_publicacion`, la que usa rocks con `publishedToWall=true`, y es
+           peor: el feed firma la media para cada lector, no solo para el atacante. */
+        var comando = new PublicarDesdeEvidenciaComando(autor, "Completo mi Roca",
+                "renaser-files", "firmas/" + UUID.randomUUID() + "/fase_2.svg", "image/jpeg");
+
+        assertThatThrownBy(() -> service.publicarDesdeEvidencia(comando))
+                .isInstanceOf(com.renaser.os.shared.domain.NotAuthorizedException.class);
+        verify(savePublicacionPort, org.mockito.Mockito.never())
+                .save(org.mockito.ArgumentMatchers.any());
     }
 }

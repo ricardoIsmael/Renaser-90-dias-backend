@@ -27,6 +27,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -62,15 +63,25 @@ class TestimonioControllerTest {
                 "Cambio mi vida, en serio", 5, Instant.parse("2026-08-28T10:00:00Z"));
     }
 
+    /**
+     * <b>Invertida el 2026-09-18.</b> Esta prueba se llamaba
+     * {@code crearSinSesionNiHeaderEsAnonimoYFunciona} y afirmaba que crear un testimonio SIN sesion
+     * devuelve 201. Era correcta como descripcion de lo que el codigo hacia, y era exactamente el
+     * agujero: {@code Testimonio.crear} marca {@code destacado = true} incondicionalmente y
+     * {@code GET /api/v1/testimonios} lista los destacados, asi que cualquiera escribia en la
+     * vitrina publica del producto con el nombre y el rol que quisiera, atribuido a quien quisiera
+     * — y sin forma de retirarlo, porque ningun endpoint invoca {@code retirar()}.
+     *
+     * <p>La rama de al lado del mismo handler, {@code promover}, ya exigia ADMIN/ALCHEMIST. Ahora
+     * las dos piden lo mismo, que es lo unico coherente: escriben en la misma tabla.
+     */
     @Test
-    void crearSinSesionNiHeaderEsAnonimoYFunciona() throws Exception {
-        when(crearUseCase.crear(new CrearTestimonioCommand(null, "Ana", null, "Cambio mi vida, en serio", 5)))
-                .thenReturn(new ConsultarTestimoniosUseCase.TestimonioVista(testimonio(null), null, null));
-
+    void crearSinSesionEsRechazado() throws Exception {
         mockMvc.perform(post("/api/v1/testimonios")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nombre\":\"Ana\",\"texto\":\"Cambio mi vida, en serio\",\"estrellas\":5}"))
-                .andExpect(status().isCreated());
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(crearUseCase);
     }
 
     @Test
