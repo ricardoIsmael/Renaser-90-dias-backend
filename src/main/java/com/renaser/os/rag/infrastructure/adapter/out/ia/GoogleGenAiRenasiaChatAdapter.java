@@ -163,12 +163,35 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
         return new EventoRenasia.Texto(fragmento);
     }
 
-    private static String formatearAmbito(String ambito) {
+    /** Un titulo de curso mas el de una leccion entran de sobra; el resto es relleno. */
+    private static final int LARGO_MAXIMO_DEL_AMBITO = 160;
+
+    /* Visible para la prueba: el aplanado del ambito es la mitad mecanica de una regla de
+       seguridad y se verifica directo, sin levantar el adaptador (que ni siquiera existe como
+       bean con el proveedor por defecto). */
+    static String formatearAmbito(String ambito) {
         if (ambito == null || ambito.isBlank()) {
             return "El cliente no dijo en que curso esta la persona: responde sobre los cursos del programa "
                     + "en general y, si hace falta, preguntale en cual esta.";
         }
-        return "La persona esta viendo " + ambito.trim() + ".";
+        return "La persona esta viendo " + enUnaSolaLinea(ambito) + ".";
+    }
+
+    /**
+     * El `scope` es texto libre del cliente y termina dentro del prompt de SISTEMA, que es el canal
+     * de maxima confianza del modelo. Se lo aplana a una sola linea y se lo acota antes de meterlo:
+     * sin esto, 300 caracteres con saltos de linea alcanzan para dibujar encabezados falsos y
+     * simular que empieza otra seccion del prompt — por encima del bloque de crisis, que esta ahi
+     * por el incidente del 2026-09-05. El rotulo de "esto es un dato, no una orden" vive en
+     * `sparkie-cursos.st`; esto es la mitad mecanica de lo mismo.
+     *
+     * <p>El arreglo de fondo es dejar de aceptar texto libre: el cliente ya manda `courseId`, asi
+     * que el backend podria resolver el titulo contra `academy` y que el ambito lo escriba el
+     * servidor. Queda anotado, no hecho.
+     */
+    private static String enUnaSolaLinea(String ambito) {
+        String plano = ambito.replaceAll("\\s+", " ").trim();
+        return plano.length() <= LARGO_MAXIMO_DEL_AMBITO ? plano : plano.substring(0, LARGO_MAXIMO_DEL_AMBITO);
     }
 
     private static List<Message> comoTurnos(List<MensajeRenasia> historial) {
