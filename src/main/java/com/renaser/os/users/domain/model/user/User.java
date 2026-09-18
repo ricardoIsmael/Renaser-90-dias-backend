@@ -213,11 +213,34 @@ public final class User {
         return Objects.requireNonNull(email, "email es obligatorio");
     }
 
+    /** Generoso para cualquier nombre real, incluidos los compuestos con varios apellidos. */
+    private static final int LARGO_MAXIMO_DEL_NOMBRE = 120;
+
+    /**
+     * El nombre es <b>texto que la persona se escribe a si misma</b> —{@code PATCH /users/me} lo
+     * acepta sin mas— y no se queda en su perfil: los barridos que corren sin actor lo renderizan
+     * dentro de mensajes del sistema para OTRA gente. {@code AvisosService} lo mete en la
+     * notificacion y en el push que recibe su mentor, y arranca la frase. Sin cota ni saneo, un
+     * aprendiz podia redactar parrafos enteros con saltos de linea que en la bandeja del mentor
+     * se leen como texto de Renaser y no como el nombre de un companero.
+     *
+     * <p>Por eso el saneo va aca, en el borde del dominio, y no en el controller: asi vale para
+     * los tres caminos de alta y para el cambio de nombre, y no solo para el endpoint que alguien
+     * se acuerde de anotar. La base guarda {@code text} sin cota, asi que no habia nada detras.
+     *
+     * <p>{@code rehydrate} no pasa por aca a proposito: los nombres que ya estan guardados se
+     * cargan como estan, y este limite solo gobierna lo que se escribe de ahora en adelante.
+     */
     private static String requireName(String fullName) {
         if (fullName == null || fullName.isBlank()) {
             throw new IllegalArgumentException("El nombre no puede ser vacio");
         }
-        return fullName.trim();
+        String enUnaSolaLinea = fullName.replaceAll("\\s+", " ").trim();
+        if (enUnaSolaLinea.length() > LARGO_MAXIMO_DEL_NOMBRE) {
+            throw new IllegalArgumentException(
+                    "El nombre no puede pasar de " + LARGO_MAXIMO_DEL_NOMBRE + " caracteres");
+        }
+        return enUnaSolaLinea;
     }
 
     @Override

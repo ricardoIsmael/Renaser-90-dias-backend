@@ -18,15 +18,22 @@ import javax.sql.DataSource;
  * necesidad real.
  *
  * <p>Vive en {@code shared/} (modulo OPEN, igual que {@code CacheConfig}) porque es
- * infraestructura transversal: el {@link LockProvider} es uno solo para todo el proceso, y
- * los tres modulos que hoy anotan un metodo con {@code @SchedulerLock}
- * ({@code evidence}, {@code habits}, {@code rag}) no tienen por que declarar su propio
+ * infraestructura transversal: el {@link LockProvider} es uno solo para todo el proceso, y los
+ * modulos que anotan un metodo con {@code @SchedulerLock} no tienen por que declarar su propio
  * proveedor.
  *
- * <p>{@code defaultLockAtMostFor} es una red de seguridad que NO se usa en la practica: los
- * tres {@code @SchedulerLock} de este repo declaran su propio {@code lockAtMostFor}
- * configurable (ver cada scheduler). Este default generoso (30 min) solo protege si alguien
- * agrega un {@code @SchedulerLock} nuevo sin pensar el valor.
+ * <blockquote><b>Corregido 2026-09-18.</b> Aca decia que el lock <i>"NO se aplica a los once
+ * schedulers del repo"</i> y que eran <i>"los tres modulos que hoy anotan un metodo"</i>
+ * ({@code evidence}, {@code habits}, {@code rag}). Al revisarlos uno por uno son <b>20</b>
+ * {@code @Scheduled} en nueve modulos, y <b>18</b> llevan lock. Los dos que no, no son un olvido
+ * y quedan anotados para que nadie "los arregle": {@code PresenciaDeSockets} DEBE correr en todas
+ * las instancias —cada una refresca sus propios sockets, y bloquearla apagaria la presencia de la
+ * gente conectada a la instancia que pierda— y {@code PurgaNotificacionesScheduler} es un DELETE
+ * por marca de tiempo, idempotente: dos corridas borran el mismo conjunto.</blockquote>
+ *
+ * <p>{@code defaultLockAtMostFor} es una red de seguridad que casi no se usa: los schedulers
+ * declaran su propio {@code lockAtMostFor} configurable (ver cada uno). Este default generoso
+ * (30 min) solo protege si alguien agrega un {@code @SchedulerLock} nuevo sin pensar el valor.
  */
 @Configuration
 @EnableSchedulerLock(defaultLockAtMostFor = "PT30M")

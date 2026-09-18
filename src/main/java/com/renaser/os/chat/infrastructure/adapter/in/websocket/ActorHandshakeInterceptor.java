@@ -46,6 +46,15 @@ import java.util.UUID;
 class ActorHandshakeInterceptor implements HandshakeInterceptor {
 
     static final String ATRIBUTO_ACTOR_ID = "actorId";
+    /**
+     * El id de la sesion HTTP, para poder VOLVER a mirarla mientras el socket viva.
+     *
+     * <p>Antes solo se guardaba el actor, y eso convertia al handshake en la unica
+     * comprobacion de toda la vida de la conexion: cerrar las sesiones de alguien —por
+     * suspension o por robo de token— no le quitaba el socket ni lo que ese socket ya
+     * estuviera recibiendo. Ver {@link SesionViva}.
+     */
+    static final String ATRIBUTO_ID_SESION = "idSesion";
     static final String HEADER_SESION = "X-Auth-Token";
     static final String PARAMETRO_SESION = "token";
 
@@ -65,6 +74,7 @@ class ActorHandshakeInterceptor implements HandshakeInterceptor {
             return false;
         }
         attributes.put(ATRIBUTO_ACTOR_ID, actorId);
+        attributes.put(ATRIBUTO_ID_SESION, idSesion);
         return true;
     }
 

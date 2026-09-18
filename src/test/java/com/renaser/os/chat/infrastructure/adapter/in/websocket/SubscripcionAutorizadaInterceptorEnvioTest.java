@@ -1,6 +1,6 @@
 package com.renaser.os.chat.infrastructure.adapter.in.websocket;
 
-import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
+import com.renaser.os.chat.application.ports.in.conversacion.AutorizarAccesoAConversacionUseCase;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,14 +28,16 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class SubscripcionAutorizadaInterceptorEnvioTest {
 
     @Mock
-    private EsParticipantePort esParticipantePort;
+    private AutorizarAccesoAConversacionUseCase autorizarAcceso;
     @Mock
     private UserSummaryFinder userSummaryFinder;
     @Mock
     private MessageChannel canal;
+    @Mock
+    private SesionViva sesionViva;
 
     private SubscripcionAutorizadaInterceptor interceptor() {
-        return new SubscripcionAutorizadaInterceptor(esParticipantePort, userSummaryFinder);
+        return new SubscripcionAutorizadaInterceptor(autorizarAcceso, userSummaryFinder, sesionViva);
     }
 
     private static Message<byte[]> envioA(String destino) {
@@ -50,7 +52,7 @@ class SubscripcionAutorizadaInterceptorEnvioTest {
         assertThatThrownBy(() -> interceptor().preSend(envioA("/topic/conversaciones/abc"), canal))
                 .isInstanceOf(MessagingException.class)
                 .hasMessageContaining("/app");
-        verifyNoInteractions(esParticipantePort, userSummaryFinder);
+        verifyNoInteractions(autorizarAcceso, userSummaryFinder);
     }
 
     @Test
@@ -59,6 +61,6 @@ class SubscripcionAutorizadaInterceptorEnvioTest {
         Message<byte[]> mensaje = envioA("/app/conversaciones/abc/mensajes");
 
         assertThat(interceptor().preSend(mensaje, canal)).isSameAs(mensaje);
-        verifyNoInteractions(esParticipantePort, userSummaryFinder);
+        verifyNoInteractions(autorizarAcceso, userSummaryFinder);
     }
 }

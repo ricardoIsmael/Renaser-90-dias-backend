@@ -26,6 +26,7 @@ class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final ActorHandshakeInterceptor actorHandshakeInterceptor;
     private final SubscripcionAutorizadaInterceptor subscripcionAutorizadaInterceptor;
+    private final EntregaConSesionVivaInterceptor entregaConSesionVivaInterceptor;
     /**
      * Los MISMOS origenes que CORS (auditoria NFR 2026-09-06; S-6 de la auditoria del
      * 2026-09-01). Antes era {@code setAllowedOriginPatterns("*")}: cualquier pagina web podia
@@ -37,9 +38,11 @@ class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     WebSocketConfig(ActorHandshakeInterceptor actorHandshakeInterceptor,
                      SubscripcionAutorizadaInterceptor subscripcionAutorizadaInterceptor,
+                     EntregaConSesionVivaInterceptor entregaConSesionVivaInterceptor,
                      @Value("${renaser.web.cors.origenes}") List<String> origenesPermitidos) {
         this.actorHandshakeInterceptor = actorHandshakeInterceptor;
         this.subscripcionAutorizadaInterceptor = subscripcionAutorizadaInterceptor;
+        this.entregaConSesionVivaInterceptor = entregaConSesionVivaInterceptor;
         this.origenesPermitidos = List.copyOf(origenesPermitidos);
     }
 
@@ -59,5 +62,15 @@ class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.interceptors(subscripcionAutorizadaInterceptor);
+    }
+
+    /**
+     * El canal de SALIDA existe por la mitad de la revocacion que el de entrada no cubre: a una
+     * suscripcion ya registrada el broker le sigue escribiendo sin volver a preguntarle nada a
+     * nadie. Ver {@link EntregaConSesionVivaInterceptor}.
+     */
+    @Override
+    public void configureClientOutboundChannel(ChannelRegistration registration) {
+        registration.interceptors(entregaConSesionVivaInterceptor);
     }
 }

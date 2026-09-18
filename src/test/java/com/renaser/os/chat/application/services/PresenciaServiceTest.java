@@ -250,6 +250,30 @@ class PresenciaServiceTest {
                 DIRECTA.value() + ":" + OTRO.value() + ":true");
     }
 
+    /**
+     * Regresion de la auditoria del 2026-09-18. <b>Falla contra el codigo viejo.</b>
+     *
+     * <p>Leer quien esta en linea en un grupo ya revalidaba la pertenencia vigente
+     * ({@link #exmentorNoVeElGrupo}), pero ANUNCIARLO no: el reparto salia a
+     * {@code conversacionesDe(usuarioId)} tal cual, o sea a la proyeccion. El estado de conexion de
+     * una persona se publicaba al canal de todo grupo donde conservara fila, incluidos los que ya
+     * no integra — y para un grupo cuyo periodo termino eso no se corrige nunca, porque el fin de
+     * periodo no publica {@code ComposicionDeCelulaCambiadaEvent}.
+     *
+     * <p>La conversacion DIRECTA si tiene que seguir avisando: ahi la proyeccion <i>es</i> la
+     * fuente de verdad, y recortarla de mas seria romper el producto para arreglar otra cosa.
+     */
+    @Test
+    @DisplayName("el aviso de presencia no sale al grupo que la persona ya no integra")
+    void noAvisaAlGrupoDelQueYaSalio() {
+        proyeccion.add(EXMENTOR);          // conserva la fila vieja
+        integrantesReales.remove(EXMENTOR); // pero ya no es integrante vigente
+
+        servicio.seConecto(EXMENTOR);
+
+        assertThat(publicados).containsExactly(DIRECTA.value() + ":" + EXMENTOR.value() + ":true");
+    }
+
     @Test
     @DisplayName("renovar no genera avisos: cada 45 s en todos los sockets seria ruido puro")
     void renovarNoAvisa() {

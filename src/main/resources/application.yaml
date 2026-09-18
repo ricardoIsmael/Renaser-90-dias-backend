@@ -343,10 +343,25 @@ renaser:
 # intentos de login por hora "por IP" era en realidad UN solo contador compartido por TODOS los
 # usuarios del producto; seis personas equivocandose ocho veces bloqueaban el login a todo el
 # mundo, y un atacante lo lograba solo. `framework` registra el ForwardedHeaderFilter de
-# Spring, que reescribe la direccion remota con el primer valor de X-Forwarded-For (el que
-# CloudFront pone: el cliente real). Se confia en ese header porque el security group solo
-# deja llegar al 8080 desde los rangos de CloudFront (y la IP del dueno): falsearlo exige
-# saltarse CloudFront, que es el pendiente de la cabecera secreta de origen (informe, 2.3).
+# Spring, que reescribe la direccion remota con el primer valor de X-Forwarded-For.
+#
+# >>> POR CONFIRMAR (auditoria 2026-09-18, OUT-1). Aca decia que ese primer valor es "el que
+# >>> CloudFront pone: el cliente real". Eso solo es cierto si CloudFront REEMPLAZA la cabecera.
+# >>> Si la AÑADE —que es su comportamiento documentado— y el cliente manda su propio
+# >>> X-Forwarded-For, lo que llega es "<lo que mando el cliente>, <IP real>" y
+# >>> ForwardedHeaderUtils toma el valor MAS A LA IZQUIERDA, o sea el del cliente. En ese caso
+# >>> cualquier anonimo elige su propia IP y los OCHO limites por IP (login, alta, reset) no
+# >>> cuentan nada: fuerza bruta ilimitada, ademas de envenenar solicitudes_cuenta.ip_solicitud.
+# >>>
+# >>> El security group NO cubre esto: protege contra saltarse CloudFront, no contra mandar la
+# >>> cabecera A TRAVES de CloudFront.
+# >>>
+# >>> Se resuelve con UNA peticion contra el despliegue, que tiene que correr el dueno:
+# >>>   curl -H 'X-Forwarded-For: 203.0.113.9' https://<dominio>/api/v1/auth/login ...
+# >>> y mirar que IP registro el backend. Si vio 203.0.113.9, hay que tomar la IP contando
+# >>> desde la DERECHA (con CloudFront delante, el ultimo valor es el que agrega el borde y el
+# >>> cliente no puede escribir despues de el). El cambio va en DireccionIpDelCliente, que
+# >>> existe justamente para tener un solo lugar donde tocarlo (E-151).
 # ---------------------------------------------------------------------------------------------
 # Spring AI registra "Aggregation Error" con la pila entera CADA vez que un stream del
 # modelo termina en error — y lo hace CUATRO veces por peticion, una por cada operador
@@ -361,3 +376,31 @@ logging:
 
 server:
   forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:framework}
+
+# Actuator: lo que hoy ya pasa, pero dicho a proposito en vez de heredado.
+#
+# Ninguna de estas cuatro claves existia, y las cuatro coinciden con el default de Boot 4.1.1
+# —o sea que escribirlas NO cambia el comportamiento—. Se escriben por lo que evitan: al declarar
+# `SecurityConfig` una cadena propia acotada a `/api/v1/**`, Spring Boot retira
+# `ManagementWebSecurityAutoConfiguration`, que es la que normalmente deja `/actuator/health`
+# publico y exige autenticacion para TODO el resto de actuator. Ese respaldo ya no esta.
+#
+# Con el respaldo retirado, lo unico que mantiene cerrados `/actuator/env`, `/configprops`,
+# `/heapdump` y `/loggers` es el default de exposicion. Y ese default lo puede ensanchar una sola
+# entrada en Parameter Store —`application-prod.yaml` importa `/renaser/prod/` con binding
+# relajado— sin tocar el repo ni pasar por revision. `/heapdump` entrega memoria cruda, que con
+# `spring.session.timeout: 30d` incluye ids de sesion vivos.
+#
+# Escrito aca, ensanchar la superficie de administracion vuelve a exigir un cambio versionado.
+# (Auditoria de seguridad 2026-09-18, OUT-2.)
+management:
+  endpoints:
+    access:
+      default: none
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      access: read-only
+      show-details: never

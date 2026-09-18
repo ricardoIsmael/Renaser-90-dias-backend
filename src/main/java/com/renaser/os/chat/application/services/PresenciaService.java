@@ -132,7 +132,8 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
             return;
         }
         try {
-            List<ConversacionId> destinos = conversacionesDeUsuarioPort.conversacionesDe(usuarioId);
+            List<ConversacionId> destinos = conversacionesDeUsuarioPort.conversacionesDe(usuarioId)
+                    .stream().filter(destino -> puedeVerAhora(destino, usuarioId)).toList();
             if (!destinos.isEmpty()) {
                 publicarPresenciaFanoutPort.publicar(usuarioId, enLinea, destinos);
             }
@@ -152,15 +153,34 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
      * pero es informacion del mismo grupo y se cuida igual.
      */
     private void requireParticipante(Conversacion conversacion, UserId usuarioId) {
-        if (conversacion.tipo() == TipoConversacion.CELULA) {
-            if (!pertenenciaVigentePort.perteneceAlGrupo(conversacion.celulaId(), usuarioId)) {
-                throw new NotAuthorizedException("Tu asignacion cambio: ya no perteneces a ese grupo");
-            }
+        if (autorizado(conversacion, usuarioId)) {
             return;
         }
-        if (!esParticipantePort.esParticipante(conversacion.id(), usuarioId)) {
-            throw new NotAuthorizedException("No sos participante de esta conversacion");
-        }
+        throw new NotAuthorizedException(conversacion.tipo() == TipoConversacion.CELULA
+                ? "Tu asignacion cambio: ya no perteneces a ese grupo"
+                : "No sos participante de esta conversacion");
+    }
+
+    private boolean autorizado(Conversacion conversacion, UserId usuarioId) {
+        return conversacion.tipo() == TipoConversacion.CELULA
+                ? pertenenciaVigentePort.perteneceAlGrupo(conversacion.celulaId(), usuarioId)
+                : esParticipantePort.esParticipante(conversacion.id(), usuarioId);
+    }
+
+    /**
+     * La MISMA pregunta que {@link #requireParticipante}, para poder FILTRAR en vez de lanzar.
+     *
+     * <p>El aviso de presencia se repartia a {@code conversacionesDe(usuarioId)} tal cual, o sea a
+     * la proyeccion. Leer quien esta en linea si revalidaba la pertenencia vigente, pero
+     * ANUNCIARLO no: el estado de conexion de una persona se publicaba al topic de todo grupo
+     * donde conservara fila, incluidos los que ya no integra. Para un grupo cuyo periodo termino
+     * eso no se corrige solo nunca, porque el fin de periodo no publica
+     * {@code ComposicionDeCelulaCambiadaEvent} y la proyeccion no se vuelve a tocar.
+     */
+    private boolean puedeVerAhora(ConversacionId conversacionId, UserId usuarioId) {
+        return loadConversacionPort.porId(conversacionId)
+                .map(conversacion -> autorizado(conversacion, usuarioId))
+                .orElse(false);
     }
 
     private Conversacion requireConversacion(ConversacionId id) {

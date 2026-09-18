@@ -1,6 +1,6 @@
 package com.renaser.os.chat.infrastructure.adapter.in.websocket;
 
-import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
+import com.renaser.os.chat.application.ports.in.conversacion.AutorizarAccesoAConversacionUseCase;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserStatus;
@@ -22,21 +22,31 @@ import java.util.UUID;
  * {@code /topic/conversaciones/{id}} sin verificar nada — un cliente sin ser participante
  * podia leer en vivo los mensajes de una conversacion ajena, aunque la capa REST del mismo
  * modulo si exige pertenencia (auditoria de seguridad, ver docs/BITACORA_ERRORES.md E-37).
- * Aca se aplica la MISMA regla que {@code MensajeService}/{@code ConversacionService}: el
- * actor debe existir, estar ACTIVE, y ser participante de la conversacion a la que se
- * suscribe.
+ * <p>El actor debe existir, estar ACTIVE, tener la sesion todavia viva, y estar autorizado a ver
+ * la conversacion segun {@link com.renaser.os.chat.application.ports.in.conversacion.AutorizarAccesoAConversacionUseCase}.
+ *
+ * <blockquote><b>Corregido 2026-09-18.</b> Aca decia <i>"se aplica la MISMA regla que
+ * MensajeService/ConversacionService"</i>. Dejo de ser cierto cuando esos servicios incorporaron
+ * la revalidacion contra {@code PertenenciaVigentePort} y este interceptor quedo preguntandole a
+ * la proyeccion {@code participantes_conversacion}: para una conversacion de grupo eso concede de
+ * mas, porque quien roto conserva su fila. La afirmacion de que ya estaba cubierto es
+ * probablemente la razon por la que nadie volvio a mirar. Ahora las cuatro entradas comparten un
+ * unico caso de uso, asi que la equivalencia no depende de que nadie se olvide.</blockquote>
  */
 @Component
 class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
 
     private static final String PREFIJO_TOPIC = "/topic/conversaciones/";
 
-    private final EsParticipantePort esParticipantePort;
+    private final AutorizarAccesoAConversacionUseCase autorizarAcceso;
     private final UserSummaryFinder userSummaryFinder;
+    private final SesionViva sesionViva;
 
-    SubscripcionAutorizadaInterceptor(EsParticipantePort esParticipantePort, UserSummaryFinder userSummaryFinder) {
-        this.esParticipantePort = esParticipantePort;
+    SubscripcionAutorizadaInterceptor(AutorizarAccesoAConversacionUseCase autorizarAcceso,
+                                      UserSummaryFinder userSummaryFinder, SesionViva sesionViva) {
+        this.autorizarAcceso = autorizarAcceso;
         this.userSummaryFinder = userSummaryFinder;
+        this.sesionViva = sesionViva;
     }
 
     @Override
@@ -67,7 +77,8 @@ class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
             throw new org.springframework.messaging.MessagingException("Destino de suscripcion no permitido");
         }
         UserId actorId = actorDeLaSesion(accessor.getSessionAttributes());
-        ConversacionId conversacionId = ConversacionId.of(UUID.fromString(destino.substring(PREFIJO_TOPIC.length())));
+        requireSesionTodaviaViva(accessor);
+        ConversacionId conversacionId = conversacionDelDestino(destino);
         requireParticipanteActivo(actorId, conversacionId);
         return message;
     }
@@ -86,9 +97,38 @@ class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
         if (actor.status() != UserStatus.ACTIVE) {
             throw new org.springframework.messaging.MessagingException("Cuenta suspendida");
         }
-        if (!esParticipantePort.esParticipante(conversacionId, actorId)) {
+        if (!autorizarAcceso.puedeVer(conversacionId, actorId)) {
             throw new org.springframework.messaging.MessagingException(
                     "No sos participante de esta conversacion");
+        }
+    }
+
+    /**
+     * El id de conversacion sale de una porcion del destino elegida por el cliente, asi que puede
+     * no ser un UUID. Se traduce a la excepcion del canal en vez de dejar salir el
+     * {@code IllegalArgumentException} crudo de {@code UUID.fromString}: el rechazo tiene que ser
+     * deliberado y no un efecto colateral del parseo.
+     */
+    private static ConversacionId conversacionDelDestino(String destino) {
+        try {
+            return ConversacionId.of(UUID.fromString(destino.substring(PREFIJO_TOPIC.length())));
+        } catch (IllegalArgumentException noEsUnUuid) {
+            throw new org.springframework.messaging.MessagingException("Destino de suscripcion no permitido");
+        }
+    }
+
+    /**
+     * Que la sesion HTTP siga existiendo, no solo que haya existido al abrir el socket.
+     *
+     * <p>Sin esto, quien tuviera un token robado conservaba el socket aunque la victima cambiara
+     * la contrasena, y encima podia suscribirse a conversaciones NUEVAS despues de la revocacion.
+     */
+    private void requireSesionTodaviaViva(StompHeaderAccessor accessor) {
+        Map<String, Object> atributos = accessor.getSessionAttributes();
+        Object idSesion = atributos == null ? null : atributos.get(ActorHandshakeInterceptor.ATRIBUTO_ID_SESION);
+        String socketId = accessor.getSessionId();
+        if (!(idSesion instanceof String id) || socketId == null || !sesionViva.sigueViva(socketId, id)) {
+            throw new org.springframework.messaging.MessagingException("Tu sesion ya no es valida");
         }
     }
 }

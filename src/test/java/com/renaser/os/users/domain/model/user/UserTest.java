@@ -95,6 +95,30 @@ class UserTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * Regresion de la auditoria del 2026-09-18. <b>Los dos casos fallan contra el codigo viejo</b>,
+     * que solo hacia {@code trim()}.
+     *
+     * <p>El nombre se lo escribe la propia persona ({@code PATCH /users/me}, sin {@code @Valid}) y
+     * despues lo renderiza {@code AvisosService} —un barrido sin actor— al principio del cuerpo de
+     * la notificacion y del push que recibe su MENTOR. Con saltos de linea y sin cota, un aprendiz
+     * podia redactar en la bandeja del mentor algo que se lee como texto de Renaser.
+     */
+    @Test
+    @DisplayName("el nombre no puede traer saltos de linea ni pasar de 120 caracteres")
+    void nameCannotForgeSystemText() {
+        User user = trainee();
+
+        user.rename("Ana\n\nSoporte Renaser: confirma tu clave");
+        assertThat(user.fullName())
+                .as("los saltos de linea se aplanan: no se pueden forjar renglones")
+                .isEqualTo("Ana Soporte Renaser: confirma tu clave");
+
+        assertThatThrownBy(() -> user.rename("x".repeat(121)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("120");
+    }
+
     @Test
     @DisplayName("dos usuarios son el mismo si comparten id")
     void identityIsTheId() {

@@ -6845,3 +6845,132 @@ del cliente" a "cero herramientas", en vez de dejarlo como coincidencia.
 **Cómo se evita que vuelva.** Dos pruebas en `PromptSparkieCursosTest` que fallan contra el código
 viejo: una renderiza con un ámbito hostil y exige que el rótulo de dato esté, que la cláusula nombre
 al ámbito y que las líneas de ayuda sigan **después**; la otra verifica el aplanado y el recorte.
+
+## E-198 · Cerrarle la sesión a alguien no le quitaba el chat en vivo
+
+**Síntoma.** Ninguno reportado: lo encontró la auditoría del 2026-09-18 leyendo el canal WebSocket.
+Hoy además **ningún cliente abre `/ws`** —la app móvil conversa por REST—, así que la probabilidad
+de explotación accidental era cero. Pero el endpoint está publicado y responde, y eso no es lo
+mismo que "nadie lo alcanza": es exactamente el razonamiento que este repo ya rechazó una vez.
+
+**Causa.** `ActorHandshakeInterceptor` leía la sesión de Redis **una sola vez**, en el handshake, y
+copiaba el UUID del actor a los atributos del socket. Desde ese instante nadie volvía a mirarla:
+
+```java
+attributes.put(ATRIBUTO_ACTOR_ID, actorId);   // y nada más
+```
+
+`WebSocketConfig` tampoco usaba `AbstractSessionWebSocketMessageBrokerConfigurer`, que es la
+integración de Spring Session que cierra el socket cuando la sesión desaparece. Resultado:
+`GestionSesionesService.cerrarTodas()` —el control que existe justamente para la suspensión y para
+el token robado— **no alcanzaba al canal en vivo**. Dos consecuencias distintas:
+
+1. **Suspender** a alguien conectado le impedía suscribirse a algo nuevo (eso sí se comprobaba),
+   pero sus suscripciones **ya registradas** seguían entregándole todo lo que su grupo escribiera.
+   `docs/MODULO_AUTH.md` §7.4 afirma "suspender revoca las sesiones en el acto"; en este canal no.
+2. **Peor:** quien tuviera un `X-Auth-Token` robado conservaba el socket aunque la víctima cambiara
+   la contraseña, y encima podía suscribirse a conversaciones **nuevas** después de la revocación.
+   `ResetContrasenaService` documenta al lado de esa llamada que cambiar la clave por sospecha de
+   robo "debe invalidar cualquier sesión que el atacante ya tenga abierta, no solo impedir logins
+   futuros". No lo hacía. El operador no tenía forma de cortarlo sin reiniciar la instancia.
+
+**Solución.** `SesionViva`, y las dos mitades del canal:
+
+- El handshake guarda también el **id de la sesión** (`ATRIBUTO_ID_SESION`), no solo el actor.
+- El canal de **entrada** revalida que esa sesión siga existiendo antes de autorizar un SUBSCRIBE.
+- El canal de **salida** (`EntregaConSesionVivaInterceptor`, nuevo) descarta la entrega a un socket
+  cuya sesión ya no existe. Es la mitad que la entrada no puede cubrir, porque a una suscripción ya
+  registrada el broker le escribe sin volver a preguntarle nada a nadie.
+
+**Por qué con memoria y no consultando Redis cada vez.** El canal de salida pasa una vez por mensaje
+**y por suscriptor**: en un grupo de diez, cada mensaje de chat serían diez lecturas. La comprobación
+se reusa diez segundos, así que el costo es una lectura por socket cada diez segundos y la ventana
+de exposición tras revocar queda acotada a ese lapso. Diez segundos de más es una eternidad menos
+que "hasta que reinicien".
+
+**Falla abierta si Redis no responde, y es deliberado:** sin Redis nadie puede iniciar sesión de
+todos modos, y cortarle el chat a todo el mundo por una intermitencia es peor que estirar unos
+segundos la revocación. El handshake, que es la puerta de entrada, sí falla cerrado.
+
+**Cómo se evita que vuelva.** `SuscripcionRevocacionTest` arma la cadena real —no un doble del caso
+de uso, porque lo que se quiere fijar es *a quién le pregunta* el interceptor— y cubre las dos
+mitades: con la sesión borrada no se registra una suscripción nueva, y la entrega a una suscripción
+ya registrada se corta.
+
+## E-199 · El chat del WebSocket autorizaba un grupo contra la proyección, no contra la pertenencia vigente
+
+**Síntoma.** Mismo origen que E-198, mismo día, misma clase. Se registra aparte porque la causa es
+otra y la lección también.
+
+**Causa.** La misma pregunta de autorización estaba escrita **cuatro veces**. Tres de las cuatro
+—`MensajeService`, `ConversacionService`, `PresenciaService`— se habían corregido juntas cuando se
+vio que para un grupo no alcanza la proyección `participantes_conversacion`, con este comentario:
+
+> esa tabla es una proyección, y una proyección vieja no se limita a mostrar de menos — **concede
+> acceso de más**.
+
+La cuarta copia, `SubscripcionAutorizadaInterceptor`, quedó preguntándole a la proyección. Y su
+propio javadoc decía *"Acá se aplica la MISMA regla que MensajeService/ConversacionService"* — una
+afirmación que había dejado de ser cierta y que es, probablemente, la razón por la que nadie volvió
+a mirar.
+
+Se llega a la situación por dos caminos. El transitorio es la ventana entre la rotación y la
+reconciliación asincrónica de la proyección: REST ya devuelve 403 al exmentor, pero su SUBSCRIBE se
+acepta. El permanente es peor: cuando el **período de un grupo termina** no se publica
+`ComposicionDeCelulaCambiadaEvent`, así que la proyección no se toca nunca más y las filas viejas
+quedan ahí para siempre.
+
+**La misma raíz, en el reparto de presencia.** `PresenciaService` revalidaba bien para *leer* quién
+está en línea, pero **anunciarlo** salía a `conversacionesDe(usuarioId)` tal cual, o sea a la
+proyección. El estado de conexión de una persona se publicaba al canal de todo grupo donde
+conservara fila, incluidos los que ya no integra.
+
+**Solución.** `AutorizarAccesoAConversacionUseCase` + `AutorizacionDeConversacionService`: **una sola
+respuesta** del módulo a "¿esta persona puede ver esta conversación ahora?". La consume el
+interceptor del WebSocket, y el reparto de presencia la usa para filtrar en vez de publicar a ciegas.
+Las tres guardas de `application/` quedaron como estaban —son correctas y están probadas—, pero
+ahora existe el lugar único al que converger.
+
+La conversación DIRECTA sigue decidiéndose por la proyección: ahí la proyección **es** la fuente de
+verdad, y recortarla de más sería romper el producto para arreglar otra cosa.
+
+**La lección general.** Cuatro copias de una decisión de autorización no se mantienen sincronizadas;
+se desincronizan y nadie se entera. Lo que hizo invisible este caso no fue la duplicación sino el
+**comentario que afirmaba que no la había**: un javadoc que dice "acá se aplica la misma regla" es
+una promesa que el compilador no verifica, y hace que la próxima revisión no vuelva a mirar. Cuando
+se corrige una regla replicada, o se unifica o se corrigen todas las copias en el mismo cambio.
+
+## E-200 · El nombre que el aprendiz se pone a sí mismo se renderizaba, sin cota ni saneo, en la bandeja de su mentor
+
+**Síntoma.** Sin reporte; auditoría del 2026-09-18, módulo de schedulers.
+
+**Causa.** `User.requireName` solo comprobaba que el nombre no fuera vacío y le hacía `trim()`. Sin
+longitud máxima, sin aplanar saltos de línea. `PATCH /api/v1/users/me` además no lleva `@Valid`, y
+la columna `usuarios.nombre_completo` es `text` sin cota: no había nada detrás.
+
+Ese nombre no se queda en el perfil. `DetectarAvisosScheduler` —un barrido que corre **sin
+identidad HTTP**, sin `@RequiresPermission` y sin pasar por el interceptor de permisos— lo lee y lo
+mete en `AvisoDeAcompanamientoEvent`, y el listener lo concatena **al principio** del cuerpo de la
+notificación y del push que recibe el **mentor**, bajo el título fijo del sistema "Novedades de
+acompañamiento". El aprendiz dispara la condición cuando quiere: le basta dejar vencer una evidencia.
+
+Resultado: el mentor lee en su bandeja, y como push en su teléfono, un texto de longitud y contenido
+arbitrarios elegido por otra persona, presentado como mensaje de Renaser y no como el nombre de un
+compañero.
+
+**El techo, con honestidad.** Es ingeniería social hacia un solo destinatario. **No** hay inyección
+de JSON en el proveedor de push (`ExpoPushTransporte` escapa bien comillas, backslash y controles),
+**no** hay HTML del lado del backend, y **no** se puede elegir a quién le llega.
+
+**Solución.** El saneo va en el borde del dominio, en `User.requireName`: se aplana todo blanco a un
+solo espacio y se rechaza lo que pase de 120 caracteres. En el dominio y no en el controller para
+que valga en los tres caminos de alta y en el cambio de nombre, y no solo en el endpoint que alguien
+se acuerde de anotar. `rehydrate` no pasa por ahí a propósito: los nombres ya guardados se cargan
+como están, y el límite gobierna solo lo que se escriba de ahora en adelante.
+
+**Lo que queda pendiente.** Hay una ampliación concreta de esto en el trabajo del *patrón de
+malestar*, todavía sin commitear: `PatronDeMalestarNotificationListener` renderiza el mismo nombre
+autoeditable en la bandeja y el push de **todos los ADMIN y ALCHEMIST**, y el disparador lo controla
+el propio aprendiz. Pasa de "lo ve mi mentor" a "lo ven todos los administradores, cuando yo
+quiera". El saneo de `requireName` ya lo cubre en su raíz, pero conviene revisar ese listener antes
+de mergearlo.
