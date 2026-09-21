@@ -285,7 +285,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
             return;
         }
         if (!esParticipantePort.esParticipante(conversacion.id(), usuarioId)) {
-            throw new NotAuthorizedException("No sos participante de esta conversacion");
+            throw new NotAuthorizedException("No eres participante de esta conversación");
         }
         if (conversacion.seGanaPorRolDeStaff(usuarioId) && !esStaffAdministrativo(usuarioId)) {
             throw new NotAuthorizedException(

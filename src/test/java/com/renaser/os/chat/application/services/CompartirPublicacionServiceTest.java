@@ -232,12 +232,12 @@ class CompartirPublicacionServiceTest {
         // `doThrow(...).when(...)` y no `when(...).thenThrow(...)`: la segunda forma INVOCA el
         // stub que ya dejo `setUp`, con un `null` como argumento, y revienta en el propio armado
         // de la prueba.
-        doThrow(new NotAuthorizedException("No sos participante de esta conversacion"))
+        doThrow(new NotAuthorizedException("No eres participante de esta conversación"))
                 .when(enviarMensajeUseCase).enviar(any());
 
         assertThatThrownBy(() -> service.compartir(comando()))
                 .isInstanceOf(NotAuthorizedException.class)
-                .hasMessageContaining("No sos participante");
+                .hasMessageContaining("No eres participante");
     }
 
     @Test

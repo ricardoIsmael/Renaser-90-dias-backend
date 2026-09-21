@@ -162,7 +162,7 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
         }
         throw new NotAuthorizedException(conversacion.tipo() == TipoConversacion.CELULA
                 ? "Tu asignacion cambio: ya no perteneces a ese grupo"
-                : "No sos participante de esta conversacion");
+                : "No eres participante de esta conversación");
     }
 
     /**

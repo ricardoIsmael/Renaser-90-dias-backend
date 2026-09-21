@@ -148,7 +148,7 @@ class SuscripcionRevocacionTest {
 
         assertThatThrownBy(() -> interceptor.preSend(suscripcionA(CONVERSACION), canal))
                 .isInstanceOf(MessagingException.class)
-                .hasMessageContaining("No sos participante");
+                .hasMessageContaining("No eres participante");
     }
 
     @Test

@@ -172,7 +172,7 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
     static String formatearAmbito(String ambito) {
         if (ambito == null || ambito.isBlank()) {
             return "El cliente no dijo en que curso esta la persona: responde sobre los cursos del programa "
-                    + "en general y, si hace falta, preguntale en cual esta.";
+                    + "en general y, si hace falta, pregúntale en cual esta.";
         }
         return "La persona esta viendo " + enUnaSolaLinea(ambito) + ".";
     }
