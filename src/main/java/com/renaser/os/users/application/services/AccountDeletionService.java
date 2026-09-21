@@ -7,6 +7,7 @@ import com.renaser.os.users.application.ports.in.user.CancelAccountDeletionUseCa
 import com.renaser.os.users.application.ports.in.user.GetAccountDeletionStatusUseCase;
 import com.renaser.os.users.application.ports.in.user.PurgeExpiredAccountsUseCase;
 import com.renaser.os.users.application.ports.in.user.RequestAccountDeletionUseCase;
+import com.renaser.os.users.application.ports.out.accountrequest.DeleteAccountRequestPort;
 import com.renaser.os.users.application.ports.out.user.DeleteUserPort;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.application.ports.out.user.RutasDeAlmacenamientoDeCuentaPort;
@@ -18,7 +19,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -48,26 +51,47 @@ public class AccountDeletionService implements RequestAccountDeletionUseCase, Ca
     private final LoadUserPort loadUserPort;
     private final SaveUserPort saveUserPort;
     private final DeleteUserPort deleteUserPort;
+    private final DeleteAccountRequestPort deleteAccountRequestPort;
     private final RutasDeAlmacenamientoDeCuentaPort rutasDeAlmacenamientoPort;
     private final AlmacenamientoPort almacenamientoPort;
     private final RequireActiveUserGuard requireActiveUserGuard;
+    /**
+     * Una transaccion POR CUENTA para los borrados en Postgres de {@link #purgeExpired} — el
+     * metodo no es {@code @Transactional} (a proposito: cada cuenta se intenta por separado) y
+     * desde el 2026-09-21 son DOS borrados, no uno. Sin este limite, un fallo en el segundo
+     * dejaria la cuenta a medio purgar.
+     *
+     * <p><b>Propagacion REQUIRED, no REQUIRES_NEW</b> como en los barridos de {@code habits}
+     * ({@code RachaService.transaccionPropia}). Alli REQUIRES_NEW protege de un
+     * {@code @Transactional} envolvente que una sola fila mala pudiera marcar rollback-only;
+     * aca no hay tal envolvente — el unico llamador es
+     * {@code PurgarCuentasBajaScheduler}, sin transaccion, asi que REQUIRED abre una nueva por
+     * cuenta igual — y REQUIRES_NEW ademas suspenderia la transaccion de las pruebas de
+     * integracion, que es donde este borrado se verifica contra Postgres de verdad: la
+     * transaccion nueva no veria las filas que la prueba todavia no comiteo.
+     */
+    private final TransactionTemplate transaccionPorCuenta;
     private final Clock clock;
     private final int diasDeGracia;
 
     public AccountDeletionService(LoadUserPort loadUserPort, SaveUserPort saveUserPort,
                                    DeleteUserPort deleteUserPort,
+                                   DeleteAccountRequestPort deleteAccountRequestPort,
                                    RutasDeAlmacenamientoDeCuentaPort rutasDeAlmacenamientoPort,
                                    AlmacenamientoPort almacenamientoPort,
                                    RequireActiveUserGuard requireActiveUserGuard,
+                                   PlatformTransactionManager transactionManager,
                                    Clock clock,
                                    @Value("${renaser.users.account-deletion.grace-period-days:14}")
                                    int diasDeGracia) {
         this.loadUserPort = loadUserPort;
         this.saveUserPort = saveUserPort;
         this.deleteUserPort = deleteUserPort;
+        this.deleteAccountRequestPort = deleteAccountRequestPort;
         this.rutasDeAlmacenamientoPort = rutasDeAlmacenamientoPort;
         this.almacenamientoPort = almacenamientoPort;
         this.requireActiveUserGuard = requireActiveUserGuard;
+        this.transaccionPorCuenta = new TransactionTemplate(transactionManager);
         this.clock = clock;
         this.diasDeGracia = diasDeGracia;
     }
@@ -106,12 +130,28 @@ public class AccountDeletionService implements RequestAccountDeletionUseCase, Ca
      * separado — un fallo puntual no puede dejar sin purgar a las demas (mismo criterio que
      * el cron viejo, features/account-deletion/service.ts#purgarBajasVencidas).
      *
-     * <p>En POSTGRES alcanza con {@link DeleteUserPort#deleteById} — las ~30 FK contra
+     * <p>En POSTGRES casi todo cuelga de {@link DeleteUserPort#deleteById} — las ~30 FK contra
      * `usuarios` en el baseline son ON DELETE CASCADE (o SET NULL en las de auditoria) y desde
-     * D-49 nosotros somos dueños de credenciales/identidades, asi que un solo DELETE limpia todo
-     * y libera el email (UNIQUE) para un nuevo registro.
+     * D-49 nosotros somos dueños de credenciales/identidades, asi que ese DELETE arrastra el
+     * grueso del rastro y libera el email (UNIQUE) de esa tabla.
      *
-     * <p><b>Pero el bucket no esta en ese grafo</b>, y ahi vive el material mas intimo del
+     * <p><b>Pero `solicitudes_cuenta` no esta en ese grafo.</b> Hasta el 2026-09-21 este metodo
+     * daba por sentado que un solo DELETE limpiaba todo, y no: {@code usuario_id} —la unica
+     * columna que dice de quien es la solicitud— no tiene FK contra `usuarios`, y las dos que si
+     * la tienen ({@code revisada_por}, {@code usuario_creado_id}) son ON DELETE SET NULL, que
+     * corta el vinculo y deja la fila entera. Como el alta de autoservicio crea usuario Y
+     * solicitud en la misma transaccion ({@code AccountRequestService.submit}, formulario y
+     * proveedor social por igual), toda cuenta purgada dejaba atras su correo, su nombre
+     * completo, el UUID de la cuenta ya borrada, la IP del registro y —cuando se dieron—
+     * telefono, ciudad y el sujeto del proveedor. Encima el correo seguia ocupado: el
+     * {@code existsByEmail} que consulta {@code POST /api/v1/account-requests/exists} (endpoint
+     * en permitAll) y {@code rejectIfEmailYaRegistrado} no distingue una solicitud viva de la
+     * lapida de una cuenta ya purgada, asi que un anonimo seguia obteniendo "si" sobre alguien
+     * que pidio ser borrada, y ella no podia volver a darse de alta con su propio correo. Por
+     * eso el barrido nombra esa fila explicitamente
+     * ({@link DeleteAccountRequestPort#borrarPorUsuario}) en vez de delegarla a las FK.
+     *
+     * <p><b>Y el bucket tampoco esta en ese grafo</b>, ahi vive el material mas intimo del
      * producto: evidencia de habitos, firmas del Pacto, avatar, audios de onboarding y fotos del
      * Muro. Hasta el 2026-09-21 la purga borraba las filas que guardaban las RUTAS y dejaba los
      * OBJETOS en S3 para siempre — el indice se iba y el archivo se quedaba, exactamente al reves
@@ -157,7 +197,19 @@ public class AccountDeletionService implements RequestAccountDeletionUseCase, Ca
                                 id, clave, e);
                     }
                 }
-                deleteUserPort.deleteById(id);
+                // 3. Los dos borrados de Postgres, en UNA transaccion (`transaccionPorCuenta`):
+                //    son dos tablas y este metodo no es @Transactional, asi que sin este limite
+                //    un fallo en el segundo dejaria la cuenta a medio purgar.
+                transaccionPorCuenta.executeWithoutResult(estado -> {
+                    // La solicitud ANTES que el usuario, por el mismo motivo que los objetos van
+                    // antes que la fila: la fila de `usuarios` es lo unico que hace que el
+                    // barrido de manana vuelva a mirar esta cuenta (`pendingDeletionUpTo` lee de
+                    // ahi). Al reves —usuario primero— un corte entre los dos borrados dejaria la
+                    // solicitud huerfana PARA SIEMPRE, sin nadie que volviera a nombrarla: el
+                    // agujero exacto que este paso cierra.
+                    deleteAccountRequestPort.borrarPorUsuario(id);
+                    deleteUserPort.deleteById(id);
+                });
                 purgadas++;
             } catch (RuntimeException e) {
                 fallidas++;

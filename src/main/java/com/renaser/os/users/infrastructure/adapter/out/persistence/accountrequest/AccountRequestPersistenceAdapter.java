@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.out.persistence.accountrequest;
 
+import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.out.accountrequest.DeleteAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SaveAccountRequestPort;
@@ -88,6 +89,15 @@ class AccountRequestPersistenceAdapter implements LoadAccountRequestPort, SaveAc
         }
         repository.deleteById(id.value());
         return true;
+    }
+
+    /** Sin {@code existsById} previo, a diferencia de {@link #deleteById}: la consulta derivada
+     * de Spring Data ya es idempotente -- si no hay fila para ese usuario, no borra nada y no
+     * lanza (el {@code EmptyResultDataAccessException} lo tira {@code deleteById(id)}, que es
+     * otro metodo). */
+    @Override
+    public void borrarPorUsuario(UserId usuarioId) {
+        repository.deleteByUsuarioId(usuarioId.value());
     }
 
     @Override
