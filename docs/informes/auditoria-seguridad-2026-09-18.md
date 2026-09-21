@@ -7,7 +7,7 @@ se ejecutó contra el despliegue, nada se sondeó, ninguna credencial se tocó.
 La regla que se aplicó para aceptar un hallazgo, y que descartó la mayoría de los candidatos:
 hace falta **principal de menor confianza + entrada aceptada + control previsto + frontera cruzada
 + persona o recurso afectado + resultado concreto**. Una buena práctica ausente no es un hallazgo.
-Algo que solo te afecta a vos mismo, tampoco.
+Algo que solo te afecta a ti mismo, tampoco.
 
 Rama: trabajo mergeado a `master`. Pruebas al cierre: **3075 unitarias + 66 de integración, 0 fallos**.
 
@@ -34,7 +34,7 @@ en seis barridos, tope de paginación, SSRF de push cerrado, tres rutas sin cubr
 
 ## 2. Lo que falta, y de quién depende
 
-### 2.1 Bloqueado en un hecho que solo vos podés observar
+### 2.1 Bloqueado en un hecho que solo tú puedes observar
 
 **Estas tres no se pueden cerrar leyendo el repo.** La configuración del borde no está versionada:
 cero archivos de nginx, Terraform o CloudFront rastreados por git. Todo lo que el código dice sobre
@@ -58,7 +58,7 @@ arbitraria en `solicitudes_cuenta.ip_solicitud`.
 >      -H 'Content-Type: application/json' \
 >      -d '{"email":"no-existe@ejemplo.invalid","contrasena":"x"}'
 > ```
-> Después mirá qué IP registró el backend (`docker logs backend --tail 50`, o el contador por IP en
+> Después mira qué IP registró el backend (`docker logs backend --tail 50`, o el contador por IP en
 > Redis). **Si vio `203.0.113.9`, está confirmado.**
 >
 > **El arreglo, si se confirma:** tomar la IP contando desde la **derecha**. Con un solo salto de
@@ -77,8 +77,31 @@ el origen de internet.
 aws ec2 describe-security-groups --group-ids <sg-...> \
     --query 'SecurityGroups[].IpPermissions' --region us-east-1
 ```
-Buscá cualquier regla `0.0.0.0/0` sobre el 8080. Lo correcto es la prefix list
-`com.amazonaws.global.cloudfront.origin-facing` y nada más.
+**Cómo leer la salida** — y acá hay que tener cuidado, porque la versión anterior de este
+informe decía lo contrario y te habría hecho cerrar el hallazgo mal. Mira las reglas cuyo
+`FromPort`/`ToPort` es 8080:
+
+- Una regla `0.0.0.0/0` es exposición directa a internet. Obvio.
+- Una regla con la prefix list `pl-3b927c52` (`com.amazonaws.global.cloudfront.origin-facing`)
+  **también es exposición**, y es justo la que `auditoria-nfr-2026-09-06.md` §2.3 dejó marcada como
+  el hallazgo: esa lista es de **todas** las distribuciones de CloudFront del mundo, no solo la
+  nuestra. Cualquiera con una cuenta de AWS levanta su propia distribución apuntando a
+  `52.0.210.237:8080` y se saltea la nuestra, con todo lo que le colguemos.
+  Acotar el origen a esa lista **no** es el arreglo: es el punto de partida del problema.
+- Lo correcto es que el 8080 solo lo alcance **nuestra** distribución. Como CloudFront no publica
+  las IP de una distribución concreta, eso se consigue con la receta de D-117, en este orden
+  (al revés rompe producción): primero la cabecera secreta de origen en CloudFront con el secreto
+  en Parameter Store, después un filtro en el backend que la exija —hoy **no existe ninguno**, hay
+  que escribirlo— exceptuando `/actuator/health`, que el CD consulta por `localhost`, y recién
+  entonces desplegar.
+
+Mientras estés ahí, mira también `CustomHeaders.Quantity` de la distribución:
+
+```
+aws cloudfront get-distribution-config --id E3O4M4W7JW3TJQ --region us-east-1
+```
+
+Si da `0`, no hay cabecera secreta y la primera mitad de la receta sigue sin hacerse.
 
 #### P-3 · ¿Qué hay realmente en Parameter Store?
 
