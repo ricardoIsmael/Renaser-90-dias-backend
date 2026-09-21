@@ -242,7 +242,8 @@ public class AccountDeletionService implements RequestAccountDeletionUseCase, Ca
         List<String> exclusivas = candidatas.stream().filter(ruta -> !deTerceros.contains(ruta)).toList();
         if (exclusivas.size() < candidatas.size()) {
             log.warn("[users.AccountDeletionService] la cuenta {} deja {} de {} objeto(s) en el bucket: "
-                            + "otra fila que sobrevive a la purga los referencia (testimonio o mensaje ajeno)",
+                            + "otra fila que sobrevive a la purga los referencia (testimonio, mensaje, "
+                            + "publicacion, bitacora o santuario ajeno)",
                     id, candidatas.size() - exclusivas.size(), candidatas.size());
         }
         return exclusivas;

@@ -24,9 +24,19 @@ import java.util.Set;
  *   <li>Compartir una publicacion al chat referencia la MISMA clave {@code muro/...}; si el que
  *       compartio es otra persona, su mensaje no cae con la cascada de {@code emisor_id} y se
  *       queda apuntando al objeto.</li>
+ *   <li>Nada obliga a que una clave {@code muro/} sea unica: la publicacion de OTRA persona puede
+ *       usar la misma, y esa fila cuelga del {@code autor_id} del otro, no del purgado.</li>
+ *   <li>{@code entradas_diario.audio_ruta} y {@code sesiones_bloqueo.evidencia_salida_ruta} las
+ *       llena el cliente sin validacion, asi que la fila de otro participante puede nombrar un
+ *       objeto de esta cuenta y sobrevive a su purga.</li>
  * </ul>
- * Borrar el objeto en cualquiera de esos dos casos deja la foto en 404 dentro del producto para
+ * Borrar el objeto en cualquiera de esos casos deja la foto en 404 dentro del producto para
  * alguien que no pidio ninguna baja.
+ *
+ * <p>Es el reverso de {@code community.ReferenciasDeMediaDelMuroPort} y su SPI
+ * {@code community.api.ReferenciasExternasDeMediaDelMuro}, que resuelven lo mismo cuando lo que
+ * se borra es una PUBLICACION. El criterio es el mismo en las dos direcciones: toda fila que
+ * sobreviva al DELETE y siga nombrando la clave la retiene. Ante la duda, no se borra.
  */
 public interface RutasDeAlmacenamientoDeCuentaPort {
 
