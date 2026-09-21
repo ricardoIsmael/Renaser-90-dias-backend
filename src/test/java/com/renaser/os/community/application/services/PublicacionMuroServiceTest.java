@@ -2,6 +2,7 @@ package com.renaser.os.community.application.services;
 
 import com.renaser.os.community.api.PublicacionCreadaEvent;
 import com.renaser.os.community.api.PublicarEnMuroPort.PublicarDesdeEvidenciaComando;
+import com.renaser.os.community.api.ReferenciasExternasDeMediaDelMuro;
 import com.renaser.os.community.application.ports.in.categoria.ConsultarCategoriasMuroUseCase;
 import com.renaser.os.community.application.ports.in.publicacion.EditarPublicacionUseCase.EditarPublicacionCommand;
 import com.renaser.os.community.application.ports.in.publicacion.OcultarPublicacionUseCase.OcultarPublicacionCommand;
@@ -15,6 +16,7 @@ import com.renaser.os.community.application.ports.out.publicacion.EliminarPublic
 import com.renaser.os.community.application.ports.out.publicacion.LoadComentarioPort;
 import com.renaser.os.community.application.ports.out.publicacion.LoadPublicacionPort;
 import com.renaser.os.community.application.ports.out.publicacion.ReaccionMuroPort;
+import com.renaser.os.community.application.ports.out.publicacion.ReferenciasDeMediaDelMuroPort;
 import com.renaser.os.community.application.ports.out.publicacion.SavePublicacionPort;
 import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort;
 import com.renaser.os.community.domain.model.publicacion.MediaPublicacion;
@@ -53,8 +55,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -88,8 +93,18 @@ class PublicacionMuroServiceTest {
     private ApplicationEventPublisher events;
     @Mock
     private IdGenerator idGenerator;
+    @Mock
+    private ReferenciasDeMediaDelMuroPort referenciasDeMediaPort;
+    @Mock
+    private ReferenciasExternasDeMediaDelMuro referenciasEnElChat;
 
     private PublicacionMuroService service;
+    /**
+     * Espia sobre el adaptador real, no un mock pelado: las vistas del feed llaman a
+     * {@code firmarLectura} y un mock devolveria {@code null}. Lo que se quiere observar es
+     * {@code borrar}, sin cambiarle el comportamiento a lo demas.
+     */
+    private com.renaser.os.shared.infrastructure.storage.NoOpAlmacenamientoAdapter almacenamiento;
 
     private final UserId autor = UserId.of(UUID.randomUUID());
     private final UserId otro = UserId.of(UUID.randomUUID());
@@ -99,10 +114,14 @@ class PublicacionMuroServiceTest {
 
     @BeforeEach
     void setUp() {
+        almacenamiento = spy(new NoOpAlmacenamientoAdapter());
         service = new PublicacionMuroService(loadPublicacionPort, savePublicacionPort, eliminarPublicacionPort,
                 loadComentarioPort, reaccionMuroPort, categoriasUseCase, consultarPerfilUsuarioPort,
-                new NoOpAlmacenamientoAdapter(), userSummaryFinder, events, CLOCK, idGenerator,
-                participacionFinder);
+                almacenamiento, userSummaryFinder, events, CLOCK, idGenerator,
+                participacionFinder, referenciasDeMediaPort, List.of(referenciasEnElChat));
+        // Por defecto nadie mas mira los objetos: cada prueba que necesite lo contrario lo dice.
+        lenient().when(referenciasDeMediaPort.referenciadasFueraDe(any(), any())).thenReturn(Set.of());
+        lenient().when(referenciasEnElChat.referenciadas(any())).thenReturn(Set.of());
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(autor))
                 .thenReturn(Optional.of(new UserSummary(autor, "Autor", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
@@ -125,15 +144,35 @@ class PublicacionMuroServiceTest {
         lenient().when(savePublicacionPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
-    private static List<ArchivoEntrada> unaFoto() {
-        return List.of(new ArchivoEntrada("wall", "muro/x/1.jpg", "image/jpeg"));
+    /**
+     * La clave tal cual la emite el servidor: {@code muro/<carpeta>/<autorId>/<uuid>}
+     * ({@code PublicacionMuroService.rutaDeMedia}). Antes este helper usaba {@code "muro/x/1.jpg"},
+     * que no es una clave que el sistema pueda haber firmado nunca — misma correccion que ya se le
+     * hizo el 2026-09-18 al helper de {@code rocas/}.
+     */
+    private static String claveDelMuro(UserId autorId) {
+        return "muro/fotos/" + autorId.value() + "/" + UUID.randomUUID();
+    }
+
+    private static List<ArchivoEntrada> unaFotoDe(UserId autorId) {
+        return List.of(new ArchivoEntrada("wall", claveDelMuro(autorId), "image/jpeg"));
     }
 
     private Publicacion publicacionVisible(UserId autorId) {
+        return publicacionVisibleCon(autorId, List.of(new MediaPublicacion("wall", claveDelMuro(autorId),
+                "image/jpeg", 0)));
+    }
+
+    private Publicacion publicacionVisibleCon(UserId autorId, List<MediaPublicacion> media) {
         return Publicacion.rehydrate(PublicacionId.of(UUID.randomUUID()), autorId,
                 com.renaser.os.community.domain.model.publicacion.TipoPublicacion.MANUAL, null, "hola",
-                List.of(new MediaPublicacion("wall", "muro/x/1.jpg", "image/jpeg", 0)), false, CLOCK.now(),
-                CLOCK.now());
+                media, false, CLOCK.now(), CLOCK.now());
+    }
+
+    private Publicacion publicacionOcultaCon(UserId autorId, List<MediaPublicacion> media) {
+        return Publicacion.rehydrate(PublicacionId.of(UUID.randomUUID()), autorId,
+                com.renaser.os.community.domain.model.publicacion.TipoPublicacion.MANUAL, null, "hola",
+                media, true, CLOCK.now(), CLOCK.now());
     }
 
     /**
@@ -179,14 +218,14 @@ class PublicacionMuroServiceTest {
     @Test
     void publicarConCategoriaDesconocidaFalla() {
         when(categoriasUseCase.clavesExistentes()).thenReturn(Set.of("LOGROS"));
-        var command = new PublicarCommand(autor, "hola comunidad", unaFoto(), "INEXISTENTE");
+        var command = new PublicarCommand(autor, "hola comunidad", unaFotoDe(autor), "INEXISTENTE");
         assertThatThrownBy(() -> service.publicar(command)).isInstanceOf(IllegalArgumentException.class);
         verify(savePublicacionPort, never()).save(any());
     }
 
     @Test
     void publicarPublicaElEventoDeDominio() {
-        var command = new PublicarCommand(autor, "hola comunidad", unaFoto(), null);
+        var command = new PublicarCommand(autor, "hola comunidad", unaFotoDe(autor), null);
         service.publicar(command);
         verify(events, times(1)).publishEvent(any(PublicacionCreadaEvent.class));
     }
@@ -273,7 +312,7 @@ class PublicacionMuroServiceTest {
         Publicacion publicacion = publicacionVisible(suspendido);
         when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
 
-        var command = new EditarPublicacionCommand(suspendido, publicacion.id(), "nuevo texto", unaFoto());
+        var command = new EditarPublicacionCommand(suspendido, publicacion.id(), "nuevo texto", unaFotoDe(suspendido));
         assertThatThrownBy(() -> service.editar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(savePublicacionPort, never()).save(any());
     }
@@ -402,7 +441,7 @@ class PublicacionMuroServiceTest {
     @Test
     @DisplayName("publicar(): cuenta SUSPENDIDA -> 403, nunca guarda")
     void publicarConActorSuspendidoFalla() {
-        var command = new PublicarCommand(suspendido, "hola comunidad", unaFoto(), null);
+        var command = new PublicarCommand(suspendido, "hola comunidad", unaFotoDe(suspendido), null);
         assertThatThrownBy(() -> service.publicar(command)).isInstanceOf(NotAuthorizedException.class);
         verify(savePublicacionPort, never()).save(any());
     }
@@ -539,5 +578,201 @@ class PublicacionMuroServiceTest {
                 .isInstanceOf(com.renaser.os.shared.domain.NotAuthorizedException.class);
         verify(savePublicacionPort, org.mockito.Mockito.never())
                 .save(org.mockito.ArgumentMatchers.any());
+    }
+
+    // ─── El borrado del Muro tiene que llegar al bucket, y solo a lo que es suyo ──────────
+    //
+    // Las dos direcciones, porque las dos son roturas reales:
+    //   - lo EXCLUSIVO se borra: si no, "borrado fisico" no borra el archivo, la cascada de
+    //     medias_publicacion destruye la clave y el objeto queda vivo y re-firmable para siempre;
+    //   - lo REFERENCIADO por otro NO se borra: compartir una publicacion en el chat no copia el
+    //     archivo, y una portada promovida a testimonio tampoco — borrar ahi deja esas fotos en
+    //     404 para siempre, sin que ninguna moderacion las haya tocado.
+
+    @Test
+    @DisplayName("eliminarPermanente(): saca del bucket las medias `muro/` exclusivas, y recien despues borra la fila")
+    void eliminarPermanenteRetiraLosObjetosExclusivos() {
+        String primera = claveDelMuro(autor);
+        String segunda = claveDelMuro(autor);
+        Publicacion publicacion = publicacionOcultaCon(autor, List.of(
+                new MediaPublicacion("wall", primera, "image/jpeg", 0),
+                new MediaPublicacion("wall", segunda, "image/jpeg", 1)));
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        service.eliminarPermanente(new EliminarPublicacionCommand(admin, publicacion.id()));
+
+        verify(almacenamiento).borrar(primera);
+        verify(almacenamiento).borrar(segunda);
+        // El orden no es decorativo: la FK ON DELETE CASCADE de medias_publicacion se lleva
+        // ruta_storage con la fila, asi que despues del DELETE ya no hay clave con la que limpiar.
+        var orden = org.mockito.Mockito.inOrder(almacenamiento, eliminarPublicacionPort);
+        orden.verify(almacenamiento, times(2)).borrar(any());
+        orden.verify(eliminarPublicacionPort).eliminar(publicacion.id());
+    }
+
+    @Test
+    @DisplayName("eliminarPermanente(): una publicacion hecha desde una evidencia (`rocas/`) no toca el bucket")
+    void eliminarPermanenteNoBorraLaEvidenciaDelAprendiz() {
+        // publicarDesdeEvidencia guarda en medias_publicacion la clave `rocas/<autorId>/<rocaId>`,
+        // que sigue siendo la evidencia del aprendiz en evidencias.ruta_storage (V1:764). Ese
+        // objeto es de otro modulo: borrarlo con la publicacion destruiria un dato ajeno.
+        String evidencia = "rocas/" + autor.value() + "/" + UUID.randomUUID();
+        Publicacion publicacion = publicacionOcultaCon(autor,
+                List.of(new MediaPublicacion("renaser-files", evidencia, "image/jpeg", 0)));
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        service.eliminarPermanente(new EliminarPublicacionCommand(admin, publicacion.id()));
+
+        verify(almacenamiento, never()).borrar(any());
+        // Ni siquiera se pregunta por ella: no es una clave del Muro.
+        verify(referenciasDeMediaPort, never()).referenciadasFueraDe(any(), any());
+        verify(eliminarPublicacionPort).eliminar(publicacion.id());
+    }
+
+    @Test
+    @DisplayName("eliminarPermanente(): la foto que alguien compartio en un chat se queda en el bucket")
+    void eliminarPermanenteNoRompeLaFotoCompartidaEnUnChat() {
+        // Compartir al chat NO copia el archivo: CompartirPublicacionService persiste la MISMA
+        // clave en mensajes.media_ruta y el borrado del chat es un tombstone, no un DELETE.
+        String compartida = claveDelMuro(autor);
+        String soloDeLaPublicacion = claveDelMuro(autor);
+        Publicacion publicacion = publicacionOcultaCon(autor, List.of(
+                new MediaPublicacion("wall", compartida, "image/jpeg", 0),
+                new MediaPublicacion("wall", soloDeLaPublicacion, "image/jpeg", 1)));
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        when(referenciasEnElChat.referenciadas(any())).thenReturn(Set.of(compartida));
+
+        service.eliminarPermanente(new EliminarPublicacionCommand(admin, publicacion.id()));
+
+        verify(almacenamiento, never()).borrar(compartida);
+        verify(almacenamiento).borrar(soloDeLaPublicacion);
+        verify(eliminarPublicacionPort).eliminar(publicacion.id());
+    }
+
+    @Test
+    @DisplayName("eliminarPermanente(): la portada promovida a testimonio tampoco se borra")
+    void eliminarPermanenteNoRompeLaVitrinaDeTestimonios() {
+        // TestimonioService.promover copia la clave de la portada en testimonios.foto_evento_ruta,
+        // y publicacion_muro_id es ON DELETE SET NULL: el testimonio SOBREVIVE al borrado con la
+        // ruta congelada y aVista la vuelve a firmar en cada GET /api/v1/testimonios.
+        String portada = claveDelMuro(autor);
+        Publicacion publicacion = publicacionOcultaCon(autor,
+                List.of(new MediaPublicacion("wall", portada, "image/jpeg", 0)));
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        when(referenciasDeMediaPort.referenciadasFueraDe(any(), eq(publicacion.id())))
+                .thenReturn(Set.of(portada));
+
+        service.eliminarPermanente(new EliminarPublicacionCommand(admin, publicacion.id()));
+
+        verify(almacenamiento, never()).borrar(any());
+        verify(eliminarPublicacionPort).eliminar(publicacion.id());
+    }
+
+    @Test
+    @DisplayName("eliminarPermanente(): el censo recibe las claves `muro/` y excluye a la propia publicacion")
+    void eliminarPermanentePreguntaPorLasClavesDelMuroExcluyendoLaPropiaPublicacion() {
+        String delMuro = claveDelMuro(autor);
+        String evidencia = "rocas/" + autor.value() + "/" + UUID.randomUUID();
+        Publicacion publicacion = publicacionOcultaCon(autor, List.of(
+                new MediaPublicacion("wall", delMuro, "image/jpeg", 0),
+                new MediaPublicacion("renaser-files", evidencia, "image/jpeg", 1)));
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        service.eliminarPermanente(new EliminarPublicacionCommand(admin, publicacion.id()));
+
+        verify(referenciasDeMediaPort).referenciadasFueraDe(List.of(delMuro), publicacion.id());
+        verify(referenciasEnElChat).referenciadas(List.of(delMuro));
+    }
+
+    @Test
+    @DisplayName("eliminarPermanente(): un fallo de S3 no tumba la moderacion — la fila igual se borra")
+    void unFalloDeS3NoImpideLaModeracion() {
+        String clave = claveDelMuro(autor);
+        Publicacion publicacion = publicacionOcultaCon(autor,
+                List.of(new MediaPublicacion("wall", clave, "image/jpeg", 0)));
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        doThrow(new IllegalStateException("S3 caido")).when(almacenamiento).borrar(clave);
+
+        service.eliminarPermanente(new EliminarPublicacionCommand(admin, publicacion.id()));
+
+        verify(eliminarPublicacionPort).eliminar(publicacion.id());
+    }
+
+    @Test
+    @DisplayName("editar(): bajar de dos fotos a una saca del bucket solo la que se fue")
+    void editarQuitandoUnaFotoRetiraSoloEseObjeto() {
+        // save() -> reemplazarMedia() hace DELETE de medias_publicacion y reinserta: la media que
+        // sale pierde su unica fila, y con ella la unica copia de su clave.
+        String seQueda = claveDelMuro(autor);
+        String seVa = claveDelMuro(autor);
+        Publicacion publicacion = publicacionVisibleCon(autor, List.of(
+                new MediaPublicacion("wall", seQueda, "image/jpeg", 0),
+                new MediaPublicacion("wall", seVa, "image/jpeg", 1)));
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        service.editar(new EditarPublicacionCommand(autor, publicacion.id(), "queda una",
+                List.of(new ArchivoEntrada("wall", seQueda, "image/jpeg"))));
+
+        verify(almacenamiento).borrar(seVa);
+        verify(almacenamiento, never()).borrar(seQueda);
+    }
+
+    @Test
+    @DisplayName("editar(): la foto que se quita pero alguien comparte en un chat se queda en el bucket")
+    void editarNoBorraUnaFotoQueElChatTodaviaSirve() {
+        String seQueda = claveDelMuro(autor);
+        String seVa = claveDelMuro(autor);
+        Publicacion publicacion = publicacionVisibleCon(autor, List.of(
+                new MediaPublicacion("wall", seQueda, "image/jpeg", 0),
+                new MediaPublicacion("wall", seVa, "image/jpeg", 1)));
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        when(referenciasEnElChat.referenciadas(any())).thenReturn(Set.of(seVa));
+
+        service.editar(new EditarPublicacionCommand(autor, publicacion.id(), "queda una",
+                List.of(new ArchivoEntrada("wall", seQueda, "image/jpeg"))));
+
+        verify(almacenamiento, never()).borrar(any());
+    }
+
+    @Test
+    @DisplayName("editar(): si no se saca ninguna foto, no se toca el bucket ni se consulta el censo")
+    void editarSinQuitarFotosNoTocaElBucket() {
+        String unica = claveDelMuro(autor);
+        Publicacion publicacion = publicacionVisibleCon(autor,
+                List.of(new MediaPublicacion("wall", unica, "image/jpeg", 0)));
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        service.editar(new EditarPublicacionCommand(autor, publicacion.id(), "solo cambia el texto",
+                List.of(new ArchivoEntrada("wall", unica, "image/jpeg"))));
+
+        verify(almacenamiento, never()).borrar(any());
+        verify(referenciasDeMediaPort, never()).referenciadasFueraDe(any(), any());
+    }
+
+    @Test
+    @DisplayName("publicar(): una clave `muro/` de OTRO usuario se rechaza -> 403, nunca guarda")
+    void publicarConLaClaveDeOtroUsuarioFalla() {
+        /* Sin esto, una clave suelta se recicla en una publicacion nueva; y, peor, publicar la
+           clave de la foto de OTRO deja una referencia viva que impide para siempre que la
+           moderacion retire ese objeto del bucket. Mismo criterio que exigirRutaDelAutor. */
+        var command = new PublicarCommand(autor, "hola comunidad",
+                List.of(new ArchivoEntrada("wall", claveDelMuro(otro), "image/jpeg")), null);
+
+        assertThatThrownBy(() -> service.publicar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePublicacionPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("editar(): tampoco se puede meter la clave de otro por la puerta del PATCH")
+    void editarConLaClaveDeOtroUsuarioFalla() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        var command = new EditarPublicacionCommand(autor, publicacion.id(), "texto",
+                List.of(new ArchivoEntrada("wall", claveDelMuro(otro), "image/jpeg")));
+
+        assertThatThrownBy(() -> service.editar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(savePublicacionPort, never()).save(any());
+        verify(almacenamiento, never()).borrar(any());
     }
 }
