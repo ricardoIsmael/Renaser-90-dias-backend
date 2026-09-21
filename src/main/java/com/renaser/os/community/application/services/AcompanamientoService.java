@@ -1,5 +1,6 @@
 package com.renaser.os.community.application.services;
 
+import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.community.application.ports.in.acompanamiento.ConsultarAprendicesDelGrupoUseCase;
 import com.renaser.os.community.application.ports.in.acompanamiento.ConsultarContextoAcompanamientoUseCase;
 import com.renaser.os.community.application.ports.out.acompanamiento.LoadAsignacionesPort;
@@ -50,17 +51,21 @@ public class AcompanamientoService
     private final LoadAsignacionesPort loadAsignacionesPort;
     private final LoadCelulaPort loadCelulaPort;
     private final LoadPoliticaMentoriaPort loadPoliticaMentoriaPort;
+    /** La respuesta canonica a "¿este actor acompaña vigentemente ese grupo?". Ver {@link #requireAcompanaVigente}. */
+    private final AcompanamientoFinder acompanamientoFinder;
     private final ParticipacionProgramaFinder participacionProgramaFinder;
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
 
     public AcompanamientoService(LoadAsignacionesPort loadAsignacionesPort, LoadCelulaPort loadCelulaPort,
                                   LoadPoliticaMentoriaPort loadPoliticaMentoriaPort,
+                                  AcompanamientoFinder acompanamientoFinder,
                                   ParticipacionProgramaFinder participacionProgramaFinder,
                                   UserSummaryFinder userSummaryFinder, Clock clock) {
         this.loadAsignacionesPort = loadAsignacionesPort;
         this.loadCelulaPort = loadCelulaPort;
         this.loadPoliticaMentoriaPort = loadPoliticaMentoriaPort;
+        this.acompanamientoFinder = acompanamientoFinder;
         this.participacionProgramaFinder = participacionProgramaFinder;
         this.userSummaryFinder = userSummaryFinder;
         this.clock = clock;
@@ -117,9 +122,11 @@ public class AcompanamientoService
         Instant ahora = clock.now();
         CelulaId grupoId = CelulaId.of(consulta.grupoId());
 
-        ConjuntoAsignaciones composicion = ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(grupoId));
-        requireAcompanaVigente(consulta.actorId(), grupoId, composicion, ahora);
+        // Primero autorizar y despues leer: asi el camino que termina en 403 no llega a cargar
+        // la composicion del grupo.
+        requireAcompanaVigente(consulta.actorId(), grupoId, ahora);
 
+        ConjuntoAsignaciones composicion = ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(grupoId));
         Celula grupo = loadCelulaPort.porId(grupoId)
                 .orElseThrow(() -> new NoSuchElementException("Grupo no encontrado: " + consulta.grupoId()));
 
@@ -150,15 +157,26 @@ public class AcompanamientoService
     /**
      * La comprobacion que impide que manipular el {@code groupId} devuelva gente de otro grupo.
      * Se pide relacion VIGENTE: un exmentor con un token todavia valido no pasa (V11, V12).
+     *
+     * <p><b>Delega en vez de repetir el predicado.</b> "¿Este actor acompaña vigentemente este
+     * grupo?" tiene UNA respuesta en el producto, {@code AcompanamientoFinder.acompanaVigente}, y es
+     * la que ya usan {@code mentoring.SeguimientoService}, {@code habits.AcompanamientoDeAlumnoService}
+     * y —via {@code esIntegranteVigente}— el chat de grupo. Lo que vivia aca era una copia que se
+     * habia quedado con la mitad: miraba el intervalo de la ASIGNACION y nunca el periodo del GRUPO.
+     * Esa mitad faltante es justo donde vive la revocacion, porque cerrar el periodo de un grupo NO
+     * cierra sus filas de {@code asignaciones_celula} —nada en el repositorio las cierra por el paso
+     * del tiempo—, asi que un exmentor seguia leyendo el padron de un grupo ya terminado mientras el
+     * chat y la semana de sus exalumnos ya le respondian 403. Un grupo PROGRAMADO tampoco pasa:
+     * existir no es estar corriendo. Ver el javadoc de
+     * {@code AcompanamientoFinderService.grupoOperativoEn}.
+     *
+     * <p>Delegar y no copiar la condicion tambien resuelve la zona horaria: el finder resuelve el dia
+     * del grupo con la zona de la politica de SU cohorte, mientras que el {@link #hoyDelPrograma()}
+     * de esta clase usa {@code PoliticaMentoria.ZONA_POR_DEFECTO}. Una cohorte con otra zona haria
+     * que las dos difieran en un dia justo en el borde del periodo, que es donde importa.
      */
-    private void requireAcompanaVigente(UserId actorId, CelulaId grupoId, ConjuntoAsignaciones composicion,
-                                         Instant ahora) {
-        boolean acompana = composicion.todas().stream()
-                .filter(a -> a.usuarioId().equals(actorId))
-                .filter(a -> a.celulaId().equals(grupoId))
-                .filter(AcompanamientoService::esDeAcompanamiento)
-                .anyMatch(a -> a.vigenteEn(ahora));
-        if (!acompana) {
+    private void requireAcompanaVigente(UserId actorId, CelulaId grupoId, Instant ahora) {
+        if (!acompanamientoFinder.acompanaVigente(actorId, grupoId.value(), ahora)) {
             // Mismo mensaje tanto si el grupo no existe como si existe y no es suyo: distinguirlos
             // le confirmaria a quien prueba ids que ese grupo existe.
             throw new NotAuthorizedException("No acompanas ese grupo");

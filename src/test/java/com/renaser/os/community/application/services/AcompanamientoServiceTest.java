@@ -8,12 +8,15 @@ import com.renaser.os.community.application.ports.out.acompanamiento.LoadPolitic
 import com.renaser.os.community.application.ports.out.celula.LoadCelulaPort;
 import com.renaser.os.community.domain.model.acompanamiento.AsignacionCelula;
 import com.renaser.os.community.domain.model.acompanamiento.AsignacionId;
+import com.renaser.os.community.domain.model.acompanamiento.CadenciaRotacion;
 import com.renaser.os.community.domain.model.acompanamiento.FuncionAcompanamiento;
 import com.renaser.os.community.domain.model.acompanamiento.MotivoAsignacion;
 import com.renaser.os.community.domain.model.acompanamiento.PoliticaMentoria;
 import com.renaser.os.community.domain.model.celula.Celula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
+import com.renaser.os.community.domain.model.celula.PeriodoGrupo;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -28,6 +31,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -105,7 +109,13 @@ class AcompanamientoServiceTest {
         }
     };
 
-    private final LoadPoliticaMentoriaPort cargaPolitica = cohorteId -> Optional.empty();
+    /**
+     * Politicas por cohorte. Vacio —lo normal en estas pruebas— significa que la cohorte no tiene
+     * fila propia y rige {@code PoliticaMentoria.porDefecto}, con zona America/Lima.
+     */
+    private final Map<CohorteId, PoliticaMentoria> politicas = new HashMap<>();
+
+    private final LoadPoliticaMentoriaPort cargaPolitica = cohorteId -> Optional.ofNullable(politicas.get(cohorteId));
 
     private final UserSummaryFinder buscaUsuarios = new UserSummaryFinder() {
             @Override
@@ -177,13 +187,37 @@ class AcompanamientoServiceTest {
     };
 
     private AcompanamientoService servicio() {
-        return new AcompanamientoService(cargaAsignaciones, cargaCelulas, cargaPolitica, buscaParticipacion,
-                buscaUsuarios, CLOCK);
+        return servicio(CLOCK);
+    }
+
+    /**
+     * El finder que se inyecta es el REAL, no un doble. La autorizacion de esta clase delega en
+     * {@code AcompanamientoFinder.acompanaVigente}, asi que lo que estas pruebas tienen que
+     * proteger es esa respuesta entera —periodo del grupo y zona de la cohorte incluidos—; un
+     * doble de mentira podria seguir diciendo que si mucho despues de que el de verdad dijera que
+     * no, que es exactamente la forma del agujero que se esta cerrando.
+     */
+    private AcompanamientoService servicio(Clock reloj) {
+        return new AcompanamientoService(cargaAsignaciones, cargaCelulas, cargaPolitica,
+                new AcompanamientoFinderService(cargaAsignaciones, cargaCelulas, cargaPolitica),
+                buscaParticipacion, buscaUsuarios, reloj);
     }
 
     // ── armado ──────────────────────────────────────────────────────────────
     private void grupo(CelulaId id, String nombre) {
         celulas.put(id.value(), Celula.crear(id, nombre, COHORTE, null, AHORA));
+    }
+
+    /** V48: el mismo grupo, con el periodo que escribio el administrador. */
+    private void grupoConPeriodo(CelulaId id, String nombre, LocalDate inicio, LocalDate fin) {
+        celulas.put(id.value(), Celula.crear(id, nombre, COHORTE, null, new PeriodoGrupo(inicio, fin), AHORA));
+    }
+
+    /** Le da a la cohorte una politica propia con una zona distinta de America/Lima. */
+    private void zonaDeLaCohorte(String zona) {
+        politicas.put(COHORTE, PoliticaMentoria.rehydrate(COHORTE, PoliticaMentoria.CAPACIDAD_POR_DEFECTO,
+                CadenciaRotacion.MENSUAL, zona, PoliticaMentoria.DIA_TRASLADO_POR_DEFECTO,
+                PoliticaMentoria.DIAS_SIN_ACTIVIDAD_POR_DEFECTO, null, 1));
     }
 
     private void persona(UserId id, String nombre) {
@@ -326,6 +360,110 @@ class AcompanamientoServiceTest {
 
         // Y su contexto ya no lista el grupo.
         assertThat(servicio().contexto(EXMENTOR).asignaciones()).isEmpty();
+    }
+
+    // ── el periodo del GRUPO, no solo el de la asignacion ───────────────────
+    // Cerrar el periodo de un grupo NO cierra sus filas de `asignaciones_celula`: ningun camino
+    // del repositorio las cierra por el paso del tiempo (lo unico que ocurre al vencer es un aviso
+    // al administrador), y el camino vigente para darle grupo nuevo a un mentor tampoco cierra el
+    // anterior (D-141). Asi que "grupo vencido + asignacion todavia abierta" no es un estado raro:
+    // es el estado normal apenas termina una cohorte, y la revocacion tiene que hacerla la lectura.
+
+    @Test
+    @DisplayName("grupo con el periodo vencido: el exmentor NO lee el roster aunque su asignacion siga abierta")
+    void grupoVencidoNoSeLee() {
+        grupoConPeriodo(MI_GRUPO, "Grupo Amanecer", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 9, 8));
+        persona(ANA, "Ana Perez");
+        // Nadie la cerro: es lo que pasa cuando un periodo simplemente vence.
+        asignar(MI_GRUPO, MENTOR, FuncionAcompanamiento.MENTOR, AHORA.minusSeconds(2_592_000), null);
+        asignar(MI_GRUPO, ANA, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(2_592_000), null);
+
+        assertThatThrownBy(() -> servicio().aprendices(
+                new ConsultaAprendices(MENTOR, MI_GRUPO.value(), null, 25)))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("grupo PROGRAMADO: existir no es estar corriendo, tampoco devuelve el padron")
+    void grupoProgramadoNoSeLee() {
+        grupoConPeriodo(MI_GRUPO, "Grupo de Octubre", LocalDate.of(2026, 9, 10), LocalDate.of(2026, 10, 9));
+        persona(ANA, "Ana Perez");
+        asignar(MI_GRUPO, MENTOR, FuncionAcompanamiento.MENTOR, AHORA.minusSeconds(86_400), null);
+        asignar(MI_GRUPO, ANA, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(86_400), null);
+
+        assertThatThrownBy(() -> servicio().aprendices(
+                new ConsultaAprendices(MENTOR, MI_GRUPO.value(), null, 25)))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("el periodo vencido cierra la lectura a TODA funcion de acompanamiento, no solo a MENTOR")
+    void grupoVencidoTampocoLoLeeSoporte() {
+        grupoConPeriodo(MI_GRUPO, "Grupo Amanecer", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 9, 8));
+        persona(ANA, "Ana Perez");
+        UserId soporte = UserId.of(UUID.randomUUID());
+        asignar(MI_GRUPO, soporte, FuncionAcompanamiento.SOPORTE, AHORA.minusSeconds(2_592_000), null);
+        asignar(MI_GRUPO, ANA, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(2_592_000), null);
+
+        assertThatThrownBy(() -> servicio().aprendices(
+                new ConsultaAprendices(soporte, MI_GRUPO.value(), null, 25)))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("el ULTIMO dia del periodo es un dia de grupo entero: ahi el roster todavia responde")
+    void grupoEnSuUltimoDiaSiSeLee() {
+        // El contrapeso de los tres de arriba: el arreglo revoca al vencer, no un dia antes.
+        // `PeriodoGrupo` es cerrado en los dos extremos justo por esto.
+        grupoConPeriodo(MI_GRUPO, "Grupo Amanecer", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 9, 9));
+        persona(ANA, "Ana Perez");
+        asignar(MI_GRUPO, MENTOR, FuncionAcompanamiento.MENTOR, AHORA.minusSeconds(2_592_000), null);
+        asignar(MI_GRUPO, ANA, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(2_592_000), null);
+
+        PaginaAprendices pagina = servicio().aprendices(new ConsultaAprendices(MENTOR, MI_GRUPO.value(), null, 25));
+
+        assertThat(pagina.total()).isEqualTo(1);
+    }
+
+    // ── el dia lo pone la cohorte, no el servidor ni America/Lima ───────────
+    // Las dos de abajo son el motivo por el que el guard DELEGA en el finder en vez de copiarle la
+    // condicion: el finder resuelve el dia del grupo con la zona de la politica de SU cohorte.
+    // Un arreglo que comparara contra `PoliticaMentoria.ZONA_POR_DEFECTO` daria el dia equivocado
+    // en la franja horaria en que las dos zonas no coinciden — cerraria el hueco unas horas y lo
+    // dejaria abierto otras, que es peor que no arreglarlo porque parece arreglado.
+
+    @Test
+    @DisplayName("borde de zona: con la cohorte en Tokio el grupo ya vencio, aunque en Lima sea el ultimo dia")
+    void bordeDeZonaCierraConLaZonaDeLaCohorte() {
+        // 2026-09-09T15:00Z son las 10:00 del 9 en Lima, pero ya la medianoche del 10 en Tokio.
+        zonaDeLaCohorte("Asia/Tokyo");
+        grupoConPeriodo(MI_GRUPO, "Grupo Amanecer", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 9, 9));
+        persona(ANA, "Ana Perez");
+        asignar(MI_GRUPO, MENTOR, FuncionAcompanamiento.MENTOR, AHORA.minusSeconds(2_592_000), null);
+        asignar(MI_GRUPO, ANA, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(2_592_000), null);
+
+        assertThatThrownBy(() -> servicio().aprendices(
+                new ConsultaAprendices(MENTOR, MI_GRUPO.value(), null, 25)))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("borde de zona al reves: con la cohorte en Tokio el grupo YA arranco, aunque en Lima sea la vispera")
+    void bordeDeZonaAbreConLaZonaDeLaCohorte() {
+        // 2026-09-09T02:00Z son las 21:00 del 8 en Lima, pero las 11:00 del 9 en Tokio. Mirar la
+        // zona equivocada aca no concede de mas: NIEGA de mas, y le apaga el grupo a un mentor
+        // cuyo grupo esta corriendo. El borde tiene que fallar para los dos lados o no esta fijo.
+        Instant vispera = Instant.parse("2026-09-09T02:00:00Z");
+        zonaDeLaCohorte("Asia/Tokyo");
+        grupoConPeriodo(MI_GRUPO, "Grupo Amanecer", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 10, 9));
+        persona(ANA, "Ana Perez");
+        asignar(MI_GRUPO, MENTOR, FuncionAcompanamiento.MENTOR, vispera.minusSeconds(86_400), null);
+        asignar(MI_GRUPO, ANA, FuncionAcompanamiento.APRENDIZ, vispera.minusSeconds(86_400), null);
+
+        PaginaAprendices pagina = servicio(FixedClock.at(vispera)).aprendices(
+                new ConsultaAprendices(MENTOR, MI_GRUPO.value(), null, 25));
+
+        assertThat(pagina.total()).isEqualTo(1);
     }
 
     @Test
