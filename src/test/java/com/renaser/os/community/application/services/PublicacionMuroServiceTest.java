@@ -290,7 +290,12 @@ class PublicacionMuroServiceTest {
         Optional<PublicacionParaCompartir> resultado = service.paraCompartir(publicacion.id().value());
 
         assertThat(resultado).isPresent();
-        assertThat(resultado.get().mediaRuta()).isEqualTo("muro/x/1.jpg");
+        // Contra la clave del propio fixture, no contra un literal: el helper emite ahora una
+        // clave real del servidor (`muro/<carpeta>/<autorId>/<uuid>`), porque el guard de
+        // pertenencia rechaza las inventadas. Comparar con un literal ataba esta prueba a la
+        // forma vieja de la clave y la rompia cada vez que el fixture se acercaba a la realidad.
+        assertThat(resultado.get().mediaRuta())
+                .isEqualTo(publicacion.media().getFirst().ruta());
         assertThat(resultado.get().tieneImagen()).isTrue();
     }
 
