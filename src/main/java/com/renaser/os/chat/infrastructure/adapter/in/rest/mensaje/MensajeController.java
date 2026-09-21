@@ -4,6 +4,7 @@ import com.renaser.os.chat.application.ports.in.mensaje.CompartirPublicacionUseC
 import com.renaser.os.chat.application.ports.in.mensaje.CompartirPublicacionUseCase.CompartirPublicacionCommand;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.EnviarMensajeCommand;
+import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.OrigenMedia;
 import com.renaser.os.chat.application.ports.in.mensaje.ListarMensajesUseCase;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
@@ -50,7 +51,11 @@ public class MensajeController {
                 ConversacionId.of(conversationId), parseTipoMensaje(request.type()), request.text(),
                 request.mediaBucket(), request.mediaPath(), request.mediaMime(), request.mediaBytes(),
                 request.mediaDurationSeconds(),
-                request.replyToId() != null ? MensajeId.of(UUID.fromString(request.replyToId())) : null));
+                request.replyToId() != null ? MensajeId.of(UUID.fromString(request.replyToId())) : null,
+                // La ruta la eligio el TELEFONO: solo vale si es del prefijo de esta conversacion.
+                // El cuerpo no tiene forma de pedir otra cosa — `EnviarMensajeRequest` no expone
+                // este campo a proposito, es lo unico que separa compartir de pegar una clave ajena.
+                OrigenMedia.CLIENTE));
         return ResponseEntity.status(HttpStatus.CREATED).body(MensajeResponse.from(mensaje));
     }
 

@@ -69,10 +69,23 @@ public interface PublicacionMuroFinder {
      * una publicacion que existe. Quien llama ya autorizo a su actor — en `chat`, comprobando que
      * sea participante de la conversacion donde va a compartir.
      *
-     * <p><b>Devuelve tambien las ocultas</b>, por el mismo criterio que {@link #publicoEntre}:
-     * ocultar es moderacion con semantica propia y no es asunto de este metodo. Si el dueno
-     * decide que una publicacion oculta no debe poder compartirse, se filtra <b>en el caso de uso
-     * de `chat`</b>, donde esa regla es visible, y no en silencio aca.
+     * <p><b>NO devuelve las ocultas</b>, al reves que {@link #publicoEntre}. Este javadoc decia lo
+     * contrario hasta el 2026-09-21 y ya no era cierto: el 2026-09-18 la implementacion sumo un
+     * {@code .filter(publicacion -> !publicacion.oculta())} porque compartir al chat resucitaba la
+     * foto de una publicacion que el autor habia borrado —"borrar mi publicacion" solo pone
+     * {@code oculta}— o que un moderador habia retirado, y {@code MensajeService.urlDeLectura} la
+     * volvia a prefirmar para todo participante de la conversacion destino.
+     *
+     * <p><b>Esa puerta es ahora la UNICA que cruza la media del Muro para entrar al chat</b>, asi
+     * que este filtro es carga estructural, no una preferencia: desde el 2026-09-21
+     * {@code MensajeService} acepta una ruta ajena al prefijo de la conversacion solo cuando viene
+     * marcada como derivada por el servidor ({@code OrigenMedia.MURO_COMPARTIDO}), y el unico que
+     * pone esa marca es {@code CompartirPublicacionService}, justo despues de llamar a este
+     * metodo. Quitar el filtro de aca reabre el agujero entero sin tocar una linea de `chat`.
+     *
+     * <p>Que {@link #publicoEntre} siga contando las ocultas no es una contradiccion: aquel
+     * responde por un hecho ya ocurrido (el aprendiz publico ese dia) y este entrega contenido
+     * para volver a mostrarlo.
      */
     Optional<PublicacionParaCompartir> paraCompartir(UUID publicacionId);
 }

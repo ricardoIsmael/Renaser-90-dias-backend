@@ -3,6 +3,7 @@ package com.renaser.os.chat.application.services;
 import com.renaser.os.chat.application.ports.in.mensaje.CompartirPublicacionUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.EnviarMensajeCommand;
+import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.OrigenMedia;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
 import com.renaser.os.community.api.PublicacionMuroFinder;
@@ -87,7 +88,12 @@ public class CompartirPublicacionService implements CompartirPublicacionUseCase 
                 // objeto que ya vive en el bucket del Muro. Una foto no tiene duracion.
                 null, null,
                 // Compartir no es responder a nadie.
-                null));
+                null,
+                // La UNICA marca de "esta ruta la derivo el servidor". Es lo que autoriza a que la
+                // media no sea del prefijo de la conversacion, y se apoya entera en el
+                // `.filter(!oculta())` de `paraCompartir`, cinco lineas mas arriba: sin esa puerta
+                // esto volveria a ser el permiso incondicional de namespace que era antes.
+                OrigenMedia.MURO_COMPARTIDO));
     }
 
     /**

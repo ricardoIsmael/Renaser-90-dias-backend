@@ -1,6 +1,7 @@
 package com.renaser.os.chat.application.services;
 
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.EnviarMensajeCommand;
+import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.OrigenMedia;
 import com.renaser.os.chat.application.ports.in.mensaje.SolicitarUrlSubidaMediaChatUseCase.SolicitarUrlSubidaMediaChatCommand;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
@@ -209,7 +210,7 @@ class MensajeServicePermisosDeGrupoTest {
 
     private EnviarMensajeCommand mensajeDe(UserId autor, ConversacionId conversacion) {
         return new EnviarMensajeCommand(autor, conversacion, TipoMensaje.TEXTO, "hola",
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, OrigenMedia.CLIENTE);
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.renaser.os.chat.application.services;
 import com.renaser.os.chat.application.ports.in.mensaje.CompartirPublicacionUseCase.CompartirPublicacionCommand;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.EnviarMensajeCommand;
+import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.OrigenMedia;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
@@ -132,6 +133,21 @@ class CompartirPublicacionServiceTest {
 
         // Solo el encabezado: ni salto de linea ni un par de comillas colgando.
         assertThat(comandoCapturado().texto()).isEqualTo("📌 [Compartido del Muro por Maria Quispe]");
+    }
+
+    /**
+     * La marca que hace que {@code enviar} acepte una ruta que no es del prefijo de la
+     * conversacion. Es lo UNICO que separa compartir de que alguien pegue a mano la clave de la
+     * foto de otro, asi que si se cae, compartir deja de funcionar (o, si se cae al reves y el
+     * controller empieza a mandarla, vuelve el agujero del 2026-09-21).
+     */
+    @Test
+    void elComandoMarcaLaRutaComoDerivadaPorElServidor() {
+        dadaLaPublicacion("Dia 12 cumplido", "muro", "muro/abc/foto.jpg", "image/jpeg");
+
+        service.compartir(comando());
+
+        assertThat(comandoCapturado().origenMedia()).isEqualTo(OrigenMedia.MURO_COMPARTIDO);
     }
 
     // ─── Sin foto ─────────────────────────────────────────────────────────────────────────

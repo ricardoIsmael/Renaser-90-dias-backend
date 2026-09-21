@@ -1,6 +1,7 @@
 package com.renaser.os.chat.application.services;
 
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase;
+import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.OrigenMedia;
 import com.renaser.os.chat.application.ports.in.mensaje.ListarMensajesUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.MensajeEnriquecido;
 import com.renaser.os.chat.application.ports.in.mensaje.MensajeEnriquecido.RespuestaPreview;
@@ -92,7 +93,8 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
 
         Instant ahora = clock.now();
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
-        exigirMediaDeEstaConversacion(command.mediaRuta(), command.conversacionId());
+        exigirMediaDeEstaConversacion(command.mediaRuta(), command.origenMedia(),
+                command.conversacionId());
         Mensaje mensaje = Mensaje.escribir(MensajeId.of(idGenerator.newId()), command.conversacionId(),
                 command.actorId(), command.tipo(), command.texto(), command.mediaBucket(), command.mediaRuta(),
                 command.mediaMime(), command.mediaBytes(), command.mediaDuracionS(), command.respuestaAId(),
@@ -319,26 +321,42 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     }
 
     /**
-     * La media de un mensaje tiene que ser de ESTA conversacion, o una publicacion del Muro.
+     * La media de un mensaje tiene que ser de ESTA conversacion, salvo que la ruta la haya
+     * derivado el SERVIDOR al compartir una publicacion del Muro.
      *
      * <p><b>El agujero que cierra (2026-09-18).</b> `mediaPath` llegaba del cuerpo y se guardaba sin
      * mirarlo; `urlDeLectura` lo firma despues para quien lea la conversacion. Con UN SOLO bucket
      * fisico —`firmarLectura(ruta, validez)` ni recibe bucket— y claves predecibles en los demas
-     * modulos, bastaba abrir un mensaje propio apuntando a `firmas/<victimaId>/fase_2.svg` y leerlo
+     * modulos, bastaba abrir un mensaje propio apuntando a `firmas/&lt;victimaId&gt;/fase_2.svg` y leerlo
      * para recibir esa firma prefirmada. `Mensaje.escribir` solo comprobaba que bucket y ruta
      * viajaran juntos.
      *
-     * <p><b>El prefijo `muro/` se admite a proposito.</b> Compartir una publicacion
-     * ({@code CompartirPublicacionService}) entra por este mismo caso de uso con la ruta de la
-     * portada, que es del Muro y la derivo el servidor. Un guard que solo aceptara `chat/<id>/`
-     * romperia esa funcion — y es exactamente la clase de rotura que un arreglo apurado introduce.
+     * <p><b>El segundo agujero, el que dejo abierto ese mismo arreglo (2026-09-21).</b> Aquel guard
+     * admitia el prefijo `muro/` de forma INCONDICIONAL para no romper compartir. Pero un prefijo
+     * es la FORMA de la clave, no su procedencia: `GET /api/v1/wall` le entrega a toda cuenta
+     * activa la URL prefirmada de cada media, y la clave viaja en su camino. Cualquier participante
+     * podia copiar esa clave, pegarla en un `POST .../messages` armado a mano, y quedarse con un
+     * asa permanente sobre la foto de otro — incluso despues de que el autor usara "borrar mi
+     * publicacion" (que solo pone `oculta`) o de que un moderador la retirara, porque la fila de
+     * `mensajes` no se revisa nunca mas y {@link #urlDeLectura} la vuelve a firmar en cada listado.
+     * Era la misma puerta que {@code PublicacionMuroService.paraCompartir} habia cerrado el
+     * 2026-09-18 en el camino de compartir, abierta al lado.
+     *
+     * <p><b>Por que se mira el ORIGEN y no el prefijo.</b> Compartir y pegar a mano llegan aca con
+     * la misma forma de clave, asi que la clave no alcanza para separarlas: lo que las separa es
+     * quien la eligio. Con {@link OrigenMedia#MURO_COMPARTIDO} la ruta la derivo el servidor de una
+     * publicacion que ya paso por {@code paraCompartir} —que filtra las ocultas—, asi que la puerta
+     * de visibilidad se cruza UNA sola vez y en un solo lugar, sin duplicar la regla ni agregar una
+     * consulta al camino de enviar. Con {@link OrigenMedia#CLIENTE} no queda ningun prefijo ajeno
+     * aceptado: ni `muro/`, ni `firmas/`, ni `rocas/`.
      */
-    private static void exigirMediaDeEstaConversacion(String mediaRuta, ConversacionId conversacionId) {
-        if (mediaRuta == null) {
+    private static void exigirMediaDeEstaConversacion(String mediaRuta, OrigenMedia origenMedia,
+                                                       ConversacionId conversacionId) {
+        if (mediaRuta == null || origenMedia == OrigenMedia.MURO_COMPARTIDO) {
             return;
         }
         String propia = "chat/" + conversacionId.value() + "/";
-        if (!mediaRuta.startsWith(propia) && !mediaRuta.startsWith("muro/")) {
+        if (!mediaRuta.startsWith(propia)) {
             throw new IllegalArgumentException(
                     "La media del mensaje tiene que ser de esta conversacion (" + propia + ")");
         }
