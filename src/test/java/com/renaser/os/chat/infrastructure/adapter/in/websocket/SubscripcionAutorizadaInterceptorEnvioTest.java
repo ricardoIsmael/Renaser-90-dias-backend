@@ -35,9 +35,11 @@ class SubscripcionAutorizadaInterceptorEnvioTest {
     private MessageChannel canal;
     @Mock
     private SesionViva sesionViva;
+    @Mock
+    private AutorizacionViva autorizacionViva;
 
     private SubscripcionAutorizadaInterceptor interceptor() {
-        return new SubscripcionAutorizadaInterceptor(autorizarAcceso, userSummaryFinder, sesionViva);
+        return new SubscripcionAutorizadaInterceptor(autorizarAcceso, userSummaryFinder, sesionViva, autorizacionViva);
     }
 
     private static Message<byte[]> envioA(String destino) {
