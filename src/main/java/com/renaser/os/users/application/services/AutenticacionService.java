@@ -33,16 +33,30 @@ public class AutenticacionService implements IniciarSesionUseCase {
      * <p>Los topes son mas altos que los de esos flujos, y a proposito: pedir un reseteo es
      * algo que se hace una vez cada mucho, mientras que iniciar sesion es rutina. Cinco
      * intentos por hora dejaria afuera a alguien que simplemente se equivoco de contrasena un
-     * par de veces. Diez por correo sigue haciendo inviable adivinar una contrasena, que es lo
-     * que hay que impedir.
+     * par de veces. Diez sigue haciendo inviable adivinar una contrasena, que es lo que hay
+     * que impedir.
      *
      * <p><b>Son numeros elegidos por quien escribio esto, no confirmados por el dueno del
      * proyecto.</b> Si resultan molestos en uso real, se suben; lo que no se puede es no tener
      * ninguno, que era el estado hasta ahora.
      */
     static final Duration VENTANA_RATE_LIMIT = Duration.ofHours(1);
-    static final int LIMITE_POR_EMAIL = 10;
+
+    /**
+     * Diez intentos por hora contra el MISMO correo DESDE EL MISMO ORIGEN (2026-09-21). Hasta
+     * ahora este tope colgaba del correo a secas, y por eso se podia gastar desde afuera: el
+     * numero no cambio, lo que cambio es quien lo paga. El razonamiento completo, y la regla
+     * general que deja esto asi, estan en {@link OrigenDeLaPeticion}.
+     */
+    static final int LIMITE_POR_EMAIL_Y_ORIGEN = 10;
+
     static final int LIMITE_POR_IP = 50;
+
+    /**
+     * El mismo texto para los dos topes: decir cual de los dos se alcanzo le confirmaria a
+     * quien sondea que ese correo existe y esta siendo defendido.
+     */
+    private static final String MENSAJE_LIMITE = "Demasiados intentos. Espera unos minutos.";
 
     private final LoadCredencialPort loadCredencialPort;
     private final LoadUserPort loadUserPort;
@@ -89,17 +103,39 @@ public class AutenticacionService implements IniciarSesionUseCase {
      * prueba contrasenas al azar acierta o no, y si acierta ya entro — el limite tiene que
      * gastarse con el intento, no con su resultado.
      *
-     * <p>El mensaje no distingue si el tope alcanzado fue el del correo o el de la IP: decirlo
-     * le confirmaria a quien sondea que ese correo existe y esta siendo defendido.
+     * <p><b>Contra QUIEN se cuenta (2026-09-21).</b> Los dos topes cuelgan ahora del origen de
+     * la peticion. El de la pareja (origen, correo) reemplaza al viejo {@code login:email:},
+     * que colgaba del correo a secas: con aquel, diez peticiones anonimas con el correo de otra
+     * persona la dejaban afuera de su propia cuenta el resto de la hora, porque el tope se
+     * agotaba y el rechazo salia antes de que se llegara a comparar ningun hash. Contra un
+     * mismo origen el freno es exactamente el de antes —el intento once desde ahi rebota— pero
+     * el cupo de cada quien ya no lo puede gastar un tercero.
+     *
+     * <p><b>Y por que ya no hay ningun tope global por correo.</b> Se evaluo dejarlo con un
+     * umbral mas alto, para frenar un ataque repartido entre muchos origenes. No se puede
+     * elegir ese umbral: como cada origen aporta hasta {@link #LIMITE_POR_IP} por ventana, un
+     * tope global de T se agota con T/50 origenes —seis para 300— y vuelve a ser la palanca de
+     * expulsion que se esta sacando. Y al reves, un tope global que la duena pudiera saltearse
+     * con su contrasena correcta no frena ni un intento: una contrasena equivocada se rechaza
+     * igual que siempre, y una acertada ya entro. Frenar el ataque repartido pide un desafio de
+     * posesion del correo, no un contador; el modulo ya tiene uno y esta enfrente —
+     * {@code POST /auth/password/forgot} manda un codigo de 6 digitos a la casilla—, y
+     * {@code ResetContrasenaService} lo deja abierto por construccion: ningun tercero puede
+     * cerrarlo. Esa es la salida de quien se quedo afuera, y por eso no hay que inventar otra.
+     *
+     * <p>El orden importa: el guard por origen va PRIMERO. Si fuera al reves, un origen que ya
+     * agoto sus 50 por hora seguiria creando una clave nueva en Redis por cada correo que
+     * tocara, aunque cada peticion le devolviera 429.
      */
     private void requireDentroDelLimite(IniciarSesionCommand command) {
-        if (!limitarIntentosPort.registrarIntento("login:email:" + command.email(),
-                VENTANA_RATE_LIMIT, LIMITE_POR_EMAIL)) {
-            throw new RateLimitExceededException("Demasiados intentos. Espera unos minutos.");
+        if (!limitarIntentosPort.registrarIntento("login:ip:" + OrigenDeLaPeticion.de(command.requestIp()),
+                VENTANA_RATE_LIMIT, LIMITE_POR_IP)) {
+            throw new RateLimitExceededException(MENSAJE_LIMITE);
         }
-        if (command.requestIp() != null && !limitarIntentosPort.registrarIntento(
-                "login:ip:" + command.requestIp(), VENTANA_RATE_LIMIT, LIMITE_POR_IP)) {
-            throw new RateLimitExceededException("Demasiados intentos. Espera unos minutos.");
+        if (!limitarIntentosPort.registrarIntento(
+                OrigenDeLaPeticion.claveConEmail("login:origen-email:", command.requestIp(), command.email()),
+                VENTANA_RATE_LIMIT, LIMITE_POR_EMAIL_Y_ORIGEN)) {
+            throw new RateLimitExceededException(MENSAJE_LIMITE);
         }
     }
 }

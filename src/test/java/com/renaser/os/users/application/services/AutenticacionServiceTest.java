@@ -29,6 +29,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
@@ -39,6 +40,13 @@ class AutenticacionServiceTest {
 
     private static final PasswordEncoder ENCODER = PasswordEncoderFactories.createDelegatingPasswordEncoder();
     private static final String CONTRASENA_REAL = "una-contrasena-larga-de-verdad";
+    private static final String EMAIL = "actor@renaser.dev";
+    private static final String IP = "203.0.113.10";
+
+    /** La clave compuesta tal como la arma {@code OrigenDeLaPeticion}: origen primero. */
+    private static String clavePareja(String ip, String email) {
+        return "login:origen-email:" + ip + "|" + email;
+    }
 
     @Mock
     private LoadCredencialPort loadCredencialPort;
@@ -134,14 +142,15 @@ class AutenticacionServiceTest {
     }
 
     @Test
-    void alSuperarElLimitePorCorreoSeRechazaAntesDeMirarLaContrasena() {
+    void alSuperarElLimiteDeLaParejaCorreoYOrigenSeRechazaAntesDeMirarLaContrasena() {
         AutenticacionService servicio = new AutenticacionService(
                 loadCredencialPort, loadUserPort, ENCODER, limitarIntentosPort);
-        when(limitarIntentosPort.registrarIntento(eq("login:email:actor@renaser.dev"), any(), anyInt()))
+        when(limitarIntentosPort.registrarIntento(eq("login:ip:" + IP), any(), anyInt())).thenReturn(true);
+        when(limitarIntentosPort.registrarIntento(eq(clavePareja(IP, EMAIL)), any(), anyInt()))
                 .thenReturn(false);
 
         assertThatThrownBy(() -> servicio.iniciarSesion(
-                new IniciarSesionCommand("actor@renaser.dev", CONTRASENA_REAL, "203.0.113.10")))
+                new IniciarSesionCommand(EMAIL, CONTRASENA_REAL, IP)))
                 .isInstanceOf(RateLimitExceededException.class);
 
         // Lo que de verdad prueba que corta ANTES: nunca se pregunto por la credencial. Si el
@@ -154,32 +163,74 @@ class AutenticacionServiceTest {
     void alSuperarElLimitePorIpTambienSeRechaza() {
         AutenticacionService servicio = new AutenticacionService(
                 loadCredencialPort, loadUserPort, ENCODER, limitarIntentosPort);
-        when(limitarIntentosPort.registrarIntento(eq("login:email:actor@renaser.dev"), any(), anyInt()))
-                .thenReturn(true);
-        when(limitarIntentosPort.registrarIntento(eq("login:ip:203.0.113.10"), any(), anyInt()))
+        when(limitarIntentosPort.registrarIntento(eq("login:ip:" + IP), any(), anyInt()))
                 .thenReturn(false);
 
         assertThatThrownBy(() -> servicio.iniciarSesion(
-                new IniciarSesionCommand("actor@renaser.dev", CONTRASENA_REAL, "203.0.113.10")))
+                new IniciarSesionCommand(EMAIL, CONTRASENA_REAL, IP)))
                 .isInstanceOf(RateLimitExceededException.class);
     }
 
+    /**
+     * Refuta el punto (a) del hallazgo: antes, el INCR del contador por correo corria ANTES del
+     * guard por IP, asi que un origen con su cupo agotado seguia gastando el cupo de cada correo
+     * nuevo que tocaba — y de paso creaba una clave nueva en Redis por cada uno — aunque
+     * recibiera 429 por respuesta.
+     */
     @Test
-    void sinIpSoloSeAplicaElLimitePorCorreo() {
-        UserId id = UserId.of(UUID.randomUUID());
-        String hash = "{bcrypt}" + ENCODER.encode(CONTRASENA_REAL).substring("{bcrypt}".length());
+    void unOrigenSinCupoYaNoTocaNingunContadorDeCorreo() {
         AutenticacionService servicio = new AutenticacionService(
                 loadCredencialPort, loadUserPort, ENCODER, limitarIntentosPort);
-        when(limitarIntentosPort.registrarIntento(eq("login:email:actor@renaser.dev"), any(), anyInt()))
-                .thenReturn(true);
-        when(loadCredencialPort.porEmail("actor@renaser.dev"))
-                .thenReturn(Optional.of(new CredencialParaLogin(id, hash, true)));
+        when(limitarIntentosPort.registrarIntento(eq("login:ip:" + IP), any(), anyInt()))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> servicio.iniciarSesion(
+                new IniciarSesionCommand("otra-victima@renaser.dev", CONTRASENA_REAL, IP)))
+                .isInstanceOf(RateLimitExceededException.class);
+
+        verify(limitarIntentosPort, never()).registrarIntento(startsWith("login:origen-email:"), any(), anyInt());
+        verify(limitarIntentosPort, times(1)).registrarIntento(anyString(), any(), anyInt());
+    }
+
+    /**
+     * El contador que era el arma —una clave armada solo con el correo del cuerpo— ya no se
+     * registra en ninguna rama. Es la prueba mas directa de que el cupo de una persona no se
+     * puede gastar desde afuera: no existe ningun cupo que cuelgue solo de su correo.
+     */
+    @Test
+    void ningunContadorDelLoginCuelgaSoloDelCorreo() {
+        UserId id = UserId.of(UUID.randomUUID());
+        String hash = "{bcrypt}" + ENCODER.encode(CONTRASENA_REAL).substring("{bcrypt}".length());
+        when(loadCredencialPort.porEmail(EMAIL)).thenReturn(Optional.of(new CredencialParaLogin(id, hash, true)));
         when(loadUserPort.byId(id)).thenReturn(Optional.of(usuario(id)));
 
-        User resultado = servicio.iniciarSesion(
-                new IniciarSesionCommand("actor@renaser.dev", CONTRASENA_REAL, null));
+        service().iniciarSesion(new IniciarSesionCommand(EMAIL, CONTRASENA_REAL, IP));
+
+        verify(limitarIntentosPort, never()).registrarIntento(eq("login:email:" + EMAIL), any(), anyInt());
+        verify(limitarIntentosPort).registrarIntento("login:ip:" + IP,
+                AutenticacionService.VENTANA_RATE_LIMIT, AutenticacionService.LIMITE_POR_IP);
+        verify(limitarIntentosPort).registrarIntento(clavePareja(IP, EMAIL),
+                AutenticacionService.VENTANA_RATE_LIMIT, AutenticacionService.LIMITE_POR_EMAIL_Y_ORIGEN);
+    }
+
+    /**
+     * Sin IP no hay a quien cobrarle la peticion, y la salida facil —caer a una clave de
+     * solo-correo— es justamente el agujero que se cerro. Se cobra entonces a una unidad de
+     * conteo unica y compartida, de modo que los dos topes siguen aplicandose.
+     */
+    @Test
+    void sinIpElOrigenDesconocidoEsSuPropiaUnidadDeConteoYLosDosTopesSiguenCorriendo() {
+        UserId id = UserId.of(UUID.randomUUID());
+        String hash = "{bcrypt}" + ENCODER.encode(CONTRASENA_REAL).substring("{bcrypt}".length());
+        when(loadCredencialPort.porEmail(EMAIL)).thenReturn(Optional.of(new CredencialParaLogin(id, hash, true)));
+        when(loadUserPort.byId(id)).thenReturn(Optional.of(usuario(id)));
+
+        User resultado = service().iniciarSesion(new IniciarSesionCommand(EMAIL, CONTRASENA_REAL, null));
 
         assertThat(resultado.id()).isEqualTo(id);
-        verify(limitarIntentosPort, never()).registrarIntento(startsWith("login:ip:"), any(), anyInt());
+        verify(limitarIntentosPort).registrarIntento("login:ip:" + OrigenDeLaPeticion.DESCONOCIDO,
+                AutenticacionService.VENTANA_RATE_LIMIT, AutenticacionService.LIMITE_POR_IP);
+        verify(limitarIntentosPort).registrarIntento(clavePareja(OrigenDeLaPeticion.DESCONOCIDO, EMAIL),
+                AutenticacionService.VENTANA_RATE_LIMIT, AutenticacionService.LIMITE_POR_EMAIL_Y_ORIGEN);
     }
 }
