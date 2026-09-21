@@ -57,6 +57,19 @@ public class RutasDeAlmacenamientoDeCuentaJdbcAdapter implements RutasDeAlmacena
      *       ({@code "/"}, ver {@code WebPushAdapter}), no una clave de objeto.</li>
      * </ul>
      *
+     * <p><b>{@code entradas_diario} y {@code sesiones_bloqueo} NO cuentan, y es deliberado.</b>
+     * Son las dos columnas de ruta que el cliente llena sin que nadie las valide
+     * ({@code BitacoraNocturnaService.escribir} guarda {@code audioRuta} tal como viene, y
+     * {@code SantuarioService.romper} lo mismo con {@code evidenciaRuta}). Honrarlas invierte el
+     * arma: las candidatas ya vienen filtradas por {@code ClavesDeCuenta}, asi que toda clave que
+     * llega aca es demostrablemente del purgado, y el servidor JAMAS emite para una persona una
+     * clave que otra pondria legitimamente en su bitacora — una referencia cruzada ahi es abuso o
+     * es bug, nunca un caso valido. Contarla dejaria que cualquiera impida la baja de otro
+     * escribiendo una cadena en su propio diario, y la baja de cuenta es requisito de tienda:
+     * retener de mas es el daño que este metodo existe para evitar, no el que evita. Mismo
+     * criterio que {@code community.PublicacionMuroService} en el sentido inverso, donde honrarlas
+     * daria un veto permanente sobre la moderacion.
+     *
      * <p>{@code entradas_diario.audio_ruta}, {@code sesiones_bloqueo.evidencia_salida_ruta} y
      * {@code mensajes.media_ruta} SI entran, pero solo porque {@code ClavesDeCuenta} las filtra
      * despues: las tres las llena el cliente y pueden nombrar un objeto ajeno.
@@ -171,13 +184,6 @@ public class RutasDeAlmacenamientoDeCuentaJdbcAdapter implements RutasDeAlmacena
             SELECT mp.ruta_storage FROM renaser.medias_publicacion mp
               JOIN renaser.publicaciones_muro p ON p.id = mp.publicacion_id
              WHERE mp.ruta_storage IN (:rutas) AND p.autor_id <> :usuarioId
-            UNION
-            SELECT d.audio_ruta FROM renaser.entradas_diario d
-             WHERE d.audio_ruta IN (:rutas) AND d.participante_id <> :usuarioId
-            UNION
-            SELECT sb.evidencia_salida_ruta FROM renaser.sesiones_bloqueo sb
-              JOIN renaser.registros_habito rh ON rh.id = sb.registro_habito_id
-             WHERE sb.evidencia_salida_ruta IN (:rutas) AND rh.participante_id <> :usuarioId
             """;
 
     private static final String SQL_AVATAR_EN_TESTIMONIO = """
