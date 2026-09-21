@@ -90,7 +90,7 @@ class ClaseDiariaHabitoServiceTest {
 
         mockProgresoActivo(participanteId);
         when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.of(habito));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(participanteId, habito.id(), HOY))
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(pendiente));
         when(completarRegistroUseCase.completar(any())).thenReturn(completado);
 
@@ -120,7 +120,7 @@ class ClaseDiariaHabitoServiceTest {
 
         mockProgresoActivo(participanteId);
         when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.of(habito));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(participanteId, habito.id(), HOY))
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(cerradoSinResumen));
 
         assertThatThrownBy(() -> service().completarDeHoy(
@@ -140,7 +140,7 @@ class ClaseDiariaHabitoServiceTest {
 
         mockProgresoActivo(participanteId);
         when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.of(habito));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(participanteId, habito.id(), HOY))
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(yaCompletado));
 
         var resultado = service().completarDeHoy(
@@ -183,12 +183,44 @@ class ClaseDiariaHabitoServiceTest {
         Habito habito = habitoDailyClass();
         mockProgresoActivo(participanteId);
         when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.of(habito));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(participanteId, habito.id(), HOY))
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service().completarDeHoy(
                 new CompletarClaseDiariaHabitoCommand(participanteId, "resumen valido de mas de veinte caracteres")))
                 .isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
+    /**
+     * Hallazgo de seguridad del 2026-09-21. La busqueda del track tiene que ir CON cerrojo, y ser
+     * la unica: leerlo antes con la consulta que no bloquea lo deja gestionado en el contexto de
+     * persistencia de la transaccion que abre {@code academy.ClaseDiariaService.completar}, y
+     * entonces el {@code findByIdParaEscritura} de {@code RegistroService} recibe esa instancia
+     * vieja en vez de la fila fresca — el cerrojo se toma igual, pero protege la escritura y no la
+     * decision.
+     *
+     * <p>Este test es barato y no prueba la carrera: la carrera la prueba
+     * {@code ClaseDiariaYPastillaCerrojoIT} contra Postgres real. Lo que cuida este es que nadie
+     * vuelva a meter la lectura sin cerrojo por comodidad.
+     */
+    @Test
+    @DisplayName("el track de hoy se busca SOLO con la consulta bloqueada, nunca con la que no bloquea")
+    void nuncaLeeElRegistroSinCerrojo() {
+        UserId participanteId = participante();
+        Habito habito = habitoDailyClass();
+        RegistroHabito pendiente = registroPendiente(participanteId, habito.id());
+
+        mockProgresoActivo(participanteId);
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
+                .thenReturn(Optional.of(pendiente));
+        when(completarRegistroUseCase.completar(any())).thenReturn(pendiente);
+
+        service().completarDeHoy(
+                new CompletarClaseDiariaHabitoCommand(participanteId, "resumen valido de mas de veinte caracteres"));
+
+        verify(loadRegistroPort, never()).porParticipanteHabitoYFecha(any(), any(), any());
+        verify(loadRegistroPort).porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY);
     }
 
     @Test

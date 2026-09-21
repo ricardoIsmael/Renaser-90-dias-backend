@@ -37,8 +37,9 @@ interface SpringDataRegistroHabitoRepository extends JpaRepository<RegistroHabit
     /**
      * La MISMA fila que {@link #findByParticipanteIdAndHabitoIdAndFechaEjecucion}, pero con el
      * mismo bloqueo pesimista de {@link #findByIdParaEscritura}. Es para quien busca el registro
-     * por (participante, habito, dia) y va a DECIDIR sobre su estado — hoy, el cierre del habito
-     * de post diario en comunidad que dispara publicar en el Muro.
+     * por (participante, habito, dia) y va a DECIDIR sobre su estado — hoy son tres: el cierre
+     * del habito de post diario en comunidad que dispara publicar en el Muro, el de la Clase
+     * Diaria y el de Pastilla Renacer.
      *
      * <p><b>Por que existe este metodo y no alcanza con leer sin cerrojo y bloquear despues.</b>
      * Porque un {@code @Lock(PESSIMISTIC_WRITE)} sobre una entidad que YA esta gestionada en el
