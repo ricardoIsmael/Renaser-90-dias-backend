@@ -8,6 +8,7 @@ import com.renaser.os.users.application.ports.out.autenticacion.CodigoVerificaci
 import com.renaser.os.users.application.ports.out.autenticacion.EnviarEmailPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LimitarSolicitudesResetPort;
 import com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort;
+import com.renaser.os.users.domain.model.user.Email;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -89,20 +90,54 @@ class VerificacionEmailService implements EnviarCodigoVerificacionEmailUseCase, 
 
     @Override
     public void enviar(EnviarCodigoVerificacionEmailCommand command) {
-        rejectIfRateLimitExceeded(command.email(), command.requestIp());
-        String codigo = codigoVerificacionEmailPort.generarCodigo(command.email(), VIGENCIA_CODIGO);
-        enviarEmailPort.enviarCodigoVerificacionEmail(command.email(), codigo);
+        String email = canonico(command.email());
+        rejectIfRateLimitExceeded(email, command.requestIp());
+        String codigo = codigoVerificacionEmailPort.generarCodigo(email, VIGENCIA_CODIGO);
+        enviarEmailPort.enviarCodigoVerificacionEmail(email, codigo);
     }
 
     @Override
     public ResultadoVerificacion confirmar(ConfirmarCodigoVerificacionEmailCommand command) {
-        boolean coincide = codigoVerificacionEmailPort.verificarCodigo(command.email(), command.codigo(),
+        // La MISMA canonizacion que enviar(), y en el mismo commit: el codigo se guarda bajo la
+        // clave canonica, asi que buscarlo bajo el texto crudo no lo encontraria nunca.
+        String email = canonico(command.email());
+        boolean coincide = codigoVerificacionEmailPort.verificarCodigo(email, command.codigo(),
                 MAX_INTENTOS);
         if (!coincide) {
             throw new CodigoVerificacionInvalidoException();
         }
-        String token = tokenVerificacionEmailPort.generar(command.email(), VIGENCIA_TOKEN_VERIFICACION);
+        String token = tokenVerificacionEmailPort.generar(email, VIGENCIA_TOKEN_VERIFICACION);
         return new ResultadoVerificacion(token);
+    }
+
+    /**
+     * Forma canonica de la direccion: la unica que este servicio puede usar para armar claves de
+     * Redis y para elegir destinatario.
+     *
+     * <p><b>Por que (auditoria 2026-09-21).</b> Los limites de arriba dicen "para el MISMO
+     * correo", pero se contaban sobre el String crudo del cuerpo HTTP. La parte de dominio de una
+     * direccion es insensible a mayusculas para la entrega —los MX se resuelven por DNS, que no
+     * distingue caja—, asi que {@code victima@gmail.com} y {@code victima@GMAIL.com} eran dos
+     * contadores distintos en Redis y un solo buzon en el servidor de correo: cada variacion de
+     * mayusculas estrenaba su cupo de {@link #LIMITE_POR_EMAIL} y se saltaba la espera de
+     * {@link #ESPERA_ENTRE_ENVIOS}. El limite por buzon era, en realidad, un limite por spelling.
+     *
+     * <p>La regla de canonizacion no se inventa aca: es la del dominio ({@code Email}, trim +
+     * minusculas), la misma que la base guarda en {@code usuarios.email} y el mismo gesto que ya
+     * hace {@code AccountRequestService.submit:145}. Se llama en el primer renglon de los dos
+     * puntos de entrada y desde ahi no se vuelve a mirar {@code command.email()}, que es lo que
+     * garantiza que clave y destinatario sean la MISMA identidad.
+     *
+     * <p>El formato tambien se valida de paso —{@code Email} rechaza lo que no tenga forma de
+     * direccion, y desde el arreglo de JNDI tampoco acepta ':' ni '/' en el dominio—, asi que
+     * este camino ya no le entrega al adaptador SMTP un destinatario que nadie reviso: era el
+     * unico de los cuatro que llaman al puerto de correo que no pasaba antes por la base. El
+     * {@code IllegalArgumentException} que puede lanzar lo traduce {@code GlobalExceptionHandler}
+     * a 400, igual que en {@code ConsultaEmailService.estaRegistrado}: el borde no cambia de
+     * contrato, y lo que antes respondia 202 para una direccion imposible ahora responde 400.
+     */
+    private static String canonico(String email) {
+        return new Email(email).value();
     }
 
     /**
@@ -122,6 +157,7 @@ class VerificacionEmailService implements EnviarCodigoVerificacionEmailUseCase, 
         }
     }
 
+    /** {@code email} llega SIEMPRE canonizado por {@link #canonico}: ver alli por que importa. */
     private void rejectIfRateLimitExceeded(String email, String requestIp) {
         rejectIfEsperaEntreEnviosNoCumplida(email);
         if (!limitarSolicitudesResetPort.registrarIntento("email-verification:email:" + email, VENTANA_RATE_LIMIT,
