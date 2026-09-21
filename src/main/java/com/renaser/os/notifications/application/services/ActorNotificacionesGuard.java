@@ -39,4 +39,20 @@ class ActorNotificacionesGuard {
         }
         return actor;
     }
+
+    /**
+     * La misma pregunta que {@link #requireActivo}, pero respondida con un booleano: sirve para el
+     * camino de ENTREGA (el push de {@code NotificacionService}), donde no hay nadie a quien
+     * devolverle un 403 — no lo pidio un usuario — y el unico efecto posible es entregar o no
+     * entregar. Convertir eso en una excepcion obligaria a atraparla dos lineas mas abajo para
+     * volver a un booleano.
+     *
+     * <p>Un destinatario que ya no existe tampoco recibe: no es un error del envio, es que no hay
+     * a quien entregarle.
+     */
+    boolean puedeRecibirEntregas(UserId destinatarioId) {
+        return userSummaryFinder.findById(destinatarioId)
+                .map(destinatario -> destinatario.status().allowsAccess())
+                .orElse(false);
+    }
 }

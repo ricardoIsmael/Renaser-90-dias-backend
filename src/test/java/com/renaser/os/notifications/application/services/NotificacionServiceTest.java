@@ -207,13 +207,17 @@ class NotificacionServiceTest {
     }
 
     /**
-     * E-38: {@code emitir} es la excepcion deliberada — la invocan los listeners de eventos de
-     * otros modulos, no un usuario. Un suspendido debe seguir ACUMULANDO su bandeja (lo que no
-     * puede es leerla), y bloquear aca romperia el outbox de Modulith.
+     * E-38: la FILA de la bandeja es la excepcion deliberada — {@code emitir} lo invocan los
+     * listeners de eventos de otros modulos, no un usuario. Un suspendido debe seguir ACUMULANDO su
+     * bandeja (lo que no puede es leerla), y bloquear el guardado romperia el outbox de Modulith.
+     *
+     * <p>Sin tokens push registrados no hay nada que entregar, asi que el estado del destinatario
+     * no se consulta en ningun momento: guardar la fila nunca depende de el. La otra mitad —que la
+     * ENTREGA si mira el estado— la fija {@link #suspendidoConTokenGuardaBandejaPeroNoRecibePush}.
      */
     @Test
-    @DisplayName("E-38: emitir() ni siquiera consulta el estado del destinatario — un suspendido "
-            + "sigue acumulando bandeja (lo que no puede es leerla)")
+    @DisplayName("E-38: para GUARDAR la fila, emitir() no consulta el estado del destinatario — un "
+            + "suspendido sigue acumulando bandeja (lo que no puede es leerla)")
     void emitirNoVerificaElEstadoDelDestinatario() {
         UserId destinatario = usuario();
         when(loadPreferenciasPort.habilitadaPara(destinatario, TipoNotificacion.MENSAJE_MENTOR))
@@ -226,6 +230,74 @@ class NotificacionServiceTest {
         verify(saveNotificacionPort).guardar(any());
         // La asercion clave: el guard no se invoca en este camino, por eso da igual el estado.
         verify(userSummaryFinder, never()).findById(any());
+    }
+
+    /**
+     * <b>La regresion.</b> Suspender revoca TODAS las sesiones en el acto
+     * (docs/MODULO_AUTH.md §7.4) y {@code listar} le devuelve 403 a esta misma fila, pero el push
+     * salia igual hacia los tokens que el suspendido habia registrado mientras estaba activo: el
+     * aviso de acompañamiento arranca con el nombre completo del aprendiz y dice cuantas
+     * evidencias debe. O sea que la copia protegida se guardaba y la copia sin proteger se
+     * entregaba, a una cuenta cuyo acceso se acababa de revocar y con datos de OTRA persona.
+     *
+     * <p>Lo que NO cambia: la fila se sigue guardando (E-38). Lo que cambia: no sale del sobre.
+     */
+    @Test
+    @DisplayName("un destinatario SUSPENDIDO acumula la fila en su bandeja pero NO recibe el push")
+    void suspendidoConTokenGuardaBandejaPeroNoRecibePush() {
+        UserId mentorSuspendido = usuario();
+        when(loadPreferenciasPort.habilitadaPara(mentorSuspendido, TipoNotificacion.ACOMPANAMIENTO_ALUMNO))
+                .thenReturn(Optional.of(true));
+        when(loadTokenPushPort.tokensDe(mentorSuspendido)).thenReturn(List.of(TokenPush.registrar(
+                TokenPushId.of(UUID.randomUUID()), mentorSuspendido, "ExponentPushToken[viejo]",
+                PlataformaPush.ANDROID, CLOCK)));
+        when(userSummaryFinder.findById(mentorSuspendido)).thenReturn(Optional.of(new UserSummary(
+                mentorSuspendido, "Mentor Suspendido", null, UserRole.MENTOR, UserStatus.SUSPENDED)));
+
+        Optional<Notificacion> emitida = service.emitir(new EmitirNotificacionCommand(mentorSuspendido,
+                TipoNotificacion.ACOMPANAMIENTO_ALUMNO, "Novedades de acompañamiento",
+                "Ana Quispe tiene 3 evidencias pendientes.", "/mentor/groups/g/learners/a", null));
+
+        assertThat(emitida).isPresent();
+        verify(saveNotificacionPort).guardar(any());
+        verify(pushPort, never()).enviar(anyList(), any(), any(), any());
+    }
+
+    /** El otro lado de la regresion: el arreglo no puede dejar sin push a quien si corresponde. */
+    @Test
+    @DisplayName("un destinatario ACTIVO con token si recibe el push")
+    void activoConTokenSiRecibeElPush() {
+        UserId mentorActivo = usuario();
+        when(loadPreferenciasPort.habilitadaPara(mentorActivo, TipoNotificacion.ACOMPANAMIENTO_ALUMNO))
+                .thenReturn(Optional.of(true));
+        TokenPush token = TokenPush.registrar(TokenPushId.of(UUID.randomUUID()), mentorActivo,
+                "ExponentPushToken[vigente]", PlataformaPush.ANDROID, CLOCK);
+        when(loadTokenPushPort.tokensDe(mentorActivo)).thenReturn(List.of(token));
+        when(pushPort.enviar(anyList(), any(), any(), any())).thenReturn(List.of());
+
+        service.emitir(new EmitirNotificacionCommand(mentorActivo, TipoNotificacion.ACOMPANAMIENTO_ALUMNO,
+                "Novedades de acompañamiento", "Ana Quispe tiene 3 evidencias pendientes.", null, null));
+
+        verify(pushPort).enviar(eq(List.of(token)), eq("Novedades de acompañamiento"),
+                eq("Ana Quispe tiene 3 evidencias pendientes."), eq(null));
+    }
+
+    /** Un destinatario que ya no existe no es un fallo del envio: no hay a quien entregarle. */
+    @Test
+    @DisplayName("un destinatario que ya no existe no recibe push (y no revienta la emision)")
+    void destinatarioInexistenteNoRecibePush() {
+        UserId borrado = usuario();
+        when(loadPreferenciasPort.habilitadaPara(borrado, TipoNotificacion.ANUNCIO_SISTEMA))
+                .thenReturn(Optional.empty());
+        when(loadTokenPushPort.tokensDe(borrado)).thenReturn(List.of(TokenPush.registrar(
+                TokenPushId.of(UUID.randomUUID()), borrado, "tok-huerfano", PlataformaPush.IOS, CLOCK)));
+        when(userSummaryFinder.findById(borrado)).thenReturn(Optional.empty());
+
+        Optional<Notificacion> emitida = service.emitir(new EmitirNotificacionCommand(borrado,
+                TipoNotificacion.ANUNCIO_SISTEMA, "T", "C", null, null));
+
+        assertThat(emitida).isPresent();
+        verify(pushPort, never()).enviar(anyList(), any(), any(), any());
     }
 
     /**

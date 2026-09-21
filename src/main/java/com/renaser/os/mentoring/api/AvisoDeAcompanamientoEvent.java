@@ -16,8 +16,13 @@ import java.util.UUID;
  *                           {@code origenEventoId}, que tiene índice único: repetir el barrido
  *                           mientras la condición siga sin resolverse no crea otra notificación.
  * @param magnitud           días sin actividad o cantidad de evidencias vencidas.
- * @param nombreDelAlumno    para el texto en la bandeja del mentor. El detalle autorizado se
- *                           carga dentro de la app; el push no lleva datos personales.
+ * @param nombreDelAlumno    para el texto en la bandeja del mentor. <b>Y tambien para el push</b>,
+ *                           que arranca con este nombre: el javadoc decia lo contrario ("el push
+ *                           no lleva datos personales") y eso es lo que hizo que nadie mirara este
+ *                           canal al escribir la revocacion de cuentas. Lo que si se queda adentro
+ *                           de la app, contra un endpoint que revalida permisos, es el detalle del
+ *                           alumno. Que el push solo llegue a cuentas vigentes lo garantiza
+ *                           {@code NotificacionService.intentarPush}.
  */
 public record AvisoDeAcompanamientoEvent(UUID claveDeduplicacion, UUID mentorId, UUID alumnoId, UUID grupoId,
                                           String motivo, int magnitud, String nombreDelAlumno,

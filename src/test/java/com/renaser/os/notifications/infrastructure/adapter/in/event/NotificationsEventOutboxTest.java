@@ -4,6 +4,8 @@ import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.api.SantuarioRotoEvent;
 import com.renaser.os.rocks.api.RocaCompletadaEvent;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.EstadoDeCuentaCambiadoEvent;
+import com.renaser.os.users.api.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -81,6 +83,42 @@ class NotificationsEventOutboxTest {
         List<String> tipos = esperarNotificacionesDe(usuarioId);
 
         assertThat(tipos).contains("HITO_PROGRAMA");
+    }
+
+    /**
+     * El otro sentido del circuito: un evento de `users` que hace BORRAR algo en `notifications`.
+     * Suspender revocaba solo las sesiones; las filas de {@code tokens_push} quedaban intactas y
+     * el telefono del suspendido seguia siendo un destino valido. Esto prueba las tres cosas que
+     * el unitario del listener no puede: que el evento serializa en el registro de publicaciones,
+     * que el outbox lo entrega, y que el DELETE por usuario llega a la base.
+     */
+    @Test
+    @Timeout(value = 10, unit = TimeUnit.SECONDS)
+    void suspenderUnaCuentaLeBorraSusTokensPush() throws InterruptedException {
+        jdbcTemplate.update("INSERT INTO renaser.tokens_push (id, usuario_id, token, plataforma) "
+                        + "VALUES (?, ?, ?, CAST('ANDROID' AS renaser.plataforma_push))",
+                UUID.randomUUID(), usuarioId, "ExponentPushToken[" + usuarioId + "]");
+        assertThat(contarTokensDe(usuarioId)).isEqualTo(1);
+
+        publisherHelper.publicarYConfirmar(new EstadoDeCuentaCambiadoEvent(UserId.of(usuarioId),
+                UserStatus.ACTIVE, UserStatus.SUSPENDED, Instant.now()));
+
+        assertThat(esperarSinTokensDe(usuarioId)).isZero();
+    }
+
+    private Integer contarTokensDe(UUID usuarioId) {
+        return jdbcTemplate.queryForObject(
+                "select count(*) from renaser.tokens_push where usuario_id = ?", Integer.class, usuarioId);
+    }
+
+    private int esperarSinTokensDe(UUID usuarioId) throws InterruptedException {
+        long limite = System.currentTimeMillis() + 8000;
+        int cuantos = contarTokensDe(usuarioId);
+        while (System.currentTimeMillis() < limite && cuantos > 0) {
+            Thread.sleep(200);
+            cuantos = contarTokensDe(usuarioId);
+        }
+        return cuantos;
     }
 
     /** Poll corto (sin Awaitility, no esta en el classpath): el listener corre async

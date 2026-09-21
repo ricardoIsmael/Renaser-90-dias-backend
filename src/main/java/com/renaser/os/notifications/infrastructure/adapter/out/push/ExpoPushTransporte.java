@@ -27,9 +27,13 @@ import java.util.Locale;
  * en el log. Fingir una entrega exitosa dejaría a soporte creyendo que el aviso salió — el mismo
  * criterio que ya aplica {@code WebPushAdapter} cuando falta VAPID.
  *
- * <p>El cuerpo del push es discreto a propósito: dice que hay novedades, no de quién ni de qué.
- * El detalle se carga dentro de la app contra un endpoint que revalida permisos, porque entre que
- * se envía el push y se lo toca el mentor puede haber rotado.
+ * <p><b>El cuerpo NO es discreto</b>, aunque este javadoc afirmara que sí hasta el 2026-09-21:
+ * {@code cuerpoJson} serializa el título y el cuerpo tal como llegan, y el aviso de acompañamiento
+ * llega nombrando al alumno y diciendo qué incumplió. Lo que sí se queda adentro de la app, contra
+ * un endpoint que revalida permisos, es el detalle — porque entre que se envía el push y se lo
+ * toca el mentor puede haber rotado. Quién puede recibir un push lo decide
+ * {@code NotificacionService.intentarPush}, no este transporte: acá ya no se sabe de quién es el
+ * token.
  */
 @Component
 class ExpoPushTransporte implements TransportePush {

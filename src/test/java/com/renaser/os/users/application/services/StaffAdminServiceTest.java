@@ -1,7 +1,9 @@
 package com.renaser.os.users.application.services;
 
+import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.EstadoDeCuentaCambiadoEvent;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.application.ports.in.admin.ListStaffUseCase.ListStaffCommand;
@@ -16,9 +18,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
+import java.time.Instant;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,19 +45,23 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class StaffAdminServiceTest {
 
+    private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-09-21T10:00:00Z"));
+
     @Mock
     private LoadUserPort loadUserPort;
     @Mock
     private SaveUserPort saveUserPort;
     @Mock
     private CerrarTodasLasSesionesUseCase cerrarTodasLasSesionesUseCase;
+    @Mock
+    private ApplicationEventPublisher events;
 
     private StaffAdminService service;
 
     @BeforeEach
     void setUp() {
         service = new StaffAdminService(loadUserPort, saveUserPort, new RequireAdminGuard(loadUserPort),
-                cerrarTodasLasSesionesUseCase);
+                cerrarTodasLasSesionesUseCase, events, CLOCK);
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -176,6 +185,46 @@ class StaffAdminServiceTest {
                 .isInstanceOf(NotAuthorizedException.class);
 
         verify(saveUserPort, never()).save(any());
+    }
+
+    /**
+     * El otro sustrato de la revocacion. Las sesiones se cortan aca mismo porque viven en `users`;
+     * los tokens push viven en `notifications` y se enteran por este evento — llamar directo
+     * cerraria un ciclo entre modulos que ArchitectureTest rompe. Sin evento, suspender dejaba
+     * intactas las filas de `tokens_push` y el telefono seguia siendo un destino valido.
+     */
+    @Test
+    @DisplayName("updateStatus: suspender publica el cambio de estado para que otros modulos "
+            + "revoquen lo suyo (los tokens push)")
+    void updateStatusSuspenderPublicaElCambioDeEstado() {
+        UserId actorId = id();
+        UserId targetId = id();
+        when(loadUserPort.byId(targetId)).thenReturn(Optional.of(activo(targetId, UserRole.MENTOR)));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+
+        service.updateStatus(new UpdateUserStatusCommand(actorId, targetId, UserStatus.SUSPENDED));
+
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(events).publishEvent(captor.capture());
+        assertThat(captor.getValue()).isInstanceOf(EstadoDeCuentaCambiadoEvent.class);
+        EstadoDeCuentaCambiadoEvent evento = (EstadoDeCuentaCambiadoEvent) captor.getValue();
+        assertThat(evento.usuarioId()).isEqualTo(targetId);
+        assertThat(evento.estadoAnterior()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(evento.estadoNuevo()).isEqualTo(UserStatus.SUSPENDED);
+        assertThat(evento.occurredAt()).isEqualTo(CLOCK.now());
+    }
+
+    @Test
+    @DisplayName("updateStatus: reasignar el MISMO estado no publica nada (no es una novedad)")
+    void updateStatusSinCambioRealNoPublicaEvento() {
+        UserId actorId = id();
+        UserId targetId = id();
+        when(loadUserPort.byId(targetId)).thenReturn(Optional.of(suspendido(targetId, UserRole.MENTOR)));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+
+        service.updateStatus(new UpdateUserStatusCommand(actorId, targetId, UserStatus.SUSPENDED));
+
+        verify(events, never()).publishEvent(any(Object.class));
     }
 
     @Test
