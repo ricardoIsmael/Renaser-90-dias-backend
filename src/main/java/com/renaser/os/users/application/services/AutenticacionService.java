@@ -2,6 +2,7 @@ package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.CredencialesInvalidasException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
+import com.renaser.os.shared.domain.UnidadDeConteoPorIp;
 import com.renaser.os.users.application.ports.out.autenticacion.LimitarSolicitudesResetPort;
 import java.time.Duration;
 import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionUseCase;
@@ -91,6 +92,11 @@ public class AutenticacionService implements IniciarSesionUseCase {
      *
      * <p>El mensaje no distingue si el tope alcanzado fue el del correo o el de la IP: decirlo
      * le confirmaria a quien sondea que ese correo existe y esta siendo defendido.
+     *
+     * <p>El tope por IP cuenta por {@link UnidadDeConteoPorIp} y no por la direccion entera. El
+     * de 10 por correo acota el dano por victima, pero el que acotaba CUANTAS victimas distintas
+     * se pueden tocar por hora era este, y en IPv6 no acotaba nada: un abonado con su /64 propio
+     * estrenaba contador en cada peticion.
      */
     private void requireDentroDelLimite(IniciarSesionCommand command) {
         if (!limitarIntentosPort.registrarIntento("login:email:" + command.email(),
@@ -98,7 +104,8 @@ public class AutenticacionService implements IniciarSesionUseCase {
             throw new RateLimitExceededException("Demasiados intentos. Espera unos minutos.");
         }
         if (command.requestIp() != null && !limitarIntentosPort.registrarIntento(
-                "login:ip:" + command.requestIp(), VENTANA_RATE_LIMIT, LIMITE_POR_IP)) {
+                "login:ip:" + UnidadDeConteoPorIp.de(command.requestIp()), VENTANA_RATE_LIMIT,
+                LIMITE_POR_IP)) {
             throw new RateLimitExceededException("Demasiados intentos. Espera unos minutos.");
         }
     }

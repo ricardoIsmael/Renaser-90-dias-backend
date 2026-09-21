@@ -2,6 +2,7 @@ package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.CodigoVerificacionInvalidoException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
+import com.renaser.os.shared.domain.UnidadDeConteoPorIp;
 import com.renaser.os.users.application.ports.in.autenticacion.ConfirmarCodigoVerificacionEmailUseCase;
 import com.renaser.os.users.application.ports.in.autenticacion.EnviarCodigoVerificacionEmailUseCase;
 import com.renaser.os.users.application.ports.out.autenticacion.CodigoVerificacionEmailPort;
@@ -122,14 +123,20 @@ class VerificacionEmailService implements EnviarCodigoVerificacionEmailUseCase, 
         }
     }
 
+    /**
+     * El tope por IP cuenta por {@link UnidadDeConteoPorIp} (el /64 en IPv6): aca cada intento
+     * cuesta un correo real, y contando la direccion entera un abonado con su propio prefijo
+     * podia gastar esa cuota sobre tantos correos de terceros como quisiera.
+     */
     private void rejectIfRateLimitExceeded(String email, String requestIp) {
         rejectIfEsperaEntreEnviosNoCumplida(email);
         if (!limitarSolicitudesResetPort.registrarIntento("email-verification:email:" + email, VENTANA_RATE_LIMIT,
                 LIMITE_POR_EMAIL)) {
             throw new RateLimitExceededException("Limite de solicitudes de verificacion de correo excedido");
         }
-        if (requestIp != null && !limitarSolicitudesResetPort.registrarIntento("email-verification:ip:" + requestIp,
-                VENTANA_RATE_LIMIT, LIMITE_POR_IP)) {
+        if (requestIp != null && !limitarSolicitudesResetPort.registrarIntento(
+                "email-verification:ip:" + UnidadDeConteoPorIp.de(requestIp), VENTANA_RATE_LIMIT,
+                LIMITE_POR_IP)) {
             throw new RateLimitExceededException("Limite de solicitudes de verificacion de correo excedido");
         }
     }

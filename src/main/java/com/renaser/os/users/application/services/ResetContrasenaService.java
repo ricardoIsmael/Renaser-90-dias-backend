@@ -4,6 +4,7 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.CodigoVerificacionInvalidoException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.TokenResetInvalidoException;
+import com.renaser.os.shared.domain.UnidadDeConteoPorIp;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.in.autenticacion.CerrarTodasLasSesionesUseCase;
 import com.renaser.os.users.application.ports.in.autenticacion.ConfirmarResetContrasenaUseCase;
@@ -160,12 +161,17 @@ public class ResetContrasenaService implements SolicitarResetContrasenaUseCase, 
         enviarEmailPort.enviarCodigoResetContrasena(email, codigo);
     }
 
+    /**
+     * El tope por IP cuenta por {@link UnidadDeConteoPorIp} (el /64 en IPv6): contar la direccion
+     * entera dejaba que un abonado con su propio prefijo pidiera un reseteo por direccion, y con
+     * eso bombardear el buzon de tantas victimas distintas como quisiera.
+     */
     private void rejectIfRateLimitExceeded(String email, String requestIp) {
         if (!limitarSolicitudesResetPort.registrarIntento("email:" + email, VENTANA_RATE_LIMIT, LIMITE_POR_EMAIL)) {
             throw new RateLimitExceededException("Limite de solicitudes de reseteo de contrasena excedido");
         }
-        if (requestIp != null
-                && !limitarSolicitudesResetPort.registrarIntento("ip:" + requestIp, VENTANA_RATE_LIMIT, LIMITE_POR_IP)) {
+        if (requestIp != null && !limitarSolicitudesResetPort.registrarIntento(
+                "ip:" + UnidadDeConteoPorIp.de(requestIp), VENTANA_RATE_LIMIT, LIMITE_POR_IP)) {
             throw new RateLimitExceededException("Limite de solicitudes de reseteo de contrasena excedido");
         }
     }

@@ -1,6 +1,7 @@
 package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.RateLimitExceededException;
+import com.renaser.os.shared.domain.UnidadDeConteoPorIp;
 import com.renaser.os.users.application.ports.in.accountrequest.ConsultarEmailRegistradoUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.VerificarDominioEmailUseCase;
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
@@ -84,12 +85,19 @@ class ConsultaEmailService implements ConsultarEmailRegistradoUseCase, Verificar
         };
     }
 
+    /**
+     * Se cuenta por {@link UnidadDeConteoPorIp} y no por la direccion entera: en IPv6 la direccion
+     * entera identifica una interfaz, no a un abonado, asi que quien tiene su propio /64 —lo
+     * normal en datos moviles— estrenaba contador en cada peticion y este tope no disparaba
+     * nunca. Es el endpoint donde mas dolia: este contador es el UNICO control de `check-email`
+     * y `exists`.
+     */
     private void rejectIfRateLimitExceeded(String requestIp) {
         if (requestIp == null) {
             return;
         }
-        if (!limitarSolicitudesPort.registrarIntento("email-check:ip:" + requestIp, VENTANA_RATE_LIMIT,
-                LIMITE_CONSULTAS_POR_IP)) {
+        if (!limitarSolicitudesPort.registrarIntento("email-check:ip:" + UnidadDeConteoPorIp.de(requestIp),
+                VENTANA_RATE_LIMIT, LIMITE_CONSULTAS_POR_IP)) {
             throw new RateLimitExceededException("Demasiadas consultas de correo. Intenta mas tarde.");
         }
     }

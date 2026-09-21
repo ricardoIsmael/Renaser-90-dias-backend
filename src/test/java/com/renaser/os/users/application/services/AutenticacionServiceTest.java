@@ -11,6 +11,7 @@ import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
 import com.renaser.os.users.api.UserRole;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -30,6 +31,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -162,6 +164,27 @@ class AutenticacionServiceTest {
         assertThatThrownBy(() -> servicio.iniciarSesion(
                 new IniciarSesionCommand("actor@renaser.dev", CONTRASENA_REAL, "203.0.113.10")))
                 .isInstanceOf(RateLimitExceededException.class);
+    }
+
+    /**
+     * Regresion del hallazgo del prefijo IPv6. El tope por correo (10/h) acota el dano por
+     * victima; el que acotaba cuantas victimas distintas se pueden tocar por hora era este, y
+     * contando la direccion entera no acotaba nada.
+     */
+    @Test
+    @DisplayName("dos direcciones del mismo /64 gastan el MISMO cupo de login por IP")
+    void elLimitePorIpCuentaPorPrefijoEnIpv6() {
+        AutenticacionService servicio = service();
+
+        assertThatThrownBy(() -> servicio.iniciarSesion(new IniciarSesionCommand(
+                "actor@renaser.dev", CONTRASENA_REAL, "2803:9810:6075:9310:c63b:3904:e158:3228")))
+                .isInstanceOf(CredencialesInvalidasException.class);
+        assertThatThrownBy(() -> servicio.iniciarSesion(new IniciarSesionCommand(
+                "actor@renaser.dev", CONTRASENA_REAL, "2803:9810:6075:9310:1:2:3:4")))
+                .isInstanceOf(CredencialesInvalidasException.class);
+
+        verify(limitarIntentosPort, times(2)).registrarIntento(
+                eq("login:ip:2803:9810:6075:9310::/64"), any(), eq(AutenticacionService.LIMITE_POR_IP));
     }
 
     @Test
