@@ -1,11 +1,13 @@
 package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.IdentidadProveedorInvalidaException;
+import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionConProveedorUseCase.IniciarSesionConProveedorCommand;
 import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionConProveedorUseCase.ResultadoLoginSocial;
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.autenticacion.IdentidadVerificada;
+import com.renaser.os.users.application.ports.out.autenticacion.LimitarSolicitudesResetPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadIdentidadExternaPort;
 import com.renaser.os.users.application.ports.out.autenticacion.RegistroPendienteSocial;
 import com.renaser.os.users.application.ports.out.autenticacion.TokenRegistroPendienteSocialPort;
@@ -35,6 +37,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -53,11 +57,19 @@ class AutenticacionSocialServiceTest {
     private LoadUserPort loadUserPort;
     @Mock
     private TokenRegistroPendienteSocialPort tokenRegistroPendienteSocialPort;
+    @Mock
+    private LimitarSolicitudesResetPort limitarSolicitudesPort;
 
     private AutenticacionSocialService service() {
+        return service(true);
+    }
+
+    /** @param conCupo si a esta IP le queda margen en el contador por hora. */
+    private AutenticacionSocialService service(boolean conCupo) {
         when(verificadorGoogle.proveedor()).thenReturn(ProveedorIdentidad.GOOGLE);
+        when(limitarSolicitudesPort.registrarIntento(anyString(), any(), anyInt())).thenReturn(conCupo);
         return new AutenticacionSocialService(List.of(verificadorGoogle), loadIdentidadExternaPort,
-                loadAccountRequestPort, loadUserPort, tokenRegistroPendienteSocialPort);
+                loadAccountRequestPort, loadUserPort, tokenRegistroPendienteSocialPort, limitarSolicitudesPort);
     }
 
     private static IniciarSesionConProveedorCommand command() {
@@ -221,6 +233,46 @@ class AutenticacionSocialServiceTest {
         assertThatThrownBy(() -> service().iniciarSesion(command()))
                 .isInstanceOf(IdentidadProveedorInvalidaException.class);
         verify(loadIdentidadExternaPort, never()).porProveedorYSujeto(any(), any());
+    }
+
+    /**
+     * Regresion del hallazgo del cupo (2026-09-21). {@code POST /auth/social} es anonimo y lo
+     * primero que hace es canjear el {@code code} contra el proveedor: una peticion saliente
+     * emitida a nombre de la IP del producto. La {@code requestIp} viajaba en el comando desde que
+     * existe el endpoint —el controller la pone con {@code DireccionIpDelCliente.de(...)}, y el
+     * record la declara— y <b>no la leia nadie</b>: el control tenia la cañeria puesta y el limite
+     * no existia, que es peor que no tener ninguno, porque parece que lo hay.
+     *
+     * <p>Lo que se exige es que pasado el tope el verificador NO se llame: si se llamara, el canje
+     * ya habria salido y el tope no serviria de nada.
+     */
+    @Test
+    void pasadoElLimitePorIpNoSeCanjeaElCodeContraElProveedor() {
+        assertThatThrownBy(() -> service(false).iniciarSesion(command()))
+                .isInstanceOf(RateLimitExceededException.class);
+
+        verify(verificadorGoogle, never()).verificar(any());
+    }
+
+    /**
+     * La otra mitad: que el cupo se gaste de verdad, con la IP que llego y en su propio contador.
+     * Se cuenta TODO intento y no solo los que fallan, por el mismo motivo que en el login por
+     * contrasena: el que acierta ya entro.
+     */
+    @Test
+    void cadaIntentoDeLoginSocialGastaCupoDeLaIpQueLlama() {
+        UserId id = UserId.of(UUID.randomUUID());
+        when(verificadorGoogle.verificar(any()))
+                .thenReturn(new IdentidadVerificada("google-sub-cupo", "concupo@renaser.dev", true, "Alguien"));
+        when(loadIdentidadExternaPort.porProveedorYSujeto(ProveedorIdentidad.GOOGLE, "google-sub-cupo"))
+                .thenReturn(Optional.of(new IdentidadExterna(ProveedorIdentidad.GOOGLE, "google-sub-cupo", id,
+                        "concupo@renaser.dev", Instant.now())));
+        when(loadUserPort.byId(id)).thenReturn(Optional.of(usuario(id)));
+
+        service().iniciarSesion(command());
+
+        verify(limitarSolicitudesPort).registrarIntento("social-login:ip:127.0.0.1",
+                AutenticacionSocialService.VENTANA_RATE_LIMIT, AutenticacionSocialService.LIMITE_POR_IP);
     }
 
     @Test

@@ -1,11 +1,13 @@
 package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.CredencialesInvalidasException;
+import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionConProveedorUseCase;
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.autenticacion.CanjeCodigoCommand;
 import com.renaser.os.users.application.ports.out.autenticacion.IdentidadVerificada;
+import com.renaser.os.users.application.ports.out.autenticacion.LimitarSolicitudesResetPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadIdentidadExternaPort;
 import com.renaser.os.users.application.ports.out.autenticacion.RegistroPendienteSocial;
 import com.renaser.os.users.application.ports.out.autenticacion.TokenRegistroPendienteSocialPort;
@@ -41,21 +43,42 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
      */
     static final Duration VIGENCIA_REGISTRO_PENDIENTE = VerificacionEmailService.VIGENCIA_CODIGO;
 
+    /**
+     * Limite por IP del login social (2026-09-21). La {@code requestIp} llegaba en el comando
+     * desde que existe el endpoint y no la leia nadie: la cañeria estaba puesta y el limite no
+     * existia, que es peor que no tenerlo, porque parece que lo hay.
+     *
+     * <p>Misma ventana que el resto del modulo. El tope queda por DEBAJO del login por contrasena
+     * ({@code AutenticacionService.LIMITE_POR_IP}, 50) aunque para la persona sea el mismo gesto:
+     * alli un intento cuesta un BCrypt y una lectura local, aca cuesta una peticion saliente
+     * hacia Google/Apple/Facebook a nombre de la IP del producto. Queda por encima de los envios
+     * de correo (20), que cuestan una cuota real de un tercero.
+     *
+     * <p><b>Asuncion, no confirmada por producto</b> (mismo criterio que A-5): tocar "Continuar
+     * con Google" es un gesto ocasional; 30 por hora no le queda corto ni a varias personas
+     * detras de un mismo NAT.
+     */
+    static final Duration VENTANA_RATE_LIMIT = Duration.ofHours(1);
+    static final int LIMITE_POR_IP = 30;
+
     private final RegistroVerificadoresIdentidad verificadores;
     private final LoadIdentidadExternaPort loadIdentidadExternaPort;
     private final LoadAccountRequestPort loadAccountRequestPort;
     private final LoadUserPort loadUserPort;
     private final TokenRegistroPendienteSocialPort tokenRegistroPendienteSocialPort;
+    private final LimitarSolicitudesResetPort limitarSolicitudesPort;
 
     public AutenticacionSocialService(List<VerificadorIdentidadProveedor> verificadores,
                                        LoadIdentidadExternaPort loadIdentidadExternaPort,
                                        LoadAccountRequestPort loadAccountRequestPort, LoadUserPort loadUserPort,
-                                       TokenRegistroPendienteSocialPort tokenRegistroPendienteSocialPort) {
+                                       TokenRegistroPendienteSocialPort tokenRegistroPendienteSocialPort,
+                                       LimitarSolicitudesResetPort limitarSolicitudesPort) {
         this.verificadores = new RegistroVerificadoresIdentidad(verificadores);
         this.loadIdentidadExternaPort = loadIdentidadExternaPort;
         this.loadAccountRequestPort = loadAccountRequestPort;
         this.loadUserPort = loadUserPort;
         this.tokenRegistroPendienteSocialPort = tokenRegistroPendienteSocialPort;
+        this.limitarSolicitudesPort = limitarSolicitudesPort;
     }
 
     /**
@@ -66,6 +89,10 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
      */
     @Override
     public ResultadoLoginSocial iniciarSesion(IniciarSesionConProveedorCommand command) {
+        // Antes de todo lo demas, porque lo primero que hace este metodo es salir de la maquina:
+        // canjear el code contra el proveedor. Se cuenta TODO intento y no solo los que fallan,
+        // por el mismo motivo que en el login por contrasena — el que acierta ya entro.
+        rejectIfRateLimitExceeded(command.requestIp());
         VerificadorIdentidadProveedor verificador = verificadores.para(command.proveedor());
         IdentidadVerificada identidad = verificador.verificar(
                 new CanjeCodigoCommand(command.code(), command.codeVerifier(), command.redirectUri()));
@@ -128,6 +155,22 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
                         fullName),
                 VIGENCIA_REGISTRO_PENDIENTE);
         return new ResultadoLoginSocial.RegistroPendiente(token, identidad.email(), fullName);
+    }
+
+    /**
+     * Sin IP no se cuenta, mismo criterio que el resto del modulo ({@code AutenticacionService},
+     * {@code ResetContrasenaService}): un limite que no sabe a quien contarle no puede bloquear a
+     * nadie sin bloquear a todos. En el camino HTTP real siempre viene — la pone el controller
+     * con {@code DireccionIpDelCliente.de(...)}.
+     */
+    private void rejectIfRateLimitExceeded(String requestIp) {
+        if (requestIp == null) {
+            return;
+        }
+        if (!limitarSolicitudesPort.registrarIntento("social-login:ip:" + requestIp, VENTANA_RATE_LIMIT,
+                LIMITE_POR_IP)) {
+            throw new RateLimitExceededException("Demasiados intentos. Espera unos minutos.");
+        }
     }
 
     private static String nombreOFallback(IdentidadVerificada identidad) {

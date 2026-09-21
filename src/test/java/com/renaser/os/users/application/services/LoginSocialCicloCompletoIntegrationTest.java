@@ -14,6 +14,7 @@ import com.renaser.os.users.application.ports.in.autenticacion.IniciarSesionConP
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.autenticacion.CanjeCodigoCommand;
 import com.renaser.os.users.application.ports.out.autenticacion.IdentidadVerificada;
+import com.renaser.os.users.application.ports.out.autenticacion.LimitarSolicitudesResetPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadIdentidadExternaPort;
 import com.renaser.os.users.application.ports.out.autenticacion.TokenRegistroPendienteSocialPort;
 import com.renaser.os.users.application.ports.out.autenticacion.VerificadorIdentidadProveedor;
@@ -80,6 +81,9 @@ class LoginSocialCicloCompletoIntegrationTest {
     private ApproveAccountRequestUseCase approveAccountRequestUseCase;
     @Autowired
     private TokenRegistroPendienteSocialPort tokenRegistroPendienteSocialPort;
+    /** El contador por IP del login social, contra el Redis del contenedor: tambien es de produccion. */
+    @Autowired
+    private LimitarSolicitudesResetPort limitarSolicitudesPort;
     @Autowired
     private CompletarRegistroSocialUseCase completarRegistroSocialUseCase;
 
@@ -185,7 +189,7 @@ class LoginSocialCicloCompletoIntegrationTest {
     private AutenticacionSocialService servicioConVerificadorQueDevuelve(String email) {
         VerificadorIdentidadProveedor verificador = new VerificadorGoogleDeMentira(email);
         return new AutenticacionSocialService(List.of(verificador), loadIdentidadExternaPort,
-                loadAccountRequestPort, loadUserPort, tokenRegistroPendienteSocialPort);
+                loadAccountRequestPort, loadUserPort, tokenRegistroPendienteSocialPort, limitarSolicitudesPort);
     }
 
     private UserId persistirAdmin() {
