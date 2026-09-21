@@ -32,21 +32,29 @@ import java.util.UUID;
  * mas, porque quien roto conserva su fila. La afirmacion de que ya estaba cubierto es
  * probablemente la razon por la que nadie volvio a mirar. Ahora las cuatro entradas comparten un
  * unico caso de uso, asi que la equivalencia no depende de que nadie se olvide.</blockquote>
+ *
+ * <blockquote><b>Agregado 2026-09-21.</b> Esta clase decide <i>una sola vez por suscripcion</i>, en
+ * el SUBSCRIBE, y el broker no le vuelve a preguntar nunca. Eso alcanzaba mientras se creyera que
+ * la autorizacion no caduca, pero caduca sola: rotar a un mentor, trasladar a un aprendiz o sacar a
+ * alguien de un soporte apagan la pertenencia sin cerrar sesion ni socket. La revalidacion en cada
+ * entrega vive en {@link EntregaAutorizadaInterceptor}; esta guarda sigue siendo la de la puerta,
+ * no la unica.</blockquote>
  */
 @Component
 class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
 
-    private static final String PREFIJO_TOPIC = "/topic/conversaciones/";
-
     private final AutorizarAccesoAConversacionUseCase autorizarAcceso;
     private final UserSummaryFinder userSummaryFinder;
     private final SesionViva sesionViva;
+    private final AutorizacionViva autorizacionViva;
 
     SubscripcionAutorizadaInterceptor(AutorizarAccesoAConversacionUseCase autorizarAcceso,
-                                      UserSummaryFinder userSummaryFinder, SesionViva sesionViva) {
+                                      UserSummaryFinder userSummaryFinder, SesionViva sesionViva,
+                                      AutorizacionViva autorizacionViva) {
         this.autorizarAcceso = autorizarAcceso;
         this.userSummaryFinder = userSummaryFinder;
         this.sesionViva = sesionViva;
+        this.autorizacionViva = autorizacionViva;
     }
 
     @Override
@@ -73,13 +81,21 @@ class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
             return message;
         }
         String destino = accessor.getDestination();
-        if (destino == null || !destino.startsWith(PREFIJO_TOPIC)) {
+        if (!DestinoDeConversacion.loEs(destino)) {
             throw new org.springframework.messaging.MessagingException("Destino de suscripcion no permitido");
         }
         UserId actorId = actorDeLaSesion(accessor.getSessionAttributes());
-        requireSesionTodaviaViva(accessor);
-        ConversacionId conversacionId = conversacionDelDestino(destino);
+        String socketId = requireSesionTodaviaViva(accessor);
+        // El parseo del id vive en DestinoDeConversacion para que el canal de salida lea EXACTAMENTE
+        // la misma conversacion en el mismo destino; aca solo cambia que se hace con el rechazo.
+        ConversacionId conversacionId = DestinoDeConversacion.de(destino)
+                .orElseThrow(() -> new org.springframework.messaging.MessagingException(
+                        "Destino de suscripcion no permitido"));
         requireParticipanteActivo(actorId, conversacionId);
+        // Recien aca, con la suscripcion ya autorizada: el canal de SALIDA necesita saber de quien
+        // es este socket para poder volver a preguntar en cada entrega, y este frame es el ultimo
+        // que trae los atributos del handshake — el de entrega ya no los trae.
+        autorizacionViva.anotarActorDelSocket(socketId, actorId);
         return message;
     }
 
@@ -104,31 +120,19 @@ class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
     }
 
     /**
-     * El id de conversacion sale de una porcion del destino elegida por el cliente, asi que puede
-     * no ser un UUID. Se traduce a la excepcion del canal en vez de dejar salir el
-     * {@code IllegalArgumentException} crudo de {@code UUID.fromString}: el rechazo tiene que ser
-     * deliberado y no un efecto colateral del parseo.
-     */
-    private static ConversacionId conversacionDelDestino(String destino) {
-        try {
-            return ConversacionId.of(UUID.fromString(destino.substring(PREFIJO_TOPIC.length())));
-        } catch (IllegalArgumentException noEsUnUuid) {
-            throw new org.springframework.messaging.MessagingException("Destino de suscripcion no permitido");
-        }
-    }
-
-    /**
-     * Que la sesion HTTP siga existiendo, no solo que haya existido al abrir el socket.
+     * Que la sesion HTTP siga existiendo, no solo que haya existido al abrir el socket. Devuelve el
+     * id del socket, que ya quedo comprobado no nulo.
      *
      * <p>Sin esto, quien tuviera un token robado conservaba el socket aunque la victima cambiara
      * la contrasena, y encima podia suscribirse a conversaciones NUEVAS despues de la revocacion.
      */
-    private void requireSesionTodaviaViva(StompHeaderAccessor accessor) {
+    private String requireSesionTodaviaViva(StompHeaderAccessor accessor) {
         Map<String, Object> atributos = accessor.getSessionAttributes();
         Object idSesion = atributos == null ? null : atributos.get(ActorHandshakeInterceptor.ATRIBUTO_ID_SESION);
         String socketId = accessor.getSessionId();
         if (!(idSesion instanceof String id) || socketId == null || !sesionViva.sigueViva(socketId, id)) {
             throw new org.springframework.messaging.MessagingException("Tu sesion ya no es valida");
         }
+        return socketId;
     }
 }

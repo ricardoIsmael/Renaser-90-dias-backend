@@ -40,8 +40,14 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 class SesionViva {
 
-    /** Cuanto se reusa una comprobacion antes de volver a preguntarle a Redis. */
-    private static final Duration GRACIA = Duration.ofSeconds(10);
+    /**
+     * Cuanto se reusa una comprobacion antes de volver a preguntarle a Redis.
+     *
+     * <p>No es privada porque {@link AutorizacionViva} reusa sus respuestas con esta misma ventana:
+     * las dos mitades de la revocacion tienen que tardar lo mismo en hacerse efectivas, y dos
+     * constantes iguales escritas en dos lados se separan sin que nadie lo note.
+     */
+    static final Duration GRACIA = Duration.ofSeconds(10);
 
     private record Comprobacion(String idSesionHttp, long enMillis, boolean viva) {}
 
