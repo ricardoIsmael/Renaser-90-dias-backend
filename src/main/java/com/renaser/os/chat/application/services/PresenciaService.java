@@ -14,6 +14,7 @@ import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.users.api.UserSummaryFinder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -62,6 +63,7 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
     private final LoadConversacionPort loadConversacionPort;
     private final EsParticipantePort esParticipantePort;
     private final PertenenciaVigentePort pertenenciaVigentePort;
+    private final UserSummaryFinder userSummaryFinder;
 
     public PresenciaService(PresenciaPort presenciaPort,
                             PublicarPresenciaFanoutPort publicarPresenciaFanoutPort,
@@ -69,7 +71,8 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
                             ListarUsuariosDeConversacionPort listarUsuariosDeConversacionPort,
                             LoadConversacionPort loadConversacionPort,
                             EsParticipantePort esParticipantePort,
-                            PertenenciaVigentePort pertenenciaVigentePort) {
+                            PertenenciaVigentePort pertenenciaVigentePort,
+                            UserSummaryFinder userSummaryFinder) {
         this.presenciaPort = presenciaPort;
         this.publicarPresenciaFanoutPort = publicarPresenciaFanoutPort;
         this.conversacionesDeUsuarioPort = conversacionesDeUsuarioPort;
@@ -77,6 +80,7 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
         this.loadConversacionPort = loadConversacionPort;
         this.esParticipantePort = esParticipantePort;
         this.pertenenciaVigentePort = pertenenciaVigentePort;
+        this.userSummaryFinder = userSummaryFinder;
     }
 
     @Override
@@ -161,10 +165,39 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
                 : "No sos participante de esta conversacion");
     }
 
+    /**
+     * Las DOS entradas de presencia pasan por aca —{@link #requireParticipante}, que lanza, y
+     * {@link #puedeVerAhora}, que filtra a que canales se reparte el aviso—, asi que la rama de
+     * SOPORTE se escribe una sola vez para todo el reparto.
+     *
+     * <p>Espejo EXACTO de {@code AutorizacionDeConversacionService.autorizado}: misma condicion y
+     * mismo orden. Esta clase guarda su propia copia de la regla en vez de llamar al caso de uso
+     * compartido, y esa duplicacion es justo lo que dejo a SOPORTE sin cubrir cuando se corrigio
+     * la rama de CELULA.
+     */
     private boolean autorizado(Conversacion conversacion, UserId usuarioId) {
-        return conversacion.tipo() == TipoConversacion.CELULA
-                ? pertenenciaVigentePort.perteneceAlGrupo(conversacion.celulaId(), usuarioId)
-                : esParticipantePort.esParticipante(conversacion.id(), usuarioId);
+        if (conversacion.tipo() == TipoConversacion.CELULA) {
+            return pertenenciaVigentePort.perteneceAlGrupo(conversacion.celulaId(), usuarioId);
+        }
+        if (!esParticipantePort.esParticipante(conversacion.id(), usuarioId)) {
+            return false;
+        }
+        /* Un SOPORTE se gana por ROL, no por ser una de las dos partes como una DIRECTA: la fila
+           no alcanza. Sin esto, el aviso de conexion de un ex administrador se seguia publicando
+           al canal del chat de soporte de CADA aprendiz, aunque ya no pudiera leerlo por REST. */
+        return !conversacion.seGanaPorRolDeStaff(usuarioId) || esStaffAdministrativo(usuarioId);
+    }
+
+    /**
+     * El rol de AHORA, no el que dejo escrita la proyeccion. {@code canManageRoles()} es
+     * exactamente {ADMIN, ALCHEMIST}, el mismo conjunto que
+     * {@code ConversacionSoporteService.STAFF_ADMINISTRATIVO}. Un usuario que ya no existe no es
+     * staff: falla cerrado.
+     */
+    private boolean esStaffAdministrativo(UserId usuarioId) {
+        return userSummaryFinder.findById(usuarioId)
+                .map(usuario -> usuario.role().canManageRoles())
+                .orElse(false);
     }
 
     /**

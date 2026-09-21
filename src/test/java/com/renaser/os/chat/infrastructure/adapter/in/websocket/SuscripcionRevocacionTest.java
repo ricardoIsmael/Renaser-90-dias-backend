@@ -88,7 +88,7 @@ class SuscripcionRevocacionTest {
         sesiones.save(new MapSession(ID_SESION));
         sesionViva = new SesionViva(sesiones, relojFijo());
         interceptor = new SubscripcionAutorizadaInterceptor(
-                new AutorizacionDeConversacionService(conversaciones, proyeccion, pertenenciaVigente),
+                new AutorizacionDeConversacionService(conversaciones, proyeccion, pertenenciaVigente, usuarios),
                 usuarios, sesionViva);
     }
 

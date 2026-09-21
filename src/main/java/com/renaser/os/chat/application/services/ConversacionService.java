@@ -220,6 +220,15 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
      *
      * <p>Los directos y el GLOBAL siguen con su politica de siempre: nadie pierde un DM porque
      * alguien roto.
+     *
+     * <p><b>Un SOPORTE tampoco se resuelve con la proyeccion</b> (auditoria de seguridad). Se gana
+     * por ROL —el aprendiz y los ADMIN/ALCHEMIST activos, nadie mas—, no por ser una de las dos
+     * partes como una DIRECTA, asi que le cabe el mismo argumento: la fila que dejo la etapa de
+     * staff le sobrevivia a la baja de rol y mantenia a un ex administrador dentro del chat privado
+     * de cada aprendiz. Esto es el cinturon: vale aunque la revocacion del listener todavia no haya
+     * corrido, se haya perdido o se reentregue tarde. <b>La misma condicion, en el mismo orden,
+     * esta en {@code MensajeService}, {@code ConversacionService}, {@code PresenciaService} y
+     * {@code AutorizacionDeConversacionService}; si se toca una, se tocan las cuatro.</b>
      */
     private void requireParticipante(Conversacion conversacion, UserId usuarioId) {
         if (conversacion.tipo() == TipoConversacion.CELULA) {
@@ -231,6 +240,22 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         if (!esParticipantePort.esParticipante(conversacion.id(), usuarioId)) {
             throw new NotAuthorizedException("No sos participante de esta conversacion");
         }
+        if (conversacion.seGanaPorRolDeStaff(usuarioId) && !esStaffAdministrativo(usuarioId)) {
+            throw new NotAuthorizedException(
+                    "Tu rol cambio: ya no formas parte del staff que acompana ese chat de soporte");
+        }
+    }
+
+    /**
+     * El rol de AHORA, no el que dejo escrita la proyeccion. {@code canManageRoles()} es
+     * exactamente {ADMIN, ALCHEMIST}, el mismo conjunto que
+     * {@code ConversacionSoporteService.STAFF_ADMINISTRATIVO}. Un usuario que ya no existe no es
+     * staff: falla cerrado.
+     */
+    private boolean esStaffAdministrativo(UserId usuarioId) {
+        return userSummaryFinder.findById(usuarioId)
+                .map(usuario -> usuario.role().canManageRoles())
+                .orElse(false);
     }
 
     private Conversacion requireConversacion(ConversacionId id) {

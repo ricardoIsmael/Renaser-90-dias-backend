@@ -2,6 +2,7 @@ package com.renaser.os.chat.application.services;
 
 import com.renaser.os.chat.application.ports.in.conversacion.IncorporarUsuarioAlSoporteUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.RellenarConversacionesDeSoporteUseCase;
+import com.renaser.os.chat.application.ports.in.conversacion.RetirarDelSoporteUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.SalirDeConversacionSoporteUseCase;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.conversacion.SaveConversacionPort;
@@ -56,7 +57,8 @@ import java.util.stream.Collectors;
  */
 @Service
 public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUseCase,
-        RellenarConversacionesDeSoporteUseCase, SalirDeConversacionSoporteUseCase {
+        RellenarConversacionesDeSoporteUseCase, SalirDeConversacionSoporteUseCase,
+        RetirarDelSoporteUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(ConversacionSoporteService.class);
 
@@ -200,6 +202,53 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
         if (sumadas > 0) {
             log.info("[chat.soporte] {} sumado a {} conversacion(es) de soporte ya existentes", staffId, sumadas);
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Es el espejo de {@link #sumarStaffALasQueYaExisten}: recorre las mismas conversaciones y
+     * toca exactamente las filas que aquel metodo escribio. No recompone nada mas — no mete a
+     * nadie, no repone al que se fue solo, no mira si a la conversacion le falta alguien del staff.
+     * Esa es la <b>excepcion acotada</b> a CH-11 que describe {@link RetirarDelSoporteUseCase}, no
+     * su derogacion.
+     *
+     * <p>La conversacion de soporte <b>propia</b> queda intacta: si el ex staff es ademas aprendiz
+     * —una baja a TRAINEE lo vuelve—, su via de contacto con la casa no se le puede cerrar
+     * (regla 4: el aprendiz no sale de la suya ni aunque quiera).
+     */
+    @Override
+    public void retirarPorBajaDeStaff(UserId exStaffId) {
+        if (sigueSiendoStaffAdministrativo(exStaffId)) {
+            // El outbox entrega al-menos-una-vez y SIN ORDEN: un evento de baja viejo puede llegar
+            // despues de un ascenso posterior, o reentregarse cuando la persona ya volvio al staff.
+            // Decidir contra el rol VIGENTE y no contra el del evento es lo que hace que esto
+            // converja igual en cualquier orden, en vez de borrarle las filas a un ADMIN legitimo.
+            log.debug("[chat.soporte] {} vuelve a ser staff administrativo: no se retira nada", exStaffId);
+            return;
+        }
+        int retiradas = 0;
+        for (Conversacion soporte : loadConversacionPort.deSoporte()) {
+            if (soporte.esAprendizDeSoporte(exStaffId)) {
+                continue;
+            }
+            if (esParticipantePort.esParticipante(soporte.id(), exStaffId)) {
+                quitarParticipantePort.quitar(soporte.id(), exStaffId);
+                retiradas++;
+            }
+        }
+        if (retiradas > 0) {
+            log.info("[chat.soporte] {} salio del staff administrativo: retirado de {} conversacion(es) de soporte",
+                    exStaffId, retiradas);
+        }
+    }
+
+    /** El rol de AHORA, no el que traia el evento — ver {@link #retirarPorBajaDeStaff}. Un usuario
+     * que ya no existe no es staff: fallar cerrado deja la fila fuera, que es lo prudente. */
+    private boolean sigueSiendoStaffAdministrativo(UserId usuarioId) {
+        return userSummaryFinder.findById(usuarioId)
+                .map(usuario -> STAFF_ADMINISTRATIVO.contains(usuario.role()))
+                .orElse(false);
     }
 
     /**

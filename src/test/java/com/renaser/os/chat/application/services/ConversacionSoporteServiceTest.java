@@ -290,6 +290,87 @@ class ConversacionSoporteServiceTest {
                 .isInstanceOf(NotAuthorizedException.class);
     }
 
+    // ── 4-bis. La baja de rol revoca: excepcion ACOTADA a CH-11 ─────────────────────────────
+
+    /**
+     * Regresion de la auditoria de seguridad. <b>Falla contra el codigo viejo</b>: antes no existia
+     * ningun camino que sacara a nadie del soporte que no fuera la propia persona pulsando salir,
+     * asi que un ex administrador conservaba la fila —y con ella el chat privado— de cada aprendiz.
+     */
+    @Test
+    @DisplayName("bajar del staff lo saca de TODAS las conversaciones de soporte ajenas")
+    void laBajaDeStaffLoSacaDeTodosLosSoportesAjenos() {
+        perfil(ADMINA, "Ex admin", UserRole.MENTOR, UserStatus.ACTIVE);
+        Conversacion deAna = soporteDe(ANA);
+        Conversacion deBruno = soporteDe(BRUNO);
+        when(loadConversacionPort.deSoporte()).thenReturn(List.of(deAna, deBruno));
+        when(esParticipantePort.esParticipante(any(), eq(ADMINA))).thenReturn(true);
+
+        service.retirarPorBajaDeStaff(ADMINA);
+
+        verify(quitarParticipantePort).quitar(deAna.id(), ADMINA);
+        verify(quitarParticipantePort).quitar(deBruno.id(), ADMINA);
+    }
+
+    /** Regla 4: el aprendiz no sale de la suya ni aunque quiera. Una baja hasta TRAINEE lo vuelve
+     * aprendiz, y esa conversacion es su via de contacto con la casa. */
+    @Test
+    @DisplayName("la baja de rol NO toca la conversacion de soporte propia")
+    void laBajaDeStaffNoTocaElSoportePropio() {
+        perfil(ANA, "Ana Perez", UserRole.TRAINEE, UserStatus.ACTIVE);
+        Conversacion deAna = soporteDe(ANA);
+        Conversacion deBruno = soporteDe(BRUNO);
+        when(loadConversacionPort.deSoporte()).thenReturn(List.of(deAna, deBruno));
+        when(esParticipantePort.esParticipante(any(), eq(ANA))).thenReturn(true);
+
+        service.retirarPorBajaDeStaff(ANA);
+
+        verify(quitarParticipantePort, never()).quitar(eq(deAna.id()), any());
+        verify(quitarParticipantePort).quitar(deBruno.id(), ANA);
+    }
+
+    /** Corre en el outbox, que entrega al-menos-una-vez: quitar una fila que ya no esta no falla. */
+    @Test
+    @DisplayName("retirar es idempotente: a quien ya no tiene fila no se le quita nada")
+    void retirarEsIdempotente() {
+        perfil(ADMINA, "Ex admin", UserRole.MENTOR, UserStatus.ACTIVE);
+        when(loadConversacionPort.deSoporte()).thenReturn(List.of(soporteDe(ANA)));
+        when(esParticipantePort.esParticipante(any(), eq(ADMINA))).thenReturn(false);
+
+        service.retirarPorBajaDeStaff(ADMINA);
+
+        verify(quitarParticipantePort, never()).quitar(any(), any());
+    }
+
+    /**
+     * El outbox entrega al-menos-una-vez y SIN ORDEN: un evento de baja viejo puede reentregarse
+     * cuando la persona ya volvio al staff, o llegar despues de un ascenso posterior. Decidir
+     * contra el rol VIGENTE es lo que impide que eso le borre las filas a un ADMIN legitimo.
+     */
+    @Test
+    @DisplayName("no retira nada si a esta altura la persona volvio a ser staff administrativo")
+    void noRetiraSiSigueSiendoStaff() {
+        perfil(ADMINA, "Admin", UserRole.ADMIN, UserStatus.ACTIVE);
+
+        service.retirarPorBajaDeStaff(ADMINA);
+
+        verify(loadConversacionPort, never()).deSoporte();
+        verify(quitarParticipantePort, never()).quitar(any(), any());
+    }
+
+    @Test
+    @DisplayName("un usuario que ya no existe no es staff: se le retiran las filas igual")
+    void unUsuarioQueYaNoExisteNoEsStaff() {
+        when(userSummaryFinder.findById(ADMINA)).thenReturn(Optional.empty());
+        Conversacion deAna = soporteDe(ANA);
+        when(loadConversacionPort.deSoporte()).thenReturn(List.of(deAna));
+        when(esParticipantePort.esParticipante(deAna.id(), ADMINA)).thenReturn(true);
+
+        service.retirarPorBajaDeStaff(ADMINA);
+
+        verify(quitarParticipantePort).quitar(deAna.id(), ADMINA);
+    }
+
     // ── 5. Relleno de los aprendices que ya estaban ─────────────────────────────────────────
 
     @Test

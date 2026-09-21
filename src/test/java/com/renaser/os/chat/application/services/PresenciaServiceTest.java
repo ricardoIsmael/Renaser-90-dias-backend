@@ -11,6 +11,10 @@ import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -161,8 +165,33 @@ class PresenciaServiceTest {
             }
         };
 
+        /* Nadie de este test es staff administrativo y aca no hay ninguna conversacion de
+           SOPORTE: la rama nueva del guard no se activa y el finder solo esta para armar el
+           servicio. La revocacion del soporte la fija RevocacionDeSoportePorBajaDeRolTest. */
+        UserSummaryFinder usuarios = new UserSummaryFinder() {
+            @Override
+            public Optional<UserSummary> findById(UserId id) {
+                return Optional.of(new UserSummary(id, "Alguien", null, UserRole.TRAINEE, UserStatus.ACTIVE));
+            }
+
+            @Override
+            public Map<UserId, UserSummary> findByIds(Collection<UserId> ids) {
+                return Map.of();
+            }
+
+            @Override
+            public List<UserSummary> aprendicesActivos() {
+                return List.of();
+            }
+
+            @Override
+            public Optional<UserSummary> findByEmail(String email) {
+                return Optional.empty();
+            }
+        };
+
         servicio = new PresenciaService(presencia, fanout, conversacionesDe, roster, conversaciones,
-                esParticipante, pertenencia);
+                esParticipante, pertenencia, usuarios);
     }
 
     private void siRedisCaidoFallar() {
