@@ -8,6 +8,7 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.application.ports.in.user.RequestAccountDeletionUseCase.RequestAccountDeletionCommand;
+import com.renaser.os.users.application.ports.out.accountrequest.DeleteAccountRequestPort;
 import com.renaser.os.users.application.ports.out.user.DeleteUserPort;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.application.ports.out.user.RutasDeAlmacenamientoDeCuentaPort;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.util.List;
@@ -56,17 +58,27 @@ class AccountDeletionServiceTest {
     @Mock
     private DeleteUserPort deleteUserPort;
     @Mock
+    private DeleteAccountRequestPort deleteAccountRequestPort;
+    @Mock
     private RutasDeAlmacenamientoDeCuentaPort rutasDeAlmacenamientoPort;
     @Mock
     private AlmacenamientoPort almacenamientoPort;
+    /**
+     * Basta un mock: {@code TransactionTemplate} le pide el status, corre el bloque y le pide
+     * commit (o rollback y repropaga si el bloque tira). Lo que esta prueba mira es que los dos
+     * borrados ocurran y en que orden — que el limite transaccional sea REAL lo verifica
+     * {@code AccountDeletionIntegrationTest} contra Postgres.
+     */
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private AccountDeletionService service;
 
     @BeforeEach
     void setUp() {
         service = new AccountDeletionService(loadUserPort, saveUserPort, deleteUserPort,
-                rutasDeAlmacenamientoPort, almacenamientoPort,
-                new RequireActiveUserGuard(loadUserPort), CLOCK, DIAS_DE_GRACIA);
+                deleteAccountRequestPort, rutasDeAlmacenamientoPort, almacenamientoPort,
+                new RequireActiveUserGuard(loadUserPort), transactionManager, CLOCK, DIAS_DE_GRACIA);
         org.mockito.Mockito.lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -386,6 +398,77 @@ class AccountDeletionServiceTest {
         assertThat(resultado.purgadas()).isEqualTo(1);
         verify(rutasDeAlmacenamientoPort, never()).referenciadasPorTerceros(any(), any());
         verify(almacenamientoPort, never()).borrar(any());
+        verify(deleteUserPort).deleteById(id);
+    }
+
+    // ─── purgeExpired: la solicitud de alta ─────────────────────────────────
+    //
+    // `solicitudes_cuenta` no cuelga de `usuarios` por ninguna FK borrable: `usuario_id` no
+    // tiene FK y las dos que la tienen son ON DELETE SET NULL. Si el barrido no la nombra, el
+    // correo, el nombre, la IP y el sujeto del proveedor del ex usuario sobreviven a su baja.
+
+    @Test
+    @DisplayName("purgeExpired borra tambien la solicitud de alta de la cuenta purgada")
+    void purgeExpiredBorraLaSolicitudDeAlta() {
+        UserId id = UserId.of(UUID.randomUUID());
+        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(List.of());
+
+        var resultado = service.purgeExpired();
+
+        assertThat(resultado.purgadas()).isEqualTo(1);
+        verify(deleteAccountRequestPort).borrarPorUsuario(id);
+        verify(deleteUserPort).deleteById(id);
+    }
+
+    /**
+     * El orden no es cosmetico. La fila de `usuarios` es lo unico que hace que el barrido de
+     * manana vuelva a mirar esta cuenta ({@code pendingDeletionUpTo} lee de ahi), asi que tiene
+     * que irse ULTIMA: un corte entre los dos borrados con el usuario ya borrado dejaria la
+     * solicitud huerfana para siempre, que es exactamente el agujero que se esta cerrando.
+     */
+    @Test
+    @DisplayName("la solicitud se borra ANTES que la fila de usuarios: la fila raiz es lo que hace reintentar")
+    void purgeExpiredBorraLaSolicitudAntesQueLaFilaDeUsuarios() {
+        UserId id = UserId.of(UUID.randomUUID());
+        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(List.of());
+
+        service.purgeExpired();
+
+        InOrder orden = inOrder(deleteAccountRequestPort, deleteUserPort);
+        orden.verify(deleteAccountRequestPort).borrarPorUsuario(id);
+        orden.verify(deleteUserPort).deleteById(id);
+    }
+
+    @Test
+    @DisplayName("si falla el borrado de la solicitud, la cuenta NO se purga: se reintenta manana entera")
+    void purgeExpiredNoBorraElUsuarioSiFallaLaSolicitud() {
+        UserId id = UserId.of(UUID.randomUUID());
+        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(List.of());
+        doThrow(new RuntimeException("postgres caido")).when(deleteAccountRequestPort).borrarPorUsuario(id);
+
+        var resultado = service.purgeExpired();
+
+        assertThat(resultado.purgadas()).isZero();
+        assertThat(resultado.fallidas()).isEqualTo(1);
+        verify(deleteUserPort, never()).deleteById(any());
+    }
+
+    /** Una cuenta sin solicitud —el staff que entra por {@code POST /api/v1/users/invite} no
+     * tiene ninguna— se purga igual: el borrado por usuario es idempotente. */
+    @Test
+    @DisplayName("una cuenta sin solicitud de alta se purga igual")
+    void purgeExpiredSinSolicitudSePurgaIgual() {
+        UserId id = UserId.of(UUID.randomUUID());
+        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(List.of());
+
+        var resultado = service.purgeExpired();
+
+        assertThat(resultado.purgadas()).isEqualTo(1);
+        assertThat(resultado.fallidas()).isZero();
         verify(deleteUserPort).deleteById(id);
     }
 }
