@@ -11,4 +11,8 @@ interface SpringDataTokenPushRepository extends JpaRepository<TokenPushJpaEntity
     Optional<TokenPushJpaEntity> findByToken(String token);
 
     List<TokenPushJpaEntity> findByUsuarioId(UUID usuarioId);
+
+    /** Revocacion en bloque: todas las suscripciones de una cuenta (ver
+     * {@code BorrarTokensPushDeUsuarioPort}). Devuelve cuantas filas se borraron. */
+    int deleteByUsuarioId(UUID usuarioId);
 }

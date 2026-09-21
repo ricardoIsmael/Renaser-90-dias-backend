@@ -90,4 +90,31 @@ class TokenPushPersistenceAdapterTest {
         assertThat(adapter.tokensDe(UserId.of(usuarioId))).extracting(TokenPush::token)
                 .containsExactlyInAnyOrder("tok-a", "tok-b");
     }
+
+    @Test
+    void borrarDeSacaSoloLosDispositivosDeEsaCuenta() {
+        adapter.upsertPorToken(
+                TokenPush.registrar(nuevoId(), UserId.of(usuarioId), "tok-a", PlataformaPush.IOS, CLOCK));
+        adapter.upsertPorToken(
+                TokenPush.registrar(nuevoId(), UserId.of(usuarioId), "tok-b", PlataformaPush.ANDROID, CLOCK));
+        adapter.upsertPorToken(
+                TokenPush.registrar(nuevoId(), UserId.of(otroUsuarioId), "tok-ajeno", PlataformaPush.IOS, CLOCK));
+
+        int borrados = adapter.borrarDe(UserId.of(usuarioId));
+
+        assertThat(borrados).isEqualTo(2);
+        assertThat(adapter.tokensDe(UserId.of(usuarioId))).isEmpty();
+        // Lo que NO se toca: revocar a una persona no puede dejar sin push a otra.
+        assertThat(adapter.tokensDe(UserId.of(otroUsuarioId))).extracting(TokenPush::token)
+                .containsExactly("tok-ajeno");
+    }
+
+    @Test
+    void borrarDeEsIdempotente() {
+        adapter.upsertPorToken(
+                TokenPush.registrar(nuevoId(), UserId.of(usuarioId), "tok-a", PlataformaPush.IOS, CLOCK));
+
+        assertThat(adapter.borrarDe(UserId.of(usuarioId))).isEqualTo(1);
+        assertThat(adapter.borrarDe(UserId.of(usuarioId))).isZero();
+    }
 }

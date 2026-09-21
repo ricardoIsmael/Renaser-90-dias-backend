@@ -1,5 +1,6 @@
 package com.renaser.os.users.application.services;
 
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.in.admin.ListStaffUseCase;
 import com.renaser.os.users.application.ports.in.admin.UpdateStaffProfileUseCase;
@@ -7,8 +8,10 @@ import com.renaser.os.users.application.ports.in.admin.UpdateUserStatusUseCase;
 import com.renaser.os.users.application.ports.in.autenticacion.CerrarTodasLasSesionesUseCase;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
+import com.renaser.os.users.api.EstadoDeCuentaCambiadoEvent;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.domain.model.user.User;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,13 +32,18 @@ class StaffAdminService implements ListStaffUseCase, UpdateUserStatusUseCase, Up
     private final SaveUserPort saveUserPort;
     private final RequireAdminGuard requireAdminGuard;
     private final CerrarTodasLasSesionesUseCase cerrarTodasLasSesionesUseCase;
+    private final ApplicationEventPublisher events;
+    private final Clock clock;
 
     StaffAdminService(LoadUserPort loadUserPort, SaveUserPort saveUserPort, RequireAdminGuard requireAdminGuard,
-                       CerrarTodasLasSesionesUseCase cerrarTodasLasSesionesUseCase) {
+                       CerrarTodasLasSesionesUseCase cerrarTodasLasSesionesUseCase,
+                       ApplicationEventPublisher events, Clock clock) {
         this.loadUserPort = loadUserPort;
         this.saveUserPort = saveUserPort;
         this.requireAdminGuard = requireAdminGuard;
         this.cerrarTodasLasSesionesUseCase = cerrarTodasLasSesionesUseCase;
+        this.events = events;
+        this.clock = clock;
     }
 
     /** Listado sin un recurso previo por id: el gate de admin va primero, no hay orden que respetar. */
@@ -48,12 +56,28 @@ class StaffAdminService implements ListStaffUseCase, UpdateUserStatusUseCase, Up
         return new PaginaStaff(contenido, total, command.page(), command.size());
     }
 
+    /**
+     * <b>Revocar es revocar por todos lados.</b> Las sesiones se cortan aca mismo porque viven en
+     * este modulo; las demas credenciales de entrega viven en otros (hoy: los tokens push de
+     * {@code notifications}) y se enteran por {@link EstadoDeCuentaCambiadoEvent}. No se las llama
+     * directo a proposito: `notifications` ya depende de `users.api` para preguntar por el estado
+     * de una cuenta, asi que una llamada en el otro sentido cerraria un ciclo entre modulos y
+     * {@code ArchitectureTest.modulesDoNotLeakInternals} rompe el build. El evento es el mismo
+     * camino que ya usan {@code UsuarioRegistradoEvent} y {@code RolDeUsuarioCambiadoEvent}.
+     *
+     * <p>El evento es el <i>cinturon</i>, no el control: llega despues del commit y de forma
+     * asincrona, asi que quien tiene que impedir la entrega en el acto es el emisor del push
+     * ({@code NotificacionService.intentarPush}, que consulta el estado del destinatario). Esto
+     * hace que ademas no quede la credencial guardada esperando.
+     */
     @Override
     @Transactional
     public void updateStatus(UpdateUserStatusCommand command) {
         User target = requireTarget(command.targetUserId());
         requireAdminGuard.requireAdminActivo(command.actorId());
 
+        // Se lee ANTES de applyStatus, que muta el agregado en sitio.
+        UserStatus estadoAnterior = target.status();
         applyStatus(target, command.newStatus());
         saveUserPort.save(target);
 
@@ -61,6 +85,12 @@ class StaffAdminService implements ListStaffUseCase, UpdateUserStatusUseCase, Up
         // corta accesos futuros.
         if (command.newStatus() == UserStatus.SUSPENDED) {
             cerrarTodasLasSesionesUseCase.cerrarTodas(target.id());
+        }
+        // Solo si cambio de verdad: reasignar el mismo estado no es una novedad (mismo criterio
+        // que UserAccountService.updateRole con RolDeUsuarioCambiadoEvent).
+        if (estadoAnterior != command.newStatus()) {
+            events.publishEvent(new EstadoDeCuentaCambiadoEvent(target.id(), estadoAnterior,
+                    command.newStatus(), clock.now()));
         }
     }
 

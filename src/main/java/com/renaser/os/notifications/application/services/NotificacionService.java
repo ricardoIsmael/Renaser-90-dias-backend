@@ -81,6 +81,11 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
      * OTROS modulos sobre un destinatario. Bloquear aca por cuenta suspendida rompería el
      * flujo del outbox de Modulith — un suspendido igual debe acumular su bandeja, lo que no
      * puede es leerla ni operarla (E-38).
+     *
+     * <p><b>Eso vale para la FILA, no para el push.</b> Las dos decisiones viajaban pegadas en
+     * esta misma llamada y no son la misma: acumular es guardar algo que el suspendido no puede
+     * leer, entregar es ponerselo en la pantalla del telefono con la cuenta ya revocada. El
+     * estado del destinatario se consulta en {@link #intentarPush}, no aca.
      */
     @Override
     @Transactional
@@ -177,9 +182,36 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
         });
     }
 
+    /**
+     * <b>La fila se acumula para cualquiera; la ENTREGA no.</b> Es la mitad de E-38 que faltaba
+     * separar: guardar la notificacion de un suspendido es correcto (la junta hasta que vuelva),
+     * pero empujarla a su telefono es entregarle contenido con la cuenta ya revocada. Suspender
+     * corta TODAS las sesiones en el acto (docs/MODULO_AUTH.md §7.4) y {@link #listar} le devuelve
+     * 403 a esa misma fila; el push salia igual, y el aviso de acompañamiento lleva el nombre del
+     * aprendiz y su incumplimiento — datos de OTRA persona.
+     *
+     * <p>Este es el unico punto del sistema por donde sale un push ({@code PushPort.enviar} tiene
+     * un solo llamador), asi que la regla puesta aca cubre tambien a los listeners que se escriban
+     * despues, y a las cuentas que ya estaban suspendidas cuando esto se desplego.
+     *
+     * <p>El orden importa: si no hay tokens no hay nada que entregar, y preguntar por el estado de
+     * un destinatario al que igual no le ibamos a mandar nada seria una consulta por emision para
+     * nada — la enorme mayoria de las emisiones son de gente sin push registrado.
+     * {@code DespachadorPush.enviar} ya devolvia lista vacia para una lista vacia, asi que cortar
+     * antes no cambia el resultado.
+     */
     private void intentarPush(EmitirNotificacionCommand command) {
         try {
             var tokens = loadTokenPushPort.tokensDe(command.usuarioId());
+            if (tokens.isEmpty()) {
+                return;
+            }
+            if (!actorGuard.puedeRecibirEntregas(command.usuarioId())) {
+                log.info("[notifications.NotificacionService] destinatario {} sin cuenta vigente: "
+                        + "la notificacion {} queda en su bandeja, el push no sale",
+                        command.usuarioId(), command.tipo());
+                return;
+            }
             List<ResultadoEnvioPush> resultados = pushPort.enviar(tokens, command.titulo(), command.cuerpo(),
                     command.rutaApp());
             procesarResultados(command, resultados);

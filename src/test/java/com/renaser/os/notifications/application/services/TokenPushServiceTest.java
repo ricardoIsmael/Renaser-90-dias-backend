@@ -1,6 +1,7 @@
 package com.renaser.os.notifications.application.services;
 
 import com.renaser.os.notifications.application.ports.in.tokenpush.RegistrarTokenPushUseCase.RegistrarTokenPushCommand;
+import com.renaser.os.notifications.application.ports.out.tokenpush.BorrarTokensPushDeUsuarioPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.UpsertTokenPushPort;
 import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
@@ -42,6 +43,8 @@ class TokenPushServiceTest {
     @Mock
     private UpsertTokenPushPort upsertTokenPushPort;
     @Mock
+    private BorrarTokensPushDeUsuarioPort borrarTokensPushDeUsuarioPort;
+    @Mock
     private UserSummaryFinder userSummaryFinder;
     @Mock
     private IdGenerator idGenerator;
@@ -50,8 +53,8 @@ class TokenPushServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TokenPushService(upsertTokenPushPort, new ActorNotificacionesGuard(userSummaryFinder),
-                CLOCK, idGenerator);
+        service = new TokenPushService(upsertTokenPushPort, borrarTokensPushDeUsuarioPort,
+                new ActorNotificacionesGuard(userSummaryFinder), CLOCK, idGenerator);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(upsertTokenPushPort.upsertPorToken(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(userSummaryFinder.findById(any())).thenAnswer(inv -> Optional.of(
@@ -95,5 +98,22 @@ class TokenPushServiceTest {
                 new RegistrarTokenPushCommand(usuario, "expo-tok-1", PlataformaPush.IOS)))
                 .isInstanceOf(java.util.NoSuchElementException.class);
         verify(upsertTokenPushPort, never()).upsertPorToken(any());
+    }
+
+    /**
+     * Al reves que {@code registrar}: revocar NO exige cuenta activa, porque se invoca justo
+     * cuando la cuenta dejo de estarlo. Pedir una cuenta activa para revocarla seria pedir que
+     * nunca se revoque nada.
+     */
+    @Test
+    @DisplayName("revocarDe() borra los tokens de una cuenta SUSPENDIDA (no exige cuenta activa)")
+    void revocarNoExigeCuentaActiva() {
+        UserId suspendido = UserId.of(UUID.randomUUID());
+        when(borrarTokensPushDeUsuarioPort.borrarDe(suspendido)).thenReturn(2);
+
+        assertThat(service.revocarDe(suspendido)).isEqualTo(2);
+        verify(borrarTokensPushDeUsuarioPort).borrarDe(suspendido);
+        // La asercion que lo fija: no se le pregunta el estado a nadie antes de revocar.
+        verify(userSummaryFinder, never()).findById(any());
     }
 }

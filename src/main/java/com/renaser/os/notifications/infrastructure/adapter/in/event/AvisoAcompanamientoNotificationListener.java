@@ -15,9 +15,11 @@ import org.springframework.stereotype.Component;
  * {@code origenEventoId} y el índice único de {@code notificaciones} rechaza la segunda. Eso
  * cubre además la reentrega del outbox de Modulith, que es at-least-once.
  *
- * <p>El texto nombra al alumno pero no dice qué incumplió. El detalle se carga dentro de la app
- * contra un endpoint que revalida permisos: si el mentor rotó entre el aviso y el toque, no
- * debería poder leer nada (plan.md §9).
+ * <p>El texto nombra al alumno y dice qué incumplió —cuántas evidencias debe o cuántos días lleva
+ * sin actividad—; el javadoc decía que no lo decía. Lo que sí se queda adentro de la app, contra un
+ * endpoint que revalida permisos, es el detalle: si el mentor rotó entre el aviso y el toque, no
+ * debería poder leer nada (plan.md §9). Y como ese mismo texto sale además por push, que el
+ * destinatario siga teniendo cuenta vigente lo comprueba {@code NotificacionService.intentarPush}.
  */
 @Component
 class AvisoAcompanamientoNotificationListener {

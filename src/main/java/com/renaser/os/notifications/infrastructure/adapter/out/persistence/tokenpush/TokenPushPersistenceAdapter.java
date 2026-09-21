@@ -1,6 +1,7 @@
 package com.renaser.os.notifications.infrastructure.adapter.out.persistence.tokenpush;
 
 import com.renaser.os.notifications.application.ports.out.push.DesactivarTokenPushPort;
+import com.renaser.os.notifications.application.ports.out.tokenpush.BorrarTokensPushDeUsuarioPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPushPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.UpsertTokenPushPort;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
@@ -14,7 +15,8 @@ import java.util.List;
 import java.util.UUID;
 
 @Component
-class TokenPushPersistenceAdapter implements UpsertTokenPushPort, LoadTokenPushPort, DesactivarTokenPushPort {
+class TokenPushPersistenceAdapter implements UpsertTokenPushPort, LoadTokenPushPort, DesactivarTokenPushPort,
+        BorrarTokensPushDeUsuarioPort {
 
     /**
      * C-10 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): el UPSERT
@@ -90,5 +92,11 @@ class TokenPushPersistenceAdapter implements UpsertTokenPushPort, LoadTokenPushP
     @Override
     public void desactivar(com.renaser.os.notifications.domain.model.tokenpush.TokenPushId tokenId) {
         repository.deleteById(tokenId.value());
+    }
+
+    /** Idempotente igual que {@link #desactivar}: una cuenta sin tokens devuelve 0, no falla. */
+    @Override
+    public int borrarDe(UserId usuarioId) {
+        return repository.deleteByUsuarioId(usuarioId.value());
     }
 }
