@@ -14,6 +14,7 @@ import com.renaser.os.community.domain.model.acompanamiento.TipoCelula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -47,6 +48,16 @@ class ConfiguracionMentoriaServiceTest {
     private static final CohorteId COHORTE = CohorteId.of(UUID.randomUUID());
     private static final CelulaId RECEPCION = CelulaId.of(UUID.randomUUID());
     private static final UserId ADMIN = UserId.of(UUID.randomUUID());
+    /**
+     * Los actores que el guard tiene que rechazar. MENTOR y MENTOR_LEAD son los dos que el
+     * interceptor de permisos deja pasar igual (falla-abierto para MENTOR, modo sombra para
+     * MENTOR_LEAD), asi que si el servicio no los frena no los frena nadie.
+     */
+    private static final UserId MENTOR = UserId.of(UUID.fromString("00000000-0000-0000-0000-0000000000b1"));
+    private static final UserId LIDER_MENTORES = UserId.of(UUID.fromString("00000000-0000-0000-0000-0000000000b2"));
+    private static final UserId ADMIN_SUSPENDIDO = UserId.of(UUID.fromString("00000000-0000-0000-0000-0000000000b3"));
+    /** Un grupo REGULAR de la misma cohorte: el destino que el atacante elegia. */
+    private static final CelulaId GRUPO_REGULAR = CelulaId.of(UUID.fromString("00000000-0000-0000-0000-0000000000c1"));
 
     private static final UserId GUIA_A = UserId.of(UUID.fromString("00000000-0000-0000-0000-0000000000a1"));
     private static final UserId GUIA_B = UserId.of(UUID.fromString("00000000-0000-0000-0000-0000000000a2"));
@@ -68,13 +79,25 @@ class ConfiguracionMentoriaServiceTest {
                 4, 3, RECEPCION, 1));
         banco.grupo(RECEPCION, COHORTE, TipoCelula.RECEPCION, null, AHORA);
 
+        banco.grupo(GRUPO_REGULAR, COHORTE, TipoCelula.REGULAR, null, AHORA);
+
         persona(GUIA_A, "ana@renaser.test", "Ana Guia", UserStatus.ACTIVE);
         persona(GUIA_B, "beto@renaser.test", "Beto Guia", UserStatus.ACTIVE);
         persona(SUSPENDIDO, "carla@renaser.test", "Carla Suspendida", UserStatus.SUSPENDED);
+
+        // El actor de las pruebas existe de verdad en el padron: el guard lo consulta.
+        persona(ADMIN, "admin@renaser.test", "Ada Admin", UserRole.ADMIN, UserStatus.ACTIVE);
+        persona(MENTOR, "mario@renaser.test", "Mario Mentor", UserRole.MENTOR, UserStatus.ACTIVE);
+        persona(LIDER_MENTORES, "lia@renaser.test", "Lia Lider", UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
+        persona(ADMIN_SUSPENDIDO, "sara@renaser.test", "Sara Admin", UserRole.ADMIN, UserStatus.SUSPENDED);
     }
 
     private void persona(UserId id, String email, String nombre, UserStatus estado) {
-        UserSummary perfil = new UserSummary(id, nombre, null, UserRole.ADMIN, estado);
+        persona(id, email, nombre, UserRole.ADMIN, estado);
+    }
+
+    private void persona(UserId id, String email, String nombre, UserRole rol, UserStatus estado) {
+        UserSummary perfil = new UserSummary(id, nombre, null, rol, estado);
         porId.put(id, perfil);
         porEmail.put(email, perfil);
     }
@@ -302,5 +325,104 @@ class ConfiguracionMentoriaServiceTest {
                 List.of(new ReferenciaDeUsuario(GUIA_A.value(), null)))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("no pertenece a la cohorte");
+    }
+
+    @Test
+    @DisplayName("un grupo REGULAR de la cohorte no sirve de recepcion")
+    void grupoRegularNoSirveDeRecepcion() {
+        assertThatThrownBy(() -> servicio().reemplazarGuias(new ReemplazarGuias(ADMIN, COHORTE,
+                GRUPO_REGULAR.value(), List.of(new ReferenciaDeUsuario(GUIA_A.value(), null)))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("no es de recepcion");
+
+        assertThat(guiasVigentes()).isEmpty();
+        assertThat(banco.composicionesAvisadas).isEmpty();
+    }
+
+    @Test
+    @DisplayName("el motivo de una cuenta inactiva no devuelve el nombre completo de esa cuenta")
+    void elRechazoNoFiltraElNombreDeLaCuenta() {
+        assertThatThrownBy(() -> servicio().reemplazarGuias(new ReemplazarGuias(ADMIN, COHORTE, null,
+                List.of(new ReferenciaDeUsuario(null, "carla@renaser.test")))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("no esta activa")
+                .hasMessageContaining("carla@renaser.test")
+                .hasMessageNotContaining("Carla Suspendida");
+    }
+
+    // ── autorizacion ────────────────────────────────────────────────────────
+    // La anotacion @RequiresPermission(MANAGE_COHORTS) del controller NO se hace cumplir para
+    // estos actores: el interceptor devuelve true sin comparar nada para MENTOR y deja pasar a
+    // MENTOR_LEAD en modo sombra, que es el default. El unico control real es este guard.
+
+    @Test
+    @DisplayName("un MENTOR no lee la politica de una cohorte")
+    void mentorNoConsultaLaPolitica() {
+        assertThatThrownBy(() -> servicio().consultar(MENTOR, COHORTE))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("un MENTOR no reconfigura la politica de una cohorte")
+    void mentorNoReconfiguraLaPolitica() {
+        assertThatThrownBy(() -> servicio().reconfigurar(new ReconfigurarPolitica(MENTOR, COHORTE,
+                15, "SEMANAL", "America/Lima", 2, 1, 1)))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        // Y no llego a escribir: el guard es la primera linea, antes del agregado.
+        assertThat(guardada).isNull();
+        assertThat(banco.politicas.get(COHORTE).capacidadCelula()).isEqualTo(10);
+    }
+
+    /**
+     * El hallazgo completo, de punta a punta: el mentor se designa GUIA sobre un grupo ajeno de
+     * la cohorte. Si la designacion se abriera, el chat de ese grupo lo daria por integrante
+     * (AcompanamientoFinder.esIntegranteVigente no filtra por funcion) y el evento de composicion
+     * lo sumaria a participantes_conversacion.
+     */
+    @Test
+    @DisplayName("un MENTOR no se designa guia de un grupo ajeno")
+    void mentorNoSeDesignaGuia() {
+        assertThatThrownBy(() -> servicio().reemplazarGuias(new ReemplazarGuias(MENTOR, COHORTE,
+                GRUPO_REGULAR.value(), List.of(new ReferenciaDeUsuario(MENTOR.value(), null)))))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        assertThat(banco.asignaciones).isEmpty();
+        assertThat(guiasVigentes()).isEmpty();
+        // Ni se avisa al chat: sin evento, el grupo ajeno no aparece en su bandeja.
+        assertThat(banco.composicionesAvisadas).isEmpty();
+    }
+
+    @Test
+    @DisplayName("MENTOR_LEAD tampoco administra: el nombre no da el permiso")
+    void liderDeMentoresTampocoConfigura() {
+        assertThatThrownBy(() -> servicio().consultar(LIDER_MENTORES, COHORTE))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> servicio().reconfigurar(new ReconfigurarPolitica(LIDER_MENTORES, COHORTE,
+                15, "SEMANAL", "America/Lima", 2, 1, 1)))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> servicio().reemplazarGuias(new ReemplazarGuias(LIDER_MENTORES, COHORTE, null,
+                List.of(new ReferenciaDeUsuario(GUIA_A.value(), null)))))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        assertThat(guardada).isNull();
+        assertThat(banco.asignaciones).isEmpty();
+    }
+
+    @Test
+    @DisplayName("un ADMIN suspendido no configura nada aunque su sesion siga viva")
+    void adminSuspendidoNoConfigura() {
+        assertThatThrownBy(() -> servicio().consultar(ADMIN_SUSPENDIDO, COHORTE))
+                .isInstanceOf(NotAuthorizedException.class)
+                .hasMessageContaining("suspendida");
+        assertThatThrownBy(() -> servicio().reconfigurar(new ReconfigurarPolitica(ADMIN_SUSPENDIDO, COHORTE,
+                15, "SEMANAL", "America/Lima", 2, 1, 1)))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> servicio().reemplazarGuias(new ReemplazarGuias(ADMIN_SUSPENDIDO, COHORTE, null,
+                List.of(new ReferenciaDeUsuario(GUIA_A.value(), null)))))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        assertThat(guardada).isNull();
+        assertThat(banco.asignaciones).isEmpty();
     }
 }

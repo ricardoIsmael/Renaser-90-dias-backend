@@ -18,7 +18,9 @@ import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
+import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -78,12 +80,14 @@ public class ConfiguracionMentoriaService implements ConfigurarMentoriaUseCase {
     @Override
     @Transactional(readOnly = true)
     public PoliticaConfigurada consultar(UserId actorId, CohorteId cohorteId) {
+        requireAdmin(actorId);
         return aRespuesta(politicaDe(cohorteId));
     }
 
     @Override
     @Transactional
     public PoliticaConfigurada reconfigurar(ReconfigurarPolitica comando) {
+        requireAdmin(comando.actorId());
         PoliticaMentoria politica = politicaDe(comando.cohorteId());
         // reconfigurar() valida rangos y zona, y rechaza si la version no coincide.
         politica.reconfigurar(comando.capacidadCelula(), cadencia(comando.cadenciaRotacion()),
@@ -99,6 +103,7 @@ public class ConfiguracionMentoriaService implements ConfigurarMentoriaUseCase {
     @Override
     @Transactional
     public GuiasConfigurados reemplazarGuias(ReemplazarGuias comando) {
+        requireAdmin(comando.actorId());
         PoliticaMentoria politica = politicaDe(comando.cohorteId());
 
         CelulaId recepcion = comando.celulaRecepcionId() != null
@@ -112,6 +117,14 @@ public class ConfiguracionMentoriaService implements ConfigurarMentoriaUseCase {
                 .orElseThrow(() -> new NoSuchElementException("Celula de recepcion no encontrada: " + recepcion));
         if (!celula.cohorteId().equals(comando.cohorteId())) {
             throw new IllegalArgumentException("Esa celula no pertenece a la cohorte indicada");
+        }
+        // Designar guias es designar LA RECEPCION, no un grupo cualquiera de la cohorte. Sin esto,
+        // una asignacion GUIA sobre un grupo regular concede la lectura de su chat, porque
+        // AcompanamientoFinder.esIntegranteVigente no filtra por funcion. Se admite la celula que
+        // la politica YA tiene designada aunque sea REGULAR: hay cohortes anteriores a V45 cuya
+        // recepcion quedo sin tipar, y bloquearlas dejaria sin forma de administrar sus guias.
+        if (!celula.esRecepcion() && !recepcion.equals(politica.celulaRecepcionId())) {
+            throw new IllegalArgumentException("Esa celula no es de recepcion");
         }
 
         // TODA la lista primero. Si una referencia falla, no se escribio nada todavia.
@@ -174,7 +187,8 @@ public class ConfiguracionMentoriaService implements ConfigurarMentoriaUseCase {
                 continue;
             }
             if (encontrado.get().status() != UserStatus.ACTIVE) {
-                problemas.add("La cuenta de " + encontrado.get().fullName() + " no esta activa");
+                problemas.add("La cuenta de " + (porId ? referencia.userId() : referencia.email())
+                        + " no esta activa");
                 continue;
             }
             // Repetir a la misma persona no es un error: la lista se deduplica y queda una vez.
@@ -185,6 +199,30 @@ public class ConfiguracionMentoriaService implements ConfigurarMentoriaUseCase {
             throw new IllegalArgumentException(String.join("; ", problemas));
         }
         return resueltos;
+    }
+
+    /**
+     * Mismo guard que {@code CohorteService}/{@code CelulaService}, los hermanos de
+     * {@code /api/v1/admin/cohorts} con el mismo {@code MANAGE_COHORTS}: cuenta ACTIVE y rol
+     * ADMIN/ALCHEMIST. Tiene que vivir aca porque {@code @RequiresPermission} no lo hace cumplir
+     * — {@code PermissionEnforcementInterceptor} falla-abierto para MENTOR/ADMIN/ALCHEMIST y deja
+     * pasar a MENTOR_LEAD en modo sombra (el default), y {@code SecurityConfig} solo exige sesion
+     * en esa ruta. Va como PRIMERA linea de los tres casos de uso, igual que en los hermanos: el
+     * actor es el sujeto de la operacion, no un tercero cuyo rol se consulta, asi que no aplica el
+     * orden recurso-primero de E-42/CM-19 (que existe para {@code esModerador} y para
+     * {@code RequireAdminGuard}, guards fail-closed que nunca lanzan 404). Ademas, gatear antes de
+     * cargar la celula evita que un actor sin permiso distinga 404 de 403 y use el endpoint como
+     * sonda de existencia de celulas.
+     */
+    private void requireAdmin(UserId actorId) {
+        UserSummary actor = userSummaryFinder.findById(actorId)
+                .orElseThrow(() -> new NoSuchElementException("Actor no encontrado: " + actorId));
+        if (actor.status() != UserStatus.ACTIVE) {
+            throw new NotAuthorizedException("La cuenta esta suspendida");
+        }
+        if (actor.role() != UserRole.ADMIN && actor.role() != UserRole.ALCHEMIST) {
+            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST configuran la mentoria de una cohorte");
+        }
     }
 
     private static CadenciaRotacion cadencia(String valor) {
