@@ -1,6 +1,7 @@
 package com.renaser.os.chat.application.services;
 
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.EnviarMensajeCommand;
+import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.OrigenMedia;
 import com.renaser.os.chat.application.ports.in.mensaje.SolicitarUrlSubidaMediaChatUseCase.SolicitarUrlSubidaMediaChatCommand;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
@@ -108,7 +109,7 @@ class MensajeServiceTest {
 
     private EnviarMensajeCommand comandoDeTexto(UserId actorId) {
         return new EnviarMensajeCommand(actorId, conversacionId, TipoMensaje.TEXTO, "hola", null, null, null, null,
-                null, null);
+                null, null, OrigenMedia.CLIENTE);
     }
 
     @Test
@@ -149,6 +150,111 @@ class MensajeServiceTest {
         // Sin transaccion Spring activa en el test (unit puro): el fanout se dispara
         // sincrono, tras el save — nunca antes.
         verify(publicarMensajeFanoutPort).publicar(any());
+    }
+
+    // ─── De donde puede venir la media de un mensaje ──────────────────────────────────────
+
+    /**
+     * Las dos direcciones del arreglo del 2026-09-21 viven en este bloque, y la de abajo —
+     * compartir SIGUE funcionando— es la que importa tanto como la de arriba: el guard viejo
+     * aceptaba el prefijo `muro/` de forma incondicional justamente para no romper compartir, asi
+     * que un arreglo que se limite a prohibir ese prefijo pasa las pruebas de rechazo y rompe la
+     * funcion. Lo que separa un caso del otro no es la clave, que es identica, sino
+     * {@link OrigenMedia}.
+     */
+    private EnviarMensajeCommand comandoConMedia(String ruta, OrigenMedia origen) {
+        return new EnviarMensajeCommand(activo, conversacionId, TipoMensaje.IMAGEN, null,
+                Mensaje.BUCKET_DEFAULT, ruta, "image/jpeg", null, null, null, origen);
+    }
+
+    /**
+     * El hallazgo, tal cual: el atacante saca la clave del feed —{@code GET /api/v1/wall} devuelve
+     * la URL prefirmada entera y la clave viaja en su camino— y la pega en un POST armado a mano.
+     * Si esto se guarda, {@code urlDeLectura} vuelve a firmarla en CADA listado y para CADA
+     * participante, tambien despues de que el autor la borre (que solo la oculta).
+     */
+    @Test
+    void enviarRechazaLaClaveDeUnaPublicacionDelMuroPegadaAMano() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+        String claveAjena = "muro/fotos/" + UUID.randomUUID() + "/" + UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.enviar(comandoConMedia(claveAjena, OrigenMedia.CLIENTE)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tiene que ser de esta conversacion");
+
+        verify(saveMensajePort, never()).save(any());
+    }
+
+    /**
+     * La regresion del arreglo del 2026-09-18, que hasta hoy no tenia prueba ninguna: con UN SOLO
+     * bucket fisico, la firma del Pacto de Sangre de otra persona es una clave predecible.
+     */
+    @Test
+    void enviarRechazaLaClaveDeOtroModulo() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+        String firmaAjena = "firmas/" + UUID.randomUUID() + "/fase_2.svg";
+
+        assertThatThrownBy(() -> service.enviar(comandoConMedia(firmaAjena, OrigenMedia.CLIENTE)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(saveMensajePort, never()).save(any());
+    }
+
+    @Test
+    void enviarRechazaLaMediaDeOtraConversacion() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+        String deOtroChat = "chat/" + UUID.randomUUID() + "/fotos/" + UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.enviar(comandoConMedia(deOtroChat, OrigenMedia.CLIENTE)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(saveMensajePort, never()).save(any());
+    }
+
+    @Test
+    void enviarAceptaLaMediaSubidaAEstaConversacion() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+        String propia = "chat/" + conversacionId.value() + "/fotos/" + UUID.randomUUID();
+
+        Mensaje enviado = service.enviar(comandoConMedia(propia, OrigenMedia.CLIENTE));
+
+        assertThat(enviado.mediaRuta()).isEqualTo(propia);
+        verify(saveMensajePort).save(any());
+    }
+
+    /**
+     * La direccion que evita romper la funcion: la MISMA clave que se rechaza mas arriba pasa
+     * cuando la derivo el servidor. Compartir referencia el objeto del Muro en vez de copiarlo, y
+     * esa referencia tiene que seguir entrando.
+     */
+    @Test
+    void enviarAceptaLaRutaDelMuroQueDerivoElServidorAlCompartir() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+        String portada = "muro/fotos/" + UUID.randomUUID() + "/" + UUID.randomUUID();
+
+        Mensaje enviado = service.enviar(comandoConMedia(portada, OrigenMedia.MURO_COMPARTIDO));
+
+        assertThat(enviado.mediaRuta()).isEqualTo(portada);
+        verify(saveMensajePort).save(any());
+    }
+
+    /**
+     * Una publicacion creada por `rocks` al completar una Roca con {@code publishedToWall=true}
+     * guarda su media bajo {@code rocas/<autorId>/<rocaId>}, no bajo {@code muro/}
+     * ({@code PublicacionMuroService.exigirRutaDelAutor}). Compartirla al chat estaba ROTA desde el
+     * 2026-09-18, porque el guard viejo solo conocia los prefijos {@code chat/} y {@code muro/} y
+     * reventaba con 400. Mirar el origen en vez del prefijo la arregla de paso, y esta prueba es
+     * la que impide que alguien "endurezca" el guard volviendo a exigir {@code muro/}.
+     */
+    @Test
+    void enviarAceptaLaPortadaDeUnaPublicacionCreadaDesdeUnaRoca() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+        String evidencia = "rocas/" + UUID.randomUUID() + "/" + UUID.randomUUID();
+
+        Mensaje enviado = service.enviar(comandoConMedia(evidencia, OrigenMedia.MURO_COMPARTIDO));
+
+        assertThat(enviado.mediaRuta()).isEqualTo(evidencia);
+        verify(saveMensajePort).save(any());
     }
 
     // ─── URL de subida de media (fotos y audios de chat) ──────────────────────────────────

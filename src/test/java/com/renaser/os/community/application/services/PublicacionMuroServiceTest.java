@@ -13,6 +13,7 @@ import com.renaser.os.community.application.ports.in.publicacion.RestaurarPublic
 import com.renaser.os.community.application.ports.in.publicacion.SolicitarUrlSubidaMediaUseCase.SolicitarUrlSubidaMediaCommand;
 import com.renaser.os.community.application.ports.out.publicacion.EliminarPublicacionPort;
 import com.renaser.os.community.application.ports.out.publicacion.LoadComentarioPort;
+import com.renaser.os.community.api.PublicacionParaCompartir;
 import com.renaser.os.community.application.ports.out.publicacion.LoadPublicacionPort;
 import com.renaser.os.community.application.ports.out.publicacion.ReaccionMuroPort;
 import com.renaser.os.community.application.ports.out.publicacion.SavePublicacionPort;
@@ -229,6 +230,43 @@ class PublicacionMuroServiceTest {
         when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
         service.ocultar(new OcultarPublicacionCommand(admin, publicacion.id()));
         assertThat(publicacion.oculta()).isTrue();
+    }
+
+    // ─── paraCompartir(): la puerta por la que el Muro entra al chat ──────────────────────
+
+    /**
+     * Este metodo lo consume `chat` para compartir una publicacion en una conversacion, y desde el
+     * arreglo del 2026-09-21 es la <b>unica</b> puerta de visibilidad de ese camino: `chat` acepta
+     * una ruta ajena al prefijo de la conversacion solo cuando viene marcada como derivada por el
+     * servidor, y quien pone esa marca la pone justo despues de llamar aca. El filtro de abajo
+     * existia desde el 2026-09-18 pero no tenia NINGUNA prueba; si alguien lo quita, el agujero
+     * vuelve entero sin que se rompa un solo test de `chat`.
+     */
+    @Test
+    @DisplayName("paraCompartir(): una publicacion visible entrega bucket y ruta de su portada")
+    void paraCompartirEntregaLaPortadaDeUnaVisible() {
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        Optional<PublicacionParaCompartir> resultado = service.paraCompartir(publicacion.id().value());
+
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().mediaRuta()).isEqualTo("muro/x/1.jpg");
+        assertThat(resultado.get().tieneImagen()).isTrue();
+    }
+
+    /**
+     * "Borrar mi publicacion" (DELETE /api/v1/wall/{id}) y la moderacion hacen lo mismo: ponen
+     * {@code oculta}. A partir de ahi no hay nada que compartir — ni el texto ni la foto.
+     */
+    @Test
+    @DisplayName("paraCompartir(): una publicacion oculta no se entrega")
+    void paraCompartirNoEntregaUnaOculta() {
+        Publicacion publicacion = publicacionVisible(autor);
+        publicacion.ocultar(CLOCK.now());
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+
+        assertThat(service.paraCompartir(publicacion.id().value())).isEmpty();
     }
 
     @Test
