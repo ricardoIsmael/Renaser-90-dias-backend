@@ -15,6 +15,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -22,6 +25,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -139,6 +143,78 @@ class VerificacionEmailServiceTest {
         var resultado = service.confirmar(new ConfirmarCodigoVerificacionEmailCommand("alguien@renaser.dev", "123456"));
 
         assertThat(resultado.verificationToken()).isEqualTo("token-opaco");
+    }
+
+    /**
+     * Auditoria 2026-09-21 (renaser-users-clave-redis-correo-sin-normalizar). Los dos frenos por
+     * buzon —la espera de 30 s y los 5 por hora— se contaban sobre el String crudo del cuerpo
+     * HTTP. La parte de dominio de una direccion es insensible a mayusculas para la ENTREGA (los
+     * MX se resuelven por DNS, que no distingue caja), asi que {@code alguien@renaser.dev} y
+     * {@code Alguien@RENASER.dev} eran dos contadores en Redis y un solo buzon en el servidor de
+     * correo: cada variacion estrenaba su cupo entero. Con 'gmail.com' son 2^8 = 256 spellings.
+     *
+     * <p>El contador de este test es el de verdad —una clave, un numero, un maximo—, para que lo
+     * que quede clavado no sea un literal sino el invariante: las dos escrituras tienen que caer
+     * en la MISMA cuenta, y el correo tiene que salir a la direccion canonica.
+     */
+    @Test
+    @DisplayName("variar las mayusculas del dominio NO estrena contador propio: la espera se aplica igual")
+    void variarLasMayusculasNoEstrenaContadorPropio() {
+        Map<String, Integer> contadores = new HashMap<>();
+        when(limitarSolicitudesResetPort.registrarIntento(any(), any(), anyInt())).thenAnswer(invocacion -> {
+            String clave = invocacion.getArgument(0);
+            int maximo = invocacion.getArgument(2);
+            return contadores.merge(clave, 1, Integer::sum) <= maximo;
+        });
+        when(codigoVerificacionEmailPort.generarCodigo(eq("alguien@renaser.dev"), any())).thenReturn("123456");
+
+        service.enviar(new EnviarCodigoVerificacionEmailCommand("alguien@renaser.dev", null));
+
+        assertThatThrownBy(() -> service.enviar(
+                new EnviarCodigoVerificacionEmailCommand("Alguien@RENASER.dev", null)))
+                .isInstanceOf(RateLimitExceededException.class)
+                .hasMessageContaining("30");
+
+        assertThat(contadores).containsOnlyKeys("email-verification:espera:alguien@renaser.dev",
+                "email-verification:email:alguien@renaser.dev");
+        verify(enviarEmailPort, times(1)).enviarCodigoVerificacionEmail("alguien@renaser.dev", "123456");
+        verify(enviarEmailPort, never()).enviarCodigoVerificacionEmail(eq("Alguien@RENASER.dev"), any());
+    }
+
+    /**
+     * La otra mitad del mismo arreglo, y la razon por la que enviar() y confirmar() se tocan
+     * juntos: el codigo se guarda bajo la clave canonica, asi que si confirmar() buscara bajo el
+     * texto crudo, a quien escribiera su correo con otra caja no le serviria nunca su codigo.
+     */
+    @Test
+    @DisplayName("confirmar encuentra el codigo aunque el correo vuelva con otras mayusculas")
+    void confirmarUsaLaMismaClaveCanonicaQueEnviar() {
+        when(codigoVerificacionEmailPort.verificarCodigo("alguien@renaser.dev", "123456",
+                VerificacionEmailService.MAX_INTENTOS)).thenReturn(true);
+        when(tokenVerificacionEmailPort.generar("alguien@renaser.dev",
+                VerificacionEmailService.VIGENCIA_TOKEN_VERIFICACION)).thenReturn("token-opaco");
+
+        var resultado = service.confirmar(
+                new ConfirmarCodigoVerificacionEmailCommand("Alguien@RENASER.dev", "123456"));
+
+        assertThat(resultado.verificationToken()).isEqualTo("token-opaco");
+    }
+
+    /**
+     * Efecto de borde del arreglo, escrito a proposito: canonizar con el tipo del dominio tambien
+     * valida la forma. Una direccion que {@code @Email} deja pasar pero que el dominio no acepta
+     * —un dominio sin punto— ya no termina en el adaptador SMTP con 202; rebota como 400
+     * ({@code IllegalArgumentException} -> GlobalExceptionHandler) sin tocar Redis ni el correo.
+     */
+    @Test
+    @DisplayName("una direccion que el dominio no acepta rebota antes de tocar Redis o el correo")
+    void enviarRechazaUnaDireccionQueElDominioNoAcepta() {
+        assertThatThrownBy(() -> service.enviar(
+                new EnviarCodigoVerificacionEmailCommand("alguien@localhost", null)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(limitarSolicitudesResetPort, never()).registrarIntento(any(), any(), anyInt());
+        verify(enviarEmailPort, never()).enviarCodigoVerificacionEmail(any(), any());
     }
 
     @Test
