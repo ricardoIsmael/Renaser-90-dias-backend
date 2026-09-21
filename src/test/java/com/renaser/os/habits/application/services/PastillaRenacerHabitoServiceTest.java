@@ -87,7 +87,7 @@ class PastillaRenacerHabitoServiceTest {
 
         mockProgresoActivo(participanteId);
         when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER)).thenReturn(Optional.of(habito));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(participanteId, habito.id(), HOY))
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(pendiente));
         when(completarRegistroUseCase.completar(any())).thenReturn(completado);
 
@@ -109,7 +109,7 @@ class PastillaRenacerHabitoServiceTest {
 
         mockProgresoActivo(participanteId);
         when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER)).thenReturn(Optional.of(habito));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(participanteId, habito.id(), HOY))
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(pendiente));
         when(completarRegistroUseCase.completar(any())).thenAnswer(inv -> {
             CompletarRegistroCommand c = inv.getArgument(0);
@@ -132,7 +132,7 @@ class PastillaRenacerHabitoServiceTest {
 
         mockProgresoActivo(participanteId);
         when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER)).thenReturn(Optional.of(habito));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(participanteId, habito.id(), HOY))
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(yaCompletado));
 
         var resultado = service().completarDeHoy(participanteId, "otro resumen");
@@ -140,6 +140,34 @@ class PastillaRenacerHabitoServiceTest {
         assertThat(resultado).isPresent();
         assertThat(resultado.get().puntosOtorgados()).isEqualTo(10);
         verify(completarRegistroUseCase, never()).completar(any());
+    }
+
+    /**
+     * Hallazgo de seguridad del 2026-09-21, gemelo del de {@code ClaseDiariaHabitoServiceTest}.
+     * Aca la transaccion que las dos lecturas comparten es la propia (REQUIRES_NEW) que abre
+     * {@code EspirituService.reflejarEnPastillaRenacer} — aislarla del resumen de Espiritu no
+     * separa las lecturas entre si, solo mueve de lugar la transaccion en la que caen las dos.
+     *
+     * <p>La carrera de verdad la prueba {@code ClaseDiariaYPastillaCerrojoIT} contra Postgres
+     * real; este test solo cuida que la lectura sin cerrojo no vuelva por comodidad.
+     */
+    @Test
+    @DisplayName("el track de hoy se busca SOLO con la consulta bloqueada, nunca con la que no bloquea")
+    void nuncaLeeElRegistroSinCerrojo() {
+        UserId participanteId = participante();
+        Habito habito = habitoPastilla();
+        RegistroHabito pendiente = registroPendiente(participanteId, habito.id());
+
+        mockProgresoActivo(participanteId);
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER)).thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
+                .thenReturn(Optional.of(pendiente));
+        when(completarRegistroUseCase.completar(any())).thenReturn(pendiente);
+
+        service().completarDeHoy(participanteId, RESUMEN);
+
+        verify(loadRegistroPort, never()).porParticipanteHabitoYFecha(any(), any(), any());
+        verify(loadRegistroPort).porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY);
     }
 
     @Test
@@ -150,7 +178,7 @@ class PastillaRenacerHabitoServiceTest {
 
         mockProgresoActivo(participanteId);
         when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER)).thenReturn(Optional.of(habito));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(participanteId, habito.id(), HOY))
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.empty());
 
         assertThat(service().completarDeHoy(participanteId, RESUMEN)).isEmpty();

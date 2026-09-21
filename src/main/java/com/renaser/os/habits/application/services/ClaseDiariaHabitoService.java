@@ -25,6 +25,30 @@ import java.util.NoSuchElementException;
  * para el cálculo de puntos, ventana de entrega y evento de dominio — ese cálculo vive en un
  * solo lugar ({@code RegistroService}, ver javadoc de {@code PoliticaHabito}), esta clase solo
  * localiza el track de HOY del hábito {@code DAILY_CLASS} sin exponer su identidad al llamador.
+ *
+ * <p><b>El track de hoy se busca CON cerrojo</b> (hallazgo de seguridad del 2026-09-21, el mismo
+ * que ya se arreglo en {@code PostDiarioComunidadHabitoService}). Antes se buscaba con la
+ * consulta que no bloquea y se confiaba en que el {@code findByIdParaEscritura} de
+ * {@code RegistroService.requireRegistro} serializara la carrera. No lo hacia: esta clase corre
+ * DENTRO del {@code @Transactional} de {@code academy.ClaseDiariaService.completar}, asi que las
+ * dos lecturas viven en la misma transaccion y en el mismo contexto de persistencia, y Hibernate
+ * no rehidrata una entidad ya gestionada cuando una consulta con cerrojo la vuelve a traer (el
+ * detalle, con los metodos, esta en el javadoc de
+ * {@code SpringDataRegistroHabitoRepository.findByParticipanteHabitoYFechaParaEscritura}). El
+ * cerrojo se tomaba igual, pero protegia la escritura y no la decision.
+ *
+ * <p>Lo que costaba: dos {@code POST /api/v1/classroom/clase-diaria} simultaneos —un doble toque,
+ * o el reenvio tras un corte de red— leian ambos {@code PENDIENTE}, los dos esquivaban
+ * {@link #yaCompletadaHoy} y los dos pagaban los puntos de la clase; y el segundo en escribir
+ * pisaba el resumen del primero. O sea que la idempotencia que {@link #yaCompletadaHoy} documenta
+ * como contrato no se cumplia justo cuando hacia falta. Con la lectura bloqueada aqui arriba no
+ * hay ninguna lectura previa sin proteger: el segundo entra serializado, lee {@code COMPLETADO}
+ * y cae en la rama idempotente, que es lo que el contrato promete.
+ *
+ * <p><b>El unico camino concurrente es este mismo endpoint</b>, a diferencia del post diario en
+ * comunidad: {@link com.renaser.os.habits.application.politica.PoliticaClaseDiaria} le cierra a
+ * {@code DAILY_CLASS} la ruta generica {@code POST /habit-tracks/{id}/complete}, asi que no hay un
+ * segundo camino ajeno con el que pelearse. La carrera es contra si mismo, y alcanza.
  */
 @Service
 public class ClaseDiariaHabitoService implements CompletarClaseDiariaHabitoUseCase {
@@ -53,8 +77,11 @@ public class ClaseDiariaHabitoService implements CompletarClaseDiariaHabitoUseCa
                         "No existe en el catalogo un habito con claveSistema=" + CLAVE_SISTEMA_DAILY_CLASS));
 
         LocalDate hoy = fechaHoyEnZonaDe(requireProgresoNoSuspendido(participanteId).timezone());
+        // CON cerrojo, y esta es la PRIMERA lectura de esta fila en la transaccion que abre
+        // academy: la guarda de abajo y el completar() que la sigue tienen que decidir sobre el
+        // estado que el cerrojo protege, no sobre uno leido antes. Ver el javadoc de la clase.
         RegistroHabito registro = loadRegistroPort
-                .porParticipanteHabitoYFecha(participanteId, habitoDailyClass.id(), hoy)
+                .porParticipanteHabitoYFechaParaEscritura(participanteId, habitoDailyClass.id(), hoy)
                 .orElseThrow(() -> new NoSuchElementException("No hay Clase Diaria generada para hoy"));
 
         if (registro.estado() == EstadoRegistro.COMPLETADO) {

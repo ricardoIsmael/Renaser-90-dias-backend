@@ -39,6 +39,38 @@ import java.util.Optional;
  * pausado (D-87) o el habito puede no haberse generado hoy, y su entrega del resumen de
  * Espiritu sigue siendo valida igual. Por eso devuelve {@link Optional#empty()} en vez de
  * lanzar.
+ *
+ * <p><b>El track de hoy se busca CON cerrojo</b> (hallazgo de seguridad del 2026-09-21, el mismo
+ * que ya se arreglo en {@code PostDiarioComunidadHabitoService} y en
+ * {@code ClaseDiariaHabitoService}). Antes se buscaba con la consulta que no bloquea y se
+ * confiaba en que el {@code findByIdParaEscritura} de {@code RegistroService.requireRegistro}
+ * serializara la carrera; no lo hacia, porque Hibernate no rehidrata una entidad ya gestionada
+ * cuando una consulta con cerrojo la vuelve a traer — el detalle, con los metodos, esta en el
+ * javadoc de
+ * {@code SpringDataRegistroHabitoRepository.findByParticipanteHabitoYFechaParaEscritura}.
+ *
+ * <p><b>Que el llamador use REQUIRES_NEW no cambiaba nada, y conviene dejarlo escrito</b> porque
+ * invita a pensar que si. {@code EspirituService.reflejarEnPastillaRenacer} abre una transaccion
+ * propia, pero lo que aisla es la entrega del resumen de Espiritu de un fallo de este habito: la
+ * transaccion nueva es una sola, y las DOS lecturas del registro —la de aca y la de
+ * {@code RegistroService.completar}, que es {@code @Transactional} REQUIRED y se une a ella—
+ * caen dentro de esa misma transaccion nueva y comparten su contexto de persistencia. El
+ * REQUIRES_NEW mueve de lugar la transaccion que las dos lecturas comparten; no las separa.
+ *
+ * <p>Lo que costaba: este habito NO tiene una politica que le cierre la ruta generica (no existe
+ * una {@code PoliticaPastillaRenacer}, a diferencia de {@code PoliticaClaseDiaria}), asi que hay
+ * dos caminos vivos que lo cierran — la entrega del resumen de Espiritu y el
+ * {@code POST /habit-tracks/{id}/complete} de siempre. Simultaneos, los dos leian
+ * {@code PENDIENTE} y los dos pagaban; y como el camino de Espiritu manda su propio resumen,
+ * el segundo en escribir pisaba el texto del primero. Con la lectura bloqueada aqui arriba el
+ * segundo entra serializado, lee {@code COMPLETADO} y devuelve el resultado ya otorgado.
+ *
+ * <p><b>Tomar el cerrojo unas lineas antes no reabre el auto-interbloqueo</b> que advierte el
+ * javadoc de {@code RegistroService.transaccionPropia} y que
+ * {@code EspirituService.reflejarEnPastillaRenacer} ya descarta: el cerrojo sigue cayendo DENTRO
+ * de la transaccion anidada y sobre {@code registros_habito}, una tabla que la transaccion
+ * suspendida (la de {@code registros_espiritu}) no leyo ni bloqueo. No hay fila en comun, y la
+ * ventana del cerrojo crece lo que ocupa una sola comparacion de estado.
  */
 @Service
 public class PastillaRenacerHabitoService implements CompletarPastillaRenacerUseCase {
@@ -69,8 +101,11 @@ public class PastillaRenacerHabitoService implements CompletarPastillaRenacerUse
         }
 
         LocalDate hoy = fechaHoyEnZonaDe(requireProgresoNoSuspendido(participanteId).timezone());
+        // CON cerrojo, y esta es la PRIMERA lectura de esta fila en la transaccion anidada que
+        // abre EspirituService: la guarda de abajo y el completar() que la sigue tienen que
+        // decidir sobre el estado que el cerrojo protege. Ver el javadoc de la clase.
         Optional<RegistroHabito> registro = loadRegistroPort
-                .porParticipanteHabitoYFecha(participanteId, habito.get().id(), hoy);
+                .porParticipanteHabitoYFechaParaEscritura(participanteId, habito.get().id(), hoy);
         if (registro.isEmpty()) {
             return Optional.empty();
         }

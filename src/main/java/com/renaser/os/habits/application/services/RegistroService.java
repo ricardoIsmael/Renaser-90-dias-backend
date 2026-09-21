@@ -461,9 +461,15 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
      * contexto de persistencia ya tiene la entidad y Hibernate NO la rehidrata: la consulta con
      * cerrojo se ejecuta, trae la fila fresca y la descarta, y este metodo devuelve el estado
      * viejo. El cerrojo se toma igual, pero protege la escritura y no la decision. Los caminos
-     * que entran por el {@code POST /complete} cumplen el invariante solos; el oyente del Muro
-     * lo cumple leyendo con
-     * {@code LoadRegistroHabitoPort.porParticipanteHabitoYFechaParaEscritura}.
+     * que entran por el {@code POST /complete} cumplen el invariante solos, porque no leen la
+     * fila antes; los tres que la buscan por (participante, habito, dia) —el oyente del Muro,
+     * {@code ClaseDiariaHabitoService} y {@code PastillaRenacerHabitoService}— lo cumplen
+     * leyendo con {@code LoadRegistroHabitoPort.porParticipanteHabitoYFechaParaEscritura}.
+     *
+     * <p>Y no alcanza con envolver al llamador en un {@code REQUIRES_NEW}: eso cambia CUAL es la
+     * transaccion compartida, no que las dos lecturas la compartan — es el caso de
+     * {@code PastillaRenacerHabitoService}, que corre dentro de la transaccion propia de
+     * {@code EspirituService.reflejarEnPastillaRenacer} y sufria el problema igual.
      */
     private RegistroHabito requireRegistro(RegistroHabitoId id) {
         return loadRegistroPort.byIdParaEscritura(id)
