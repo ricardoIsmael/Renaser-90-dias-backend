@@ -92,7 +92,7 @@ class PostDiarioComunidadHabitoServiceTest {
         mockParticipanteEnLima(autor);
         when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
                 .thenReturn(Optional.of(habito));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(autor, habito.id(), LocalDate.of(2026, 8, 24)))
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), LocalDate.of(2026, 8, 24)))
                 .thenReturn(Optional.of(registro));
 
         service().alPublicarEnElMuro(autor, Instant.parse("2026-08-24T15:00:00Z"));
@@ -121,12 +121,12 @@ class PostDiarioComunidadHabitoServiceTest {
         mockParticipanteEnLima(autor);
         when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
                 .thenReturn(Optional.of(habito));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(autor, habito.id(), diaEnLima))
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), diaEnLima))
                 .thenReturn(Optional.of(registro));
 
         service().alPublicarEnElMuro(autor, Instant.parse("2026-08-25T02:00:00Z"));
 
-        verify(loadRegistroPort).porParticipanteHabitoYFecha(autor, habito.id(), diaEnLima);
+        verify(loadRegistroPort).porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), diaEnLima);
         verify(completarRegistroUseCase).completar(any());
     }
 
@@ -146,7 +146,7 @@ class PostDiarioComunidadHabitoServiceTest {
         mockParticipanteEnLima(autor);
         when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
                 .thenReturn(Optional.of(habito));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(autor, habito.id(), LocalDate.of(2026, 8, 24)))
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), LocalDate.of(2026, 8, 24)))
                 .thenReturn(Optional.of(yaCompletado));
 
         service().alPublicarEnElMuro(autor, Instant.parse("2026-08-24T15:00:00Z"));
@@ -154,6 +154,37 @@ class PostDiarioComunidadHabitoServiceTest {
 
         assertThat(yaCompletado.puntosOtorgados()).isEqualTo(10);
         verify(completarRegistroUseCase, never()).completar(any());
+    }
+
+    /**
+     * Hallazgo de seguridad del 2026-09-21. La busqueda del registro tiene que ir CON cerrojo, y
+     * ser la unica: leerlo antes con la consulta que no bloquea lo deja gestionado en el contexto
+     * de persistencia de la transaccion del oyente, y entonces el {@code findByIdParaEscritura} de
+     * {@code RegistroService} recibe esa instancia vieja en vez de la fila fresca — el cerrojo se
+     * toma igual, pero protege la escritura y no la decision.
+     *
+     * <p>Este test es barato y no prueba la carrera: la carrera la prueba
+     * {@code PostDiarioComunidadCerrojoIT} contra Postgres real. Lo que cuida este es que nadie
+     * vuelva a meter la lectura sin cerrojo por comodidad.
+     */
+    @Test
+    @DisplayName("el registro se busca SOLO con la consulta bloqueada, nunca con la que no bloquea")
+    void nuncaLeeElRegistroSinCerrojo() {
+        UserId autor = participante();
+        Habito habito = habitoPostDiario();
+        RegistroHabito registro = registroDe(autor, habito.id(), LocalDate.of(2026, 8, 24));
+
+        mockParticipanteEnLima(autor);
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+                .thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), LocalDate.of(2026, 8, 24)))
+                .thenReturn(Optional.of(registro));
+
+        service().alPublicarEnElMuro(autor, Instant.parse("2026-08-24T15:00:00Z"));
+
+        verify(loadRegistroPort, never()).porParticipanteHabitoYFecha(any(), any(), any());
+        verify(loadRegistroPort).porParticipanteHabitoYFechaParaEscritura(autor, habito.id(),
+                LocalDate.of(2026, 8, 24));
     }
 
     @Test
@@ -166,7 +197,7 @@ class PostDiarioComunidadHabitoServiceTest {
 
         service().alPublicarEnElMuro(autor, Instant.parse("2026-08-24T15:00:00Z"));
 
-        verify(loadRegistroPort, never()).porParticipanteHabitoYFecha(any(), any(), any());
+        verify(loadRegistroPort, never()).porParticipanteHabitoYFechaParaEscritura(any(), any(), any());
         verify(completarRegistroUseCase, never()).completar(any());
     }
 
@@ -192,7 +223,7 @@ class PostDiarioComunidadHabitoServiceTest {
         mockParticipanteEnLima(autor);
         when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
                 .thenReturn(Optional.of(habito));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(autor, habito.id(), LocalDate.of(2026, 8, 24)))
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), LocalDate.of(2026, 8, 24)))
                 .thenReturn(Optional.empty());
 
         service().alPublicarEnElMuro(autor, Instant.parse("2026-08-24T15:00:00Z"));

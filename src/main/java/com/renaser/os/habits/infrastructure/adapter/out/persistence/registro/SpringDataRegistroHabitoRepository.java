@@ -34,6 +34,36 @@ interface SpringDataRegistroHabitoRepository extends JpaRepository<RegistroHabit
                                                                                         UUID habitoId,
                                                                                         LocalDate fechaEjecucion);
 
+    /**
+     * La MISMA fila que {@link #findByParticipanteIdAndHabitoIdAndFechaEjecucion}, pero con el
+     * mismo bloqueo pesimista de {@link #findByIdParaEscritura}. Es para quien busca el registro
+     * por (participante, habito, dia) y va a DECIDIR sobre su estado — hoy, el cierre del habito
+     * de post diario en comunidad que dispara publicar en el Muro.
+     *
+     * <p><b>Por que existe este metodo y no alcanza con leer sin cerrojo y bloquear despues.</b>
+     * Porque un {@code @Lock(PESSIMISTIC_WRITE)} sobre una entidad que YA esta gestionada en el
+     * mismo contexto de persistencia no la rehidrata. En Hibernate 7.4.5.Final
+     * ({@code EntityInitializerImpl}): {@code resolveEntityInstance1} encuentra la instancia que
+     * el contexto ya tiene y la marca {@code State.INITIALIZED}, {@code initializeInstance} solo
+     * hidrata cuando el estado es {@code State.RESOLVED} y entonces no hace nada, y
+     * {@code upgradeLockMode} se limita a escribir el nuevo {@code LockMode} en el
+     * {@code EntityEntry}. O sea: el {@code SELECT ... FOR UPDATE} se ejecuta, la fila fresca
+     * viaja, y sus columnas se descartan — el dominio sigue decidiendo con el estado de la
+     * primera lectura, la que el cerrojo nunca protegio. El cerrojo termina protegiendo la
+     * escritura y no la decision.
+     *
+     * <p>Por eso la lectura CON cerrojo tiene que ser la PRIMERA de esa fila en la transaccion.
+     * Quien llame aca no debe haber materializado el registro antes: despues de esta lectura, el
+     * {@link #findByIdParaEscritura} de {@code RegistroService.completar} reencuentra esta misma
+     * instancia, ya fresca y ya bloqueada, y {@code upgradeLockMode} no tiene nada que subir.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM RegistroHabitoJpaEntity r WHERE r.participanteId = :participanteId "
+            + "AND r.habitoId = :habitoId AND r.fechaEjecucion = :fecha")
+    Optional<RegistroHabitoJpaEntity> findByParticipanteHabitoYFechaParaEscritura(
+            @Param("participanteId") UUID participanteId, @Param("habitoId") UUID habitoId,
+            @Param("fecha") LocalDate fecha);
+
     List<RegistroHabitoJpaEntity> findByParticipanteIdAndFechaEjecucion(UUID participanteId, LocalDate fechaEjecucion);
 
     List<RegistroHabitoJpaEntity> findByEstadoAndFechaEjecucionLessThan(EstadoRegistroJpa estado, LocalDate fecha);

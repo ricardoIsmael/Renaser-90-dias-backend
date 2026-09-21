@@ -27,21 +27,35 @@ import java.util.Optional;
  * solo lugar— el calculo de puntos, la ventana de entrega, el bloqueo pesimista y el evento de
  * dominio.
  *
- * <p><b>Tres guardas de idempotencia, en este orden</b>, porque el disparador es un evento del
+ * <p><b>Dos guardas de idempotencia, en este orden</b>, porque el disparador es un evento del
  * outbox y puede reentregarse:
  *
  * <ol>
  *   <li>El registro se busca por el DIA DE LA PUBLICACION en la zona del participante, no por
  *       "hoy" — una reentrega al dia siguiente vuelve a apuntar al mismo registro, no al de
  *       manana (ver javadoc del puerto).</li>
- *   <li>Si ese registro ya esta en estado terminal, se vuelve sin tocarlo. Es la guarda que
- *       evita el doble pago en el caso comun: dos publicaciones el mismo dia, o una reentrega
- *       despues de un reinicio.</li>
- *   <li>Si aun asi dos caminos llegan a la vez (el oyente y el {@code POST /complete} que el
- *       cliente movil todavia hace al publicar), el bloqueo pesimista de
- *       {@code RegistroService.requireRegistro} serializa los dos y el segundo choca contra
- *       {@code EstadoRegistro.COMPLETADO}, que es terminal. Nunca se paga dos veces.</li>
+ *   <li>Si ese registro ya esta en estado terminal, se vuelve sin tocarlo. Cubre los dos casos,
+ *       el comun y el de carrera, porque la busqueda se hace CON el bloqueo pesimista: dos
+ *       publicaciones el mismo dia o una reentrega tras un reinicio leen el estado ya
+ *       terminal, y dos caminos simultaneos (este oyente y el {@code POST /complete} que el
+ *       cliente movil todavia hace al publicar) quedan serializados por el cerrojo, asi que el
+ *       segundo lee {@code COMPLETADO}. Nunca se paga dos veces.</li>
  * </ol>
+ *
+ * <p><b>El cerrojo va en ESTA busqueda, y no mas abajo</b> (hallazgo de seguridad del
+ * 2026-09-21). Antes esta clase materializaba el registro con la consulta sin cerrojo y
+ * confiaba en que el {@code findByIdParaEscritura} de {@code RegistroService.requireRegistro}
+ * serializara la carrera. No lo hacia: las dos lecturas viven en la MISMA transaccion —la que
+ * abre el {@code @ApplicationModuleListener}— y por lo tanto en el mismo contexto de
+ * persistencia, y Hibernate no rehidrata una entidad ya gestionada cuando la vuelve a traer una
+ * consulta con cerrojo (el detalle, con los metodos, esta en el javadoc de
+ * {@code SpringDataRegistroHabitoRepository.findByParticipanteHabitoYFechaParaEscritura}). El
+ * segundo cierre concurrente decidia sobre el {@code PENDIENTE} viejo y volvia a pagar los
+ * puntos; y como el comando de aca manda {@code respuestaTexto} y
+ * {@code calificacionProductividad} nulos, ademas pisaba con {@code null} lo que el aprendiz
+ * hubiera escrito por el camino HTTP. Con la lectura bloqueada aqui arriba no hay ninguna
+ * lectura previa sin proteger, y la guarda de estado terminal decide sobre la fila que el
+ * cerrojo acaba de leer.
  *
  * <p><b>Se completa con el gesto GENERICO a proposito</b>, no con
  * {@code GestoCompletar.PROPIO_DEL_HABITO}: asi {@link PoliticaPostDiarioComunidad} vuelve a
@@ -89,13 +103,16 @@ public class PostDiarioComunidadHabitoService implements CerrarPostDiarioComunid
         }
 
         LocalDate diaDeLaPublicacion = publicadoEn.atZone(ZoneId.of(progreso.get().timezone())).toLocalDate();
+        // CON cerrojo, y esta es la PRIMERA lectura de esta fila en la transaccion del oyente:
+        // la guarda de abajo tiene que decidir sobre el estado que el cerrojo protege, no sobre
+        // uno leido antes. Ver el javadoc de la clase.
         Optional<RegistroHabito> registro = loadRegistroPort
-                .porParticipanteHabitoYFecha(autorId, habito.get().id(), diaDeLaPublicacion);
+                .porParticipanteHabitoYFechaParaEscritura(autorId, habito.get().id(), diaDeLaPublicacion);
         if (registro.isEmpty()) {
             return; // no le toca ese dia, o lo pauso (D-87)
         }
         if (registro.get().estado().esTerminal()) {
-            return; // ya cobrado (segunda publicacion del dia o reentrega del outbox), o expirado
+            return; // ya cobrado (segunda publicacion del dia, reentrega del outbox o carrera), o expirado
         }
 
         completarRegistroUseCase.completar(
