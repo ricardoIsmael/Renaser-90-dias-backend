@@ -452,6 +452,18 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
      * lock, dos requests concurrentes leen ambas el mismo estado PENDIENTE, ambas pasan la
      * validacion del dominio y ambas pagan (verificado en vivo: 6 llamadas paralelas
      * devolvian 200 cada una, la 7a secuencial devolvia 409).
+     *
+     * <p><b>Invariante para quien llame a {@link #completar}</b> (hallazgo de seguridad del
+     * 2026-09-21): esta tiene que ser la PRIMERA lectura de esa fila en la transaccion, o al
+     * menos la primera que no venga ya bloqueada. Si el llamador materializo antes el registro
+     * con una consulta sin cerrojo —y se une a esta transaccion, que es lo que hace un
+     * {@code @Transactional} REQUIRED dentro de un {@code @ApplicationModuleListener}—, el
+     * contexto de persistencia ya tiene la entidad y Hibernate NO la rehidrata: la consulta con
+     * cerrojo se ejecuta, trae la fila fresca y la descarta, y este metodo devuelve el estado
+     * viejo. El cerrojo se toma igual, pero protege la escritura y no la decision. Los caminos
+     * que entran por el {@code POST /complete} cumplen el invariante solos; el oyente del Muro
+     * lo cumple leyendo con
+     * {@code LoadRegistroHabitoPort.porParticipanteHabitoYFechaParaEscritura}.
      */
     private RegistroHabito requireRegistro(RegistroHabitoId id) {
         return loadRegistroPort.byIdParaEscritura(id)

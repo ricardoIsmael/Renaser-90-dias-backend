@@ -49,6 +49,13 @@ class RegistroHabitoPersistenceAdapter implements LoadRegistroHabitoPort, SaveRe
     }
 
     @Override
+    public Optional<RegistroHabito> porParticipanteHabitoYFechaParaEscritura(UserId participanteId, HabitoId habitoId,
+                                                                               LocalDate fecha) {
+        return repository.findByParticipanteHabitoYFechaParaEscritura(participanteId.value(), habitoId.value(), fecha)
+                .map(mapper::toDomain);
+    }
+
+    @Override
     public List<RegistroHabito> porParticipanteYFecha(UserId participanteId, LocalDate fecha) {
         return repository.findByParticipanteIdAndFechaEjecucion(participanteId.value(), fecha).stream()
                 .map(mapper::toDomain).toList();
