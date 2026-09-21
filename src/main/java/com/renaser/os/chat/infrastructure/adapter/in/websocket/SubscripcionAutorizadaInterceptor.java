@@ -115,7 +115,7 @@ class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
         }
         if (!autorizarAcceso.puedeVer(conversacionId, actorId)) {
             throw new org.springframework.messaging.MessagingException(
-                    "No sos participante de esta conversacion");
+                    "No eres participante de esta conversación");
         }
     }
 

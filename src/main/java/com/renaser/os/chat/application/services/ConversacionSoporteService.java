@@ -324,7 +324,7 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
             throw new NotAuthorizedException("El aprendiz no puede salir de su conversacion de soporte");
         }
         if (!esParticipantePort.esParticipante(conversacion.id(), command.actorId())) {
-            throw new NotAuthorizedException("No sos participante de esta conversacion");
+            throw new NotAuthorizedException("No eres participante de esta conversación");
         }
         quitarParticipantePort.quitar(conversacion.id(), command.actorId());
     }
