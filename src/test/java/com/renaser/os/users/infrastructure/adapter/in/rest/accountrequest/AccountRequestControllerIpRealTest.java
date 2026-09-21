@@ -10,6 +10,7 @@ import com.renaser.os.users.application.ports.in.accountrequest.ListAccountReque
 import com.renaser.os.users.application.ports.in.accountrequest.RejectAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.VerificarDominioEmailUseCase;
+import com.renaser.os.users.application.ports.in.accountrequest.VerificarDominioEmailUseCase.ResultadoVerificacionDominio;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -131,5 +132,34 @@ class AccountRequestControllerIpRealTest {
         assertThat(ip.getValue())
                 .as("sin corchetes: Postgres rechaza \"[2803:...]\" en una columna inet")
                 .isEqualTo("2803:9810:6075:9310:c63b:3904:e158:3228");
+    }
+
+    /**
+     * Regresion del hallazgo del cupo (2026-09-21). De los tres handlers publicos de este
+     * controller, {@code verify-email} era el unico que NO recibia la {@code HttpServletRequest},
+     * y por eso era el unico que no podia gastar cupo: no sabia a quien contarle la peticion. Y es
+     * justamente el que sale de la maquina — consulta por DNS el dominio que vino en el cuerpo —,
+     * asi que el mas caro de los tres era tambien el unico sin tope.
+     *
+     * <p>Aca se fija la mitad del arreglo que vive en el borde: que al caso de uso le llegue la IP
+     * del cliente real y no la del borde de CloudFront, que es lo que hace que el contador cuente
+     * a alguien. La otra mitad —que con esa IP se gaste cupo ANTES de salir a la red— la fija
+     * {@code ConsultaEmailServiceTest.cortaAntesDeSalirALaRed}.
+     */
+    @Test
+    @DisplayName("verify-email tambien recibe la IP del cliente: es el handler que sale a la red")
+    void verifyEmailRecibeLaIpDelClienteReal() throws Exception {
+        when(verificarDominioEmailUseCase.verificar(eq("alguien@ejemplo.com"), anyString()))
+                .thenReturn(ResultadoVerificacionDominio.puedeRecibir());
+
+        mockMvc.perform(post("/api/v1/account-requests/verify-email")
+                        .header("X-Forwarded-For", "203.0.113.9, 130.176.0.1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"alguien@ejemplo.com\"}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<String> ip = ArgumentCaptor.forClass(String.class);
+        verify(verificarDominioEmailUseCase).verificar(eq("alguien@ejemplo.com"), ip.capture());
+        assertThat(ip.getValue()).isEqualTo("203.0.113.9");
     }
 }

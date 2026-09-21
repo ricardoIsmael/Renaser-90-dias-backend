@@ -147,9 +147,10 @@ class ConsultaEmailServiceTest {
         @Test
         @DisplayName("con MX el dominio puede recibir correo")
         void conMx() {
+            conMargenDeCuota();
             given(resolverMxPort.consultar("ejemplo.test")).willReturn(ResultadoMx.TIENE_MX);
 
-            var resultado = service.verificar(EMAIL);
+            var resultado = service.verificar(EMAIL, IP);
 
             assertThat(resultado.entregable()).isTrue();
             assertThat(resultado.motivo()).isNull();
@@ -158,9 +159,10 @@ class ConsultaEmailServiceTest {
         @Test
         @DisplayName("sin MX no es entregable, y se dice por que")
         void sinMx() {
+            conMargenDeCuota();
             given(resolverMxPort.consultar("ejemplo.test")).willReturn(ResultadoMx.SIN_MX);
 
-            var resultado = service.verificar(EMAIL);
+            var resultado = service.verificar(EMAIL, IP);
 
             assertThat(resultado.entregable()).isFalse();
             assertThat(resultado.motivo()).isEqualTo(MotivoNoEntregable.SIN_MX);
@@ -169,30 +171,35 @@ class ConsultaEmailServiceTest {
         @Test
         @DisplayName("un dominio inexistente se distingue de uno sin MX")
         void dominioInexistente() {
+            conMargenDeCuota();
             given(resolverMxPort.consultar("ejemplo.test")).willReturn(ResultadoMx.DOMINIO_INEXISTENTE);
 
-            assertThat(service.verificar(EMAIL).motivo()).isEqualTo(MotivoNoEntregable.DOMINIO_INEXISTENTE);
+            assertThat(service.verificar(EMAIL, IP).motivo()).isEqualTo(MotivoNoEntregable.DOMINIO_INEXISTENTE);
         }
 
         @Test
         @DisplayName("si el DNS no responde, NO se convierte en un 'no': queda indeterminado")
         void dnsCaidoNoEsUnNo() {
+            conMargenDeCuota();
             given(resolverMxPort.consultar("ejemplo.test")).willReturn(ResultadoMx.INDETERMINADO);
 
-            var resultado = service.verificar(EMAIL);
+            var resultado = service.verificar(EMAIL, IP);
 
             assertThat(resultado.entregable()).isNull();
             assertThat(resultado.motivo()).isNull();
         }
 
         @Test
-        @DisplayName("un correo mal formado responde 'formato' en vez de explotar, y no consulta DNS")
+        @DisplayName("un correo mal formado responde 'formato' sin consultar DNS y sin gastar cupo")
         void formatoInvalido() {
-            var resultado = service.verificar("no-es-un-correo");
+            var resultado = service.verificar("no-es-un-correo", IP);
 
             assertThat(resultado.entregable()).isFalse();
             assertThat(resultado.motivo()).isEqualTo(MotivoNoEntregable.FORMATO);
             verify(resolverMxPort, never()).consultar(anyString());
+            // El cupo raciona la salida a la red, y este camino no sale: se responde con un
+            // regex. Cobrarselo le gastaria el cupo a quien se equivoca escribiendo su correo.
+            verify(limitarSolicitudesPort, never()).registrarIntento(anyString(), any(), anyInt());
         }
 
         /**
@@ -213,19 +220,74 @@ class ConsultaEmailServiceTest {
         })
         @DisplayName("un dominio con forma de URL se responde 'formato' y no llega al resolvedor")
         void dominioConFormaDeUrlNoLlegaAlResolvedor(String conFormaDeUrl) {
-            var resultado = service.verificar(conFormaDeUrl);
+            var resultado = service.verificar(conFormaDeUrl, IP);
 
             assertThat(resultado.entregable()).isFalse();
             assertThat(resultado.motivo()).isEqualTo(MotivoNoEntregable.FORMATO);
             verify(resolverMxPort, never()).consultar(anyString());
         }
 
+        /**
+         * <b>Esta prueba estaba al reves hasta el 2026-09-21, y se invirtio a proposito.</b> Se
+         * llamaba {@code noConsumeCuota}, se titulaba <i>"verificar el dominio no consume cuota:
+         * no manda correo ni toca la base"</i> y afirmaba que {@code registrarIntento} no se
+         * llamaba NUNCA.
+         *
+         * <p>Su titulo decia la verdad sobre dos recursos y se olvidaba del tercero: es cierto que
+         * este camino no manda correo y no toca la base, pero <b>sale de la maquina</b> — consulta
+         * el DNS de un nombre que elige quien llama, sin cache que lo absorba. Con esa cuenta, el
+         * unico de los tres endpoints publicos de correo que cuesta un viaje de red quedo siendo
+         * el unico sin tope, mientras sus dos hermanos —que cuestan una lectura local— si lo
+         * tenian. Y como estaba escrita como prueba, ponerle el tope dejaba la suite en rojo: la
+         * ausencia del control estaba fijada, no olvidada.
+         *
+         * <p>Lo que se exige ahora es lo contrario, y es lo que hay que sostener: pasado el tope,
+         * el resolvedor <b>no se llama ni una vez</b>. Contar las llamadas al puerto —y no
+         * conformarse con la excepcion— es lo que la pone roja si alguien vuelve a mover el cupo
+         * a despues de la consulta.
+         */
         @Test
-        @DisplayName("verificar el dominio no consume cuota: no manda correo ni toca la base")
-        void noConsumeCuota() {
+        @DisplayName("pasado el limite por IP el DNS no se consulta ni una vez: salir a la red cuesta cupo")
+        void cortaAntesDeSalirALaRed() {
+            given(limitarSolicitudesPort.registrarIntento("email-mx:ip:" + IP,
+                    ConsultaEmailService.VENTANA_RATE_LIMIT,
+                    ConsultaEmailService.LIMITE_MX_POR_IP)).willReturn(false);
+
+            assertThatThrownBy(() -> service.verificar(EMAIL, IP))
+                    .isInstanceOf(RateLimitExceededException.class);
+
+            verify(resolverMxPort, never()).consultar(anyString());
+        }
+
+        /**
+         * La otra mitad del mismo arreglo: que el cupo se gaste de verdad y en SU contador. Si
+         * compartiera clave con {@code email-check:ip:}, teclear el correo en el formulario
+         * —que consulta ese otro endpoint en cada tecla— dejaria sin verificacion de dominio a
+         * quien esta por registrarse, que es el uso legitimo de este.
+         */
+        @Test
+        @DisplayName("una consulta que sale a la red gasta cupo, y del contador del MX")
+        void gastaCupoDeSuPropioContador() {
+            conMargenDeCuota();
             given(resolverMxPort.consultar("ejemplo.test")).willReturn(ResultadoMx.TIENE_MX);
 
-            service.verificar(EMAIL);
+            service.verificar(EMAIL, IP);
+
+            verify(limitarSolicitudesPort).registrarIntento("email-mx:ip:" + IP,
+                    ConsultaEmailService.VENTANA_RATE_LIMIT, ConsultaEmailService.LIMITE_MX_POR_IP);
+        }
+
+        /**
+         * Mismo criterio que {@code estaRegistrado} y que el resto del modulo: un contador que no
+         * sabe a quien contarle no bloquea a nadie, porque bloquearia a todos. Por el camino HTTP
+         * real la IP siempre viene — la pone el controller.
+         */
+        @Test
+        @DisplayName("sin IP conocida se consulta igual: no se puede contar, no se bloquea")
+        void sinIpNoSeLimitaPeroSeConsultaIgual() {
+            given(resolverMxPort.consultar("ejemplo.test")).willReturn(ResultadoMx.TIENE_MX);
+
+            assertThat(service.verificar(EMAIL, null).entregable()).isTrue();
 
             verify(limitarSolicitudesPort, never()).registrarIntento(anyString(), any(), anyInt());
         }

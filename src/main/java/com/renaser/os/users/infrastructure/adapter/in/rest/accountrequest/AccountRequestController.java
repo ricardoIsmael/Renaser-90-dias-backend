@@ -106,11 +106,20 @@ public class AccountRequestController {
                 consultarEmailRegistradoUseCase.estaRegistrado(request.email(), DireccionIpDelCliente.de(httpRequest)));
     }
 
-    /** PUBLIC_ENDPOINT. ¿El dominio del correo puede recibir correo? Aviso, nunca un bloqueo. */
-    @PublicEndpoint("Paso del alta: valida el dominio del correo antes de que exista la cuenta.")
+    /**
+     * PUBLIC_ENDPOINT. ¿El dominio del correo puede recibir correo? Aviso, nunca un bloqueo.
+     *
+     * <p>Recibe la {@code HttpServletRequest} por el mismo motivo que sus dos hermanos de arriba,
+     * y con mas razon: este es el unico de los tres que sale de la maquina — consulta el DNS del
+     * dominio que vino en el cuerpo. Sin la IP no hay a quien contarle esa consulta, y hasta el
+     * 2026-09-21 era el unico handler publico del controller que no la pedia.
+     */
+    @PublicEndpoint("Paso del alta: valida el dominio del correo antes de que exista la cuenta. Sale a la red (consulta MX), protegido por rate limit por IP.")
     @PostMapping("/verify-email")
-    public VerificacionDominioResponse verifyEmail(@RequestBody @Valid ConsultarEmailRequest request) {
-        return VerificacionDominioResponse.from(verificarDominioEmailUseCase.verificar(request.email()));
+    public VerificacionDominioResponse verifyEmail(@RequestBody @Valid ConsultarEmailRequest request,
+                                                     HttpServletRequest httpRequest) {
+        return VerificacionDominioResponse.from(
+                verificarDominioEmailUseCase.verificar(request.email(), DireccionIpDelCliente.de(httpRequest)));
     }
 
     @PublicEndpoint("Es el alta: no puede exigir una cuenta que todavia no existe. El rol nunca llega desde el cliente, lo fuerza el caso de uso.")
