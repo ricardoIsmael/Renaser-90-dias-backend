@@ -152,6 +152,24 @@ class ResetContrasenaServiceTest {
         verify(loadCredencialPort, never()).porEmail(any());
     }
 
+    /**
+     * Regresion del hallazgo del prefijo IPv6: con la direccion entera como clave, un abonado con
+     * su /64 propio pedia un reseteo por direccion y bombardeaba el buzon de tantas victimas
+     * distintas como quisiera.
+     */
+    @Test
+    @DisplayName("dos direcciones del mismo /64 gastan el MISMO cupo de reseteo por IP")
+    void elLimitePorIpCuentaPorPrefijoEnIpv6() {
+        permitirRateLimit();
+        when(loadCredencialPort.porEmail(EMAIL)).thenReturn(Optional.empty());
+
+        service().solicitar(new SolicitarResetContrasenaCommand(EMAIL, "2803:9810:6075:9310::1"));
+        service().solicitar(new SolicitarResetContrasenaCommand(EMAIL, "2803:9810:6075:9310:1:2:3:4"));
+
+        verify(limitarSolicitudesResetPort, times(2)).registrarIntento(
+                eq("ip:2803:9810:6075:9310::/64"), any(), eq(ResetContrasenaService.LIMITE_POR_IP));
+    }
+
     @Test
     void solicitarConLimiteDeTasaPorIpExcedidoLanzaRateLimitExceeded() {
         when(limitarSolicitudesResetPort.registrarIntento(eq("ip:" + IP), any(), anyInt()))

@@ -26,8 +26,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /** Unit puro: los cuatro puertos mockeados, sin Spring, sin base, sin DNS real. */
@@ -137,6 +139,78 @@ class ConsultaEmailServiceTest {
             assertThat(service.estaRegistrado(EMAIL, null)).isFalse();
 
             verify(limitarSolicitudesPort, never()).registrarIntento(anyString(), any(), anyInt());
+        }
+    }
+
+    /**
+     * Regresion del hallazgo del prefijo IPv6. Este es el contador donde mas dolia: es el UNICO
+     * control de `check-email` y `exists`, que responden con un booleano si un correo ya tiene
+     * cuenta. Con la direccion entera como clave, un cliente IPv6 con su /64 propio estrenaba
+     * contador en cada peticion y el tope de 120/h no disparaba nunca — enumeracion del padron
+     * sin techo, sin falsificar una sola cabecera.
+     */
+    @Nested
+    @DisplayName("el contador por IP cuenta por prefijo, no por direccion")
+    class ContadorPorPrefijo {
+
+        @Test
+        @DisplayName("dos direcciones distintas del mismo /64 gastan el MISMO contador")
+        void dosDireccionesDelMismoPrefijoCompartenContador() {
+            conMargenDeCuota();
+
+            service.estaRegistrado(EMAIL, "2803:9810:6075:9310:c63b:3904:e158:3228");
+            service.estaRegistrado(EMAIL, "2803:9810:6075:9310:1:2:3:4");
+
+            verify(limitarSolicitudesPort, times(2)).registrarIntento(
+                    eq("email-check:ip:2803:9810:6075:9310::/64"), any(), anyInt());
+        }
+
+        @Test
+        @DisplayName("dos formas de escribir la misma direccion gastan el MISMO contador")
+        void dosFormasDeLaMismaDireccionCompartenContador() {
+            conMargenDeCuota();
+
+            service.estaRegistrado(EMAIL, "2803:9810:0:0::1");
+            service.estaRegistrado(EMAIL, "2803:9810::1");
+
+            verify(limitarSolicitudesPort, times(2)).registrarIntento(
+                    eq("email-check:ip:2803:9810::/64"), any(), anyInt());
+        }
+
+        @Test
+        @DisplayName("dos /64 distintos siguen en contadores distintos: agregar no junta a todo el mundo")
+        void dosPrefijosDistintosNoCompartenContador() {
+            conMargenDeCuota();
+
+            service.estaRegistrado(EMAIL, "2001:db8:1:1::1");
+            service.estaRegistrado(EMAIL, "2001:db8:1:2::1");
+
+            verify(limitarSolicitudesPort).registrarIntento(
+                    eq("email-check:ip:2001:db8:1:1::/64"), any(), anyInt());
+            verify(limitarSolicitudesPort).registrarIntento(
+                    eq("email-check:ip:2001:db8:1:2::/64"), any(), anyInt());
+        }
+
+        @Test
+        @DisplayName("IPv4 no cambia: la clave es exactamente la misma que antes del arreglo")
+        void ipv4CuentaIgualQueAntes() {
+            conMargenDeCuota();
+
+            service.estaRegistrado(EMAIL, IP);
+
+            verify(limitarSolicitudesPort).registrarIntento(eq("email-check:ip:" + IP), any(), anyInt());
+        }
+
+        @Test
+        @DisplayName("dos IPv4 distintas siguen en contadores distintos")
+        void dosIpv4DistintasNoCompartenContador() {
+            conMargenDeCuota();
+
+            service.estaRegistrado(EMAIL, "203.0.113.7");
+            service.estaRegistrado(EMAIL, "203.0.113.8");
+
+            verify(limitarSolicitudesPort).registrarIntento(eq("email-check:ip:203.0.113.7"), any(), anyInt());
+            verify(limitarSolicitudesPort).registrarIntento(eq("email-check:ip:203.0.113.8"), any(), anyInt());
         }
     }
 

@@ -21,13 +21,26 @@ import jakarta.servlet.http.HttpServletRequest;
  * lugares (alta, login, reset, verificacion de correo, social) y varios la usan para contar
  * limites por IP. Si se normalizara en un solo repositorio, los contadores compararian
  * {@code [2803:...]} contra {@code 2803:...} y el limite por IP dejaria de acertar sin avisar.
+ *
+ * <p><b>Lo que esta clase NO responde.</b> Lo que devuelve son los 128 bits enteros: la
+ * direccion para GUARDAR (la columna {@code inet}) o para mostrar. La unidad que los limites
+ * por IP tienen que CONTAR es otra —el /64 en IPv6— y vive en
+ * {@link com.renaser.os.shared.domain.UnidadDeConteoPorIp}, que es quien arma la clave de los
+ * cinco contadores del modulo {@code users}. Son dos preguntas distintas y durante un tiempo las
+ * respondio este mismo metodo: mientras fue asi, a un cliente IPv6 le bastaba usar otra
+ * direccion de su propio prefijo —sin falsificar ninguna cabecera— para estrenar contador en
+ * cada peticion.
  */
 public final class DireccionIpDelCliente {
 
     private DireccionIpDelCliente() {
     }
 
-    /** La IP de quien hace esta peticion, lista para guardar o comparar. */
+    /**
+     * La IP de quien hace esta peticion, entera, lista para guardar en una columna {@code inet}.
+     * Para CONTAR limites por IP no se usa esto sino
+     * {@link com.renaser.os.shared.domain.UnidadDeConteoPorIp#de(String)}.
+     */
     public static String de(HttpServletRequest request) {
         return normalizar(request.getRemoteAddr());
     }

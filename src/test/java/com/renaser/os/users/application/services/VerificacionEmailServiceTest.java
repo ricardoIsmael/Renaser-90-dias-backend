@@ -112,6 +112,26 @@ class VerificacionEmailServiceTest {
                 eq("email-verification:ip:1.2.3.4"), any(), anyInt());
     }
 
+    /**
+     * Regresion del hallazgo del prefijo IPv6: aca cada intento cuesta un correo real, y con la
+     * direccion entera como clave un abonado con su /64 propio gastaba esa cuota sobre tantos
+     * correos de terceros como quisiera.
+     */
+    @Test
+    @DisplayName("dos direcciones del mismo /64 gastan el MISMO cupo de envios por IP")
+    void elLimitePorIpCuentaPorPrefijoEnIpv6() {
+        when(codigoVerificacionEmailPort.generarCodigo(eq("alguien@renaser.dev"), any())).thenReturn("123456");
+
+        service.enviar(new EnviarCodigoVerificacionEmailCommand("alguien@renaser.dev",
+                "2803:9810:6075:9310::1"));
+        service.enviar(new EnviarCodigoVerificacionEmailCommand("alguien@renaser.dev",
+                "2803:9810:6075:9310:1:2:3:4"));
+
+        verify(limitarSolicitudesResetPort, org.mockito.Mockito.times(2)).registrarIntento(
+                eq("email-verification:ip:2803:9810:6075:9310::/64"), any(),
+                eq(VerificacionEmailService.LIMITE_POR_IP));
+    }
+
     @Test
     @DisplayName("supera el limite por IP: no llega a generar ningun codigo")
     void enviarRechazaSiSuperaElLimitePorIp() {

@@ -1,5 +1,6 @@
 package com.renaser.os.users.application.services;
 
+import com.renaser.os.shared.domain.UnidadDeConteoPorIp;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.users.application.ports.in.accountrequest.ConsultarEmailRegistradoUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.VerificarDominioEmailUseCase;
@@ -120,7 +121,7 @@ class ConsultaEmailService implements ConsultarEmailRegistradoUseCase, Verificar
         if (requestIp == null) {
             return;
         }
-        if (!limitarSolicitudesPort.registrarIntento(prefijoClave + requestIp, VENTANA_RATE_LIMIT, maximo)) {
+        if (!limitarSolicitudesPort.registrarIntento(prefijoClave + UnidadDeConteoPorIp.de(requestIp), VENTANA_RATE_LIMIT, maximo)) {
             throw new RateLimitExceededException("Demasiadas consultas de correo. Intenta mas tarde.");
         }
     }

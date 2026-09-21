@@ -1,5 +1,7 @@
 package com.renaser.os.users.application.services;
 
+import com.renaser.os.shared.domain.UnidadDeConteoPorIp;
+
 /**
  * El origen al que se le cobra una peticion, y la clave compuesta (origen, correo) con la que
  * cuentan sus limites los endpoints publicos de autenticacion.
@@ -46,7 +48,12 @@ final class OrigenDeLaPeticion {
 
     /** La unidad de conteo de quien hace esta peticion. Nunca devuelve null ni vacio. */
     static String de(String requestIp) {
-        return requestIp == null || requestIp.isBlank() ? DESCONOCIDO : requestIp;
+        // El origen es el CUBO de conteo, no la direccion entera: en IPv6 un abonado
+        // enlaza 2^64 direcciones sin permiso de nadie, asi que contar la direccion
+        // completa es no contar (ver UnidadDeConteoPorIp).
+        return requestIp == null || requestIp.isBlank()
+                ? DESCONOCIDO
+                : UnidadDeConteoPorIp.de(requestIp);
     }
 
     /** Clave {@code prefijo + origen + "|" + correo}, para contar un par (origen, correo). */

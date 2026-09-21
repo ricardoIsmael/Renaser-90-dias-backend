@@ -1,5 +1,6 @@
 package com.renaser.os.users.application.services;
 
+import com.renaser.os.shared.domain.UnidadDeConteoPorIp;
 import com.renaser.os.shared.domain.CredencialesInvalidasException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.UserId;
@@ -167,7 +168,7 @@ public class AutenticacionSocialService implements IniciarSesionConProveedorUseC
         if (requestIp == null) {
             return;
         }
-        if (!limitarSolicitudesPort.registrarIntento("social-login:ip:" + requestIp, VENTANA_RATE_LIMIT,
+        if (!limitarSolicitudesPort.registrarIntento("social-login:ip:" + UnidadDeConteoPorIp.de(requestIp), VENTANA_RATE_LIMIT,
                 LIMITE_POR_IP)) {
             throw new RateLimitExceededException("Demasiados intentos. Espera unos minutos.");
         }

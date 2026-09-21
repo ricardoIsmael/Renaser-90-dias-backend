@@ -150,6 +150,47 @@ class AccountRequestServiceTest {
                         "una-contrasena-de-12-o-mas", "127.0.0.1");
     }
 
+    private static com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand
+    comandoDeAltaDesde(String ip) {
+        return com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand
+                .porFormulario("solicitante@renaser.dev", "Solicitante", "555-0000", "Lima", "token-valido",
+                        "una-contrasena-de-12-o-mas", ip);
+    }
+
+    /**
+     * Regresion del hallazgo del prefijo IPv6, con las DOS preguntas a la vez: la clave del
+     * contador es el /64 (si fuera la direccion entera, cada alta estrenaria contador), y lo que
+     * queda en `solicitudes_cuenta.ip_solicitud` sigue siendo la direccion entera (si fuera el
+     * prefijo, se perderia el dato que esa columna existe para guardar).
+     */
+    @Test
+    @DisplayName("el contador por IP usa el /64, pero lo que se GUARDA sigue siendo la direccion entera")
+    void elContadorUsaElPrefijoPeroSeGuardaLaDireccionEntera() {
+        when(tokenVerificacionEmailPort.emailDe("token-valido")).thenReturn(Optional.of("solicitante@renaser.dev"));
+
+        service.submit(comandoDeAltaDesde("2803:9810:6075:9310:c63b:3904:e158:3228"));
+
+        verify(limitarSolicitudesResetPort).registrarIntento(
+                eq("account-request:ip:2803:9810:6075:9310::/64"), any(), anyInt());
+
+        var solicitudCaptor = org.mockito.ArgumentCaptor.forClass(AccountRequest.class);
+        verify(saveAccountRequestPort).save(solicitudCaptor.capture());
+        assertThat(solicitudCaptor.getValue().requestIp())
+                .isEqualTo("2803:9810:6075:9310:c63b:3904:e158:3228");
+    }
+
+    @Test
+    @DisplayName("dos altas desde direcciones distintas del mismo /64 gastan el mismo contador")
+    void dosAltasDelMismoPrefijoCompartenContador() {
+        when(tokenVerificacionEmailPort.emailDe("token-valido")).thenReturn(Optional.of("solicitante@renaser.dev"));
+
+        service.submit(comandoDeAltaDesde("2803:9810:6075:9310::1"));
+        service.submit(comandoDeAltaDesde("2803:9810:6075:9310:aaaa:bbbb:cccc:dddd"));
+
+        verify(limitarSolicitudesResetPort, org.mockito.Mockito.times(2)).registrarIntento(
+                eq("account-request:ip:2803:9810:6075:9310::/64"), any(), anyInt());
+    }
+
     @Test
     @DisplayName("2026-08-27: submit consume el token de verificacion y arma la solicitud")
     void submitConTokenValidoArmaLaSolicitud() {

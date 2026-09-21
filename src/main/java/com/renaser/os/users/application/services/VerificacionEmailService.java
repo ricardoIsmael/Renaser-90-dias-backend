@@ -1,5 +1,6 @@
 package com.renaser.os.users.application.services;
 
+import com.renaser.os.shared.domain.UnidadDeConteoPorIp;
 import com.renaser.os.shared.domain.CodigoVerificacionInvalidoException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.users.application.ports.in.autenticacion.ConfirmarCodigoVerificacionEmailUseCase;
@@ -164,7 +165,7 @@ class VerificacionEmailService implements EnviarCodigoVerificacionEmailUseCase, 
                 LIMITE_POR_EMAIL)) {
             throw new RateLimitExceededException("Limite de solicitudes de verificacion de correo excedido");
         }
-        if (requestIp != null && !limitarSolicitudesResetPort.registrarIntento("email-verification:ip:" + requestIp,
+        if (requestIp != null && !limitarSolicitudesResetPort.registrarIntento("email-verification:ip:" + UnidadDeConteoPorIp.de(requestIp),
                 VENTANA_RATE_LIMIT, LIMITE_POR_IP)) {
             throw new RateLimitExceededException("Limite de solicitudes de verificacion de correo excedido");
         }

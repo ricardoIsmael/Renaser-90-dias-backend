@@ -4,6 +4,7 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.TokenVerificacionEmailInvalidoException;
+import com.renaser.os.shared.domain.UnidadDeConteoPorIp;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.in.accountrequest.ApproveAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.CheckAccountRequestStatusUseCase;
@@ -323,12 +324,18 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
      *
      * <p>{@code loadAccountRequestPort.countSubmittedFromIpSince} queda sin uso en este servicio
      * tras este cambio (se deja el puerto y su adaptador tal cual, sin tocarlos — ver informe).
+     *
+     * <p>La CLAVE del contador es {@link UnidadDeConteoPorIp} (el /64 en IPv6), no la direccion
+     * entera: sin eso, quien tiene su propio prefijo estrenaba contador en cada alta. Lo que se
+     * guarda en {@code solicitudes_cuenta.ip_solicitud} sigue siendo {@code command.requestIp()}
+     * entero — son dos preguntas distintas y el prefijo no es la respuesta de la segunda.
      */
     private void rejectIfRateLimitExceeded(String requestIp) {
         if (requestIp == null) {
             return;
         }
-        if (!limitarSolicitudesResetPort.registrarIntento("account-request:ip:" + requestIp, VENTANA_RATE_LIMIT_IP,
+        if (!limitarSolicitudesResetPort.registrarIntento(
+                "account-request:ip:" + UnidadDeConteoPorIp.de(requestIp), VENTANA_RATE_LIMIT_IP,
                 RATE_LIMIT_PER_HOUR)) {
             throw new RateLimitExceededException("Limite de solicitudes por hora excedido para IP " + requestIp);
         }
