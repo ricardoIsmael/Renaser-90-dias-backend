@@ -158,6 +158,25 @@ public final class Conversacion {
                 && claveSoporteDe(usuarioId).equals(claveDirecta);
     }
 
+    /**
+     * Si para {@code usuarioId} esta conversacion se gana por <b>ROL</b> y no por la fila de
+     * {@code participantes_conversacion}: un SOPORTE del que no es el aprendiz dueño.
+     *
+     * <p>Existe para que la pregunta se escriba UNA vez y no cuatro. La regla de acceso del modulo
+     * esta copiada en {@code MensajeService}, {@code ConversacionService}, {@code PresenciaService}
+     * y {@code AutorizacionDeConversacionService}, y fue esa duplicacion la que dejo al SOPORTE en
+     * la misma bolsa que un mensaje directo — donde la proyeccion alcanza, porque nadie pierde un
+     * DM por cambiar de rol. Un soporte si: adentro van el aprendiz y los ADMIN/ALCHEMIST activos,
+     * nadie mas (regla 1 de D-136). Quien da {@code true} aca tiene que seguir siendo staff AHORA,
+     * no haberlo sido alguna vez.
+     *
+     * <p>Un DM, la GLOBAL y una CELULA dan {@code false}: a ninguno le aplica esta pregunta — la
+     * CELULA tiene la suya propia, que es la pertenencia vigente al grupo.
+     */
+    public boolean seGanaPorRolDeStaff(UserId usuarioId) {
+        return tipo == TipoConversacion.SOPORTE && !esAprendizDeSoporte(usuarioId);
+    }
+
     @Override
     public String toString() {
         return "Conversacion[" + id + ", " + tipo + "]";

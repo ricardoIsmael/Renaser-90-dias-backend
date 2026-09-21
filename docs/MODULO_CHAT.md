@@ -244,11 +244,12 @@ equivocar la palabra no lo nota ningún compilador — lo nota el teléfono de a
 | # | Decisión |
 |---|---|
 | CH-10 | **El relleno es un endpoint, no un barrido al arrancar.** Una corrida masiva en el arranque crea N conversaciones en todo entorno que levante —incluido el de un desarrollador— y cuando alguien lo nota ya pasó. `POST /api/v1/admin/chat/support-conversations/backfill` lo dispara una persona, y la respuesta dice `traineesReviewed / created / alreadyExisted / failed`. Idempotente. |
-| CH-11 | **Nada reconcilia participantes, nunca.** Es la consecuencia directa de la regla 4: si el staff se puede ir, una sincronización *"dejalo como debería estar"* le desharía la salida en el próximo evento. Por eso el relleno **no toca** una conversación que ya existe aunque le falte alguien del staff, y `incorporar` solo **suma**. Es la diferencia con `ParticipantesCelulaService`, que sí reconcilia — ahí la composición la manda `community`, acá la manda la persona. |
+| CH-11 | **Nada reconcilia participantes, nunca** — con **una excepción acotada, CH-16**. Es la consecuencia directa de la regla 4: si el staff se puede ir, una sincronización *"dejalo como debería estar"* le desharía la salida en el próximo evento. Por eso el relleno **no toca** una conversación que ya existe aunque le falte alguien del staff, y `incorporar` solo **suma**. Es la diferencia con `ParticipantesCelulaService`, que sí reconcilia — ahí la composición la manda `community`, acá la manda la persona. |
 | CH-12 | **El `nombre` es una foto del momento de creación** (`"Soporte - <nombre del aprendiz>"`). Lleva el nombre porque quien más ve estas conversaciones es el staff, y sin nombre tendría 25 filas idénticas — el mismo problema que ya arregló el listado de mensajes directos. **Limitación conocida:** si la persona se cambia el nombre después, el título no se entera. Derivarlo en cada lectura obligaría a resolver el aprendiz de cada soporte al listar; no se hizo porque nadie lo pidió, y queda escrito acá en vez de quedar como olvido. |
 | CH-13 | **Salir es solo de un SOPORTE.** Irse de una CÉLULA, de un DM o de la GLOBAL son tres preguntas distintas que nadie contestó; el caso de uso rechaza cualquier otro tipo en vez de inventarles un significado. Salir borra la fila de participación y **nunca** los mensajes. |
-| CH-14 | **`Conversacion` pasó de 7 a 10 métodos públicos** (`crearSoporte`, `claveSoporteDe`, `esAprendizDeSoporte`), por encima del techo de 7 de `.claude/rules/01`. Es el costo de una raíz de agregado con una fábrica por tipo: la alternativa —un `crear(tipo, ...)` genérico con parámetros que sobran en tres de cada cuatro llamadas— es peor. Se deja anotado en vez de disimulado. |
+| CH-14 | **`Conversacion` pasó de 7 a 11 métodos públicos** (`crearSoporte`, `claveSoporteDe`, `esAprendizDeSoporte` y, desde CH-16, `seGanaPorRolDeStaff`), por encima del techo de 7 de `.claude/rules/01`. Es el costo de una raíz de agregado con una fábrica por tipo: la alternativa —un `crear(tipo, ...)` genérico con parámetros que sobran en tres de cada cuatro llamadas— es peor. Se deja anotado en vez de disimulado. |
 | CH-15 | **`deSoporte()` no pagina.** Hay una por aprendiz del padrón (25 al 2026-09-16) y quien llama necesita el conjunto entero para compararlo contra el padrón entero. Si el padrón creciera a miles, **este es el método que hay que paginar**. |
+| CH-16 | **La baja de rol SÍ revoca** (auditoría de seguridad). Única excepción a CH-11, y acotada a eso: cuando alguien deja de ser `ADMIN`/`ALCHEMIST`, `RetirarDelSoporteUseCase` le borra la fila de toda conversación de soporte donde no sea el aprendiz dueño. **No** repone a quien se fue solo, **no** recompone conversaciones a las que les falte staff y **no** mueve a nadie más — que es lo que CH-11 prohíbe; solo revoca a quien dejó de cumplir la **regla 1**, que estaba sin cumplir en el camino de bajada. Sin esto, un ex administrador conservaba el chat privado de **cada** aprendiz: leyéndolo, escribiendo en él y recibiéndolo en vivo, sin ninguna forma de sacarlo desde el producto. Decide contra el rol **vigente** (no contra el del evento) porque el outbox entrega al-menos-una-vez y sin orden: una reentrega tardía no puede borrarle las filas a un administrador legítimo. Además, las CUATRO copias del guard (`MensajeService`, `ConversacionService`, `PresenciaService`, `AutorizacionDeConversacionService`) exigen ahora rol de staff vigente para un `SOPORTE` ajeno, así la puerta queda cerrada aunque la revocación no haya corrido. |
 
 ### 8.5 Anti-N+1 (D-43)
 
@@ -267,9 +268,10 @@ un aprendiz sin fila todavía no entró.
 | Clase | Qué fija |
 |---|---|
 | `ConversacionTest` (+9 casos) | Clave canónica y determinista, que no colisione con la de un DM, `tipo_coherente` para SOPORTE en `rehydrate`, y quién es el aprendiz dueño |
-| `ConversacionSoporteServiceTest` (19) | Las cinco reglas, el anti-N+1, el barrido que no se detiene ante un fallo, y las autorizaciones negativas (suspendido, aprendiz que intenta salirse, no-administrador que intenta rellenar) |
+| `ConversacionSoporteServiceTest` (24) | Las cinco reglas, el anti-N+1, el barrido que no se detiene ante un fallo, y las autorizaciones negativas (suspendido, aprendiz que intenta salirse, no-administrador que intenta rellenar) |
 | `ConversacionResponseTest` (2) | El contrato del wire: `SUPPORT` |
-| `SoporteChatListenersTest` (2) | Los dos avisos llegan al caso de uso |
+| `SoporteChatListenersTest` (6) | Los dos avisos llegan al caso de uso, y el de cambio de rol llega al caso de uso **correcto** según la dirección (CH-16) |
+| `RevocacionDeSoportePorBajaDeRolTest` (5) | La regresión del hallazgo, con la cadena real: ascender a `ADMIN`, ver el soporte de un aprendiz ajeno, degradar, y ya no verlo — por REST, por STOMP, por presencia y en la bandeja. Cubre las CUATRO copias del guard, que la excepción a CH-11 no mueva a nadie más, y que una reentrega del outbox no le quite las filas a quien volvió al staff |
 | `ChatPersistenceAdapterTest` (+2) | Contra Postgres real: `V53` + `V54` + el mapeo de Hibernate funcionando juntos, y el UNIQUE rechazando el segundo soporte del mismo aprendiz |
 | `UserAccountServiceTest` (+2) | `users` avisa el cambio de rol, y **no** avisa si el rol no cambió |
 
@@ -277,6 +279,11 @@ Todas se verificaron **revirtiendo la regla y viéndolas en rojo**. Ese ejercici
 decorativo: `elAprendizNoPuedeSalirseDeSuPropioSoporte` pasaba con y sin la regla, porque el rechazo
 le llegaba del guard de participación. Se corrigió declarando al aprendiz participante, y ahí sí
 distingue.
+
+Las de CH-16 se verificaron igual: revirtiendo el listener y **cada uno de los cuatro guards por
+separado**, y viendo que `RevocacionDeSoportePorBajaDeRolTest` se pone en rojo con cada reversión.
+Un guard que se pudiera revertir sin que ningún test lo notara sería justo la superficie que el
+hallazgo dejó abierta.
 
 **Sin caso de reloj en el rango 00:00–05:00 UTC** (`.claude/rules/02`): esta función no deriva
 ninguna fecha local. El reloj solo sella `creado_en`/`ultimo_leido_en`, que son instantes.
