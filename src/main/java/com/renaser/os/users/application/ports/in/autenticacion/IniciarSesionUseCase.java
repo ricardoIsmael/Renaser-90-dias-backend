@@ -17,9 +17,17 @@ public interface IniciarSesionUseCase {
     User iniciarSesion(IniciarSesionCommand command);
 
     /**
-     * {@code requestIp} puede ser nula: solo alimenta el limite por IP, que es la segunda
-     * barrera. La que de verdad protege una cuenta es el limite por email, y esa no depende
-     * de la IP — un atacante rota direcciones, pero no puede rotar el correo de su victima.
+     * {@code requestIp} puede ser nula, aunque en produccion no llega asi. Alimenta los DOS
+     * limites del login: el de la IP y el de la pareja (origen, correo).
+     *
+     * <p><b>Corregido el 2026-09-21.</b> Aca decia que el limite que de verdad protege una
+     * cuenta es el que cuelga del correo, "porque un atacante rota direcciones pero no puede
+     * rotar el correo de su victima". Es cierto y es exactamente el problema: como el correo lo
+     * elige quien llama, cualquiera podia gastar el cupo de una persona y dejarla sin entrar
+     * —diez peticiones anonimas bastaban— sin acertar ninguna contrasena. Un contador anclado
+     * solo al recurso atacado no lo defiende: lo vuelve una palanca contra su dueno. El tope
+     * cuelga ahora de la pareja (origen, correo), y el detalle esta en
+     * {@code OrigenDeLaPeticion} y en {@code AutenticacionService.requireDentroDelLimite}.
      */
     record IniciarSesionCommand(@NotBlank @Email String email, @NotBlank String contrasena,
                                  String requestIp) {

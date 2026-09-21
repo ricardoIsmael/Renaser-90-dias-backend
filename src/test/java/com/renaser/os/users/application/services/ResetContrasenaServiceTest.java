@@ -51,6 +51,11 @@ class ResetContrasenaServiceTest {
     private static final String EMAIL = "actor@renaser.dev";
     private static final String IP = "203.0.113.7";
 
+    /** La clave compuesta tal como la arma {@code OrigenDeLaPeticion}: origen primero. */
+    private static String clavePareja(String ip, String email) {
+        return "origen-email:" + ip + "|" + email;
+    }
+
     @Mock
     private LoadCredencialPort loadCredencialPort;
     @Mock
@@ -136,8 +141,9 @@ class ResetContrasenaServiceTest {
     }
 
     @Test
-    void solicitarConLimiteDeTasaPorEmailExcedidoLanzaRateLimitExceeded() {
-        when(limitarSolicitudesResetPort.registrarIntento(eq("email:" + EMAIL), any(), anyInt()))
+    void solicitarConLimiteDeLaParejaCorreoYOrigenExcedidoLanzaRateLimitExceeded() {
+        when(limitarSolicitudesResetPort.registrarIntento(eq("ip:" + IP), any(), anyInt())).thenReturn(true);
+        when(limitarSolicitudesResetPort.registrarIntento(eq(clavePareja(IP, EMAIL)), any(), anyInt()))
                 .thenReturn(false);
 
         assertThatThrownBy(() -> service().solicitar(new SolicitarResetContrasenaCommand(EMAIL, IP)))
@@ -148,8 +154,6 @@ class ResetContrasenaServiceTest {
 
     @Test
     void solicitarConLimiteDeTasaPorIpExcedidoLanzaRateLimitExceeded() {
-        when(limitarSolicitudesResetPort.registrarIntento(eq("email:" + EMAIL), any(), anyInt()))
-                .thenReturn(true);
         when(limitarSolicitudesResetPort.registrarIntento(eq("ip:" + IP), any(), anyInt()))
                 .thenReturn(false);
 
@@ -157,16 +161,75 @@ class ResetContrasenaServiceTest {
                 .isInstanceOf(RateLimitExceededException.class);
     }
 
+    /**
+     * Refuta el punto (a) del hallazgo tambien del lado de la recuperacion: el guard por origen
+     * corre primero, asi que un origen sin cupo ya no gasta ningun contador asociado a un correo.
+     */
     @Test
-    void solicitarSinIpOmiteElLimitePorIp() {
-        when(limitarSolicitudesResetPort.registrarIntento(eq("email:" + EMAIL), any(), anyInt()))
-                .thenReturn(true);
+    void unOrigenSinCupoYaNoTocaNingunContadorDeCorreo() {
+        when(limitarSolicitudesResetPort.registrarIntento(eq("ip:" + IP), any(), anyInt()))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> service().solicitar(new SolicitarResetContrasenaCommand(EMAIL, IP)))
+                .isInstanceOf(RateLimitExceededException.class);
+
+        verify(limitarSolicitudesResetPort, times(1)).registrarIntento(anyString(), any(), anyInt());
+    }
+
+    /**
+     * Sin IP no hay a quien cobrarle la peticion; se cobra a la unidad de conteo compartida en
+     * vez de caer a una clave de solo-correo, que era el agujero.
+     */
+    @Test
+    void solicitarSinIpCobraAlOrigenDesconocidoYNoAUnaClaveDeSoloCorreo() {
+        permitirRateLimit();
         when(loadCredencialPort.porEmail(EMAIL)).thenReturn(Optional.empty());
 
         service().solicitar(new SolicitarResetContrasenaCommand(EMAIL, null));
 
-        // Solo el chequeo por email se ejecuta: sin IP no hay clave "ip:..." posible que registrar.
-        verify(limitarSolicitudesResetPort, times(1)).registrarIntento(anyString(), any(), anyInt());
+        verify(limitarSolicitudesResetPort).registrarIntento("ip:" + OrigenDeLaPeticion.DESCONOCIDO,
+                ResetContrasenaService.VENTANA_RATE_LIMIT, ResetContrasenaService.LIMITE_POR_IP);
+        verify(limitarSolicitudesResetPort).registrarIntento(
+                clavePareja(OrigenDeLaPeticion.DESCONOCIDO, EMAIL),
+                ResetContrasenaService.VENTANA_RATE_LIMIT, ResetContrasenaService.LIMITE_POR_EMAIL_Y_ORIGEN);
+        // Sin cuenta detras del correo no sale ningun mail, asi que el tope de envios ni se toca.
+        verify(limitarSolicitudesResetPort, times(2)).registrarIntento(anyString(), any(), anyInt());
+    }
+
+    /**
+     * El unico contador que sigue colgando solo del correo cuenta CORREOS ENVIADOS y no rechaza
+     * nada: agotado, no sale mail pero la peticion responde lo mismo de siempre (202 — el metodo
+     * vuelve sin excepcion). Es lo que impide que este tope, que existe para que nadie use
+     * nuestro servidor de mail para bombardear un buzon, vuelva a ser una palanca de expulsion.
+     */
+    @Test
+    void conElTopeDeEnviosAgotadoNoSaleCorreoPeroLaPeticionNoSeRechaza() {
+        when(limitarSolicitudesResetPort.registrarIntento(eq("ip:" + IP), any(), anyInt())).thenReturn(true);
+        when(limitarSolicitudesResetPort.registrarIntento(eq(clavePareja(IP, EMAIL)), any(), anyInt()))
+                .thenReturn(true);
+        when(limitarSolicitudesResetPort.registrarIntento(eq("email-envios:" + EMAIL), any(), anyInt()))
+                .thenReturn(false);
+        cuentaConContrasena();
+
+        assertThatCode(() -> service().solicitar(new SolicitarResetContrasenaCommand(EMAIL, IP)))
+                .doesNotThrowAnyException();
+
+        verify(tokenResetContrasenaPort, never()).generar(any(), any());
+        verify(enviarEmailPort, never()).enviarResetContrasena(any(), any());
+    }
+
+    @Test
+    void elTopeDeEnviosSeCuentaContraElCorreoYConElUmbralDeEnvios() {
+        permitirRateLimit();
+        UserId id = cuentaConContrasena();
+        when(tokenResetContrasenaPort.generar(eq(id), any(Duration.class))).thenReturn("token-opaco");
+
+        service().solicitar(new SolicitarResetContrasenaCommand(EMAIL, IP));
+
+        verify(limitarSolicitudesResetPort).registrarIntento("email-envios:" + EMAIL,
+                ResetContrasenaService.VENTANA_RATE_LIMIT, ResetContrasenaService.LIMITE_DE_ENVIOS_POR_EMAIL);
+        // La clave que era el arma —el corte duro colgado solo del correo— ya no existe.
+        verify(limitarSolicitudesResetPort, never()).registrarIntento(eq("email:" + EMAIL), any(), anyInt());
     }
 
     @Test
@@ -272,22 +335,23 @@ class ResetContrasenaServiceTest {
         }
 
         @Test
-        @DisplayName("comparte el contador de rate limit con el reset por link: misma clave email:/ip:")
+        @DisplayName("comparte los contadores con el reset por link: mismas claves ip:/origen-email:")
         void solicitarCodigoUsaElMismoContadorQueElResetPorLink() {
             permitirRateLimit();
             when(loadCredencialPort.porEmail(EMAIL)).thenReturn(Optional.empty());
 
             service().solicitarCodigo(new SolicitarCodigoResetContrasenaCommand(EMAIL, IP));
 
-            verify(limitarSolicitudesResetPort).registrarIntento("email:" + EMAIL,
-                    ResetContrasenaService.VENTANA_RATE_LIMIT, ResetContrasenaService.LIMITE_POR_EMAIL);
+            verify(limitarSolicitudesResetPort).registrarIntento(clavePareja(IP, EMAIL),
+                    ResetContrasenaService.VENTANA_RATE_LIMIT, ResetContrasenaService.LIMITE_POR_EMAIL_Y_ORIGEN);
             verify(limitarSolicitudesResetPort).registrarIntento("ip:" + IP,
                     ResetContrasenaService.VENTANA_RATE_LIMIT, ResetContrasenaService.LIMITE_POR_IP);
         }
 
         @Test
         void solicitarCodigoConLimiteDeTasaExcedidoLanzaRateLimitExceededAntesDeMirarLaCuenta() {
-            when(limitarSolicitudesResetPort.registrarIntento(eq("email:" + EMAIL), any(), anyInt()))
+            when(limitarSolicitudesResetPort.registrarIntento(eq("ip:" + IP), any(), anyInt())).thenReturn(true);
+            when(limitarSolicitudesResetPort.registrarIntento(eq(clavePareja(IP, EMAIL)), any(), anyInt()))
                     .thenReturn(false);
 
             assertThatThrownBy(() -> service().solicitarCodigo(new SolicitarCodigoResetContrasenaCommand(EMAIL, IP)))
@@ -295,6 +359,23 @@ class ResetContrasenaServiceTest {
 
             verify(loadCredencialPort, never()).porEmail(any());
             verify(codigoResetContrasenaPort, never()).generarCodigo(any(), any());
+        }
+
+        @Test
+        @DisplayName("con el tope de envios agotado no sale codigo, pero la peticion no se rechaza")
+        void conElTopeDeEnviosAgotadoNoSaleCodigoPeroLaPeticionNoSeRechaza() {
+            when(limitarSolicitudesResetPort.registrarIntento(eq("ip:" + IP), any(), anyInt())).thenReturn(true);
+            when(limitarSolicitudesResetPort.registrarIntento(eq(clavePareja(IP, EMAIL)), any(), anyInt()))
+                    .thenReturn(true);
+            when(limitarSolicitudesResetPort.registrarIntento(eq("email-envios:" + EMAIL), any(), anyInt()))
+                    .thenReturn(false);
+            cuentaConContrasena();
+
+            assertThatCode(() -> service().solicitarCodigo(new SolicitarCodigoResetContrasenaCommand(EMAIL, IP)))
+                    .doesNotThrowAnyException();
+
+            verify(codigoResetContrasenaPort, never()).generarCodigo(any(), any());
+            verify(enviarEmailPort, never()).enviarCodigoResetContrasena(any(), any());
         }
 
         @Test

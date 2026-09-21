@@ -56,8 +56,36 @@ public class ResetContrasenaService implements SolicitarResetContrasenaUseCase, 
      * {@code AccountRequestService}), quedan documentados como decision a confirmar.
      */
     static final Duration VENTANA_RATE_LIMIT = Duration.ofHours(1);
-    static final int LIMITE_POR_EMAIL = 5;
+
+    /**
+     * Cinco pedidos por hora contra el MISMO correo DESDE EL MISMO ORIGEN (2026-09-21). El
+     * numero es el de siempre; lo que cambio es que ya no cuelga del correo a secas, asi que
+     * un tercero no puede gastarle el cupo a nadie. Ver {@link OrigenDeLaPeticion}.
+     */
+    static final int LIMITE_POR_EMAIL_Y_ORIGEN = 5;
+
     static final int LIMITE_POR_IP = 20;
+
+    /**
+     * Tope de CORREOS ENVIADOS a una misma casilla por hora, no de peticiones recibidas
+     * (2026-09-21). Es el unico contador del flujo que sigue colgando solo del correo, y por
+     * eso es el unico que NO rechaza nada: si esta agotado, {@link #solicitar} y
+     * {@link #solicitarCodigo} se saltean el envio y devuelven lo mismo que devuelven siempre
+     * —202, exista o no la cuenta—, que es justo el contrato de no-enumeracion que estos dos
+     * endpoints ya tenian. Existe porque cada pedido le mete un correo a una casilla ajena, y
+     * sin ningun tope la recuperacion seria un canon para bombardear un buzon con nuestro
+     * propio servidor de mail.
+     *
+     * <p>Sube de 5 a 30 porque cambio de trabajo: 5 era el corte duro de la puerta (y por eso
+     * cerrarla costaba cinco peticiones), 30 es cuanto mail se tolera hacia una casilla antes
+     * de frenar el grifo. Con el guard por origen delante, un solo origen puede empujarlo a lo
+     * sumo {@link #LIMITE_POR_IP} veces, y contra un correo concreto solo
+     * {@link #LIMITE_POR_EMAIL_Y_ORIGEN}: llegar a 30 pide seis origenes distintos.
+     */
+    static final int LIMITE_DE_ENVIOS_POR_EMAIL = 30;
+
+    /** Mismo texto para los dos topes que rechazan, por lo mismo que en el login. */
+    private static final String MENSAJE_LIMITE = "Limite de solicitudes de reseteo de contrasena excedido";
 
     private final LoadCredencialPort loadCredencialPort;
     private final SaveCredencialPort saveCredencialPort;
@@ -92,23 +120,31 @@ public class ResetContrasenaService implements SolicitarResetContrasenaUseCase, 
         rejectIfRateLimitExceeded(command.email(), command.requestIp());
 
         // Sin `else`: si no hay cuenta, o la cuenta no tiene contrasena (solo entra por
-        // proveedor social), el metodo simplemente no hace nada mas — misma no-enumeracion que
-        // el login (CLAUDE.MD §5.3.3).
-        cuentaConContrasena(command.email())
-                .ifPresent(credencial -> emitirTokenYEnviarCorreo(credencial.usuarioId(), command.email()));
+        // proveedor social), o el buzon ya recibio demasiado correo nuestro en esta hora, el
+        // metodo simplemente no hace nada mas — misma no-enumeracion que el login
+        // (CLAUDE.MD §5.3.3): la respuesta es 202 en los cuatro casos.
+        cuentaConContrasena(command.email()).ifPresent(credencial -> {
+            if (hayCupoDeEnvioA(command.email())) {
+                emitirTokenYEnviarCorreo(credencial.usuarioId(), command.email());
+            }
+        });
     }
 
     /**
-     * Mismo contador de rate limit que {@link #solicitar} (claves {@code email:}/{@code ip:}),
-     * a proposito: para el limite, pedir un link o pedir un codigo es la misma accion —
-     * "alguien quiere recuperar esta cuenta" — y separarlos duplicaria el cupo.
+     * Mismos contadores que {@link #solicitar} (claves {@code ip:}/{@code origen-email:} y el
+     * tope de envios {@code email-envios:}), a proposito: para el limite, pedir un link o pedir
+     * un codigo es la misma accion — "alguien quiere recuperar esta cuenta" — y separarlos
+     * duplicaria el cupo.
      */
     @Override
     public void solicitarCodigo(SolicitarCodigoResetContrasenaCommand command) {
         rejectIfRateLimitExceeded(command.email(), command.requestIp());
 
-        cuentaConContrasena(command.email())
-                .ifPresent(credencial -> emitirCodigoYEnviarCorreo(command.email()));
+        cuentaConContrasena(command.email()).ifPresent(credencial -> {
+            if (hayCupoDeEnvioA(command.email())) {
+                emitirCodigoYEnviarCorreo(command.email());
+            }
+        });
     }
 
     /**
@@ -160,13 +196,38 @@ public class ResetContrasenaService implements SolicitarResetContrasenaUseCase, 
         enviarEmailPort.enviarCodigoResetContrasena(email, codigo);
     }
 
+    /**
+     * Se consume solo cuando de verdad va a salir un correo: el tope cuenta mail enviado, no
+     * peticiones. Un correo sin cuenta nunca lo toca, y eso no se nota desde afuera porque la
+     * respuesta es 202 igual.
+     */
+    private boolean hayCupoDeEnvioA(String email) {
+        return limitarSolicitudesResetPort.registrarIntento("email-envios:" + email, VENTANA_RATE_LIMIT,
+                LIMITE_DE_ENVIOS_POR_EMAIL);
+    }
+
+    /**
+     * Los dos topes que rechazan cuelgan del origen de la peticion (2026-09-21). El de la
+     * pareja (origen, correo) reemplaza al viejo {@code email:}, que colgaba del correo a
+     * secas: con aquel, cinco peticiones anonimas con el correo de otra persona le cerraban la
+     * recuperacion el resto de la hora —las dos puertas a la vez, porque {@link #solicitar} y
+     * {@link #solicitarCodigo} comparten contador—, y eso convertia la unica salida de emergencia
+     * en algo que un tercero podia clausurar. Ahora esa salida no se puede cerrar desde afuera,
+     * que es lo que sostiene la decision del login de no tener ningun tope global por correo
+     * (ver {@code AutenticacionService.requireDentroDelLimite}).
+     *
+     * <p>El guard por origen va primero, por lo mismo que en el login: un origen sin cupo no
+     * debe poder seguir creando una clave nueva por cada correo que toque.
+     */
     private void rejectIfRateLimitExceeded(String email, String requestIp) {
-        if (!limitarSolicitudesResetPort.registrarIntento("email:" + email, VENTANA_RATE_LIMIT, LIMITE_POR_EMAIL)) {
-            throw new RateLimitExceededException("Limite de solicitudes de reseteo de contrasena excedido");
+        if (!limitarSolicitudesResetPort.registrarIntento("ip:" + OrigenDeLaPeticion.de(requestIp),
+                VENTANA_RATE_LIMIT, LIMITE_POR_IP)) {
+            throw new RateLimitExceededException(MENSAJE_LIMITE);
         }
-        if (requestIp != null
-                && !limitarSolicitudesResetPort.registrarIntento("ip:" + requestIp, VENTANA_RATE_LIMIT, LIMITE_POR_IP)) {
-            throw new RateLimitExceededException("Limite de solicitudes de reseteo de contrasena excedido");
+        if (!limitarSolicitudesResetPort.registrarIntento(
+                OrigenDeLaPeticion.claveConEmail("origen-email:", requestIp, email),
+                VENTANA_RATE_LIMIT, LIMITE_POR_EMAIL_Y_ORIGEN)) {
+            throw new RateLimitExceededException(MENSAJE_LIMITE);
         }
     }
 }
