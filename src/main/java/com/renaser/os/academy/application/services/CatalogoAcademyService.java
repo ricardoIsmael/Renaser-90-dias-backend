@@ -10,6 +10,8 @@ import com.renaser.os.academy.application.ports.in.leccion.ConsultarLeccionUseCa
 import com.renaser.os.academy.application.ports.in.leccion.ConsultarMotivoBloqueoLeccionUseCase;
 import com.renaser.os.academy.application.ports.in.leccion.DescompletarLeccionUseCase;
 import com.renaser.os.academy.application.ports.out.curso.LoadCursoPort;
+import com.renaser.os.points.api.AjustarPuntosPort;
+import com.renaser.os.points.api.MotivoPuntos;
 import com.renaser.os.academy.application.ports.out.curso.LoadLeccionPort;
 import com.renaser.os.academy.application.ports.out.curso.LoadRecursoLeccionPort;
 import com.renaser.os.academy.application.ports.out.curso.LoadSeccionCursoPort;
@@ -66,6 +68,9 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
     private final SaveProgresoLeccionPort saveProgresoLeccionPort;
     private final ConsultarProgresoParticipanteAcademyPort progresoPort;
     private final AlmacenamientoPort almacenamientoPort;
+    /** D-146: completar una leccion paga. Es el mismo puerto publico de `points` que ya usan
+     *  `habits`, `rocks` y `evidence` — `academy` no conoce nada interno de ese modulo. */
+    private final AjustarPuntosPort ajustarPuntosPort;
     private final Clock clock;
 
     public CatalogoAcademyService(LoadCursoPort loadCursoPort, LoadSeccionCursoPort loadSeccionCursoPort,
@@ -73,7 +78,9 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
                                    LoadProgresoLeccionPort loadProgresoLeccionPort,
                                    SaveProgresoLeccionPort saveProgresoLeccionPort,
                                    ConsultarProgresoParticipanteAcademyPort progresoPort,
-                                   AlmacenamientoPort almacenamientoPort, Clock clock) {
+                                   AlmacenamientoPort almacenamientoPort, AjustarPuntosPort ajustarPuntosPort,
+                                   Clock clock) {
+        this.ajustarPuntosPort = ajustarPuntosPort;
         this.loadCursoPort = loadCursoPort;
         this.loadSeccionCursoPort = loadSeccionCursoPort;
         this.loadLeccionPort = loadLeccionPort;
@@ -211,6 +218,24 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
         return new LeccionDetalle(leccion, recursos);
     }
 
+    /**
+     * D-146 (2026-09-22): completar una leccion paga {@link ProgresoLeccion#PUNTOS_POR_LECCION}.
+     * Antes no pagaba nada, y los aprendices lo reportaron con esas palabras — "completo la leccion
+     * y no me cuenta como puntos". Tenian razon: la leccion pesaba en el Ranking General (25%
+     * cursos) pero nunca en los PTS que la app muestra en Hoy y en Yo, que es el numero que miran.
+     *
+     * <p><b>Se paga una sola vez</b>: {@code estaCompletada} se pregunta ANTES de guardar, asi que
+     * volver a completar una leccion que ya estaba completada no vuelve a pagar. Sin esa guarda, la
+     * app reenviando el mismo toque —o el flujo de Clase Diaria, que llama aca despues de marcar el
+     * habito— pagarian dos veces por lo mismo.
+     *
+     * <p><b>Lo que esta guarda NO cubre, y es a proposito.</b> Descompletar BORRA la fila
+     * ({@code desmarcarCompletada}, AC-16), asi que completar → descompletar → completar vuelve a
+     * pagar. Cerrarlo de verdad necesita que el ledger sepa decir "este motivo, para esta persona,
+     * por ESTA leccion, ya se pago una vez" — que es exactamente la pregunta abierta Q-4 de
+     * {@code docs/MODULO_POINTS.md}, y no existe hoy. Queda documentado como hueco conocido en
+     * D-146 en vez de resolverse con una tabla paralela que despues haya que mantener.
+     */
     @Override
     @Transactional
     public ProgresoLeccion completar(UserId actorId, LeccionId leccionId) {
@@ -221,7 +246,14 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
         requireCursoAccesible(leccion.cursoId(), rol, programDay);
         requireSeccionVisible(leccion, rol, programDay);
 
-        return saveProgresoLeccionPort.marcarCompletada(new ProgresoLeccion(actorId, leccionId, clock.now()));
+        boolean yaEstabaCompletada = loadProgresoLeccionPort.estaCompletada(actorId, leccionId);
+        ProgresoLeccion guardado = saveProgresoLeccionPort
+                .marcarCompletada(new ProgresoLeccion(actorId, leccionId, clock.now()));
+        if (!yaEstabaCompletada) {
+            ajustarPuntosPort.ajustar(actorId, MotivoPuntos.LESSON_COMPLETED,
+                    ProgresoLeccion.PUNTOS_POR_LECCION, "Leccion completada: " + leccion.titulo());
+        }
+        return guardado;
     }
 
     /** AC-16: inverso simetrico de {@link #completar}, misma exigencia de acceso vigente. */

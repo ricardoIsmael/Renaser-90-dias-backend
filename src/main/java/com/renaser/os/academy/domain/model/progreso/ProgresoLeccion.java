@@ -16,6 +16,17 @@ import java.util.Objects;
  */
 public final class ProgresoLeccion {
 
+    /**
+     * Lo que paga completar una leccion (D-146, 2026-09-22). Diez, la misma unidad que un habito
+     * completo ({@code ResultadoOtorgamiento.PUNTOS_COMPLETOS}), una roca a tiempo y un ciclo de
+     * Santuario: avanzar el curso vale lo mismo que cumplir el dia.
+     *
+     * <p><b>Fijo, sin escala por puntualidad</b>, a diferencia de los habitos: una leccion no tiene
+     * ventana de entrega contra la cual llegar tarde. No hay un {@code ResultadoOtorgamiento} que
+     * calcular porque no hay hora limite que comparar.
+     */
+    public static final int PUNTOS_POR_LECCION = 10;
+
     private final UserId usuarioId;
     private final LeccionId leccionId;
     private final Instant completadaEn;

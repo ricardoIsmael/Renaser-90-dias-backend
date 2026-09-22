@@ -12,5 +12,7 @@ public enum MotivoPuntosJpa {
     SEMANA_SIN_CELULAR_PERDIDA,
     ROCA_COMPLETADA,
     ROCA_EXTENDIDA,
+    /** Espejo del valor que agrega V60 al enum `motivo_puntos` de Postgres (D-146). */
+    LECCION_COMPLETADA,
     AJUSTE_MANUAL
 }

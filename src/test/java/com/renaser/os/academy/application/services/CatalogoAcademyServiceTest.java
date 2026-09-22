@@ -25,6 +25,8 @@ import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
+import com.renaser.os.points.api.AjustarPuntosPort;
+import com.renaser.os.points.api.MotivoPuntos;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +45,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -68,6 +73,8 @@ class CatalogoAcademyServiceTest {
     private ConsultarProgresoParticipanteAcademyPort progresoPort;
     @Mock
     private AlmacenamientoPort almacenamientoPort;
+    @Mock
+    private AjustarPuntosPort ajustarPuntosPort;
 
     private CatalogoAcademyService service;
 
@@ -75,7 +82,7 @@ class CatalogoAcademyServiceTest {
     void setUp() {
         service = new CatalogoAcademyService(loadCursoPort, loadSeccionCursoPort, loadLeccionPort,
                 loadRecursoLeccionPort, loadProgresoLeccionPort, saveProgresoLeccionPort, progresoPort,
-                almacenamientoPort, CLOCK);
+                almacenamientoPort, ajustarPuntosPort, CLOCK);
     }
 
     private static Curso curso(String id, boolean publicado, AccesoCurso acceso, Integer diaDesbloqueo) {
@@ -192,6 +199,69 @@ class CatalogoAcademyServiceTest {
 
         assertThat(resultado).isEqualTo(esperado);
         verify(saveProgresoLeccionPort).marcarCompletada(any());
+    }
+
+    /**
+     * D-146. Falla contra el codigo viejo, donde `academy` no tenia una sola referencia a
+     * `AjustarPuntosPort`: completar una leccion no pagaba nada y los aprendices lo reportaron
+     * ("completo la leccion y no me cuenta como puntos").
+     */
+    @Test
+    @DisplayName("completar leccion: paga 10 puntos la primera vez")
+    void completarPagaDiezPuntos() {
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(Optional.of(progresoTrainee(10)));
+        Leccion leccion = new Leccion(LeccionId.of("l1"), CursoId.of("c1"), null, "Leccion 1", 0, null, null, null,
+                null, null, null, CLOCK.now(), CLOCK.now());
+        when(loadLeccionPort.byId(LeccionId.of("l1"))).thenReturn(Optional.of(leccion));
+        when(loadCursoPort.byId(CursoId.of("c1"))).thenReturn(Optional.of(curso("c1", true, AccesoCurso.ABIERTO, null)));
+        when(loadProgresoLeccionPort.estaCompletada(ACTOR_ID, LeccionId.of("l1"))).thenReturn(false);
+        when(saveProgresoLeccionPort.marcarCompletada(any()))
+                .thenReturn(new ProgresoLeccion(ACTOR_ID, LeccionId.of("l1"), CLOCK.now()));
+
+        service.completar(ACTOR_ID, LeccionId.of("l1"));
+
+        verify(ajustarPuntosPort).ajustar(eq(ACTOR_ID), eq(MotivoPuntos.LESSON_COMPLETED),
+                eq(ProgresoLeccion.PUNTOS_POR_LECCION), any());
+    }
+
+    /**
+     * La guarda que evita pagar dos veces por lo mismo. Sin ella, la app reenviando el mismo toque
+     * —o el flujo de Clase Diaria, que llama a `completar` despues de marcar el habito— cobrarian
+     * dos veces. Falla si alguien saca el `estaCompletada` de `completar`.
+     */
+    @Test
+    @DisplayName("completar leccion: si ya estaba completada, no vuelve a pagar")
+    void completarDeNuevoNoVuelveAPagar() {
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(Optional.of(progresoTrainee(10)));
+        Leccion leccion = new Leccion(LeccionId.of("l1"), CursoId.of("c1"), null, "Leccion 1", 0, null, null, null,
+                null, null, null, CLOCK.now(), CLOCK.now());
+        when(loadLeccionPort.byId(LeccionId.of("l1"))).thenReturn(Optional.of(leccion));
+        when(loadCursoPort.byId(CursoId.of("c1"))).thenReturn(Optional.of(curso("c1", true, AccesoCurso.ABIERTO, null)));
+        when(loadProgresoLeccionPort.estaCompletada(ACTOR_ID, LeccionId.of("l1"))).thenReturn(true);
+        when(saveProgresoLeccionPort.marcarCompletada(any()))
+                .thenReturn(new ProgresoLeccion(ACTOR_ID, LeccionId.of("l1"), CLOCK.now()));
+
+        service.completar(ACTOR_ID, LeccionId.of("l1"));
+
+        verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
+    }
+
+    /** Sin acceso no se paga: la excepcion corta antes, y el puerto de puntos no se toca. Mismo
+     *  fixture que `completarSinAccesoNoGuarda` —curso trabado por dia de desbloqueo—, porque lo
+     *  que se verifica es lo de al lado: que ese 403 tampoco mueva el saldo. */
+    @Test
+    @DisplayName("completar leccion: sin acceso no paga nada")
+    void completarSinAccesoNoPaga() {
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(Optional.of(progresoTrainee(5)));
+        Leccion leccion = new Leccion(LeccionId.of("l1"), CursoId.of("c1"), null, "Leccion 1", 0, null, null, null,
+                null, null, null, CLOCK.now(), CLOCK.now());
+        when(loadLeccionPort.byId(LeccionId.of("l1"))).thenReturn(Optional.of(leccion));
+        when(loadCursoPort.byId(CursoId.of("c1"))).thenReturn(Optional.of(curso("c1", true, AccesoCurso.ABIERTO, 30)));
+
+        assertThatThrownBy(() -> service.completar(ACTOR_ID, LeccionId.of("l1")))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
     }
 
     @Test

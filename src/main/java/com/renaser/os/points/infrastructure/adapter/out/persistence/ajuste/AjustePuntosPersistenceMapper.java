@@ -31,6 +31,7 @@ class AjustePuntosPersistenceMapper {
             case PHONE_FREE_WEEK_MISSED -> MotivoPuntosJpa.SEMANA_SIN_CELULAR_PERDIDA;
             case ROCK_COMPLETED -> MotivoPuntosJpa.ROCA_COMPLETADA;
             case ROCK_EXTENDED -> MotivoPuntosJpa.ROCA_EXTENDIDA;
+            case LESSON_COMPLETED -> MotivoPuntosJpa.LECCION_COMPLETADA;
             case MANUAL_ADJUSTMENT -> MotivoPuntosJpa.AJUSTE_MANUAL;
         };
     }
@@ -48,6 +49,7 @@ class AjustePuntosPersistenceMapper {
             case SEMANA_SIN_CELULAR_PERDIDA -> MotivoPuntos.PHONE_FREE_WEEK_MISSED;
             case ROCA_COMPLETADA -> MotivoPuntos.ROCK_COMPLETED;
             case ROCA_EXTENDIDA -> MotivoPuntos.ROCK_EXTENDED;
+            case LECCION_COMPLETADA -> MotivoPuntos.LESSON_COMPLETED;
             case AJUSTE_MANUAL -> MotivoPuntos.MANUAL_ADJUSTMENT;
         };
     }

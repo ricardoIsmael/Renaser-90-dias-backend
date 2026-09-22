@@ -1,0 +1,39 @@
+-- Completar una leccion de un curso otorga puntos.
+--
+-- Que problema resuelve
+-- ---------------------
+-- Hasta hoy, avanzar un curso no sumaba un solo punto de liga. El modulo `academy` no tenia una
+-- sola referencia a `points.api.AjustarPuntosPort` y `MotivoPuntos` no tenia ningun valor de curso
+-- ni de leccion: no existia camino por el que una leccion pudiera pagar. Los aprendices lo
+-- reportaron con esas palabras -- "completo la leccion y no me cuenta como puntos".
+--
+-- Lo confuso era que la leccion SI contaba, pero en otro numero: el Ranking General la pesa
+-- (25% cursos desde D-144) mientras que los PTS que la app muestra en Hoy y en Yo nunca la vieron.
+-- Dos numeros distintos en dos pantallas distintas, y el que la persona mira todos los dias era el
+-- que no se movia.
+--
+-- Por que un valor mas en `motivo_puntos` y no una tabla ni una columna
+-- --------------------------------------------------------------------
+-- `ajustes_puntos` ya es el libro mayor de todo lo que suma o resta: tiene el participante, el
+-- delta pedido, el aplicado, el saldo posterior, el motivo y la fecha. Un pago por leccion es un
+-- asiento mas de ese libro, no una entidad nueva. Misma decision que tomaron ROCA_COMPLETADA y
+-- BONO_RACHA en su momento, y por el mismo motivo: la consulta del historial, el piso en cero y el
+-- ledger ya existen y se reutilizan tal cual.
+--
+-- Por que este nombre
+-- -------------------
+-- `LECCION_COMPLETADA` sigue la convencion del enum, que nombra el HECHO que ocurrio en espanol
+-- (HABITO_COMPLETADO, ROCA_COMPLETADA), y su espejo de dominio es `MotivoPuntos.LESSON_COMPLETED`,
+-- en ingles como el resto de ese enum. El mapeo esta en `AjustePuntosPersistenceMapper`, que es un
+-- `switch` exhaustivo: agregar el valor sin mapearlo no compila, que es justo lo que se busca.
+--
+-- Lo que NO hace esta migracion
+-- -----------------------------
+-- No toca ninguna fila existente. Los asientos historicos siguen con su motivo de siempre, y nadie
+-- pierde ni gana puntos por aplicarla: el valor nuevo solo habilita los asientos futuros. Tampoco
+-- paga retroactivamente las lecciones ya completadas -- eso seria un ajuste de datos, no una
+-- migracion de esquema, y es una decision aparte del dueno.
+
+-- ALTER TYPE ... ADD VALUE no puede correr dentro de un bloque transaccional junto con sentencias
+-- que USEN el valor nuevo. Va solo, sin BEGIN/COMMIT, exactamente como en V46, V49 y V59.
+ALTER TYPE renaser.motivo_puntos ADD VALUE IF NOT EXISTS 'LECCION_COMPLETADA';

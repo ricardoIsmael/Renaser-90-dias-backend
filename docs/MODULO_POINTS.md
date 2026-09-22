@@ -67,7 +67,12 @@ Los 12 valores, verificados 1:1 contra el enum Postgres `motivo_puntos` del base
 | `PHONE_FREE_WEEK_MISSED` | `SEMANA_SIN_CELULAR_PERDIDA` | `PHONE_FREE_WEEK_MISSED` |
 | `ROCK_COMPLETED` | `ROCA_COMPLETADA` | `ROCK_COMPLETED` |
 | `ROCK_EXTENDED` | `ROCA_EXTENDIDA` | `ROCK_EXTENDED` |
+| `LESSON_COMPLETED` | `LECCION_COMPLETADA` | — (no existía) |
 | `MANUAL_ADJUSTMENT` | `AJUSTE_MANUAL` | `MANUAL_ADJUSTMENT` |
+
+> **Agregado el 2026-09-22 (D-146, `V60`).** `LESSON_COMPLETED` es el único valor que **no** viene
+> del enum viejo: completar una lección no pagaba nada en ningún backend. Son 10 puntos fijos, los
+> paga `academy` (`CatalogoAcademyService.completar`) y se cobran una sola vez por lección.
 
 ### 2.4 Coherencia diaria y racha — cron `coherence-score` (`src/app/api/cron/coherence-score/route.ts`)
 

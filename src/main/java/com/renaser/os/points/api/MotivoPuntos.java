@@ -38,6 +38,15 @@ public enum MotivoPuntos {
     ROCK_COMPLETED,
     /** Roca diaria completada dentro de la extensión (puntos fijos). */
     ROCK_EXTENDED,
+    /**
+     * Lección de un curso completada (V60, 2026-09-22, D-146). 10 puntos fijos, la misma unidad
+     * que un hábito: avanzar el curso suma, y no hay escala por puntualidad porque una lección no
+     * tiene ventana de entrega.
+     *
+     * <p>Se paga <b>una sola vez</b> por lección: el caso de uso pregunta primero si ya estaba
+     * completada. Descompletarla NO devuelve los puntos — no se resta nada, por decisión del dueño.
+     */
+    LESSON_COMPLETED,
     /** Corrección administrativa manual (resets, ajustes de soporte). */
     MANUAL_ADJUSTMENT
 }

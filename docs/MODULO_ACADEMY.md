@@ -380,6 +380,15 @@ inofensivo hoy porque la app **firma la portada del lado cliente** contra el buc
   sin publicar o con `acceso=RESTRINGIDO` nunca aparece acá, mismo criterio de "no revelar de más" que
   `MotivoBloqueoCurso`/AC-01. Lista vacía (nunca error) para roles distintos de TRAINEE. `portada_url`
   viaja sin firmar — la app firma la escalera completa del lado cliente (§1.8).
+- **AC-18 (2026-09-22, D-146)** — **completar una lección paga 10 puntos.** Hasta hoy no pagaba
+  nada: este módulo no tenía una sola referencia a `points.api.AjustarPuntosPort`. Los aprendices lo
+  reportaron con esas palabras ("completo la lección y no me cuenta como puntos") y tenían razón —
+  la lección pesaba 25% en el Ranking General (D-144) pero nunca en los PTS que la app muestra.
+  `CatalogoAcademyService.completar` ahora llama al puerto público de `points`, como ya hacían
+  `habits`, `rocks` y `evidence`. Se paga **una sola vez** (`estaCompletada` se pregunta antes de
+  guardar). **Hueco conocido:** descompletar borra la fila (AC-16, abajo), así que
+  completar → descompletar → completar vuelve a pagar; cerrarlo necesita la Q-4 de
+  `docs/MODULO_POINTS.md`, que no existe. Queda escrito, no resuelto a medias.
 - **AC-16** — `DELETE /api/v1/lecciones/{id}/complete` (`DescompletarLeccionUseCase`) reemplaza la
   escritura directa `leccion_progreso.delete()` (`cursos.ts: desmarcarLeccion`). Inverso simétrico de
   `CompletarLeccionUseCase`: misma exigencia de acceso vigente al curso/sección (AC-07) antes de
