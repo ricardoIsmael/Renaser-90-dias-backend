@@ -117,9 +117,36 @@ public class GlobalExceptionHandler {
         return respond(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
-    @ExceptionHandler({IllegalArgumentException.class, ConstraintViolationException.class})
+    @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiErrorResponse> handleBadRequest(RuntimeException ex) {
         return respond(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    /**
+     * Validacion de Bean Validation, <b>sin nombres internos</b>.
+     *
+     * > <b>Corregido el 2026-09-22 (E-207).</b> Esta excepcion caia en el handler de arriba, que
+     * > devuelve {@code ex.getMessage()} tal cual. Para una violacion de {@code @Size} eso es
+     * > <i>"CrearPlanDiarioCommand.rocas: el tamano debe estar entre 3 y 9"</i>, y asi salio en un
+     * > dialogo de la app: el nombre de una clase Java y el de un campo, en la cara de un aprendiz
+     * > de 55 anios. Lo reporto el dueno mirando la pantalla: <i>"¿que es esto? ¿como sale eso al
+     * > usuario?"</i>.
+     *
+     * <p>{@code ConstraintViolation.getMessage()} trae solo el texto del mensaje; el
+     * {@code Clase.campo:} lo agrega {@code getMessage()} de la excepcion al concatenar el
+     * <i>property path</i>. Tomando los mensajes uno por uno, el path no aparece nunca.
+     *
+     * <p>Esto <b>no</b> convierte el texto en buena copia —"el tamano debe estar entre 1 y 9" sigue
+     * siendo lenguaje de formulario— pero deja de filtrar nombres internos, que es lo que no puede
+     * pasar. La copia buena para cada caso la pone la pantalla, que sabe de que esta hablando.
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleConstraintViolation(ConstraintViolationException ex) {
+        String mensaje = ex.getConstraintViolations().stream()
+                .map(jakarta.validation.ConstraintViolation::getMessage)
+                .distinct()
+                .collect(java.util.stream.Collectors.joining(". "));
+        return respond(HttpStatus.BAD_REQUEST, mensaje.isBlank() ? "Revisa los datos enviados." : mensaje);
     }
 
     @ExceptionHandler(IllegalStateException.class)

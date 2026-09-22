@@ -7212,3 +7212,47 @@ verificar, que no lleguen dos objetivos del mismo eje. Cuantos vienen lo acota e
    dar por cerrada la busqueda es justamente el error.
 3. **Un test que construye un comando NO prueba un caso de uso.** Si el cambio afecta a lo que puede
    hacer un usuario, el test tiene que pasar por el servicio.
+
+---
+
+## E-206 · Se podia armar la semana con un eje, y despues no se podia planificar el dia
+
+**Sintoma.** En el emulador, recorriendo el flujo completo. Se arma la semana con el eje principal
+—que es lo que RK-12 habilito— se agenda UNA accion para hoy, y al confirmar sale un dialogo:
+
+```
+Tus acciones del día
+CrearPlanDiarioCommand.rocas: el tamaño debe estar entre 3 y 9
+```
+
+La persona hace exactamente lo que la app le ofrece y queda trabada. No hay forma de salir del paso
+salvo volver atras y armar los otros dos ejes, que es justo lo que se habia dejado de exigir.
+
+**Causa.** `CrearPlanDiarioCommand` tenia `@Size(min = 3, max = 9)`. Ese 3 no era una regla propia:
+era la consecuencia aritmetica de asumir **tres ejes planificados**, uno por eje como minimo. Con la
+semana armable con un solo eje, de ese eje se pueden agendar 1 a 3 acciones, y una sola es
+perfectamente valida.
+
+Es la **tercera** vez el mismo dia que relajar una regla dejo otra sin tocar (E-205 fue la segunda),
+y esta se escapo por algo distinto y peor: **crear el plan del dia no tenia ni un solo test.** El
+grep de `== 3` que E-205 recomienda no lo habria encontrado, porque no dice 3 en una comparacion:
+lo dice en una anotacion, `@Size(min = 3, max = 9)`.
+
+**Solucion.** `@Size(min = 1, max = 9)`.
+
+**Lo que NO se toco, y conviene tenerlo separado:** `BloqueoPlanificacion.ROCAS_REQUERIDAS_MANANA`
+sigue en 3, por decision expresa del dueno. Son dos cosas distintas y conviene no mezclarlas: aquel
+decide si la app insiste a las 20:00 cuando manana esta flojo; este decidia si se podia **guardar**.
+Un minimo de creacion de 3 no hace que nadie planifique mejor — hace que no pueda planificar.
+
+**Como evitar que vuelva a pasar.**
+
+1. **Los tests nuevos estan en `RocaDiariaServiceTest`**, y antes de este cambio ese camino no tenia
+   ninguno. Una regla sin test es una regla que nadie va a acordarse de revisar.
+2. **Al relajar un minimo, buscar tambien en las ANOTACIONES, no solo en el codigo.** La busqueda
+   util no es `== 3` sino `@Size(min`, `@Min(`, `@Max(` en todo el modulo. Un numero magico dentro
+   de una anotacion es igual de duro que dentro de un `if`, y se ve menos.
+3. **Preguntarse de donde sale cada minimo.** El 3 de aca no era una decision de negocio: era
+   "1 por eje x 3 ejes" cristalizado en una constante. Cuando cambia el supuesto (tres ejes), todo
+   numero que se derivaba de el queda mintiendo. Vale la pena escribir en el javadoc de donde sale
+   un numero, justamente para poder revisarlo cuando el supuesto cambia.

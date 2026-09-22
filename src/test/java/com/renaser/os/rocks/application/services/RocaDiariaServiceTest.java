@@ -28,6 +28,9 @@ import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
+import com.renaser.os.rocks.application.ports.in.rocadiaria.CrearPlanDiarioUseCase.CrearPlanDiarioCommand;
+import com.renaser.os.rocks.application.ports.in.rocadiaria.CrearPlanDiarioUseCase.ItemRocaDiaria;
+import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,6 +49,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -123,6 +127,42 @@ class RocaDiariaServiceTest {
     private CompletarRocaDiariaCommand comandoTexto(RocaDiariaId id) {
         return new CompletarRocaDiariaCommand(actorId, id, TipoEvidenciaRoca.TEXTO, null, null, "hecho", null, null,
                 null, true, false);
+    }
+
+    /**
+     * <b>E-206.</b> Crear el plan del dia no tenia ni un test, y por eso el minimo de 3 sobrevivio a
+     * que la semana pasara a poder armarse con un solo eje.
+     *
+     * <p>La leccion de E-205 decia "un test que construye un comando NO prueba un caso de uso", y
+     * aca el comando SI es el lugar correcto: el minimo vive en su {@code @Size} y no hay un segundo
+     * minimo en el servicio — {@code RocaDiariaService} solo acota <i>por eje</i> (1 a 3). Se
+     * verifico con un grep de la regla, que es lo que fallo la vez anterior.
+     */
+    @Test
+    @DisplayName("E-206: una sola accion alcanza para planificar el dia")
+    void conUnaSolaAccionSeAcepta() {
+        assertThatCode(() -> new CrearPlanDiarioCommand(actorId, LocalDate.of(2026, 1, 24),
+                List.of(itemDiario(EjeObjetivo.CUERPO, 1)))).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("...pero ninguna no: un dia sin objetivos no es un dia planificado")
+    void sinNingunaSeRechaza() {
+        assertThatThrownBy(() -> new CrearPlanDiarioCommand(actorId, LocalDate.of(2026, 1, 24), List.of()))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    @DisplayName("el tope sigue en nueve: tres por eje, tres ejes")
+    void masDeNueveSeRechaza() {
+        List<ItemRocaDiaria> diez = java.util.stream.IntStream.rangeClosed(1, 10)
+                .mapToObj(i -> itemDiario(EjeObjetivo.CUERPO, i)).toList();
+        assertThatThrownBy(() -> new CrearPlanDiarioCommand(actorId, LocalDate.of(2026, 1, 24), diez))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    private static ItemRocaDiaria itemDiario(EjeObjetivo eje, int posicion) {
+        return new ItemRocaDiaria(eje, posicion, "Caminar 40 minutos", null, 5, false, null, null, null);
     }
 
     @Test
