@@ -7024,3 +7024,55 @@ grep -rn "GRUPO_POR_VENCER" --include=*.java --include=*.sql src/
 El valor anterior ya esta en todos los lugares que hay que tocar, asi que su lista de apariciones
 **es** la lista de tareas. Es mas confiable que acordarse, y mas rapido que descubrirlo un `[ERROR]`
 por vez.
+
+---
+
+## E-202 · En local NINGUN audio suena: el reproductor se queda en `0:00 / 0:00 · cargando…` para siempre
+
+**Sintoma.** En el emulador, tanto la **Pastilla Renacer** como la **Audioterapia Semanal** abren su
+hoja con el reproductor visible, el titulo correcto traido de la base, y el contador clavado en:
+
+```
+0:00 / 0:00  ·  cargando…
+```
+
+No hay error en pantalla, no hay excepcion en `logcat`, no hay toast. Se queda asi indefinidamente
+(se espero mas de dos minutos). Tocar play no cambia nada.
+
+**Causa.** El backend local corre con `renaser.storage.proveedor=noop` — que es el **default**
+(`application.yaml:306`, `${STORAGE_PROVEEDOR:noop}`). Con eso el bean activo es
+`NoOpAlmacenamientoAdapter`, y su `firmarLectura(...)` devuelve:
+
+```java
+return URI.create("about:blank#pendiente-s3/" + ruta);
+```
+
+Esa URL es **no nula**. Y ahi esta el detalle que hace que el sintoma enganie: el frontend decide si
+hay audio con `Boolean(audioUrl)`, no con una validacion de esquema. Como `about:blank#…` es una
+cadena no vacia, `hayAudio` da `true`, se pinta el reproductor de verdad en vez del aviso *"el audio
+de este dia todavia no esta publicado"*, y `expo-audio` intenta abrir una URL que jamas va a
+resolver. De ahi el `cargando…` eterno.
+
+Las dos tablas tienen contenido real, asi que el problema **no** es falta de datos:
+
+- `renaser.audios_espiritu`: 45 filas, las 45 con `ruta_storage`
+  (`contenido/pastilla-renacer/dia-NN.mp3`).
+- `renaser.audioterapias`: 13 filas con su `ruta_storage`.
+
+**Solucion.** Ninguna en codigo: es configuracion. Para oir audio en local hay que levantar el
+backend con `STORAGE_PROVEEDOR=s3` y credenciales de AWS validas (bucket `s3-renaser90dias`,
+region `us-east-1`); ahi `S3AlmacenamientoAdapter` firma una URL real y el reproductor carga.
+
+**Como evitar que vuelva a pasar.** Dos cosas, y la segunda es la que ahorra la media hora:
+
+1. **Antes de culpar al reproductor, mirar la consola del backend.** `NoOpAlmacenamientoAdapter`
+   loguea un `WARN` por cada llamada, con texto literal buscable:
+   `AlmacenamientoPort.firmarLectura(<ruta>) placeholder: faltan credenciales AWS S3 (D-34).`
+   Si esa linea esta, el audio no va a sonar y no hay nada que depurar en la app.
+2. **Un `about:blank` no es "no hay audio", pero se comporta peor que no tenerlo.** El adaptador
+   noop cumple su contrato (devuelve una URI), y aun asi degrada mal: el frontend no tiene como
+   distinguir un marcador de una URL buena mirando solo si es nula. Si algun dia molesta de verdad,
+   la forma limpia es que el noop devuelva `null` para lectura —el frontend ya sabe mostrar
+   *"todavia no esta publicado"*— o que la respuesta traiga un campo aparte que diga que es un
+   marcador. Queda anotado, no hecho: cambiar el contrato del puerto toca varios modulos y no es el
+   alcance de hoy.
