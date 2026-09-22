@@ -25,7 +25,7 @@ class RocaDiariaPersistenceAdapter implements LoadRocaDiariaPort, SaveRocaDiaria
 
     @Override
     public void borrarDeParticipanteYFecha(UserId participanteId, LocalDate fecha) {
-        repository.deleteByParticipanteIdAndFecha(participanteId.value(), fecha);
+        repository.borrarDeParticipanteYFecha(participanteId.value(), fecha);
     }
 
     @Override

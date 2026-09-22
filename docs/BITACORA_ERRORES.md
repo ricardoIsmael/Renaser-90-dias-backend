@@ -7304,3 +7304,50 @@ pero dejaron de describir lo que el producto hace.
 3. **Una regla de fechas que enumera un `Set` de dos elementos es una senal.** Las fechas admitidas
    casi siempre son un RANGO; un conjunto cerrado de dos suele ser un supuesto del momento en que se
    escribio, no la regla de negocio.
+
+---
+
+## E-209 · El plan nuevo chocaba contra el viejo: Hibernate hace los INSERT antes que los DELETE
+
+**Sintoma.** Reemplazar el plan de un dia futuro —lo que E-208 acababa de habilitar— fallaba con un
+409 que la app mostraba como:
+
+```
+El día en curso ya está armado y no se reacomoda. Puedes cambiar los que vienen.
+```
+
+El mensaje desorientaba el doble, porque el dia era el **jueves**, no el dia en curso. Se verifico
+que el codigo nuevo estuviera corriendo (el jueves se habia podido agendar, cosa que la regla vieja
+rechazaba) y que `ALREADY_PLANNED` fuera el unico conflicto posible en ese metodo. No lo era.
+
+**Causa.** El borrado se escribio como un derivado de Spring Data,
+`deleteByParticipanteIdAndFecha`. Spring Data resuelve eso **cargando las filas y llamando
+`em.remove()` en cada una**, o sea que el borrado queda encolado hasta el flush. Y Hibernate, al
+hacer flush, ejecuta las operaciones en un orden fijo en el que los **INSERT van antes que los
+DELETE**. Resultado: los objetivos nuevos entraban mientras los viejos seguian ahi y chocaban contra
+`rocas_diarias_participante_id_fecha_eje_posicion_key`.
+
+Ese `DataIntegrityViolationException` lo traduce `GlobalExceptionHandler` a **409**, y el frontend
+mapea cualquier 409 de ese endpoint a "ya planificado" (`e.esConflicto`). Por eso el mensaje hablaba
+del dia en curso: el codigo de la app asumia que el unico 409 posible era el nuestro.
+
+**Solucion.** Un DELETE de verdad, ejecutado en el acto:
+
+```java
+@Modifying(flushAutomatically = true, clearAutomatically = true)
+@Query("delete from RocaDiariaJpaEntity r where r.participanteId = :participanteId and r.fecha = :fecha")
+void borrarDeParticipanteYFecha(...);
+```
+
+**Como evitar que vuelva a pasar.**
+
+1. **El test es `ReemplazarPlanDelDiaIT`, y tiene que ser de INTEGRACION.** Un test con dobles habria
+   pasado sin dudar: el servicio llama al puerto, el puerto llama al repositorio, todo verde. El
+   `UNIQUE` y el orden de flush solo existen contra una base real. Este bug lo encontro una prueba a
+   mano en el emulador — es justo la clase de defecto que los mocks no ven.
+2. **Un `deleteByX` derivado no es un DELETE.** Carga y marca. Cuando en la misma transaccion hay un
+   insert que ocupa la misma clave unica, hace falta `@Modifying` con `@Query` para que el DELETE
+   salga primero.
+3. **Traducir "cualquier 409" a un mensaje concreto miente cuando aparece un 409 nuevo.** El
+   frontend decia "el dia en curso ya esta armado" para un 409 de integridad. Si un endpoint puede
+   devolver mas de un conflicto, hay que distinguirlos por codigo y no por status.
