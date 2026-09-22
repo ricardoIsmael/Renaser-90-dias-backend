@@ -50,7 +50,8 @@ onboarding/
 ├── package-info.java                          @ApplicationModule("Onboarding")
 ├── api/
 │   ├── package-info.java                      @NamedInterface("api")
-│   └── OnboardingEstadoFinder.java             completado(usuarioId), pactoFase1Firmado(usuarioId)
+│   ├── OnboardingEstadoFinder.java             completado(usuarioId), pactoFase1Firmado(usuarioId)
+│   └── MedicionDelMapaFinder.java              que declaro medir en el Mapa (2026-09-22, para rocks)
 ├── domain/model/
 │   ├── estado/EstadoOnboarding.java            agregado raíz 1:1 con usuarios (PK = usuario_id)
 │   ├── estado/HitoOnboarding.java               TERMINOS | PACTO | PACTO_FIRMADO | ROCAS_SYNC

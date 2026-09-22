@@ -7076,3 +7076,46 @@ region `us-east-1`); ahi `S3AlmacenamientoAdapter` firma una URL real y el repro
    *"todavia no esta publicado"*— o que la respuesta traiga un campo aparte que diga que es un
    marcador. Queda anotado, no hecho: cambiar el contrato del puerto toca varios modulos y no es el
    alcance de hoy.
+
+---
+
+## E-203 · Dos cifras distintas para el mismo mes: el Mapa decia 81,6 kg y el Plan 82 kg
+
+**Sintoma.** Con el objetivo de Cuerpo en 84 → 78 kg, la misma app mostraba dos numeros para el
+mismo tramo:
+
+- Mapa de Renacimiento, hito del **Dia 30**: `81.6 kg`
+- Plan, tarjeta del mes, **"Este mes:"**: `82 kg`
+
+No hay error, no hay excepcion, nada falla. Simplemente los dos numeros no coinciden, y el aprendiz
+no tiene forma de saber cual de los dos es su objetivo.
+
+**Causa.** Dos formulas, las dos correctas en su terreno, respondiendo la misma pregunta:
+
+1. `hitosSugeridos` (frontend, `mapa-renacimiento/reglas.ts`) usa la **progresion 40 / 75 / 100 %**
+   del manual del cliente (§3 V08): `84 + (78 − 84) × 0,40 = 81,6`.
+2. `objetivoDelMes` (frontend, `objetivos/utils/objetivoMensual.ts`) repartia **lo que falta entre
+   los meses que quedan**: `84 − 6/3 = 82`.
+
+Cada una tenia su javadoc explicando por que estaba bien, e incluso una advertencia de no
+confundirlas ("no reemplaza a `hitosSugeridos`"). La advertencia describia el problema en vez de
+resolverlo: los dos numeros igual terminaron uno encima del otro en la pantalla.
+
+**Solucion.** Una sola cuenta, en el backend (D-147): la curva del manual, anclada en el valor real
+de hoy. En el mes 1 sin mediciones da exactamente el hito, asi que los dos numeros que el dueno vio
+distintos pasaron a ser el mismo. El motor del frontend **se borro entero** —`objetivoMensual.ts`,
+`cifraDelMesDeLaRoca.ts` y la seccion mensual de `reglas.ts`— en vez de dejarlo sin usar.
+
+**Como evitar que vuelva a pasar.** Tres cosas, en orden de utilidad:
+
+1. **El test de regresion existe y falla contra el codigo viejo.**
+   `CalculadoraObjetivoMensualTest.elMes1SinMedicionesDaExactamenteElHito` compara contra la formula
+   del hito calculada aparte en el propio test, y `yaNoDaElTercio` fija explicitamente que 82 ya no
+   es la respuesta. Si alguien vuelve a poner un reparto lineal, se pone rojo solo.
+2. **Un comentario que dice "no confundir estas dos" es una senal de alarma, no una solucion.** Si
+   dos funciones necesitan que se aclare cual usar para la misma pregunta de negocio, lo que hay es
+   una regla duplicada. La pregunta correcta no es "cual uso" sino "por que hay dos".
+3. **Una regla de negocio que depende de datos que el cliente no tiene, no va en el cliente.** El
+   calculo necesita `map_health_result_type`, que vive en `respuestas_onboarding`; la app lo tenia
+   solo porque alguien lo habia reexpuesto en un hook. Eso es la pista de que el calculo estaba del
+   lado equivocado.

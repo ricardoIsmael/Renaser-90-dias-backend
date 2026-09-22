@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.infrastructure.adapter.in.rest.rocamensual;
 
+import com.renaser.os.rocks.application.ports.in.rocamensual.ConsultarObjetivoDelMesUseCase;
 import com.renaser.os.rocks.application.ports.in.rocamensual.ConsultarRocasMensualesUseCase;
 import com.renaser.os.rocks.application.ports.in.rocamensual.DefinirRocaMensualUseCase;
 import com.renaser.os.rocks.application.ports.in.rocamensual.DefinirRocaMensualUseCase.DefinirRocaMensualCommand;
@@ -23,11 +24,14 @@ import java.util.List;
 public class RocaMensualController {
 
     private final ConsultarRocasMensualesUseCase consultarUseCase;
+    private final ConsultarObjetivoDelMesUseCase planUseCase;
     private final DefinirRocaMensualUseCase definirUseCase;
 
     public RocaMensualController(ConsultarRocasMensualesUseCase consultarUseCase,
+                                  ConsultarObjetivoDelMesUseCase planUseCase,
                                   DefinirRocaMensualUseCase definirUseCase) {
         this.consultarUseCase = consultarUseCase;
+        this.planUseCase = planUseCase;
         this.definirUseCase = definirUseCase;
     }
 
@@ -36,6 +40,23 @@ public class RocaMensualController {
     public List<RocaMensualResponse> listar(@ActorAutenticado UserId actor) {
         return consultarUseCase.misRocasMensuales(actor).stream()
                 .map(RocaMensualResponse::from)
+                .toList();
+    }
+
+    /**
+     * El plan mensual completo de los tres ejes, <b>ya calculado</b>: los tres meses de cada uno con
+     * su cifra, cual esta en curso, y si el numero lo escribio la persona o lo propone el sistema.
+     *
+     * <p>Es la pregunta que hace la pantalla del Plan, y no la responde {@link #listar()}: aquel
+     * devuelve solo lo guardado, que para casi todo el mundo esta vacio. Vive aparte en vez de
+     * cambiarle la forma al otro porque son dos contratos distintos —uno son filas, el otro es un
+     * plan— y el primero ya lo consume el panel.
+     */
+    @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
+    @GetMapping("/plan")
+    public List<PlanMensualResponse> plan(@ActorAutenticado UserId actor) {
+        return planUseCase.misObjetivosMensuales(actor).stream()
+                .map(PlanMensualResponse::from)
                 .toList();
     }
 

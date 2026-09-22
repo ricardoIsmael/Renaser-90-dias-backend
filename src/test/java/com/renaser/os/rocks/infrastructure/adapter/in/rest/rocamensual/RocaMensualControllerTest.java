@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.infrastructure.adapter.in.rest.rocamensual;
 
+import com.renaser.os.rocks.application.ports.in.rocamensual.ConsultarObjetivoDelMesUseCase;
 import com.renaser.os.rocks.application.ports.in.rocamensual.ConsultarRocasMensualesUseCase;
 import com.renaser.os.rocks.application.ports.in.rocamensual.DefinirRocaMensualUseCase;
 import com.renaser.os.rocks.application.ports.in.rocamensual.DefinirRocaMensualUseCase.DefinirRocaMensualCommand;
@@ -70,6 +71,9 @@ class RocaMensualControllerTest {
 
     @MockitoBean
     private ConsultarRocasMensualesUseCase consultarUseCase;
+    /** RK-11: el controller tambien resuelve `GET /plan`. Sin este mock el contexto no levanta. */
+    @MockitoBean
+    private ConsultarObjetivoDelMesUseCase planUseCase;
     @MockitoBean
     private DefinirRocaMensualUseCase definirUseCase;
     @MockitoBean
