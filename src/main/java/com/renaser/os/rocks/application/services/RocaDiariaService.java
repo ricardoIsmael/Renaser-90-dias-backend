@@ -115,13 +115,14 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         EstadoPlazo plazoAlCrear = VentanaPlanificacionDiaria.abierta(ahora, zona) ? EstadoPlazo.EN_PLAZO
                 : EstadoPlazo.A_DESTIEMPO;
         LocalDate hoy = ahora.atZone(zona).toLocalDate();
-        LocalDate manana = hoy.plusDays(1);
-        Set<LocalDate> fechasAdmitidas = plazoAlCrear == EstadoPlazo.EN_PLAZO ? Set.of(manana) : Set.of(hoy, manana);
-        if (!fechasAdmitidas.contains(command.fecha())) {
-            throw new IllegalArgumentException("INVALID_DATE: la fecha de planificacion debe ser " + fechasAdmitidas);
-        }
+        requireFechaPlanificable(command.fecha(), hoy, plazoAlCrear, progreso.fechaInicio());
 
-        if (loadRocaDiariaPort.contarDeParticipanteYFecha(command.actorId(), command.fecha()) > 0) {
+        /* Un dia que TODAVIA NO LLEGO se puede volver a planificar: es el "hasta la noche tengo
+           para cambiar la hora" del dueno. El dia en curso no — igual que los habitos (D-91), lo
+           que se esta viviendo no se reacomoda. */
+        if (command.fecha().isAfter(hoy)) {
+            saveRocaDiariaPort.borrarDeParticipanteYFecha(command.actorId(), command.fecha());
+        } else if (loadRocaDiariaPort.contarDeParticipanteYFecha(command.actorId(), command.fecha()) > 0) {
             throw new IllegalStateException("ALREADY_PLANNED: ya existen rocas planificadas para " + command.fecha());
         }
 
@@ -226,6 +227,35 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         ProgresoParticipanteRocks progreso = requireProgreso(actorId);
         LocalDate manana = clock.now().atZone(progreso.zona()).toLocalDate().plusDays(1);
         return loadRocaDiariaPort.deParticipanteYFecha(actorId, manana);
+    }
+
+    /**
+     * Que fechas se pueden planificar hoy: <b>de manana hasta el final de la semana de programa</b>,
+     * y ademas hoy mismo mientras la ventana nocturna no haya abierto.
+     *
+     * > <b>Corregido el 2026-09-22.</b> Antes eran solo dos fechas: manana con la ventana abierta,
+     * > u hoy y manana con la ventana cerrada. El dueno lo planteo con su propio ejemplo:
+     * > <i>"si yo quiero planificar para manana, entonces puedo los dias miercoles y jueves, ¿no?
+     * > (…) estamos martes, entonces planifico para todo lo que queda"</i>. Con la regla vieja,
+     * > miercoles y jueves volvian con INVALID_DATE.
+     *
+     * <p><b>El corte es el fin de la semana de programa, y no es cosmetico:</b> cada objetivo
+     * diario cuelga del objetivo semanal de su semana ({@code NO_WEEKLY_ROCK} si no existe), asi
+     * que ofrecer el lunes que viene seria ofrecer algo que va a fallar al guardar. La semana que
+     * viene se planifica cuando se arma, el domingo.
+     *
+     * <p>Hoy sigue dependiendo de la ventana, exactamente como antes: a partir de las 18:00 el
+     * programa esta planificando el dia siguiente y volver sobre hoy es reacomodar el dia en curso.
+     */
+    private void requireFechaPlanificable(LocalDate fecha, LocalDate hoy, EstadoPlazo plazoAlCrear,
+                                           LocalDate fechaInicio) {
+        LocalDate desde = plazoAlCrear == EstadoPlazo.EN_PLAZO ? hoy.plusDays(1) : hoy;
+        LocalDate hasta = SemanaPrograma.limites(fechaInicio,
+                SemanaPrograma.numeroSemanaParaFecha(fechaInicio, hoy)).fin();
+        if (fecha.isBefore(desde) || fecha.isAfter(hasta)) {
+            throw new IllegalArgumentException(
+                    "INVALID_DATE: la fecha de planificacion debe estar entre " + desde + " y " + hasta);
+        }
     }
 
     private RocaDiaria planificarUna(UserId actorId, LocalDate fecha, ItemRocaDiaria item,

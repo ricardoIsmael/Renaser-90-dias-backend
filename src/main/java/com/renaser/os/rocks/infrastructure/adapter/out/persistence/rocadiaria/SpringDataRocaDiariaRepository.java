@@ -1,6 +1,8 @@
 package com.renaser.os.rocks.infrastructure.adapter.out.persistence.rocadiaria;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -15,6 +17,16 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
 
 interface SpringDataRocaDiariaRepository extends JpaRepository<RocaDiariaJpaEntity, UUID> {
+
+    /**
+     * Borra el plan de un dia. `@Modifying` porque Spring Data solo genera el DELETE derivado si se
+     * lo declara: sin el, este metodo cargaria las filas y las borraria una por una.
+     *
+     * <p>Arrastra `acciones_diarias` por el `ON DELETE CASCADE` de la V61.
+     */
+    @Modifying
+    @Transactional
+    void deleteByParticipanteIdAndFecha(UUID participanteId, LocalDate fecha);
 
     /**
      * Bloqueo pesimista para el camino de ESCRITURA (mismo patron que

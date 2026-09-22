@@ -21,6 +21,10 @@ import com.renaser.os.rocks.application.ports.out.rocamaestra.LoadRocaMaestraPor
 import com.renaser.os.rocks.application.ports.out.rocasemanal.LoadRocaSemanalPort;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
+import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
+import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraId;
+import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
+import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanalId;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
@@ -138,6 +142,80 @@ class RocaDiariaServiceTest {
      * minimo en el servicio — {@code RocaDiariaService} solo acota <i>por eje</i> (1 a 3). Se
      * verifico con un grep de la regla, que es lo que fallo la vez anterior.
      */
+    /* ------------------------------------------------------------------------------------------
+     * QUE FECHAS SE PUEDEN PLANIFICAR
+     *
+     * El reloj del fixture marca el 2026-08-24 a las 20:05 UTC: la ventana nocturna (18:00) esta
+     * ABIERTA, asi que hoy ya no se toca y se planifica de manana en adelante.
+     * ---------------------------------------------------------------------------------------- */
+
+    private void conPlanDiarioPosible() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
+        when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(tresMaestrasParaDiaria());
+        lenient().when(loadRocaSemanalPort.deMaestraYSemana(any(), anyInt()))
+                .thenAnswer(inv -> Optional.of(RocaSemanal.planificar(RocaSemanalId.of(UUID.randomUUID()),
+                        inv.getArgument(0), 2, "objetivo", List.of(), null, null, null, CLOCK)));
+        lenient().when(saveRocaDiariaPort.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
+    }
+
+    private List<RocaMaestra> tresMaestrasParaDiaria() {
+        Instant ahora = CLOCK.now();
+        return List.of(
+                RocaMaestra.rehydrate(RocaMaestraId.of(UUID.randomUUID()), actorId, EjeObjetivo.CUERPO,
+                        "obj cuerpo", null, ahora, ahora),
+                RocaMaestra.rehydrate(RocaMaestraId.of(UUID.randomUUID()), actorId, EjeObjetivo.TRABAJO,
+                        "obj trabajo", null, ahora, ahora),
+                RocaMaestra.rehydrate(RocaMaestraId.of(UUID.randomUUID()), actorId, EjeObjetivo.RELACIONES,
+                        "obj relaciones", null, ahora, ahora));
+    }
+
+    private void crearPara(LocalDate fecha) {
+        service.crear(new CrearPlanDiarioCommand(actorId, fecha, List.of(itemDiario(EjeObjetivo.CUERPO, 1))));
+    }
+
+    @Test
+    @DisplayName("manana se puede planificar")
+    void mananaSePuede() {
+        conPlanDiarioPosible();
+        assertThatCode(() -> crearPara(LocalDate.of(2026, 8, 25))).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("y tambien el resto de la semana: el ejemplo del dueno era miercoles y jueves")
+    void elRestoDeLaSemanaTambien() {
+        conPlanDiarioPosible();
+        assertThatCode(() -> crearPara(LocalDate.of(2026, 8, 26))).doesNotThrowAnyException();
+        assertThatCode(() -> crearPara(LocalDate.of(2026, 8, 27))).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("hoy no, con la ventana nocturna abierta: el dia en curso no se reacomoda")
+    void hoyNoConLaVentanaAbierta() {
+        conPlanDiarioPosible();
+        assertThatThrownBy(() -> crearPara(LocalDate.of(2026, 8, 24)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("INVALID_DATE");
+    }
+
+    @Test
+    @DisplayName("la semana que viene tampoco: su objetivo semanal todavia no existe")
+    void masAlladeLaSemanaNo() {
+        conPlanDiarioPosible();
+        assertThatThrownBy(() -> crearPara(LocalDate.of(2026, 9, 7)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("INVALID_DATE");
+    }
+
+    @Test
+    @DisplayName("un dia futuro ya planificado se REEMPLAZA, no se rechaza: es poder corregirse")
+    void unDiaFuturoSeReemplaza() {
+        conPlanDiarioPosible();
+        LocalDate manana = LocalDate.of(2026, 8, 25);
+
+        crearPara(manana);
+
+        verify(saveRocaDiariaPort).borrarDeParticipanteYFecha(actorId, manana);
+    }
+
     @Test
     @DisplayName("E-206: una sola accion alcanza para planificar el dia")
     void conUnaSolaAccionSeAcepta() {

@@ -7256,3 +7256,51 @@ Un minimo de creacion de 3 no hace que nadie planifique mejor — hace que no pu
    "1 por eje x 3 ejes" cristalizado en una constante. Cuando cambia el supuesto (tres ejes), todo
    numero que se derivaba de el queda mintiendo. Vale la pena escribir en el javadoc de donde sale
    un numero, justamente para poder revisarlo cuando el supuesto cambia.
+
+---
+
+## E-208 · No se podia planificar el jueves, ni corregir el plan de manana
+
+**Sintoma.** Dos cosas que el dueno noto probando, y las dos vuelven del servidor:
+
+```
+INVALID_DATE: la fecha de planificacion debe ser [2026-09-23]
+ALREADY_PLANNED: ya existen rocas planificadas para 2026-09-23
+```
+
+Su planteo, textual: *"si yo quiero planificar para manana, entonces puedo los dias miercoles y
+jueves, ¿no? (...) estamos martes, entonces planifico para todo lo que queda"* y *"si me equivoque
+debe de poder editar"*.
+
+**Causa.** `RocaDiariaService.crear` tenia dos reglas heredadas que nadie habia vuelto a mirar:
+
+1. **Solo dos fechas admitidas.** `Set.of(manana)` con la ventana nocturna abierta, o
+   `Set.of(hoy, manana)` con la ventana cerrada. Cualquier otro dia de la semana: `INVALID_DATE`.
+2. **Una fecha planificada no se podia volver a planificar.** `ALREADY_PLANNED` sin distinguir si
+   ese dia ya habia llegado o no. Por eso no existia "editar": no es que faltara el boton, es que el
+   servidor lo prohibia.
+
+Ninguna de las dos estaba mal cuando se escribio — el plan diario era "lo de manana, a la noche" —
+pero dejaron de describir lo que el producto hace.
+
+**Solucion.** Dos cambios, los dos acotados:
+
+- Las fechas admitidas van **de manana hasta el fin de la semana de programa**, mas hoy mientras la
+  ventana nocturna no haya abierto (eso ultimo queda **igual que antes**). El corte en el fin de
+  semana no es cosmetico: cada objetivo diario cuelga del semanal de SU semana, asi que ofrecer el
+  lunes que viene seria ofrecer algo que falla al guardar con `NO_WEEKLY_ROCK`.
+- Un dia que **todavia no llego** se reemplaza: se borra su plan y se guarda el nuevo. El dia en
+  curso sigue devolviendo `ALREADY_PLANNED`, igual que los habitos no se reacomodan en el dia (D-91).
+
+**Como evitar que vuelva a pasar.**
+
+1. **Los cinco tests nuevos estan en `RocaDiariaServiceTest` y pasan por el servicio**, que es donde
+   viven estas reglas. Antes de este cambio, `crear` no tenia ninguno — la misma causa raiz que
+   E-206, en el mismo metodo.
+2. **El borrado solo se permite hacia el futuro, y esta escrito en el puerto.**
+   `SaveRocaDiariaPort.borrarDeParticipanteYFecha` dice en su javadoc que quien llama tiene que
+   haber verificado que la fecha no llego: un dia ya vivido puede tener evidencia subida y puntos
+   otorgados, y borrarlo seria borrar el trabajo de una persona.
+3. **Una regla de fechas que enumera un `Set` de dos elementos es una senal.** Las fechas admitidas
+   casi siempre son un RANGO; un conjunto cerrado de dos suele ser un supuesto del momento en que se
+   escribio, no la regla de negocio.
