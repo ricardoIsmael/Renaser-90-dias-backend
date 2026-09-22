@@ -171,7 +171,9 @@ class PuntajeServiceTest {
         when(loadPuntajePort.byParticipanteIdParaEscritura(participanteId))
                 .thenReturn(Optional.empty(), Optional.of(PuntajeParticipante.inicial(participanteId, CLOCK)));
 
-        service.ajustarManualmente(new AjustarPuntosManualmenteCommand(participanteId, -5, "correccion", actorId));
+        // D-145: el delta tiene que ser positivo (el comando ya lo exige) — lo que prueba este
+        // caso es que el motivo se fuerza a MANUAL_ADJUSTMENT, no el signo del delta.
+        service.ajustarManualmente(new AjustarPuntosManualmenteCommand(participanteId, 5, "correccion", actorId));
 
         ArgumentCaptor<AjustePuntos> captor = ArgumentCaptor.forClass(AjustePuntos.class);
         verify(saveAjustePort).save(captor.capture());

@@ -20,9 +20,30 @@ class AjustarPuntosManualmenteCommandTest {
         UserId participanteId = UserId.of(UUID.randomUUID());
         UserId actorId = UserId.of(UUID.randomUUID());
 
-        var command = new AjustarPuntosManualmenteCommand(participanteId, -5, "correccion", actorId);
+        var command = new AjustarPuntosManualmenteCommand(participanteId, 5, "correccion", actorId);
 
-        assertThat(command.delta()).isEqualTo(-5);
+        assertThat(command.delta()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("D-145: el dueño del producto prohibió restar puntos por cualquier via — un ajuste "
+            + "manual negativo se rechaza en el comando, no llega ni a PuntajeService")
+    void rechazaDeltaNegativo() {
+        UserId participanteId = UserId.of(UUID.randomUUID());
+        UserId actorId = UserId.of(UUID.randomUUID());
+
+        assertThatThrownBy(() -> new AjustarPuntosManualmenteCommand(participanteId, -5, "correccion", actorId))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    @DisplayName("D-145: delta cero tampoco es un ajuste valido — se rechaza, no se acepta como no-op")
+    void rechazaDeltaCero() {
+        UserId participanteId = UserId.of(UUID.randomUUID());
+        UserId actorId = UserId.of(UUID.randomUUID());
+
+        assertThatThrownBy(() -> new AjustarPuntosManualmenteCommand(participanteId, 0, "correccion", actorId))
+                .isInstanceOf(ConstraintViolationException.class);
     }
 
     @Test
