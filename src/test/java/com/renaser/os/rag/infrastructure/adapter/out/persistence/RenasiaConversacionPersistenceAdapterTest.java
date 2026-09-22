@@ -105,6 +105,34 @@ class RenasiaConversacionPersistenceAdapterTest {
         assertThat(pagina.get(0).fuentes()).isEmpty();
     }
 
+    /**
+     * D-143: la consulta que deriva la cuenta del patron de malestar. Contra Postgres real y no con
+     * mocks porque lo unico que puede fallar aca es la traduccion — el {@code rol} es el tipo enum
+     * de Postgres {@code rol_mensaje_renasia} (mapeado con {@code @JdbcTypeCode(NAMED_ENUM)}), y un
+     * parametro de ese tipo en un JPQL compila igual aunque se envie mal.
+     *
+     * <p>Cubre las tres cosas que la consulta promete: solo lo que ESCRIBIO la persona, de los DOS
+     * agentes, y nada anterior al corte.
+     */
+    @Test
+    void escritosPorElUsuarioDesdeTraeSoloLoQueEscribioLaPersonaEnLosDosAgentes() {
+        saveConversacionRenasiaPort.save(ConversacionRenasia.iniciar(usuarioId, Instant.now()));
+        Instant corte = Instant.parse("2026-09-10T00:00:00Z");
+        saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeUsuario(nuevoId(), usuarioId, COMPANION,
+                "muy viejo, fuera de la ventana", corte.minusSeconds(60)));
+        saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeUsuario(nuevoId(), usuarioId, COMPANION,
+                "dentro, con el acompanante", corte.plusSeconds(60)));
+        saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeUsuario(nuevoId(), usuarioId, COURSE_TUTOR,
+                "dentro, con el tutor", corte.plusSeconds(120)));
+        saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeAsistente(nuevoId(), usuarioId, COMPANION,
+                "respuesta del asistente", List.of(), corte.plusSeconds(180)));
+
+        List<MensajeRenasia> escritos = loadMensajeRenasiaPort.escritosPorElUsuarioDesde(usuarioId, corte);
+
+        assertThat(escritos).extracting(MensajeRenasia::contenido)
+                .containsExactly("dentro, con el acompanante", "dentro, con el tutor");
+    }
+
     @Test
     void guardaYRecuperaUnMensajeDeAsistenteConSusFuentes() {
         saveConversacionRenasiaPort.save(ConversacionRenasia.iniciar(usuarioId, Instant.now()));

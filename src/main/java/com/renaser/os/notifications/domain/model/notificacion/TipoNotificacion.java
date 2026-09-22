@@ -24,5 +24,12 @@ public enum TipoNotificacion {
     ACOMPANAMIENTO_ALUMNO,
 
     /** A un grupo programado se le acaba el periodo y el administrador tiene que reprogramarlo. */
-    GRUPO_POR_VENCER
+    GRUPO_POR_VENCER,
+
+    /**
+     * V59: un aprendiz repitio, en pocos dias, expresiones de malestar al escribirle al asistente.
+     * <b>No es un diagnostico</b> — es un patron de texto que se repitio y conviene mirar. Le llega
+     * a ADMIN y ALCHEMIST, y nunca lleva una sola palabra de lo que la persona escribio.
+     */
+    PATRON_DE_MALESTAR_REPETIDO
 }

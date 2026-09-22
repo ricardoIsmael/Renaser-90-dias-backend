@@ -1,0 +1,38 @@
+-- Aviso al administrador: un aprendiz repitio expresiones de malestar al escribirle al asistente.
+--
+-- Renumerada el 2026-09-22: nacio como V55 el 2026-09-15 y se quedo sin commitear mientras se
+-- subian V53 a V58. Dejarla en V55 la volvia una migracion fuera de orden: Flyway habria fallado en
+-- todo entorno que ya corrio las posteriores. V59 es el siguiente numero libre despues de V58.
+--
+-- Que problema resuelve
+-- ---------------------
+-- Hasta hoy, alguien podia escribirle "ya no doy mas" a Renasia todas las semanas y eso no salia
+-- nunca del chat: nadie del equipo se enteraba, y a la persona no se le ofrecia ningun recurso de
+-- ayuda. El eje de seguridad del modulo (`EvaluarRiesgoMensajePort`, D-82) esta construido pero sin
+-- un solo llamador, y seguira asi hasta que haya criterio clinico firmado. Esto NO lo reemplaza:
+-- cuenta repeticiones de una lista de frases y avisa que conviene mirar. No clasifica ni diagnostica.
+--
+-- Por que no se crea ninguna tabla
+-- --------------------------------
+-- La cuenta se DERIVA de `mensajes_renasia`, que ya guarda el texto, el rol y la fecha de cada
+-- mensaje (regla 02 §2: lo que es funcion del calendario se deriva, no se acumula). Una tabla de
+-- detecciones seria un contador paralelo que hay que mantener sincronizado con la unica fuente de
+-- verdad que ya existe, y que se desincroniza en cuanto cambie el umbral o la lista de frases: con
+-- el conteo derivado, cambiar cualquiera de los dos reevalua tambien lo ya guardado. Tampoco hace
+-- falta un indice nuevo: `mensajes_renasia_conv_idx (usuario_id, creado_en)` ya cubre la consulta,
+-- y la cuota diaria de Renasia acota la ventana de 7 dias a unos cientos de filas por persona.
+--
+-- Por que este nombre
+-- -------------------
+-- `PATRON_DE_MALESTAR_REPETIDO` nombra lo que efectivamente ocurrio —un patron de texto que se
+-- repitio— y no un estado de la persona. Un valor llamado "CRISIS" o "RIESGO" convertiria un
+-- `contains` sobre una lista de frases en un diagnostico, que es justo lo que este mecanismo no
+-- puede afirmar. La deduplicacion por `origen_evento_id` y la purga a 90 dias se reutilizan tal cual.
+--
+-- Un valor mas en `tipo_notificacion`, NO una tabla de alertas propia -- misma decision que tomaron
+-- V46 (ACOMPANAMIENTO_ALUMNO) y V49 (GRUPO_POR_VENCER), y por el mismo motivo: la bandeja, las
+-- preferencias, la deduplicacion y la purga ya existen.
+
+-- ALTER TYPE ... ADD VALUE no puede correr dentro de un bloque transaccional junto con sentencias
+-- que USEN el valor nuevo. Va solo, sin BEGIN/COMMIT, exactamente como en V46 y V49.
+ALTER TYPE renaser.tipo_notificacion ADD VALUE IF NOT EXISTS 'PATRON_DE_MALESTAR_REPETIDO';

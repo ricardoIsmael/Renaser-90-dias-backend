@@ -38,6 +38,7 @@ class PreferenciaNotificacionPersistenceMapper {
             case HABITO_PERSONAL_MODIFICADO -> TipoNotificacionJpa.HABITO_PERSONAL_MODIFICADO;
             case ACOMPANAMIENTO_ALUMNO -> TipoNotificacionJpa.ACOMPANAMIENTO_ALUMNO;
             case GRUPO_POR_VENCER -> TipoNotificacionJpa.GRUPO_POR_VENCER;
+            case PATRON_DE_MALESTAR_REPETIDO -> TipoNotificacionJpa.PATRON_DE_MALESTAR_REPETIDO;
         };
     }
 
@@ -58,6 +59,7 @@ class PreferenciaNotificacionPersistenceMapper {
             case HABITO_PERSONAL_MODIFICADO -> TipoNotificacion.HABITO_PERSONAL_MODIFICADO;
             case ACOMPANAMIENTO_ALUMNO -> TipoNotificacion.ACOMPANAMIENTO_ALUMNO;
             case GRUPO_POR_VENCER -> TipoNotificacion.GRUPO_POR_VENCER;
+            case PATRON_DE_MALESTAR_REPETIDO -> TipoNotificacion.PATRON_DE_MALESTAR_REPETIDO;
         };
     }
 }

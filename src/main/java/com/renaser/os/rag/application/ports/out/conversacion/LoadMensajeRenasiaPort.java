@@ -13,4 +13,20 @@ public interface LoadMensajeRenasiaPort {
      * intercambio con {@code agente}, anteriores a {@code cursor} (null = pagina mas reciente),
      * orden descendente por {@code creadoEn}. Nunca devuelve mensajes del otro agente (D-102). */
     List<MensajeRenasia> pagina(UserId usuarioId, AgenteConversacional agente, Instant cursor, int limite);
+
+    /**
+     * Los mensajes que ESCRIBIO la persona (rol USUARIO) desde {@code desde} inclusive, del mas
+     * viejo al mas nuevo. Lo usa {@code PatronDeMalestarRepetido} para derivar su cuenta de las
+     * fechas en vez de acumularla en un contador (regla 02 §2).
+     *
+     * <p><b>De los DOS agentes, a diferencia de {@link #pagina}.</b> Ahi el agente separa dos chats
+     * distintos porque son dos memorias distintas (D-102); aca la pregunta es sobre la PERSONA, y a
+     * quien le escribio "no puedo mas" no cambia que lo haya escrito. Separarlos partiria la cuenta
+     * en dos y el umbral no se alcanzaria nunca en alguien que usa los dos asistentes.
+     *
+     * <p>El volumen esta acotado por la cuota diaria de Renasia ({@code renaser.renasia.limite-diario},
+     * hoy 25): en una ventana de siete dias son a lo sumo unos cientos de filas por persona, y las
+     * cubre el indice {@code mensajes_renasia_conv_idx (usuario_id, creado_en)} que ya existe.
+     */
+    List<MensajeRenasia> escritosPorElUsuarioDesde(UserId usuarioId, Instant desde);
 }

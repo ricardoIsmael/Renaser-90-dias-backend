@@ -46,6 +46,18 @@ class MensajeRenasiaPersistenceAdapter implements SaveMensajeRenasiaPort, LoadMe
                 .toList();
     }
 
+    /**
+     * Sin la segunda consulta de fuentes que si hace {@link #pagina}: un mensaje de USUARIO nunca
+     * puede tener fuentes —es un invariante de {@code MensajeRenasia}, no una suposicion— asi que
+     * pedirlas seria una consulta garantizada a vacio.
+     */
+    @Override
+    public List<MensajeRenasia> escritosPorElUsuarioDesde(UserId usuarioId, Instant desde) {
+        return repository.escritosPorElUsuarioDesde(usuarioId.value(), RolMensajeRenasiaJpa.USUARIO, desde).stream()
+                .map(fila -> mapper.toDomain(fila, List.of()))
+                .toList();
+    }
+
     @Override
     @Transactional
     public MensajeRenasia save(MensajeRenasia mensaje) {

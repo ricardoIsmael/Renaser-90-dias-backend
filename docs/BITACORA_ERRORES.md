@@ -6974,3 +6974,53 @@ autoeditable en la bandeja y el push de **todos los ADMIN y ALCHEMIST**, y el di
 el propio aprendiz. Pasa de "lo ve mi mentor" a "lo ven todos los administradores, cuando yo
 quiera". El saneo de `requireName` ya lo cubre en su raíz, pero conviene revisar ese listener antes
 de mergearlo.
+
+---
+
+## E-201 · Agregar un valor a `TipoNotificacion` rompe la compilacion en CUATRO `switch`, no en uno
+
+> **Renumerada el 2026-09-22.** Nacio como `E-183`, pero ese numero ya lo habia tomado en master
+> otro error ("Un \"Hola\" al asistente marco un habito como completado"): esta entrada se escribio
+> el 15 y se quedo sin commitear mientras master seguia avanzando. E-201 es el siguiente libre
+> despues de E-200.
+
+**Sintoma.** Al agregar `PATRON_DE_MALESTAR_REPETIDO` a `TipoNotificacion` (V59), `./mvnw compile`
+termina en:
+
+```
+[ERROR] .../notifications/infrastructure/adapter/out/persistence/notificacion/NotificacionPersistenceMapper.java:[23,16] the switch expression does not cover all possible input values
+[ERROR] .../notifications/infrastructure/adapter/out/persistence/notificacion/NotificacionPersistenceMapper.java:[43,16] the switch expression does not cover all possible input values
+```
+
+Se corrige el archivo que uno tenia a la vista (`PreferenciaNotificacionPersistenceMapper`) y el
+build vuelve a fallar en otro que ni se habia abierto.
+
+**Causa.** Esto **no es un defecto**: es exactamente lo que los `switch` exhaustivos existen para
+hacer. Lo que sorprende es la cuenta. Un valor nuevo de `TipoNotificacion` obliga a tocar
+**cinco** lugares, y solo dos son obvios:
+
+1. `notifications/domain/model/notificacion/TipoNotificacion.java` — el valor.
+2. `notifications/infrastructure/.../persistence/notificacion/TipoNotificacionJpa.java` — el espejo
+   del enum de Postgres (son dos enums distintos a proposito, CLAUDE.MD §5.4.5: la entidad JPA nunca
+   importa un tipo de dominio).
+3. `PreferenciaNotificacionPersistenceMapper` — **dos** `switch` (ida y vuelta).
+4. `NotificacionPersistenceMapper` — **otros dos** `switch` (ida y vuelta). Este es el que se olvida.
+5. Una migracion Flyway con `ALTER TYPE renaser.tipo_notificacion ADD VALUE IF NOT EXISTS '...'`,
+   **sola, sin `BEGIN`/`COMMIT`** — `ALTER TYPE ... ADD VALUE` no convive en un bloque transaccional
+   con sentencias que usen el valor nuevo (ver V46, V49, V53).
+
+El que **no** rompe la compilacion y silenciosamente hace falta es el punto 5: sin la migracion, el
+codigo compila y los tests unitarios pasan; el fallo aparece recien al INSERTAR contra Postgres, con
+`invalid input value for enum renaser.tipo_notificacion`.
+
+**Solucion.** Agregar el `case` en los cuatro `switch` y escribir la migracion.
+
+**Como evitar que vuelva a pasar.** Antes de agregar un valor, correr:
+
+```
+grep -rn "GRUPO_POR_VENCER" --include=*.java --include=*.sql src/
+```
+
+El valor anterior ya esta en todos los lugares que hay que tocar, asi que su lista de apariciones
+**es** la lista de tareas. Es mas confiable que acordarse, y mas rapido que descubrirlo un `[ERROR]`
+por vez.

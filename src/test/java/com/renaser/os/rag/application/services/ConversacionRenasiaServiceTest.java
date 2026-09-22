@@ -3,6 +3,7 @@ package com.renaser.os.rag.application.services;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase.PreguntarRenasiaCommand;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
+import com.renaser.os.rag.application.ports.in.seguridad.RevisarPatronDeMalestarUseCase;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FiltroLecciones;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FragmentoRelevante;
@@ -55,6 +56,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -97,6 +99,8 @@ class ConversacionRenasiaServiceTest {
     @Mock
     private ConsultarSituacionDelAprendizPort situacionPort;
     @Mock
+    private RevisarPatronDeMalestarUseCase revisarPatronDeMalestarUseCase;
+    @Mock
     private IdGenerator idGenerator;
 
     private ConversacionRenasiaService service;
@@ -109,7 +113,9 @@ class ConversacionRenasiaServiceTest {
         service = new ConversacionRenasiaService(userSummaryFinder, controlCuotaRenasiaPort,
                 loadConversacionRenasiaPort, saveConversacionRenasiaPort, loadMensajeRenasiaPort,
                 saveMensajeRenasiaPort, vectorStorePort, consultarLeccionesVisiblesPort, chatIAPort,
-                herramientasUseCase, situacionPort, CLOCK, idGenerator);
+                herramientasUseCase, situacionPort, revisarPatronDeMalestarUseCase, CLOCK, idGenerator);
+        // Por defecto nadie viene repitiendo nada: la conversacion normal no se ve afectada.
+        lenient().when(revisarPatronDeMalestarUseCase.revisar(any(), anyString())).thenReturn(Optional.empty());
         // lenient: no todos los casos llegan a generar un id (varios cortan antes, en autorizacion o cuota).
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(herramientasUseCase.disponibles(any())).thenReturn(List.of());
@@ -531,5 +537,87 @@ class ConversacionRenasiaServiceTest {
         service.preguntar(pregunta(activo)).collectList().block();
 
         assertThat(consultaEnviadaAlModelo().herramientas()).containsExactly(herramienta);
+    }
+
+    // --- Repeticion de expresiones de malestar (2026-09-15) ---------------------------------
+
+    /** El texto de apoyo se muestra al final de la respuesta, nunca despues del `fin`. */
+    @Test
+    void elTextoDeApoyoLlegaComoUnFragmentoMasAntesDelFin() {
+        stubCaminoFeliz();
+        when(revisarPatronDeMalestarUseCase.revisar(eq(activo), anyString()))
+                .thenReturn(Optional.of("Si queres hablar con alguien, aca tenes donde."));
+
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(eventos).hasSize(3);
+        assertThat(((EventoRenasia.Texto) eventos.get(0)).fragmento()).isEqualTo("ok");
+        assertThat(((EventoRenasia.Texto) eventos.get(1)).fragmento())
+                .isEqualTo("\n\nSi queres hablar con alguien, aca tenes donde.");
+        assertThat(eventos.get(2)).isInstanceOf(EventoRenasia.Fin.class);
+    }
+
+    /**
+     * Queda tambien en el historial: al volver al chat manana, la persona lo vuelve a encontrar en
+     * vez de que se haya evaporado con la sesion.
+     */
+    @Test
+    void elTextoDeApoyoQuedaGuardadoEnLaRespuestaDelAsistente() {
+        stubCaminoFeliz();
+        when(revisarPatronDeMalestarUseCase.revisar(eq(activo), anyString()))
+                .thenReturn(Optional.of("Aca tenes donde llamar."));
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        ArgumentCaptor<MensajeRenasia> captor = ArgumentCaptor.forClass(MensajeRenasia.class);
+        verify(saveMensajeRenasiaPort, times(2)).save(captor.capture());
+        MensajeRenasia respuesta = captor.getAllValues().get(1);
+        assertThat(respuesta.rol()).isEqualTo(RolMensaje.ASISTENTE);
+        assertThat(respuesta.contenido()).isEqualTo("ok\n\nAca tenes donde llamar.");
+    }
+
+    /** Sin patron repetido —el caso de todos los dias— el stream es exactamente el de siempre. */
+    @Test
+    void sinPatronRepetidoLaConversacionNoCambiaEnNada() {
+        stubCaminoFeliz();
+
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(eventos).hasSize(2);
+        assertThat(eventos.get(1)).isInstanceOf(EventoRenasia.Fin.class);
+    }
+
+    /**
+     * La revision es una red de seguridad, no un requisito para conversar: si se cae, la persona
+     * igual recibe su respuesta. Lo contrario seria que un fallo en el mecanismo de apoyo dejara
+     * sin asistente justo a quien lo esta usando.
+     */
+    @Test
+    void unFalloRevisandoElPatronNoDejaALaPersonaSinRespuesta() {
+        stubCaminoFeliz();
+        when(revisarPatronDeMalestarUseCase.revisar(eq(activo), anyString()))
+                .thenThrow(new RuntimeException("la base no responde"));
+
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(eventos).hasSize(2);
+        assertThat(((EventoRenasia.Texto) eventos.get(0)).fragmento()).isEqualTo("ok");
+        assertThat(eventos.get(1)).isInstanceOf(EventoRenasia.Fin.class);
+    }
+
+    /**
+     * C-1 / regla 01: la revision abre su propia transaccion corta, asi que tiene que quedar
+     * TERMINADA antes de que empiece la llamada al modelo. Si alguien la moviera adentro del
+     * stream, una respuesta lenta de Gemini retendria una conexion de Hikari todo ese rato.
+     */
+    @Test
+    void elPatronSeRevisaAntesDeHablarConElModelo() {
+        stubCaminoFeliz();
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        var orden = inOrder(revisarPatronDeMalestarUseCase, chatIAPort);
+        orden.verify(revisarPatronDeMalestarUseCase).revisar(eq(activo), anyString());
+        orden.verify(chatIAPort).responder(any());
     }
 }

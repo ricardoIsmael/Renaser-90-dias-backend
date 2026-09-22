@@ -326,6 +326,22 @@ renaser:
     activate-account-url: ${ACTIVATE_ACCOUNT_URL:https://TODO-frontend-no-definido.renaser.dev/activate-account}
   renasia:
     limite-diario: ${RENASIA_LIMITE_DIARIO:25}
+    apoyo:
+      # El texto que se le muestra a la persona cuando repite expresiones de malestar al escribirle
+      # al asistente (2026-09-15): el ofrecimiento de la linea de salud mental del MINSA.
+      #
+      # VACIO A PROPOSITO, y esto NO es un olvido. El texto del MINSA -numero, horario, alcance- lo
+      # tiene que confirmar el dueno, y este repo prohibe rellenar con supuestos lo que no esta
+      # confirmado. Un telefono inventado no es un placeholder inofensivo: manda a alguien que esta
+      # mal a llamar a la nada. NO se completa esta linea "para probar" con un numero de ejemplo.
+      #
+      # Mientras siga vacio, el aviso a ADMIN/ALQUIMISTA se emite igual -un humano se entera y puede
+      # actuar- y a la persona no se le muestra nada. El dia que llegue el texto confirmado se pega
+      # aca (o se pone RENASIA_MENSAJE_APOYO) y empieza a mostrarse, sin desplegar codigo.
+      #
+      # El umbral que decide CUANDO se muestra no vive aca: son las dos constantes de
+      # PatronDeMalestarRepetido (3 detecciones / 7 dias), tambien a confirmar con el dueno.
+      mensaje: ${RENASIA_MENSAJE_APOYO:}
   # V90 fuera de alcance (2026-09-03): sin esto en true, GrabacionV90Controller no se crea
   # y las cuatro rutas de /v90-recordings dejan de existir. Los 23 archivos y la tabla
   # quedan intactos — el dia que vuelva, se prende la propiedad y nada hay que rehacer.

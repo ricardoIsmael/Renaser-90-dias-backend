@@ -18,5 +18,7 @@ public enum TipoNotificacionJpa {
     HABITO_PERSONAL_MODIFICADO,
     /** V46. Espejo del valor homonimo del enum de Postgres. */
     ACOMPANAMIENTO_ALUMNO,
-    GRUPO_POR_VENCER
+    GRUPO_POR_VENCER,
+    /** V53. Espejo del valor homonimo del enum de Postgres. */
+    PATRON_DE_MALESTAR_REPETIDO
 }

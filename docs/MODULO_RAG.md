@@ -127,6 +127,74 @@ Ya existían `NivelRiesgo`/`Severidad`/`EvaluacionRiesgo` en `rag/domain/model/s
 
 **Por qué el `NoOp` devuelve `sinSenales()` y no un nivel alto "por las dudas":** `NivelRiesgo.CRITICO` dispara modo crisis siempre, sin importar la severidad — usarlo como default de un adaptador que nunca leyó el mensaje convertiría, el día que alguien lo conecte sin releer el javadoc, TODA conversación con Renasia en una falsa alarma de crisis permanente. `sinSenales()` es el mismo criterio que el resto de los `NoOp` del módulo: un placeholder inerte, no una mentira sobre haber evaluado algo. Queda pendiente, documentado en el javadoc de la clase: si hace falta un tercer estado "indeterminado" en `NivelRiesgo` (pregunta que el propio enum deja abierta) y, después, el mapeo completo a modo de respuesta — ninguna de las dos cosas se resuelve acá.
 
+### D-143 — Cuando el malestar se repite: un recurso para la persona y un aviso para quien pueda actuar (2026-09-15)
+
+**Qué se construyó.** Cuando un aprendiz le escribe al asistente expresiones como *"me siento mal"*
+o *"ya no doy más"*, y **ese patrón se repite**, pasan dos cosas: se le ofrece a la persona un
+recurso de ayuda real (la línea de salud mental del MINSA) y les llega un aviso a ADMIN y
+ALQUIMISTA por la bandeja de notificaciones.
+
+**Esto NO es el clasificador de riesgo de D-82, y no lo reemplaza.** No clasifica, no diagnostica y
+no llama a ninguna IA: compara texto contra una lista de frases y cuenta repeticiones.
+`EvaluarRiesgoMensajePort` sigue sin implementación real y sin criterio clínico firmado, y este
+camino no lo conecta ni lo toca. Nada en el código, en los nombres ni en los textos afirma que la
+persona esté en crisis — el aviso dice que *se repitió un patrón que conviene mirar*, y nada más.
+
+**El umbral: 3 detecciones en 7 días, en UN solo lugar.** Los dos valores son constantes de
+`PatronDeMalestarRepetido` (`DETECCIONES_PARA_AVISAR`, `VENTANA`) y **están a confirmar con el
+dueño**: tres y siete son lo que se fijó para arrancar, no salen de ninguna regla clínica. Que sea
+mayor que uno es deliberado: una frase mala un martes es la molestia corriente que produce cualquier
+programa exigente (`Severidad.BAJA`), y contestarle a eso con un recurso de emergencia hace que la
+persona deje de escribir — y entonces el asistente ya no está el día que sí hace falta.
+
+**Sin tabla nueva: la cuenta se deriva de `mensajes_renasia`** (regla 02 §2). El texto, el rol y la
+fecha de cada mensaje ya están guardados. Un contador paralelo habría que mantenerlo sincronizado y
+se desincroniza en cuanto cambie el umbral o la lista; con el conteo derivado, cambiar cualquiera de
+los dos reevalúa también lo ya guardado, correrlo dos veces da lo mismo y las detecciones viejas
+salen solas de la ventana. Tampoco hizo falta un índice: `mensajes_renasia_conv_idx` ya cubre la
+consulta, y la cuota diaria acota la ventana a unos cientos de filas por persona.
+
+**El costo en el camino normal es cero.** La cuenta de la ventana solo puede SUBIR cuando entra un
+mensaje que cuenta; sin uno nuevo, la ventana desliza y la cuenta baja. Así que primero se mira en
+memoria el mensaje recién escrito y, si no contiene ninguna expresión, no se consulta nada. El 99%
+de los mensajes no toca la base.
+
+**La lista de expresiones vive en UN archivo comentado** (`ExpresionesDeMalestar`), en español de
+Perú y normalizada (minúsculas, sin tildes, sin signos). Dos reglas la gobiernan:
+
+- **Frases completas, no pedazos.** La lista dice `"no puedo mas"` y **no** `"no puedo"`, porque
+  *"no puedo con este hábito"* y *"no puedo a esa hora"* son mensajes de alguien acomodando su día.
+  `ExpresionesDeMalestarTest` tiene esos casos como negativos: si alguien agrega `"no puedo"` a
+  secas, el build se pone en rojo.
+- **Las señales explícitas de peligro NO están, a propósito.** Un mecanismo que exige tres
+  repeticiones y se queda callado las dos primeras veces que alguien dice que se quiere morir sería
+  peor que no existir. Ese camino es `NivelRiesgo.CRITICO`, que dispara a la primera, y sigue sin
+  construirse: le faltan el criterio clínico firmado y D-80 (edad y país confiables). Hay un test
+  que falla si alguien mete una de esas frases en esta lista sin haber construido ese camino.
+
+**El texto del MINSA sale de configuración y viene VACÍO** (`renaser.renasia.apoyo.mensaje`,
+`RENASIA_MENSAJE_APOYO`). No está confirmado, y un teléfono inventado no es un placeholder: manda a
+alguien que está mal a llamar a la nada. Mientras siga vacío, **el aviso a ADMIN/ALQUIMISTA se emite
+igual** —un humano se entera y puede actuar— y a la persona no se le muestra nada. Se completa la
+propiedad y empieza a mostrarse, sin desplegar código.
+
+**Por dónde le llega cada cosa.**
+
+| A quién | Por dónde | Por qué así |
+|---|---|---|
+| La persona | Un evento `texto` más del stream SSE, al final de la respuesta | El contrato SSE es de la app móvil: un `tipo` nuevo que el cliente no conoce lo ignoraría en silencio, o sea que la persona no vería nada. Va por el canal que el cliente ya dibuja, y queda también en el mensaje persistido para que al volver al chat lo vuelva a encontrar |
+| ADMIN y ALQUIMISTA | `rag.api.PatronDeMalestarRepetidoEvent` → `notifications` | `rag` no tiene por qué saber que existe una bandeja. Es la **primera vez que `rag` publica algo hacia afuera**: su `api/` estuvo vacío desde el día uno esperando exactamente esto |
+
+La deduplicación es la que ya existe: la clave del **episodio** (persona + instante de la primera
+detección de la ventana) viaja como `origenEventoId`, que tiene índice único (V16). Revisar el patrón
+en cada mensaje entrega UN aviso a cada administrador, y la reentrega del outbox de Modulith tampoco
+lo duplica. `PATRON_DE_MALESTAR_REPETIDO` es un valor más de `tipo_notificacion` (V59) y no una tabla
+de alertas propia — misma decisión que V46 y V49.
+
+**C-1 respetado:** la revisión abre su propia transacción corta (la necesita el outbox) y corre
+**antes** de hablar con el modelo, nunca durante. Es best-effort: si falla, se registra y la persona
+igual recibe su respuesta.
+
 ### D-123 — Qué va en el prompt y qué se convierte en herramienta (2026-09-14)
 
 Regla para no seguir discutiéndolo cada vez que el agente necesita un dato nuevo.
@@ -179,7 +247,7 @@ Tres agregados reales (cada uno con identidad, ciclo de vida y repositorio propi
 ```
 rag/
 ├── package-info.java                    (@ApplicationModule)
-├── api/                                  (@NamedInterface — hoy sin consumidores)
+├── api/                                  (@NamedInterface — PatronDeMalestarRepetidoEvent, D-143)
 ├── domain/model/
 │   ├── conocimiento/                     ChunkConocimiento, ChunkConocimientoId
 │   ├── conversacion/                     ConversacionRenasia (raíz), MensajeRenasia, RolMensaje, FuenteMensaje
@@ -263,7 +331,7 @@ Esto se combina con el límite de D-48: **el límite protege del abuso, el cachi
 |---|---|
 | **Credenciales de Gemini** (D-39) | **Parcialmente resuelto (2026-09-03).** Los adaptadores reales (`GoogleGenAiRenasiaChatAdapter`, `GoogleGenAiEmbeddingAdapter`) y su `@Configuration` (`GoogleGenAiClientesConfig`) ya están escritos, detrás de `renaser.ia.proveedor=google`. Sin `GOOGLE_GENAI_API_KEY` real, el default (`renaser.ia.proveedor=noop`) sigue activando los `NoOp*`. Lo que falta: probar el camino `google` con una API key real (nadie corrió `./mvnw` contra Gemini de verdad) y que Producto cierre la voz de marca. **Corregido 2026-09-04 (D-89):** esta celda decía que el prompt es "un placeholder explícito" cuya única regla es la abstención. Ya no: `prompts/renasia-sistema.st` se reescribió a pedido del dueño y ahora define un **orden de fuentes con atribución obligatoria** — contenido del programa → búsqueda web → conocimiento general —, más límites clínicos y una cláusula de crisis. La búsqueda web real se enciende con `renaser.ia.busqueda-web` (`IA_BUSQUEDA_WEB`; default `true` al escribirse esto, **bajado a `false` el mismo día por D-100**: `gemini-3.1-flash-lite` no la soporta y el stream moría sin respuesta), que setea `GoogleGenAiChatOptions.googleSearchRetrieval(true)`. Sigue faltando la voz de marca, no la regla de negocio. `PromptSistemaRenasiaTest` renderiza el `.st` real para que un error de sintaxis de StringTemplate falle en la suite y no en producción |
 | **Sin datos en `base_conocimiento`** | Es esperable: la ingesta es admin (D-46) y el contenido llega en la fase de migración de datos |
-| **Clasificador de riesgo real** (D-82) | Existe la estructura (`EvaluarRiesgoMensajePort` + `NoOpEvaluacionRiesgoAdapter`), sin conectar. Falta: (1) confirmar si `NivelRiesgo` necesita un tercer estado "indeterminado", (2) el mapeo completo de `EvaluacionRiesgo` a modo de respuesta (firmado por el dueño del producto) y (3) los criterios de detección en sí (firmados por un profesional con licencia). Depende además de D-80 (edad/país confiables) para el camino de crisis |
+| **Clasificador de riesgo real** (D-82) | Existe la estructura (`EvaluarRiesgoMensajePort` + `NoOpEvaluacionRiesgoAdapter`), sin conectar. **D-143 NO lo desbloquea** (2026-09-15): la repetición de expresiones de malestar es un conteo de frases, no una clasificación, y las señales explícitas de peligro quedan deliberadamente fuera de ese mecanismo — siguen sin cubrir. Falta: (1) confirmar si `NivelRiesgo` necesita un tercer estado "indeterminado", (2) el mapeo completo de `EvaluacionRiesgo` a modo de respuesta (firmado por el dueño del producto) y (3) los criterios de detección en sí (firmados por un profesional con licencia). Depende además de D-80 (edad/país confiables) para el camino de crisis |
 
 ---
 

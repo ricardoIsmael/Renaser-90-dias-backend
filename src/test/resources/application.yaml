@@ -87,3 +87,8 @@ renaser:
       client-secret:
   renasia:
     limite-diario: 25
+    apoyo:
+      # Vacio, igual que en main y por el mismo motivo: el texto del MINSA no esta confirmado y no
+      # se inventa. Los tests que necesitan un texto configurado construyen su propio MensajeDeApoyo,
+      # no dependen de esta linea. Que este presente documenta que existe la propiedad.
+      mensaje:

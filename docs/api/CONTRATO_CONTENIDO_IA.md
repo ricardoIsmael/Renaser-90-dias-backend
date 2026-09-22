@@ -653,6 +653,7 @@ curl -s -X POST http://localhost:8080/api/v1/admin/conocimiento \
 - **Al superar la cuota:** **429**, `{"message": "Se alcanzo el limite diario de mensajes a Renasia"}`.
 - **Quién puede llamarlo:** cualquier actor activo, **sin chequeo de rol** (a diferencia de indexar conocimiento). 404 `"Usuario no encontrado: <id>"`; 403 `"La cuenta esta suspendida"`.
 - **Nunca se loguea la pregunta ni la respuesta** (dato personal).
+- **Un `texto` de mas al final, cuando el malestar se repite (D-143, 2026-09-15).** Si la persona viene escribiendo expresiones de malestar varias veces en pocos dias, la respuesta termina con un evento `texto` adicional —separado por dos saltos de linea— que le ofrece un recurso de ayuda. **El contrato SSE no cambia**: es un `{"tipo":"texto"}` como cualquier otro, y el cliente no tiene que hacer nada distinto (esa fue la razon de no inventarle un `tipo` nuevo: uno desconocido lo ignoraria en silencio y la persona no veria nada). El texto sale de `renaser.renasia.apoyo.mensaje`, que **viene vacio** porque el del MINSA no esta confirmado: mientras siga vacio, este evento extra no aparece nunca y el stream es exactamente el de siempre. Queda tambien en el contenido del mensaje del asistente que devuelve `GET .../mensajes`.
 
 ```bash
 curl -N -s -X POST http://localhost:8080/api/v1/renasia/mensajes \

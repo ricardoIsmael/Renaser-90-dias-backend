@@ -3,6 +3,7 @@ package com.renaser.os.rag.application.services;
 import com.renaser.os.rag.application.ports.in.conversacion.ObtenerHistorialUseCase;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
+import com.renaser.os.rag.application.ports.in.seguridad.RevisarPatronDeMalestarUseCase;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FiltroLecciones;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FragmentoRelevante;
@@ -83,6 +84,14 @@ import java.util.Set;
  * todavia tiene bloqueada — un bug real de fuga de contenido, no solo de UX. La resolucion de
  * QUE es visible vive en {@code academy} (via el finder), y DONDE se aplica el filtro vive en
  * el adaptador de {@code VectorStorePort} (ver su javadoc para el porque).
+ *
+ * <p><b>Un paso mas desde el 2026-09-15: revisar si el malestar se repite.</b> Despues de guardar
+ * la pregunta y antes de hablar con el modelo, {@link RevisarPatronDeMalestarUseCase} mira si la
+ * persona viene escribiendo expresiones de malestar varias veces en pocos dias. Si se repitio, el
+ * aviso a ADMIN/ALQUIMISTA sale por evento y el texto de apoyo configurado se agrega al final de
+ * esta misma respuesta ({@link #conApoyoAntesDelFin}). <b>Nada de esto es un diagnostico</b> ni
+ * cambia el prompt, el contexto ni las herramientas: la conversacion es exactamente la misma y el
+ * modelo ni se entera. Es best-effort: si esa revision falla, la persona igual recibe su respuesta.
  */
 @Service
 public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, ObtenerHistorialUseCase {
@@ -103,6 +112,8 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      */
     public static final String MENSAJE_PROVEEDOR_SATURADO =
             "El asistente esta saturado en este momento. Intenta de nuevo en unos minutos.";
+    /** Deja el texto de apoyo separado de lo ultimo que dijo el modelo, en vez de pegado. */
+    static final String SEPARACION_DEL_APOYO = "\n\n";
 
     private final UserSummaryFinder userSummaryFinder;
     private final ControlCuotaRenasiaPort controlCuotaRenasiaPort;
@@ -118,6 +129,9 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      * y hoy no hay ninguno conectado. */
     private final EjecutarHerramientaAgenteUseCase herramientasUseCase;
     private final ConsultarSituacionDelAprendizPort situacionPort;
+    /** Si la persona viene repitiendo expresiones de malestar (2026-09-15). Ver
+     * {@link #textoDeApoyo}: no clasifica ni diagnostica nada, cuenta repeticiones. */
+    private final RevisarPatronDeMalestarUseCase revisarPatronDeMalestarUseCase;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
@@ -130,6 +144,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                                        ConsultarLeccionesVisiblesPort consultarLeccionesVisiblesPort,
                                        ChatIAPort chatIAPort, EjecutarHerramientaAgenteUseCase herramientasUseCase,
                                        ConsultarSituacionDelAprendizPort situacionPort,
+                                       RevisarPatronDeMalestarUseCase revisarPatronDeMalestarUseCase,
                                        Clock clock, IdGenerator idGenerator) {
         this.userSummaryFinder = userSummaryFinder;
         this.controlCuotaRenasiaPort = controlCuotaRenasiaPort;
@@ -142,6 +157,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         this.chatIAPort = chatIAPort;
         this.herramientasUseCase = herramientasUseCase;
         this.situacionPort = situacionPort;
+        this.revisarPatronDeMalestarUseCase = revisarPatronDeMalestarUseCase;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
@@ -170,11 +186,16 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
             throw e;
         }
         List<String> contexto = fragmentos.stream().map(FragmentoRelevante::contenido).toList();
+        // ANTES de hablar con el modelo, nunca durante: la revision abre su propia transaccion
+        // corta (la necesita el outbox de Modulith) y ningun puerto de IA puede correr dentro de
+        // ella (regla 01, C-1).
+        String apoyo = textoDeApoyo(command);
 
         StringBuilder respuestaCompleta = new StringBuilder();
-        return chatIAPort.responder(new Consulta(command.agente(), command.actorId(), command.pregunta(), contexto,
-                        command.ambito(), historial, herramientasUseCase.disponibles(command.agente()),
-                        situacionPort.de(command.actorId()).orElse(null)))
+        return conApoyoAntesDelFin(chatIAPort.responder(new Consulta(command.agente(), command.actorId(),
+                        command.pregunta(), contexto, command.ambito(), historial,
+                        herramientasUseCase.disponibles(command.agente()),
+                        situacionPort.de(command.actorId()).orElse(null))), apoyo)
                 .doOnNext(evento -> acumularTexto(evento, respuestaCompleta))
                 .concatMap(evento -> agregarFuentesAntesDeFin(evento, fragmentos))
                 .doOnComplete(() -> persistirRespuestaAsistente(command, respuestaCompleta.toString(), fragmentos))
@@ -209,6 +230,54 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         if (evento instanceof EventoRenasia.Texto texto) {
             respuestaCompleta.append(texto.fragmento());
         }
+    }
+
+    /**
+     * Si la persona viene repitiendo expresiones de malestar, el texto de apoyo que hay que
+     * mostrarle; cadena vacia en cualquier otro caso.
+     *
+     * <p><b>Best-effort a proposito.</b> Un fallo revisando el patron —una consulta que se cae, un
+     * dato raro— no puede dejar a alguien sin la respuesta que vino a buscar. Se registra y la
+     * conversacion sigue. La revision se repite en el mensaje siguiente y, como la cuenta se deriva
+     * de los mensajes guardados y no de un contador, no se pierde nada por haberla salteado una vez.
+     */
+    private String textoDeApoyo(PreguntarRenasiaCommand command) {
+        try {
+            return revisarPatronDeMalestarUseCase.revisar(command.actorId(), command.pregunta()).orElse("");
+        } catch (RuntimeException e) {
+            log.warn("No se pudo revisar la repeticion de expresiones de malestar; la conversacion sigue normal", e);
+            return "";
+        }
+    }
+
+    /**
+     * Agrega el texto de apoyo como un fragmento mas de la respuesta, justo antes del {@code fin}.
+     *
+     * <p><b>Por que como {@link EventoRenasia.Texto} y no como una variante nueva del evento.</b>
+     * El contrato SSE es de la app movil (docs/MODULO_RAG.md §4.bis) y un {@code tipo} que el
+     * cliente no conoce lo ignora en silencio — o sea, la persona no veria nada, que es exactamente
+     * lo contrario de lo que este camino existe para hacer. Va por el canal que el cliente ya
+     * dibuja. El dia que haya una variante propia (con su tratamiento visual), este es el unico
+     * metodo que cambia.
+     *
+     * <p>Como se inserta ANTES del {@code doOnNext} que acumula el texto, queda tambien en el
+     * mensaje del asistente que se persiste: al volver al chat, la persona lo vuelve a encontrar en
+     * vez de que se haya evaporado.
+     *
+     * <p><b>Si el modelo falla, este turno no lo muestra</b> — el {@code onErrorResume} de mas
+     * abajo reemplaza el stream entero y no hay respuesta donde ponerlo. El aviso a quien pueda
+     * actuar ya se emitio igual, y el proximo turno que si responda vuelve a ofrecerlo: la cuenta
+     * se deriva de mensajes guardados, asi que el patron sigue dandose.
+     */
+    private static Flux<EventoRenasia> conApoyoAntesDelFin(Flux<EventoRenasia> respuesta, String apoyo) {
+        if (apoyo.isBlank()) {
+            return respuesta;
+        }
+        // "\n\n" literal y no System.lineSeparator(): esto viaja dentro de un JSON hacia un
+        // telefono, no se escribe en un archivo del servidor — el separador del SO no pinta nada.
+        return respuesta.concatMap(evento -> evento instanceof EventoRenasia.Fin
+                ? Flux.just(new EventoRenasia.Texto(SEPARACION_DEL_APOYO + apoyo), evento)
+                : Flux.just(evento));
     }
 
     /**

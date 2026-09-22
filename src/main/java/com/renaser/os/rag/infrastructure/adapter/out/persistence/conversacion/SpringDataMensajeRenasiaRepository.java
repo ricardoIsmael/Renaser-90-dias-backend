@@ -33,4 +33,18 @@ interface SpringDataMensajeRenasiaRepository extends JpaRepository<MensajeRenasi
             """)
     List<MensajeRenasiaJpaEntity> paginaConCursor(@Param("usuarioId") UUID usuarioId, @Param("agente") String agente,
                                                    @Param("cursor") Instant cursor, Pageable pageable);
+
+    /** Sin {@code agente} en el WHERE a proposito: ver el javadoc del metodo homonimo del puerto.
+     * El {@code rol} se filtra en la consulta y no en Java para no traer tambien las respuestas del
+     * asistente, que son la mitad de la tabla y no cuentan para nada de esto. */
+    @Query("""
+            SELECT m FROM MensajeRenasiaJpaEntity m
+            WHERE m.usuarioId = :usuarioId
+              AND m.rol = :rol
+              AND m.creadoEn >= :desde
+            ORDER BY m.creadoEn ASC
+            """)
+    List<MensajeRenasiaJpaEntity> escritosPorElUsuarioDesde(@Param("usuarioId") UUID usuarioId,
+                                                             @Param("rol") RolMensajeRenasiaJpa rol,
+                                                             @Param("desde") Instant desde);
 }
