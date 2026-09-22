@@ -49,6 +49,35 @@ public final class MesPrograma {
         return (acotar(numeroMes) - 1) * DIAS_POR_MES + 1;
     }
 
+    /** Dias que dura una semana. Aca es aritmetica sobre el dia de programa, no calendario. */
+    public static final int DIAS_POR_SEMANA = 7;
+
+    /**
+     * Que dia de ESE mes es (1 a 30) para un dia de programa. El dia 31 es el dia 1 del mes 2.
+     */
+    public static int diaDentroDelMes(int diaPrograma) {
+        int dia = Math.max(diaPrograma, 1);
+        return (dia - 1) % DIAS_POR_MES + 1;
+    }
+
+    /**
+     * Cuantas semanas quedan del mes, contando la que se esta transitando. De 1 a 5.
+     *
+     * <p><b>Ojo: no usa {@code SemanaPrograma} y es a proposito.</b> Aquella cuenta semanas
+     * calendario de lunes a domingo, y cuatro de esas dan 28 dias, no 30 — mezclarlas dejaria dias
+     * del mes fuera de toda semana, que es el mismo error que el javadoc de esta clase explica para
+     * los meses. Aca la semana es un bloque de siete dias de programa dentro del mes, que es lo que
+     * necesita repartir una cifra mensual: la cuenta cierra exacta y no depende de en que dia de la
+     * semana arranco la persona.
+     *
+     * <p>La consecuencia asumida: un mes de 30 dias da 5 bloques y el ultimo es de dos dias. Es
+     * correcto — al cierre del mes hay que estar en la cifra del mes, sobre el bloque corto o no.
+     */
+    public static int semanasQueQuedanDelMes(int diaPrograma) {
+        int diasQueQuedan = DIAS_POR_MES - diaDentroDelMes(diaPrograma) + 1;
+        return Math.max((diasQueQuedan + DIAS_POR_SEMANA - 1) / DIAS_POR_SEMANA, 1);
+    }
+
     /** {@code true} si el numero cae dentro de los tres meses del programa. */
     public static boolean esValido(int numeroMes) {
         return numeroMes >= 1 && numeroMes <= MESES;

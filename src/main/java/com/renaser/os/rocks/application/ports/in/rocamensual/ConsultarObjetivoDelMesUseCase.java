@@ -1,6 +1,7 @@
 package com.renaser.os.rocks.application.ports.in.rocamensual;
 
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
+import com.renaser.os.rocks.domain.model.rocamensual.ObjetivoDeLaSemana;
 import com.renaser.os.rocks.domain.model.rocamensual.ObjetivoDelMes;
 import com.renaser.os.rocks.domain.model.rocamensual.RocaMensual;
 import com.renaser.os.shared.domain.UserId;
@@ -23,6 +24,8 @@ public interface ConsultarObjetivoDelMesUseCase {
 
     /**
      * @param mesActual el mes que la persona transita hoy (1 a 3), derivado de su dia de programa.
+     * @param semana    el tramo de la semana en curso, derivado del mes. {@code null} cuando el mes no
+     *                  lleva cifra — y entonces la semana tampoco, por el mismo motivo.
      * @param unidad    tal como la escribio en el Mapa: {@code kg}, {@code cm}, {@code S/}. En
      *                  Relaciones es {@code /10}, que es la escala con la que el Mapa ya dibuja sus
      *                  hitos.
@@ -30,7 +33,7 @@ public interface ConsultarObjetivoDelMesUseCase {
      *                  detras ({@code 75 kg}), igual que en los hitos del Mapa.
      */
     record PlanMensualDelEje(EjeObjetivo eje, int mesActual, String unidad, boolean adelante,
-                              List<MesDelPlan> meses) {
+                              List<MesDelPlan> meses, ObjetivoDeLaSemana semana) {
     }
 
     /**

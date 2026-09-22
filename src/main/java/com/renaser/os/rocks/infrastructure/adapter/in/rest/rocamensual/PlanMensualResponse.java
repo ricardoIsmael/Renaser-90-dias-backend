@@ -2,6 +2,7 @@ package com.renaser.os.rocks.infrastructure.adapter.in.rest.rocamensual;
 
 import com.renaser.os.rocks.application.ports.in.rocamensual.ConsultarObjetivoDelMesUseCase.MesDelPlan;
 import com.renaser.os.rocks.application.ports.in.rocamensual.ConsultarObjetivoDelMesUseCase.PlanMensualDelEje;
+import com.renaser.os.rocks.domain.model.rocamensual.ObjetivoDeLaSemana;
 import com.renaser.os.rocks.domain.model.rocamensual.ObjetivoDelMes;
 import com.renaser.os.rocks.domain.model.rocamensual.RocaMensual;
 
@@ -16,11 +17,27 @@ import java.util.List;
  *                       detras ({@code 75 kg}), igual que en los hitos del Mapa.
  */
 public record PlanMensualResponse(String eje, int mesActual, String unidad, boolean unidadAdelante,
-                                   List<MesResponse> meses) {
+                                   List<MesResponse> meses, SemanaResponse semana) {
 
     public static PlanMensualResponse from(PlanMensualDelEje plan) {
         return new PlanMensualResponse(plan.eje().name(), plan.mesActual(), plan.unidad(), plan.adelante(),
-                plan.meses().stream().map(MesResponse::from).toList());
+                plan.meses().stream().map(MesResponse::from).toList(), SemanaResponse.from(plan.semana()));
+    }
+
+    /**
+     * El tramo de la semana en curso. {@code null} cuando el mes no lleva cifra — y entonces la
+     * semana tampoco, por el mismo motivo que ya explica el mes; no se repite el porque dos veces.
+     *
+     * @param cifra          donde hay que estar al cierre de ESTA semana.
+     * @param paso           cuanto hay que moverse durante la semana. Siempre positivo.
+     * @param semanasQueQuedan las que faltan del mes, contando la que se esta transitando (1 a 5).
+     */
+    public record SemanaResponse(BigDecimal cifra, BigDecimal paso, int semanasQueQuedan, boolean sube) {
+
+        static SemanaResponse from(ObjetivoDeLaSemana semana) {
+            return semana == null ? null
+                    : new SemanaResponse(semana.valor(), semana.paso(), semana.semanasQueQuedan(), semana.sube());
+        }
     }
 
     /**

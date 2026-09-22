@@ -7119,3 +7119,50 @@ distintos pasaron a ser el mismo. El motor del frontend **se borro entero** —`
    calculo necesita `map_health_result_type`, que vive en `respuestas_onboarding`; la app lo tenia
    solo porque alguien lo habia reexpuesto en un hook. Eso es la pista de que el calculo estaba del
    lado equivocado.
+
+---
+
+## E-204 · El objetivo del mes se corria solo: cuanto mejor te iba, mas te pedia
+
+**Sintoma.** Lo destapo un test al escribir el nivel semanal, no un usuario — pero habria llegado a
+un usuario. Con un objetivo de 84 a 78 kg, el mes 1 cierra en **81,6 kg**. Bajando a 82 kg, el mismo
+mes 1 pasaba a pedir **80,4 kg**.
+
+O sea: la persona avanza, y la meta del mes se aleja. Avanza otra vez, y se aleja otra vez. La cifra
+nunca se alcanza y no hay ningun error que mirar — el numero simplemente no es el que se habia
+prometido.
+
+**Causa.** La primera version de `CalculadoraObjetivoMensual` anclaba la cifra del mes en el
+**valor de hoy** y le aplicaba la fraccion de curva que quedaba:
+
+```java
+valor = hoy + (meta - hoy) * porcionDelTramo(mesActual, mes);
+```
+
+Con `hoy` moviendose, `valor` se mueve con el. Es una cinta caminadora: cada paso adelante corre la
+linea de llegada la misma fraccion hacia adelante.
+
+Lo que enganio al escribirlo fue que **el caso que se probo a mano estaba bien**: el dia 15, con la
+persona todavia en 84 kg (`avance == lineaBase`), la cuenta da 81,6, que es el numero correcto. El
+defecto solo aparece cuando el avance se separa de la linea base, y eso no pasa hasta que alguien se
+vuelve a pesar.
+
+**Solucion.** La cifra del mes es un punto **fijo** de la curva medido desde la linea base — o sea,
+literalmente el hito del Mapa:
+
+```java
+valor = base + (meta - base) * acumuladoAlCierreDe(mes);
+```
+
+No se mueve nunca. Lo que se recalcula contra el valor real es el `paso` (cuanto falta para llegar)
+y, con el, el tramo de la SEMANA (`ObjetivoDeLaSemana`), que es donde esa honestidad sirve: si una
+semana no te moviste, la siguiente pide un poco mas para llegar igual al cierre del mes.
+
+**Como evitar que vuelva a pasar.** Dos cosas:
+
+1. **El test de regresion es `ObjetivoDeLaSemanaTest.laUltimaSemanaPideTodo`**, que es el que lo
+   encontro: el dia 30 con 82 kg tiene que dar 81,6. Contra el codigo viejo daba 80,4.
+2. **Un objetivo es una promesa; un ritmo es una medicion.** Si una cifra se le muestra a alguien
+   como "lo que tengo que lograr", no puede depender de cuanto lleva logrado — eso la convierte en
+   otra cosa. La pregunta que hay que hacerse al escribir una formula asi: *si la persona mejora,
+   ¿este numero se queda quieto?* Si no, no es un objetivo.

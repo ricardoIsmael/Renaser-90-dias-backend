@@ -12,6 +12,7 @@ import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
 import com.renaser.os.rocks.domain.model.rocamensual.DatosDelEje;
 import com.renaser.os.rocks.domain.model.rocamensual.MesPrograma;
+import com.renaser.os.rocks.domain.model.rocamensual.ObjetivoDeLaSemana;
 import com.renaser.os.rocks.domain.model.rocamensual.RocaMensual;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -60,21 +61,25 @@ public class ObjetivoDelMesService implements ConsultarObjetivoDelMesUseCase {
 
         List<PlanMensualDelEje> planes = new ArrayList<>();
         for (RocaMaestra maestra : loadRocaMaestraPort.deParticipante(actorId)) {
-            planes.add(planDelEje(maestra, mesActual, medicion, editadas));
+            planes.add(planDelEje(maestra, progreso.diaPrograma(), medicion, editadas));
         }
         return List.copyOf(planes);
     }
 
-    private PlanMensualDelEje planDelEje(RocaMaestra maestra, int mesActual, MedicionDelParticipante medicion,
+    private PlanMensualDelEje planDelEje(RocaMaestra maestra, int diaPrograma, MedicionDelParticipante medicion,
                                           Map<String, RocaMensual> editadas) {
+        int mesActual = MesPrograma.deDia(diaPrograma);
         DatosDelEje datos = datosDe(maestra, medicion);
         List<MesDelPlan> meses = new ArrayList<>();
         for (int mes = 1; mes <= MesPrograma.MESES; mes++) {
             meses.add(new MesDelPlan(mes, MesPrograma.ultimoDiaDe(mes), mes == mesActual,
                     datos.calcular(mes, mesActual), editadas.get(claveDe(maestra, mes))));
         }
+        /* La semana cuelga del mes EN CURSO: es el unico tramo que la persona esta transitando. */
+        ObjetivoDeLaSemana semana = ObjetivoDeLaSemana.desde(datos.calcular(mesActual, mesActual),
+                datos.valorHoy() != null ? datos.valorHoy() : datos.lineaBase(), diaPrograma, datos.magnitud());
         return new PlanMensualDelEje(maestra.eje(), mesActual, datos.unidad(),
-                maestra.eje() == EjeObjetivo.TRABAJO, List.copyOf(meses));
+                maestra.eje() == EjeObjetivo.TRABAJO, List.copyOf(meses), semana);
     }
 
     /**
