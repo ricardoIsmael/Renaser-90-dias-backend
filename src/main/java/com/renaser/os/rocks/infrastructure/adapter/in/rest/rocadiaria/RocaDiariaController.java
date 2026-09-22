@@ -68,7 +68,7 @@ public class RocaDiariaController {
         List<ItemRocaDiaria> items = request.rocas().stream()
                 .map(item -> new ItemRocaDiaria(EjeObjetivo.valueOf(item.eje()), item.posicion(), item.titulo(),
                         item.descripcion(), item.puntajeImpacto(), item.esDelegable(), item.horaInicio(),
-                        item.horaFin()))
+                        item.horaFin(), item.acciones()))
                 .toList();
         var creadas = crearUseCase.crear(new CrearPlanDiarioCommand(actor, request.fecha(), items));
         return ResponseEntity.status(HttpStatus.CREATED)

@@ -111,13 +111,13 @@ class RocaDiariaServiceTest {
     private RocaDiaria rocaVerde(LocalTime horaFin) {
         return RocaDiaria.planificar(RocaDiariaId.of(UUID.randomUUID()), actorId,
                 LocalDate.of(2026, 8, 24), 1, "verde", null, 5, false,
-                EjeObjetivo.CUERPO, null, null, horaFin, CLOCK);
+                EjeObjetivo.CUERPO, null, null, horaFin, List.of(), CLOCK);
     }
 
     private RocaDiaria rocaAmarilla() {
         return RocaDiaria.planificar(RocaDiariaId.of(UUID.randomUUID()), actorId,
                 LocalDate.of(2026, 8, 24), 2, "amarilla", null, 5, false,
-                EjeObjetivo.CUERPO, null, null, null, CLOCK);
+                EjeObjetivo.CUERPO, null, null, null, List.of(), CLOCK);
     }
 
     private CompletarRocaDiariaCommand comandoTexto(RocaDiariaId id) {

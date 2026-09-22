@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.infrastructure.adapter.out.persistence.rocadiaria;
 
+import com.renaser.os.rocks.domain.model.rocadiaria.AccionDiaria;
 import com.renaser.os.rocks.domain.model.rocadiaria.ColorPareto;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
@@ -9,6 +10,8 @@ import com.renaser.os.rocks.infrastructure.adapter.out.persistence.rocamaestra.E
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Component
@@ -19,16 +22,30 @@ class RocaDiariaPersistenceMapper {
         return RocaDiaria.rehydrate(RocaDiariaId.of(e.getId()), UserId.of(e.getParticipanteId()), e.getFecha(),
                 e.getPosicion(), e.getTitulo(), e.getDescripcion(), toDomainColor(e.getColor()),
                 e.getPuntajeImpacto(), e.isEsDelegable(), toDomainEje(e.getEje()), rocaSemanalId, e.getHoraInicio(),
-                e.getHoraFin(), e.isCompletada(), e.getCompletadaEn(), e.getPuntosOtorgados(), e.getCreadoEn(),
-                e.getActualizadoEn());
+                e.getHoraFin(), aDominio(e.getAcciones()), e.isCompletada(), e.getCompletadaEn(),
+                e.getPuntosOtorgados(), e.getCreadoEn(), e.getActualizadoEn());
     }
 
     RocaDiariaJpaEntity toEntity(RocaDiaria r) {
         UUID rocaSemanalId = r.rocaSemanalId() == null ? null : r.rocaSemanalId().value();
         return new RocaDiariaJpaEntity(r.id().value(), r.participanteId().value(), r.fecha(), (short) r.posicion(),
                 r.titulo(), r.descripcion(), toJpaColor(r.color()), (short) r.puntajeImpacto(), r.esDelegable(),
-                toJpaEje(r.eje()), rocaSemanalId, r.horaInicio(), r.horaFin(), r.completada(), r.completadaEn(),
-                (short) r.puntosOtorgados(), r.creadoEn(), r.actualizadoEn());
+                toJpaEje(r.eje()), rocaSemanalId, r.horaInicio(), r.horaFin(), aJpa(r.acciones()), r.completada(),
+                r.completadaEn(), (short) r.puntosOtorgados(), r.creadoEn(), r.actualizadoEn());
+    }
+
+    /** Las acciones del objetivo del dia (V61). Lista vacia y null son lo mismo: sin desglose. */
+    private static List<AccionDiaria> aDominio(List<AccionDiariaEmbeddable> filas) {
+        if (filas == null) {
+            return List.of();
+        }
+        return filas.stream().map(f -> new AccionDiaria(f.getOrden(), f.getDescripcion())).toList();
+    }
+
+    private static List<AccionDiariaEmbeddable> aJpa(List<AccionDiaria> acciones) {
+        return new ArrayList<>(acciones.stream()
+                .map(a -> new AccionDiariaEmbeddable((short) a.orden(), a.descripcion()))
+                .toList());
     }
 
     private ColorParetoJpa toJpaColor(ColorPareto color) {

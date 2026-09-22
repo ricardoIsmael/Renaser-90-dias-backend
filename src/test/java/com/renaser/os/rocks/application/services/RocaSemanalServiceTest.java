@@ -180,6 +180,48 @@ class RocaSemanalServiceTest {
     }
 
     @Test
+    @DisplayName("E-205: el servicio CREA la semana con un solo eje, no solo la valida el comando")
+    void creaLaSemanaConUnSoloEje() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
+        when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(tresMaestras());
+        when(loadRocaSemanalPort.deParticipanteYSemana(anyList(), anyInt())).thenReturn(List.of());
+        when(saveRocaSemanalPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var creadas = service.crear(new CrearPlanSemanalCommand(actorId, List.of(item(EjeObjetivo.CUERPO))));
+
+        assertThat(creadas).hasSize(1);
+        assertThat(creadas.get(0).titulo()).isEqualTo("titulo");
+    }
+
+    @Test
+    @DisplayName("dos objetivos del mismo eje en la misma semana no: uno se perderia")
+    void dosDelMismoEjeSeRechaza() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
+        when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(tresMaestras());
+
+        var command = new CrearPlanSemanalCommand(actorId,
+                List.of(item(EjeObjetivo.CUERPO), item(EjeObjetivo.CUERPO)));
+        assertThatThrownBy(() -> service.crear(command)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("mismo eje");
+    }
+
+    @Test
+    @DisplayName("una semana sin acciones criticas se guarda: ahora viven en el objetivo diario")
+    void sinAccionesCriticasSeGuarda() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
+        when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(tresMaestras());
+        when(loadRocaSemanalPort.deParticipanteYSemana(anyList(), anyInt())).thenReturn(List.of());
+        when(saveRocaSemanalPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var soloObjetivo = new ItemRocaSemanal(EjeObjetivo.CUERPO, "Bajar a 81,6 kg", null, null, null,
+                null, null, null);
+        var creadas = service.crear(new CrearPlanSemanalCommand(actorId, List.of(soloObjetivo)));
+
+        assertThat(creadas).hasSize(1);
+        assertThat(creadas.get(0).acciones()).isEmpty();
+    }
+
+    @Test
     void creaLasTresRocasSemanalesUnaPorEje() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(tresMaestras());

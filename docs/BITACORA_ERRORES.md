@@ -7166,3 +7166,49 @@ semana no te moviste, la siguiente pide un poco mas para llegar igual al cierre 
    como "lo que tengo que lograr", no puede depender de cuanto lleva logrado — eso la convierte en
    otra cosa. La pregunta que hay que hacerse al escribir una formula asi: *si la persona mejora,
    ¿este numero se queda quieto?* Si no, no es un objetivo.
+
+---
+
+## E-205 · La regla de "los tres ejes" estaba escrita en DOS lugares, y se cambio uno solo
+
+**Sintoma.** Planificar la semana con un solo eje pasaba la validacion del comando y moria despues
+con:
+
+```
+IllegalArgumentException: se requiere exactamente una roca semanal por eje (CUERPO, TRABAJO, RELACIONES)
+```
+
+**Causa.** Unas horas antes, el mismo dia, se habia relajado el plan semanal para que alcanzara con
+el eje principal: `@Size(min = 3, max = 3)` paso a `min = 1` en `CrearPlanSemanalCommand`. Se
+compilo, los 403 tests de `rocks` quedaron en verde, se documento y se subio.
+
+Lo que no se hizo fue **buscar la regla, en vez de buscar la linea**. La misma regla de negocio
+estaba impuesta en dos sitios:
+
+1. `CrearPlanSemanalCommand` — `@Size`, la validacion declarativa. **Esta se cambio.**
+2. `RocaSemanalService.requireUnEjePorItem` — `ejes.equals(LOS_TRES_EJES)`. **Esta quedo.**
+
+Y el test que se escribio para el cambio tampoco lo agarro, por un motivo que vale mas que el bug:
+**verificaba el comando, no el servicio**.
+
+```java
+assertThatCode(() -> new CrearPlanSemanalCommand(actorId, List.of(item(CUERPO))))
+        .doesNotThrowAnyException();   // pasa, y no prueba nada del camino real
+```
+
+Construir el comando solo ejercita las anotaciones de Bean Validation. El camino que recorre un
+usuario es `service.crear(command)`, y ahi estaba la otra mitad de la regla.
+
+**Solucion.** `requireUnEjePorItem` ya no exige los tres: verifica lo unico que le queda que
+verificar, que no lleguen dos objetivos del mismo eje. Cuantos vienen lo acota el `@Size`.
+
+**Como evitar que vuelva a pasar.** Tres cosas, la segunda es la importante:
+
+1. El test nuevo es `RocaSemanalServiceTest.creaLaSemanaConUnSoloEje`, y **llama al servicio**.
+2. **Al relajar una restriccion, buscar la REGLA por todo el modulo, no la linea que uno recuerda.**
+   Un `grep` de `LOS_TRES_EJES` —o de `== 3`, `!= 3`, `size() >= 3`— habria devuelto los dos sitios
+   en un segundo. En este mismo cambio ya se habia encontrado un tercero por casualidad
+   (`DashboardRocasService`, que decidia si la semana estaba armada contando tres); encontrar uno y
+   dar por cerrada la busqueda es justamente el error.
+3. **Un test que construye un comando NO prueba un caso de uso.** Si el cambio afecta a lo que puede
+   hacer un usuario, el test tiene que pasar por el servicio.

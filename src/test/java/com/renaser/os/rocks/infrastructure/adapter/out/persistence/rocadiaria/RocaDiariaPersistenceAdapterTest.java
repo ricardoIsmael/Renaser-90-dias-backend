@@ -64,7 +64,7 @@ class RocaDiariaPersistenceAdapterTest {
     @Test
     void guardaYRecuperaUnaRocaDiariaPorFecha() {
         RocaDiaria roca = RocaDiaria.planificar(unId(), participanteId, LocalDate.of(2026, 8, 25), 1, "titulo",
-                "desc", 8, false, EjeObjetivo.CUERPO, null, LocalTime.of(18, 0), LocalTime.of(20, 0), CLOCK);
+                "desc", 8, false, EjeObjetivo.CUERPO, null, LocalTime.of(18, 0), LocalTime.of(20, 0), List.of(), CLOCK);
 
         adapter.save(roca);
 
@@ -79,9 +79,9 @@ class RocaDiariaPersistenceAdapterTest {
         LocalDate fecha = LocalDate.of(2026, 8, 26);
         adapter.saveAll(List.of(
                 RocaDiaria.planificar(unId(), participanteId, fecha, 1, "verde", null, 5, false,
-                        EjeObjetivo.CUERPO, null, null, null, CLOCK),
+                        EjeObjetivo.CUERPO, null, null, null, List.of(), CLOCK),
                 RocaDiaria.planificar(unId(), participanteId, fecha, 2, "amarilla", null, 5, false,
-                        EjeObjetivo.CUERPO, null, null, null, CLOCK)));
+                        EjeObjetivo.CUERPO, null, null, null, List.of(), CLOCK)));
 
         assertThat(adapter.contarDeParticipanteYFecha(participanteId, fecha)).isEqualTo(2);
         assertThat(adapter.contarDeParticipanteYFecha(participanteId, fecha.plusDays(1))).isEqualTo(0);
@@ -90,7 +90,7 @@ class RocaDiariaPersistenceAdapterTest {
     @Test
     void completarYGuardarPersisteElEstado() {
         RocaDiaria roca = RocaDiaria.planificar(unId(), participanteId, LocalDate.of(2026, 8, 27), 1, "t", null,
-                5, false, EjeObjetivo.TRABAJO, null, null, null, CLOCK);
+                5, false, EjeObjetivo.TRABAJO, null, null, null, List.of(), CLOCK);
         roca = adapter.save(roca);
 
         roca.completar(CLOCK.now(), CLOCK);

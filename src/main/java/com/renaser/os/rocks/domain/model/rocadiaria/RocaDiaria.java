@@ -13,6 +13,7 @@ import lombok.experimental.Accessors;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -43,6 +44,11 @@ public final class RocaDiaria {
     private final RocaSemanalId rocaSemanalId;
     private final LocalTime horaInicio;
     private final LocalTime horaFin;
+    /**
+     * Las acciones con las que se logra este objetivo del dia (0 a 3). Vacia es valido: un objetivo
+     * puede ser una sola cosa que no necesita desglose. Ver {@link AccionDiaria}.
+     */
+    private final List<AccionDiaria> acciones;
     private boolean completada;
     private Instant completadaEn;
     private int puntosOtorgados;
@@ -61,29 +67,38 @@ public final class RocaDiaria {
                                          int posicion, String titulo, String descripcion,
                                          int puntajeImpacto, boolean esDelegable, EjeObjetivo eje,
                                          RocaSemanalId rocaSemanalId, LocalTime horaInicio,
-                                         LocalTime horaFin, Clock clock) {
+                                         LocalTime horaFin, List<AccionDiaria> acciones, Clock clock) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Objects.requireNonNull(fecha, "fecha es obligatoria");
         Objects.requireNonNull(eje, "eje es obligatorio");
         ColorPareto color = ColorPareto.paraPosicion(posicion);
         requireImpacto(puntajeImpacto);
+        AccionDiaria.requireListaValida(acciones);
         Instant ahora = clock.now();
         return new RocaDiaria(id, participanteId, fecha, posicion, requireTitulo(titulo),
                 requireDescripcion(descripcion), color, puntajeImpacto, esDelegable, eje, rocaSemanalId, horaInicio,
-                horaFin, false, null, 0, ahora, ahora);
+                horaFin, copiaOrdenada(acciones), false, null, 0, ahora, ahora);
+    }
+
+    /** Copia defensiva y ordenada por `orden`: el agregado no comparte su lista con quien la paso. */
+    private static List<AccionDiaria> copiaOrdenada(List<AccionDiaria> acciones) {
+        if (acciones == null) {
+            return List.of();
+        }
+        return acciones.stream().sorted(java.util.Comparator.comparingInt(AccionDiaria::orden)).toList();
     }
 
     /** Solo para el adaptador de persistencia: reconstruye una roca diaria ya existente. */
     public static RocaDiaria rehydrate(RocaDiariaId id, UserId participanteId, LocalDate fecha, int posicion,
                                         String titulo, String descripcion, ColorPareto color, int puntajeImpacto,
                                         boolean esDelegable, EjeObjetivo eje, RocaSemanalId rocaSemanalId,
-                                        LocalTime horaInicio, LocalTime horaFin, boolean completada,
-                                        Instant completadaEn, int puntosOtorgados, Instant creadoEn,
-                                        Instant actualizadoEn) {
+                                        LocalTime horaInicio, LocalTime horaFin, List<AccionDiaria> acciones,
+                                        boolean completada, Instant completadaEn, int puntosOtorgados,
+                                        Instant creadoEn, Instant actualizadoEn) {
         return new RocaDiaria(id, participanteId, fecha, posicion, titulo, descripcion, color, puntajeImpacto,
-                esDelegable, eje, rocaSemanalId, horaInicio, horaFin, completada, completadaEn, puntosOtorgados,
-                creadoEn, actualizadoEn);
+                esDelegable, eje, rocaSemanalId, horaInicio, horaFin, copiaOrdenada(acciones), completada,
+                completadaEn, puntosOtorgados, creadoEn, actualizadoEn);
     }
 
     /** Marca la roca completada. Solo se puede completar una vez (ALREADY_COMPLETED en el repo viejo). */

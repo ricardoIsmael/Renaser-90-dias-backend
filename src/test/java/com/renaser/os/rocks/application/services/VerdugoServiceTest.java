@@ -76,7 +76,7 @@ class VerdugoServiceTest {
         return com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria.planificar(
                 com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId.of(UUID.randomUUID()), dueno,
                 CLOCK.today(), 1, "Roca de prueba", null, 5, false,
-                com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo.CUERPO, null, null, null, CLOCK);
+                com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo.CUERPO, null, null, null, List.of(), CLOCK);
     }
 
     private static ProgresoParticipanteRocks progreso(RolParticipante rol, boolean suspendido) {

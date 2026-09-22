@@ -28,8 +28,10 @@ public interface EditarDentroDe48hUseCase {
         public EditarRocaSemanalCommand {
             SelfValidating.validateConstructorArgs(EditarRocaSemanalCommand.class, actorId, rocaSemanalId, titulo,
                     accionesCriticas, obstaculo, contingencia, autoevaluacionInicio);
-            if (accionesCriticas != null && accionesCriticas.size() != 3) {
-                throw new IllegalArgumentException("si se envian acciones criticas deben ser exactamente 3");
+            /* Hasta 3 (2026-09-22). Decia "exactamente 3": las acciones pasaron al objetivo
+               diario y la semana quedo en su objetivo. Ver RocaSemanal.requireAccionesValidas. */
+            if (accionesCriticas != null && accionesCriticas.size() > 3) {
+                throw new IllegalArgumentException("una roca semanal admite hasta 3 acciones criticas");
             }
         }
     }

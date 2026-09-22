@@ -119,13 +119,29 @@ public final class RocaSemanal {
         }
     }
 
+    /**
+     * Las acciones de la semana, de 0 a 3.
+     *
+     * > <b>Corregido el 2026-09-22.</b> Exigia <b>exactamente 3</b>, y el mensaje decia "una roca
+     * > semanal exige exactamente 3 acciones criticas". El dueno describio la cadena del plan de
+     * > otra manera: <i>"objetivo de los 90 dias, luego mensual, luego semanal, y luego objetivo
+     * > diario, y estos objetivos diarios tienen acciones para hacerlo"</i>. Las acciones pasaron al
+     * > dia ({@code AccionDiaria}, V61) y la semana quedo en lo que es: un objetivo.
+     * >
+     * > No se borro la lista ni la tabla {@code acciones_criticas}: hay planes semanales ya
+     * > guardados que las tienen, y tirarlas seria borrar el plan de alguien para simplificar una
+     * > clase. Se aceptan, ya no se exigen, y nadie escribe nuevas.
+     */
     private static void requireAccionesValidas(List<AccionCritica> acciones) {
-        if (acciones == null || acciones.size() != 3) {
-            throw new IllegalArgumentException("una roca semanal exige exactamente 3 acciones criticas");
+        if (acciones == null || acciones.isEmpty()) {
+            return;
+        }
+        if (acciones.size() > 3) {
+            throw new IllegalArgumentException("una roca semanal admite hasta 3 acciones criticas");
         }
         Set<Integer> ordenes = acciones.stream().map(AccionCritica::orden).collect(Collectors.toSet());
-        if (!ordenes.equals(Set.of(1, 2, 3))) {
-            throw new IllegalArgumentException("las acciones criticas deben tener orden 1, 2 y 3, sin repetir");
+        if (ordenes.size() != acciones.size()) {
+            throw new IllegalArgumentException("las acciones criticas no pueden repetir orden: " + ordenes);
         }
     }
 

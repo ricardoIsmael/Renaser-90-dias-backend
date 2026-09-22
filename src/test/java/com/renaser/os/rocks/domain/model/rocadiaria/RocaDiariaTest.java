@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,7 +24,7 @@ class RocaDiariaTest {
     private static RocaDiaria roca(int posicion) {
         return RocaDiaria.planificar(RocaDiariaId.of(UUID.randomUUID()), participante(),
                 LocalDate.of(2026, 8, 25), posicion, "titulo", null, 5, false,
-                EjeObjetivo.CUERPO, null, null, null, CLOCK);
+                EjeObjetivo.CUERPO, null, null, null, List.of(), CLOCK);
     }
 
     @Test
@@ -91,6 +92,6 @@ class RocaDiariaTest {
     void puntajeImpactoFueraDeRangoEsInvalido() {
         assertThatThrownBy(() -> RocaDiaria.planificar(RocaDiariaId.of(UUID.randomUUID()), participante(),
                 LocalDate.now(), 1, "t", null, 11, false,
-                EjeObjetivo.CUERPO, null, null, null, CLOCK)).isInstanceOf(IllegalArgumentException.class);
+                EjeObjetivo.CUERPO, null, null, null, List.of(), CLOCK)).isInstanceOf(IllegalArgumentException.class);
     }
 }

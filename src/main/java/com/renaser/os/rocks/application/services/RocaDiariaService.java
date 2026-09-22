@@ -24,6 +24,7 @@ import com.renaser.os.rocks.domain.model.rocadiaria.TipoEvidenciaRoca;
 import com.renaser.os.rocks.application.ports.out.rocamaestra.LoadRocaMaestraPort;
 import com.renaser.os.rocks.application.ports.out.rocasemanal.LoadRocaSemanalPort;
 import com.renaser.os.rocks.application.ports.out.rocadiaria.SaveRocaDiariaPort;
+import com.renaser.os.rocks.domain.model.rocadiaria.AccionDiaria;
 import com.renaser.os.rocks.domain.model.rocadiaria.ColorPareto;
 import com.renaser.os.rocks.domain.model.rocadiaria.EscalaPuntosRoca;
 import com.renaser.os.rocks.domain.model.rocadiaria.FasePremio;
@@ -236,7 +237,24 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
         return RocaDiaria.planificar(RocaDiariaId.of(idGenerator.newId()), actorId, fecha, item.posicion(),
                 item.titulo(), item.descripcion(), item.puntajeImpacto(), item.esDelegable(), item.eje(),
-                rocaSemanal.id(), item.horaInicio(), item.horaFin(), clock);
+                rocaSemanal.id(), item.horaInicio(), item.horaFin(), accionesDe(item), clock);
+    }
+
+    /**
+     * Las acciones que vinieron, numeradas de corrido y salteando las vacias. Un campo en blanco en
+     * el formulario es "no escribi nada", no "una accion sin texto" — que el dominio rechazaria.
+     */
+    private static List<AccionDiaria> accionesDe(ItemRocaDiaria item) {
+        if (item.acciones() == null) {
+            return List.of();
+        }
+        List<AccionDiaria> acciones = new java.util.ArrayList<>();
+        for (String texto : item.acciones()) {
+            if (texto != null && !texto.isBlank()) {
+                acciones.add(new AccionDiaria(acciones.size() + 1, texto));
+            }
+        }
+        return List.copyOf(acciones);
     }
 
     /**

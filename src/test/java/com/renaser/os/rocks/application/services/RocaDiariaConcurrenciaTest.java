@@ -93,7 +93,7 @@ class RocaDiariaConcurrenciaTest {
     private RocaDiariaId crearRocaVerdeSinCompletar() {
         RocaDiariaId id = RocaDiariaId.of(UUID.randomUUID());
         RocaDiaria roca = RocaDiaria.planificar(id, participanteId, LocalDate.of(2026, 8, 24), 1, "Meditar 10 min",
-                null, 5, false, EjeObjetivo.CUERPO, null, null, null, CLOCK);
+                null, 5, false, EjeObjetivo.CUERPO, null, null, null, List.of(), CLOCK);
         saveRocaDiariaPort.save(roca);
         return id;
     }

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RocaSemanalTest {
@@ -42,10 +43,29 @@ class RocaSemanalTest {
         assertThat(roca.creadoEn()).isEqualTo(CLOCK.now());
     }
 
+    /**
+     * > <b>Corregido el 2026-09-22.</b> Este test se llamaba {@code rechazaMenosDeTresAcciones} y
+     * > verificaba lo contrario: que dos acciones fueran un error. Las acciones pasaron al objetivo
+     * > diario (V61) y la semana quedo en su objetivo, asi que menos de tres —y ninguna— es lo
+     * > normal ahora. Lo que sigue siendo error es pasarse de tres.
+     */
     @Test
-    void rechazaMenosDeTresAcciones() {
+    void aceptaMenosDeTresAccionesYHastaNinguna() {
         List<AccionCritica> dos = List.of(new AccionCritica(1, "uno"), new AccionCritica(2, "dos"));
-        assertThatThrownBy(() -> RocaSemanal.planificar(unId(), maestra(), 1, "T", dos, null, null, null, CLOCK))
+
+        assertThatCode(() -> RocaSemanal.planificar(unId(), maestra(), 1, "T", dos, null, null, null, CLOCK))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> RocaSemanal.planificar(unId(), maestra(), 1, "T", List.of(), null, null, null, CLOCK))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> RocaSemanal.planificar(unId(), maestra(), 1, "T", null, null, null, null, CLOCK))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void rechazaMasDeTresAcciones() {
+        List<AccionCritica> cuatro = List.of(new AccionCritica(1, "a"), new AccionCritica(2, "b"),
+                new AccionCritica(3, "c"), new AccionCritica(3, "d"));
+        assertThatThrownBy(() -> RocaSemanal.planificar(unId(), maestra(), 1, "T", cuatro, null, null, null, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

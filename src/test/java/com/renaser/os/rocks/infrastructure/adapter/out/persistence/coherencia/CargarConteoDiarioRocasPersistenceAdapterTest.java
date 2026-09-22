@@ -81,7 +81,7 @@ class CargarConteoDiarioRocasPersistenceAdapterTest {
 
     private RocaDiaria roca(UserId participante, LocalDate fecha, EjeObjetivo eje, boolean completada) {
         RocaDiaria r = RocaDiaria.planificar(RocaDiariaId.of(UUID.randomUUID()), participante, fecha, 1,
-                "titulo", null, 5, false, eje, null, null, null, CLOCK);
+                "titulo", null, 5, false, eje, null, null, null, List.of(), CLOCK);
         if (completada) {
             r.completar(CLOCK.now(), CLOCK);
         }

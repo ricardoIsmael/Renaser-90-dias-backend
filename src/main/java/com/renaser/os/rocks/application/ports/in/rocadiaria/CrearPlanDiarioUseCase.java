@@ -24,8 +24,16 @@ public interface CrearPlanDiarioUseCase {
         }
     }
 
+    /**
+     * @param acciones con que se logra ese objetivo del dia: de 0 a 3, en el orden en que se
+     *                 escribieron. Vacia es valido — un objetivo puede ser una sola cosa que no
+     *                 necesita desglose. Antes estas acciones se escribian el domingo, colgando de
+     *                 la semana; desde la V61 viven aca, que es cuando la persona sabe con que
+     *                 cuenta.
+     */
     record ItemRocaDiaria(EjeObjetivo eje, int posicion, String titulo, String descripcion, int puntajeImpacto,
-                           boolean esDelegable, LocalTime horaInicio, LocalTime horaFin) {
+                           boolean esDelegable, LocalTime horaInicio, LocalTime horaFin,
+                           @Size(max = 3) List<String> acciones) {
 
         public ItemRocaDiaria {
             if (eje == null) {

@@ -141,14 +141,37 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
         return clock.now().atZone(zona).toLocalDate();
     }
 
+    /**
+     * Las acciones que hayan venido, numeradas de corrido. Vacias se saltean: desde que las acciones
+     * viven en el objetivo diario (V61) el asistente ya no las pide, y armar
+     * {@code new AccionCritica(1, null)} reventaria con "descripcion es obligatoria".
+     */
     private static List<AccionCritica> acciones(String a1, String a2, String a3) {
-        return List.of(new AccionCritica(1, a1), new AccionCritica(2, a2), new AccionCritica(3, a3));
+        List<AccionCritica> criticas = new java.util.ArrayList<>();
+        for (String texto : List.of(a1 == null ? "" : a1, a2 == null ? "" : a2, a3 == null ? "" : a3)) {
+            if (!texto.isBlank()) {
+                criticas.add(new AccionCritica(criticas.size() + 1, texto));
+            }
+        }
+        return List.copyOf(criticas);
     }
 
+    /**
+     * Un objetivo semanal por eje, sin repetir. <b>No hace falta mandar los tres.</b>
+     *
+     * > <b>Corregido el 2026-09-22 (E-205).</b> Exigia {@code ejes.equals(LOS_TRES_EJES)}, o sea los
+     * > tres si o si. Unas horas antes se habia relajado {@code @Size(min = 3, max = 3)} a
+     * > {@code min = 1} en el comando creyendo que eso alcanzaba, y no: mandar un solo eje pasaba la
+     * > validacion del comando y moria aca con "se requiere exactamente una roca semanal por eje".
+     * > La regla de los tres estaba escrita en DOS lugares y solo se cambio uno.
+     *
+     * Cuantos vienen lo acota {@code @Size(min = 1, max = 3)}; lo que se verifica aca es lo otro:
+     * que no lleguen dos del mismo eje, que dejaria a un eje con dos objetivos para la misma semana.
+     */
     private static void requireUnEjePorItem(List<ItemRocaSemanal> rocas) {
         Set<EjeObjetivo> ejes = rocas.stream().map(ItemRocaSemanal::eje).collect(java.util.stream.Collectors.toSet());
-        if (!ejes.equals(LOS_TRES_EJES)) {
-            throw new IllegalArgumentException("se requiere exactamente una roca semanal por eje (CUERPO, TRABAJO, RELACIONES)");
+        if (ejes.size() != rocas.size()) {
+            throw new IllegalArgumentException("no se puede planificar dos objetivos semanales del mismo eje");
         }
     }
 
