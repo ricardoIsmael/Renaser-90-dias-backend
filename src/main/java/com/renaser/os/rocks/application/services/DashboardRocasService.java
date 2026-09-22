@@ -85,7 +85,11 @@ public class DashboardRocasService implements ConsultarDashboardRocasUseCase {
         boolean rocasDesbloqueadas = maestras.size() >= EjeObjetivo.values().length;
 
         List<RocaSemanalVista> semanalesVista = cargarRocasSemanalesVista(actorId, semana.numeroSemana(), zona, ahora);
-        boolean tieneRocaSemanal = semanalesVista.size() >= EjeObjetivo.values().length;
+        /* Con UNO alcanza (2026-09-22). Decia `>= EjeObjetivo.values().length`, o sea los tres, y
+           desde que el plan semanal se puede guardar con un solo eje eso dejaba a la persona
+           planificando su eje principal y leyendo igual "todavia no armaste esta semana". El
+           dashboard pregunta si la semana esta ARMADA, no si esta completa. */
+        boolean tieneRocaSemanal = !semanalesVista.isEmpty();
 
         List<DiaRocas> conteoSemana = conteoDiario(actorId, semana.inicio(), semana.fin());
         List<DiaGrillaSemanal> grilla = construirGrilla(semana.inicio(), semana.fin(), hoy, conteoSemana);

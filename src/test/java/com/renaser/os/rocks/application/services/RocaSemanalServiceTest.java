@@ -3,6 +3,7 @@ package com.renaser.os.rocks.application.services;
 import com.renaser.os.shared.GuardDeRol;
 import com.renaser.os.rocks.application.ports.in.rocasemanal.CerrarSemanaUseCase.CerrarSemanaCommand;
 import com.renaser.os.rocks.application.ports.in.rocasemanal.CrearPlanSemanalUseCase.CrearPlanSemanalCommand;
+import jakarta.validation.ConstraintViolationException;
 import com.renaser.os.rocks.application.ports.in.rocasemanal.CrearPlanSemanalUseCase.ItemRocaSemanal;
 import com.renaser.os.rocks.application.ports.in.rocasemanal.EditarDentroDe48hUseCase.EditarRocaSemanalCommand;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort;
@@ -35,6 +36,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -101,6 +103,29 @@ class RocaSemanalServiceTest {
 
     private static ItemRocaSemanal item(EjeObjetivo eje) {
         return new ItemRocaSemanal(eje, "titulo", "a1", "a2", "a3", null, null, null);
+    }
+
+    @Test
+    @DisplayName("alcanza con UN eje: la semana se abre con el principal y los otros dos se suman despues")
+    void conUnSoloEjeSeAcepta() {
+        assertThatCode(() -> new CrearPlanSemanalCommand(actorId, List.of(item(EjeObjetivo.CUERPO))))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("...pero la lista vacia no: una semana sin ningun objetivo no es una semana armada")
+    void sinNingunEjeSeRechaza() {
+        assertThatThrownBy(() -> new CrearPlanSemanalCommand(actorId, List.of()))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    @DisplayName("el maximo sigue en tres: no existe un cuarto eje")
+    void masDeTresSeRechaza() {
+        assertThatThrownBy(() -> new CrearPlanSemanalCommand(actorId,
+                List.of(item(EjeObjetivo.CUERPO), item(EjeObjetivo.TRABAJO), item(EjeObjetivo.RELACIONES),
+                        item(EjeObjetivo.CUERPO))))
+                .isInstanceOf(ConstraintViolationException.class);
     }
 
     @Test

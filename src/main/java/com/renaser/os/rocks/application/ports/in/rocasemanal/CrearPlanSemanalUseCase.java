@@ -10,13 +10,22 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-/** Planning Semanal (W-02): crea las 3 Rocas Semanales (una por eje) de la semana entrante. */
+/**
+ * Planning Semanal (W-02): crea los objetivos semanales de la semana entrante, uno por eje.
+ *
+ * <p><b>Alcanza con UNO.</b> Hasta el 2026-09-22 exigia los tres, y el efecto era que quien no
+ * tenia claros los otros dos no podia guardar ninguno: doce campos minimos en una sentada, o nada.
+ * El dueno lo corrigio con el criterio del Mapa — manda el eje que la persona eligio como
+ * principal, y los otros dos se suman cuando quiera.
+ *
+ * <p>El maximo sigue en tres: hay un objetivo semanal por eje y no existe un cuarto eje.
+ */
 public interface CrearPlanSemanalUseCase {
 
     List<RocaSemanal> crear(CrearPlanSemanalCommand command);
 
     record CrearPlanSemanalCommand(@NotNull UserId actorId,
-                                    @NotNull @Size(min = 3, max = 3) List<@Valid ItemRocaSemanal> rocas) {
+                                    @NotNull @Size(min = 1, max = 3) List<@Valid ItemRocaSemanal> rocas) {
 
         public CrearPlanSemanalCommand {
             SelfValidating.validateConstructorArgs(CrearPlanSemanalCommand.class, actorId, rocas);
