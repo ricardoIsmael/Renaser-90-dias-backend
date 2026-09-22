@@ -40,6 +40,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -151,8 +152,8 @@ class RankingServiceTest {
     }
 
     @Test
-    @DisplayName("GENERAL pondera 50/35/15 y consulta cada modulo UNA sola vez, no una por aprendiz")
-    void generalPonderaLosTresModulosEnLote() {
+    @DisplayName("GENERAL pondera habitos y cursos, sin rocas, y consulta cada modulo UNA sola vez")
+    void generalPonderaHabitosYCursosEnLote() {
         UserId a = id();
         UserId b = id();
         when(loadRankingCandidatosPort.aprendicesActivosConPuntaje()).thenReturn(List.of(
@@ -160,8 +161,6 @@ class RankingServiceTest {
                 new CandidatoRanking(b, "B", 0, BigDecimal.ZERO)));
         when(porcentajeHabitosFinder.porcentajePorParticipante(anyCollection(), eq(FECHA)))
                 .thenReturn(Map.of(a, new BigDecimal("80.0"), b, new BigDecimal("40.0")));
-        when(porcentajeRocasFinder.porcentajePorParticipante(anyCollection(), eq(FECHA)))
-                .thenReturn(Map.of(a, new BigDecimal("60.0"), b, new BigDecimal("20.0")));
         when(porcentajeCursosFinder.porcentajePorParticipante(anyCollection()))
                 .thenReturn(Map.of(a, new BigDecimal("40.0"), b, new BigDecimal("100.0")));
 
@@ -170,25 +169,28 @@ class RankingServiceTest {
         ArgumentCaptor<List<PosicionRanking>> captor = ArgumentCaptor.forClass(List.class);
         verify(saveRankingSnapshotPort).reemplazar(eq(TipoRanking.GENERAL), eq(FECHA), captor.capture());
 
-        // a = 0.5*80 + 0.35*60 + 0.15*40 = 67.0 ; b = 0.5*40 + 0.35*20 + 0.15*100 = 42.0
+        // Corregido el 2026-09-22: antes esperaba 67.0 y 42.0, con las rocas dentro (60.0 y 20.0) y
+        // la ponderacion 50/35/15. Ahora, con 0.75 habitos + 0.25 cursos:
+        // a = 0.75*80 + 0.25*40 = 70.0 ; b = 0.75*40 + 0.25*100 = 55.0
         assertThat(captor.getValue().get(0).participanteId()).isEqualTo(a);
-        assertThat(captor.getValue().get(0).puntaje()).isEqualByComparingTo("67.0");
-        assertThat(captor.getValue().get(1).puntaje()).isEqualByComparingTo("42.0");
+        assertThat(captor.getValue().get(0).puntaje()).isEqualByComparingTo("70.0");
+        assertThat(captor.getValue().get(1).puntaje()).isEqualByComparingTo("55.0");
 
         // El punto de D-43: una consulta por modulo para TODOS, nunca una por participante.
         verify(porcentajeHabitosFinder).porcentajePorParticipante(anyCollection(), eq(FECHA));
-        verify(porcentajeRocasFinder).porcentajePorParticipante(anyCollection(), eq(FECHA));
         verify(porcentajeCursosFinder).porcentajePorParticipante(anyCollection());
+        // Y el del cambio de hoy: el ranking general NO le pregunta nada a las rocas. Falla contra
+        // el codigo viejo, que las consultaba para todos los candidatos.
+        verifyNoInteractions(porcentajeRocasFinder);
     }
 
     @Test
-    @DisplayName("GENERAL: al aprendiz sin datos no se lo castiga con 0, vale 100")
+    @DisplayName("GENERAL: al aprendiz sin ningun dato no se lo premia con 100, vale 0 y va al fondo")
     void generalSinDatosValeCeroYNoCien() {
         UserId a = id();
         when(loadRankingCandidatosPort.aprendicesActivosConPuntaje())
                 .thenReturn(List.of(new CandidatoRanking(a, "A", 0, BigDecimal.ZERO)));
         when(porcentajeHabitosFinder.porcentajePorParticipante(anyCollection(), eq(FECHA))).thenReturn(Map.of());
-        when(porcentajeRocasFinder.porcentajePorParticipante(anyCollection(), eq(FECHA))).thenReturn(Map.of());
         when(porcentajeCursosFinder.porcentajePorParticipante(anyCollection())).thenReturn(Map.of());
 
         service.generar(TipoRanking.GENERAL, FECHA);

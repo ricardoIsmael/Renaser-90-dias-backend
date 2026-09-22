@@ -74,7 +74,7 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
     }
 
     /**
-     * Tres consultas EN LOTE, una por modulo — nunca una por aprendiz (D-43). El backend
+     * Dos consultas EN LOTE, una por modulo — nunca una por aprendiz (D-43). El backend
      * viejo hacia justamente eso para el progreso de cursos y con ~30 cuentas activas
      * agotaba las conexiones; por eso habia terminado en un procedimiento almacenado. Aca
      * la formula vive en el dominio ({@link PuntajeGeneral}) y lo unico que se resuelve en
@@ -91,14 +91,17 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
         if (participantes.isEmpty()) {
             return Map.of();
         }
+        // Corregido el 2026-09-22: aca tambien se pedia `porcentajeRocasFinder` y se pasaba como
+        // tercer componente. Las rocas (hoy OBJETIVOS) salieron del ranking general — su porcentaje
+        // ES la coherencia, que ya se muestra aparte y ademas ordena el ranking de celula. El finder
+        // NO se saca del servicio: `generar(CELL, ...)` lo sigue usando.
         Map<UserId, BigDecimal> habitos = porcentajeHabitosFinder.porcentajePorParticipante(participantes, fecha);
-        Map<UserId, BigDecimal> rocas = porcentajeRocasFinder.porcentajePorParticipante(participantes, fecha);
         Map<UserId, BigDecimal> cursos = porcentajeCursosFinder.porcentajePorParticipante(participantes);
 
         Map<UserId, BigDecimal> puntajes = new LinkedHashMap<>(participantes.size());
         for (UserId participante : participantes) {
-            PuntajeGeneral.calcular(habitos.get(participante), rocas.get(participante),
-                    cursos.get(participante)).ifPresent(puntaje -> puntajes.put(participante, puntaje));
+            PuntajeGeneral.calcular(habitos.get(participante), cursos.get(participante))
+                    .ifPresent(puntaje -> puntajes.put(participante, puntaje));
         }
         return puntajes;
     }

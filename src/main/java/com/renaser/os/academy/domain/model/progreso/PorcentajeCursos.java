@@ -5,8 +5,9 @@ import java.math.RoundingMode;
 import java.util.Optional;
 
 /**
- * Calculo puro del "cursosPct" del Ranking General de Comunidad (50% habitos
- * + 35% rocas + 15% cursos, decision D-43): porcentaje de avance en
+ * Calculo puro del "cursosPct" del Ranking General de Comunidad (desde el 2026-09-22,
+ * 75% habitos + 25% cursos; antes 50% habitos + 35% rocas + 15% cursos, y las rocas
+ * salieron de la formula): porcentaje de avance en
  * lecciones ACCESIBLES de un participante, sumado en todos sus cursos.
  * DOMINIO PURO — el caller (ver {@code PorcentajeCursosService}) trae los
  * crudos (total y completadas de lecciones ya filtradas a cursos accesibles,

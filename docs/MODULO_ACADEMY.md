@@ -24,7 +24,7 @@ dos consultas que reemplazan las RPC. Detalle en §1.8, §3.2 y §5.
 
 **2026-08-24 — Cierre D-43 (progreso de cursos EN LOTE para el Ranking General).** Nuevo contrato
 público `PorcentajeCursosFinder` (`academy/api/`), implementado por `PorcentajeCursosService`, para
-que `points` calcule el componente "cursos" (15%) del Ranking General sin reproducir el incidente real
+que `points` calcule el componente "cursos" (25% desde el 2026-09-22, D-144; antes 15%) del Ranking General sin reproducir el incidente real
 de producción documentado en `prisma/migrations/general_ranking_scores_function.sql` del repo viejo
 ("Too many database connections opened" con ~30 cuentas activas, causado por 1 consulta por aprendiz
 en `sumarProgresoCursos`). Cálculo en dominio puro (`PorcentajeCursos`), 4 consultas EN TOTAL sin
@@ -240,7 +240,8 @@ catálogo del aprendiz. Documentado en el javadoc de `AccesoCursoService` para q
 
 Contrato nuevo (`academy/api/PorcentajeCursosFinder.java`), implementado en `PorcentajeCursosService`:
 `Map<UserId, BigDecimal> porcentajePorParticipante(Collection<UserId> participantes)`, el componente
-"cursos" (15%) del Ranking General de Comunidad (50% hábitos + 35% rocas + 15% cursos). Ver decisión
+"cursos" del Ranking General de Comunidad — que desde el 2026-09-22 (D-144) es **75% hábitos + 15%
+cursos**, antes 50% hábitos + 35% rocas + 15% cursos. Ver decisión
 **AC-17** (§5) para el detalle completo — acá el resumen de por qué existe: el backend viejo resolvía
 esto con `sumarProgresoCursos` (`cursos/repository.ts:824-849`), **1 consulta a Supabase por
 aprendiz**, y con las ~30 cuentas activas del programa ya devolvía *"Too many database connections

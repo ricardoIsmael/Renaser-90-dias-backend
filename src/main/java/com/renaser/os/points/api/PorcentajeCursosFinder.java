@@ -9,8 +9,9 @@ import java.util.Map;
 /**
  * Contrato entre modulos: porcentaje de avance en cursos accesibles de cada
  * participante, EN LOTE. Consumido por `points` para el componente "cursos"
- * (15%) del Ranking General de Comunidad (50% habitos + 35% rocas + 15%
- * cursos — decision D-43, `docs/MODULOS_A_AVANZAR.md` §8).
+ * del Ranking General de Comunidad, que desde el 2026-09-22 es <b>75% habitos + 25% cursos</b>
+ * (antes 50% habitos + 35% rocas + 15% cursos; las rocas salieron — decision D-43 para el lote,
+ * `docs/MODULOS_A_AVANZAR.md` §8).
  *
  * <p><b>Por que "en lote" no es un detalle de estilo.</b> El backend viejo
  * resolvia esto con 1 consulta a Supabase POR APRENDIZ

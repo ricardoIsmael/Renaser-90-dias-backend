@@ -207,6 +207,12 @@ Idempotencia: `RocaDiaria.puedeOtorgarPuntos()` (`puntosOtorgados <= 0`) evita p
 
 **Encargo:** el ranking general (`docs/MODULOS_A_AVANZAR.md` §8, D-43) es 50% hábitos + 35% rocas + 15% cursos. `points` combina los tres; cada módulo dueño de su porcentaje lo expone EN LOTE, sin procedimientos almacenados — la fórmula vive en Java, no baja a SQL.
 
+> **Corregido el 2026-09-22 (D-144).** Ese encargo ya no describe el ranking general: **las rocas
+> salieron de esa fórmula**, que quedó en **75% hábitos + 25% cursos**. Las rocas pasaron a llamarse
+> OBJETIVOS y su porcentaje **es** la coherencia — contaba dos veces. `PorcentajeRocasFinder` **no
+> se borra ni cambia**: sigue siendo lo que muestra la coherencia en Hoy (D-128) y lo que ordena el
+> ranking de **célula**. Lo que dejó de hacer es puntuar en el general.
+
 ### 8.1 Paso 0 — la fórmula, con citas
 
 Dos fuentes, verificadas ambas, no solo la cabecera del SQL:

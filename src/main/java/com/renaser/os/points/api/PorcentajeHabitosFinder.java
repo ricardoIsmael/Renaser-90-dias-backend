@@ -10,7 +10,8 @@ import java.util.Map;
 /**
  * D-43 (docs/MODULOS_A_AVANZAR.md §8) — expone el % de cumplimiento de
  * habitos EN LOTE para que {@code points} lo combine con el de
- * {@code rocks}/{@code academy} (50% habitos + 35% rocas + 15% cursos) sin el
+ * {@code academy} (ranking general: 75% habitos + 25% cursos desde el 2026-09-22 — antes era
+ * 50% habitos + 35% rocas + 15% cursos, y las rocas salieron) sin el
  * N+1 que tumbaba el ranking general en el backend viejo ("Too many database
  * connections opened" con ~30 cuentas activas, verificado en vivo el
  * 2026-08-12 — ver la cabecera de

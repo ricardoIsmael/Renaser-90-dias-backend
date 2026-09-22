@@ -5,11 +5,20 @@ import java.math.RoundingMode;
 import java.util.Optional;
 
 /**
- * Formula del ranking general de la plataforma: 50% habitos + 35% rocas + 15% cursos.
+ * Formula del ranking general de la plataforma: <b>75% habitos + 25% cursos</b>.
  *
- * <p>Porte LITERAL de {@code general_ranking_scores()} del backend viejo
- * (`prisma/migrations/general_ranking_scores_function.sql`), que a su vez replicaba
- * `generalRankingService.ts`. No se recalibra ningun criterio.
+ * <blockquote><b>Corregido el 2026-09-22 (decision del dueno).</b> Aca decia <i>"50% habitos + 35%
+ * rocas + 15% cursos"</i>, porte literal de {@code general_ranking_scores()} del backend viejo. Las
+ * rocas <b>salen del ranking general</b>: pasaron a llamarse OBJETIVOS y su porcentaje ya es la
+ * COHERENCIA, que se muestra aparte en Hoy ({@code HomeAgregadoService.coherenciaDe}, D-128) y es
+ * ademas lo que ordena el ranking de celula. Tenerlas contando en los dos lados hacia que un
+ * aprendiz que todavia no planifico una accion perdiera puesto en el general por algo que el
+ * general no deberia medir.</blockquote>
+ *
+ * <p><b>Los dos pesos suman 1 exacto</b> (0.75 y 0.25, decision del dueno el 2026-09-22): con los
+ * dos modulos presentes la division de abajo es por 1 y el puntaje es la ponderacion directa. El
+ * 35% que dejaron las rocas se repartio entre los dos que quedaron — habitos subio de 0.50 a 0.75
+ * y cursos de 0.15 a 0.25.
  *
  * <p><b>Por que vive en el dominio y no en SQL (D-43):</b> el motivo por el que el equipo viejo
  * bajo esto a un procedimiento almacenado fue de rendimiento — el calculo hacia una consulta POR
@@ -17,9 +26,8 @@ import java.util.Optional;
  * resuelve con consultas en lote. La formula en si es regla de negocio y aca se puede probar sin
  * levantar Postgres.
  *
- * <p><b>Redondeos, en el orden exacto del original:</b> cada componente ya llega con un decimal
- * (lo garantizan los tres finders); la ponderacion se redondea a un decimal al final —
- * {@code round((0.5*h + 0.35*r + 0.15*c) * 10) / 10} en el SQL.
+ * <p><b>Redondeos:</b> cada componente ya llega con un decimal (lo garantizan los finders); la
+ * ponderacion se redondea a un decimal al final.
  *
  * <p><b>El modulo sin dato NO puntua: sale del promedio y su peso se reparte entre los que si
  * tienen dato</b> (2026-09-15, D-131).
@@ -33,15 +41,17 @@ import java.util.Optional;
  * viene cumpliendo. Un aprendiz sin un solo dato encabezaba el ranking general con 100.</blockquote>
  *
  * <p>Renormalizar es la unica salida que no inventa un valor: no lo castiga con un 0 por algo que
- * todavia no existe, ni lo premia con un 100 que no gano. <b>A quien tiene los tres modulos con
- * dato le da exactamente el mismo numero que antes</b> —los pesos suman 1 y la cuenta es la
- * misma—, asi que el orden de quien ya venia compitiendo no se mueve.
+ * todavia no existe, ni lo premia con un 100 que no gano.
  */
 public final class PuntajeGeneral {
 
-    private static final BigDecimal PESO_HABITOS = new BigDecimal("0.5");
-    private static final BigDecimal PESO_ROCAS = new BigDecimal("0.35");
-    private static final BigDecimal PESO_CURSOS = new BigDecimal("0.15");
+    /**
+     * Los dos unicos pesos del ranking general. <b>Cambiar cualquiera de estos dos numeros cambia
+     * el orden de la tabla para todo el padron</b>, asi que no se tocan sin decision escrita del
+     * dueno. Suman 1 exacto.
+     */
+    private static final BigDecimal PESO_HABITOS = new BigDecimal("0.75");
+    private static final BigDecimal PESO_CURSOS = new BigDecimal("0.25");
 
     private static final int DECIMALES = 1;
 
@@ -49,23 +59,19 @@ public final class PuntajeGeneral {
     }
 
     /**
-     * @param porcentajeHabitos cualquiera de los tres puede venir {@code null}: es "sin dato", que
+     * @param porcentajeHabitos cualquiera de los dos puede venir {@code null}: es "sin dato", que
      *                          no es cero ni cien — simplemente no entra en la cuenta
-     * @return el puntaje, o {@link Optional#empty()} si los TRES vinieron sin dato: ahi no hay
-     *         nada que promediar, y quien llama decide que hacer con eso (el ranking lo manda al
-     *         fondo de la tabla, no al frente)
+     * @param porcentajeCursos  idem
+     * @return el puntaje, o {@link Optional#empty()} si los DOS vinieron sin dato: ahi no hay nada
+     *         que promediar, y quien llama decide que hacer con eso (el ranking lo manda al fondo
+     *         de la tabla, no al frente)
      */
-    public static Optional<BigDecimal> calcular(BigDecimal porcentajeHabitos, BigDecimal porcentajeRocas,
-                                                 BigDecimal porcentajeCursos) {
+    public static Optional<BigDecimal> calcular(BigDecimal porcentajeHabitos, BigDecimal porcentajeCursos) {
         BigDecimal suma = BigDecimal.ZERO;
         BigDecimal pesos = BigDecimal.ZERO;
         if (porcentajeHabitos != null) {
             suma = suma.add(porcentajeHabitos.multiply(PESO_HABITOS));
             pesos = pesos.add(PESO_HABITOS);
-        }
-        if (porcentajeRocas != null) {
-            suma = suma.add(porcentajeRocas.multiply(PESO_ROCAS));
-            pesos = pesos.add(PESO_ROCAS);
         }
         if (porcentajeCursos != null) {
             suma = suma.add(porcentajeCursos.multiply(PESO_CURSOS));
@@ -74,7 +80,8 @@ public final class PuntajeGeneral {
         if (pesos.signum() == 0) {
             return Optional.empty();
         }
-        // Con los tres presentes `pesos` vale 1 exacto: esto es la misma cuenta de siempre.
+        // Con UN solo modulo con dato, `suma / pesos` devuelve ese mismo porcentaje: quien solo
+        // tiene habitos compite con su porcentaje de habitos, sin relleno inventado.
         return Optional.of(suma.divide(pesos, DECIMALES, RoundingMode.HALF_UP));
     }
 }
