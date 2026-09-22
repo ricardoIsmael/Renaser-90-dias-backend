@@ -168,8 +168,12 @@ public class SantuarioService implements IniciarSesionBloqueoUseCase, CompletarS
         registro.marcarFallido(ahora);
         saveRegistroPort.save(registro);
 
-        ajustarPuntosPort.ajustar(registro.participanteId(), MotivoPuntos.SANCTUARY_BREAK,
-                -SesionBloqueo.PENALIZACION_ROTURA_PUNTOS, "Santuario roto: " + habito.titulo());
+        // Corregido el 2026-09-22. Aca iba `ajustarPuntosPort.ajustar(..., SANCTUARY_BREAK, -10, ...)`,
+        // heredado de `blocking.ts:17` (BREAK_PENALTY_POINTS). Era la UNICA resta automatica de puntos
+        // de todo el backend, y el dueno decidio que no se resta nada: romper el Santuario deja el
+        // registro FALLIDO y esa es toda la consecuencia, igual que romper una racha
+        // (RomperRachaUseCase, honor-based). `MotivoPuntos.SANCTUARY_BREAK` NO se borra: hay filas
+        // historicas en `ajustes_puntos` con ese motivo y el mapper tiene que poder leerlas.
         events.publishEvent(new SantuarioRotoEvent(registro.id().value(), registro.participanteId(), ahora));
         return guardada;
     }

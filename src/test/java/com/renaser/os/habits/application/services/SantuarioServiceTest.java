@@ -24,8 +24,6 @@ import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.habits.domain.model.santuario.MotivoSalidaBloqueo;
 import com.renaser.os.habits.domain.model.santuario.SesionBloqueo;
 import com.renaser.os.points.api.AjustarPuntosPort;
-import com.renaser.os.points.api.MotivoPuntos;
-import com.renaser.os.points.api.ResumenAjustePuntos;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -44,8 +42,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -142,7 +141,7 @@ class SantuarioServiceTest {
     }
 
     @Test
-    void romperAplicaPenalizacionDeDiezPuntosYMarcaRegistroFallido() {
+    void romperNoDescuentaPuntosYMarcaRegistroFallido() {
         UserId dueno = UserId.of(UUID.randomUUID());
         Habito habito = habitoBloqueo();
         RegistroHabito registro = registroPendiente(dueno, habito);
@@ -154,14 +153,12 @@ class SantuarioServiceTest {
         when(loadSesionPort.porRegistro(registro.id())).thenReturn(Optional.of(sesion));
         when(progresoPort.deParticipante(dueno)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
-        when(ajustarPuntosPort.ajustar(any(), any(), org.mockito.ArgumentMatchers.anyInt(), any()))
-                .thenReturn(new ResumenAjustePuntos(dueno, -10, 90));
-
         service.romper(new RomperSesionBloqueoCommand(dueno, registro.id(), MotivoSalidaBloqueo.SALIDA_TEMPRANA,
                 null, null));
 
         assertThat(registro.estado()).isEqualTo(EstadoRegistro.FALLIDO);
-        verify(ajustarPuntosPort).ajustar(eq(dueno), eq(MotivoPuntos.SANCTUARY_BREAK),
-                eq(-SesionBloqueo.PENALIZACION_ROTURA_PUNTOS), any());
+        // Falla contra el codigo viejo: ahi esta linea restaba 10 puntos (MotivoPuntos.SANCTUARY_BREAK,
+        // -SesionBloqueo.PENALIZACION_ROTURA_PUNTOS). Romper el Santuario ya no cuesta puntos.
+        verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
     }
 }

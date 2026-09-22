@@ -42,7 +42,14 @@ Ya extraído literal en `docs/MODULO_POINTS.md` §2.1 — se implementó en `hab
 
 ### 0.4 Santuario / BLOQUEO (`blocking.ts`, completo)
 
-Ver §2 de la investigación previa a este documento. Constantes: `DEFAULT_MIN_DURATION_MIN=30` (blocking.ts:16), `BREAK_PENALTY_POINTS=10` (blocking.ts:17), `COMPLETE_GRACE_MS=5min` (blocking.ts:18). `startBlockSession`/`completeBlockSession`/`breakBlockSession` (blocking.ts:99-232) traducidos 1:1 a `SesionBloqueo` (domain) + `SantuarioService` (application), con las mismas guardas: no antes de `triggerInstant`, mínimo de duración, gracia de 5 min tras `limitInstant`, penalización de −10 puntos SIEMPRE al romper (`penaltyApplied: true` sin excepción), idempotencia (completar ya-completada / romper ya-rota devuelven éxito sin re-ejecutar).
+Ver §2 de la investigación previa a este documento. Constantes: `DEFAULT_MIN_DURATION_MIN=30` (blocking.ts:16), `BREAK_PENALTY_POINTS=10` (blocking.ts:17), `COMPLETE_GRACE_MS=5min` (blocking.ts:18). `startBlockSession`/`completeBlockSession`/`breakBlockSession` (blocking.ts:99-232) traducidos 1:1 a `SesionBloqueo` (domain) + `SantuarioService` (application), con las mismas guardas: no antes de `triggerInstant`, mínimo de duración, gracia de 5 min tras `limitInstant`, idempotencia (completar ya-completada / romper ya-rota devuelven éxito sin re-ejecutar).
+
+> **Corregido el 2026-09-22.** Esta línea terminaba en «penalización de −10 puntos SIEMPRE al romper
+> (`penaltyApplied: true` sin excepción)». Ya no: romper el Santuario **no descuenta puntos**. Era la
+> única resta automática del backend y el dueño decidió que no se resta nada — el registro queda
+> `FALLIDO` y eso es todo, igual que la racha sin celular (§1.5, honor-based). La constante
+> `SesionBloqueo.PENALIZACION_ROTURA_PUNTOS` se eliminó; `MotivoPuntos.SANCTUARY_BREAK` se conserva
+> solo para poder leer las filas históricas de `ajustes_puntos`.
 
 ### 0.5 Día sin celular (`phoneFree.ts` + `phoneFreeLadder.ts`, completo)
 

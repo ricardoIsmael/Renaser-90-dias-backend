@@ -31,14 +31,16 @@ public final class Evidencia {
     /** Espejo del CHECK {@code intentos_ia BETWEEN 0 AND 3}: al llegar a 3, cae a REVISION_MANUAL. */
     public static final int MAX_INTENTOS_IA = 3;
 
-    /** Puntos descontados cuando una evidencia de HABITO es rechazada (y revertidos si un
-     * admin anula ese veredicto, ver {@link #anularVeredicto}). Valor confirmado contra el
+    /** Magnitud de la reversión que recibe quien tenía una evidencia de HABITO rechazada y un
+     * admin le anula el veredicto (ver {@link #anularVeredicto}). Valor confirmado contra el
      * backend viejo (`Backend90dias/RenaserBack/src/features/evidence-ai/service.ts:21`,
-     * {@code INVALID_EVIDENCE_PENALTY_POINTS} — "misma magnitud que la rotura de
-     * Santuario", ver {@code habits.SesionBloqueo.PENALIZACION_ROTURA_PUNTOS}). Quién
-     * aplica la penalización por primera vez sigue sin implementarse en este alcance
-     * (pregunta abierta #2 de docs/MODULO_EVIDENCE.md) — esta constante hoy solo la usa
-     * la reversión. */
+     * {@code INVALID_EVIDENCE_PENALTY_POINTS}).
+     * <blockquote><b>Corregido el 2026-09-22.</b> Acá decía "Puntos descontados cuando una
+     * evidencia de HABITO es rechazada", con la misma magnitud "que la rotura de Santuario"
+     * ({@code habits.SesionBloqueo.PENALIZACION_ROTURA_PUNTOS}, constante que ya no existe).
+     * Nadie descuenta: el sistema no resta puntos por nada (decisión del dueño), y esta
+     * constante SOLO se usa para devolver, nunca para quitar. {@code penalizacionAplicada}
+     * solo puede venir en {@code true} desde filas históricas.</blockquote> */
     public static final int PENALIZACION_EVIDENCIA_INVALIDA_PUNTOS = 10;
 
     private final EvidenciaId id;

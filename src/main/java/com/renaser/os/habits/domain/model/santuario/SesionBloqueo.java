@@ -24,8 +24,12 @@ public final class SesionBloqueo {
 
     /** Minutos minimos por defecto antes de poder completar (blocking.ts:16, DEFAULT_MIN_DURATION_MIN). */
     public static final int DURACION_MINIMA_DEFAULT_MIN = 30;
-    /** Puntos que se descuentan al romper la sesion (blocking.ts:17, BREAK_PENALTY_POINTS). */
-    public static final int PENALIZACION_ROTURA_PUNTOS = 10;
+    /*
+     * Corregido el 2026-09-22. Aca vivia `public static final int PENALIZACION_ROTURA_PUNTOS = 10`
+     * ("Puntos que se descuentan al romper la sesion", blocking.ts:17 BREAK_PENALTY_POINTS).
+     * Romper el Santuario ya no descuenta puntos, asi que la constante no tiene a quien servir:
+     * dejarla publica solo invitaba a volver a restar. Ver SantuarioService.romper().
+     */
     /** Gracia tras la hora limite del horario para poder completar (blocking.ts:18, COMPLETE_GRACE_MS). */
     public static final Duration GRACIA_COMPLETAR = Duration.ofMinutes(5);
 
@@ -85,7 +89,7 @@ public final class SesionBloqueo {
         this.actualizadoEn = ahora;
     }
 
-    /** Rompe la sesion — penalizacion de {@link #PENALIZACION_ROTURA_PUNTOS} puntos, siempre aplicada. */
+    /** Rompe la sesion — sin costo en puntos: queda ROTA y su registro FALLIDO, nada mas. */
     public void romper(MotivoSalidaBloqueo motivo, String evidenciaBucket, String evidenciaRuta, Instant ahora) {
         requireActiva();
         this.estado = EstadoSesionBloqueo.ROTA;

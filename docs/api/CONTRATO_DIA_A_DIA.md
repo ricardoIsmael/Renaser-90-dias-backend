@@ -244,8 +244,11 @@ una tabla de políticas indexada por tipo/clave de hábito; para `BLOQUEO` esa p
 
 - **Response 200** — `SesionBloqueoResponse` con `estado: "ROTA"`, `motivoSalida` reflejando lo enviado.
 - **Idempotente** igual que `complete`.
-- **Penaliza puntos** (`SesionBloqueo.PENALIZACION_ROTURA_PUNTOS`, `MotivoPuntos.SANCTUARY_BREAK`) y marca el
-  registro `FALLIDO` — a diferencia de la racha sin celular (1.5), que nunca penaliza.
+- **NO toca los puntos.** Solo marca el registro `FALLIDO` — igual que la racha sin celular (1.5).
+  > **Corregido el 2026-09-22.** Acá decía «**Penaliza puntos** (`SesionBloqueo.PENALIZACION_ROTURA_PUNTOS`,
+  > `MotivoPuntos.SANCTUARY_BREAK`) […] a diferencia de la racha sin celular (1.5), que nunca penaliza».
+  > El backend ya no resta puntos por nada: era la única resta automática que quedaba y se quitó.
+  > El cliente **no** debe esperar que `GET /api/v1/points/{id}` baje después de un `break`.
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/habit-tracks/<REGISTRO_ID>/santuario/start -H "X-Actor-Id: <UUID>"
@@ -980,8 +983,9 @@ para todo lo que exige ese rol: rocks, radar, verdugo).
 3. Para completarlo: `POST /api/v1/habit-tracks/{id}/santuario/complete` (mismo `id`).
    Para romperlo en su lugar: `POST /api/v1/habit-tracks/{id}/santuario/break` con
    `{"motivo": "SALIDA_TEMPRANA"}`.
-4. `GET /api/v1/points/{tuActorId}` → si completaste, sumó puntos; si rompiste, restó
-   `PENALIZACION_ROTURA_PUNTOS`.
+4. `GET /api/v1/points/{tuActorId}` → si completaste, sumó puntos; si rompiste, **quedó igual**.
+   > **Corregido el 2026-09-22.** Acá decía «si rompiste, restó `PENALIZACION_ROTURA_PUNTOS`».
+   > Ya no se resta nada; lo único que cambia al romper es que el registro queda `FALLIDO`.
 
 ### C. Día sin celular (racha honor-based)
 
