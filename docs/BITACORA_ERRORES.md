@@ -7503,3 +7503,40 @@ aparecen solas en cuanto el permiso existe, porque la URL guardada ya es la corr
   nombre viaja al cliente en la respuesta de `upload-url` y el backend lo ignora al confirmar, asi
   que no rompe nada — pero es una pista falsa justo para depurar esto. Hay que hacer que reporte el
   bucket de verdad o sacarlo de la respuesta.
+
+## E-213 · Volver a pausar un hábito reusa la fecha de inicio de la pausa vieja
+
+**Síntoma.** Un hábito pausado con fecha de fin, cuya pausa ya terminó, se vuelve a pausar: los
+días entre el fin de la pausa vieja y hoy pasan a leerse como "pausados" al consultar fechas
+pasadas. Hoy y los días siguientes no se ven afectados.
+
+**Causa real.** `DesbloqueoHabito.pausar` solo fija `pausadoEn` cuando `!estaPausado()`, y
+`estaPausado()` mira únicamente `pausadoEn != null`. Una pausa con fecha que ya venció conserva su
+`pausadoEn`, así que la pausa nueva hereda el inicio viejo.
+
+**Estado.** Detectado el 2026-09-23 al construir `proponer_pausar_habito` (D-154). **No se
+corrigió** (fuera de alcance). La herramienta dice "desde hoy", que es lo que rige hacia adelante.
+
+**Cómo evitar que vuelva a pasar.** Al corregirlo, escribir primero la prueba: pausa con fin
+vencido → nueva pausa → `estaPausadoEl(ayer)` debe dar `false`.
+
+## E-214 · `apagar`/`quitar` del horario por día de semana no repiten las guardas del servicio
+
+**Síntoma.** En `PreferenciaHorarioService`, `apagar` y `quitar` (DELETE
+`/api/v1/habit-preferences/{habitId}/weekdays/{weekday}/active` y `…/{weekday}`) no llaman a
+`requireProgreso`, así que no revisan cuenta suspendida; y ni ellos ni `fijar` comprueban que un
+hábito PERSONAL sea del actor, como sí hace `editar` ("Solo puedes editar tus propios habitos").
+
+**Gravedad real (verificada leyendo el código, 2026-09-23).** Baja, es defensa en profundidad:
+- Por HTTP, `PermissionEnforcementInterceptor` ya devuelve 403 a un TRAINEE `SUSPENDED` antes de
+  llegar al servicio.
+- Todas las escrituras se guardan con el `actorId` (`saveParaDiaSemana(actorId, …)`): referenciar
+  el hábito personal de otra persona solo crea filas de preferencia del propio actor, sin tocar
+  datos ajenos.
+
+**Estado.** Detectado al construir `proponer_horario_por_dia_de_semana` (D-154). **No se corrigió**
+(se reporta, no se arregla en el mismo cambio). El camino del acompañante exige cuenta activa al
+confirmar (`PropuestasAgenteService`).
+
+**Cómo evitar que vuelva a pasar.** Al corregirlo, que los tres métodos usen las mismas guardas que
+`editar`, con pruebas: suspendido → `NotAuthorizedException` y hábito personal ajeno → rechazo.
