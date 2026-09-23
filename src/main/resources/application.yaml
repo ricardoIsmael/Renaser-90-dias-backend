@@ -320,6 +320,26 @@ renaser:
       # las guardas de negocio se vuelven a correr igual. El vencimiento se DERIVA de `vence_en`
       # (no hay scheduler ni estado VENCIDA). Formato ISO-8601 (PT10M) o el corto de Spring (10m).
       propuesta-vigencia: ${IA_ACOMPANANTE_PROPUESTA_VIGENCIA:PT10M}
+      # Fase 5 de la propuesta del acompanante (§5.1, "el acompanante escribe primero"): cuando
+      # sale un aviso automatico de habito (renaser.habits.avisos), ademas del push queda un
+      # mensaje del acompanante en su chat, armado con plantilla y datos reales. SIN llamar a la
+      # IA: costo cero y no puede inventar horas ni puntos. No consume la cuota de Renasia.
+      # AvisoHabitoEnChatService tiene el detalle (idempotencia, avisos tardios, D-132).
+      #
+      # FALSE por defecto: que avisos pasan y con que texto quedaron "por decidir" en §5.1.
+      avisos-en-chat: ${IA_ACOMPANANTE_AVISOS_EN_CHAT:false}
+      # Cuales de los dos avisos pasan al chat: INICIO (esta por empezar) y/o POR_VENCER (se
+      # vence el plazo de entrega). Separados por coma. Un nombre que no sea ninguno de esos se
+      # ignora.
+      avisos-en-chat-tipos: ${IA_ACOMPANANTE_AVISOS_EN_CHAT_TIPOS:INICIO,POR_VENCER}
+      # TEXTOS PROVISORIOS: el dueno NO aprobo esta redaccion todavia. Son copia de producto a
+      # confirmar, no una decision tomada. Marcadores: {habito}, {hora} (HH:mm en la zona del
+      # aprendiz), {puntos} (lo que gana si lo entrega ahora, calculado por habits, D-97) y
+      # {minutos}. Una plantilla vacia apaga ese tipo. Sin ${...:default} a proposito: las llaves
+      # de los marcadores dentro de un default de Spring son fragiles; se sobreescriben por
+      # entorno igual (RENASER_IA_ACOMPANANTE_AVISOSENCHATPLANTILLAINICIO, etc.).
+      avisos-en-chat-plantilla-inicio: "Tu hábito {habito} empieza a las {hora}. Hay {puntos} puntos en juego."
+      avisos-en-chat-plantilla-por-vencer: "Se te vence {habito} a las {hora}. Si lo haces ahora sumas {puntos} puntos."
   email:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}

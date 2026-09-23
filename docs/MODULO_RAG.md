@@ -323,6 +323,52 @@ SSE `propuesta` (ver el contrato en §4.bis) y la persona la resuelve con
    ejecución" para siempre: cada toque posterior responde "ya estoy aplicando este cambio" y nada
    la reintenta.
 2. Una propuesta ajena responde 403, no 404: revela que el id existe (los ids son UUID aleatorios).
+
+### D-154 — Escrituras de horario, plan de hábitos y rocas como propuestas (fase 4, 2026-09-23)
+
+Siete herramientas R2, **solo registradas con `renaser.ia.acompanante.confirmacion-con-botones=true`**
+(sin botones en la app, proponer sería inútil). Cada una valida antes con datos de lectura y deja
+una propuesta (D-153); la escritura real la hace su `AccionConfirmable` (siempre registrado)
+delegando en el mismo caso de uso que la app, que vuelve a correr todas sus guardas al confirmar.
+
+| Herramienta | Escritura real (vía `*.api`) | Antes de proponer |
+|---|---|---|
+| `proponer_cambio_de_horario` | `EditarPreferenciaHorarioUseCase` (`habits.api.AjustarHorarioHabitoUseCase`) | cupo de `CuotaEdicionHorario` de la semana efectiva: **agotado → no propone**; límite después del inicio; fecha futura. Conserva el recordatorio vigente |
+| `proponer_apagar_dia` | `CambiarEstadoHabitoEnFechaUseCase` | no pasado, no obligatorio, que el cambio cambie algo |
+| `proponer_horario_por_dia_de_semana` | `EditarHorarioSemanalUseCase` | `fijar` gasta cupo (próxima ocurrencia del día), `apagar`/`quitar` no |
+| `proponer_pausar_habito` | `CambiarEstadoHabitoDelPlanUseCase` (`habits.api.PlanDeHabitosPort`) | no obligatorio, fecha de fin no pasada |
+| `proponer_dia_de_habito_semanal` | `ElegirDiaSemanalUseCase` | días de `SemanaDeEleccion` (regla extraída al dominio y usada también por el caso de uso) |
+| `proponer_plan_del_dia` | `CrearPlanDiarioUseCase` (`rocks.api.PlanificacionDeRocasPort`) | JSON estricto en un argumento `plan`; la fecha siempre queda escrita (default: mañana en su zona) |
+| `proponer_plan_de_la_semana` | `CrearPlanSemanalUseCase` | solo la forma del JSON (el domingo planifica la semana siguiente) |
+
+**Supuestos a confirmar por el dueño:** en el plan del día, cada acción va con `puntajeImpacto=5`
+y `esDelegable=false`, copiados del default del cliente (`posicionarPorEje`), no de una regla del
+backend. Elegir el día de un hábito semanal **solo lo anota** mientras siga abierto D-H3 (el
+generador no filtra por el día elegido): el resumen dice "Anotar" y el modelo no lo promete.
+
+**Límites conocidos:** el pre-chequeo de cupo no ve qué hábitos ya se reacomodaron en la semana,
+así que puede negar uno que `habits` sí permitiría (el lado seguro); con cupo agotado remite a la
+app. La ambigüedad de la ventana de las 18:00 (D-152) sigue sin resolver: decide el caso de uso.
+
+### D-155 — El acompañante escribe primero: avisos de hábito en el chat (fase 5, 2026-09-23)
+
+`AvisoHabitoEnChatListener` (`@ApplicationModuleListener` sobre `habits.api.AvisoHabitoDebidoEvent`,
+al lado del push de `notifications`) llama a `DejarAvisoHabitoEnChatUseCase`, que deja un mensaje
+ASISTENTE/COMPANION armado con **plantilla y datos reales**: título, hora local (`occurredAt +
+minutosQueFaltan` en la zona con que calculó `habits`) y los puntos D-97 que trae el evento. **Sin
+IA y sin consumir cuota.** Apagado por defecto (`renaser.ia.acompanante.avisos-en-chat`); los tipos
+y los textos son configuración y **provisorios hasta que el dueño apruebe la redacción**.
+
+- **Idempotencia sin migración:** `habits` republica el aviso cada barrido de 5 min dentro de su
+  franja. El id del mensaje se deriva (`nameUUIDFromBytes("aviso-habito-en-chat:" + claveEvento)`)
+  y se consulta `LoadMensajeRenasiaPort.existe` antes de guardar (un `save` con id existente sería
+  un UPDATE silencioso).
+- **No se escribe si el momento ya pasó, ni si lo último del chat es un pedido sin respuesta:** un
+  mensaje del asistente ahí haría pasar ese pedido por respondido en `soloTurnosRespondidos` y
+  reabriría D-132. El push sale igual.
+- **Entrega:** la app lo ve al abrir el panel (recarga el historial); no hay tiempo real.
+- Sin verificar contra Gemini: una memoria que empieza con un turno del asistente, o con dos
+  seguidos.
 ---
 
 ## 4. Estructura del módulo

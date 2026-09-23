@@ -194,4 +194,17 @@ class RenasiaConversacionPersistenceAdapterTest {
         assertThat(delTutor).extracting(MensajeRenasia::agente).containsOnly(COURSE_TUTOR);
         assertThat(delTutorConCursor).extracting(MensajeRenasia::contenido).containsExactly("al tutor");
     }
+
+    /** El aviso de habito en el chat decide "ya lo escribi" con esto (id deterministico). */
+    @Test
+    void existeDiceSiYaHayUnMensajeConEseId() {
+        saveConversacionRenasiaPort.save(ConversacionRenasia.iniciar(usuarioId, Instant.now()));
+        MensajeRenasiaId id = nuevoId();
+        assertThat(loadMensajeRenasiaPort.existe(id)).isFalse();
+
+        saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeAsistente(id, usuarioId, COMPANION,
+                "Se te vence Meditar a las 21:29.", List.of(), Instant.now()));
+
+        assertThat(loadMensajeRenasiaPort.existe(id)).isTrue();
+    }
 }

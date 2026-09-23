@@ -1,6 +1,6 @@
 # Propuesta: el acompañante de 90 días como planificador
 
-**Estado:** fases 1 y 2 implementadas (D-152, D-153); fases 3 a 6 pendientes (§5.3).
+**Estado:** fases 1, 2, 4 y 5 implementadas en el backend (D-152 a D-155); pendientes la 3 (botones, repo de la app) y la 6 (router, necesita medirse con Gemini).
 > Decía «propuesta, pendiente de decisiones del dueño. Nada está implementado todavía». Corregido el
 > 2026-09-23 al cerrar la fase 2.
 **Fecha:** 2026-09-23. **Base:** inventario de todos los endpoints que puede llamar un aprendiz
@@ -162,8 +162,8 @@ Cada fase es un cambio propio, con `clean verify` en verde, y no rompe a la app 
 | 1 | Herramientas de **lectura** (R0) y **cálculo de tiempo** en código (R1): "¿llego a tiempo?", resumen del día, horario de un día, cuota restante, rocas, eventos de la semana. **Hecha 2026-09-23 (D-152)**: 3555 pruebas unitarias en verde; la integración (failsafe) quedó sin correr por falta del token de Testcontainers Cloud | backend |
 | 2 | **Propuestas con botones**: tabla, evento SSE `propuesta`, endpoints confirmar/cancelar, más `marcar_habito_completado`, que hoy escribe sin confirmar, pasado a propuesta. **Hecha 2026-09-23 (D-153)**, flag apagado; 3624 pruebas unitarias en verde; migración V63 y pruebas de integración sin correr (falta el token de Testcontainers Cloud) | backend |
 | 3 | Botones en la app para el evento `propuesta` | app |
-| 4 | Herramientas de **escritura** como propuestas: horario, apagar un día, día semanal, pausar, plan de rocas diario y semanal | backend |
-| 5 | **Avisos proactivos** con plantilla (§5.1) | backend |
+| 4 | Herramientas de **escritura** como propuestas: horario, apagar un día, día semanal, pausar, plan de rocas diario y semanal. **Hecha 2026-09-23 (D-154)** | backend |
+| 5 | **Avisos proactivos** con plantilla (§5.1). **Hecha 2026-09-23 (D-155)**, flag apagado, textos provisorios | backend |
 | 6 | Router rápido (`ClasificarIntencionPort`) medido con el dataset es-PE | backend |
 
 **Riesgo de la fase 2:** pasar `marcar_habito_completado` a propuesta cambia el comportamiento
