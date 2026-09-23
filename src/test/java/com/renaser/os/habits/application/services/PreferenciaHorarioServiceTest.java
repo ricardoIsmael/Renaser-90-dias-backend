@@ -16,6 +16,7 @@ import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPo
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.domain.model.habito.PlantillaHabitoPersonal;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
@@ -34,6 +35,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -44,9 +46,11 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -348,6 +352,176 @@ class PreferenciaHorarioServiceTest {
                 LocalTime.of(9, 0), null, false, null, LocalDate.of(2026, 8, 24))))
                 .isInstanceOf(IllegalArgumentException.class);
         verify(savePreferenciaPort, never()).saveParaFecha(any());
+    }
+
+    // ---- E-214: horario por dia de semana y por fecha, mismas guardas que `editar` ----
+    //
+    // Antes `apagar` y `quitar` no pasaban por `requireProgreso` (cuenta suspendida) y ninguno de
+    // `fijar`/`apagar`/`quitar`/`cambiarEstadoEnFecha` revisaba de quien era un habito PERSONAL.
+    // Las pruebas de suspendido en `apagar`/`quitar` y las de habito ajeno fallan contra ese codigo;
+    // las de suspendido en `fijar`/`cambiarEstadoEnFecha` fijan un comportamiento que ya existia.
+
+    private static Habito habitoPersonalDe(UserId dueno) {
+        return Habito.crearPersonal(HabitoId.of(UUID.randomUUID()), dueno, "Mi reto", TipoHabito.CHECKBOX,
+                "CUERPO", PlantillaHabitoPersonal.OTRO, "etiqueta", CLOCK.now());
+    }
+
+    private void progresoDe(UserId actor, boolean suspendido) {
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(
+                new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, suspendido, false)));
+    }
+
+    private void existe(Habito habito) {
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+    }
+
+    @Test
+    void fijarRechazaSuspendido() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        existe(habito);
+        progresoDe(actor, true);
+
+        assertThatThrownBy(() -> service.fijar(actor, habito.id(), DayOfWeek.TUESDAY, LocalTime.of(7, 0),
+                LocalTime.of(9, 0))).isInstanceOf(NotAuthorizedException.class);
+        verifyNoInteractions(savePreferenciaPort, historialPort);
+    }
+
+    @Test
+    void fijarRechazaHabitoPersonalAjeno() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito ajeno = habitoPersonalDe(UserId.of(UUID.randomUUID()));
+        existe(ajeno);
+
+        assertThatThrownBy(() -> service.fijar(actor, ajeno.id(), DayOfWeek.TUESDAY, LocalTime.of(7, 0),
+                LocalTime.of(9, 0))).isInstanceOf(NotAuthorizedException.class);
+        verifyNoInteractions(savePreferenciaPort, historialPort);
+    }
+
+    @Test
+    void fijarSobreUnHabitoDelCatalogoSigueCobrandoYGuardando() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        existe(habito);
+        progresoDe(actor, false);
+
+        // 2026-08-24 es lunes: el martes siguiente es el dia 4, semana de acomodo libre.
+        service.fijar(actor, habito.id(), DayOfWeek.TUESDAY, LocalTime.of(7, 0), LocalTime.of(9, 0));
+
+        verify(historialPort).registrar(actor, habito.id(), LocalDate.of(2026, 8, 25), null, null, CLOCK.now());
+        verify(savePreferenciaPort).saveParaDiaSemana(eq(actor), eq(habito.id()), any());
+    }
+
+    @Test
+    void apagarRechazaSuspendido() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        existe(habito);
+        progresoDe(actor, true);
+
+        assertThatThrownBy(() -> service.apagar(actor, habito.id(), DayOfWeek.TUESDAY))
+                .isInstanceOf(NotAuthorizedException.class);
+        verifyNoInteractions(savePreferenciaPort);
+    }
+
+    @Test
+    void apagarRechazaHabitoPersonalAjeno() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito ajeno = habitoPersonalDe(UserId.of(UUID.randomUUID()));
+        existe(ajeno);
+        progresoDe(actor, false);
+
+        assertThatThrownBy(() -> service.apagar(actor, ajeno.id(), DayOfWeek.TUESDAY))
+                .isInstanceOf(NotAuthorizedException.class);
+        verifyNoInteractions(savePreferenciaPort);
+    }
+
+    @Test
+    void apagarUnHabitoDelCatalogoOPropioSigueFuncionando() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito catalogo = habito();
+        Habito propio = habitoPersonalDe(actor);
+        existe(catalogo);
+        existe(propio);
+        progresoDe(actor, false);
+
+        service.apagar(actor, catalogo.id(), DayOfWeek.TUESDAY);
+        service.apagar(actor, propio.id(), DayOfWeek.TUESDAY);
+
+        verify(savePreferenciaPort).saveParaDiaSemana(eq(actor), eq(catalogo.id()), any());
+        verify(savePreferenciaPort).saveParaDiaSemana(eq(actor), eq(propio.id()), any());
+    }
+
+    @Test
+    void quitarRechazaSuspendido() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        existe(habito);
+        progresoDe(actor, true);
+
+        assertThatThrownBy(() -> service.quitar(actor, habito.id(), DayOfWeek.TUESDAY))
+                .isInstanceOf(NotAuthorizedException.class);
+        verifyNoInteractions(savePreferenciaPort);
+    }
+
+    @Test
+    void quitarRechazaHabitoPersonalAjeno() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito ajeno = habitoPersonalDe(UserId.of(UUID.randomUUID()));
+        existe(ajeno);
+        progresoDe(actor, false);
+
+        assertThatThrownBy(() -> service.quitar(actor, ajeno.id(), DayOfWeek.TUESDAY))
+                .isInstanceOf(NotAuthorizedException.class);
+        verifyNoInteractions(savePreferenciaPort);
+    }
+
+    @Test
+    void quitarSobreUnHabitoDelCatalogoSigueBorrando() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        existe(habito);
+        progresoDe(actor, false);
+
+        service.quitar(actor, habito.id(), DayOfWeek.TUESDAY);
+
+        verify(savePreferenciaPort).borrarParaDiaSemana(actor, habito.id(), DayOfWeek.TUESDAY);
+    }
+
+    @Test
+    void cambiarEstadoEnFechaRechazaSuspendido() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        existe(habito);
+        progresoDe(actor, true);
+
+        assertThatThrownBy(() -> service.cambiarEstadoEnFecha(actor, habito.id(), LocalDate.of(2026, 8, 25), false))
+                .isInstanceOf(NotAuthorizedException.class);
+        verifyNoInteractions(savePreferenciaPort);
+    }
+
+    @Test
+    void cambiarEstadoEnFechaRechazaHabitoPersonalAjeno() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito ajeno = habitoPersonalDe(UserId.of(UUID.randomUUID()));
+        existe(ajeno);
+        progresoDe(actor, false);
+
+        assertThatThrownBy(() -> service.cambiarEstadoEnFecha(actor, ajeno.id(), LocalDate.of(2026, 8, 25), false))
+                .isInstanceOf(NotAuthorizedException.class);
+        verifyNoInteractions(savePreferenciaPort);
+    }
+
+    @Test
+    void cambiarEstadoEnFechaSobreUnHabitoDelCatalogoSigueApagando() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        existe(habito);
+        progresoDe(actor, false);
+
+        service.cambiarEstadoEnFecha(actor, habito.id(), LocalDate.of(2026, 8, 25), false);
+
+        verify(savePreferenciaPort).saveParaFecha(any());
     }
 
 }
