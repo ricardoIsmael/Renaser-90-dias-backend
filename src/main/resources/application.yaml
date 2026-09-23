@@ -299,6 +299,25 @@ renaser:
     # busqueda hay que usar un modelo que la soporte (RENASIA_CHAT_MODEL sin `-lite`) Y poner
     # IA_BUSQUEDA_WEB=true — las dos cosas, en la configuracion de ejecucion.
     busqueda-web: ${IA_BUSQUEDA_WEB:false}
+    # Voz del orbe (POST /api/v1/renasia/voz): texto -> WAV con Piper (voz es_MX-claude-high),
+    # que corre como servicio aparte (infra/piper/, servicio `piper` de docker-compose.yml).
+    # `noop` (el default) no tiene voz: el endpoint responde 204 y la app habla con el TTS del
+    # telefono. `piper` usa el servicio en `url`. Interruptor propio, separado de
+    # renaser.ia.proveedor: la voz no depende de Gemini y se puede prender sin el.
+    #
+    # Si Piper tarda mas que timeout-ms, esta caido o no devuelve un WAV, tambien es 204: la app
+    # nunca se queda muda por culpa del servicio de voz.
+    voz:
+      proveedor: ${IA_VOZ_PROVEEDOR:noop}
+      url: ${IA_VOZ_URL:http://localhost:5055}
+      # Conexion y lectura, cada una. Una oracion tarda ~280 ms en la laptop de desarrollo.
+      timeout-ms: ${IA_VOZ_TIMEOUT_MS:5000}
+      # Parametros de Piper, afinados para una voz menos robotica: un poco mas lenta
+      # (length-scale > 1) y con mas variacion de entonacion (noise-scale) y de ritmo
+      # (noise-w-scale). Se cambian por entorno, sin tocar codigo.
+      length-scale: ${IA_VOZ_LENGTH_SCALE:1.06}
+      noise-scale: ${IA_VOZ_NOISE_SCALE:0.78}
+      noise-w-scale: ${IA_VOZ_NOISE_W_SCALE:0.95}
     acompanante:
       # Fase 2 de la propuesta del acompanante (D-153): con esto en true, `marcar_habito_completado`
       # ya NO marca el habito. Deja una propuesta pendiente y la persona la confirma con un boton
