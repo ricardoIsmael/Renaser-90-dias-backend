@@ -7351,3 +7351,58 @@ void borrarDeParticipanteYFecha(...);
 3. **Traducir "cualquier 409" a un mensaje concreto miente cuando aparece un 409 nuevo.** El
    frontend decia "el dia en curso ya esta armado" para un 409 de integridad. Si un endpoint puede
    devolver mas de un conflicto, hay que distinguirlos por codigo y no por status.
+
+---
+
+## E-210 · Una migracion de limpieza que "protegia los datos" tiro abajo produccion entera
+
+**Sintoma.** Todo el padron recibiendo 504 de CloudFront, en la app y en el frontend web de Vercel:
+
+```
+504 Gateway Timeout ERROR
+We can't connect to the server for this app or website at this time.
+x-cache: Error from cloudfront
+```
+
+El dueno lo reporto como un problema de CORS. No lo era, y la distincion importa para la proxima:
+**un error de CORS lo emite el navegador con el servidor respondiendo**; un 504 del CDN significa
+que no hubo ninguna respuesta del origen. Con la app movil ni siquiera aplica CORS.
+
+En el log del despliegue:
+
+```
+ERROR: la aplicacion no respondio UP en 240s.
+  at org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor.executeStatement
+Error: El despliegue fallo (estado SSM: Failed). La instancia NO quedo sirviendo esta version.
+```
+
+**Causa.** La `V62` borraba `acciones_criticas`, vacia desde la V61. Para no destruir datos por
+error, contaba las filas primero y hacia `RAISE EXCEPTION` si encontraba alguna. La intencion era
+buena; el efecto, desproporcionado: **Flyway corre al arrancar, y una migracion que falla impide que
+la aplicacion levante**. El contenedor quedo reiniciandose en loop y el `cd.yml` —que por diseno
+borra el contenedor viejo ANTES de levantar el nuevo y no revierte solo— dejo la EC2 sin nada
+sirviendo.
+
+En local no se podia ver ninguno de los dos disparadores: las pruebas corren contra una base
+efimera donde la tabla siempre esta vacia, y con el usuario `postgres` superusuario. En produccion
+el usuario es el de la aplicacion, que puede no ser dueno de la tabla — y `DROP TABLE` exige ser
+dueno, no alcanza con permisos de escritura (`42501: must be owner of table`).
+
+**Solucion.** La `V62` **reporta y sigue**. Los tres caminos que no borran dejan un `WARNING` en el
+log de arranque y devuelven el control: tabla ausente, tabla con filas, y `DROP` rechazado por
+permisos (este ultimo con un bloque `EXCEPTION WHEN OTHERS` que captura el error exacto de Postgres
+y lo escribe). La regla "no borres datos que no esperabas" se sigue cumpliendo; lo que se corto es
+la otra regla, la que nadie habia pedido: "no dejes arrancar la aplicacion".
+
+**Como evitar que vuelva a pasar.**
+
+- **Una migracion de limpieza es opcional por naturaleza y nunca debe ser bloqueante.** Si un `DROP`
+  de una tabla que nadie lee no se puede hacer hoy, la tabla queda un dia mas y no pasa nada. Que
+  eso tire el servicio no es proporcionado en ningun escenario. Un `RAISE EXCEPTION` en una
+  migracion solo se justifica cuando seguir adelante corrompe datos.
+- **Probar toda migracion con el usuario que la va a correr, no con `postgres`.** El caso 4 de la
+  prueba —un rol con SELECT/INSERT/UPDATE/DELETE pero sin ser dueno— reproduce en dos minutos un
+  fallo que de otro modo solo aparece en produccion. Quedo escrito en la cabecera de la `V62`.
+- **Antes de pushear una migracion, mirar si el repo auto-despliega.** `cd.yml` corre en cada push
+  a `master`. Eso no se verifico antes de pushear, y es el error de fondo: el problema no fue la
+  migracion sino haberla mandado a produccion sin saber que la estaba mandando a produccion.

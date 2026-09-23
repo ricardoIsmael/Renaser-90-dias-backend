@@ -4,40 +4,42 @@
 --
 -- QUE PROBLEMA RESUELVE
 --
--- La V61 movio las acciones del objetivo semanal al objetivo diario (`acciones_diarias`) y dejo
--- `acciones_criticas` en pie, marcada como historica, con este motivo escrito en su cabecera:
+-- La V61 movio las acciones del objetivo semanal al diario (`acciones_diarias`) y dejo
+-- `acciones_criticas` en pie, marcada como historica, porque desde el entorno local no se podia
+-- verificar que estuviera vacia en produccion. El dueno lo confirmo el 2026-09-22. Esta es la
+-- migracion que la borra.
 --
---   "Porque no se puede verificar desde aca que este vacia en produccion. En la base local tiene
---    cero filas, pero cero local no es cero en produccion (...) si el dueno confirma que quedo
---    vacia, se borra en una migracion posterior de una linea."
+-- POR QUE ESTA MIGRACION NO PUEDE FALLAR NUNCA  (leer esto antes de "endurecerla")
 --
--- El dueno lo confirmo el 2026-09-22: "ya confirme que esta vacia". Esta es esa migracion.
+-- La primera version de este archivo hacia `RAISE EXCEPTION` si encontraba filas, para no borrar
+-- datos por error. La intencion era correcta y el efecto fue un incidente: Flyway corre al
+-- arrancar, una migracion que falla impide que la aplicacion levante, y el contenedor de
+-- produccion quedo reiniciandose en loop. CloudFront devolvia 504 a todo el padron (E-210).
 --
--- POR QUE NO ES "UNA LINEA", COMO DECIA LA V61
+-- La leccion es que eran DOS reglas distintas atadas en una:
 --
--- Porque un `DROP TABLE` pelado borra igual de bien una tabla vacia que una con datos, y la
--- confirmacion de que esta vacia es de una persona mirando una base, no algo que la migracion
--- pueda comprobar por si misma. Si en algun entorno quedara una fila, un DROP pelado se la llevaria
--- sin decir nada y sin vuelta atras.
+--   1. "no borres datos que no esperabas encontrar"  -> se cumple, y se sigue cumpliendo
+--   2. "no dejes arrancar la aplicacion"             -> NUNCA fue lo que se quiso
 --
--- Entonces la migracion comprueba primero y aborta si encuentra algo. El resultado es que esta
--- migracion SOLO puede borrar una tabla vacia: en un entorno con datos no rompe nada, falla al
--- arrancar con un mensaje que dice exactamente cuantas filas encontro, y se decide que hacer con
--- ellas antes de tocarlas. Es la diferencia entre "confio en que esta vacia" y "no se borra si no
--- lo esta".
+-- Un DROP de limpieza es opcional por naturaleza: si no se puede hacer hoy, la tabla queda un dia
+-- mas sin molestar a nadie. No hay ni una linea de codigo que la lea. Que eso tire abajo el
+-- servicio es desproporcionado en cualquier escenario.
 --
--- POR QUE SE BORRA Y NO SE DEJA VACIA PARA SIEMPRE
+-- Entonces esta migracion **reporta y sigue**. Los tres caminos que no borran dejan un WARNING en
+-- el log de arranque, que es donde alguien lo va a ver, y devuelven el control sin romper nada:
 --
--- Porque una tabla sin escritores no queda quieta: queda como invitacion. El mapeo
--- `@ElementCollection` que la leia ya se saco de `RocaSemanalJpaEntity` en este mismo cambio, asi
--- que a partir de aca nadie la escribe ni la lee. Una tabla viva que nadie usa es la que, dentro de
--- seis meses, alguien "arregla" volviendo a colgarle acciones a la semana — que es exactamente el
--- diseno del que se salio.
+--   * la tabla ya no existe          -> NOTICE, no hay nada que hacer (idempotente)
+--   * la tabla tiene filas           -> WARNING con cuantas, y NO se borra
+--   * el DROP no se puede ejecutar   -> WARNING con el error exacto de Postgres, y NO se borra
+--
+-- El tercer caso es el que no se podia ver en pruebas: en local se corre como `postgres`
+-- superusuario y en produccion con el usuario de la aplicacion, que puede no ser dueno de la
+-- tabla. `DROP TABLE` exige ser dueno, no alcanza con permisos de escritura.
 --
 -- QUE PASA SI HAY QUE VOLVER ATRAS
 --
--- La definicion original esta en la V1 (lineas 702-708) y se puede recrear tal cual. Los datos no
--- se pueden recuperar, y por eso la comprobacion de arriba: solo se borra cuando no hay ninguno.
+-- La definicion original esta en la V1 (lineas 702-708) y se puede recrear tal cual. Si la tabla
+-- se borro es porque estaba vacia, asi que no hay datos que recuperar.
 -- =============================================================================
 
 DO $$
@@ -45,19 +47,29 @@ DECLARE
     filas bigint;
 BEGIN
     IF to_regclass('renaser.acciones_criticas') IS NULL THEN
-        RAISE NOTICE 'renaser.acciones_criticas ya no existe; no hay nada que borrar.';
+        RAISE NOTICE 'V62: renaser.acciones_criticas ya no existe; nada que borrar.';
         RETURN;
     END IF;
 
     EXECUTE 'SELECT count(*) FROM renaser.acciones_criticas' INTO filas;
 
     IF filas > 0 THEN
-        RAISE EXCEPTION
-            'renaser.acciones_criticas tiene % fila(s) y esta migracion solo borra la tabla vacia. '
-            'Las acciones viven en renaser.acciones_diarias desde la V61: migra o descarta esas '
-            'filas a mano y volve a correr.', filas;
+        RAISE WARNING 'V62: renaser.acciones_criticas tiene % fila(s), asi que NO se borra. '
+                      'Las acciones viven en renaser.acciones_diarias desde la V61. La tabla queda '
+                      'sin escritores; migra o descarta esas filas y borrala a mano cuando quieras.',
+                      filas;
+        RETURN;
     END IF;
 
-    EXECUTE 'DROP TABLE renaser.acciones_criticas';
+    BEGIN
+        EXECUTE 'DROP TABLE renaser.acciones_criticas';
+        RAISE NOTICE 'V62: renaser.acciones_criticas borrada (estaba vacia).';
+    EXCEPTION
+        WHEN OTHERS THEN
+            -- Se traga cualquier error a proposito: ver "POR QUE ESTA MIGRACION NO PUEDE FALLAR
+            -- NUNCA" arriba. El caso esperado es 42501 (must be owner of table).
+            RAISE WARNING 'V62: no se pudo borrar renaser.acciones_criticas (%: %). La tabla queda '
+                          'como esta, sin escritores. No es bloqueante.', SQLSTATE, SQLERRM;
+    END;
 END
 $$;
