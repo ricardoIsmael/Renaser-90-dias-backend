@@ -405,6 +405,67 @@ una herramienta; nada se da por hecho hasta que la herramienta lo confirma; a te
 **Lo que escribe la persona es suyo:** bitácora, radar y resúmenes. Las descripciones le
 prohíben al modelo inventarlo o "mejorarlo". Ese contenido viaja al modelo y queda en
 `propuestas_acompanante.argumentos`, pero **no va al log** (E-218).
+
+### D-157 — La voz del orbe: Piper es_MX desde el backend (2026-09-23)
+
+Pedido del dueño: "la voz es paupérrima… una voz más fluida, natural y menos robótica". Se
+compararon cuatro voces con la misma frase: el TTS del teléfono (robótico), Kokoro (natural pero
+3,3 s por frase en CPU), Gemini TTS (buena, 0,7 s al primer audio, **de pago**) y **Piper
+`es_MX-claude-high`** (open source, gratis, **~0,3 s por frase**). Se eligió Piper.
+
+`POST /api/v1/renasia/voz` con `{"texto":"..."}` (≤ 400 caracteres, `USE_APP`, sesión obligatoria
+por `/api/v1/renasia/**`) devuelve `200 audio/wav`, o `204` sin cuerpo cuando no hay voz del
+servidor (proveedor `noop`, o Piper caído, lento o con una respuesta que no es WAV). Con un 204 la
+app habla con el TTS del teléfono y no vuelve a preguntar durante un minuto. El caso de uso
+`SintetizarVozService` no abre transacción, porque la síntesis es una llamada de red (C-1). Exige
+cuenta activa y texto recortado no vacío, y delega en `SintetizarVozPort` (`Optional<byte[]>`, que
+nunca lanza).
+
+Adaptadores: `NoOpVozAdapter` (el default, `renaser.ia.voz.proveedor=noop`) y `PiperVozAdapter`
+(`piper`). Este llama a `POST {renaser.ia.voz.url}/synthesize` con `text`, `length_scale`,
+`noise_scale` y `noise_w_scale`. Los valores por defecto son 1.06 / 0.78 / 0.95: un poco más
+pausado y con más variación de entonación que el original, que sonaba plano. Se cambian por
+entorno, sin tocar código. El adaptador valida el WAV por la cabecera RIFF/WAVE, porque Piper lo
+manda como `text/html` (E-226), y registra los fallos sin el texto.
+
+Piper corre como servicio aparte: `infra/piper/Dockerfile` (la voz se descarga al construir la
+imagen) y el servicio `piper` de `docker-compose.yml`, detrás del perfil `voz`
+(`docker compose --profile voz up -d piper`). Tiene un interruptor propio, independiente de
+`renaser.ia.proveedor`.
+
+**En la app:** el `Locutor` pide el audio de cada oración apenas llega, mientras suena la anterior,
+y las reproduce en orden con `expo-audio`, como URI `data:`. Si una falla, la dice la voz del
+teléfono.
+
+**Abierto (lo decide el dueño):**
+- El endpoint no tiene cuota propia, y cada frase gasta CPU del servicio de voz.
+- La voz podría ir dentro de la app (Piper con sherpa-onnx, +60 MB, sin internet). Cambiarla solo
+  toca `PARLANTES_DEL_TELEFONO.sintetizar`.
+
+### D-158 — Modo voz: el acompañante contesta como se habla (2026-09-23)
+
+`POST /api/v1/renasia/mensajes` acepta un campo opcional `canal` (`TEXTO` | `VOZ`). El orbe de Hoy
+manda `"canal":"VOZ"`. Sin el campo, o con cualquier otro valor (no importan mayúsculas ni
+espacios), es `TEXTO`, y el prompt queda idéntico al de antes.
+
+A diferencia de `agent`, un valor desconocido **no** es 400. `canal` solo cambia la forma, y como la
+app no se actualiza por aire, un build futuro que mande un valor nuevo tiene que seguir funcionando.
+
+El valor recorre `PreguntarRenasiaRequest.canalConversacion()` → `PreguntarRenasiaCommand.canal` →
+`ChatIAPort.Consulta.canal` y no se persiste. Con `VOZ`, `GoogleGenAiRenasiaChatAdapter` agrega al
+final del prompt de sistema el bloque `prompts/modo-voz.st`, que pide:
+- una a tres frases;
+- sin markdown, listas, emojis ni enlaces;
+- horas y cantidades dichas como se hablan;
+- a lo sumo una pregunta corta al final.
+
+El bloque dice explícitamente que fuentes, herramientas y "Tus limites" siguen iguales, y que en una
+crisis los números de ayuda se dicen completos. No se editó `renasia-sistema.st` ni
+`sparkie-cursos.st`.
+
+**Limitación conocida:** los textos que el servicio agrega después de la respuesta del modelo no
+pasan por el bloque. Son el "Propuesta: …" y el texto de apoyo (D-143). La app no lee en voz alta
+el "Propuesta: …": dice "Te dejé la propuesta en el chat: confírmala con el botón".
 ---
 
 ## 4. Estructura del módulo

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
+import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
@@ -69,10 +70,13 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
 
     static final String RECURSO_PROMPT_ACOMPANANTE = "prompts/renasia-sistema.st";
     static final String RECURSO_PROMPT_TUTOR_CURSOS = "prompts/sparkie-cursos.st";
+    static final String RECURSO_MODO_VOZ = "prompts/modo-voz.st";
 
     private final ChatClient chatClient;
     private final PromptTemplate promptAcompanante;
     private final PromptTemplate promptTutorCursos;
+    /** Sin variables: se renderiza una sola vez, al construir el adaptador. */
+    private final String modoVoz;
     private final EjecutarHerramientaAgenteUseCase herramientasUseCase;
     private final ObjectMapper json;
 
@@ -90,6 +94,7 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
         this.json = new ObjectMapper();
         this.promptAcompanante = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_ACOMPANANTE));
         this.promptTutorCursos = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_TUTOR_CURSOS));
+        this.modoVoz = new PromptTemplate(new ClassPathResource(RECURSO_MODO_VOZ)).render();
     }
 
     /**
@@ -146,8 +151,21 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
                 .toList();
     }
 
-    /** D-102: cada agente tiene su prompt; solo el tutor de cursos tiene seccion de ambito. */
+    /**
+     * D-102: cada agente tiene su prompt; solo el tutor de cursos tiene seccion de ambito.
+     *
+     * <p>2026-09-23: con {@link CanalConversacion#VOZ} se agrega al final el bloque de
+     * {@code prompts/modo-voz.st} (respuesta para escuchar: frases cortas, sin markdown). Va al
+     * final y entero, no mezclado en el prompt del agente: con {@code TEXTO} el prompt queda
+     * byte por byte como antes, y ninguna seccion existente — riesgo, crisis, atribucion — se
+     * edita para hacerle lugar.
+     */
     private String promptSistema(Consulta consulta) {
+        String delAgente = promptDelAgente(consulta);
+        return consulta.canal() == CanalConversacion.VOZ ? delAgente + "\n\n" + modoVoz : delAgente;
+    }
+
+    private String promptDelAgente(Consulta consulta) {
         String contexto = formatearContexto(consulta.contexto());
         return switch (consulta.agente()) {
             case COMPANION -> promptAcompanante.render(Map.of(

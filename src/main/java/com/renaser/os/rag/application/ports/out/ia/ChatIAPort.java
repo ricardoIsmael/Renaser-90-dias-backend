@@ -2,6 +2,7 @@ package com.renaser.os.rag.application.ports.out.ia;
 
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
+import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
@@ -57,13 +58,20 @@ public interface ChatIAPort {
      *
      * <p>El adaptador {@code NoOp} recibe las herramientas y no las usa — no hay modelo que las
      * pida. El adaptador real de Gemini SI las declara (ver {@code HerramientaToolCallback}).
+     *
+     * <p>{@code canal} (2026-09-23): si la respuesta se va a leer ({@link CanalConversacion#TEXTO})
+     * o a escuchar ({@link CanalConversacion#VOZ}). Con {@code VOZ} el adaptador real agrega al
+     * prompt de sistema las pautas de forma hablada; no cambia el contexto, las herramientas ni los
+     * limites. El {@code NoOp} lo ignora.
      */
     record Consulta(AgenteConversacional agente, UserId actorId, String pregunta, List<String> contexto,
                     String ambito, List<MensajeRenasia> historial,
-                    List<DefinicionHerramienta> herramientas, SituacionDelAprendiz situacion) {
+                    List<DefinicionHerramienta> herramientas, SituacionDelAprendiz situacion,
+                    CanalConversacion canal) {
 
         public Consulta {
             Objects.requireNonNull(agente, "agente no puede ser null");
+            Objects.requireNonNull(canal, "canal no puede ser null");
             Objects.requireNonNull(actorId, "actorId no puede ser null");
             Objects.requireNonNull(pregunta, "pregunta no puede ser null");
             contexto = List.copyOf(Objects.requireNonNull(contexto, "contexto no puede ser null"));

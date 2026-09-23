@@ -112,6 +112,28 @@ class PromptSistemaRenasiaTest {
         assertThat(render).contains("informacion, no");
     }
 
+    /**
+     * 2026-09-23: el bloque de voz es un archivo aparte que el adaptador agrega al final con
+     * {@code canal=VOZ}. Se renderiza aca sin variables — si alguien le mete una llave en la prosa,
+     * falla aca y no el primer dia que alguien le hable al orbe.
+     */
+    @Test
+    @DisplayName("el bloque de voz parsea, no filtra su comentario y no afloja los limites")
+    void renderizaElBloqueDeVoz() {
+        String voz = new PromptTemplate(new ClassPathResource(GoogleGenAiRenasiaChatAdapter.RECURSO_MODO_VOZ))
+                .render();
+
+        assertThat(voz).contains("Esta respuesta se va a escuchar")
+                .contains("sin markdown")
+                .contains("Una a tres frases cortas")
+                .doesNotContain("!}")
+                .doesNotContain("MODO VOZ");
+        // La brevedad nunca se lee como permiso para recortar la ayuda en una crisis.
+        assertThat(voz).contains("Tus limites").contains("numeros de ayuda se dicen completos");
+        // El prompt del acompanante NO lo trae por su cuenta: con TEXTO no aparece.
+        assertThat(renderizar("(vacio)")).doesNotContain("Esta respuesta se va a escuchar");
+    }
+
     @Test
     @DisplayName("sigue rindiendo cuando no se recupero nada del programa")
     void renderizaConContextoVacio() {

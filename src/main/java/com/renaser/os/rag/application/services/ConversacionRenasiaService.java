@@ -211,7 +211,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         Flux<EventoRenasia> delModelo = chatIAPort.responder(new Consulta(command.agente(), command.actorId(),
                 command.pregunta(), contexto, command.ambito(), historial,
                 herramientasUseCase.disponibles(command.agente()),
-                situacionPort.de(command.actorId()).orElse(null)));
+                situacionPort.de(command.actorId()).orElse(null), command.canal()));
         return conApoyoAntesDelFin(conPropuestasAntesDelFin(delModelo, command.actorId(), inicioDelTurno), apoyo)
                 .doOnNext(evento -> acumularTexto(evento, respuestaCompleta))
                 .concatMap(evento -> agregarFuentesAntesDeFin(evento, fragmentos))

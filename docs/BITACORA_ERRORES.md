@@ -7745,3 +7745,104 @@ una nota que diga por qué no lo tiene.
 > quitaron las herramientas `proponer_ticket_al_mentor` / `consultar_mis_tickets_al_mentor` del
 > acompañante (D-156, corregido).
 
+
+## E-220 · La app revienta con "Cannot find native module 'ExpoSpeechRecognition'"
+
+**Síntoma.** Al abrir el chat en el emulador: `Error: Cannot find native module 'ExpoSpeechRecognition'`.
+
+**Causa real.** Se agregó `expo-speech-recognition` y se recargó en caliente sobre el binario viejo,
+que no lo tenía compilado. El paquete llama a `requireNativeModule` al importarse.
+
+**Solución (2026-09-23, app `9034f30`).** Todo módulo nativo nuevo se carga con `require` dentro de
+un `try` (`useDictado`, `parlantesDelTelefono`, `OrbeAcompanante`); sin él la función se oculta. Para
+tenerlo hay que reconstruir el binario (`npm run android`).
+
+**Cómo evitar que vuelva a pasar.** La app no se actualiza por aire: un módulo nativo nuevo siempre
+se carga opcional, porque habrá teléfonos con el binario anterior.
+
+## E-221 · `npm run android` falla en `react-native-worklets:configureCMakeDebug`
+
+**Síntoma.** `Execution failed for task ':react-native-worklets:configureCMakeDebug' … A restricted
+method in java.lang.System has been called`.
+
+**Causa real.** El build de Android corría con el JDK 25 del sistema; Gradle y el CMake de worklets
+no lo soportan.
+
+**Solución.** Compilar la app con el JDK 21:
+`JAVA_HOME=~/.sdkman/candidates/java/21.0.12+1.1-tem npm run android`. El backend sigue en JDK 25.
+
+**Cómo evitar que vuelva a pasar.** Backend y app usan JDKs distintos; el `JAVA_HOME` se fija en
+el comando, no globalmente.
+
+## E-222 · "[Reanimated] The easing function is not a worklet"
+
+**Síntoma.** Pantalla roja al abrir Hoy con el orbe líquido: `[Reanimated] The easing function is
+not a worklet. Please make sure that you pass a function created with Easing.bezier or …`.
+
+**Causa real.** Se pasó `Easing.inOut(Easing.quad)` de React Native a `withTiming` de Reanimated.
+
+**Solución (app `659cb62`).** `Easing.bezier` de Reanimated. El orbe líquido se descartó después.
+
+**Cómo evitar que vuelva a pasar.** En animaciones de Reanimated, importar `Easing` de
+`react-native-reanimated`, nunca de `react-native`.
+
+## E-223 · `expo-thinking-orbs`: "undefined is not a function … (0,_core.hashD)"
+
+**Síntoma.** `Render Error: undefined is not a function` en `orbits.js`, llamando a `(0,_core.hashD)`.
+Antes, Metro había dicho `None of these files exist: …expo-thinking-orbs/lib/commonjs/engine/registry.js`
+(eso era solo el caché de Metro: se arregla con `npx expo start -c`).
+
+**Causa real.** El plugin de worklets convierte `function hashD() {'worklet'; …}` en un `const` que
+ya no se eleva (hoisting), y el build commonjs del paquete deja los `exports.hashD = hashD` arriba
+de la definición. Cuando otro archivo lo lee, todavía vale `undefined`.
+
+**Solución (app `3612024`).** `scripts/arreglar-thinking-orbs.js` en `postinstall`: mueve las líneas
+`exports.X = X;` al final de cada archivo del paquete. Es idempotente y deja una marca.
+
+**Cómo evitar que vuelva a pasar.** Si se actualiza `expo-thinking-orbs`, verificar que el script
+siga aplicando (busca la marca `[renaser]`), o sacarlo si el paquete lo corrigió.
+
+## E-224 · El orbe no responde al toque
+
+**Síntoma.** Tocar el orbe de Hoy no hacía nada.
+
+**Causa real.** El lienzo de Skia del orbe se quedaba con los toques y no llegaban al `Pressable`.
+
+**Solución (app `3612024`).** El lienzo va dentro de un `<View pointerEvents="none">`.
+
+**Cómo evitar que vuelva a pasar.** Todo lienzo de Skia decorativo dentro de un botón lleva
+`pointerEvents="none"`.
+
+## E-225 · El orbe no habla en el emulador, sin ningún error en la app
+
+**Síntoma.** El acompañante respondía por escrito pero no se oía nada. En `adb logcat`:
+`Can't get TTS model availability`.
+
+**Causa real.** Se pedía la voz `es-419` y el emulador solo trae `es-US` y `es-ES`. Además, la app
+esperaba la respuesta entera antes de hablar, y eso se sentía lento aunque el backend tardaba 3,3 s.
+Se midió con los timestamps de los mensajes en la base.
+
+**Solución (app `537aa43`).** `elegirIdiomaDeVoz` elige la mejor voz en español instalada, y la app
+habla por oración mientras la respuesta sigue llegando.
+
+**Cómo evitar que vuelva a pasar.** Nunca fijar un idioma de TTS sin preguntar qué voces hay
+(`getAvailableVoicesAsync`). Antes de decir "está lento", medir en qué tramo se va el tiempo.
+
+## E-226 · Evaluando voces: Piper responde WAV como `text/html`, y Kokoro busca espeak en otra máquina
+
+**Síntoma 1.** `piper.http_server` (piper-tts 1.8.0) responde `POST /synthesize` con
+`Content-Type: text/html; charset=utf-8`, aunque el cuerpo es un WAV (`RIFF…WAVE`).
+
+**Síntoma 2.** `kokoro-onnx` falla al sintetizar con una ruta de otra máquina:
+`/home/runner/work/espeakng-loader/…/phontab`.
+
+**Causa real.** (1) El servidor de Piper no fija el content-type. (2) El `espeakng-loader` que viene
+en el wheel trae hardcodeada la ruta del CI donde se construyó.
+
+**Solución (2026-09-23).** (1) `PiperVozAdapter` valida la cabecera RIFF/WAVE y no mira el
+content-type (`PiperVozAdapterTest` sirve un WAV como `text/html`). (2) Kokoro se probó con
+`EspeakConfig(lib_path="/usr/lib64/libespeak-ng.so.1", data_path="/usr/share/espeak-ng-data")`,
+y se descartó por lento: 3,3 s por frase en CPU contra 0,3 s de Piper.
+
+**Cómo evitar que vuelva a pasar.** Para el audio de un servicio externo se valida el contenido, no
+el header.

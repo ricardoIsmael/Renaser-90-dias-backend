@@ -18,6 +18,7 @@ import com.renaser.os.rag.application.ports.out.cuota.ControlCuotaRenasiaPort;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort.Consulta;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
+import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
@@ -142,12 +143,13 @@ class ConversacionRenasiaServiceTest {
 
     /** Pregunta al acompanante, sin ambito ni curso: el chat general del programa. */
     private PreguntarRenasiaCommand pregunta(UserId actorId) {
-        return new PreguntarRenasiaCommand(actorId, COMPANION, "que es Renasia?", null, null);
+        return new PreguntarRenasiaCommand(actorId, COMPANION, "que es Renasia?", null, null, null);
     }
 
     /** Pregunta a Sparkie desde adentro de un curso. */
     private PreguntarRenasiaCommand preguntaAlTutor(UserId actorId, String cursoId) {
-        return new PreguntarRenasiaCommand(actorId, COURSE_TUTOR, "que dice la leccion?", "el curso \"X\"", cursoId);
+        return new PreguntarRenasiaCommand(actorId, COURSE_TUTOR, "que dice la leccion?", "el curso \"X\"", cursoId,
+                null);
     }
 
     /** Un stream mínimo y válido para los tests a los que no les importa el contenido de la respuesta. */
@@ -259,7 +261,7 @@ class ConversacionRenasiaServiceTest {
         when(loadMensajeRenasiaPort.pagina(eq(activo), eq(COMPANION), any(), eq(10)))
                 .thenReturn(List.of(segundo, primero));
 
-        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "y que te dije recien?", null, null))
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "y que te dije recien?", null, null, null))
                 .collectList().block();
 
         Consulta consulta = consultaEnviadaAlModelo();
@@ -290,7 +292,7 @@ class ConversacionRenasiaServiceTest {
         when(loadMensajeRenasiaPort.pagina(eq(activo), eq(COMPANION), any(), eq(10)))
                 .thenReturn(List.of(instruccionSinResponder, respuesta, pregunta));
 
-        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "Hola", null, null))
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "Hola", null, null, null))
                 .collectList().block();
 
         Consulta consulta = consultaEnviadaAlModelo();
@@ -312,7 +314,7 @@ class ConversacionRenasiaServiceTest {
         when(loadMensajeRenasiaPort.pagina(eq(activo), eq(COMPANION), any(), eq(10)))
                 .thenReturn(List.of(contestada, reintento, fallido));
 
-        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "gracias", null, null))
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "gracias", null, null, null))
                 .collectList().block();
 
         assertThat(consultaEnviadaAlModelo().historial()).containsExactly(reintento, contestada);
@@ -393,7 +395,7 @@ class ConversacionRenasiaServiceTest {
     void preguntarDelAcompananteIgnoraAmbitoYCurso() {
         stubCaminoFeliz();
 
-        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "hola", "el curso \"X\"", "curso-1"))
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "hola", "el curso \"X\"", "curso-1", null))
                 .collectList().block();
 
         Consulta consulta = consultaEnviadaAlModelo();
@@ -401,6 +403,29 @@ class ConversacionRenasiaServiceTest {
         assertThat(consulta.ambito()).isNull();
         verify(consultarLeccionesVisiblesPort).visiblesParaActor(activo);
         verify(consultarLeccionesVisiblesPort, never()).visiblesParaActorEnCurso(any(), any());
+    }
+
+    /** 2026-09-23: sin canal (toda app anterior al orbe de voz) la respuesta es la escrita de siempre. */
+    @Test
+    @DisplayName("sin canal, la consulta viaja como TEXTO")
+    void sinCanalLaConsultaEsTexto() {
+        stubCaminoFeliz();
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(consultaEnviadaAlModelo().canal()).isEqualTo(CanalConversacion.TEXTO);
+    }
+
+    /** El canal llega hasta el adaptador, que es quien decide como cambia el prompt. */
+    @Test
+    @DisplayName("con canal VOZ, la consulta al modelo lo lleva")
+    void conCanalVozLaConsultaLoLleva() {
+        stubCaminoFeliz();
+
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "hola", null, null, CanalConversacion.VOZ))
+                .collectList().block();
+
+        assertThat(consultaEnviadaAlModelo().canal()).isEqualTo(CanalConversacion.VOZ);
     }
 
     @Test
