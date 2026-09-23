@@ -42,7 +42,22 @@ contenedores: si no identifica Testcontainers Cloud, falla en vez de usar Docker
 
 El CI existente conserva Docker en el runner de GitHub; no consume recursos de la laptop.
 `./mvnw` directo conserva el comportamiento anterior. Para descargar los contenedores en la nube
-hay que usar `test-cloud.sh`; no iniciar la suite completa con Docker local sin indicación del usuario.
+hay que usar `test-cloud.sh`. **Sin token, se corre con Docker local** (indicación del usuario,
+2026-09-23; `.claude/rules/03`).
+
+> **Corregido 2026-09-23.** Decía: «no iniciar la suite completa con Docker local sin indicación
+> del usuario». El usuario dio esa indicación de forma permanente.
+
+**Ojo con `~/.testcontainers.properties`:** tiene `docker.host` y `tc.host` apuntando al agente de
+Testcontainers Cloud (`tcp://127.0.0.1:37843`). Con el agente apagado, `./mvnw clean verify` no
+encuentra Docker. Para usar el Docker local sin tocar ese archivo:
+
+```bash
+DOCKER_HOST=unix:///var/run/docker.sock \
+TESTCONTAINERS_TC_HOST=unix:///var/run/docker.sock \
+TESTCONTAINERS_DOCKER_HOST=unix:///var/run/docker.sock \
+./mvnw clean verify
+```
 
 ## Estado de la conexión
 
