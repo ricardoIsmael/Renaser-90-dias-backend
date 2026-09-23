@@ -224,6 +224,30 @@ class DesbloqueoHabitoServiceTest {
         verify(savePort).save(fila);
     }
 
+    /**
+     * E-213 visto desde el caso de uso: una pausa "hasta el 20" que ya vencio no presta su inicio a
+     * la pausa nueva del 26. El servicio tiene que pasar el instante en la zona del participante.
+     */
+    @Test
+    void pausarDeNuevoTrasUnaPausaVencidaArrancaEnElInstanteNuevo() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habitoDeSistemaActivo();
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(
+                new ProgresoParticipanteHabits(10, "America/Lima", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        Instant pausaVieja = Instant.parse("2026-08-10T15:00:00Z");
+        DesbloqueoHabito fila = DesbloqueoHabito.rehydrate(actor, habito.id(), 1, pausaVieja, pausaVieja,
+                pausaVieja, pausaVieja, LocalDate.of(2026, 8, 20));
+        when(loadPort.deParticipanteYHabito(actor, habito.id())).thenReturn(Optional.of(fila));
+        when(savePort.save(fila)).thenReturn(fila);
+
+        DesbloqueoHabito pausado = service.cambiarEstado(
+                new CambiarEstadoHabitoCommand(actor, habito.id(), false, null));
+
+        assertThat(pausado.pausadoEn()).isEqualTo(CLOCK.now());
+        assertThat(pausado.estaPausadoEl(LocalDate.of(2026, 8, 23), ZoneId.of("America/Lima"))).isFalse();
+    }
+
     /** Contraparte: el mismo interruptor lo vuelve a encender. */
     @Test
     void elInterruptorReactivaUnHabitoPersonalPausado() {
