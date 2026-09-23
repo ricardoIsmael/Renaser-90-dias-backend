@@ -11,6 +11,7 @@ import com.renaser.os.rocks.application.ports.out.rocamensual.LoadRocaMensualPor
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
 import com.renaser.os.rocks.domain.model.rocamensual.DatosDelEje;
+import com.renaser.os.rocks.domain.model.rocamensual.ObjetivoDelMes;
 import com.renaser.os.rocks.domain.model.rocamensual.MesPrograma;
 import com.renaser.os.rocks.domain.model.rocamensual.ObjetivoDeLaSemana;
 import com.renaser.os.rocks.domain.model.rocamensual.RocaMensual;
@@ -76,10 +77,45 @@ public class ObjetivoDelMesService implements ConsultarObjetivoDelMesUseCase {
                     datos.calcular(mes, mesActual), editadas.get(claveDe(maestra, mes))));
         }
         /* La semana cuelga del mes EN CURSO: es el unico tramo que la persona esta transitando. */
-        ObjetivoDeLaSemana semana = ObjetivoDeLaSemana.desde(datos.calcular(mesActual, mesActual),
+        ObjetivoDeLaSemana semana = ObjetivoDeLaSemana.desde(objetivoQueMandaEn(mesActual, datos, meses),
                 datos.valorHoy() != null ? datos.valorHoy() : datos.lineaBase(), diaPrograma, datos.magnitud());
         return new PlanMensualDelEje(maestra.eje(), mesActual, datos.unidad(),
                 maestra.eje() == EjeObjetivo.TRABAJO, List.copyOf(meses), semana);
+    }
+
+    /**
+     * El objetivo del mes en curso <b>que de verdad rige</b>: el que la persona guardo si lo
+     * corrigio, y si no el calculado.
+     *
+     * > <b>Corregido el 2026-09-23.</b> La semana se derivaba SIEMPRE de {@code datos.calcular(...)},
+     * > o sea del numero que propone el sistema. Pero el contrato de {@code MesDelPlan} dice que lo
+     * > editado <b>manda</b>, y la app ya lo respeta para el mes. El resultado era que corregir el
+     * > objetivo del mes cambiaba el mes en pantalla y <b>no la semana</b>: la persona veia "este
+     * > mes: 80 kg" y debajo una semana apuntando a la ruta hacia 81,6 — los dos escalones del mismo
+     * > plan contradiciendose, que es exactamente el problema que E-203 vino a cerrar un nivel mas
+     * > arriba.
+     * >
+     * > Si el mes editado se guardo sin cifra (solo titulo), no hay de donde derivar una semana y se
+     * > devuelve {@code null}: es preferible no mostrar tramo semanal a mostrar uno que apunta a un
+     * > numero que la persona ya reemplazo.
+     */
+    private static ObjetivoDelMes objetivoQueMandaEn(int mesActual, DatosDelEje datos, List<MesDelPlan> meses) {
+        MesDelPlan enCurso = meses.stream().filter(MesDelPlan::enCurso).findFirst().orElse(null);
+        if (enCurso == null || !enCurso.fueEditado()) {
+            return datos.calcular(mesActual, mesActual);
+        }
+        RocaMensual editado = enCurso.editado();
+        if (!editado.tieneMeta()) {
+            /* Guardo solo un titulo: no hay numero del que colgar la semana. Se devuelve null y
+               `ObjetivoDeLaSemana.desde` no arma tramo — antes que inventar un motivo que no existe
+               o seguir usando la cifra que la persona acaba de reemplazar. */
+            return null;
+        }
+        ObjetivoDelMes calculado = datos.calcular(mesActual, mesActual);
+        boolean sube = calculado instanceof ObjetivoDelMes.ConCifra c ? c.sube()
+                : editado.meta().objetivo().compareTo(datos.lineaBase()) > 0;
+        return new ObjetivoDelMes.ConCifra(mesActual, datos.magnitud(), editado.meta().objetivo(),
+                null, null, sube);
     }
 
     /**
