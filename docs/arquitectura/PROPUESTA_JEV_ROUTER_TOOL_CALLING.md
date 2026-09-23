@@ -150,8 +150,14 @@ Mismo algoritmo que `ComparacionSemantica`.
 
 **Falla en lo que más importaba, la voz mal transcrita:** "ya tome awa" salió `conversar` y el hábito
 resuelto fue "Leer" (margen 0.005); "ya ley" y "ya medite" tampoco se reconocieron como marcar. La
-variante `RETRIEVAL_DOCUMENT` (la que usa hoy el backend) no se pudo medir: la key devolvió **429**
-por cuota.
+variante `RETRIEVAL_DOCUMENT` (la que usa hoy el backend) no se pudo medir en la primera corrida: la
+key devolvió **429** por cuota.
+
+> **Actualizado 2026-09-23 (key nueva).** `RETRIEVAL_DOCUMENT`: 20/24 (83%); con margen ≥ 0.06 decide en
+> 12/24 con 0 errores. Sigue fallando en la voz: "ya tome awa" → `conversar` con hábito "Meditar"
+> (margen 0.001), "ya medite" → `consultar_horarios`. La decisión no cambia. La key nueva también dio
+> 429 en la segunda corrida seguida (~66 embeddings por corrida): es la cuota por minuto de la capa
+> gratuita, no la key.
 
 **Decisión: el router NO se conecta al chat.** Con un umbral seguro decide en menos de la mitad de
 los mensajes, se equivoca justo en los casos de voz, y tarda lo mismo que un turno corto del modelo
