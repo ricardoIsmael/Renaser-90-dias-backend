@@ -7459,3 +7459,47 @@ manda a la pista equivocada.
   aun asi hay que reparar a mano los que si la aplicaron.
 - **La `V62` no puede volver a editarse.** Ya esta aplicada y con checksum registrado en local y en
   produccion. Cualquier cambio sobre `acciones_criticas` de aca en adelante es una `V63`.
+
+---
+
+## E-212 · La foto de perfil sube bien y el circulo queda vacio: falta la bucket policy de S3
+
+**Sintoma.** Reportado el 2026-09-23 probando el `.aab` en pruebas internas de Play Store: se elige
+una foto de perfil, la app dice *"Foto actualizada"*, y el circulo del avatar sigue mostrando las
+iniciales. Sin error en pantalla.
+
+**Causa.** No es de la app ni del backend: **falta la bucket policy de lectura publica sobre
+`avatares/`**. El recorrido funciona entero —URL prefirmada, `PUT` a S3, confirmacion, la URL
+permanente guardada en `usuarios.avatar_url`— y despues el `<Image>` pide esa URL de forma anonima
+y S3 responde **403**. Una imagen que no carga no muestra error: deja el hueco.
+
+Ya estaba escrito en `docs/INFRA_S3_BUCKET.md` §3 —*"es la unica pieza que hoy esta rota (...) S3
+responde 403 porque falta la bucket policy"*— y se comprobo sin credenciales aprovechando que S3
+distingue los dos casos:
+
+```
+curl -o /dev/null -w "%{http_code}" https://s3-renaser90dias.s3.us-east-1.amazonaws.com/avatares/<clave-inexistente>
+-> 403
+```
+
+**Con lectura publica activa una clave inexistente responde 404** (`NoSuchKey`); sin ella responde
+403, porque S3 oculta hasta la existencia del objeto. El 403 sobre una clave que no existe prueba
+que el permiso falta, sin necesidad de conocer ninguna URL real de avatar.
+
+**Solucion.** Aplicar la politica de `docs/INFRA_S3_BUCKET.md` §3 sobre `s3-renaser90dias` y
+desactivar **solo** `BlockPublicPolicy` y `RestrictPublicBuckets` de ese bucket. Es infraestructura,
+no despliegue: **no hace falta tocar codigo ni volver a subir el `.aab`.** Las fotos ya subidas
+aparecen solas en cuanto el permiso existe, porque la URL guardada ya es la correcta.
+
+**Como evitar que vuelva a pasar.**
+
+- **Una imagen rota no avisa.** `<Image>` con una URL que da 403 no lanza error ni muestra nada, y
+  el flujo de subida reporta exito porque su parte salio bien. Cuando algo "se guarda pero no se
+  ve", el primer sospechoso es el permiso de LECTURA, no la escritura.
+- **El 403-vs-404 de S3 es un test de permisos que no necesita credenciales ni datos reales.** Sirve
+  para cualquier bucket, en cualquier momento, y responde en un segundo.
+- **Pendiente relacionado:** `AvatarService.BUCKET_AVATARES` vale `"renaser-files"`, pero el bucket
+  real sale de `renaser.storage.s3.bucket` (`AWS_S3_BUCKET`, por defecto `s3-renaser90dias`). Ese
+  nombre viaja al cliente en la respuesta de `upload-url` y el backend lo ignora al confirmar, asi
+  que no rompe nada — pero es una pista falsa justo para depurar esto. Hay que hacer que reporte el
+  bucket de verdad o sacarlo de la respuesta.
