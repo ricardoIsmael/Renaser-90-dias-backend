@@ -132,3 +132,35 @@ Criterio propuesto para seguir adelante (el usuario lo confirma o lo ajusta):
 - LangChain, guía de Jev: https://www.langchain.com/blog/building-a-harness-with-jev
 - N-best del STT para intención (+14–25% relativo): https://arxiv.org/abs/2001.05284
 - Menos tools → mejor function calling en edge: https://arxiv.org/abs/2411.15399
+
+## 8. Medición real del router con embeddings (2026-09-23)
+
+`scripts/ia/router_eval.py`, `gemini-embedding-001` a 768 dimensiones con `taskType=SEMANTIC_SIMILARITY`,
+24 frases es-PE (incluye errores de voz y trampas) contra 6 intenciones y 4 hábitos de fixture.
+Mismo algoritmo que `ComparacionSemantica`.
+
+| Métrica | Resultado |
+|---|---|
+| Exactitud total | 18/24 (75%) |
+| Margen ≥ 0.06 (umbral seguro) | decide solo en 10/24, 0 errores, 0 marcas equivocadas |
+| Margen ≥ 0.02 | decide en 19/24, 2 errores |
+| Latencia | ~2.3 s por llamada de embeddings (3 lotes en 7 s) |
+
+**Falla en lo que más importaba, la voz mal transcrita:** "ya tome awa" salió `conversar` y el hábito
+resuelto fue "Leer" (margen 0.005); "ya ley" y "ya medite" tampoco se reconocieron como marcar. La
+variante `RETRIEVAL_DOCUMENT` (la que usa hoy el backend) no se pudo medir: la key devolvió **429**
+por cuota.
+
+**Decisión: el router NO se conecta al chat.** Con un umbral seguro decide en menos de la mitad de
+los mensajes, se equivoca justo en los casos de voz, y tarda lo mismo que un turno corto del modelo
+de chat, que ya tiene las herramientas y resuelve esos casos con contexto. Queda el contrato
+(`ClasificarIntencionPort`, adaptador `noop`) y el script para volver a medir si aparece algo mejor
+(Jev con evaluaciones independientes, u otro modelo).
+
+**Lo que sí ataca el problema de la voz:** sesgar el reconocedor con los nombres de los hábitos de la
+persona (`contextualStrings` / `initialPrompt`, plan v2.1 §3.5), para que "awa" ni llegue a
+transcribirse. Va en la app.
+
+**Riesgo operativo detectado:** la key del entorno local respondió 429 con pocas llamadas. Si es la
+misma cuota que usa el chat en producción, varios usuarios a la vez verán "el asistente está
+saturado". Revisar el plan de facturación en Google AI Studio.
