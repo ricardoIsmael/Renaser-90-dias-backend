@@ -160,19 +160,55 @@ class RocaSemanalServiceTest {
                 .hasMessageContaining("ROCKS_LOCKED");
     }
 
+    /**
+     * > <b>Corregido el 2026-09-23.</b> Este test se llamaba {@code yaPlanificadaLaSemanaEsConflicto}
+     * > y daba por buena la regla vieja: con UN objetivo en la semana, pedir los tres era conflicto.
+     * > Esa regla es la que dejaba al dueno mirando Negocio y viendo el objetivo de Cuerpo, sin
+     * > poder planificar el suyo hasta el domingo siguiente.
+     * >
+     * > Ademas su fixture mentia: llamaba a {@code tresMaestras()} DOS veces y cada llamada sortea
+     * > UUIDs nuevos, asi que la roca "existente" colgaba de una maestra que no estaba en la lista.
+     * > Con el codigo viejo daba igual —solo miraba {@code isEmpty()}— y por eso paso inadvertido.
+     * > Es el caso exacto de `.claude/rules/03-pruebas.md`: el bug se escondia en el fixture.
+     */
     @Test
-    void yaPlanificadaLaSemanaEsConflicto() {
-        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
+    @DisplayName("pedir SOLO un eje que ya tiene objetivo esta semana sigue siendo conflicto")
+    void pedirSoloUnEjeYaPlanificadoEsConflicto() {
         List<RocaMaestra> maestras = tresMaestras();
-        when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(maestras);
-        when(loadRocaSemanalPort.deParticipanteYSemana(anyList(), anyInt()))
-                .thenReturn(List.of(RocaSemanal.planificar(RocaSemanalId.of(UUID.randomUUID()),
-                        tresMaestras().get(0).id(), 2, "x", null, null, null, CLOCK)));
+        conSemanaQueYaTiene(maestras, EjeObjetivo.CUERPO);
 
-        var command = new CrearPlanSemanalCommand(actorId,
-                List.of(item(EjeObjetivo.CUERPO), item(EjeObjetivo.TRABAJO), item(EjeObjetivo.RELACIONES)));
+        var command = new CrearPlanSemanalCommand(actorId, List.of(item(EjeObjetivo.CUERPO)));
         assertThatThrownBy(() -> service.crear(command)).isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("ALREADY_PLANNED");
+    }
+
+    @Test
+    @DisplayName("suma los ejes que faltan y no pisa el que ya estaba")
+    void sumaLosEjesQueFaltan() {
+        List<RocaMaestra> maestras = tresMaestras();
+        conSemanaQueYaTiene(maestras, EjeObjetivo.CUERPO);
+        when(saveRocaSemanalPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var creadas = service.crear(new CrearPlanSemanalCommand(actorId,
+                List.of(item(EjeObjetivo.CUERPO), item(EjeObjetivo.TRABAJO), item(EjeObjetivo.RELACIONES))));
+
+        // Solo las dos que faltaban: Cuerpo ya tenia la suya y no se toca desde aca.
+        assertThat(creadas).hasSize(2);
+        RocaMaestraId trabajo = maestras.get(1).id();
+        RocaMaestraId relaciones = maestras.get(2).id();
+        assertThat(creadas).extracting(RocaSemanal::rocaMaestraId)
+                .containsExactlyInAnyOrder(trabajo, relaciones);
+    }
+
+    /** Siembra una semana que ya tiene objetivo en {@code ejeExistente}, con maestras coherentes. */
+    private void conSemanaQueYaTiene(List<RocaMaestra> maestras, EjeObjetivo ejeExistente) {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
+        when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(maestras);
+        RocaMaestraId maestraDelEje = maestras.stream().filter(m -> m.eje() == ejeExistente).findFirst()
+                .orElseThrow().id();
+        when(loadRocaSemanalPort.deParticipanteYSemana(anyList(), anyInt()))
+                .thenReturn(List.of(RocaSemanal.planificar(RocaSemanalId.of(UUID.randomUUID()),
+                        maestraDelEje, 2, "ya estaba", null, null, null, CLOCK)));
     }
 
     @Test

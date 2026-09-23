@@ -3,6 +3,7 @@ package com.renaser.os.rocks.application.services;
 import com.renaser.os.rocks.application.ports.in.rocasemanal.CerrarSemanaUseCase;
 import com.renaser.os.rocks.application.ports.in.rocasemanal.ConsultarRocasSemanalesUseCase;
 import com.renaser.os.rocks.application.ports.in.rocasemanal.CrearPlanSemanalUseCase;
+import com.renaser.os.rocks.application.ports.in.rocasemanal.CrearPlanSemanalUseCase.ItemRocaSemanal;
 import com.renaser.os.rocks.application.ports.in.rocasemanal.EditarDentroDe48hUseCase;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort.ProgresoParticipanteRocks;
@@ -30,8 +31,10 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentroDe48hUseCase, CerrarSemanaUseCase,
@@ -69,12 +72,16 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
         LocalDate hoy = hoyEn(progreso.zona());
         int numeroSemana = numeroSemanaAPlanificar(progreso, hoy);
 
-        List<RocaMaestraId> idsMaestras = maestras.values().stream().map(RocaMaestra::id).toList();
-        if (!loadRocaSemanalPort.deParticipanteYSemana(idsMaestras, numeroSemana).isEmpty()) {
-            throw new IllegalStateException("ALREADY_PLANNED: la semana " + numeroSemana + " ya tiene rocas planificadas");
+        Set<EjeObjetivo> yaPlanificados = ejesYaPlanificados(maestras, numeroSemana);
+        List<ItemRocaSemanal> porCrear = command.rocas().stream()
+                .filter(item -> !yaPlanificados.contains(item.eje()))
+                .toList();
+        if (porCrear.isEmpty()) {
+            throw new IllegalStateException("ALREADY_PLANNED: la semana " + numeroSemana
+                    + " ya tiene objetivo en todos los ejes pedidos");
         }
 
-        List<RocaSemanal> creadas = command.rocas().stream()
+        List<RocaSemanal> creadas = porCrear.stream()
                 // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
                 .map(item -> RocaSemanal.planificar(RocaSemanalId.of(idGenerator.newId()),
                         maestras.get(item.eje()).id(), numeroSemana, item.titulo(),
@@ -130,6 +137,29 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
     private int numeroSemanaAPlanificar(ProgresoParticipanteRocks progreso, LocalDate hoy) {
         int semanaDeHoy = SemanaPrograma.numeroSemanaParaFecha(progreso.fechaInicio(), hoy);
         return hoy.getDayOfWeek() == DayOfWeek.SUNDAY ? semanaDeHoy + 1 : semanaDeHoy;
+    }
+
+    /**
+     * Los ejes que esta semana YA tienen objetivo.
+     *
+     * > <b>Agregado el 2026-09-23.</b> Antes esto era un {@code isEmpty()}: si la semana tenia
+     * > aunque fuera un objetivo, {@code crear} respondia {@code ALREADY_PLANNED} y no se podia
+     * > sumar nada mas. Eso convirtio a RK-12 en una trampa: se bajo el minimo a UN eje para que
+     * > nadie tuviera que llenar los tres de una sentada, pero al guardar el principal los otros
+     * > dos quedaban bloqueados hasta el domingo siguiente. El dueno lo vio en pantalla —abria
+     * > Negocio y la tarjeta le mostraba el objetivo de Cuerpo, sin forma de planificar el suyo—.
+     * >
+     * > Ahora se rechaza por eje, no por semana: lo que ya existe se respeta y lo que falta se
+     * > puede sumar cualquier dia. Un objetivo ya guardado NO se pisa desde aca; para cambiarlo
+     * > esta {@code editar}, que es donde vive la ventana de rectificacion.
+     */
+    private Set<EjeObjetivo> ejesYaPlanificados(Map<EjeObjetivo, RocaMaestra> maestras, int numeroSemana) {
+        Map<RocaMaestraId, EjeObjetivo> ejePorMaestra = maestras.entrySet().stream()
+                .collect(Collectors.toMap(e -> e.getValue().id(), Map.Entry::getKey));
+        return loadRocaSemanalPort.deParticipanteYSemana(List.copyOf(ejePorMaestra.keySet()), numeroSemana).stream()
+                .map(roca -> ejePorMaestra.get(roca.rocaMaestraId()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     private LocalDate hoyEn(ZoneId zona) {

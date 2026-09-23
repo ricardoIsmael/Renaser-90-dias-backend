@@ -7406,3 +7406,56 @@ la otra regla, la que nadie habia pedido: "no dejes arrancar la aplicacion".
 - **Antes de pushear una migracion, mirar si el repo auto-despliega.** `cd.yml` corre en cada push
   a `master`. Eso no se verifico antes de pushear, y es el error de fondo: el problema no fue la
   migracion sino haberla mandado a produccion sin saber que la estaba mandando a produccion.
+
+---
+
+## E-211 · Editar una migracion ya aplicada: el backend local dejo de arrancar por checksum
+
+**Sintoma.** El backend local no levanta, justo despues de arreglar E-210:
+
+```
+Validate failed: Migrations have failed validation
+Migration checksum mismatch for migration version 62
+-> Applied to database : -202689993
+-> Resolved locally    : -262555823
+Either revert the changes to the migration, or run repair to update the schema history.
+```
+
+**Causa.** Se **edito el contenido de la `V62`, que ya estaba aplicada** en la base local. Flyway
+guarda un checksum del archivo en `flyway_schema_history` y compara al arrancar; cambiar el texto de
+una migracion ya corrida rompe esa comparacion. `.claude/rules/04-base-de-datos-y-migraciones.md` lo
+dice sin matices: *"Nunca editar una migracion ya aplicada. Se agrega una nueva."*
+
+**Por que se edito igual, y por que no alcanza como excusa.** La `V62` habia **fallado en
+produccion** (E-210). Al fallar dentro de una transaccion, Postgres la revirtio entera y no quedo
+registrada alla, asi que corregir el archivo era la unica forma de que esa version volviera a
+intentarse. Lo que no se penso es que **en local si se habia aplicado con exito** —tabla vacia y
+usuario superusuario—, y ahi el archivo viejo ya tenia su checksum guardado. Los dos entornos
+estaban en estados distintos y se trato a los dos como si estuvieran en el de produccion.
+
+**Solucion.** Alinear el checksum del historial, que es exactamente lo que hace `flyway repair`:
+
+```sql
+UPDATE public.flyway_schema_history SET checksum = <el "Resolved locally" del error>
+WHERE version = '62';
+```
+
+Es seguro en este caso concreto porque la migracion **ya habia hecho su trabajo** (la tabla estaba
+borrada) y la version nueva, sobre esa base, no hace nada: entra por el camino "la tabla ya no
+existe" y sale con un NOTICE. No se repara un checksum sin comprobar antes que el efecto de las dos
+versiones sobre ESA base es el mismo.
+
+**Ojo con donde vive el historial.** En este proyecto es `public.flyway_schema_history`, **no**
+`renaser.flyway_schema_history`. Buscarla en el esquema del producto da `relation does not exist` y
+manda a la pista equivocada.
+
+**Como evitar que vuelva a pasar.**
+
+- **Antes de editar una migracion, preguntarse en que estado esta CADA entorno.** "Fallo en
+  produccion" no implica "no se aplico en ningun lado". Con Postgres una migracion fallida se
+  revierte y no deja rastro; una exitosa deja checksum. Dos entornos, dos estados.
+- **Cuando una migracion ya corrio bien en algun lado, la correccion va en una migracion NUEVA.**
+  El unico caso donde editar es defendible es este —fallo en todos los entornos que importan— y
+  aun asi hay que reparar a mano los que si la aplicaron.
+- **La `V62` no puede volver a editarse.** Ya esta aplicada y con checksum registrado en local y en
+  produccion. Cualquier cambio sobre `acciones_criticas` de aca en adelante es una `V63`.
