@@ -2,7 +2,7 @@ package com.renaser.os.points.infrastructure.adapter.in.rest.puntaje;
 
 import com.renaser.os.points.application.ports.in.puntaje.AjustarPuntosManualmenteUseCase;
 import com.renaser.os.points.application.ports.in.puntaje.AjustarPuntosManualmenteUseCase.AjustarPuntosManualmenteCommand;
-import com.renaser.os.points.application.ports.in.puntaje.ConsultarPuntajeUseCase;
+import com.renaser.os.points.application.ports.in.puntaje.ConsultarPuntajeVisibleUseCase;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -21,10 +21,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/points")
 public class PuntajeController {
 
-    private final ConsultarPuntajeUseCase consultarPuntajeUseCase;
+    private final ConsultarPuntajeVisibleUseCase consultarPuntajeUseCase;
     private final AjustarPuntosManualmenteUseCase ajustarPuntosManualmenteUseCase;
 
-    public PuntajeController(ConsultarPuntajeUseCase consultarPuntajeUseCase,
+    public PuntajeController(ConsultarPuntajeVisibleUseCase consultarPuntajeUseCase,
                               AjustarPuntosManualmenteUseCase ajustarPuntosManualmenteUseCase) {
         this.consultarPuntajeUseCase = consultarPuntajeUseCase;
         this.ajustarPuntosManualmenteUseCase = ajustarPuntosManualmenteUseCase;

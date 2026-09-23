@@ -7651,8 +7651,17 @@ de verdad se **deriva** de los días con hábito cumplido (`Racha.derivarDe`, re
 incrementar), y esa derivación la usan `/home` y, desde 2026-09-23, `points.api.ResumenPuntajeFinder`
 (`RachaMostrada`, compartida).
 
-**Estado.** Detectado el 2026-09-23 al construir el resumen del acompañante. **No se corrigió**
-(se reporta). El acompañante ya usa el valor derivado.
+**Estado.** ~~Detectado el 2026-09-23 al construir el resumen del acompañante. **No se corrigió**
+(se reporta). El acompañante ya usa el valor derivado.~~
+
+> **Corregido 2026-09-23.** `GET /api/v1/points/{id}` ahora pasa por `ConsultarPuntajeVisibleUseCase`
+> (`PuntajeVisibleService`), que toma el puntaje guardado y le pone encima la racha DERIVADA con la
+> misma regla de Hoy (`PuntajeConRachaDerivada` → `RachaMostrada`); `ResumenPuntajeService` (el del
+> acompañante) usa la misma clase, así que la regla sigue escrita una sola vez. La forma del JSON no
+> cambió, y la app no llama a este endpoint (verificado con grep en el repo de la app). Regresión:
+> `PuntajeVisibleServiceTest` (racha guardada 0 → se muestra 3, con récord 4, contada hasta hoy en
+> Lima a las 03:30 UTC). **Sigue abierto:** `coherencia` de esa respuesta es la guardada, que
+> tampoco escribe nadie; la de Hoy sale de `PorcentajeRocasFinder`.
 
 **Cómo evitar que vuelva a pasar.** Que `/points/{id}` use `RachaMostrada` o deje de exponer esos
 campos. Ojo: sacar campos de una respuesta rompe la app instalada (no hay actualización por aire);
