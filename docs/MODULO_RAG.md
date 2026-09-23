@@ -238,6 +238,58 @@ Este módulo ya aplicó el criterio una vez, y está comentado en `HerramientasA
 **Corolario:** no se agregan herramientas "por si acaso". Cada definición viaja en cada petición
 —ocupa contexto— y le da al modelo una opción más entre las que dudar. Hoy son tres y alcanzan.
 
+> **Actualizado 2026-09-23 (D-152).** "Hoy son tres y alcanzan" dejó de ser cierto: el dueño pidió
+> un acompañante que **planifique** con la persona (tiempo, horarios, rocas, eventos). Pasaron a ser
+> ocho, y ninguna es "por si acaso": cada una responde una pregunta concreta que el acompañante no
+> podía contestar sin inventar. El criterio de arriba sigue en pie: la herramienta nueva de
+> resumen **no** duplica el día y la fase que ya van en el prompt, sino que los lee del mismo
+> puerto (`ConsultarSituacionDelAprendizPort`) para que nunca digan cosas distintas.
+
+### D-152 — El acompañante como planificador: cinco herramientas de lectura (2026-09-23)
+
+Diseño completo, inventario de las ~90 operaciones del aprendiz y decisiones del dueño:
+`docs/arquitectura/PROPUESTA_ACOMPANANTE_90_DIAS.md`. Esta es la **fase 1**: solo lectura y
+cálculo. Las escrituras (cambiar horario, pausar, plan de rocas) llegan en la fase 4, como
+**propuestas con botones de confirmación** (fase 2); el modelo nunca las ejecuta solo.
+
+**Punto de extensión.** Cada herramienta nueva es un `@Component` que implementa
+`application/services/herramientas/HerramientaAgente`; `HerramientasAgenteService` las recibe
+todas, las ofrece solo a `COMPANION`, valida sus obligatorios, traduce cualquier excepción a un
+`Fallo` legible y **corta el arranque si dos herramientas se llaman igual**. Las tres originales no
+se migraron: funcionan y están probadas.
+
+| Herramienta | Responde | Lee de (reusa, no reimplementa) |
+|---|---|---|
+| `consultar_tiempo_para_puntos` | "¿llego a tiempo?", "¿cuánto pierdo si lo hago a las 9?", cuál vence primero | `habits.api.AgendaDelDiaFinder`: se agregaron `HabitoEnJuegoResumen.tramos` (la escala D-97, derivada de `ResultadoOtorgamiento`, el mismo cálculo que otorga los puntos) y `zonaDe` |
+| `consultar_resumen_del_programa` | día N de 90, fase, fecha y hora local, coherencia, próximo evento | `ConsultarSituacionDelAprendizPort` (día/fase, el mismo del prompt) + `points.api.PorcentajeRocasFinder` y `ProximoEventoFinder`, los mismos de `GET /home` |
+| `consultar_horarios` | horario resuelto por día, apagado/pausado/obligatorio, **cuota de cambios** restante | nuevo `habits.api.HorarioDelDiaFinder` → `ConsultarPreferenciasHorarioUseCase` (el de `GET /habit-preferences?date=`) |
+| `consultar_rocas` | rocas de hoy/mañana/semana/mes, si el plan de mañana existe, ventana de las 18:00 | nuevo `rocks.api.RocasDelAprendizFinder` → dashboard, rocas de mañana, objetivo del mes, `VentanaPlanificacionDiaria` |
+| `consultar_eventos` | eventos de hoy o de los próximos 7 días, con el RSVP | nuevo `calendar.api.EventosDelParticipanteFinder` → `ListarEventosParaVisorUseCase` (audiencia y RSVP intactos) |
+
+**Horas y fechas, siempre en código** (regla 02): "hoy", "mañana", "faltan 32 min" y la hora local
+salen de `Clock` en la zona del participante; el modelo solo los repite. Cada herramienta tiene
+una prueba con el reloj entre 00:00 y 05:00 UTC, que en Lima cae en el día anterior.
+
+**Dependencias nuevas de `rag`:** `points.api`, `rocks.api` y `calendar.api`. Ninguno de esos
+módulos importa `rag`, así que no hay ciclo.
+
+**Huecos conocidos (no se inventaron):**
+
+- La racha y los puntos de liga no se exponen: la derivación vive en `points.application`
+  (`HomeAgregadoService.rachaDe`) y no hay contrato público. Falta un finder en `points.api` que
+  `HomeAgregadoService` también reuse, para que la regla quede en un solo lugar. La herramienta de
+  resumen lo dice explícitamente para que el modelo no invente esos números.
+- En `consultar_eventos`, "semana" son los próximos 7 días; en `consultar_rocas` es la semana del
+  programa. Queda así hasta que el dueño diga lo contrario.
+
+**Preguntas abiertas al dueño**, detectadas al implementar (no se tocó nada):
+
+1. Con la truncación a minutos, el mínimo de 5 puntos de D-97 solo se paga en el instante exacto
+   del vencimiento: en la práctica la escala termina en 6.
+2. `RocaDiariaService.requireFechaPlanificable` deja crear el plan de mañana antes de las 18:00,
+   pero `puedeCrearPlanDiario` del dashboard exige la ventana abierta. La herramienta reporta los
+   dos datos sin decidir cuál manda.
+
 ---
 
 ## 4. Estructura del módulo

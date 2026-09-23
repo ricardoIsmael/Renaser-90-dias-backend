@@ -6,6 +6,7 @@ import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPo
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,8 +39,18 @@ class ConsultarAgendaHabitosAdapter implements ConsultarAgendaHabitosPort {
         return agendaDelDiaFinder.completar(actorId, registroId);
     }
 
+    @Override
+    public ZoneId zonaDe(UserId participanteId) {
+        return agendaDelDiaFinder.zonaDe(participanteId);
+    }
+
     private static HabitoDelDia aHabitoDelDia(HabitoEnJuegoResumen resumen) {
         return new HabitoDelDia(resumen.registroId(), resumen.titulo(), resumen.estado(), resumen.puntosEnJuego(),
-                resumen.puntosMaximos(), resumen.plazo(), resumen.exigeEvidencia());
+                resumen.puntosMaximos(), resumen.plazo(), resumen.exigeEvidencia(),
+                resumen.tramos().stream().map(ConsultarAgendaHabitosAdapter::aTramo).toList());
+    }
+
+    private static TramoPuntos aTramo(HabitoEnJuegoResumen.TramoPuntos tramo) {
+        return new TramoPuntos(tramo.hasta(), tramo.puntos());
     }
 }

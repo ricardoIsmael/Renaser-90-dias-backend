@@ -3,6 +3,7 @@ package com.renaser.os.rag.application.services;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
+import com.renaser.os.rag.application.services.herramientas.HerramientaAgente;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.herramienta.CatalogoHerramientasAgente;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
@@ -13,9 +14,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
  * Ejecuta las herramientas del agente contra los puertos de negocio reales.
@@ -41,19 +45,30 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
     private static final Logger log = LoggerFactory.getLogger(HerramientasAgenteService.class);
 
     private final ConsultarAgendaHabitosPort agendaHabitosPort;
+    /** Las herramientas que viven en su propia clase (2026-09-23). Ver {@link HerramientaAgente}. */
+    private final List<HerramientaAgente> adicionales;
 
-    public HerramientasAgenteService(ConsultarAgendaHabitosPort agendaHabitosPort) {
+    public HerramientasAgenteService(ConsultarAgendaHabitosPort agendaHabitosPort,
+                                     List<HerramientaAgente> adicionales) {
         this.agendaHabitosPort = agendaHabitosPort;
+        this.adicionales = List.copyOf(adicionales);
+        requireNombresUnicos();
     }
 
     @Override
     public List<DefinicionHerramienta> disponibles(AgenteConversacional agente) {
-        return agente == AgenteConversacional.COMPANION ? CatalogoHerramientasAgente.definiciones() : List.of();
+        if (agente != AgenteConversacional.COMPANION) {
+            return List.of();
+        }
+        return Stream.concat(CatalogoHerramientasAgente.definiciones().stream(),
+                adicionales.stream().map(HerramientaAgente::definicion)).toList();
     }
 
     @Override
     public ResultadoHerramienta ejecutar(UserId actorId, InvocacionHerramienta invocacion) {
-        Optional<DefinicionHerramienta> definicion = CatalogoHerramientasAgente.porNombre(invocacion.nombre());
+        Optional<HerramientaAgente> adicional = adicionalLlamada(invocacion.nombre());
+        Optional<DefinicionHerramienta> definicion = adicional.map(HerramientaAgente::definicion)
+                .or(() -> CatalogoHerramientasAgente.porNombre(invocacion.nombre()));
         if (definicion.isEmpty()) {
             return ResultadoHerramienta.fallo("No existe una herramienta llamada " + invocacion.nombre() + ".");
         }
@@ -62,7 +77,40 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
             return ResultadoHerramienta.fallo("Faltan datos para usar esa herramienta: " + String.join(", ",
                     faltantes) + ".");
         }
-        return ejecutarConDatosValidos(actorId, invocacion);
+        return adicional.map(herramienta -> ejecutarAdicional(herramienta, actorId, invocacion))
+                .orElseGet(() -> ejecutarConDatosValidos(actorId, invocacion));
+    }
+
+    private Optional<HerramientaAgente> adicionalLlamada(String nombre) {
+        return adicionales.stream().filter(herramienta -> herramienta.definicion().nombre().equals(nombre))
+                .findFirst();
+    }
+
+    /**
+     * La red de seguridad del contrato: una herramienta adicional no deberia lanzar, pero si lo
+     * hace, el modelo recibe un motivo legible y el detalle queda en el log.
+     */
+    private static ResultadoHerramienta ejecutarAdicional(HerramientaAgente herramienta, UserId actorId,
+                                                          InvocacionHerramienta invocacion) {
+        try {
+            return herramienta.ejecutar(actorId, invocacion);
+        } catch (RuntimeException falla) {
+            log.warn("[rag] la herramienta {} fallo sin traducir el error", invocacion.nombre(), falla);
+            return ResultadoHerramienta.fallo("No pude consultar eso en este momento.");
+        }
+    }
+
+    /** Dos herramientas con el mismo nombre harian ambiguo lo que el modelo pide: se corta al arrancar. */
+    private void requireNombresUnicos() {
+        Set<String> vistos = new HashSet<>();
+        Stream.concat(CatalogoHerramientasAgente.definiciones().stream(),
+                        adicionales.stream().map(HerramientaAgente::definicion))
+                .map(DefinicionHerramienta::nombre)
+                .filter(nombre -> !vistos.add(nombre))
+                .findFirst()
+                .ifPresent(repetido -> {
+                    throw new IllegalStateException("Dos herramientas del agente se llaman " + repetido);
+                });
     }
 
     private ResultadoHerramienta ejecutarConDatosValidos(UserId actorId, InvocacionHerramienta invocacion) {

@@ -90,7 +90,7 @@ class HerramientasAgenteServiceTest {
     }
 
     private HerramientasAgenteService servicio() {
-        return new HerramientasAgenteService(agendaHabitosPort);
+        return new HerramientasAgenteService(agendaHabitosPort, List.of());
     }
 
     private static HabitoDelDia habitoVivo(String titulo, int puntos) {

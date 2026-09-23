@@ -1,6 +1,7 @@
 package com.renaser.os.habits.api;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -23,7 +24,33 @@ import java.util.UUID;
  * @param exigeEvidencia si el catalogo pide evidencia para este habito (2026-09-14). Que la
  *                       EXIJA no impide completarlo: {@code RegistroService.completar} no mira
  *                       esta bandera. Existe para poder decirlo, no para bloquear
+ * @param tramos         la escala de puntos completa del habito, en orden y hasta el
+ *                       {@code plazo} (2026-09-23). Vacia cuando no hay nada que escalonar: el
+ *                       registro esta en estado terminal o el habito no vence. Ver {@link TramoPuntos}
  */
 public record HabitoEnJuegoResumen(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
-                                    Integer puntosMaximos, Instant plazo, boolean exigeEvidencia) {
+                                    Integer puntosMaximos, Instant plazo, boolean exigeEvidencia,
+                                    List<TramoPuntos> tramos) {
+
+    public HabitoEnJuegoResumen {
+        tramos = tramos == null ? List.of() : List.copyOf(tramos);
+    }
+
+    /**
+     * Un tramo de la escala: entregar ANTES de {@code hasta} (y despues del tramo anterior)
+     * paga {@code puntos}. El primero cubre tambien todo lo previo a la hora ancla; el ultimo
+     * termina en el {@code plazo}.
+     *
+     * <p>Nace para la herramienta {@code consultar_tiempo_para_puntos} del agente (2026-09-23):
+     * "si no lo haces antes de las 8:32, pasa a pagar 9". Solo con {@code plazo} y
+     * {@code puntosEnJuego} el llamador tendria que saber la escala de D-97 (cuando empieza la
+     * gracia, cada cuanto baja) y reimplementarla fuera de {@code habits}; con los tramos ya
+     * resueltos solo tiene que ubicar un instante en una lista.
+     *
+     * <p>El puntaje del instante exacto del plazo (el minimo de la escala, que se paga solo en
+     * ese instante) no forma tramo: dura cero segundos y anunciarlo seria prometer algo que nadie
+     * puede alcanzar a proposito.
+     */
+    public record TramoPuntos(Instant hasta, int puntos) {
+    }
 }
