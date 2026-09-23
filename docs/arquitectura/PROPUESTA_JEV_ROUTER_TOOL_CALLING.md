@@ -2,9 +2,11 @@
 
 **Estado:** **en espera** (decisión del usuario, 2026-09-23). Jev lleva una semana en el mercado
 y todavía no tiene evaluaciones independientes ni en español. Se retoma cuando las haya. Mientras
-tanto se construye el puerto `ClasificarIntencionPort` con un adaptador de embeddings, para que
-sumar Jev después sea agregar un adaptador más, sin tocar el dominio. Nada de este documento está
-en el código.
+tanto quedó el puerto `ClasificarIntencionPort` con su adaptador `noop` (sin conectar al chat).
+El adaptador de embeddings **no se construyó**: se midió antes con Gemini (§8) y no alcanza. Sumar
+Jev u otro clasificador después sigue siendo agregar un adaptador, sin tocar el dominio.
+> Corregido 2026-09-23: decía "se construye el puerto con un adaptador de embeddings" y "nada de
+> este documento está en el código".
 **Fecha:** 2026-09-23 · **Origen:** pedido del usuario sobre el plan
 `RENASER_OFFLINE_AI_SENIOR_PLAN(3).md` (§5.2 clasificador, §67 tool calling).
 
