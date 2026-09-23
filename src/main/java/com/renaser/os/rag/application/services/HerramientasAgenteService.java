@@ -3,7 +3,9 @@ package com.renaser.os.rag.application.services;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
+import com.renaser.os.rag.application.services.herramientas.CompletacionDeHabito;
 import com.renaser.os.rag.application.services.herramientas.HerramientaAgente;
+import com.renaser.os.rag.application.services.herramientas.PropuestaDeMarcarHabito;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.herramienta.CatalogoHerramientasAgente;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
@@ -18,7 +20,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
@@ -47,11 +48,18 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
     private final ConsultarAgendaHabitosPort agendaHabitosPort;
     /** Las herramientas que viven en su propia clase (2026-09-23). Ver {@link HerramientaAgente}. */
     private final List<HerramientaAgente> adicionales;
+    /**
+     * Si {@code marcar_habito_completado} marca en el acto o deja una propuesta con botones
+     * (fase 2, D-153, flag {@code renaser.ia.acompanante.confirmacion-con-botones}).
+     */
+    private final PropuestaDeMarcarHabito propuestaDeMarcar;
 
     public HerramientasAgenteService(ConsultarAgendaHabitosPort agendaHabitosPort,
-                                     List<HerramientaAgente> adicionales) {
+                                     List<HerramientaAgente> adicionales,
+                                     PropuestaDeMarcarHabito propuestaDeMarcar) {
         this.agendaHabitosPort = agendaHabitosPort;
         this.adicionales = List.copyOf(adicionales);
+        this.propuestaDeMarcar = propuestaDeMarcar;
         requireNombresUnicos();
     }
 
@@ -60,8 +68,14 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
         if (agente != AgenteConversacional.COMPANION) {
             return List.of();
         }
-        return Stream.concat(CatalogoHerramientasAgente.definiciones().stream(),
-                adicionales.stream().map(HerramientaAgente::definicion)).toList();
+        return Stream.concat(delCatalogo().stream(), adicionales.stream().map(HerramientaAgente::definicion))
+                .toList();
+    }
+
+    /** Con el flag prendido, {@code marcar_habito_completado} se describe como lo que hace: proponer. */
+    private List<DefinicionHerramienta> delCatalogo() {
+        return propuestaDeMarcar.activa() ? CatalogoHerramientasAgente.definicionesConConfirmacion()
+                : CatalogoHerramientasAgente.definiciones();
     }
 
     @Override
@@ -190,23 +204,15 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
                 + " habito(s) que todavia puede entregar.");
     }
 
+    /**
+     * Con el flag apagado marca en el acto, exactamente como antes de la fase 2. Prendido, NO
+     * marca: deja una propuesta y la persona confirma con un boton (D-153). En los dos casos un id
+     * inventado se rechaza antes de tocar ningun puerto.
+     */
     private ResultadoHerramienta marcarCompletado(UserId actorId, String registroId) {
-        UUID id;
-        try {
-            id = UUID.fromString(registroId.trim());
-        } catch (IllegalArgumentException noEsUnIdentificador) {
-            return ResultadoHerramienta.fallo("Ese identificador de habito no es valido. Consulta primero los "
-                    + "habitos del dia y usa el id que devuelven.");
-        }
-        try {
-            return ResultadoHerramienta.exito("Habito marcado como completado. Puntos otorgados: "
-                    + agendaHabitosPort.completar(actorId, id) + ".");
-        } catch (RuntimeException fallaDelNegocio) {
-            // El detalle va al log; al modelo solo un motivo apto para repetirle a la persona.
-            log.info("[rag] la herramienta {} no pudo completar el habito: {}",
-                    CatalogoHerramientasAgente.MARCAR_HABITO_COMPLETADO, fallaDelNegocio.toString());
-            return ResultadoHerramienta.fallo("No se pudo marcar ese habito como completado: puede que ya este "
-                    + "hecho, que se le haya vencido el plazo o que no sea uno de los suyos.");
-        }
+        return CompletacionDeHabito.registroIdDe(registroId)
+                .map(id -> propuestaDeMarcar.activa() ? propuestaDeMarcar.proponer(actorId, id)
+                        : CompletacionDeHabito.completar(agendaHabitosPort, actorId, id))
+                .orElseGet(CompletacionDeHabito::identificadorInvalido);
     }
 }

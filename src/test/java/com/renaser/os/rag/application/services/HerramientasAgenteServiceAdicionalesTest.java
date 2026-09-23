@@ -1,7 +1,9 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.application.services.herramientas.HerramientaAgente;
+import com.renaser.os.rag.application.services.herramientas.PropuestaDeMarcarHabito;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.herramienta.CatalogoHerramientasAgente;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
@@ -32,10 +34,15 @@ class HerramientasAgenteServiceAdicionalesTest {
 
     private final ConsultarAgendaHabitosPort agenda = mock(ConsultarAgendaHabitosPort.class);
 
+    /** Flag de la fase 2 apagado: estos casos son sobre las adicionales, no sobre las propuestas. */
+    private PropuestaDeMarcarHabito sinPropuesta() {
+        return new PropuestaDeMarcarHabito(agenda, mock(ProponerAccionUseCase.class), false);
+    }
+
     @Test
     @DisplayName("el acompanante recibe las originales y las adicionales; Sparkie ninguna")
     void seOfrecenSoloAlAcompanante() {
-        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()));
+        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()), sinPropuesta());
 
         assertThat(servicio.disponibles(AgenteConversacional.COMPANION))
                 .extracting(DefinicionHerramienta::nombre)
@@ -48,7 +55,7 @@ class HerramientasAgenteServiceAdicionalesTest {
     @Test
     @DisplayName("una adicional se ejecuta con el actor de la conversacion y sus argumentos")
     void seEjecutaConElActor() {
-        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()));
+        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()), sinPropuesta());
 
         var resultado = servicio.ejecutar(APRENDIZ,
                 new InvocacionHerramienta(HerramientaDeEco.NOMBRE, Map.of("texto", "hola")));
@@ -59,7 +66,7 @@ class HerramientasAgenteServiceAdicionalesTest {
     @Test
     @DisplayName("a una adicional tambien se le exigen sus argumentos obligatorios antes de ejecutarla")
     void seValidanLosObligatorios() {
-        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()));
+        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()), sinPropuesta());
 
         var resultado = servicio.ejecutar(APRENDIZ, InvocacionHerramienta.sinArgumentos(HerramientaDeEco.NOMBRE));
 
@@ -70,7 +77,7 @@ class HerramientasAgenteServiceAdicionalesTest {
     @Test
     @DisplayName("si una adicional lanza, el modelo recibe un motivo legible y no la excepcion")
     void unaExcepcionSeTraduce() {
-        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaQueRevienta()));
+        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaQueRevienta()), sinPropuesta());
 
         var resultado = servicio.ejecutar(APRENDIZ, InvocacionHerramienta.sinArgumentos(HerramientaQueRevienta.NOMBRE));
 
@@ -93,7 +100,7 @@ class HerramientasAgenteServiceAdicionalesTest {
             }
         };
 
-        assertThatThrownBy(() -> new HerramientasAgenteService(agenda, List.of(copiaDeUnaOriginal)))
+        assertThatThrownBy(() -> new HerramientasAgenteService(agenda, List.of(copiaDeUnaOriginal), sinPropuesta()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA);
     }

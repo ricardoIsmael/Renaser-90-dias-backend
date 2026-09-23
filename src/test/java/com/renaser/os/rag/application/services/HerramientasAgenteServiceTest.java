@@ -1,7 +1,9 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
+import com.renaser.os.rag.application.services.herramientas.PropuestaDeMarcarHabito;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.herramienta.CatalogoHerramientasAgente;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
@@ -42,6 +44,10 @@ class HerramientasAgenteServiceTest {
 
     @Mock
     private ConsultarAgendaHabitosPort agendaHabitosPort;
+
+    /** Nunca se llama: todo este archivo corre con el flag de la fase 2 apagado (D-153). */
+    @Mock
+    private ProponerAccionUseCase proponerAccion;
 
     /**
      * La razon de ser de la bandera: el agente no puede subir la evidencia —por el chat no entran
@@ -90,7 +96,8 @@ class HerramientasAgenteServiceTest {
     }
 
     private HerramientasAgenteService servicio() {
-        return new HerramientasAgenteService(agendaHabitosPort, List.of());
+        return new HerramientasAgenteService(agendaHabitosPort, List.of(),
+                new PropuestaDeMarcarHabito(agendaHabitosPort, proponerAccion, false));
     }
 
     private static HabitoDelDia habitoVivo(String titulo, int puntos) {
@@ -116,6 +123,13 @@ class HerramientasAgenteServiceTest {
     private static String motivoDe(ResultadoHerramienta resultado) {
         assertThat(resultado).isInstanceOf(ResultadoHerramienta.Fallo.class);
         return ((ResultadoHerramienta.Fallo) resultado).motivo();
+    }
+
+    @Test
+    @DisplayName("con el flag apagado, marcar_habito_completado conserva la descripcion de siempre")
+    void conElFlagApagadoLaDescripcionNoCambia() {
+        assertThat(servicio().disponibles(AgenteConversacional.COMPANION))
+                .isEqualTo(CatalogoHerramientasAgente.definiciones());
     }
 
     @Test
@@ -174,8 +188,9 @@ class HerramientasAgenteServiceTest {
                 CatalogoHerramientasAgente.MARCAR_HABITO_COMPLETADO,
                 Map.of(CatalogoHerramientasAgente.ARGUMENTO_REGISTRO_ID, REGISTRO.toString()))));
 
-        assertThat(texto).contains("Puntos otorgados: 8");
+        assertThat(texto).isEqualTo("Habito marcado como completado. Puntos otorgados: 8.");
         verify(agendaHabitosPort).completar(APRENDIZ, REGISTRO);
+        verify(proponerAccion, never()).proponer(any(), any(), any());
     }
 
     @Test

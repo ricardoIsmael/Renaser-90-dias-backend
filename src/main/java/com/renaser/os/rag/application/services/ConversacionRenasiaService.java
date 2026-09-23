@@ -3,6 +3,8 @@ package com.renaser.os.rag.application.services;
 import com.renaser.os.rag.application.ports.in.conversacion.ObtenerHistorialUseCase;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ConsultarPropuestasDelTurnoUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.in.seguridad.RevisarPatronDeMalestarUseCase;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FiltroLecciones;
@@ -92,6 +94,10 @@ import java.util.Set;
  * esta misma respuesta ({@link #conApoyoAntesDelFin}). <b>Nada de esto es un diagnostico</b> ni
  * cambia el prompt, el contexto ni las herramientas: la conversacion es exactamente la misma y el
  * modelo ni se entera. Es best-effort: si esa revision falla, la persona igual recibe su respuesta.
+ *
+ * <p><b>Propuestas del turno (fase 2, D-153).</b> Una herramienta de escritura no escribe: deja
+ * una propuesta pendiente. Al terminar el stream del modelo, este servicio recoge las que nacieron
+ * en el turno y las manda antes del {@code fin} ({@link #conPropuestasAntesDelFin}).
  */
 @Service
 public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, ObtenerHistorialUseCase {
@@ -114,6 +120,11 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
             "El asistente esta saturado en este momento. Intenta de nuevo en unos minutos.";
     /** Deja el texto de apoyo separado de lo ultimo que dijo el modelo, en vez de pegado. */
     static final String SEPARACION_DEL_APOYO = "\n\n";
+    /**
+     * Lo que ve una app sin botones (y el historial) por cada propuesta. Dice "Propuesta" y no
+     * "Listo": todavia no se ejecuto nada. No menciona botones porque la app vieja no los tiene.
+     */
+    static final String ENCABEZADO_DE_PROPUESTA = "\n\nPropuesta: ";
 
     private final UserSummaryFinder userSummaryFinder;
     private final ControlCuotaRenasiaPort controlCuotaRenasiaPort;
@@ -132,6 +143,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     /** Si la persona viene repitiendo expresiones de malestar (2026-09-15). Ver
      * {@link #textoDeApoyo}: no clasifica ni diagnostica nada, cuenta repeticiones. */
     private final RevisarPatronDeMalestarUseCase revisarPatronDeMalestarUseCase;
+    private final ConsultarPropuestasDelTurnoUseCase propuestasDelTurno;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
@@ -145,6 +157,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                                        ChatIAPort chatIAPort, EjecutarHerramientaAgenteUseCase herramientasUseCase,
                                        ConsultarSituacionDelAprendizPort situacionPort,
                                        RevisarPatronDeMalestarUseCase revisarPatronDeMalestarUseCase,
+                                       ConsultarPropuestasDelTurnoUseCase propuestasDelTurno,
                                        Clock clock, IdGenerator idGenerator) {
         this.userSummaryFinder = userSummaryFinder;
         this.controlCuotaRenasiaPort = controlCuotaRenasiaPort;
@@ -158,6 +171,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         this.herramientasUseCase = herramientasUseCase;
         this.situacionPort = situacionPort;
         this.revisarPatronDeMalestarUseCase = revisarPatronDeMalestarUseCase;
+        this.propuestasDelTurno = propuestasDelTurno;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
@@ -166,6 +180,8 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     public Flux<EventoRenasia> preguntar(PreguntarRenasiaCommand command) {
         requireActivo(command.actorId());
         requireCuotaDisponible(command.actorId());
+        // Antes de cualquier otra cosa del turno: toda propuesta de este turno nace despues.
+        Instant inicioDelTurno = clock.now();
 
         List<FragmentoRelevante> fragmentos;
         List<MensajeRenasia> historial;
@@ -192,10 +208,11 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         String apoyo = textoDeApoyo(command);
 
         StringBuilder respuestaCompleta = new StringBuilder();
-        return conApoyoAntesDelFin(chatIAPort.responder(new Consulta(command.agente(), command.actorId(),
-                        command.pregunta(), contexto, command.ambito(), historial,
-                        herramientasUseCase.disponibles(command.agente()),
-                        situacionPort.de(command.actorId()).orElse(null))), apoyo)
+        Flux<EventoRenasia> delModelo = chatIAPort.responder(new Consulta(command.agente(), command.actorId(),
+                command.pregunta(), contexto, command.ambito(), historial,
+                herramientasUseCase.disponibles(command.agente()),
+                situacionPort.de(command.actorId()).orElse(null)));
+        return conApoyoAntesDelFin(conPropuestasAntesDelFin(delModelo, command.actorId(), inicioDelTurno), apoyo)
                 .doOnNext(evento -> acumularTexto(evento, respuestaCompleta))
                 .concatMap(evento -> agregarFuentesAntesDeFin(evento, fragmentos))
                 .doOnComplete(() -> persistirRespuestaAsistente(command, respuestaCompleta.toString(), fragmentos))
@@ -278,6 +295,49 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         return respuesta.concatMap(evento -> evento instanceof EventoRenasia.Fin
                 ? Flux.just(new EventoRenasia.Texto(SEPARACION_DEL_APOYO + apoyo), evento)
                 : Flux.just(evento));
+    }
+
+    /**
+     * Las propuestas que nacieron en este turno, justo antes del {@code fin} del modelo: por cada
+     * una, primero un {@link EventoRenasia.Texto} con su resumen y despues el
+     * {@link EventoRenasia.Propuesta} con el que la app dibuja los botones.
+     *
+     * <p><b>Por que el texto ademas del evento.</b> La app no se actualiza por aire y un
+     * {@code tipo} que no conoce lo ignora en silencio: sin el texto, quien no reinstalo no se
+     * enteraria de que hubo una propuesta. Va ANTES del {@code doOnNext} que acumula, asi que queda
+     * en el mensaje guardado: al volver al chat (donde los botones ya no se redibujan) la persona
+     * sigue viendo que se propuso, y el modelo, en el turno siguiente, sabe que ya lo propuso.
+     *
+     * <p><b>Cuando corre la consulta.</b> Recien al llegar el {@code fin}, o sea cuando el modelo ya
+     * termino de hablar y de llamar herramientas: ninguna conexion queda retenida durante la
+     * llamada al proveedor (C-1). Best-effort, como {@link #textoDeApoyo}: si falla, se registra y
+     * el turno termina normal; la propuesta sigue guardada y vence sola.
+     *
+     * <p>Si el modelo falla, el {@code onErrorResume} reemplaza el stream y este turno no las
+     * muestra.
+     */
+    private Flux<EventoRenasia> conPropuestasAntesDelFin(Flux<EventoRenasia> respuesta, UserId actorId,
+                                                         Instant inicioDelTurno) {
+        return respuesta.concatMap(evento -> evento instanceof EventoRenasia.Fin
+                ? Flux.concat(Flux.fromIterable(eventosDePropuestas(actorId, inicioDelTurno)), Flux.just(evento))
+                : Flux.just(evento));
+    }
+
+    /** Tambien atrapa una propuesta con datos invalidos: no puede convertir en error una respuesta
+     * que el modelo ya dio bien (el {@code onErrorResume} mandaria un {@code error} y liberaria la
+     * cuota de un turno que si se respondio). */
+    private List<EventoRenasia> eventosDePropuestas(UserId actorId, Instant inicioDelTurno) {
+        try {
+            List<EventoRenasia> eventos = new java.util.ArrayList<>();
+            for (PropuestaCreada propuesta : propuestasDelTurno.pendientesCreadasDesde(actorId, inicioDelTurno)) {
+                eventos.add(new EventoRenasia.Texto(ENCABEZADO_DE_PROPUESTA + propuesta.resumen()));
+                eventos.add(new EventoRenasia.Propuesta(propuesta.id(), propuesta.resumen(), propuesta.venceEn()));
+            }
+            return eventos;
+        } catch (RuntimeException e) {
+            log.warn("No se pudieron recoger las propuestas del turno; la respuesta termina sin ellas", e);
+            return List.of();
+        }
     }
 
     /**

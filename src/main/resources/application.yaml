@@ -299,6 +299,27 @@ renaser:
     # busqueda hay que usar un modelo que la soporte (RENASIA_CHAT_MODEL sin `-lite`) Y poner
     # IA_BUSQUEDA_WEB=true — las dos cosas, en la configuracion de ejecucion.
     busqueda-web: ${IA_BUSQUEDA_WEB:false}
+    acompanante:
+      # Fase 2 de la propuesta del acompanante (D-153): con esto en true, `marcar_habito_completado`
+      # ya NO marca el habito. Deja una propuesta pendiente y la persona la confirma con un boton
+      # en la app; el modelo nunca llega a escribir (lo que evita otro D-132, un "Hola" que cerro
+      # un habito).
+      #
+      # FALSE por defecto, y se prende JUNTO con la version de la app que dibuja los botones del
+      # evento `propuesta`, nunca antes. La app no se actualiza por aire: con el flag prendido y
+      # una app vieja, la persona ve la propuesta como texto pero no tiene como confirmarla, y
+      # marcar desde el chat deja de funcionar para ella.
+      #
+      # Con false el comportamiento es exactamente el de antes: la herramienta marca en el acto,
+      # con la misma descripcion y los mismos mensajes.
+      confirmacion-con-botones: ${IA_ACOMPANANTE_CONFIRMACION_CON_BOTONES:false}
+      # Cuanto vive una propuesta pendiente antes de que su boton "Confirmar" deje de servir
+      # (PropuestasAgenteService). Es una ventana TECNICA de seguridad, no una regla de negocio:
+      # evita que una propuesta vieja —armada con los datos de hace horas— se ejecute cuando la
+      # persona vuelve al chat y toca un boton que quedo en pantalla. Entre proponer y confirmar
+      # las guardas de negocio se vuelven a correr igual. El vencimiento se DERIVA de `vence_en`
+      # (no hay scheduler ni estado VENCIDA). Formato ISO-8601 (PT10M) o el corto de Spring (10m).
+      propuesta-vigencia: ${IA_ACOMPANANTE_PROPUESTA_VIGENCIA:PT10M}
   email:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}

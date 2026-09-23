@@ -248,6 +248,8 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 |---|---|
 | POST | `/api/v1/renasia/mensajes` — streaming **SSE** (`text/event-stream`) |
 | GET | `/api/v1/renasia/mensajes` — historial paginado por cursor |
+| POST | `/api/v1/renasia/propuestas/{id}/confirmar` — ejecuta UNA vez la accion propuesta por el acompanante (D-153). 200 `{estado, mensaje}`; 403 ajena o suspendida; 409 vencida o cancelada; 404 inexistente |
+| POST | `/api/v1/renasia/propuestas/{id}/cancelar` — 204, idempotente (D-153) |
 | GET | `/api/v1/espejo-sombra` · `/api/v1/espejo-sombra/{id}` |
 | POST | `/api/v1/admin/conocimiento` |
 

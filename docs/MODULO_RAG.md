@@ -290,6 +290,39 @@ módulos importa `rag`, así que no hay ciclo.
    pero `puedeCrearPlanDiario` del dashboard exige la ventana abierta. La herramienta reporta los
    dos datos sin decidir cuál manda.
 
+
+### D-153 — Las escrituras del acompañante son propuestas con botones (2026-09-23)
+
+Fase 2 de `docs/arquitectura/PROPUESTA_ACOMPANANTE_90_DIAS.md`. **El modelo nunca ejecuta una
+escritura:** una herramienta de escritura llama a `ProponerAccionUseCase`, que guarda una fila en
+`propuestas_acompanante` (V63): herramienta, argumentos (jsonb), su SHA-256 sobre una forma
+canónica, un resumen legible y `vence_en = ahora + renaser.ia.acompanante.propuesta-vigencia`
+(default `PT10M`, ventana técnica, no regla de negocio). El turno del chat la entrega como evento
+SSE `propuesta` (ver el contrato en §4.bis) y la persona la resuelve con
+`POST /api/v1/renasia/propuestas/{id}/confirmar` o `/cancelar` (sesión + `USE_APP`).
+
+- Estados guardados: `PENDIENTE → CONFIRMADA | CANCELADA | FALLIDA`. El vencimiento **se deriva**
+  (`PENDIENTE` y `vence_en <= ahora`): no hay scheduler ni estado `VENCIDA`.
+- `confirmar`, en orden: dueño y cuenta activa (403) → ya resuelta (devuelve el mismo resultado sin
+  volver a ejecutar) → vencida o cancelada (409) → integridad del hash → que exista un
+  `AccionConfirmable` para esa herramienta → guarda `CONFIRMADA` con bloqueo optimista (`version`)
+  **antes** de ejecutar, así un doble toque ejecuta una sola vez → ejecuta fuera de toda
+  transacción (C-1). Un rechazo del negocio deja la propuesta `FALLIDA` con el motivo a la vista.
+- **Primera escritura migrada:** `marcar_habito_completado`, detrás de
+  `renaser.ia.acompanante.confirmacion-con-botones` (env `IA_ACOMPANANTE_CONFIRMACION_CON_BOTONES`,
+  **default `false`**). Con `false` todo es como antes. Con `true` la herramienta verifica que el
+  registro sea de hoy y siga en juego, propone `Marcar '<titulo>' como hecho (+N puntos si lo
+  confirmas ahora)` y le dice al modelo que **todavía no** está hecho; la escritura real la hace
+  `MarcarHabitoCompletadoConfirmable`. La traducción de errores vive en un solo lugar
+  (`CompletacionDeHabito`). **El flag se prende junto con la versión de la app que dibuja los
+  botones**: la app no se actualiza por aire.
+
+**Limitaciones conocidas (sin decidir):**
+
+1. Si el proceso muere entre guardar `CONFIRMADA` y guardar el resultado, la propuesta queda "en
+   ejecución" para siempre: cada toque posterior responde "ya estoy aplicando este cambio" y nada
+   la reintenta.
+2. Una propuesta ajena responde 403, no 404: revela que el id existe (los ids son UUID aleatorios).
 ---
 
 ## 4. Estructura del módulo
@@ -334,6 +367,31 @@ rag/
 ---
 
 ## 4.bis Hallazgos de la verificación técnica (contra los JARs reales, no documentación)
+
+### Contrato SSE de `POST /api/v1/renasia/mensajes` (actualizado 2026-09-23, D-153)
+
+Formas de `data:` (fuente de verdad: `EventoRenasiaSseMapper`):
+
+    data: {"tipo":"texto","valor":"..."}
+    data: {"tipo":"propuesta","id":"<uuid>","resumen":"Marcar 'Meditar' como hecho (+10 puntos si lo confirmas ahora)","venceEn":"2026-09-23T15:10:00Z"}
+    data: {"tipo":"fuentes","lecciones":["leccion-id-1"]}
+    data: {"tipo":"error","valor":"mensaje apto para mostrar"}
+    data: {"tipo":"fin"}
+
+- `propuesta.id` se usa en `POST /api/v1/renasia/propuestas/{id}/confirmar` y `/cancelar`.
+- `venceEn` es `Instant.toString()` (UTC, puede traer fracciones de segundo). Pasado ese instante,
+  `confirmar` responde 409; la app puede ocultar los botones.
+
+**Orden garantizado:** textos del modelo → por cada propuesta del turno (de la más vieja a la más
+nueva) un `texto` `"\n\nPropuesta: <resumen>"` seguido de su `propuesta` → texto de apoyo (D-143)
+→ `fuentes` (a lo sumo una vez) → `fin` (siempre último). Si el modelo falla, el turno es
+`error` + `fin` y no trae propuestas.
+
+**Compatibilidad:** un `tipo` desconocido se ignora en silencio y la app no se actualiza por aire,
+así que cada propuesta viaja además como `texto`: una app vieja muestra "Propuesta: …" aunque no
+pueda confirmarla. Ese texto queda guardado en el mensaje del asistente; los botones no se
+redibujan desde el historial. **El texto del chat nunca confirma nada**: solo el endpoint.
+
 
 Se inspeccionaron los JARs de `spring-ai:2.0.0` en el repositorio local de Maven (`jar tf`, `javap`, extracción de strings del bytecode). Cuatro resultados cambian o confirman el diseño:
 

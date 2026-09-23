@@ -3,13 +3,15 @@ package com.renaser.os.rag.infrastructure.adapter.in.rest.conversacion;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * El contrato SSE de {@code POST /api/v1/renasia/mensajes} (docs/MODULO_RAG.md §4.bis) es
- * fijo: estas tres formas de JSON, exactas, nada más ni distinto orden de campos.
+ * fijo: estas formas de JSON, exactas, nada más ni distinto orden de campos.
  */
 class EventoRenasiaSseMapperTest {
 
@@ -46,5 +48,19 @@ class EventoRenasiaSseMapperTest {
     void errorSeSerializaConTipoYValor() {
         String json = EventoRenasiaSseMapper.aJson(new EventoRenasia.Error("no pude"));
         org.assertj.core.api.Assertions.assertThat(json).contains("\"tipo\":\"error\"").contains("no pude");
+    }
+
+    /**
+     * Fase 2, D-153: la forma que la app nueva lee para dibujar [Confirmar] [Cancelar]. El orden
+     * de campos y el {@code venceEn} como texto ISO-8601 en UTC son parte del contrato.
+     */
+    @Test
+    void propuestaSerializaConIdResumenYVencimientoIso() {
+        String json = EventoRenasiaSseMapper.aJson(new EventoRenasia.Propuesta(
+                UUID.fromString("22222222-2222-2222-2222-222222222222"), "Meditar: de 06:00 a 07:00",
+                Instant.parse("2026-09-23T15:10:00Z")));
+
+        assertThat(json).isEqualTo("{\"tipo\":\"propuesta\",\"id\":\"22222222-2222-2222-2222-222222222222\","
+                + "\"resumen\":\"Meditar: de 06:00 a 07:00\",\"venceEn\":\"2026-09-23T15:10:00Z\"}");
     }
 }
