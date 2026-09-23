@@ -7737,3 +7737,11 @@ deduplicación. Prueba: `TicketMentorRespondidoNotificationListenerTest`.
 **Cómo evitar que vuelva a pasar.** Ver E-217: todo evento de un `*.api` necesita un consumidor o
 una nota que diga por qué no lo tiene.
 
+> **Nota 2026-09-23 sobre E-217 y E-219.** Los tickets al mentor **se retiraron de la app el
+> 2026-09-07** a pedido del dueño (la comunicación con el mentor es por su chat privado); solo queda
+> la bandeja de solo lectura del líder de mentores. Los dos avisos quedan porque son correctos para
+> el backend (tickets ya existentes, o si algún día vuelve el apartado), pero hoy casi no se
+> disparan. Por lo mismo se descartó avisar al ADMIN cuando el aprendiz no tiene mentor, y se
+> quitaron las herramientas `proponer_ticket_al_mentor` / `consultar_mis_tickets_al_mentor` del
+> acompañante (D-156, corregido).
+

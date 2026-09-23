@@ -389,7 +389,7 @@ la app por un contrato `*.api` nuevo, sin reimplementar reglas.
 | Academia | `consultar_clase_de_hoy`, `proponer_entregar_clase_de_hoy`, `consultar_mis_cursos`, `consultar_por_que_esta_bloqueado` | `academy.api.ClaseDiariaPort`, `CursosDelAprendizFinder` | entregar la clase da puntos; no entrega si cambió el día de programa entre proponer y confirmar. ~~**No lee la recomendación adaptativa**: generarla llama a la IA (C-1) y no hay lectura solo de caché~~ **Corregido 2026-09-23:** `consultar_clase_de_hoy` muestra la recomendación de hoy si ya está en caché, vía `ClaseDiariaPort.recomendacionDeHoySiExiste` → `ConsultarRecomendacionDiariaUseCase.recomendacionDeHoySiExiste` (mismo "hoy" en la zona del participante y misma fila que el `GET`, nunca llama a `RecomendarClasePort` ni guarda); si no hay, dice que se genera al abrir la Academia en la app |
 | Domingo Ritual y contratos | `proponer_cerrar_semana`, `consultar_contratos_de_fase` | `rocks.api.CierreDeSemanaPort`, `phasecontracts.api.ContratosDeFaseDelParticipanteFinder` | cerrar la semana no da puntos (verificado); **desde el chat no se pisa una revisión existente** (supuesto a confirmar por el dueño). Firmar contratos es consentimiento legal: no hay herramienta para eso |
 | Espíritu y enfoque | `consultar_espiritu_de_hoy`, `proponer_resumen_espiritu`, `proponer_iniciar_santuario`, `proponer_iniciar_dia_sin_celular` | `habits.api.EnfoqueDiarioPort` | la lectura de Espíritu **no es pura**: usa el mismo caso de uso que abrir Training (idempotente); copiar su avance duplicaría la regla. Solo se INICIA Santuario / día sin celular: completar o romper sigue en la app |
-| Mentor, notificaciones y Espejo | `consultar_notificaciones`, `proponer_marcar_notificaciones_leidas`, `consultar_mis_tickets_al_mentor`, `proponer_ticket_al_mentor`, `consultar_espejo_de_la_sombra` | `rag.api.BandejaDeNotificaciones` (la implementa `notifications`, que ya depende de `rag`), `support.api.TicketsAlMentor` | **el ticket al mentor es una excepción aprobada por el dueño** a "no escribe a terceros": el botón muestra los tres textos exactos. El Espejo por chat solo muestra el informe propio |
+| Notificaciones y Espejo | `consultar_notificaciones`, `proponer_marcar_notificaciones_leidas`, `consultar_espejo_de_la_sombra` | `rag.api.BandejaDeNotificaciones` (la implementa `notifications`, que ya depende de `rag`) | El Espejo por chat solo muestra el informe propio. **Corregido 2026-09-23:** esta fila incluía `consultar_mis_tickets_al_mentor` y `proponer_ticket_al_mentor` ("excepción aprobada a no escribe a terceros"). Se quitaron el mismo día: los tickets al mentor **se retiraron de la app el 2026-09-07** a pedido del dueño, y para hablar con el mentor existe el chat privado. El acompañante sugiere escribirle por ese chat y puede ayudar a ordenar el mensaje, pero no escribe por la persona |
 
 **Logros en el chat (proactivo, plantilla, sin IA ni cuota):** `LogroEnChatListener` escucha
 `habits.api.RachaCompletadaEvent` y `rocks.api.RocaCompletadaEvent`; apagado por defecto
@@ -400,9 +400,9 @@ la app por un contrato `*.api` nuevo, sin reimplementar reglas.
 **Tono:** el prompt del acompañante adoptó "cercano y cálido" (celebra lo chico, no regaña tras
 un día perdido, una pregunta a la vez, sin voseo) y reglas nuevas: horas, puntos y fechas siempre de
 una herramienta; nada se da por hecho hasta que la herramienta lo confirma; a terceros solo el
-ticket al mentor como propuesta. Crisis (D-143), riesgo y atribución de fuentes no se tocaron.
+— **corregido 2026-09-23:** decía "a terceros solo el ticket al mentor como propuesta"; ahora nunca escribe a terceros y sugiere el chat privado con el mentor. Crisis (D-143), riesgo y atribución de fuentes no se tocaron.
 
-**Lo que escribe la persona es suyo:** bitácora, radar, resúmenes y ticket. Las descripciones le
+**Lo que escribe la persona es suyo:** bitácora, radar y resúmenes. Las descripciones le
 prohíben al modelo inventarlo o "mejorarlo". Ese contenido viaja al modelo y queda en
 `propuestas_acompanante.argumentos`, pero **no va al log** (E-218).
 ---
