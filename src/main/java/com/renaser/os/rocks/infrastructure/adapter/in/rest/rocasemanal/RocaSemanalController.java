@@ -61,8 +61,7 @@ public class RocaSemanalController {
                                                              @Valid @RequestBody CrearPlanSemanalRequest request) {
         List<ItemRocaSemanal> items = request.rocas().stream()
                 .map(item -> new ItemRocaSemanal(EjeObjetivo.valueOf(item.eje()), item.titulo(),
-                        item.accionCritica1(), item.accionCritica2(), item.accionCritica3(), item.obstaculo(),
-                        item.contingencia(), item.autoevaluacionInicio()))
+                        item.obstaculo(), item.contingencia(), item.autoevaluacionInicio()))
                 .toList();
         var creadas = crearUseCase.crear(new CrearPlanSemanalCommand(actor, items));
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -74,7 +73,7 @@ public class RocaSemanalController {
     public RocaSemanalResponse editar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                        @Valid @RequestBody EditarRocaSemanalRequest request) {
         var editada = editarUseCase.editar(new EditarRocaSemanalCommand(actor, RocaSemanalId.of(id),
-                request.titulo(), request.accionesCriticas(), request.obstaculo(), request.contingencia(),
+                request.titulo(), request.obstaculo(), request.contingencia(),
                 request.autoevaluacionInicio()));
         return RocaSemanalResponse.from(editada);
     }

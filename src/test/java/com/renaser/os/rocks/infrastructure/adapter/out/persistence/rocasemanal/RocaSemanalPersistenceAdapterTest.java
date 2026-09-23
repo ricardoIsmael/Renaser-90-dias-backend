@@ -2,7 +2,6 @@ package com.renaser.os.rocks.infrastructure.adapter.out.persistence.rocasemanal;
 
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraId;
-import com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanalId;
 import com.renaser.os.shared.domain.FixedClock;
@@ -16,12 +15,20 @@ import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** IT que cubre el riesgo real de este adaptador: el @ElementCollection de `acciones_criticas`. */
+/**
+ * IT del adaptador del objetivo semanal contra Postgres de verdad.
+ *
+ * > <b>Corregido el 2026-09-22.</b> Decia <i>"cubre el riesgo real de este adaptador: el
+ * > @ElementCollection de `acciones_criticas`"</i>, y sus dos primeros tests guardaban y releian
+ * > esa coleccion. La tabla se borro en la V62 (estaba vacia) y el mapeo con ella. El riesgo real
+ * > paso a ser el contrario —<b>que quede algo apuntando a una tabla que ya no existe</b>— y eso
+ * > es justo lo que verifica el ida y vuelta de abajo: si sobreviviera un solo rastro del mapeo,
+ * > Hibernate fallaria al arrancar o el SELECT moriria con "relation does not exist".
+ */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @Transactional
@@ -69,13 +76,9 @@ class RocaSemanalPersistenceAdapterTest {
         return RocaSemanalId.of(UUID.randomUUID());
     }
 
-    private static List<AccionCritica> tresAcciones() {
-        return List.of(new AccionCritica(1, "uno"), new AccionCritica(2, "dos"), new AccionCritica(3, "tres"));
-    }
-
     @Test
-    void guardaYRecuperaLasTresAccionesCriticasEnOrden() {
-        RocaSemanal roca = RocaSemanal.planificar(unId(), rocaMaestraId, 3, "Titulo", tresAcciones(), "obstaculo",
+    void guardaYRecuperaElObjetivoDeLaSemanaEntero() {
+        RocaSemanal roca = RocaSemanal.planificar(unId(), rocaMaestraId, 3, "Titulo", "obstaculo",
                 "contingencia", 6, CLOCK);
 
         adapter.save(roca);
@@ -84,14 +87,16 @@ class RocaSemanalPersistenceAdapterTest {
 
         var recuperada = adapter.byId(roca.id());
         assertThat(recuperada).isPresent();
-        assertThat(recuperada.get().acciones()).extracting(AccionCritica::descripcion)
-                .containsExactly("uno", "dos", "tres");
+        assertThat(recuperada.get().titulo()).isEqualTo("Titulo");
+        assertThat(recuperada.get().numeroSemana()).isEqualTo(3);
+        assertThat(recuperada.get().obstaculo()).isEqualTo("obstaculo");
+        assertThat(recuperada.get().contingencia()).isEqualTo("contingencia");
+        assertThat(recuperada.get().autoevaluacionInicio()).isEqualTo(6);
     }
 
     @Test
     void deMaestraYSemanaEncuentraLaRocaDeEsaSemana() {
-        RocaSemanal roca = RocaSemanal.planificar(unId(), rocaMaestraId, 5, "T", tresAcciones(), null, null,
-                null, CLOCK);
+        RocaSemanal roca = RocaSemanal.planificar(unId(), rocaMaestraId, 5, "T", null, null, null, CLOCK);
         adapter.save(roca);
         entityManager.flush();
         entityManager.clear();
@@ -101,21 +106,18 @@ class RocaSemanalPersistenceAdapterTest {
     }
 
     @Test
-    void actualizarYGuardarSobreescribeLasAccionesCriticas() {
-        RocaSemanal roca = RocaSemanal.planificar(unId(), rocaMaestraId, 2, "T", tresAcciones(), null, null,
-                null, CLOCK);
+    void actualizarYGuardarSobreescribeLoEditado() {
+        RocaSemanal roca = RocaSemanal.planificar(unId(), rocaMaestraId, 2, "T", null, null, null, CLOCK);
         roca = adapter.save(roca);
-        roca.actualizarPlanificacion(null,
-                List.of(new AccionCritica(1, "nueva1"), new AccionCritica(2, "nueva2"),
-                        new AccionCritica(3, "nueva3")),
-                null, null, null, CLOCK);
+        roca.actualizarPlanificacion("Titulo corregido", "obstaculo nuevo", null, 8, CLOCK);
 
         adapter.save(roca);
         entityManager.flush();
         entityManager.clear();
 
         var recuperada = adapter.byId(roca.id());
-        assertThat(recuperada.get().acciones()).extracting(AccionCritica::descripcion)
-                .containsExactly("nueva1", "nueva2", "nueva3");
+        assertThat(recuperada.get().titulo()).isEqualTo("Titulo corregido");
+        assertThat(recuperada.get().obstaculo()).isEqualTo("obstaculo nuevo");
+        assertThat(recuperada.get().autoevaluacionInicio()).isEqualTo(8);
     }
 }

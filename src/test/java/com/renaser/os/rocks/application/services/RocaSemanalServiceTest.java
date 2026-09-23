@@ -102,7 +102,7 @@ class RocaSemanalServiceTest {
     }
 
     private static ItemRocaSemanal item(EjeObjetivo eje) {
-        return new ItemRocaSemanal(eje, "titulo", "a1", "a2", "a3", null, null, null);
+        return new ItemRocaSemanal(eje, "titulo", null, null, null);
     }
 
     @Test
@@ -167,11 +167,7 @@ class RocaSemanalServiceTest {
         when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(maestras);
         when(loadRocaSemanalPort.deParticipanteYSemana(anyList(), anyInt()))
                 .thenReturn(List.of(RocaSemanal.planificar(RocaSemanalId.of(UUID.randomUUID()),
-                        tresMaestras().get(0).id(), 2, "x",
-                        List.of(new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(1, "a"),
-                                new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(2, "b"),
-                                new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(3, "c")),
-                        null, null, null, CLOCK)));
+                        tresMaestras().get(0).id(), 2, "x", null, null, null, CLOCK)));
 
         var command = new CrearPlanSemanalCommand(actorId,
                 List.of(item(EjeObjetivo.CUERPO), item(EjeObjetivo.TRABAJO), item(EjeObjetivo.RELACIONES)));
@@ -206,19 +202,18 @@ class RocaSemanalServiceTest {
     }
 
     @Test
-    @DisplayName("una semana sin acciones criticas se guarda: ahora viven en el objetivo diario")
-    void sinAccionesCriticasSeGuarda() {
+    @DisplayName("alcanza con el objetivo: la semana se guarda con titulo y nada mas")
+    void soloConElObjetivoSeGuarda() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(tresMaestras());
         when(loadRocaSemanalPort.deParticipanteYSemana(anyList(), anyInt())).thenReturn(List.of());
         when(saveRocaSemanalPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        var soloObjetivo = new ItemRocaSemanal(EjeObjetivo.CUERPO, "Bajar a 81,6 kg", null, null, null,
-                null, null, null);
+        var soloObjetivo = new ItemRocaSemanal(EjeObjetivo.CUERPO, "Bajar a 81,6 kg", null, null, null);
         var creadas = service.crear(new CrearPlanSemanalCommand(actorId, List.of(soloObjetivo)));
 
         assertThat(creadas).hasSize(1);
-        assertThat(creadas.get(0).acciones()).isEmpty();
+        assertThat(creadas.get(0).titulo()).isEqualTo("Bajar a 81,6 kg");
     }
 
     @Test
@@ -243,16 +238,13 @@ class RocaSemanalServiceTest {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         RocaMaestraId maestraId = tresMaestras().get(0).id();
         RocaSemanal existente = RocaSemanal.planificar(RocaSemanalId.of(UUID.randomUUID()), maestraId, 2, "T",
-                List.of(new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(1, "a"),
-                        new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(2, "b"),
-                        new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(3, "c")),
                 null, null, null, FixedClock.at(Instant.parse("2026-08-18T13:00:00Z")));
         when(loadRocaSemanalPort.byId(existente.id())).thenReturn(Optional.of(existente));
         when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(
                 List.of(RocaMaestra.rehydrate(maestraId, actorId, EjeObjetivo.CUERPO, "obj", null,
                         Instant.now(), Instant.now())));
 
-        var command = new EditarRocaSemanalCommand(actorId, existente.id(), "nuevo", null, null, null, null);
+        var command = new EditarRocaSemanalCommand(actorId, existente.id(), "nuevo", null, null, null);
         assertThatThrownBy(() -> service.editar(command)).isInstanceOf(NotAuthorizedException.class);
     }
 
@@ -260,11 +252,7 @@ class RocaSemanalServiceTest {
     void cerrarEsIdempotenteYSobreescribe() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
         RocaMaestraId maestraId = tresMaestras().get(0).id();
-        RocaSemanal existente = RocaSemanal.planificar(RocaSemanalId.of(UUID.randomUUID()), maestraId, 2, "T",
-                List.of(new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(1, "a"),
-                        new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(2, "b"),
-                        new com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica(3, "c")),
-                null, null, null, CLOCK);
+        RocaSemanal existente = RocaSemanal.planificar(RocaSemanalId.of(UUID.randomUUID()), maestraId, 2, "T", null, null, null, CLOCK);
         when(loadRocaSemanalPort.byId(existente.id())).thenReturn(Optional.of(existente));
         when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(
                 List.of(RocaMaestra.rehydrate(maestraId, actorId, EjeObjetivo.CUERPO, "obj", null,

@@ -7,7 +7,8 @@ import java.util.stream.Collectors;
 /**
  * Una de las (hasta tres) acciones con las que se logra un objetivo diario.
  *
- * <p>Antes vivian colgando de la semana, como {@code AccionCritica} de {@code RocaSemanal}. El
+ * <p>Antes vivian colgando de la semana, en la tabla {@code acciones_criticas} (borrada vacia en
+ * la V62). El
  * dueno describio la cadena al reves de como estaba construida: <i>"objetivo de los 90 dias, luego
  * mensual, luego semanal, y luego objetivo diario, y estos objetivos diarios tienen acciones para
  * hacerlo"</i>. Ahi cuelgan ahora.

@@ -6,8 +6,6 @@ import com.renaser.os.shared.application.SelfValidating;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.validation.constraints.NotNull;
 
-import java.util.List;
-
 /**
  * Edita una Roca Semanal (W-03) dentro de su ventana de rectificación.
  *
@@ -22,17 +20,11 @@ public interface EditarDentroDe48hUseCase {
 
     /** Campo {@code null} = no se toca (PATCH parcial). */
     record EditarRocaSemanalCommand(@NotNull UserId actorId, @NotNull RocaSemanalId rocaSemanalId, String titulo,
-                                     List<String> accionesCriticas, String obstaculo, String contingencia,
-                                     Integer autoevaluacionInicio) {
+                                     String obstaculo, String contingencia, Integer autoevaluacionInicio) {
 
         public EditarRocaSemanalCommand {
             SelfValidating.validateConstructorArgs(EditarRocaSemanalCommand.class, actorId, rocaSemanalId, titulo,
-                    accionesCriticas, obstaculo, contingencia, autoevaluacionInicio);
-            /* Hasta 3 (2026-09-22). Decia "exactamente 3": las acciones pasaron al objetivo
-               diario y la semana quedo en su objetivo. Ver RocaSemanal.requireAccionesValidas. */
-            if (accionesCriticas != null && accionesCriticas.size() > 3) {
-                throw new IllegalArgumentException("una roca semanal admite hasta 3 acciones criticas");
-            }
+                    obstaculo, contingencia, autoevaluacionInicio);
         }
     }
 }

@@ -13,7 +13,6 @@ import com.renaser.os.rocks.application.ports.out.rocasemanal.SaveRocaSemanalPor
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraId;
-import com.renaser.os.rocks.domain.model.rocasemanal.AccionCritica;
 import com.renaser.os.rocks.domain.model.rocasemanal.EstadoPlazo;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanalId;
@@ -79,7 +78,6 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
                 // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
                 .map(item -> RocaSemanal.planificar(RocaSemanalId.of(idGenerator.newId()),
                         maestras.get(item.eje()).id(), numeroSemana, item.titulo(),
-                        acciones(item.accionCritica1(), item.accionCritica2(), item.accionCritica3()),
                         item.obstaculo(), item.contingencia(), item.autoevaluacionInicio(), clock))
                 .map(saveRocaSemanalPort::save)
                 .toList();
@@ -99,10 +97,7 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
             throw new NotAuthorizedException("La ventana para editar esta roca semanal ya cerro");
         }
 
-        List<AccionCritica> acciones = command.accionesCriticas() == null ? null
-                : acciones(command.accionesCriticas().get(0), command.accionesCriticas().get(1),
-                        command.accionesCriticas().get(2));
-        rocaSemanal.actualizarPlanificacion(command.titulo(), acciones, command.obstaculo(), command.contingencia(),
+        rocaSemanal.actualizarPlanificacion(command.titulo(), command.obstaculo(), command.contingencia(),
                 command.autoevaluacionInicio(), clock);
         return saveRocaSemanalPort.save(rocaSemanal);
     }
@@ -139,21 +134,6 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
 
     private LocalDate hoyEn(ZoneId zona) {
         return clock.now().atZone(zona).toLocalDate();
-    }
-
-    /**
-     * Las acciones que hayan venido, numeradas de corrido. Vacias se saltean: desde que las acciones
-     * viven en el objetivo diario (V61) el asistente ya no las pide, y armar
-     * {@code new AccionCritica(1, null)} reventaria con "descripcion es obligatoria".
-     */
-    private static List<AccionCritica> acciones(String a1, String a2, String a3) {
-        List<AccionCritica> criticas = new java.util.ArrayList<>();
-        for (String texto : List.of(a1 == null ? "" : a1, a2 == null ? "" : a2, a3 == null ? "" : a3)) {
-            if (!texto.isBlank()) {
-                criticas.add(new AccionCritica(criticas.size() + 1, texto));
-            }
-        }
-        return List.copyOf(criticas);
     }
 
     /**

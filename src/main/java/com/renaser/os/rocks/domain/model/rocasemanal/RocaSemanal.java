@@ -9,15 +9,15 @@ import lombok.Getter;
 import lombok.experimental.Accessors;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
- * Roca Semanal: el plan de la semana para un eje (Cuerpo/Trabajo/Relaciones),
- * con exactamente 3 acciones críticas. Se cierra al final de la semana con la
- * autoevaluación de revisión (W-04).
+ * Roca Semanal: el objetivo de la semana para un eje (Cuerpo/Trabajo/Relaciones). Se cierra al
+ * final de la semana con la autoevaluación de revisión (W-04).
+ *
+ * > <b>Corregido el 2026-09-22.</b> Decía "con exactamente 3 acciones críticas". Las acciones
+ * > bajaron al objetivo diario ({@code AccionDiaria}, V61) y este agregado dejó de tenerlas: la
+ * > semana es un objetivo. La tabla {@code acciones_criticas} se borró en la V62, vacía.
  */
 @Getter
 @Accessors(fluent = true)
@@ -32,7 +32,6 @@ public final class RocaSemanal {
     private final RocaMaestraId rocaMaestraId;
     private final int numeroSemana;
     private String titulo;
-    private List<AccionCritica> acciones;
     private String obstaculo;
     private String contingencia;
     private Integer autoevaluacionInicio;
@@ -43,7 +42,7 @@ public final class RocaSemanal {
     private Instant actualizadoEn;
 
     /**
-     * Planifica una nueva Roca Semanal, con sus 3 acciones críticas (Planning Semanal, W-02).
+     * Planifica una nueva Roca Semanal: el objetivo de esa semana para un eje (Planning Semanal, W-02).
      *
      * <p>El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
      * {@code IdGenerator} que inyecta el caso de uso ({@code RocaSemanalService.crear}). Asi la
@@ -51,25 +50,24 @@ public final class RocaSemanal {
      * vez de tener que caer a {@link #rehydrate} para lograrlo (CLAUDE.MD §5.4.7).
      */
     public static RocaSemanal planificar(RocaSemanalId id, RocaMaestraId rocaMaestraId, int numeroSemana,
-                                          String titulo, List<AccionCritica> acciones, String obstaculo,
+                                          String titulo, String obstaculo,
                                           String contingencia, Integer autoevaluacionInicio, Clock clock) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(rocaMaestraId, "rocaMaestraId es obligatorio");
         requireNumeroSemanaValido(numeroSemana);
-        requireAccionesValidas(acciones);
         Instant ahora = clock.now();
-        return new RocaSemanal(id, rocaMaestraId, numeroSemana, requireTitulo(titulo), acciones,
+        return new RocaSemanal(id, rocaMaestraId, numeroSemana, requireTitulo(titulo),
                 requireTexto(obstaculo, "obstaculo"), requireTexto(contingencia, "contingencia"),
                 requireEscala(autoevaluacionInicio, "autoevaluacionInicio"), null, null, null, ahora, ahora);
     }
 
     /** Solo para el adaptador de persistencia: reconstruye una roca semanal ya existente. */
     public static RocaSemanal rehydrate(RocaSemanalId id, RocaMaestraId rocaMaestraId, int numeroSemana,
-                                         String titulo, List<AccionCritica> acciones, String obstaculo,
+                                         String titulo, String obstaculo,
                                          String contingencia, Integer autoevaluacionInicio, Integer autoevaluacionFin,
                                          String bloqueoPrincipal, String correccion, Instant creadoEn,
                                          Instant actualizadoEn) {
-        return new RocaSemanal(id, rocaMaestraId, numeroSemana, titulo, acciones, obstaculo, contingencia,
+        return new RocaSemanal(id, rocaMaestraId, numeroSemana, titulo, obstaculo, contingencia,
                 autoevaluacionInicio, autoevaluacionFin, bloqueoPrincipal, correccion, creadoEn, actualizadoEn);
     }
 
@@ -80,14 +78,10 @@ public final class RocaSemanal {
      * a este método (necesita la zona horaria del participante, que el dominio
      * no conoce).
      */
-    public void actualizarPlanificacion(String titulo, List<AccionCritica> acciones, String obstaculo,
+    public void actualizarPlanificacion(String titulo, String obstaculo,
                                          String contingencia, Integer autoevaluacionInicio, Clock clock) {
         if (titulo != null) {
             this.titulo = requireTitulo(titulo);
-        }
-        if (acciones != null) {
-            requireAccionesValidas(acciones);
-            this.acciones = acciones;
         }
         if (obstaculo != null) {
             this.obstaculo = requireTexto(obstaculo, "obstaculo");
@@ -116,32 +110,6 @@ public final class RocaSemanal {
     private static void requireNumeroSemanaValido(int numeroSemana) {
         if (numeroSemana < 1 || numeroSemana > 13) {
             throw new IllegalArgumentException("numeroSemana debe estar entre 1 y 13: " + numeroSemana);
-        }
-    }
-
-    /**
-     * Las acciones de la semana, de 0 a 3.
-     *
-     * > <b>Corregido el 2026-09-22.</b> Exigia <b>exactamente 3</b>, y el mensaje decia "una roca
-     * > semanal exige exactamente 3 acciones criticas". El dueno describio la cadena del plan de
-     * > otra manera: <i>"objetivo de los 90 dias, luego mensual, luego semanal, y luego objetivo
-     * > diario, y estos objetivos diarios tienen acciones para hacerlo"</i>. Las acciones pasaron al
-     * > dia ({@code AccionDiaria}, V61) y la semana quedo en lo que es: un objetivo.
-     * >
-     * > No se borro la lista ni la tabla {@code acciones_criticas}: hay planes semanales ya
-     * > guardados que las tienen, y tirarlas seria borrar el plan de alguien para simplificar una
-     * > clase. Se aceptan, ya no se exigen, y nadie escribe nuevas.
-     */
-    private static void requireAccionesValidas(List<AccionCritica> acciones) {
-        if (acciones == null || acciones.isEmpty()) {
-            return;
-        }
-        if (acciones.size() > 3) {
-            throw new IllegalArgumentException("una roca semanal admite hasta 3 acciones criticas");
-        }
-        Set<Integer> ordenes = acciones.stream().map(AccionCritica::orden).collect(Collectors.toSet());
-        if (ordenes.size() != acciones.size()) {
-            throw new IllegalArgumentException("las acciones criticas no pueden repetir orden: " + ordenes);
         }
     }
 

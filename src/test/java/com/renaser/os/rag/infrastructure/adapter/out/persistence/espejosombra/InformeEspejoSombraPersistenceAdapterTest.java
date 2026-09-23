@@ -27,8 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Persistencia del agregado Espejo Sombra contra Postgres real (Testcontainers) —
- * cubre el @ElementCollection de {@code preguntas_confrontacion} (mismo riesgo real
- * que {@code RocaSemanalPersistenceAdapterTest} con {@code acciones_criticas}), el
+ * cubre el @ElementCollection de {@code preguntas_confrontacion}, el
  * UNIQUE {@code (participante_id, semana_inicio)} y que el CHECK
  * {@code pcts_suman_100} de la base rechaza una fila inválida insertada por SQL
  * nativo — la última línea de defensa de la que habla el javadoc de

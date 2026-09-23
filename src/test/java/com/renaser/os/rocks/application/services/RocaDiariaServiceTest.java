@@ -154,7 +154,7 @@ class RocaDiariaServiceTest {
         when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(tresMaestrasParaDiaria());
         lenient().when(loadRocaSemanalPort.deMaestraYSemana(any(), anyInt()))
                 .thenAnswer(inv -> Optional.of(RocaSemanal.planificar(RocaSemanalId.of(UUID.randomUUID()),
-                        inv.getArgument(0), 2, "objetivo", List.of(), null, null, null, CLOCK)));
+                        inv.getArgument(0), 2, "objetivo", null, null, null, CLOCK)));
         lenient().when(saveRocaDiariaPort.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
     }

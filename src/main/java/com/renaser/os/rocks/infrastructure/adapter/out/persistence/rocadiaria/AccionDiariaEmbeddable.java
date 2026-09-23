@@ -6,7 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Fila de `acciones_diarias` (V61). Espejo de `AccionCriticaEmbeddable`, un nivel mas abajo. */
+/** Fila de `acciones_diarias` (V61): el desglose de un objetivo del dia, hasta tres. */
 @Embeddable
 @Data
 @NoArgsConstructor

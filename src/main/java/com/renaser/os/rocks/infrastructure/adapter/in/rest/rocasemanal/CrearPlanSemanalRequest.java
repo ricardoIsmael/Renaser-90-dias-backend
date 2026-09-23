@@ -8,8 +8,12 @@ import java.util.List;
 
 public record CrearPlanSemanalRequest(@NotEmpty List<@Valid ItemRocaSemanalRequest> rocas) {
 
-    public record ItemRocaSemanalRequest(@NotBlank String eje, @NotBlank String titulo, String accionCritica1, String accionCritica2,
-                                          String accionCritica3, String obstaculo, String contingencia,
-                                          Integer autoevaluacionInicio) {
+    /**
+     * > <b>Corregido el 2026-09-22.</b> Tenia {@code accionCritica1/2/3}. Las acciones pasaron al
+     * > objetivo diario (V61) y la app dejo de mandarlas. Una version vieja que todavia las mande
+     * > no rompe: Jackson ignora los campos que sobran, asi que llegan y se descartan.
+     */
+    public record ItemRocaSemanalRequest(@NotBlank String eje, @NotBlank String titulo, String obstaculo,
+                                          String contingencia, Integer autoevaluacionInicio) {
     }
 }

@@ -37,8 +37,7 @@ public interface CrearPlanSemanalUseCase {
      *                       al objetivo diario ({@code AccionDiaria}, V61) y la semana quedo en su
      *                       objetivo. Se siguen aceptando para no romper a quien las mande.
      */
-    record ItemRocaSemanal(EjeObjetivo eje, String titulo, String accionCritica1, String accionCritica2,
-                            String accionCritica3, String obstaculo, String contingencia,
+    record ItemRocaSemanal(EjeObjetivo eje, String titulo, String obstaculo, String contingencia,
                             Integer autoevaluacionInicio) {
 
         public ItemRocaSemanal {
