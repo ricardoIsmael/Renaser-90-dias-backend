@@ -7677,8 +7677,32 @@ push ni notificación: solo lo ve si entra a su bandeja. Sin mentor asignado, na
 **Causa real.** `support` publica `TicketMentorAbiertoEvent`, pero ningún módulo lo escucha
 (verificado el 2026-09-23 al construir `proponer_ticket_al_mentor`, D-156).
 
-**Estado.** **No se corrigió**: es previo al acompañante y cambia a quién se notifica (decisión de
-producto). Afecta igual a los tickets abiertos desde la app.
+**Estado.** **Resuelto (2026-09-23).**
+
+> **Corregido 2026-09-23.** Esta sección decía: "**No se corrigió**: es previo al acompañante y
+> cambia a quién se notifica (decisión de producto). Afecta igual a los tickets abiertos desde la
+> app." Se corrigió avisando solo a quien ya tenía que responder el ticket —el mentor asignado, el
+> mismo criterio con el que `support` autoriza la respuesta—, sin decidir nada nuevo sobre el caso
+> sin mentor, que sigue abierto (abajo).
+
+**Solución.** Nuevo `notifications.TicketMentorAbiertoNotificationListener`
+(`@ApplicationModuleListener`): busca el `mentorId` de la participación del aprendiz
+(`users.api.ParticipacionProgramaFinder`) y emite `TICKET_ABIERTO` por `EmitirNotificacionUseCase`
+(respeta la preferencia del mentor). Título "Nuevo ticket de un aprendiz", cuerpo
+"<nombre> te abrió un ticket y espera tu respuesta." — **nunca** el texto del bloqueo, que sale
+también por push. El id del ticket es el `origenEventoId` (deduplica la reentrega del outbox, C-7).
+Sin mentor asignado: log INFO y ninguna notificación — **pregunta de producto abierta**: ¿a quién
+se le avisa entonces (ADMIN, líder de célula) o se le impide abrir el ticket? No se inventó un
+destinatario.
+
+De paso, `TicketMentorAbiertoEvent.ticketId` pasó de `support.domain...TicketMentorId` a `UUID`:
+con el tipo de dominio en la firma, `notifications` no podía leerlo sin romper
+`ApplicationModules.verify()`. Tests: `TicketMentorAbiertoNotificationListenerTest` y el caso
+`traineePuedeAbrirTicket` de `TicketMentorServiceTest` (ahora verifica el contenido del evento).
+
+**Pendiente, no corregido acá:** `TicketMentorRespondidoEvent` tampoco tiene consumidor —el
+aprendiz no recibe `TICKET_RESPONDIDO` cuando el mentor contesta— y sigue exponiendo
+`TicketMentorId` en `support.api`. Mismo patrón de arreglo.
 
 **Cómo evitar que vuelva a pasar.** Todo evento publicado en un `*.api` necesita al menos un
 consumidor o una nota que diga por qué no lo tiene.
@@ -7695,4 +7719,21 @@ la bitácora, el radar o el texto de un ticket: contenido personal que no puede 
 
 **Cómo evitar que vuelva a pasar.** Nunca pasar la excepción entera a un log cuando su mensaje
 puede contener datos de entrada; en este módulo, loguear el tipo y el nombre de la herramienta.
+
+## E-219 · Cuando el mentor responde un ticket, al aprendiz no le llega nada
+
+**Síntoma.** El mentor responde (`POST /api/v1/tickets/{id}/answer`) y el aprendiz no recibe push
+ni notificación; solo se entera si vuelve a abrir sus tickets.
+
+**Causa real.** Mismo patrón que E-217: `support` publicaba `TicketMentorRespondidoEvent` y nadie
+lo escuchaba. El tipo `TICKET_RESPONDIDO` existía en el enum y en los mappers, pero nadie lo emitía.
+Además el evento exponía `TicketMentorId`, un tipo de `support.domain` que otro módulo no puede ver.
+
+**Solución (2026-09-23).** `TicketMentorRespondidoEvent.ticketId` pasa a `UUID` y
+`notifications.TicketMentorRespondidoNotificationListener` avisa al aprendiz con un texto fijo, sin
+la respuesta (el cuerpo sale por push a la pantalla bloqueada); el ticket es la clave de
+deduplicación. Prueba: `TicketMentorRespondidoNotificationListenerTest`.
+
+**Cómo evitar que vuelva a pasar.** Ver E-217: todo evento de un `*.api` necesita un consumidor o
+una nota que diga por qué no lo tiene.
 

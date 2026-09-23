@@ -80,6 +80,11 @@ class TicketMentorServiceTest {
         assertThat(ticket.estado()).isEqualTo(EstadoTicketMentor.ABIERTO);
         assertThat(ticket.participanteId()).isEqualTo(trainee);
         assertThat(events.eventosPublicados()).hasSize(1).first().isInstanceOf(TicketMentorAbiertoEvent.class);
+        // E-217: notifications usa el id del ticket como clave de deduplicacion y el aprendiz para
+        // encontrar a su mentor; los dos tienen que viajar en el evento.
+        TicketMentorAbiertoEvent evento = (TicketMentorAbiertoEvent) events.eventosPublicados().getFirst();
+        assertThat(evento.ticketId()).isEqualTo(ticket.id().value());
+        assertThat(evento.participanteId()).isEqualTo(trainee);
     }
 
     @Test
