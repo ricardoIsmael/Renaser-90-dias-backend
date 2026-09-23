@@ -16,6 +16,7 @@ import com.renaser.os.academy.application.ports.in.curso.ConsultarMotivoBloqueoC
 import com.renaser.os.academy.application.ports.in.curso.ConsultarMotivoBloqueoCursoUseCase.BloqueadoPorDia;
 import com.renaser.os.academy.application.ports.in.curso.ConsultarMotivoBloqueoCursoUseCase.NoBloqueado;
 import com.renaser.os.academy.application.ports.in.leccion.ConsultarMotivoBloqueoLeccionUseCase;
+import com.renaser.os.academy.application.ports.in.recomendacion.ConsultarRecomendacionDiariaUseCase;
 import com.renaser.os.academy.domain.model.curso.AccesoCurso;
 import com.renaser.os.academy.domain.model.curso.Curso;
 import com.renaser.os.academy.domain.model.curso.CursoId;
@@ -25,11 +26,13 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,7 +51,10 @@ class AcademiaParaAcompananteTest {
     private final ConsultarMotivoBloqueoCursoUseCase motivoCurso = mock(ConsultarMotivoBloqueoCursoUseCase.class);
     private final ConsultarMotivoBloqueoLeccionUseCase motivoLeccion = mock(ConsultarMotivoBloqueoLeccionUseCase.class);
 
-    private final ClaseDiariaPortService claseDiaria = new ClaseDiariaPortService(consultarClase, completarClase);
+    private final ConsultarRecomendacionDiariaUseCase recomendacion = mock(ConsultarRecomendacionDiariaUseCase.class);
+
+    private final ClaseDiariaPortService claseDiaria = new ClaseDiariaPortService(consultarClase, completarClase,
+            recomendacion);
     private final CursosDelAprendizFinderService cursos = new CursosDelAprendizFinderService(misCursos, bloqueados,
             motivoCurso, motivoLeccion);
 
@@ -82,6 +88,17 @@ class AcademiaParaAcompananteTest {
 
         verify(completarClase).completar(comando);
         assertThat(entrega).isEqualTo(new ClaseDiariaPort.Entrega("l-12", 8));
+    }
+
+    @Test
+    void recomendacionDeHoyUsaSoloLaLecturaDeCache() {
+        when(recomendacion.recomendacionDeHoySiExiste(APRENDIZ)).thenReturn(Optional.of(
+                new ConsultarRecomendacionDiariaUseCase.Disponible(LeccionId.of("l-3"), "Respirar",
+                        CursoId.of("c-1"), "Fundamentos", "Tu energia vino baja")));
+
+        assertThat(claseDiaria.recomendacionDeHoySiExiste(APRENDIZ)).contains(new ClaseDiariaPort.Recomendacion(
+                "c-1", "Fundamentos", "l-3", "Respirar", "Tu energia vino baja"));
+        verify(recomendacion, never()).recomendacion(APRENDIZ);
     }
 
     @Test

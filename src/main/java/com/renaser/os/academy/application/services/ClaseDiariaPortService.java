@@ -9,9 +9,12 @@ import com.renaser.os.academy.application.ports.in.clasediaria.ConsultarClaseDia
 import com.renaser.os.academy.application.ports.in.clasediaria.ConsultarClaseDiariaUseCase.Disponible;
 import com.renaser.os.academy.application.ports.in.clasediaria.ConsultarClaseDiariaUseCase.NoIniciado;
 import com.renaser.os.academy.application.ports.in.clasediaria.ConsultarClaseDiariaUseCase.Proximamente;
+import com.renaser.os.academy.application.ports.in.recomendacion.ConsultarRecomendacionDiariaUseCase;
 import com.renaser.os.academy.domain.model.curso.LeccionId;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
+
+import java.util.Optional;
 
 /**
  * Implementa {@link ClaseDiariaPort} (2026-09-23). Fachada delgada, mismo patron que
@@ -24,11 +27,14 @@ public class ClaseDiariaPortService implements ClaseDiariaPort {
 
     private final ConsultarClaseDiariaUseCase consultarUseCase;
     private final CompletarClaseDiariaUseCase completarUseCase;
+    private final ConsultarRecomendacionDiariaUseCase recomendacionUseCase;
 
     public ClaseDiariaPortService(ConsultarClaseDiariaUseCase consultarUseCase,
-                                  CompletarClaseDiariaUseCase completarUseCase) {
+                                  CompletarClaseDiariaUseCase completarUseCase,
+                                  ConsultarRecomendacionDiariaUseCase recomendacionUseCase) {
         this.consultarUseCase = consultarUseCase;
         this.completarUseCase = completarUseCase;
+        this.recomendacionUseCase = recomendacionUseCase;
     }
 
     @Override
@@ -41,6 +47,14 @@ public class ClaseDiariaPortService implements ClaseDiariaPort {
         ClaseDiariaCompletada completada = completarUseCase.completar(
                 new CompletarClaseDiariaCommand(actorId, LeccionId.of(leccionId), resumen));
         return new Entrega(completada.leccionId().value(), completada.puntosOtorgados());
+    }
+
+    /** Delega en la lectura SOLO de cache: {@code recomendacion(...)} generaria con IA (C-1). */
+    @Override
+    public Optional<Recomendacion> recomendacionDeHoySiExiste(UserId actorId) {
+        return recomendacionUseCase.recomendacionDeHoySiExiste(actorId)
+                .map(r -> new Recomendacion(r.cursoId().value(), r.cursoTitulo(), r.leccionId().value(),
+                        r.leccionTitulo(), r.motivo()));
     }
 
     static ClaseDeHoy aClaseDeHoy(ClaseDiariaResolution resolucion) {

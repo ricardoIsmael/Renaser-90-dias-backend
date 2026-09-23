@@ -2,6 +2,8 @@ package com.renaser.os.rag.application.ports.out.academia;
 
 import com.renaser.os.shared.domain.UserId;
 
+import java.util.Optional;
+
 /**
  * Puerto propio de {@code rag} para la Clase Diaria del aprendiz (herramientas
  * {@code consultar_clase_de_hoy} y {@code proponer_entregar_clase_de_hoy}, 2026-09-23).
@@ -25,6 +27,14 @@ public interface ClaseDiariaDelAprendizPort {
      */
     int entregar(UserId actorId, String leccionId, String resumen);
 
+    /**
+     * La recomendacion de Academia Adaptativa de hoy, SOLO si ya existe: vacio si todavia no se genero
+     * (se genera al abrir la Academia en la app). Nunca dispara la IA (C-1).
+     *
+     * @throws RuntimeException cuenta inexistente, suspendida o fuera del programa
+     */
+    Optional<RecomendacionDeHoy> recomendacionDeHoySiExiste(UserId actorId);
+
     enum EstadoClase {
         DISPONIBLE,
         /** Dia 0: el programa todavia no arranco. */
@@ -44,5 +54,9 @@ public interface ClaseDiariaDelAprendizPort {
         public boolean disponible() {
             return estado == EstadoClase.DISPONIBLE;
         }
+    }
+
+    /** @param motivo el porque de la recomendacion, tal cual lo guardo {@code academy} */
+    record RecomendacionDeHoy(String cursoTitulo, String leccionTitulo, String motivo) {
     }
 }

@@ -5,6 +5,8 @@ import com.renaser.os.rag.application.ports.out.academia.ClaseDiariaDelAprendizP
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
+
 /**
  * Implementa {@link ClaseDiariaDelAprendizPort} delegando en {@code academy.api.ClaseDiariaPort}
  * (D-41). Traduccion y nada mas: las excepciones del negocio pasan tal cual, para que la
@@ -31,6 +33,12 @@ class ClaseDiariaDelAprendizAdapter implements ClaseDiariaDelAprendizPort {
     @Override
     public int entregar(UserId actorId, String leccionId, String resumen) {
         return claseDiaria.entregar(actorId, leccionId, resumen).puntosOtorgados();
+    }
+
+    @Override
+    public Optional<RecomendacionDeHoy> recomendacionDeHoySiExiste(UserId actorId) {
+        return claseDiaria.recomendacionDeHoySiExiste(actorId)
+                .map(r -> new RecomendacionDeHoy(r.cursoTitulo(), r.leccionTitulo(), r.motivo()));
     }
 
     private static EstadoClase aEstado(ClaseDiariaPort.Estado estado) {

@@ -3,6 +3,8 @@ package com.renaser.os.academy.api;
 import com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase;
 import com.renaser.os.shared.domain.UserId;
 
+import java.util.Optional;
+
 /**
  * Contrato publico de {@code academy} para la Clase Diaria (2026-09-23). Primer consumidor: el
  * acompanante de {@code rag} ({@code consultar_clase_de_hoy} y {@code proponer_entregar_clase_de_hoy}).
@@ -12,9 +14,16 @@ import com.renaser.os.shared.domain.UserId;
  * /api/v1/classroom/clase-diaria}. Que clase toca hoy, el gate de dia de programa, la suspension y
  * la idempotencia de la entrega los siguen decidiendo esos casos de uso.
  *
- * <p>No expone la recomendacion de Academia Adaptativa: {@code ConsultarRecomendacionDiariaUseCase}
- * la GENERA con IA si todavia no esta en cache, y una herramienta del chat no puede disparar ese
- * costo ni esa espera (C-1).
+ * <p>La recomendacion de Academia Adaptativa se expone SOLO desde cache
+ * ({@link #recomendacionDeHoySiExiste}): {@code ConsultarRecomendacionDiariaUseCase#recomendacion}
+ * la GENERA con IA si todavia no esta, y una herramienta del chat no puede disparar ese costo ni esa
+ * espera (C-1). Va en este mismo contrato y no en uno nuevo porque tiene el mismo consumidor y la
+ * misma pregunta ("que me toca estudiar hoy").
+ *
+ * <p><b>Corregido 2026-09-23.</b> Este parrafo decia: "No expone la recomendacion de Academia
+ * Adaptativa: {@code ConsultarRecomendacionDiariaUseCase} la GENERA con IA si todavia no esta en
+ * cache, y una herramienta del chat no puede disparar ese costo ni esa espera (C-1)". Cambio al
+ * existir la lectura solo de cache.
  */
 public interface ClaseDiariaPort {
 
@@ -40,6 +49,16 @@ public interface ClaseDiariaPort {
      */
     Entrega entregar(UserId actorId, String leccionId, String resumen);
 
+    /**
+     * La recomendacion de Academia Adaptativa de HOY (dia calendario en la zona del participante),
+     * solo si ya fue generada y guardada — la genera {@code GET /api/v1/academia/recomendacion} al
+     * abrir la Academia en la app. Nunca llama a la IA ni guarda nada.
+     *
+     * @throws RuntimeException con las mismas guardas que el {@code GET}: cuenta inexistente,
+     *                          suspendida o fuera del programa
+     */
+    Optional<Recomendacion> recomendacionDeHoySiExiste(UserId actorId);
+
     enum Estado {
         /** Hay clase hoy: {@link ClaseDeHoy#leccionId()} y los titulos vienen completos. */
         DISPONIBLE,
@@ -58,5 +77,9 @@ public interface ClaseDiariaPort {
     }
 
     record Entrega(String leccionId, int puntosOtorgados) {
+    }
+
+    /** @param motivo el porque de la recomendacion, tal cual quedo guardado */
+    record Recomendacion(String cursoId, String cursoTitulo, String leccionId, String leccionTitulo, String motivo) {
     }
 }

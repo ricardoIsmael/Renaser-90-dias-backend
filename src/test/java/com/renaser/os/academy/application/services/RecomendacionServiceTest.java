@@ -19,6 +19,7 @@ import com.renaser.os.academy.domain.model.curso.CursoId;
 import com.renaser.os.academy.domain.model.curso.Leccion;
 import com.renaser.os.academy.domain.model.curso.LeccionId;
 import com.renaser.os.academy.domain.model.recomendacion.RecomendacionAcademia;
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -60,8 +62,63 @@ class RecomendacionServiceTest {
     private ConsultarProgresoParticipanteAcademyPort progresoPort;
 
     private RecomendacionService service() {
+        return service(CLOCK);
+    }
+
+    private RecomendacionService service(Clock clock) {
         return new RecomendacionService(loadRecomendacionPort, saveRecomendacionPort, recomendarClasePort,
-                loadLeccionPort, loadCursoPort, progresoPort, CLOCK);
+                loadLeccionPort, loadCursoPort, progresoPort, clock);
+    }
+
+    /**
+     * Solo cache (2026-09-23): 03:30 UTC del 24 son las 22:30 del 23 en Lima. Con un reloj a las
+     * 12:00 UTC las dos fechas coinciden y un "hoy" del servidor pasaria igual (regla 02, E-91).
+     */
+    @Test
+    @DisplayName("solo cache: con la recomendacion guardada del dia LOCAL la devuelve y nunca llama a la IA")
+    void soloCacheDevuelveLaDelDiaLocalSinIa() {
+        FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-08-24T03:30:00Z"));
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
+                Optional.of(new ProgresoParticipanteAcademy(10, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, false)));
+        LocalDate hoyEnLima = LocalDate.of(2026, 8, 23);
+        when(loadRecomendacionPort.delDia(ACTOR_ID, hoyEnLima)).thenReturn(Optional.of(
+                new RecomendacionAcademia(ACTOR_ID, hoyEnLima, LeccionId.of("l1"), "porque si", madrugadaUtc.now())));
+        when(loadLeccionPort.byId(LeccionId.of("l1"))).thenReturn(Optional.of(new Leccion(LeccionId.of("l1"),
+                CursoId.of("c1"), null, "Leccion 1", 0, null, null, null, null, null, null, CLOCK.now(), CLOCK.now())));
+        when(loadCursoPort.byId(CursoId.of("c1"))).thenReturn(Optional.of(new Curso(CursoId.of("c1"), "c1",
+                "Curso 1", null, null, 0, true, AccesoCurso.ABIERTO, "skool", null, Set.of(), CLOCK.now(), CLOCK.now())));
+
+        Optional<Disponible> resultado = service(madrugadaUtc).recomendacionDeHoySiExiste(ACTOR_ID);
+
+        assertThat(resultado).hasValueSatisfying(r -> {
+            assertThat(r.leccionTitulo()).isEqualTo("Leccion 1");
+            assertThat(r.cursoTitulo()).isEqualTo("Curso 1");
+            assertThat(r.motivo()).isEqualTo("porque si");
+        });
+        verifyNoInteractions(recomendarClasePort, saveRecomendacionPort);
+    }
+
+    @Test
+    @DisplayName("solo cache: sin recomendacion de hoy devuelve vacio, sin generar ni guardar nada")
+    void soloCacheSinRecomendacionNoGenera() {
+        FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-08-24T03:30:00Z"));
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
+                Optional.of(new ProgresoParticipanteAcademy(10, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, false)));
+        when(loadRecomendacionPort.delDia(ACTOR_ID, LocalDate.of(2026, 8, 23))).thenReturn(Optional.empty());
+
+        assertThat(service(madrugadaUtc).recomendacionDeHoySiExiste(ACTOR_ID)).isEmpty();
+        verifyNoInteractions(recomendarClasePort, saveRecomendacionPort, loadLeccionPort, loadCursoPort);
+    }
+
+    @Test
+    @DisplayName("solo cache: la cuenta suspendida se rechaza igual que en la recomendacion normal")
+    void soloCacheRespetaLaGuarda() {
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(
+                Optional.of(new ProgresoParticipanteAcademy(10, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, true, false)));
+
+        assertThatThrownBy(() -> service().recomendacionDeHoySiExiste(ACTOR_ID))
+                .isInstanceOf(NotAuthorizedException.class);
+        verifyNoInteractions(loadRecomendacionPort, recomendarClasePort);
     }
 
     @Test

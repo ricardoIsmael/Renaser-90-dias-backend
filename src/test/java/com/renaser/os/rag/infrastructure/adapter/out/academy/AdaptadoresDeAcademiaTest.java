@@ -4,10 +4,12 @@ import com.renaser.os.academy.api.ClaseDiariaPort;
 import com.renaser.os.academy.api.CursosDelAprendizFinder;
 import com.renaser.os.rag.application.ports.out.academia.ClaseDiariaDelAprendizPort.ClaseDeHoy;
 import com.renaser.os.rag.application.ports.out.academia.ClaseDiariaDelAprendizPort.EstadoClase;
+import com.renaser.os.rag.application.ports.out.academia.ClaseDiariaDelAprendizPort.RecomendacionDeHoy;
 import com.renaser.os.rag.application.ports.out.academia.ConsultarCursosPort.Bloqueo;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,6 +32,16 @@ class AdaptadoresDeAcademiaTest {
         assertThat(adapter.claseDeHoy(APRENDIZ)).isEqualTo(new ClaseDeHoy(EstadoClase.DISPONIBLE, 12, "Fundamentos",
                 "l-12", "Clase 12", false, ClaseDiariaPort.RESUMEN_MIN_LENGTH, ClaseDiariaPort.RESUMEN_MAX_LENGTH));
         assertThat(adapter.entregar(APRENDIZ, "l-12", "texto de la persona")).isEqualTo(8);
+    }
+
+    @Test
+    void recomendacionDeHoyPasaTitulosYMotivo() {
+        ClaseDiariaPort api = mock(ClaseDiariaPort.class);
+        when(api.recomendacionDeHoySiExiste(APRENDIZ)).thenReturn(Optional.of(new ClaseDiariaPort.Recomendacion(
+                "c-1", "Fundamentos", "l-3", "Respirar", "Tu energia vino baja")));
+
+        assertThat(new ClaseDiariaDelAprendizAdapter(api).recomendacionDeHoySiExiste(APRENDIZ))
+                .contains(new RecomendacionDeHoy("Fundamentos", "Respirar", "Tu energia vino baja"));
     }
 
     @Test

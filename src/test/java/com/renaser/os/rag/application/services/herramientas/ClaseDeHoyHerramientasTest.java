@@ -4,6 +4,7 @@ import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
 import com.renaser.os.rag.application.ports.out.academia.ClaseDiariaDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.academia.ClaseDiariaDelAprendizPort.ClaseDeHoy;
 import com.renaser.os.rag.application.ports.out.academia.ClaseDiariaDelAprendizPort.EstadoClase;
+import com.renaser.os.rag.application.ports.out.academia.ClaseDiariaDelAprendizPort.RecomendacionDeHoy;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,7 +27,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * {@code consultar_clase_de_hoy}, {@code proponer_entregar_clase_de_hoy} y su confirmable
- * (2026-09-23): leer sin disparar IA, proponer sin entregar, y no entregar sobre otro dia.
+ * (2026-09-23): leer sin disparar IA (la recomendacion adaptativa, solo si ya esta en cache),
+ * proponer sin entregar, y no entregar sobre otro dia.
  *
  * <p>Sin {@code FixedClock}: ninguna de estas clases lee el reloj. El dia de programa lo decide
  * {@code academy}; el caso "paso la medianoche entre proponer y confirmar" se cubre con el dia que
@@ -59,17 +62,48 @@ class ClaseDeHoyHerramientasTest {
                 PropuestaDeEntregarClaseDeHoy.ARGUMENTO_DIA_PROGRAMA, Integer.toString(dia)));
     }
 
+    private String consultarTexto() {
+        return ((ResultadoHerramienta.Exito) consultar.ejecutar(APRENDIZ,
+                InvocacionHerramienta.sinArgumentos(ConsultarClaseDeHoyHerramienta.NOMBRE))).contenido();
+    }
+
     @Test
-    @DisplayName("consultar: titulo, si esta vista, que hace falta y sin recomendacion inventada")
+    @DisplayName("consultar: titulo, si esta vista, que hace falta y, sin recomendacion de hoy, no la inventa")
     void consultaLaClaseDeHoy() {
         when(puerto.claseDeHoy(APRENDIZ)).thenReturn(disponible(12, "lec-12", false));
+        when(puerto.recomendacionDeHoySiExiste(APRENDIZ)).thenReturn(Optional.empty());
 
-        String texto = ((ResultadoHerramienta.Exito) consultar.ejecutar(APRENDIZ,
-                InvocacionHerramienta.sinArgumentos(ConsultarClaseDeHoyHerramienta.NOMBRE))).contenido();
+        String texto = consultarTexto();
 
         assertThat(texto).contains("dia 12").contains("Clase 12: Constancia").contains("leccion_id=lec-12")
                 .contains("Leccion vista: no").contains("de 15 a 2000 caracteres").contains("conviene que la vea")
-                .contains("no inventes una");
+                .contains("todavia no hay recomendacion de hoy")
+                .contains("todavia no hay recomendacion de hoy").contains("No inventes una");
+    }
+
+    @Test
+    @DisplayName("consultar: con la recomendacion de hoy ya generada, muestra leccion, curso y motivo")
+    void consultaConRecomendacionDeHoy() {
+        when(puerto.claseDeHoy(APRENDIZ)).thenReturn(disponible(12, "lec-12", true));
+        when(puerto.recomendacionDeHoySiExiste(APRENDIZ)).thenReturn(Optional.of(
+                new RecomendacionDeHoy("Bienestar", "Respirar antes de decidir", "Tu energia vino baja ayer")));
+
+        String texto = consultarTexto();
+
+        assertThat(texto).contains("Clase 12: Constancia")
+                .contains("Recomendacion de Academia Adaptativa de hoy: 'Respirar antes de decidir' del curso "
+                        + "'Bienestar'. Motivo: Tu energia vino baja ayer")
+                .doesNotContain("todavia no hay recomendacion");
+    }
+
+    @Test
+    @DisplayName("consultar: si falla la lectura de la recomendacion, igual contesta la Clase Diaria")
+    void recomendacionQueFallaNoTapaLaClase() {
+        when(puerto.claseDeHoy(APRENDIZ)).thenReturn(disponible(12, "lec-12", true));
+        when(puerto.recomendacionDeHoySiExiste(APRENDIZ)).thenThrow(new IllegalStateException("detalle interno"));
+
+        assertThat(consultarTexto()).contains("Clase 12: Constancia").contains("No pude leer la recomendacion")
+                .doesNotContain("detalle interno");
     }
 
     @Test
