@@ -135,13 +135,21 @@ public class WallController {
         return WallFeedPageResponse.from(consultarFeedUseCase.feedOculto(actorId, parseCursor(cursor)));
     }
 
-    // TODO(auth fase 4): sin clasificar. Recibe actor pero contarMisPublicaciones no ejecuta ningun guard: con el respaldo de X-Actor-Id devuelve el conteo de cualquier userId que el cliente declare. NO marcar publico por defecto.
+    /* Clasificado 2026-09-23 (E-215). Aca habia un TODO que decia que contarMisPublicaciones "no
+       ejecuta ningun guard" y que "con el respaldo de X-Actor-Id devuelve el conteo de cualquier
+       userId". Las dos cosas habian dejado de ser ciertas: el servicio llama a requireActorActivo
+       (CM-20) y `/api/v1/wall/**` exige sesion en SecurityConfig desde el 2026-09-05, asi que
+       @ActorAutenticado sale de la sesion y el header se ignora. Faltaba solo declararlo. */
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping("/mine")
     public Map<String, Integer> mine(@ActorAutenticado UserId actorId) {
         return Map.of("count", consultarFeedUseCase.contarMisPublicaciones(actorId));
     }
 
-    // TODO(auth fase 4): sin clasificar. Declara actor pero ultimoAutor() ni lo recibe: el parametro se ignora, asi que hoy es publico de hecho sin que nadie lo haya decidido. NO marcar publico por defecto.
+    /* Clasificado 2026-09-23 (E-215). El TODO de aca decia que ultimoAutor() "ni recibe" al actor;
+       desde CM-20 lo recibe y exige cuenta activa. Devuelve el nombre de un tercero: mismo permiso
+       que el feed, nunca publico. */
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping("/latest-author")
     public Map<String, String> latestAuthor(@ActorAutenticado UserId actorId) {
         Map<String, String> body = new HashMap<>();
@@ -159,9 +167,8 @@ public class WallController {
     }
 
     /** Quien puede ver la publicacion puede ver sus reacciones — mismo permiso que
-     * {@link #feed} y {@link #reaccionar}, no el criterio "sin clasificar" de
-     * {@code WallCommentController#listar} (TODO auth fase 4, ese es un hueco declarado, no
-     * un patron a copiar). */
+     * {@link #feed} y {@link #reaccionar} (y que {@code WallCommentController#listar}, que
+     * estuvo "sin clasificar" hasta E-215). */
     @RequiresPermission(Permission.USE_APP)
     @GetMapping("/{id}/reactions")
     public WallReactionsResponse reacciones(@ActorAutenticado UserId actorId, @PathVariable UUID id) {

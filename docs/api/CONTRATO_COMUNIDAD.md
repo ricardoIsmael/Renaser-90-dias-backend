@@ -347,7 +347,9 @@ Con célula: `{"members": [{"traineeId":"...","fullName":"...","avatarUrl":"..."
 Servicio: `TestimonioService`.
 
 ### 7.1 `GET /api/v1/testimonios` — listar destacados
-**Totalmente público** — sin header, sin chequeo de actor. Devuelve hasta 50, los que tienen `destacado=true` (todo testimonio nace destacado, no hay endpoint para des-destacar).
+> **Corregido 2026-09-23 (E-215).** Esta línea decía «**Totalmente público** — sin header, sin chequeo de actor». Desde el 2026-09-18 `SecurityConfig` exige sesión en `/api/v1/testimonios/**`, y desde E-215 el handler exige `USE_APP` (una cuenta suspendida recibe 403). Lo de abajo sobre headers y los ejemplos "sin sesión" quedan desactualizados para el listado.
+
+**Requiere sesión y `USE_APP`.** Devuelve hasta 50, los que tienen `destacado=true` (todo testimonio nace destacado, no hay endpoint para des-destacar).
 **Respuesta:** `[{"id":"...","userId":"...","wallPostId":null,"nombre":"...","rol":"...","avatarUrl":"...","fotoEventoUrl":null,"texto":"...","estrellas":5,"createdAt":"..."}]`.
 
 ### 7.2 `POST /api/v1/testimonios` — dos modos según el body
@@ -537,7 +539,7 @@ curl -s -X POST "http://localhost:8080/api/v1/calendar/events/<id>/portada/confi
 
 ### D. Testimonios: listar públicos y crear uno
 
-1. **Listar (sin sesión):** `GET /api/v1/testimonios` → debería responder aunque no mandes ningún header.
+1. **Listar (con sesión, E-215):** `GET /api/v1/testimonios` → `200` con sesión activa; sin sesión `403`. *(Corregido 2026-09-23: decía que respondía sin ningún header.)*
 2. **Crear uno manual (sin sesión):** `POST /api/v1/testimonios` con `{"nombre":"Ana","texto":"Cambio mi vida, en serio","estrellas":5}` (sin `wallPostId`) → `201`.
 3. **Volver a listar:** el testimonio del paso 2 tiene que aparecer (nace `destacado=true` siempre).
 4. **(Opcional) Promover una publicación existente:** `POST /api/v1/testimonios` con `X-Actor-Id: <admin>` y `{"wallPostId":"<id de una publicacion del flujo A>"}` → `201`, con `nombre`/`texto`/`avatarUrl` tomados automáticamente del autor y la publicación, ignorando cualquier otro campo del body.

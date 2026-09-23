@@ -599,6 +599,8 @@ Por módulo: `community` 45, `habits` 40, `users` 40, `onboarding` 15, `rocks` 1
 
 ### Los 5 que NO se pudieron clasificar
 
+> **Actualizado 2026-09-23 (E-215).** Cuatro de los cinco ya están clasificados con `USE_APP`: `wall/{postId}/comments`, `wall/mine`, `wall/latest-author` y `GET /testimonios`, y salieron de `HANDLERS_SIN_CLASIFICAR`. Lo que decía la tabla sobre `wall/mine` («devuelve el conteo de cualquier `userId`») ya no era cierto: `SecurityConfig` exige sesión en `/api/v1/wall/**` desde el 2026-09-05 y con sesión el header se ignora. Queda sin clasificar solo `POST /testimonios`.
+
 **Ninguno se marcó público.** Un `@PublicEndpoint` puesto por comodidad es un agujero permanente: cuando `SecurityConfig` pase a `authenticated()`, esa anotación *es* la lista de excepciones. Los 5 llevan un TODO en su controller y entran en `HANDLERS_SIN_CLASIFICAR` del test, que los aísla sin dejarlos pasar por default.
 
 | Endpoint | Por qué no se puede decidir desde el código |

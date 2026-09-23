@@ -9,7 +9,12 @@ import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.community.domain.model.testimonio.Testimonio;
 import com.renaser.os.community.domain.model.testimonio.TestimonioId;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -22,6 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -29,7 +35,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -52,6 +60,10 @@ class TestimonioControllerTest {
     private CrearTestimonioUseCase crearUseCase;
     @MockitoBean
     private PromoverPublicacionATestimonioUseCase promoverUseCase;
+    /** Lo necesita {@code PermissionEnforcementInterceptor} para evaluar {@code listar} (USE_APP,
+     * E-215). Sin este mock el interceptor ve el contexto reducido y deja pasar todo. */
+    @MockitoBean
+    private UserSummaryFinder userSummaryFinder;
 
     @AfterEach
     void limpiarContexto() {
@@ -113,5 +125,40 @@ class TestimonioControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"wallPostId\":\"" + wallPostId + "\",\"estrellas\":5}"))
                 .andExpect(status().isForbidden());
+    }
+
+    // ─── GET /api/v1/testimonios — "sin clasificar" hasta E-215, hoy USE_APP ───
+
+    private void sesionDe(UserId actor, UserStatus status) {
+        when(userSummaryFinder.findById(actor))
+                .thenReturn(Optional.of(new UserSummary(actor, "Actor", null, UserRole.TRAINEE, status)));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actor.value().toString(), null, List.of()));
+    }
+
+    @Test
+    @DisplayName("TRAINEE activo con sesion lista los testimonios destacados (USE_APP)")
+    void traineeActivoListaLosTestimonios() throws Exception {
+        UserId actor = UserId.of(UUID.randomUUID());
+        sesionDe(actor, UserStatus.ACTIVE);
+        when(consultarUseCase.listarDestacados())
+                .thenReturn(List.of(new ConsultarTestimoniosUseCase.TestimonioVista(testimonio(null), null, null)));
+
+        mockMvc.perform(get("/api/v1/testimonios"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    /** Falla contra el codigo de antes de E-215: sin {@code @RequiresPermission} el interceptor
+     * no evaluaba nada y el caso de uso se invocaba. */
+    @Test
+    @DisplayName("autorizacion negativa: un TRAINEE SUSPENDIDO con sesion valida recibe 403 al listar testimonios")
+    void traineeSuspendidoNoListaLosTestimonios() throws Exception {
+        sesionDe(UserId.of(UUID.randomUUID()), UserStatus.SUSPENDED);
+
+        mockMvc.perform(get("/api/v1/testimonios"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(consultarUseCase);
     }
 }
