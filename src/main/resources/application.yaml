@@ -340,6 +340,24 @@ renaser:
       # entorno igual (RENASER_IA_ACOMPANANTE_AVISOSENCHATPLANTILLAINICIO, etc.).
       avisos-en-chat-plantilla-inicio: "Tu hábito {habito} empieza a las {hora}. Hay {puntos} puntos en juego."
       avisos-en-chat-plantilla-por-vencer: "Se te vence {habito} a las {hora}. Si lo haces ahora sumas {puntos} puntos."
+      # El acompanante celebra los logros en el chat (LogroEnChatService): mismo molde que
+      # avisos-en-chat — plantilla, SIN IA, sin cuota, un solo mensaje por logro aunque el outbox
+      # reentregue, y nunca detras de un mensaje de la persona sin respuesta (D-132). El push de
+      # notifications sale igual, prendido o apagado esto.
+      #
+      # FALSE por defecto: que se celebra y con que texto esta por decidir con el dueno.
+      logros-en-chat: ${IA_ACOMPANANTE_LOGROS_EN_CHAT:false}
+      # Cuales logros pasan al chat, separados por coma: RACHA_SIN_CELULAR (ciclo de 24h del Dia
+      # sin celular) y/o ROCA_COMPLETADA (una Roca Diaria con evidencia). Un nombre desconocido se
+      # ignora. PROVISORIO: ROCA_COMPLETADA queda afuera por defecto porque se completan varias por
+      # dia y celebrar cada una en el chat seria ruido; se agrega aca si el dueno lo quiere.
+      logros-en-chat-tipos: ${IA_ACOMPANANTE_LOGROS_EN_CHAT_TIPOS:RACHA_SIN_CELULAR}
+      # TEXTOS PROVISORIOS: el dueno NO aprobo esta redaccion todavia. Tono "cercano y calido",
+      # tuteo, espanol neutro de Peru. Sin marcadores (los eventos de logro solo traen ids). Una
+      # plantilla vacia apaga ese logro. Se sobreescriben por entorno
+      # (RENASER_IA_ACOMPANANTE_LOGROSENCHATPLANTILLARACHASINCELULAR, etc.).
+      logros-en-chat-plantilla-racha-sin-celular: "¡Lo lograste! Completaste tu día sin celular: 24 horas enteras. Eso es constancia de verdad. ¿Cómo te sentiste?"
+      logros-en-chat-plantilla-roca-completada: "¡Roca completada! Un paso firme más hacia lo que te propusiste. Bien hecho."
   email:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}

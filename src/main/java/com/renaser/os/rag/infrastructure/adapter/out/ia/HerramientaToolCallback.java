@@ -162,7 +162,11 @@ class HerramientaToolCallback implements ToolCallback {
             });
             return argumentos;
         } catch (Exception e) {
-            log.warn("El modelo mando argumentos ilegibles para la herramienta {}", definicion.nombre(), e);
+            // Solo el tipo de la excepcion, nunca `e` entero: el mensaje de Jackson copia un pedazo del
+            // JSON, y desde 2026-09-23 esos argumentos pueden ser la bitacora o el radar de la persona
+            // (contenido personal que no va al log, CLAUDE.MD sec. 5.4.9).
+            log.warn("El modelo mando argumentos ilegibles para la herramienta {} ({})", definicion.nombre(),
+                    e.getClass().getSimpleName());
             return Map.of();
         }
     }

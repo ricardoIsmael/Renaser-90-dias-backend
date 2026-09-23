@@ -8,21 +8,14 @@ import com.renaser.os.rag.application.ports.out.conversacion.SaveMensajeRenasiaP
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.domain.model.aviso.AvisosEnChat;
 import com.renaser.os.rag.domain.model.aviso.AvisosEnChat.DatosDelAviso;
-import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
-import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
-import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasiaId;
-import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
 import com.renaser.os.shared.domain.Clock;
-import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -34,9 +27,9 @@ import java.util.UUID;
  * <p><b>Idempotencia sin columna nueva.</b> {@code habits} republica el mismo aviso en cada barrido
  * de 5 minutos mientras dura su franja, y el outbox puede reentregar. El id del mensaje se DERIVA
  * de {@code claveEvento} (ya deterministica por registro y tipo, ver {@code TipoAvisoHabito}): la
- * segunda vez {@link LoadMensajeRenasiaPort#existe} lo encuentra y no se escribe nada. Si dos
- * entregas corren a la vez, la clave primaria es la ultima guarda: la segunda falla y el outbox
- * la reintenta, y en el reintento ya existe.
+ * segunda vez {@link LoadMensajeRenasiaPort#existe} lo encuentra y no se escribe nada. El detalle
+ * (y la guarda de D-132 de abajo) vive en {@link MensajeProactivoDelAcompanante}, compartida con
+ * la celebracion de logros.
  *
  * <p><b>La hora se deriva del evento, no se recalcula.</b> El evento trae el instante del calculo
  * y los minutos que faltaban, redondeados hacia arriba por {@code habits}; sumarlos y truncar al
@@ -53,7 +46,7 @@ import java.util.UUID;
  * asistente. Un aviso escrito justo despues de un pedido que fallo lo haria pasar por respondido,
  * y el pedido viejo volveria a la memoria del modelo: exactamente el incidente de D-132. Por eso,
  * si lo ultimo del chat es un mensaje de la persona sin respuesta, este aviso NO se escribe
- * ({@link #loUltimoEsUnPedidoSinRespuesta}). No se pierde nada que no se recupere: si el turno
+ * ({@link MensajeProactivoDelAcompanante#puedeEscribir}). No se pierde nada que no se recupere: si el turno
  * estaba en curso, el barrido siguiente republica el aviso y, ya con la respuesta guardada, se
  * escribe; el push de {@code notifications} sale igual en cualquier caso.
  *
@@ -66,13 +59,9 @@ public class AvisoHabitoEnChatService implements DejarAvisoHabitoEnChatUseCase {
 
     /** Prefijo del id deterministico: separa este uso de la clave de cualquier otro. */
     static final String PREFIJO_ID = "aviso-habito-en-chat:";
-    private static final AgenteConversacional ACOMPANANTE = AgenteConversacional.COMPANION;
 
     private final AvisosEnChat avisosEnChat;
-    private final LoadMensajeRenasiaPort loadMensajePort;
-    private final SaveMensajeRenasiaPort saveMensajePort;
-    private final LoadConversacionRenasiaPort loadConversacionPort;
-    private final SaveConversacionRenasiaPort saveConversacionPort;
+    private final MensajeProactivoDelAcompanante mensajeProactivo;
     private final ConsultarAgendaHabitosPort agendaPort;
     private final Clock clock;
 
@@ -82,10 +71,8 @@ public class AvisoHabitoEnChatService implements DejarAvisoHabitoEnChatUseCase {
                                      SaveConversacionRenasiaPort saveConversacionPort,
                                      ConsultarAgendaHabitosPort agendaPort, Clock clock) {
         this.avisosEnChat = avisosEnChat;
-        this.loadMensajePort = loadMensajePort;
-        this.saveMensajePort = saveMensajePort;
-        this.loadConversacionPort = loadConversacionPort;
-        this.saveConversacionPort = saveConversacionPort;
+        this.mensajeProactivo = new MensajeProactivoDelAcompanante(loadMensajePort, saveMensajePort,
+                loadConversacionPort, saveConversacionPort, clock);
         this.agendaPort = agendaPort;
         this.clock = clock;
     }
@@ -97,15 +84,14 @@ public class AvisoHabitoEnChatService implements DejarAvisoHabitoEnChatUseCase {
         }
         Instant momento = momentoAvisado(command);
         MensajeRenasiaId id = idDelAviso(command.claveEvento());
-        if (!clock.now().isBefore(momento) || loadMensajePort.existe(id)
-                || loUltimoEsUnPedidoSinRespuesta(command.participanteId())) {
+        if (!clock.now().isBefore(momento) || !mensajeProactivo.puedeEscribir(id, command.participanteId())) {
             return false;
         }
         Optional<String> texto = avisosEnChat.redactar(command.tipoAviso(), datosDe(command, momento));
         if (texto.isEmpty()) {
             return false;
         }
-        escribir(id, command.participanteId(), texto.get());
+        mensajeProactivo.escribir(id, command.participanteId(), texto.get());
         return true;
     }
 
@@ -115,34 +101,13 @@ public class AvisoHabitoEnChatService implements DejarAvisoHabitoEnChatUseCase {
                 .truncatedTo(ChronoUnit.MINUTES);
     }
 
-    /** {@code nameUUIDFromBytes}: funcion pura del nombre, la misma entrega tras entrega. */
+    /** Mismos bytes que antes de la extraccion: los ids de avisos ya escritos no cambian. */
     static MensajeRenasiaId idDelAviso(UUID claveEvento) {
-        return MensajeRenasiaId.of(UUID.nameUUIDFromBytes(
-                (PREFIJO_ID + claveEvento).getBytes(StandardCharsets.UTF_8)));
-    }
-
-    /** Ver "No rompe la memoria de D-132" en el javadoc de la clase. */
-    private boolean loUltimoEsUnPedidoSinRespuesta(UserId participanteId) {
-        List<MensajeRenasia> ultimo = loadMensajePort.pagina(participanteId, ACOMPANANTE, null, 1);
-        return !ultimo.isEmpty() && ultimo.getFirst().rol() == RolMensaje.USUARIO;
+        return MensajeProactivoDelAcompanante.idDeterministico(PREFIJO_ID + claveEvento);
     }
 
     private DatosDelAviso datosDe(AvisoHabitoEnChatCommand command, Instant momento) {
         LocalTime hora = momento.atZone(agendaPort.zonaDe(command.participanteId())).toLocalTime();
         return new DatosDelAviso(command.tituloHabito(), hora, command.puntosEnJuego(), command.minutosQueFaltan());
-    }
-
-    /**
-     * La conversacion puede no existir todavia: alguien que nunca abrio el chat igual recibe el
-     * aviso. Es el mismo buscar-o-crear de {@code ConversacionRenasiaService}, repetido y no
-     * extraido a proposito: son dos lineas sobre dos puertos que ya existen, y extraerlas obligaba a
-     * tocar ese servicio (en uso por otro cambio en paralelo) sin ganar nada.
-     */
-    private void escribir(MensajeRenasiaId id, UserId participanteId, String texto) {
-        if (loadConversacionPort.porUsuarioId(participanteId).isEmpty()) {
-            saveConversacionPort.save(ConversacionRenasia.iniciar(participanteId, clock.now()));
-        }
-        saveMensajePort.save(MensajeRenasia.escribirDeAsistente(id, participanteId, ACOMPANANTE, texto, List.of(),
-                clock.now()));
     }
 }

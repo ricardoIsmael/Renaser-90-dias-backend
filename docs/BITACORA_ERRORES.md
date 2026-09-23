@@ -7669,3 +7669,30 @@ lo seguro es devolver el valor derivado. Relacionados: el fixture de `HomeAgrega
 (`participacionInscrita()`: día 12 con `fechaInicio` 2026-05-01) es incoherente según la regla 03, y
 el javadoc de `PorcentajeRocasService` todavía dice "ventana vacía → 100" y "7 días UTC cerrados".
 
+## E-217 · Al abrir un ticket, el mentor no recibe ningún aviso
+
+**Síntoma.** Un aprendiz abre un ticket al mentor (`POST /api/v1/tickets`) y el mentor no recibe
+push ni notificación: solo lo ve si entra a su bandeja. Sin mentor asignado, nadie lo contesta.
+
+**Causa real.** `support` publica `TicketMentorAbiertoEvent`, pero ningún módulo lo escucha
+(verificado el 2026-09-23 al construir `proponer_ticket_al_mentor`, D-156).
+
+**Estado.** **No se corrigió**: es previo al acompañante y cambia a quién se notifica (decisión de
+producto). Afecta igual a los tickets abiertos desde la app.
+
+**Cómo evitar que vuelva a pasar.** Todo evento publicado en un `*.api` necesita al menos un
+consumidor o una nota que diga por qué no lo tiene.
+
+## E-218 · El log de herramientas podía guardar pedazos de lo que escribió la persona
+
+**Síntoma.** `HerramientaToolCallback` registraba con `log.warn(..., e)` la excepción de Jackson
+cuando el modelo mandaba argumentos ilegibles. El mensaje de Jackson copia un fragmento del JSON.
+
+**Causa real.** Antes era inocuo (los argumentos eran ids); desde D-156 los argumentos pueden ser
+la bitácora, el radar o el texto de un ticket: contenido personal que no puede ir al log.
+
+**Solución.** Se registra solo el tipo de la excepción (2026-09-23).
+
+**Cómo evitar que vuelva a pasar.** Nunca pasar la excepción entera a un log cuando su mensaje
+puede contener datos de entrada; en este módulo, loguear el tipo y el nombre de la herramienta.
+

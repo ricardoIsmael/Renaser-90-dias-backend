@@ -76,7 +76,7 @@ incidente D-132 (un "Hola" que marcó un hábito).
 
 | Operación | Motivo |
 |---|---|
-| Mensajes a otros (chat DM/célula/global, compartir, tickets al mentor o a soporte) | habla en nombre de la persona con terceros |
+| Mensajes a otros (chat DM/célula/global, compartir, tickets a soporte) | habla en nombre de la persona con terceros. **Excepción aprobada por el dueño el 2026-09-23 (D-156): el ticket al mentor**, como propuesta con botón que muestra los textos exactos. Antes esta fila incluía también los tickets al mentor |
 | Muro: publicar, comentar, reaccionar, editar | contenido público |
 | Perfil y avatar | visible para todos |
 | Baja de cuenta, vincular cuenta social, contraseña | seguridad y destructivo |

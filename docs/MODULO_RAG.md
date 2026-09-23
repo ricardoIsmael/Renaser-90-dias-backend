@@ -375,6 +375,36 @@ y los textos son configuración y **provisorios hasta que el dueño apruebe la r
 - **Entrega:** la app lo ve al abrir el panel (recarga el historial); no hay tiempo real.
 - Sin verificar contra Gemini: una memoria que empieza con un turno del asistente, o con dos
   seguidos.
+
+### D-156 — El acompañante suma rituales, academia, mentor y logros (2026-09-23)
+
+Pedido del dueño: "que sea amigable pero con sus restricciones". Mismo patrón de siempre: lectura
+directa (R0), escritura solo como propuesta con botón (R2, detrás de
+`renaser.ia.acompanante.confirmacion-con-botones`) y cada herramienta delega en el caso de uso de
+la app por un contrato `*.api` nuevo, sin reimplementar reglas.
+
+| Área | Herramientas | Contrato | Notas |
+|---|---|---|---|
+| Bitácora y Código Renaser | `consultar_bitacora_de_hoy`, `proponer_bitacora_de_hoy`, `consultar_ultimo_radar`, `proponer_check_in_radar` | `habits.api.DiarioYRadarPort` | la bitácora es un upsert: si ya existe, la propuesta dice "Reemplazar" y muestra lo actual y lo nuevo; no escribe si al confirmar ya pasó la medianoche. Radar: uno por hora (`RadarService.mismaHora`, compartido) |
+| Academia | `consultar_clase_de_hoy`, `proponer_entregar_clase_de_hoy`, `consultar_mis_cursos`, `consultar_por_que_esta_bloqueado` | `academy.api.ClaseDiariaPort`, `CursosDelAprendizFinder` | entregar la clase da puntos; no entrega si cambió el día de programa entre proponer y confirmar. **No lee la recomendación adaptativa**: generarla llama a la IA (C-1) y no hay lectura solo de caché |
+| Domingo Ritual y contratos | `proponer_cerrar_semana`, `consultar_contratos_de_fase` | `rocks.api.CierreDeSemanaPort`, `phasecontracts.api.ContratosDeFaseDelParticipanteFinder` | cerrar la semana no da puntos (verificado); **desde el chat no se pisa una revisión existente** (supuesto a confirmar por el dueño). Firmar contratos es consentimiento legal: no hay herramienta para eso |
+| Espíritu y enfoque | `consultar_espiritu_de_hoy`, `proponer_resumen_espiritu`, `proponer_iniciar_santuario`, `proponer_iniciar_dia_sin_celular` | `habits.api.EnfoqueDiarioPort` | la lectura de Espíritu **no es pura**: usa el mismo caso de uso que abrir Training (idempotente); copiar su avance duplicaría la regla. Solo se INICIA Santuario / día sin celular: completar o romper sigue en la app |
+| Mentor, notificaciones y Espejo | `consultar_notificaciones`, `proponer_marcar_notificaciones_leidas`, `consultar_mis_tickets_al_mentor`, `proponer_ticket_al_mentor`, `consultar_espejo_de_la_sombra` | `rag.api.BandejaDeNotificaciones` (la implementa `notifications`, que ya depende de `rag`), `support.api.TicketsAlMentor` | **el ticket al mentor es una excepción aprobada por el dueño** a "no escribe a terceros": el botón muestra los tres textos exactos. El Espejo por chat solo muestra el informe propio |
+
+**Logros en el chat (proactivo, plantilla, sin IA ni cuota):** `LogroEnChatListener` escucha
+`habits.api.RachaCompletadaEvent` y `rocks.api.RocaCompletadaEvent`; apagado por defecto
+(`renaser.ia.acompanante.logros-en-chat`) y por defecto solo celebra el día sin celular completo
+(las rocas son varias por día). Textos provisorios. La lógica común con D-155 (id derivado,
+`existe`, guarda de D-132) pasó a una sola clase, `MensajeProactivoDelAcompanante`.
+
+**Tono:** el prompt del acompañante adoptó "cercano y cálido" (celebra lo chico, no regaña tras
+un día perdido, una pregunta a la vez, sin voseo) y reglas nuevas: horas, puntos y fechas siempre de
+una herramienta; nada se da por hecho hasta que la herramienta lo confirma; a terceros solo el
+ticket al mentor como propuesta. Crisis (D-143), riesgo y atribución de fuentes no se tocaron.
+
+**Lo que escribe la persona es suyo:** bitácora, radar, resúmenes y ticket. Las descripciones le
+prohíben al modelo inventarlo o "mejorarlo". Ese contenido viaja al modelo y queda en
+`propuestas_acompanante.argumentos`, pero **no va al log** (E-218).
 ---
 
 ## 4. Estructura del módulo

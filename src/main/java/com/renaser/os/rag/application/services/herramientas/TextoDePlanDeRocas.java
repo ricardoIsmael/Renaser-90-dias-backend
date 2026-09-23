@@ -111,8 +111,8 @@ final class TextoDePlanDeRocas {
         return linea.toString();
     }
 
-    /** {@code CUERPO} -> {@code Cuerpo}. */
-    private static String nombreDelEje(String eje) {
+    /** {@code CUERPO} -> {@code Cuerpo}. De paquete: tambien lo usa {@link TextoDeCierreDeSemana}. */
+    static String nombreDelEje(String eje) {
         String minusculas = eje.toLowerCase(Locale.ROOT);
         return Character.toUpperCase(minusculas.charAt(0)) + minusculas.substring(1);
     }

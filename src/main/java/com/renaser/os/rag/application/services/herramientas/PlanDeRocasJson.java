@@ -32,6 +32,9 @@ import java.util.Set;
  * <p><b>Solo forma, ninguna regla.</b> Cuantas acciones por eje, que fechas se pueden planificar o
  * si ya hay plan lo decide {@code rocks} al confirmar. Lo unico que se compara contra algo externo
  * es el nombre del eje, y contra la lista que expone el propio {@code rocks}.
+ *
+ * <p>{@code objeto}, {@code lista}, {@code eje} y {@code obligatorio} son de paquete (2026-09-23) para
+ * que {@link CierreDeSemanaJson} lea el cierre de la semana con las mismas reglas de forma, sin copiarlas.
  */
 final class PlanDeRocasJson {
 
@@ -93,7 +96,7 @@ final class PlanDeRocasJson {
         }
     }
 
-    private static JsonNode objeto(JsonNode nodo, String donde, Set<String> camposPermitidos) {
+    static JsonNode objeto(JsonNode nodo, String donde, Set<String> camposPermitidos) {
         if (nodo == null || !nodo.isObject()) {
             throw new PlanMalFormadoException(donde + " tiene que ser un objeto JSON.");
         }
@@ -107,7 +110,7 @@ final class PlanDeRocasJson {
         return nodo;
     }
 
-    private static JsonNode lista(JsonNode raiz, String campo) {
+    static JsonNode lista(JsonNode raiz, String campo) {
         JsonNode lista = raiz.get(campo);
         if (lista == null || !lista.isArray() || lista.isEmpty()) {
             throw new PlanMalFormadoException("Falta '" + campo + "': una lista con al menos un elemento.");
@@ -115,7 +118,7 @@ final class PlanDeRocasJson {
         return lista;
     }
 
-    private static String eje(JsonNode nodo, String donde, List<String> ejesValidos) {
+    static String eje(JsonNode nodo, String donde, List<String> ejesValidos) {
         String eje = obligatorio(nodo, "eje", donde).toUpperCase(Locale.ROOT);
         if (!ejesValidos.contains(eje)) {
             throw new PlanMalFormadoException(donde + " tiene un eje que no existe: '" + eje + "'. Usa uno de: "
@@ -124,7 +127,7 @@ final class PlanDeRocasJson {
         return eje;
     }
 
-    private static String obligatorio(JsonNode nodo, String campo, String donde) {
+    static String obligatorio(JsonNode nodo, String campo, String donde) {
         String valor = opcional(nodo, campo, donde);
         if (valor == null) {
             throw new PlanMalFormadoException(donde + " no tiene '" + campo + "'.");
