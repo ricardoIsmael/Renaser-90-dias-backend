@@ -1,6 +1,6 @@
 # Propuesta: el acompañante de 90 días como planificador
 
-**Estado:** fases 1, 2, 4 y 5 implementadas en el backend (D-152 a D-155), verificadas el 2026-09-23 con `clean verify` en Docker local: 3762 unitarias y 96 de integración en verde, V63 incluida; pendientes la 3 (botones, repo de la app) y la 6 (router, necesita medirse con Gemini).
+**Estado:** fases 1, 2, 4 y 5 implementadas en el backend (D-152 a D-155), verificadas el 2026-09-23 con `clean verify` en Docker local: 3762 unitarias y 96 de integración en verde, V63 incluida; la 3 (botones) está hecha en el repo de la app, rama `agente/botones-propuestas`, sin publicar; pendiente la 6 (router, necesita medirse con Gemini).
 > Decía «propuesta, pendiente de decisiones del dueño. Nada está implementado todavía». Corregido el
 > 2026-09-23 al cerrar la fase 2.
 **Fecha:** 2026-09-23. **Base:** inventario de todos los endpoints que puede llamar un aprendiz
@@ -161,7 +161,7 @@ Cada fase es un cambio propio, con `clean verify` en verde, y no rompe a la app 
 |---|---|---|
 | 1 | Herramientas de **lectura** (R0) y **cálculo de tiempo** en código (R1): "¿llego a tiempo?", resumen del día, horario de un día, cuota restante, rocas, eventos de la semana. **Hecha 2026-09-23 (D-152)** | backend |
 | 2 | **Propuestas con botones**: tabla, evento SSE `propuesta`, endpoints confirmar/cancelar, más `marcar_habito_completado`, que hoy escribe sin confirmar, pasado a propuesta. **Hecha 2026-09-23 (D-153)**, flag apagado | backend |
-| 3 | Botones en la app para el evento `propuesta` | app |
+| 3 | Botones en la app para el evento `propuesta`. **Hecha 2026-09-23** en el repo de la app, rama `agente/botones-propuestas` (`TarjetaPropuesta`, `useRenasiaChat`); `tsc` sin errores y 364 pruebas de Jest en verde. **Prender `IA_ACOMPANANTE_CONFIRMACION_CON_BOTONES` recién cuando esa versión esté publicada** | app |
 | 4 | Herramientas de **escritura** como propuestas: horario, apagar un día, día semanal, pausar, plan de rocas diario y semanal. **Hecha 2026-09-23 (D-154)** | backend |
 | 5 | **Avisos proactivos** con plantilla (§5.1). **Hecha 2026-09-23 (D-155)**, flag apagado, textos provisorios | backend |
 | 6 | Router rápido (`ClasificarIntencionPort`) medido con el dataset es-PE | backend |
