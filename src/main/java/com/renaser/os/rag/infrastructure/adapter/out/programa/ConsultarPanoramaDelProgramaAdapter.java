@@ -2,6 +2,7 @@ package com.renaser.os.rag.infrastructure.adapter.out.programa;
 
 import com.renaser.os.points.api.PorcentajeRocasFinder;
 import com.renaser.os.points.api.ProximoEventoFinder;
+import com.renaser.os.points.api.ResumenPuntajeFinder;
 import com.renaser.os.rag.application.ports.out.programa.ConsultarPanoramaDelProgramaPort;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -25,7 +26,9 @@ import java.util.Optional;
  * <p><b>Falla parcial, mismo criterio que Inicio:</b> si el finder del proximo evento no aplica
  * para esta persona ({@link NoSuchElementException} o {@link NotAuthorizedException}, las dos que
  * documenta su contrato), el panorama sale igual, sin evento. Una herramienta que se cae entera
- * porque un widget no aplica le quita a la persona el dia y la hora, que si estaban.
+ * porque un widget no aplica le quita a la persona el dia y la hora, que si estaban. Lo mismo para
+ * la racha y los puntos de liga ({@link ResumenPuntajeFinder}): una cuenta suspendida o sin fila
+ * los deja vacios, no tumba el panorama.
  */
 @Component
 class ConsultarPanoramaDelProgramaAdapter implements ConsultarPanoramaDelProgramaPort {
@@ -35,13 +38,16 @@ class ConsultarPanoramaDelProgramaAdapter implements ConsultarPanoramaDelProgram
     private final ParticipacionProgramaFinder participacionFinder;
     private final PorcentajeRocasFinder porcentajeRocasFinder;
     private final ProximoEventoFinder proximoEventoFinder;
+    private final ResumenPuntajeFinder resumenPuntajeFinder;
 
     ConsultarPanoramaDelProgramaAdapter(ParticipacionProgramaFinder participacionFinder,
                                         PorcentajeRocasFinder porcentajeRocasFinder,
-                                        ProximoEventoFinder proximoEventoFinder) {
+                                        ProximoEventoFinder proximoEventoFinder,
+                                        ResumenPuntajeFinder resumenPuntajeFinder) {
         this.participacionFinder = participacionFinder;
         this.porcentajeRocasFinder = porcentajeRocasFinder;
         this.proximoEventoFinder = proximoEventoFinder;
+        this.resumenPuntajeFinder = resumenPuntajeFinder;
     }
 
     @Override
@@ -53,7 +59,7 @@ class ConsultarPanoramaDelProgramaAdapter implements ConsultarPanoramaDelProgram
     private Panorama panoramaDe(UserId participanteId, ParticipacionPrograma participacion, Instant ahora) {
         LocalDate hoyEnSuZona = ahora.atZone(participacion.zona()).toLocalDate();
         return new Panorama(participacion.zona(), coherenciaHasta(participanteId, hoyEnSuZona),
-                proximoEventoDe(participanteId));
+                proximoEventoDe(participanteId), rachaYPuntosDe(participanteId, ahora));
     }
 
     /**
@@ -72,6 +78,21 @@ class ConsultarPanoramaDelProgramaAdapter implements ConsultarPanoramaDelProgram
                     .map(evento -> new ProximoEvento(evento.titulo(), evento.iniciaEn()));
         } catch (NoSuchElementException | NotAuthorizedException noAplica) {
             log.info("[rag] el proximo evento no aplica para este participante: {}",
+                    noAplica.getClass().getSimpleName());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * La racha y los puntos salen del mismo codigo que {@code GET /home} (racha derivada, no la
+     * guardada). Se pasa el MISMO {@code ahora} para que "hoy en su zona" coincida con el resto.
+     */
+    private Optional<RachaYPuntos> rachaYPuntosDe(UserId participanteId, Instant ahora) {
+        try {
+            return resumenPuntajeFinder.de(participanteId, ahora)
+                    .map(r -> new RachaYPuntos(r.rachaActual(), r.rachaMaxima(), r.puntosLiga()));
+        } catch (NoSuchElementException | NotAuthorizedException noAplica) {
+            log.info("[rag] la racha y los puntos no aplican para este participante: {}",
                     noAplica.getClass().getSimpleName());
             return Optional.empty();
         }

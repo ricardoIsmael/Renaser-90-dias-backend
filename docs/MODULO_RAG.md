@@ -275,10 +275,16 @@ módulos importa `rag`, así que no hay ciclo.
 
 **Huecos conocidos (no se inventaron):**
 
-- La racha y los puntos de liga no se exponen: la derivación vive en `points.application`
+- ~~La racha y los puntos de liga no se exponen: la derivación vive en `points.application`
   (`HomeAgregadoService.rachaDe`) y no hay contrato público. Falta un finder en `points.api` que
   `HomeAgregadoService` también reuse, para que la regla quede en un solo lugar. La herramienta de
-  resumen lo dice explícitamente para que el modelo no invente esos números.
+  resumen lo dice explícitamente para que el modelo no invente esos números.~~
+  > **Resuelto 2026-09-23.** Entra `points.api.ResumenPuntajeFinder` (`puntosLiga`, `rachaActual`,
+  > `rachaMaxima`, misma semántica que `GET /home`: racha **derivada**, no la guardada que devuelve
+  > `GET /points/{id}`). La ventana y la derivación viven en `points.application.services.RachaMostrada`,
+  > que usan tanto `HomeAgregadoService` como `ResumenPuntajeService`: la regla está escrita una vez.
+  > `consultar_resumen_del_programa` ahora muestra "Racha actual: N dias (record: M)" y
+  > "Puntos de liga: P"; si no se pueden leer (cuenta suspendida, sin fila), lo dice en vez de inventar.
 - En `consultar_eventos`, "semana" son los próximos 7 días; en `consultar_rocas` es la semana del
   programa. Queda así hasta que el dueño diga lo contrario.
 

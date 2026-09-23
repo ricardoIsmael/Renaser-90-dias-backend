@@ -2,8 +2,10 @@ package com.renaser.os.rag.infrastructure.adapter.out.programa;
 
 import com.renaser.os.points.api.PorcentajeRocasFinder;
 import com.renaser.os.points.api.ProximoEventoFinder;
+import com.renaser.os.points.api.ResumenPuntajeFinder;
 import com.renaser.os.rag.application.ports.out.programa.ConsultarPanoramaDelProgramaPort.Panorama;
 import com.renaser.os.rag.application.ports.out.programa.ConsultarPanoramaDelProgramaPort.ProximoEvento;
+import com.renaser.os.rag.application.ports.out.programa.ConsultarPanoramaDelProgramaPort.RachaYPuntos;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
@@ -46,6 +48,8 @@ class ConsultarPanoramaDelProgramaAdapterTest {
             LocalDate.of(2026, 9, 11), LIMA, FasePrograma.PHASE_2_DEVELOPMENT, null, null, UserRole.TRAINEE,
             false, true);
 
+    private static final ResumenPuntajeFinder SIN_RESUMEN = (participanteId, ahora) -> Optional.empty();
+
     private final List<LocalDate> fechasPedidas = new ArrayList<>();
 
     private PorcentajeRocasFinder coherenciaDe(BigDecimal porcentaje) {
@@ -63,7 +67,7 @@ class ConsultarPanoramaDelProgramaAdapterTest {
     @DisplayName("la coherencia se pide hasta HOY EN LIMA, no hasta la fecha UTC del servidor")
     void coherenciaConLaFechaLocal() {
         var adaptador = new ConsultarPanoramaDelProgramaAdapter(new FinderFijo(EN_DIA_12),
-                coherenciaDe(new BigDecimal("85.5")), participanteId -> Optional.empty());
+                coherenciaDe(new BigDecimal("85.5")), participanteId -> Optional.empty(), SIN_RESUMEN);
 
         Optional<Panorama> panorama = adaptador.de(APRENDIZ, MADRUGADA_UTC);
 
@@ -78,7 +82,7 @@ class ConsultarPanoramaDelProgramaAdapterTest {
     @DisplayName("sin acciones planificadas no hay coherencia: vacio, ni cero ni cien (D-128)")
     void sinCoherencia() {
         var adaptador = new ConsultarPanoramaDelProgramaAdapter(new FinderFijo(EN_DIA_12), coherenciaDe(null),
-                participanteId -> Optional.empty());
+                participanteId -> Optional.empty(), SIN_RESUMEN);
 
         assertThat(adaptador.de(APRENDIZ, MADRUGADA_UTC))
                 .hasValueSatisfying(p -> assertThat(p.coherencia()).isEmpty());
@@ -89,7 +93,7 @@ class ConsultarPanoramaDelProgramaAdapterTest {
     void proximoEvento() {
         Instant inicio = Instant.parse("2026-09-23T14:00:00Z");
         var adaptador = new ConsultarPanoramaDelProgramaAdapter(new FinderFijo(EN_DIA_12), coherenciaDe(null),
-                conEvento("Sesion en vivo", inicio));
+                conEvento("Sesion en vivo", inicio), SIN_RESUMEN);
 
         assertThat(adaptador.de(APRENDIZ, MADRUGADA_UTC)).hasValueSatisfying(p ->
                 assertThat(p.proximoEvento()).contains(new ProximoEvento("Sesion en vivo", inicio)));
@@ -107,7 +111,7 @@ class ConsultarPanoramaDelProgramaAdapterTest {
 
         for (ProximoEventoFinder finder : List.of(suspendido, sinProgreso)) {
             var adaptador = new ConsultarPanoramaDelProgramaAdapter(new FinderFijo(EN_DIA_12),
-                    coherenciaDe(new BigDecimal("70.0")), finder);
+                    coherenciaDe(new BigDecimal("70.0")), finder, SIN_RESUMEN);
 
             assertThat(adaptador.de(APRENDIZ, MADRUGADA_UTC)).hasValueSatisfying(p -> {
                 assertThat(p.proximoEvento()).isEmpty();
@@ -120,10 +124,47 @@ class ConsultarPanoramaDelProgramaAdapterTest {
     @DisplayName("una persona que no existe no tiene panorama")
     void sinParticipacion() {
         var adaptador = new ConsultarPanoramaDelProgramaAdapter(new FinderFijo(null), coherenciaDe(null),
-                participanteId -> Optional.empty());
+                participanteId -> Optional.empty(), SIN_RESUMEN);
 
         assertThat(adaptador.de(APRENDIZ, MADRUGADA_UTC)).isEmpty();
         assertThat(fechasPedidas).isEmpty();
+    }
+
+    @Test
+    @DisplayName("la racha y los puntos se piden con el MISMO instante del panorama y viajan tal cual")
+    void rachaYPuntos() {
+        List<Instant> instantesPedidos = new ArrayList<>();
+        ResumenPuntajeFinder resumen = (participanteId, ahora) -> {
+            instantesPedidos.add(ahora);
+            return Optional.of(new ResumenPuntajeFinder.ResumenPuntaje(150, 3, 7));
+        };
+        var adaptador = new ConsultarPanoramaDelProgramaAdapter(new FinderFijo(EN_DIA_12), coherenciaDe(null),
+                participanteId -> Optional.empty(), resumen);
+
+        assertThat(adaptador.de(APRENDIZ, MADRUGADA_UTC)).hasValueSatisfying(p ->
+                assertThat(p.rachaYPuntos()).contains(new RachaYPuntos(3, 7, 150)));
+        assertThat(instantesPedidos).containsExactly(MADRUGADA_UTC);
+    }
+
+    @Test
+    @DisplayName("si la racha y los puntos no aplican para la persona, el panorama sale igual, sin ellos")
+    void rachaYPuntosQueNoAplican() {
+        ResumenPuntajeFinder suspendido = (participanteId, ahora) -> {
+            throw new NotAuthorizedException("cuenta suspendida");
+        };
+        ResumenPuntajeFinder inexistente = (participanteId, ahora) -> {
+            throw new NoSuchElementException("sin participante");
+        };
+
+        for (ResumenPuntajeFinder finder : List.of(suspendido, inexistente, SIN_RESUMEN)) {
+            var adaptador = new ConsultarPanoramaDelProgramaAdapter(new FinderFijo(EN_DIA_12),
+                    coherenciaDe(new BigDecimal("70.0")), participanteId -> Optional.empty(), finder);
+
+            assertThat(adaptador.de(APRENDIZ, MADRUGADA_UTC)).hasValueSatisfying(p -> {
+                assertThat(p.rachaYPuntos()).isEmpty();
+                assertThat(p.coherencia()).contains(new BigDecimal("70.0"));
+            });
+        }
     }
 
     /** Doble minimo: solo se le pregunta la participacion de una persona. */

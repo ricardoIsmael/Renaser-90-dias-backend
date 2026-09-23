@@ -7514,11 +7514,30 @@ pasadas. Hoy y los días siguientes no se ven afectados.
 `estaPausado()` mira únicamente `pausadoEn != null`. Una pausa con fecha que ya venció conserva su
 `pausadoEn`, así que la pausa nueva hereda el inicio viejo.
 
-**Estado.** Detectado el 2026-09-23 al construir `proponer_pausar_habito` (D-154). **No se
-corrigió** (fuera de alcance). La herramienta dice "desde hoy", que es lo que rige hacia adelante.
+**Estado.** **Resuelto el 2026-09-23.**
 
-**Cómo evitar que vuelva a pasar.** Al corregirlo, escribir primero la prueba: pausa con fin
-vencido → nueva pausa → `estaPausadoEl(ayer)` debe dar `false`.
+> **Corregido 2026-09-23.** Esta línea decía: *"Detectado el 2026-09-23 al construir
+> `proponer_pausar_habito` (D-154). **No se corrigió** (fuera de alcance). La herramienta dice
+> "desde hoy", que es lo que rige hacia adelante."* Cambió porque se corrigió el mismo día.
+
+**Solución.** `pausar` ya no pregunta "¿hay una pausa registrada?" (`estaPausado()`) sino "¿la
+pausa sigue vigente el día de la pausa nueva, en la zona del participante?"
+(`estaPausadoEl(hoyEnSuZona, zona)`). Solo si sigue vigente se conserva `pausadoEn` (extender o
+acortar una pausa en curso no mueve su inicio, igual que antes); si ya venció, `pausadoEn` pasa a
+ser el instante nuevo. Para saber el día local, las dos firmas de `pausar` reciben ahora un
+`ZonedDateTime ahoraEnSuZona` en lugar del `Instant ahora` — el instante y la zona viajan juntos y
+no se puede pasar uno sin el otro (E-91). `DesbloqueoHabitoService.cambiarEstado` lo arma con
+`clock.now().atZone(progreso.timezone())`, que ya calculaba para `retirarPendientes`. Sin migración:
+`reactivar`, los hábitos obligatorios y `estaPausado()` no cambian.
+
+**Cómo evitar que vuelva a pasar.** Pruebas en `DesbloqueoHabitoPausaTest` (bloque E-213): pausa
+hasta el 10 → pausa nueva el 20 → `estaPausadoEl(15)` da `false` y `estaPausadoEl(20)` da `true`
+(falla contra el código viejo); extender una pausa en su último día conserva el inicio; y el par
+03:00 UTC del 11 (todavía el 10 en Lima: se conserva) / 03:00 UTC del 12 (ya el 11: arranca de
+cero). Más `pausarDeNuevoTrasUnaPausaVencidaArrancaEnElInstanteNuevo` en
+`DesbloqueoHabitoServiceTest`, que verifica que el servicio pasa la zona del participante.
+La lección general: **"hay una pausa registrada" y "está pausado hoy" son preguntas distintas**, y
+cualquier decisión que dependa del calendario usa la segunda.
 
 ## E-214 · `apagar`/`quitar` del horario por día de semana no repiten las guardas del servicio
 
@@ -7534,9 +7553,110 @@ hábito PERSONAL sea del actor, como sí hace `editar` ("Solo puedes editar tus 
   el hábito personal de otra persona solo crea filas de preferencia del propio actor, sin tocar
   datos ajenos.
 
-**Estado.** Detectado al construir `proponer_horario_por_dia_de_semana` (D-154). **No se corrigió**
+**Estado.** ~~Detectado al construir `proponer_horario_por_dia_de_semana` (D-154). **No se corrigió**
 (se reporta, no se arregla en el mismo cambio). El camino del acompañante exige cuenta activa al
-confirmar (`PropuestasAgenteService`).
+confirmar (`PropuestasAgenteService`).~~
+
+> **Corregido 2026-09-23.** El estado de arriba decía "No se corrigió"; ya está resuelto.
+> `PreferenciaHorarioService` tiene dos guardas privadas: `requirePropio(actorId, habito)` (el mismo
+> `if` que tenía `editar`, ahora extraído y reusado, con la misma `NotAuthorizedException("Solo
+> puedes editar tus propios habitos")`) y `requireEditable(actorId, habito)` = `requireProgreso` +
+> `requirePropio`.
+> - `apagar` y `quitar` llaman a `requireEditable` antes de escribir.
+> - `fijar` llama a `requirePropio`; la cuenta suspendida ya la rechazaba `cobrarCupo`, cuyo primer
+>   paso es `requireProgreso`, antes de cualquier escritura. El cobro de cupo no cambió.
+> - `cambiarEstadoEnFecha` (DELETE/PUT de un día puntual) tenía el mismo hueco de pertenencia —ya
+>   revisaba suspensión— y ahora también llama a `requirePropio`.
+> - `consultar` (lectura) **no se tocó**: revisa suspensión pero no pertenencia. Lo único que expone
+>   de un hábito personal ajeno es su horario de catálogo (`loadHorarioPort.porHabito`), porque las
+>   preferencias se leen con el `actorId`. Queda anotado, no corregido.
+>
+> Pruebas en `PreferenciaHorarioServiceTest` (bloque E-214): para `fijar`, `apagar`, `quitar` y
+> `cambiarEstadoEnFecha`, suspendido → `NotAuthorizedException`, hábito personal ajeno →
+> `NotAuthorizedException` sin escribir nada, y hábito del catálogo (y en `apagar`, uno propio) →
+> sigue funcionando. Contra el código viejo fallan las de suspendido en `apagar`/`quitar` y las
+> cuatro de hábito ajeno; las de suspendido en `fijar`/`cambiarEstadoEnFecha` fijan un
+> comportamiento que ya existía.
 
 **Cómo evitar que vuelva a pasar.** Al corregirlo, que los tres métodos usen las mismas guardas que
 `editar`, con pruebas: suspendido → `NotAuthorizedException` y hábito personal ajeno → rechazo.
+
+## E-215 · Cuatro lecturas del Muro y de testimonios seguían "sin clasificar" con TODOs que ya mentían
+
+**Síntoma.** Un inventario de seguridad (2026-09-23) reportó, leyendo los TODO de los controllers:
+`GET /api/v1/wall/mine`, `GET /api/v1/wall/latest-author`, `GET /api/v1/wall/{postId}/comments` y
+`GET /api/v1/testimonios` sin `@RequiresPermission`, y que `/wall/mine` "con el header X-Actor-Id
+devuelve el conteo de cualquier usuario". El TODO literal de `WallController#mine` decía:
+`TODO(auth fase 4): sin clasificar. Recibe actor pero contarMisPublicaciones no ejecuta ningun guard: con el respaldo de X-Actor-Id devuelve el conteo de cualquier userId que el cliente declare.`
+Los cuatro figuraban en `HANDLERS_SIN_CLASIFICAR` de `EndpointAuthorizationDeclarationTest`, que
+por eso los dejaba pasar.
+
+**Exposición real (verificada leyendo el código, no los TODO).**
+- **No había suplantación por `X-Actor-Id`.** `/api/v1/wall/**` exige sesión en `SecurityConfig`
+  desde el 2026-09-05 (`5641d28`) y `/api/v1/testimonios/**` desde el 2026-09-18 (`9fb018a`). Sin
+  sesión, las cuatro rutas responden 403 en el filtro. Con sesión,
+  `ActorAutenticadoArgumentResolver` toma el actor de la sesión y **ignora** el header. El respaldo
+  por header sigue vivo en todos los perfiles, pero solo alcanza a las rutas que quedaron en
+  `permitAll()`, y estas no están entre ellas.
+- **`/wall/mine` y `/latest-author` ya tenían guard.** `PublicacionMuroService.contarMisPublicaciones`
+  y `ultimoAutor` llaman a `requireActorActivo` (CM-20). Los TODO eran anteriores a eso y nadie los
+  actualizó.
+- **El hueco real, que era chico:** `GET /wall/{postId}/comments` y `GET /testimonios` no reciben
+  actor ni tienen guard en el servicio. Sin `@RequiresPermission`, `PermissionEnforcementInterceptor`
+  los deja pasar sin mirar a nadie, así que **una cuenta SUSPENDIDA que todavía tenga la sesión viva
+  podía leer comentarios y testimonios**. El feed hermano (`GET /wall`) sí devuelve 403 en ese caso.
+
+**Causa real.** Los TODO y la lista de excepciones del test se escribieron cuando todo estaba en
+`permitAll()` y los servicios no tenían guard. Después se cerraron las rutas y se agregaron los
+guards, pero nadie volvió a clasificar los handlers: la excepción del test quedó tapando cuatro
+endpoints que ya se podían declarar.
+
+**Solución.** Los cuatro pasan a `@RequiresPermission(Permission.USE_APP)`, el mismo permiso que el
+feed, las reacciones y comentar. Se quitaron sus TODO (con una nota de qué decían y por qué ya no
+valía) y sus cuatro entradas de `HANDLERS_SIN_CLASIFICAR`. `GET /testimonios` **no** se marcó
+`@PublicEndpoint`: `SecurityConfig` ya exige sesión ahí y la app muestra los testimonios dentro de
+Comunidad. Declararlo público habría contradicho al filtro. Ya no hace falta cambiar nada para que
+`/wall/mine` tome el actor de la sesión: eso lo garantiza la ruta autenticada, y ahora lo prueba un
+test.
+
+**Lo que queda abierto, dicho.**
+- `TestimonioController#crear` sigue en `HANDLERS_SIN_CLASIFICAR`: es un handler con dos casos de
+  uso y no se puede declarar hasta partirlo en dos.
+- Para comentarios y testimonios el chequeo de suspensión lo hace solo el interceptor, que hoy mira
+  TRAINEE (y MENTOR_LEAD en modo sombra). Un MENTOR/ADMIN/ALCHEMIST suspendido con sesión sigue
+  leyendo (falla abierta de A-1). Cerrarlo del todo exige pasar el actor a `ConsultarComentariosUseCase`
+  y `ConsultarTestimoniosUseCase`.
+- `docs/api/CONTRATO_COMUNIDAD.md` §7.1 todavía dice que `GET /api/v1/testimonios` es "totalmente
+  público", y `docs/MODULO_AUTH.md` todavía lista estos cinco como "sin clasificar". Hay que
+  corregir los dos.
+
+**Cómo evitar que vuelva a pasar.**
+- `MuroYTestimoniosAutenticacionTest` usa la cadena real: sin sesión, 403 en las cuatro rutas aunque
+  venga `X-Actor-Id`; con sesión, `/wall/mine` cuenta las publicaciones de la sesión e ignora un
+  header ajeno. `WallControllerAuthorizationTest`, `WallCommentControllerAuthorizationTest` y
+  `TestimonioControllerTest` prueban que un TRAINEE suspendido recibe 403 y uno activo recibe 200.
+  Las pruebas de suspendido fallan contra el código viejo.
+- Lección: un TODO de seguridad describe el código **del día en que se escribió**. Antes de dar por
+  bueno un hallazgo que sale de un TODO, leer el guard del servicio y la ruta en `SecurityConfig`.
+  Y cada vez que se cierra una ruta o se agrega un guard, revisar si alguno de sus handlers sale de
+  `HANDLERS_SIN_CLASIFICAR`.
+
+## E-216 · `GET /api/v1/points/{id}` muestra racha 0 siempre, y no coincide con la pantalla Hoy
+
+**Síntoma.** `GET /api/v1/points/{participanteId}` devuelve `rachaActual` y `rachaMaxima` en 0 para
+todo el mundo, mientras `GET /api/v1/home` muestra la racha real (por ejemplo 3, con récord 7).
+
+**Causa real.** `PuntajeResponse` lee las columnas guardadas de racha, que nadie escribe. La racha
+de verdad se **deriva** de los días con hábito cumplido (`Racha.derivarDe`, regla 02: derivar, no
+incrementar), y esa derivación la usan `/home` y, desde 2026-09-23, `points.api.ResumenPuntajeFinder`
+(`RachaMostrada`, compartida).
+
+**Estado.** Detectado el 2026-09-23 al construir el resumen del acompañante. **No se corrigió**
+(se reporta). El acompañante ya usa el valor derivado.
+
+**Cómo evitar que vuelva a pasar.** Que `/points/{id}` use `RachaMostrada` o deje de exponer esos
+campos. Ojo: sacar campos de una respuesta rompe la app instalada (no hay actualización por aire);
+lo seguro es devolver el valor derivado. Relacionados: el fixture de `HomeAgregadoServiceTest`
+(`participacionInscrita()`: día 12 con `fechaInicio` 2026-05-01) es incoherente según la regla 03, y
+el javadoc de `PorcentajeRocasService` todavía dice "ventana vacía → 100" y "7 días UTC cerrados".
+

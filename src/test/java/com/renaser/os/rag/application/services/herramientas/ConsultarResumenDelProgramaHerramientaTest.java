@@ -5,6 +5,7 @@ import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionD
 import com.renaser.os.rag.application.ports.out.programa.ConsultarPanoramaDelProgramaPort;
 import com.renaser.os.rag.application.ports.out.programa.ConsultarPanoramaDelProgramaPort.Panorama;
 import com.renaser.os.rag.application.ports.out.programa.ConsultarPanoramaDelProgramaPort.ProximoEvento;
+import com.renaser.os.rag.application.ports.out.programa.ConsultarPanoramaDelProgramaPort.RachaYPuntos;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.shared.domain.FixedClock;
@@ -66,7 +67,7 @@ class ConsultarResumenDelProgramaHerramientaTest {
     @Test
     @DisplayName("dice el dia de 90 y la fase")
     void diaYFase() {
-        var panorama = new Panorama(LIMA, Optional.empty(), Optional.empty());
+        var panorama = new Panorama(LIMA, Optional.empty(), Optional.empty(), Optional.empty());
 
         String contenido = contenidoDe(ejecutar(herramienta(EN_DIA_12, panorama, MADRUGADA_UTC)));
 
@@ -76,7 +77,7 @@ class ConsultarResumenDelProgramaHerramientaTest {
     @Test
     @DisplayName("a las 03:30 UTC la fecha y la hora son las de Lima: martes 22 a las 22:30, no miercoles 23")
     void laFechaEsLaDeSuZona() {
-        var panorama = new Panorama(LIMA, Optional.empty(), Optional.empty());
+        var panorama = new Panorama(LIMA, Optional.empty(), Optional.empty(), Optional.empty());
 
         String contenido = contenidoDe(ejecutar(herramienta(EN_DIA_12, panorama, MADRUGADA_UTC)));
 
@@ -88,7 +89,7 @@ class ConsultarResumenDelProgramaHerramientaTest {
     @DisplayName("un evento del dia siguiente en Lima es 'manana' aunque en UTC sea el mismo dia")
     void elEventoSeCuentaEnFechasLocales() {
         var panorama = new Panorama(LIMA, Optional.empty(),
-                Optional.of(new ProximoEvento("Sesion en vivo", INICIO_DEL_EVENTO)));
+                Optional.of(new ProximoEvento("Sesion en vivo", INICIO_DEL_EVENTO)), Optional.empty());
 
         String contenido = contenidoDe(ejecutar(herramienta(EN_DIA_12, panorama, MADRUGADA_UTC)));
 
@@ -100,7 +101,7 @@ class ConsultarResumenDelProgramaHerramientaTest {
     @DisplayName("con el reloj a media manana en Lima, el mismo evento es 'hoy'")
     void elEventoDeHoy() {
         var panorama = new Panorama(LIMA, Optional.empty(),
-                Optional.of(new ProximoEvento("Sesion en vivo", INICIO_DEL_EVENTO)));
+                Optional.of(new ProximoEvento("Sesion en vivo", INICIO_DEL_EVENTO)), Optional.empty());
 
         String contenido = contenidoDe(ejecutar(
                 herramienta(EN_DIA_12, panorama, Instant.parse("2026-09-23T12:00:00Z"))));
@@ -111,8 +112,8 @@ class ConsultarResumenDelProgramaHerramientaTest {
     @Test
     @DisplayName("la coherencia se muestra con su decimal, y sin dato se dice que no hay, nunca un cero")
     void coherencia() {
-        var conDato = new Panorama(LIMA, Optional.of(new BigDecimal("85.5")), Optional.empty());
-        var sinDato = new Panorama(LIMA, Optional.empty(), Optional.empty());
+        var conDato = new Panorama(LIMA, Optional.of(new BigDecimal("85.5")), Optional.empty(), Optional.empty());
+        var sinDato = new Panorama(LIMA, Optional.empty(), Optional.empty(), Optional.empty());
 
         assertThat(contenidoDe(ejecutar(herramienta(EN_DIA_12, conDato, MADRUGADA_UTC))))
                 .contains("Coherencia de los ultimos 7 dias: 85.5%");
@@ -121,20 +122,55 @@ class ConsultarResumenDelProgramaHerramientaTest {
     }
 
     @Test
-    @DisplayName("sin eventos, lo dice; y avisa que racha y puntos de liga no vienen, para que no se inventen")
-    void sinEventoYSinRacha() {
-        var panorama = new Panorama(LIMA, Optional.empty(), Optional.empty());
+    @DisplayName("sin eventos, lo dice")
+    void sinEvento() {
+        var panorama = new Panorama(LIMA, Optional.empty(), Optional.empty(), Optional.empty());
 
         String contenido = contenidoDe(ejecutar(herramienta(EN_DIA_12, panorama, MADRUGADA_UTC)));
 
-        assertThat(contenido).contains("no tiene eventos proximos")
-                .contains("Racha y puntos de liga: no disponibles");
+        assertThat(contenido).contains("no tiene eventos proximos");
+    }
+
+    @Test
+    @DisplayName("a las 03:30 UTC muestra la racha actual con su record y los puntos de liga, sin decir que no estan")
+    void rachaYPuntos() {
+        var panorama = new Panorama(LIMA, Optional.empty(), Optional.empty(),
+                Optional.of(new RachaYPuntos(3, 7, 150)));
+
+        String contenido = contenidoDe(ejecutar(herramienta(EN_DIA_12, panorama, MADRUGADA_UTC)));
+
+        assertThat(contenido).contains("Racha actual: 3 dias (record: 7).")
+                .contains("Puntos de liga: 150.")
+                .doesNotContain("no disponibles");
+    }
+
+    @Test
+    @DisplayName("una racha de un dia se dice en singular, y una en cero se muestra como cero, no como falta de dato")
+    void rachaDeUnDiaYEnCero() {
+        var deUnDia = new Panorama(LIMA, Optional.empty(), Optional.empty(), Optional.of(new RachaYPuntos(1, 1, 100)));
+        var enCero = new Panorama(LIMA, Optional.empty(), Optional.empty(), Optional.of(new RachaYPuntos(0, 5, 90)));
+
+        assertThat(contenidoDe(ejecutar(herramienta(EN_DIA_12, deUnDia, MADRUGADA_UTC))))
+                .contains("Racha actual: 1 dia (record: 1).");
+        assertThat(contenidoDe(ejecutar(herramienta(EN_DIA_12, enCero, MADRUGADA_UTC))))
+                .contains("Racha actual: 0 dias (record: 5).").contains("Puntos de liga: 90.");
+    }
+
+    @Test
+    @DisplayName("si la racha y los puntos no se pudieron leer, lo dice en vez de mostrar un cero")
+    void sinRachaNiPuntos() {
+        var panorama = new Panorama(LIMA, Optional.empty(), Optional.empty(), Optional.empty());
+
+        String contenido = contenidoDe(ejecutar(herramienta(EN_DIA_12, panorama, MADRUGADA_UTC)));
+
+        assertThat(contenido).contains("Racha y puntos de liga: no pude leerlos")
+                .doesNotContain("Racha actual:").doesNotContain("Puntos de liga: ");
     }
 
     @Test
     @DisplayName("un programa que todavia no arranco no es 'dia 0 de 90'")
     void programaSinEmpezar() {
-        var panorama = new Panorama(LIMA, Optional.empty(), Optional.empty());
+        var panorama = new Panorama(LIMA, Optional.empty(), Optional.empty(), Optional.empty());
         ConsultarSituacionDelAprendizPort enDiaCero = participanteId -> Optional.of(new SituacionDelAprendiz(0, 1));
 
         String contenido = contenidoDe(ejecutar(herramienta(enDiaCero, panorama, MADRUGADA_UTC)));

@@ -10,7 +10,8 @@ import java.util.Optional;
 
 /**
  * Lo que la herramienta {@code consultar_resumen_del_programa} suma al dia y la fase: la zona
- * horaria de la persona, su coherencia de la semana y su proximo evento (2026-09-23).
+ * horaria de la persona, su coherencia de la semana, su proximo evento, y su racha y puntos de
+ * liga (2026-09-23).
  *
  * <p><b>Por que no alcanza con {@code ConsultarSituacionDelAprendizPort}.</b> Ese puerto da el
  * dia y la fase, y se reusa tal cual. Pero no trae la zona, y sin la zona no hay "que hora es
@@ -19,7 +20,8 @@ import java.util.Optional;
  *
  * <p>Son los mismos datos que muestra {@code GET /home} ({@code HomeAgregadoService}), leidos
  * por los mismos contratos publicos ({@code users.api.ParticipacionProgramaFinder},
- * {@code points.api.PorcentajeRocasFinder}, {@code points.api.ProximoEventoFinder}). Puerto
+ * {@code points.api.PorcentajeRocasFinder}, {@code points.api.ProximoEventoFinder},
+ * {@code points.api.ResumenPuntajeFinder}). Puerto
  * propio de {@code rag} con tipos propios, mismo criterio que {@code ConsultarAgendaHabitosPort}.
  */
 public interface ConsultarPanoramaDelProgramaPort {
@@ -38,14 +40,26 @@ public interface ConsultarPanoramaDelProgramaPort {
      *                      ultimos 7 dias, con un decimal. Vacio si no planifico ninguna: no es un
      *                      cero ni un cien, es que no hay dato (D-128)
      * @param proximoEvento el evento futuro mas cercano visible para la persona, si hay
+     * @param rachaYPuntos  la racha y los puntos de liga que muestra Inicio. Vacio si no se pudieron
+     *                      leer: la herramienta lo dice en vez de inventar un numero
      */
-    record Panorama(ZoneId zona, Optional<BigDecimal> coherencia, Optional<ProximoEvento> proximoEvento) {
+    record Panorama(ZoneId zona, Optional<BigDecimal> coherencia, Optional<ProximoEvento> proximoEvento,
+                    Optional<RachaYPuntos> rachaYPuntos) {
 
         public Panorama {
             Objects.requireNonNull(zona, "zona es obligatoria");
             Objects.requireNonNull(coherencia, "coherencia es obligatoria (vacia si no hay dato)");
             Objects.requireNonNull(proximoEvento, "proximoEvento es obligatorio (vacio si no hay)");
+            Objects.requireNonNull(rachaYPuntos, "rachaYPuntos es obligatorio (vacio si no hay dato)");
         }
+    }
+
+    /**
+     * @param rachaActual dias seguidos con al menos un habito cumplido, terminando hoy o ayer
+     * @param rachaMaxima la racha mas larga desde que empezo el programa (su record)
+     * @param puntosLiga  saldo de puntos de liga
+     */
+    record RachaYPuntos(int rachaActual, int rachaMaxima, int puntosLiga) {
     }
 
     record ProximoEvento(String titulo, Instant iniciaEn) {
