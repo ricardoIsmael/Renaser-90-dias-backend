@@ -7990,3 +7990,29 @@ En la app, `voz.test.ts` → `crearAgrupador`.
 
 **Cómo evitar que vuelva a pasar.** Antes de encadenar clips de TTS, medir el silencio de sus
 bordes. Y agrupar lo que se pueda: cada cambio de clip cuesta.
+
+## E-233 · El orbe responde "El asistente está saturado en este momento"
+
+**Síntoma.** Al preguntarle al orbe "me puedes ayudar", la app mostró *"El asistente esta saturado en
+este momento. Intenta de nuevo en unos minutos."*. En el backend:
+`WARN ... ConversacionRenasiaService : El proveedor de IA no respondio (El asistente no esta disponible
+en este momento. Intenta de nuevo en unos segundos.). El aprendiz recibio el aviso y su cuota se libero.`
+
+**Causa real.** No era nuestro código. Google tenía sobrecargado el modelo de chat por defecto,
+`gemini-3.1-flash-lite`. Probado directo contra la API con la misma key:
+`503 "This model is currently experiencing high demand. Spikes in demand are usually temporary."`
+Cuando respondía tardaba 2 a 8 s, y por eso la conversación por voz se sentía más lenta que el día
+anterior. El backend ya reintenta ante un 503 (`GoogleGenAiClientesConfig`), pero ese día no
+alcanzó.
+
+**Solución (2026-09-24).** El default de `ai.google.genai.chat.model` pasa a
+`gemini-3.5-flash-lite`. Medido con 3 llamadas por modelo: 1,2 a 3,0 s y sin fallas; además llama
+bien a las herramientas (`consultar_horarios`). Se sigue pudiendo cambiar por
+`RENASIA_CHAT_MODEL`.
+
+**Cómo evitar que vuelva a pasar.**
+- Si aparece "saturado", primero probar el modelo directo contra la API: un 503 `UNAVAILABLE` es
+  de Google, no del backend.
+- **Antes de producción:** producción no fija `RENASIA_CHAT_MODEL`, así que toma el default del
+  yml. Revisar el precio de 3.5-flash-lite.
+- Evaluar un modelo de respaldo automático ante 503, que hoy no existe.

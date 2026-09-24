@@ -151,7 +151,14 @@ spring:
   # vigente y su precio no es promocional. La serie 2.5 quedo en fin de vida (retiro anunciado
   # para octubre de 2026), asi que no se usa. Para el Espejo de la Sombra conviene subir a
   # gemini-3.8-flash, que corre una vez por semana y produce el texto mas delicado.
-  ai.google.genai.chat.model: ${RENASIA_CHAT_MODEL:gemini-3.1-flash-lite}
+  #
+  # Corregido 2026-09-24 (E-233): el default era gemini-3.1-flash-lite. Ese dia Google lo tenia
+  # sobrecargado ("503 This model is currently experiencing high demand") y respondia en 2-8 s; el
+  # orbe mostraba "El asistente esta saturado". Medido con la misma key, 3 llamadas por modelo:
+  # 3.5-flash-lite 1,2-3,0 s y sin fallas; 3.1-flash-lite 2,2-3,8 s con 503 a ratos; 3.7/3.8-flash
+  # 4-9 s con 503. 3.5-flash-lite llama bien a las herramientas del acompanante. Ojo al pasar a
+  # produccion: produccion no fija RENASIA_CHAT_MODEL, asi que toma este default; revisar su precio.
+  ai.google.genai.chat.model: ${RENASIA_CHAT_MODEL:gemini-3.5-flash-lite}
   # C-7: el outbox de Spring Modulith (event_publication, V2) no tenia ninguna configuracion
   # propia. Analisis completo en docs/informes/auditoria-fixes/C-7.md.
   modulith:
