@@ -488,13 +488,13 @@ menos". Las mediciones del 2026-09-23:
 | `GET /api/v1/renasia/voz/{id}` | **200** `audio/wav` transmitido mientras se genera (`StreamingResponseBody`). **204** si falló sin producir sonido (espera hasta 8 s). **404** si no existe, venció (2 min) o es de otra persona |
 
 **Por qué dos pasos:** el reproductor del teléfono (ExoPlayer vía expo-audio) solo sabe bajar una
-URL con headers, pero sí toca un WAV mientras baja.
+URL con headers, pero sí toca un WAV mientras baja. Así sirve con la app ya instalada, sin
+módulos nativos nuevos. Como el `POST` arranca la generación, la segunda oración ya está lista
+cuando le toca sonar.
 
 > **Corregido 2026-09-24 (E-231):** tocarlo mientras baja se oía entrecortado, por el buffer de
 > ExoPlayer (2,5 s para arrancar y 5 s tras un corte). La app ahora baja cada oración entera con
-> `preload` mientras suena la anterior. El contrato del backend no cambió. Así sirve con la app ya instalada, sin
-módulos nativos nuevos. Como el `POST` arranca la generación, la segunda oración ya está lista
-cuando le toca sonar.
+> `preload` mientras suena la anterior. El contrato del backend no cambió.
 
 **Piezas:**
 - `SintetizarVozPort` pasó a entregar el audio por partes: `disponible()` y
