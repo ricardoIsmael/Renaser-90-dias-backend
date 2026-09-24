@@ -600,6 +600,75 @@ madrugada al día siguiente (lunes 00:00-06:00).
 **Límite conocido.** Si después se cambia solo el domingo, la madrugada que ya pasó al lunes no se
 recalcula, porque la fila no recuerda de qué día vino. Se corrige guardando de nuevo el lunes.
 
+### D-162 — Conversación por voz en tiempo real con Gemini Live, pasando por el backend (2026-09-24)
+
+**Qué.** Un WebSocket propio, `/api/v1/renasia/voz/en-vivo`, por el que la app manda el audio del
+micrófono y recibe la voz del acompañante mientras se genera, con la transcripción de las dos partes.
+El backend hace de intermediario con Gemini Live (`gemini-3.8-live`, voz Kore). Diseño aprobado y
+contrato: `docs/arquitectura/PROPUESTA_GEMINI_LIVE.md` (§3, §5.ter, §8).
+
+**Por qué por el backend y no directo.** Decisión 1 del dueño: la key no sale del servidor, las
+herramientas corren con el actor de la sesión (nunca con algo que diga el modelo o la app) y la cuota
+y el historial se controlan acá.
+
+**Contrato (§5.ter).** Frames binarios en los dos sentidos: PCM 16 bits mono **16 kHz** (el backend
+baja a 16 kHz los 24 kHz de Gemini, `RemuestreoDe24a16kHz`, con estado entre pedazos para que no
+haya clics). Frames de texto JSON `{"tipo":…}`: `listo{segundosRestantes}`, `oido{texto}`,
+`dicho{texto}`, `interrumpido`, `turnoCompleto`, `propuesta{id,resumen,venceEn}`, `cuotaAgotada`,
+`error{valor}`; la app manda `{"tipo":"fin"}`. Cierres: 1000 normal; 1000 `cuota-agotada`; 1013
+`no-disponible` (apagado o Gemini que no abre); 1011 `error`. Frames de la app partidos por Tomcat se
+juntan en el handler (E-234). El mapeo del socket va antes que los controllers: si no,
+`GET /voz/{id}` se quedaba con `/voz/en-vivo` y el handshake daba 400 (E-236).
+
+**Autenticación.** El handshake es un `GET` con `X-Auth-Token` (la misma sesión de Spring Session que
+el resto del API). Cae bajo `/api/v1/renasia/**`, que exige sesión: sin sesión, 403 del filtro.
+`VozEnVivoHandshakeInterceptor` lee el usuario de esa sesión y pide al caso de uso cuenta **activa**
+con `USE_APP`; si no, 403. Hacía falta porque `PermissionEnforcementInterceptor` solo mira métodos de
+controller.
+
+**Lo mismo que el chat, a propósito.** El mismo prompt del acompañante con el bloque de modo voz
+(D-158), las mismas herramientas (`HerramientasAgenteService`), las mismas propuestas con botón
+(D-153, evento `propuesta`, y el resumen al final del mensaje guardado) y la misma revisión de
+malestar repetido. Cada turno completo se guarda en `mensajes_renasia` como `COMPANION`: lo que dijo
+la persona y lo que respondió. **El audio no se guarda nunca** (decisión 3).
+
+**Cuota (decisión 2).** 10 minutos por persona y por día, contados en Redis por segundos
+(`renasia:voz-en-vivo:{usuario}:{fecha}`), donde la fecha es el **día local de la persona**
+(`participantes_programa.timezone`, regla 02; probado con el reloj a las 03:00 UTC). Se cuenta desde
+`listo` (los segundos que tarda Gemini en abrir no se cobran), cada 5 s y al cerrar (la fracción final
+se redondea para arriba). Si la persona cierra el orbe mientras Gemini todavía está abriendo, la sesión
+se termina apenas abre. Al agotarse: `cuotaAgotada` y cierre; la app
+vuelve al flujo anterior. Tope de 15 minutos por sesión (límite de Gemini Live). **Si Redis no
+responde al abrir, no se abre** (`no-disponible`): son minutos de un servicio pago y la app tiene a
+dónde volver. Si falla a mitad, la conversación sigue, el cobro siguiente suma esos segundos y el tope
+de la sesión se aplica igual (no depende de Redis). Es el criterio opuesto a la cuota de mensajes,
+que deja pasar si Redis falla.
+
+**Detalle verificado contra la API real.** Tras pedir una herramienta, Gemini manda un `turnComplete`
+sin haber hablado y otro al terminar. El primero no cierra el turno: si no, la persona y la respuesta
+quedaban en mensajes separados y la app dejaba de "pensar" antes de tiempo. Al revés, si la persona
+interrumpe cuando el acompañante ya estaba hablando, lo que alcanzó a decir se guarda como su
+respuesta y lo nuevo empieza otro turno, para que el historial conserve el orden real.
+
+**Interruptor.** `renaser.ia.voz.en-vivo.activa` (`IA_VOZ_EN_VIVO`, apagado). Es `en-vivo.activa` y no
+`en-vivo: true` como decía la propuesta porque en YAML una clave no puede ser a la vez valor y bloque.
+Prendido sin `GOOGLE_GENAI_API_KEY`, el backend no arranca y dice por qué.
+
+**Límites conocidos.**
+- El modelo no recibe los turnos anteriores ni contexto de la base de conocimiento: la sesión se abre
+  antes de que la persona hable. Lo que sabe de ella viene de la situación del prompt y de las
+  herramientas.
+- Si Gemini corta a mitad (`goAway`, red), la app recibe `error` y se cierra; no hay reconexión
+  automática todavía.
+- Las sesiones viven en memoria de la instancia: con más de una instancia, cada una atiende los
+  sockets que abrió (la cuota sí es compartida, está en Redis).
+
+Piezas: `ConversarEnVivoUseCase`, `ConversacionEnVivoService`, `SesionDeVozEnVivo`,
+`TiempoDeVozEnVivo`, `TurnosDeVozEnVivo`, `ConversacionEnVivoPort` (+ `GeminiLiveAdapter` /
+`NoOpConversacionEnVivoAdapter`), `ControlCuotaVozEnVivoPort` (+ Redis),
+`ConsultarZonaDelParticipantePort`, `ProgramarTareaPeriodicaPort`, `VozEnVivoWebSocketHandler`,
+`VozEnVivoHandshakeInterceptor`, `CuotaDeVozEnVivo` y `EventoDeVozEnVivo` (dominio).
+
 ---
 
 ## 4. Estructura del módulo

@@ -1,6 +1,9 @@
 # Propuesta: conversación por voz en tiempo real con Gemini Live
 
 **Estado:** aprobada por el dueño el 2026-09-24, con las decisiones de §8 tomadas. En construcción por fases (§5).
+**Avance (2026-09-24):** Fase 1 (backend) y la parte de backend de la Fase 3 (historial, cuota, D-162)
+hechas, detrás del interruptor apagado. Probado contra Gemini Live real con herramientas. Falta la
+app (Fase 2) y la prueba en un teléfono real.
 **Fecha:** 2026-09-24 · **Origen:** pedido del dueño ("la voz tiene que salir a la par del texto").
 
 ## 1. Por qué
@@ -46,7 +49,7 @@ asistente de voz conversacional.
 
 ```text
 App (micrófono 16 kHz con cancelación de eco)
-  ⇄ WebSocket propio  /api/v1/renasia/live  (sesión de la app, X-Auth-Token)
+  ⇄ WebSocket propio  /api/v1/renasia/voz/en-vivo  (sesión de la app, X-Auth-Token)
      Backend (rag): arma la sesión, ejecuta herramientas, guarda el historial, cuenta la cuota
   ⇄ WebSocket Gemini Live (API key solo en el servidor)
 ```
@@ -77,6 +80,13 @@ cada escritura sigue siendo una propuesta con botón (D-153).
 | `SesionDeVozService` | `application/services` | arma el setup (prompt del acompañante en modo voz, herramientas del catálogo existente, voz Kore), ejecuta las herramientas con `HerramientasAgenteService`, guarda la transcripción en `mensajes_renasia`, controla la cuota |
 | `VozEnVivoWebSocketHandler` | `infrastructure/adapter/in/websocket` | el WebSocket de la app: autentica, sin lógica, delega en el caso de uso |
 
+> **Corregido 2026-09-24 (al construirlo).** La ruta del diagrama decía `/api/v1/renasia/live`; la que
+> vale es la de §5.ter, `/api/v1/renasia/voz/en-vivo`. `SesionDeVozService` quedó repartido en
+> `ConversacionEnVivoService` (caso de uso `ConversarEnVivoUseCase`), `SesionDeVozEnVivo` (una
+> conversación viva), `TiempoDeVozEnVivo` (cuota) y `TurnosDeVozEnVivo` (historial), en
+> `application/services/vozenvivo`. El prompt lo arma el adaptador (`PromptDeVozEnVivo`), igual que en
+> el chat. Detalle en D-162 de `docs/MODULO_RAG.md`.
+
 **Se reusa todo lo que ya existe:**
 - las **mismas herramientas** (`HerramientaAgente`), incluidas `buscar_huecos_para_habitos` y la agenda;
 - el **mismo prompt** del acompañante con el bloque de modo voz (D-158);
@@ -105,6 +115,9 @@ cada escritura sigue siendo una propuesta con botón (D-153).
 
 Todo detrás de un interruptor (`renaser.ia.voz.en-vivo`, apagado por defecto), en la rama
 `acompanante-ia`.
+
+> **Corregido 2026-09-24.** El interruptor es `renaser.ia.voz.en-vivo.activa` (`IA_VOZ_EN_VIVO`): en
+> YAML `en-vivo` no puede ser a la vez un valor y el bloque con `modelo`, `voz` y la cuota.
 
 ## 5.bis Fase 0 hecha: medición real (2026-09-24)
 
@@ -144,6 +157,20 @@ mejora que justifica el cambio.
 
 Se guarda en `mensajes_renasia` (agente COMPANION) cada turno completo: lo que dijo la persona
 (`oido`) y lo que respondió (`dicho`).
+
+**Agregado al construirlo (2026-09-24), sin cambiar lo de arriba:**
+
+- **Cierres.** 1000 normal; 1000 con motivo `cuota-agotada` (después de `cuotaAgotada`); 1013
+  `no-disponible` (voz en vivo apagada o Gemini que no abre, después de `error`): la app vuelve al
+  flujo anterior; 1011 `error` (después de `error`).
+- **Autenticación.** El handshake es un `GET` con el header `X-Auth-Token`. Sin sesión, o con una
+  cuenta suspendida o sin `USE_APP`, es **403** y no hay socket.
+- **Cuándo mandar audio.** Después de `listo`. Frames de ~100 ms (3200 bytes); el backend junta los
+  frames que Tomcat entrega partidos, hasta 1 MB (E-234).
+- **`dicho` también lleva el texto de apoyo** cuando se repite el malestar, igual que el chat (va
+  separado por un salto de párrafo y no se dice en voz alta).
+- **`turnoCompleto` llega una vez por respuesta**, aunque en el medio el modelo haya usado una
+  herramienta (Gemini manda dos; el backend filtra el intermedio).
 
 ## 6. Riesgos
 

@@ -233,7 +233,7 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
      * de omitir la seccion — si el marcador quedara vacio, el prompt afirmaria implicitamente que
      * hay un dia y el modelo intentaria encontrarlo.
      */
-    private static String formatearSituacion(SituacionDelAprendiz situacion) {
+    static String formatearSituacion(SituacionDelAprendiz situacion) {
         if (situacion == null) {
             return "(quien te escribe no esta cursando el programa de 90 dias: no tiene dia ni fase. "
                     + "No hables de su dia ni se lo preguntes.)";
@@ -241,7 +241,7 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
         return "Hoy es su dia " + situacion.diaPrograma() + " de 90, en la fase " + situacion.fase() + " de 4.";
     }
 
-    private static String formatearContexto(List<String> contexto) {
+    static String formatearContexto(List<String> contexto) {
         if (contexto.isEmpty()) {
             return "(no se recupero contexto de la base de conocimiento para esta pregunta)";
         }

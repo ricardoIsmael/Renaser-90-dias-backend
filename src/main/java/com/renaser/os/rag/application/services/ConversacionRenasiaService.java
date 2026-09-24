@@ -119,12 +119,12 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     public static final String MENSAJE_PROVEEDOR_SATURADO =
             "El asistente esta saturado en este momento. Intenta de nuevo en unos minutos.";
     /** Deja el texto de apoyo separado de lo ultimo que dijo el modelo, en vez de pegado. */
-    static final String SEPARACION_DEL_APOYO = "\n\n";
+    public static final String SEPARACION_DEL_APOYO = "\n\n";
     /**
      * Lo que ve una app sin botones (y el historial) por cada propuesta. Dice "Propuesta" y no
      * "Listo": todavia no se ejecuto nada. No menciona botones porque la app vieja no los tiene.
      */
-    static final String ENCABEZADO_DE_PROPUESTA = "\n\nPropuesta: ";
+    public static final String ENCABEZADO_DE_PROPUESTA = "\n\nPropuesta: ";
 
     private final UserSummaryFinder userSummaryFinder;
     private final ControlCuotaRenasiaPort controlCuotaRenasiaPort;

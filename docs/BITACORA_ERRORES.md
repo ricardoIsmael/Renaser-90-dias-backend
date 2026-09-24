@@ -8016,3 +8016,67 @@ bien a las herramientas (`consultar_horarios`). Se sigue pudiendo cambiar por
 - **Antes de producción:** producción no fija `RENASIA_CHAT_MODEL`, así que toma el default del
   yml. Revisar el precio de 3.5-flash-lite.
 - Evaluar un modelo de respaldo automático ante 503, que hoy no existe.
+
+## E-234 · `1009: The decoded text message was too big for the output buffer and the endpoint does not support partial messages`
+
+**Síntoma.** Al probar `GeminiLiveAdapter` contra un Gemini Live falso (Tomcat embebido), las tres
+pruebas que abrían sesión fallaban con:
+`ConversacionEnVivoNoDisponibleException: Gemini Live no acepto la sesion: cerrada por Gemini (1009: The decoded text message was too big for the output buffer and the endpoint does not support partial messages)`.
+
+**Causa real.** Tomcat trae un buffer de **8 KB** por mensaje de WebSocket y, si el endpoint no
+acepta mensajes parciales, cierra con 1009 todo frame más grande. El `setup` de Gemini Live lleva el
+prompt entero del acompañante más el bloque de voz y las herramientas (~15 KB). Gemini real lo acepta;
+el servidor falso no.
+
+**Lo importante: el mismo límite aplicaba a nuestro propio WebSocket.** `/api/v1/renasia/voz/en-vivo`
+corre en ese mismo Tomcat: un frame de audio de la app de más de 8 KB (apenas **256 ms** de PCM a
+16 kHz) se habría cortado con 1009, y la app no tiene cómo saberlo de antemano.
+
+**Solución (2026-09-24, D-162).**
+- En la prueba, el falso sube su buffer de texto a 1 MB (`setDefaultMaxTextMessageBufferSize`).
+- En el backend, `VozEnVivoWebSocketHandler` acepta mensajes parciales y los junta
+  (`FramesPartidos`, tope de 1 MB por frame). No se subió el límite de todo el contenedor para no
+  cambiar el del STOMP del chat.
+
+**Cómo evitar que vuelva a pasar.** Todo WebSocket nuevo que reciba binarios o JSON grandes tiene
+que decidir qué hace con frames de más de 8 KB. Queda probado en
+`VozEnVivoWebSocketHandlerTest.frameParticionado` y `framePasadoDelTope`.
+
+## E-235 · La voz en vivo no responde nada si la pregunta es audio sintético de `espeak-ng`
+
+**Síntoma.** En la prueba de humo contra Gemini Live real, con una pregunta generada con
+`espeak-ng -v es-419`, la sesión abría (`setupComplete`, `sessionResumptionUpdate`) pero no llegaba
+nada más: ni `inputTranscription`, ni audio, ni `turnComplete`. Sin error.
+
+**Causa real.** No era el backend. La detección de voz automática de Gemini Live no toma como habla
+la voz robótica de `espeak-ng`. Con audio de voz natural (una respuesta de Kore grabada y una pregunta
+generada con Gemini TTS) respondió enseguida, con transcripción y herramientas.
+
+**Solución.** Para probar a mano, usar voz natural: grabarse, o generar la pregunta con Gemini TTS
+(`GeminiVozAdapter`) y pasarla a 16 kHz con `ffmpeg -ar 16000 -ac 1 -f s16le`, dejando ~2 s de
+silencio al final para que la detección cierre el turno.
+
+**Cómo evitar que vuelva a pasar.** Si la voz en vivo "no contesta" y no hay error, probar primero
+con una grabación de voz real antes de buscar un bug.
+
+## E-236 · El WebSocket de voz en vivo responde 400 en el handshake: `Unexpected HTTP response status code 400`
+
+**Síntoma.** En `VozEnVivoWebSocketIT` (Tomcat real, sesión real en Redis), abrir
+`/api/v1/renasia/voz/en-vivo` **con** una sesión válida fallaba con:
+`java.util.concurrent.ExecutionException: java.net.http.WebSocketHandshakeException` —
+`Caused by: jdk.internal.net.http.websocket.CheckFailedException: Unexpected HTTP response status code 400`.
+La prueba de cuenta suspendida daba `expected: 403 but was: 400`. Sin sesión sí daba 403 (lo corta el
+filtro de seguridad antes). Las pruebas unitarias del handler y del interceptor pasaban todas.
+
+**Causa real.** El pedido nunca llegaba al WebSocket. `@EnableWebSocket` registra su mapeo con orden
+**1**, y los controllers van en **0**. `VozRenasiaController` tiene `GET /api/v1/renasia/voz/{id}`
+con `{id}` de tipo `UUID`: tomaba `en-vivo` como id, no podía convertirlo y respondía 400.
+
+**Solución (2026-09-24, D-162).** `VozEnVivoWebSocketConfig` pone su mapeo primero
+(`ServletWebSocketHandlerRegistry.setOrder(Ordered.HIGHEST_PRECEDENCE)`). Ese mapeo solo conoce su
+propia ruta, así que no le quita nada a ningún controller.
+
+**Cómo evitar que vuelva a pasar.** Una ruta de WebSocket debajo de una ruta de controller con
+variable (`/voz/{id}` y `/voz/en-vivo`) choca en silencio. Lo atrapa solo una prueba con el servidor
+real: `VozEnVivoWebSocketIT` queda como regresión (sin el arreglo falla con este mismo 400). Un
+`@WebMvcTest` o una prueba unitaria del handler no lo ven.

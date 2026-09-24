@@ -341,6 +341,30 @@ renaser:
       length-scale: ${IA_VOZ_LENGTH_SCALE:1.06}
       noise-scale: ${IA_VOZ_NOISE_SCALE:0.78}
       noise-w-scale: ${IA_VOZ_NOISE_W_SCALE:0.95}
+      # Conversacion por voz en tiempo real con Gemini Live (D-162,
+      # docs/arquitectura/PROPUESTA_GEMINI_LIVE.md): WebSocket /api/v1/renasia/voz/en-vivo. El
+      # backend hace de intermediario: la key no sale del servidor, las herramientas corren con el
+      # actor de la sesion y la transcripcion se guarda en mensajes_renasia (el audio nunca).
+      #
+      # Apagada por defecto. Con `activa: false` el socket igual existe y responde `error` +
+      # cierre 1013 `no-disponible`, y la app usa el flujo anterior (STT del telefono, chat y voz
+      # Kore). Prendida y SIN GOOGLE_GENAI_API_KEY, el backend no arranca y dice por que.
+      #
+      # Es `en-vivo.activa` y no `en-vivo: true` como decia la propuesta: una clave de YAML no puede
+      # ser a la vez un valor y un bloque con modelo/voz/cuota adentro.
+      en-vivo:
+        activa: ${IA_VOZ_EN_VIVO:false}
+        # Sin la key: va en el header x-goog-api-key, nunca en la URL (no queda en ningun log).
+        url: ${IA_VOZ_EN_VIVO_URL:wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent}
+        modelo: ${IA_VOZ_EN_VIVO_MODELO:gemini-3.8-live}
+        voz: ${IA_VOZ_EN_VIVO_VOZ:Kore}
+        # Conectar y que Gemini acepte la sesion (setupComplete). Medido: ~3,8 s.
+        timeout-ms: ${IA_VOZ_EN_VIVO_TIMEOUT_MS:15000}
+        # Decision del dueno (2026-09-24): 10 minutos por persona y por dia, contados en el dia
+        # local de la persona. Pasado el limite, `cuotaAgotada` y la app vuelve al flujo anterior.
+        minutos-por-dia: ${IA_VOZ_EN_VIVO_MINUTOS_POR_DIA:10}
+        # Tope de Gemini Live para una sesion de solo audio. Con la cuota de 10 no se alcanza.
+        minutos-maximos-por-sesion: ${IA_VOZ_EN_VIVO_MINUTOS_POR_SESION:15}
     acompanante:
       # Fase 2 de la propuesta del acompanante (D-153): con esto en true, `marcar_habito_completado`
       # ya NO marca el habito. Deja una propuesta pendiente y la persona la confirma con un boton
