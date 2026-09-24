@@ -703,6 +703,17 @@ general rige **desde mañana**, el día en curso no se reacomoda, y el resumen l
 `useRenasiaChat` a `utils/propuestas` para no duplicar qué queda en la tarjeta ante 409, sin red u
 otro error.
 
+
+### D-164 — Si la voz del servidor falla, la app avisa y responde por escrito; nunca la voz del teléfono (2026-09-24)
+
+Decisión del dueño: *"cuando la app esté fallando, que comunique que está fallando"*. Hasta ahora,
+si `POST /api/v1/renasia/voz` respondía 204 o fallaba, la app hablaba con el TTS del teléfono, que
+el dueño calificó de "paupérrimo" (D-157) y que además hacía que el acompañante cambiara de voz sin
+aviso. Desde hoy la voz es **una sola**, Kore: si no está, el `Locutor` de la app avisa una vez por
+turno (*"Mi voz no está disponible ahora mismo; te respondo por escrito."*) y la respuesta queda en
+pantalla. `expo-speech` sale del respaldo. El backend no cambió: sigue respondiendo 204 cuando no hay
+voz, y ese 204 es lo que dispara el aviso.
+
 ---
 
 ## 4. Estructura del módulo
