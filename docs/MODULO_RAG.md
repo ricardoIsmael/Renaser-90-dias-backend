@@ -703,6 +703,12 @@ general rige **desde mañana**, el día en curso no se reacomoda, y el resumen l
 `useRenasiaChat` a `utils/propuestas` para no duplicar qué queda en la tarjeta ante 409, sin red u
 otro error.
 
+> **Verificado 2026-09-24, 15:43–15:44**, en el emulador con la voz en vivo: *"Recuerda que trabajo de
+> lunes a viernes de nueve a seis"* → el orbe preguntó *"¿Quieres que guarde ese horario…?"* → *"Sí,
+> guárdalo"* → la tarjeta apareció debajo del orbe con el resumen y los botones; **Cancelar** la dejó
+> en `CANCELADA` en la base y la tarjeta mostró el cierre. La propuesta sobrevive a un turno nuevo (en
+> el medio hubo otro intercambio) hasta que la persona actúa. Queda por probar en un teléfono real.
+
 
 ### D-164 — Si la voz del servidor falla, la app avisa y responde por escrito; nunca la voz del teléfono (2026-09-24)
 
