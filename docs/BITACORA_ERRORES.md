@@ -7846,3 +7846,21 @@ y se descartó por lento: 3,3 s por frase en CPU contra 0,3 s de Piper.
 
 **Cómo evitar que vuelva a pasar.** Para el audio de un servicio externo se valida el contenido, no
 el header.
+
+## E-227 · Un `clean verify` en segundo plano "falla" en ITs de `habits` que no se tocaron
+
+**Síntoma.** `Tests run: 6, Failures: 0, Errors: 6 … <<< FAILURE! -- in
+com.renaser.os.habits.application.services.PausaHabitoPersonalIT` (y
+`CrearHabitoPersonalGeneraTrackTransaccionIT`), en un cambio que solo tocaba `rag`.
+
+**Causa real.** Mientras el `clean verify` corría en segundo plano, el agente siguió editando y
+lanzó `./mvnw compile` sobre el mismo `target/`. Es E-104 otra vez: dos builds sobre un mismo
+`target/`. El verify terminó con clases a medio recompilar, y el contexto de Spring de las
+pruebas de integración no levantó.
+
+**Solución (2026-09-23).** Descartar ese resultado y correr `clean verify` de nuevo, sin ningún
+otro build al mismo tiempo.
+
+**Cómo evitar que vuelva a pasar.** Mientras corre un verify en segundo plano no se compila ni se
+prueba en el mismo worktree. Si hace falta avanzar, que sea en otro `git worktree`. Un fallo en un
+módulo que el cambio no tocó es la primera señal de esto.

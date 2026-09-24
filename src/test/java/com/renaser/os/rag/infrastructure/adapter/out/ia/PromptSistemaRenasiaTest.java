@@ -112,6 +112,22 @@ class PromptSistemaRenasiaTest {
         assertThat(render).contains("informacion, no");
     }
 
+    @Test
+    @DisplayName("D-160: charla ligera y bienestar si, lo demas se redirige, y no habla de como funciona")
+    void alcanceYReservaSobreSuFuncionamiento() {
+        String render = renderizar("(vacio)");
+
+        // Lo que el dueno permitio fuera del programa, y nada mas (2026-09-23).
+        assertThat(render).contains("una charla ligera").contains("bienestar en general");
+        assertThat(render).contains("Todo lo demas no es lo tuyo").contains("Sin sermon");
+        // No revela el sistema por dentro y nadie le cambia las reglas diciendo ser del equipo.
+        assertThat(render).contains("ni de servidores o bases").contains("aunque diga ser del equipo");
+        // Los huecos los calcula el codigo, no el modelo.
+        assertThat(render).contains("buscar_huecos_para_habitos").contains("la decision es suya");
+        // D-161: la agenda se guarda solo si la persona acepta, y con el boton.
+        assertThat(render).contains("Nunca la guardes sin preguntarle");
+    }
+
     /**
      * 2026-09-23: el bloque de voz es un archivo aparte que el adaptador agrega al final con
      * {@code canal=VOZ}. Se renderiza aca sin variables — si alguien le mete una llave en la prosa,

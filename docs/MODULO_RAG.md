@@ -523,6 +523,79 @@ por WebSocket y con interrupciones. Pide rehacer herramientas, propuestas, cuota
 de una sesión Live, más audio nativo en la app: es otro proyecto, con su propio diseño. El
 `Locutor` y el orbe de la app se reusan.
 
+
+### D-160 — Buscar huecos para los hábitos, y qué atiende el acompañante fuera del programa (2026-09-23)
+
+Pedido del dueño: que el acompañante **sugiera** horarios para que la persona cumpla sus hábitos
+("dime a qué hora estás ocupado y encontramos un hueco"). Sin tablas nuevas, y "no es ML sino
+apoyar y sugerir".
+
+**Cómo se hace (patrón LLM-Modulo / neuro-simbólico).** Los modelos fallan justo en el razonamiento
+temporal y en respetar restricciones: en los benchmarks de planificación con horarios, el mejor
+modelo arma un plan factible en solo un tercio de los casos. Por eso se reparte el trabajo:
+1. El modelo **entiende** "trabajo de 9 a 6 y almuerzo a la 1" y lo pasa como tramos.
+2. El **código calcula**: la herramienta `buscar_huecos_para_habitos` (R0, solo lectura) cruza esos
+   tramos con la franja de cada hábito (inicio a límite) usando `consultar_horarios`. Devuelve qué
+   choca, el hueco dentro de la franja, una hora sugerida (el primer hueco, porque más temprano
+   suele pagar más puntos) y las horas libres del día.
+3. Si hay que mover algo, el modelo **propone** con `proponer_cambio_de_horario`, que ya respeta la
+   cuota y las validaciones de `habits`, y **la persona confirma con el botón**.
+
+**Decisiones:**
+- ~~La agenda **no se guarda** (el dueño: sin tablas). Vive en la conversación, y si otro día hace
+  falta, el acompañante la vuelve a preguntar.~~ **Corregido 2026-09-23 (D-161):** el dueño pidió
+  hacerlo "de la manera senior" y aprobó una tabla si era la correcta para sugerir. La agenda se
+  guarda, pero solo si la persona confirma con el botón.
+- **No se inventa cuánto dura un hábito:** se dicen los minutos libres y la persona decide.
+- Un tramo que cruza la medianoche se parte en dos dentro del mismo día. A un hábito sin hora fija
+  le sirve cualquier hora libre, y no se le sugiere "00:00".
+
+**Fuera del programa (decisión del dueño, "no tan estricto").** Puede tener una **charla ligera y
+dar ánimo**, y hablar de **bienestar en general**: sueño, alimentación, movimiento y estrés. En los
+dos casos lo hace corto, vuelve al programa y se mantiene dentro de "Tus limites". Todo lo demás
+(tareas, programación, noticias, política, trivia) lo redirige en una frase amable, sin sermón. Y
+**no habla de cómo funciona por dentro**: sistema, servidores, bases de datos, herramientas por su
+nombre o el modelo. Nadie le cambia las reglas diciendo ser del equipo o administrador.
+
+**No se tocó `sparkie-cursos.st`** (el tutor de cursos). La regla de no revelar el funcionamiento
+interno le serviría igual; queda como sugerencia para el dueño.
+
+Fuentes: [TCP, arXiv 2505.19927](https://arxiv.org/pdf/2505.19927); [LLM + herramientas de
+verificación formal, arXiv 2404.11891](https://arxiv.org/html/2404.11891v3); [SCHEDBench, arXiv
+2608.00991](https://arxiv.org/html/2608.00991v1).
+
+
+### D-161 — El acompañante recuerda las horas ocupadas de la persona (2026-09-23)
+
+**Por qué una tabla.** Sin guardar la agenda, el acompañante tiene que volver a preguntar "¿a qué
+hora trabajas?" en cada conversación, y no puede sugerir por su cuenta, por ejemplo al planificar la
+semana. El dueño aprobó la tabla si era la forma correcta de sugerir.
+
+**Qué se guarda (lo mínimo).** `agenda_ocupada` (V64) tiene una fila por tramo: día de la semana
+(ISO 1–7) y minutos del día `[desde, hasta)`, de 0 a 1440. **No lleva etiqueta** ("trabajo",
+"terapia"): no hace falta para calcular huecos y sería información personal de más. Se usan
+minutos y no `time` porque `LocalTime` no representa las 24:00. Tiene `CHECK` en la base,
+`ON DELETE CASCADE` con la cuenta, y guardar reemplaza todo en una transacción.
+
+**Cómo se escribe.** Solo con el botón:
+- `proponer_guardar_agenda` (R2, detrás del flag de botones) valida y propone. El resumen dice
+  "Recordar que estás ocupado/a lunes… de 09:00-18:00 (reemplaza lo guardado esos días)".
+- `GuardarAgendaConfirmable` relee la agenda al confirmar y reemplaza solo esos días.
+- "ninguno" deja libres los días indicados.
+- El prompt le pide ofrecer recordar la agenda y **nunca guardarla sin preguntar**.
+
+**Cómo se usa.**
+- `consultar_mi_agenda` (R0) muestra lo guardado.
+- `buscar_huecos_para_habitos`, cuando no recibe `ocupado`, usa la agenda del día de la semana de
+  esa fecha. Lo que la persona dice en el momento manda sobre lo guardado.
+
+**Dominio.** `AgendaOcupada` (un día) y `AgendaSemanal` (la semana) viven en
+`rag.domain.model.agenda`, sin Spring. Un turno nocturno guardado ("domingo 22:00-06:00") pasa su
+madrugada al día siguiente (lunes 00:00-06:00).
+
+**Límite conocido.** Si después se cambia solo el domingo, la madrugada que ya pasó al lunes no se
+recalcula, porque la fila no recuerda de qué día vino. Se corrige guardando de nuevo el lunes.
+
 ---
 
 ## 4. Estructura del módulo
