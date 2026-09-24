@@ -675,6 +675,12 @@ Piezas: `ConversarEnVivoUseCase`, `ConversacionEnVivoService`, `SesionDeVozEnViv
 > efectiva Gemini se oía a sí mismo y se contestaba en loop. Se pierde interrumpirlo hablando; se
 > corta tocando el orbe. El backend no cambió.
 
+> **Corregido 2026-09-24 (E-239).** Sí hubo un cambio en el backend después: la sesión se abre con
+> detección de voz poco sensible (`START_SENSITIVITY_LOW`, 200 ms de colchón, 800 ms de silencio) y
+> el prompt suma `prompts/modo-en-vivo.st`, que obliga a responder siempre en español y a pedir que
+> repitan ante ruido. Antes, el ruido del cuarto disparaba turnos que el modelo transcribía en
+> coreano y contestaba en coreano.
+
 ---
 
 ## 4. Estructura del módulo

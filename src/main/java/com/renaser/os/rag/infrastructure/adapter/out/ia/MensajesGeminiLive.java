@@ -49,6 +49,16 @@ final class MensajesGeminiLive {
         record Adios() implements DelServidor { }
     }
 
+    /**
+     * Deteccion de voz (E-239). El microfono queda abierto entre turnos, y con la sensibilidad por
+     * defecto el ruido del cuarto disparaba turnos que el modelo transcribia en otro idioma. Baja
+     * sensibilidad al arranque; 200 ms de colchon antes de la voz para no comerse la primera silaba;
+     * 800 ms de silencio para dar por terminado lo que dijo la persona (el valor del servidor).
+     */
+    static final String SENSIBILIDAD_DE_ARRANQUE = "START_SENSITIVITY_LOW";
+    static final int COLCHON_ANTES_DE_LA_VOZ_MS = 200;
+    static final int SILENCIO_FIN_DE_TURNO_MS = 800;
+
     static String setup(String modelo, String voz, String prompt, List<DefinicionHerramienta> herramientas) {
         ObjectNode setup = JSON.createObjectNode();
         setup.put("model", modelo.startsWith("models/") ? modelo : "models/" + modelo);
@@ -57,6 +67,10 @@ final class MensajesGeminiLive {
         generacion.putObject("speechConfig").putObject("voiceConfig").putObject("prebuiltVoiceConfig")
                 .put("voiceName", voz);
         setup.putObject("systemInstruction").putArray("parts").addObject().put("text", prompt);
+        ObjectNode deteccion = setup.putObject("realtimeInputConfig").putObject("automaticActivityDetection");
+        deteccion.put("startOfSpeechSensitivity", SENSIBILIDAD_DE_ARRANQUE);
+        deteccion.put("prefixPaddingMs", COLCHON_ANTES_DE_LA_VOZ_MS);
+        deteccion.put("silenceDurationMs", SILENCIO_FIN_DE_TURNO_MS);
         setup.putObject("inputAudioTranscription");
         setup.putObject("outputAudioTranscription");
         if (!herramientas.isEmpty()) {

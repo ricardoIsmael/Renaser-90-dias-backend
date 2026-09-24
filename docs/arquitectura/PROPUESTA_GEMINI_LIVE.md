@@ -112,6 +112,11 @@ cada escritura sigue siendo una propuesta con botón (D-153).
 > JavaScript lo dejaba entrecortado). Se termina la conversación tocando el orbe. La interrupción
 > hablando se retoma cuando se pruebe en un teléfono con cancelación de eco de verdad.
 
+> **Corregido 2026-09-24 (E-239).** La tabla de §2 dice que el idioma se detecta solo. Cierto, y es
+> un problema: ante ruido, el modelo transcribió coreano y contestó en coreano. Como Google no deja
+> fijar el idioma de salida por configuración en audio nativo, va por instrucción
+> (`prompts/modo-en-vivo.st`) y el detector de voz se abre con sensibilidad baja.
+
 ## 5. Fases
 
 | Fase | Qué | Cómo se verifica |

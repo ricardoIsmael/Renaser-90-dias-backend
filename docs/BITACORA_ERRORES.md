@@ -8151,3 +8151,37 @@ AudioTrack: restartIfDisabled(103): releaseBuffer() track 0x79e7f17011e0 disable
 garantías de tiempo. Lo que necesite tiempo real va al lado nativo. Y todo asistente de voz que
 hable por el parlante necesita o cancelación de eco comprobada o semidúplex; en el emulador, siempre
 semidúplex.
+
+> **Nota 2026-09-24 sobre E-238.** Después del arreglo quedan `underrun` en el log, pero ya no son
+> cortes: aparecen **al arrancar** el parlante vacío (el módulo llama a `play()` sin datos) y **al
+> terminar cada respuesta**, cuando la cola se vacía. Durante las respuestas (8,5 s y 9 s medidos
+> con la prueba de punta a punta) no hubo ninguno. Si alguien vuelve a contar `underrun`, que mire
+> la línea de tiempo contra `restartIfDisabled` y `Mic sample tap stopped` antes de asustarse.
+
+## E-239 · El orbe en vivo transcribe ruido del cuarto como coreano y contesta en coreano
+
+**Síntoma.** En la prueba de punta a punta de la voz en vivo (D-162), sin que nadie hablara,
+quedó guardado un turno del "usuario" `대통령 기록관` y la respuesta del acompañante fue en coreano:
+`저는 프로그램과 관련된 내용만 안내해 드릴 수 있어요…`. En la pantalla Hoy se vio igual.
+
+**Causa real.** Dos cosas:
+1. **El detector de voz de Gemini es sensible por defecto.** Con el micrófono abierto entre turnos,
+   el ruido del cuarto (el ventilador de la laptop, en el emulador) disparó un turno. Sobre un
+   audio que no es voz, la transcripción del modelo inventa texto, y ese día inventó coreano.
+2. **El modelo siguió el idioma de lo que "oyó".** El prompt dice que escribe en español, pero ante
+   un turno en coreano contestó en coreano. Google no permite fijar el idioma de salida por
+   configuración en los modelos de audio nativo (`languageCode` no se soporta ahí): solo por
+   instrucciones.
+
+**Solución (2026-09-24).**
+- `MensajesGeminiLive.setup` manda `realtimeInputConfig.automaticActivityDetection` con
+  `startOfSpeechSensitivity = START_SENSITIVITY_LOW`, `prefixPaddingMs = 200` y
+  `silenceDurationMs = 800`. Menos turnos falsos por ruido, sin comerse la primera sílaba.
+- `prompts/modo-en-vivo.st`, que `PromptDeVozEnVivo` agrega después del bloque de voz: siempre
+  en español aunque lo oído parezca otro idioma; ante ruido o algo que no se entiende, dice en
+  español que no alcanzó a oír y pide repetir; ante silencio, espera.
+
+**Cómo evitar que vuelva a pasar.** Todo asistente con el micrófono abierto necesita las dos
+cosas: un detector de voz poco sensible y una regla explícita de idioma en el prompt. Y en la
+bitácora de pruebas, mirar siempre lo que quedó guardado como turno del usuario: ahí se ve lo que
+el modelo cree haber oído.

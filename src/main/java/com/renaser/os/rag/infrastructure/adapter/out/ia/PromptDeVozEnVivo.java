@@ -23,11 +23,14 @@ final class PromptDeVozEnVivo {
             new PromptTemplate(new ClassPathResource(GoogleGenAiRenasiaChatAdapter.RECURSO_PROMPT_ACOMPANANTE));
     private final String modoVoz =
             new PromptTemplate(new ClassPathResource(GoogleGenAiRenasiaChatAdapter.RECURSO_MODO_VOZ)).render();
+    /** Lo propio de la conversacion en vivo (E-239): siempre en espanol, y que hacer con ruido. */
+    static final String RECURSO_MODO_EN_VIVO = "prompts/modo-en-vivo.st";
+    private final String enVivo = new PromptTemplate(new ClassPathResource(RECURSO_MODO_EN_VIVO)).render();
 
     String para(SituacionDelAprendiz situacion) {
         String delAgente = acompanante.render(Map.of(
                 "contexto", GoogleGenAiRenasiaChatAdapter.formatearContexto(List.of()),
                 "situacion", GoogleGenAiRenasiaChatAdapter.formatearSituacion(situacion)));
-        return delAgente + "\n\n" + modoVoz;
+        return delAgente + "\n\n" + modoVoz + "\n\n" + enVivo;
     }
 }
