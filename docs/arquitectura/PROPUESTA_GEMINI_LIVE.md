@@ -185,6 +185,18 @@ Se guarda en `mensajes_renasia` (agente COMPANION) cada turno completo: lo que d
 - **`turnoCompleto` llega una vez por respuesta**, aunque en el medio el modelo haya usado una
   herramienta (Gemini manda dos; el backend filtra el intermedio).
 
+## 5.quater Estado al 2026-09-24 (tarde)
+
+| Fase | Estado |
+|---|---|
+| 0 | Hecha (§5.bis) |
+| 1 | Hecha: backend con `clean verify` en verde (4097 + 107) |
+| 2 | Hecha en el emulador. Dos correcciones sobre la marcha: E-237 (el módulo no compilaba con Expo 57), E-238 (audio entrecortado y loop → entrega directa al parlante nativo y semidúplex) |
+| 3 | Backend hecho (historial, cuota). E-239: detector de voz poco sensible y español obligatorio. **Falta la prueba en un teléfono real** |
+
+Última prueba de punta a punta (14:39): pregunta transcrita completa, respuesta en español con datos
+de las herramientas, 13,8 s de voz sin cortes, cuota cobrada, cierre limpio.
+
 ## 6. Riesgos
 
 - **Modelo nuevo en una API en vivo:** la forma de los mensajes puede cambiar. Por eso va detrás

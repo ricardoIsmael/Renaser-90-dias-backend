@@ -8185,3 +8185,12 @@ quedó guardado un turno del "usuario" `대통령 기록관` y la respuesta del 
 cosas: un detector de voz poco sensible y una regla explícita de idioma en el prompt. Y en la
 bitácora de pruebas, mirar siempre lo que quedó guardado como turno del usuario: ahí se ve lo que
 el modelo cree haber oído.
+
+> **Verificado 2026-09-24, 14:39**, con la prueba de punta a punta (emulador, pregunta grabada por
+> los parlantes). El micrófono se abrió mientras la pregunta ya sonaba y el modelo oyó primero un
+> pedazo ("sacar mi"): respondió **en español** *"No alcancé a oír bien lo que necesitas. ¿Podrías
+> repetírmelo, por favor?"*, que es la regla nueva funcionando. Después transcribió la pregunta
+> completa y correcta (*"¿Qué hábitos me tocan hoy y cuánto tiempo me queda para hacerlos?"*) y
+> contestó con datos reales de las herramientas (Clase diaria, Pastilla Renacer), 13,8 s de voz sin
+> un solo corte. La sesión tardó ~11 s en abrir con el backend recién reiniciado; queda pendiente
+> medirlo en caliente.
