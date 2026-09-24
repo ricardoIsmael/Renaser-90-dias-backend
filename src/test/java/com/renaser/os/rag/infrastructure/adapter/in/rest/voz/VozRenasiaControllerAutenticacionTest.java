@@ -1,6 +1,6 @@
 package com.renaser.os.rag.infrastructure.adapter.in.rest.voz;
 
-import com.renaser.os.rag.application.ports.in.voz.SintetizarVozUseCase;
+import com.renaser.os.rag.application.ports.in.voz.VozDelOrbeUseCase;
 import com.renaser.os.shared.web.SecurityConfig;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.DisplayName;
@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -34,7 +35,7 @@ class VozRenasiaControllerAutenticacionTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private SintetizarVozUseCase sintetizarVozUseCase;
+    private VozDelOrbeUseCase vozDelOrbe;
     @MockitoBean
     private UserSummaryFinder userSummaryFinder;
 
@@ -47,6 +48,16 @@ class VozRenasiaControllerAutenticacionTest {
                         .content("{\"texto\":\"Hola\"}"))
                 .andExpect(status().isForbidden());
 
-        verifyNoInteractions(sintetizarVozUseCase);
+        verifyNoInteractions(vozDelOrbe);
+    }
+
+    @Test
+    @DisplayName("escuchar un audio sin sesion es rechazado, aunque venga el header de actor")
+    void escucharSinSesionEsRechazado() throws Exception {
+        mockMvc.perform(get("/api/v1/renasia/voz/" + UUID.randomUUID())
+                        .header("X-Actor-Id", UUID.randomUUID().toString()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(vozDelOrbe);
     }
 }

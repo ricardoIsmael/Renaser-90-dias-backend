@@ -299,16 +299,31 @@ renaser:
     # busqueda hay que usar un modelo que la soporte (RENASIA_CHAT_MODEL sin `-lite`) Y poner
     # IA_BUSQUEDA_WEB=true — las dos cosas, en la configuracion de ejecucion.
     busqueda-web: ${IA_BUSQUEDA_WEB:false}
-    # Voz del orbe (POST /api/v1/renasia/voz): texto -> WAV con Piper (voz es_MX-claude-high),
-    # que corre como servicio aparte (infra/piper/, servicio `piper` de docker-compose.yml).
+    # Voz del orbe (/api/v1/renasia/voz): texto -> WAV con Gemini o Piper (voz es_MX-claude-high,
+    # que corre como servicio aparte (infra/piper/, servicio `piper` de docker-compose.yml)).
     # `noop` (el default) no tiene voz: el endpoint responde 204 y la app habla con el TTS del
-    # telefono. `piper` usa el servicio en `url`. Interruptor propio, separado de
-    # renaser.ia.proveedor: la voz no depende de Gemini y se puede prender sin el.
+    # telefono. `piper` usa el servicio en `url`; `gemini`, la API de Google (bloque `gemini`).
+    # Interruptor propio, separado de renaser.ia.proveedor: la voz se prende o apaga sin tocar el
+    # chat.
     #
     # Si Piper tarda mas que timeout-ms, esta caido o no devuelve un WAV, tambien es 204: la app
     # nunca se queda muda por culpa del servicio de voz.
+    #
+    # Corregido 2026-09-23 (D-159): se sumo `gemini` (voz Kore, elegida por el dueno escuchando
+    # muestras), con la MISMA key que el chat (spring.ai.google.genai.api-key). Transmite el audio
+    # mientras se genera: ~1,5 s al primer sonido. Costo de flash-lite TTS: US$0,50 por millon de
+    # tokens de texto y US$6 por millon de tokens de audio (~25 por segundo) hasta 2026-12-31; se
+    # duplica desde 2027-01-01. Una respuesta hablada de 10 s cuesta ~US$0,0015.
     voz:
       proveedor: ${IA_VOZ_PROVEEDOR:noop}
+      gemini:
+        url: ${IA_VOZ_GEMINI_URL:https://generativelanguage.googleapis.com}
+        modelo: ${IA_VOZ_GEMINI_MODELO:gemini-3.8-flash-lite-tts}
+        voz: ${IA_VOZ_GEMINI_VOZ:Kore}
+        # Como hablar. Es lo que la hace sonar fluida y no leida; se afina sin tocar codigo.
+        estilo: ${IA_VOZ_GEMINI_ESTILO:Habla de forma fluida y natural, como en una conversacion relajada con un amigo. Ritmo continuo, entonacion viva, sin pausas roboticas entre frases. Espanol latinoamericano neutro.}
+        # Lo maximo que se espera a que Gemini empiece a responder.
+        timeout-ms: ${IA_VOZ_GEMINI_TIMEOUT_MS:15000}
       url: ${IA_VOZ_URL:http://localhost:5055}
       # Conexion y lectura, cada una. Una oracion tarda ~280 ms en la laptop de desarrollo.
       timeout-ms: ${IA_VOZ_TIMEOUT_MS:5000}

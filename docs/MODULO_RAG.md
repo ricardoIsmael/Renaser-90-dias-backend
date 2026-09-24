@@ -413,6 +413,10 @@ compararon cuatro voces con la misma frase: el TTS del teléfono (robótico), Ko
 3,3 s por frase en CPU), Gemini TTS (buena, 0,7 s al primer audio, **de pago**) y **Piper
 `es_MX-claude-high`** (open source, gratis, **~0,3 s por frase**). Se eligió Piper.
 
+> **Corregido 2026-09-23 (D-159).** El contrato de abajo (el `POST` devuelve el WAV entero) ya no
+> rige: el dueño eligió la voz Kore de Gemini con streaming, y el endpoint pasó a dos pasos. Piper
+> sigue como proveedor, detrás del mismo contrato nuevo. Se deja el texto original como historia.
+
 `POST /api/v1/renasia/voz` con `{"texto":"..."}` (≤ 400 caracteres, `USE_APP`, sesión obligatoria
 por `/api/v1/renasia/**`) devuelve `200 audio/wav`, o `204` sin cuerpo cuando no hay voz del
 servidor (proveedor `noop`, o Piper caído, lento o con una respuesta que no es WAV). Con un 204 la
@@ -466,6 +470,59 @@ crisis los números de ayuda se dicen completos. No se editó `renasia-sistema.s
 **Limitación conocida:** los textos que el servicio agrega después de la respuesta del modelo no
 pasan por el bloque. Son el "Propuesta: …" y el texto de apoyo (D-143). La app no lee en voz alta
 el "Propuesta: …": dice "Te dejé la propuesta en el chat: confírmala con el botón".
+
+### D-159 — La voz del orbe pasa a Gemini (Kore) y se transmite mientras se genera (2026-09-23)
+
+El dueño escuchó muestras de Piper y de cuatro voces de Gemini y eligió **Kore**, con el modelo
+**`gemini-3.8-flash-lite-tts`** porque es el más rápido. Pidió: "que sea fluida" y "que se demore
+menos". Las mediciones del 2026-09-23:
+- Esperar el audio entero tarda **4 a 7 s por frase**, demasiado para conversar.
+- **Transmitiendo, el primer sonido llega en ~1,5 s**, y el audio se genera más rápido de lo que
+  dura, así que no se corta una vez que empieza.
+
+**Contrato (reemplaza al de D-157):**
+
+| Pedido | Respuestas |
+|---|---|
+| `POST /api/v1/renasia/voz` `{"texto"}` | **201** `{"audio":"/api/v1/renasia/voz/{id}"}`: el audio **ya empieza a generarse**. **204** sin voz del servidor. 400 / 403 como antes |
+| `GET /api/v1/renasia/voz/{id}` | **200** `audio/wav` transmitido mientras se genera (`StreamingResponseBody`). **204** si falló sin producir sonido (espera hasta 8 s). **404** si no existe, venció (2 min) o es de otra persona |
+
+**Por qué dos pasos:** el reproductor del teléfono (ExoPlayer vía expo-audio) solo sabe bajar una
+URL con headers, pero sí toca un WAV mientras baja. Así sirve con la app ya instalada, sin
+módulos nativos nuevos. Como el `POST` arranca la generación, la segunda oración ya está lista
+cuando le toca sonar.
+
+**Piezas:**
+- `SintetizarVozPort` pasó a entregar el audio por partes: `disponible()` y
+  `sintetizar(texto, destino)`. Nunca lanza.
+- `GeminiVozAdapter` (`renaser.ia.voz.proveedor=gemini`) pide la Interactions API con
+  `stream: true` y reenvía cada `step.delta`. Esos pedazos son PCM crudo `audio/l16` (16 bits,
+  mono, 24 kHz); el adaptador les antepone una cabecera WAV con largo `0xFFFFFFFF`, porque todavía
+  no se sabe cuánto va a durar. Usa la misma key que el chat y nunca registra el texto ni la key.
+- `PiperVozAdapter` entrega su WAV de una vez.
+- `VozDelOrbeService` genera en hilos virtuales y guarda cada audio en un `AudioEnCurso`: un búfer
+  que se puede leer desde el principio mientras sigue creciendo.
+- Tiene un tope de 300 audios en memoria. Pasado el tope, la app usa su propia voz.
+- Sin `@Transactional` (C-1).
+
+**Por qué en memoria y no Kafka ni Redis:** el audio vive 2 minutos y lo lee una sola persona.
+Kafka sirve para eventos durables entre servicios y acá solo sumaría infraestructura y demora.
+Producción es **una sola EC2**, así que la memoria alcanza. **Límite conocido:** con varias
+instancias, el `GET` podría caer en otra y dar 404. Ahí se pasa a Redis, cambiando solo dónde se
+guarda.
+
+**Configuración** (`renaser.ia.voz.gemini.*`): `modelo`, `voz`, `estilo` (la instrucción de cómo
+hablar, que es lo que la hace sonar fluida) y `timeout-ms`, todos cambiables por entorno.
+
+**Costo:** flash-lite TTS cuesta US$0,50 por millón de tokens de texto y US$6 por millón de tokens
+de audio (~25 por segundo) hasta el 2026-12-31. Se duplica desde el 2027-01-01. Una respuesta
+hablada de 10 s cuesta unos US$0,0015.
+
+**A futuro (no hecho):** la experiencia más humana sería **Gemini Live**, voz a voz en tiempo real
+por WebSocket y con interrupciones. Pide rehacer herramientas, propuestas, cuota e historial dentro
+de una sesión Live, más audio nativo en la app: es otro proyecto, con su propio diseño. El
+`Locutor` y el orbe de la app se reusan.
+
 ---
 
 ## 4. Estructura del módulo

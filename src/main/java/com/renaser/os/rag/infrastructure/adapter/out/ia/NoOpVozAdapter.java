@@ -4,7 +4,7 @@ import com.renaser.os.rag.application.ports.out.ia.SintetizarVozPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * El default ({@code renaser.ia.voz.proveedor=noop}): no hay voz del servidor, el endpoint
@@ -16,7 +16,12 @@ import java.util.Optional;
 class NoOpVozAdapter implements SintetizarVozPort {
 
     @Override
-    public Optional<byte[]> sintetizar(String texto) {
-        return Optional.empty();
+    public boolean disponible() {
+        return false;
+    }
+
+    @Override
+    public boolean sintetizar(String texto, Consumer<byte[]> destino) {
+        return false;
     }
 }

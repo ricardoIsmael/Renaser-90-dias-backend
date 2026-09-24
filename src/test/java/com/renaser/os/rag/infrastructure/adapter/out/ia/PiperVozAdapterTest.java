@@ -7,6 +7,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.io.ByteArrayOutputStream;
 import java.net.SocketTimeoutException;
 import java.util.Optional;
 
@@ -42,6 +43,13 @@ class PiperVozAdapterTest {
         adapter = new PiperVozAdapter(builder.build(), PROPIEDADES);
     }
 
+    /** El WAV entregado, o vacio si el adaptador dijo que no hubo voz. */
+    private Optional<byte[]> sintetizar(String texto) {
+        ByteArrayOutputStream entregado = new ByteArrayOutputStream();
+        boolean completo = adapter.sintetizar(texto, entregado::writeBytes);
+        return completo ? Optional.of(entregado.toByteArray()) : Optional.empty();
+    }
+
     @Test
     @DisplayName("manda el texto y los tres parametros de Piper, y devuelve el WAV aunque venga como text/html")
     void devuelveElWavAunqueElContentTypeSeaHtml() {
@@ -54,7 +62,7 @@ class PiperVozAdapterTest {
                 .andExpect(jsonPath("$.noise_w_scale").value(0.95))
                 .andRespond(withSuccess(WAV, MediaType.TEXT_HTML));
 
-        Optional<byte[]> audio = adapter.sintetizar("Hola, ¿como estas?");
+        Optional<byte[]> audio = sintetizar("Hola, ¿como estas?");
 
         assertThat(audio).hasValueSatisfying(bytes -> assertThat(bytes).isEqualTo(WAV));
         servidor.verify();
@@ -66,7 +74,7 @@ class PiperVozAdapterTest {
         servidor.expect(requestTo(URL + PiperVozAdapter.RUTA_SINTESIS))
                 .andRespond(withSuccess("<html>Internal error</html>", MediaType.TEXT_HTML));
 
-        assertThat(adapter.sintetizar("Hola")).isEmpty();
+        assertThat(sintetizar("Hola")).isEmpty();
     }
 
     @Test
@@ -74,7 +82,7 @@ class PiperVozAdapterTest {
     void errorDelServidorEsVacio() {
         servidor.expect(requestTo(URL + PiperVozAdapter.RUTA_SINTESIS)).andRespond(withServerError());
 
-        assertThat(adapter.sintetizar("Hola")).isEmpty();
+        assertThat(sintetizar("Hola")).isEmpty();
     }
 
     @Test
@@ -83,7 +91,13 @@ class PiperVozAdapterTest {
         servidor.expect(requestTo(URL + PiperVozAdapter.RUTA_SINTESIS))
                 .andRespond(withException(new SocketTimeoutException("Read timed out")));
 
-        assertThat(adapter.sintetizar("Hola")).isEmpty();
+        assertThat(sintetizar("Hola")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Piper siempre esta disponible cuando es el proveedor elegido")
+    void estaDisponible() {
+        assertThat(adapter.disponible()).isTrue();
     }
 
     @Test

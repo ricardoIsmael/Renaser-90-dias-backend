@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * Voz con Piper (voz {@code es_MX-claude-high}), que corre como servicio aparte
@@ -29,7 +30,7 @@ import java.util.Optional;
  * con {@code text/html}. Cualquier otra cosa (una pagina de error, un cuerpo vacio) cuenta como
  * fallo.
  *
- * <p><b>Todo fallo es {@code Optional.empty()}</b> (el puerto lo pide): timeout, servicio caido,
+ * <p><b>Todo fallo es {@code false}</b> (el puerto lo pide): timeout, servicio caido,
  * 5xx o cuerpo que no es WAV. La app cae al TTS del telefono. El WARN nunca lleva el texto — es
  * lo que la persona esta leyendo o lo que el acompanante le responde — ni el throwable, cuyo
  * mensaje puede arrastrar el cuerpo de la respuesta.
@@ -62,7 +63,19 @@ class PiperVozAdapter implements SintetizarVozPort {
     }
 
     @Override
-    public Optional<byte[]> sintetizar(String texto) {
+    public boolean disponible() {
+        return true;
+    }
+
+    /** Piper no transmite: el WAV sale entero, de una sola vez. */
+    @Override
+    public boolean sintetizar(String texto, Consumer<byte[]> destino) {
+        Optional<byte[]> audio = pedir(texto);
+        audio.ifPresent(destino);
+        return audio.isPresent();
+    }
+
+    private Optional<byte[]> pedir(String texto) {
         try {
             byte[] audio = restClient.post()
                     .uri(RUTA_SINTESIS)
