@@ -52,11 +52,15 @@ final class MensajesGeminiLive {
     /**
      * Deteccion de voz (E-239). El microfono queda abierto entre turnos, y con la sensibilidad por
      * defecto el ruido del cuarto disparaba turnos que el modelo transcribia en otro idioma. Baja
-     * sensibilidad al arranque; 200 ms de colchon antes de la voz para no comerse la primera silaba;
+     * sensibilidad al arranque; un colchon de audio antes de la voz para no comerse la primera silaba;
      * 800 ms de silencio para dar por terminado lo que dijo la persona (el valor del servidor).
+     *
+     * <p>Corregido 2026-09-24 (E-243): el colchon era de 200 ms y con la sensibilidad baja el detector
+     * arranca tarde: "Desactiva el habito..." llego como "Activa el habito..." y el orbe contesto lo
+     * contrario de lo pedido. Con 600 ms entra la primera silaba aunque la deteccion tarde.
      */
     static final String SENSIBILIDAD_DE_ARRANQUE = "START_SENSITIVITY_LOW";
-    static final int COLCHON_ANTES_DE_LA_VOZ_MS = 200;
+    static final int COLCHON_ANTES_DE_LA_VOZ_MS = 600;
     static final int SILENCIO_FIN_DE_TURNO_MS = 800;
 
     static String setup(String modelo, String voz, String prompt, List<DefinicionHerramienta> herramientas) {

@@ -8263,3 +8263,23 @@ herramienta corrió.
 `pactl list source-outputs short` tiene que mostrar la captura del emulador mientras el orbe
 escucha. Y el micrófono del dispositivo al 100 % (`pactl get-source-volume @DEFAULT_SOURCE@`): al
 68 % Gemini tampoco detecta habla.
+
+## E-243 · El orbe en vivo oyó "Activa" cuando le dijeron "Desactiva": se perdió la primera sílaba
+
+**Síntoma.** Prueba de punta a punta (2026-09-24, 16:06). Clip: *"Desactiva el hábito Escritura libre
+nocturna para mañana"*. Turno guardado del usuario: *"**Activa** el hábito escritura libre nocturna
+para mañana"*. Respuesta: *"…ya está programado en tu plan para mañana"*. No propuso apagar nada: hizo
+lo contrario de lo pedido, con toda naturalidad.
+
+**Causa real.** El detector de voz de Gemini se abre con sensibilidad baja (E-239, para que el ruido
+del cuarto no dispare turnos) y eso hace que detecte el arranque del habla un poco tarde. El
+`prefixPaddingMs` (cuánto audio anterior al arranque se incluye) estaba en 200 ms: no alcanzó para
+"Des-". Sin esa sílaba, la frase invierte el sentido y el modelo no tiene forma de saberlo.
+
+**Solución (2026-09-24).** `prefixPaddingMs` pasa a **600 ms** (`MensajesGeminiLive.COLCHON_ANTES_DE_LA_VOZ_MS`).
+Cuesta ~0,4 s más de audio por turno, nada más.
+
+**Cómo evitar que vuelva a pasar.** Toda vez que se baje la sensibilidad de un detector de voz hay
+que subir el colchón previo, y probar con frases cuya primera sílaba cambie el sentido
+("desactiva/activa", "no quiero/quiero"). Y en las pruebas, comparar siempre el turno guardado con
+lo que se dijo: ahí se ve lo que el modelo oyó de verdad.

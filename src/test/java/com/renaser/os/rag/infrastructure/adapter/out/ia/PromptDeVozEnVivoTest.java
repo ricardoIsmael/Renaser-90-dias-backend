@@ -25,7 +25,10 @@ class PromptDeVozEnVivoTest {
                 .contains("Esta respuesta se va a escuchar")
                 .contains("conversando por voz, en tiempo real")
                 .contains("Hablas SIEMPRE en espanol")
-                .contains("no alcanzaste a oir")
+                .contains("No alcance a oirte")
+                // Directo (pedido del dueno, 2026-09-24): sin preambulos y sin describir la propuesta.
+                .contains("una o dos frases")
+                .contains("Te deje la propuesta abajo")
                 .doesNotContain("!}")
                 .doesNotContain("Bloque EN VIVO");
         // Los limites clinicos y de crisis siguen ahi: el bloque en vivo solo suma forma e idioma.

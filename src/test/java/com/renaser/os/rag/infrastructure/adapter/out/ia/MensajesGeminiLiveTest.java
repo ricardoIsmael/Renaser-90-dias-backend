@@ -138,7 +138,8 @@ class MensajesGeminiLiveTest {
                 .at("/setup/realtimeInputConfig/automaticActivityDetection");
 
         assertThat(deteccion.path("startOfSpeechSensitivity").asText()).isEqualTo("START_SENSITIVITY_LOW");
-        assertThat(deteccion.path("prefixPaddingMs").asInt()).isEqualTo(200);
+        // E-243: con 200 ms la primera silaba se perdia ("Desactiva" llegaba como "Activa").
+        assertThat(deteccion.path("prefixPaddingMs").asInt()).isEqualTo(600);
         assertThat(deteccion.path("silenceDurationMs").asInt()).isEqualTo(800);
         // La deteccion automatica sigue activa: no se manda `disabled`.
         assertThat(deteccion.has("disabled")).isFalse();

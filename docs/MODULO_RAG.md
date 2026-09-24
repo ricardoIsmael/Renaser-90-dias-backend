@@ -676,9 +676,12 @@ Piezas: `ConversarEnVivoUseCase`, `ConversacionEnVivoService`, `SesionDeVozEnViv
 > corta tocando el orbe. El backend no cambió.
 
 > **Corregido 2026-09-24 (E-239).** Sí hubo un cambio en el backend después: la sesión se abre con
-> detección de voz poco sensible (`START_SENSITIVITY_LOW`, 200 ms de colchón, 800 ms de silencio) y
+> detección de voz poco sensible (`START_SENSITIVITY_LOW`, ~~200~~ **600** ms de colchón —E-243: con
+> 200 se perdía la primera sílaba y "Desactiva" llegaba como "Activa"—, 800 ms de silencio) y
 > el prompt suma `prompts/modo-en-vivo.st`, que obliga a responder siempre en español y a pedir que
-> repitan ante ruido. Antes, el ruido del cuarto disparaba turnos que el modelo transcribía en
+> repitan ante ruido. El mismo bloque pide **respuestas directas** (pedido del dueño): una o dos
+> frases, sin "he generado" ni "en la aplicación", y ante una propuesta solo "Te dejé la propuesta
+> abajo, confírmala si estás de acuerdo", porque la persona ya la ve en pantalla. Antes, el ruido del cuarto disparaba turnos que el modelo transcribía en
 > coreano y contestaba en coreano.
 
 
@@ -702,6 +705,16 @@ general rige **desde mañana**, el día en curso no se reacomoda, y el resumen l
 **Hook:** `usePropuestasDeVoz` (app), compartido por los dos flujos de voz; `cambioPorError` pasó de
 `useRenasiaChat` a `utils/propuestas` para no duplicar qué queda en la tarjeta ante 409, sin red u
 otro error.
+
+> **Corregido 2026-09-24 (tarde).** Las tarjetas dentro de la conversación alargaban la pantalla y
+> quedaban bajo el pliegue; el dueño las vio con demasiado texto. Ahora es **una sola hoja
+> flotante** (`AccionDelAcompanante`), abajo y siempre a la vista: un ícono, **una línea** con la
+> acción (`resumenCorto`: "Cambiar 'Genera 10 km' de 07:00 a 10:00"; tocándola se ve el detalle
+> completo), y Cancelar/Confirmar. Al resolverse, un ícono y una frase ("Hecho · Horario cambiado:
+> 10:00 desde el viernes 2026-09-25") y se retira sola a los 4 s (`elegirAccionVisible`). Si hay
+> más pendientes, "+N" y quedan en el chat. Verificado con un cambio de horario real: confirmado
+> desde la hoja, la base quedó con `cambios_horario_pendientes` para el 25/09 y la preferencia de
+> hoy intacta (D-91).
 
 > **Verificado 2026-09-24, 15:43–15:44**, en el emulador con la voz en vivo: *"Recuerda que trabajo de
 > lunes a viernes de nueve a seis"* → el orbe preguntó *"¿Quieres que guarde ese horario…?"* → *"Sí,
