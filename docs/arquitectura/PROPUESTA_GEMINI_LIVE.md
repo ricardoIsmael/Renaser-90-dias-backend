@@ -164,7 +164,7 @@ mejora que justifica el cambio.
 | backend → app | `interrumpido` | — | la persona habló encima: la app corta lo que suena |
 | backend → app | `turnoCompleto` | — | terminó de responder |
 | backend → app | `propuesta` | `id`, `resumen`, `venceEn` | igual que en el SSE del chat (D-153); se confirma con el botón |
-| backend → app | `cuotaAgotada` | — | se acabaron los 10 min del día; la app vuelve al flujo anterior |
+| backend → app | `cuotaAgotada` | — | se acabó la cuota del día (10 min; 30 mientras se prueba, corregido 2026-09-24); la app vuelve al flujo anterior |
 | backend → app | `error` | `valor` | texto apto para mostrar; después se cierra |
 | app → backend | `fin` | — | la persona cerró el orbe |
 
@@ -228,7 +228,7 @@ reiniciado, 7–11 s).
 
 1. **Pasando por el backend (proxy).** La key no sale del servidor, las herramientas y la cuota se
    controlan ahí y el historial se guarda solo.
-2. **Cuota: 10 minutos de conversación por voz, por persona y por día.** Pasado el límite, el orbe
+2. **Cuota: 10 minutos de conversación por voz, por persona y por día** (*corregido 2026-09-24: 30 mientras se prueba, a pedido del dueño; se vuelve a decidir antes de producción*). Pasado el límite, el orbe
    vuelve al flujo actual (STT, chat y TTS).
 3. **Se guarda la transcripción** de lo que se habla en `mensajes_renasia`, solo el texto. El
    audio no se guarda nunca.

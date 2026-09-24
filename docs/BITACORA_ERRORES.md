@@ -8219,3 +8219,26 @@ línea en el log con su nombre. Y en las pruebas de voz, mirar los turnos guarda
 si no son una pregunta, la respuesta no vale como evidencia de nada. Limitación conocida: un
 micrófono abierto en un cuarto con gente hablando va a disparar turnos; en un teléfono cerca de la
 boca pasa mucho menos.
+
+## E-241 · Tras una cuota agotada, el orbe queda en el modo anterior el resto del día y sin decir por qué
+
+**Síntoma.** El 2026-09-24 a las 15:15 se agotó la cuota de voz en vivo (10 min). Desde ahí, cada
+toque al orbe abría el modo anterior (dictado del teléfono → chat → TTS) sin mostrar el aviso
+*"Por hoy ya usaste tu tiempo de voz en vivo…"*. Reiniciar el contador en Redis no cambió nada:
+la app seguía sin intentar la voz en vivo. En `adb logcat` se veían pares
+`requestAudioFocus`/`abandonAudioFocus` del reconocedor del teléfono y ningún
+`[voz en vivo] cerrado`.
+
+**Causa real.** `useVozDelOrbe` marcaba `descartada = true` la primera vez que `empezar()` fallaba
+y no lo volvía a poner en `false` nunca: solo una recarga de la pantalla lo reseteaba. Y mientras
+estaba descartada, el selector mostraba el estado del modo anterior, que no tenía el mensaje de la
+cuota: el aviso que sí había llegado quedaba escondido.
+
+**Solución (2026-09-24).** La pausa dura **2 minutos** (`PAUSA_TRAS_FALLO_MS`): pasado eso se vuelve
+a intentar la voz en vivo (con la cuota agotada, el backend la rechaza antes de abrir Gemini, así
+que reintentar es barato). Durante la pausa se muestra el aviso de la voz en vivo aunque ya se esté
+usando la de siempre.
+
+**Cómo evitar que vuelva a pasar.** Un "descartado" sin vencimiento es un bug esperando: todo
+respaldo automático necesita un plazo para volver a intentar. Y cuando una vía se cae, el motivo
+se muestra, no se traga.

@@ -632,7 +632,7 @@ controller.
 malestar repetido. Cada turno completo se guarda en `mensajes_renasia` como `COMPANION`: lo que dijo
 la persona y lo que respondió. **El audio no se guarda nunca** (decisión 3).
 
-**Cuota (decisión 2).** 10 minutos por persona y por día, contados en Redis por segundos
+**Cuota (decisión 2).** ~~10~~ **30** minutos por persona y por día (*corregido 2026-09-24: 30 mientras se prueba, a pedido del dueño; antes de producción se vuelve a decidir*), contados en Redis por segundos
 (`renasia:voz-en-vivo:{usuario}:{fecha}`), donde la fecha es el **día local de la persona**
 (`participantes_programa.timezone`, regla 02; probado con el reloj a las 03:00 UTC). Se cuenta desde
 `listo` (los segundos que tarda Gemini en abrir no se cobran), cada 5 s y al cerrar (la fracción final
@@ -680,6 +680,28 @@ Piezas: `ConversarEnVivoUseCase`, `ConversacionEnVivoService`, `SesionDeVozEnViv
 > el prompt suma `prompts/modo-en-vivo.st`, que obliga a responder siempre en español y a pedir que
 > repitan ante ruido. Antes, el ruido del cuarto disparaba turnos que el modelo transcribía en
 > coreano y contestaba en coreano.
+
+
+### D-163 — Las propuestas del acompañante se confirman sobre el orbe, como en un asistente de voz (2026-09-24)
+
+Pedido del dueño: que se vea "que hizo la acción", como Siri o el asistente de Gemini, y que la persona
+entienda que fue el acompañante. Antes, por voz, el orbe decía "te dejé la propuesta en el chat" y
+había que ir a buscarla.
+
+Ahora, en la app, cada `propuesta` que llega durante una conversación por voz (por el SSE del chat o
+por el WebSocket en vivo) se dibuja **debajo del orbe** con la misma `TarjetaPropuesta` del chat:
+el resumen que armó la herramienta (por ejemplo *"Cambiar 'Meditar' de 07:00 a 08:00 como horario
+general, desde el 25/09"*), los botones **Cancelar / Confirmar**, y al confirmar el resultado que
+devuelve el servidor ("Listo, quedó aplicado." o el motivo si falló). Encabezado fijo: *"Tu
+acompañante propone. Nada cambia hasta que confirmes."*
+
+**Lo que no cambia:** la voz sigue sin confirmar nada (D-132, D-153); el backend no se tocó; las
+reglas de negocio las sigue poniendo la herramienta, incluida la de D-91: un cambio de horario
+general rige **desde mañana**, el día en curso no se reacomoda, y el resumen lo dice.
+
+**Hook:** `usePropuestasDeVoz` (app), compartido por los dos flujos de voz; `cambioPorError` pasó de
+`useRenasiaChat` a `utils/propuestas` para no duplicar qué queda en la tarjeta ante 409, sin red u
+otro error.
 
 ---
 

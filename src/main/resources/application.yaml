@@ -362,7 +362,10 @@ renaser:
         timeout-ms: ${IA_VOZ_EN_VIVO_TIMEOUT_MS:15000}
         # Decision del dueno (2026-09-24): 10 minutos por persona y por dia, contados en el dia
         # local de la persona. Pasado el limite, `cuotaAgotada` y la app vuelve al flujo anterior.
-        minutos-por-dia: ${IA_VOZ_EN_VIVO_MINUTOS_POR_DIA:10}
+        # Corregido 2026-09-24: eran 10 (decision del dueno, D-162 §8). Pasan a 30 mientras se prueba
+        # con el equipo, a pedido del dueno; antes de produccion se vuelve a decidir (cada minuto
+        # de conversacion cuesta ~US$0,014 de entrada mas la salida).
+        minutos-por-dia: ${IA_VOZ_EN_VIVO_MINUTOS_POR_DIA:30}
         # Tope de Gemini Live para una sesion de solo audio. Con la cuota de 10 no se alcanza.
         minutos-maximos-por-sesion: ${IA_VOZ_EN_VIVO_MINUTOS_POR_SESION:15}
     acompanante:
