@@ -40,7 +40,7 @@ import java.util.stream.Stream;
  * <p>Nunca registra el texto ni la key: solo el status o el tipo de la excepcion.
  */
 @Component
-@ConditionalOnProperty(name = "renaser.ia.voz.proveedor", havingValue = "gemini")
+@ConditionalOnProperty(name = "renaser.ia.voz.proveedor", havingValue = "google")
 @EnableConfigurationProperties(GeminiVozProperties.class)
 class GeminiVozAdapter implements SintetizarVozPort {
 

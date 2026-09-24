@@ -302,14 +302,15 @@ renaser:
     # Voz del orbe (/api/v1/renasia/voz): texto -> WAV con Gemini o Piper (voz es_MX-claude-high,
     # que corre como servicio aparte (infra/piper/, servicio `piper` de docker-compose.yml)).
     # `noop` (el default) no tiene voz: el endpoint responde 204 y la app habla con el TTS del
-    # telefono. `piper` usa el servicio en `url`; `gemini`, la API de Google (bloque `gemini`).
+    # telefono. `piper` usa el servicio en `url`; `google`, la voz Kore de Gemini (bloque `gemini`).
+    # Un valor distinto de noop/piper/google hace fallar el arranque con un mensaje claro (E-228).
     # Interruptor propio, separado de renaser.ia.proveedor: la voz se prende o apaga sin tocar el
     # chat.
     #
     # Si Piper tarda mas que timeout-ms, esta caido o no devuelve un WAV, tambien es 204: la app
     # nunca se queda muda por culpa del servicio de voz.
     #
-    # Corregido 2026-09-23 (D-159): se sumo `gemini` (voz Kore, elegida por el dueno escuchando
+    # Corregido 2026-09-23 (D-159): se sumo `google` (voz Kore, elegida por el dueno escuchando
     # muestras), con la MISMA key que el chat (spring.ai.google.genai.api-key). Transmite el audio
     # mientras se genera: ~1,5 s al primer sonido. Costo de flash-lite TTS: US$0,50 por millon de
     # tokens de texto y US$6 por millon de tokens de audio (~25 por segundo) hasta 2026-12-31; se

@@ -7864,3 +7864,26 @@ otro build al mismo tiempo.
 **Cómo evitar que vuelva a pasar.** Mientras corre un verify en segundo plano no se compila ni se
 prueba en el mismo worktree. Si hace falta avanzar, que sea en otro `git worktree`. Un fallo en un
 módulo que el cambio no tocó es la primera señal de esto.
+
+## E-228 · El backend no arranca con `IA_VOZ_PROVEEDOR=google`
+
+**Síntoma.**
+```
+Parameter 1 of constructor in com.renaser.os.rag.application.services.VozDelOrbeService required a
+bean of type 'com.renaser.os.rag.application.ports.out.ia.SintetizarVozPort' that could not be found.
+```
+
+**Causa real.** El adaptador de la voz de Gemini (D-159) se activaba con el valor `gemini`, pero el
+dueño puso `google`. Es lo lógico: `IA_PROVEEDOR=google` es la convención del repo para Gemini. Con un
+valor que ningún `@ConditionalOnProperty` reconoce, no queda ningún adaptador de voz y Spring muere
+con un mensaje que no menciona la variable de entorno.
+
+**Solución (2026-09-24).**
+- El valor pasa a ser `google`, igual que `IA_PROVEEDOR`.
+- `ProveedorDeVozConfig` valida al arrancar que sea `noop`, `piper` o `google`. Si no, falla con un
+  mensaje que nombra `IA_VOZ_PROVEEDOR` y los valores válidos.
+- Prueba: `ProveedorDeVozConfigTest`, con `ApplicationContextRunner`.
+
+**Cómo evitar que vuelva a pasar.** Todo interruptor de proveedor con varios adaptadores condicionales
+necesita una validación que falle con un mensaje claro ante un valor desconocido. Y los valores
+siguen la convención ya existente (`google` para todo lo de Gemini).

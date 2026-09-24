@@ -13,7 +13,7 @@ import java.util.function.Consumer;
  * <p><b>Nunca lanza:</b> devuelve {@code false} si no hubo voz o se corto a la mitad. Una voz
  * caida nunca puede dejar a la persona sin respuesta: la app habla con el TTS del telefono.
  *
- * <p>Lo implementan {@code GeminiVozAdapter} ({@code renaser.ia.voz.proveedor=gemini}),
+ * <p>Lo implementan {@code GeminiVozAdapter} ({@code renaser.ia.voz.proveedor=google}),
  * {@code PiperVozAdapter} ({@code piper}) y {@code NoOpVozAdapter} (el default).
  *
  * <p><b>Nunca dentro de una transaccion</b> (regla 01, C-1): el adaptador real hace una llamada de

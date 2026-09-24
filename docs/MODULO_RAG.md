@@ -495,7 +495,7 @@ cuando le toca sonar.
 **Piezas:**
 - `SintetizarVozPort` pasó a entregar el audio por partes: `disponible()` y
   `sintetizar(texto, destino)`. Nunca lanza.
-- `GeminiVozAdapter` (`renaser.ia.voz.proveedor=gemini`) pide la Interactions API con
+- `GeminiVozAdapter` (`renaser.ia.voz.proveedor=google`; ~~`gemini`~~, corregido 2026-09-24, E-228) pide la Interactions API con
   `stream: true` y reenvía cada `step.delta`. Esos pedazos son PCM crudo `audio/l16` (16 bits,
   mono, 24 kHz); el adaptador les antepone una cabecera WAV con largo `0xFFFFFFFF`, porque todavía
   no se sabe cuánto va a durar. Usa la misma key que el chat y nunca registra el texto ni la key.
