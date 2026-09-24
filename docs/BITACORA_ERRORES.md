@@ -8085,3 +8085,32 @@ propia ruta, así que no le quita nada a ningún controller.
 variable (`/voz/{id}` y `/voz/en-vivo`) choca en silencio. Lo atrapa solo una prueba con el servidor
 real: `VozEnVivoWebSocketIT` queda como regresión (sin el arreglo falla con este mismo 400). Un
 `@WebMvcTest` o una prueba unitaria del handler no lo ven.
+
+## E-237 · La app se cae al abrir: "This function has a reified type parameter…"
+
+**Síntoma.** Recién instalado el binario con `@speechmatics/expo-two-way-audio` 0.1.2 (D-162), la
+app muestra en rojo al abrir, antes de cualquier pantalla:
+```
+This function has a reified type parameter and thus can only be inlined at compilation time, not called directly.
+throwUndefinedForReified (Intrinsics.java:209) … definition (ExpoTwoWayAudioModule.kt:277)
+<init> (ModuleHolder.kt:22) … register (ModuleRegistry.kt:29) … createNativeModules (ExpoModulesPackage.kt:35)
+```
+El `require` opcional no sirve: Expo registra **todos** los módulos nativos al arrancar.
+
+**Causa real.** En Expo 57, el DSL de los módulos (`Function`, `AsyncFunction`, `Events`) necesita el
+plugin de compilador de Kotlin **pika**, que genera la información de tipos al compilar. Los
+módulos oficiales lo reciben con `plugins { id 'expo-module-gradle-plugin' }`. Este paquete usa la
+forma vieja: `apply from: ExpoModulesCorePlugin.gradle` + `applyKotlinExpoModulesCorePlugin()`, que ya
+no aplica pika. En la clase compilada quedó
+`io/github/lukmccall/pika/TypeDescriptorOfKt.throwNonReifiedTypeDescriptorError` (visto con `javap`
+sobre `node_modules/@speechmatics/expo-two-way-audio/android/build/tmp/kotlin-classes/debug/…`). Que
+el archivo tuviera 125 líneas y el error dijera 277 ya delataba código "inline" de otra librería.
+
+**Solución (2026-09-24).** En la app, `scripts/arreglar-two-way-audio.js` corre en `postinstall` y
+reescribe el `android/build.gradle` del paquete con `expo-module-gradle-plugin`, igual que
+`expo-audio`. Es idempotente. Después hay que borrar `…/expo-two-way-audio/android/build` y
+recompilar la app.
+
+**Cómo evitar que vuelva a pasar.** Antes de instalar un módulo nativo de terceros, mirar su
+`android/build.gradle`: si usa `apply from: ExpoModulesCorePlugin.gradle`, con Expo 57 va a romper
+al abrir. Probar siempre el binario nuevo en el emulador antes de dárselo a nadie.
