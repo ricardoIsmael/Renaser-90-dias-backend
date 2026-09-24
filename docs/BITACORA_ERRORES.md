@@ -7942,3 +7942,26 @@ Estaba latente desde antes. Se destapó el 2026-09-24, porque el orbe de voz
 **Cómo evitar que vuelva a pasar.** "Idempotente" tiene que valer también con pedidos
 simultáneos. Si un GET crea filas protegidas por una `UNIQUE`, el INSERT va con `ON CONFLICT`: el
 chequeo previo no alcanza.
+
+## E-231 · La voz del orbe se oye entrecortada y con pausas largas
+
+**Síntoma.** En el emulador, con `IA_VOZ_PROVEEDOR=google`, la voz Kore sonaba a tirones, se cortaba
+a mitad de frase y tardaba en retomar. En la prueba directa contra Gemini se oía fluida y rápida.
+
+**Causa real.** La app le pasaba al reproductor la URL del WAV **mientras se generaba** (D-159). El
+ExoPlayer de expo-audio usa los valores por defecto de `DefaultLoadControl`:
+- espera **2,5 s** de audio en el buffer antes de arrancar;
+- si el buffer se vacía, se frena y espera **5 s** antes de seguir.
+
+Gemini manda el audio a tirones, así que el buffer se vaciaba y el reproductor se frenaba una y otra
+vez. El emulador además suma algo de ruido propio, pero no era la causa.
+
+**Solución (2026-09-24).** `parlantesDelTelefono.sintetizarYBajar`: cada oración se baja **entera a
+memoria** con `preload` de expo-audio y después suena con `replace`. El `AudioPreloadManager` guarda
+los bytes por URI y el reproductor los lee sin red. Mientras suena una oración, la siguiente ya se
+está bajando, y el audio se libera al terminar. El backend no cambió.
+
+**Cómo evitar que vuelva a pasar.** Antes de hacer streaming de audio a un reproductor, revisar su
+política de buffer. Con ExoPlayer y un origen irregular, bajar el clip entero suena mejor y tarda
+casi lo mismo, porque igual esperaba 2,5 s. Probar la voz en un teléfono real antes de culpar al
+emulador.
