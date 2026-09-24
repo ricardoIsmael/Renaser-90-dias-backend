@@ -7720,6 +7720,11 @@ la bitácora, el radar o el texto de un ticket: contenido personal que no puede 
 **Cómo evitar que vuelva a pasar.** Nunca pasar la excepción entera a un log cuando su mensaje
 puede contener datos de entrada; en este módulo, loguear el tipo y el nombre de la herramienta.
 
+> **Nota 2026-09-24.** Al revisar la voz en vivo (D-162) aparecieron cinco `log.warn(..., e)` con
+> la excepción entera: en la herramienta, en la revisión de malestar, en el guardado del turno, al
+> recoger propuestas y al abrir la sesión. Pasaron a registrar solo el tipo. Lo que dice la persona
+> por voz es tan personal como lo que escribe.
+
 ## E-219 · Cuando el mentor responde un ticket, al aprendiz no le llega nada
 
 **Síntoma.** El mentor responde (`POST /api/v1/tickets/{id}/answer`) y el aprendiz no recibe push

@@ -90,7 +90,8 @@ public class TurnosDeVozEnVivo {
         try {
             return revisarPatronDeMalestar.revisar(actorId, oido).orElse("");
         } catch (RuntimeException e) {
-            log.warn("No se pudo revisar la repeticion de expresiones de malestar en la voz en vivo; sigue normal", e);
+            log.warn("No se pudo revisar la repeticion de expresiones de malestar en la voz en vivo ({}); sigue normal",
+                    e.getClass().getSimpleName());
             return "";
         }
     }

@@ -111,7 +111,7 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
             log.warn("No se pudo abrir la voz en vivo: {}", e.getMessage());
             return rechazar(salida, new EventoDeVozEnVivo.Error(MENSAJE_NO_DISPONIBLE), MotivoDeCierre.NO_DISPONIBLE);
         } catch (RuntimeException e) {
-            log.warn("Fallo al abrir la voz en vivo", e);
+            log.warn("Fallo al abrir la voz en vivo ({})", e.getClass().getSimpleName());
             return rechazar(salida, new EventoDeVozEnVivo.Error(MENSAJE_NO_DISPONIBLE), MotivoDeCierre.NO_DISPONIBLE);
         }
     }

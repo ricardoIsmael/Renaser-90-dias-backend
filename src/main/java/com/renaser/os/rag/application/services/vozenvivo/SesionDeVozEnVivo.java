@@ -227,7 +227,8 @@ final class SesionDeVozEnVivo implements ConversacionEnVivo, ConversacionEnVivoP
         try {
             return c.herramientas().ejecutar(actorId, invocacion);
         } catch (RuntimeException e) {
-            log.warn("Fallo la herramienta {} en la voz en vivo", invocacion.nombre(), e);
+            log.warn("Fallo la herramienta {} en la voz en vivo ({})", invocacion.nombre(),
+                    e.getClass().getSimpleName());
             return ResultadoHerramienta.fallo(HERRAMIENTA_FALLO);
         }
     }
@@ -238,7 +239,7 @@ final class SesionDeVozEnVivo implements ConversacionEnVivo, ConversacionEnVivoP
         try {
             nuevas = c.propuestas().pendientesCreadasDesde(actorId, antes);
         } catch (RuntimeException e) {
-            log.warn("No se pudieron recoger las propuestas de la voz en vivo", e);
+            log.warn("No se pudieron recoger las propuestas de la voz en vivo ({})", e.getClass().getSimpleName());
             return;
         }
         for (PropuestaCreada propuesta : nuevas) {
@@ -264,7 +265,8 @@ final class SesionDeVozEnVivo implements ConversacionEnVivo, ConversacionEnVivoP
                 emitir(new EventoDeVozEnVivo.Dicho(ConversacionRenasiaService.SEPARACION_DEL_APOYO + apoyo));
             }
         } catch (RuntimeException e) {
-            log.warn("No se pudo guardar un turno de la voz en vivo; la conversacion sigue", e);
+            log.warn("No se pudo guardar un turno de la voz en vivo ({}); la conversacion sigue",
+                    e.getClass().getSimpleName());
         }
     }
 
