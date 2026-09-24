@@ -8242,3 +8242,24 @@ usando la de siempre.
 **Cómo evitar que vuelva a pasar.** Un "descartado" sin vencimiento es un bug esperando: todo
 respaldo automático necesita un plazo para volver a intentar. Y cuando una vía se cae, el motivo
 se muestra, no se traga.
+
+## E-242 · En el emulador, el orbe deja de oír a mitad de una sesión larga ("No te entendí bien")
+
+**Síntoma.** Probando la voz en vivo en el emulador, después de varias sesiones y recargas de la
+app, Gemini transcribía fragmentos sueltos ("entrar") o nada, y contestaba *"No te entendí bien"*.
+Los clips de prueba sonaban igual de fuerte que los que sí habían funcionado (−17,5 dBFS).
+
+**Causa real.** El **stream de captura del emulador desapareció del mezclador de la laptop**
+(`pactl list source-outputs` ya no mostraba el de `qemu`), aunque dentro de Android
+`dumpsys audio` seguía diciendo `Recording active: true`. El guest creía grabar; el host no le
+mandaba nada. Es del emulador con `-allow-host-audio`, no de la app ni del backend: en un teléfono
+no existe ese salto.
+
+**Solución (2026-09-24).** Cerrar y reabrir la sesión del orbe: el `AudioRecord` nuevo hace que QEMU
+vuelva a abrir la captura en el host. Con eso la misma frase se transcribió completa y la
+herramienta corrió.
+
+**Cómo evitar que vuelva a pasar.** Antes de culpar al detector de voz o al modelo, mirar el host:
+`pactl list source-outputs short` tiene que mostrar la captura del emulador mientras el orbe
+escucha. Y el micrófono del dispositivo al 100 % (`pactl get-source-volume @DEFAULT_SOURCE@`): al
+68 % Gemini tampoco detecta habla.
