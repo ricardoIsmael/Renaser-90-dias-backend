@@ -235,7 +235,11 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
             // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
             RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(idGenerator.newId()), participanteId,
                     habito.id(), fecha, progreso.diaPrograma(), tipoDia, habito.esOpcional(), ahora);
-            generados.add(saveRegistroPort.save(registro));
+            // Idempotente tambien con pedidos simultaneos (E-230): si otro pedido lo creo entre la
+            // consulta de arriba y este INSERT, no se revienta con la UNIQUE; simplemente ya existe.
+            if (saveRegistroPort.insertarSiNoExiste(registro)) {
+                generados.add(registro);
+            }
         }
         return generados;
     }

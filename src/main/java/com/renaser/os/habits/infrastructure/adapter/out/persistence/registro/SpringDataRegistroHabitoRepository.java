@@ -154,4 +154,24 @@ interface SpringDataRegistroHabitoRepository extends JpaRepository<RegistroHabit
                                  @Param("habitoId") UUID habitoId,
                                  @Param("desde") LocalDate desde,
                                  @Param("hasta") LocalDate hasta);
+
+    /**
+     * INSERT idempotente de un track nuevo (E-230): si ya existe uno para ese participante, habito y
+     * fecha (lo creo otro pedido al mismo tiempo), no hace nada y devuelve 0 en vez de reventar con
+     * la violacion de UNIQUE. En Postgres una violacion aborta la transaccion entera, asi que no se
+     * puede "atrapar y releer": el conflicto se resuelve en el propio INSERT.
+     */
+    @Modifying
+    @Query(value = """
+            INSERT INTO renaser.registros_habito (id, participante_id, habito_id, fecha_ejecucion, dia_programa,
+                tipo_dia, es_opcional, estado, puntos_otorgados, respuesta_texto, calificacion_productividad,
+                entrada_diario_id, completado_en, creado_en, actualizado_en)
+            VALUES (:#{#r.id}, :#{#r.participanteId}, :#{#r.habitoId}, :#{#r.fechaEjecucion}, :#{#r.diaPrograma},
+                CAST(:#{#r.tipoDia.name()} AS renaser.tipo_dia), :#{#r.esOpcional},
+                CAST(:#{#r.estado.name()} AS renaser.estado_registro), :#{#r.puntosOtorgados},
+                :#{#r.respuestaTexto}, :#{#r.calificacionProductividad}, :#{#r.entradaDiarioId},
+                :#{#r.completadoEn}, :#{#r.creadoEn}, :#{#r.actualizadoEn})
+            ON CONFLICT (participante_id, habito_id, fecha_ejecucion) DO NOTHING
+            """, nativeQuery = true)
+    int insertarSiNoExiste(@Param("r") RegistroHabitoJpaEntity r);
 }

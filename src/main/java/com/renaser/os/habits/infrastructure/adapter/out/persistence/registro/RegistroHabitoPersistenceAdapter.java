@@ -74,6 +74,11 @@ class RegistroHabitoPersistenceAdapter implements LoadRegistroHabitoPort, SaveRe
     }
 
     @Override
+    public boolean insertarSiNoExiste(RegistroHabito registro) {
+        return repository.insertarSiNoExiste(mapper.toEntity(registro)) == 1;
+    }
+
+    @Override
     public long totalHabitosCompletados(UserId participanteId) {
         return repository.countByParticipanteIdAndEstado(participanteId.value(), EstadoRegistroJpa.COMPLETADO);
     }

@@ -7905,3 +7905,40 @@ sirve **Build → Rebuild Project** en IntelliJ.
 **Cómo evitar que vuelva a pasar.** Cada vez que el agente actualice la rama del checkout del IDE,
 compila ahí mismo o avisa que hay que hacer Rebuild. Para diagnosticar, antes de buscar otra causa
 hay que comparar el `.class` (fecha y `strings`) con el fuente.
+
+## E-230 · Abrir Hoy a primera hora del día responde 409 en `/habit-tracks/today`
+
+**Síntoma.** Dos pedidos en el mismo milisegundo (`omcat-handler-5` y `-7`, 09:44:15.34):
+```
+ERROR: duplicate key value violates unique constraint "registros_habito_participante_id_habito_id_fecha_ejecucion_key"
+Detail: Key (participante_id, habito_id, fecha_ejecucion)=(…, …, 2026-09-24) already exists.
+409 -> Conflict: violacion de integridad en la base
+```
+
+**Causa real.** `RegistroService.generarInterno` era idempotente solo para pedidos **en serie**:
+primero preguntaba si el track existía y después lo insertaba ("check-then-act"). Con dos pedidos
+simultáneos, los dos ven "no existe", los dos insertan, y el segundo choca contra el `UNIQUE`. En
+Postgres esa violación aborta la transacción entera, y el pedido responde 409. La `UNIQUE` sí
+cuidaba los datos: nunca hubo duplicados. Lo que faltaba era manejar el choque.
+
+Estaba latente desde antes. Se destapó el 2026-09-24, porque el orbe de voz
+(`useFrasesDeHabitos`) empezó a pedir `/today` al mismo tiempo que la pantalla Hoy
+(`useHabitoDelMomento`).
+
+**Solución (2026-09-24).**
+- **Backend:** `SaveRegistroHabitoPort.insertarSiNoExiste` hace `INSERT … ON CONFLICT
+  (participante_id, habito_id, fecha_ejecucion) DO NOTHING` y devuelve si insertó. La generación
+  lo usa en vez de `save`. El choque se resuelve en el INSERT mismo, porque en Postgres "atrapar
+  la excepción y releer" no sirve: la transacción ya quedó abortada.
+- **App:** `obtenerTracksDeHoy` comparte el pedido mientras hay uno en vuelo. No es un caché:
+  terminado el pedido, el siguiente vuelve a ir al servidor.
+
+**Pruebas.**
+- `InsertarTrackSiNoExisteIT`: 4 hilos simultáneos (`CyclicBarrier`) contra Postgres real. Uno
+  solo inserta, ninguno lanza y queda una fila.
+- `RegistroServiceTest.generarToleraElTrackCreadoPorOtroPedido`.
+- En la app, `tracksDeHoyEnVuelo.test.ts`.
+
+**Cómo evitar que vuelva a pasar.** "Idempotente" tiene que valer también con pedidos
+simultáneos. Si un GET crea filas protegidas por una `UNIQUE`, el INSERT va con `ON CONFLICT`: el
+chequeo previo no alcanza.
