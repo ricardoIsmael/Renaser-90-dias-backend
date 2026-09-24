@@ -140,7 +140,7 @@ class ConsultarResumenDelProgramaHerramientaTest {
         String contenido = contenidoDe(ejecutar(herramienta(EN_DIA_12, panorama, MADRUGADA_UTC)));
 
         assertThat(contenido).contains("Racha actual: 3 dias (record: 7).")
-                .contains("Puntos de liga: 150.")
+                .contains("Puntos de liga: 150 puntos")
                 .doesNotContain("no disponibles");
     }
 
@@ -153,7 +153,7 @@ class ConsultarResumenDelProgramaHerramientaTest {
         assertThat(contenidoDe(ejecutar(herramienta(EN_DIA_12, deUnDia, MADRUGADA_UTC))))
                 .contains("Racha actual: 1 dia (record: 1).");
         assertThat(contenidoDe(ejecutar(herramienta(EN_DIA_12, enCero, MADRUGADA_UTC))))
-                .contains("Racha actual: 0 dias (record: 5).").contains("Puntos de liga: 90.");
+                .contains("Racha actual: 0 dias (record: 5).").contains("Puntos de liga: 90 puntos");
     }
 
     @Test

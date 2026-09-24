@@ -8194,3 +8194,28 @@ el modelo cree haber oído.
 > contestó con datos reales de las herramientas (Clase diaria, Pastilla Renacer), 13,8 s de voz sin
 > un solo corte. La sesión tardó ~11 s en abrir con el backend recién reiniciado; queda pendiente
 > medirlo en caliente.
+
+## E-240 · El orbe en vivo dijo "Tienes cien puntos" cuando la persona tiene 127
+
+**Síntoma.** Sesión de voz en vivo del 2026-09-24, 14:47. Turno guardado del "usuario": *"Tá. No tengo
+yo en temas de No tengo ningún inconveniente al respecto, como les he dicho. Es más,"* (habla de
+fondo del cuarto, no una pregunta). Respuesta del acompañante: *"Tienes cien puntos"*. En la base:
+`puntos_liga = 127`, `coherencia = 100.00`.
+
+**Causa real.** No se pudo determinar con certeza, y eso es el problema de fondo: **la voz en vivo no
+registraba qué herramientas ejecutaba**, así que no hay forma de saber si el modelo llamó a
+`consultar_resumen_del_programa` y confundió la coherencia (100 %) con los puntos, o si contestó
+una cifra inventada a un audio que no era una pregunta. Las dos cosas son posibles con habla de
+fondo captada por un micrófono abierto.
+
+**Solución (2026-09-24).**
+- `SesionDeVozEnVivo` registra en INFO cada herramienta ejecutada en la sesión en vivo, solo el
+  nombre y si salió bien; nunca los argumentos ni el resultado (E-218).
+- `consultar_resumen_del_programa` dice "Puntos de liga: 127 puntos (los mismos que ve en
+  Inicio)", con unidad, para que no se confunda con el porcentaje de coherencia.
+
+**Cómo evitar que vuelva a pasar.** Toda ejecución de herramienta desde una sesión de IA deja una
+línea en el log con su nombre. Y en las pruebas de voz, mirar los turnos guardados del "usuario":
+si no son una pregunta, la respuesta no vale como evidencia de nada. Limitación conocida: un
+micrófono abierto en un cuarto con gente hablando va a disparar turnos; en un teléfono cerca de la
+boca pasa mucho menos.

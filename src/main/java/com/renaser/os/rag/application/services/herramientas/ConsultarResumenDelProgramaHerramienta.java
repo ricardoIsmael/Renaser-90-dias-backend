@@ -117,7 +117,7 @@ public class ConsultarResumenDelProgramaHerramienta implements HerramientaAgente
     private static String lineasDeRachaYPuntos(Panorama panorama) {
         return panorama.rachaYPuntos()
                 .map(r -> "Racha actual: " + dias(r.rachaActual()) + " (record: " + r.rachaMaxima() + ").\n"
-                        + "Puntos de liga: " + r.puntosLiga() + ".")
+                        + "Puntos de liga: " + r.puntosLiga() + " puntos (los mismos que ve en Inicio).")
                 .orElse("Racha y puntos de liga: no pude leerlos en este momento; no los inventes.");
     }
 

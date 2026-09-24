@@ -225,7 +225,12 @@ final class SesionDeVozEnVivo implements ConversacionEnVivo, ConversacionEnVivoP
 
     private ResultadoHerramienta ejecutar(InvocacionHerramienta invocacion) {
         try {
-            return c.herramientas().ejecutar(actorId, invocacion);
+            ResultadoHerramienta resultado = c.herramientas().ejecutar(actorId, invocacion);
+            // Solo el nombre y si salio bien (E-240): con esto se sabe si una cifra que dijo el orbe
+            // vino de una herramienta o se la invento. Nunca los argumentos ni el resultado.
+            log.info("[rag] voz en vivo: herramienta {} -> {}", invocacion.nombre(),
+                    resultado instanceof ResultadoHerramienta.Exito ? "ok" : "fallo");
+            return resultado;
         } catch (RuntimeException e) {
             log.warn("Fallo la herramienta {} en la voz en vivo ({})", invocacion.nombre(),
                     e.getClass().getSimpleName());
