@@ -7887,3 +7887,21 @@ con un mensaje que no menciona la variable de entorno.
 **Cómo evitar que vuelva a pasar.** Todo interruptor de proveedor con varios adaptadores condicionales
 necesita una validación que falle con un mensaje claro ante un valor desconocido. Y los valores
 siguen la convención ya existente (`google` para todo lo de Gemini).
+
+## E-229 · Arreglado en el código, pero el IDE sigue arrancando con la versión vieja
+
+**Síntoma.** Después de corregir E-228 y actualizar la rama, el backend lanzado desde IntelliJ siguió
+fallando con el mismo mensaje literal: `Parameter 1 of constructor in ...VozDelOrbeService required a
+bean of type '...SintetizarVozPort' that could not be found.` El log muestra que carga clases de
+`Renaser-90-dias-backend/target/classes`.
+
+**Causa real.** La rama del checkout del IDE se actualizó desde afuera (`git merge --ff-only` hecho por
+el agente) y IntelliJ no recompiló. `target/classes/.../GeminiVozAdapter.class` era de las 09:13 y
+seguía diciendo `gemini`; `ProveedorDeVozConfig.class` ni existía.
+
+**Solución (2026-09-24).** `./mvnw -o -q compile` en ese checkout, con el backend detenido. También
+sirve **Build → Rebuild Project** en IntelliJ.
+
+**Cómo evitar que vuelva a pasar.** Cada vez que el agente actualice la rama del checkout del IDE,
+compila ahí mismo o avisa que hay que hacer Rebuild. Para diagnosticar, antes de buscar otra causa
+hay que comparar el `.class` (fecha y `strings`) con el fuente.
