@@ -197,6 +197,14 @@ Se guarda en `mensajes_renasia` (agente COMPANION) cada turno completo: lo que d
 Última prueba de punta a punta (14:39): pregunta transcrita completa, respuesta en español con datos
 de las herramientas, 13,8 s de voz sin cortes, cuota cobrada, cierre limpio.
 
+**Herramientas verificadas con rastro en la base (14:59).** Por voz: *"Recuerda que trabajo de lunes a
+viernes, de nueve de la mañana a seis de la tarde"* → quedó una fila `PENDIENTE` en
+`propuestas_acompanante` con `proponer_guardar_agenda` y el resumen *"Recordar que estás ocupado/a
+lunes, martes, miércoles, jueves, viernes de 09:00-18:00"*; el orbe dijo que hay que confirmarlo con
+el botón. Después, *"Sí, guárdalo, por favor"* por voz **no lo guardó**: volvió a pedir el botón
+(D-132, D-153). Con el backend caliente la sesión abrió en **3 s** (con el backend recién
+reiniciado, 7–11 s).
+
 ## 6. Riesgos
 
 - **Modelo nuevo en una API en vivo:** la forma de los mensajes puede cambiar. Por eso va detrás
