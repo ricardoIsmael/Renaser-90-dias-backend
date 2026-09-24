@@ -35,7 +35,8 @@ import java.util.stream.Stream;
  * sonido apenas llega (~1,5 s el primero), en vez de esperar el audio entero (4 a 7 s). Los
  * pedazos llegan como PCM crudo ({@code audio/l16}: 16 bits, mono, 24 kHz) dentro de eventos SSE
  * {@code step.delta}; aca se les antepone una cabecera WAV con el largo en {@code 0xFFFFFFFF}
- * ("desconocido"), porque cuando sale la cabecera todavia no se sabe cuanto va a durar.
+ * ("desconocido"), porque cuando sale la cabecera todavia no se sabe cuanto va a durar. El silencio
+ * de sobra al principio y al final se recorta al vuelo ({@link RecorteDeSilencio}, E-232).
  *
  * <p>Nunca registra el texto ni la key: solo el status o el tipo de la excepcion.
  */
@@ -127,6 +128,7 @@ class GeminiVozAdapter implements SintetizarVozPort {
     private static final class Transmision {
 
         private final Consumer<byte[]> destino;
+        private final RecorteDeSilencio recorte = new RecorteDeSilencio(MUESTRAS_POR_SEGUNDO);
         private boolean empezo;
         private boolean termino;
 
@@ -153,14 +155,23 @@ class GeminiVozAdapter implements SintetizarVozPort {
             if (sonido.isEmpty() || !delta.path("mime_type").asText().startsWith("audio/l16")) {
                 return;
             }
+            entregar(recorte.agregar(Base64.getDecoder().decode(sonido)));
+        }
+
+        private void entregar(byte[] pcm) {
+            if (pcm.length == 0) {
+                return;
+            }
             if (!empezo) {
                 destino.accept(cabeceraWav());
                 empezo = true;
             }
-            destino.accept(Base64.getDecoder().decode(sonido));
+            destino.accept(pcm);
         }
 
+        /** Entrega la cola retenida, ya sin el silencio del final. */
         boolean completa() {
+            entregar(recorte.terminar());
             return empezo && termino;
         }
 

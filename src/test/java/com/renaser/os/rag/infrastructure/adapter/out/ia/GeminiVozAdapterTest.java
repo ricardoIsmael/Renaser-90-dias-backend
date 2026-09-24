@@ -25,8 +25,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class GeminiVozAdapterTest {
 
-    private static final byte[] PCM_1 = {1, 2, 3, 4};
-    private static final byte[] PCM_2 = {5, 6};
+    /** Sonido de verdad (muestras de 5000): el silencio se recorta desde E-232. */
+    private static final byte[] PCM_1 = sonido(3);
+    private static final byte[] PCM_2 = sonido(2);
+
+    private static byte[] sonido(int muestras) {
+        ByteBuffer pcm = ByteBuffer.allocate(muestras * 2).order(ByteOrder.LITTLE_ENDIAN);
+        for (int i = 0; i < muestras; i++) {
+            pcm.putShort((short) (i % 2 == 0 ? 5000 : -5000));
+        }
+        return pcm.array();
+    }
 
     private HttpServer servidor;
     private final AtomicReference<String> cuerpoRecibido = new AtomicReference<>();
@@ -88,7 +97,10 @@ class GeminiVozAdapterTest {
         byte[] bytes = entregado.toByteArray();
         assertThat(completo).isTrue();
         assertThat(Arrays.copyOfRange(bytes, 0, 44)).isEqualTo(GeminiVozAdapter.cabeceraWav());
-        assertThat(Arrays.copyOfRange(bytes, 44, bytes.length)).containsExactly(1, 2, 3, 4, 5, 6);
+        byte[] esperado = new byte[PCM_1.length + PCM_2.length];
+        System.arraycopy(PCM_1, 0, esperado, 0, PCM_1.length);
+        System.arraycopy(PCM_2, 0, esperado, PCM_1.length, PCM_2.length);
+        assertThat(Arrays.copyOfRange(bytes, 44, bytes.length)).isEqualTo(esperado);
     }
 
     @Test

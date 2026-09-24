@@ -7965,3 +7965,28 @@ está bajando, y el audio se libera al terminar. El backend no cambió.
 política de buffer. Con ExoPlayer y un origen irregular, bajar el clip entero suena mejor y tarda
 casi lo mismo, porque igual esperaba 2,5 s. Probar la voz en un teléfono real antes de culpar al
 emulador.
+
+## E-232 · En cada punto la voz del orbe hace una pausa larga ("microcortes")
+
+**Síntoma.** Ya sin cortes a mitad de frase (E-231), la voz se detenía en cada punto casi un segundo
+antes de seguir leyendo. Además tardaba en empezar a hablar.
+
+**Causa real.** Se midió con Gemini real el 2026-09-24. Cada clip trae **~0,2–0,26 s de silencio
+al principio** y **~0,27–0,37 s al final**. Con un audio por oración, en cada punto se sumaban el
+silencio del final, el del principio del siguiente y el cambio de clip en el reproductor (~0,2 s):
+**~0,7–0,8 s muertos por punto**. El silencio del principio también retrasaba la primera palabra.
+
+**Solución (2026-09-24).**
+- **Backend:** `RecorteDeSilencio` recorta el silencio al vuelo dentro de `GeminiVozAdapter` y deja
+  60 ms de respiro a cada lado. Retiene los últimos 600 ms para decidir al final si eran silencio o
+  una pausa entre palabras. Nunca corta una muestra a la mitad.
+- **App:** `crearAgrupador` manda la **primera oración sola**, para que empiece rápido, y **el
+  resto junto en un solo audio**. Así hay un solo cambio de clip por respuesta, y la voz entona el
+  párrafo completo.
+
+**Pruebas.** `RecorteDeSilencioTest`: 300 ms de silencio + 500 ms de voz + 400 ms de silencio quedan
+en ~620 ms; las pausas del medio se respetan y el resultado no depende de cómo lleguen los pedazos.
+En la app, `voz.test.ts` → `crearAgrupador`.
+
+**Cómo evitar que vuelva a pasar.** Antes de encadenar clips de TTS, medir el silencio de sus
+bordes. Y agrupar lo que se pueda: cada cambio de clip cuesta.
