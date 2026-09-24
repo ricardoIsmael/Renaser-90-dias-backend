@@ -8114,3 +8114,40 @@ recompilar la app.
 **Cómo evitar que vuelva a pasar.** Antes de instalar un módulo nativo de terceros, mirar su
 `android/build.gradle`: si usa `apply from: ExpoModulesCorePlugin.gradle`, con Expo 57 va a romper
 al abrir. Probar siempre el binario nuevo en el emulador antes de dárselo a nadie.
+
+## E-238 · La voz en vivo se oye entrecortada y el orbe se contesta a sí mismo en loop
+
+**Síntoma.** Probando Gemini Live (D-162) en el emulador: la voz sale a tirones, y el orbe "entra en
+loop": habla, se calla, vuelve a hablar solo. En `adb logcat`, 43 veces en pocos minutos:
+```
+AudioFlinger: prepareTracks_l BUFFER TIMEOUT: remove track(111) from active list due to underrun on thread 13
+AudioTrack: restartIfDisabled(103): releaseBuffer() track 0x79e7f17011e0 disabled due to previous underrun, restarting
+```
+
+**Causa real.** Tres cosas juntas en `useConversacionEnVivo`:
+1. **El parlante se quedaba sin audio.** El audio de Gemini no se le entregaba al módulo nativo
+   apenas llegaba: un reloj de JavaScript (`setInterval` de 40 ms) lo repartía de a poco, 250 ms
+   por delante, para poder cortarlo al interrumpir. El `AudioTrack` del módulo usa el buffer mínimo
+   del sistema, así que cualquier demora del hilo de JavaScript (la animación del orbe, la
+   transcripción llegando 25 veces por segundo) lo dejaba vacío: `underrun`, y un hueco audible.
+2. **El orbe se oía a sí mismo.** El micrófono se mandaba siempre. En el emulador el micrófono es
+   el de la laptop y la cancelación de eco no hace nada: la voz del orbe salía por el parlante,
+   entraba por el micrófono, Gemini la tomaba como si hablara la persona, se interrumpía y le
+   contestaba. De ahí el loop.
+3. **El micrófono se volvía a suscribir en cada render.** `useExpoTwoWayAudioEventListener` se
+   suscribe de nuevo cada vez que cambia la función que recibe, y se le pasaba una función nueva
+   por render.
+
+**Solución (2026-09-24).**
+- El audio va **entero y enseguida** al módulo nativo, que lo encola y lo toca de corrido.
+  `Parlante` solo lleva la cuenta de hasta cuándo suena.
+- **Semidúplex:** mientras el orbe habla, y 400 ms después, se manda **silencio** en vez del
+  micrófono (silencio y no nada: Gemini prefiere un stream continuo). Se pierde interrumpirlo
+  hablando; se lo corta tocando el orbe. Con cancelación de eco de verdad se puede revisar.
+- La función del micrófono es estable (`useCallback` sin dependencias, todo por refs) y manda
+  lotes de ~100 ms en vez de 31 frames por segundo.
+
+**Cómo evitar que vuelva a pasar.** Nunca dosificar audio desde JavaScript: el hilo de JS no tiene
+garantías de tiempo. Lo que necesite tiempo real va al lado nativo. Y todo asistente de voz que
+hable por el parlante necesita o cancelación de eco comprobada o semidúplex; en el emulador, siempre
+semidúplex.

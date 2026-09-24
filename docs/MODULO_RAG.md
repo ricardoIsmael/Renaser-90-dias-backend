@@ -669,6 +669,12 @@ Piezas: `ConversarEnVivoUseCase`, `ConversacionEnVivoService`, `SesionDeVozEnViv
 `ConsultarZonaDelParticipantePort`, `ProgramarTareaPeriodicaPort`, `VozEnVivoWebSocketHandler`,
 `VozEnVivoHandshakeInterceptor`, `CuotaDeVozEnVivo` y `EventoDeVozEnVivo` (dominio).
 
+
+> **Corregido 2026-09-24 (E-238).** En la app la voz en vivo quedó **semidúplex**: mientras el orbe
+> habla (y 400 ms después) se manda silencio en vez del micrófono, porque sin cancelación de eco
+> efectiva Gemini se oía a sí mismo y se contestaba en loop. Se pierde interrumpirlo hablando; se
+> corta tocando el orbe. El backend no cambió.
+
 ---
 
 ## 4. Estructura del módulo

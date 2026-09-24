@@ -104,6 +104,14 @@ cada escritura sigue siendo una propuesta con botón (D-153).
 - **Respaldo:** si el binario no trae el módulo nuevo (una app vieja, sin actualización por aire) o
   el WebSocket falla, queda el flujo actual (STT, chat y TTS), que ya funciona.
 
+
+> **Corregido 2026-09-24 (E-238).** Arriba dice "se lo puede interrumpir hablando" y "tocarlo
+> mientras habla lo interrumpe". En la práctica quedó **semidúplex**: mientras el orbe habla, la app
+> manda silencio en vez del micrófono (sin cancelación de eco efectiva, el orbe se oía a sí mismo y
+> se contestaba en loop), y el audio va entero al módulo nativo apenas llega (dosificarlo desde
+> JavaScript lo dejaba entrecortado). Se termina la conversación tocando el orbe. La interrupción
+> hablando se retoma cuando se pruebe en un teléfono con cancelación de eco de verdad.
+
 ## 5. Fases
 
 | Fase | Qué | Cómo se verifica |
