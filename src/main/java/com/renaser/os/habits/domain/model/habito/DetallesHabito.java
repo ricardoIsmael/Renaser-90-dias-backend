@@ -19,4 +19,9 @@ public record DetallesHabito(String descripcion, String categoriaClave, Exigenci
             throw new IllegalArgumentException("exigenciaEvidencia es obligatoria");
         }
     }
+
+    /** Los mismos detalles con otra bandera de intoxicación (la edición que no la informa la conserva, E-263). */
+    public DetallesHabito conObligatorioEnIntoxicacion(boolean obligatorio) {
+        return new DetallesHabito(descripcion, categoriaClave, exigenciaEvidencia, esOpcional, obligatorio);
+    }
 }

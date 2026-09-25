@@ -18,10 +18,16 @@ public interface ActualizarHabitoUseCase {
 
     Habito actualizar(ActualizarHabitoCommand command);
 
+    /**
+     * @param conservaObligatorioEnIntoxicacion el pedido no informó la bandera: se conserva la del hábito
+     *        en vez de apagarla (E-263). Ningún formulario podía devolverla porque el listado no la traía,
+     *        y desde D-169 apagarla vuelve opcional el post de la comunidad en los días de intoxicación.
+     */
     record ActualizarHabitoCommand(@NotNull UserId actorId, @NotNull HabitoId habitoId,
-                                    @NotNull DetallesHabito detalles) {
+                                    @NotNull DetallesHabito detalles, boolean conservaObligatorioEnIntoxicacion) {
         public ActualizarHabitoCommand {
-            SelfValidating.validateConstructorArgs(ActualizarHabitoCommand.class, actorId, habitoId, detalles);
+            SelfValidating.validateConstructorArgs(ActualizarHabitoCommand.class, actorId, habitoId, detalles,
+                    conservaObligatorioEnIntoxicacion);
         }
     }
 }

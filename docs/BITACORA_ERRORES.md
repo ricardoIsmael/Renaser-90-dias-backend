@@ -8620,12 +8620,21 @@ descripción de POST DIARIO EN COMUNIDAD desde el panel lo dejaría **opcional e
 **Causa real.** La bandera no tenía ningún efecto hasta D-169, así que nadie notó que el formulario de edición
 no puede hidratarla: la respuesta del listado no la trae.
 
-**Solución.** Ninguna en este cambio (se reporta, regla 00). En los repos del frontend de esta máquina no hay
-llamadores de ese endpoint (buscado `mandatoryOnIntoxication` y `/api/v1/admin/habits`).
+**Solución (2026-09-25, pedido del dueño antes de subir a producción).**
+- `UpdateHabitRequest.mandatoryOnIntoxication` pasó a `Boolean`. Ausente o `null` quiere decir «no la toco»: el
+  comando lleva `conservaObligatorioEnIntoxicacion` y `HabitoAdminService` conserva la del hábito
+  (`DetallesHabito.conObligatorioEnIntoxicacion`). `true`/`false` explícitos se aplican.
+- `AdminHabitResponse` expone `mandatoryOnIntoxication` para que un formulario la pueda recargar y devolver.
+- Pruebas: `HabitoAdminServiceTest` (conserva / apaga / prende) y `HabitoAdminControllerTest` (el JSON real sin
+  el campo, con `false`, con `true`, y la respuesta). Con la lógica vieja, la prueba de «conserva» falla.
 
-**Cómo evitar que vuelva a pasar.** Exponer `mandatoryOnIntoxication` en `AdminHabitResponse` y aceptar
-`Boolean` nulo como «conservar» en `UpdateHabitRequest`, con una prueba de que editar la descripción no toca la
-bandera. Mientras tanto, comprobar en la base que el post la conserva:
+> **Corregido 2026-09-25 (mismo día).** La solución decía «Ninguna en este cambio (se reporta, regla 00)».
+> En los repos del frontend de esta máquina no había llamadores de ese endpoint (se buscó
+> `mandatoryOnIntoxication` y `/api/v1/admin/habits`), pero el dueño pidió arreglarlo antes de producción.
+
+**Cómo evitar que vuelva a pasar.** Un campo que un «reemplazo completo» exige tiene que venir en la respuesta
+que hidrata el formulario; si no viene, el pedido lo trata como «conservar». Para comprobar en producción que el
+post conserva la bandera:
 `SELECT titulo, obligatorio_en_intoxicacion FROM renaser.habitos WHERE clave_sistema = 'COMMUNITY_POST';`
 tiene que dar `true`.
 

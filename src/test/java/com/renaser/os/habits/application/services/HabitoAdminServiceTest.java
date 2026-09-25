@@ -111,7 +111,7 @@ class HabitoAdminServiceTest {
     void actualizarSobreHabitoInexistenteFalla404() {
         HabitoId id = HabitoId.of(UUID.randomUUID());
         when(loadPort.byId(id)).thenReturn(Optional.empty());
-        var command = new ActualizarHabitoCommand(admin, id, detalles());
+        var command = new ActualizarHabitoCommand(admin, id, detalles(), false);
 
         assertThatThrownBy(() -> service.actualizar(command)).isInstanceOf(NoSuchElementException.class);
     }
@@ -124,11 +124,57 @@ class HabitoAdminServiceTest {
         when(loadPort.byId(id)).thenReturn(Optional.of(existente));
         var nuevosDetalles = new DetallesHabito("otra", "MENTE", ExigenciaEvidencia.OBLIGATORIA, true, true);
 
-        Habito actualizado = service.actualizar(new ActualizarHabitoCommand(admin, id, nuevosDetalles));
+        Habito actualizado = service.actualizar(new ActualizarHabitoCommand(admin, id, nuevosDetalles, false));
 
         assertThat(actualizado.tipo()).isEqualTo(TipoHabito.BLOQUEO);
         assertThat(actualizado.claveSistema()).isNull();
         assertThat(actualizado.categoriaClave()).isEqualTo("MENTE");
+    }
+
+    // ── E-263: la bandera de intoxicación no se apaga en silencio ───────────
+
+    @Test
+    void editarSinInformarLaBanderaDeIntoxicacionLaConserva() {
+        Habito post = postConBandera(true);
+        when(loadPort.byId(post.id())).thenReturn(Optional.of(post));
+        when(savePort.save(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
+        // El pedido no la trajo: los detalles dicen false, pero no se aplica.
+        var otraDescripcion = new DetallesHabito("Escribe solo lo bueno", "CUERPO", ExigenciaEvidencia.OPCIONAL,
+                false, false);
+
+        Habito editado = service.actualizar(new ActualizarHabitoCommand(admin, post.id(), otraDescripcion, true));
+
+        assertThat(editado.obligatorioEnIntoxicacion()).isTrue();
+        assertThat(editado.descripcion()).isEqualTo("Escribe solo lo bueno");
+    }
+
+    @Test
+    void editarConLaBanderaEnFalseExplicitoLaApaga() {
+        Habito post = postConBandera(true);
+        when(loadPort.byId(post.id())).thenReturn(Optional.of(post));
+        when(savePort.save(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        Habito editado = service.actualizar(new ActualizarHabitoCommand(admin, post.id(), detalles(), false));
+
+        assertThat(editado.obligatorioEnIntoxicacion()).isFalse();
+    }
+
+    @Test
+    void editarConLaBanderaEnTrueExplicitoLaPrende() {
+        Habito post = postConBandera(false);
+        when(loadPort.byId(post.id())).thenReturn(Optional.of(post));
+        when(savePort.save(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
+        var conBandera = new DetallesHabito("desc", "CUERPO", ExigenciaEvidencia.OPCIONAL, false, true);
+
+        Habito editado = service.actualizar(new ActualizarHabitoCommand(admin, post.id(), conBandera, false));
+
+        assertThat(editado.obligatorioEnIntoxicacion()).isTrue();
+    }
+
+    private Habito postConBandera(boolean obligatorioEnIntoxicacion) {
+        return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "POST DIARIO EN COMUNIDAD", TipoHabito.CHECKBOX,
+                new DetallesHabito("desc", "CUERPO", ExigenciaEvidencia.OPCIONAL, false, obligatorioEnIntoxicacion),
+                CLOCK.now());
     }
 
     @Test
