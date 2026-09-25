@@ -8544,6 +8544,10 @@ distinta raíz:
   ejemplo neutro "no pases por esto a solas" en la urgencia médica.
 - `consultar_habitos_del_dia` nombra aparte los pausados.
 
+**Verificado.** Repetidos en el emulador con los arreglos, los cuatro responden bien. El #41 (cambiar la
+hora de un hábito pausado sin decirlo) se resolvió en la tarjeta: "Está pausado: el horario nuevo se
+verá cuando lo reactive" (`HorariosParaProponer.siEstaPausado`).
+
 **Cómo evitar que vuelva a pasar.** Las pruebas `PropuestaDeApagarDiaTest.obligatorioConFechaMalArmada`,
 `PropuestaDeApagarDiaTest.fueraDelProgramaConLaFechaDeHoy`, `HerramientasAgenteServiceTest.pausadosAparte`
 y `PromptSistemaRenasiaTest.rondaDos`. La lección general: cuando el modelo necesita un dato para no
