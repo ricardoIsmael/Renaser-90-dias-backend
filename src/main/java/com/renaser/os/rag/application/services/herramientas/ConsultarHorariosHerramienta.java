@@ -1,7 +1,6 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.out.horarios.ConsultarHorariosPort;
-import com.renaser.os.rag.application.ports.out.horarios.ConsultarHorariosPort.CuotaCambios;
 import com.renaser.os.rag.application.ports.out.horarios.ConsultarHorariosPort.HorarioDeHabito;
 import com.renaser.os.rag.application.ports.out.horarios.ConsultarHorariosPort.HorariosDelDia;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
@@ -99,7 +98,7 @@ public class ConsultarHorariosHerramienta implements HerramientaAgente {
             texto.append("No tiene habitos activos.\n");
         }
         dia.habitos().forEach(habito -> texto.append(lineaDe(habito)).append('\n'));
-        return texto.append(lineaDe(dia.cuota())).toString();
+        return texto.append(HorariosParaProponer.lineaDeCupo(dia.cuota())).toString();
     }
 
     /** Solo se nombran las marcas que SON ciertas: el modelo parafrasea lo que ve, no lo que falta. */
@@ -131,13 +130,5 @@ public class ConsultarHorariosHerramienta implements HerramientaAgente {
             return "sin hora fija ese dia";
         }
         return "inicio=" + habito.horaDisparo() + (habito.horaLimite() == null ? "" : " limite=" + habito.horaLimite());
-    }
-
-    private static String lineaDe(CuotaCambios cuota) {
-        if (cuota.semanaDeAcomodoLibre()) {
-            return "Cambios de horario: semana de acomodo libre, los cambios inmediatos no consumen cupo.";
-        }
-        return "Cambios de horario esta semana: " + cuota.usados() + " usados, " + cuota.restantes()
-                + " restantes de " + cuota.limite() + ".";
     }
 }

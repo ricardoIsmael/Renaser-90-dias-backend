@@ -53,7 +53,7 @@ public class ConsultarResumenDelProgramaHerramienta implements HerramientaAgente
                     + "proximo evento del calendario, su racha actual de dias seguidos con al menos un habito "
                     + "cumplido (y su record) y sus puntos de liga. Usala cuando pregunte que dia u hora es para "
                     + "el, como viene su semana, que evento tiene a continuacion, cuantos dias lleva de racha o "
-                    + "cuantos puntos tiene.");
+                    + "cuantos puntos tiene. Sin ella no sabes la hora ni la fecha: nunca las digas de memoria.");
 
     private static final DateTimeFormatter FECHA_Y_HORA = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final Locale CASTELLANO = Locale.forLanguageTag("es");
@@ -109,7 +109,8 @@ public class ConsultarResumenDelProgramaHerramienta implements HerramientaAgente
     private static String lineaDeCoherencia(Panorama panorama) {
         return panorama.coherencia()
                 .map(porcentaje -> "Coherencia de los ultimos 7 dias: " + porcentaje.toPlainString()
-                        + "% de las acciones diarias planificadas, cumplidas.")
+                        + "% de las acciones diarias planificadas, cumplidas. Las acciones diarias son las rocas "
+                        + "que planifica cada dia: se cuentan acciones cumplidas sobre planificadas, no dias (D-128).")
                 .orElse("Coherencia: no planifico acciones diarias en los ultimos 7 dias, asi que no hay dato.");
     }
 

@@ -9,13 +9,22 @@ import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
  */
 final class AvisoDePropuesta {
 
+    /**
+     * Antes decia "dile que confirme con el boton" y el modelo lo repetia en cada propuesta, con
+     * negritas y el contenido otra vez ("Toca el boton **Confirmar** en la app para..."), cuando la
+     * persona ya ve la tarjeta con sus botones (bateria del 2026-09-25).
+     */
+    static final String COMO_DECIRLO = "TODAVIA NO esta hecho: se aplica solo si la persona toca Confirmar en la app, donde ya "
+                + "ve la propuesta con su detalle y sus botones. No digas que ya quedo hecho ni repitas lo que "
+                + "propone: basta una frase corta, por ejemplo \"Te deje la propuesta abajo para que la "
+                + "confirmes\".";
+
     private AvisoDePropuesta() {
     }
 
     static ResultadoHerramienta creada(String resumen, String advertencia) {
-        return ResultadoHerramienta.exito("Propuesta creada: " + resumen + ". TODAVIA NO esta hecho: la persona "
-                + "tiene que tocar Confirmar en la app para que se aplique. No digas que ya quedo hecho; dile que "
-                + "confirme con el boton." + (advertencia == null ? "" : " " + advertencia));
+        return ResultadoHerramienta.exito("Propuesta creada: " + resumen + ". " + COMO_DECIRLO
+                + (advertencia == null ? "" : " " + advertencia));
     }
 
     static ResultadoHerramienta noSePudoPreparar() {

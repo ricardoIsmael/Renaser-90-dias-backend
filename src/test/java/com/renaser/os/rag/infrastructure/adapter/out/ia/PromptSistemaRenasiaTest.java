@@ -142,6 +142,46 @@ class PromptSistemaRenasiaTest {
         assertThat(render).contains("en que dia del programa va").contains("no restes tu");
     }
 
+    @Test
+    @DisplayName("bateria 2026-09-25: sin salidas inventadas, cupo solo leido, pausados, propuesta en una frase")
+    void reglasDeLaBateria() {
+        String render = renderizar("(vacio)");
+
+        // Ofrecio "cambiar el dia" de la audioterapia, que no se elige por dia.
+        assertThat(render).contains("no inventes").contains("cambiar el dia de un habito que no se elige por dia");
+        // Afirmo que no le quedaban cambios de horario sin haberlo leido.
+        assertThat(render).contains("nunca lo supongas");
+        // Propuso reactivar un habito pausado cuando pidieron cambiar hasta cuando dura la pausa.
+        assertThat(render).contains("Un habito pausado").contains("se cambia la pausa");
+        // Repetia la propuesta con negritas en vez de una frase corta.
+        assertThat(render).contains("Te deje la propuesta abajo para").contains("Nada de negritas");
+        // Invento la hora (18:03 a las 11:22), la fecha de fin y como se calcula la coherencia.
+        assertThat(render).contains("La hora y la fecha de hoy").contains("nunca las digas de memoria")
+                .contains("ni digas una").contains("explicalo solo con lo que dice la");
+        // Hablo del horario de un habito pausado sin decir que estaba pausado.
+        assertThat(render).contains("el horario").contains("nuevo se vera cuando lo reactive");
+        // "No estas sola" a un hombre: lo dictaba el propio bloque de crisis.
+        assertThat(render).contains("No sabes si la persona es hombre o mujer").contains("pasar por esto a solas")
+                .doesNotContain("no esta sola");
+        // Mostro los UUID de sus habitos.
+        assertThat(render).contains("Nunca muestres identificadores internos");
+    }
+
+    @Test
+    @DisplayName("bateria 2026-09-25, pedido del dueño: menos cerrado, calido con lo que siente, 106 primero")
+    void menosCerradoYMasCalido() {
+        String render = renderizar("(vacio)");
+
+        // "Eso no lo manejo" salio 9 veces, incluso ante la ansiedad; un chiste se rechazo.
+        assertThat(render).contains("Nunca un \"eso no lo manejo\" a secas").contains("un chiste corto")
+                .contains("reconocelo con calidez").doesNotContain("\"eso no lo manejo, pero si quieres");
+        // Ante "me duele el pecho" dio alternativas antes del 106.
+        assertThat(render).contains("llame ya al 106 (SAMU)");
+        // Contesto de memoria lo que dependia de datos; confundio rocas con habitos; no nombro Cancelar.
+        assertThat(render).contains("se vuelve a consultar cada vez").contains("Las rocas (consultar_rocas) no son habitos")
+                .contains("toque Cancelar en su tarjeta").contains("puede estar pausado o apagado");
+    }
+
     /**
      * 2026-09-23: el bloque de voz es un archivo aparte que el adaptador agrega al final con
      * {@code canal=VOZ}. Se renderiza aca sin variables — si alguien le mete una llave en la prosa,

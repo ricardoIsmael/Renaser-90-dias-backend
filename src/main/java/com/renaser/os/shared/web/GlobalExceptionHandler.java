@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -99,7 +100,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IdentidadProveedorInvalidaException.class)
     public ResponseEntity<ApiErrorResponse> handleIdentidadProveedorInvalida(IdentidadProveedorInvalidaException ex) {
         log.warn("401 -> login social rechazado", ex);
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiErrorResponse.of(ex.getMessage()));
+        return comoJson(ResponseEntity.status(HttpStatus.UNAUTHORIZED), ApiErrorResponse.of(ex.getMessage()));
     }
 
     /**
@@ -175,9 +176,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleProveedorIaNoDisponible(ProveedorIaNoDisponibleException ex) {
         long segundos = Math.max(1, ex.reintentarEn().toSeconds());
         log.warn("503 -> proveedor de IA no disponible (Retry-After {}s): {}", segundos, ex.getMessage());
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .header(HttpHeaders.RETRY_AFTER, Long.toString(segundos))
-                .body(ApiErrorResponse.of(ex.getMessage()));
+        return comoJson(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(segundos)), ApiErrorResponse.of(ex.getMessage()));
     }
 
     /**
@@ -272,12 +272,24 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleIntegridad(DataIntegrityViolationException ex) {
         log.warn("409 -> Conflict: violacion de integridad en la base", ex);
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiErrorResponse.of("La operacion entra en conflicto con datos que ya existen"));
+        return comoJson(ResponseEntity.status(HttpStatus.CONFLICT),
+                ApiErrorResponse.of("La operacion entra en conflicto con datos que ya existen"));
     }
 
+    /**
+     * El error sale SIEMPRE como JSON, con el {@code Content-Type} fijado a mano (E-248). Sin eso,
+     * un error que salta antes de abrir un endpoint {@code text/event-stream} (el chat de Renasia)
+     * no se podia escribir: Spring negociaba contra el {@code produces} del endpoint, fallaba con
+     * {@code HttpMediaTypeNotAcceptableException} y el cliente recibia un 500 en vez del 429 "se
+     * acabaron tus mensajes de hoy", que la app ya sabe mostrar.
+     */
     private ResponseEntity<ApiErrorResponse> respond(HttpStatus status, String message) {
         log.warn("{} -> {}: {}", status.value(), status.getReasonPhrase(), message);
-        return ResponseEntity.status(status).body(ApiErrorResponse.of(message));
+        return comoJson(ResponseEntity.status(status), ApiErrorResponse.of(message));
+    }
+
+    private static ResponseEntity<ApiErrorResponse> comoJson(ResponseEntity.BodyBuilder respuesta,
+                                                            ApiErrorResponse cuerpo) {
+        return respuesta.contentType(MediaType.APPLICATION_JSON).body(cuerpo);
     }
 }

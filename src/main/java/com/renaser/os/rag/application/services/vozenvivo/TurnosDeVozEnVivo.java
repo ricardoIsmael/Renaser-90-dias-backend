@@ -5,6 +5,7 @@ import com.renaser.os.rag.application.ports.out.conversacion.LoadConversacionRen
 import com.renaser.os.rag.application.ports.out.conversacion.SaveConversacionRenasiaPort;
 import com.renaser.os.rag.application.ports.out.conversacion.SaveMensajeRenasiaPort;
 import com.renaser.os.rag.application.services.ConversacionRenasiaService;
+import com.renaser.os.rag.domain.model.conversacion.FiltroDeIdentificadores;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
@@ -80,8 +81,9 @@ public class TurnosDeVozEnVivo {
         if (!respuesta.isBlank()) {
             // Nunca antes que la pregunta: el historial se ordena por fecha.
             Instant fin = clock.now().isAfter(inicio) ? clock.now() : inicio.plusMillis(1);
+            // E-270: si el modelo dijo un id en voz alta, al historial llega tapado.
             saveMensajePort.save(MensajeRenasia.escribirDeAsistente(MensajeRenasiaId.of(idGenerator.newId()),
-                    actorId, AgenteConversacional.COMPANION, respuesta, List.of(), fin));
+                    actorId, AgenteConversacional.COMPANION, FiltroDeIdentificadores.taparEn(respuesta), List.of(), fin));
         }
         return apoyo;
     }

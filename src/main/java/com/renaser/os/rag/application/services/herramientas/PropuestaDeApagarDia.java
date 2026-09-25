@@ -87,6 +87,9 @@ public class PropuestaDeApagarDia implements HerramientaAgente {
         if (pedido.apagar() && habito.obligatorio()) {
             throw new PropuestaImposibleException(LoQueSiSePuede.obligatorio(habito.titulo()));
         }
+        if (habito.pausado()) {
+            throw new PropuestaImposibleException(LoQueSiSePuede.pausado(habito.titulo()));
+        }
         if (pedido.apagar() && habito.apagado()) {
             throw new PropuestaImposibleException("'" + habito.titulo() + "' ya esta apagado ese dia.");
         }

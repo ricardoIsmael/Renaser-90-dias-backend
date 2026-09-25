@@ -42,7 +42,8 @@ class HerramientasAgenteServiceAdicionalesTest {
     @Test
     @DisplayName("el acompanante recibe las originales y las adicionales; Sparkie ninguna")
     void seOfrecenSoloAlAcompanante() {
-        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()), sinPropuesta());
+        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()), sinPropuesta(),
+                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z")));
 
         assertThat(servicio.disponibles(AgenteConversacional.COMPANION))
                 .extracting(DefinicionHerramienta::nombre)
@@ -55,7 +56,8 @@ class HerramientasAgenteServiceAdicionalesTest {
     @Test
     @DisplayName("una adicional se ejecuta con el actor de la conversacion y sus argumentos")
     void seEjecutaConElActor() {
-        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()), sinPropuesta());
+        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()), sinPropuesta(),
+                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z")));
 
         var resultado = servicio.ejecutar(APRENDIZ,
                 new InvocacionHerramienta(HerramientaDeEco.NOMBRE, Map.of("texto", "hola")));
@@ -66,7 +68,8 @@ class HerramientasAgenteServiceAdicionalesTest {
     @Test
     @DisplayName("a una adicional tambien se le exigen sus argumentos obligatorios antes de ejecutarla")
     void seValidanLosObligatorios() {
-        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()), sinPropuesta());
+        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()), sinPropuesta(),
+                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z")));
 
         var resultado = servicio.ejecutar(APRENDIZ, InvocacionHerramienta.sinArgumentos(HerramientaDeEco.NOMBRE));
 
@@ -77,7 +80,8 @@ class HerramientasAgenteServiceAdicionalesTest {
     @Test
     @DisplayName("si una adicional lanza, el modelo recibe un motivo legible y no la excepcion")
     void unaExcepcionSeTraduce() {
-        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaQueRevienta()), sinPropuesta());
+        var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaQueRevienta()), sinPropuesta(),
+                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z")));
 
         var resultado = servicio.ejecutar(APRENDIZ, InvocacionHerramienta.sinArgumentos(HerramientaQueRevienta.NOMBRE));
 
@@ -100,7 +104,8 @@ class HerramientasAgenteServiceAdicionalesTest {
             }
         };
 
-        assertThatThrownBy(() -> new HerramientasAgenteService(agenda, List.of(copiaDeUnaOriginal), sinPropuesta()))
+        assertThatThrownBy(() -> new HerramientasAgenteService(agenda, List.of(copiaDeUnaOriginal), sinPropuesta(),
+                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z"))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA);
     }

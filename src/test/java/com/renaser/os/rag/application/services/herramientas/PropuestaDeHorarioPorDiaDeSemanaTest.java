@@ -131,4 +131,16 @@ class PropuestaDeHorarioPorDiaDeSemanaTest {
                         .isInstanceOf(ResultadoHerramienta.Fallo.class));
         verify(proponer, never()).proponer(any(), any(), any());
     }
+
+    @Test
+    @DisplayName("bateria 2026-09-25: fijar la misma franja que ya tiene ese dia no se propone ni gasta cupo")
+    void fijarLoMismo() {
+        hoyYProximoLunes(new CuotaCambios(1, 2, 3, false), false);
+
+        ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, pedido("dia_semana", "lunes", "accion",
+                "fijar", "hora_inicio", "06:00", "hora_limite", "07:00"));
+
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("ya esta a las 06:00-07:00");
+        verify(proponer, never()).proponer(any(), any(), any());
+    }
 }

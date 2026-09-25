@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -38,6 +39,9 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class HerramientasAgenteServiceTest {
+
+    /** 9 horas antes del plazo de los habitos de prueba (2026-09-06T05:00:00Z). */
+    private static final com.renaser.os.shared.domain.Clock RELOJ = com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-05T20:00:00Z"));
 
     private static final UserId APRENDIZ = UserId.of(UUID.randomUUID());
     private static final UUID REGISTRO = UUID.fromString("22222222-2222-2222-2222-222222222222");
@@ -97,7 +101,7 @@ class HerramientasAgenteServiceTest {
 
     private HerramientasAgenteService servicio() {
         return new HerramientasAgenteService(agendaHabitosPort, List.of(),
-                new PropuestaDeMarcarHabito(agendaHabitosPort, proponerAccion, false));
+                new PropuestaDeMarcarHabito(agendaHabitosPort, proponerAccion, false), RELOJ);
     }
 
     private static HabitoDelDia habitoVivo(String titulo, int puntos) {
@@ -152,7 +156,7 @@ class HerramientasAgenteServiceTest {
                 InvocacionHerramienta.sinArgumentos(CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA)));
 
         assertThat(texto).contains(REGISTRO.toString()).contains("Meditacion").contains("estado=PENDIENTE")
-                .contains("puntos_en_juego=10 de 10").contains("vence=")
+                .contains("puntos_en_juego=10 de 10").contains("vence_en=9 h 0 min")
                 // El total viaja en la misma respuesta para que el modelo no encadene una
                 // segunda herramienta (un viaje mas a Gemini) para sumar lo que ya tiene.
                 .contains("Total en juego: 10 puntos en 1 habito(s)");
@@ -233,5 +237,21 @@ class HerramientasAgenteServiceTest {
         assertThat(motivo).contains("No se pudo marcar ese habito")
                 // el detalle tecnico va al log, nunca al texto que el asistente le repite a la persona
                 .doesNotContain("IllegalStateException");
+    }
+
+    @Test
+    @DisplayName("bateria 2026-09-25: un habito vencido se marca ya_vencio y no cuenta como pendiente ni en juego")
+    void vencidoNoCuenta() {
+        var agenda = mock(ConsultarAgendaHabitosPort.class);
+        when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(new HabitoDelDia(UUID.randomUUID(), "Ritual", "PENDIENTE",
+                0, 10, Instant.parse("2026-09-05T14:10:00Z"), false)));
+        var servicio = new HerramientasAgenteService(agenda, List.of(),
+                new PropuestaDeMarcarHabito(agenda, proponerAccion, false), RELOJ);
+
+        String contenido = ((ResultadoHerramienta.Exito) servicio.ejecutar(APRENDIZ,
+                InvocacionHerramienta.sinArgumentos(CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA))).contenido();
+
+        assertThat(contenido).contains("ya_vencio=si").doesNotContain("vence_en")
+                .contains("Total en juego: 0 puntos en 0 habito(s)").contains("1 ya vencieron hoy");
     }
 }

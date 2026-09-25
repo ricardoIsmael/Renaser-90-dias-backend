@@ -157,4 +157,18 @@ class PropuestaDeCambioDeHorarioTest {
         assertThat(herramienta.definicion().obligatoriosFaltantesEn(pedido()))
                 .containsExactly("habito_id", "hora_inicio");
     }
+
+    @Test
+    @DisplayName("bateria 2026-09-25: un cambio a la misma franja no se propone ni gasta cupo, y lo dice")
+    void mismaFranjaNoSePropone() {
+        hoyEsDia12();
+        when(horarios.deFecha(APRENDIZ, MANANA)).thenReturn(dia(MANANA, 13, new CuotaCambios(2, 1, 3, false)));
+
+        ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, pedido("habito_id", MEDITAR.toString(),
+                "hora_inicio", "06:00", "hora_limite", "07:00"));
+
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("ya esta a las 06:00-07:00")
+                .contains("no se gasta un cambio");
+        verify(proponer, never()).proponer(any(), any(), any());
+    }
 }

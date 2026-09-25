@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -61,6 +62,26 @@ final class HorariosParaProponer {
                     + "habitos que ya reacomodo esa semana los puede seguir ajustando desde la app, y el resto la "
                     + "semana siguiente.");
         }
+    }
+
+    /**
+     * Un cambio a la misma franja no cambia nada y gastaria un cupo: en la bateria del 2026-09-25 se
+     * propuso "de 06:00 a 06:00". Se dice que ya esta asi y no se propone.
+     */
+    static void requireQueCambie(HorarioDeHabito actual, LocalTime inicio, LocalTime limite) {
+        if (inicio.equals(actual.horaDisparo()) && Objects.equals(limite, actual.horaLimite())) {
+            throw new PropuestaImposibleException("'" + actual.titulo() + "' ya esta a las " + franja(inicio, limite)
+                    + " ese dia: no hay nada que cambiar y no se gasta un cambio de horario.");
+        }
+    }
+
+    /** Lo que dice {@code consultar_horarios} del cupo, para que ninguna herramienta lo cuente distinto. */
+    static String lineaDeCupo(CuotaCambios cuota) {
+        if (cuota.semanaDeAcomodoLibre()) {
+            return "Cambios de horario: semana de acomodo libre, los cambios inmediatos no consumen cupo.";
+        }
+        return "Cambios de horario esta semana: " + cuota.usados() + " usados, " + cuota.restantes()
+                + " restantes de " + cuota.limite() + ".";
     }
 
     /** La parte del resumen que dice cuanto cupo gasta, con los numeros que dio {@code habits}. */
