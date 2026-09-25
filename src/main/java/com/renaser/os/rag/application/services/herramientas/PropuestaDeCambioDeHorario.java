@@ -80,7 +80,7 @@ public class PropuestaDeCambioDeHorario implements HerramientaAgente {
             HorariosParaProponer.requireQueCambie(actual, cambio.horaInicio(), cambio.horaLimite());
             HorariosParaProponer.requireCupo(diaQueCambia.cuota());
             String resumen = resumenDe(cambio, actual, rigeDesde) + " "
-                    + HorariosParaProponer.gastoDeCupo(diaQueCambia.cuota());
+                    + HorariosParaProponer.gastoDeCupo(diaQueCambia.cuota()) + HorariosParaProponer.siEstaPausado(actual);
             return PropuestaPendiente.registrar(proponerAccion, actorId, cambio.invocacion(), resumen);
         } catch (PropuestaImposibleException imposible) {
             return ResultadoHerramienta.fallo(imposible.getMessage());

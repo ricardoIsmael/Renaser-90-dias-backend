@@ -75,7 +75,7 @@ public class PropuestaDeHorarioPorDiaDeSemana implements HerramientaAgente {
             LocalDate proxima = hoy.with(TemporalAdjusters.next(pedido.diaSemana()));
             HorariosDelDia dia = HorariosParaProponer.de(horariosPort, actorId, proxima);
             HorarioDeHabito habito = HorariosParaProponer.habito(dia, pedido.habitoId());
-            String resumen = resumenValidado(pedido, habito, dia);
+            String resumen = resumenValidado(pedido, habito, dia) + HorariosParaProponer.siEstaPausado(habito);
             return PropuestaPendiente.registrar(proponerAccion, actorId, pedido.invocacion(), resumen);
         } catch (PropuestaImposibleException imposible) {
             return ResultadoHerramienta.fallo(imposible.getMessage());
