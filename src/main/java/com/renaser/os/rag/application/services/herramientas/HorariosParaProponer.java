@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -39,9 +40,29 @@ final class HorariosParaProponer {
         HorariosDelDia dia = leer(puerto, actorId, fecha);
         if (dia.diaPrograma() < PRIMER_DIA_DEL_PROGRAMA || dia.diaPrograma() > ULTIMO_DIA_DEL_PROGRAMA) {
             throw new PropuestaImposibleException("El " + ArgumentosDeHorario.texto(dia.fecha())
-                    + " queda fuera de sus 90 dias de programa: no hay horario que cambiar ese dia.");
+                    + " queda fuera de sus 90 dias de programa: no hay horario que cambiar ese dia."
+                    + conLaFechaDeHoy(puerto, actorId, fecha));
         }
         return dia;
+    }
+
+    /**
+     * Bateria del 2026-09-25 (ronda 2): a "saltate la clase diaria este sabado" el acompanante
+     * contesto "el programa no llega hasta ese sabado", en el dia 18 de 90. Una fecha mal armada (el
+     * año, casi siempre) caia aca, y el modelo repetia el motivo sin darse cuenta. Con la fecha de
+     * hoy al lado puede corregirla y volver a intentar.
+     */
+    private static String conLaFechaDeHoy(ConsultarHorariosPort puerto, UserId actorId, LocalDate fecha) {
+        if (fecha == null) {
+            return "";
+        }
+        try {
+            HorariosDelDia hoy = leer(puerto, actorId, null);
+            return " Hoy es " + ArgumentosDeHorario.texto(hoy.fecha()) + ", su dia " + hoy.diaPrograma()
+                    + " de 90: revisa el año y la fecha que pediste y vuelve a intentar.";
+        } catch (RuntimeException sinHoy) {
+            return "";
+        }
     }
 
     static HorarioDeHabito habito(HorariosDelDia dia, UUID habitoId) {
@@ -61,6 +82,26 @@ final class HorariosParaProponer {
                     + "habitos que ya reacomodo esa semana los puede seguir ajustando desde la app, y el resto la "
                     + "semana siguiente.");
         }
+    }
+
+    /**
+     * Un cambio a la misma franja no cambia nada y gastaria un cupo: en la bateria del 2026-09-25 se
+     * propuso "de 06:00 a 06:00". Se dice que ya esta asi y no se propone.
+     */
+    static void requireQueCambie(HorarioDeHabito actual, LocalTime inicio, LocalTime limite) {
+        if (inicio.equals(actual.horaDisparo()) && Objects.equals(limite, actual.horaLimite())) {
+            throw new PropuestaImposibleException("'" + actual.titulo() + "' ya esta a las " + franja(inicio, limite)
+                    + " ese dia: no hay nada que cambiar y no se gasta un cambio de horario.");
+        }
+    }
+
+    /** Lo que dice {@code consultar_horarios} del cupo, para que ninguna herramienta lo cuente distinto. */
+    static String lineaDeCupo(CuotaCambios cuota) {
+        if (cuota.semanaDeAcomodoLibre()) {
+            return "Cambios de horario: semana de acomodo libre, los cambios inmediatos no consumen cupo.";
+        }
+        return "Cambios de horario esta semana: " + cuota.usados() + " usados, " + cuota.restantes()
+                + " restantes de " + cuota.limite() + ".";
     }
 
     /** La parte del resumen que dice cuanto cupo gasta, con los numeros que dio {@code habits}. */

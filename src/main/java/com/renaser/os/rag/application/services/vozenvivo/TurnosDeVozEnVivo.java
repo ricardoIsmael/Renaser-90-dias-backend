@@ -1,10 +1,12 @@
 package com.renaser.os.rag.application.services.vozenvivo;
 
+import com.renaser.os.rag.application.ports.in.memoria.CompactarMemoriaUseCase;
 import com.renaser.os.rag.application.ports.in.seguridad.RevisarPatronDeMalestarUseCase;
 import com.renaser.os.rag.application.ports.out.conversacion.LoadConversacionRenasiaPort;
 import com.renaser.os.rag.application.ports.out.conversacion.SaveConversacionRenasiaPort;
 import com.renaser.os.rag.application.ports.out.conversacion.SaveMensajeRenasiaPort;
 import com.renaser.os.rag.application.services.ConversacionRenasiaService;
+import com.renaser.os.rag.domain.model.conversacion.FiltroDeIdentificadores;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
@@ -41,17 +43,19 @@ public class TurnosDeVozEnVivo {
     private final SaveConversacionRenasiaPort saveConversacionPort;
     private final SaveMensajeRenasiaPort saveMensajePort;
     private final RevisarPatronDeMalestarUseCase revisarPatronDeMalestar;
+    private final CompactarMemoriaUseCase compactarMemoria;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
     public TurnosDeVozEnVivo(LoadConversacionRenasiaPort loadConversacionPort,
                              SaveConversacionRenasiaPort saveConversacionPort, SaveMensajeRenasiaPort saveMensajePort,
-                             RevisarPatronDeMalestarUseCase revisarPatronDeMalestar, Clock clock,
-                             IdGenerator idGenerator) {
+                             RevisarPatronDeMalestarUseCase revisarPatronDeMalestar,
+                             CompactarMemoriaUseCase compactarMemoria, Clock clock, IdGenerator idGenerator) {
         this.loadConversacionPort = loadConversacionPort;
         this.saveConversacionPort = saveConversacionPort;
         this.saveMensajePort = saveMensajePort;
         this.revisarPatronDeMalestar = revisarPatronDeMalestar;
+        this.compactarMemoria = compactarMemoria;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
@@ -80,8 +84,12 @@ public class TurnosDeVozEnVivo {
         if (!respuesta.isBlank()) {
             // Nunca antes que la pregunta: el historial se ordena por fecha.
             Instant fin = clock.now().isAfter(inicio) ? clock.now() : inicio.plusMillis(1);
+            // E-270: si el modelo dijo un id en voz alta, al historial llega tapado.
             saveMensajePort.save(MensajeRenasia.escribirDeAsistente(MensajeRenasiaId.of(idGenerator.newId()),
-                    actorId, AgenteConversacional.COMPANION, respuesta, List.of(), fin));
+                    actorId, AgenteConversacional.COMPANION, FiltroDeIdentificadores.taparEn(respuesta), List.of(), fin));
+            // D-167: igual que el chat, despues de guardar la respuesta. Corre en segundo plano y
+            // nunca cambia la sesion abierta (su prompt se armo al abrir): sirve a la proxima.
+            compactarMemoria.compactarEnSegundoPlano(actorId);
         }
         return apoyo;
     }

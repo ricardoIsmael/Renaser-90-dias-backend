@@ -57,7 +57,10 @@ public class PropuestaDePausarHabito implements HerramientaAgente {
             "Propone pausar un habito de su plan (hasta una fecha o sin fecha de fin) o reactivar uno pausado. "
                     + "NO lo pausa: deja una propuesta y la persona tiene que tocar Confirmar en la app. Nunca "
                     + "digas que ya quedo pausado o reactivado. Los habitos obligatorios no se pueden pausar. "
-                    + "Usala solo si la persona pidio pausar o reactivar; saca el habito_id de consultar_horarios.",
+                    + "Si ya esta pausado y pide que la pausa dure hasta otra fecha (o sin fin), usa 'pausar' con "
+                    + "esa fecha: eso cambia la pausa. Usa 'reactivar' solo si pide volver a hacerlo. Usala solo si "
+                    + "la persona pidio pausar o reactivar; saca el habito_id de consultar_horarios, aunque ahi "
+                    + "figure pausado.",
             List.of(ParametroHerramienta.obligatorio(ARGUMENTO_HABITO_ID, TipoParametroHerramienta.IDENTIFICADOR,
                             "El habito_id que devuelve consultar_horarios."),
                     ParametroHerramienta.obligatorio(ARGUMENTO_ACCION, TipoParametroHerramienta.TEXTO,

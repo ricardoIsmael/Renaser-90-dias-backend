@@ -208,6 +208,7 @@ class PropuestaDePausarHabitoTest {
     void descripcion() {
         assertThat(herramienta.definicion().nombre()).isEqualTo("proponer_pausar_habito");
         assertThat(herramienta.definicion().descripcion()).startsWith("Propone").contains("Confirmar")
-                .contains("Nunca digas");
+                .contains("Nunca digas")
+                .contains("eso cambia la pausa").contains("'reactivar' solo si pide volver a hacerlo");
     }
 }

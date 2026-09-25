@@ -1,5 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
+import com.renaser.os.rag.application.ports.out.horarios.ConsultarHorariosPort;
+import com.renaser.os.rag.application.ports.out.horarios.ConsultarHorariosPort.HorariosDelDia;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoDelPlan;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.PlanDelAprendiz;
@@ -37,9 +39,12 @@ public class ConsultarHabitosObligatoriosHerramienta implements HerramientaAgent
             List.of());
 
     private final GestionarPlanDeHabitosPort planPort;
+    private final ConsultarHorariosPort horariosPort;
 
-    public ConsultarHabitosObligatoriosHerramienta(GestionarPlanDeHabitosPort planPort) {
+    public ConsultarHabitosObligatoriosHerramienta(GestionarPlanDeHabitosPort planPort,
+                                                  ConsultarHorariosPort horariosPort) {
         this.planPort = planPort;
+        this.horariosPort = horariosPort;
     }
 
     @Override
@@ -49,7 +54,22 @@ public class ConsultarHabitosObligatoriosHerramienta implements HerramientaAgent
 
     @Override
     public ResultadoHerramienta ejecutar(UserId actorId, InvocacionHerramienta invocacion) {
-        return LecturaDelPlan.conPlan(planPort, actorId, plan -> ResultadoHerramienta.exito(textoDe(plan)));
+        return LecturaDelPlan.conPlan(planPort, actorId,
+                plan -> ResultadoHerramienta.exito(textoDe(plan) + cupoDeCambios(actorId)));
+    }
+
+    /**
+     * El cupo real de cambios de horario de esta semana: sin el, el modelo ofrecia "cambiarle la hora"
+     * o afirmaba que no quedaban cambios sin haberlo leido (bateria del 2026-09-25). Si no se puede
+     * leer, se omite: lo demas de la respuesta sigue siendo cierto.
+     */
+    private String cupoDeCambios(UserId actorId) {
+        try {
+            HorariosDelDia hoy = HorariosParaProponer.de(horariosPort, actorId, null);
+            return "\n" + HorariosParaProponer.lineaDeCupo(hoy.cuota());
+        } catch (PropuestaImposibleException sinHorarios) {
+            return "";
+        }
     }
 
     static String textoDe(PlanDelAprendiz plan) {

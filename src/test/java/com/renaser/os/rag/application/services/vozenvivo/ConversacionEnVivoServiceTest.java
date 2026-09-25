@@ -1,5 +1,8 @@
 package com.renaser.os.rag.application.services.vozenvivo;
 
+import com.renaser.os.rag.application.ports.in.memoria.CompactarMemoriaUseCase;
+import com.renaser.os.rag.application.ports.in.memoria.ConsultarMemoriaUseCase;
+import com.renaser.os.rag.domain.model.memoria.MemoriaDeRenasia;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.in.propuesta.ConsultarPropuestasDelTurnoUseCase;
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
@@ -79,6 +82,10 @@ class ConversacionEnVivoServiceTest {
     private final LoadConversacionRenasiaPort loadConversacion = mock(LoadConversacionRenasiaPort.class);
     private final SaveConversacionRenasiaPort saveConversacion = mock(SaveConversacionRenasiaPort.class);
     private final RevisarPatronDeMalestarUseCase malestar = mock(RevisarPatronDeMalestarUseCase.class);
+    private final ConsultarMemoriaUseCase memoria = mock(ConsultarMemoriaUseCase.class);
+    /** Anota a quien se le pidio compactar, sin correr nada. */
+    private final List<UserId> compactaciones = new ArrayList<>();
+    private final CompactarMemoriaUseCase compactar = compactaciones::add;
     private final SalidaGrabada salida = new SalidaGrabada();
 
     private ConversacionEnVivoService service;
@@ -95,9 +102,9 @@ class ConversacionEnVivoServiceTest {
         TiempoDeVozEnVivo tiempo = new TiempoDeVozEnVivo(cuotaPort, id -> LIMA,
                 new CuotaDeVozEnVivo(Duration.ofMinutes(10), Duration.ofMinutes(15)), reloj);
         TurnosDeVozEnVivo turnos = new TurnosDeVozEnVivo(loadConversacion, saveConversacion, mensajes, malestar,
-                reloj, UUID::randomUUID);
-        service = new ConversacionEnVivoService(usuarios, proveedor, situacion, herramientas, propuestas, turnos,
-                tiempo, temporizador, reloj);
+                compactar, reloj, UUID::randomUUID);
+        service = new ConversacionEnVivoService(usuarios, proveedor, situacion, memoria, herramientas, propuestas,
+                turnos, tiempo, temporizador, reloj);
     }
 
     private void conCuenta(UserRole rol, UserStatus estado) {
@@ -116,6 +123,35 @@ class ConversacionEnVivoServiceTest {
         assertThat(proveedor.apertura.herramientas()).extracting(DefinicionHerramienta::nombre)
                 .containsExactly("consultar_habitos_del_dia");
         verify(saveConversacion).save(any());
+    }
+
+    @Test
+    @DisplayName("D-167: la memoria entra en la apertura; apagada, la apertura va sin ella")
+    void memoriaEnLaApertura() {
+        var recuerdos = new MemoriaDeRenasia(List.of(), Optional.of("Armaron su rutina."), Instant.EPOCH);
+        when(memoria.paraConversar(actor)).thenReturn(Optional.of(recuerdos));
+
+        service.iniciar(actor, salida);
+        assertThat(proveedor.apertura.memoria()).isEqualTo(recuerdos);
+
+        when(memoria.paraConversar(actor)).thenReturn(Optional.empty());
+        service.iniciar(actor, new SalidaGrabada());
+        assertThat(proveedor.apertura.memoria()).isNull();
+    }
+
+    @Test
+    @DisplayName("D-167: despues de guardar la respuesta hablada se pide compactar, igual que en el chat")
+    void pideCompactarDespuesDelTurno() {
+        service.iniciar(actor, salida);
+
+        proveedor.oyente.oido("Hola");
+        proveedor.oyente.turnoCompleto();
+        assertThat(compactaciones).as("sin respuesta no hay turno completo").isEmpty();
+
+        proveedor.oyente.oido("Como voy?");
+        proveedor.oyente.dicho("Vas bien.");
+        proveedor.oyente.turnoCompleto();
+        assertThat(compactaciones).containsExactly(actor);
     }
 
     @Test
@@ -342,8 +378,9 @@ class ConversacionEnVivoServiceTest {
     void duracionMaxima() {
         TiempoDeVozEnVivo tiempo = new TiempoDeVozEnVivo(cuotaPort, id -> LIMA,
                 new CuotaDeVozEnVivo(Duration.ofMinutes(60), Duration.ofMinutes(15)), reloj);
-        service = new ConversacionEnVivoService(usuarios, proveedor, situacion, herramientas, propuestas,
-                new TurnosDeVozEnVivo(loadConversacion, saveConversacion, mensajes, malestar, reloj, UUID::randomUUID),
+        service = new ConversacionEnVivoService(usuarios, proveedor, situacion, memoria, herramientas, propuestas,
+                new TurnosDeVozEnVivo(loadConversacion, saveConversacion, mensajes, malestar, compactar, reloj,
+                        UUID::randomUUID),
                 tiempo, temporizador, reloj);
         service.iniciar(actor, salida);
 

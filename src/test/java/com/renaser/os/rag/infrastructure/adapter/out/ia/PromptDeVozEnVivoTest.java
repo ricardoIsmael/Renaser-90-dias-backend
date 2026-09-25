@@ -1,8 +1,16 @@
 package com.renaser.os.rag.infrastructure.adapter.out.ia;
 
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
+import com.renaser.os.rag.domain.model.memoria.CategoriaDeRecuerdo;
+import com.renaser.os.rag.domain.model.memoria.MemoriaDeRenasia;
+import com.renaser.os.rag.domain.model.memoria.Recuerdo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -18,7 +26,7 @@ class PromptDeVozEnVivoTest {
     @Test
     @DisplayName("es el acompanante, con el bloque de voz y el bloque en vivo, sin comentarios de plantilla")
     void armaLosTresBloques() {
-        String texto = prompt.para(new SituacionDelAprendiz(17, 1));
+        String texto = prompt.para(new SituacionDelAprendiz(17, 1), null);
 
         assertThat(texto).contains("Eres Renasia")
                 .contains("Hoy es su dia 17 de 90")
@@ -39,8 +47,29 @@ class PromptDeVozEnVivoTest {
     @Test
     @DisplayName("sin situacion (no cursa el programa) igual arma el prompt y no inventa un dia")
     void sinSituacion() {
-        String texto = prompt.para(null);
+        String texto = prompt.para(null, null);
 
         assertThat(texto).contains("no esta cursando el programa").doesNotContain("Hoy es su dia");
+    }
+
+    @Test
+    @DisplayName("D-167: con memoria va la misma seccion que en el chat, antes de los bloques de voz")
+    void conMemoria() {
+        var memoria = new MemoriaDeRenasia(List.of(new Recuerdo(UUID.randomUUID(),
+                CategoriaDeRecuerdo.PREFERENCIAS_DE_TRATO, "Prefiere respuestas cortas", Instant.EPOCH)),
+                Optional.empty(), Instant.EPOCH);
+
+        String texto = prompt.para(new SituacionDelAprendiz(17, 1), memoria);
+
+        assertThat(texto).contains("## Lo que sabes de esta persona").contains("- Prefiere respuestas cortas")
+                .doesNotContain("{recuerdos}");
+        assertThat(texto.indexOf("## Lo que sabes de esta persona"))
+                .isLessThan(texto.indexOf("Esta respuesta se va a escuchar"));
+    }
+
+    @Test
+    @DisplayName("D-167: sin memoria (apagada) el prompt de la voz no cambia")
+    void sinMemoria() {
+        assertThat(prompt.para(new SituacionDelAprendiz(17, 1), null)).doesNotContain("Lo que sabes de esta persona");
     }
 }

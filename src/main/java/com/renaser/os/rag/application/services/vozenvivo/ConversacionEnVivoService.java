@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.vozenvivo;
 
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
+import com.renaser.os.rag.application.ports.in.memoria.ConsultarMemoriaUseCase;
 import com.renaser.os.rag.application.ports.in.propuesta.ConsultarPropuestasDelTurnoUseCase;
 import com.renaser.os.rag.application.ports.in.voz.ConversarEnVivoUseCase;
 import com.renaser.os.rag.application.ports.out.ia.ConversacionEnVivoPort;
@@ -50,16 +51,20 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
     private final UserSummaryFinder userSummaryFinder;
     private final ConversacionEnVivoPort conversacionPort;
     private final ConsultarSituacionDelAprendizPort situacionPort;
+    /** D-167: la misma memoria que el chat escrito; se lee una vez, al abrir la sesion. */
+    private final ConsultarMemoriaUseCase memoriaUseCase;
     private final SesionDeVozEnVivo.Colaboradores colaboradores;
 
     public ConversacionEnVivoService(UserSummaryFinder userSummaryFinder, ConversacionEnVivoPort conversacionPort,
                                      ConsultarSituacionDelAprendizPort situacionPort,
+                                     ConsultarMemoriaUseCase memoriaUseCase,
                                      EjecutarHerramientaAgenteUseCase herramientas,
                                      ConsultarPropuestasDelTurnoUseCase propuestas, TurnosDeVozEnVivo turnos,
                                      TiempoDeVozEnVivo tiempo, ProgramarTareaPeriodicaPort programador, Clock clock) {
         this.userSummaryFinder = userSummaryFinder;
         this.conversacionPort = conversacionPort;
         this.situacionPort = situacionPort;
+        this.memoriaUseCase = memoriaUseCase;
         this.colaboradores = new SesionDeVozEnVivo.Colaboradores(herramientas, propuestas, turnos, tiempo,
                 programador, clock, INTERVALO_DE_COBRO);
     }
@@ -118,7 +123,8 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
 
     private ConversacionEnVivoPort.Apertura apertura(UserId actorId) {
         return new ConversacionEnVivoPort.Apertura(situacionPort.de(actorId).orElse(null),
-                colaboradores.herramientas().disponibles(AgenteConversacional.COMPANION));
+                colaboradores.herramientas().disponibles(AgenteConversacional.COMPANION),
+                memoriaUseCase.paraConversar(actorId).orElse(null));
     }
 
     private static ConversacionEnVivo rechazar(SalidaDeVozEnVivo salida, EventoDeVozEnVivo aviso,

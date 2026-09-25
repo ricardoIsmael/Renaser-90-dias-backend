@@ -442,6 +442,14 @@ renaser:
       # (RENASER_IA_ACOMPANANTE_LOGROSENCHATPLANTILLARACHASINCELULAR, etc.).
       logros-en-chat-plantilla-racha-sin-celular: "¡Lo lograste! Completaste tu día sin celular: 24 horas enteras. Eso es constancia de verdad. ¿Cómo te sentiste?"
       logros-en-chat-plantilla-roca-completada: "¡Roca completada! Un paso firme más hacia lo que te propusiste. Bien hecho."
+      # Memoria del acompanante (D-167, V67): lo que aprende de cada persona (contexto de vida, metas
+      # y lo que le funciona, como prefiere el trato; nunca lo emocional ni la salud) entra al prompt
+      # del chat y de la voz en vivo, y cada ~10 idas y vueltas se resume la conversacion en segundo
+      # plano con el modelo de texto. La persona lo ve y lo borra en su perfil.
+      #
+      # FALSE por defecto: apagada, el prompt queda byte por byte como antes y no se compacta nada.
+      # Lo que ya estaba guardado se sigue viendo en el perfil, para poder borrarlo.
+      memoria: ${IA_ACOMPANANTE_MEMORIA:false}
       # El acompanante cuenta en el chat como cerro la semana del semaforo (D-168,
       # SemaforoEnChatService): mismo molde que logros-en-chat — plantilla, SIN IA, sin cuota, un
       # solo mensaje por persona y semana aunque el outbox reentregue, y nunca detras de un mensaje
@@ -453,9 +461,9 @@ renaser:
       # TEXTOS PROVISORIOS: el dueno NO aprobo esta redaccion todavia. Uno por color, tuteo,
       # espanol neutro de Peru. Marcadores: {etiqueta} (la palabra del color que manda points: "Al
       # dia", "Requiere atencion", "Con problemas") y {porcentaje} (el de la semana, con punto
-      # decimal como la tarjeta de la app: "86" o "78.3"). La de sin datos se usa tambien cuando la semana no trae
-      # porcentaje, y NUNCA lleva numero. Una plantilla vacia apaga ese color. Se sobreescriben por
-      # entorno (RENASER_IA_ACOMPANANTE_SEMAFOROENCHATPLANTILLAVERDE, etc.).
+      # decimal como la tarjeta de la app: "86" o "78.3"). La de sin datos se usa tambien cuando
+      # la semana no trae porcentaje, y NUNCA lleva numero. Una plantilla vacia apaga ese color. Se
+      # sobreescriben por entorno (RENASER_IA_ACOMPANANTE_SEMAFOROENCHATPLANTILLAVERDE, etc.).
       semaforo-en-chat-plantilla-verde: "Cerraste la semana en verde, {etiqueta}: {porcentaje} %. ¡Bien hecho! Tu constancia se nota."
       semaforo-en-chat-plantilla-amarillo: "Cerraste la semana en amarillo, {etiqueta}: {porcentaje} %. Estás cerca: elige un hábito y cuídalo cada día de esta semana."
       semaforo-en-chat-plantilla-rojo: "Cerraste la semana en rojo, {etiqueta}: {porcentaje} %. No es un juicio, es un punto de partida. ¿Empezamos hoy con un paso pequeño? Aquí estoy para acompañarte."

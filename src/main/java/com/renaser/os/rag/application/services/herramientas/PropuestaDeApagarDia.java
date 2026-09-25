@@ -68,6 +68,7 @@ public class PropuestaDeApagarDia implements HerramientaAgente {
         try {
             DiaPedido pedido = DiaPedido.de(invocacion);
             HorariosDelDia hoy = HorariosParaProponer.de(horariosPort, actorId, null);
+            requireNoEsObligatorio(pedido, hoy);
             if (pedido.fecha().isBefore(hoy.fecha())) {
                 throw new PropuestaImposibleException("Ese dia ya paso: solo se puede apagar hoy o un dia futuro. "
                         + "Hoy es " + ArgumentosDeHorario.texto(hoy.fecha()) + ".");
@@ -83,9 +84,29 @@ public class PropuestaDeApagarDia implements HerramientaAgente {
         }
     }
 
+    /**
+     * Un obligatorio no se apaga ningun dia: se dice antes de mirar la fecha. Si no, una fecha mal
+     * armada respondia "queda fuera del programa" y el modelo daba ese motivo, que no era el real
+     * (bateria del 2026-09-25, ronda 2).
+     */
+    private static void requireNoEsObligatorio(DiaPedido pedido, HorariosDelDia hoy) {
+        if (!pedido.apagar()) {
+            return;
+        }
+        hoy.habitos().stream()
+                .filter(habito -> habito.obligatorio() && pedido.habitoId().equals(habito.habitoId()))
+                .findFirst()
+                .ifPresent(habito -> {
+                    throw new PropuestaImposibleException(LoQueSiSePuede.obligatorio(habito.titulo()));
+                });
+    }
+
     private static void requirePosible(DiaPedido pedido, HorarioDeHabito habito) {
         if (pedido.apagar() && habito.obligatorio()) {
             throw new PropuestaImposibleException(LoQueSiSePuede.obligatorio(habito.titulo()));
+        }
+        if (habito.pausado()) {
+            throw new PropuestaImposibleException(LoQueSiSePuede.pausado(habito.titulo()));
         }
         if (pedido.apagar() && habito.apagado()) {
             throw new PropuestaImposibleException("'" + habito.titulo() + "' ya esta apagado ese dia.");

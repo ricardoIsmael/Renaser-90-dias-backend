@@ -86,6 +86,7 @@ public class PropuestaDeHorarioPorDiaDeSemana implements HerramientaAgente {
     static String resumenValidado(HorarioSemanalPedido pedido, HorarioDeHabito habito, HorariosDelDia proxima) {
         String dias = "los " + ArgumentosDeHorario.nombre(pedido.diaSemana());
         if (pedido.accion() == Accion.FIJAR) {
+            HorariosParaProponer.requireQueCambie(habito, pedido.horaInicio(), pedido.horaLimite());
             HorariosParaProponer.requireCupo(proxima.cuota());
             return "Fijar '" + habito.titulo() + "' " + dias + " a "
                     + HorariosParaProponer.franjaPedida(pedido.horaInicio(), pedido.horaLimite())
