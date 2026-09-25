@@ -11,8 +11,8 @@ import java.util.Map;
 /**
  * Convierte las propiedades {@code renaser.ia.acompanante.semaforo-en-chat*} en el valor de dominio
  * {@link SemaforoEnChat}. Mismo molde que {@link LogrosEnChatConfig}: los defaults de ACÁ (propiedad
- * ausente) son los seguros — interruptor apagado y plantillas vacías. Los textos provisorios viven
- * solo en {@code application.yaml}.
+ * ausente) son los seguros — interruptor apagado y plantillas vacías. El interruptor encendido
+ * (desde el 2026-09-25) y los textos viven solo en {@code application.yaml}.
  */
 @Configuration
 class SemaforoEnChatConfig {

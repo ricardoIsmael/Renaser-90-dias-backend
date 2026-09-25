@@ -70,7 +70,9 @@ class ResumenSemanalGeneralNotificationListenerTest {
             assertThat(comando.origenEventoId()).isEqualTo(clave);
             assertThat(comando.rutaApp()).isEqualTo("/semaforo/grupos");
             assertThat(comando.titulo()).isEqualTo("Semana cerrada");
-            assertThat(comando.cuerpo()).isEqualTo("El semáforo de los grupos ya está listo.");
+            // 12 en amarillo y 8 en rojo en la semana: "necesitan apoyo", sin cifras.
+            assertThat(comando.cuerpo())
+                    .isEqualTo("Hay grupos con aprendices que necesitan apoyo. Mira el semáforo por grupos.");
         });
     }
 

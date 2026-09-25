@@ -45,10 +45,31 @@ contratos: backend, app y agentes trabajan contra lo que dice acá. Si algo camb
 
 | Destinatario | Canal | Contenido |
 |---|---|---|
-| Cada persona medida | Push + bandeja (`RESUMEN_SEMANAL`, tipo ya existente y sin uso) | «Tu semana ya cerró: mira tu semáforo». **Sin cifras** (regla de la app: el push no lleva métricas). Ruta `/semaforo`. |
-| Cada persona medida | Mensaje del acompañante (`rag.SemaforoEnChatListener`, plantilla sin IA, flag `renaser.ia.acompanante.semaforo-en-chat`, **apagado por defecto**) | Color, palabra y %: «Cerraste la semana en verde, Al día: 86 %». Una plantilla por color en `application.yaml`; la de «sin datos» nunca lleva número. Textos provisorios hasta que el dueño los apruebe (como D-155). |
-| Mentor | Bandeja + push (`RESUMEN_SEMANAL`) | Un aviso por grupo: «Tu grupo cerró la semana — El semáforo de Grupo Fénix ya está listo». **Sin cifras** (ver nota). Ruta `/mentor/groups/{grupoId}/semaforo`. |
-| Líder, admin, alquimista | Bandeja + push (`RESUMEN_SEMANAL`) | Un aviso general: «Semana cerrada — El semáforo de los grupos ya está listo». **Sin cifras**; los conteos por color viajan en el evento y se ven al abrir la ruta. Ruta `/semaforo/grupos`. |
+| Cada persona medida | Push + bandeja (`RESUMEN_SEMANAL`, tipo ya existente y sin uso) | Texto según el caso (tabla de abajo). **Sin cifras ni colores** (regla de la app: el push no lleva métricas). Ruta `/semaforo`. |
+| Cada persona medida | Mensaje del acompañante (`rag.SemaforoEnChatListener`, plantilla sin IA, flag `renaser.ia.acompanante.semaforo-en-chat`, **encendido por defecto**) | Color, palabra y %: «Cerraste la semana en verde, Al día: 86 %». Una plantilla por color en `application.yaml`; la de «sin datos» nunca lleva número. Si una plantilla deja un marcador sin reemplazar, sale un texto de respaldo (`SemaforoEnChat.TEXTO_DE_RESPALDO`). |
+| Mentor | Bandeja + push (`RESUMEN_SEMANAL`) | Un aviso por grupo, con texto según el caso. **Sin cifras ni colores**; nombra al grupo, nunca a una persona. Ruta `/mentor/groups/{grupoId}/semaforo`. |
+| Líder, admin, alquimista | Bandeja + push (`RESUMEN_SEMANAL`) | Un aviso general, con texto según el caso. **Sin cifras ni colores**; los conteos viajan en el evento y se ven al abrir la ruta. Ruta `/semaforo/grupos`. |
+
+**Textos según el caso** (decisión del dueño, 2026-09-25: «automáticos viendo todos los posibles casos y
+resilientes»). Los arma `notifications.domain.model.semaforo.RedaccionDelSemaforo`; el conteo del evento solo
+elige el caso (`ConteoDeLaSemana.caso()`), nunca llega al texto:
+
+| Caso (`CasoDelAviso`) | Cuándo | Persona | Mentor («Tu grupo cerró la semana») | Líder, admin, alquimista («Semana cerrada») |
+|---|---|---|---|---|
+| `CON_REGISTROS` | la persona tuvo algo programado | «Tu semana ya cerró — Mira cómo te fue en tu semáforo de la semana.» | — | — |
+| `SIN_REGISTROS` | nada programado / nadie con registros | «…no tuviste hábitos ni objetivos programados. Planifica los de esta semana…» | «En {grupo}, nadie tuvo registros en el semáforo esta semana.» | «Ningún grupo tuvo registros en el semáforo esta semana.» |
+| `NECESITAN_APOYO` | al menos uno en amarillo o rojo | — | «En {grupo} hay aprendices que necesitan tu apoyo. Mira el semáforo del grupo.» | «Hay grupos con aprendices que necesitan apoyo. Mira el semáforo por grupos.» |
+| `SIN_ALERTAS` | todos en verde | — | «En {grupo}, nadie necesita apoyo extra esta semana. ¡Buen acompañamiento!» | «Ningún grupo tiene aprendices que necesiten apoyo extra esta semana.» |
+| `NEUTRO` | verdes y sin registros mezclados, o datos que no cierran | — | «El semáforo de {grupo} ya está listo.» | «El semáforo de los grupos ya está listo.» |
+
+Resiliencia: nunca falla ni deja huecos. Un grupo sin nombre se dice «tu grupo», un nombre de más de 60
+caracteres se corta con «…» y un conteo negativo, vacío o ausente da el caso `NEUTRO`. La plantilla HTML que se
+agregue después elige su diseño por `CasoDelAviso`; estos textos quedan de respaldo y para el push.
+
+> **Corregido 2026-09-25 (mismo día).** La tabla tenía un solo texto fijo por destinatario («Tu semana ya
+> cerró: mira tu semáforo», «El semáforo de Grupo Fénix ya está listo», «El semáforo de los grupos ya está
+> listo»), provisorio hasta que el dueño lo aprobara, y el mensaje del acompañante apagado por defecto. El dueño
+> pidió textos automáticos según el caso y el mensaje encendido.
 
 Los avisos solo salen si el cierre ocurre **dentro del fin de semana** (sábado o domingo local). Si el backend
 estuvo caído todo el fin de semana, la semana igual se cierra y queda en el historial, pero sin avisos tardíos.
@@ -295,12 +316,16 @@ Orden: rojo, amarillo, sin datos, verde; dentro de cada color, por nombre. Solo 
 > **Corregido 2026-09-25.** El ejemplo mostraba los días sin `etiqueta`; `TablaDelSemaforoResponse` siempre
 > la manda, como dice §4.1.
 
-Cómo queda hoy, pendiente de confirmar con el dueño:
+**Solo cuentas activas** (decisión del dueño, 2026-09-25): un aprendiz **suspendido**, o una cuenta sin
+aprobar, no aparece en la tabla ni suma en `resumen`, en el resumen por grupos (§4.4) ni en el aviso del
+sábado. Es un solo padrón para todo (`mentoring.MedicionDeGrupos`), con el mismo criterio del barrido, que solo
+calcula a cuentas activas. El mentor tampoco abre su detalle (403). Si la cuenta se reactiva, vuelve a aparecer.
 
-- Un aprendiz **suspendido** que sigue en el padrón del grupo aparece en la tabla. El barrido no le calcula
-  días nuevos (solo recorre cuentas activas), y un día del programa sin cálculo se lee `PENDIENTE`: desde la
-  suspensión sus días salen «Pendiente», y cuando en la ventana ya no queda ningún día medido, la fila sale
-  «Sin datos».
+> **Corregido 2026-09-25 (mismo día).** Decía que el suspendido aparecía en la tabla con sus días
+> «Pendiente» y después «Sin datos», pendiente de confirmar. El dueño confirmó que no debe aparecer.
+
+Cómo queda hoy:
+
 - Quien **no se mide** (sin programa activado, día 0 o ya graduado) llega igual que quien no tuvo nada
   programado: `SIN_DATOS`, `diasConDatos: 0`, `dias: []`. La fila dice «Sin datos · 0 de 7 días con datos».
 
@@ -316,21 +341,28 @@ ALCHEMIST **y** cuenta activa (el permiso no alcanza: MENTOR/ADMIN/ALCHEMIST pas
   "grupos": [
     { "grupoId": "…", "grupoNombre": "Grupo Fénix", "mentorNombre": "Luisa Ramírez",
       "resumen": { "verde": 5, "amarillo": 2, "rojo": 1, "sinDatos": 0, "total": 8 },
-      "promedio": 76.4 }
+      "promedio": 76.4, "color": "AMARILLO", "etiqueta": "Requiere atención" }
   ]
 }
 ```
 
 Grupos regulares con mentor vigente (`gruposConMentorVigente`, sin recepción). `promedio` = promedio de los %
-de sus aprendices con datos, 1 decimal, o `null`. `promedio` **no trae color ni palabra**: los umbrales son de
-personas, y el cliente no los aplica; la app lo muestra neutro.
+de sus aprendices con datos, 1 decimal, o `null`. `color` y `etiqueta` son los del promedio, con **los mismos
+umbrales que una persona** (decisión del dueño, 2026-09-25): los calcula el servidor
+(`ColorSemaforo.delPorcentaje`, que delega en `ReglaDelSemaforo`) y la app los pinta sin aplicar umbrales. Sin
+promedio, `SIN_DATOS` / «Sin datos».
+
+> **Corregido 2026-09-25 (mismo día).** Decía que `promedio` no traía color ni palabra y que la app lo
+> mostraba neutro. El dueño pidió el promedio del grupo con color.
 
 Orden de `grupos`: alfabético por `grupoNombre` y, ante nombres iguales, por `grupoId` (estable).
 
-Cómo queda hoy, pendiente de confirmar con el dueño:
+Confirmado por el dueño (2026-09-25):
 
-- `mentorNombre` es el **nombre completo** del mentor.
-- `totales` es la **suma de los grupos**: un aprendiz que está en dos grupos (D-139) cuenta en los dos. La
+- `mentorNombre` es el **nombre completo** del mentor: con muchos mentores, una abreviatura («Luisa R.») se
+  repite.
+- `totales` es la **suma de los grupos**: un aprendiz que está en dos grupos cuenta en los dos, porque así lo
+  decidió el cliente (D-139). Con nombre lo ven solo su mentor, admin y alquimista; el líder ve cantidades. La
   lectura del semáforo sí se hace una sola vez por persona.
 
 > **Corregido 2026-09-25.** El ejemplo decía `"mentorNombre": "Luisa R."` (abreviado); el servicio devuelve el

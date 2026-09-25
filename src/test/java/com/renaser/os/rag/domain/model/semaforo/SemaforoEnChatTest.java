@@ -70,6 +70,27 @@ class SemaforoEnChatTest {
     }
 
     @Test
+    @DisplayName("un marcador mal escrito nunca llega a la persona: sale el texto de respaldo")
+    void marcadorMalEscrito() {
+        var chat = new SemaforoEnChat(true, Map.of(ColorDeLaSemana.VERDE, "Cerraste en verde, {porcentje} %."));
+        var cierre = new CierreDeSemana(ColorDeLaSemana.VERDE, "Al día", new BigDecimal("86.0"));
+
+        assertThat(chat.redactar(cierre)).contains(SemaforoEnChat.TEXTO_DE_RESPALDO);
+    }
+
+    @Test
+    @DisplayName("un porcentaje pedido en la plantilla de sin datos tampoco queda a la vista")
+    void porcentajeEnSinDatos() {
+        var chat = new SemaforoEnChat(true, Map.of(ColorDeLaSemana.SIN_DATOS, "Cerraste en {porcentaje} %."));
+        var cierre = new CierreDeSemana(ColorDeLaSemana.SIN_DATOS, "Sin datos", null);
+
+        assertThat(chat.redactar(cierre)).hasValueSatisfying(texto -> {
+            assertThat(texto).isEqualTo(SemaforoEnChat.TEXTO_DE_RESPALDO);
+            assertThat(texto).doesNotContain("{").doesNotContainPattern("\\d");
+        });
+    }
+
+    @Test
     @DisplayName("con el interruptor apagado no redacta nada")
     void apagadoNoRedacta() {
         var cierre = new CierreDeSemana(ColorDeLaSemana.VERDE, "Al día", new BigDecimal("86.0"));

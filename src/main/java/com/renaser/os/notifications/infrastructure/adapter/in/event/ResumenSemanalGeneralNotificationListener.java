@@ -4,6 +4,9 @@ import com.renaser.os.mentoring.api.ResumenSemanalGeneralEvent;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase.EmitirNotificacionCommand;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
+import com.renaser.os.notifications.domain.model.semaforo.AvisoRedactado;
+import com.renaser.os.notifications.domain.model.semaforo.ConteoDeLaSemana;
+import com.renaser.os.notifications.domain.model.semaforo.RedaccionDelSemaforo;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
@@ -27,7 +30,8 @@ import java.util.Set;
  * {@code origenEventoId}), así que la clave de la semana le entrega UNA a cada uno.
  *
  * <p>Sin cifras y sin nombres: el push no lleva métricas y el líder ve el resumen por grupo sin
- * nombres de aprendices (RL-07 del SDD 002). El detalle está en {@code /semaforo/grupos}.
+ * nombres de aprendices (RL-07 del SDD 002). El conteo solo elige el caso
+ * ({@link RedaccionDelSemaforo}); el detalle está en {@code /semaforo/grupos}.
  */
 @Component
 class ResumenSemanalGeneralNotificationListener {
@@ -35,10 +39,6 @@ class ResumenSemanalGeneralNotificationListener {
     private static final Logger log = LoggerFactory.getLogger(ResumenSemanalGeneralNotificationListener.class);
 
     private static final Set<UserRole> DESTINATARIOS = Set.of(UserRole.MENTOR_LEAD, UserRole.ADMIN, UserRole.ALCHEMIST);
-
-    /* TEXTOS PROVISORIOS (D-168): los aprueba el dueño, igual que los del acompañante (D-155). */
-    static final String TITULO = "Semana cerrada";
-    static final String CUERPO = "El semáforo de los grupos ya está listo.";
 
     private final EmitirNotificacionUseCase emitirNotificacionUseCase;
     private final ParticipacionProgramaFinder participacionFinder;
@@ -57,9 +57,12 @@ class ResumenSemanalGeneralNotificationListener {
                     + "y no hay ningun lider, administrador ni alquimista activo a quien avisarle", event.hasta());
             return;
         }
+        AvisoRedactado aviso = RedaccionDelSemaforo.paraLaConduccion(
+                new ConteoDeLaSemana(event.verde(), event.amarillo(), event.rojo(), event.sinDatos()));
         for (UserId destinatario : destinatarios) {
             emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(destinatario,
-                    TipoNotificacion.RESUMEN_SEMANAL, TITULO, CUERPO, event.rutaApp(), event.claveDeduplicacion()));
+                    TipoNotificacion.RESUMEN_SEMANAL, aviso.titulo(), aviso.cuerpo(), event.rutaApp(),
+                    event.claveDeduplicacion()));
         }
     }
 }

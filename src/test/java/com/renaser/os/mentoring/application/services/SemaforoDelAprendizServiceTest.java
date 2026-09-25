@@ -91,6 +91,16 @@ class SemaforoDelAprendizServiceTest {
     }
 
     @Test
+    @DisplayName("un aprendiz suspendido sale del padron: el mentor ya no abre su detalle, igual que en la tabla")
+    void aprendizSuspendido() {
+        banco.usuario(ANA, "Ana Pérez", UserRole.TRAINEE, UserStatus.SUSPENDED);
+
+        assertThatThrownBy(() -> servicio.detalleDe(new ConsultaDetalleDelAprendiz(MENTORA, FENIX, ANA.value(), 8)))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThat(banco.detallesPedidos).isEmpty();
+    }
+
+    @Test
     @DisplayName("un grupo que no acompaña no devuelve el detalle, aunque el aprendiz sea de ese grupo")
     void grupoQueNoAcompana() {
         assertThatThrownBy(() -> servicio.detalleDe(

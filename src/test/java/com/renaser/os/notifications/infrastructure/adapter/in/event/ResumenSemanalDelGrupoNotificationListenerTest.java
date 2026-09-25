@@ -52,7 +52,9 @@ class ResumenSemanalDelGrupoNotificationListenerTest {
         assertThat(comando.origenEventoId()).isEqualTo(clave);
         assertThat(comando.rutaApp()).isEqualTo("/mentor/groups/" + grupo + "/semaforo");
         assertThat(comando.titulo()).isEqualTo("Tu grupo cerró la semana");
-        assertThat(comando.cuerpo()).isEqualTo("El semáforo de Grupo Fénix ya está listo.");
+        // 2 en amarillo y 1 en rojo: el caso es "necesitan apoyo", sin decir cuántos.
+        assertThat(comando.cuerpo())
+                .isEqualTo("En Grupo Fénix hay aprendices que necesitan tu apoyo. Mira el semáforo del grupo.");
     }
 
     /** Sale igual por push: nada de cuántos quedaron en cada color. */
@@ -71,6 +73,7 @@ class ResumenSemanalDelGrupoNotificationListenerTest {
     @Test
     @DisplayName("un grupo sin nombre igual avisa, sin dejar un hueco en el texto")
     void grupoSinNombre() {
-        assertThat(emitidoPara("  ").cuerpo()).isEqualTo("El semáforo de tu grupo ya está listo.");
+        assertThat(emitidoPara("  ").cuerpo())
+                .isEqualTo("En tu grupo hay aprendices que necesitan tu apoyo. Mira el semáforo del grupo.");
     }
 }

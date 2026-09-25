@@ -191,7 +191,7 @@ public class BancoDelSemaforo {
 
     public SemaforoDelGrupoService servicioDeTablas() {
         MedicionDeGrupos medicion = medicion();
-        return new SemaforoDelGrupoService(acceso(medicion), medicion, acompanamiento, usuarios, reloj);
+        return new SemaforoDelGrupoService(acceso(medicion), medicion, acompanamiento, reloj);
     }
 
     public SemaforoDelAprendizService servicioDeDetalle() {
@@ -204,7 +204,7 @@ public class BancoDelSemaforo {
     }
 
     private MedicionDeGrupos medicion() {
-        return new MedicionDeGrupos(acompanamiento, semaforo);
+        return new MedicionDeGrupos(acompanamiento, semaforo, usuarios);
     }
 
     private AccesoAVistasDelSemaforo acceso(MedicionDeGrupos medicion) {

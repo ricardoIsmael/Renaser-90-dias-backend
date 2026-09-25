@@ -106,11 +106,11 @@ class SemaforoPorGruposControllerTest {
                             { "grupoId": "00000000-0000-0000-0000-00000000f002", "grupoNombre": "Grupo Aurora",
                               "mentorNombre": "Raúl Soto",
                               "resumen": { "verde": 0, "amarillo": 1, "rojo": 0, "sinDatos": 0, "total": 1 },
-                              "promedio": 70.0 },
+                              "promedio": 70.0, "color": "AMARILLO", "etiqueta": "Requiere atención" },
                             { "grupoId": "00000000-0000-0000-0000-00000000f001", "grupoNombre": "Grupo Fénix",
                               "mentorNombre": "Luisa Rojas",
                               "resumen": { "verde": 1, "amarillo": 0, "rojo": 1, "sinDatos": 1, "total": 3 },
-                              "promedio": 67.5 }
+                              "promedio": 67.5, "color": "AMARILLO", "etiqueta": "Requiere atención" }
                           ]
                         }
                         """, JsonCompareMode.STRICT))

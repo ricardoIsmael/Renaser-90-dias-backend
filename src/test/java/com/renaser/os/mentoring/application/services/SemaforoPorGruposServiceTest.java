@@ -79,6 +79,22 @@ class SemaforoPorGruposServiceTest {
         return resumen.grupos().stream().filter(g -> g.grupoId().equals(grupoId)).findFirst().orElseThrow();
     }
 
+    // ── padrón: solo cuentas activas ────────────────────────────────────────
+
+    @Test
+    @DisplayName("un aprendiz suspendido no suma en su grupo ni en los totales, ni entra al promedio")
+    void suspendidoFueraDelResumen() {
+        banco.usuario(LUIS, "Luis Díaz", UserRole.TRAINEE, UserStatus.SUSPENDED);
+
+        ResumenPorGrupos resumen = resumenDelLider();
+
+        // Fénix queda con Ana (90) y Mario (sin datos): 90 de promedio, no (90 + 50) / 2.
+        assertThat(grupo(resumen, FENIX).resumen().conteo()).isEqualTo(new ConteoPorColor(1, 0, 0, 1));
+        assertThat(grupo(resumen, FENIX).resumen().promedio()).isEqualByComparingTo("90.0");
+        assertThat(resumen.totales().total()).isEqualTo(3);
+        assertThat(banco.lecturasDelSemaforo.getFirst()).doesNotContain(LUIS);
+    }
+
     // ── autorización ────────────────────────────────────────────────────────
 
     @Test
@@ -146,12 +162,15 @@ class SemaforoPorGruposServiceTest {
     }
 
     @Test
-    @DisplayName("no pide ni devuelve nombres de aprendices: los unicos nombres que se leen son los de los mentores")
+    @DisplayName("no devuelve nombres de aprendices; sus cuentas se leen una sola vez, solo para saber quien esta activo")
     void sinNombresDeAprendices() {
         ResumenPorGrupos resumen = resumenDelLider();
 
-        assertThat(banco.nombresPedidos).hasSize(1);
-        assertThat(banco.nombresPedidos.getFirst()).containsExactlyInAnyOrder(LUISA, RAUL);
+        // Una lectura para las cuentas de TODOS los aprendices (deja fuera a quien no esta activo) y
+        // otra para los nombres de los mentores. Nunca una por grupo ni por persona.
+        assertThat(banco.nombresPedidos).hasSize(2);
+        assertThat(banco.nombresPedidos.getFirst()).containsExactlyInAnyOrder(ANA, LUIS, MARIO, PIA);
+        assertThat(banco.nombresPedidos.get(1)).containsExactlyInAnyOrder(LUISA, RAUL);
         // Aurora va antes que Fénix: los grupos se ordenan por nombre.
         assertThat(resumen.grupos()).extracting(GrupoDelResumen::mentorNombre)
                 .containsExactly("Raúl Soto", "Luisa Rojas");

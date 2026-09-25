@@ -51,7 +51,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>Se doblan solo las fronteras que este módulo no controla: el reloj (sábado 00:40 en Lima), el
  * grupo de {@code community} y el semáforo de {@code points}. Con {@code @Primary}, así la prueba no
  * depende de que el cierre del semáforo ya exista, y sigue valiendo cuando exista. El mensaje del
- * acompañante se prende acá con una plantilla de prueba: en producción arranca apagado.
+ * acompañante se prende acá con una plantilla de prueba (en producción también arranca encendido,
+ * desde el 2026-09-25, con las plantillas de {@code application.yaml}).
  */
 @SpringBootTest(properties = {
         "renaser.ia.acompanante.semaforo-en-chat=true",
@@ -82,6 +83,8 @@ class ResumenSemanalDelSemaforoIT {
     void elResumenLlegaALaBandejaDelMentorYDelAdministradorUnaSolaVez() throws InterruptedException {
         insertarUsuario(MENTORA, "MENTOR");
         insertarUsuario(ADMIN, "ADMIN");
+        // Ana tiene cuenta y está activa: el padrón del semáforo solo cuenta cuentas activas (2026-09-25).
+        insertarUsuario(ANA.value(), "APRENDIZ");
 
         assertThat(resumirSemana.resumir()).isEqualTo(1);
         esperarQueElOutboxTermine();
@@ -89,7 +92,8 @@ class ResumenSemanalDelSemaforoIT {
         assertThat(notificacionesDe(MENTORA)).singleElement().satisfies(fila -> assertThat(fila)
                 .containsEntry("tipo", "RESUMEN_SEMANAL")
                 .containsEntry("titulo", "Tu grupo cerró la semana")
-                .containsEntry("cuerpo", "El semáforo de Grupo Fénix ya está listo.")
+                // Ana cerró en verde y es la única: el caso es "nadie necesita apoyo extra", sin cifras.
+                .containsEntry("cuerpo", "En Grupo Fénix, nadie necesita apoyo extra esta semana. ¡Buen acompañamiento!")
                 .containsEntry("ruta_app", "/mentor/groups/" + GRUPO + "/semaforo")
                 .containsEntry("origen_evento_id", ReglasDelResumenSemanal.claveDelGrupo(GRUPO, VIERNES)));
         assertThat(notificacionesDe(ADMIN)).singleElement().satisfies(fila -> assertThat(fila)
@@ -121,7 +125,7 @@ class ResumenSemanalDelSemaforoIT {
         assertThat(notificacionesDe(PERSONA)).singleElement().satisfies(fila -> assertThat(fila)
                 .containsEntry("tipo", "RESUMEN_SEMANAL")
                 .containsEntry("titulo", "Tu semana ya cerró")
-                .containsEntry("cuerpo", "Mira tu semáforo de la semana en la app.")
+                .containsEntry("cuerpo", "Mira cómo te fue en tu semáforo de la semana.")
                 .containsEntry("ruta_app", "/semaforo")
                 .containsEntry("origen_evento_id", clave));
         assertThat(jdbcTemplate.queryForList("SELECT contenido FROM renaser.mensajes_renasia WHERE usuario_id = ?",

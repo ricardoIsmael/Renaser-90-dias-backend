@@ -1,5 +1,7 @@
 package com.renaser.os.mentoring.domain.model.semaforo;
 
+import com.renaser.os.points.api.ColorSemaforo;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Collection;
@@ -21,6 +23,11 @@ public record ResumenDelGrupo(ConteoPorColor conteo, BigDecimal promedio) {
 
     public ResumenDelGrupo {
         Objects.requireNonNull(conteo, "conteo es obligatorio");
+    }
+
+    /** El color del promedio, con los mismos umbrales que una persona; sin promedio, SIN_DATOS. */
+    public ColorSemaforo colorDelPromedio() {
+        return ColorSemaforo.delPorcentaje(promedio);
     }
 
     public static ResumenDelGrupo de(Collection<MedicionDelAprendiz> mediciones) {

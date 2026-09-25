@@ -12,7 +12,6 @@ import com.renaser.os.points.api.VentanaDelSemaforo;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserSummary;
-import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,8 +33,9 @@ import java.util.UUID;
  * —relación vigente para el mentor, rol para el administrador— y por eso vive en dos métodos; la
  * tabla es la misma, porque si fueran dos cálculos verían números distintos del mismo día.
  *
- * <p>Tres lecturas en lote, nunca una por aprendiz: el padrón del grupo, los nombres
- * ({@code findByIds}) y el semáforo de todos juntos. El semáforo solo se lee: lo calculó el barrido
+ * <p>Lecturas en lote, nunca una por aprendiz: el padrón del grupo con sus perfiles (una sola
+ * lectura de cuentas, que da el nombre y deja fuera a quien no está activo) y el semáforo de todos
+ * juntos. El semáforo solo se lee: lo calculó el barrido
  * horario de {@code points}.
  */
 @Service
@@ -45,16 +45,13 @@ public class SemaforoDelGrupoService implements ConsultarSemaforoDelGrupoUseCase
     private final AccesoAVistasDelSemaforo acceso;
     private final MedicionDeGrupos medicion;
     private final AcompanamientoFinder acompanamientoFinder;
-    private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
 
     SemaforoDelGrupoService(AccesoAVistasDelSemaforo acceso, MedicionDeGrupos medicion,
-                            AcompanamientoFinder acompanamientoFinder, UserSummaryFinder userSummaryFinder,
-                            Clock clock) {
+                            AcompanamientoFinder acompanamientoFinder, Clock clock) {
         this.acceso = acceso;
         this.medicion = medicion;
         this.acompanamientoFinder = acompanamientoFinder;
-        this.userSummaryFinder = userSummaryFinder;
         this.clock = clock;
     }
 
@@ -78,19 +75,20 @@ public class SemaforoDelGrupoService implements ConsultarSemaforoDelGrupoUseCase
     private TablaDelSemaforo armarTabla(UUID grupoId, LocalDate semanaHasta, Instant ahora) {
         GrupoBasico grupo = acompanamientoFinder.grupo(grupoId)
                 .orElseThrow(() -> new NoSuchElementException("Grupo no encontrado"));
-        List<UserId> aprendices = medicion.aprendicesDe(grupoId, ahora);
+        Map<UserId, UserSummary> padron = medicion.padronDe(grupoId, ahora);
+        List<UserId> aprendices = List.copyOf(padron.keySet());
         Map<UserId, VentanaDelSemaforo> ventanas = medicion.ventanasDe(aprendices, semanaHasta);
 
-        List<FilaDelSemaforo> filas = filas(aprendices, ventanas);
+        List<FilaDelSemaforo> filas = filas(padron, ventanas);
         ResumenDelGrupo resumen = ResumenDelGrupo.de(filas.stream().map(FilaDelSemaforo::medicion).toList());
         return new TablaDelSemaforo(grupo.grupoId(), grupo.nombre(),
                 periodo(aprendices, ventanas, esperado(grupo, semanaHasta, ahora)), resumen.conteo(), filas);
     }
 
-    private List<FilaDelSemaforo> filas(List<UserId> aprendices, Map<UserId, VentanaDelSemaforo> ventanas) {
-        Map<UserId, UserSummary> perfiles = userSummaryFinder.findByIds(aprendices);
-        return aprendices.stream()
-                .map(aprendiz -> fila(aprendiz, perfiles.get(aprendiz), ventanas.get(aprendiz)))
+    /** Los perfiles ya vienen con el padrón: el nombre no se vuelve a pedir. */
+    private List<FilaDelSemaforo> filas(Map<UserId, UserSummary> padron, Map<UserId, VentanaDelSemaforo> ventanas) {
+        return padron.entrySet().stream()
+                .map(aprendiz -> fila(aprendiz.getKey(), aprendiz.getValue(), ventanas.get(aprendiz.getKey())))
                 .sorted(orden())
                 .toList();
     }

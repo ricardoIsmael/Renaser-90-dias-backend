@@ -1,5 +1,9 @@
 package com.renaser.os.points.api;
 
+import com.renaser.os.points.domain.model.semaforo.ReglaDelSemaforo;
+
+import java.math.BigDecimal;
+
 /**
  * Color del semáforo de cumplimiento del APRENDIZ (D-168). No confundir con el semáforo
  * operativo del mentor ({@code users.MentorOperationalStatus}): no comparten umbrales ni se
@@ -26,5 +30,14 @@ public enum ColorSemaforo {
     /** La palabra que se muestra junto al color. */
     public String etiqueta() {
         return etiqueta;
+    }
+
+    /**
+     * El color de un porcentaje que no es de una persona, como el promedio de un grupo (decisión del
+     * dueño, 2026-09-25: mismos umbrales). No duplica nada: delega en {@code ReglaDelSemaforo}, así
+     * los umbrales siguen en un solo lugar. {@code null} = sin datos.
+     */
+    public static ColorSemaforo delPorcentaje(BigDecimal porcentaje) {
+        return ReglaDelSemaforo.colorDe(porcentaje);
     }
 }

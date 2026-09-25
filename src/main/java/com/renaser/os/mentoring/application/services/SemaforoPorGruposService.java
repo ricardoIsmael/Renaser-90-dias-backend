@@ -20,7 +20,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -65,7 +64,7 @@ public class SemaforoPorGruposService implements ConsultarSemaforoPorGruposUseCa
         Instant ahora = clock.now();
         // Grupos regulares con mentor vigente: la recepcion queda fuera, igual que en el ranking.
         List<GrupoAcompanado> grupos = acompanamientoFinder.gruposConMentorVigente(ahora);
-        Map<UUID, List<UserId>> aprendicesPorGrupo = aprendicesPorGrupo(grupos, ahora);
+        Map<UUID, List<UserId>> aprendicesPorGrupo = medicion.aprendicesPorGrupo(grupos, ahora);
         Map<UserId, VentanaDelSemaforo> ventanas =
                 medicion.ventanasDe(todos(aprendicesPorGrupo), consulta.semanaHasta());
 
@@ -74,15 +73,6 @@ public class SemaforoPorGruposService implements ConsultarSemaforoPorGruposUseCa
                 ahora.atZone(zonaDeReferencia(grupos)).toLocalDate(), consulta.semanaHasta());
         return new ResumenPorGrupos(PeriodoDelSemaforo.de(ventanas.values(), esperado), totales(resumenes),
                 resumenes);
-    }
-
-    /** Una lectura del padrón por grupo: son pocos grupos, y cada uno trae ya a su mentor. */
-    private Map<UUID, List<UserId>> aprendicesPorGrupo(List<GrupoAcompanado> grupos, Instant ahora) {
-        Map<UUID, List<UserId>> porGrupo = new LinkedHashMap<>();
-        for (GrupoAcompanado grupo : grupos) {
-            porGrupo.put(grupo.grupoId(), medicion.aprendicesDe(grupo, ahora));
-        }
-        return porGrupo;
     }
 
     /** Sin repetidos: un aprendiz puede estar en dos grupos (D-139) y se lo pide una sola vez. */

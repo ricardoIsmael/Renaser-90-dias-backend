@@ -69,7 +69,8 @@ class ResumenSemanalDelSemaforoServiceTest {
     }
 
     private ResumenSemanalDelSemaforoService servicio(Instant ahora) {
-        return new ResumenSemanalDelSemaforoService(banco.acompanamiento, semaforo, evento -> {
+        MedicionDeGrupos padron = new MedicionDeGrupos(banco.acompanamiento, semaforo, banco.usuarios);
+        return new ResumenSemanalDelSemaforoService(banco.acompanamiento, padron, evento -> {
             publicados.add(evento);
             publicadosEnTransaccion.add(transacciones.abierta);
         }, transacciones, FixedClock.at(ahora));
@@ -128,6 +129,21 @@ class ResumenSemanalDelSemaforoServiceTest {
 
         assertThat(consultas).containsExactly(List.of(ana, beto));
         assertThat(unicoDelGrupo().total()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("un aprendiz suspendido no cuenta en el resumen del sabado: es el mismo padron que las tablas")
+    void suspendidoFueraDelResumen() {
+        banco.grupo(FENIX, "Grupo Fenix", MENTORA, UUID.randomUUID(), 3);
+        UserId ana = aprendiz(FENIX, cerrada(ColorSemaforo.VERDE));
+        UserId beto = aprendiz(FENIX, cerrada(ColorSemaforo.ROJO));
+        banco.suspendidos.add(beto);
+
+        servicio(SABADO_0040_LIMA).resumir();
+
+        assertThat(consultas).containsExactly(List.of(ana));
+        ResumenSemanalDelGrupoEvent resumen = unicoDelGrupo();
+        assertThat(List.of(resumen.verde(), resumen.rojo(), resumen.total())).containsExactly(1, 0, 1);
     }
 
     @Test

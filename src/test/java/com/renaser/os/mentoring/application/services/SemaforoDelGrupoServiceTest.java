@@ -110,7 +110,7 @@ class SemaforoDelGrupoServiceTest {
     // ── armado ──────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("ordena rojo, amarillo, sin datos y verde; dentro de cada color por nombre, sin nombre al final")
+    @DisplayName("ordena rojo, amarillo, sin datos y verde; dentro de cada color por nombre")
     void ordenPorColorYNombre() {
         aprendiz(BETO, "Beto Paz", 90);
         aprendiz(ANA, "Ana Pérez", 85);
@@ -118,16 +118,30 @@ class SemaforoDelGrupoServiceTest {
         aprendiz(DORA, "Dora Vega", 70);
         aprendiz(ELSA, "Elsa Mora", null);
         aprendiz(ANGELA, "Ángela Ruiz", 50);
-        aprendiz(SIN_PERFIL, null, 30);
 
         List<FilaDelSemaforo> filas = tablaDelMentor().aprendices();
 
         assertThat(filas).extracting(FilaDelSemaforo::aprendizId).containsExactly(
-                ANGELA.value(), CARLA.value(), SIN_PERFIL.value(), DORA.value(), ELSA.value(), ANA.value(),
-                BETO.value());
+                ANGELA.value(), CARLA.value(), DORA.value(), ELSA.value(), ANA.value(), BETO.value());
         assertThat(filas).extracting(f -> f.medicion().color()).containsExactly(
-                ColorSemaforo.ROJO, ColorSemaforo.ROJO, ColorSemaforo.ROJO, ColorSemaforo.AMARILLO,
-                ColorSemaforo.SIN_DATOS, ColorSemaforo.VERDE, ColorSemaforo.VERDE);
+                ColorSemaforo.ROJO, ColorSemaforo.ROJO, ColorSemaforo.AMARILLO, ColorSemaforo.SIN_DATOS,
+                ColorSemaforo.VERDE, ColorSemaforo.VERDE);
+    }
+
+    @Test
+    @DisplayName("solo cuentas activas: un suspendido, o alguien sin cuenta en users, no aparece ni cuenta en el resumen")
+    void soloCuentasActivas() {
+        aprendiz(ANA, "Ana Pérez", 85);
+        aprendiz(BETO, "Beto Paz", 40);
+        banco.usuario(BETO, "Beto Paz", UserRole.TRAINEE, UserStatus.SUSPENDED);
+        aprendiz(SIN_PERFIL, null, 30);
+
+        var tabla = tablaDelMentor();
+
+        assertThat(tabla.aprendices()).extracting(FilaDelSemaforo::aprendizId).containsExactly(ANA.value());
+        assertThat(tabla.resumen()).isEqualTo(new ConteoPorColor(1, 0, 0, 0));
+        // Ni siquiera se le pide el semáforo: la lectura en lote ya va sin ellos.
+        assertThat(banco.lecturasDelSemaforo).containsExactly(List.of(ANA));
     }
 
     @Test

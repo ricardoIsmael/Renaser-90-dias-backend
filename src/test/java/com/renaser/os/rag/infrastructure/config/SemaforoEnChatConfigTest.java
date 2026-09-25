@@ -37,9 +37,18 @@ class SemaforoEnChatConfigTest {
     }
 
     @Test
-    @DisplayName("apagado por defecto, como los otros mensajes del acompanante (D-155)")
-    void apagadoPorDefecto() {
-        assertThat(MAIN.getProperty(PREFIJO)).isEqualTo("${IA_ACOMPANANTE_SEMAFORO_EN_CHAT:false}");
+    @DisplayName("encendido por defecto: el dueño pidió avisos automáticos según el caso (2026-09-25)")
+    void encendidoPorDefecto() {
+        // Antes era FALSE hasta que el dueño aprobara los textos, como los otros mensajes (D-155).
+        assertThat(MAIN.getProperty(PREFIJO)).isEqualTo("${IA_ACOMPANANTE_SEMAFORO_EN_CHAT:true}");
+    }
+
+    @Test
+    @DisplayName("los cuatro casos tienen texto: encendido, ninguna semana se queda sin mensaje")
+    void cuatroCasosConTexto() {
+        for (String color : new String[]{"verde", "amarillo", "rojo", "sin-datos"}) {
+            assertThat(MAIN.getProperty(PREFIJO + "-plantilla-" + color)).isNotBlank();
+        }
     }
 
     @Test

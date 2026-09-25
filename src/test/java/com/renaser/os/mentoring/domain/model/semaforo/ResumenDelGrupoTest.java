@@ -18,6 +18,25 @@ class ResumenDelGrupoTest {
     }
 
     @Test
+    @DisplayName("el color del promedio usa los umbrales de una persona: 80 verde, 79,9 amarillo, 59,9 rojo")
+    void colorDelPromedio() {
+        assertThat(ResumenDelGrupo.de(List.of(medido("80.0", ColorSemaforo.VERDE))).colorDelPromedio())
+                .isEqualTo(ColorSemaforo.VERDE);
+        assertThat(ResumenDelGrupo.de(List.of(medido("79.9", ColorSemaforo.AMARILLO))).colorDelPromedio())
+                .isEqualTo(ColorSemaforo.AMARILLO);
+        assertThat(ResumenDelGrupo.de(List.of(medido("60.0", ColorSemaforo.AMARILLO))).colorDelPromedio())
+                .isEqualTo(ColorSemaforo.AMARILLO);
+        assertThat(ResumenDelGrupo.de(List.of(medido("59.9", ColorSemaforo.ROJO))).colorDelPromedio())
+                .isEqualTo(ColorSemaforo.ROJO);
+    }
+
+    @Test
+    @DisplayName("un grupo sin nadie con datos no tiene promedio: su color es sin datos, nunca verde")
+    void sinPromedioSinColor() {
+        assertThat(ResumenDelGrupo.de(List.of()).colorDelPromedio()).isEqualTo(ColorSemaforo.SIN_DATOS);
+    }
+
+    @Test
     @DisplayName("el promedio redondea mitad hacia arriba a 1 decimal: 80,0 y 72,5 dan 76,3 (no 76,2)")
     void promedioMitadHaciaArriba() {
         ResumenDelGrupo resumen = ResumenDelGrupo.de(List.of(

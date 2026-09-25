@@ -8640,3 +8640,28 @@ de ejecución no sea `git`, y lo rechaza aunque no toque ningún repositorio. Pa
 
 **Cómo evitar que vuelva a pasar.** En una sesión aislada, escribir los comandos con rutas literales y, para
 ediciones repetidas, usar un script con las rutas adentro en vez de variables de shell.
+
+## E-266 · El resumen del sábado no llegó a la bandeja en la prueba de integración: la aprendiz del fixture no tenía cuenta
+
+**Síntoma (2026-09-25, `./mvnw clean verify` después de sacar a los suspendidos del semáforo).**
+`ResumenSemanalDelSemaforoIT.elResumenLlegaALaBandejaDelMentorYDelAdministradorUnaSolaVez`:
+
+```
+org.opentest4j.AssertionFailedError:
+expected: 1
+ but was: 0
+	at ...ResumenSemanalDelSemaforoIT.elResumenLlegaALaBandejaDelMentorYDelAdministradorUnaSolaVez(ResumenSemanalDelSemaforoIT.java:86)
+```
+
+**Causa real.** El fixture ponía a Ana en el grupo (doble de `AcompanamientoFinder`) pero nunca creaba su fila en
+`renaser.usuarios`. Desde la decisión del dueño de dejar fuera a los suspendidos, el padrón del semáforo
+(`mentoring.MedicionDeGrupos`) solo cuenta cuentas activas: sin cuenta, Ana quedó fuera, el grupo quedó vacío y
+no hubo resumen. El código estaba bien; el fixture era incoherente (en producción no existe una aprendiz sin
+cuenta).
+
+**Solución.** El fixture crea la cuenta de Ana (`insertarUsuario(ANA, "APRENDIZ")`, que queda `ACTIVO` por el
+default de V1).
+
+**Cómo evitar que vuelva a pasar.** Un aprendiz de prueba que entra al semáforo del grupo tiene su fila en
+`usuarios`, igual que en producción. La prueba unitaria `SemaforoDelGrupoServiceTest.soloCuentasActivas` cubre
+el caso de alguien sin cuenta.

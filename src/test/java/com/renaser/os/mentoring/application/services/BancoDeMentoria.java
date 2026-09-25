@@ -20,10 +20,12 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -41,6 +43,8 @@ class BancoDeMentoria {
     final List<ObligacionHabito> obligaciones = new ArrayList<>();
     final Map<UUID, EntregaDeEvidencia> entregas = new LinkedHashMap<>();
     final Map<UserId, String> nombres = new LinkedHashMap<>();
+    /** Cuentas suspendidas: el resto de los perfiles sale ACTIVE. */
+    final Set<UserId> suspendidos = new HashSet<>();
 
     final AcompanamientoFinder acompanamiento = new AcompanamientoFinder() {
         @Override
@@ -141,7 +145,7 @@ class BancoDeMentoria {
 
         private UserSummary perfil(UserId id) {
             return new UserSummary(id, nombres.getOrDefault(id, "Alguien"), null, UserRole.TRAINEE,
-                    UserStatus.ACTIVE);
+                    suspendidos.contains(id) ? UserStatus.SUSPENDED : UserStatus.ACTIVE);
         }
     };
 

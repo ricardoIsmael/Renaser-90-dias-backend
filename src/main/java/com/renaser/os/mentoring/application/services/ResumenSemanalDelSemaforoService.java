@@ -7,7 +7,6 @@ import com.renaser.os.mentoring.api.ResumenSemanalGeneralEvent;
 import com.renaser.os.mentoring.application.ports.in.ResumirSemanaDelSemaforoUseCase;
 import com.renaser.os.mentoring.domain.model.semaforo.ConteoPorColor;
 import com.renaser.os.mentoring.domain.model.resumen.ReglasDelResumenSemanal;
-import com.renaser.os.points.api.SemaforoFinder;
 import com.renaser.os.points.api.SemanaDelSemaforo;
 import com.renaser.os.points.api.VentanaDelSemaforo;
 import com.renaser.os.shared.domain.Clock;
@@ -53,16 +52,16 @@ public class ResumenSemanalDelSemaforoService implements ResumirSemanaDelSemafor
     private static final Logger log = LoggerFactory.getLogger(ResumenSemanalDelSemaforoService.class);
 
     private final AcompanamientoFinder acompanamientoFinder;
-    private final SemaforoFinder semaforoFinder;
+    private final MedicionDeGrupos medicion;
     private final ApplicationEventPublisher eventos;
     private final TransactionTemplate transaccionPropia;
     private final Clock clock;
 
-    public ResumenSemanalDelSemaforoService(AcompanamientoFinder acompanamientoFinder, SemaforoFinder semaforoFinder,
-                                            ApplicationEventPublisher eventos,
-                                            PlatformTransactionManager transactionManager, Clock clock) {
+    ResumenSemanalDelSemaforoService(AcompanamientoFinder acompanamientoFinder, MedicionDeGrupos medicion,
+                                     ApplicationEventPublisher eventos,
+                                     PlatformTransactionManager transactionManager, Clock clock) {
         this.acompanamientoFinder = acompanamientoFinder;
-        this.semaforoFinder = semaforoFinder;
+        this.medicion = medicion;
         this.eventos = eventos;
         this.transaccionPropia = new TransactionTemplate(transactionManager);
         this.transaccionPropia.setPropagationBehavior(Propagation.REQUIRES_NEW.value());
@@ -97,7 +96,8 @@ public class ResumenSemanalDelSemaforoService implements ResumirSemanaDelSemafor
         if (semana.isEmpty()) {
             return Optional.empty();
         }
-        List<UserId> aprendices = aprendicesSinElMentor(grupo, ahora);
+        // El mismo padrón que las tablas: sin el mentor que además cursa y solo cuentas activas.
+        List<UserId> aprendices = medicion.aprendicesDe(grupo, ahora);
         Map<UserId, VentanaDelSemaforo> semanas = semanasDe(aprendices, semana.get());
         if (!ReglasDelResumenSemanal.semaforoListo(aprendices, semanas)) {
             return Optional.empty();
@@ -107,16 +107,9 @@ public class ResumenSemanalDelSemaforoService implements ResumirSemanaDelSemafor
         return Optional.of(resumen);
     }
 
-    /** El mentor que además cursa no entra en el semáforo de su propio grupo (§4.3 del contrato). */
-    private List<UserId> aprendicesSinElMentor(GrupoAcompanado grupo, Instant ahora) {
-        return acompanamientoFinder.aprendicesVigentes(grupo.grupoId(), ahora).stream()
-                .filter(aprendiz -> !aprendiz.equals(grupo.mentorId()))
-                .toList();
-    }
-
     /** Una sola consulta para todo el grupo, nunca una por aprendiz. */
     private Map<UserId, VentanaDelSemaforo> semanasDe(List<UserId> aprendices, LocalDate semanaHasta) {
-        return aprendices.isEmpty() ? Map.of() : semaforoFinder.semanaDe(aprendices, semanaHasta);
+        return aprendices.isEmpty() ? Map.of() : medicion.ventanasDe(aprendices, semanaHasta);
     }
 
     /** Si falla, la corrida siguiente de la ventana lo vuelve a intentar con la misma clave. */

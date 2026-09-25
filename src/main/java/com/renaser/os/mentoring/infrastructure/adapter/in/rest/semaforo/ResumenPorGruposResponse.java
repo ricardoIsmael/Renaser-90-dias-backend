@@ -2,6 +2,7 @@ package com.renaser.os.mentoring.infrastructure.adapter.in.rest.semaforo;
 
 import com.renaser.os.mentoring.application.ports.in.ConsultarSemaforoPorGruposUseCase.GrupoDelResumen;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSemaforoPorGruposUseCase.ResumenPorGrupos;
+import com.renaser.os.points.api.ColorSemaforo;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -21,13 +22,20 @@ public record ResumenPorGruposResponse(LocalDate desde, LocalDate hasta, boolean
                 resumen.grupos().stream().map(GrupoResponse::from).toList());
     }
 
-    /** @param promedio de los aprendices con datos, 1 decimal; null si ninguno tiene. */
+    /**
+     * @param promedio de los aprendices con datos, 1 decimal; null si ninguno tiene
+     * @param color    el del promedio, con los mismos umbrales que una persona; SIN_DATOS sin promedio
+     * @param etiqueta la palabra de ese color: nunca viaja un color solo (RL-30)
+     */
     public record GrupoResponse(UUID grupoId, String grupoNombre, String mentorNombre,
-                                ConteoPorColorResponse resumen, BigDecimal promedio) {
+                                ConteoPorColorResponse resumen, BigDecimal promedio, String color,
+                                String etiqueta) {
 
         static GrupoResponse from(GrupoDelResumen grupo) {
+            ColorSemaforo color = grupo.resumen().colorDelPromedio();
             return new GrupoResponse(grupo.grupoId(), grupo.grupoNombre(), grupo.mentorNombre(),
-                    ConteoPorColorResponse.from(grupo.resumen().conteo()), grupo.resumen().promedio());
+                    ConteoPorColorResponse.from(grupo.resumen().conteo()), grupo.resumen().promedio(),
+                    color.name(), color.etiqueta());
         }
     }
 }

@@ -53,7 +53,17 @@ class SemanaDelSemaforoCerradaNotificationListenerTest {
         assertThat(comando.origenEventoId()).isEqualTo(SemanaDelSemaforoCerradaEvent.claveDe(persona, VIERNES));
         assertThat(comando.rutaApp()).isEqualTo("/semaforo");
         assertThat(comando.titulo()).isEqualTo("Tu semana ya cerró");
-        assertThat(comando.cuerpo()).isEqualTo("Mira tu semáforo de la semana en la app.");
+        assertThat(comando.cuerpo()).isEqualTo("Mira cómo te fue en tu semáforo de la semana.");
+    }
+
+    @Test
+    @DisplayName("una semana sin nada programado la invita a planificar, igual sin cifras ni color")
+    void semanaSinNadaProgramado() {
+        EmitirNotificacionCommand comando = emitidoPara(ColorSemaforo.SIN_DATOS, null);
+
+        assertThat(comando.titulo()).isEqualTo("Tu semana ya cerró");
+        assertThat(comando.cuerpo()).startsWith("Esta semana no tuviste hábitos ni objetivos programados.");
+        assertThat(comando.cuerpo()).doesNotContain(ColorSemaforo.SIN_DATOS.etiqueta());
     }
 
     /** El título y el cuerpo son también el texto del push, y el push no lleva métricas. */

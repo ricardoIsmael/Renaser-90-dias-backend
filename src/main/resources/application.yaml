@@ -456,9 +456,10 @@ renaser:
       # de la persona sin respuesta (D-132). El push de notifications ("Tu semana ya cerro", sin
       # cifras) sale igual, prendido o apagado esto.
       #
-      # FALSE por defecto: la redaccion es provisoria hasta que el dueno la apruebe (D-155).
-      semaforo-en-chat: ${IA_ACOMPANANTE_SEMAFORO_EN_CHAT:false}
-      # TEXTOS PROVISORIOS: el dueno NO aprobo esta redaccion todavia. Uno por color, tuteo,
+      # TRUE por defecto desde el 2026-09-25: el dueno pidio avisos automaticos segun el caso, sin
+      # esperar aprobacion de textos. (Antes: FALSE hasta que aprobara la redaccion, como D-155.)
+      semaforo-en-chat: ${IA_ACOMPANANTE_SEMAFORO_EN_CHAT:true}
+      # UN TEXTO POR CASO (los cuatro colores de la semana): se usan tal cual. Tuteo,
       # espanol neutro de Peru. Marcadores: {etiqueta} (la palabra del color que manda points: "Al
       # dia", "Requiere atencion", "Con problemas") y {porcentaje} (el de la semana, con punto
       # decimal como la tarjeta de la app: "86" o "78.3"). La de sin datos se usa tambien cuando

@@ -3,6 +3,9 @@ package com.renaser.os.notifications.infrastructure.adapter.in.event;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase.EmitirNotificacionCommand;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
+import com.renaser.os.notifications.domain.model.semaforo.AvisoRedactado;
+import com.renaser.os.notifications.domain.model.semaforo.RedaccionDelSemaforo;
+import com.renaser.os.points.api.ColorSemaforo;
 import com.renaser.os.points.api.SemanaDelSemaforoCerradaEvent;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.modulith.events.ApplicationModuleListener;
@@ -14,9 +17,9 @@ import org.springframework.stereotype.Component;
  *
  * <p><b>Sin cifras ni colores.</b> El título y el cuerpo son también el texto del push
  * ({@code NotificacionService.intentarPush} los manda tal cual), y el push de la app no lleva
- * métricas: el resultado se ve adentro, en {@code /semaforo}. Por eso este listener ni siquiera lee
- * el porcentaje ni el color del evento. Quien sí los cuenta es el acompañante, dentro del chat
- * ({@code rag}).
+ * métricas: el resultado se ve adentro, en {@code /semaforo}. Del evento solo se mira si la semana
+ * tuvo algo programado, para elegir el caso ({@link RedaccionDelSemaforo}); nunca el número ni el
+ * color. Quien sí los cuenta es el acompañante, dentro del chat ({@code rag}).
  *
  * <p>La deduplicación no la hace este listener: {@code claveDeduplicacion} (una por persona y
  * semana) viaja como {@code origenEventoId} y el índice único de {@code notificaciones} rechaza la
@@ -24,10 +27,6 @@ import org.springframework.stereotype.Component;
  */
 @Component
 class SemanaDelSemaforoCerradaNotificationListener {
-
-    /* TEXTOS PROVISORIOS (D-168): los aprueba el dueño, igual que los del acompañante (D-155). */
-    static final String TITULO = "Tu semana ya cerró";
-    static final String CUERPO = "Mira tu semáforo de la semana en la app.";
 
     private final EmitirNotificacionUseCase emitirNotificacionUseCase;
 
@@ -37,8 +36,14 @@ class SemanaDelSemaforoCerradaNotificationListener {
 
     @ApplicationModuleListener
     void on(SemanaDelSemaforoCerradaEvent event) {
+        AvisoRedactado aviso = RedaccionDelSemaforo.paraLaPersona(tuvoAlgoProgramado(event));
         emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(
-                UserId.of(event.participanteId()), TipoNotificacion.RESUMEN_SEMANAL, TITULO, CUERPO,
-                event.rutaApp(), event.claveDeduplicacion()));
+                UserId.of(event.participanteId()), TipoNotificacion.RESUMEN_SEMANAL, aviso.titulo(),
+                aviso.cuerpo(), event.rutaApp(), event.claveDeduplicacion()));
+    }
+
+    /** Por contrato, sin porcentaje = ningún día tuvo algo programado (§3.3). */
+    private static boolean tuvoAlgoProgramado(SemanaDelSemaforoCerradaEvent event) {
+        return event.porcentaje() != null && event.color() != ColorSemaforo.SIN_DATOS;
     }
 }
