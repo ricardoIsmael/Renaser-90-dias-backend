@@ -664,7 +664,9 @@ no se cargan acá, la función queda apagada aunque el código esté desplegado.
 | `RENASIA_CHAT_MODEL` | No cargarlo: queda el default `gemini-3.5-flash-lite` | El modelo del chat | Decisión del dueño del 2026-09-25: el más estable de los medidos (E-233) |
 
 **Cómo se cargan: `scripts/despliegue/parametros-acompanante.sh`.** Lo corre quien tenga acceso a AWS
-y no sobrescribe nada sin preguntar.
+y no sobrescribe nada sin preguntar. Antes de escribir, confirma que las credenciales sean de la
+cuenta de producción, la `302277511407`, y si no lo son se detiene (E-277: la primera vez escribió en
+otra cuenta).
 - **`preparar`, antes del push a master:**
   - pide la API key de Gemini sin mostrarla;
   - revisa `IA_PROVEEDOR` y `RENASIA_CHAT_MODEL`;
