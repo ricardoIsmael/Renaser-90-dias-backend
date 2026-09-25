@@ -678,6 +678,18 @@ y no sobrescribe nada sin preguntar.
 - **`prender`, cuando la gente tenga la app nueva:** enciende los interruptores y borra los dos
   crons, para que el semáforo recalcule solo, y después `docker restart backend`.
 
+**Cómo comprobar, después del despliegue, que el semáforo quedó apagado:**
+- **En el log:** `[points.CerrarSemaforoScheduler] evaluados=…` sale en INFO en cada corrida. Si a los
+  :25 de la hora no aparece, la tarea no corrió.
+- **En la base de producción, pasadas las :25 y las :40:**
+  - `SELECT count(*) FROM renaser.semaforo_dias;` da **0**. La tabla la crea V68 y solo la llena el
+    barrido.
+  - `SELECT name, locked_at FROM renaser.shedlock WHERE name IN ('points-cerrar-semaforo','mentoring-resumir-semana-semaforo');`
+    no devuelve **ninguna fila**: ninguna de las dos tareas tomó su lock.
+
+Si alguna da otra cosa, el parámetro no se tomó: revisar el nombre exacto y que el contenedor haya
+arrancado **después** de cargarlo (E-244).
+
 **Opcionales — solo si hay que apartarse del default:** `DB_POOL_MAX_SIZE`, `DB_POOL_MIN_IDLE`,
 `DB_POOL_CONNECTION_TIMEOUT_MS`, `ASYNC_IA_CONCURRENCY_LIMIT`, `RENASIA_LIMITE_DIARIO`,
 `ACCOUNT_DELETION_GRACE_DAYS`, `ONBOARDING_V90_HABILITADO`, `HABITS_AVISO_ANTELACION_INICIO`,
