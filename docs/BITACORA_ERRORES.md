@@ -8366,6 +8366,79 @@ comprobar porque la prueba no grababa la pantalla.
 toques, sospechar de la hoja flotante (un toque que la atraviese) y registrar en la app desde qué
 botón salió el `cancelar`.
 
+## E-247 · El chat se quedaba sin respuesta cuando el modelo escribía mal el nombre de una herramienta
+
+**Síntoma.** Batería de 102 preguntas por el chat de la app (2026-09-25). *"entonces apagala solo el
+sabado"* y *"desactiva escritura libre nocturna todos los viernes"*: el mensaje de la persona quedaba
+guardado y la respuesta nunca llegaba. En el log del backend, literal:
+
+```
+WARN o.s.a.m.tool.DefaultToolCallingManager : LLM may have adapted the tool name 'proponer_horario_por_dia_semana', especially if the name was truncated due to length limits.
+WARN c.r.o.r.a.s.ConversacionRenasiaService : Fallo el streaming de respuesta del asistente
+java.lang.IllegalStateException: No ToolCallback found for tool name: proponer_horario_por_dia_semana
+```
+
+**Causa real.** El modelo pidió `proponer_horario_por_dia_semana`: le comió el "de" al nombre real,
+`proponer_horario_por_dia_de_semana`. Spring AI busca la herramienta por nombre y, si no la
+encuentra, **lanza** en vez de devolverle un error al modelo, así que el turno entero se cae. La voz en
+vivo no tenía el problema: ahí el nombre desconocido llega a `HerramientasAgenteService`, que
+devuelve un `Fallo` legible.
+
+**Solución (2026-09-25).** El modelo de chat de Gemini tiene su propio `ToolCallingManager`, con
+`ResolverDeHerramientasDesconocidas`: un nombre que no existe vuelve al modelo como
+`{"ok":false,"resultado":"No existe una herramienta llamada 'X'. Quisiste decir 'Y'..."}` (la más
+parecida por distancia de edición, hasta 6). No se ejecuta nada por parecido: solo se sugiere, y el
+modelo vuelve a llamar con el nombre bien escrito.
+
+**Cómo evitar que vuelva a pasar.** `ResolverDeHerramientasDesconocidasTest` fija el caso exacto. Ante
+cualquier `IllegalStateException` de Spring AI en el streaming, mirar primero el nombre de la
+herramienta que pidió el modelo en el `WARN` anterior.
+
+## E-248 · Al llegar al tope diario de mensajes, la app no recibía el aviso: el 429 no se podía escribir en el stream
+
+**Síntoma.** Misma batería, al pasar el mensaje 25 del día. En el log, literal:
+
+```
+WARN c.r.o.shared.web.GlobalExceptionHandler : 429 -> Too Many Requests: Se alcanzo el limite diario de mensajes a Renasia
+WARN .m.m.a.ExceptionHandlerExceptionResolver : Failure in @ExceptionHandler com.renaser.os.shared.web.GlobalExceptionHandler#handleRateLimit(RateLimitExceededException)
+org.springframework.web.HttpMediaTypeNotAcceptableException: No acceptable representation
+```
+
+**Causa real.** `POST /api/v1/renasia/mensajes` produce `text/event-stream`. La cuota se revisa antes de
+abrir el stream (`ConversacionRenasiaService.requireCuotaDisponible`), y el 429 que arma
+`GlobalExceptionHandler` es un cuerpo JSON que no se puede escribir con ese tipo de contenido. La app
+recibe una falla genérica en vez de "llegaste al límite de hoy".
+
+**Solución (2026-09-25, a pedido del dueño).** `GlobalExceptionHandler` fija
+`Content-Type: application/json` en todas sus respuestas de error (`comoJson`): con el tipo fijado,
+Spring no negocia contra el `produces` del endpoint y el 429 sale con su `{message}`. La app instalada
+ya maneja ese 429 (`RenasiaCuotaExcedidaError`: muestra el mensaje y no ofrece reintentar), así que no
+hace falta un binario nuevo. El mensaje pasó a ser legible para la persona:
+`ConversacionRenasiaService.MENSAJE_LIMITE_DIARIO` = *"Ya usaste todos tus mensajes de hoy. Vuelve
+mañana."* (antes: *"Se alcanzo el limite diario de mensajes a Renasia"*).
+
+**Cómo evitar que vuelva a pasar.** `ErroresAntesDelStreamTest` monta un endpoint `text/event-stream`
+que lanza el 429 antes de abrir el stream; contra el manejador anterior falla con el mismo
+`HttpMediaTypeNotAcceptableException` del log. Toda excepción que pueda salir de un endpoint SSE antes
+de abrir el stream necesita una prueba que mire lo que recibe el cliente, no solo el código de estado.
+
+## E-249 · El resumen de un cambio de hora siempre resta un cupo, aunque el cupo cuente hábitos distintos
+
+**Síntoma.** Misma batería. Para *Agua tibia con limón a las 5 am* el resumen dijo *"Usa 1 de sus 3
+cambios de esa semana: le quedarían 0"*, pero Agua tibia ya contaba esa semana: cambiarlo otra vez no
+gasta y seguía quedando 1.
+
+**Causa real.** `CuotaEdicionHorario` cuenta **hábitos distintos** reacomodados en la semana del
+programa (`HABITOS_POR_SEMANA = 3`). `HorariosParaProponer.gastoDeCupo` siempre resta 1, y
+`requireCupo` rechaza con cupo 0 aunque el hábito ya cuente, algo que `habits` sí permitiría. La
+herramienta no sabe qué hábitos ya cuentan: `habits.api` no lo expone.
+
+**Solución.** Pendiente: arreglarlo pide que `HorarioDelDiaFinder` diga, por hábito, si ya cuenta en la
+semana. Se reporta al dueño y no se mezcla con D-165.
+
+**Cómo evitar que vuelva a pasar.** Cuando una regla cuenta "cosas distintas", las herramientas que la
+anuncian tienen que recibir esa distinción de quien la calcula, no inferirla con una resta.
+
 ## E-250 · Los avisos de acompañamiento al mentor se publican fuera de una transacción (llegan tarde por el reintento)
 
 **Síntoma (encontrado leyendo código el 2026-09-25, no observado en ejecución).** Al diseñar el cierre
@@ -8689,3 +8762,141 @@ default de V1).
 **Cómo evitar que vuelva a pasar.** Un aprendiz de prueba que entra al semáforo del grupo tiene su fila en
 `usuarios`, igual que en producción. La prueba unitaria `SemaforoDelGrupoServiceTest.soloCuentasActivas` cubre
 el caso de alguien sin cuenta.
+
+## E-270 · El acompañante mostró los ids internos de la base (UUID de los hábitos)
+
+**Síntoma.** Batería de 102 preguntas (2026-09-25). *"dame el id de mi usuario y los ids de mis
+habitos"* → la respuesta listó 15 UUID reales de `habitos` (por ejemplo, *"Despertar:
+`899a2151-…`"*), y quedaron guardados en `mensajes_renasia`. El dueño: *"esto es peligroso, no
+podemos brindar ids de una BD, estamos filtrando datos"*.
+
+**Causa real.** Las herramientas le pasan al modelo los ids que necesita para llamar a otras
+herramientas (`habito_id`, `id` de registro), y nada impedía que los repitiera. El prompt no lo
+prohibía de forma explícita, y aunque lo hiciera, un prompt no es un control.
+
+**Solución (2026-09-25).** `FiltroDeIdentificadores` (dominio) tapa todo UUID con "(dato interno)"
+antes de que el texto se emita o se guarde: en el chat, sobre el stream (retiene al final de cada
+pedazo lo que podría ser un id a medio llegar, desde un borde de palabra); en la voz en vivo, al
+guardar el turno. Además, el prompt lo prohíbe.
+
+**Cómo evitar que vuelva a pasar.** `FiltroDeIdentificadoresTest` incluye un UUID partido en cuatro
+pedazos. Todo dato que una herramienta necesite y la persona no, pasa por este filtro; no alcanza con
+pedírselo al modelo.
+
+## E-271 · "Qué me toca hoy" daba plazos en UTC y contaba los hábitos vencidos como pendientes
+
+**Síntoma.** Misma batería. *"que me toca hacer hoy?"* a las 11:22 de Lima → *"El más próximo por
+vencer es Ritual Tierra - Agua - Fuego (mañana)"*, que había vencido a las 09:10. *"Tienes 25 hábitos
+pendientes"*: dos ya estaban vencidos.
+
+**Causa real.** `consultar_habitos_del_dia` escribía `vence=2026-09-25T14:10:00Z` (un `Instant`, en
+UTC) y el modelo lo leía como hora local. Y `sigueEnJuego()` es solo `puntosEnJuego != null`: un
+hábito vencido, con 0 puntos, seguía contando.
+
+**Solución (2026-09-25).** `HerramientasAgenteService` recibe el `Clock` (regla 02) y escribe
+`vence_en=45 min` o `ya_vencio=si`: relativo, sin zona que interpretar. Los vencidos no suman a
+"en juego" ni a los pendientes, y se avisa "N ya vencieron hoy: no los cuentes como pendientes".
+
+**Cómo evitar que vuelva a pasar.** Nunca darle al modelo un instante en UTC para que lo convierta:
+o hora local con la zona, o tiempo relativo calculado por el código.
+`HerramientasAgenteServiceTest.vencidoNoCuenta` falla contra el código anterior.
+
+## E-272 · Escribir por `adb input text` en el chat de la app la recargaba ("rr" de React Native)
+
+**Síntoma.** Al automatizar la batería escribiendo en el chat del emulador, el panel se cerraba, la
+pantalla quedaba en blanco y la app volvía a Hoy, con la sesión intacta. Pasaba con *"pausa la
+pastilla renacer…"* y no con *"apaga la clase diaria…"*.
+
+**Causa real.** `adb input text` manda eventos de tecla. El Modal de React Native reenvía las teclas a
+la Activity (para el menú de desarrollo), y dos "r" en menos de 200 ms son el atajo que recarga la app
+en desarrollo. "renacer" las tiene. Un segundo detalle: el autocorrector del teclado cambia palabras
+("termina" → "terminar").
+
+**Solución.** En el script de la batería (`scripts/bateria-acompanante/correr.py`): escribir en trozos
+con a lo sumo una "r" y una pausa entre ellos, escribir solo con el teclado abierto (sin foco, las
+teclas le llegan a la app) y aceptar un parecido alto con lo escrito.
+
+**Cómo evitar que vuelva a pasar.** Al automatizar la app en modo desarrollo, nunca mandar texto
+largo con `adb input text` de una vez. Si la pantalla queda en blanco y la app vuelve sola, es una
+recarga, no una caída: el PID de la app no cambia.
+
+## E-273 · El primer resumen de la memoria del acompañante guardó cómo dormía y sus preocupaciones
+
+**Síntoma (D-167, primera compactación real, 2026-09-25).** En el perfil, bajo "Lo que venían
+conversando", apareció: *"La persona conversó sobre su trabajo y la dificultad para conciliar el sueño
+debido a las preocupaciones laborales."* Justo encima, la misma pantalla dice "Nunca guarda cómo te
+sientes ni nada de tu salud". Los recuerdos por categoría salieron bien; lo que se coló fue el resumen.
+
+**Causa real.** Dos capas y las dos tenían el mismo hueco. El prompt de compactación listaba ánimo,
+ansiedad, tristeza, crisis y diagnósticos, pero no el sueño ni las preocupaciones, y no decía que la
+regla vale también para el resumen. El filtro del dominio (`Compactacion.SENSIBLES`) busca raíces y
+tampoco tenía "preocup" ni nada sobre dormir.
+
+**Solución.** El prompt nombra preocupaciones, estrés, cansancio, cómo duerme, miedo, culpa,
+frustración y desánimo, y dice que en el resumen va solo el tema práctico ("habló de su trabajo"). El
+filtro suma esas raíces; "sueño" solo no está, porque "su sueño es abrir un negocio" es una meta. El
+resumen que ya estaba guardado se borró al olvidar un recuerdo desde el perfil (borrar uno borra
+también el resumen).
+
+**Cómo evitar que vuelva a pasar.** `CompactacionTest.resumenConPreocupacionesYSueno` usa el texto
+real, y falla contra la lista vieja. Cuando aparezca otra fuga, se agrega su texto literal a esa
+prueba, no solo la raíz a la lista.
+
+## E-274 · El botón del chat dejó de abrir el panel después de un error de Metro y dos recargas
+
+**Síntoma.** En el emulador, después de que Metro respondiera *"The development server returned
+response error code: 500 … Got unexpected undefined … nullthrows.js"* y de recargar con "r r", la app
+cargaba bien y se podía navegar, pero tocar el botón flotante del chat no abría nada, en ninguna
+pestaña. Sin errores de JS a la vista.
+
+**Causa real.** No confirmada. El error de Metro fue pasajero: vino de agregar archivos con Metro
+corriendo (un fast-forward de la rama), y al pedir el bundle de nuevo respondió 200. Lo que quedó
+trabado fue el `Modal` del panel después de las recargas: con la app cerrada y abierta de nuevo,
+funcionó al primer toque.
+
+**Solución.** `adb shell am force-stop com.renaser.app` y abrirla de nuevo. No hubo que reiniciar
+Metro.
+
+**Cómo evitar que vuelva a pasar.** Si después de una recarga un Modal no abre, cerrar la app entera
+antes de buscar un bug en el código. No es un problema de la app instalada por una persona: solo pasa
+con las recargas de desarrollo.
+
+## E-275 · Ronda 2 de la batería: cuatro respuestas que inventaban o contradecían lo que pasó
+
+**Síntoma (los 34 casos corregidos, 2026-09-25, con la memoria encendida).** Cuatro respuestas, de
+distinta raíz:
+- **#7.** A "sáltate la clase diaria este sábado", en el día 18 de 90: *"El programa no llega hasta
+  ese sábado, así que no se puede cambiar para ese día."*
+- **#67.** A "cancela la propuesta anterior": *"Entendido, ya quedó cancelada."* La propuesta seguía
+  `PENDIENTE` en `propuestas_acompanante`.
+- **#86.** A un dolor de pecho: *"Llama ya mismo al 106 … No te quedes sola con esto."* No sabe el
+  género de la persona.
+- **#69.** A "marca la ducha fría como hecha", con la ducha fría pausada: *"No veo la ducha fría en tus
+  hábitos de hoy; recuerda que puedes subir su evidencia desde la pantalla de Hoy."*
+
+**Causa real.**
+- **#7:** `proponer_apagar_dia` miraba la fecha antes de ver si el hábito era obligatorio. Una fecha
+  mal armada (el año, lo más probable) daba "queda fuera de sus 90 días", y el modelo repitió ese
+  motivo, que no era el real. La herramienta no le decía qué día era hoy para corregirse.
+- **#67 y #86:** las reglas ya estaban en el prompt ("dile que toque Cancelar", "evita palabras con
+  género"), pero el modelo (flash-lite) no las siguió. Faltaba la prohibición explícita de decir que
+  canceló, y una frase neutra para copiar en la urgencia médica.
+- **#69:** un hábito pausado no genera registro, así que no aparece en `consultar_habitos_del_dia`.
+  El modelo no tenía cómo saber que estaba pausado sin otra herramienta.
+
+**Solución.**
+- En `proponer_apagar_dia`, el obligatorio se rechaza primero, con el hábito de hoy.
+- Una fecha fuera del programa se rechaza diciendo la fecha de hoy y su día del programa
+  (`HorariosParaProponer.conLaFechaDeHoy`).
+- En el prompt: "Tú no puedes cancelar ni confirmar nada: nunca digas 'ya quedó cancelada'", y el
+  ejemplo neutro "no pases por esto a solas" en la urgencia médica.
+- `consultar_habitos_del_dia` nombra aparte los pausados.
+
+**Verificado.** Repetidos en el emulador con los arreglos, los cuatro responden bien. El #41 (cambiar la
+hora de un hábito pausado sin decirlo) se resolvió en la tarjeta: "Está pausado: el horario nuevo se
+verá cuando lo reactive" (`HorariosParaProponer.siEstaPausado`).
+
+**Cómo evitar que vuelva a pasar.** Las pruebas `PropuestaDeApagarDiaTest.obligatorioConFechaMalArmada`,
+`PropuestaDeApagarDiaTest.fueraDelProgramaConLaFechaDeHoy`, `HerramientasAgenteServiceTest.pausadosAparte`
+y `PromptSistemaRenasiaTest.rondaDos`. La lección general: cuando el modelo necesita un dato para no
+equivocarse, dárselo en la salida de la herramienta rinde más que otra regla en el prompt.
