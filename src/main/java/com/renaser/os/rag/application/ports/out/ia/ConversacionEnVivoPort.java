@@ -2,6 +2,7 @@ package com.renaser.os.rag.application.ports.out.ia;
 
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
+import com.renaser.os.rag.domain.model.memoria.MemoriaDeRenasia;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 
@@ -38,10 +39,18 @@ public interface ConversacionEnVivoPort {
     /**
      * @param situacion    {@code null} si quien habla no cursa el programa (igual que en {@link ChatIAPort})
      * @param herramientas las mismas del chat del acompanante
+     * @param memoria      lo que el acompanante sabe de la persona (D-167); {@code null} con la memoria
+     *                     apagada, y entonces el prompt queda como antes
      */
-    record Apertura(SituacionDelAprendiz situacion, List<DefinicionHerramienta> herramientas) {
+    record Apertura(SituacionDelAprendiz situacion, List<DefinicionHerramienta> herramientas,
+                    MemoriaDeRenasia memoria) {
         public Apertura {
             herramientas = List.copyOf(Objects.requireNonNull(herramientas, "herramientas es obligatorio"));
+        }
+
+        /** Sin memoria (D-167). */
+        public Apertura(SituacionDelAprendiz situacion, List<DefinicionHerramienta> herramientas) {
+            this(situacion, herramientas, null);
         }
     }
 

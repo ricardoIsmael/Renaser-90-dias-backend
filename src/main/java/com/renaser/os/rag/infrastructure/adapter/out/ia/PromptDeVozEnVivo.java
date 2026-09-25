@@ -1,6 +1,7 @@
 package com.renaser.os.rag.infrastructure.adapter.out.ia;
 
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
+import com.renaser.os.rag.domain.model.memoria.MemoriaDeRenasia;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.core.io.ClassPathResource;
 
@@ -27,10 +28,21 @@ final class PromptDeVozEnVivo {
     static final String RECURSO_MODO_EN_VIVO = "prompts/modo-en-vivo.st";
     private final String enVivo = new PromptTemplate(new ClassPathResource(RECURSO_MODO_EN_VIVO)).render();
 
-    String para(SituacionDelAprendiz situacion) {
+    private final PromptTemplate seccionDeMemoria =
+            new PromptTemplate(new ClassPathResource(GoogleGenAiRenasiaChatAdapter.RECURSO_MEMORIA));
+
+    /**
+     * @param memoria D-167: {@code null} con la memoria apagada, y el prompt queda como antes. Si
+     *                viene, va donde la pone el chat escrito: despues del prompt del agente y antes
+     *                de los modos de voz.
+     */
+    String para(SituacionDelAprendiz situacion, MemoriaDeRenasia memoria) {
         String delAgente = acompanante.render(Map.of(
                 "contexto", GoogleGenAiRenasiaChatAdapter.formatearContexto(List.of()),
                 "situacion", GoogleGenAiRenasiaChatAdapter.formatearSituacion(situacion)));
+        if (memoria != null) {
+            delAgente += "\n\n" + seccionDeMemoria.render(Map.of("recuerdos", memoria.paraElModelo()));
+        }
         return delAgente + "\n\n" + modoVoz + "\n\n" + enVivo;
     }
 }

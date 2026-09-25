@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
+import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
@@ -71,12 +72,14 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
     static final String RECURSO_PROMPT_ACOMPANANTE = "prompts/renasia-sistema.st";
     static final String RECURSO_PROMPT_TUTOR_CURSOS = "prompts/sparkie-cursos.st";
     static final String RECURSO_MODO_VOZ = "prompts/modo-voz.st";
+    static final String RECURSO_MEMORIA = "prompts/memoria-acompanante.st";
 
     private final ChatClient chatClient;
     private final PromptTemplate promptAcompanante;
     private final PromptTemplate promptTutorCursos;
     /** Sin variables: se renderiza una sola vez, al construir el adaptador. */
     private final String modoVoz;
+    private final PromptTemplate seccionDeMemoria;
     private final EjecutarHerramientaAgenteUseCase herramientasUseCase;
     private final ObjectMapper json;
 
@@ -95,6 +98,7 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
         this.promptAcompanante = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_ACOMPANANTE));
         this.promptTutorCursos = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_TUTOR_CURSOS));
         this.modoVoz = new PromptTemplate(new ClassPathResource(RECURSO_MODO_VOZ)).render();
+        this.seccionDeMemoria = new PromptTemplate(new ClassPathResource(RECURSO_MEMORIA));
     }
 
     /**
@@ -159,10 +163,17 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
      * final y entero, no mezclado en el prompt del agente: con {@code TEXTO} el prompt queda
      * byte por byte como antes, y ninguna seccion existente — riesgo, crisis, atribucion — se
      * edita para hacerle lugar.
+     *
+     * <p>D-167: con memoria, la seccion de {@code prompts/memoria-acompanante.st} va despues del
+     * prompt del agente y antes del modo voz, con el mismo criterio: sin memoria (apagada, o el
+     * tutor de cursos) el prompt no cambia en nada.
      */
     private String promptSistema(Consulta consulta) {
-        String delAgente = promptDelAgente(consulta);
-        return consulta.canal() == CanalConversacion.VOZ ? delAgente + "\n\n" + modoVoz : delAgente;
+        String prompt = promptDelAgente(consulta);
+        if (consulta.memoria() != null && consulta.agente() == AgenteConversacional.COMPANION) {
+            prompt += "\n\n" + seccionDeMemoria.render(Map.of("recuerdos", consulta.memoria().paraElModelo()));
+        }
+        return consulta.canal() == CanalConversacion.VOZ ? prompt + "\n\n" + modoVoz : prompt;
     }
 
     private String promptDelAgente(Consulta consulta) {

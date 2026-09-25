@@ -1,5 +1,10 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.ports.in.memoria.CompactarMemoriaUseCase;
+import com.renaser.os.rag.application.ports.in.memoria.ConsultarMemoriaUseCase;
+import com.renaser.os.rag.domain.model.memoria.CategoriaDeRecuerdo;
+import com.renaser.os.rag.domain.model.memoria.MemoriaDeRenasia;
+import com.renaser.os.rag.domain.model.memoria.Recuerdo;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase.PreguntarRenasiaCommand;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
@@ -39,6 +44,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
@@ -65,6 +71,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * Orquestacion de los dos asistentes (D-102) sobre puertos mockeados. Las reglas de dominio
@@ -107,6 +114,10 @@ class ConversacionRenasiaServiceTest {
     private ConsultarPropuestasDelTurnoUseCase propuestasDelTurno;
     @Mock
     private IdGenerator idGenerator;
+    @Mock
+    private ConsultarMemoriaUseCase memoriaUseCase;
+    @Mock
+    private CompactarMemoriaUseCase compactarMemoriaUseCase;
 
     private ConversacionRenasiaService service;
 
@@ -118,8 +129,8 @@ class ConversacionRenasiaServiceTest {
         service = new ConversacionRenasiaService(userSummaryFinder, controlCuotaRenasiaPort,
                 loadConversacionRenasiaPort, saveConversacionRenasiaPort, loadMensajeRenasiaPort,
                 saveMensajeRenasiaPort, vectorStorePort, consultarLeccionesVisiblesPort, chatIAPort,
-                herramientasUseCase, situacionPort, revisarPatronDeMalestarUseCase, propuestasDelTurno, CLOCK,
-                idGenerator);
+                herramientasUseCase, situacionPort, revisarPatronDeMalestarUseCase, propuestasDelTurno,
+                memoriaUseCase, compactarMemoriaUseCase, CLOCK, idGenerator);
         // Por defecto el turno no propone nada: el caso de todos los dias.
         lenient().when(propuestasDelTurno.pendientesCreadasDesde(any(), any())).thenReturn(List.of());
         // Por defecto nadie viene repitiendo nada: la conversacion normal no se ve afectada.
@@ -774,5 +785,55 @@ class ConversacionRenasiaServiceTest {
         assertThat(eventos).hasSize(2);
         assertThat(eventos.get(1)).isInstanceOf(EventoRenasia.Fin.class);
         verify(propuestasDelTurno, never()).pendientesCreadasDesde(any(), any());
+    }
+
+    @Test
+    @DisplayName("D-167: la memoria viaja con el acompanante y, al terminar el turno, se pide compactar")
+    void laMemoriaViajaConElAcompanante() {
+        stubCaminoFeliz();
+        var memoria = new MemoriaDeRenasia(List.of(new Recuerdo(UUID.randomUUID(), CategoriaDeRecuerdo.CONTEXTO_DE_VIDA,
+                "Trabaja de noche", CLOCK.now())), Optional.empty(), Instant.EPOCH);
+        when(memoriaUseCase.paraConversar(activo)).thenReturn(Optional.of(memoria));
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(consultaEnviadaAlModelo().memoria()).isEqualTo(memoria);
+        InOrder orden = inOrder(saveMensajeRenasiaPort, compactarMemoriaUseCase);
+        orden.verify(saveMensajeRenasiaPort, times(2)).save(any());
+        orden.verify(compactarMemoriaUseCase).compactarEnSegundoPlano(activo);
+    }
+
+    @Test
+    @DisplayName("D-167: con la memoria apagada no viaja nada y el prompt queda como antes")
+    void memoriaApagada() {
+        stubCaminoFeliz();
+        when(memoriaUseCase.paraConversar(activo)).thenReturn(Optional.empty());
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(consultaEnviadaAlModelo().memoria()).isNull();
+    }
+
+    @Test
+    @DisplayName("D-167: el tutor de cursos no lee ni compacta la memoria del acompanante (D-102)")
+    void elTutorNoTieneMemoria() {
+        stubCaminoFeliz();
+
+        service.preguntar(preguntaAlTutor(activo, "curso-1")).collectList().block();
+
+        assertThat(consultaEnviadaAlModelo().memoria()).isNull();
+        verifyNoInteractions(memoriaUseCase, compactarMemoriaUseCase);
+    }
+
+    @Test
+    @DisplayName("D-167: si el modelo falla no hay turno completo, y no se compacta")
+    void sinRespuestaNoSeCompacta() {
+        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
+        when(chatIAPort.responder(any())).thenReturn(Flux.error(new IllegalStateException("modelo caido")));
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        verify(compactarMemoriaUseCase, never()).compactarEnSegundoPlano(any());
     }
 }
