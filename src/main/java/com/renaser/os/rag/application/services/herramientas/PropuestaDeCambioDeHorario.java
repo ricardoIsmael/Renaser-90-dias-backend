@@ -77,6 +77,7 @@ public class PropuestaDeCambioDeHorario implements HerramientaAgente {
             LocalDate rigeDesde = rigeDesde(cambio, hoy.fecha());
             HorariosDelDia diaQueCambia = HorariosParaProponer.de(horariosPort, actorId, rigeDesde);
             HorarioDeHabito actual = HorariosParaProponer.habito(diaQueCambia, cambio.habitoId());
+            HorariosParaProponer.requireQueCambie(actual, cambio.horaInicio(), cambio.horaLimite());
             HorariosParaProponer.requireCupo(diaQueCambia.cuota());
             String resumen = resumenDe(cambio, actual, rigeDesde) + " "
                     + HorariosParaProponer.gastoDeCupo(diaQueCambia.cuota());

@@ -791,6 +791,59 @@ los mismos casos de uso.
 > acompañante pausa igual que Plan, en vez de explicar una regla que no existe. También se corrigió
 > *"desde el día futuro que elija"*: con una fecha, el cambio de hora vale **solo ese día**.
 
+
+### D-166 — Batería de 102 preguntas al acompañante, y lo que se corrigió (2026-09-25)
+
+Pedido del dueño: probar por escrito con unas 100 preguntas y casos límite antes de pensar en
+`master`, porque *"el acompañante tiene que estar preparado para todo"*.
+
+**Cómo se probó.** 102 preguntas en 13 grupos: obligatorios, hábitos de la base, pausar, horario, día
+del programa, puntos, agenda, confirmación por texto, privacidad, fuera del programa, bienestar y
+crisis, inyección de instrucciones y forma. Se escribieron en el chat de la app del emulador, como una
+persona: sin tokens (el clasificador de seguridad no permitió sacar la sesión de Redis), y así la
+prueba es de punta a punta. Cada respuesta y cada propuesta se leyó de la base, y calificaron cuatro
+agentes en paralelo, un bloque cada uno. Script, preguntas y guía de calificación:
+`scripts/bateria-acompanante/`.
+
+**Primera corrida (antes de los arreglos): 55 OK, 30 leves, 17 graves.**
+
+| Bloque | OK | Leve | Grave |
+|---|---|---|---|
+| 1–24 obligatorios y base | 13 | 7 | 4 |
+| 25–44 pausar y horario | 7 | 10 | 3 |
+| 45–69 día, puntos, agenda, confirmación | 12 | 7 | 6 |
+| 70–102 privacidad, fuera del programa, crisis, inyección, forma | 23 | 6 | 4 |
+
+**Salió bien sin tocar nada:** los obligatorios con motivo y alternativa (D-165); D-91 (hoy no se
+reacomoda); la privacidad (no lee el chat privado ni da datos de otros); la crisis con números de Perú
+(106, 113 opción 5, nunca 911); ninguna inyección de instrucciones funcionó; nunca confirmó por texto.
+
+**Los graves, y cómo se arreglaron:**
+
+- El turno se caía si el modelo escribía mal el nombre de una herramienta (#14, #20): E-247.
+- Con un hábito pausado no sabía cambiar la pausa, proponía reactivar (lo contrario de lo pedido) o
+  apagar un día que no cambiaba nada (#16, #25, #28, #99, #100): guardas en `proponer_apagar_dia` y la
+  descripción de `proponer_pausar_habito`, más una regla en el prompt.
+- Un cambio "de 06:00 a 06:00" gastaba cupo (#34): `HorariosParaProponer.requireQueCambie`.
+- Datos inventados: la hora (#51), la fecha de fin (#52), la definición de coherencia (#60), el cupo
+  (#6) y "cambiarle el día" a un obligatorio (#5). Se corrigieron con reglas del prompt, el cupo real
+  en `consultar_habitos_obligatorios` y la definición de D-128 en `consultar_resumen_del_programa`.
+- Plazos en UTC y vencidos contados como pendientes (#48, #49): E-271.
+- Rocas confundidas con hábitos (#53); un hábito pausado que "tendría otro nombre" (#69): prompt.
+- Ids internos a la vista (#95): E-270, un filtro en el código, no solo el prompt.
+- En plena crisis lo trató en femenino (#87): venía del propio bloque de crisis ("dile que no está
+  sola"), que pasó a una forma neutra en `renasia-sistema.st` y `sparkie-cursos.st`.
+
+Además, a pedido del dueño: el 429 del tope diario llega bien a la app (E-248), y el acompañante es
+**menos cerrado**. Nada de "eso no lo manejo" a secas; un chiste corto es charla ligera; con lo que
+siente la persona, primero se reconoce. En una urgencia médica, el 106 primero.
+
+**Pendiente (reportado, sin tocar):** E-249 (el cupo cuenta hábitos distintos y la herramienta
+siempre resta uno); propuestas idénticas duplicadas (#29, #62), sin deduplicar; el prompt dice que
+todos tienen mentor asignado, y el usuario de prueba no tiene (¿es así en producción?); la fecha de fin
+del programa no la da ninguna herramienta (hay que definir si es el día 90 o el siguiente y exponerla
+desde `users.api`).
+
 ---
 
 ## 4. Estructura del módulo

@@ -48,7 +48,8 @@ class HerramientasAgenteServicePropuestaTest {
 
     private HerramientasAgenteService servicio() {
         return new HerramientasAgenteService(agendaHabitosPort, List.of(),
-                new PropuestaDeMarcarHabito(agendaHabitosPort, proponerAccion, true));
+                new PropuestaDeMarcarHabito(agendaHabitosPort, proponerAccion, true),
+                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-23T20:00:00Z")));
     }
 
     private static InvocacionHerramienta marcar(String registroId) {

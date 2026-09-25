@@ -4,6 +4,7 @@ import com.google.genai.types.HttpOptions;
 import com.google.genai.types.HttpRetryOptions;
 
 import com.google.genai.Client;
+import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.google.genai.GoogleGenAiChatModel;
 import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
@@ -12,6 +13,7 @@ import org.springframework.ai.google.genai.text.GoogleGenAiTextEmbeddingModel;
 import org.springframework.ai.google.genai.text.GoogleGenAiTextEmbeddingOptions;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.retry.RetryUtils;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -46,11 +48,14 @@ import org.springframework.context.annotation.Configuration;
  * {@code Client} ya construido en vez de armar el suyo propio, así que no hace falta declarar
  * una segunda credencial para lo mismo.
  *
- * <p>{@link ToolCallingManager} lo sigue proveyendo la autoconfiguración de Spring AI
- * ({@code ToolCallingAutoConfiguration}, en {@code spring-ai-autoconfigure-model-tool}), que NO
- * está en la lista de exclusiones — Renasia no declara herramientas hoy, pero
- * {@link GoogleGenAiChatModel.Builder#toolCallingManager} es un parámetro obligatorio del
- * builder real.
+ * <p>El {@link ToolCallingManager} del modelo de chat se arma acá, con
+ * {@link ResolverDeHerramientasDesconocidas}: un nombre de herramienta mal escrito por el modelo ya
+ * no tumba el turno (E-247).
+ *
+ * <p><b>Corregido 2026-09-25.</b> Este párrafo decía que el {@code ToolCallingManager} lo proveía la
+ * autoconfiguración de Spring AI y que "Renasia no declara herramientas hoy". Las declara desde el
+ * 2026-09-05, y el de la autoconfiguración lanzaba {@code No ToolCallback found for tool name}
+ * ante un nombre mal escrito.
  */
 @Configuration
 @ConditionalOnProperty(name = "renaser.ia.proveedor", havingValue = "google")
@@ -112,13 +117,23 @@ class GoogleGenAiClientesConfig {
                 .build();
     }
 
+    /**
+     * El {@link ToolCallingManager} es propio y no el de la autoconfiguracion (E-247): con el de
+     * siempre, un nombre de herramienta mal escrito por el modelo lanza
+     * {@code No ToolCallback found for tool name} y tumba el turno entero. Con
+     * {@link ResolverDeHerramientasDesconocidas}, el modelo recibe "no existe, quisiste decir X".
+     */
     @Bean
-    GoogleGenAiChatModel googleGenAiChatModel(Client googleGenAiClient, ToolCallingManager toolCallingManager,
-            ObservationRegistry observationRegistry, GoogleGenAiChatOptions opciones) {
+    GoogleGenAiChatModel googleGenAiChatModel(Client googleGenAiClient, ObservationRegistry observationRegistry,
+            GoogleGenAiChatOptions opciones, ObjectProvider<EjecutarHerramientaAgenteUseCase> herramientas) {
+        ToolCallingManager tolerante = ToolCallingManager.builder()
+                .observationRegistry(observationRegistry)
+                .toolCallbackResolver(new ResolverDeHerramientasDesconocidas(herramientas))
+                .build();
         return GoogleGenAiChatModel.builder()
                 .genAiClient(googleGenAiClient)
                 .options(opciones)
-                .toolCallingManager(toolCallingManager)
+                .toolCallingManager(tolerante)
                 .retryTemplate(RetryUtils.DEFAULT_RETRY_TEMPLATE)
                 .observationRegistry(observationRegistry)
                 .build();

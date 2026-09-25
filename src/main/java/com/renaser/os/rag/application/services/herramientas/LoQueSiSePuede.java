@@ -13,10 +13,13 @@ package com.renaser.os.rag.application.services.herramientas;
  */
 final class LoQueSiSePuede {
 
-    /** Con un obligatorio del programa lo unico que se mueve es la hora, y gasta cupo. */
-    static final String CON_UN_OBLIGATORIO = "Lo que si se puede es cambiarle la hora, si le quedan cambios esta "
-            + "semana: como horario general desde manana, o solo para un dia futuro. El dia de hoy no se "
-            + "reacomoda.";
+    /**
+     * Con un obligatorio del programa lo unico que se mueve es la hora, y gasta cupo. El dia no: en la
+     * bateria del 2026-09-25 el modelo ofrecio "cambiar el dia" de la audioterapia, que no se elige.
+     */
+    static final String CON_UN_OBLIGATORIO = "Lo que si se puede es cambiarle la hora (el dia en que le toca no "
+            + "se mueve), si le quedan cambios esta semana: como horario general desde manana, o solo para un dia "
+            + "futuro. El dia de hoy no se reacomoda.";
 
     /** Todo lo que no es obligatorio. */
     static final String CON_LOS_DEMAS = "Cualquier habito que no sea obligatorio se puede pausar (hasta una fecha "
@@ -30,5 +33,15 @@ final class LoQueSiSePuede {
     static String obligatorio(String titulo) {
         return "'" + titulo + "' es obligatorio del programa: no se puede apagar ningun dia ni pausar. "
                 + CON_UN_OBLIGATORIO;
+    }
+
+    /**
+     * Un habito pausado no se pide ningun dia: apagarlo o encenderlo un dia no cambia nada (en la
+     * bateria del 2026-09-25 se propuso apagar un dia un habito pausado desde hacia dos semanas).
+     */
+    static String pausado(String titulo) {
+        return "'" + titulo + "' esta pausado: mientras dure la pausa no se le pide ningun dia, asi que apagarlo o "
+                + "encenderlo un dia no cambia nada. Si quiere volver a hacerlo, lo que corresponde es reactivarlo; "
+                + "si quiere que la pausa dure hasta otra fecha, se vuelve a pausar con esa fecha.";
     }
 }

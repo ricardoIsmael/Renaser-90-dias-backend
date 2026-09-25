@@ -1,5 +1,8 @@
 package com.renaser.os.rag.application.services.herramientas;
 
+import com.renaser.os.rag.application.ports.out.horarios.ConsultarHorariosPort;
+import com.renaser.os.rag.application.ports.out.horarios.ConsultarHorariosPort.CuotaCambios;
+import com.renaser.os.rag.application.ports.out.horarios.ConsultarHorariosPort.HorariosDelDia;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoDelPlan;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.PlanDelAprendiz;
@@ -32,8 +35,9 @@ class ConsultarHabitosObligatoriosHerramientaTest {
             new InvocacionHerramienta(ConsultarHabitosObligatoriosHerramienta.NOMBRE, Map.of());
 
     private final GestionarPlanDeHabitosPort planPort = mock(GestionarPlanDeHabitosPort.class);
+    private final ConsultarHorariosPort horarios = mock(ConsultarHorariosPort.class);
     private final ConsultarHabitosObligatoriosHerramienta herramienta =
-            new ConsultarHabitosObligatoriosHerramienta(planPort);
+            new ConsultarHabitosObligatoriosHerramienta(planPort, horarios);
 
     private static HabitoDelPlan obligatorio(String titulo) {
         return new HabitoDelPlan(UUID.randomUUID(), titulo, true, false, null);
@@ -49,6 +53,8 @@ class ConsultarHabitosObligatoriosHerramientaTest {
 
     private void conHabitos(HabitoDelPlan... habitos) {
         when(planPort.planDe(APRENDIZ)).thenReturn(new PlanDelAprendiz(HOY, List.of(habitos), List.of()));
+        when(horarios.deFecha(APRENDIZ, null)).thenReturn(new HorariosDelDia(HOY, 18, List.of(),
+                new CuotaCambios(2, 1, 3, false)));
     }
 
     private String contenido() {
@@ -63,7 +69,7 @@ class ConsultarHabitosObligatoriosHerramientaTest {
         assertThat(contenido())
                 .contains("Obligatorios del programa (no se apagan ningun dia ni se pausan): Clase diaria, "
                         + "Pastilla Renacer.")
-                .contains("cambiarle la hora, si le quedan cambios esta semana")
+                .contains("cambiarle la hora (el dia en que le toca no se mueve), si le quedan cambios esta semana")
                 .contains("solo para un dia futuro").contains("El dia de hoy no se reacomoda")
                 .doesNotContain("Ducha fria,");
     }
@@ -94,6 +100,23 @@ class ConsultarHabitosObligatoriosHerramientaTest {
 
         assertThat(contenido()).contains("No tiene habitos obligatorios del programa.")
                 .contains("Hoy no tiene habitos pausados.");
+    }
+
+    @Test
+    @DisplayName("bateria 2026-09-25: trae el cupo real de cambios de horario, para no suponerlo")
+    void cupoDeCambios() {
+        conHabitos(obligatorio("Clase diaria"));
+
+        assertThat(contenido()).contains("Cambios de horario esta semana: 2 usados, 1 restantes de 3.");
+    }
+
+    @Test
+    @DisplayName("si no se pueden leer los horarios, contesta igual sin el cupo")
+    void sinCupoSiFallanLosHorarios() {
+        conHabitos(obligatorio("Clase diaria"));
+        when(horarios.deFecha(APRENDIZ, null)).thenThrow(new IllegalStateException("caido"));
+
+        assertThat(contenido()).contains("Clase diaria").doesNotContain("Cambios de horario");
     }
 
     @Test

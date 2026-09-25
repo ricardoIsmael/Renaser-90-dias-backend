@@ -11,11 +11,14 @@ import com.renaser.os.rag.domain.model.herramienta.CatalogoHerramientasAgente;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -54,10 +57,18 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
      */
     private final PropuestaDeMarcarHabito propuestaDeMarcar;
 
+    /**
+     * Para decir "vence en 45 min" o "ya vencio" en vez de un instante en UTC (bateria del
+     * 2026-09-25): el modelo leia "vence=2026-09-25T14:10:00Z" como hora local, ofrecia como
+     * "el mas proximo por vencer" uno que ya habia vencido y contaba los vencidos como pendientes.
+     */
+    private final Clock clock;
+
     public HerramientasAgenteService(ConsultarAgendaHabitosPort agendaHabitosPort,
                                      List<HerramientaAgente> adicionales,
-                                     PropuestaDeMarcarHabito propuestaDeMarcar) {
+                                     PropuestaDeMarcarHabito propuestaDeMarcar, Clock clock) {
         this.agendaHabitosPort = agendaHabitosPort;
+        this.clock = clock;
         this.adicionales = List.copyOf(adicionales);
         this.propuestaDeMarcar = propuestaDeMarcar;
         requireNombresUnicos();
@@ -143,13 +154,17 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
             return ResultadoHerramienta.exito("Hoy no tiene ningun habito generado.");
         }
         StringBuilder texto = new StringBuilder();
+        Instant ahora = clock.now();
         int totalEnJuego = 0;
         int pendientes = 0;
+        int vencidos = 0;
         for (HabitoDelDia habito : habitos) {
-            texto.append(lineaDe(habito)).append('\n');
-            if (habito.sigueEnJuego()) {
+            texto.append(lineaDe(habito, ahora)).append('\n');
+            if (habito.sigueEnJuego() && !vencio(habito, ahora)) {
                 totalEnJuego += habito.puntosEnJuego();
                 pendientes++;
+            } else if (habito.sigueEnJuego()) {
+                vencidos++;
             }
         }
         // El total va en la MISMA respuesta (auditoria NFR 2026-09-06): "que me falta y cuanto
@@ -160,7 +175,21 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
         // que haga falta llamar a las dos.
         texto.append("Total en juego: ").append(totalEnJuego).append(" puntos en ").append(pendientes)
                 .append(" habito(s) que todavia puede entregar.");
+        if (vencidos > 0) {
+            texto.append(" ").append(vencidos).append(" ya vencieron hoy: no los cuentes como pendientes.");
+        }
         return ResultadoHerramienta.exito(texto.toString().trim());
+    }
+
+    /** Vencido = su plazo ya paso. Un habito sin plazo no vence. */
+    private static boolean vencio(HabitoDelDia habito, Instant ahora) {
+        return habito.plazo() != null && !habito.plazo().isAfter(ahora);
+    }
+
+    /** "45 min" o "2 h 10 min": relativo, asi no depende de ninguna zona horaria. */
+    private static String faltan(Instant ahora, Instant plazo) {
+        long minutos = Duration.between(ahora, plazo).toMinutes();
+        return minutos < 60 ? minutos + " min" : (minutos / 60) + " h " + (minutos % 60) + " min";
     }
 
     /** Una linea por habito: el modelo la parafrasea, asi que dice lo que hace falta y nada mas.
@@ -170,7 +199,7 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
      * despues por un aviso al mentor de evidencia vencida que nadie le habia pedido. El agente no
      * puede subirla —el chat no recibe archivos—, asi que lo unico que hace con este dato es
      * decirlo y mandar a la pantalla de Hoy. */
-    private static String lineaDe(HabitoDelDia habito) {
+    private static String lineaDe(HabitoDelDia habito, Instant ahora) {
         StringBuilder linea = new StringBuilder()
                 .append("id=").append(habito.registroId())
                 .append(" | ").append(habito.titulo())
@@ -179,8 +208,10 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
             linea.append(" | puntos_en_juego=").append(habito.puntosEnJuego())
                     .append(" de ").append(habito.puntosMaximos());
         }
-        if (habito.plazo() != null) {
-            linea.append(" | vence=").append(habito.plazo());
+        if (vencio(habito, ahora)) {
+            linea.append(" | ya_vencio=si");
+        } else if (habito.plazo() != null) {
+            linea.append(" | vence_en=").append(faltan(ahora, habito.plazo()));
         }
         /* Solo se nombra cuando ES cierto: una linea que dijera `exige_evidencia=false` en cada
            habito gastaria contexto en repetir lo normal, y el modelo parafrasea lo que ve. Con la
@@ -194,8 +225,9 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
     private ResultadoHerramienta puntosEnJuego(UserId actorId) {
         int total = 0;
         int pendientes = 0;
+        Instant ahora = clock.now();
         for (HabitoDelDia habito : agendaHabitosPort.deHoyDe(actorId)) {
-            if (habito.sigueEnJuego()) {
+            if (habito.sigueEnJuego() && !vencio(habito, ahora)) {
                 total += habito.puntosEnJuego();
                 pendientes++;
             }

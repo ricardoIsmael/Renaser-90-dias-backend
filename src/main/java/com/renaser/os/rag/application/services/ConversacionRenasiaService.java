@@ -21,6 +21,7 @@ import com.renaser.os.rag.application.ports.out.ia.ChatIAPort.Consulta;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
+import com.renaser.os.rag.domain.model.conversacion.FiltroDeIdentificadores;
 import com.renaser.os.rag.domain.model.conversacion.FuenteMensaje;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
@@ -116,6 +117,13 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      * Cuando el que no puede es el PROVEEDOR (cuota agotada, saturado): decirle "en unos segundos"
      * seria mentir y lo haria insistir contra una cuota que no vuelve. Auditoria NFR 2026-09-06.
      */
+    /**
+     * Lo que ve la persona cuando se le acaban los mensajes del dia (la app lo muestra tal cual y
+     * no ofrece reintentar). Antes decia "Se alcanzo el limite diario de mensajes a Renasia", y
+     * ademas nunca llegaba: el 429 no se podia escribir en el stream (E-248).
+     */
+    public static final String MENSAJE_LIMITE_DIARIO = "Ya usaste todos tus mensajes de hoy. Vuelve mañana.";
+
     public static final String MENSAJE_PROVEEDOR_SATURADO =
             "El asistente esta saturado en este momento. Intenta de nuevo en unos minutos.";
     /** Deja el texto de apoyo separado de lo ultimo que dijo el modelo, en vez de pegado. */
@@ -208,10 +216,10 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         String apoyo = textoDeApoyo(command);
 
         StringBuilder respuestaCompleta = new StringBuilder();
-        Flux<EventoRenasia> delModelo = chatIAPort.responder(new Consulta(command.agente(), command.actorId(),
-                command.pregunta(), contexto, command.ambito(), historial,
+        Flux<EventoRenasia> delModelo = sinIdentificadores(chatIAPort.responder(new Consulta(command.agente(),
+                command.actorId(), command.pregunta(), contexto, command.ambito(), historial,
                 herramientasUseCase.disponibles(command.agente()),
-                situacionPort.de(command.actorId()).orElse(null), command.canal()));
+                situacionPort.de(command.actorId()).orElse(null), command.canal())));
         return conApoyoAntesDelFin(conPropuestasAntesDelFin(delModelo, command.actorId(), inicioDelTurno), apoyo)
                 .doOnNext(evento -> acumularTexto(evento, respuestaCompleta))
                 .concatMap(evento -> agregarFuentesAntesDeFin(evento, fragmentos))
@@ -240,6 +248,22 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                 ? consultarLeccionesVisiblesPort.visiblesParaActorEnCurso(command.actorId(), command.cursoId())
                 : consultarLeccionesVisiblesPort.visiblesParaActor(command.actorId());
         return FiltroLecciones.soloVisibles(visibles);
+    }
+
+    /**
+     * Ningun id de la base llega a la pantalla ni al historial (E-270): se tapa lo que diga el
+     * modelo antes de emitirlo y de acumularlo para guardar. Un filtro por respuesta, porque retiene
+     * entre pedazos la cola que podria ser un id a medio llegar; esa cola sale antes del {@code Fin}.
+     */
+    private static Flux<EventoRenasia> sinIdentificadores(Flux<EventoRenasia> eventos) {
+        return Flux.defer(() -> {
+            FiltroDeIdentificadores filtro = new FiltroDeIdentificadores();
+            return eventos.concatMap(evento -> switch (evento) {
+                case EventoRenasia.Texto texto -> Flux.just(new EventoRenasia.Texto(filtro.pasar(texto.fragmento())));
+                case EventoRenasia.Fin fin -> Flux.just(new EventoRenasia.Texto(filtro.cerrar()), fin);
+                default -> Flux.just(evento);
+            }).filter(evento -> !(evento instanceof EventoRenasia.Texto texto) || !texto.fragmento().isEmpty());
+        });
     }
 
     /** Solo acumula {@link EventoRenasia.Texto}: {@code Fuentes}/{@code Fin} no aportan contenido. */
@@ -439,7 +463,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
 
     private void requireCuotaDisponible(UserId actorId) {
         if (!controlCuotaRenasiaPort.intentarConsumir(actorId)) {
-            throw new RateLimitExceededException("Se alcanzo el limite diario de mensajes a Renasia");
+            throw new RateLimitExceededException(MENSAJE_LIMITE_DIARIO);
         }
     }
 

@@ -116,4 +116,24 @@ class PropuestaDeApagarDiaTest {
                 .isInstanceOf(ResultadoHerramienta.Fallo.class);
         verify(proponer, never()).proponer(any(), any(), any());
     }
+
+    private static HorariosDelDia pausado(LocalDate fecha) {
+        return new HorariosDelDia(fecha, 12, List.of(new HorarioDeHabito(MEDITAR, "Meditar", LocalTime.of(6, 0),
+                null, false, false, true, false, null)), CUOTA);
+    }
+
+    @Test
+    @DisplayName("bateria 2026-09-25: apagar o encender un dia de un habito pausado no se propone; apunta a reactivar")
+    void pausadoNoSeApagaNiSeEnciende() {
+        LocalDate viernes = HOY.plusDays(2);
+        when(horarios.deFecha(APRENDIZ, null)).thenReturn(pausado(HOY));
+        when(horarios.deFecha(APRENDIZ, viernes)).thenReturn(pausado(viernes));
+
+        for (String accion : new String[] {"apagar", "encender"}) {
+            ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, pedido(viernes, accion));
+            assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("'Meditar' esta pausado")
+                    .contains("reactivarlo").contains("se vuelve a pausar con esa fecha");
+        }
+        verify(proponer, never()).proponer(any(), any(), any());
+    }
 }

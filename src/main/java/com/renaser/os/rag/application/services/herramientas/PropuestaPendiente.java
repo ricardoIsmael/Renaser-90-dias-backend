@@ -32,8 +32,6 @@ final class PropuestaPendiente {
             log.warn("[rag] no se pudo guardar la propuesta de {}", invocacion.nombre(), falla);
             return ResultadoHerramienta.fallo("No pude preparar la confirmacion en este momento.");
         }
-        return ResultadoHerramienta.exito("Propuesta creada: " + resumen + " TODAVIA NO esta hecho: la persona "
-                + "tiene que tocar Confirmar en la app para que se aplique. No digas que ya quedo cambiado; dile "
-                + "que confirme con el boton.");
+        return ResultadoHerramienta.exito("Propuesta creada: " + resumen + " " + AvisoDePropuesta.COMO_DECIRLO);
     }
 }
