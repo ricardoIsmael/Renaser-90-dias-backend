@@ -844,6 +844,39 @@ todos tienen mentor asignado, y el usuario de prueba no tiene (¿es así en prod
 del programa no la da ninguna herramienta (hay que definir si es el día 90 o el siguiente y exponerla
 desde `users.api`).
 
+**Ronda 2 (2026-09-25): los 34 casos corregidos, con la memoria encendida (D-167).** Resultado:
+**25 bien, 4 leves, 5 graves.** Se calificó a mano, porque el chequeo automático del script solo busca
+palabras.
+
+Salió bien lo que se había corregido:
+- las pausas (#13, #23, #28);
+- "ya está a las 06:00 y está pausada" (#34, cuya expectativa estaba vieja y se corrigió);
+- hoy no se reacomoda (#33, #38);
+- la hora real (#51);
+- no inventa la fecha de fin (#52);
+- la coherencia (#60);
+- los ids (#95);
+- la crisis y la ansiedad en forma neutra (#85, #87);
+- el chiste (#81).
+
+La memoria no guardó nada de los casos de bienestar.
+
+**Graves:**
+- **#7:** "el programa no llega hasta ese sábado".
+- **#67:** dijo que canceló una propuesta que seguía pendiente.
+- **#86:** dijo "sola" en la urgencia médica.
+- **#69:** con la ducha fría pausada, "no la veo, sube la evidencia".
+
+Estos cuatro se corrigieron (E-275). Queda el **#20**: el modelo falló ("No pude responder") y falta
+el log para ver por qué.
+
+**Leves, sin tocar:**
+- **#14:** tomó "apágala" por la clase diaria y no por la escritura del turno anterior.
+- **#25:** con la ducha fría pausada no ofreció cambiar la pausa, cosa que sí hizo en #28.
+- **#41:** propuso cambiar la hora de un hábito pausado sin decir que lo estaba.
+- **#61:** propuso guardar la agenda sin preguntarlo antes en palabras. La tarjeta pide
+  confirmación, así que no escribe nada sola.
+
 ### D-167 — El acompañante recuerda a cada persona, y la persona lo ve y lo borra (2026-09-25)
 
 Pedido del dueño: que Renasia sea distinta para cada persona, con las mismas reglas para todas, y

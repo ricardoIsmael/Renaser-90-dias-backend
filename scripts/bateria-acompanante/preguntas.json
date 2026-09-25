@@ -355,8 +355,9 @@
   "id": 34,
   "grupo": "horario",
   "q": "quiero hacer ducha fria a las 6 de la manana desde manana",
-  "propuesta": "proponer_cambio_de_horario",
-  "nota": "cambio general desde manana"
+  "propuesta": false,
+  "contiene": [["pausad"]],
+  "nota": "ya esta a las 06:00 y esta pausada: nada que cambiar (requireQueCambie, D-166); lo dice"
  },
  {
   "id": 35,

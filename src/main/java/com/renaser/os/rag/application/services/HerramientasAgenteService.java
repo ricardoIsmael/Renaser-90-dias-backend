@@ -3,6 +3,7 @@ package com.renaser.os.rag.application.services;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
+import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.services.herramientas.CompletacionDeHabito;
 import com.renaser.os.rag.application.services.herramientas.HerramientaAgente;
 import com.renaser.os.rag.application.services.herramientas.PropuestaDeMarcarHabito;
@@ -63,12 +64,20 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
      * "el mas proximo por vencer" uno que ya habia vencido y contaba los vencidos como pendientes.
      */
     private final Clock clock;
+    /**
+     * Para listar los pausados junto a los de hoy (bateria del 2026-09-25, ronda 2): un pausado no
+     * genera registro, y el modelo decia "no veo la ducha fria en tus habitos de hoy" y mandaba a
+     * subir evidencia, en vez de decir que esta pausada.
+     */
+    private final GestionarPlanDeHabitosPort planPort;
 
     public HerramientasAgenteService(ConsultarAgendaHabitosPort agendaHabitosPort,
                                      List<HerramientaAgente> adicionales,
-                                     PropuestaDeMarcarHabito propuestaDeMarcar, Clock clock) {
+                                     PropuestaDeMarcarHabito propuestaDeMarcar, Clock clock,
+                                     GestionarPlanDeHabitosPort planPort) {
         this.agendaHabitosPort = agendaHabitosPort;
         this.clock = clock;
+        this.planPort = planPort;
         this.adicionales = List.copyOf(adicionales);
         this.propuestaDeMarcar = propuestaDeMarcar;
         requireNombresUnicos();
@@ -151,7 +160,7 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
     private ResultadoHerramienta habitosDelDia(UserId actorId) {
         List<HabitoDelDia> habitos = agendaHabitosPort.deHoyDe(actorId);
         if (habitos.isEmpty()) {
-            return ResultadoHerramienta.exito("Hoy no tiene ningun habito generado.");
+            return ResultadoHerramienta.exito(("Hoy no tiene ningun habito generado." + pausados(actorId)).trim());
         }
         StringBuilder texto = new StringBuilder();
         Instant ahora = clock.now();
@@ -178,7 +187,27 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
         if (vencidos > 0) {
             texto.append(" ").append(vencidos).append(" ya vencieron hoy: no los cuentes como pendientes.");
         }
+        texto.append(pausados(actorId));
         return ResultadoHerramienta.exito(texto.toString().trim());
+    }
+
+    /**
+     * Los pausados no estan en la lista de hoy (no generan registro): se nombran aparte para que el
+     * modelo diga "esta pausado" en vez de "no lo veo". Best-effort: sin el plan, la lista de hoy
+     * sale igual.
+     */
+    private String pausados(UserId actorId) {
+        try {
+            List<String> titulos = planPort.planDe(actorId).habitos().stream()
+                    .filter(GestionarPlanDeHabitosPort.HabitoDelPlan::pausadoHoy)
+                    .map(GestionarPlanDeHabitosPort.HabitoDelPlan::titulo)
+                    .toList();
+            return titulos.isEmpty() ? "" : "\nPausados (no se le piden ningun dia hasta que los reactive): "
+                    + String.join(", ", titulos) + ". Si pregunta por uno de estos, dile que esta pausado.";
+        } catch (RuntimeException falla) {
+            log.warn("[rag] no se pudieron leer los pausados del plan ({})", falla.getClass().getSimpleName());
+            return "";
+        }
     }
 
     /** Vencido = su plazo ya paso. Un habito sin plazo no vence. */

@@ -1,5 +1,6 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.application.services.herramientas.HerramientaAgente;
@@ -33,6 +34,7 @@ class HerramientasAgenteServiceAdicionalesTest {
     private static final UserId APRENDIZ = UserId.of(UUID.randomUUID());
 
     private final ConsultarAgendaHabitosPort agenda = mock(ConsultarAgendaHabitosPort.class);
+    private final GestionarPlanDeHabitosPort plan = mock(GestionarPlanDeHabitosPort.class);
 
     /** Flag de la fase 2 apagado: estos casos son sobre las adicionales, no sobre las propuestas. */
     private PropuestaDeMarcarHabito sinPropuesta() {
@@ -43,7 +45,7 @@ class HerramientasAgenteServiceAdicionalesTest {
     @DisplayName("el acompanante recibe las originales y las adicionales; Sparkie ninguna")
     void seOfrecenSoloAlAcompanante() {
         var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()), sinPropuesta(),
-                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z")));
+                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z")), plan);
 
         assertThat(servicio.disponibles(AgenteConversacional.COMPANION))
                 .extracting(DefinicionHerramienta::nombre)
@@ -57,7 +59,7 @@ class HerramientasAgenteServiceAdicionalesTest {
     @DisplayName("una adicional se ejecuta con el actor de la conversacion y sus argumentos")
     void seEjecutaConElActor() {
         var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()), sinPropuesta(),
-                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z")));
+                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z")), plan);
 
         var resultado = servicio.ejecutar(APRENDIZ,
                 new InvocacionHerramienta(HerramientaDeEco.NOMBRE, Map.of("texto", "hola")));
@@ -69,7 +71,7 @@ class HerramientasAgenteServiceAdicionalesTest {
     @DisplayName("a una adicional tambien se le exigen sus argumentos obligatorios antes de ejecutarla")
     void seValidanLosObligatorios() {
         var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaDeEco()), sinPropuesta(),
-                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z")));
+                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z")), plan);
 
         var resultado = servicio.ejecutar(APRENDIZ, InvocacionHerramienta.sinArgumentos(HerramientaDeEco.NOMBRE));
 
@@ -81,7 +83,7 @@ class HerramientasAgenteServiceAdicionalesTest {
     @DisplayName("si una adicional lanza, el modelo recibe un motivo legible y no la excepcion")
     void unaExcepcionSeTraduce() {
         var servicio = new HerramientasAgenteService(agenda, List.of(new HerramientaQueRevienta()), sinPropuesta(),
-                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z")));
+                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z")), plan);
 
         var resultado = servicio.ejecutar(APRENDIZ, InvocacionHerramienta.sinArgumentos(HerramientaQueRevienta.NOMBRE));
 
@@ -105,7 +107,7 @@ class HerramientasAgenteServiceAdicionalesTest {
         };
 
         assertThatThrownBy(() -> new HerramientasAgenteService(agenda, List.of(copiaDeUnaOriginal), sinPropuesta(),
-                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z"))))
+                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-25T15:00:00Z")), plan))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA);
     }

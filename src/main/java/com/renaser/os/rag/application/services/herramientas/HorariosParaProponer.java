@@ -40,9 +40,29 @@ final class HorariosParaProponer {
         HorariosDelDia dia = leer(puerto, actorId, fecha);
         if (dia.diaPrograma() < PRIMER_DIA_DEL_PROGRAMA || dia.diaPrograma() > ULTIMO_DIA_DEL_PROGRAMA) {
             throw new PropuestaImposibleException("El " + ArgumentosDeHorario.texto(dia.fecha())
-                    + " queda fuera de sus 90 dias de programa: no hay horario que cambiar ese dia.");
+                    + " queda fuera de sus 90 dias de programa: no hay horario que cambiar ese dia."
+                    + conLaFechaDeHoy(puerto, actorId, fecha));
         }
         return dia;
+    }
+
+    /**
+     * Bateria del 2026-09-25 (ronda 2): a "saltate la clase diaria este sabado" el acompanante
+     * contesto "el programa no llega hasta ese sabado", en el dia 18 de 90. Una fecha mal armada (el
+     * año, casi siempre) caia aca, y el modelo repetia el motivo sin darse cuenta. Con la fecha de
+     * hoy al lado puede corregirla y volver a intentar.
+     */
+    private static String conLaFechaDeHoy(ConsultarHorariosPort puerto, UserId actorId, LocalDate fecha) {
+        if (fecha == null) {
+            return "";
+        }
+        try {
+            HorariosDelDia hoy = leer(puerto, actorId, null);
+            return " Hoy es " + ArgumentosDeHorario.texto(hoy.fecha()) + ", su dia " + hoy.diaPrograma()
+                    + " de 90: revisa el año y la fecha que pediste y vuelve a intentar.";
+        } catch (RuntimeException sinHoy) {
+            return "";
+        }
     }
 
     static HorarioDeHabito habito(HorariosDelDia dia, UUID habitoId) {
