@@ -36,6 +36,7 @@ public final class RegistroHabito {
     private final LocalDate fechaEjecucion;
     private final int diaPrograma;
     private final TipoDia tipoDia;
+    /** Snapshot del DIA, no del catalogo: {@code Habito.esOpcionalEnDia} (Ciclos de Intoxicacion, D-169). */
     private final boolean esOpcional;
     private EstadoRegistro estado;
     private int puntosOtorgados;

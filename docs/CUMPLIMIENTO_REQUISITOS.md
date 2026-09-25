@@ -46,9 +46,9 @@ Esto es lo que justifica haberlo leído con cuidado. Varias reglas que dejamos e
 
 | Pregunta abierta nuestra | Respuesta del documento | Acción |
 |---|---|---|
-| **Q-2** (`points`): ¿cuál es la fórmula de la Ley VI? | `Coherencia = (Hábitos Obligatorios Completados / Total Obligatorios) × 100`. Los opcionales y los de intoxicación **nunca** reducen el porcentaje ni la racha | Implementable ya. `RegistrarCoherenciaDiariaUseCase` existe y espera exactamente este valor |
+| **Q-2** (`points`): ¿cuál es la fórmula de la Ley VI? | `Coherencia = (Hábitos Obligatorios Completados / Total Obligatorios) × 100`. Los opcionales y los de intoxicación **nunca** reducen el porcentaje ni la racha | Implementable ya. `RegistrarCoherenciaDiariaUseCase` existe y espera exactamente este valor. *Actualizado 2026-09-25 (D-169): los hábitos de los días de intoxicación ya nacen opcionales, así que sin cumplir no bajan el semáforo ni el ranking; la fórmula de RF-24 sigue sin llamador.* |
 | **Semáforo diario** (no lo teníamos ni como pregunta) | Verde ≥80%, Amarillo 60–79%, Rojo <60% | Regla nueva, hoy no existe en el código |
-| **Ciclos de intoxicación** — `resolverTipoDia` los deja fuera con un comentario explícito | Días **8-10 (VER)**, **17-19 (CORTAR)**, **26-28 (RENASER)**. Todos los hábitos pasan a opcionales **salvo la publicación diaria en comunidad** | Desbloquea `TipoDia.INTOXICACION` y `Habito.obligatorioEnIntoxicacion`, que ya están modelados pero nunca se activan |
+| **Ciclos de intoxicación** — `resolverTipoDia` los deja fuera con un comentario explícito | Días **8-10 (VER)**, **17-19 (CORTAR)**, **26-28 (RENASER)**. Todos los hábitos pasan a opcionales **salvo la publicación diaria en comunidad** | ✅ **Implementado (D-169, 2026-09-25).** `CicloIntoxicacion` + `Habito.esOpcionalEnDia`: el registro del día nace con `es_opcional = true` salvo los `obligatorio_en_intoxicacion` (POST DIARIO EN COMUNIDAD, ya marcado en V4). `TipoDia.INTOXICACION` no hizo falta: el tipo del día elige horario, no exigencia. *(Decía: «Desbloquea `TipoDia.INTOXICACION` y `Habito.obligatorioEnIntoxicacion`, que ya están modelados pero nunca se activan».)* |
 | **Disparo del Verdugo** — teníamos el registro de eventos, no la detección | Semáforo Rojo **o** 2 días seguidos críticos → `EnforcerEvent` ACTIVE | Regla concreta, implementable |
 | **Cupo de cambio de horarios** | Máximo **3 por semana de programa**, y aplican desde las **00:00 del día siguiente** (para que nadie manipule el día en curso) | Justifica `historial_cambios_horario` + `cambios_horario_pendientes`, hoy sin uso |
 | **Penalizaciones de puntos** | Evidencia rechazada por IA: **−5**. Override manual del admin: **+5**. Semana sin phone-free: **−10**. Roca diaria completada: **+10** | Números duros para `points` |
@@ -185,7 +185,9 @@ El [`PLAN_INTEGRACION_FRONTEND.md`](PLAN_INTEGRACION_FRONTEND.md) listaba 31 GAP
 
 **Prioridad 2 — Lo barato que cierra requisitos enteros.** `POST /classroom/clase-diaria` (RF-36), listado de evidencias y de la cola de revisión (RF-20), escritura de entrada de diario (RF-30, que además desbloquea el Espejo de la Sombra que ya construimos), auditoría de cambio de rol (RF-04, que es una Ley incumplida). Todos son de días, no de semanas.
 
-**Prioridad 3 — Ciclos de intoxicación (regla de negocio nueva).** `TipoDia.INTOXICACION` y `Habito.obligatorioEnIntoxicacion` ya existen sin usarse; solo falta la función que dice qué días son. Es chico y tiene impacto directo en la coherencia de Prioridad 1.
+**Prioridad 3 — Ciclos de intoxicación (regla de negocio nueva).** ✅ **Hecho el 2026-09-25 (D-169).** La función que dice qué días son es `CicloIntoxicacion` (dominio de `habits`), `Habito.obligatorioEnIntoxicacion` ya se usa, y el efecto llega al semáforo (D-168) y al % de hábitos del ranking (`PorcentajeHabitos`, la Ley VI portada de `coherence.ts`) por el `es_opcional` de cada registro. `TipoDia.INTOXICACION` no hizo falta.
+
+> **Corregido 2026-09-25 (D-169).** Decía: «`TipoDia.INTOXICACION` y `Habito.obligatorioEnIntoxicacion` ya existen sin usarse; solo falta la función que dice qué días son. Es chico y tiene impacto directo en la coherencia de Prioridad 1.»
 
 **Prioridad 4 — Personalización de hábitos (RF-10, 11, 12, 16, 17).** Es la bolsa grande. Son 5 requisitos y 5 de las 7 tablas sin uso. Merece su propio lote.
 

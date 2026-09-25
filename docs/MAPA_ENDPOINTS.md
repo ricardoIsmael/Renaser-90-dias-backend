@@ -298,7 +298,10 @@ Esto es lo más barato del backlog. Hay dominio, puertos y persistencia construi
 | Auditoría de cambio de rol | `PATCH /users/{id}/role` ya funciona, solo no deja rastro | `auditoria_cambios_rol` |
 | Listado de evidencias | Repositorio y proyección ya existen, falta la consulta | *(ninguna)* |
 | Ranking por célula | `points` ya calcula y guarda snapshots | `ranking_celulas` |
-| Ciclos de intoxicación | `TipoDia.INTOXICACION` + `Habito.obligatorioEnIntoxicacion` ya modelados | *(ninguna)* |
+| ~~Ciclos de intoxicación~~ ✅ **Hecho (D-169, 2026-09-25)**, sin endpoint nuevo: se ve en el `esOpcional` de cada track | `Habito.obligatorioEnIntoxicacion` (V4 ya lo marca en el post diario) + `CicloIntoxicacion`. `TipoDia.INTOXICACION` no hizo falta | *(ninguna)* |
+
+> **Corregido 2026-09-25 (D-169).** La fila de los ciclos de intoxicación decía «`TipoDia.INTOXICACION` +
+> `Habito.obligatorioEnIntoxicacion` ya modelados»: ya está construido, y sin usar `TipoDia.INTOXICACION`.
 
 ### Categoría B — Falta el endpoint, el resto está
 

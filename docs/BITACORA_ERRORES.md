@@ -8584,3 +8584,59 @@ sesión quedó avisada de seguir desde `V69`.
 **Cómo evitar que vuelva a pasar.** Antes de integrar una rama con migraciones nuevas: mirar el máximo aplicado
 en la base local (la consulta de arriba; la tabla está en `public`, no en `renaser`) y los archivos de la otra
 rama, y renumerar lo propio por encima. Con varias sesiones en paralelo, avisar el número que se toma.
+
+## E-263 · Editar un hábito desde el panel admin apaga `obligatorio_en_intoxicacion` sin avisar
+
+**Síntoma (encontrado leyendo código el 2026-09-25, al implementar D-169; no hay mensaje: pasa en
+silencio).** `GET /api/v1/admin/habits` (`AdminHabitResponse`) no devuelve `mandatoryOnIntoxication`, y
+`POST /api/v1/admin/habits/{id}` (`UpdateHabitRequest`) es un reemplazo completo con `boolean
+mandatoryOnIntoxication` primitivo: si el formulario no lo manda, llega `false`. Editar, por ejemplo, la
+descripción de POST DIARIO EN COMUNIDAD desde el panel lo dejaría **opcional en los días de intoxicación**.
+
+**Causa real.** La bandera no tenía ningún efecto hasta D-169, así que nadie notó que el formulario de edición
+no puede hidratarla: la respuesta del listado no la trae.
+
+**Solución.** Ninguna en este cambio (se reporta, regla 00). En los repos del frontend de esta máquina no hay
+llamadores de ese endpoint (buscado `mandatoryOnIntoxication` y `/api/v1/admin/habits`).
+
+**Cómo evitar que vuelva a pasar.** Exponer `mandatoryOnIntoxication` en `AdminHabitResponse` y aceptar
+`Boolean` nulo como «conservar» en `UpdateHabitRequest`, con una prueba de que editar la descripción no toca la
+bandera. Mientras tanto, comprobar en la base que el post la conserva:
+`SELECT titulo, obligatorio_en_intoxicacion FROM renaser.habitos WHERE clave_sistema = 'COMMUNITY_POST';`
+tiene que dar `true`.
+
+## E-264 · `GenerarTracksDelDiaUseCase.generar(participante, fecha)` guarda el día de programa de HOY en registros de otra fecha
+
+**Síntoma (encontrado leyendo código el 2026-09-25, D-169).** `RegistroService.generarInterno` usa
+`progreso.diaPrograma()` —el día de programa de HOY en la zona de la persona— para cualquier `fecha` que reciba.
+Por las dos vías de producción (`generarDiaCompletoEnSuZona` y `generarDisponiblesAhora`) la fecha es hoy y los
+dos datos coinciden; `generar(participante, fecha)` con otra fecha deja un `dia_programa` que no es el de esa
+fecha y, desde D-169, un `es_opcional` calculado con ese día.
+
+**Causa real.** El método no tiene llamador en producción: solo lo usan `RegistroServiceTest`,
+`PausaHabitoPersonalIT` y `CrearHabitoPersonalGeneraTrackTransaccionIT`.
+
+**Solución.** Ninguna en este cambio (se reporta, regla 00). D-169 calcula `es_opcional` con el mismo
+`dia_programa` que se guarda en la fila, así que el registro por lo menos no se contradice a sí mismo.
+
+**Cómo evitar que vuelva a pasar.** Si `generar(fecha)` pasa a usarse en producción, derivar el día de esa
+fecha como ya hacen `HorarioDelDiaFinderService` y `ConsultaPreferenciasHorarioService` (`diaPrograma` más los
+días entre hoy y `fecha`, acotado a 0..90), o sacar el método del puerto.
+
+## E-265 · En una sesión aislada en un worktree se rechazan comandos con valores calculados (`sed` con variables)
+
+**Síntoma (agente de D-169, 2026-09-25, trabajando sobre una copia en el scratchpad, fuera del repo).**
+*"This session is isolated in the worktree /home/ricardo/Documentos/Renaser/Renaser-90-dias-backend/.claude/worktrees/semaforo-aprendiz,
+but this command runs sed with a value computed at runtime (the variable F) where an option may stand [...]
+Refusing to run it — a worktree-isolated session's git operations must target its own worktree."* Lo mismo con
+`sed -n "$(grep ...)"` («a value computed at runtime (command output)») y con `docker ps --format '{{.Names}}...'`
+(«inside a construct too complex to verify»).
+
+**Causa real.** El guardia del aislamiento no puede probar que un comando con un argumento calculado en tiempo
+de ejecución no sea `git`, y lo rechaza aunque no toque ningún repositorio. Pariente de E-259.
+
+**Solución.** Rutas y valores literales en el comando, o un script propio en el scratchpad que haga el cambio
+(así se aplicaron y revirtieron las mutaciones de prueba de D-169 y se insertó su fila en §8).
+
+**Cómo evitar que vuelva a pasar.** En una sesión aislada, escribir los comandos con rutas literales y, para
+ediciones repetidas, usar un script con las rutas adentro en vez de variables de shell.

@@ -29,7 +29,7 @@ contratos: backend, app y agentes trabajan contra lo que dice acá. Si algo camb
 | Lo completado **tarde** | Hoy la app permite completar días pasados (hábito EXPIRADO→COMPLETADO, objetivo sin límite de fecha). Cuenta para su día **hasta el cierre del sábado**; lo reportado ya no cambia. |
 | Qué días se miden | Del **día 1 al día 90** del programa (con los ajustes de día del admin). Día 0 y días después de graduarse, no. |
 | Quién se mide | **Aprendiz** con programa activado: obligatorio, no se puede apagar. **Mentor, líder, admin y alquimista con programa propio**: se mide por defecto y lo pueden **pausar con fecha de regreso** (esos días no se miden ni salen en rojo; lo anterior se conserva; al pasar la fecha vuelve solo; no borra nada). |
-| Días de intoxicación (8-10, 17-19, 26-28) | La especificación los vuelve opcionales, pero `habits` todavía no lo hace (`TipoDia.INTOXICACION` sin uso). **El semáforo no lo inventa**: cuenta lo que `habits` marque como opcional. Cuando `habits` lo implemente, el semáforo lo toma solo. |
+| Días de intoxicación (8-10, 17-19, 26-28) | `habits` los genera opcionales salvo la publicación diaria en comunidad (D-169). **El semáforo no lo inventa**: cuenta lo que `habits` marque como opcional (`ConteoDiarioHabitos.calificables()`), así que un hábito de esos días sin cumplir no cuenta y uno cumplido suma arriba y abajo. No cambió nada del semáforo para tomarlo. Vale para lo generado desde el 2026-09-25: los registros anteriores conservan su foto. *(Decía: «La especificación los vuelve opcionales, pero `habits` todavía no lo hace (`TipoDia.INTOXICACION` sin uso). […] Cuando `habits` lo implemente, el semáforo lo toma solo.»)* |
 
 ### 1.1 Quién ve qué
 
@@ -366,5 +366,5 @@ La app instalada ignora rutas que no conoce y solo se abre: no rompe nada.
 
 - Link de la mentoría de Darren (punto 8 del Excel): pedido del dueño, después.
 - Verdugo por semáforo rojo (RF-28): no se pidió.
-- Días de intoxicación como opcionales: es de `habits` (ver §1).
+- Días de intoxicación como opcionales: es de `habits` (ver §1), y ya está hecho allá (D-169) sin tocar el semáforo.
 - El «semáforo» del punto 10 del Excel (días sin responder): otro indicador.
