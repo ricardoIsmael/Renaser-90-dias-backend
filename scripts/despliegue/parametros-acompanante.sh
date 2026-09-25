@@ -4,6 +4,7 @@
 #
 #   ./scripts/despliegue/parametros-acompanante.sh preparar   # ANTES del push a master
 #   ./scripts/despliegue/parametros-acompanante.sh prender    # cuando la gente tenga la app nueva
+#   ./scripts/despliegue/parametros-acompanante.sh key        # solo cambiar la API key de Gemini
 #
 # `preparar` deja producción lista para el despliegue sin cambiarle nada a quien tiene la app de hoy.
 #   - Pide la API key nueva de Gemini sin mostrarla.
@@ -186,5 +187,7 @@ exigir_cuenta_de_produccion() {
 case "${1:-}" in
   preparar) exigir_cuenta_de_produccion preparar; preparar ;;
   prender) exigir_cuenta_de_produccion prender; prender ;;
-  *) echo "Uso: $0 preparar|prender" >&2; exit 2 ;;
+  key) exigir_cuenta_de_produccion key; key_de_gemini
+       echo "Listo. Falta reiniciar el contenedor para que la tome: docker restart backend (E-244)." ;;
+  *) echo "Uso: $0 preparar|prender|key" >&2; exit 2 ;;
 esac
