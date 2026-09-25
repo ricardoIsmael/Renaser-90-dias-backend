@@ -8968,7 +8968,9 @@ valid state for account"*.
 de producción (`302277511407`, la del rol del despliegue). `parametros-acompanante.sh` escribió todo
 allá: la key nueva de Gemini, los interruptores y los crons del semáforo. Producción nunca lo vio. La
 lectura de los parámetros "confirmaba" los valores porque también leía la cuenta equivocada. El
-perfil `renaser` que usa esta guía no existía en esa máquina.
+perfil `renaser` que usa la guía no existía en esa máquina: ahí el de producción se llama `prod`
+(`AWS_PROFILE=prod`), y `default` es la otra cuenta. Con `prod` se cargaron los interruptores; el
+dueño puso la key nueva en la consola, y el backend se reinició por SSM (health UP en 40 s).
 
 **Solución.** El script verifica la cuenta con `aws sts get-caller-identity` antes de escribir, y se
 detiene si no es `302277511407`. Hay que volver a correrlo con credenciales de producción (un perfil
