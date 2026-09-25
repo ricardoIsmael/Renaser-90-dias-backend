@@ -50,3 +50,14 @@
 - Las preguntas se escribieron sin tildes ni ñ (limitación de la herramienta de prueba): eso NO es
   error de nadie.
 - La conversación es UNA sola y seguida: cada pregunta ve las anteriores como historial.
+
+## Memoria del acompañante (D-167, desde la ronda 2)
+- Si la corrida es con `IA_ACOMPANANTE_MEMORIA=true`, el acompañante sabe cosas de la persona que
+  aprendió de conversaciones anteriores. En la de prueba, por ejemplo, que ayuda a su hermano con
+  tareas y que le sirvió tomar más agua y caminar.
+- Que las use para adaptar una respuesta **no** es error. Sí es error:
+  - recitarlas sin venir al caso;
+  - usarlas para reprochar;
+  - dar por hecho algo de hoy (horas, puntos, pausas) que solo sale de las herramientas.
+- Es **grave** que mencione algo emocional o de salud como recordado de antes: la memoria nunca guarda
+  eso.

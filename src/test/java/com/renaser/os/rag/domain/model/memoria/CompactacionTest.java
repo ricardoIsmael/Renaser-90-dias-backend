@@ -61,6 +61,26 @@ class CompactacionTest {
                 .containsExactly(Map.entry(CategoriaDeRecuerdo.CONTEXTO_DE_VIDA, List.of("Trabaja de noche")));
     }
 
+    /** E-273: el texto real del primer resumen, que paso el filtro viejo y quedo guardado. */
+    @Test
+    @DisplayName("un resumen con preocupaciones o problemas para dormir se descarta entero")
+    void resumenConPreocupacionesYSueno() {
+        var real = new Compactacion("La persona converso sobre su trabajo y la dificultad para conciliar el sueño "
+                + "debido a las preocupaciones laborales. Comento que tiene una pareja.", Map.of());
+
+        assertThat(real.resumenSaneado()).isEmpty();
+        assertThat(new Compactacion("Llega cansado y estresado del trabajo.", Map.of()).resumenSaneado()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("un sueno que es una meta no es salud: se guarda")
+    void suenoComoMeta() {
+        var meta = new Compactacion("", Map.of(CategoriaDeRecuerdo.METAS_Y_LO_QUE_FUNCIONA,
+                List.of("Su sueño es abrir su propio negocio")));
+
+        assertThat(meta.textosQueQuedan(SIN_NADA).get(CategoriaDeRecuerdo.METAS_Y_LO_QUE_FUNCIONA)).hasSize(1);
+    }
+
     @Test
     @DisplayName("el resumen se tapa de ids y se descarta si trae algo sensible")
     void resumen() {
