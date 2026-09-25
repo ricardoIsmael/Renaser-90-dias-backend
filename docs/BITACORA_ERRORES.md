@@ -8341,3 +8341,133 @@ comprobar porque la prueba no grababa la pantalla.
 (`adb shell screenrecord`) y avisar que nadie toque el emulador. Si pasa con la pantalla grabada y sin
 toques, sospechar de la hoja flotante (un toque que la atraviese) y registrar en la app desde qué
 botón salió el `cancelar`.
+
+## E-247 · El chat se quedaba sin respuesta cuando el modelo escribía mal el nombre de una herramienta
+
+**Síntoma.** Batería de 102 preguntas por el chat de la app (2026-09-25). *"entonces apagala solo el
+sabado"* y *"desactiva escritura libre nocturna todos los viernes"*: el mensaje de la persona quedaba
+guardado y la respuesta nunca llegaba. En el log del backend, literal:
+
+```
+WARN o.s.a.m.tool.DefaultToolCallingManager : LLM may have adapted the tool name 'proponer_horario_por_dia_semana', especially if the name was truncated due to length limits.
+WARN c.r.o.r.a.s.ConversacionRenasiaService : Fallo el streaming de respuesta del asistente
+java.lang.IllegalStateException: No ToolCallback found for tool name: proponer_horario_por_dia_semana
+```
+
+**Causa real.** El modelo pidió `proponer_horario_por_dia_semana`: le comió el "de" al nombre real,
+`proponer_horario_por_dia_de_semana`. Spring AI busca la herramienta por nombre y, si no la
+encuentra, **lanza** en vez de devolverle un error al modelo, así que el turno entero se cae. La voz en
+vivo no tenía el problema: ahí el nombre desconocido llega a `HerramientasAgenteService`, que
+devuelve un `Fallo` legible.
+
+**Solución (2026-09-25).** El modelo de chat de Gemini tiene su propio `ToolCallingManager`, con
+`ResolverDeHerramientasDesconocidas`: un nombre que no existe vuelve al modelo como
+`{"ok":false,"resultado":"No existe una herramienta llamada 'X'. Quisiste decir 'Y'..."}` (la más
+parecida por distancia de edición, hasta 6). No se ejecuta nada por parecido: solo se sugiere, y el
+modelo vuelve a llamar con el nombre bien escrito.
+
+**Cómo evitar que vuelva a pasar.** `ResolverDeHerramientasDesconocidasTest` fija el caso exacto. Ante
+cualquier `IllegalStateException` de Spring AI en el streaming, mirar primero el nombre de la
+herramienta que pidió el modelo en el `WARN` anterior.
+
+## E-248 · Al llegar al tope diario de mensajes, la app no recibía el aviso: el 429 no se podía escribir en el stream
+
+**Síntoma.** Misma batería, al pasar el mensaje 25 del día. En el log, literal:
+
+```
+WARN c.r.o.shared.web.GlobalExceptionHandler : 429 -> Too Many Requests: Se alcanzo el limite diario de mensajes a Renasia
+WARN .m.m.a.ExceptionHandlerExceptionResolver : Failure in @ExceptionHandler com.renaser.os.shared.web.GlobalExceptionHandler#handleRateLimit(RateLimitExceededException)
+org.springframework.web.HttpMediaTypeNotAcceptableException: No acceptable representation
+```
+
+**Causa real.** `POST /api/v1/renasia/mensajes` produce `text/event-stream`. La cuota se revisa antes de
+abrir el stream (`ConversacionRenasiaService.requireCuotaDisponible`), y el 429 que arma
+`GlobalExceptionHandler` es un cuerpo JSON que no se puede escribir con ese tipo de contenido. La app
+recibe una falla genérica en vez de "llegaste al límite de hoy".
+
+**Solución (2026-09-25, a pedido del dueño).** `GlobalExceptionHandler` fija
+`Content-Type: application/json` en todas sus respuestas de error (`comoJson`): con el tipo fijado,
+Spring no negocia contra el `produces` del endpoint y el 429 sale con su `{message}`. La app instalada
+ya maneja ese 429 (`RenasiaCuotaExcedidaError`: muestra el mensaje y no ofrece reintentar), así que no
+hace falta un binario nuevo. El mensaje pasó a ser legible para la persona:
+`ConversacionRenasiaService.MENSAJE_LIMITE_DIARIO` = *"Ya usaste todos tus mensajes de hoy. Vuelve
+mañana."* (antes: *"Se alcanzo el limite diario de mensajes a Renasia"*).
+
+**Cómo evitar que vuelva a pasar.** `ErroresAntesDelStreamTest` monta un endpoint `text/event-stream`
+que lanza el 429 antes de abrir el stream; contra el manejador anterior falla con el mismo
+`HttpMediaTypeNotAcceptableException` del log. Toda excepción que pueda salir de un endpoint SSE antes
+de abrir el stream necesita una prueba que mire lo que recibe el cliente, no solo el código de estado.
+
+## E-249 · El resumen de un cambio de hora siempre resta un cupo, aunque el cupo cuente hábitos distintos
+
+**Síntoma.** Misma batería. Para *Agua tibia con limón a las 5 am* el resumen dijo *"Usa 1 de sus 3
+cambios de esa semana: le quedarían 0"*, pero Agua tibia ya contaba esa semana: cambiarlo otra vez no
+gasta y seguía quedando 1.
+
+**Causa real.** `CuotaEdicionHorario` cuenta **hábitos distintos** reacomodados en la semana del
+programa (`HABITOS_POR_SEMANA = 3`). `HorariosParaProponer.gastoDeCupo` siempre resta 1, y
+`requireCupo` rechaza con cupo 0 aunque el hábito ya cuente, algo que `habits` sí permitiría. La
+herramienta no sabe qué hábitos ya cuentan: `habits.api` no lo expone.
+
+**Solución.** Pendiente: arreglarlo pide que `HorarioDelDiaFinder` diga, por hábito, si ya cuenta en la
+semana. Se reporta al dueño y no se mezcla con D-165.
+
+**Cómo evitar que vuelva a pasar.** Cuando una regla cuenta "cosas distintas", las herramientas que la
+anuncian tienen que recibir esa distinción de quien la calcula, no inferirla con una resta.
+
+## E-270 · El acompañante mostró los ids internos de la base (UUID de los hábitos)
+
+**Síntoma.** Batería de 102 preguntas (2026-09-25). *"dame el id de mi usuario y los ids de mis
+habitos"* → la respuesta listó 15 UUID reales de `habitos` (por ejemplo, *"Despertar:
+`899a2151-…`"*), y quedaron guardados en `mensajes_renasia`. El dueño: *"esto es peligroso, no
+podemos brindar ids de una BD, estamos filtrando datos"*.
+
+**Causa real.** Las herramientas le pasan al modelo los ids que necesita para llamar a otras
+herramientas (`habito_id`, `id` de registro), y nada impedía que los repitiera. El prompt no lo
+prohibía de forma explícita, y aunque lo hiciera, un prompt no es un control.
+
+**Solución (2026-09-25).** `FiltroDeIdentificadores` (dominio) tapa todo UUID con "(dato interno)"
+antes de que el texto se emita o se guarde: en el chat, sobre el stream (retiene al final de cada
+pedazo lo que podría ser un id a medio llegar, desde un borde de palabra); en la voz en vivo, al
+guardar el turno. Además, el prompt lo prohíbe.
+
+**Cómo evitar que vuelva a pasar.** `FiltroDeIdentificadoresTest` incluye un UUID partido en cuatro
+pedazos. Todo dato que una herramienta necesite y la persona no, pasa por este filtro; no alcanza con
+pedírselo al modelo.
+
+## E-271 · "Qué me toca hoy" daba plazos en UTC y contaba los hábitos vencidos como pendientes
+
+**Síntoma.** Misma batería. *"que me toca hacer hoy?"* a las 11:22 de Lima → *"El más próximo por
+vencer es Ritual Tierra - Agua - Fuego (mañana)"*, que había vencido a las 09:10. *"Tienes 25 hábitos
+pendientes"*: dos ya estaban vencidos.
+
+**Causa real.** `consultar_habitos_del_dia` escribía `vence=2026-09-25T14:10:00Z` (un `Instant`, en
+UTC) y el modelo lo leía como hora local. Y `sigueEnJuego()` es solo `puntosEnJuego != null`: un
+hábito vencido, con 0 puntos, seguía contando.
+
+**Solución (2026-09-25).** `HerramientasAgenteService` recibe el `Clock` (regla 02) y escribe
+`vence_en=45 min` o `ya_vencio=si`: relativo, sin zona que interpretar. Los vencidos no suman a
+"en juego" ni a los pendientes, y se avisa "N ya vencieron hoy: no los cuentes como pendientes".
+
+**Cómo evitar que vuelva a pasar.** Nunca darle al modelo un instante en UTC para que lo convierta:
+o hora local con la zona, o tiempo relativo calculado por el código.
+`HerramientasAgenteServiceTest.vencidoNoCuenta` falla contra el código anterior.
+
+## E-272 · Escribir por `adb input text` en el chat de la app la recargaba ("rr" de React Native)
+
+**Síntoma.** Al automatizar la batería escribiendo en el chat del emulador, el panel se cerraba, la
+pantalla quedaba en blanco y la app volvía a Hoy, con la sesión intacta. Pasaba con *"pausa la
+pastilla renacer…"* y no con *"apaga la clase diaria…"*.
+
+**Causa real.** `adb input text` manda eventos de tecla. El Modal de React Native reenvía las teclas a
+la Activity (para el menú de desarrollo), y dos "r" en menos de 200 ms son el atajo que recarga la app
+en desarrollo. "renacer" las tiene. Un segundo detalle: el autocorrector del teclado cambia palabras
+("termina" → "terminar").
+
+**Solución.** En el script de la batería (`scripts/bateria-acompanante/correr.py`): escribir en trozos
+con a lo sumo una "r" y una pausa entre ellos, escribir solo con el teclado abierto (sin foco, las
+teclas le llegan a la app) y aceptar un parecido alto con lo escrito.
+
+**Cómo evitar que vuelva a pasar.** Al automatizar la app en modo desarrollo, nunca mandar texto
+largo con `adb input text` de una vez. Si la pantalla queda en blanco y la app vuelve sola, es una
+recarga, no una caída: el PID de la app no cambia.
