@@ -3,6 +3,8 @@ package com.renaser.os.rag.application.services;
 import com.renaser.os.rag.application.ports.in.conversacion.ObtenerHistorialUseCase;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
+import com.renaser.os.rag.application.ports.in.memoria.CompactarMemoriaUseCase;
+import com.renaser.os.rag.application.ports.in.memoria.ConsultarMemoriaUseCase;
 import com.renaser.os.rag.application.ports.in.propuesta.ConsultarPropuestasDelTurnoUseCase;
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.in.seguridad.RevisarPatronDeMalestarUseCase;
@@ -26,6 +28,7 @@ import com.renaser.os.rag.domain.model.conversacion.FuenteMensaje;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasiaId;
+import com.renaser.os.rag.domain.model.memoria.MemoriaDeRenasia;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -152,6 +155,9 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      * {@link #textoDeApoyo}: no clasifica ni diagnostica nada, cuenta repeticiones. */
     private final RevisarPatronDeMalestarUseCase revisarPatronDeMalestarUseCase;
     private final ConsultarPropuestasDelTurnoUseCase propuestasDelTurno;
+    /** D-167: lo que el acompanante sabe de la persona, y la compactacion despues de cada turno. */
+    private final ConsultarMemoriaUseCase memoriaUseCase;
+    private final CompactarMemoriaUseCase compactarMemoriaUseCase;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
@@ -166,6 +172,8 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                                        ConsultarSituacionDelAprendizPort situacionPort,
                                        RevisarPatronDeMalestarUseCase revisarPatronDeMalestarUseCase,
                                        ConsultarPropuestasDelTurnoUseCase propuestasDelTurno,
+                                       ConsultarMemoriaUseCase memoriaUseCase,
+                                       CompactarMemoriaUseCase compactarMemoriaUseCase,
                                        Clock clock, IdGenerator idGenerator) {
         this.userSummaryFinder = userSummaryFinder;
         this.controlCuotaRenasiaPort = controlCuotaRenasiaPort;
@@ -180,6 +188,8 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         this.situacionPort = situacionPort;
         this.revisarPatronDeMalestarUseCase = revisarPatronDeMalestarUseCase;
         this.propuestasDelTurno = propuestasDelTurno;
+        this.memoriaUseCase = memoriaUseCase;
+        this.compactarMemoriaUseCase = compactarMemoriaUseCase;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
@@ -219,7 +229,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         Flux<EventoRenasia> delModelo = sinIdentificadores(chatIAPort.responder(new Consulta(command.agente(),
                 command.actorId(), command.pregunta(), contexto, command.ambito(), historial,
                 herramientasUseCase.disponibles(command.agente()),
-                situacionPort.de(command.actorId()).orElse(null), command.canal())));
+                situacionPort.de(command.actorId()).orElse(null), command.canal(), memoriaDe(command))));
         return conApoyoAntesDelFin(conPropuestasAntesDelFin(delModelo, command.actorId(), inicioDelTurno), apoyo)
                 .doOnNext(evento -> acumularTexto(evento, respuestaCompleta))
                 .concatMap(evento -> agregarFuentesAntesDeFin(evento, fragmentos))
@@ -233,6 +243,12 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                 // Se emite un `error` apto para mostrar y despues el `fin` que el contrato SSE exige.
                 .onErrorResume(error -> Flux.just(new EventoRenasia.Error(mensajeParaLaPersona(error)),
                         new EventoRenasia.Fin()));
+    }
+
+    /** D-167: solo el acompanante recuerda; el tutor de cursos es otra memoria (D-102) y no la tiene. */
+    private MemoriaDeRenasia memoriaDe(PreguntarRenasiaCommand command) {
+        return command.agente() == AgenteConversacional.COMPANION
+                ? memoriaUseCase.paraConversar(command.actorId()).orElse(null) : null;
     }
 
     /**
@@ -414,6 +430,11 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                 .toList();
         saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeAsistente(MensajeRenasiaId.of(idGenerator.newId()),
                 command.actorId(), command.agente(), contenido, fuentes, clock.now()));
+        // D-167: despues de guardar la respuesta, nunca antes (el turno tiene que estar completo). No
+        // bloquea: si hace falta compactar, corre en segundo plano.
+        if (command.agente() == AgenteConversacional.COMPANION) {
+            compactarMemoriaUseCase.compactarEnSegundoPlano(command.actorId());
+        }
     }
 
     /** Ver el comentario en {@link #preguntar}: del mas viejo al mas nuevo, sin la pregunta actual. */

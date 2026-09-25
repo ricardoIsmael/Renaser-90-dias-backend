@@ -69,7 +69,7 @@ class GeminiLiveAdapter implements ConversacionEnVivoPort {
         WebSocket webSocket = conectar(recepcion);
         try {
             String setup = MensajesGeminiLive.setup(propiedades.modelo(), propiedades.voz(),
-                    prompt.para(apertura.situacion()), apertura.herramientas());
+                    prompt.para(apertura.situacion(), apertura.memoria()), apertura.herramientas());
             webSocket.sendText(setup, true).get(propiedades.timeoutMs(), TimeUnit.MILLISECONDS);
             recepcion.setup().get(propiedades.timeoutMs(), TimeUnit.MILLISECONDS);
             return new SesionGeminiLive(webSocket);

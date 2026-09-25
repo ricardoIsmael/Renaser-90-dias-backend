@@ -427,6 +427,14 @@ renaser:
       # (RENASER_IA_ACOMPANANTE_LOGROSENCHATPLANTILLARACHASINCELULAR, etc.).
       logros-en-chat-plantilla-racha-sin-celular: "¡Lo lograste! Completaste tu día sin celular: 24 horas enteras. Eso es constancia de verdad. ¿Cómo te sentiste?"
       logros-en-chat-plantilla-roca-completada: "¡Roca completada! Un paso firme más hacia lo que te propusiste. Bien hecho."
+      # Memoria del acompanante (D-167, V67): lo que aprende de cada persona (contexto de vida, metas
+      # y lo que le funciona, como prefiere el trato; nunca lo emocional ni la salud) entra al prompt
+      # del chat y de la voz en vivo, y cada ~10 idas y vueltas se resume la conversacion en segundo
+      # plano con el modelo de texto. La persona lo ve y lo borra en su perfil.
+      #
+      # FALSE por defecto: apagada, el prompt queda byte por byte como antes y no se compacta nada.
+      # Lo que ya estaba guardado se sigue viendo en el perfil, para poder borrarlo.
+      memoria: ${IA_ACOMPANANTE_MEMORIA:false}
   email:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}
