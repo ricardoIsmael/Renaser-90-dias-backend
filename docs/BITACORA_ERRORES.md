@@ -8946,3 +8946,12 @@ el error estaba en la fecha que llegaba.
 - La lección: un dato que el modelo necesita para no equivocarse va en el prompt o en la salida de la
   herramienta, nunca se da por sabido. Y si el modelo igual lo arma mal, se corrige en el servidor,
   donde es determinístico.
+
+**Verificado en el emulador (2026-09-25, 16:40), con el backend en c28dd3b7.**
+- Salen bien "apaga la escritura el martes 29 de septiembre" (2026-09-29), "ducha fría el sábado 3
+  de octubre" (2026-10-03), "¿qué hábitos tengo el 10 de octubre?" y "¿qué fecha es hoy?".
+- "El 5 de noviembre, clase diaria a las 7" dijo una vez que "no se puede cambiar de hora". Es falso,
+  porque a un obligatorio sí se le cambia la hora (D-165). Pedido en dos pasos, propuso bien el
+  jueves 2026-11-05. Es variación del modelo, no un error del código, y queda anotado como límite
+  conocido de flash-lite en D-166.
+
