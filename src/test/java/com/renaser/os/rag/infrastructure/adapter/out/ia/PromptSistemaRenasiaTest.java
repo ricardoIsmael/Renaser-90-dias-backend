@@ -156,8 +156,10 @@ class PromptSistemaRenasiaTest {
         // Repetia la propuesta con negritas en vez de una frase corta.
         assertThat(render).contains("Te deje la propuesta abajo para").contains("Nada de negritas");
         // Invento la hora (18:03 a las 11:22), la fecha de fin y como se calcula la coherencia.
-        assertThat(render).contains("La hora y la fecha de hoy").contains("nunca las digas de memoria")
+        assertThat(render).contains("sale solo de consultar_resumen_del_programa; nunca la digas de")
                 .contains("ni digas una").contains("explicalo solo con lo que dice la");
+        // Ronda 2 (#41): armo "el 2 de octubre" con el año de su entrenamiento. La fecha de hoy va arriba.
+        assertThat(render).contains("La fecha de hoy, con su año").contains("nunca de lo que recuerdes");
         // Hablo del horario de un habito pausado sin decir que estaba pausado.
         assertThat(render).contains("el horario").contains("nuevo se vera cuando lo reactive");
         // "No estas sola" a un hombre: lo dictaba el propio bloque de crisis.
