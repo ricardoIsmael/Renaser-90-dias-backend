@@ -8924,14 +8924,25 @@ es…" al rechazo, no alcanzó: el modelo repitió el rechazo en vez de reintent
 bien el día de una fecha futura (`HorarioDelDiaFinderService`: día de hoy más los días que faltan);
 el error estaba en la fecha que llegaba.
 
-**Solución.** `SituacionDelAprendiz` trae la fecha de hoy en la zona de la persona (regla 02:
-`clock.now().atZone(zona)`), y el prompt dice "Hoy es viernes 25/09/2026, su día 18 de 90…". Vale
-para el chat y para la voz en vivo. La regla del prompt dice que toda fecha se arma a partir de esa,
-nunca de memoria.
+**Solución, en dos partes.**
+- `SituacionDelAprendiz` trae la fecha de hoy en la zona de la persona (regla 02:
+  `clock.now().atZone(zona)`), y el prompt dice "Hoy es viernes 25/09/2026, su día 18 de 90…". Vale
+  para el chat y para la voz en vivo. La regla del prompt dice que toda fecha se arma a partir de esa,
+  nunca de memoria.
+- **No alcanzó.** Con la fecha en el prompt, "¿qué fecha es hoy?" salió bien, pero "el 5 de
+  noviembre" y "el martes 29 de septiembre" volvieron a dar "fuera de tus 90 días". El modelo sabía
+  el año y aun así lo ponía mal al armar el argumento. Por eso las herramientas de horarios
+  (`consultar_horarios`, `proponer_apagar_dia`, `proponer_cambio_de_horario`) corrigen el año con
+  `HorariosParaProponer.dentroDelPrograma`: si la fecha pedida cae fuera del programa y con el año
+  de hoy (o el siguiente) cae dentro, se usa esa. La tarjeta muestra la fecha corregida con su día
+  de la semana, y la persona confirma.
 
 **Cómo evitar que vuelva a pasar.**
 - `ConsultarSituacionDelAprendizAdapterTest.hoyEnSuZona`, con el reloj a las 03:00 UTC, que en Lima
   todavía es el día anterior.
 - `GoogleGenAiRenasiaChatAdapterTest.laFechaDeHoyLlegaAlPrompt`.
+- `ConsultarHorariosHerramientaTest.fechaConAnioViejoSeCorrige` y
+  `PropuestaDeApagarDiaTest.fechaConAnioViejoSeCorrige`.
 - La lección: un dato que el modelo necesita para no equivocarse va en el prompt o en la salida de la
-  herramienta; nunca se da por sabido.
+  herramienta, nunca se da por sabido. Y si el modelo igual lo arma mal, se corrige en el servidor,
+  donde es determinístico.
