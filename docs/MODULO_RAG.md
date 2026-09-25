@@ -870,12 +870,24 @@ La memoria no guardó nada de los casos de bienestar.
 Estos cuatro se corrigieron (E-275). Queda el **#20**: el modelo falló ("No pude responder") y falta
 el log para ver por qué.
 
-**Leves, sin tocar:**
+**Leves:**
 - **#14:** tomó "apágala" por la clase diaria y no por la escritura del turno anterior.
 - **#25:** con la ducha fría pausada no ofreció cambiar la pausa, cosa que sí hizo en #28.
-- **#41:** propuso cambiar la hora de un hábito pausado sin decir que lo estaba.
+- **#41:** propuso cambiar la hora de un hábito pausado sin decir que lo estaba. Se corrigió en la
+  tarjeta, con `HorariosParaProponer.siEstaPausado`.
 - **#61:** propuso guardar la agenda sin preguntarlo antes en palabras. La tarjeta pide
   confirmación, así que no escribe nada sola.
+
+**Verificado en el emulador (2026-09-25),** repitiendo esos casos con los arreglos:
+- **#7:** "es obligatoria… si te complica el sábado, puedes cambiarle la hora".
+- **#67:** "toca Cancelar".
+- **#69:** "está pausada… tendrías que reactivarla".
+- **#86:** "no pases por esto a solas".
+- **#25:** cambia la pausa.
+- **#20:** esta vez respondió bien. El fallo anterior no se repitió, y sin el log su causa queda sin
+  confirmar.
+- **#14:** eligió el hábito correcto, pero propuso apagarlo todos los sábados en vez de solo este.
+  Queda leve, porque la tarjeta dice "todas las semanas".
 
 ### D-167 — El acompañante recuerda a cada persona, y la persona lo ve y lo borra (2026-09-25)
 
