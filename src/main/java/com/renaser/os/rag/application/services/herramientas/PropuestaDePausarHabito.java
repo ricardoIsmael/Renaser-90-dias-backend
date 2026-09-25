@@ -101,7 +101,7 @@ public class PropuestaDePausarHabito implements HerramientaAgente {
     private ResultadoHerramienta proponerSiCorresponde(UserId actorId, PlanDelAprendiz plan, Pedido pedido) {
         Optional<HabitoDelPlan> habito = plan.habitoDelPlan(pedido.habitoId());
         if (habito.isEmpty()) {
-            return ResultadoHerramienta.fallo("Ese habito no esta en su plan. " + pausables(plan));
+            return ResultadoHerramienta.fallo(porQueNoSePausa(plan, pedido.habitoId()));
         }
         Optional<String> impedimento = pedido.pausar() ? impedimentoParaPausar(habito.get(), plan, pedido)
                 : impedimentoParaReactivar(habito.get());
@@ -118,9 +118,21 @@ public class PropuestaDePausarHabito implements HerramientaAgente {
         return AvisoDePropuesta.creada(resumen, null);
     }
 
+    /**
+     * Un habito que no esta entre los que se suman al plan: o es obligatorio del programa, o es de la
+     * base de su dia. Antes los dos casos decian "no esta en su plan", y el modelo lo resumia en "no
+     * es posible pausarlo", sin motivo ni alternativa (E-245).
+     */
+    private static String porQueNoSePausa(PlanDelAprendiz plan, UUID habitoId) {
+        return plan.obligatorio(habitoId)
+                .map(obligatorio -> LoQueSiSePuede.obligatorio(obligatorio.titulo()))
+                .orElseGet(() -> "Ese habito no se pausa: la pausa es solo para los que se suman a su plan. "
+                        + LoQueSiSePuede.CON_UNO_DE_LA_BASE + "\n" + pausables(plan));
+    }
+
     private static Optional<String> impedimentoParaPausar(HabitoDelPlan habito, PlanDelAprendiz plan, Pedido pedido) {
         if (habito.obligatorio()) {
-            return Optional.of("'" + habito.titulo() + "' es obligatorio: no se puede pausar.");
+            return Optional.of(LoQueSiSePuede.obligatorio(habito.titulo()));
         }
         if (pedido.hasta() != null && pedido.hasta().isBefore(plan.hoy())) {
             return Optional.of("Esa fecha ya paso (hoy es " + FechaDelPlan.legible(plan.hoy()) + " para la "

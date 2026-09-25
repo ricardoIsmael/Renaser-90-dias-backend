@@ -7,11 +7,13 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * El plan de habitos del aprendiz visto desde otro modulo: que habitos lleva, cuales puede pausar
- * y que dia de esta semana puede elegir para los de eleccion semanal (2026-09-23).
+ * El plan de habitos del aprendiz visto desde otro modulo: que habitos lleva, cuales puede pausar,
+ * cuales son obligatorios del programa y que dia de esta semana puede elegir para los de eleccion
+ * semanal (2026-09-23; los obligatorios, 2026-09-25, D-165).
  *
  * <p>Primer consumidor: las herramientas {@code proponer_pausar_habito} y
- * {@code proponer_dia_de_habito_semanal} del acompanante de {@code rag} (fase 2, D-153). Se expone
+ * {@code proponer_dia_de_habito_semanal} del acompanante de {@code rag} (fase 2, D-153), y despues
+ * {@code consultar_habitos_obligatorios} (D-165). Se expone
  * aca por la regla de siempre (D-41, regla 01): {@code rag} no lee {@code desbloqueos_habito} ni
  * {@code dias_semanales_habito} por su cuenta, y las escrituras pasan por los MISMOS casos de uso
  * que {@code PATCH /api/v1/habit-unlocks/{habitId}} y {@code PUT /api/v1/weekly-habit-days/{habitId}},
@@ -48,11 +50,19 @@ public interface PlanDeHabitosPort {
     void elegirDiaSemanal(UserId actorId, UUID habitoId, LocalDate fecha);
 
     /**
-     * @param hoy       el dia de hoy en la zona del participante
-     * @param habitos   los habitos activos de su plan ({@code desbloqueos_habito})
-     * @param semanales los habitos de eleccion semanal que puede ver
+     * @param hoy          el dia de hoy en la zona del participante
+     * @param habitos      los habitos activos de su plan ({@code desbloqueos_habito})
+     * @param semanales    los habitos de eleccion semanal que puede ver
+     * @param obligatorios los habitos que ve y que no puede apagar ningun dia ni pausar
+     *                     ({@code habitos.desactivable = false}, V18). Son de la base del programa:
+     *                     casi nunca estan en {@code habitos}, que son los desbloqueos
      */
-    record PlanDeHabitos(LocalDate hoy, List<HabitoDelPlan> habitos, List<HabitoSemanal> semanales) {
+    record PlanDeHabitos(LocalDate hoy, List<HabitoDelPlan> habitos, List<HabitoSemanal> semanales,
+                         List<HabitoObligatorio> obligatorios) {
+    }
+
+    /** Un habito obligatorio del programa (V18), con el titulo que ve el aprendiz. */
+    record HabitoObligatorio(UUID habitoId, String titulo) {
     }
 
     /**

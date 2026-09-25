@@ -28,7 +28,10 @@ class GestionarPlanDeHabitosAdapter implements GestionarPlanDeHabitosPort {
         PlanDeHabitosPort.PlanDeHabitos plan = planDeHabitos.planDe(participanteId);
         return new PlanDelAprendiz(plan.hoy(),
                 plan.habitos().stream().map(GestionarPlanDeHabitosAdapter::aHabitoDelPlan).toList(),
-                plan.semanales().stream().map(GestionarPlanDeHabitosAdapter::aHabitoSemanal).toList());
+                plan.semanales().stream().map(GestionarPlanDeHabitosAdapter::aHabitoSemanal).toList(),
+                plan.obligatorios().stream()
+                        .map(habito -> new HabitoObligatorio(habito.habitoId(), habito.titulo()))
+                        .toList());
     }
 
     @Override

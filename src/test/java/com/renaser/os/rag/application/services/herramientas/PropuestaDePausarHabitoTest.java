@@ -3,6 +3,7 @@ package com.renaser.os.rag.application.services.herramientas;
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoDelPlan;
+import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoObligatorio;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.PlanDelAprendiz;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
@@ -35,6 +36,8 @@ class PropuestaDePausarHabitoTest {
     private static final UserId APRENDIZ = UserId.of(UUID.randomUUID());
     private static final UUID LEER = UUID.fromString("55555555-5555-5555-5555-555555555555");
     private static final UUID DORMIR = UUID.fromString("66666666-6666-6666-6666-666666666666");
+    /** Obligatorio de la base del programa: no esta en los desbloqueos, como en la base real. */
+    private static final UUID CLASE = UUID.fromString("77777777-7777-7777-7777-777777777777");
     /** Miercoles: el "hoy" en la zona del aprendiz que devuelve {@code habits}. */
     private static final LocalDate HOY = LocalDate.of(2026, 9, 23);
 
@@ -53,7 +56,8 @@ class PropuestaDePausarHabitoTest {
     }
 
     private void conPlan(HabitoDelPlan... habitos) {
-        when(planPort.planDe(APRENDIZ)).thenReturn(new PlanDelAprendiz(HOY, List.of(habitos), List.of()));
+        when(planPort.planDe(APRENDIZ)).thenReturn(new PlanDelAprendiz(HOY, List.of(habitos), List.of(),
+                List.of(new HabitoObligatorio(CLASE, "Clase diaria"))));
     }
 
     private static HabitoDelPlan leer(boolean pausadoHoy, LocalDate pausadoHasta) {
@@ -101,7 +105,35 @@ class PropuestaDePausarHabitoTest {
 
         ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, invocacion(DORMIR.toString(), "pausar", null));
 
-        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("obligatorio");
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("'Dormir' es obligatorio del programa")
+                .contains("cambiarle la hora");
+        verifyNoInteractions(proponerAccion);
+    }
+
+    @Test
+    @DisplayName("E-245: un obligatorio de la base (fuera de los desbloqueos) dice que es obligatorio, no 'no esta en su plan'")
+    void obligatorioDeLaBase() {
+        conPlan(leer(false, null));
+
+        String motivo = ((ResultadoHerramienta.Fallo) herramienta.ejecutar(APRENDIZ,
+                invocacion(CLASE.toString(), "pausar", null))).motivo();
+
+        assertThat(motivo).contains("'Clase diaria' es obligatorio del programa")
+                .contains("no se puede apagar ningun dia ni pausar").contains("cambiarle la hora")
+                .doesNotContain("no esta en su plan");
+        verifyNoInteractions(proponerAccion);
+    }
+
+    @Test
+    @DisplayName("E-245: un habito de la base que no se pausa dice por que y que si se puede")
+    void deLaBaseNoSePausa() {
+        conPlan(leer(false, null));
+
+        String motivo = ((ResultadoHerramienta.Fallo) herramienta.ejecutar(APRENDIZ,
+                invocacion(UUID.randomUUID().toString(), "pausar", "2026-09-27"))).motivo();
+
+        assertThat(motivo).contains("la pausa es solo para los que se suman a su plan")
+                .contains("apagarlo un dia puntual").contains("cambiarle la hora desde manana");
         verifyNoInteractions(proponerAccion);
     }
 
@@ -164,7 +196,8 @@ class PropuestaDePausarHabitoTest {
         assertThat(((ResultadoHerramienta.Fallo) herramienta.ejecutar(APRENDIZ,
                 invocacion(LEER.toString(), "pausar", null))).motivo()).contains("suspendida");
 
-        doReturn(new PlanDelAprendiz(HOY, List.of(leer(false, null)), List.of())).when(planPort).planDe(APRENDIZ);
+        doReturn(new PlanDelAprendiz(HOY, List.of(leer(false, null)), List.of(), List.of())).when(planPort)
+                .planDe(APRENDIZ);
         when(proponerAccion.proponer(any(), any(), any())).thenThrow(new IllegalStateException("db caida"));
         assertThat(((ResultadoHerramienta.Fallo) herramienta.ejecutar(APRENDIZ,
                 invocacion(LEER.toString(), "pausar", null))).motivo()).doesNotContain("db caida");

@@ -76,7 +76,9 @@ class PropuestaDeApagarDiaTest {
         ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, pedido(viernes, "apagar"));
 
         assertThat(resultado).isInstanceOf(ResultadoHerramienta.Fallo.class);
-        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("obligatorio");
+        // E-245: el motivo y lo que si se puede, nunca un "no se puede" a secas.
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("obligatorio del programa")
+                .contains("cambiarle la hora");
         verify(proponer, never()).proponer(any(), any(), any());
     }
 

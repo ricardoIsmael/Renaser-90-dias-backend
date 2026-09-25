@@ -114,6 +114,8 @@ class PropuestaDeHorarioPorDiaDeSemanaTest {
                 "accion", "apagar"));
 
         assertThat(obligatorio).isInstanceOf(ResultadoHerramienta.Fallo.class);
+        assertThat(((ResultadoHerramienta.Fallo) obligatorio).motivo()).contains("obligatorio del programa")
+                .contains("cambiarle la hora");
         verify(proponer, never()).proponer(any(), any(), any());
     }
 

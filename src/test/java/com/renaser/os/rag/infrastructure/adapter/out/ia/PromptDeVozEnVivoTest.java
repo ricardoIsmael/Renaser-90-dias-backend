@@ -29,6 +29,7 @@ class PromptDeVozEnVivoTest {
                 // Directo (pedido del dueno, 2026-09-24): sin preambulos y sin describir la propuesta.
                 .contains("una o dos frases")
                 .contains("Te deje la propuesta abajo")
+                .contains("Nunca un \"no es posible\" a secas")
                 .doesNotContain("!}")
                 .doesNotContain("Bloque EN VIVO");
         // Los limites clinicos y de crisis siguen ahi: el bloque en vivo solo suma forma e idioma.

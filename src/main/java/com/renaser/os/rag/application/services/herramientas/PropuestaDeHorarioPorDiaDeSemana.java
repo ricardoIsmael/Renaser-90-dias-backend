@@ -96,8 +96,7 @@ public class PropuestaDeHorarioPorDiaDeSemana implements HerramientaAgente {
         }
         if (pedido.accion() == Accion.APAGAR) {
             if (habito.obligatorio()) {
-                throw new PropuestaImposibleException("'" + habito.titulo() + "' es obligatorio del programa: no "
-                        + "se puede apagar ningun dia.");
+                throw new PropuestaImposibleException(LoQueSiSePuede.obligatorio(habito.titulo()));
             }
             return "Apagar '" + habito.titulo() + "' " + dias + ", todas las semanas, hasta que lo vuelva a activar. "
                     + "No gasta cambios de horario.";

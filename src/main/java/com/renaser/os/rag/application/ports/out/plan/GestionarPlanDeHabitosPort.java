@@ -33,8 +33,14 @@ public interface GestionarPlanDeHabitosPort {
 
     void elegirDiaSemanal(UserId actorId, UUID habitoId, LocalDate fecha);
 
-    /** @param hoy el dia de hoy en la zona del participante, resuelto por {@code habits} */
-    record PlanDelAprendiz(LocalDate hoy, List<HabitoDelPlan> habitos, List<HabitoSemanal> semanales) {
+    /**
+     * @param hoy          el dia de hoy en la zona del participante, resuelto por {@code habits}
+     * @param obligatorios los que no se apagan ningun dia ni se pausan (V18). Son de la base del
+     *                     programa y casi nunca estan en {@code habitos}, que son los que se suman al
+     *                     plan (D-165)
+     */
+    record PlanDelAprendiz(LocalDate hoy, List<HabitoDelPlan> habitos, List<HabitoSemanal> semanales,
+                           List<HabitoObligatorio> obligatorios) {
 
         public Optional<HabitoDelPlan> habitoDelPlan(UUID habitoId) {
             return habitos.stream().filter(habito -> habito.habitoId().equals(habitoId)).findFirst();
@@ -43,6 +49,14 @@ public interface GestionarPlanDeHabitosPort {
         public Optional<HabitoSemanal> habitoSemanal(UUID habitoId) {
             return semanales.stream().filter(habito -> habito.habitoId().equals(habitoId)).findFirst();
         }
+
+        public Optional<HabitoObligatorio> obligatorio(UUID habitoId) {
+            return obligatorios.stream().filter(habito -> habito.habitoId().equals(habitoId)).findFirst();
+        }
+    }
+
+    /** Un habito obligatorio del programa, con el titulo que ve el aprendiz. */
+    record HabitoObligatorio(UUID habitoId, String titulo) {
     }
 
     /**

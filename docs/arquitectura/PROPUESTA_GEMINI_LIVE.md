@@ -205,6 +205,13 @@ el botón. Después, *"Sí, guárdalo, por favor"* por voz **no lo guardó**: vo
 (D-132, D-153). Con el backend caliente la sesión abrió en **3 s** (con el backend recién
 reiniciado, 7–11 s).
 
+**Herramientas de escritura verificadas por voz (17:28–17:38).** *"Desactiva el hábito escritura
+libre nocturna para mañana"* llegó entero con 600 ms de colchón (E-243) → propuesta de apagar el día →
+**Confirmar** en la hoja flotante → quedó en la base. *"Pausa el hábito día sin celular hasta el
+domingo"* → propuesta → **Cancelar** → nada cambió. El audio se inyectó al emulador por una fuente
+virtual de PulseAudio (`module-null-sink`), sin pasar por los parlantes. Detalle en D-163 de
+`docs/MODULO_RAG.md`; lo que salió mal, en E-245 y E-246.
+
 ## 6. Riesgos
 
 - **Modelo nuevo en una API en vivo:** la forma de los mensajes puede cambiar. Por eso va detrás

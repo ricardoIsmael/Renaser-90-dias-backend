@@ -722,6 +722,15 @@ otro error.
 > en `CANCELADA` en la base y la tarjeta mostró el cierre. La propuesta sobrevive a un turno nuevo (en
 > el medio hubo otro intercambio) hasta que la persona actúa. Queda por probar en un teléfono real.
 
+> **Verificado 2026-09-24, 17:28–17:38**, con la hoja flotante y la voz en vivo, audio inyectado al
+> emulador sin pasar por los parlantes. *"Desactiva el hábito escritura libre nocturna para mañana"*
+> se transcribió entero (E-243 resuelto: antes llegaba "Activa") → `proponer_apagar_dia` para el 25/09
+> → **Confirmar** en la hoja → "Hecho · Habito apagado el viernes 2026-09-25" y la fila
+> `horarios_habito_por_fecha` con `activo = false` para ese día. *"Pausa el hábito día sin celular
+> hasta el domingo"* → `proponer_pausar_habito` → **Cancelar** → `CANCELADA`, nada cambió. Con
+> Escritura libre nocturna, la pausa contestó "no es posible" sin motivo: eso es E-245 y lo arregla
+> D-165.
+
 
 ### D-164 — Si la voz del servidor falla, la app avisa y responde por escrito; nunca la voz del teléfono (2026-09-24)
 
@@ -732,6 +741,39 @@ aviso. Desde hoy la voz es **una sola**, Kore: si no está, el `Locutor` de la a
 turno (*"Mi voz no está disponible ahora mismo; te respondo por escrito."*) y la respuesta queda en
 pantalla. `expo-speech` sale del respaldo. El backend no cambió: sigue respondiendo 204 cuando no hay
 voz, y ese 204 es lo que dispara el aviso.
+
+
+### D-165 — El acompañante sabe cuáles hábitos son obligatorios y dice qué sí se puede (2026-09-25)
+
+**El problema (E-245).** Por voz: *"Pausa el hábito escritura libre nocturna hasta el domingo"* → el
+orbe: *"No es posible pausar el hábito de escritura libre nocturna"*. Ni por qué ni qué hacer en su
+lugar. La herramienta de pausa solo busca en los desbloqueos (`desbloqueos_habito`, lo que se suma al
+plan); un hábito de la base del programa no está ahí, y un obligatorio tampoco, así que los dos casos
+volvían como "ese hábito no está en su plan".
+
+**Pedido del dueño (2026-09-25):** que con los obligatorios diga *"no puedo, es obligatorio del
+programa"*; que el acompañante tenga una herramienta para saber cuáles son; que explique qué sí se
+puede modificar; y que sepa responder por el día: qué cambios valen para hoy y en qué día del
+programa va.
+
+**Qué se hizo:**
+
+- `habits.api.PlanDeHabitosPort.PlanDeHabitos` trae `obligatorios`: los hábitos que la persona ve con
+  `desactivable = false` (V18: Audioterapia semanal, Pastilla Renacer, Clase diaria y Post diario en
+  comunidad). Salen de **todos** los que ve, no de los desbloqueos.
+- Herramienta nueva **`consultar_habitos_obligatorios`** (solo lee, sin flag): los obligatorios, los
+  que se pueden pausar y qué sí se puede con cada tipo.
+- Las negativas de `proponer_pausar_habito`, `proponer_apagar_dia` y
+  `proponer_horario_por_dia_de_semana` dicen el motivo **y** la salida, con una sola redacción
+  (`LoQueSiSePuede`): con un obligatorio solo se mueve la hora (desde mañana o para un día futuro);
+  uno de la base no se pausa, pero se apaga un día o ciertos días de la semana, o se cambia de hora.
+- Prompt (`renasia-sistema.st`): nunca un "no es posible" a secas; el día de hoy no se reacomoda
+  (D-91: la hora cambia desde mañana; hoy solo se puede apagar, si no es obligatorio); el día del
+  programa sale del sistema y no se resta a mano. `modo-en-vivo.st` repite la regla del motivo en dos
+  frases.
+
+**Lo que no cambia:** ninguna regla de negocio. Qué es obligatorio lo sigue decidiendo `habits` (V18);
+el acompañante solo lo lee y lo explica. La pausa sigue existiendo solo para lo que se suma al plan.
 
 ---
 

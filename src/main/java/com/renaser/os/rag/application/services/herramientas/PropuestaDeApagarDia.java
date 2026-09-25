@@ -85,8 +85,7 @@ public class PropuestaDeApagarDia implements HerramientaAgente {
 
     private static void requirePosible(DiaPedido pedido, HorarioDeHabito habito) {
         if (pedido.apagar() && habito.obligatorio()) {
-            throw new PropuestaImposibleException("'" + habito.titulo() + "' es obligatorio del programa: no se "
-                    + "puede apagar ningun dia.");
+            throw new PropuestaImposibleException(LoQueSiSePuede.obligatorio(habito.titulo()));
         }
         if (pedido.apagar() && habito.apagado()) {
             throw new PropuestaImposibleException("'" + habito.titulo() + "' ya esta apagado ese dia.");

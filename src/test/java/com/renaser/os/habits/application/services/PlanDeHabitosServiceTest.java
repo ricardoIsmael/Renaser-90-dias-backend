@@ -1,6 +1,7 @@
 package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.api.PlanDeHabitosPort.HabitoDelPlan;
+import com.renaser.os.habits.api.PlanDeHabitosPort.HabitoObligatorio;
 import com.renaser.os.habits.api.PlanDeHabitosPort.HabitoSemanal;
 import com.renaser.os.habits.api.PlanDeHabitosPort.PlanDeHabitos;
 import com.renaser.os.habits.application.ports.in.desbloqueo.CambiarEstadoHabitoDelPlanUseCase;
@@ -122,6 +123,23 @@ class PlanDeHabitosServiceTest {
         assertThat(habitos).extracting(HabitoDelPlan::titulo, HabitoDelPlan::obligatorio, HabitoDelPlan::pausadoHoy)
                 .containsExactly(tuple("Leer", false, true), tuple("Dormir", true, false),
                         tuple("Meditar", false, false));
+    }
+
+    @Test
+    @DisplayName("E-245: los obligatorios salen de todos los que ve, aunque no esten desbloqueados")
+    void obligatoriosDeLaBase() {
+        Habito clase = habito("Clase diaria", false, false);
+        Habito leer = habito("Leer", true, false);
+        Habito pastilla = habito("Pastilla Renacer", false, false);
+        when(misHabitosUseCase.consultar(aprendiz)).thenReturn(List.of(conDias(clase), conDias(leer),
+                conDias(pastilla)));
+        when(loadDesbloqueoPort.deParticipante(aprendiz)).thenReturn(List.of(sinPausa(leer)));
+
+        PlanDeHabitos plan = servicio.planDe(aprendiz);
+
+        assertThat(plan.obligatorios()).containsExactly(new HabitoObligatorio(clase.id().value(), "Clase diaria"),
+                new HabitoObligatorio(pastilla.id().value(), "Pastilla Renacer"));
+        assertThat(plan.habitos()).extracting(HabitoDelPlan::titulo).containsExactly("Leer");
     }
 
     @Test

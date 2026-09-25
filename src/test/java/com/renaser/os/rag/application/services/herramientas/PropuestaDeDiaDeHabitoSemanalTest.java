@@ -50,7 +50,7 @@ class PropuestaDeDiaDeHabitoSemanalTest {
 
     private void conSemanal(LocalDate diaElegido, List<LocalDate> elegibles) {
         when(planPort.planDe(APRENDIZ)).thenReturn(new PlanDelAprendiz(HOY, List.of(),
-                List.of(new HabitoSemanal(CORRER, "Correr", diaElegido, elegibles))));
+                List.of(new HabitoSemanal(CORRER, "Correr", diaElegido, elegibles)), List.of()));
     }
 
     @Test

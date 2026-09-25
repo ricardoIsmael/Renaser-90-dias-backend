@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -91,7 +92,19 @@ public class PlanDeHabitosService implements PlanDeHabitosPort {
                 .filter(Habito::eleccionDiaSemanal)
                 .map(habito -> aHabitoSemanal(participanteId, habito, hoy, elegibles))
                 .toList();
-        return new PlanDeHabitos(hoy, delPlan, semanales);
+        return new PlanDeHabitos(hoy, delPlan, semanales, obligatoriosEntre(visibles.values()));
+    }
+
+    /**
+     * Los obligatorios salen de TODOS los que ve, no de los desbloqueos: son de la base del programa
+     * y casi nunca estan desbloqueados. Buscarlos solo en el plan hacia que el acompanante dijera "no
+     * esta en su plan" de la Clase diaria (E-245).
+     */
+    private static List<HabitoObligatorio> obligatoriosEntre(Collection<Habito> visibles) {
+        return visibles.stream()
+                .filter(habito -> !habito.desactivable())
+                .map(habito -> new HabitoObligatorio(habito.id().value(), habito.titulo()))
+                .toList();
     }
 
     @Override

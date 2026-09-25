@@ -128,6 +128,20 @@ class PromptSistemaRenasiaTest {
         assertThat(render).contains("Nunca la guardes sin preguntarle");
     }
 
+    @Test
+    @DisplayName("D-165: lo que no se puede va con motivo y alternativa; hoy no se reacomoda; el dia sale del sistema")
+    void noSePuedeHoyYDiaDelPrograma() {
+        String render = renderizar("(vacio)");
+
+        // E-245: el orbe contesto "no es posible pausarlo" sin motivo ni salida.
+        assertThat(render).contains("di por que y que si se puede").contains("Nunca un \"no es posible\"")
+                .contains("consultar_habitos_obligatorios");
+        // D-91: un cambio de hora rige desde manana; hoy solo se puede apagar, si no es obligatorio.
+        assertThat(render).contains("El dia de hoy no se reacomoda").contains("apagar ese habito solo por hoy");
+        // El dia del programa es un dato del sistema; restar lo hace el codigo, no el modelo.
+        assertThat(render).contains("en que dia del programa va").contains("no restes tu");
+    }
+
     /**
      * 2026-09-23: el bloque de voz es un archivo aparte que el adaptador agrega al final con
      * {@code canal=VOZ}. Se renderiza aca sin variables — si alguien le mete una llave en la prosa,

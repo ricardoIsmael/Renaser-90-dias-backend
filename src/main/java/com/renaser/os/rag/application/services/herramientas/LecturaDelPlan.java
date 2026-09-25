@@ -14,7 +14,7 @@ import java.util.function.Function;
 /**
  * Leer el plan del aprendiz antes de proponer, con la traduccion de errores de siempre: una
  * herramienta no lanza, devuelve un {@code Fallo} legible (contrato de {@link HerramientaAgente}).
- * Compartido por las dos herramientas del plan de habitos para que digan lo mismo.
+ * Compartido por las herramientas del plan de habitos para que digan lo mismo.
  */
 final class LecturaDelPlan {
 
@@ -31,9 +31,9 @@ final class LecturaDelPlan {
         } catch (NoSuchElementException sinPrograma) {
             return ResultadoHerramienta.fallo("No encontre un programa activo para esta cuenta.");
         } catch (NotAuthorizedException suspendida) {
-            return ResultadoHerramienta.fallo("La cuenta esta suspendida: no puedo cambiar su plan de habitos.");
+            return ResultadoHerramienta.fallo("La cuenta esta suspendida: no puedo ver ni cambiar su plan de habitos.");
         } catch (RuntimeException falla) {
-            log.warn("[rag] no se pudo leer el plan de habitos para proponer un cambio", falla);
+            log.warn("[rag] no se pudo leer el plan de habitos", falla);
             return ResultadoHerramienta.fallo("No pude consultar su plan de habitos en este momento.");
         }
         return siguiente.apply(plan);
