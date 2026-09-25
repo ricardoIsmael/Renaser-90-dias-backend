@@ -896,6 +896,16 @@ el log para ver por qué.
 - **#14:** eligió el hábito correcto, pero propuso apagarlo todos los sábados en vez de solo este.
   Queda leve, porque la tarjeta dice "todas las semanas".
 
+**Prueba final (2026-09-25, backend integrado con el semáforo).**
+- **Fechas:** "el 2 de octubre" dio "fuera de tus 90 días" (E-276). Ahora el prompt lleva la fecha de
+  hoy con el año, y las herramientas de horarios corrigen el año mal armado.
+- **Límite conocido del modelo (flash-lite):** a veces contradice una regla que está en el prompt y
+  que dijo bien un turno antes. Pasó con "¿te refieres a otro hábito?" ante un hábito pausado (#25) y
+  con "la clase diaria no se puede cambiar de hora" pedido en una sola frase. Repetido, sale bien.
+  Donde un error así podía tener consecuencias, el código lo cubre: la tarjeta dice la fecha exacta y
+  si el hábito está pausado, y nada se ejecuta sin el botón. Un modelo más grande los reduciría, a
+  mayor costo; es una decisión del dueño (`RENASIA_CHAT_MODEL`).
+
 ### D-167 — El acompañante recuerda a cada persona, y la persona lo ve y lo borra (2026-09-25)
 
 Pedido del dueño: que Renasia sea distinta para cada persona, con las mismas reglas para todas, y
