@@ -66,8 +66,9 @@ public class PropuestaDeApagarDia implements HerramientaAgente {
     @Override
     public ResultadoHerramienta ejecutar(UserId actorId, InvocacionHerramienta invocacion) {
         try {
-            DiaPedido pedido = DiaPedido.de(invocacion);
+            DiaPedido leido = DiaPedido.de(invocacion);
             HorariosDelDia hoy = HorariosParaProponer.de(horariosPort, actorId, null);
+            DiaPedido pedido = leido.dentroDelPrograma(hoy);
             requireNoEsObligatorio(pedido, hoy);
             if (pedido.fecha().isBefore(hoy.fecha())) {
                 throw new PropuestaImposibleException("Ese dia ya paso: solo se puede apagar hoy o un dia futuro. "
@@ -144,6 +145,11 @@ public class PropuestaDeApagarDia implements HerramientaAgente {
                 return false;
             }
             throw new PropuestaImposibleException("La accion tiene que ser 'apagar' o 'encender'.");
+        }
+
+        /** E-276: con el año corregido si el modelo lo armo con uno viejo. */
+        DiaPedido dentroDelPrograma(HorariosDelDia hoy) {
+            return new DiaPedido(habitoId, HorariosParaProponer.dentroDelPrograma(fecha, hoy), apagar);
         }
 
         InvocacionHerramienta invocacion() {

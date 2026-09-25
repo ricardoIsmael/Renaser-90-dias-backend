@@ -72,8 +72,9 @@ public class PropuestaDeCambioDeHorario implements HerramientaAgente {
     @Override
     public ResultadoHerramienta ejecutar(UserId actorId, InvocacionHerramienta invocacion) {
         try {
-            CambioPedido cambio = CambioPedido.de(invocacion);
+            CambioPedido leido = CambioPedido.de(invocacion);
             HorariosDelDia hoy = HorariosParaProponer.de(horariosPort, actorId, null);
+            CambioPedido cambio = leido.dentroDelPrograma(hoy);
             LocalDate rigeDesde = rigeDesde(cambio, hoy.fecha());
             HorariosDelDia diaQueCambia = HorariosParaProponer.de(horariosPort, actorId, rigeDesde);
             HorarioDeHabito actual = HorariosParaProponer.habito(diaQueCambia, cambio.habitoId());
@@ -141,6 +142,11 @@ public class PropuestaDeCambioDeHorario implements HerramientaAgente {
                 throw new PropuestaImposibleException("La hora_limite tiene que ser posterior a la hora_inicio. "
                         + "Preguntale a la persona hasta que hora quiere tener el habito.");
             }
+        }
+
+        /** E-276: con el año corregido si el modelo lo armo con uno viejo; sin fecha, igual. */
+        CambioPedido dentroDelPrograma(HorariosDelDia hoy) {
+            return new CambioPedido(habitoId, horaInicio, horaLimite, HorariosParaProponer.dentroDelPrograma(fecha, hoy));
         }
 
         InvocacionHerramienta invocacion() {

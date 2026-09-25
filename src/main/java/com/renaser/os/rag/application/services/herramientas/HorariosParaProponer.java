@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.UUID;
@@ -33,6 +34,34 @@ final class HorariosParaProponer {
     private static final Logger log = LoggerFactory.getLogger(HorariosParaProponer.class);
 
     private HorariosParaProponer() {
+    }
+
+    /**
+     * La fecha que pidio el modelo, con el año corregido si hace falta (E-276). Aun con la fecha de hoy
+     * en el prompt, el modelo a veces arma "el 5 de noviembre" con el año de su entrenamiento, y la
+     * fecha cae fuera del programa. Si con el año de hoy (o el siguiente, para un programa que cruza
+     * el año nuevo) cae dentro, se usa esa. Si no, queda la pedida y se rechaza como antes.
+     *
+     * <p>No escribe nada por si sola: la tarjeta muestra la fecha ya corregida, con su dia de la
+     * semana, y la persona la confirma o la cancela.
+     */
+    static LocalDate dentroDelPrograma(LocalDate pedida, HorariosDelDia hoy) {
+        if (pedida == null || enElPrograma(pedida, hoy)) {
+            return pedida;
+        }
+        for (int anio = hoy.fecha().getYear(); anio <= hoy.fecha().getYear() + 1; anio++) {
+            LocalDate candidata = pedida.withYear(anio);
+            if (enElPrograma(candidata, hoy)) {
+                return candidata;
+            }
+        }
+        return pedida;
+    }
+
+    /** La misma cuenta que usa {@code habits} para el dia de una fecha: el de hoy mas los dias que faltan. */
+    private static boolean enElPrograma(LocalDate fecha, HorariosDelDia hoy) {
+        long dia = hoy.diaPrograma() + ChronoUnit.DAYS.between(hoy.fecha(), fecha);
+        return dia >= PRIMER_DIA_DEL_PROGRAMA && dia <= ULTIMO_DIA_DEL_PROGRAMA;
     }
 
     /** @param fecha {@code null} = hoy en la zona del participante */

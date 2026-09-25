@@ -108,6 +108,22 @@ class ConsultarHorariosHerramientaTest {
         assertThat(previo).isInstanceOf(ResultadoHerramienta.Fallo.class);
     }
 
+    /** E-276: "el 5 de noviembre" llego como 2025-11-05 y la respuesta fue "queda fuera de tus 90 dias". */
+    @Test
+    @DisplayName("una fecha armada con un año viejo se corrige al año en que cae dentro del programa")
+    void fechaConAnioViejoSeCorrige() {
+        LocalDate hoy = LocalDate.of(2026, 9, 25);
+        LocalDate conAnioViejo = LocalDate.of(2025, 11, 5);
+        LocalDate corregida = LocalDate.of(2026, 11, 5);
+        when(puerto.deFecha(APRENDIZ, conAnioViejo)).thenReturn(conDia(conAnioViejo, -306));
+        when(puerto.deFecha(APRENDIZ, null)).thenReturn(conDia(hoy, 18));
+        when(puerto.deFecha(APRENDIZ, corregida)).thenReturn(conDia(corregida, 59));
+
+        String texto = texto(herramienta.ejecutar(APRENDIZ, conFecha("2025-11-05")));
+
+        assertThat(texto).contains("Horarios del 2026-11-05 (dia 59 del programa)");
+    }
+
     @Test
     @DisplayName("el dia 0 (programa aun sin activar) y el dia 90 si se consultan")
     void bordesDelProgramaSeConsultan() {

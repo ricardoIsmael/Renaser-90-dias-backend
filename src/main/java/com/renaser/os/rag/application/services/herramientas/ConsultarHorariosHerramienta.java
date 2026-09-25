@@ -76,6 +76,9 @@ public class ConsultarHorariosHerramienta implements HerramientaAgente {
         HorariosDelDia dia;
         try {
             dia = horariosPort.deFecha(actorId, fecha);
+            if (fecha != null && fueraDelPrograma(dia)) {
+                dia = conElAnioCorregido(actorId, fecha).orElse(dia);
+            }
         } catch (NoSuchElementException sinPrograma) {
             return ResultadoHerramienta.fallo("No encontre un programa activo para esta cuenta.");
         } catch (NotAuthorizedException suspendida) {
@@ -84,11 +87,27 @@ public class ConsultarHorariosHerramienta implements HerramientaAgente {
             log.warn("[rag] la herramienta {} no pudo leer los horarios", NOMBRE, falla);
             return ResultadoHerramienta.fallo("No pude consultar sus horarios en este momento.");
         }
-        if (dia.diaPrograma() < PRIMER_DIA_DEL_PROGRAMA || dia.diaPrograma() > ULTIMO_DIA_DEL_PROGRAMA) {
+        if (fueraDelPrograma(dia)) {
             return ResultadoHerramienta.fallo("El " + dia.fecha() + " queda fuera de sus 90 dias de programa: "
                     + "no hay horario que consultar para esa fecha.");
         }
         return ResultadoHerramienta.exito(textoDe(dia));
+    }
+
+    private static boolean fueraDelPrograma(HorariosDelDia dia) {
+        return dia.diaPrograma() < PRIMER_DIA_DEL_PROGRAMA || dia.diaPrograma() > ULTIMO_DIA_DEL_PROGRAMA;
+    }
+
+    /**
+     * E-276: el modelo a veces arma la fecha con el año de su entrenamiento ("el 5 de noviembre" en
+     * 2025). Solo si la pedida cae fuera del programa se mira el dia de hoy y se prueba con el año
+     * corregido; el caso comun no paga una consulta de mas. Si no se puede, queda la pedida.
+     */
+    private java.util.Optional<HorariosDelDia> conElAnioCorregido(UserId actorId, LocalDate fecha) {
+        HorariosDelDia hoy = horariosPort.deFecha(actorId, null);
+        LocalDate corregida = hoy == null ? fecha : HorariosParaProponer.dentroDelPrograma(fecha, hoy);
+        return corregida.equals(fecha) ? java.util.Optional.empty()
+                : java.util.Optional.of(horariosPort.deFecha(actorId, corregida));
     }
 
     private static String textoDe(HorariosDelDia dia) {

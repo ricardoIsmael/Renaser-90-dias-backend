@@ -164,4 +164,20 @@ class PropuestaDeApagarDiaTest {
         assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("queda fuera de sus 90 dias")
                 .contains("Hoy es miércoles 2026-09-09, su dia 12 de 90").contains("revisa el año y la fecha");
     }
+
+    /** E-276: "apaga escritura libre el martes 29 de septiembre" llego con el año de entrenamiento del modelo. */
+    @Test
+    @DisplayName("una fecha con un año viejo se corrige, y la tarjeta y lo que se guarda llevan la corregida")
+    void fechaConAnioViejoSeCorrige() {
+        LocalDate conAnioViejo = HOY.plusDays(3).minusYears(1);
+        LocalDate corregida = HOY.plusDays(3);
+        when(horarios.deFecha(APRENDIZ, null)).thenReturn(dia(HOY, false, false));
+        when(horarios.deFecha(APRENDIZ, corregida)).thenReturn(dia(corregida, false, false));
+
+        herramienta.ejecutar(APRENDIZ, pedido(conAnioViejo, "apagar"));
+
+        verify(proponer).proponer(APRENDIZ, new InvocacionHerramienta(PropuestaDeApagarDia.NOMBRE,
+                        Map.of("habito_id", MEDITAR.toString(), "fecha", corregida.toString(), "accion", "apagar")),
+                "Apagar 'Meditar' solo el sábado 2026-09-12: ese dia no se le va a pedir. No gasta cambios de horario.");
+    }
 }
