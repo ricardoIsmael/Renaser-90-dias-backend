@@ -247,6 +247,21 @@ renaser:
       habits-despachar-avisos:
         lock-at-most-for: PT4M
         lock-at-least-for: PT10S
+      # D-168: barrido horario del semaforo del aprendiz (minuto 25). Sin lock, dos instancias
+      # calculan el padron dos veces; la foto semanal no se duplica (PK + ON CONFLICT DO NOTHING)
+      # ni el aviso (solo lo publica quien inserto la foto), pero es trabajo doble.
+      points-cerrar-semaforo:
+        lock-at-most-for: PT20M
+        lock-at-least-for: PT30S
+      # Resumen semanal del semaforo para mentores y lider/admin (D-168, cada hora en el minuto
+      # 40; solo actua el sabado de 00:00 a 05:59 en la zona de cada grupo). Sin lock, dos
+      # instancias recorren los grupos y publican el mismo resumen dos veces; la notificacion
+      # doble ya la impide la deduplicacion por origen_evento_id (C-7/V16), el trabajo doble no.
+      # lock-at-most-for muy por debajo de la hora a proposito: si el proceso muere con el lock
+      # tomado, la corrida siguiente de la ventana no se pierde.
+      mentoring-resumir-semana-semaforo:
+        lock-at-most-for: PT20M
+        lock-at-least-for: PT30S
   habits:
     # Cuanto antes se avisa cada cosa (2026-09-05). NO son constantes en el codigo porque el
     # dueno todavia no confirmo los numeros y este repo tiene una regla explicita contra
@@ -427,6 +442,24 @@ renaser:
       # (RENASER_IA_ACOMPANANTE_LOGROSENCHATPLANTILLARACHASINCELULAR, etc.).
       logros-en-chat-plantilla-racha-sin-celular: "¡Lo lograste! Completaste tu día sin celular: 24 horas enteras. Eso es constancia de verdad. ¿Cómo te sentiste?"
       logros-en-chat-plantilla-roca-completada: "¡Roca completada! Un paso firme más hacia lo que te propusiste. Bien hecho."
+      # El acompanante cuenta en el chat como cerro la semana del semaforo (D-168,
+      # SemaforoEnChatService): mismo molde que logros-en-chat — plantilla, SIN IA, sin cuota, un
+      # solo mensaje por persona y semana aunque el outbox reentregue, y nunca detras de un mensaje
+      # de la persona sin respuesta (D-132). El push de notifications ("Tu semana ya cerro", sin
+      # cifras) sale igual, prendido o apagado esto.
+      #
+      # FALSE por defecto: la redaccion es provisoria hasta que el dueno la apruebe (D-155).
+      semaforo-en-chat: ${IA_ACOMPANANTE_SEMAFORO_EN_CHAT:false}
+      # TEXTOS PROVISORIOS: el dueno NO aprobo esta redaccion todavia. Uno por color, tuteo,
+      # espanol neutro de Peru. Marcadores: {etiqueta} (la palabra del color que manda points: "Al
+      # dia", "Requiere atencion", "Con problemas") y {porcentaje} (el de la semana, con punto
+      # decimal como la tarjeta de la app: "86" o "78.3"). La de sin datos se usa tambien cuando la semana no trae
+      # porcentaje, y NUNCA lleva numero. Una plantilla vacia apaga ese color. Se sobreescriben por
+      # entorno (RENASER_IA_ACOMPANANTE_SEMAFOROENCHATPLANTILLAVERDE, etc.).
+      semaforo-en-chat-plantilla-verde: "Cerraste la semana en verde, {etiqueta}: {porcentaje} %. ¡Bien hecho! Tu constancia se nota."
+      semaforo-en-chat-plantilla-amarillo: "Cerraste la semana en amarillo, {etiqueta}: {porcentaje} %. Estás cerca: elige un hábito y cuídalo cada día de esta semana."
+      semaforo-en-chat-plantilla-rojo: "Cerraste la semana en rojo, {etiqueta}: {porcentaje} %. No es un juicio, es un punto de partida. ¿Empezamos hoy con un paso pequeño? Aquí estoy para acompañarte."
+      semaforo-en-chat-plantilla-sin-datos: "Tu semana cerró sin datos en el semáforo. ¿Planificamos juntos esta semana? Elegir hoy tus hábitos y objetivos te ayuda a empezar con claridad."
   email:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}

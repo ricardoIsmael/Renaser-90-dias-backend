@@ -9,6 +9,7 @@ import com.renaser.os.points.api.RocaDelDiaResumen;
 import com.renaser.os.points.api.PorcentajeRocasFinder;
 import com.renaser.os.points.api.RocasDelDiaFinder;
 import com.renaser.os.points.application.ports.in.home.ConsultarResumenHomeUseCase;
+import com.renaser.os.points.application.ports.in.semaforo.ConsultarMiSemaforoUseCase;
 import com.renaser.os.points.application.ports.in.puntaje.ConsultarPuntajeUseCase;
 import com.renaser.os.points.domain.model.puntaje.PuntajeParticipante;
 import com.renaser.os.points.domain.model.puntaje.Racha;
@@ -83,6 +84,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
     private final ProximoEventoFinder proximoEventoFinder;
     private final NotificacionesNoLeidasFinder notificacionesNoLeidasFinder;
     private final PorcentajeRocasFinder porcentajeRocasFinder;
+    private final ConsultarMiSemaforoUseCase consultarMiSemaforo;
     private final Clock clock;
 
     public HomeAgregadoService(ConsultarPuntajeUseCase consultarPuntajeUseCase,
@@ -93,6 +95,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
                                 ProximoEventoFinder proximoEventoFinder,
                                 NotificacionesNoLeidasFinder notificacionesNoLeidasFinder,
                                 PorcentajeRocasFinder porcentajeRocasFinder,
+                                ConsultarMiSemaforoUseCase consultarMiSemaforo,
                                 Clock clock) {
         this.consultarPuntajeUseCase = consultarPuntajeUseCase;
         this.participacionProgramaFinder = participacionProgramaFinder;
@@ -102,6 +105,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
         this.proximoEventoFinder = proximoEventoFinder;
         this.notificacionesNoLeidasFinder = notificacionesNoLeidasFinder;
         this.porcentajeRocasFinder = porcentajeRocasFinder;
+        this.consultarMiSemaforo = consultarMiSemaforo;
         this.clock = clock;
     }
 
@@ -115,7 +119,23 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
         return new ResumenHome(puntaje.puntosLiga(), coherenciaDe(actorId, participacion.zona()), racha.actual(),
                 racha.maxima(), participacion.diaPrograma(), participacion.inscrito(),
                 participacion.fase(), habitosHoyDe(actorId, participacion.zona()), rocasHoyDe(actorId),
-                proximoEventoDe(actorId), notificacionesNoLeidasDe(actorId), BLOQUEOS);
+                proximoEventoDe(actorId), notificacionesNoLeidasDe(actorId), BLOQUEOS, semaforoDe(actorId));
+    }
+
+    /**
+     * La tarjeta del semáforo (D-168): lee lo que el barrido ya guardó, no calcula nada. {@code null}
+     * si la persona no se mide; misma falla parcial que los otros widgets.
+     */
+    private ResumenHome.SemaforoHoyResumen semaforoDe(UserId actorId) {
+        try {
+            return consultarMiSemaforo.resumenParaHoy(actorId)
+                    .map(r -> new ResumenHome.SemaforoHoyResumen(r.color(), r.porcentaje(), r.diasConDatos(),
+                            r.pausado(), r.dias()))
+                    .orElse(null);
+        } catch (NoSuchElementException | NotAuthorizedException e) {
+            logWidgetDegradado("semaforo", e);
+            return null;
+        }
     }
 
     /**

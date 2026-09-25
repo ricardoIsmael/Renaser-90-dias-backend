@@ -1,10 +1,13 @@
 package com.renaser.os.points.infrastructure.adapter.in.rest.home;
 
+import com.renaser.os.points.api.ColorSemaforo;
+import com.renaser.os.points.api.DiaDelSemaforo;
 import com.renaser.os.points.application.ports.in.home.ConsultarResumenHomeUseCase.ResumenHome;
 import com.renaser.os.users.api.FasePrograma;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -19,14 +22,38 @@ public record ResumenHomeResponse(int puntosLiga, BigDecimal coherencia, int rac
                                    int diaPrograma, boolean inscrito, FasePrograma fase,
                                    HabitosHoyResponse habitosHoy, RocasHoyResponse rocasHoy,
                                    ProximoEventoResponse proximoEvento, Long notificacionesNoLeidas,
-                                   List<String> bloqueos) {
+                                   List<String> bloqueos, SemaforoResponse semaforo) {
 
     public static ResumenHomeResponse from(ResumenHome resumen) {
         return new ResumenHomeResponse(resumen.puntosLiga(), resumen.coherencia(), resumen.rachaActual(),
                 resumen.rachaMaxima(), resumen.diaPrograma(), resumen.inscrito(), resumen.fase(),
                 HabitosHoyResponse.from(resumen.habitosHoy()), RocasHoyResponse.from(resumen.rocasHoy()),
                 ProximoEventoResponse.from(resumen.proximoEvento()), resumen.notificacionesNoLeidas(),
-                resumen.bloqueos());
+                resumen.bloqueos(), SemaforoResponse.from(resumen.semaforo()));
+    }
+
+    /**
+     * Campo nuevo y aditivo (D-168): la app instalada lo ignora. Cada color viaja con su palabra
+     * (RL-30). {@code null} si la persona no se mide.
+     */
+    public record SemaforoResponse(ColorSemaforo color, String etiqueta, BigDecimal porcentaje, int diasConDatos,
+                                   boolean pausado, List<DiaCompactoResponse> dias) {
+
+        static SemaforoResponse from(ResumenHome.SemaforoHoyResumen resumen) {
+            return resumen == null ? null : new SemaforoResponse(resumen.color(), resumen.color().etiqueta(),
+                    resumen.porcentaje(), resumen.diasConDatos(), resumen.pausado(),
+                    resumen.dias().stream().map(DiaCompactoResponse::from).toList());
+        }
+    }
+
+    /** Un día de la ventana vigente, lo justo para dibujar las 7 barras de la tarjeta. */
+    public record DiaCompactoResponse(LocalDate fecha, String estado, Integer porcentaje, ColorSemaforo color,
+                                      String etiqueta) {
+
+        static DiaCompactoResponse from(DiaDelSemaforo dia) {
+            return new DiaCompactoResponse(dia.fecha(), dia.estado().name(), dia.porcentaje(), dia.color(),
+                    dia.color().etiqueta());
+        }
     }
 
     public record HabitosHoyResponse(int completados, int total) {

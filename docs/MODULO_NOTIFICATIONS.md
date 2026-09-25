@@ -270,6 +270,8 @@ Factory methods con nombre de intención (`emitir`, `rehydrate`, `registrar`, `r
 
 ### 2. Listeners de evento (`infrastructure/adapter/in/event/`) — el foco del encargo
 
+> **Actualizado 2026-09-25 (D-168).** Se suman tres listeners del semáforo de cumplimiento del aprendiz, todos con el tipo `RESUMEN_SEMANAL` (existía desde V1 sin emisor): `SemanaDelSemaforoCerradaNotificationListener` (a la persona), `ResumenSemanalDelGrupoNotificationListener` (al mentor) y `ResumenSemanalGeneralNotificationListener` (a cada MENTOR_LEAD, ADMIN y ALCHEMIST activo). Título y cuerpo **sin cifras ni nombres de personas**, porque `NotificacionService.intentarPush` manda los mismos textos en el push. Textos provisorios hasta que el dueño los apruebe.
+>
 > **Corregido 2026-09-15.** Este párrafo decía "los 4 listeners" y enumeraba solo esos cuatro; desde la auditoría se sumaron `AvisoHabitoNotificationListener`, `AvisoAcompanamientoNotificationListener`, `GrupoPorVencerNotificationListener` y `PatronDeMalestarNotificationListener`. La descripción de abajo sigue valiendo para todos: ninguno tiene lógica de negocio, `@Transactional` propio ni más de un caso de uso.
 
 Los listeners originales (`HabitoCompletadoNotificationListener.java:28-42`, `RachaCompletadaNotificationListener.java:13-27`, `RocaCompletadaNotificationListener.java:13-26`, `SantuarioRotoNotificationListener.java:14-28`) son "adaptador tonto" de manual: cada uno usa `@ApplicationModuleListener`, reacciona a **un** evento con **una** llamada a `EmitirNotificacionUseCase.emitir(...)`, sin lógica de negocio embebida, sin `@Transactional` propio, sin orquestar más de un caso de uso. Ninguno supera 42 líneas.

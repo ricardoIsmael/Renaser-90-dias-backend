@@ -125,7 +125,7 @@ Mismo criterio, más chico: el documento describe la fase II como "Días 8 a 34"
 | RF-22 | Weekly Rocks | ✅ | Con ventana de planificación y cierre semanal |
 | RF-23 | Daily Rocks + Pomodoro | ⚠️ | Rocas diarias completas (incluido Pareto); el temporizador es cliente |
 | RF-24 | Coherencia diaria (Ley VI) | ⚠️ | `RegistrarCoherenciaDiariaUseCase` existe y **nadie lo llama** — era **Q-2**, ahora resuelta (§2) |
-| RF-25 | Semáforo diario (80/60) | ❌ | Los umbrales no existen en el código |
+| RF-25 | Semáforo diario (80/60) | ✅ | **D-168 (2026-09-25).** Verde ≥ 80, amarillo 60–79,9, rojo < 60, sin datos nunca verde. La fórmula es la que confirmó el dueño (hábitos + objetivos, promedio de 7 días cerrados), no la de RF-24: ver la fila «Ley V/VI» de §5. Barrido horario `points-cerrar-semaforo`, cierre semanal sábado 00:00 local. *(Decía: «❌ Los umbrales no existen en el código».)* |
 | RF-26 | Puntos inmutables (append-only) | ✅ | Ledger + saldo en la misma transacción (Ley I cumplida) |
 | RF-27 | Ranking de liga | ⚠️ | LEAGUE y CELL reales; **GENERAL y COHORT lanzan `UnsupportedOperationException` a propósito** (D-P7: no se inventó la fórmula). El documento la aporta parcialmente |
 | RF-28 | Detección y activación del Verdugo | ❌ | Registramos eventos (con el fix de destino ajeno, E-38); **la detección automática no existe** |
@@ -169,7 +169,7 @@ El documento consolida 6 "Leyes Maestras". Las verifiqué contra el código porq
 | **Ley II** · Identidad por `system_key` | El título es editable; la lógica debe emparejar por la clave inmutable | ✅ **Se cumple.** `Habito.claveSistema` existe y es la identidad de negocio |
 | **Ley III** · `programDay` solo avanza por cron | **Nunca** derivarlo de `startDate` vs hoy | ✅ **Se cumple, verificado explícitamente.** `ParticipacionPrograma.diaPrograma` es un contador que solo hace `++` con tope en 90. La única resta de fechas del proyecto está en `SemanaPrograma` (rocks) y calcula *semana de calendario*, que es otra cosa |
 | **Ley IV** · Aislamiento Phone-Free | Estado `IN_PROGRESS` excluido de la expiración nocturna | ✅ **Se cumple.** |
-| **Ley V/VI** · Semáforo y coherencia | Fórmula y umbrales | ❌ **No implementada** — es RF-24/RF-25. La fórmula recién llega con este documento |
+| **Ley V/VI** · Semáforo y coherencia | Fórmula y umbrales | ⚠️ **Semáforo implementado (D-168), coherencia de RF-24 no.** El dueño definió el semáforo con hábitos + objetivos (lo que hacía `coherence.ts` del backend viejo), no con la «coherencia = obligatorios hechos / obligatorios» de RF-24; y la «coherencia» que muestra Hoy es solo objetivos (D-128). Son tres números distintos a propósito. *(Decía: «❌ No implementada — es RF-24/RF-25».)* |
 
 **Cuatro de seis leyes se cumplen y están probadas.** La que falta es justamente la que nadie nos había dado hasta hoy.
 

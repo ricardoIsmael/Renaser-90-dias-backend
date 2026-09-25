@@ -146,6 +146,26 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | POST | `/api/v1/admin/ranking/snapshots?date=YYYY-MM-DD` |
 | GET | `/api/v1/ranking/{tipo}` — `tipo` ∈ `LEAGUE`, `CELL` (`GENERAL`/`COHORT` todavía no) |
 
+### Semáforo de cumplimiento del aprendiz (D-168, 2026-09-25)
+
+Formato JSON y reglas: [`docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md`](arquitectura/SEMAFORO_DEL_APRENDIZ.md) §4.
+Todas exigen sesión (`SecurityConfig`, E-254).
+
+| Verbo | Ruta | Quién · guard |
+|---|---|---|
+| GET | `/api/v1/me/semaforo?semanas=8` | cualquiera, el propio · cuenta activa |
+| PUT | `/api/v1/me/semaforo/pausa` `{"hasta": "YYYY-MM-DD"}` | staff con programa propio (`TRACK_PROGRAM_AS_STAFF`) · el aprendiz recibe 403 |
+| DELETE | `/api/v1/me/semaforo/pausa` | ídem |
+| GET | `/api/v1/home` → campo `semaforo` (con los 7 días) | el propio |
+| GET | `/api/v1/mentor/groups/{groupId}/semaforo?semanaHasta=` | mentor · acompaña vigentemente el grupo y cuenta activa |
+| GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/semaforo?semanas=8` | mentor · ídem y el alumno es del grupo |
+| GET | `/api/v1/semaforo/groups?semanaHasta=` | líder, admin, alquimista · sin nombres de aprendices |
+| GET | `/api/v1/admin/semaforo/groups/{groupId}?semanaHasta=` | admin, alquimista (`MANAGE_TRAINEES`) |
+| GET | `/api/v1/admin/trainees/{traineeId}/semaforo?semanas=8` | admin, alquimista · 404 si la persona no existe |
+
+`semanaHasta` es el viernes que cierra la semana (sábado→viernes); sin él, la ventana vigente (los 7 días
+cerrados que terminan ayer). Un `semanaHasta` que no es viernes responde 400.
+
 ### `academy`
 
 | Verbo | Ruta |

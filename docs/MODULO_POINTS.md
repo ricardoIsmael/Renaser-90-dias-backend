@@ -213,6 +213,29 @@ No se creó el agregado `participante` en `users` — está fuera del alcance de
 
 ---
 
+## 9. Semáforo de cumplimiento del aprendiz (D-168, 2026-09-25)
+
+`points` es dueño del semáforo verde/amarillo/rojo del aprendiz (punto 9 del Excel de problemas de
+formación, RF-25). Reglas, contratos JSON, quién ve qué y avisos del sábado están en un solo lugar:
+[`docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md`](arquitectura/SEMAFORO_DEL_APRENDIZ.md). Acá, solo el mapa.
+
+| Pieza | Dónde |
+|---|---|
+| Fórmula, umbrales, semana sábado→viernes, pausa | `domain/model/semaforo/` (`ReglaDelSemaforo`, `CumplimientoDelDia`, `MedicionDeLaPersona`, `CierreSemanal`, `PlanDeCierre`, `PausaDeMedicion`) |
+| Barrido cada hora (minuto 25, `points-cerrar-semaforo`) | `CerrarSemaforoScheduler` → `CierreDelSemaforoService` (paginado, 2 consultas en lote por página) → `CierreDeParticipanteService` (una transacción por persona, publica `SemanaDelSemaforoCerradaEvent`) |
+| Lectura para otros módulos | `api/SemaforoFinder` → `ConsultaDelSemaforoService` (solo lee lo guardado) |
+| Conteos por día | `api/ConteoDiarioHabitosFinder` (lo implementa `habits`) y `api/ConteoDiarioObjetivosFinder` (lo implementa `rocks`), DIP como D-43, sin SQL nuevo |
+| Fechas del programa | `users.api.ProgramasActivadosFinder` (el día 1 y el 90 los calcula el agregado de `users`) |
+| Tablas | `semaforo_dias` (conteos), `semaforo_semanas` (foto append-only), `semaforo_pausas` — V68 |
+| Endpoints propios | `GET /api/v1/me/semaforo`, `PUT`/`DELETE /api/v1/me/semaforo/pausa`, campo `semaforo` de `GET /api/v1/home` |
+
+**Pruebas:** dominio sin Spring (`ReglaDelSemaforoTest`, `CumplimientoDelDiaTest`, `MedicionDeLaPersonaTest`,
+`CierreSemanalTest`, `PausaDeMedicionTest`, `SemanaDelSemaforoTest`), aplicación con tablas en memoria
+(`CierreDelSemaforoServiceTest` —incluye el sábado 04:30 UTC, que en Lima todavía es viernes—,
+`ConsultaYPausaDelSemaforoTest`), endpoint contra el interceptor real (`MiSemaforoControllerTest`),
+persistencia (`SemaforoJdbcAdaptersTest`) y punta a punta con los cuatro módulos reales
+(`SemaforoDeExtremoAExtremoIT`).
+
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 
 Alcance: `src/main/java/com/renaser/os/points/**` contra CLAUDE.MD §5.1, §5.1.2, §5.3.4/§5.3.5, §5.4.1–§5.4.10. Solo lectura — no se corrió `./mvnw`, no se modificó ningún `.java`. Método: lectura completa de los 62 archivos de producción del módulo + grep dirigido.

@@ -1,5 +1,7 @@
 package com.renaser.os.points.application.ports.in.home;
 
+import com.renaser.os.points.api.ColorSemaforo;
+import com.renaser.os.points.api.DiaDelSemaforo;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 
@@ -59,7 +61,7 @@ public interface ConsultarResumenHomeUseCase {
                         int diaPrograma, boolean inscrito, FasePrograma fase,
                         HabitosHoyResumen habitosHoy, RocasHoyResumen rocasHoy,
                         ProximoEventoResumen proximoEvento, Long notificacionesNoLeidas,
-                        List<String> bloqueos) {
+                        List<String> bloqueos, SemaforoHoyResumen semaforo) {
 
         /** Espejo de {@code TodayCounts} del contrato movil ({completed,total}). */
         public record HabitosHoyResumen(int completados, int total) {
@@ -70,6 +72,14 @@ public interface ConsultarResumenHomeUseCase {
         }
 
         public record ProximoEventoResumen(UUID eventoId, String titulo, Instant iniciaEn) {
+        }
+
+        /**
+         * El semáforo de cumplimiento vigente (D-168), para la tarjeta de Hoy. {@code null} si la
+         * persona no se mide. {@code porcentaje} null = sin datos en la ventana (nunca verde).
+         */
+        public record SemaforoHoyResumen(ColorSemaforo color, BigDecimal porcentaje, int diasConDatos,
+                                         boolean pausado, List<DiaDelSemaforo> dias) {
         }
     }
 }
