@@ -663,6 +663,21 @@ no se cargan acá, la función queda apagada aunque el código esté desplegado.
 | `IA_ACOMPANANTE_AVISOS_EN_CHAT`, `IA_ACOMPANANTE_LOGROS_EN_CHAT` | `true` cuando el dueño apruebe los textos | Avisos de hábitos y logros en el chat | Los textos de `application.yaml` están marcados como provisorios |
 | `RENASIA_CHAT_MODEL` | No cargarlo: queda el default `gemini-3.5-flash-lite` | El modelo del chat | Decisión del dueño del 2026-09-25: el más estable de los medidos (E-233) |
 
+**Cómo se cargan: `scripts/despliegue/parametros-acompanante.sh`.** Lo corre quien tenga acceso a AWS
+y no sobrescribe nada sin preguntar.
+- **`preparar`, antes del push a master:**
+  - pide la API key de Gemini sin mostrarla;
+  - revisa `IA_PROVEEDOR` y `RENASIA_CHAT_MODEL`;
+  - crea los interruptores de arriba **apagados**;
+  - pone en `-` los dos crons del semáforo (`renaser.scheduling.semaforo.cron` y
+    `renaser.scheduling.resumen-semaforo.cron`), que así no se programan.
+
+  Así el despliegue no le cambia nada a quien tiene la app de hoy. El dueño decidió el 2026-09-25
+  subir el backend primero y prender todo junto después. Con la app vieja, un aviso del semáforo
+  llegaría sin pantalla donde verlo.
+- **`prender`, cuando la gente tenga la app nueva:** enciende los interruptores y borra los dos
+  crons, para que el semáforo recalcule solo, y después `docker restart backend`.
+
 **Opcionales — solo si hay que apartarse del default:** `DB_POOL_MAX_SIZE`, `DB_POOL_MIN_IDLE`,
 `DB_POOL_CONNECTION_TIMEOUT_MS`, `ASYNC_IA_CONCURRENCY_LIMIT`, `RENASIA_LIMITE_DIARIO`,
 `ACCOUNT_DELETION_GRACE_DAYS`, `ONBOARDING_V90_HABILITADO`, `HABITS_AVISO_ANTELACION_INICIO`,
