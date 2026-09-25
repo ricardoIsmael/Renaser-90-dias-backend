@@ -65,6 +65,16 @@ final class HorariosParaProponer {
         }
     }
 
+    /**
+     * Si el habito esta pausado, la tarjeta lo dice: el horario nuevo se guarda igual, pero no se va
+     * a ver hasta que lo reactive (bateria del 2026-09-25, ronda 2: propuso "ducha fria a las 20:00"
+     * sin decir que estaba pausada). Va en el resumen y no en el prompt: la persona lo lee antes de
+     * confirmar, lo diga el modelo o no.
+     */
+    static String siEstaPausado(HorarioDeHabito habito) {
+        return habito.pausado() ? " Esta pausado: el horario nuevo se vera cuando lo reactive." : "";
+    }
+
     static HorarioDeHabito habito(HorariosDelDia dia, UUID habitoId) {
         return dia.habitos().stream()
                 .filter(habito -> habitoId.equals(habito.habitoId()))

@@ -171,4 +171,19 @@ class PropuestaDeCambioDeHorarioTest {
                 .contains("no se gasta un cambio");
         verify(proponer, never()).proponer(any(), any(), any());
     }
+
+    /** Bateria 2026-09-25, ronda 2 (#41): "ducha fria a las 20:00" para un habito pausado, sin decirlo. */
+    @Test
+    @DisplayName("si el habito esta pausado, la tarjeta dice que el horario nuevo se vera cuando lo reactive")
+    void pausadoLoDiceLaTarjeta() {
+        hoyEsDia12();
+        when(horarios.deFecha(APRENDIZ, MANANA)).thenReturn(new HorariosDelDia(MANANA, 13, List.of(new HorarioDeHabito(
+                MEDITAR, "Meditar", LocalTime.of(6, 0), LocalTime.of(7, 0), false, false, true, false, null)),
+                new CuotaCambios(2, 1, 3, false)));
+
+        herramienta.ejecutar(APRENDIZ, pedido("habito_id", MEDITAR.toString(), "hora_inicio", "06:30"));
+
+        verify(proponer).proponer(org.mockito.ArgumentMatchers.eq(APRENDIZ), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.endsWith("Esta pausado: el horario nuevo se vera cuando lo reactive."));
+    }
 }
