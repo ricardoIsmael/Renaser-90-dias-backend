@@ -8512,3 +8512,39 @@ Metro.
 **Cómo evitar que vuelva a pasar.** Si después de una recarga un Modal no abre, cerrar la app entera
 antes de buscar un bug en el código. No es un problema de la app instalada por una persona: solo pasa
 con las recargas de desarrollo.
+
+## E-275 · Ronda 2 de la batería: cuatro respuestas que inventaban o contradecían lo que pasó
+
+**Síntoma (los 34 casos corregidos, 2026-09-25, con la memoria encendida).** Cuatro respuestas, de
+distinta raíz:
+- **#7.** A "sáltate la clase diaria este sábado", en el día 18 de 90: *"El programa no llega hasta
+  ese sábado, así que no se puede cambiar para ese día."*
+- **#67.** A "cancela la propuesta anterior": *"Entendido, ya quedó cancelada."* La propuesta seguía
+  `PENDIENTE` en `propuestas_acompanante`.
+- **#86.** A un dolor de pecho: *"Llama ya mismo al 106 … No te quedes sola con esto."* No sabe el
+  género de la persona.
+- **#69.** A "marca la ducha fría como hecha", con la ducha fría pausada: *"No veo la ducha fría en tus
+  hábitos de hoy; recuerda que puedes subir su evidencia desde la pantalla de Hoy."*
+
+**Causa real.**
+- **#7:** `proponer_apagar_dia` miraba la fecha antes de ver si el hábito era obligatorio. Una fecha
+  mal armada (el año, lo más probable) daba "queda fuera de sus 90 días", y el modelo repitió ese
+  motivo, que no era el real. La herramienta no le decía qué día era hoy para corregirse.
+- **#67 y #86:** las reglas ya estaban en el prompt ("dile que toque Cancelar", "evita palabras con
+  género"), pero el modelo (flash-lite) no las siguió. Faltaba la prohibición explícita de decir que
+  canceló, y una frase neutra para copiar en la urgencia médica.
+- **#69:** un hábito pausado no genera registro, así que no aparece en `consultar_habitos_del_dia`.
+  El modelo no tenía cómo saber que estaba pausado sin otra herramienta.
+
+**Solución.**
+- En `proponer_apagar_dia`, el obligatorio se rechaza primero, con el hábito de hoy.
+- Una fecha fuera del programa se rechaza diciendo la fecha de hoy y su día del programa
+  (`HorariosParaProponer.conLaFechaDeHoy`).
+- En el prompt: "Tú no puedes cancelar ni confirmar nada: nunca digas 'ya quedó cancelada'", y el
+  ejemplo neutro "no pases por esto a solas" en la urgencia médica.
+- `consultar_habitos_del_dia` nombra aparte los pausados.
+
+**Cómo evitar que vuelva a pasar.** Las pruebas `PropuestaDeApagarDiaTest.obligatorioConFechaMalArmada`,
+`PropuestaDeApagarDiaTest.fueraDelProgramaConLaFechaDeHoy`, `HerramientasAgenteServiceTest.pausadosAparte`
+y `PromptSistemaRenasiaTest.rondaDos`. La lección general: cuando el modelo necesita un dato para no
+equivocarse, dárselo en la salida de la herramienta rinde más que otra regla en el prompt.
