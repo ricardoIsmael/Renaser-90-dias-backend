@@ -8283,3 +8283,51 @@ Cuesta ~0,4 s más de audio por turno, nada más.
 que subir el colchón previo, y probar con frases cuya primera sílaba cambie el sentido
 ("desactiva/activa", "no quiero/quiero"). Y en las pruebas, comparar siempre el turno guardado con
 lo que se dijo: ahí se ve lo que el modelo oyó de verdad.
+
+## E-245 · El orbe dijo "No es posible pausar el hábito" sin motivo ni alternativa
+
+**Síntoma.** Prueba por voz (2026-09-24, 17:34). Clip: *"Pausa el hábito escritura libre nocturna
+hasta el domingo."* Respuesta guardada: *"No es posible pausar el hábito de escritura libre nocturna.
+Si tienes cualquier duda sobre los hábitos que sí puedes modificar, dímelo."* Ante *"Sí, hazlo, por
+favor"*: *"Como te mencioné, no es posible pausar ese hábito en este momento."* El dueño lo oyó y pidió
+que diga el motivo ("no puedo, es obligatorio del programa") y qué sí se puede.
+
+**Causa real.** Dos, en la misma herramienta. (1) `proponer_pausar_habito` busca el hábito solo en los
+desbloqueos (`desbloqueos_habito`, lo que se suma al plan). Escritura libre nocturna es de la base del
+programa y no está ahí (0 filas para ese participante), así que devolvía *"Ese habito no esta en su
+plan"* y la lista de pausables, y el modelo lo resumió en "no es posible". Ojo: ese hábito **no** es
+obligatorio (`desactivable = true`) y sí se puede apagar por día (se hizo en la misma prueba, 17:28).
+(2) Con un obligatorio pasaba lo mismo: los cuatro de V18 tampoco están en los desbloqueos, así que la
+guarda `habito.obligatorio()` de la herramienta no se alcanzaba nunca y la Clase diaria también
+recibía "no está en su plan".
+
+**Solución (2026-09-25, D-165).** `habits.api` expone los obligatorios de todos los hábitos que la
+persona ve; la pausa distingue "es obligatorio del programa" de "es de la base de tu día" y las dos
+negativas dicen qué sí se puede (`LoQueSiSePuede`, la misma redacción en pausar, apagar un día y
+horario por día de semana). Herramienta nueva `consultar_habitos_obligatorios`. El prompt prohíbe el
+"no es posible" a secas.
+
+**Cómo evitar que vuelva a pasar.** Una negativa de herramienta lleva motivo **y** alternativa; los
+tests lo exigen (`PropuestaDePausarHabitoTest.obligatorioDeLaBase` y `deLaBaseNoSePausa`, que fallan
+contra el código anterior; `PropuestaDeApagarDiaTest.obligatorio`). Al probar una herramienta de
+escritura, usar hábitos de los dos tipos: uno que se suma al plan y uno de la base.
+
+## E-246 · Una propuesta del orbe quedó CANCELADA a los 60 s sin que el script tocara Cancelar
+
+**Síntoma.** Prueba por voz (2026-09-24). `proponer_apagar_dia` creada a las 17:21:14.65 (Lima) y en
+`CANCELADA` a las 17:22:14.37 (`resuelta_en`), sin `resultado`. En ese lapso el script de prueba solo
+leía logcat: no tocó la pantalla. En la corrida siguiente (17:28) la misma propuesta siguió
+`PENDIENTE` más de dos minutos hasta que se confirmó.
+
+**Causa real.** No determinada. Lo único que pasa una propuesta a `CANCELADA` es
+`POST /api/v1/renasia/propuestas/{id}/cancelar`, y la app lo manda solo al tocar CANCELAR (hoja del
+orbe o tarjeta del chat); el backend nunca cancela solo (a los 10 min la vence a `VENCIDA`). Lo más
+probable es un toque manual en el emulador, que el dueño estaba mirando a esa hora. No se pudo
+comprobar porque la prueba no grababa la pantalla.
+
+**Solución.** Ninguna en el código: no se encontró un defecto.
+
+**Cómo diagnosticarlo si vuelve.** En las pruebas de punta a punta, grabar la pantalla
+(`adb shell screenrecord`) y avisar que nadie toque el emulador. Si pasa con la pantalla grabada y sin
+toques, sospechar de la hoja flotante (un toque que la atraviese) y registrar en la app desde qué
+botón salió el `cancelar`.
