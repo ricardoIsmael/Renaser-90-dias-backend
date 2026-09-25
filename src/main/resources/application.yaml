@@ -380,8 +380,9 @@ renaser:
         # Corregido 2026-09-24: eran 10 (decision del dueno, D-162 §8). Pasan a 30 mientras se prueba
         # con el equipo, a pedido del dueno; antes de produccion se vuelve a decidir (cada minuto
         # de conversacion cuesta ~US$0,014 de entrada mas la salida).
-        minutos-por-dia: ${IA_VOZ_EN_VIVO_MINUTOS_POR_DIA:30}
-        # Tope de Gemini Live para una sesion de solo audio. Con la cuota de 10 no se alcanza.
+        # Corregido 2026-09-25: el dueno decidio 20 para produccion. Decia 30.
+        minutos-por-dia: ${IA_VOZ_EN_VIVO_MINUTOS_POR_DIA:20}
+        # Tope de Gemini Live para una sesion de solo audio: con 20 por dia, una sesion larga deja 5.
         minutos-maximos-por-sesion: ${IA_VOZ_EN_VIVO_MINUTOS_POR_SESION:15}
     acompanante:
       # Fase 2 de la propuesta del acompanante (D-153): con esto en true, `marcar_habito_completado`
