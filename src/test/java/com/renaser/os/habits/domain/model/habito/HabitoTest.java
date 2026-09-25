@@ -106,6 +106,71 @@ class HabitoTest {
         assertThat(deCatalogo.esPersonalDe(null)).isFalse();
     }
 
+    // ────────────────────────────────────────────────────────────────────────────────────
+    // D-169: Ciclos de Intoxicacion (dias 8-10, 17-19, 26-28). Todos los habitos pasan a
+    // opcionales salvo los `obligatorio_en_intoxicacion`. Con el codigo anterior (`es_opcional`
+    // del catalogo copiado tal cual) los casos "en ventana" fallan: no existia la regla.
+    // ────────────────────────────────────────────────────────────────────────────────────
+
+    private static Habito deCatalogo(boolean esOpcional, boolean obligatorioEnIntoxicacion) {
+        return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "Titulo", TipoHabito.CHECKBOX,
+                new DetallesHabito(null, "CUERPO", ExigenciaEvidencia.OBLIGATORIA, esOpcional,
+                        obligatorioEnIntoxicacion), AHORA);
+    }
+
+    @Test
+    void unHabitoObligatorioSeVuelveOpcionalSoloDentroDeLasVentanas() {
+        Habito jugoVerde = deCatalogo(false, false);
+
+        assertThat(jugoVerde.esOpcionalEnDia(7)).isFalse();
+        assertThat(jugoVerde.esOpcionalEnDia(8)).isTrue();
+        assertThat(jugoVerde.esOpcionalEnDia(10)).isTrue();
+        assertThat(jugoVerde.esOpcionalEnDia(11)).isFalse();
+        assertThat(jugoVerde.esOpcionalEnDia(18)).isTrue();
+        assertThat(jugoVerde.esOpcionalEnDia(28)).isTrue();
+        assertThat(jugoVerde.esOpcionalEnDia(29)).isFalse();
+        assertThat(jugoVerde.esOpcionalEnDia(0)).isFalse();
+    }
+
+    /** La publicacion diaria en la comunidad (V4: `obligatorio_en_intoxicacion = true`). */
+    @Test
+    void elHabitoObligatorioEnIntoxicacionSigueExigibleEnLasVentanas() {
+        Habito postDiario = deCatalogo(false, true);
+
+        assertThat(postDiario.esOpcionalEnDia(9)).isFalse();
+        assertThat(postDiario.esOpcionalEnDia(17)).isFalse();
+        assertThat(postDiario.esOpcionalEnDia(26)).isFalse();
+        assertThat(postDiario.esOpcionalEnDia(12)).isFalse();
+    }
+
+    /** DIA SIN CELULAR: opcional de catalogo todos los dias, en ventana o no. */
+    @Test
+    void unHabitoOpcionalDeCatalogoEsOpcionalTodosLosDias() {
+        Habito diaSinCelular = deCatalogo(true, false);
+
+        assertThat(diaSinCelular.esOpcionalEnDia(5)).isTrue();
+        assertThat(diaSinCelular.esOpcionalEnDia(9)).isTrue();
+    }
+
+    /** Supuesto de D-169: la bandera exceptua de volverse opcional; no vuelve obligatorio a nadie. */
+    @Test
+    void laBanderaNoVuelveObligatorioAUnHabitoOpcionalDeCatalogo() {
+        Habito opcionalConBandera = deCatalogo(true, true);
+
+        assertThat(opcionalConBandera.esOpcionalEnDia(9)).isTrue();
+        assertThat(opcionalConBandera.esOpcionalEnDia(12)).isTrue();
+    }
+
+    /** "Todos los habitos": tambien los propios del aprendiz, que nacen sin ninguna de las dos banderas. */
+    @Test
+    void unHabitoPersonalTambienSeVuelveOpcionalEnLasVentanas() {
+        Habito propio = Habito.crearPersonal(HabitoId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                "Correr 5km", TipoHabito.CHECKBOX, "CUERPO", PlantillaHabitoPersonal.CORRER, "Meta", AHORA);
+
+        assertThat(propio.esOpcionalEnDia(19)).isTrue();
+        assertThat(propio.esOpcionalEnDia(20)).isFalse();
+    }
+
     /**
      * Invariante protegido explicito (CLAUDE.MD, encargo de esta tarea): {@code
      * actualizarDetalles} no expone ninguna forma de tocar {@code tipo} ni

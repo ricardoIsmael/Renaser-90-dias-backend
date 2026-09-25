@@ -8284,6 +8284,30 @@ que subir el colchón previo, y probar con frases cuya primera sílaba cambie el
 ("desactiva/activa", "no quiero/quiero"). Y en las pruebas, comparar siempre el turno guardado con
 lo que se dijo: ahí se ve lo que el modelo oyó de verdad.
 
+## E-244 · Producción dejó de mandar correos tras cambiar `SMTP_PASSWORD`: el contenedor seguía con la clave vieja
+
+**Síntoma.** Desde el 2026-09-25 04:09 UTC ningún correo transaccional salía (códigos de
+verificación y de recuperar contraseña; lo notaron con la cuenta 3). En el log de `backend`, literal:
+`[users.SmtpEnviarEmailAdapter] fallo el envio de un correo transaccional (asunto 'Tu código para
+recuperar la contraseña de Renaser', causa MailAuthenticationException)`.
+
+**Causa real.** `/renaser/prod/SMTP_PASSWORD` se cambió (versión 2) el 2026-09-24 16:10 UTC, pero el
+contenedor había arrancado el 2026-09-23 16:34 UTC. `application-prod.yaml` importa Parameter Store
+**una sola vez, al arrancar** (§6 de `docs/DESPLIEGUE_Y_CI.md`): no hay recarga en caliente, así que
+el `JavaMailSender` siguió autenticando con la clave anterior, que ya no era válida. El código no
+tenía nada mal.
+
+**Solución (2026-09-25).** `docker restart backend` en `i-0ea00f555c5fe8028` por `ssm send-command`
+(misma imagen, `UP` a los 54 s). En el arranque el log muestra `Loading property from AWS Parameter
+Store with name: /renaser/prod/`, que es cuando toma la clave nueva.
+
+**Cómo evitar que vuelva a pasar.** **Todo cambio de un parámetro de `/renaser/prod/` va seguido de
+reiniciar el contenedor `backend`** (o de un despliegue). Para diagnosticar, comparar
+`aws ssm describe-parameters ... LastModifiedDate` contra `docker inspect -f {{.State.StartedAt}}
+backend`: si el parámetro es más nuevo que el arranque, el backend no lo tiene. Si tras reiniciar
+sigue `MailAuthenticationException`, ya es la clave: con Gmail tiene que ser una contraseña de
+aplicación de la misma cuenta de `SMTP_USERNAME`.
+
 ## E-245 · El orbe dijo "No es posible pausar el hábito" sin motivo ni alternativa
 
 **Síntoma.** Prueba por voz (2026-09-24, 17:34). Clip: *"Pausa el hábito escritura libre nocturna
@@ -8414,6 +8438,330 @@ semana. Se reporta al dueño y no se mezcla con D-165.
 
 **Cómo evitar que vuelva a pasar.** Cuando una regla cuenta "cosas distintas", las herramientas que la
 anuncian tienen que recibir esa distinción de quien la calcula, no inferirla con una resta.
+
+## E-250 · Los avisos de acompañamiento al mentor se publican fuera de una transacción (llegan tarde por el reintento)
+
+**Síntoma (encontrado leyendo código el 2026-09-25, no observado en ejecución).** Al diseñar el cierre
+semanal del semáforo (D-168) se revisó `mentoring/application/services/AvisosService`, el precedente de
+"barrido que publica avisos". `detectar()` no es `@Transactional` y llama a `revisarGrupo(...)`, anotado
+`@Transactional(propagation = REQUIRES_NEW)`, **desde la misma clase**. El listener que entrega el aviso
+(`AvisoAcompanamientoNotificationListener`) es `@ApplicationModuleListener`, que es un
+`@TransactionalEventListener`.
+
+**Causa real.** Auto-invocación: una llamada `this.revisarGrupo()` no pasa por el proxy de Spring, así que
+el `@Transactional(REQUIRES_NEW)` no se aplica y `publishEvent` corre sin transacción. Un
+`@TransactionalEventListener` sin transacción activa no se ejecuta (salvo `fallbackExecution = true`,
+que no está). Consecuencia probable: los avisos `SIN_ACTIVIDAD` y `EVIDENCIA_VENCIDA` al mentor no se
+crean nunca, y la sección AVISOS de `MiCelulaScreen` sale siempre vacía. `AvisosServiceTest` no lo
+detecta porque es unitaria (sin proxy).
+
+**Solución.** Ninguna en este cambio (regla 00: se reporta, no se arregla de paso). Para confirmarlo:
+contar en una base con datos `SELECT count(*) FROM renaser.notificaciones WHERE tipo =
+'ACOMPANAMIENTO_ALUMNO'`, o una IT que corra el barrido con Spring y mire la tabla. El arreglo es mover
+`revisarGrupo` a otro bean (o usar `TransactionTemplate`), como hace `CierreDeParticipanteService`.
+
+**Cómo evitar que vuelva a pasar.** Un evento con listener `@ApplicationModuleListener` se publica
+siempre dentro de una transacción que pasa por el proxy. El cierre del semáforo lo hace en un bean aparte
+(`CierreDeParticipanteService`) y lo prueba `SemaforoDeExtremoAExtremoIT` con el contexto real.
+
+> **Corregido 2026-09-25 (mismo día).** El título decía «probable: nunca llegan». Al construir el resumen
+> del sábado se hizo una mutación a propósito (publicar sin transacción) y las publicaciones **sí quedaron
+> registradas** en el outbox de Spring Modulith, pero incompletas (2 de 2). `EventPublicationMaintenanceScheduler`
+> reintenta las incompletas (`reintento-tras: PT5M`), así que lo más probable es que los avisos al mentor
+> lleguen **tarde** (5 minutos o más) y no que se pierdan. Sigue sin verificarse contra una base con datos;
+> la forma correcta de publicar no cambia.
+
+## E-251 · El snapshot del ranking general cuenta el día recién empezado como 0 %
+
+**Síntoma (encontrado leyendo código el 2026-09-25).** `SnapshotRankingScheduler` corre a las 05:05 UTC
+(00:05 de Lima) y pasa `clock.today()` —la fecha UTC, que a esa hora ya es el día nuevo de Lima— como
+`hasta` de la ventana de 7 días de `PorcentajeHabitosFinder`. Los registros de ese día se acaban de
+generar (05:02 UTC) y están todos PENDIENTE.
+
+**Causa real.** La ventana `[hasta-6, hasta]` incluye un día que todavía no empezó a vivirse: sus hábitos
+obligatorios cuentan como no cumplidos y ese día entra al promedio con 0 %. El ranking general de todos
+queda sistemáticamente más bajo, y más para quien tiene menos días en la ventana.
+
+**Solución.** Ninguna en este cambio (fuera del alcance de D-168, se reporta). El semáforo no tiene el
+problema: su ventana son los 7 días CERRADOS que terminan ayer, en la zona de cada persona.
+
+**Cómo evitar que vuelva a pasar.** Una ventana "de 7 días" dice explícitamente si incluye hoy; un
+cálculo de cumplimiento nunca incluye un día que no cerró.
+
+## E-252 · El Espejo de la Sombra corre el domingo 22:00 de Lima como si la semana ya hubiera cerrado
+
+**Síntoma (encontrado leyendo código el 2026-09-25).** `GenerarInformesSemanalesScheduler` corre
+`0 0 3 * * MON` en UTC —domingo 22:00 en Lima— y arma "la semana pasada" desde `clock.today()`, que es la
+fecha UTC (lunes).
+
+**Causa real.** Regla 02 §1: la medianoche local no cae a una hora UTC fija. Lo que se escriba el domingo
+entre las 22:00 y las 24:00 de Lima queda fuera del informe de esa semana.
+
+**Solución.** Ninguna en este cambio (se reporta).
+
+**Cómo evitar que vuelva a pasar.** Todo cierre semanal decide en la zona de la persona, con un barrido
+horario (como el del semáforo, `CerrarSemaforoScheduler`).
+
+## E-253 · El Verdugo marca IGNORADO a las 18:55 de Lima lo pendiente "de hoy"
+
+**Síntoma (encontrado leyendo código el 2026-09-25).** `VerdugoIgnoradoScheduler` corre `0 55 23 * * *`
+UTC (18:55 en Lima) y resuelve los eventos de `clock.today()`.
+
+**Causa real.** Misma familia que E-91 y E-252: a esa hora al día de Lima le quedan cinco horas. Impacto
+bajo hoy, porque ningún código del servidor crea eventos del Verdugo (RK-6), pero el día que existan se
+cerrarán antes de tiempo.
+
+**Solución.** Ninguna en este cambio (se reporta).
+
+**Cómo evitar que vuelva a pasar.** Igual que E-252.
+
+## E-254 · Las rutas nuevas del semáforo quedaban fuera del filtro de sesión
+
+**Síntoma.** `./mvnw clean verify` en la rama `semaforo-aprendiz` (2026-09-25):
+`RutasCubiertasPorElFiltroTest.ningunaRutaQuedaFueraDelFiltro` → *"Estas rutas no las alcanza ningun
+matcher .authenticated() de SecurityConfig y tampoco declaran @PublicEndpoint [...] Expecting empty but
+was: ["/api/v1/me/semaforo", "/api/v1/me/semaforo/pausa"]"*.
+
+**Causa real.** Los controllers nuevos declaraban `@RequiresPermission`, pero `SecurityConfig` exige
+sesión por prefijo de ruta y `/api/v1/me/semaforo` no estaba en ningún matcher: la cadena termina en
+`anyRequest().permitAll()`, así que sin el matcher la identidad habría salido del header `X-Actor-Id`.
+
+**Solución.** Matcher `.authenticated()` para `/api/v1/me/semaforo`, `/api/v1/me/semaforo/**` y
+`/api/v1/semaforo/**` (el resumen del líder). Las vistas del mentor y del administrador ya caían en
+`/mentor/**` y `/admin/**`.
+
+**Cómo evitar que vuelva a pasar.** Ya está automatizado: la prueba lo detectó antes de que la ruta
+llegara a ningún lado. Al diseñar un endpoint con prefijo nuevo, agregarlo a `SecurityConfig` en el mismo
+cambio (anotado en `docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md` §4).
+
+## E-255 · Hoy queda en blanco en la versión web: el orbe carga Skia sin CanvasKit
+
+**Síntoma (frontend, rama `acompanante-ia`, encontrado al hacer capturas del semáforo el 2026-09-25).**
+El build web muestra Hoy en blanco con `TypeError: Cannot read properties of undefined (reading 'Paint')`.
+
+**Causa real.** `OrbeAcompanante` carga `expo-thinking-orbs` (Skia) sin protección para web y nunca se
+carga CanvasKit. En Android/iOS no pasa; en la web publicada en Vercel se rompería la pestaña Hoy entera.
+
+**Solución.** Corregido en el frontend, rama `acompanante-ia`, commit `6febd7a` («Mostrar el orbe simple en la
+web, donde el animado dejaba Hoy en blanco»): en web `cargarOrbes()` devuelve `null` y no se carga
+`expo-thinking-orbs`, así que queda el orbe simple; además un `ErrorBoundary` deja el orbe simple si el
+animado revienta al dibujarse, en cualquier plataforma. Prueba: `src/features/renasia/utils/__tests__/orbeEnWeb.test.ts`.
+
+> **Actualizado 2026-09-25 (mismo día).** Decía: «Ninguna todavía (se reporta; es del área del acompañante).
+> Para las capturas del semáforo se precargó CanvasKit solo en un `index.html` del scratchpad; el repo no
+> cambió. Arreglo probable: `LoadSkiaWeb` antes de montar, o el orbe simple en web». Lo corrigió la sesión del
+> acompañante, que avisó con el commit. Las capturas del semáforo se hicieron antes del arreglo, con CanvasKit
+> precargado en el scratchpad.
+
+**Cómo evitar que vuelva a pasar.** Un recorrido web de humo de Hoy con Playwright en el CI del frontend.
+
+## E-256 · Jest no encuentra pruebas si el frontend corre dentro de un worktree
+
+**Síntoma.** Dentro de `.claude/worktrees/semaforo-app`, `npx jest` → `No tests found, exiting with code 1`.
+
+**Causa real.** `jest.config.js` tiene `testPathIgnorePatterns: ['/.claude/']`, que coincide con la ruta
+ABSOLUTA de cualquier worktree bajo `.claude/worktrees/` y descarta todas las pruebas.
+
+**Solución.** Ninguna en el repo (se reporta). Para correr ahí:
+`npx jest <rutas...> --testPathIgnorePatterns='/node_modules/|/e2e/'` (un solo valor, con `=` y `|`).
+Arreglo probable: `'<rootDir>/.claude/'`.
+
+> **Corregido 2026-09-25 (mismo día).** Decía `npx jest --testPathIgnorePatterns '/node_modules/' '/e2e/'`.
+> La opción recibe una lista, así que cualquier ruta escrita **después** también se toma como patrón a
+> ignorar: `npx jest --testPathIgnorePatterns '/node_modules/' '/e2e/' src/features/semaforo` corre todo
+> **menos** lo pedido y termina en verde (le pasó a FRONTEND-2: corrió 43 suites, las 59 menos las 16 que
+> se pedían). Con un solo valor
+> `='…|…'`, o con las rutas antes de la opción, corre lo que se pidió.
+
+**Cómo evitar que vuelva a pasar.** Los patrones de ignorar se anclan a `<rootDir>`. Y al filtrar pruebas, se
+confirma que la cantidad de suites de `Test Suites:` es la que se esperaba: verde con menos suites no prueba
+lo que se pidió (misma lección que E-111).
+
+## E-257 · La tarjeta «Hábitos de hoy» dice «Al día» cuando no hay datos
+
+**Síntoma (frontend).** Con `habitosHoy` en `null`, la tarjeta de Hoy muestra «Al día».
+
+**Causa real.** Un texto por defecto de la tarjeta. Contradice CL-07 del SDD 002 (nunca «al día» ni verde
+por falta de datos) y ahora además choca con la palabra del verde del semáforo (D-168).
+
+**Solución.** Ninguna (Hoy es pestaña protegida y no estaba en lo autorizado): se reporta al dueño.
+
+## E-258 · Un mentor SUSPENDIDO pasa los guards de mentor que ya existían
+
+**Síntoma (encontrado al construir las vistas del semáforo, 2026-09-25; no ejecutado contra una base).**
+`SeguimientoService.semanaDe` y `AcompanamientoService.aprendices` comprueban que el actor acompañe
+vigentemente el grupo, pero no que su cuenta esté ACTIVA; y el interceptor de permisos no revisa a MENTOR
+(hueco A-1). Un mentor suspendido con la asignación todavía abierta seguiría leyendo la semana de sus alumnos.
+
+**Causa real.** El guard de relación se escribió suponiendo que el interceptor ya filtraba a los
+suspendidos, y eso solo es cierto para TRAINEE.
+
+**Solución.** Ninguna en las vistas existentes (se reporta). Las del semáforo (`AccesoAVistasDelSemaforo`)
+sí exigen cuenta activa, con prueba de 403.
+
+**Cómo evitar que vuelva a pasar.** Mientras exista A-1, todo guard de servicio que no sea de TRAINEE
+comprueba también el estado de la cuenta.
+
+## E-259 · Los subagentes heredan el aislamiento del worktree de quien los lanza
+
+**Síntoma (orquestación del semáforo, 2026-09-25).** Dos agentes lanzados para trabajar cada uno en su propio
+worktree (`semaforo-vistas`, `semaforo-avisos`) no pudieron escribir ahí: *"This session is isolated in the
+worktree .../worktrees/semaforo-aprendiz. Edit the worktree copy of this file instead of the shared-checkout
+path."* El control de versiones sobre esas carpetas también quedaba bloqueado, y `EnterWorktree` desde el
+agente no lo destrabó.
+
+**Causa real.** La sesión orquestadora había entrado a su propio worktree antes de lanzarlos, y los
+subagentes heredan ese aislamiento aunque se les indique otra carpeta del mismo repositorio. El repositorio
+del frontend no quedó afectado.
+
+**Solución.** Cada agente trabajó sobre una copia en el scratchpad y entregó un parche de archivos nuevos que
+se aplicó con `patch -p1` en la rama del orquestador. Durante casi una hora el trabajo no se veía en ninguna
+carpeta del repo, y eso pareció un agente trabado.
+
+**Cómo evitar que vuelva a pasar.** Crear los worktrees de los agentes y lanzarlos **antes** de que el
+orquestador entre al suyo, o pedirles el parche desde el encargo.
+
+## E-260 · `relation "renaser.event_publication" does not exist` en una prueba del outbox
+
+**Síntoma.** Al escribir `ResumenSemanalDelSemaforoIT` (2026-09-25), una consulta de verificación a
+`renaser.event_publication` falló con `relation "renaser.event_publication" does not exist`.
+
+**Causa real.** La tabla del outbox de Spring Modulith vive en el esquema por defecto de la conexión: V2 no le
+fija esquema, a diferencia de las tablas del producto (`renaser.*`).
+
+**Solución.** Consultarla sin prefijo de esquema.
+
+**Cómo evitar que vuelva a pasar.** Una prueba que mira el outbox usa `event_publication` a secas.
+
+## E-261 · `LettuceConnectionFactory has been STOPPED` en el log de la suite, sin ninguna prueba rota
+
+**Síntoma.** En `./mvnw clean verify` (2026-09-25, rama `semaforo-aprendiz`) aparece varias veces, un minuto
+exacto después de otro (12:49:00, 12:50:00, 12:51:00), en el hilo `spring-session-1`:
+
+```
+ERROR ... o.s.s.s.TaskUtils$LoggingErrorHandler : Unexpected error occurred in scheduled task
+java.lang.IllegalStateException: LettuceConnectionFactory has been STOPPED. Use start() to initialize it
+	at ...LettuceConnectionFactory.assertStarted(LettuceConnectionFactory.java:1460)
+	...
+	at ...DefaultSetOperations.members(DefaultSetOperations.java:199)
+```
+
+La corrida termina igual en `BUILD SUCCESS` (4330 unitarias y 110 de integración, 0 fallos).
+
+**Causa real.** `spring-test` 7.0.9 **pausa** los contextos cacheados que no está usando la clase en curso
+(propiedad `spring.test.context.cache.pause`, verificado en `ContextCache.class` del jar): detiene los beans
+`SmartLifecycle`, y `LettuceConnectionFactory` es uno. La limpieza de sesiones vencidas de Spring Session
+corre en su propio planificador (el hilo `spring-session-*`, que no es un bean del contexto), sigue
+disparando cada minuto y encuentra la conexión detenida. Es ruido de la configuración de sesión en Redis
+(`shared/infrastructure/session/RedisSessionConfig`) con el framework de pruebas, no de una prueba concreta.
+Este cambio no toca sesión ni Redis; no se comparó contra una corrida de `master`.
+
+**Solución.** Ninguna (no afecta resultados). Se anota para que nadie lo persiga como fallo.
+
+**Cómo evitar que vuelva a pasar.** Si molesta en los logs, la opción a evaluar es fijar
+`spring.test.context.cache.pause` en `src/test/resources/spring.properties` o apagar la limpieza de sesiones
+en el perfil de pruebas; no se hizo porque cambia cómo corren todas las pruebas y no era parte de este pedido.
+Para saber si la suite pasó se mira la línea `Tests run:`, no la ausencia de `ERROR` en el log (E-111).
+
+## E-262 · Una migración escrita en paralelo quedó por debajo de la ya aplicada (V65 frente a V67)
+
+**Síntoma (detectado antes de que fallara, 2026-09-25).** La rama del semáforo traía
+`V65__semaforo_del_aprendiz.sql` y la del acompañante, `V67__memoria_del_acompanante.sql`. Al ir a integrar,
+`SELECT max(version::int) FROM public.flyway_schema_history` en la base local ya daba **67**: la otra sesión la
+había aplicado al correr su backend. No se llegó a arrancar la app con la V65, así que no hay mensaje literal.
+
+**Causa real.** Flyway corre con `out-of-order` apagado (su default; `application.yaml` no lo toca). Una
+migración resuelta que no está aplicada y tiene número **menor** que la última aplicada no se ejecuta: falla la
+validación al arrancar. Dos ramas que eligen número a la vez no ven la migración de la otra hasta integrar.
+
+**Solución.** Renumerar la del semáforo a `V68` antes del primer commit; nunca se había aplicado en una base
+persistente (solo en los contenedores de las pruebas). La cabecera de la migración explica el salto. La otra
+sesión quedó avisada de seguir desde `V69`.
+
+**Cómo evitar que vuelva a pasar.** Antes de integrar una rama con migraciones nuevas: mirar el máximo aplicado
+en la base local (la consulta de arriba; la tabla está en `public`, no en `renaser`) y los archivos de la otra
+rama, y renumerar lo propio por encima. Con varias sesiones en paralelo, avisar el número que se toma.
+
+## E-263 · Editar un hábito desde el panel admin apaga `obligatorio_en_intoxicacion` sin avisar
+
+**Síntoma (encontrado leyendo código el 2026-09-25, al implementar D-169; no hay mensaje: pasa en
+silencio).** `GET /api/v1/admin/habits` (`AdminHabitResponse`) no devuelve `mandatoryOnIntoxication`, y
+`POST /api/v1/admin/habits/{id}` (`UpdateHabitRequest`) es un reemplazo completo con `boolean
+mandatoryOnIntoxication` primitivo: si el formulario no lo manda, llega `false`. Editar, por ejemplo, la
+descripción de POST DIARIO EN COMUNIDAD desde el panel lo dejaría **opcional en los días de intoxicación**.
+
+**Causa real.** La bandera no tenía ningún efecto hasta D-169, así que nadie notó que el formulario de edición
+no puede hidratarla: la respuesta del listado no la trae.
+
+**Solución.** Ninguna en este cambio (se reporta, regla 00). En los repos del frontend de esta máquina no hay
+llamadores de ese endpoint (buscado `mandatoryOnIntoxication` y `/api/v1/admin/habits`).
+
+**Cómo evitar que vuelva a pasar.** Exponer `mandatoryOnIntoxication` en `AdminHabitResponse` y aceptar
+`Boolean` nulo como «conservar» en `UpdateHabitRequest`, con una prueba de que editar la descripción no toca la
+bandera. Mientras tanto, comprobar en la base que el post la conserva:
+`SELECT titulo, obligatorio_en_intoxicacion FROM renaser.habitos WHERE clave_sistema = 'COMMUNITY_POST';`
+tiene que dar `true`.
+
+## E-264 · `GenerarTracksDelDiaUseCase.generar(participante, fecha)` guarda el día de programa de HOY en registros de otra fecha
+
+**Síntoma (encontrado leyendo código el 2026-09-25, D-169).** `RegistroService.generarInterno` usa
+`progreso.diaPrograma()` —el día de programa de HOY en la zona de la persona— para cualquier `fecha` que reciba.
+Por las dos vías de producción (`generarDiaCompletoEnSuZona` y `generarDisponiblesAhora`) la fecha es hoy y los
+dos datos coinciden; `generar(participante, fecha)` con otra fecha deja un `dia_programa` que no es el de esa
+fecha y, desde D-169, un `es_opcional` calculado con ese día.
+
+**Causa real.** El método no tiene llamador en producción: solo lo usan `RegistroServiceTest`,
+`PausaHabitoPersonalIT` y `CrearHabitoPersonalGeneraTrackTransaccionIT`.
+
+**Solución.** Ninguna en este cambio (se reporta, regla 00). D-169 calcula `es_opcional` con el mismo
+`dia_programa` que se guarda en la fila, así que el registro por lo menos no se contradice a sí mismo.
+
+**Cómo evitar que vuelva a pasar.** Si `generar(fecha)` pasa a usarse en producción, derivar el día de esa
+fecha como ya hacen `HorarioDelDiaFinderService` y `ConsultaPreferenciasHorarioService` (`diaPrograma` más los
+días entre hoy y `fecha`, acotado a 0..90), o sacar el método del puerto.
+
+## E-265 · En una sesión aislada en un worktree se rechazan comandos con valores calculados (`sed` con variables)
+
+**Síntoma (agente de D-169, 2026-09-25, trabajando sobre una copia en el scratchpad, fuera del repo).**
+*"This session is isolated in the worktree /home/ricardo/Documentos/Renaser/Renaser-90-dias-backend/.claude/worktrees/semaforo-aprendiz,
+but this command runs sed with a value computed at runtime (the variable F) where an option may stand [...]
+Refusing to run it — a worktree-isolated session's git operations must target its own worktree."* Lo mismo con
+`sed -n "$(grep ...)"` («a value computed at runtime (command output)») y con `docker ps --format '{{.Names}}...'`
+(«inside a construct too complex to verify»).
+
+**Causa real.** El guardia del aislamiento no puede probar que un comando con un argumento calculado en tiempo
+de ejecución no sea `git`, y lo rechaza aunque no toque ningún repositorio. Pariente de E-259.
+
+**Solución.** Rutas y valores literales en el comando, o un script propio en el scratchpad que haga el cambio
+(así se aplicaron y revirtieron las mutaciones de prueba de D-169 y se insertó su fila en §8).
+
+**Cómo evitar que vuelva a pasar.** En una sesión aislada, escribir los comandos con rutas literales y, para
+ediciones repetidas, usar un script con las rutas adentro en vez de variables de shell.
+
+## E-266 · El resumen del sábado no llegó a la bandeja en la prueba de integración: la aprendiz del fixture no tenía cuenta
+
+**Síntoma (2026-09-25, `./mvnw clean verify` después de sacar a los suspendidos del semáforo).**
+`ResumenSemanalDelSemaforoIT.elResumenLlegaALaBandejaDelMentorYDelAdministradorUnaSolaVez`:
+
+```
+org.opentest4j.AssertionFailedError:
+expected: 1
+ but was: 0
+	at ...ResumenSemanalDelSemaforoIT.elResumenLlegaALaBandejaDelMentorYDelAdministradorUnaSolaVez(ResumenSemanalDelSemaforoIT.java:86)
+```
+
+**Causa real.** El fixture ponía a Ana en el grupo (doble de `AcompanamientoFinder`) pero nunca creaba su fila en
+`renaser.usuarios`. Desde la decisión del dueño de dejar fuera a los suspendidos, el padrón del semáforo
+(`mentoring.MedicionDeGrupos`) solo cuenta cuentas activas: sin cuenta, Ana quedó fuera, el grupo quedó vacío y
+no hubo resumen. El código estaba bien; el fixture era incoherente (en producción no existe una aprendiz sin
+cuenta).
+
+**Solución.** El fixture crea la cuenta de Ana (`insertarUsuario(ANA, "APRENDIZ")`, que queda `ACTIVO` por el
+default de V1).
+
+**Cómo evitar que vuelva a pasar.** Un aprendiz de prueba que entra al semáforo del grupo tiene su fila en
+`usuarios`, igual que en producción. La prueba unitaria `SemaforoDelGrupoServiceTest.soloCuentasActivas` cubre
+el caso de alguien sin cuenta.
 
 ## E-270 · El acompañante mostró los ids internos de la base (UUID de los hábitos)
 

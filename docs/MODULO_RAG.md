@@ -1109,6 +1109,7 @@ Esto se combina con el límite de D-48: **el límite protege del abuso, el cachi
 1. **¿Qué tipos de `entradas_diario` alimentan el Espejo Sombra?** El enum tiene un valor `ESPEJO_SOMBRA` dedicado, pero nada obliga a filtrar por él — podrían usarse todas las entradas de la semana. No se puede derivar del esquema.
 2. **Retención de conversaciones de Renasia.** El chat normal sí tiene política documentada (12 meses en GLOBAL); para Renasia no hay ninguna.
 3. **¿Notificar al aprendiz cuando su informe semanal está listo?** El enum `tipo_notificacion` ya tiene `RESUMEN_SEMANAL` sin dueño — encajaría, pero no está confirmado que deba dispararse.
+   > **Actualizado 2026-09-25.** `RESUMEN_SEMANAL` ya tiene dueño: lo emite `notifications` para el cierre semanal del semáforo (D-168). Esta pregunta, sobre el informe del Espejo de la Sombra, sigue abierta. De paso, `rag` suma `SemaforoEnChatListener`: el acompañante deja en el chat cómo cerró la semana, con plantilla y sin IA, detrás del flag `renaser.ia.acompanante.semaforo-en-chat`, **encendido por defecto** desde el 2026-09-25 (el dueño pidió avisos automáticos según el caso; antes estaba apagado hasta aprobar los textos). Si una plantilla deja un marcador sin reemplazar, sale `SemaforoEnChat.TEXTO_DE_RESPALDO`.
 4. **Cadencia del scheduler:** ¿barrido semanal para todos los participantes activos, o por aniversario individual de cada aprendiz (día N de su programa)?
 
 ---

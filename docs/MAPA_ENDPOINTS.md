@@ -146,6 +146,26 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | POST | `/api/v1/admin/ranking/snapshots?date=YYYY-MM-DD` |
 | GET | `/api/v1/ranking/{tipo}` — `tipo` ∈ `LEAGUE`, `CELL` (`GENERAL`/`COHORT` todavía no) |
 
+### Semáforo de cumplimiento del aprendiz (D-168, 2026-09-25)
+
+Formato JSON y reglas: [`docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md`](arquitectura/SEMAFORO_DEL_APRENDIZ.md) §4.
+Todas exigen sesión (`SecurityConfig`, E-254).
+
+| Verbo | Ruta | Quién · guard |
+|---|---|---|
+| GET | `/api/v1/me/semaforo?semanas=8` | cualquiera, el propio · cuenta activa |
+| PUT | `/api/v1/me/semaforo/pausa` `{"hasta": "YYYY-MM-DD"}` | staff con programa propio (`TRACK_PROGRAM_AS_STAFF`) · el aprendiz recibe 403 |
+| DELETE | `/api/v1/me/semaforo/pausa` | ídem |
+| GET | `/api/v1/home` → campo `semaforo` (con los 7 días) | el propio |
+| GET | `/api/v1/mentor/groups/{groupId}/semaforo?semanaHasta=` | mentor · acompaña vigentemente el grupo y cuenta activa |
+| GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/semaforo?semanas=8` | mentor · ídem y el alumno es del grupo |
+| GET | `/api/v1/semaforo/groups?semanaHasta=` | líder, admin, alquimista · sin nombres de aprendices |
+| GET | `/api/v1/admin/semaforo/groups/{groupId}?semanaHasta=` | admin, alquimista (`MANAGE_TRAINEES`) |
+| GET | `/api/v1/admin/trainees/{traineeId}/semaforo?semanas=8` | admin, alquimista · 404 si la persona no existe |
+
+`semanaHasta` es el viernes que cierra la semana (sábado→viernes); sin él, la ventana vigente (los 7 días
+cerrados que terminan ayer). Un `semanaHasta` que no es viernes responde 400.
+
 ### `academy`
 
 | Verbo | Ruta |
@@ -278,7 +298,10 @@ Esto es lo más barato del backlog. Hay dominio, puertos y persistencia construi
 | Auditoría de cambio de rol | `PATCH /users/{id}/role` ya funciona, solo no deja rastro | `auditoria_cambios_rol` |
 | Listado de evidencias | Repositorio y proyección ya existen, falta la consulta | *(ninguna)* |
 | Ranking por célula | `points` ya calcula y guarda snapshots | `ranking_celulas` |
-| Ciclos de intoxicación | `TipoDia.INTOXICACION` + `Habito.obligatorioEnIntoxicacion` ya modelados | *(ninguna)* |
+| ~~Ciclos de intoxicación~~ ✅ **Hecho (D-169, 2026-09-25)**, sin endpoint nuevo: se ve en el `esOpcional` de cada track | `Habito.obligatorioEnIntoxicacion` (V4 ya lo marca en el post diario) + `CicloIntoxicacion`. `TipoDia.INTOXICACION` no hizo falta | *(ninguna)* |
+
+> **Corregido 2026-09-25 (D-169).** La fila de los ciclos de intoxicación decía «`TipoDia.INTOXICACION` +
+> `Habito.obligatorioEnIntoxicacion` ya modelados»: ya está construido, y sin usar `TipoDia.INTOXICACION`.
 
 ### Categoría B — Falta el endpoint, el resto está
 

@@ -33,8 +33,12 @@ public record ConteoDiarioHabitos(LocalDate fecha, int totalRegistros, int compl
     /**
      * total - opcionales sin completar: un habito opcional sin completar no entra ni al
      * numerador ni al denominador (coherence.ts:61-68, "Fallar un opcional no es un fallo").
+     *
+     * <p>Publico desde D-168: el semaforo del aprendiz ({@code points}) pide por dia cuantos
+     * habitos contaban, y esta es la unica definicion de "contaban" — {@code habits} la aplica
+     * antes de reportar, y nadie la copia afuera.
      */
-    int calificables() {
+    public int calificables() {
         return totalRegistros - opcionalesNoCompletados;
     }
 
