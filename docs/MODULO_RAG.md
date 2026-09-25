@@ -245,6 +245,13 @@ Este módulo ya aplicó el criterio una vez, y está comentado en `HerramientasA
 > resumen **no** duplica el día y la fase que ya van en el prompt, sino que los lee del mismo
 > puerto (`ConsultarSituacionDelAprendizPort`) para que nunca digan cosas distintas.
 
+> **Ampliado 2026-09-25 (E-276).** Junto al día y la fase va ahora **la fecha de hoy, con el día de
+> la semana y el año**, calculada en la zona de la persona: "Hoy es viernes 25/09/2026, su día 18
+> de 90…". Es el mismo criterio de esta tabla: un dato chico que hace falta casi siempre. Sin él,
+> el modelo armaba "el 2 de octubre" con el año de su entrenamiento, y la herramienta respondía
+> "fuera del programa". La hora **no** va en el prompt: cambia durante la conversación y sale de
+> `consultar_resumen_del_programa`.
+
 ### D-152 — El acompañante como planificador: cinco herramientas de lectura (2026-09-23)
 
 Diseño completo, inventario de las ~90 operaciones del aprendiz y decisiones del dueño:

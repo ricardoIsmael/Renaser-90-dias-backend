@@ -1,6 +1,7 @@
 package com.renaser.os.rag.infrastructure.adapter.out.participante;
 
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.ParticipacionPrograma;
@@ -20,16 +21,20 @@ import java.util.Optional;
 class ConsultarSituacionDelAprendizAdapter implements ConsultarSituacionDelAprendizPort {
 
     private final ParticipacionProgramaFinder participacionFinder;
+    private final Clock clock;
 
-    ConsultarSituacionDelAprendizAdapter(ParticipacionProgramaFinder participacionFinder) {
+    ConsultarSituacionDelAprendizAdapter(ParticipacionProgramaFinder participacionFinder, Clock clock) {
         this.participacionFinder = participacionFinder;
+        this.clock = clock;
     }
 
+    /** La fecha de hoy es la de SU zona, no la del servidor (regla 02): a las 23:30 de Lima ya es manana en UTC. */
     @Override
     public Optional<SituacionDelAprendiz> de(UserId participanteId) {
         return participacionFinder.deParticipante(participanteId)
                 .filter(ParticipacionPrograma::inscrito)
-                .map(p -> new SituacionDelAprendiz(p.diaPrograma(), numeroDeFase(p.diaPrograma())));
+                .map(p -> new SituacionDelAprendiz(p.diaPrograma(), numeroDeFase(p.diaPrograma()),
+                        clock.now().atZone(p.zona()).toLocalDate()));
     }
 
     /**

@@ -249,8 +249,14 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
             return "(quien te escribe no esta cursando el programa de 90 dias: no tiene dia ni fase. "
                     + "No hables de su dia ni se lo preguntes.)";
         }
-        return "Hoy es su dia " + situacion.diaPrograma() + " de 90, en la fase " + situacion.fase() + " de 4.";
+        String fecha = situacion.hoy() == null ? "" : situacion.hoy().format(FECHA_DE_HOY) + ", ";
+        return "Hoy es " + fecha + "su dia " + situacion.diaPrograma() + " de 90, en la fase " + situacion.fase()
+                + " de 4.";
     }
+
+    /** "viernes 25/09/2026": con el año, para que el modelo arme bien "el 2 de octubre" (bateria, #41). */
+    private static final java.time.format.DateTimeFormatter FECHA_DE_HOY =
+            java.time.format.DateTimeFormatter.ofPattern("EEEE dd/MM/yyyy", java.util.Locale.forLanguageTag("es"));
 
     static String formatearContexto(List<String> contexto) {
         if (contexto.isEmpty()) {

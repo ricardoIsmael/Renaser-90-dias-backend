@@ -2,6 +2,7 @@ package com.renaser.os.rag.application.ports.out.participante;
 
 import com.renaser.os.shared.domain.UserId;
 
+import java.time.LocalDate;
 import java.util.Optional;
 
 /**
@@ -37,7 +38,15 @@ public interface ConsultarSituacionDelAprendizPort {
      *                    guardada: {@code users.api.FasePrograma} documenta que hay filas con el
      *                    dia y la fase desincronizados (D-66) y que nunca hay que confiar en el
      *                    valor guardado sin recomputarlo
+     * @param hoy         la fecha de hoy EN SU ZONA, con el año. Puede faltar ({@code null}) en quien no
+     *                    la necesita. Sin ella el modelo armaba "el 2 de octubre" con el año de su
+     *                    entrenamiento y la herramienta respondia "fuera del programa" (bateria del
+     *                    2026-09-25, #41)
      */
-    record SituacionDelAprendiz(int diaPrograma, int fase) {
+    record SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy) {
+
+        public SituacionDelAprendiz(int diaPrograma, int fase) {
+            this(diaPrograma, fase, null);
+        }
     }
 }

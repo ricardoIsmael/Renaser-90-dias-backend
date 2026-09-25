@@ -75,6 +75,15 @@ class GoogleGenAiRenasiaChatAdapterTest {
         assertThat(sistema).contains("dia 17 de 90").contains("fase 2 de 4");
     }
 
+    /** Bateria 2026-09-25 (#41): sin el año, "el 2 de octubre" salia con el año del entrenamiento del modelo. */
+    @Test
+    @DisplayName("la fecha de hoy, con dia de la semana y año, llega al prompt de sistema")
+    void laFechaDeHoyLlegaAlPrompt() {
+        String sistema = promptDeSistemaCon(new SituacionDelAprendiz(18, 2, java.time.LocalDate.of(2026, 9, 25)));
+
+        assertThat(sistema).contains("Hoy es viernes 25/09/2026, su dia 18 de 90, en la fase 2 de 4.");
+    }
+
     /**
      * Sin situacion el marcador NO puede quedar vacio: un hueco en esa seccion afirma
      * implicitamente que hay un dia, y el modelo lo buscaria. Se dice en una frase que puede leer.
