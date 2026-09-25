@@ -136,4 +136,32 @@ class PropuestaDeApagarDiaTest {
         }
         verify(proponer, never()).proponer(any(), any(), any());
     }
+
+    /** Bateria 2026-09-25, ronda 2: "saltate la clase diaria este sabado" respondio "el programa no llega". */
+    @Test
+    @DisplayName("un obligatorio se rechaza por obligatorio aunque la fecha venga mal armada (otro año)")
+    void obligatorioConFechaMalArmada() {
+        LocalDate otroAnio = HOY.plusDays(3).minusYears(1);
+        when(horarios.deFecha(APRENDIZ, null)).thenReturn(dia(HOY, false, true));
+        when(horarios.deFecha(APRENDIZ, otroAnio)).thenReturn(new HorariosDelDia(otroAnio, -350, List.of(), CUOTA));
+
+        ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, pedido(otroAnio, "apagar"));
+
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("obligatorio del programa")
+                .doesNotContain("fuera de sus 90 dias");
+        verify(horarios, never()).deFecha(APRENDIZ, otroAnio);
+    }
+
+    @Test
+    @DisplayName("una fecha fuera del programa se rechaza con la fecha de hoy al lado, para que el modelo la corrija")
+    void fueraDelProgramaConLaFechaDeHoy() {
+        LocalDate despues = HOY.plusDays(200);
+        when(horarios.deFecha(APRENDIZ, null)).thenReturn(dia(HOY, false, false));
+        when(horarios.deFecha(APRENDIZ, despues)).thenReturn(new HorariosDelDia(despues, 212, List.of(), CUOTA));
+
+        ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, pedido(despues, "apagar"));
+
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("queda fuera de sus 90 dias")
+                .contains("Hoy es miércoles 2026-09-09, su dia 12 de 90").contains("revisa el año y la fecha");
+    }
 }

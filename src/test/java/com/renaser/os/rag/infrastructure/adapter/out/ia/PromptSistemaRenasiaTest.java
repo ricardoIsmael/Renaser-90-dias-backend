@@ -182,6 +182,18 @@ class PromptSistemaRenasiaTest {
                 .contains("toque Cancelar en su tarjeta").contains("puede estar pausado o apagado");
     }
 
+    /** Bateria 2026-09-25, ronda 2. */
+    @Test
+    @DisplayName("ni dice que cancelo lo que no puede cancelar, ni pone genero en la urgencia medica")
+    void rondaDos() {
+        String render = renderizar("(vacio)");
+
+        // #67: "Entendido, ya quedo cancelada", con la propuesta todavia PENDIENTE en la base.
+        assertThat(render).contains("Tu no puedes cancelar ni confirmar").contains("nunca digas \"ya quedo cancelada\"");
+        // #86: "Llama ya mismo al 106 ... No te quedes sola con esto."
+        assertThat(render).contains("Sin genero, por ejemplo").contains("no pases por esto a solas");
+    }
+
     /**
      * 2026-09-23: el bloque de voz es un archivo aparte que el adaptador agrega al final con
      * {@code canal=VOZ}. Se renderiza aca sin variables — si alguien le mete una llave en la prosa,

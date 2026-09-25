@@ -1,5 +1,6 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
@@ -49,7 +50,8 @@ class HerramientasAgenteServicePropuestaTest {
     private HerramientasAgenteService servicio() {
         return new HerramientasAgenteService(agendaHabitosPort, List.of(),
                 new PropuestaDeMarcarHabito(agendaHabitosPort, proponerAccion, true),
-                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-23T20:00:00Z")));
+                com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-09-23T20:00:00Z")),
+                org.mockito.Mockito.mock(GestionarPlanDeHabitosPort.class));
     }
 
     private static InvocacionHerramienta marcar(String registroId) {

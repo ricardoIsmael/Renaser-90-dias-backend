@@ -1,0 +1,4 @@
+# Lo que deja cada corrida: capturas del chat y respuestas de la persona de prueba. No se suben.
+*.png
+*.jsonl
+__pycache__/

@@ -1,5 +1,6 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
@@ -53,6 +54,10 @@ class HerramientasAgenteServiceTest {
     @Mock
     private ProponerAccionUseCase proponerAccion;
 
+    /** Sin stub devuelve null: la lista de hoy sale igual, sin la linea de pausados (best-effort). */
+    @Mock
+    private GestionarPlanDeHabitosPort planPort;
+
     /**
      * La razon de ser de la bandera: el agente no puede subir la evidencia —por el chat no entran
      * archivos— asi que lo unico que puede hacer con este dato es nombrarlo. Sin el, marcaba el
@@ -101,7 +106,7 @@ class HerramientasAgenteServiceTest {
 
     private HerramientasAgenteService servicio() {
         return new HerramientasAgenteService(agendaHabitosPort, List.of(),
-                new PropuestaDeMarcarHabito(agendaHabitosPort, proponerAccion, false), RELOJ);
+                new PropuestaDeMarcarHabito(agendaHabitosPort, proponerAccion, false), RELOJ, planPort);
     }
 
     private static HabitoDelDia habitoVivo(String titulo, int puntos) {
@@ -246,12 +251,32 @@ class HerramientasAgenteServiceTest {
         when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(new HabitoDelDia(UUID.randomUUID(), "Ritual", "PENDIENTE",
                 0, 10, Instant.parse("2026-09-05T14:10:00Z"), false)));
         var servicio = new HerramientasAgenteService(agenda, List.of(),
-                new PropuestaDeMarcarHabito(agenda, proponerAccion, false), RELOJ);
+                new PropuestaDeMarcarHabito(agenda, proponerAccion, false), RELOJ,
+                mock(GestionarPlanDeHabitosPort.class));
 
         String contenido = ((ResultadoHerramienta.Exito) servicio.ejecutar(APRENDIZ,
                 InvocacionHerramienta.sinArgumentos(CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA))).contenido();
 
         assertThat(contenido).contains("ya_vencio=si").doesNotContain("vence_en")
                 .contains("Total en juego: 0 puntos en 0 habito(s)").contains("1 ya vencieron hoy");
+    }
+
+    /** Bateria 2026-09-25, ronda 2: "marca la ducha fria como hecha" respondio "no la veo" y mando a subir evidencia. */
+    @Test
+    @DisplayName("los pausados se nombran aparte, porque no estan en la lista de hoy")
+    void pausadosAparte() {
+        when(agendaHabitosPort.deHoyDe(APRENDIZ)).thenReturn(List.of(new HabitoDelDia(REGISTRO, "Meditar", "PENDIENTE",
+                10, 10, null, false)));
+        when(planPort.planDe(APRENDIZ)).thenReturn(new GestionarPlanDeHabitosPort.PlanDelAprendiz(
+                java.time.LocalDate.of(2026, 9, 5), List.of(
+                        new GestionarPlanDeHabitosPort.HabitoDelPlan(UUID.randomUUID(), "Ducha fria", false, true, null),
+                        new GestionarPlanDeHabitosPort.HabitoDelPlan(UUID.randomUUID(), "Meditar", false, false, null)),
+                List.of()));
+
+        String contenido = ((ResultadoHerramienta.Exito) servicio().ejecutar(APRENDIZ,
+                InvocacionHerramienta.sinArgumentos(CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA))).contenido();
+
+        assertThat(contenido).contains("Pausados (no se le piden ningun dia hasta que los reactive): Ducha fria.")
+                .contains("dile que esta pausado");
     }
 }
