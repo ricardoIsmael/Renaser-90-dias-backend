@@ -8293,24 +8293,34 @@ favor"*: *"Como te mencioné, no es posible pausar ese hábito en este momento."
 que diga el motivo ("no puedo, es obligatorio del programa") y qué sí se puede.
 
 **Causa real.** Dos, en la misma herramienta. (1) `proponer_pausar_habito` busca el hábito solo en los
-desbloqueos (`desbloqueos_habito`, lo que se suma al plan). Escritura libre nocturna es de la base del
-programa y no está ahí (0 filas para ese participante), así que devolvía *"Ese habito no esta en su
-plan"* y la lista de pausables, y el modelo lo resumió en "no es posible". Ojo: ese hábito **no** es
-obligatorio (`desactivable = true`) y sí se puede apagar por día (se hizo en la misma prueba, 17:28).
-(2) Con un obligatorio pasaba lo mismo: los cuatro de V18 tampoco están en los desbloqueos, así que la
-guarda `habito.obligatorio()` de la herramienta no se alcanzaba nunca y la Clase diaria también
-recibía "no está en su plan".
+desbloqueos (`desbloqueos_habito`). Escritura libre nocturna no tiene fila ahí (0 filas para ese
+participante: la tabla arranca vacía para todos, D-99), así que devolvía *"Ese habito no esta en su
+plan"* y el modelo lo resumió en "no es posible". Pero en Plan ese mismo hábito **sí** se pausa: el
+interruptor manda primero el `PUT /habit-unlocks/{id}` que crea la fila y recién después la pausa.
+El acompañante se saltaba ese primer paso. (2) Con un obligatorio pasaba lo mismo: los cuatro de V18
+tampoco tienen fila, así que la guarda `habito.obligatorio()` de la herramienta no se alcanzaba nunca
+y la Clase diaria recibía "no está en su plan" en vez de "es obligatoria del programa".
 
-**Solución (2026-09-25, D-165).** `habits.api` expone los obligatorios de todos los hábitos que la
-persona ve; la pausa distingue "es obligatorio del programa" de "es de la base de tu día" y las dos
-negativas dicen qué sí se puede (`LoQueSiSePuede`, la misma redacción en pausar, apagar un día y
-horario por día de semana). Herramienta nueva `consultar_habitos_obligatorios`. El prompt prohíbe el
-"no es posible" a secas.
+**Solución (2026-09-25, D-165).** `habits.api` entrega **todos** los hábitos que la persona ve, con los
+obligatorios marcados, y `pausar` asegura la fila antes de pausar, igual que Plan. Las negativas dicen
+el motivo y qué sí se puede (`LoQueSiSePuede`, la misma redacción en pausar, apagar un día y horario
+por día de semana). Herramienta nueva `consultar_habitos_obligatorios`. El prompt prohíbe el "no es
+posible" a secas.
 
-**Cómo evitar que vuelva a pasar.** Una negativa de herramienta lleva motivo **y** alternativa; los
-tests lo exigen (`PropuestaDePausarHabitoTest.obligatorioDeLaBase` y `deLaBaseNoSePausa`, que fallan
-contra el código anterior; `PropuestaDeApagarDiaTest.obligatorio`). Al probar una herramienta de
-escritura, usar hábitos de los dos tipos: uno que se suma al plan y uno de la base.
+> **Corregido 2026-09-25.** El primer arreglo (`be5fc8a6`) no hacía que la pausa funcionara: le
+> enseñaba al acompañante a explicar que *"la pausa es solo para los que se suman al plan"* y que un
+> hábito de la base *"no se pausa"*. Era una regla inventada, contraria a lo que hace Plan (regla 00:
+> no inventar reglas de negocio). La encontró la revisión de código antes de que llegara a nadie. La
+> lección: antes de explicar por qué algo "no se puede", comprobar que de verdad no se puede **en la
+> app**, no solo en la herramienta.
+
+**Cómo evitar que vuelva a pasar.** Una negativa de herramienta lleva motivo **y** alternativa, y la
+herramienta hace lo mismo que la pantalla equivalente de la app. Los tests lo exigen:
+`PropuestaDePausarHabitoTest.deLaBaseSePausa` (falla contra el código anterior y contra `be5fc8a6`),
+`PlanDeHabitosServiceTest.todosLosQueVe` y `escriturasDelegan` (la fila antes que la pausa),
+`PropuestaDeApagarDiaTest.obligatorio` y `GestionarPlanDeHabitosAdapterTest`. Al probar una
+herramienta de escritura, usar hábitos de los tres tipos: uno con fila de desbloqueo, uno de la base
+sin fila y un obligatorio.
 
 ## E-246 · Una propuesta del orbe quedó CANCELADA a los 60 s sin que el script tocara Cancelar
 
