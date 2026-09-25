@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -116,7 +117,7 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
         if (command.activo()) {
             desbloqueo.reactivar(clock.now());
         } else {
-            Instant ahora = clock.now();
+            ZonedDateTime ahora = clock.now().atZone(ZoneId.of(progreso.timezone()));
             desbloqueo.pausar(habito.desactivable(), command.pausadoHasta(), ahora);
             /* Pausar apagaba la generacion FUTURA, pero el track de HOY ya estaba creado -- lo
                hace el barrido de las 05:02 o la primera apertura de la app -- y se quedaba en
@@ -130,7 +131,7 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
 
                Solo se retira lo que sigue ABIERTO. Ver el javadoc del puerto: borrar lo ya
                vencido dejaria limpiar fallos pausando despues de fallar. */
-            LocalDate desdeHoy = ahora.atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+            LocalDate desdeHoy = ahora.toLocalDate();
             retirarPort.retirarPendientes(command.actorId(), command.habitoId(), desdeHoy,
                     command.pausadoHasta());
         }

@@ -4,6 +4,7 @@ import com.renaser.os.rag.application.ports.in.conversacion.ObtenerHistorialUseC
 import com.renaser.os.rag.application.ports.in.conversacion.ObtenerHistorialUseCase.PaginaMensajesRenasia;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase.PreguntarRenasiaCommand;
+import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -133,6 +134,61 @@ class RenasiaControllerAgenteTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(preguntarUseCase);
+    }
+
+    @Test
+    @DisplayName("sin `canal` (toda app anterior al orbe de voz) el comando va como TEXTO")
+    void sinCanalEsTexto() throws Exception {
+        mockMvc.perform(post(RUTA)
+                        .header(HEADER_ACTOR_ID, actorId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\":\"hola\"}"))
+                .andExpect(status().isOk());
+
+        assertThat(comandoRecibido().canal()).isEqualTo(CanalConversacion.TEXTO);
+    }
+
+    @Test
+    @DisplayName("con `canal=VOZ` el comando lo lleva")
+    void conCanalVoz() throws Exception {
+        mockMvc.perform(post(RUTA)
+                        .header(HEADER_ACTOR_ID, actorId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\":\"hola\",\"canal\":\"VOZ\"}"))
+                .andExpect(status().isOk());
+
+        PreguntarRenasiaCommand comando = comandoRecibido();
+        assertThat(comando.canal()).isEqualTo(CanalConversacion.VOZ);
+        assertThat(comando.agente()).isEqualTo(COMPANION);
+    }
+
+    /**
+     * Al reves que `agent`: un canal desconocido NO es 400. Solo cambia la forma de la respuesta,
+     * y una app futura (sin actualizacion por aire) que mande un valor nuevo tiene que seguir
+     * recibiendo su respuesta escrita en vez de un error.
+     */
+    @Test
+    @DisplayName("un `canal` desconocido no es 400: cae en TEXTO")
+    void canalDesconocidoEsTexto() throws Exception {
+        mockMvc.perform(post(RUTA)
+                        .header(HEADER_ACTOR_ID, actorId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\":\"hola\",\"canal\":\"VIDEO\"}"))
+                .andExpect(status().isOk());
+
+        assertThat(comandoRecibido().canal()).isEqualTo(CanalConversacion.TEXTO);
+    }
+
+    @Test
+    @DisplayName("`canal` no distingue mayusculas ni espacios")
+    void canalVozEnMinusculas() throws Exception {
+        mockMvc.perform(post(RUTA)
+                        .header(HEADER_ACTOR_ID, actorId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\":\"hola\",\"canal\":\" voz \"}"))
+                .andExpect(status().isOk());
+
+        assertThat(comandoRecibido().canal()).isEqualTo(CanalConversacion.VOZ);
     }
 
     @Test

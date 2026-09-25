@@ -5,6 +5,7 @@ import com.renaser.os.rag.application.ports.out.conversacion.SaveMensajeRenasiaP
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.FuenteMensaje;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
+import com.renaser.os.rag.domain.model.conversacion.MensajeRenasiaId;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -56,6 +57,11 @@ class MensajeRenasiaPersistenceAdapter implements SaveMensajeRenasiaPort, LoadMe
         return repository.escritosPorElUsuarioDesde(usuarioId.value(), RolMensajeRenasiaJpa.USUARIO, desde).stream()
                 .map(fila -> mapper.toDomain(fila, List.of()))
                 .toList();
+    }
+
+    @Override
+    public boolean existe(MensajeRenasiaId id) {
+        return repository.existsById(id.value());
     }
 
     @Override

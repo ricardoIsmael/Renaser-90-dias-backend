@@ -188,6 +188,26 @@ public final class Habito {
         return tipo == TipoHabito.BLOQUEO;
     }
 
+    /**
+     * Si este habito es opcional el dia {@code diaPrograma} del programa (D-169): lo es si el
+     * catalogo lo marca opcional, o si ese dia cae en un {@link CicloIntoxicacion} y el habito no
+     * es de los que siguen exigibles en esos dias ({@code obligatorio_en_intoxicacion}; en el
+     * catalogo, solo POST DIARIO EN COMUNIDAD, V4).
+     *
+     * <p>La intoxicacion solo afloja: un habito que el catalogo ya marca opcional sigue opcional
+     * aunque tenga la bandera. La especificacion describe la bandera como la EXCEPCION a "todos se
+     * vuelven opcionales", no como una obligacion nueva (pregunta abierta en D-169).
+     *
+     * <p>Es lo que {@code RegistroService} copia en {@code registros_habito.es_opcional} al
+     * generar el dia, y de ahi lo leen el semaforo, el ranking y el seguimiento del mentor.
+     */
+    public boolean esOpcionalEnDia(int diaPrograma) {
+        if (esOpcional) {
+            return true;
+        }
+        return CicloIntoxicacion.esDiaDeIntoxicacion(diaPrograma) && !obligatorioEnIntoxicacion;
+    }
+
     private static String requireTitulo(String titulo) {
         if (titulo == null || titulo.isBlank()) {
             throw new IllegalArgumentException("El titulo del habito es obligatorio");

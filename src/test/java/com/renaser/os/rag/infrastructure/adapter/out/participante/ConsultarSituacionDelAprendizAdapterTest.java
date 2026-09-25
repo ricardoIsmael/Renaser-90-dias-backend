@@ -1,6 +1,7 @@
 package com.renaser.os.rag.infrastructure.adapter.out.participante;
 
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
+import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.ParticipacionPrograma;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -31,8 +33,20 @@ class ConsultarSituacionDelAprendizAdapterTest {
 
     private static final UserId ALGUIEN = UserId.of(UUID.randomUUID());
 
+    /** 03:00 UTC del 26: en Lima todavia es el 25 (regla 02 — el caso que el fixture de las 10:00 escondia). */
+    private static final Instant TRES_AM_UTC = Instant.parse("2026-09-26T03:00:00Z");
+
     private ConsultarSituacionDelAprendizAdapter adaptador(ParticipacionPrograma participacion) {
-        return new ConsultarSituacionDelAprendizAdapter(new FinderFijo(participacion));
+        return new ConsultarSituacionDelAprendizAdapter(new FinderFijo(participacion), FixedClock.at(TRES_AM_UTC));
+    }
+
+    /** Bateria 2026-09-25 (#41): sin el año, el modelo armaba las fechas con el de su entrenamiento. */
+    @Test
+    @DisplayName("la fecha de hoy es la de su zona: a las 03:00 UTC en Lima todavia es el dia anterior")
+    void hoyEnSuZona() {
+        Optional<SituacionDelAprendiz> situacion = adaptador(inscritoEnDia(18, FasePrograma.initial())).de(ALGUIEN);
+
+        assertThat(situacion).hasValueSatisfying(s -> assertThat(s.hoy()).isEqualTo(LocalDate.of(2026, 9, 25)));
     }
 
     @ParameterizedTest(name = "dia {0} -> fase {1}")

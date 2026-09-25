@@ -2,6 +2,7 @@ package com.renaser.os.rag.application.ports.out.conversacion;
 
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
+import com.renaser.os.rag.domain.model.conversacion.MensajeRenasiaId;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
@@ -29,4 +30,12 @@ public interface LoadMensajeRenasiaPort {
      * cubre el indice {@code mensajes_renasia_conv_idx (usuario_id, creado_en)} que ya existe.
      */
     List<MensajeRenasia> escritosPorElUsuarioDesde(UserId usuarioId, Instant desde);
+
+    /**
+     * Si ya hay un mensaje con ese id (2026-09-23). Lo usa el aviso de habito en el chat, cuyo id
+     * es DETERMINISTICO por aviso: es la forma de no escribirlo dos veces sin columna ni tabla
+     * nueva. Se pregunta antes de guardar porque {@code save} con un id existente no falla —
+     * JPA lo convierte en un UPDATE que pisaria el texto y la fecha del mensaje ya mostrado.
+     */
+    boolean existe(MensajeRenasiaId id);
 }

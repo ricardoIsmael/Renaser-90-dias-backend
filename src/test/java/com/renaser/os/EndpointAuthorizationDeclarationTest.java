@@ -56,13 +56,11 @@ class EndpointAuthorizationDeclarationTest {
      * las dudas es un agujero permanente (ver {@link PublicEndpoint}).
      */
     private static final Set<String> HANDLERS_SIN_CLASIFICAR = Set.of(
-            // community: el handler no ejecuta ningun guard y el codigo no dice si eso es
-            // deliberado. Detalle de cada uno en el TODO del controller.
-            "TestimonioController#listar",
+            // community: un solo handler con dos casos de uso (crear y promover); no es declarable
+            // hasta partirlo en dos endpoints. Los otros cuatro de community que estaban aca
+            // (testimonios#listar, comentarios#listar, wall#mine, wall#latestAuthor) se
+            // clasificaron como USE_APP el 2026-09-23 (E-215).
             "TestimonioController#crear",
-            "WallCommentController#listar",
-            "WallController#mine",
-            "WallController#latestAuthor",
             // habits: MisHabitosService.consultar(actor) filtra por el actor pero NO ejecuta
             // ningun guard, asi que una cuenta suspendida sigue leyendo su catalogo. Anotarlo
             // con un permiso afirmaria que algo lo hace cumplir, y no es cierto.

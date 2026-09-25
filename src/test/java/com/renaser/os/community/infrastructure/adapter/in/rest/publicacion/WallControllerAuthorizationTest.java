@@ -34,6 +34,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -164,5 +165,57 @@ class WallControllerAuthorizationTest {
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(consultarReaccionesUseCase);
+    }
+
+    // ─── GET /api/v1/wall/mine y /latest-author — "sin clasificar" hasta E-215 ───
+
+    @Test
+    @DisplayName("TRAINEE activo puede pedir cuantas publicaciones propias tiene (USE_APP)")
+    void traineeActivoCuentaSusPublicaciones() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        mockActor(actorId, UserRole.TRAINEE, UserStatus.ACTIVE);
+        when(consultarFeedUseCase.contarMisPublicaciones(UserId.of(actorId))).thenReturn(3);
+
+        mockMvc.perform(get("/api/v1/wall/mine").header("X-Actor-Id", actorId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(3));
+    }
+
+    /** Falla contra el codigo de antes de E-215: sin {@code @RequiresPermission} el interceptor
+     * dejaba pasar y el mock del caso de uso se invocaba. */
+    @Test
+    @DisplayName("autorizacion negativa: un TRAINEE SUSPENDIDO recibe 403 en /wall/mine, antes del caso de uso")
+    void traineeSuspendidoNoPuedeContarSusPublicaciones() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        mockActor(actorId, UserRole.TRAINEE, UserStatus.SUSPENDED);
+
+        mockMvc.perform(get("/api/v1/wall/mine").header("X-Actor-Id", actorId.toString()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(consultarFeedUseCase);
+    }
+
+    @Test
+    @DisplayName("TRAINEE activo puede leer quien publico ultimo (USE_APP)")
+    void traineeActivoLeeElUltimoAutor() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        mockActor(actorId, UserRole.TRAINEE, UserStatus.ACTIVE);
+        when(consultarFeedUseCase.ultimoAutor(UserId.of(actorId))).thenReturn(Optional.of("Ana"));
+
+        mockMvc.perform(get("/api/v1/wall/latest-author").header("X-Actor-Id", actorId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authorName").value("Ana"));
+    }
+
+    @Test
+    @DisplayName("autorizacion negativa: un TRAINEE SUSPENDIDO recibe 403 en /wall/latest-author, antes del caso de uso")
+    void traineeSuspendidoNoPuedeLeerElUltimoAutor() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        mockActor(actorId, UserRole.TRAINEE, UserStatus.SUSPENDED);
+
+        mockMvc.perform(get("/api/v1/wall/latest-author").header("X-Actor-Id", actorId.toString()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(consultarFeedUseCase);
     }
 }

@@ -3,6 +3,7 @@ package com.renaser.os.rag.application.ports.out.habitos;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,8 +19,11 @@ import java.util.UUID;
  * cambie la traduccion queda contenida en el adaptador.
  *
  * <p><b>Lectura y escritura en el mismo puerto, a proposito.</b> No es un repositorio generico:
- * son las tres operaciones que el agente puede hacer con la agenda de un aprendiz, ni una mas
+ * son las operaciones que el agente puede hacer con la agenda de un aprendiz, ni una mas
  * (ISP se cumple por lo chico del contrato, no por partirlo en dos interfaces de un metodo).
+ * {@link #zonaDe} se sumo el 2026-09-23 para {@code consultar_tiempo_para_puntos}: decir los
+ * plazos en la hora local del aprendiz. (Este parrafo decia "las tres operaciones"; ahora son
+ * dos lecturas, la zona y una escritura.)
  */
 public interface ConsultarAgendaHabitosPort {
 
@@ -37,19 +41,43 @@ public interface ConsultarAgendaHabitosPort {
     int completar(UserId actorId, UUID registroId);
 
     /**
+     * La zona del aprendiz, la MISMA con la que {@code habits} calculo los plazos de
+     * {@link #deHoyDe} (2026-09-23). Para decir esos instantes en su hora local y para traducir
+     * una hora suya ("si lo hago a las 21:00") a un instante (regla 02).
+     */
+    ZoneId zonaDe(UserId participanteId);
+
+    /**
      * @param puntosEnJuego  {@code null} cuando ya esta en estado terminal (nada en juego)
      * @param plazo          {@code null} cuando el habito no vence
      * @param exigeEvidencia si el habito pide evidencia. El agente NO puede subirla —el chat no
      *                       recibe fotos ni audios— asi que su unico uso es decirlo y mandar a la
      *                       pantalla de Hoy. Marcar como hecho sigue funcionando igual con o sin
      *                       ella: quien completa desde la app tampoco la entrega en ese paso
+     * @param tramos         la escala de puntos del habito hasta el {@code plazo}, ya resuelta por
+     *                       {@code habits} (2026-09-23). Vacia si no vence o ya no esta en juego.
+     *                       {@code rag} solo ubica instantes en ella: nunca reconstruye la escala
      */
     record HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego, Integer puntosMaximos,
-                         Instant plazo, boolean exigeEvidencia) {
+                         Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos) {
+
+        public HabitoDelDia {
+            tramos = tramos == null ? List.of() : List.copyOf(tramos);
+        }
+
+        /** Sin escala: para quien no necesita los tramos (las tres herramientas originales). */
+        public HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
+                            Integer puntosMaximos, Instant plazo, boolean exigeEvidencia) {
+            this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, List.of());
+        }
 
         /** Un habito con puntos en juego es, por definicion, uno que todavia se puede entregar. */
         public boolean sigueEnJuego() {
             return puntosEnJuego != null;
         }
+    }
+
+    /** Entregar antes de {@code hasta} (y despues del tramo anterior) paga {@code puntos}. */
+    record TramoPuntos(Instant hasta, int puntos) {
     }
 }

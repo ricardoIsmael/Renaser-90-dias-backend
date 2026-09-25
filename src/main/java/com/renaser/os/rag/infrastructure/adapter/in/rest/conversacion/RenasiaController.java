@@ -57,7 +57,7 @@ public class RenasiaController {
     public Flux<String> preguntar(@ActorAutenticado UserId actorId,
                                    @RequestBody @Valid PreguntarRenasiaRequest request) {
         return preguntarUseCase.preguntar(new PreguntarRenasiaCommand(actorId, request.agente(), request.question(),
-                        request.scope(), request.courseId()))
+                        request.scope(), request.courseId(), request.canalConversacion()))
                 .map(EventoRenasiaSseMapper::aJson)
                 // Red de seguridad: el caso de uso ya traduce el fallo del modelo a `error` + `fin`
                 // (D-100); esto cubre lo que pudiera fallar fuera de el, con la misma forma.

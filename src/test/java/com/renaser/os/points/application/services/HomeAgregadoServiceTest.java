@@ -1,6 +1,9 @@
 package com.renaser.os.points.application.services;
 
+import com.renaser.os.points.api.ColorSemaforo;
+import com.renaser.os.points.api.DiaDelSemaforo;
 import com.renaser.os.points.api.DiasConHabitoCumplidoFinder;
+import com.renaser.os.points.api.EstadoDiaSemaforo;
 import com.renaser.os.points.api.HabitoDelDiaResumen;
 import com.renaser.os.points.api.HabitosDelDiaFinder;
 import com.renaser.os.points.api.NotificacionesNoLeidasFinder;
@@ -10,6 +13,7 @@ import com.renaser.os.points.api.PorcentajeRocasFinder;
 import com.renaser.os.points.api.RocasDelDiaFinder;
 import com.renaser.os.points.application.ports.in.home.ConsultarResumenHomeUseCase.ResumenHome;
 import com.renaser.os.points.application.ports.in.puntaje.ConsultarPuntajeUseCase;
+import com.renaser.os.points.application.ports.in.semaforo.ConsultarMiSemaforoUseCase;
 import com.renaser.os.points.domain.model.puntaje.PuntajeParticipante;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -66,19 +70,21 @@ class HomeAgregadoServiceTest {
     private NotificacionesNoLeidasFinder notificacionesNoLeidasFinder;
     @Mock
     private PorcentajeRocasFinder porcentajeRocasFinder;
+    @Mock
+    private ConsultarMiSemaforoUseCase consultarMiSemaforo;
 
     private final UserId actor = UserId.of(UUID.randomUUID());
 
     private HomeAgregadoService nuevoServicio() {
         return new HomeAgregadoService(consultarPuntajeUseCase, participacionProgramaFinder, habitosDelDiaFinder,
                 diasConHabitoCumplidoFinder, rocasDelDiaFinder, proximoEventoFinder, notificacionesNoLeidasFinder,
-                porcentajeRocasFinder, CLOCK);
+                porcentajeRocasFinder, consultarMiSemaforo, CLOCK);
     }
 
     private HomeAgregadoService nuevoServicioCon(FixedClock reloj) {
         return new HomeAgregadoService(consultarPuntajeUseCase, participacionProgramaFinder, habitosDelDiaFinder,
                 diasConHabitoCumplidoFinder, rocasDelDiaFinder, proximoEventoFinder, notificacionesNoLeidasFinder,
-                porcentajeRocasFinder, reloj);
+                porcentajeRocasFinder, consultarMiSemaforo, reloj);
     }
 
     /**
@@ -98,6 +104,38 @@ class HomeAgregadoServiceTest {
         ResumenHome resumen = service.consultar(actor);
 
         assertThat(resumen.coherencia()).isNull();
+    }
+
+    /** D-168: la tarjeta de Hoy recibe el semáforo vigente con sus 7 días, sin una segunda petición. */
+    @Test
+    void elSemaforoLlegaAHoyConSusDias() {
+        HomeAgregadoService service = nuevoServicio();
+        when(consultarPuntajeUseCase.consultar(actor, actor)).thenReturn(
+                PuntajeParticipante.rehydrate(actor, new BigDecimal("100.00"), 10, 0, 0, CLOCK.now()));
+        when(participacionProgramaFinder.deParticipante(actor)).thenReturn(Optional.of(participacionInscrita()));
+        when(porcentajeRocasFinder.porcentajePorParticipante(List.of(actor), HOY_LIMA)).thenReturn(Map.of());
+        DiaDelSemaforo ayer = new DiaDelSemaforo(HOY_LIMA.minusDays(1), EstadoDiaSemaforo.MEDIDO, 80,
+                ColorSemaforo.VERDE, 4, 3, 1, 1);
+        when(consultarMiSemaforo.resumenParaHoy(actor)).thenReturn(Optional.of(new ConsultarMiSemaforoUseCase
+                .ResumenParaHoy(ColorSemaforo.VERDE, new BigDecimal("80.0"), 1, false, List.of(ayer))));
+
+        ResumenHome resumen = service.consultar(actor);
+
+        assertThat(resumen.semaforo().color()).isEqualTo(ColorSemaforo.VERDE);
+        assertThat(resumen.semaforo().porcentaje()).isEqualByComparingTo("80.0");
+        assertThat(resumen.semaforo().dias()).containsExactly(ayer);
+    }
+
+    @Test
+    void quienNoSeMideNoTieneTarjetaDeSemaforo() {
+        HomeAgregadoService service = nuevoServicio();
+        when(consultarPuntajeUseCase.consultar(actor, actor)).thenReturn(
+                PuntajeParticipante.rehydrate(actor, new BigDecimal("100.00"), 10, 0, 0, CLOCK.now()));
+        when(participacionProgramaFinder.deParticipante(actor)).thenReturn(Optional.of(participacionInscrita()));
+        when(porcentajeRocasFinder.porcentajePorParticipante(List.of(actor), HOY_LIMA)).thenReturn(Map.of());
+        when(consultarMiSemaforo.resumenParaHoy(actor)).thenReturn(Optional.empty());
+
+        assertThat(service.consultar(actor).semaforo()).isNull();
     }
 
     private ParticipacionPrograma participacionInscrita() {

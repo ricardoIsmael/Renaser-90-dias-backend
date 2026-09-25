@@ -46,9 +46,9 @@ Esto es lo que justifica haberlo leído con cuidado. Varias reglas que dejamos e
 
 | Pregunta abierta nuestra | Respuesta del documento | Acción |
 |---|---|---|
-| **Q-2** (`points`): ¿cuál es la fórmula de la Ley VI? | `Coherencia = (Hábitos Obligatorios Completados / Total Obligatorios) × 100`. Los opcionales y los de intoxicación **nunca** reducen el porcentaje ni la racha | Implementable ya. `RegistrarCoherenciaDiariaUseCase` existe y espera exactamente este valor |
-| **Semáforo diario** (no lo teníamos ni como pregunta) | Verde ≥80%, Amarillo 60–79%, Rojo <60% | Regla nueva, hoy no existe en el código |
-| **Ciclos de intoxicación** — `resolverTipoDia` los deja fuera con un comentario explícito | Días **8-10 (VER)**, **17-19 (CORTAR)**, **26-28 (RENASER)**. Todos los hábitos pasan a opcionales **salvo la publicación diaria en comunidad** | Desbloquea `TipoDia.INTOXICACION` y `Habito.obligatorioEnIntoxicacion`, que ya están modelados pero nunca se activan |
+| **Q-2** (`points`): ¿cuál es la fórmula de la Ley VI? | `Coherencia = (Hábitos Obligatorios Completados / Total Obligatorios) × 100`. Los opcionales y los de intoxicación **nunca** reducen el porcentaje ni la racha | Implementable ya. `RegistrarCoherenciaDiariaUseCase` existe y espera exactamente este valor. *Actualizado 2026-09-25 (D-169): los hábitos de los días de intoxicación ya nacen opcionales, así que sin cumplir no bajan el semáforo ni el ranking; la fórmula de RF-24 sigue sin llamador.* |
+| **Semáforo diario** (no lo teníamos ni como pregunta) | Verde ≥80%, Amarillo 60–79%, Rojo <60% | **Implementado (D-168, 2026-09-25):** % del día sobre hábitos + objetivos y semáforo = promedio de los últimos 7 días cerrados, con esos umbrales (`points.ReglaDelSemaforo`). *Decía: «Regla nueva, hoy no existe en el código».* |
+| **Ciclos de intoxicación** — `resolverTipoDia` los deja fuera con un comentario explícito | Días **8-10 (VER)**, **17-19 (CORTAR)**, **26-28 (RENASER)**. Todos los hábitos pasan a opcionales **salvo la publicación diaria en comunidad** | ✅ **Implementado (D-169, 2026-09-25).** `CicloIntoxicacion` + `Habito.esOpcionalEnDia`: el registro del día nace con `es_opcional = true` salvo los `obligatorio_en_intoxicacion` (POST DIARIO EN COMUNIDAD, ya marcado en V4). `TipoDia.INTOXICACION` no hizo falta: el tipo del día elige horario, no exigencia. *(Decía: «Desbloquea `TipoDia.INTOXICACION` y `Habito.obligatorioEnIntoxicacion`, que ya están modelados pero nunca se activan».)* |
 | **Disparo del Verdugo** — teníamos el registro de eventos, no la detección | Semáforo Rojo **o** 2 días seguidos críticos → `EnforcerEvent` ACTIVE | Regla concreta, implementable |
 | **Cupo de cambio de horarios** | Máximo **3 por semana de programa**, y aplican desde las **00:00 del día siguiente** (para que nadie manipule el día en curso) | Justifica `historial_cambios_horario` + `cambios_horario_pendientes`, hoy sin uso |
 | **Penalizaciones de puntos** | Evidencia rechazada por IA: **−5**. Override manual del admin: **+5**. Semana sin phone-free: **−10**. Roca diaria completada: **+10** | Números duros para `points` |
@@ -125,7 +125,7 @@ Mismo criterio, más chico: el documento describe la fase II como "Días 8 a 34"
 | RF-22 | Weekly Rocks | ✅ | Con ventana de planificación y cierre semanal |
 | RF-23 | Daily Rocks + Pomodoro | ⚠️ | Rocas diarias completas (incluido Pareto); el temporizador es cliente |
 | RF-24 | Coherencia diaria (Ley VI) | ⚠️ | `RegistrarCoherenciaDiariaUseCase` existe y **nadie lo llama** — era **Q-2**, ahora resuelta (§2) |
-| RF-25 | Semáforo diario (80/60) | ❌ | Los umbrales no existen en el código |
+| RF-25 | Semáforo diario (80/60) | ✅ | **D-168 (2026-09-25).** Verde ≥ 80, amarillo 60–79,9, rojo < 60, sin datos nunca verde. La fórmula es la que confirmó el dueño (hábitos + objetivos, promedio de 7 días cerrados), no la de RF-24: ver la fila «Ley V/VI» de §5. Barrido horario `points-cerrar-semaforo`, cierre semanal sábado 00:00 local. *(Decía: «❌ Los umbrales no existen en el código».)* |
 | RF-26 | Puntos inmutables (append-only) | ✅ | Ledger + saldo en la misma transacción (Ley I cumplida) |
 | RF-27 | Ranking de liga | ⚠️ | LEAGUE y CELL reales; **GENERAL y COHORT lanzan `UnsupportedOperationException` a propósito** (D-P7: no se inventó la fórmula). El documento la aporta parcialmente |
 | RF-28 | Detección y activación del Verdugo | ❌ | Registramos eventos (con el fix de destino ajeno, E-38); **la detección automática no existe** |
@@ -169,7 +169,7 @@ El documento consolida 6 "Leyes Maestras". Las verifiqué contra el código porq
 | **Ley II** · Identidad por `system_key` | El título es editable; la lógica debe emparejar por la clave inmutable | ✅ **Se cumple.** `Habito.claveSistema` existe y es la identidad de negocio |
 | **Ley III** · `programDay` solo avanza por cron | **Nunca** derivarlo de `startDate` vs hoy | ✅ **Se cumple, verificado explícitamente.** `ParticipacionPrograma.diaPrograma` es un contador que solo hace `++` con tope en 90. La única resta de fechas del proyecto está en `SemanaPrograma` (rocks) y calcula *semana de calendario*, que es otra cosa |
 | **Ley IV** · Aislamiento Phone-Free | Estado `IN_PROGRESS` excluido de la expiración nocturna | ✅ **Se cumple.** |
-| **Ley V/VI** · Semáforo y coherencia | Fórmula y umbrales | ❌ **No implementada** — es RF-24/RF-25. La fórmula recién llega con este documento |
+| **Ley V/VI** · Semáforo y coherencia | Fórmula y umbrales | ⚠️ **Semáforo implementado (D-168), coherencia de RF-24 no.** El dueño definió el semáforo con hábitos + objetivos (lo que hacía `coherence.ts` del backend viejo), no con la «coherencia = obligatorios hechos / obligatorios» de RF-24; y la «coherencia» que muestra Hoy es solo objetivos (D-128). Son tres números distintos a propósito. *(Decía: «❌ No implementada — es RF-24/RF-25».)* |
 
 **Cuatro de seis leyes se cumplen y están probadas.** La que falta es justamente la que nadie nos había dado hasta hoy.
 
@@ -185,7 +185,9 @@ El [`PLAN_INTEGRACION_FRONTEND.md`](PLAN_INTEGRACION_FRONTEND.md) listaba 31 GAP
 
 **Prioridad 2 — Lo barato que cierra requisitos enteros.** `POST /classroom/clase-diaria` (RF-36), listado de evidencias y de la cola de revisión (RF-20), escritura de entrada de diario (RF-30, que además desbloquea el Espejo de la Sombra que ya construimos), auditoría de cambio de rol (RF-04, que es una Ley incumplida). Todos son de días, no de semanas.
 
-**Prioridad 3 — Ciclos de intoxicación (regla de negocio nueva).** `TipoDia.INTOXICACION` y `Habito.obligatorioEnIntoxicacion` ya existen sin usarse; solo falta la función que dice qué días son. Es chico y tiene impacto directo en la coherencia de Prioridad 1.
+**Prioridad 3 — Ciclos de intoxicación (regla de negocio nueva).** ✅ **Hecho el 2026-09-25 (D-169).** La función que dice qué días son es `CicloIntoxicacion` (dominio de `habits`), `Habito.obligatorioEnIntoxicacion` ya se usa, y el efecto llega al semáforo (D-168) y al % de hábitos del ranking (`PorcentajeHabitos`, la Ley VI portada de `coherence.ts`) por el `es_opcional` de cada registro. `TipoDia.INTOXICACION` no hizo falta.
+
+> **Corregido 2026-09-25 (D-169).** Decía: «`TipoDia.INTOXICACION` y `Habito.obligatorioEnIntoxicacion` ya existen sin usarse; solo falta la función que dice qué días son. Es chico y tiene impacto directo en la coherencia de Prioridad 1.»
 
 **Prioridad 4 — Personalización de hábitos (RF-10, 11, 12, 16, 17).** Es la bolsa grande. Son 5 requisitos y 5 de las 7 tablas sin uso. Merece su propio lote.
 

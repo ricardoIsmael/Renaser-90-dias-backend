@@ -31,6 +31,11 @@ import javax.sql.DataSource;
  * gente conectada a la instancia que pierda— y {@code PurgaNotificacionesScheduler} es un DELETE
  * por marca de tiempo, idempotente: dos corridas borran el mismo conjunto.</blockquote>
  *
+ * <p><b>Actualizado 2026-09-25 (D-168):</b> con el barrido del semáforo
+ * ({@code points.CerrarSemaforoScheduler}) y su resumen del sábado
+ * ({@code mentoring.ResumirSemanaDelSemaforoScheduler}) son <b>22</b> {@code @Scheduled}, y <b>20</b>
+ * llevan lock; los dos sin lock siguen siendo los de arriba.
+ *
  * <p>{@code defaultLockAtMostFor} es una red de seguridad que casi no se usa: los schedulers
  * declaran su propio {@code lockAtMostFor} configurable (ver cada uno). Este default generoso
  * (30 min) solo protege si alguien agrega un {@code @SchedulerLock} nuevo sin pensar el valor.

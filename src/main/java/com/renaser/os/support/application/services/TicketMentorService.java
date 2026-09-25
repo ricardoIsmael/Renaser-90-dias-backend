@@ -69,7 +69,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
                 command.participanteId(), command.descripcionBloqueo(), command.solucionesIntentadas(),
                 command.impactoMetaSmart(), clock);
         TicketMentor saved = saveTicketMentorPort.save(ticket);
-        events.publishEvent(new TicketMentorAbiertoEvent(saved.id(), saved.participanteId(), clock.now()));
+        events.publishEvent(new TicketMentorAbiertoEvent(saved.id().value(), saved.participanteId(), clock.now()));
         return saved;
     }
 
@@ -81,7 +81,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
         requireMentorAsignado(command.actorId(), ticket);
         ticket.responder(command.respuesta(), clock);
         TicketMentor saved = saveTicketMentorPort.save(ticket);
-        events.publishEvent(new TicketMentorRespondidoEvent(saved.id(), saved.participanteId(), clock.now()));
+        events.publishEvent(new TicketMentorRespondidoEvent(saved.id().value(), saved.participanteId(), clock.now()));
         return saved;
     }
 

@@ -69,9 +69,7 @@ public class RecomendacionService implements ConsultarRecomendacionDiariaUseCase
      */
     @Override
     public RecomendacionDiaria recomendacion(UserId actorId) {
-        ProgresoParticipanteAcademy progreso = requireProgresoTrainee(actorId);
-        ZoneId zona = progreso.zona() == null ? ZONA_POR_DEFECTO : progreso.zona();
-        LocalDate hoy = clock.now().atZone(zona).toLocalDate();
+        LocalDate hoy = hoyDelParticipante(requireProgresoTrainee(actorId));
 
         Optional<RecomendacionAcademia> cache = loadRecomendacionPort.delDia(actorId, hoy);
         if (cache.isPresent()) {
@@ -89,7 +87,25 @@ public class RecomendacionService implements ConsultarRecomendacionDiariaUseCase
         return aDisponible(guardada);
     }
 
-    private RecomendacionDiaria aDisponible(RecomendacionAcademia recomendacion) {
+    /**
+     * Solo cache (2026-09-23, acompanante de {@code rag}): la misma guarda, el mismo "hoy" y la misma
+     * fila que {@link #recomendacion}, pero si hoy todavia no hay recomendacion NO la genera. Nunca
+     * toca {@link RecomendarClasePort} ni {@link SaveRecomendacionPort}: una herramienta del chat no
+     * puede disparar la IA (C-1).
+     */
+    @Override
+    public Optional<Disponible> recomendacionDeHoySiExiste(UserId actorId) {
+        LocalDate hoy = hoyDelParticipante(requireProgresoTrainee(actorId));
+        return loadRecomendacionPort.delDia(actorId, hoy).map(this::aDisponible);
+    }
+
+    /** El dia calendario del participante en SU zona, no el del servidor (regla 02, E-91). */
+    private LocalDate hoyDelParticipante(ProgresoParticipanteAcademy progreso) {
+        ZoneId zona = progreso.zona() == null ? ZONA_POR_DEFECTO : progreso.zona();
+        return clock.now().atZone(zona).toLocalDate();
+    }
+
+    private Disponible aDisponible(RecomendacionAcademia recomendacion) {
         Leccion leccion = loadLeccionPort.byId(recomendacion.leccionId())
                 .orElseThrow(() -> new NoSuchElementException("Leccion no encontrada: " + recomendacion.leccionId()));
         Curso curso = loadCursoPort.byId(leccion.cursoId())

@@ -1,11 +1,16 @@
 # Pruebas
 
-## Ejecución en esta laptop (2026-09-07)
+## Ejecución en esta laptop (actualizado 2026-09-23)
 
-Por indicación del usuario, los contenedores de pruebas deben correr en Testcontainers Cloud;
-Maven y Java permanecen locales. Usar `./scripts/test-cloud.sh` para `clean verify`.
-Si falta conexión/token, no volver a Docker local: completar las verificaciones sin contenedores
-que sean útiles e informar qué integración queda pendiente. Ver `docs/PRUEBAS_EN_CLOUD.md`.
+Si hay token de Testcontainers Cloud, se usa `./scripts/test-cloud.sh` para `clean verify`
+(Maven y Java locales, contenedores en la nube; ver `docs/PRUEBAS_EN_CLOUD.md`). **Si falta el
+token, se corre `./mvnw clean verify` con Docker local**, sin pedir antes que se apague el backend
+(indicación del usuario del 2026-09-23).
+
+> **Corregido 2026-09-23.** Decía: «Si falta conexión/token, no volver a Docker local: completar
+> las verificaciones sin contenedores que sean útiles e informar qué integración queda pendiente».
+> Con esa regla las fases D-152 a D-155 quedaron con la integración sin correr, porque el token
+> estaba vacío. El usuario pidió que en ese caso pase Docker local.
 
 ## La regla que no se negocia
 

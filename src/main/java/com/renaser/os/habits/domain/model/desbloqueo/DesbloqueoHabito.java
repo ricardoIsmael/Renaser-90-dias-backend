@@ -11,6 +11,7 @@ import lombok.experimental.Accessors;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 
 /**
  * En que dia de programa se desbloquea un habito para este participante (tabla
@@ -125,25 +126,39 @@ public final class DesbloqueoHabito {
      *
      * <p>Idempotente: pausar algo ya pausado no mueve la fecha original. Interesa CUANDO dejo de
      * hacerlo, no cuando volvio a tocar el boton.
+     *
+     * @param ahoraEnSuZona el instante de la pausa en la zona del participante (E-91, E-213).
      */
-    public void pausar(boolean desactivable, Instant ahora) {
-        pausar(desactivable, null, ahora);
+    public void pausar(boolean desactivable, ZonedDateTime ahoraEnSuZona) {
+        pausar(desactivable, null, ahoraEnSuZona);
     }
 
     /**
      * Pausa con fecha de fin opcional (V31). {@code hasta = null} mantiene la pausa indefinida de
      * V23.
      *
-     * <p>A diferencia de {@link #pausar(boolean, Instant)}, volver a pausar algo YA pausado SI
+     * <p>A diferencia de {@link #pausar(boolean, ZonedDateTime)}, volver a pausar algo YA pausado SI
      * actualiza la fecha de fin: es la forma natural de extender o acortar una pausa vigente
      * ("mejor hasta el martes"). Lo que sigue sin moverse es {@code pausadoEn} — interesa cuando
      * dejo de hacerlo, no cuando toco el boton por ultima vez.
+     *
+     * <p><b>Corregido 2026-09-23 (E-213).</b> Esto decidia "ya estaba pausado" con
+     * {@link #estaPausado()}, que solo mira que haya una pausa REGISTRADA. Una pausa con fecha de
+     * fin ya cumplida conserva su {@code pausadoEn}, asi que pausar de nuevo semanas despues
+     * heredaba el inicio viejo y los dias entre el fin de aquella pausa y hoy pasaban a leerse como
+     * pausados. Ahora solo se conserva el inicio si la pausa sigue VIGENTE el dia de la pausa nueva,
+     * en la zona del participante; por eso entra el instante ya con su zona.
+     *
+     * @param ahoraEnSuZona el instante de la pausa en la zona del participante, nunca la del
+     *                      servidor (E-91): de ahi sale el dia contra el que se compara
+     *                      {@code pausadoHasta}.
      */
-    public void pausar(boolean desactivable, LocalDate hasta, Instant ahora) {
+    public void pausar(boolean desactivable, LocalDate hasta, ZonedDateTime ahoraEnSuZona) {
         if (!desactivable) {
             throw new IllegalStateException("Este habito es obligatorio y no se puede pausar");
         }
-        if (!estaPausado()) {
+        Instant ahora = ahoraEnSuZona.toInstant();
+        if (!estaPausadoEl(ahoraEnSuZona.toLocalDate(), ahoraEnSuZona.getZone())) {
             this.pausadoEn = ahora;
         }
         this.pausadoHasta = hasta;

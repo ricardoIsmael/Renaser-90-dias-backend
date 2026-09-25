@@ -2,6 +2,7 @@ package com.renaser.os.habits.api;
 
 import com.renaser.os.shared.domain.UserId;
 
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,4 +43,14 @@ public interface AgendaDelDiaFinder {
      * @param actorId el propio participante — el caso de uso rechaza cualquier otro
      */
     int completar(UserId actorId, UUID registroId);
+
+    /**
+     * La zona en la que {@code habits} resolvio el "hoy" y los plazos de {@link #deHoyDe}
+     * (2026-09-23). Existe para que el llamador pueda decir esos instantes en la hora local del
+     * aprendiz, o traducir una hora local suya ("si lo hago a las 21:00") a un instante, con la
+     * MISMA zona con que se calcularon — no con otra fuente que pudiera discrepar.
+     *
+     * <p>Mismo respaldo que la proyeccion del dia: si el participante no tiene progreso, UTC.
+     */
+    ZoneId zonaDe(UserId participanteId);
 }

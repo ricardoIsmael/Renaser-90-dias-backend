@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
+import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
+import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
@@ -69,10 +71,15 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
 
     static final String RECURSO_PROMPT_ACOMPANANTE = "prompts/renasia-sistema.st";
     static final String RECURSO_PROMPT_TUTOR_CURSOS = "prompts/sparkie-cursos.st";
+    static final String RECURSO_MODO_VOZ = "prompts/modo-voz.st";
+    static final String RECURSO_MEMORIA = "prompts/memoria-acompanante.st";
 
     private final ChatClient chatClient;
     private final PromptTemplate promptAcompanante;
     private final PromptTemplate promptTutorCursos;
+    /** Sin variables: se renderiza una sola vez, al construir el adaptador. */
+    private final String modoVoz;
+    private final PromptTemplate seccionDeMemoria;
     private final EjecutarHerramientaAgenteUseCase herramientasUseCase;
     private final ObjectMapper json;
 
@@ -90,6 +97,8 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
         this.json = new ObjectMapper();
         this.promptAcompanante = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_ACOMPANANTE));
         this.promptTutorCursos = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_TUTOR_CURSOS));
+        this.modoVoz = new PromptTemplate(new ClassPathResource(RECURSO_MODO_VOZ)).render();
+        this.seccionDeMemoria = new PromptTemplate(new ClassPathResource(RECURSO_MEMORIA));
     }
 
     /**
@@ -146,8 +155,28 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
                 .toList();
     }
 
-    /** D-102: cada agente tiene su prompt; solo el tutor de cursos tiene seccion de ambito. */
+    /**
+     * D-102: cada agente tiene su prompt; solo el tutor de cursos tiene seccion de ambito.
+     *
+     * <p>2026-09-23: con {@link CanalConversacion#VOZ} se agrega al final el bloque de
+     * {@code prompts/modo-voz.st} (respuesta para escuchar: frases cortas, sin markdown). Va al
+     * final y entero, no mezclado en el prompt del agente: con {@code TEXTO} el prompt queda
+     * byte por byte como antes, y ninguna seccion existente — riesgo, crisis, atribucion — se
+     * edita para hacerle lugar.
+     *
+     * <p>D-167: con memoria, la seccion de {@code prompts/memoria-acompanante.st} va despues del
+     * prompt del agente y antes del modo voz, con el mismo criterio: sin memoria (apagada, o el
+     * tutor de cursos) el prompt no cambia en nada.
+     */
     private String promptSistema(Consulta consulta) {
+        String prompt = promptDelAgente(consulta);
+        if (consulta.memoria() != null && consulta.agente() == AgenteConversacional.COMPANION) {
+            prompt += "\n\n" + seccionDeMemoria.render(Map.of("recuerdos", consulta.memoria().paraElModelo()));
+        }
+        return consulta.canal() == CanalConversacion.VOZ ? prompt + "\n\n" + modoVoz : prompt;
+    }
+
+    private String promptDelAgente(Consulta consulta) {
         String contexto = formatearContexto(consulta.contexto());
         return switch (consulta.agente()) {
             case COMPANION -> promptAcompanante.render(Map.of(
@@ -215,15 +244,21 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
      * de omitir la seccion — si el marcador quedara vacio, el prompt afirmaria implicitamente que
      * hay un dia y el modelo intentaria encontrarlo.
      */
-    private static String formatearSituacion(SituacionDelAprendiz situacion) {
+    static String formatearSituacion(SituacionDelAprendiz situacion) {
         if (situacion == null) {
             return "(quien te escribe no esta cursando el programa de 90 dias: no tiene dia ni fase. "
                     + "No hables de su dia ni se lo preguntes.)";
         }
-        return "Hoy es su dia " + situacion.diaPrograma() + " de 90, en la fase " + situacion.fase() + " de 4.";
+        String fecha = situacion.hoy() == null ? "" : situacion.hoy().format(FECHA_DE_HOY) + ", ";
+        return "Hoy es " + fecha + "su dia " + situacion.diaPrograma() + " de 90, en la fase " + situacion.fase()
+                + " de 4.";
     }
 
-    private static String formatearContexto(List<String> contexto) {
+    /** "viernes 25/09/2026": con el año, para que el modelo arme bien "el 2 de octubre" (bateria, #41). */
+    private static final java.time.format.DateTimeFormatter FECHA_DE_HOY =
+            java.time.format.DateTimeFormatter.ofPattern("EEEE dd/MM/yyyy", java.util.Locale.forLanguageTag("es"));
+
+    static String formatearContexto(List<String> contexto) {
         if (contexto.isEmpty()) {
             return "(no se recupero contexto de la base de conocimiento para esta pregunta)";
         }

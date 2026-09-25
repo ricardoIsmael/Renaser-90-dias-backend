@@ -173,6 +173,15 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/wall/**", "/api/v1/chat/**",
                                 "/api/v1/me/cell/**", "/api/v1/me/cells", "/api/v1/me/cells/**")
                         .authenticated()
+                        /* Semaforo del aprendiz (D-168): el propio (`/me/semaforo` y su pausa) y el
+                           resumen por grupos del lider (`/semaforo/**`). Se enumeran las dos formas de
+                           `/me/semaforo` por el mismo motivo que `/me/cells`: `/**` no cubre la raiz.
+                           Sin esto quedaban sin sesion, con la identidad saliendo de `X-Actor-Id`
+                           (lo detecto `RutasCubiertasPorElFiltroTest`). Las vistas del mentor y del
+                           administrador ya caen en `/mentor/**` y `/admin/**`. */
+                        .requestMatchers("/api/v1/me/semaforo", "/api/v1/me/semaforo/**",
+                                "/api/v1/semaforo/**")
+                        .authenticated()
                         /* `/api/v1/participants/**` no aparecia en ninguna busqueda por prefijo
                            porque su controller no declara `@RequestMapping` de clase: las rutas
                            estan escritas enteras en cada metodo. Incluye

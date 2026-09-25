@@ -10,16 +10,22 @@ import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
  *
  * <pre>
  * data: {"tipo":"texto","valor":"fragmento de la respuesta"}
+ * data: {"tipo":"propuesta","id":"<uuid>","resumen":"Meditar: de 06:00 a 07:00","venceEn":"2026-09-23T15:10:00Z"}
  * data: {"tipo":"fuentes","lecciones":["leccion-id-1","leccion-id-2"]}
+ * data: {"tipo":"error","valor":"mensaje apto para mostrar"}
  * data: {"tipo":"fin"}
  * </pre>
+ *
+ * <p>{@code venceEn} viaja como texto ISO-8601 en UTC ({@link java.time.Instant#toString()}) y no
+ * como numero: es lo que {@code Date.parse} del cliente lee sin configuracion, y no depende de
+ * que el mapper tenga registrado el modulo de {@code java.time}.
  *
  * <p><b>Por qué un {@link ObjectMapper} propio, sin depender del conversor HTTP por
  * defecto de Spring.</b> Mismo motivo que documenta {@code PgVectorNativoAdapter} (E-33,
  * docs/BITACORA_ERRORES.md): Spring Boot 4.1 autoconfigura el {@code ObjectMapper} de
  * Jackson 3 ({@code tools.jackson.databind}), no el clásico de {@code com.fasterxml} que usa
  * esta clase. Construir el JSON a mano, con un mapper que esta clase controla por completo,
- * es lo que garantiza que estas tres formas no cambien silenciosamente porque alguien
+ * es lo que garantiza que estas formas no cambien silenciosamente porque alguien
  * reconfiguró el {@code ObjectMapper} global de la app (indentación, naming strategy,
  * inclusión de nulos, etc.) — el contrato SSE es de la app móvil, no negociable por config.
  */
@@ -42,6 +48,12 @@ final class EventoRenasiaSseMapper {
                 nodo.put("tipo", "fuentes");
                 var lecciones = nodo.putArray("lecciones");
                 fuentes.leccionIds().forEach(lecciones::add);
+            }
+            case EventoRenasia.Propuesta propuesta -> {
+                nodo.put("tipo", "propuesta");
+                nodo.put("id", propuesta.id().toString());
+                nodo.put("resumen", propuesta.resumen());
+                nodo.put("venceEn", propuesta.venceEn().toString());
             }
             case EventoRenasia.Error error -> {
                 nodo.put("tipo", "error");

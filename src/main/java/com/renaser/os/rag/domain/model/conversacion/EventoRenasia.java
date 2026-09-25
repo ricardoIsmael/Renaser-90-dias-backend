@@ -1,7 +1,9 @@
 package com.renaser.os.rag.domain.model.conversacion;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * Un evento del streaming de respuesta de Renasia. Reemplaza al {@code Flux<String>} que
@@ -10,7 +12,7 @@ import java.util.Objects;
  * tres cosas viajaban mezcladas y el cliente (o el propio {@code ConversacionRenasiaService})
  * tenia que adivinar por convencion.
  *
- * <p><b>Por que {@code sealed}.</b> El compilador obliga a cubrir los tres casos en cada
+ * <p><b>Por que {@code sealed}.</b> El compilador obliga a cubrir todos los casos en cada
  * {@code switch} (ver {@code ConversacionRenasiaService} y {@code EventoRenasiaSseMapper}).
  * El dia que se agregue un cuarto tipo — la herramienta pensada hoy es "el modelo invoco una
  * herramienta", para cuando Renasia pueda consultar datos en vivo del aprendiz — agregar el
@@ -19,11 +21,16 @@ import java.util.Objects;
  * Es lo que permite crecer el contrato sin romper a quien ya lo consume.
  *
  * <p><b>Contrato de la SSE (ver {@code RenasiaController}, docs/MODULO_RAG.md §4.bis):</b> cada
- * variante mapea 1:1 a una de las tres formas fijas de {@code data:} que expone
- * {@code POST /api/v1/renasia/mensajes}. {@link Texto} puede repetirse N veces; {@link Fuentes}
- * aparece a lo sumo una vez, antes de {@link Fin}; {@link Fin} siempre es el ultimo evento,
- * incluso si el streaming termino en error (esa garantia la sostiene el adaptador HTTP, no este
- * tipo — ver el manejo de errores de {@code RenasiaController}).
+ * variante mapea 1:1 a una de las formas fijas de {@code data:} que expone
+ * {@code POST /api/v1/renasia/mensajes}. {@link Texto} puede repetirse N veces; {@link Propuesta}
+ * puede repetirse N veces y siempre llega despues de un {@link Texto} con su mismo resumen;
+ * {@link Fuentes} aparece a lo sumo una vez, antes de {@link Fin}; {@link Fin} siempre es el
+ * ultimo evento, incluso si el streaming termino en error (esa garantia la sostiene el adaptador
+ * HTTP, no este tipo — ver el manejo de errores de {@code RenasiaController}).
+ *
+ * <p><b>Un {@code tipo} nuevo no llega a las apps viejas.</b> La app no se actualiza por aire y
+ * un {@code tipo} que no conoce lo ignora en silencio. Por eso toda variante nueva que la persona
+ * TENGA que ver viaja ademas como {@link Texto} (ver {@link Propuesta}).
  */
 public sealed interface EventoRenasia {
 
@@ -52,7 +59,30 @@ public sealed interface EventoRenasia {
         }
     }
 
-    /** Marca el final del streaming. Siempre es el ultimo evento de la secuencia. */
+    /**
+     * Fase 2, D-153: una accion de escritura que el modelo PROPUSO y que todavia no se ejecuto. La
+     * app dibuja [Confirmar] [Cancelar]; confirmar llama a
+     * {@code POST /api/v1/renasia/propuestas/{id}/confirmar}. El texto del chat nunca confirma.
+     *
+     * <p>No la arma el modelo: {@code ConversacionRenasiaService} la recoge al terminar el turno,
+     * de las propuestas que se guardaron durante el turno. Siempre va precedida de un {@link Texto}
+     * con el mismo {@code resumen}, para que una app anterior a los botones —que ignora este
+     * {@code tipo}— al menos muestre que se propuso.
+     *
+     * @param venceEn desde cuando ya no se puede confirmar; la app puede ocultar los botones
+     */
+    record Propuesta(UUID id, String resumen, Instant venceEn) implements EventoRenasia {
+
+        public Propuesta {
+            Objects.requireNonNull(id, "id no puede ser null");
+            Objects.requireNonNull(resumen, "resumen no puede ser null");
+            Objects.requireNonNull(venceEn, "venceEn no puede ser null");
+            if (resumen.isBlank()) {
+                throw new IllegalArgumentException("Una propuesta sin resumen no le dice a la persona que confirma");
+            }
+        }
+    }
+
     /**
      * D-100: el modelo no pudo responder. Antes esto se tragaba en silencio y el cliente recibia
      * un {@code Fin} pelado — tres preguntas del aprendiz y ninguna respuesta, sin saber por que.
@@ -61,6 +91,7 @@ public sealed interface EventoRenasia {
     record Error(String mensaje) implements EventoRenasia {
     }
 
+    /** Marca el final del streaming. Siempre es el ultimo evento de la secuencia. */
     record Fin() implements EventoRenasia {
     }
 }

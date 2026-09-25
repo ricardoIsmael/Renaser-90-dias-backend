@@ -7503,3 +7503,1455 @@ aparecen solas en cuanto el permiso existe, porque la URL guardada ya es la corr
   nombre viaja al cliente en la respuesta de `upload-url` y el backend lo ignora al confirmar, asi
   que no rompe nada — pero es una pista falsa justo para depurar esto. Hay que hacer que reporte el
   bucket de verdad o sacarlo de la respuesta.
+
+## E-213 · Volver a pausar un hábito reusa la fecha de inicio de la pausa vieja
+
+**Síntoma.** Un hábito pausado con fecha de fin, cuya pausa ya terminó, se vuelve a pausar: los
+días entre el fin de la pausa vieja y hoy pasan a leerse como "pausados" al consultar fechas
+pasadas. Hoy y los días siguientes no se ven afectados.
+
+**Causa real.** `DesbloqueoHabito.pausar` solo fija `pausadoEn` cuando `!estaPausado()`, y
+`estaPausado()` mira únicamente `pausadoEn != null`. Una pausa con fecha que ya venció conserva su
+`pausadoEn`, así que la pausa nueva hereda el inicio viejo.
+
+**Estado.** **Resuelto el 2026-09-23.**
+
+> **Corregido 2026-09-23.** Esta línea decía: *"Detectado el 2026-09-23 al construir
+> `proponer_pausar_habito` (D-154). **No se corrigió** (fuera de alcance). La herramienta dice
+> "desde hoy", que es lo que rige hacia adelante."* Cambió porque se corrigió el mismo día.
+
+**Solución.** `pausar` ya no pregunta "¿hay una pausa registrada?" (`estaPausado()`) sino "¿la
+pausa sigue vigente el día de la pausa nueva, en la zona del participante?"
+(`estaPausadoEl(hoyEnSuZona, zona)`). Solo si sigue vigente se conserva `pausadoEn` (extender o
+acortar una pausa en curso no mueve su inicio, igual que antes); si ya venció, `pausadoEn` pasa a
+ser el instante nuevo. Para saber el día local, las dos firmas de `pausar` reciben ahora un
+`ZonedDateTime ahoraEnSuZona` en lugar del `Instant ahora` — el instante y la zona viajan juntos y
+no se puede pasar uno sin el otro (E-91). `DesbloqueoHabitoService.cambiarEstado` lo arma con
+`clock.now().atZone(progreso.timezone())`, que ya calculaba para `retirarPendientes`. Sin migración:
+`reactivar`, los hábitos obligatorios y `estaPausado()` no cambian.
+
+**Cómo evitar que vuelva a pasar.** Pruebas en `DesbloqueoHabitoPausaTest` (bloque E-213): pausa
+hasta el 10 → pausa nueva el 20 → `estaPausadoEl(15)` da `false` y `estaPausadoEl(20)` da `true`
+(falla contra el código viejo); extender una pausa en su último día conserva el inicio; y el par
+03:00 UTC del 11 (todavía el 10 en Lima: se conserva) / 03:00 UTC del 12 (ya el 11: arranca de
+cero). Más `pausarDeNuevoTrasUnaPausaVencidaArrancaEnElInstanteNuevo` en
+`DesbloqueoHabitoServiceTest`, que verifica que el servicio pasa la zona del participante.
+La lección general: **"hay una pausa registrada" y "está pausado hoy" son preguntas distintas**, y
+cualquier decisión que dependa del calendario usa la segunda.
+
+## E-214 · `apagar`/`quitar` del horario por día de semana no repiten las guardas del servicio
+
+**Síntoma.** En `PreferenciaHorarioService`, `apagar` y `quitar` (DELETE
+`/api/v1/habit-preferences/{habitId}/weekdays/{weekday}/active` y `…/{weekday}`) no llaman a
+`requireProgreso`, así que no revisan cuenta suspendida; y ni ellos ni `fijar` comprueban que un
+hábito PERSONAL sea del actor, como sí hace `editar` ("Solo puedes editar tus propios habitos").
+
+**Gravedad real (verificada leyendo el código, 2026-09-23).** Baja, es defensa en profundidad:
+- Por HTTP, `PermissionEnforcementInterceptor` ya devuelve 403 a un TRAINEE `SUSPENDED` antes de
+  llegar al servicio.
+- Todas las escrituras se guardan con el `actorId` (`saveParaDiaSemana(actorId, …)`): referenciar
+  el hábito personal de otra persona solo crea filas de preferencia del propio actor, sin tocar
+  datos ajenos.
+
+**Estado.** ~~Detectado al construir `proponer_horario_por_dia_de_semana` (D-154). **No se corrigió**
+(se reporta, no se arregla en el mismo cambio). El camino del acompañante exige cuenta activa al
+confirmar (`PropuestasAgenteService`).~~
+
+> **Corregido 2026-09-23.** El estado de arriba decía "No se corrigió"; ya está resuelto.
+> `PreferenciaHorarioService` tiene dos guardas privadas: `requirePropio(actorId, habito)` (el mismo
+> `if` que tenía `editar`, ahora extraído y reusado, con la misma `NotAuthorizedException("Solo
+> puedes editar tus propios habitos")`) y `requireEditable(actorId, habito)` = `requireProgreso` +
+> `requirePropio`.
+> - `apagar` y `quitar` llaman a `requireEditable` antes de escribir.
+> - `fijar` llama a `requirePropio`; la cuenta suspendida ya la rechazaba `cobrarCupo`, cuyo primer
+>   paso es `requireProgreso`, antes de cualquier escritura. El cobro de cupo no cambió.
+> - `cambiarEstadoEnFecha` (DELETE/PUT de un día puntual) tenía el mismo hueco de pertenencia —ya
+>   revisaba suspensión— y ahora también llama a `requirePropio`.
+> - `consultar` (lectura) **no se tocó**: revisa suspensión pero no pertenencia. Lo único que expone
+>   de un hábito personal ajeno es su horario de catálogo (`loadHorarioPort.porHabito`), porque las
+>   preferencias se leen con el `actorId`. Queda anotado, no corregido.
+>
+> Pruebas en `PreferenciaHorarioServiceTest` (bloque E-214): para `fijar`, `apagar`, `quitar` y
+> `cambiarEstadoEnFecha`, suspendido → `NotAuthorizedException`, hábito personal ajeno →
+> `NotAuthorizedException` sin escribir nada, y hábito del catálogo (y en `apagar`, uno propio) →
+> sigue funcionando. Contra el código viejo fallan las de suspendido en `apagar`/`quitar` y las
+> cuatro de hábito ajeno; las de suspendido en `fijar`/`cambiarEstadoEnFecha` fijan un
+> comportamiento que ya existía.
+
+**Cómo evitar que vuelva a pasar.** Al corregirlo, que los tres métodos usen las mismas guardas que
+`editar`, con pruebas: suspendido → `NotAuthorizedException` y hábito personal ajeno → rechazo.
+
+## E-215 · Cuatro lecturas del Muro y de testimonios seguían "sin clasificar" con TODOs que ya mentían
+
+**Síntoma.** Un inventario de seguridad (2026-09-23) reportó, leyendo los TODO de los controllers:
+`GET /api/v1/wall/mine`, `GET /api/v1/wall/latest-author`, `GET /api/v1/wall/{postId}/comments` y
+`GET /api/v1/testimonios` sin `@RequiresPermission`, y que `/wall/mine` "con el header X-Actor-Id
+devuelve el conteo de cualquier usuario". El TODO literal de `WallController#mine` decía:
+`TODO(auth fase 4): sin clasificar. Recibe actor pero contarMisPublicaciones no ejecuta ningun guard: con el respaldo de X-Actor-Id devuelve el conteo de cualquier userId que el cliente declare.`
+Los cuatro figuraban en `HANDLERS_SIN_CLASIFICAR` de `EndpointAuthorizationDeclarationTest`, que
+por eso los dejaba pasar.
+
+**Exposición real (verificada leyendo el código, no los TODO).**
+- **No había suplantación por `X-Actor-Id`.** `/api/v1/wall/**` exige sesión en `SecurityConfig`
+  desde el 2026-09-05 (`5641d28`) y `/api/v1/testimonios/**` desde el 2026-09-18 (`9fb018a`). Sin
+  sesión, las cuatro rutas responden 403 en el filtro. Con sesión,
+  `ActorAutenticadoArgumentResolver` toma el actor de la sesión y **ignora** el header. El respaldo
+  por header sigue vivo en todos los perfiles, pero solo alcanza a las rutas que quedaron en
+  `permitAll()`, y estas no están entre ellas.
+- **`/wall/mine` y `/latest-author` ya tenían guard.** `PublicacionMuroService.contarMisPublicaciones`
+  y `ultimoAutor` llaman a `requireActorActivo` (CM-20). Los TODO eran anteriores a eso y nadie los
+  actualizó.
+- **El hueco real, que era chico:** `GET /wall/{postId}/comments` y `GET /testimonios` no reciben
+  actor ni tienen guard en el servicio. Sin `@RequiresPermission`, `PermissionEnforcementInterceptor`
+  los deja pasar sin mirar a nadie, así que **una cuenta SUSPENDIDA que todavía tenga la sesión viva
+  podía leer comentarios y testimonios**. El feed hermano (`GET /wall`) sí devuelve 403 en ese caso.
+
+**Causa real.** Los TODO y la lista de excepciones del test se escribieron cuando todo estaba en
+`permitAll()` y los servicios no tenían guard. Después se cerraron las rutas y se agregaron los
+guards, pero nadie volvió a clasificar los handlers: la excepción del test quedó tapando cuatro
+endpoints que ya se podían declarar.
+
+**Solución.** Los cuatro pasan a `@RequiresPermission(Permission.USE_APP)`, el mismo permiso que el
+feed, las reacciones y comentar. Se quitaron sus TODO (con una nota de qué decían y por qué ya no
+valía) y sus cuatro entradas de `HANDLERS_SIN_CLASIFICAR`. `GET /testimonios` **no** se marcó
+`@PublicEndpoint`: `SecurityConfig` ya exige sesión ahí y la app muestra los testimonios dentro de
+Comunidad. Declararlo público habría contradicho al filtro. Ya no hace falta cambiar nada para que
+`/wall/mine` tome el actor de la sesión: eso lo garantiza la ruta autenticada, y ahora lo prueba un
+test.
+
+**Lo que queda abierto, dicho.**
+- `TestimonioController#crear` sigue en `HANDLERS_SIN_CLASIFICAR`: es un handler con dos casos de
+  uso y no se puede declarar hasta partirlo en dos.
+- Para comentarios y testimonios el chequeo de suspensión lo hace solo el interceptor, que hoy mira
+  TRAINEE (y MENTOR_LEAD en modo sombra). Un MENTOR/ADMIN/ALCHEMIST suspendido con sesión sigue
+  leyendo (falla abierta de A-1). Cerrarlo del todo exige pasar el actor a `ConsultarComentariosUseCase`
+  y `ConsultarTestimoniosUseCase`.
+- `docs/api/CONTRATO_COMUNIDAD.md` §7.1 todavía dice que `GET /api/v1/testimonios` es "totalmente
+  público", y `docs/MODULO_AUTH.md` todavía lista estos cinco como "sin clasificar". Hay que
+  corregir los dos.
+
+**Cómo evitar que vuelva a pasar.**
+- `MuroYTestimoniosAutenticacionTest` usa la cadena real: sin sesión, 403 en las cuatro rutas aunque
+  venga `X-Actor-Id`; con sesión, `/wall/mine` cuenta las publicaciones de la sesión e ignora un
+  header ajeno. `WallControllerAuthorizationTest`, `WallCommentControllerAuthorizationTest` y
+  `TestimonioControllerTest` prueban que un TRAINEE suspendido recibe 403 y uno activo recibe 200.
+  Las pruebas de suspendido fallan contra el código viejo.
+- Lección: un TODO de seguridad describe el código **del día en que se escribió**. Antes de dar por
+  bueno un hallazgo que sale de un TODO, leer el guard del servicio y la ruta en `SecurityConfig`.
+  Y cada vez que se cierra una ruta o se agrega un guard, revisar si alguno de sus handlers sale de
+  `HANDLERS_SIN_CLASIFICAR`.
+
+## E-216 · `GET /api/v1/points/{id}` muestra racha 0 siempre, y no coincide con la pantalla Hoy
+
+**Síntoma.** `GET /api/v1/points/{participanteId}` devuelve `rachaActual` y `rachaMaxima` en 0 para
+todo el mundo, mientras `GET /api/v1/home` muestra la racha real (por ejemplo 3, con récord 7).
+
+**Causa real.** `PuntajeResponse` lee las columnas guardadas de racha, que nadie escribe. La racha
+de verdad se **deriva** de los días con hábito cumplido (`Racha.derivarDe`, regla 02: derivar, no
+incrementar), y esa derivación la usan `/home` y, desde 2026-09-23, `points.api.ResumenPuntajeFinder`
+(`RachaMostrada`, compartida).
+
+**Estado.** ~~Detectado el 2026-09-23 al construir el resumen del acompañante. **No se corrigió**
+(se reporta). El acompañante ya usa el valor derivado.~~
+
+> **Corregido 2026-09-23.** `GET /api/v1/points/{id}` ahora pasa por `ConsultarPuntajeVisibleUseCase`
+> (`PuntajeVisibleService`), que toma el puntaje guardado y le pone encima la racha DERIVADA con la
+> misma regla de Hoy (`PuntajeConRachaDerivada` → `RachaMostrada`); `ResumenPuntajeService` (el del
+> acompañante) usa la misma clase, así que la regla sigue escrita una sola vez. La forma del JSON no
+> cambió, y la app no llama a este endpoint (verificado con grep en el repo de la app). Regresión:
+> `PuntajeVisibleServiceTest` (racha guardada 0 → se muestra 3, con récord 4, contada hasta hoy en
+> Lima a las 03:30 UTC). **Sigue abierto:** `coherencia` de esa respuesta es la guardada, que
+> tampoco escribe nadie; la de Hoy sale de `PorcentajeRocasFinder`.
+
+**Cómo evitar que vuelva a pasar.** Que `/points/{id}` use `RachaMostrada` o deje de exponer esos
+campos. Ojo: sacar campos de una respuesta rompe la app instalada (no hay actualización por aire);
+lo seguro es devolver el valor derivado. Relacionados: el fixture de `HomeAgregadoServiceTest`
+(`participacionInscrita()`: día 12 con `fechaInicio` 2026-05-01) es incoherente según la regla 03, y
+el javadoc de `PorcentajeRocasService` todavía dice "ventana vacía → 100" y "7 días UTC cerrados".
+
+## E-217 · Al abrir un ticket, el mentor no recibe ningún aviso
+
+**Síntoma.** Un aprendiz abre un ticket al mentor (`POST /api/v1/tickets`) y el mentor no recibe
+push ni notificación: solo lo ve si entra a su bandeja. Sin mentor asignado, nadie lo contesta.
+
+**Causa real.** `support` publica `TicketMentorAbiertoEvent`, pero ningún módulo lo escucha
+(verificado el 2026-09-23 al construir `proponer_ticket_al_mentor`, D-156).
+
+**Estado.** **Resuelto (2026-09-23).**
+
+> **Corregido 2026-09-23.** Esta sección decía: "**No se corrigió**: es previo al acompañante y
+> cambia a quién se notifica (decisión de producto). Afecta igual a los tickets abiertos desde la
+> app." Se corrigió avisando solo a quien ya tenía que responder el ticket —el mentor asignado, el
+> mismo criterio con el que `support` autoriza la respuesta—, sin decidir nada nuevo sobre el caso
+> sin mentor, que sigue abierto (abajo).
+
+**Solución.** Nuevo `notifications.TicketMentorAbiertoNotificationListener`
+(`@ApplicationModuleListener`): busca el `mentorId` de la participación del aprendiz
+(`users.api.ParticipacionProgramaFinder`) y emite `TICKET_ABIERTO` por `EmitirNotificacionUseCase`
+(respeta la preferencia del mentor). Título "Nuevo ticket de un aprendiz", cuerpo
+"<nombre> te abrió un ticket y espera tu respuesta." — **nunca** el texto del bloqueo, que sale
+también por push. El id del ticket es el `origenEventoId` (deduplica la reentrega del outbox, C-7).
+Sin mentor asignado: log INFO y ninguna notificación — **pregunta de producto abierta**: ¿a quién
+se le avisa entonces (ADMIN, líder de célula) o se le impide abrir el ticket? No se inventó un
+destinatario.
+
+De paso, `TicketMentorAbiertoEvent.ticketId` pasó de `support.domain...TicketMentorId` a `UUID`:
+con el tipo de dominio en la firma, `notifications` no podía leerlo sin romper
+`ApplicationModules.verify()`. Tests: `TicketMentorAbiertoNotificationListenerTest` y el caso
+`traineePuedeAbrirTicket` de `TicketMentorServiceTest` (ahora verifica el contenido del evento).
+
+**Pendiente, no corregido acá:** `TicketMentorRespondidoEvent` tampoco tiene consumidor —el
+aprendiz no recibe `TICKET_RESPONDIDO` cuando el mentor contesta— y sigue exponiendo
+`TicketMentorId` en `support.api`. Mismo patrón de arreglo.
+
+**Cómo evitar que vuelva a pasar.** Todo evento publicado en un `*.api` necesita al menos un
+consumidor o una nota que diga por qué no lo tiene.
+
+## E-218 · El log de herramientas podía guardar pedazos de lo que escribió la persona
+
+**Síntoma.** `HerramientaToolCallback` registraba con `log.warn(..., e)` la excepción de Jackson
+cuando el modelo mandaba argumentos ilegibles. El mensaje de Jackson copia un fragmento del JSON.
+
+**Causa real.** Antes era inocuo (los argumentos eran ids); desde D-156 los argumentos pueden ser
+la bitácora, el radar o el texto de un ticket: contenido personal que no puede ir al log.
+
+**Solución.** Se registra solo el tipo de la excepción (2026-09-23).
+
+**Cómo evitar que vuelva a pasar.** Nunca pasar la excepción entera a un log cuando su mensaje
+puede contener datos de entrada; en este módulo, loguear el tipo y el nombre de la herramienta.
+
+> **Nota 2026-09-24.** Al revisar la voz en vivo (D-162) aparecieron cinco `log.warn(..., e)` con
+> la excepción entera: en la herramienta, en la revisión de malestar, en el guardado del turno, al
+> recoger propuestas y al abrir la sesión. Pasaron a registrar solo el tipo. Lo que dice la persona
+> por voz es tan personal como lo que escribe.
+
+## E-219 · Cuando el mentor responde un ticket, al aprendiz no le llega nada
+
+**Síntoma.** El mentor responde (`POST /api/v1/tickets/{id}/answer`) y el aprendiz no recibe push
+ni notificación; solo se entera si vuelve a abrir sus tickets.
+
+**Causa real.** Mismo patrón que E-217: `support` publicaba `TicketMentorRespondidoEvent` y nadie
+lo escuchaba. El tipo `TICKET_RESPONDIDO` existía en el enum y en los mappers, pero nadie lo emitía.
+Además el evento exponía `TicketMentorId`, un tipo de `support.domain` que otro módulo no puede ver.
+
+**Solución (2026-09-23).** `TicketMentorRespondidoEvent.ticketId` pasa a `UUID` y
+`notifications.TicketMentorRespondidoNotificationListener` avisa al aprendiz con un texto fijo, sin
+la respuesta (el cuerpo sale por push a la pantalla bloqueada); el ticket es la clave de
+deduplicación. Prueba: `TicketMentorRespondidoNotificationListenerTest`.
+
+**Cómo evitar que vuelva a pasar.** Ver E-217: todo evento de un `*.api` necesita un consumidor o
+una nota que diga por qué no lo tiene.
+
+> **Nota 2026-09-23 sobre E-217 y E-219.** Los tickets al mentor **se retiraron de la app el
+> 2026-09-07** a pedido del dueño (la comunicación con el mentor es por su chat privado); solo queda
+> la bandeja de solo lectura del líder de mentores. Los dos avisos quedan porque son correctos para
+> el backend (tickets ya existentes, o si algún día vuelve el apartado), pero hoy casi no se
+> disparan. Por lo mismo se descartó avisar al ADMIN cuando el aprendiz no tiene mentor, y se
+> quitaron las herramientas `proponer_ticket_al_mentor` / `consultar_mis_tickets_al_mentor` del
+> acompañante (D-156, corregido).
+
+
+## E-220 · La app revienta con "Cannot find native module 'ExpoSpeechRecognition'"
+
+**Síntoma.** Al abrir el chat en el emulador: `Error: Cannot find native module 'ExpoSpeechRecognition'`.
+
+**Causa real.** Se agregó `expo-speech-recognition` y se recargó en caliente sobre el binario viejo,
+que no lo tenía compilado. El paquete llama a `requireNativeModule` al importarse.
+
+**Solución (2026-09-23, app `9034f30`).** Todo módulo nativo nuevo se carga con `require` dentro de
+un `try` (`useDictado`, `parlantesDelTelefono`, `OrbeAcompanante`); sin él la función se oculta. Para
+tenerlo hay que reconstruir el binario (`npm run android`).
+
+**Cómo evitar que vuelva a pasar.** La app no se actualiza por aire: un módulo nativo nuevo siempre
+se carga opcional, porque habrá teléfonos con el binario anterior.
+
+## E-221 · `npm run android` falla en `react-native-worklets:configureCMakeDebug`
+
+**Síntoma.** `Execution failed for task ':react-native-worklets:configureCMakeDebug' … A restricted
+method in java.lang.System has been called`.
+
+**Causa real.** El build de Android corría con el JDK 25 del sistema; Gradle y el CMake de worklets
+no lo soportan.
+
+**Solución.** Compilar la app con el JDK 21:
+`JAVA_HOME=~/.sdkman/candidates/java/21.0.12+1.1-tem npm run android`. El backend sigue en JDK 25.
+
+**Cómo evitar que vuelva a pasar.** Backend y app usan JDKs distintos; el `JAVA_HOME` se fija en
+el comando, no globalmente.
+
+## E-222 · "[Reanimated] The easing function is not a worklet"
+
+**Síntoma.** Pantalla roja al abrir Hoy con el orbe líquido: `[Reanimated] The easing function is
+not a worklet. Please make sure that you pass a function created with Easing.bezier or …`.
+
+**Causa real.** Se pasó `Easing.inOut(Easing.quad)` de React Native a `withTiming` de Reanimated.
+
+**Solución (app `659cb62`).** `Easing.bezier` de Reanimated. El orbe líquido se descartó después.
+
+**Cómo evitar que vuelva a pasar.** En animaciones de Reanimated, importar `Easing` de
+`react-native-reanimated`, nunca de `react-native`.
+
+## E-223 · `expo-thinking-orbs`: "undefined is not a function … (0,_core.hashD)"
+
+**Síntoma.** `Render Error: undefined is not a function` en `orbits.js`, llamando a `(0,_core.hashD)`.
+Antes, Metro había dicho `None of these files exist: …expo-thinking-orbs/lib/commonjs/engine/registry.js`
+(eso era solo el caché de Metro: se arregla con `npx expo start -c`).
+
+**Causa real.** El plugin de worklets convierte `function hashD() {'worklet'; …}` en un `const` que
+ya no se eleva (hoisting), y el build commonjs del paquete deja los `exports.hashD = hashD` arriba
+de la definición. Cuando otro archivo lo lee, todavía vale `undefined`.
+
+**Solución (app `3612024`).** `scripts/arreglar-thinking-orbs.js` en `postinstall`: mueve las líneas
+`exports.X = X;` al final de cada archivo del paquete. Es idempotente y deja una marca.
+
+**Cómo evitar que vuelva a pasar.** Si se actualiza `expo-thinking-orbs`, verificar que el script
+siga aplicando (busca la marca `[renaser]`), o sacarlo si el paquete lo corrigió.
+
+## E-224 · El orbe no responde al toque
+
+**Síntoma.** Tocar el orbe de Hoy no hacía nada.
+
+**Causa real.** El lienzo de Skia del orbe se quedaba con los toques y no llegaban al `Pressable`.
+
+**Solución (app `3612024`).** El lienzo va dentro de un `<View pointerEvents="none">`.
+
+**Cómo evitar que vuelva a pasar.** Todo lienzo de Skia decorativo dentro de un botón lleva
+`pointerEvents="none"`.
+
+## E-225 · El orbe no habla en el emulador, sin ningún error en la app
+
+**Síntoma.** El acompañante respondía por escrito pero no se oía nada. En `adb logcat`:
+`Can't get TTS model availability`.
+
+**Causa real.** Se pedía la voz `es-419` y el emulador solo trae `es-US` y `es-ES`. Además, la app
+esperaba la respuesta entera antes de hablar, y eso se sentía lento aunque el backend tardaba 3,3 s.
+Se midió con los timestamps de los mensajes en la base.
+
+**Solución (app `537aa43`).** `elegirIdiomaDeVoz` elige la mejor voz en español instalada, y la app
+habla por oración mientras la respuesta sigue llegando.
+
+**Cómo evitar que vuelva a pasar.** Nunca fijar un idioma de TTS sin preguntar qué voces hay
+(`getAvailableVoicesAsync`). Antes de decir "está lento", medir en qué tramo se va el tiempo.
+
+## E-226 · Evaluando voces: Piper responde WAV como `text/html`, y Kokoro busca espeak en otra máquina
+
+**Síntoma 1.** `piper.http_server` (piper-tts 1.8.0) responde `POST /synthesize` con
+`Content-Type: text/html; charset=utf-8`, aunque el cuerpo es un WAV (`RIFF…WAVE`).
+
+**Síntoma 2.** `kokoro-onnx` falla al sintetizar con una ruta de otra máquina:
+`/home/runner/work/espeakng-loader/…/phontab`.
+
+**Causa real.** (1) El servidor de Piper no fija el content-type. (2) El `espeakng-loader` que viene
+en el wheel trae hardcodeada la ruta del CI donde se construyó.
+
+**Solución (2026-09-23).** (1) `PiperVozAdapter` valida la cabecera RIFF/WAVE y no mira el
+content-type (`PiperVozAdapterTest` sirve un WAV como `text/html`). (2) Kokoro se probó con
+`EspeakConfig(lib_path="/usr/lib64/libespeak-ng.so.1", data_path="/usr/share/espeak-ng-data")`,
+y se descartó por lento: 3,3 s por frase en CPU contra 0,3 s de Piper.
+
+**Cómo evitar que vuelva a pasar.** Para el audio de un servicio externo se valida el contenido, no
+el header.
+
+## E-227 · Un `clean verify` en segundo plano "falla" en ITs de `habits` que no se tocaron
+
+**Síntoma.** `Tests run: 6, Failures: 0, Errors: 6 … <<< FAILURE! -- in
+com.renaser.os.habits.application.services.PausaHabitoPersonalIT` (y
+`CrearHabitoPersonalGeneraTrackTransaccionIT`), en un cambio que solo tocaba `rag`.
+
+**Causa real.** Mientras el `clean verify` corría en segundo plano, el agente siguió editando y
+lanzó `./mvnw compile` sobre el mismo `target/`. Es E-104 otra vez: dos builds sobre un mismo
+`target/`. El verify terminó con clases a medio recompilar, y el contexto de Spring de las
+pruebas de integración no levantó.
+
+**Solución (2026-09-23).** Descartar ese resultado y correr `clean verify` de nuevo, sin ningún
+otro build al mismo tiempo.
+
+**Cómo evitar que vuelva a pasar.** Mientras corre un verify en segundo plano no se compila ni se
+prueba en el mismo worktree. Si hace falta avanzar, que sea en otro `git worktree`. Un fallo en un
+módulo que el cambio no tocó es la primera señal de esto.
+
+## E-228 · El backend no arranca con `IA_VOZ_PROVEEDOR=google`
+
+**Síntoma.**
+```
+Parameter 1 of constructor in com.renaser.os.rag.application.services.VozDelOrbeService required a
+bean of type 'com.renaser.os.rag.application.ports.out.ia.SintetizarVozPort' that could not be found.
+```
+
+**Causa real.** El adaptador de la voz de Gemini (D-159) se activaba con el valor `gemini`, pero el
+dueño puso `google`. Es lo lógico: `IA_PROVEEDOR=google` es la convención del repo para Gemini. Con un
+valor que ningún `@ConditionalOnProperty` reconoce, no queda ningún adaptador de voz y Spring muere
+con un mensaje que no menciona la variable de entorno.
+
+**Solución (2026-09-24).**
+- El valor pasa a ser `google`, igual que `IA_PROVEEDOR`.
+- `ProveedorDeVozConfig` valida al arrancar que sea `noop`, `piper` o `google`. Si no, falla con un
+  mensaje que nombra `IA_VOZ_PROVEEDOR` y los valores válidos.
+- Prueba: `ProveedorDeVozConfigTest`, con `ApplicationContextRunner`.
+
+**Cómo evitar que vuelva a pasar.** Todo interruptor de proveedor con varios adaptadores condicionales
+necesita una validación que falle con un mensaje claro ante un valor desconocido. Y los valores
+siguen la convención ya existente (`google` para todo lo de Gemini).
+
+## E-229 · Arreglado en el código, pero el IDE sigue arrancando con la versión vieja
+
+**Síntoma.** Después de corregir E-228 y actualizar la rama, el backend lanzado desde IntelliJ siguió
+fallando con el mismo mensaje literal: `Parameter 1 of constructor in ...VozDelOrbeService required a
+bean of type '...SintetizarVozPort' that could not be found.` El log muestra que carga clases de
+`Renaser-90-dias-backend/target/classes`.
+
+**Causa real.** La rama del checkout del IDE se actualizó desde afuera (`git merge --ff-only` hecho por
+el agente) y IntelliJ no recompiló. `target/classes/.../GeminiVozAdapter.class` era de las 09:13 y
+seguía diciendo `gemini`; `ProveedorDeVozConfig.class` ni existía.
+
+**Solución (2026-09-24).** `./mvnw -o -q compile` en ese checkout, con el backend detenido. También
+sirve **Build → Rebuild Project** en IntelliJ.
+
+**Cómo evitar que vuelva a pasar.** Cada vez que el agente actualice la rama del checkout del IDE,
+compila ahí mismo o avisa que hay que hacer Rebuild. Para diagnosticar, antes de buscar otra causa
+hay que comparar el `.class` (fecha y `strings`) con el fuente.
+
+## E-230 · Abrir Hoy a primera hora del día responde 409 en `/habit-tracks/today`
+
+**Síntoma.** Dos pedidos en el mismo milisegundo (`omcat-handler-5` y `-7`, 09:44:15.34):
+```
+ERROR: duplicate key value violates unique constraint "registros_habito_participante_id_habito_id_fecha_ejecucion_key"
+Detail: Key (participante_id, habito_id, fecha_ejecucion)=(…, …, 2026-09-24) already exists.
+409 -> Conflict: violacion de integridad en la base
+```
+
+**Causa real.** `RegistroService.generarInterno` era idempotente solo para pedidos **en serie**:
+primero preguntaba si el track existía y después lo insertaba ("check-then-act"). Con dos pedidos
+simultáneos, los dos ven "no existe", los dos insertan, y el segundo choca contra el `UNIQUE`. En
+Postgres esa violación aborta la transacción entera, y el pedido responde 409. La `UNIQUE` sí
+cuidaba los datos: nunca hubo duplicados. Lo que faltaba era manejar el choque.
+
+Estaba latente desde antes. Se destapó el 2026-09-24, porque el orbe de voz
+(`useFrasesDeHabitos`) empezó a pedir `/today` al mismo tiempo que la pantalla Hoy
+(`useHabitoDelMomento`).
+
+**Solución (2026-09-24).**
+- **Backend:** `SaveRegistroHabitoPort.insertarSiNoExiste` hace `INSERT … ON CONFLICT
+  (participante_id, habito_id, fecha_ejecucion) DO NOTHING` y devuelve si insertó. La generación
+  lo usa en vez de `save`. El choque se resuelve en el INSERT mismo, porque en Postgres "atrapar
+  la excepción y releer" no sirve: la transacción ya quedó abortada.
+- **App:** `obtenerTracksDeHoy` comparte el pedido mientras hay uno en vuelo. No es un caché:
+  terminado el pedido, el siguiente vuelve a ir al servidor.
+
+**Pruebas.**
+- `InsertarTrackSiNoExisteIT`: 4 hilos simultáneos (`CyclicBarrier`) contra Postgres real. Uno
+  solo inserta, ninguno lanza y queda una fila.
+- `RegistroServiceTest.generarToleraElTrackCreadoPorOtroPedido`.
+- En la app, `tracksDeHoyEnVuelo.test.ts`.
+
+**Cómo evitar que vuelva a pasar.** "Idempotente" tiene que valer también con pedidos
+simultáneos. Si un GET crea filas protegidas por una `UNIQUE`, el INSERT va con `ON CONFLICT`: el
+chequeo previo no alcanza.
+
+## E-231 · La voz del orbe se oye entrecortada y con pausas largas
+
+**Síntoma.** En el emulador, con `IA_VOZ_PROVEEDOR=google`, la voz Kore sonaba a tirones, se cortaba
+a mitad de frase y tardaba en retomar. En la prueba directa contra Gemini se oía fluida y rápida.
+
+**Causa real.** La app le pasaba al reproductor la URL del WAV **mientras se generaba** (D-159). El
+ExoPlayer de expo-audio usa los valores por defecto de `DefaultLoadControl`:
+- espera **2,5 s** de audio en el buffer antes de arrancar;
+- si el buffer se vacía, se frena y espera **5 s** antes de seguir.
+
+Gemini manda el audio a tirones, así que el buffer se vaciaba y el reproductor se frenaba una y otra
+vez. El emulador además suma algo de ruido propio, pero no era la causa.
+
+**Solución (2026-09-24).** `parlantesDelTelefono.sintetizarYBajar`: cada oración se baja **entera a
+memoria** con `preload` de expo-audio y después suena con `replace`. El `AudioPreloadManager` guarda
+los bytes por URI y el reproductor los lee sin red. Mientras suena una oración, la siguiente ya se
+está bajando, y el audio se libera al terminar. El backend no cambió.
+
+**Cómo evitar que vuelva a pasar.** Antes de hacer streaming de audio a un reproductor, revisar su
+política de buffer. Con ExoPlayer y un origen irregular, bajar el clip entero suena mejor y tarda
+casi lo mismo, porque igual esperaba 2,5 s. Probar la voz en un teléfono real antes de culpar al
+emulador.
+
+## E-232 · En cada punto la voz del orbe hace una pausa larga ("microcortes")
+
+**Síntoma.** Ya sin cortes a mitad de frase (E-231), la voz se detenía en cada punto casi un segundo
+antes de seguir leyendo. Además tardaba en empezar a hablar.
+
+**Causa real.** Se midió con Gemini real el 2026-09-24. Cada clip trae **~0,2–0,26 s de silencio
+al principio** y **~0,27–0,37 s al final**. Con un audio por oración, en cada punto se sumaban el
+silencio del final, el del principio del siguiente y el cambio de clip en el reproductor (~0,2 s):
+**~0,7–0,8 s muertos por punto**. El silencio del principio también retrasaba la primera palabra.
+
+**Solución (2026-09-24).**
+- **Backend:** `RecorteDeSilencio` recorta el silencio al vuelo dentro de `GeminiVozAdapter` y deja
+  60 ms de respiro a cada lado. Retiene los últimos 600 ms para decidir al final si eran silencio o
+  una pausa entre palabras. Nunca corta una muestra a la mitad.
+- **App:** `crearAgrupador` manda la **primera oración sola**, para que empiece rápido, y **el
+  resto junto en un solo audio**. Así hay un solo cambio de clip por respuesta, y la voz entona el
+  párrafo completo.
+
+**Pruebas.** `RecorteDeSilencioTest`: 300 ms de silencio + 500 ms de voz + 400 ms de silencio quedan
+en ~620 ms; las pausas del medio se respetan y el resultado no depende de cómo lleguen los pedazos.
+En la app, `voz.test.ts` → `crearAgrupador`.
+
+**Cómo evitar que vuelva a pasar.** Antes de encadenar clips de TTS, medir el silencio de sus
+bordes. Y agrupar lo que se pueda: cada cambio de clip cuesta.
+
+## E-233 · El orbe responde "El asistente está saturado en este momento"
+
+**Síntoma.** Al preguntarle al orbe "me puedes ayudar", la app mostró *"El asistente esta saturado en
+este momento. Intenta de nuevo en unos minutos."*. En el backend:
+`WARN ... ConversacionRenasiaService : El proveedor de IA no respondio (El asistente no esta disponible
+en este momento. Intenta de nuevo en unos segundos.). El aprendiz recibio el aviso y su cuota se libero.`
+
+**Causa real.** No era nuestro código. Google tenía sobrecargado el modelo de chat por defecto,
+`gemini-3.1-flash-lite`. Probado directo contra la API con la misma key:
+`503 "This model is currently experiencing high demand. Spikes in demand are usually temporary."`
+Cuando respondía tardaba 2 a 8 s, y por eso la conversación por voz se sentía más lenta que el día
+anterior. El backend ya reintenta ante un 503 (`GoogleGenAiClientesConfig`), pero ese día no
+alcanzó.
+
+**Solución (2026-09-24).** El default de `ai.google.genai.chat.model` pasa a
+`gemini-3.5-flash-lite`. Medido con 3 llamadas por modelo: 1,2 a 3,0 s y sin fallas; además llama
+bien a las herramientas (`consultar_horarios`). Se sigue pudiendo cambiar por
+`RENASIA_CHAT_MODEL`.
+
+**Cómo evitar que vuelva a pasar.**
+- Si aparece "saturado", primero probar el modelo directo contra la API: un 503 `UNAVAILABLE` es
+  de Google, no del backend.
+- **Antes de producción:** producción no fija `RENASIA_CHAT_MODEL`, así que toma el default del
+  yml. Revisar el precio de 3.5-flash-lite.
+- Evaluar un modelo de respaldo automático ante 503, que hoy no existe.
+
+## E-234 · `1009: The decoded text message was too big for the output buffer and the endpoint does not support partial messages`
+
+**Síntoma.** Al probar `GeminiLiveAdapter` contra un Gemini Live falso (Tomcat embebido), las tres
+pruebas que abrían sesión fallaban con:
+`ConversacionEnVivoNoDisponibleException: Gemini Live no acepto la sesion: cerrada por Gemini (1009: The decoded text message was too big for the output buffer and the endpoint does not support partial messages)`.
+
+**Causa real.** Tomcat trae un buffer de **8 KB** por mensaje de WebSocket y, si el endpoint no
+acepta mensajes parciales, cierra con 1009 todo frame más grande. El `setup` de Gemini Live lleva el
+prompt entero del acompañante más el bloque de voz y las herramientas (~15 KB). Gemini real lo acepta;
+el servidor falso no.
+
+**Lo importante: el mismo límite aplicaba a nuestro propio WebSocket.** `/api/v1/renasia/voz/en-vivo`
+corre en ese mismo Tomcat: un frame de audio de la app de más de 8 KB (apenas **256 ms** de PCM a
+16 kHz) se habría cortado con 1009, y la app no tiene cómo saberlo de antemano.
+
+**Solución (2026-09-24, D-162).**
+- En la prueba, el falso sube su buffer de texto a 1 MB (`setDefaultMaxTextMessageBufferSize`).
+- En el backend, `VozEnVivoWebSocketHandler` acepta mensajes parciales y los junta
+  (`FramesPartidos`, tope de 1 MB por frame). No se subió el límite de todo el contenedor para no
+  cambiar el del STOMP del chat.
+
+**Cómo evitar que vuelva a pasar.** Todo WebSocket nuevo que reciba binarios o JSON grandes tiene
+que decidir qué hace con frames de más de 8 KB. Queda probado en
+`VozEnVivoWebSocketHandlerTest.frameParticionado` y `framePasadoDelTope`.
+
+## E-235 · La voz en vivo no responde nada si la pregunta es audio sintético de `espeak-ng`
+
+**Síntoma.** En la prueba de humo contra Gemini Live real, con una pregunta generada con
+`espeak-ng -v es-419`, la sesión abría (`setupComplete`, `sessionResumptionUpdate`) pero no llegaba
+nada más: ni `inputTranscription`, ni audio, ni `turnComplete`. Sin error.
+
+**Causa real.** No era el backend. La detección de voz automática de Gemini Live no toma como habla
+la voz robótica de `espeak-ng`. Con audio de voz natural (una respuesta de Kore grabada y una pregunta
+generada con Gemini TTS) respondió enseguida, con transcripción y herramientas.
+
+**Solución.** Para probar a mano, usar voz natural: grabarse, o generar la pregunta con Gemini TTS
+(`GeminiVozAdapter`) y pasarla a 16 kHz con `ffmpeg -ar 16000 -ac 1 -f s16le`, dejando ~2 s de
+silencio al final para que la detección cierre el turno.
+
+**Cómo evitar que vuelva a pasar.** Si la voz en vivo "no contesta" y no hay error, probar primero
+con una grabación de voz real antes de buscar un bug.
+
+## E-236 · El WebSocket de voz en vivo responde 400 en el handshake: `Unexpected HTTP response status code 400`
+
+**Síntoma.** En `VozEnVivoWebSocketIT` (Tomcat real, sesión real en Redis), abrir
+`/api/v1/renasia/voz/en-vivo` **con** una sesión válida fallaba con:
+`java.util.concurrent.ExecutionException: java.net.http.WebSocketHandshakeException` —
+`Caused by: jdk.internal.net.http.websocket.CheckFailedException: Unexpected HTTP response status code 400`.
+La prueba de cuenta suspendida daba `expected: 403 but was: 400`. Sin sesión sí daba 403 (lo corta el
+filtro de seguridad antes). Las pruebas unitarias del handler y del interceptor pasaban todas.
+
+**Causa real.** El pedido nunca llegaba al WebSocket. `@EnableWebSocket` registra su mapeo con orden
+**1**, y los controllers van en **0**. `VozRenasiaController` tiene `GET /api/v1/renasia/voz/{id}`
+con `{id}` de tipo `UUID`: tomaba `en-vivo` como id, no podía convertirlo y respondía 400.
+
+**Solución (2026-09-24, D-162).** `VozEnVivoWebSocketConfig` pone su mapeo primero
+(`ServletWebSocketHandlerRegistry.setOrder(Ordered.HIGHEST_PRECEDENCE)`). Ese mapeo solo conoce su
+propia ruta, así que no le quita nada a ningún controller.
+
+**Cómo evitar que vuelva a pasar.** Una ruta de WebSocket debajo de una ruta de controller con
+variable (`/voz/{id}` y `/voz/en-vivo`) choca en silencio. Lo atrapa solo una prueba con el servidor
+real: `VozEnVivoWebSocketIT` queda como regresión (sin el arreglo falla con este mismo 400). Un
+`@WebMvcTest` o una prueba unitaria del handler no lo ven.
+
+## E-237 · La app se cae al abrir: "This function has a reified type parameter…"
+
+**Síntoma.** Recién instalado el binario con `@speechmatics/expo-two-way-audio` 0.1.2 (D-162), la
+app muestra en rojo al abrir, antes de cualquier pantalla:
+```
+This function has a reified type parameter and thus can only be inlined at compilation time, not called directly.
+throwUndefinedForReified (Intrinsics.java:209) … definition (ExpoTwoWayAudioModule.kt:277)
+<init> (ModuleHolder.kt:22) … register (ModuleRegistry.kt:29) … createNativeModules (ExpoModulesPackage.kt:35)
+```
+El `require` opcional no sirve: Expo registra **todos** los módulos nativos al arrancar.
+
+**Causa real.** En Expo 57, el DSL de los módulos (`Function`, `AsyncFunction`, `Events`) necesita el
+plugin de compilador de Kotlin **pika**, que genera la información de tipos al compilar. Los
+módulos oficiales lo reciben con `plugins { id 'expo-module-gradle-plugin' }`. Este paquete usa la
+forma vieja: `apply from: ExpoModulesCorePlugin.gradle` + `applyKotlinExpoModulesCorePlugin()`, que ya
+no aplica pika. En la clase compilada quedó
+`io/github/lukmccall/pika/TypeDescriptorOfKt.throwNonReifiedTypeDescriptorError` (visto con `javap`
+sobre `node_modules/@speechmatics/expo-two-way-audio/android/build/tmp/kotlin-classes/debug/…`). Que
+el archivo tuviera 125 líneas y el error dijera 277 ya delataba código "inline" de otra librería.
+
+**Solución (2026-09-24).** En la app, `scripts/arreglar-two-way-audio.js` corre en `postinstall` y
+reescribe el `android/build.gradle` del paquete con `expo-module-gradle-plugin`, igual que
+`expo-audio`. Es idempotente. Después hay que borrar `…/expo-two-way-audio/android/build` y
+recompilar la app.
+
+**Cómo evitar que vuelva a pasar.** Antes de instalar un módulo nativo de terceros, mirar su
+`android/build.gradle`: si usa `apply from: ExpoModulesCorePlugin.gradle`, con Expo 57 va a romper
+al abrir. Probar siempre el binario nuevo en el emulador antes de dárselo a nadie.
+
+## E-238 · La voz en vivo se oye entrecortada y el orbe se contesta a sí mismo en loop
+
+**Síntoma.** Probando Gemini Live (D-162) en el emulador: la voz sale a tirones, y el orbe "entra en
+loop": habla, se calla, vuelve a hablar solo. En `adb logcat`, 43 veces en pocos minutos:
+```
+AudioFlinger: prepareTracks_l BUFFER TIMEOUT: remove track(111) from active list due to underrun on thread 13
+AudioTrack: restartIfDisabled(103): releaseBuffer() track 0x79e7f17011e0 disabled due to previous underrun, restarting
+```
+
+**Causa real.** Tres cosas juntas en `useConversacionEnVivo`:
+1. **El parlante se quedaba sin audio.** El audio de Gemini no se le entregaba al módulo nativo
+   apenas llegaba: un reloj de JavaScript (`setInterval` de 40 ms) lo repartía de a poco, 250 ms
+   por delante, para poder cortarlo al interrumpir. El `AudioTrack` del módulo usa el buffer mínimo
+   del sistema, así que cualquier demora del hilo de JavaScript (la animación del orbe, la
+   transcripción llegando 25 veces por segundo) lo dejaba vacío: `underrun`, y un hueco audible.
+2. **El orbe se oía a sí mismo.** El micrófono se mandaba siempre. En el emulador el micrófono es
+   el de la laptop y la cancelación de eco no hace nada: la voz del orbe salía por el parlante,
+   entraba por el micrófono, Gemini la tomaba como si hablara la persona, se interrumpía y le
+   contestaba. De ahí el loop.
+3. **El micrófono se volvía a suscribir en cada render.** `useExpoTwoWayAudioEventListener` se
+   suscribe de nuevo cada vez que cambia la función que recibe, y se le pasaba una función nueva
+   por render.
+
+**Solución (2026-09-24).**
+- El audio va **entero y enseguida** al módulo nativo, que lo encola y lo toca de corrido.
+  `Parlante` solo lleva la cuenta de hasta cuándo suena.
+- **Semidúplex:** mientras el orbe habla, y 400 ms después, se manda **silencio** en vez del
+  micrófono (silencio y no nada: Gemini prefiere un stream continuo). Se pierde interrumpirlo
+  hablando; se lo corta tocando el orbe. Con cancelación de eco de verdad se puede revisar.
+- La función del micrófono es estable (`useCallback` sin dependencias, todo por refs) y manda
+  lotes de ~100 ms en vez de 31 frames por segundo.
+
+**Cómo evitar que vuelva a pasar.** Nunca dosificar audio desde JavaScript: el hilo de JS no tiene
+garantías de tiempo. Lo que necesite tiempo real va al lado nativo. Y todo asistente de voz que
+hable por el parlante necesita o cancelación de eco comprobada o semidúplex; en el emulador, siempre
+semidúplex.
+
+> **Nota 2026-09-24 sobre E-238.** Después del arreglo quedan `underrun` en el log, pero ya no son
+> cortes: aparecen **al arrancar** el parlante vacío (el módulo llama a `play()` sin datos) y **al
+> terminar cada respuesta**, cuando la cola se vacía. Durante las respuestas (8,5 s y 9 s medidos
+> con la prueba de punta a punta) no hubo ninguno. Si alguien vuelve a contar `underrun`, que mire
+> la línea de tiempo contra `restartIfDisabled` y `Mic sample tap stopped` antes de asustarse.
+
+## E-239 · El orbe en vivo transcribe ruido del cuarto como coreano y contesta en coreano
+
+**Síntoma.** En la prueba de punta a punta de la voz en vivo (D-162), sin que nadie hablara,
+quedó guardado un turno del "usuario" `대통령 기록관` y la respuesta del acompañante fue en coreano:
+`저는 프로그램과 관련된 내용만 안내해 드릴 수 있어요…`. En la pantalla Hoy se vio igual.
+
+**Causa real.** Dos cosas:
+1. **El detector de voz de Gemini es sensible por defecto.** Con el micrófono abierto entre turnos,
+   el ruido del cuarto (el ventilador de la laptop, en el emulador) disparó un turno. Sobre un
+   audio que no es voz, la transcripción del modelo inventa texto, y ese día inventó coreano.
+2. **El modelo siguió el idioma de lo que "oyó".** El prompt dice que escribe en español, pero ante
+   un turno en coreano contestó en coreano. Google no permite fijar el idioma de salida por
+   configuración en los modelos de audio nativo (`languageCode` no se soporta ahí): solo por
+   instrucciones.
+
+**Solución (2026-09-24).**
+- `MensajesGeminiLive.setup` manda `realtimeInputConfig.automaticActivityDetection` con
+  `startOfSpeechSensitivity = START_SENSITIVITY_LOW`, `prefixPaddingMs = 200` y
+  `silenceDurationMs = 800`. Menos turnos falsos por ruido, sin comerse la primera sílaba.
+- `prompts/modo-en-vivo.st`, que `PromptDeVozEnVivo` agrega después del bloque de voz: siempre
+  en español aunque lo oído parezca otro idioma; ante ruido o algo que no se entiende, dice en
+  español que no alcanzó a oír y pide repetir; ante silencio, espera.
+
+**Cómo evitar que vuelva a pasar.** Todo asistente con el micrófono abierto necesita las dos
+cosas: un detector de voz poco sensible y una regla explícita de idioma en el prompt. Y en la
+bitácora de pruebas, mirar siempre lo que quedó guardado como turno del usuario: ahí se ve lo que
+el modelo cree haber oído.
+
+> **Verificado 2026-09-24, 14:39**, con la prueba de punta a punta (emulador, pregunta grabada por
+> los parlantes). El micrófono se abrió mientras la pregunta ya sonaba y el modelo oyó primero un
+> pedazo ("sacar mi"): respondió **en español** *"No alcancé a oír bien lo que necesitas. ¿Podrías
+> repetírmelo, por favor?"*, que es la regla nueva funcionando. Después transcribió la pregunta
+> completa y correcta (*"¿Qué hábitos me tocan hoy y cuánto tiempo me queda para hacerlos?"*) y
+> contestó con datos reales de las herramientas (Clase diaria, Pastilla Renacer), 13,8 s de voz sin
+> un solo corte. La sesión tardó ~11 s en abrir con el backend recién reiniciado; queda pendiente
+> medirlo en caliente.
+
+## E-240 · El orbe en vivo dijo "Tienes cien puntos" cuando la persona tiene 127
+
+**Síntoma.** Sesión de voz en vivo del 2026-09-24, 14:47. Turno guardado del "usuario": *"Tá. No tengo
+yo en temas de No tengo ningún inconveniente al respecto, como les he dicho. Es más,"* (habla de
+fondo del cuarto, no una pregunta). Respuesta del acompañante: *"Tienes cien puntos"*. En la base:
+`puntos_liga = 127`, `coherencia = 100.00`.
+
+**Causa real.** No se pudo determinar con certeza, y eso es el problema de fondo: **la voz en vivo no
+registraba qué herramientas ejecutaba**, así que no hay forma de saber si el modelo llamó a
+`consultar_resumen_del_programa` y confundió la coherencia (100 %) con los puntos, o si contestó
+una cifra inventada a un audio que no era una pregunta. Las dos cosas son posibles con habla de
+fondo captada por un micrófono abierto.
+
+**Solución (2026-09-24).**
+- `SesionDeVozEnVivo` registra en INFO cada herramienta ejecutada en la sesión en vivo, solo el
+  nombre y si salió bien; nunca los argumentos ni el resultado (E-218).
+- `consultar_resumen_del_programa` dice "Puntos de liga: 127 puntos (los mismos que ve en
+  Inicio)", con unidad, para que no se confunda con el porcentaje de coherencia.
+
+**Cómo evitar que vuelva a pasar.** Toda ejecución de herramienta desde una sesión de IA deja una
+línea en el log con su nombre. Y en las pruebas de voz, mirar los turnos guardados del "usuario":
+si no son una pregunta, la respuesta no vale como evidencia de nada. Limitación conocida: un
+micrófono abierto en un cuarto con gente hablando va a disparar turnos; en un teléfono cerca de la
+boca pasa mucho menos.
+
+## E-241 · Tras una cuota agotada, el orbe queda en el modo anterior el resto del día y sin decir por qué
+
+**Síntoma.** El 2026-09-24 a las 15:15 se agotó la cuota de voz en vivo (10 min). Desde ahí, cada
+toque al orbe abría el modo anterior (dictado del teléfono → chat → TTS) sin mostrar el aviso
+*"Por hoy ya usaste tu tiempo de voz en vivo…"*. Reiniciar el contador en Redis no cambió nada:
+la app seguía sin intentar la voz en vivo. En `adb logcat` se veían pares
+`requestAudioFocus`/`abandonAudioFocus` del reconocedor del teléfono y ningún
+`[voz en vivo] cerrado`.
+
+**Causa real.** `useVozDelOrbe` marcaba `descartada = true` la primera vez que `empezar()` fallaba
+y no lo volvía a poner en `false` nunca: solo una recarga de la pantalla lo reseteaba. Y mientras
+estaba descartada, el selector mostraba el estado del modo anterior, que no tenía el mensaje de la
+cuota: el aviso que sí había llegado quedaba escondido.
+
+**Solución (2026-09-24).** La pausa dura **2 minutos** (`PAUSA_TRAS_FALLO_MS`): pasado eso se vuelve
+a intentar la voz en vivo (con la cuota agotada, el backend la rechaza antes de abrir Gemini, así
+que reintentar es barato). Durante la pausa se muestra el aviso de la voz en vivo aunque ya se esté
+usando la de siempre.
+
+**Cómo evitar que vuelva a pasar.** Un "descartado" sin vencimiento es un bug esperando: todo
+respaldo automático necesita un plazo para volver a intentar. Y cuando una vía se cae, el motivo
+se muestra, no se traga.
+
+## E-242 · En el emulador, el orbe deja de oír a mitad de una sesión larga ("No te entendí bien")
+
+**Síntoma.** Probando la voz en vivo en el emulador, después de varias sesiones y recargas de la
+app, Gemini transcribía fragmentos sueltos ("entrar") o nada, y contestaba *"No te entendí bien"*.
+Los clips de prueba sonaban igual de fuerte que los que sí habían funcionado (−17,5 dBFS).
+
+**Causa real.** El **stream de captura del emulador desapareció del mezclador de la laptop**
+(`pactl list source-outputs` ya no mostraba el de `qemu`), aunque dentro de Android
+`dumpsys audio` seguía diciendo `Recording active: true`. El guest creía grabar; el host no le
+mandaba nada. Es del emulador con `-allow-host-audio`, no de la app ni del backend: en un teléfono
+no existe ese salto.
+
+**Solución (2026-09-24).** Cerrar y reabrir la sesión del orbe: el `AudioRecord` nuevo hace que QEMU
+vuelva a abrir la captura en el host. Con eso la misma frase se transcribió completa y la
+herramienta corrió.
+
+**Cómo evitar que vuelva a pasar.** Antes de culpar al detector de voz o al modelo, mirar el host:
+`pactl list source-outputs short` tiene que mostrar la captura del emulador mientras el orbe
+escucha. Y el micrófono del dispositivo al 100 % (`pactl get-source-volume @DEFAULT_SOURCE@`): al
+68 % Gemini tampoco detecta habla.
+
+## E-243 · El orbe en vivo oyó "Activa" cuando le dijeron "Desactiva": se perdió la primera sílaba
+
+**Síntoma.** Prueba de punta a punta (2026-09-24, 16:06). Clip: *"Desactiva el hábito Escritura libre
+nocturna para mañana"*. Turno guardado del usuario: *"**Activa** el hábito escritura libre nocturna
+para mañana"*. Respuesta: *"…ya está programado en tu plan para mañana"*. No propuso apagar nada: hizo
+lo contrario de lo pedido, con toda naturalidad.
+
+**Causa real.** El detector de voz de Gemini se abre con sensibilidad baja (E-239, para que el ruido
+del cuarto no dispare turnos) y eso hace que detecte el arranque del habla un poco tarde. El
+`prefixPaddingMs` (cuánto audio anterior al arranque se incluye) estaba en 200 ms: no alcanzó para
+"Des-". Sin esa sílaba, la frase invierte el sentido y el modelo no tiene forma de saberlo.
+
+**Solución (2026-09-24).** `prefixPaddingMs` pasa a **600 ms** (`MensajesGeminiLive.COLCHON_ANTES_DE_LA_VOZ_MS`).
+Cuesta ~0,4 s más de audio por turno, nada más.
+
+**Cómo evitar que vuelva a pasar.** Toda vez que se baje la sensibilidad de un detector de voz hay
+que subir el colchón previo, y probar con frases cuya primera sílaba cambie el sentido
+("desactiva/activa", "no quiero/quiero"). Y en las pruebas, comparar siempre el turno guardado con
+lo que se dijo: ahí se ve lo que el modelo oyó de verdad.
+
+## E-244 · Producción dejó de mandar correos tras cambiar `SMTP_PASSWORD`: el contenedor seguía con la clave vieja
+
+**Síntoma.** Desde el 2026-09-25 04:09 UTC ningún correo transaccional salía (códigos de
+verificación y de recuperar contraseña; lo notaron con la cuenta 3). En el log de `backend`, literal:
+`[users.SmtpEnviarEmailAdapter] fallo el envio de un correo transaccional (asunto 'Tu código para
+recuperar la contraseña de Renaser', causa MailAuthenticationException)`.
+
+**Causa real.** `/renaser/prod/SMTP_PASSWORD` se cambió (versión 2) el 2026-09-24 16:10 UTC, pero el
+contenedor había arrancado el 2026-09-23 16:34 UTC. `application-prod.yaml` importa Parameter Store
+**una sola vez, al arrancar** (§6 de `docs/DESPLIEGUE_Y_CI.md`): no hay recarga en caliente, así que
+el `JavaMailSender` siguió autenticando con la clave anterior, que ya no era válida. El código no
+tenía nada mal.
+
+**Solución (2026-09-25).** `docker restart backend` en `i-0ea00f555c5fe8028` por `ssm send-command`
+(misma imagen, `UP` a los 54 s). En el arranque el log muestra `Loading property from AWS Parameter
+Store with name: /renaser/prod/`, que es cuando toma la clave nueva.
+
+**Cómo evitar que vuelva a pasar.** **Todo cambio de un parámetro de `/renaser/prod/` va seguido de
+reiniciar el contenedor `backend`** (o de un despliegue). Para diagnosticar, comparar
+`aws ssm describe-parameters ... LastModifiedDate` contra `docker inspect -f {{.State.StartedAt}}
+backend`: si el parámetro es más nuevo que el arranque, el backend no lo tiene. Si tras reiniciar
+sigue `MailAuthenticationException`, ya es la clave: con Gmail tiene que ser una contraseña de
+aplicación de la misma cuenta de `SMTP_USERNAME`.
+
+## E-245 · El orbe dijo "No es posible pausar el hábito" sin motivo ni alternativa
+
+**Síntoma.** Prueba por voz (2026-09-24, 17:34). Clip: *"Pausa el hábito escritura libre nocturna
+hasta el domingo."* Respuesta guardada: *"No es posible pausar el hábito de escritura libre nocturna.
+Si tienes cualquier duda sobre los hábitos que sí puedes modificar, dímelo."* Ante *"Sí, hazlo, por
+favor"*: *"Como te mencioné, no es posible pausar ese hábito en este momento."* El dueño lo oyó y pidió
+que diga el motivo ("no puedo, es obligatorio del programa") y qué sí se puede.
+
+**Causa real.** Dos, en la misma herramienta. (1) `proponer_pausar_habito` busca el hábito solo en los
+desbloqueos (`desbloqueos_habito`). Escritura libre nocturna no tiene fila ahí (0 filas para ese
+participante: la tabla arranca vacía para todos, D-99), así que devolvía *"Ese habito no esta en su
+plan"* y el modelo lo resumió en "no es posible". Pero en Plan ese mismo hábito **sí** se pausa: el
+interruptor manda primero el `PUT /habit-unlocks/{id}` que crea la fila y recién después la pausa.
+El acompañante se saltaba ese primer paso. (2) Con un obligatorio pasaba lo mismo: los cuatro de V18
+tampoco tienen fila, así que la guarda `habito.obligatorio()` de la herramienta no se alcanzaba nunca
+y la Clase diaria recibía "no está en su plan" en vez de "es obligatoria del programa".
+
+**Solución (2026-09-25, D-165).** `habits.api` entrega **todos** los hábitos que la persona ve, con los
+obligatorios marcados, y `pausar` asegura la fila antes de pausar, igual que Plan. Las negativas dicen
+el motivo y qué sí se puede (`LoQueSiSePuede`, la misma redacción en pausar, apagar un día y horario
+por día de semana). Herramienta nueva `consultar_habitos_obligatorios`. El prompt prohíbe el "no es
+posible" a secas.
+
+> **Corregido 2026-09-25.** El primer arreglo (`be5fc8a6`) no hacía que la pausa funcionara: le
+> enseñaba al acompañante a explicar que *"la pausa es solo para los que se suman al plan"* y que un
+> hábito de la base *"no se pausa"*. Era una regla inventada, contraria a lo que hace Plan (regla 00:
+> no inventar reglas de negocio). La encontró la revisión de código antes de que llegara a nadie. La
+> lección: antes de explicar por qué algo "no se puede", comprobar que de verdad no se puede **en la
+> app**, no solo en la herramienta.
+
+**Cómo evitar que vuelva a pasar.** Una negativa de herramienta lleva motivo **y** alternativa, y la
+herramienta hace lo mismo que la pantalla equivalente de la app. Los tests lo exigen:
+`PropuestaDePausarHabitoTest.deLaBaseSePausa` (falla contra el código anterior y contra `be5fc8a6`),
+`PlanDeHabitosServiceTest.todosLosQueVe` y `escriturasDelegan` (la fila antes que la pausa),
+`PropuestaDeApagarDiaTest.obligatorio` y `GestionarPlanDeHabitosAdapterTest`. Al probar una
+herramienta de escritura, usar hábitos de los tres tipos: uno con fila de desbloqueo, uno de la base
+sin fila y un obligatorio.
+
+## E-246 · Una propuesta del orbe quedó CANCELADA a los 60 s sin que el script tocara Cancelar
+
+**Síntoma.** Prueba por voz (2026-09-24). `proponer_apagar_dia` creada a las 17:21:14.65 (Lima) y en
+`CANCELADA` a las 17:22:14.37 (`resuelta_en`), sin `resultado`. En ese lapso el script de prueba solo
+leía logcat: no tocó la pantalla. En la corrida siguiente (17:28) la misma propuesta siguió
+`PENDIENTE` más de dos minutos hasta que se confirmó.
+
+**Causa real.** No determinada. Lo único que pasa una propuesta a `CANCELADA` es
+`POST /api/v1/renasia/propuestas/{id}/cancelar`, y la app lo manda solo al tocar CANCELAR (hoja del
+orbe o tarjeta del chat); el backend nunca cancela solo (a los 10 min la vence a `VENCIDA`). Lo más
+probable es un toque manual en el emulador, que el dueño estaba mirando a esa hora. No se pudo
+comprobar porque la prueba no grababa la pantalla.
+
+**Solución.** Ninguna en el código: no se encontró un defecto.
+
+**Cómo diagnosticarlo si vuelve.** En las pruebas de punta a punta, grabar la pantalla
+(`adb shell screenrecord`) y avisar que nadie toque el emulador. Si pasa con la pantalla grabada y sin
+toques, sospechar de la hoja flotante (un toque que la atraviese) y registrar en la app desde qué
+botón salió el `cancelar`.
+
+## E-247 · El chat se quedaba sin respuesta cuando el modelo escribía mal el nombre de una herramienta
+
+**Síntoma.** Batería de 102 preguntas por el chat de la app (2026-09-25). *"entonces apagala solo el
+sabado"* y *"desactiva escritura libre nocturna todos los viernes"*: el mensaje de la persona quedaba
+guardado y la respuesta nunca llegaba. En el log del backend, literal:
+
+```
+WARN o.s.a.m.tool.DefaultToolCallingManager : LLM may have adapted the tool name 'proponer_horario_por_dia_semana', especially if the name was truncated due to length limits.
+WARN c.r.o.r.a.s.ConversacionRenasiaService : Fallo el streaming de respuesta del asistente
+java.lang.IllegalStateException: No ToolCallback found for tool name: proponer_horario_por_dia_semana
+```
+
+**Causa real.** El modelo pidió `proponer_horario_por_dia_semana`: le comió el "de" al nombre real,
+`proponer_horario_por_dia_de_semana`. Spring AI busca la herramienta por nombre y, si no la
+encuentra, **lanza** en vez de devolverle un error al modelo, así que el turno entero se cae. La voz en
+vivo no tenía el problema: ahí el nombre desconocido llega a `HerramientasAgenteService`, que
+devuelve un `Fallo` legible.
+
+**Solución (2026-09-25).** El modelo de chat de Gemini tiene su propio `ToolCallingManager`, con
+`ResolverDeHerramientasDesconocidas`: un nombre que no existe vuelve al modelo como
+`{"ok":false,"resultado":"No existe una herramienta llamada 'X'. Quisiste decir 'Y'..."}` (la más
+parecida por distancia de edición, hasta 6). No se ejecuta nada por parecido: solo se sugiere, y el
+modelo vuelve a llamar con el nombre bien escrito.
+
+**Cómo evitar que vuelva a pasar.** `ResolverDeHerramientasDesconocidasTest` fija el caso exacto. Ante
+cualquier `IllegalStateException` de Spring AI en el streaming, mirar primero el nombre de la
+herramienta que pidió el modelo en el `WARN` anterior.
+
+## E-248 · Al llegar al tope diario de mensajes, la app no recibía el aviso: el 429 no se podía escribir en el stream
+
+**Síntoma.** Misma batería, al pasar el mensaje 25 del día. En el log, literal:
+
+```
+WARN c.r.o.shared.web.GlobalExceptionHandler : 429 -> Too Many Requests: Se alcanzo el limite diario de mensajes a Renasia
+WARN .m.m.a.ExceptionHandlerExceptionResolver : Failure in @ExceptionHandler com.renaser.os.shared.web.GlobalExceptionHandler#handleRateLimit(RateLimitExceededException)
+org.springframework.web.HttpMediaTypeNotAcceptableException: No acceptable representation
+```
+
+**Causa real.** `POST /api/v1/renasia/mensajes` produce `text/event-stream`. La cuota se revisa antes de
+abrir el stream (`ConversacionRenasiaService.requireCuotaDisponible`), y el 429 que arma
+`GlobalExceptionHandler` es un cuerpo JSON que no se puede escribir con ese tipo de contenido. La app
+recibe una falla genérica en vez de "llegaste al límite de hoy".
+
+**Solución (2026-09-25, a pedido del dueño).** `GlobalExceptionHandler` fija
+`Content-Type: application/json` en todas sus respuestas de error (`comoJson`): con el tipo fijado,
+Spring no negocia contra el `produces` del endpoint y el 429 sale con su `{message}`. La app instalada
+ya maneja ese 429 (`RenasiaCuotaExcedidaError`: muestra el mensaje y no ofrece reintentar), así que no
+hace falta un binario nuevo. El mensaje pasó a ser legible para la persona:
+`ConversacionRenasiaService.MENSAJE_LIMITE_DIARIO` = *"Ya usaste todos tus mensajes de hoy. Vuelve
+mañana."* (antes: *"Se alcanzo el limite diario de mensajes a Renasia"*).
+
+**Cómo evitar que vuelva a pasar.** `ErroresAntesDelStreamTest` monta un endpoint `text/event-stream`
+que lanza el 429 antes de abrir el stream; contra el manejador anterior falla con el mismo
+`HttpMediaTypeNotAcceptableException` del log. Toda excepción que pueda salir de un endpoint SSE antes
+de abrir el stream necesita una prueba que mire lo que recibe el cliente, no solo el código de estado.
+
+## E-249 · El resumen de un cambio de hora siempre resta un cupo, aunque el cupo cuente hábitos distintos
+
+**Síntoma.** Misma batería. Para *Agua tibia con limón a las 5 am* el resumen dijo *"Usa 1 de sus 3
+cambios de esa semana: le quedarían 0"*, pero Agua tibia ya contaba esa semana: cambiarlo otra vez no
+gasta y seguía quedando 1.
+
+**Causa real.** `CuotaEdicionHorario` cuenta **hábitos distintos** reacomodados en la semana del
+programa (`HABITOS_POR_SEMANA = 3`). `HorariosParaProponer.gastoDeCupo` siempre resta 1, y
+`requireCupo` rechaza con cupo 0 aunque el hábito ya cuente, algo que `habits` sí permitiría. La
+herramienta no sabe qué hábitos ya cuentan: `habits.api` no lo expone.
+
+**Solución.** Pendiente: arreglarlo pide que `HorarioDelDiaFinder` diga, por hábito, si ya cuenta en la
+semana. Se reporta al dueño y no se mezcla con D-165.
+
+**Cómo evitar que vuelva a pasar.** Cuando una regla cuenta "cosas distintas", las herramientas que la
+anuncian tienen que recibir esa distinción de quien la calcula, no inferirla con una resta.
+
+## E-250 · Los avisos de acompañamiento al mentor se publican fuera de una transacción (llegan tarde por el reintento)
+
+**Síntoma (encontrado leyendo código el 2026-09-25, no observado en ejecución).** Al diseñar el cierre
+semanal del semáforo (D-168) se revisó `mentoring/application/services/AvisosService`, el precedente de
+"barrido que publica avisos". `detectar()` no es `@Transactional` y llama a `revisarGrupo(...)`, anotado
+`@Transactional(propagation = REQUIRES_NEW)`, **desde la misma clase**. El listener que entrega el aviso
+(`AvisoAcompanamientoNotificationListener`) es `@ApplicationModuleListener`, que es un
+`@TransactionalEventListener`.
+
+**Causa real.** Auto-invocación: una llamada `this.revisarGrupo()` no pasa por el proxy de Spring, así que
+el `@Transactional(REQUIRES_NEW)` no se aplica y `publishEvent` corre sin transacción. Un
+`@TransactionalEventListener` sin transacción activa no se ejecuta (salvo `fallbackExecution = true`,
+que no está). Consecuencia probable: los avisos `SIN_ACTIVIDAD` y `EVIDENCIA_VENCIDA` al mentor no se
+crean nunca, y la sección AVISOS de `MiCelulaScreen` sale siempre vacía. `AvisosServiceTest` no lo
+detecta porque es unitaria (sin proxy).
+
+**Solución.** Ninguna en este cambio (regla 00: se reporta, no se arregla de paso). Para confirmarlo:
+contar en una base con datos `SELECT count(*) FROM renaser.notificaciones WHERE tipo =
+'ACOMPANAMIENTO_ALUMNO'`, o una IT que corra el barrido con Spring y mire la tabla. El arreglo es mover
+`revisarGrupo` a otro bean (o usar `TransactionTemplate`), como hace `CierreDeParticipanteService`.
+
+**Cómo evitar que vuelva a pasar.** Un evento con listener `@ApplicationModuleListener` se publica
+siempre dentro de una transacción que pasa por el proxy. El cierre del semáforo lo hace en un bean aparte
+(`CierreDeParticipanteService`) y lo prueba `SemaforoDeExtremoAExtremoIT` con el contexto real.
+
+> **Corregido 2026-09-25 (mismo día).** El título decía «probable: nunca llegan». Al construir el resumen
+> del sábado se hizo una mutación a propósito (publicar sin transacción) y las publicaciones **sí quedaron
+> registradas** en el outbox de Spring Modulith, pero incompletas (2 de 2). `EventPublicationMaintenanceScheduler`
+> reintenta las incompletas (`reintento-tras: PT5M`), así que lo más probable es que los avisos al mentor
+> lleguen **tarde** (5 minutos o más) y no que se pierdan. Sigue sin verificarse contra una base con datos;
+> la forma correcta de publicar no cambia.
+
+## E-251 · El snapshot del ranking general cuenta el día recién empezado como 0 %
+
+**Síntoma (encontrado leyendo código el 2026-09-25).** `SnapshotRankingScheduler` corre a las 05:05 UTC
+(00:05 de Lima) y pasa `clock.today()` —la fecha UTC, que a esa hora ya es el día nuevo de Lima— como
+`hasta` de la ventana de 7 días de `PorcentajeHabitosFinder`. Los registros de ese día se acaban de
+generar (05:02 UTC) y están todos PENDIENTE.
+
+**Causa real.** La ventana `[hasta-6, hasta]` incluye un día que todavía no empezó a vivirse: sus hábitos
+obligatorios cuentan como no cumplidos y ese día entra al promedio con 0 %. El ranking general de todos
+queda sistemáticamente más bajo, y más para quien tiene menos días en la ventana.
+
+**Solución.** Ninguna en este cambio (fuera del alcance de D-168, se reporta). El semáforo no tiene el
+problema: su ventana son los 7 días CERRADOS que terminan ayer, en la zona de cada persona.
+
+**Cómo evitar que vuelva a pasar.** Una ventana "de 7 días" dice explícitamente si incluye hoy; un
+cálculo de cumplimiento nunca incluye un día que no cerró.
+
+## E-252 · El Espejo de la Sombra corre el domingo 22:00 de Lima como si la semana ya hubiera cerrado
+
+**Síntoma (encontrado leyendo código el 2026-09-25).** `GenerarInformesSemanalesScheduler` corre
+`0 0 3 * * MON` en UTC —domingo 22:00 en Lima— y arma "la semana pasada" desde `clock.today()`, que es la
+fecha UTC (lunes).
+
+**Causa real.** Regla 02 §1: la medianoche local no cae a una hora UTC fija. Lo que se escriba el domingo
+entre las 22:00 y las 24:00 de Lima queda fuera del informe de esa semana.
+
+**Solución.** Ninguna en este cambio (se reporta).
+
+**Cómo evitar que vuelva a pasar.** Todo cierre semanal decide en la zona de la persona, con un barrido
+horario (como el del semáforo, `CerrarSemaforoScheduler`).
+
+## E-253 · El Verdugo marca IGNORADO a las 18:55 de Lima lo pendiente "de hoy"
+
+**Síntoma (encontrado leyendo código el 2026-09-25).** `VerdugoIgnoradoScheduler` corre `0 55 23 * * *`
+UTC (18:55 en Lima) y resuelve los eventos de `clock.today()`.
+
+**Causa real.** Misma familia que E-91 y E-252: a esa hora al día de Lima le quedan cinco horas. Impacto
+bajo hoy, porque ningún código del servidor crea eventos del Verdugo (RK-6), pero el día que existan se
+cerrarán antes de tiempo.
+
+**Solución.** Ninguna en este cambio (se reporta).
+
+**Cómo evitar que vuelva a pasar.** Igual que E-252.
+
+## E-254 · Las rutas nuevas del semáforo quedaban fuera del filtro de sesión
+
+**Síntoma.** `./mvnw clean verify` en la rama `semaforo-aprendiz` (2026-09-25):
+`RutasCubiertasPorElFiltroTest.ningunaRutaQuedaFueraDelFiltro` → *"Estas rutas no las alcanza ningun
+matcher .authenticated() de SecurityConfig y tampoco declaran @PublicEndpoint [...] Expecting empty but
+was: ["/api/v1/me/semaforo", "/api/v1/me/semaforo/pausa"]"*.
+
+**Causa real.** Los controllers nuevos declaraban `@RequiresPermission`, pero `SecurityConfig` exige
+sesión por prefijo de ruta y `/api/v1/me/semaforo` no estaba en ningún matcher: la cadena termina en
+`anyRequest().permitAll()`, así que sin el matcher la identidad habría salido del header `X-Actor-Id`.
+
+**Solución.** Matcher `.authenticated()` para `/api/v1/me/semaforo`, `/api/v1/me/semaforo/**` y
+`/api/v1/semaforo/**` (el resumen del líder). Las vistas del mentor y del administrador ya caían en
+`/mentor/**` y `/admin/**`.
+
+**Cómo evitar que vuelva a pasar.** Ya está automatizado: la prueba lo detectó antes de que la ruta
+llegara a ningún lado. Al diseñar un endpoint con prefijo nuevo, agregarlo a `SecurityConfig` en el mismo
+cambio (anotado en `docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md` §4).
+
+## E-255 · Hoy queda en blanco en la versión web: el orbe carga Skia sin CanvasKit
+
+**Síntoma (frontend, rama `acompanante-ia`, encontrado al hacer capturas del semáforo el 2026-09-25).**
+El build web muestra Hoy en blanco con `TypeError: Cannot read properties of undefined (reading 'Paint')`.
+
+**Causa real.** `OrbeAcompanante` carga `expo-thinking-orbs` (Skia) sin protección para web y nunca se
+carga CanvasKit. En Android/iOS no pasa; en la web publicada en Vercel se rompería la pestaña Hoy entera.
+
+**Solución.** Corregido en el frontend, rama `acompanante-ia`, commit `6febd7a` («Mostrar el orbe simple en la
+web, donde el animado dejaba Hoy en blanco»): en web `cargarOrbes()` devuelve `null` y no se carga
+`expo-thinking-orbs`, así que queda el orbe simple; además un `ErrorBoundary` deja el orbe simple si el
+animado revienta al dibujarse, en cualquier plataforma. Prueba: `src/features/renasia/utils/__tests__/orbeEnWeb.test.ts`.
+
+> **Actualizado 2026-09-25 (mismo día).** Decía: «Ninguna todavía (se reporta; es del área del acompañante).
+> Para las capturas del semáforo se precargó CanvasKit solo en un `index.html` del scratchpad; el repo no
+> cambió. Arreglo probable: `LoadSkiaWeb` antes de montar, o el orbe simple en web». Lo corrigió la sesión del
+> acompañante, que avisó con el commit. Las capturas del semáforo se hicieron antes del arreglo, con CanvasKit
+> precargado en el scratchpad.
+
+**Cómo evitar que vuelva a pasar.** Un recorrido web de humo de Hoy con Playwright en el CI del frontend.
+
+## E-256 · Jest no encuentra pruebas si el frontend corre dentro de un worktree
+
+**Síntoma.** Dentro de `.claude/worktrees/semaforo-app`, `npx jest` → `No tests found, exiting with code 1`.
+
+**Causa real.** `jest.config.js` tiene `testPathIgnorePatterns: ['/.claude/']`, que coincide con la ruta
+ABSOLUTA de cualquier worktree bajo `.claude/worktrees/` y descarta todas las pruebas.
+
+**Solución.** Ninguna en el repo (se reporta). Para correr ahí:
+`npx jest <rutas...> --testPathIgnorePatterns='/node_modules/|/e2e/'` (un solo valor, con `=` y `|`).
+Arreglo probable: `'<rootDir>/.claude/'`.
+
+> **Corregido 2026-09-25 (mismo día).** Decía `npx jest --testPathIgnorePatterns '/node_modules/' '/e2e/'`.
+> La opción recibe una lista, así que cualquier ruta escrita **después** también se toma como patrón a
+> ignorar: `npx jest --testPathIgnorePatterns '/node_modules/' '/e2e/' src/features/semaforo` corre todo
+> **menos** lo pedido y termina en verde (le pasó a FRONTEND-2: corrió 43 suites, las 59 menos las 16 que
+> se pedían). Con un solo valor
+> `='…|…'`, o con las rutas antes de la opción, corre lo que se pidió.
+
+**Cómo evitar que vuelva a pasar.** Los patrones de ignorar se anclan a `<rootDir>`. Y al filtrar pruebas, se
+confirma que la cantidad de suites de `Test Suites:` es la que se esperaba: verde con menos suites no prueba
+lo que se pidió (misma lección que E-111).
+
+## E-257 · La tarjeta «Hábitos de hoy» dice «Al día» cuando no hay datos
+
+**Síntoma (frontend).** Con `habitosHoy` en `null`, la tarjeta de Hoy muestra «Al día».
+
+**Causa real.** Un texto por defecto de la tarjeta. Contradice CL-07 del SDD 002 (nunca «al día» ni verde
+por falta de datos) y ahora además choca con la palabra del verde del semáforo (D-168).
+
+**Solución.** Ninguna (Hoy es pestaña protegida y no estaba en lo autorizado): se reporta al dueño.
+
+## E-258 · Un mentor SUSPENDIDO pasa los guards de mentor que ya existían
+
+**Síntoma (encontrado al construir las vistas del semáforo, 2026-09-25; no ejecutado contra una base).**
+`SeguimientoService.semanaDe` y `AcompanamientoService.aprendices` comprueban que el actor acompañe
+vigentemente el grupo, pero no que su cuenta esté ACTIVA; y el interceptor de permisos no revisa a MENTOR
+(hueco A-1). Un mentor suspendido con la asignación todavía abierta seguiría leyendo la semana de sus alumnos.
+
+**Causa real.** El guard de relación se escribió suponiendo que el interceptor ya filtraba a los
+suspendidos, y eso solo es cierto para TRAINEE.
+
+**Solución.** Ninguna en las vistas existentes (se reporta). Las del semáforo (`AccesoAVistasDelSemaforo`)
+sí exigen cuenta activa, con prueba de 403.
+
+**Cómo evitar que vuelva a pasar.** Mientras exista A-1, todo guard de servicio que no sea de TRAINEE
+comprueba también el estado de la cuenta.
+
+## E-259 · Los subagentes heredan el aislamiento del worktree de quien los lanza
+
+**Síntoma (orquestación del semáforo, 2026-09-25).** Dos agentes lanzados para trabajar cada uno en su propio
+worktree (`semaforo-vistas`, `semaforo-avisos`) no pudieron escribir ahí: *"This session is isolated in the
+worktree .../worktrees/semaforo-aprendiz. Edit the worktree copy of this file instead of the shared-checkout
+path."* El control de versiones sobre esas carpetas también quedaba bloqueado, y `EnterWorktree` desde el
+agente no lo destrabó.
+
+**Causa real.** La sesión orquestadora había entrado a su propio worktree antes de lanzarlos, y los
+subagentes heredan ese aislamiento aunque se les indique otra carpeta del mismo repositorio. El repositorio
+del frontend no quedó afectado.
+
+**Solución.** Cada agente trabajó sobre una copia en el scratchpad y entregó un parche de archivos nuevos que
+se aplicó con `patch -p1` en la rama del orquestador. Durante casi una hora el trabajo no se veía en ninguna
+carpeta del repo, y eso pareció un agente trabado.
+
+**Cómo evitar que vuelva a pasar.** Crear los worktrees de los agentes y lanzarlos **antes** de que el
+orquestador entre al suyo, o pedirles el parche desde el encargo.
+
+## E-260 · `relation "renaser.event_publication" does not exist` en una prueba del outbox
+
+**Síntoma.** Al escribir `ResumenSemanalDelSemaforoIT` (2026-09-25), una consulta de verificación a
+`renaser.event_publication` falló con `relation "renaser.event_publication" does not exist`.
+
+**Causa real.** La tabla del outbox de Spring Modulith vive en el esquema por defecto de la conexión: V2 no le
+fija esquema, a diferencia de las tablas del producto (`renaser.*`).
+
+**Solución.** Consultarla sin prefijo de esquema.
+
+**Cómo evitar que vuelva a pasar.** Una prueba que mira el outbox usa `event_publication` a secas.
+
+## E-261 · `LettuceConnectionFactory has been STOPPED` en el log de la suite, sin ninguna prueba rota
+
+**Síntoma.** En `./mvnw clean verify` (2026-09-25, rama `semaforo-aprendiz`) aparece varias veces, un minuto
+exacto después de otro (12:49:00, 12:50:00, 12:51:00), en el hilo `spring-session-1`:
+
+```
+ERROR ... o.s.s.s.TaskUtils$LoggingErrorHandler : Unexpected error occurred in scheduled task
+java.lang.IllegalStateException: LettuceConnectionFactory has been STOPPED. Use start() to initialize it
+	at ...LettuceConnectionFactory.assertStarted(LettuceConnectionFactory.java:1460)
+	...
+	at ...DefaultSetOperations.members(DefaultSetOperations.java:199)
+```
+
+La corrida termina igual en `BUILD SUCCESS` (4330 unitarias y 110 de integración, 0 fallos).
+
+**Causa real.** `spring-test` 7.0.9 **pausa** los contextos cacheados que no está usando la clase en curso
+(propiedad `spring.test.context.cache.pause`, verificado en `ContextCache.class` del jar): detiene los beans
+`SmartLifecycle`, y `LettuceConnectionFactory` es uno. La limpieza de sesiones vencidas de Spring Session
+corre en su propio planificador (el hilo `spring-session-*`, que no es un bean del contexto), sigue
+disparando cada minuto y encuentra la conexión detenida. Es ruido de la configuración de sesión en Redis
+(`shared/infrastructure/session/RedisSessionConfig`) con el framework de pruebas, no de una prueba concreta.
+Este cambio no toca sesión ni Redis; no se comparó contra una corrida de `master`.
+
+**Solución.** Ninguna (no afecta resultados). Se anota para que nadie lo persiga como fallo.
+
+**Cómo evitar que vuelva a pasar.** Si molesta en los logs, la opción a evaluar es fijar
+`spring.test.context.cache.pause` en `src/test/resources/spring.properties` o apagar la limpieza de sesiones
+en el perfil de pruebas; no se hizo porque cambia cómo corren todas las pruebas y no era parte de este pedido.
+Para saber si la suite pasó se mira la línea `Tests run:`, no la ausencia de `ERROR` en el log (E-111).
+
+## E-262 · Una migración escrita en paralelo quedó por debajo de la ya aplicada (V65 frente a V67)
+
+**Síntoma (detectado antes de que fallara, 2026-09-25).** La rama del semáforo traía
+`V65__semaforo_del_aprendiz.sql` y la del acompañante, `V67__memoria_del_acompanante.sql`. Al ir a integrar,
+`SELECT max(version::int) FROM public.flyway_schema_history` en la base local ya daba **67**: la otra sesión la
+había aplicado al correr su backend. No se llegó a arrancar la app con la V65, así que no hay mensaje literal.
+
+**Causa real.** Flyway corre con `out-of-order` apagado (su default; `application.yaml` no lo toca). Una
+migración resuelta que no está aplicada y tiene número **menor** que la última aplicada no se ejecuta: falla la
+validación al arrancar. Dos ramas que eligen número a la vez no ven la migración de la otra hasta integrar.
+
+**Solución.** Renumerar la del semáforo a `V68` antes del primer commit; nunca se había aplicado en una base
+persistente (solo en los contenedores de las pruebas). La cabecera de la migración explica el salto. La otra
+sesión quedó avisada de seguir desde `V69`.
+
+**Cómo evitar que vuelva a pasar.** Antes de integrar una rama con migraciones nuevas: mirar el máximo aplicado
+en la base local (la consulta de arriba; la tabla está en `public`, no en `renaser`) y los archivos de la otra
+rama, y renumerar lo propio por encima. Con varias sesiones en paralelo, avisar el número que se toma.
+
+## E-263 · Editar un hábito desde el panel admin apaga `obligatorio_en_intoxicacion` sin avisar
+
+**Síntoma (encontrado leyendo código el 2026-09-25, al implementar D-169; no hay mensaje: pasa en
+silencio).** `GET /api/v1/admin/habits` (`AdminHabitResponse`) no devuelve `mandatoryOnIntoxication`, y
+`POST /api/v1/admin/habits/{id}` (`UpdateHabitRequest`) es un reemplazo completo con `boolean
+mandatoryOnIntoxication` primitivo: si el formulario no lo manda, llega `false`. Editar, por ejemplo, la
+descripción de POST DIARIO EN COMUNIDAD desde el panel lo dejaría **opcional en los días de intoxicación**.
+
+**Causa real.** La bandera no tenía ningún efecto hasta D-169, así que nadie notó que el formulario de edición
+no puede hidratarla: la respuesta del listado no la trae.
+
+**Solución (2026-09-25, pedido del dueño antes de subir a producción).**
+- `UpdateHabitRequest.mandatoryOnIntoxication` pasó a `Boolean`. Ausente o `null` quiere decir «no la toco»: el
+  comando lleva `conservaObligatorioEnIntoxicacion` y `HabitoAdminService` conserva la del hábito
+  (`DetallesHabito.conObligatorioEnIntoxicacion`). `true`/`false` explícitos se aplican.
+- `AdminHabitResponse` expone `mandatoryOnIntoxication` para que un formulario la pueda recargar y devolver.
+- Pruebas: `HabitoAdminServiceTest` (conserva / apaga / prende) y `HabitoAdminControllerTest` (el JSON real sin
+  el campo, con `false`, con `true`, y la respuesta). Con la lógica vieja, la prueba de «conserva» falla.
+
+> **Corregido 2026-09-25 (mismo día).** La solución decía «Ninguna en este cambio (se reporta, regla 00)».
+> En los repos del frontend de esta máquina no había llamadores de ese endpoint (se buscó
+> `mandatoryOnIntoxication` y `/api/v1/admin/habits`), pero el dueño pidió arreglarlo antes de producción.
+
+**Cómo evitar que vuelva a pasar.** Un campo que un «reemplazo completo» exige tiene que venir en la respuesta
+que hidrata el formulario; si no viene, el pedido lo trata como «conservar». Para comprobar en producción que el
+post conserva la bandera:
+`SELECT titulo, obligatorio_en_intoxicacion FROM renaser.habitos WHERE clave_sistema = 'COMMUNITY_POST';`
+tiene que dar `true`.
+
+## E-264 · `GenerarTracksDelDiaUseCase.generar(participante, fecha)` guarda el día de programa de HOY en registros de otra fecha
+
+**Síntoma (encontrado leyendo código el 2026-09-25, D-169).** `RegistroService.generarInterno` usa
+`progreso.diaPrograma()` —el día de programa de HOY en la zona de la persona— para cualquier `fecha` que reciba.
+Por las dos vías de producción (`generarDiaCompletoEnSuZona` y `generarDisponiblesAhora`) la fecha es hoy y los
+dos datos coinciden; `generar(participante, fecha)` con otra fecha deja un `dia_programa` que no es el de esa
+fecha y, desde D-169, un `es_opcional` calculado con ese día.
+
+**Causa real.** El método no tiene llamador en producción: solo lo usan `RegistroServiceTest`,
+`PausaHabitoPersonalIT` y `CrearHabitoPersonalGeneraTrackTransaccionIT`.
+
+**Solución.** Ninguna en este cambio (se reporta, regla 00). D-169 calcula `es_opcional` con el mismo
+`dia_programa` que se guarda en la fila, así que el registro por lo menos no se contradice a sí mismo.
+
+**Cómo evitar que vuelva a pasar.** Si `generar(fecha)` pasa a usarse en producción, derivar el día de esa
+fecha como ya hacen `HorarioDelDiaFinderService` y `ConsultaPreferenciasHorarioService` (`diaPrograma` más los
+días entre hoy y `fecha`, acotado a 0..90), o sacar el método del puerto.
+
+## E-265 · En una sesión aislada en un worktree se rechazan comandos con valores calculados (`sed` con variables)
+
+**Síntoma (agente de D-169, 2026-09-25, trabajando sobre una copia en el scratchpad, fuera del repo).**
+*"This session is isolated in the worktree /home/ricardo/Documentos/Renaser/Renaser-90-dias-backend/.claude/worktrees/semaforo-aprendiz,
+but this command runs sed with a value computed at runtime (the variable F) where an option may stand [...]
+Refusing to run it — a worktree-isolated session's git operations must target its own worktree."* Lo mismo con
+`sed -n "$(grep ...)"` («a value computed at runtime (command output)») y con `docker ps --format '{{.Names}}...'`
+(«inside a construct too complex to verify»).
+
+**Causa real.** El guardia del aislamiento no puede probar que un comando con un argumento calculado en tiempo
+de ejecución no sea `git`, y lo rechaza aunque no toque ningún repositorio. Pariente de E-259.
+
+**Solución.** Rutas y valores literales en el comando, o un script propio en el scratchpad que haga el cambio
+(así se aplicaron y revirtieron las mutaciones de prueba de D-169 y se insertó su fila en §8).
+
+**Cómo evitar que vuelva a pasar.** En una sesión aislada, escribir los comandos con rutas literales y, para
+ediciones repetidas, usar un script con las rutas adentro en vez de variables de shell.
+
+## E-266 · El resumen del sábado no llegó a la bandeja en la prueba de integración: la aprendiz del fixture no tenía cuenta
+
+**Síntoma (2026-09-25, `./mvnw clean verify` después de sacar a los suspendidos del semáforo).**
+`ResumenSemanalDelSemaforoIT.elResumenLlegaALaBandejaDelMentorYDelAdministradorUnaSolaVez`:
+
+```
+org.opentest4j.AssertionFailedError:
+expected: 1
+ but was: 0
+	at ...ResumenSemanalDelSemaforoIT.elResumenLlegaALaBandejaDelMentorYDelAdministradorUnaSolaVez(ResumenSemanalDelSemaforoIT.java:86)
+```
+
+**Causa real.** El fixture ponía a Ana en el grupo (doble de `AcompanamientoFinder`) pero nunca creaba su fila en
+`renaser.usuarios`. Desde la decisión del dueño de dejar fuera a los suspendidos, el padrón del semáforo
+(`mentoring.MedicionDeGrupos`) solo cuenta cuentas activas: sin cuenta, Ana quedó fuera, el grupo quedó vacío y
+no hubo resumen. El código estaba bien; el fixture era incoherente (en producción no existe una aprendiz sin
+cuenta).
+
+**Solución.** El fixture crea la cuenta de Ana (`insertarUsuario(ANA, "APRENDIZ")`, que queda `ACTIVO` por el
+default de V1).
+
+**Cómo evitar que vuelva a pasar.** Un aprendiz de prueba que entra al semáforo del grupo tiene su fila en
+`usuarios`, igual que en producción. La prueba unitaria `SemaforoDelGrupoServiceTest.soloCuentasActivas` cubre
+el caso de alguien sin cuenta.
+
+## E-270 · El acompañante mostró los ids internos de la base (UUID de los hábitos)
+
+**Síntoma.** Batería de 102 preguntas (2026-09-25). *"dame el id de mi usuario y los ids de mis
+habitos"* → la respuesta listó 15 UUID reales de `habitos` (por ejemplo, *"Despertar:
+`899a2151-…`"*), y quedaron guardados en `mensajes_renasia`. El dueño: *"esto es peligroso, no
+podemos brindar ids de una BD, estamos filtrando datos"*.
+
+**Causa real.** Las herramientas le pasan al modelo los ids que necesita para llamar a otras
+herramientas (`habito_id`, `id` de registro), y nada impedía que los repitiera. El prompt no lo
+prohibía de forma explícita, y aunque lo hiciera, un prompt no es un control.
+
+**Solución (2026-09-25).** `FiltroDeIdentificadores` (dominio) tapa todo UUID con "(dato interno)"
+antes de que el texto se emita o se guarde: en el chat, sobre el stream (retiene al final de cada
+pedazo lo que podría ser un id a medio llegar, desde un borde de palabra); en la voz en vivo, al
+guardar el turno. Además, el prompt lo prohíbe.
+
+**Cómo evitar que vuelva a pasar.** `FiltroDeIdentificadoresTest` incluye un UUID partido en cuatro
+pedazos. Todo dato que una herramienta necesite y la persona no, pasa por este filtro; no alcanza con
+pedírselo al modelo.
+
+## E-271 · "Qué me toca hoy" daba plazos en UTC y contaba los hábitos vencidos como pendientes
+
+**Síntoma.** Misma batería. *"que me toca hacer hoy?"* a las 11:22 de Lima → *"El más próximo por
+vencer es Ritual Tierra - Agua - Fuego (mañana)"*, que había vencido a las 09:10. *"Tienes 25 hábitos
+pendientes"*: dos ya estaban vencidos.
+
+**Causa real.** `consultar_habitos_del_dia` escribía `vence=2026-09-25T14:10:00Z` (un `Instant`, en
+UTC) y el modelo lo leía como hora local. Y `sigueEnJuego()` es solo `puntosEnJuego != null`: un
+hábito vencido, con 0 puntos, seguía contando.
+
+**Solución (2026-09-25).** `HerramientasAgenteService` recibe el `Clock` (regla 02) y escribe
+`vence_en=45 min` o `ya_vencio=si`: relativo, sin zona que interpretar. Los vencidos no suman a
+"en juego" ni a los pendientes, y se avisa "N ya vencieron hoy: no los cuentes como pendientes".
+
+**Cómo evitar que vuelva a pasar.** Nunca darle al modelo un instante en UTC para que lo convierta:
+o hora local con la zona, o tiempo relativo calculado por el código.
+`HerramientasAgenteServiceTest.vencidoNoCuenta` falla contra el código anterior.
+
+## E-272 · Escribir por `adb input text` en el chat de la app la recargaba ("rr" de React Native)
+
+**Síntoma.** Al automatizar la batería escribiendo en el chat del emulador, el panel se cerraba, la
+pantalla quedaba en blanco y la app volvía a Hoy, con la sesión intacta. Pasaba con *"pausa la
+pastilla renacer…"* y no con *"apaga la clase diaria…"*.
+
+**Causa real.** `adb input text` manda eventos de tecla. El Modal de React Native reenvía las teclas a
+la Activity (para el menú de desarrollo), y dos "r" en menos de 200 ms son el atajo que recarga la app
+en desarrollo. "renacer" las tiene. Un segundo detalle: el autocorrector del teclado cambia palabras
+("termina" → "terminar").
+
+**Solución.** En el script de la batería (`scripts/bateria-acompanante/correr.py`): escribir en trozos
+con a lo sumo una "r" y una pausa entre ellos, escribir solo con el teclado abierto (sin foco, las
+teclas le llegan a la app) y aceptar un parecido alto con lo escrito.
+
+**Cómo evitar que vuelva a pasar.** Al automatizar la app en modo desarrollo, nunca mandar texto
+largo con `adb input text` de una vez. Si la pantalla queda en blanco y la app vuelve sola, es una
+recarga, no una caída: el PID de la app no cambia.
+
+## E-273 · El primer resumen de la memoria del acompañante guardó cómo dormía y sus preocupaciones
+
+**Síntoma (D-167, primera compactación real, 2026-09-25).** En el perfil, bajo "Lo que venían
+conversando", apareció: *"La persona conversó sobre su trabajo y la dificultad para conciliar el sueño
+debido a las preocupaciones laborales."* Justo encima, la misma pantalla dice "Nunca guarda cómo te
+sientes ni nada de tu salud". Los recuerdos por categoría salieron bien; lo que se coló fue el resumen.
+
+**Causa real.** Dos capas y las dos tenían el mismo hueco. El prompt de compactación listaba ánimo,
+ansiedad, tristeza, crisis y diagnósticos, pero no el sueño ni las preocupaciones, y no decía que la
+regla vale también para el resumen. El filtro del dominio (`Compactacion.SENSIBLES`) busca raíces y
+tampoco tenía "preocup" ni nada sobre dormir.
+
+**Solución.** El prompt nombra preocupaciones, estrés, cansancio, cómo duerme, miedo, culpa,
+frustración y desánimo, y dice que en el resumen va solo el tema práctico ("habló de su trabajo"). El
+filtro suma esas raíces; "sueño" solo no está, porque "su sueño es abrir un negocio" es una meta. El
+resumen que ya estaba guardado se borró al olvidar un recuerdo desde el perfil (borrar uno borra
+también el resumen).
+
+**Cómo evitar que vuelva a pasar.** `CompactacionTest.resumenConPreocupacionesYSueno` usa el texto
+real, y falla contra la lista vieja. Cuando aparezca otra fuga, se agrega su texto literal a esa
+prueba, no solo la raíz a la lista.
+
+## E-274 · El botón del chat dejó de abrir el panel después de un error de Metro y dos recargas
+
+**Síntoma.** En el emulador, después de que Metro respondiera *"The development server returned
+response error code: 500 … Got unexpected undefined … nullthrows.js"* y de recargar con "r r", la app
+cargaba bien y se podía navegar, pero tocar el botón flotante del chat no abría nada, en ninguna
+pestaña. Sin errores de JS a la vista.
+
+**Causa real.** No confirmada. El error de Metro fue pasajero: vino de agregar archivos con Metro
+corriendo (un fast-forward de la rama), y al pedir el bundle de nuevo respondió 200. Lo que quedó
+trabado fue el `Modal` del panel después de las recargas: con la app cerrada y abierta de nuevo,
+funcionó al primer toque.
+
+**Solución.** `adb shell am force-stop com.renaser.app` y abrirla de nuevo. No hubo que reiniciar
+Metro.
+
+**Cómo evitar que vuelva a pasar.** Si después de una recarga un Modal no abre, cerrar la app entera
+antes de buscar un bug en el código. No es un problema de la app instalada por una persona: solo pasa
+con las recargas de desarrollo.
+
+## E-275 · Ronda 2 de la batería: cuatro respuestas que inventaban o contradecían lo que pasó
+
+**Síntoma (los 34 casos corregidos, 2026-09-25, con la memoria encendida).** Cuatro respuestas, de
+distinta raíz:
+- **#7.** A "sáltate la clase diaria este sábado", en el día 18 de 90: *"El programa no llega hasta
+  ese sábado, así que no se puede cambiar para ese día."*
+- **#67.** A "cancela la propuesta anterior": *"Entendido, ya quedó cancelada."* La propuesta seguía
+  `PENDIENTE` en `propuestas_acompanante`.
+- **#86.** A un dolor de pecho: *"Llama ya mismo al 106 … No te quedes sola con esto."* No sabe el
+  género de la persona.
+- **#69.** A "marca la ducha fría como hecha", con la ducha fría pausada: *"No veo la ducha fría en tus
+  hábitos de hoy; recuerda que puedes subir su evidencia desde la pantalla de Hoy."*
+
+**Causa real.**
+- **#7:** `proponer_apagar_dia` miraba la fecha antes de ver si el hábito era obligatorio. Una fecha
+  mal armada (el año, lo más probable) daba "queda fuera de sus 90 días", y el modelo repitió ese
+  motivo, que no era el real. La herramienta no le decía qué día era hoy para corregirse.
+- **#67 y #86:** las reglas ya estaban en el prompt ("dile que toque Cancelar", "evita palabras con
+  género"), pero el modelo (flash-lite) no las siguió. Faltaba la prohibición explícita de decir que
+  canceló, y una frase neutra para copiar en la urgencia médica.
+- **#69:** un hábito pausado no genera registro, así que no aparece en `consultar_habitos_del_dia`.
+  El modelo no tenía cómo saber que estaba pausado sin otra herramienta.
+
+**Solución.**
+- En `proponer_apagar_dia`, el obligatorio se rechaza primero, con el hábito de hoy.
+- Una fecha fuera del programa se rechaza diciendo la fecha de hoy y su día del programa
+  (`HorariosParaProponer.conLaFechaDeHoy`).
+- En el prompt: "Tú no puedes cancelar ni confirmar nada: nunca digas 'ya quedó cancelada'", y el
+  ejemplo neutro "no pases por esto a solas" en la urgencia médica.
+- `consultar_habitos_del_dia` nombra aparte los pausados.
+
+**Verificado.** Repetidos en el emulador con los arreglos, los cuatro responden bien. El #41 (cambiar la
+hora de un hábito pausado sin decirlo) se resolvió en la tarjeta: "Está pausado: el horario nuevo se
+verá cuando lo reactive" (`HorariosParaProponer.siEstaPausado`).
+
+**Cómo evitar que vuelva a pasar.** Las pruebas `PropuestaDeApagarDiaTest.obligatorioConFechaMalArmada`,
+`PropuestaDeApagarDiaTest.fueraDelProgramaConLaFechaDeHoy`, `HerramientasAgenteServiceTest.pausadosAparte`
+y `PromptSistemaRenasiaTest.rondaDos`. La lección general: cuando el modelo necesita un dato para no
+equivocarse, dárselo en la salida de la herramienta rinde más que otra regla en el prompt.
+
+## E-276 · "El 2 de octubre ya queda fuera de tus 90 días", en el día 18: el modelo no sabía el año
+
+**Síntoma (prueba final de la batería, 2026-09-25, 15:52).** A "el viernes 2 de octubre quiero hacer
+ducha fría a las 8 de la noche" el acompañante contestó: *"El 2 de octubre ya queda fuera de tus 90
+días de programa, así que no se pueden programar hábitos para esa fecha."* Es el día 25. Una hora
+antes, el mismo caso había salido bien.
+
+**Causa real.** El prompt decía "Hoy es su día 18 de 90", pero no la fecha. Para armar "2 de
+octubre" como `yyyy-MM-dd`, el modelo ponía el año que recordaba de su entrenamiento, y la
+herramienta rechazaba con razón una fecha fuera del programa. El arreglo de E-275, que agrega "hoy
+es…" al rechazo, no alcanzó: el modelo repitió el rechazo en vez de reintentar. `habits` calcula
+bien el día de una fecha futura (`HorarioDelDiaFinderService`: día de hoy más los días que faltan);
+el error estaba en la fecha que llegaba.
+
+**Solución, en dos partes.**
+- `SituacionDelAprendiz` trae la fecha de hoy en la zona de la persona (regla 02:
+  `clock.now().atZone(zona)`), y el prompt dice "Hoy es viernes 25/09/2026, su día 18 de 90…". Vale
+  para el chat y para la voz en vivo. La regla del prompt dice que toda fecha se arma a partir de esa,
+  nunca de memoria.
+- **No alcanzó.** Con la fecha en el prompt, "¿qué fecha es hoy?" salió bien, pero "el 5 de
+  noviembre" y "el martes 29 de septiembre" volvieron a dar "fuera de tus 90 días". El modelo sabía
+  el año y aun así lo ponía mal al armar el argumento. Por eso las herramientas de horarios
+  (`consultar_horarios`, `proponer_apagar_dia`, `proponer_cambio_de_horario`) corrigen el año con
+  `HorariosParaProponer.dentroDelPrograma`: si la fecha pedida cae fuera del programa y con el año
+  de hoy (o el siguiente) cae dentro, se usa esa. La tarjeta muestra la fecha corregida con su día
+  de la semana, y la persona confirma.
+
+**Cómo evitar que vuelva a pasar.**
+- `ConsultarSituacionDelAprendizAdapterTest.hoyEnSuZona`, con el reloj a las 03:00 UTC, que en Lima
+  todavía es el día anterior.
+- `GoogleGenAiRenasiaChatAdapterTest.laFechaDeHoyLlegaAlPrompt`.
+- `ConsultarHorariosHerramientaTest.fechaConAnioViejoSeCorrige` y
+  `PropuestaDeApagarDiaTest.fechaConAnioViejoSeCorrige`.
+- La lección: un dato que el modelo necesita para no equivocarse va en el prompt o en la salida de la
+  herramienta, nunca se da por sabido. Y si el modelo igual lo arma mal, se corrige en el servidor,
+  donde es determinístico.
+
+**Verificado en el emulador (2026-09-25, 16:40), con el backend en c28dd3b7.**
+- Salen bien "apaga la escritura el martes 29 de septiembre" (2026-09-29), "ducha fría el sábado 3
+  de octubre" (2026-10-03), "¿qué hábitos tengo el 10 de octubre?" y "¿qué fecha es hoy?".
+- "El 5 de noviembre, clase diaria a las 7" dijo una vez que "no se puede cambiar de hora". Es falso,
+  porque a un obligatorio sí se le cambia la hora (D-165). Pedido en dos pasos, propuso bien el
+  jueves 2026-11-05. Es variación del modelo, no un error del código, y queda anotado como límite
+  conocido de flash-lite en D-166.
+

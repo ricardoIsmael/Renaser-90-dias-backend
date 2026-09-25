@@ -327,8 +327,9 @@ public enum Permission {
      * del cliente §2.5 reserva al ALCHEMIST el ascenso entre <i>roles de usuario</i>, que es
      * otra cosa y no se toca.
      *
-     * <p>Ojo con el nombre: este semaforo es el del <b>mentor</b>. El semaforo diario del
-     * <b>aprendiz</b> (Verde &ge;80 %, RF-24/RF-25) es otro concepto y todavia no existe.
+     * <p>Ojo con el nombre: este semaforo es el del <b>mentor</b>. El semaforo de cumplimiento del
+     * <b>aprendiz</b> (Verde &ge;80 %, RF-25) es otro concepto: existe desde D-168
+     * ({@code points.api.ColorSemaforo}) y no comparte umbrales ni permisos con este.
      *
      * <p>Roles que lo satisfacen: MENTOR_LEAD, ADMIN, ALCHEMIST.
      */

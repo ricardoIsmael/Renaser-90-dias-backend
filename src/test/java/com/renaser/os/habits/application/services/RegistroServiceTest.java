@@ -110,6 +110,7 @@ class RegistroServiceTest {
                 transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(saveRegistroPort.insertarSiNoExiste(any())).thenReturn(true);
     }
 
     private static UserId participante() {
@@ -455,7 +456,7 @@ class RegistroServiceTest {
         List<RegistroHabito> generados = service.generar(participante, LocalDate.of(2026, 8, 24));
 
         assertThat(generados).isEmpty();
-        verify(saveRegistroPort, never()).save(any());
+        verify(saveRegistroPort, never()).insertarSiNoExiste(any());
     }
 
     /** Contraparte: llegado su dia, el mismo habito si genera. */
@@ -480,5 +481,32 @@ class RegistroServiceTest {
 
         assertThat(generados).hasSize(1);
         assertThat(generados.get(0).habitoId()).isEqualTo(habito.id());
+    }
+
+    /**
+     * E-230: dos pedidos a /hoy en el mismo milisegundo ven "no existe" y los dos insertan. El que
+     * pierde ya no revienta con la UNIQUE (antes: 409): el INSERT idempotente dice que ya estaba y
+     * la generacion sigue sin agregarlo.
+     */
+    @Test
+    @DisplayName("generar: si otro pedido simultaneo ya creo el track, no falla ni lo cuenta dos veces")
+    void generarToleraElTrackCreadoPorOtroPedido() {
+        UserId participante = participante();
+        Habito habito = habitoCheckbox();
+        when(progresoPort.deParticipante(participante)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(2, "UTC", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
+        when(loadHabitoPort.personalesActivosDe(participante)).thenReturn(List.of());
+        when(loadRegistroPort.porParticipanteHabitoYFecha(eq(participante), eq(habito.id()), any()))
+                .thenReturn(Optional.empty());
+        when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null, TipoDia.TODOS,
+                        LocalTime.of(7, 0), null, CLOCK.now())));
+        when(saveRegistroPort.insertarSiNoExiste(any())).thenReturn(false);
+
+        List<RegistroHabito> generados = service.generar(participante, LocalDate.of(2026, 8, 24));
+
+        assertThat(generados).isEmpty();
+        verify(saveRegistroPort, never()).save(any());
     }
 }

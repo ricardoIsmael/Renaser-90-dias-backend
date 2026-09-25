@@ -77,7 +77,7 @@ public class HabitoAdminController {
     public AdminHabitResponse actualizar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                           @RequestBody @Valid UpdateHabitRequest request) {
         var habito = actualizarUseCase.actualizar(new ActualizarHabitoCommand(actor, HabitoId.of(id),
-                request.toDetalles()));
+                request.toDetalles(), request.conservaObligatorioEnIntoxicacion()));
         return AdminHabitResponse.from(habito);
     }
 

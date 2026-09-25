@@ -88,8 +88,11 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
      * Misma franja horaria. Se trunca en UTC igual que el indice unico de V52 — no en la zona del
      * participante — para que la comprobacion y la garantia partan la hora en el mismo instante.
      * Que sea UTC no cambia nada en Lima, que es UTC-5 exacto.
+     *
+     * <p>Package-private desde 2026-09-23: {@code DiarioYRadarService} le avisa al acompanante si la
+     * franja en curso ya esta ocupada, y tiene que partir la hora exactamente igual que aca.
      */
-    private static boolean mismaHora(Instant a, Instant b) {
+    static boolean mismaHora(Instant a, Instant b) {
         return a.truncatedTo(ChronoUnit.HOURS).equals(b.truncatedTo(ChronoUnit.HOURS));
     }
 

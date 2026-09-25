@@ -9,6 +9,7 @@ import com.renaser.os.points.api.RocaDelDiaResumen;
 import com.renaser.os.points.api.PorcentajeRocasFinder;
 import com.renaser.os.points.api.RocasDelDiaFinder;
 import com.renaser.os.points.application.ports.in.home.ConsultarResumenHomeUseCase;
+import com.renaser.os.points.application.ports.in.semaforo.ConsultarMiSemaforoUseCase;
 import com.renaser.os.points.application.ports.in.puntaje.ConsultarPuntajeUseCase;
 import com.renaser.os.points.domain.model.puntaje.PuntajeParticipante;
 import com.renaser.os.points.domain.model.puntaje.Racha;
@@ -78,11 +79,12 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
     private final ConsultarPuntajeUseCase consultarPuntajeUseCase;
     private final ParticipacionProgramaFinder participacionProgramaFinder;
     private final HabitosDelDiaFinder habitosDelDiaFinder;
-    private final DiasConHabitoCumplidoFinder diasConHabitoCumplidoFinder;
+    private final RachaMostrada rachaMostrada;
     private final RocasDelDiaFinder rocasDelDiaFinder;
     private final ProximoEventoFinder proximoEventoFinder;
     private final NotificacionesNoLeidasFinder notificacionesNoLeidasFinder;
     private final PorcentajeRocasFinder porcentajeRocasFinder;
+    private final ConsultarMiSemaforoUseCase consultarMiSemaforo;
     private final Clock clock;
 
     public HomeAgregadoService(ConsultarPuntajeUseCase consultarPuntajeUseCase,
@@ -93,15 +95,17 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
                                 ProximoEventoFinder proximoEventoFinder,
                                 NotificacionesNoLeidasFinder notificacionesNoLeidasFinder,
                                 PorcentajeRocasFinder porcentajeRocasFinder,
+                                ConsultarMiSemaforoUseCase consultarMiSemaforo,
                                 Clock clock) {
         this.consultarPuntajeUseCase = consultarPuntajeUseCase;
         this.participacionProgramaFinder = participacionProgramaFinder;
         this.habitosDelDiaFinder = habitosDelDiaFinder;
-        this.diasConHabitoCumplidoFinder = diasConHabitoCumplidoFinder;
+        this.rachaMostrada = new RachaMostrada(diasConHabitoCumplidoFinder);
         this.rocasDelDiaFinder = rocasDelDiaFinder;
         this.proximoEventoFinder = proximoEventoFinder;
         this.notificacionesNoLeidasFinder = notificacionesNoLeidasFinder;
         this.porcentajeRocasFinder = porcentajeRocasFinder;
+        this.consultarMiSemaforo = consultarMiSemaforo;
         this.clock = clock;
     }
 
@@ -115,7 +119,23 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
         return new ResumenHome(puntaje.puntosLiga(), coherenciaDe(actorId, participacion.zona()), racha.actual(),
                 racha.maxima(), participacion.diaPrograma(), participacion.inscrito(),
                 participacion.fase(), habitosHoyDe(actorId, participacion.zona()), rocasHoyDe(actorId),
-                proximoEventoDe(actorId), notificacionesNoLeidasDe(actorId), BLOQUEOS);
+                proximoEventoDe(actorId), notificacionesNoLeidasDe(actorId), BLOQUEOS, semaforoDe(actorId));
+    }
+
+    /**
+     * La tarjeta del semáforo (D-168): lee lo que el barrido ya guardó, no calcula nada. {@code null}
+     * si la persona no se mide; misma falla parcial que los otros widgets.
+     */
+    private ResumenHome.SemaforoHoyResumen semaforoDe(UserId actorId) {
+        try {
+            return consultarMiSemaforo.resumenParaHoy(actorId)
+                    .map(r -> new ResumenHome.SemaforoHoyResumen(r.color(), r.porcentaje(), r.diasConDatos(),
+                            r.pausado(), r.dias()))
+                    .orElse(null);
+        } catch (NoSuchElementException | NotAuthorizedException e) {
+            logWidgetDegradado("semaforo", e);
+            return null;
+        }
     }
 
     /**
@@ -144,44 +164,12 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
     }
 
     /**
-     * La racha que se MUESTRA: dias seguidos con al menos un habito cumplido.
-     *
-     * <p><b>Se deriva, no se lee de la fila de puntaje.</b> {@code puntaje.rachaActual()} vale 0
-     * para todo el mundo porque quien la avanza ({@code RegistrarCoherenciaDiariaUseCase}) no tiene
-     * un solo llamador en el backend — verificado el 2026-09-14. Mostrar ese 0 era decirle a un
-     * aprendiz con 30 dias seguidos que no tiene racha.
-     *
-     * <p><b>Lo que NO hace, a proposito:</b> no toca
-     * {@link PuntajeParticipante#actualizarRachaTrasDia}, que es lo que gobierna el bono de puntos.
-     * Si esto escribiera la racha, empezarian a otorgarse bonos que hoy no se otorgan, como efecto
-     * colateral de un cambio de pantalla. Aca se responde <i>que se muestra</i>; el premio sigue
-     * siendo una decision aparte.
-     *
-     * <p>La ventana arranca en la fecha de inicio del programa: una racha no puede empezar antes de
-     * que el programa empiece. Sin inscripcion se miran los ultimos 90 dias, que es el largo del
-     * programa entero.
-     *
-     * <p>Misma politica de falla parcial que el resto de los widgets: si el finder se cae, Inicio
-     * se dibuja igual con la racha en cero en vez de devolver un 500.
-     *
-     * <p><b>Un programa que todavia no empezo no tiene racha.</b> A quien se inscribe hoy le queda
-     * la {@code fechaInicio} en manana, y pedirle al finder "desde manana hasta hoy" es un rango al
-     * reves: lanza {@code IllegalArgumentException}, que no es una falla del widget sino un error
-     * de programacion, y por eso no se atrapa abajo — tumbaba el {@code /home} entero de cada
-     * cuenta nueva durante su primer dia (2026-09-16, en produccion). Se corta antes de preguntar.
+     * La racha que se MUESTRA. La regla entera (ventana, programa sin empezar, falla parcial) vive en
+     * {@link RachaMostrada}, compartida con {@code points.api.ResumenPuntajeFinder} para que Inicio y
+     * el acompanante no puedan mostrar rachas distintas (2026-09-23).
      */
     private Racha rachaDe(UserId actorId, ParticipacionPrograma participacion) {
-        try {
-            LocalDate hoy = LocalDate.ofInstant(clock.now(), participacion.zona());
-            LocalDate desde = participacion.fechaInicio() != null ? participacion.fechaInicio() : hoy.minusDays(90);
-            if (desde.isAfter(hoy)) {
-                return Racha.NINGUNA;
-            }
-            return Racha.derivarDe(diasConHabitoCumplidoFinder.entre(actorId, desde, hoy), hoy);
-        } catch (NoSuchElementException | NotAuthorizedException e) {
-            logWidgetDegradado("racha", e);
-            return Racha.NINGUNA;
-        }
+        return rachaMostrada.de(actorId, participacion, clock.now());
     }
 
     private ResumenHome.HabitosHoyResumen habitosHoyDe(UserId actorId, ZoneId zonaDelParticipante) {

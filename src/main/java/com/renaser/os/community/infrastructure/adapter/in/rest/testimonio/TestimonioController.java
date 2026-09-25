@@ -7,8 +7,10 @@ import com.renaser.os.community.application.ports.in.testimonio.PromoverPublicac
 import com.renaser.os.community.application.ports.in.testimonio.PromoverPublicacionATestimonioUseCase.PromoverPublicacionCommand;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,7 +42,12 @@ public class TestimonioController {
         this.promoverUseCase = promoverUseCase;
     }
 
-    // TODO(auth fase 4): sin clasificar. No recibe actor ni ejecuta guard. Los testimonios destacados podrian ser contenido publico de marketing, pero el codigo no lo dice en ningun lado. NO marcar publico por defecto.
+    /* Clasificado 2026-09-23 (E-215). El TODO de aca dudaba entre "contenido publico de marketing"
+       y "omision". Lo decidio SecurityConfig el 2026-09-18 (9fb018a): `/api/v1/testimonios/**`
+       exige sesion, y la app los muestra como una seccion de Comunidad, adentro. Marcarlo
+       @PublicEndpoint contradiria al filtro. Si algun dia una landing sin cuenta los necesita, eso
+       es abrir la ruta en SecurityConfig y cambiar esto a @PublicEndpoint, a proposito. */
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping
     public List<TestimonioResponse> listar() {
         return consultarUseCase.listarDestacados().stream().map(TestimonioResponse::from).toList();

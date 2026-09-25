@@ -83,9 +83,18 @@ Hábitos (tracks) del día del propio actor.
   que el cliente conozca zonas, gracia ni extensión. `null` si el hábito no tiene ninguna hora
   configurada — ése no vence.
 
-  `tipoDia`: `DISCIPLINA` cualquier día salvo domingo (`DOMINGO`). El tercer tipo del enum viejo,
-  `INTOXICACION` (ciclos fijos), **no está implementado** en esta versión — confirmado en el comentario de
-  `RegistroService.resolverTipoDia`.
+  `tipoDia`: `DISCIPLINA` cualquier día salvo domingo (`DOMINGO`). Nunca viene `INTOXICACION`: los días de
+  intoxicación no cambian el tipo del día (que decide qué horario rige), cambian `esOpcional`.
+
+  > **Corregido 2026-09-25 (D-169).** Decía: «El tercer tipo del enum viejo, `INTOXICACION` (ciclos fijos),
+  > **no está implementado** en esta versión — confirmado en el comentario de `RegistroService.resolverTipoDia`.»
+  > Los ciclos ya están implementados, pero por `esOpcional` y no por `tipoDia`.
+
+  `esOpcional`: si ese día el hábito no es exigible. Sin hacer, no baja el semáforo ni el ranking; hecho, suma
+  y paga igual que cualquier otro. Es una foto **del día**, no del catálogo: vale `true` si el catálogo lo marca
+  opcional y, además, en los **días de intoxicación** del programa (8-10, 17-19 y 26-28, D-169) para todo hábito
+  salvo los `obligatorio_en_intoxicacion` (hoy, POST DIARIO EN COMUNIDAD). El mismo hábito puede venir `false`
+  el día 7 y `true` el día 8. Los registros generados antes del 2026-09-25 conservan la foto que tenían.
   `estado`: `PENDIENTE | EN_CURSO | COMPLETADO | FALLIDO | EXPIRADO` (máquina de estados de
   `EstadoRegistro`). `COMPLETADO`/`FALLIDO`/`EXPIRADO` son terminales.
 

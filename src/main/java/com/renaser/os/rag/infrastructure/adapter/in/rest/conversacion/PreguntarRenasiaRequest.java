@@ -1,6 +1,7 @@
 package com.renaser.os.rag.infrastructure.adapter.in.rest.conversacion;
 
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
+import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -17,6 +18,10 @@ import jakarta.validation.constraints.Size;
  *   <li>{@code scope} (D-100): solo para {@code COURSE_TUTOR}. Sobre que esta hablando la
  *   persona — el cliente manda algo como {@code el curso "X", leccion "Y", dia 12 del programa}.
  *   Va al prompt de sistema; NUNCA se guarda como parte de {@code question}.</li>
+ *   <li>{@code canal} (2026-09-23): {@code TEXTO} o {@code VOZ}. Con {@code VOZ} (la persona le
+ *   hablo al orbe de Hoy) la respuesta se pide en forma hablada: frases cortas, sin markdown ni
+ *   listas. Opcional: sin el, o con cualquier valor que no sea {@code VOZ}, es {@code TEXTO} —
+ *   ver {@link #canalConversacion()} para el porque de no rechazar un valor desconocido.</li>
  * </ul>
  *
  * <p>Para {@code COMPANION}, {@code courseId} y {@code scope} se ignoran (los descarta el
@@ -31,12 +36,27 @@ public record PreguntarRenasiaRequest(
                                       @Pattern(regexp = "COMPANION|COURSE_TUTOR",
                                                message = "agent debe ser COMPANION o COURSE_TUTOR") String agent,
                                       @Size(max = 120) String courseId,
-                                      @Size(max = 300) String scope) {
+                                      @Size(max = 300) String scope,
+                                      String canal) {
 
     /** Sin {@code agent} = el acompanante (compatibilidad con clientes anteriores a D-102). */
     public static final int LARGO_MAXIMO_PREGUNTA = 4000;
 
     public AgenteConversacional agente() {
         return agent == null ? AgenteConversacional.COMPANION : AgenteConversacional.valueOf(agent);
+    }
+
+    /**
+     * Tolerante a proposito, al reves que {@code agent}. Un {@code agent} equivocado cambia QUIEN
+     * responde, que historial se lee y donde se guarda: ahi un 400 es lo correcto. {@code canal}
+     * solo cambia la FORMA de la respuesta; rechazar un valor desconocido convertiria una
+     * indicacion de presentacion en un mensaje perdido. Y la app no se actualiza por aire: si un
+     * build futuro manda un canal que este servidor no conoce, ese build tiene que seguir
+     * funcionando igual, con la respuesta escrita de siempre.
+     */
+    public CanalConversacion canalConversacion() {
+        return canal != null && "VOZ".equalsIgnoreCase(canal.strip())
+                ? CanalConversacion.VOZ
+                : CanalConversacion.TEXTO;
     }
 }

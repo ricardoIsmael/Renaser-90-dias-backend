@@ -48,7 +48,12 @@ public class WallCommentController {
         this.ocultarUseCase = ocultarUseCase;
     }
 
-    // TODO(auth fase 4): sin clasificar. No recibe actor ni ejecuta guard, pero el feed del Muro si exige cuenta activa: no se puede saber desde el codigo si es publico a proposito o una omision. NO marcar publico por defecto.
+    /* Clasificado 2026-09-23 (E-215). El TODO de aca preguntaba si leer comentarios era publico a
+       proposito. No lo es: `/api/v1/wall/**` exige sesion en SecurityConfig desde el 2026-09-05 y la
+       app solo los pide dentro del Muro, que es USE_APP. Sin la anotacion, el interceptor dejaba
+       leer a una cuenta SUSPENDIDA con sesion todavia viva. El caso de uso no recibe actor, asi que
+       para MENTOR/ADMIN/ALCHEMIST (sin matriz, A-1) sigue sin haber chequeo de suspension. */
+    @RequiresPermission(Permission.USE_APP)
     @GetMapping
     public WallCommentsPageResponse listar(@PathVariable UUID postId,
                                             @RequestParam(required = false) String cursor) {

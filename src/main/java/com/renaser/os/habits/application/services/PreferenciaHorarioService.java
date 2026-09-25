@@ -95,9 +95,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         Habito habito = requireHabito(command.habitoId());
         VentanaDelDia.requireHoraDisparoDentroDelDia(command.horaDisparo());
-        if (habito.participanteId() != null && !habito.participanteId().equals(command.actorId())) {
-            throw new NotAuthorizedException("Solo puedes editar tus propios habitos");
-        }
+        requirePropio(command.actorId(), habito);
         if (!habito.activo()) throw new IllegalArgumentException("El habito no esta activo");
 
         ZoneId zona = ZoneId.of(progreso.timezone());
@@ -311,6 +309,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     public void cambiarEstadoEnFecha(UserId actorId, HabitoId habitoId, LocalDate fecha, boolean activo) {
         Habito habito = requireHabito(habitoId);
         ProgresoParticipanteHabits progreso = requireProgreso(actorId);
+        requirePropio(actorId, habito);
         LocalDate hoy = clock.now().atZone(ZoneId.of(progreso.timezone())).toLocalDate();
         HorarioPorFecha.requireApagable(fecha, hoy);
 
@@ -343,6 +342,9 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     public void fijar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, LocalTime horaDisparo,
                       LocalTime horaLimite) {
         Habito habito = requireHabito(habitoId);
+        // E-214: la cuenta suspendida la rechaza `cobrarCupo` (su primer paso es `requireProgreso`),
+        // antes de escribir nada; lo que faltaba era la pertenencia del habito personal.
+        requirePropio(actorId, habito);
         Instant ahora = clock.now();
         cobrarCupo(actorId, habitoId, habito, diaSemana, ahora);
         var preferencia = PreferenciaHorario.crear(actorId, habitoId, horaDisparo, horaLimite, ahora);
@@ -360,6 +362,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     @Transactional
     public void apagar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana) {
         Habito habito = requireHabito(habitoId);
+        requireEditable(actorId, habito);
         if (!habito.desactivable()) {
             throw new IllegalStateException("Este habito es obligatorio y no se puede apagar");
         }
@@ -374,7 +377,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     @Override
     @Transactional
     public void quitar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana) {
-        requireHabito(habitoId);
+        requireEditable(actorId, requireHabito(habitoId));
         savePreferenciaPort.borrarParaDiaSemana(actorId, habitoId, diaSemana);
     }
 
@@ -470,6 +473,28 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
 
     private Habito requireHabito(HabitoId id) {
         return loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + id));
+    }
+
+    /**
+     * E-214: las mismas guardas que {@link #editar} para los caminos que no necesitan el progreso
+     * para nada mas ({@code apagar}, {@code quitar}). Antes esos dos no revisaban ni la cuenta
+     * suspendida ni de quien era el habito.
+     */
+    private void requireEditable(UserId actorId, Habito habito) {
+        requireProgreso(actorId);
+        requirePropio(actorId, habito);
+    }
+
+    /**
+     * Un habito PERSONAL solo lo toca su dueno; uno del catalogo ({@code participanteId == null})
+     * lo acomoda cualquiera, porque la preferencia se guarda a nombre del actor. Es defensa en
+     * profundidad (E-214): las escrituras ya van con el {@code actorId}, pero no hay motivo para
+     * dejar que alguien arme horarios sobre el habito privado de otra persona.
+     */
+    private static void requirePropio(UserId actorId, Habito habito) {
+        if (habito.participanteId() != null && !habito.participanteId().equals(actorId)) {
+            throw new NotAuthorizedException("Solo puedes editar tus propios habitos");
+        }
     }
 
     private ProgresoParticipanteHabits requireProgreso(UserId participanteId) {

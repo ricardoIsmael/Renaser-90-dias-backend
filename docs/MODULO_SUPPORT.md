@@ -81,7 +81,8 @@ Fuente: `docs/FEATURE_SUPPORT.md`, `src/features/support/{schema,repository,serv
 
 - **REST** (`adapter/in/rest/`): ver tabla de endpoints §2.
 - **Persistencia** (`adapter/out/persistence/`): JPA + mappers a mano (D-28), enums `*Jpa` en español espejo de los tipos Postgres (`EstadoTicketMentorJpa`, `CategoriaSoporteJpa`, `EstadoTicketSoporteJpa`) — aunque en este módulo casi todos los valores ya coinciden textualmente con el dominio (ambos en español), se mantiene el tipo `*Jpa` separado igual, por la misma razón que `NivelMentorJpa` en `users` (`N0..N3` coincide y aun así hay un tipo aparte): la entidad JPA nunca debe importar un tipo de dominio.
-- **Eventos** (`api/`): `TicketMentorAbiertoEvent`, `TicketMentorRespondidoEvent` — publicados via `ApplicationEventPublisher` dentro de la transacción (Spring Modulith los persiste en su outbox). Sin consumidores todavía (`notifications` no existe, Ola 3).
+- **Eventos** (`api/`): `TicketMentorAbiertoEvent`, `TicketMentorRespondidoEvent` — publicados via `ApplicationEventPublisher` dentro de la transacción (Spring Modulith los persiste en su outbox). `TicketMentorAbiertoEvent` lo consume `notifications.TicketMentorAbiertoNotificationListener` (aviso `TICKET_ABIERTO` al mentor asignado, E-217); `TicketMentorRespondidoEvent` sigue sin consumidor.
+  > **Corregido 2026-09-23.** Decía "Sin consumidores todavía (`notifications` no existe, Ola 3)." `notifications` ya existía y el evento seguía sin escucharse (E-217).
 
 ---
 

@@ -1,8 +1,15 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.ports.in.memoria.CompactarMemoriaUseCase;
+import com.renaser.os.rag.application.ports.in.memoria.ConsultarMemoriaUseCase;
+import com.renaser.os.rag.domain.model.memoria.CategoriaDeRecuerdo;
+import com.renaser.os.rag.domain.model.memoria.MemoriaDeRenasia;
+import com.renaser.os.rag.domain.model.memoria.Recuerdo;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase.PreguntarRenasiaCommand;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ConsultarPropuestasDelTurnoUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.in.seguridad.RevisarPatronDeMalestarUseCase;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FiltroLecciones;
@@ -16,6 +23,7 @@ import com.renaser.os.rag.application.ports.out.cuota.ControlCuotaRenasiaPort;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort.Consulta;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
+import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
@@ -36,6 +44,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
@@ -62,6 +71,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * Orquestacion de los dos asistentes (D-102) sobre puertos mockeados. Las reglas de dominio
@@ -101,7 +111,13 @@ class ConversacionRenasiaServiceTest {
     @Mock
     private RevisarPatronDeMalestarUseCase revisarPatronDeMalestarUseCase;
     @Mock
+    private ConsultarPropuestasDelTurnoUseCase propuestasDelTurno;
+    @Mock
     private IdGenerator idGenerator;
+    @Mock
+    private ConsultarMemoriaUseCase memoriaUseCase;
+    @Mock
+    private CompactarMemoriaUseCase compactarMemoriaUseCase;
 
     private ConversacionRenasiaService service;
 
@@ -113,7 +129,10 @@ class ConversacionRenasiaServiceTest {
         service = new ConversacionRenasiaService(userSummaryFinder, controlCuotaRenasiaPort,
                 loadConversacionRenasiaPort, saveConversacionRenasiaPort, loadMensajeRenasiaPort,
                 saveMensajeRenasiaPort, vectorStorePort, consultarLeccionesVisiblesPort, chatIAPort,
-                herramientasUseCase, situacionPort, revisarPatronDeMalestarUseCase, CLOCK, idGenerator);
+                herramientasUseCase, situacionPort, revisarPatronDeMalestarUseCase, propuestasDelTurno,
+                memoriaUseCase, compactarMemoriaUseCase, CLOCK, idGenerator);
+        // Por defecto el turno no propone nada: el caso de todos los dias.
+        lenient().when(propuestasDelTurno.pendientesCreadasDesde(any(), any())).thenReturn(List.of());
         // Por defecto nadie viene repitiendo nada: la conversacion normal no se ve afectada.
         lenient().when(revisarPatronDeMalestarUseCase.revisar(any(), anyString())).thenReturn(Optional.empty());
         // lenient: no todos los casos llegan a generar un id (varios cortan antes, en autorizacion o cuota).
@@ -135,12 +154,13 @@ class ConversacionRenasiaServiceTest {
 
     /** Pregunta al acompanante, sin ambito ni curso: el chat general del programa. */
     private PreguntarRenasiaCommand pregunta(UserId actorId) {
-        return new PreguntarRenasiaCommand(actorId, COMPANION, "que es Renasia?", null, null);
+        return new PreguntarRenasiaCommand(actorId, COMPANION, "que es Renasia?", null, null, null);
     }
 
     /** Pregunta a Sparkie desde adentro de un curso. */
     private PreguntarRenasiaCommand preguntaAlTutor(UserId actorId, String cursoId) {
-        return new PreguntarRenasiaCommand(actorId, COURSE_TUTOR, "que dice la leccion?", "el curso \"X\"", cursoId);
+        return new PreguntarRenasiaCommand(actorId, COURSE_TUTOR, "que dice la leccion?", "el curso \"X\"", cursoId,
+                null);
     }
 
     /** Un stream mínimo y válido para los tests a los que no les importa el contenido de la respuesta. */
@@ -252,7 +272,7 @@ class ConversacionRenasiaServiceTest {
         when(loadMensajeRenasiaPort.pagina(eq(activo), eq(COMPANION), any(), eq(10)))
                 .thenReturn(List.of(segundo, primero));
 
-        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "y que te dije recien?", null, null))
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "y que te dije recien?", null, null, null))
                 .collectList().block();
 
         Consulta consulta = consultaEnviadaAlModelo();
@@ -283,7 +303,7 @@ class ConversacionRenasiaServiceTest {
         when(loadMensajeRenasiaPort.pagina(eq(activo), eq(COMPANION), any(), eq(10)))
                 .thenReturn(List.of(instruccionSinResponder, respuesta, pregunta));
 
-        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "Hola", null, null))
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "Hola", null, null, null))
                 .collectList().block();
 
         Consulta consulta = consultaEnviadaAlModelo();
@@ -305,7 +325,7 @@ class ConversacionRenasiaServiceTest {
         when(loadMensajeRenasiaPort.pagina(eq(activo), eq(COMPANION), any(), eq(10)))
                 .thenReturn(List.of(contestada, reintento, fallido));
 
-        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "gracias", null, null))
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "gracias", null, null, null))
                 .collectList().block();
 
         assertThat(consultaEnviadaAlModelo().historial()).containsExactly(reintento, contestada);
@@ -386,7 +406,7 @@ class ConversacionRenasiaServiceTest {
     void preguntarDelAcompananteIgnoraAmbitoYCurso() {
         stubCaminoFeliz();
 
-        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "hola", "el curso \"X\"", "curso-1"))
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "hola", "el curso \"X\"", "curso-1", null))
                 .collectList().block();
 
         Consulta consulta = consultaEnviadaAlModelo();
@@ -394,6 +414,29 @@ class ConversacionRenasiaServiceTest {
         assertThat(consulta.ambito()).isNull();
         verify(consultarLeccionesVisiblesPort).visiblesParaActor(activo);
         verify(consultarLeccionesVisiblesPort, never()).visiblesParaActorEnCurso(any(), any());
+    }
+
+    /** 2026-09-23: sin canal (toda app anterior al orbe de voz) la respuesta es la escrita de siempre. */
+    @Test
+    @DisplayName("sin canal, la consulta viaja como TEXTO")
+    void sinCanalLaConsultaEsTexto() {
+        stubCaminoFeliz();
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(consultaEnviadaAlModelo().canal()).isEqualTo(CanalConversacion.TEXTO);
+    }
+
+    /** El canal llega hasta el adaptador, que es quien decide como cambia el prompt. */
+    @Test
+    @DisplayName("con canal VOZ, la consulta al modelo lo lleva")
+    void conCanalVozLaConsultaLoLleva() {
+        stubCaminoFeliz();
+
+        service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "hola", null, null, CanalConversacion.VOZ))
+                .collectList().block();
+
+        assertThat(consultaEnviadaAlModelo().canal()).isEqualTo(CanalConversacion.VOZ);
     }
 
     @Test
@@ -619,5 +662,178 @@ class ConversacionRenasiaServiceTest {
         var orden = inOrder(revisarPatronDeMalestarUseCase, chatIAPort);
         orden.verify(revisarPatronDeMalestarUseCase).revisar(eq(activo), anyString());
         orden.verify(chatIAPort).responder(any());
+    }
+
+    // --- Propuestas del turno (fase 2, D-153) ------------------------------------------------
+
+    private static final PropuestaCreada MEDITAR = new PropuestaCreada(
+            UUID.fromString("22222222-2222-2222-2222-222222222222"), "Meditar: de 06:00 a 07:00 desde manana",
+            Instant.parse("2026-08-25T10:15:00Z"));
+    private static final PropuestaCreada LEER = new PropuestaCreada(
+            UUID.fromString("33333333-3333-3333-3333-333333333333"), "Leer: apagar el sabado",
+            Instant.parse("2026-08-25T10:16:00Z"));
+
+    /**
+     * Cada propuesta llega como texto (lo unico que ve una app sin botones) y enseguida como
+     * evento {@code propuesta}; todo antes de las fuentes y del {@code fin}, que sigue siendo el
+     * ultimo. Se piden las creadas desde el inicio del turno: las de turnos anteriores no vuelven.
+     */
+    @Test
+    void lasPropuestasDelTurnoLleganAntesDelFinCadaUnaPrecedidaDeSuTexto() {
+        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of(
+                new FragmentoRelevante("contexto", "leccion-1", 0.1)));
+        when(chatIAPort.responder(any())).thenReturn(Flux.just(
+                new EventoRenasia.Texto("Te dejo dos cambios."), new EventoRenasia.Fin()));
+        when(propuestasDelTurno.pendientesCreadasDesde(activo, CLOCK.now())).thenReturn(List.of(MEDITAR, LEER));
+
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(eventos).containsExactly(
+                new EventoRenasia.Texto("Te dejo dos cambios."),
+                new EventoRenasia.Texto("\n\nPropuesta: Meditar: de 06:00 a 07:00 desde manana"),
+                new EventoRenasia.Propuesta(MEDITAR.id(), MEDITAR.resumen(), MEDITAR.venceEn()),
+                new EventoRenasia.Texto("\n\nPropuesta: Leer: apagar el sabado"),
+                new EventoRenasia.Propuesta(LEER.id(), LEER.resumen(), LEER.venceEn()),
+                new EventoRenasia.Fuentes(List.of("leccion-1")),
+                new EventoRenasia.Fin());
+    }
+
+    /** Al volver al chat los botones no se redibujan: el texto guardado es lo que queda. */
+    @Test
+    void elTextoDeLaPropuestaQuedaGuardadoEnLaRespuestaDelAsistente() {
+        stubCaminoFeliz();
+        when(propuestasDelTurno.pendientesCreadasDesde(activo, CLOCK.now())).thenReturn(List.of(MEDITAR));
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        ArgumentCaptor<MensajeRenasia> captor = ArgumentCaptor.forClass(MensajeRenasia.class);
+        verify(saveMensajeRenasiaPort, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues().get(1).contenido())
+                .isEqualTo("ok\n\nPropuesta: Meditar: de 06:00 a 07:00 desde manana");
+    }
+
+    /** La propuesta va pegada a lo que dijo el modelo; el texto de apoyo, si toca, sigue despues. */
+    @Test
+    void laPropuestaVaAntesDelTextoDeApoyo() {
+        stubCaminoFeliz();
+        when(revisarPatronDeMalestarUseCase.revisar(eq(activo), anyString())).thenReturn(Optional.of("Apoyo."));
+        when(propuestasDelTurno.pendientesCreadasDesde(activo, CLOCK.now())).thenReturn(List.of(MEDITAR));
+
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(eventos).containsExactly(
+                new EventoRenasia.Texto("ok"),
+                new EventoRenasia.Texto("\n\nPropuesta: Meditar: de 06:00 a 07:00 desde manana"),
+                new EventoRenasia.Propuesta(MEDITAR.id(), MEDITAR.resumen(), MEDITAR.venceEn()),
+                new EventoRenasia.Texto("\n\nApoyo."),
+                new EventoRenasia.Fin());
+    }
+
+    /** Sin propuestas —casi todos los turnos— el stream es exactamente el de siempre. */
+    @Test
+    void sinPropuestasElStreamNoCambia() {
+        stubCaminoFeliz();
+
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(eventos).containsExactly(new EventoRenasia.Texto("ok"), new EventoRenasia.Fin());
+        verify(propuestasDelTurno).pendientesCreadasDesde(activo, CLOCK.now());
+    }
+
+    /**
+     * Best-effort: si la consulta se cae, la persona igual recibe su respuesta entera y el
+     * {@code fin}. No es un fallo del modelo: no se manda {@code error} ni se libera la cuota.
+     */
+    @Test
+    void unFalloConsultandoLasPropuestasNoCortaLaRespuesta() {
+        stubCaminoFeliz();
+        when(propuestasDelTurno.pendientesCreadasDesde(any(), any()))
+                .thenThrow(new RuntimeException("la base no responde"));
+
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(eventos).containsExactly(new EventoRenasia.Texto("ok"), new EventoRenasia.Fin());
+        verify(controlCuotaRenasiaPort, never()).liberar(any());
+        verify(saveMensajeRenasiaPort, times(2)).save(any());
+    }
+
+    /**
+     * C-1: la consulta corre cuando el modelo ya termino, nunca al armar el turno ni durante la
+     * llamada. Armar el {@code Flux} sin suscribirse no la dispara; consumirlo, una sola vez.
+     */
+    @Test
+    void lasPropuestasSeConsultanRecienCuandoTerminaElStreamDelModelo() {
+        stubCaminoFeliz();
+
+        Flux<EventoRenasia> resultado = service.preguntar(pregunta(activo));
+        verify(propuestasDelTurno, never()).pendientesCreadasDesde(any(), any());
+
+        resultado.collectList().block();
+        verify(propuestasDelTurno, times(1)).pendientesCreadasDesde(activo, CLOCK.now());
+    }
+
+    /** Si el modelo falla no hay {@code fin} del modelo donde colgarlas: el turno queda en error+fin. */
+    @Test
+    void siElModeloFallaNoSeConsultanPropuestas() {
+        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
+        when(chatIAPort.responder(any())).thenReturn(Flux.error(new RuntimeException("Gemini no responde")));
+
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(eventos).hasSize(2);
+        assertThat(eventos.get(1)).isInstanceOf(EventoRenasia.Fin.class);
+        verify(propuestasDelTurno, never()).pendientesCreadasDesde(any(), any());
+    }
+
+    @Test
+    @DisplayName("D-167: la memoria viaja con el acompanante y, al terminar el turno, se pide compactar")
+    void laMemoriaViajaConElAcompanante() {
+        stubCaminoFeliz();
+        var memoria = new MemoriaDeRenasia(List.of(new Recuerdo(UUID.randomUUID(), CategoriaDeRecuerdo.CONTEXTO_DE_VIDA,
+                "Trabaja de noche", CLOCK.now())), Optional.empty(), Instant.EPOCH);
+        when(memoriaUseCase.paraConversar(activo)).thenReturn(Optional.of(memoria));
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(consultaEnviadaAlModelo().memoria()).isEqualTo(memoria);
+        InOrder orden = inOrder(saveMensajeRenasiaPort, compactarMemoriaUseCase);
+        orden.verify(saveMensajeRenasiaPort, times(2)).save(any());
+        orden.verify(compactarMemoriaUseCase).compactarEnSegundoPlano(activo);
+    }
+
+    @Test
+    @DisplayName("D-167: con la memoria apagada no viaja nada y el prompt queda como antes")
+    void memoriaApagada() {
+        stubCaminoFeliz();
+        when(memoriaUseCase.paraConversar(activo)).thenReturn(Optional.empty());
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(consultaEnviadaAlModelo().memoria()).isNull();
+    }
+
+    @Test
+    @DisplayName("D-167: el tutor de cursos no lee ni compacta la memoria del acompanante (D-102)")
+    void elTutorNoTieneMemoria() {
+        stubCaminoFeliz();
+
+        service.preguntar(preguntaAlTutor(activo, "curso-1")).collectList().block();
+
+        assertThat(consultaEnviadaAlModelo().memoria()).isNull();
+        verifyNoInteractions(memoriaUseCase, compactarMemoriaUseCase);
+    }
+
+    @Test
+    @DisplayName("D-167: si el modelo falla no hay turno completo, y no se compacta")
+    void sinRespuestaNoSeCompacta() {
+        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
+        when(chatIAPort.responder(any())).thenReturn(Flux.error(new IllegalStateException("modelo caido")));
+
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        verify(compactarMemoriaUseCase, never()).compactarEnSegundoPlano(any());
     }
 }

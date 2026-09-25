@@ -5,8 +5,10 @@ import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.Set;
 
-/** Espejo de `tipo_dia` (baseline SQL). DISCIPLINA/INTOXICACION derivan del dia
- * de programa (ciclos fijos); TODOS aplica cualquier dia; DOMINGO es especial. */
+/** Espejo de `tipo_dia` (baseline SQL): decide QUE HORARIO rige un dia. TODOS aplica cualquier
+ * dia; DOMINGO es especial. El baseline preveia INTOXICACION como tipo de dia, pero los Ciclos de
+ * Intoxicacion (D-169) se resolvieron como regla de exigencia, no de horario: ver
+ * {@link CicloIntoxicacion} y {@link Habito#esOpcionalEnDia(int)}. */
 public enum TipoDia {
     DISCIPLINA,
     INTOXICACION,
@@ -14,9 +16,11 @@ public enum TipoDia {
     DOMINGO;
 
     /**
-     * DOMINGO por dia de calendario; DISCIPLINA en cualquier otro caso. INTOXICACION (ciclos
-     * fijos del repo viejo) NO esta implementado en esta version — ver docs/MODULO_HABITS.md.
-     * Regla pura: la comparten la generacion de registros y la lectura de horarios vigentes.
+     * DOMINGO por dia de calendario; DISCIPLINA en cualquier otro caso. Nunca INTOXICACION: un
+     * dia de intoxicacion (D-169) conserva su horario de siempre y solo cambia si cada habito es
+     * exigible, que se guarda en {@code registros_habito.es_opcional}. Por eso un horario con tipo
+     * INTOXICACION sigue sin aplicar ningun dia (pregunta abierta en D-169). Regla pura: la
+     * comparten la generacion de registros y la lectura de horarios vigentes.
      */
     public static TipoDia delDia(LocalDate fecha) {
         return fecha.getDayOfWeek() == DayOfWeek.SUNDAY ? DOMINGO : DISCIPLINA;
@@ -34,8 +38,9 @@ public enum TipoDia {
      * PROFUNDO} es de domingo y no lo dice, y el titulo ademas es renombrable (misma razon por la
      * que V18 lo descarto como criterio).
      *
-     * <p>INTOXICACION no depende del calendario semanal sino del dia de programa, y ademas no esta
-     * implementado en esta version: se responde el conjunto vacio en vez de inventar dias.
+     * <p>INTOXICACION no depende del calendario semanal sino del dia de programa, y ademas ningun
+     * dia se resuelve como ese tipo (D-169, ver {@link #delDia}): se responde el conjunto vacio en
+     * vez de inventar dias.
      */
     public Set<DayOfWeek> diasDeLaSemana() {
         return switch (this) {

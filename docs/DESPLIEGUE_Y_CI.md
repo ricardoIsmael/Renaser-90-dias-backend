@@ -550,6 +550,11 @@ aws ssm put-parameter --name "/renaser/prod/DB_PASSWORD" --type SecureString --v
 aws ssm put-parameter --name "/renaser/prod/REDIS_HOST"  --type String       --value "..."
 ```
 
+**Cambiar un parámetro no tiene efecto hasta reiniciar el contenedor.** Parameter Store se lee una
+sola vez, al arrancar; no hay recarga en caliente. Después de un `put-parameter --overwrite` va
+`docker restart backend` (o un despliegue). Olvidarlo dejó a producción una noche sin correos con
+una `SMTP_PASSWORD` vieja (**E-244**).
+
 ### 6.3 Permisos que necesita el rol de ejecución de la aplicación
 
 ```json
@@ -632,7 +637,11 @@ que las toma del rol de la tarea o de la instancia. No hay que crear un `AWS_SEC
 | `FACEBOOK_APP_ID` | String |
 | `FACEBOOK_APP_SECRET` | **SecureString** |
 
-**Para encender la IA** (hoy todos los adaptadores son `NoOp` y nunca se llamó a un modelo):
+**Para encender la IA:**
+
+> **Corregido 2026-09-25.** Esta línea decía "(hoy todos los adaptadores son `NoOp` y nunca se llamó
+> a un modelo)". Ya no es así: los adaptadores de Gemini existen y se usan (chat, herramientas, voz,
+> memoria). Si producción los usa lo decide `IA_PROVEEDOR` en Parameter Store.
 
 | Parámetro | Tipo | Ojo |
 |---|---|---|
@@ -640,6 +649,19 @@ que las toma del rol de la tarea o de la instancia. No hay que crear un `AWS_SEC
 | `IA_PROVEEDOR` | String | `noop` o `google`. Ponerlo en `google` antes de que existan los adaptadores reales **deja puertos sin implementación y el arranque falla** |
 | `IA_BUSQUEDA_WEB` | String | Necesita además un `RENASIA_CHAT_MODEL` que soporte búsqueda (sin `-lite`): ver D-100 |
 | `RENASIA_CHAT_MODEL`, `RENASIA_EMBEDDING_MODEL`, `RENASIA_EMBEDDING_DIMENSIONS`, `RENASIA_EMBEDDING_TASK_TYPE` | String | Los vectores de dos modelos distintos no son comparables: cambiar el de embeddings obliga a reindexar todo |
+
+**Para el acompañante: voz, voz en vivo, propuestas y memoria.** Son las decisiones del dueño del
+2026-09-25 para el primer paso a producción. Todos los interruptores valen `false` por defecto: si
+no se cargan acá, la función queda apagada aunque el código esté desplegado.
+
+| Parámetro | Valor en producción | Qué prende | Ojo |
+|---|---|---|---|
+| `IA_VOZ_PROVEEDOR` | `google` | La voz del orbe (Kore, D-159) | Usa el cupo del chat (`RENASIA_LIMITE_DIARIO`) |
+| `IA_VOZ_EN_VIVO` | `true` | La conversación por voz en tiempo real (Gemini Live, D-162) | Cobra por minuto. La cuota por defecto ya es 20 min por persona y por día (`IA_VOZ_EN_VIVO_MINUTOS_POR_DIA`): no hace falta cargarla |
+| `IA_ACOMPANANTE_CONFIRMACION_CON_BOTONES` | `true` | Las propuestas con Confirmar y Cancelar (D-153) | Solo con la app nueva instalada. Con la vieja, la persona ve la propuesta como texto y no puede confirmarla |
+| `IA_ACOMPANANTE_MEMORIA` | `true` | La memoria del acompañante (D-167, tablas de V67) | Con la app nueva. La vieja no tiene la pantalla para ver y borrar lo que se recuerda |
+| `IA_ACOMPANANTE_AVISOS_EN_CHAT`, `IA_ACOMPANANTE_LOGROS_EN_CHAT` | `true` cuando el dueño apruebe los textos | Avisos de hábitos y logros en el chat | Los textos de `application.yaml` están marcados como provisorios |
+| `RENASIA_CHAT_MODEL` | No cargarlo: queda el default `gemini-3.5-flash-lite` | El modelo del chat | Decisión del dueño del 2026-09-25: el más estable de los medidos (E-233) |
 
 **Opcionales — solo si hay que apartarse del default:** `DB_POOL_MAX_SIZE`, `DB_POOL_MIN_IDLE`,
 `DB_POOL_CONNECTION_TIMEOUT_MS`, `ASYNC_IA_CONCURRENCY_LIMIT`, `RENASIA_LIMITE_DIARIO`,

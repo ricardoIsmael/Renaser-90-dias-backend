@@ -1,5 +1,7 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.domain.model.eleccion.SemanaDeEleccion;
+
 import com.renaser.os.habits.application.ports.in.eleccion.ElegirDiaSemanalUseCase;
 import com.renaser.os.habits.application.ports.out.eleccion.SaveEleccionDiaSemanalPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
@@ -60,9 +62,9 @@ public class EleccionDiaSemanalService implements ElegirDiaSemanalUseCase {
         ZoneId zona = ZoneId.of(progreso.timezone());
         Instant ahora = clock.now();
         LocalDate hoy = ahora.atZone(zona).toLocalDate();
-        LocalDate semanaInicio = lunesDe(hoy);
+        LocalDate semanaInicio = SemanaDeEleccion.lunesDe(hoy);
 
-        if (command.fechaElegida().isBefore(hoy) || command.fechaElegida().isAfter(semanaInicio.plusDays(6))) {
+        if (!SemanaDeEleccion.esElegible(command.fechaElegida(), hoy)) {
             throw new IllegalArgumentException("Elige un dia de esta semana que no haya pasado todavia");
         }
 
@@ -70,11 +72,6 @@ public class EleccionDiaSemanalService implements ElegirDiaSemanalUseCase {
         EleccionDiaSemanal eleccion = EleccionDiaSemanal.elegir(command.actorId(), command.habitoId(),
                 command.fechaElegida(), semanaInicio, ahora);
         return savePort.save(eleccion);
-    }
-
-    /** WEEK_ANCHOR=MONDAY (weeklyChoice.ts) — el lunes de la semana de calendario de {@code fecha}. */
-    private static LocalDate lunesDe(LocalDate fecha) {
-        return fecha.minusDays(fecha.getDayOfWeek().getValue() - 1);
     }
 
     private Habito requireHabito(HabitoId id) {

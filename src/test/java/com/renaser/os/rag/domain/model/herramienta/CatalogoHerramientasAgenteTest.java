@@ -41,6 +41,25 @@ class CatalogoHerramientasAgenteTest {
                 });
     }
 
+    /**
+     * Fase 2 (D-153): al prender la confirmacion con botones cambia la descripcion de la que
+     * escribe y NADA mas — el nombre y el parametro viajan en conversaciones vivas.
+     */
+    @Test
+    @DisplayName("la variante con confirmacion solo cambia la descripcion de marcar_habito_completado")
+    void varianteConConfirmacion() {
+        var normales = CatalogoHerramientasAgente.definiciones();
+        var conConfirmacion = CatalogoHerramientasAgente.definicionesConConfirmacion();
+
+        assertThat(conConfirmacion).extracting(DefinicionHerramienta::nombre)
+                .containsExactlyElementsOf(normales.stream().map(DefinicionHerramienta::nombre).toList());
+        assertThat(conConfirmacion).extracting(DefinicionHerramienta::parametros)
+                .containsExactlyElementsOf(normales.stream().map(DefinicionHerramienta::parametros).toList());
+        assertThat(conConfirmacion.subList(0, 2)).isEqualTo(normales.subList(0, 2));
+        assertThat(conConfirmacion.get(2).descripcion()).isNotEqualTo(normales.get(2).descripcion())
+                .startsWith("Propone").contains("Confirmar");
+    }
+
     @Test
     @DisplayName("una herramienta que el modelo se invento no esta en el catalogo")
     void herramientaInventada() {

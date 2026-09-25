@@ -47,6 +47,10 @@ app en producción todavía no lo usa.
 
 ### 0.3 El bug de la pausa es peor de lo reportado
 
+> **Corregido 2026-09-23.** Esta sección ya no describe el código: el bug se arregló el 2026-09-07 sin la
+> columna `pausado_desde`: `estaPausadoEl(LocalDate, ZoneId)` usa `pausadoEn` en la zona del aprendiz como
+> límite inferior (prueba de regresión en `DesbloqueoHabitoPausaTest`). Queda un bug vecino, E-213.
+
 `DesbloqueoHabito.estaPausadoEl` (línea 89) **ignora `pausadoEn` por completo**:
 
 ```java

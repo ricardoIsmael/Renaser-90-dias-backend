@@ -45,6 +45,18 @@ services:
       timeout: 5s
       retries: 10
 
+  # Voz del orbe (renaser.ia.voz.proveedor=piper, IA_VOZ_URL=http://localhost:5055). Opcional:
+  # sin este servicio el backend responde 204 y la app habla con el TTS del telefono.
+  # Detras del perfil `voz` para que `docker compose up` siga levantando solo db y redis (la
+  # imagen baja ~100 MB de modelo al construirse): `docker compose --profile voz up -d piper`.
+  piper:
+    profiles: ["voz"]
+    build: ./infra/piper
+    container_name: renaser-piper
+    restart: unless-stopped
+    ports:
+      - "5055:5055"
+
 volumes:
   renaser_db_data:
   renaser_redis_data:

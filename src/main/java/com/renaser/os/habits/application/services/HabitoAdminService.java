@@ -7,6 +7,7 @@ import com.renaser.os.habits.application.ports.in.habitoadmin.CrearHabitoUseCase
 import com.renaser.os.habits.application.ports.in.habitoadmin.EliminarHabitoUseCase;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.SaveHabitoPort;
+import com.renaser.os.habits.domain.model.habito.DetallesHabito;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.Clock;
@@ -59,8 +60,15 @@ public class HabitoAdminService implements ConsultarCatalogoAdminUseCase, CrearH
     public Habito actualizar(ActualizarHabitoCommand command) {
         guard.requireAdmin(command.actorId());
         Habito habito = requireHabito(command.habitoId());
-        habito.actualizarDetalles(command.detalles(), clock.now());
+        habito.actualizarDetalles(detallesPara(command, habito), clock.now());
         return savePort.save(habito);
+    }
+
+    /** Un pedido que no informó la bandera de intoxicación la deja como estaba (E-263). */
+    private static DetallesHabito detallesPara(ActualizarHabitoCommand command, Habito habito) {
+        return command.conservaObligatorioEnIntoxicacion()
+                ? command.detalles().conObligatorioEnIntoxicacion(habito.obligatorioEnIntoxicacion())
+                : command.detalles();
     }
 
     @Override

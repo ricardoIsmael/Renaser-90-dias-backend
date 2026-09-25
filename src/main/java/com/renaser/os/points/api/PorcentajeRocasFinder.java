@@ -20,22 +20,27 @@ import java.util.Map;
  * que muestra Hoy ({@code HomeAgregadoService.coherenciaDe}, D-128) y el orden del ranking de
  * CELULA ({@code RankingService.generar(CELL, ...)}). No se borra nada.
  *
- * <p>Fórmula (ver {@code docs/MODULO_ROCKS.md} §8 para el detalle citado
- * archivo:línea): ventana de 7 días UTC cerrados terminando en {@code hasta}
- * (incluido); una Roca Diaria nunca es opcional, así que toda roca
- * planificada ese día entra al total; cada día se redondea a entero primero y
- * LUEGO se promedia (doble redondeo deliberado); ventana sin días calificables
- * → 100.
+ * <p>Fórmula (D-128, {@code rocks.domain.model.coherencia.PorcentajeRocas}): ventana de 7 días
+ * terminando en {@code hasta} (incluido), que quien llama calcula como HOY EN LA ZONA DEL
+ * PARTICIPANTE (regla 02 §1); una Roca Diaria nunca es opcional, así que toda roca planificada
+ * entra al total; se cuentan <b>acciones, no días</b>: cumplidas ÷ planificadas de la ventana
+ * entera, con 1 decimal.
  *
- * <p>El valor es un {@link BigDecimal} de 1 decimal, no un {@code Integer}:
- * la fórmula original ya redondea a 1 decimal
- * ({@code round(avg(day_score) * 10) / 10}) y truncar acá a entero perdería
- * precisión que {@code points} necesita para su propio redondeo final.
+ * <p>El valor es un {@link BigDecimal} de 1 decimal, no un {@code Integer}: truncar acá a entero
+ * perdería precisión que {@code points} necesita para su propio redondeo final.
  *
- * <p>Cada {@code UserId} pedido aparece en el mapa devuelto — incluso un
- * participante sin ninguna Roca Diaria calificable en la ventana entera, con
- * valor {@code 100.0} (ventana vacía, no un castigo).
-
+ * <p><b>Un participante sin ninguna acción planificada en la ventana NO aparece en el mapa</b>:
+ * sin clave es "sin dato", ni un cero ni un cien (D-128). Quien consume lee la ausencia de clave
+ * como "no planificó su semana" ({@code HomeAgregadoService.coherenciaDe} la devuelve como
+ * {@code null}).
+ *
+ * <p><b>Corregido 2026-09-23.</b> Este javadoc seguía diciendo lo de antes de D-128 (2026-09-15):
+ * "ventana de 7 días UTC cerrados", "cada día se redondea a entero primero y LUEGO se promedia
+ * (doble redondeo deliberado); ventana sin días calificables → 100" y "Cada {@code UserId} pedido
+ * aparece en el mapa devuelto — incluso un participante sin ninguna Roca Diaria calificable en la
+ * ventana entera, con valor {@code 100.0}". La implementación ({@code PorcentajeRocasService})
+ * omite la clave desde D-128, y un consumidor que confiara en el contrato viejo mostraría un 100
+ * inventado o reventaría con un {@code null} inesperado.
  *
  * <p><b>Por que vive en `points` y no en el modulo que lo implementa (DIP):</b> declararlo
  * en el modulo proveedor creaba un CICLO que Spring Modulith rechaza — `habits` ya depende

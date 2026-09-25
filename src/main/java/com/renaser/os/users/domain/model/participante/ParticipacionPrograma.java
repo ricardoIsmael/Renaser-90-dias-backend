@@ -206,6 +206,33 @@ public final class ParticipacionPrograma {
     }
 
     /**
+     * Primera fecha local con día de programa ≥ 1 (D-168: el semáforo del aprendiz mide del día 1
+     * al 90). Si se lo retrocedió, el ajuste corre el día 1 hacia adelante; si se lo adelantó, el
+     * primer día contado cae en la propia fecha de inicio (los días salteados nunca existieron).
+     *
+     * @return {@code null} si el programa no está activado
+     */
+    public LocalDate primeraFechaDelPrograma() {
+        if (!estaActivado() || fechaInicio == null) {
+            return null;
+        }
+        return fechaInicio.plusDays(Math.max(0, diasAjuste));
+    }
+
+    /**
+     * Fecha local del día 90: la graduación esperada menos un día. Sale de
+     * {@link #fechaGraduacionEsperada()} para que la cuenta con el ajuste siga en un solo lugar.
+     *
+     * @return {@code null} si el programa no está activado
+     */
+    public LocalDate ultimaFechaDelPrograma() {
+        if (!estaActivado() || fechaInicio == null) {
+            return null;
+        }
+        return fechaGraduacionEsperada().minusDays(1);
+    }
+
+    /**
      * <b>La cuenta que define el reloj del programa</b> (V20). Dia 1 es
      * {@link #fechaInicio}; de ahi en adelante son dias de calendario EN LA ZONA DEL
      * PARTICIPANTE, menos los que no cuentan ({@link #diasAjuste}), acotado a [0, 90].

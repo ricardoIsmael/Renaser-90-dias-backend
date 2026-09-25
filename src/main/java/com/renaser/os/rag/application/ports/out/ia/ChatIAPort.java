@@ -2,9 +2,11 @@ package com.renaser.os.rag.application.ports.out.ia;
 
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
+import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
+import com.renaser.os.rag.domain.model.memoria.MemoriaDeRenasia;
 import com.renaser.os.shared.domain.UserId;
 import reactor.core.publisher.Flux;
 
@@ -57,13 +59,32 @@ public interface ChatIAPort {
      *
      * <p>El adaptador {@code NoOp} recibe las herramientas y no las usa — no hay modelo que las
      * pida. El adaptador real de Gemini SI las declara (ver {@code HerramientaToolCallback}).
+     *
+     * <p>{@code canal} (2026-09-23): si la respuesta se va a leer ({@link CanalConversacion#TEXTO})
+     * o a escuchar ({@link CanalConversacion#VOZ}). Con {@code VOZ} el adaptador real agrega al
+     * prompt de sistema las pautas de forma hablada; no cambia el contexto, las herramientas ni los
+     * limites. El {@code NoOp} lo ignora.
+     *
+     * <p>{@code memoria} (D-167): lo que el acompanante sabe de la persona. {@code null} si no hay
+     * que usarla: el tutor de cursos, o la memoria apagada o ilegible. Con {@code null} el prompt
+     * queda byte por byte como antes de D-167.
      */
     record Consulta(AgenteConversacional agente, UserId actorId, String pregunta, List<String> contexto,
                     String ambito, List<MensajeRenasia> historial,
-                    List<DefinicionHerramienta> herramientas, SituacionDelAprendiz situacion) {
+                    List<DefinicionHerramienta> herramientas, SituacionDelAprendiz situacion,
+                    CanalConversacion canal, MemoriaDeRenasia memoria) {
+
+        /** Sin memoria (D-167). */
+        public Consulta(AgenteConversacional agente, UserId actorId, String pregunta, List<String> contexto,
+                        String ambito, List<MensajeRenasia> historial,
+                        List<DefinicionHerramienta> herramientas, SituacionDelAprendiz situacion,
+                        CanalConversacion canal) {
+            this(agente, actorId, pregunta, contexto, ambito, historial, herramientas, situacion, canal, null);
+        }
 
         public Consulta {
             Objects.requireNonNull(agente, "agente no puede ser null");
+            Objects.requireNonNull(canal, "canal no puede ser null");
             Objects.requireNonNull(actorId, "actorId no puede ser null");
             Objects.requireNonNull(pregunta, "pregunta no puede ser null");
             contexto = List.copyOf(Objects.requireNonNull(contexto, "contexto no puede ser null"));

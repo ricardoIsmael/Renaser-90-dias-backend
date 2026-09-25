@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.ports.in.conversacion;
 
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
+import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.shared.application.SelfValidating;
 import com.renaser.os.shared.domain.UserId;
@@ -30,15 +31,23 @@ public interface PreguntarRenasiaUseCase {
      * las lecciones de ese curso. Para el acompanante se descartan aca mismo: un cliente viejo
      * (anterior a D-102) que mande {@code scope} sin {@code agent} cae en el acompanante y no
      * arrastra el ambito a un prompt que ya no lo tiene.
+     *
+     * <p>{@code canal} (2026-09-23): si la respuesta se va a leer o a escuchar. Nulo es
+     * {@link CanalConversacion#TEXTO}, el comportamiento de siempre. No se descarta segun el
+     * agente: pedir la respuesta en forma hablada tiene sentido para cualquiera de los dos.
      */
     record PreguntarRenasiaCommand(@NotNull UserId actorId, @NotNull AgenteConversacional agente,
-                                   @NotBlank String pregunta, String ambito, String cursoId) {
+                                   @NotBlank String pregunta, String ambito, String cursoId,
+                                   CanalConversacion canal) {
         public PreguntarRenasiaCommand {
             SelfValidating.validateConstructorArgs(PreguntarRenasiaCommand.class, actorId, agente, pregunta,
-                    ambito, cursoId);
+                    ambito, cursoId, canal);
             if (agente != AgenteConversacional.COURSE_TUTOR) {
                 ambito = null;
                 cursoId = null;
+            }
+            if (canal == null) {
+                canal = CanalConversacion.TEXTO;
             }
         }
     }
