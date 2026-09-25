@@ -927,6 +927,16 @@ ya guardado se sigue viendo en el perfil (`activa=false`), para poder borrarlo.
 - `MemoriaRenasiaControllerTest` y `...AutenticacionTest`: SUSPENDED → 403; sin sesión → 403.
 - En los tests del chat, la voz y los prompts: con memoria y sin ella.
 
+**Verificado en el emulador (2026-09-25),** con el backend local y la memoria encendida:
+- **Primera compactación**, sobre la conversación de la batería. Los recuerdos salieron bien: tiene
+  pareja, ayuda a su hermano, su meta en el programa, "ha notado cambios pequeños como tomar más agua
+  y caminar". El resumen, en cambio, guardó el sueño y las preocupaciones (E-273), y se corrigió.
+- **"¿Qué recuerdas de mí?"**: lo dice en una frase y avisa que se ve y se borra en el perfil. En la
+  respuesta siguiente no lo recita.
+- **Perfil**: la fila aparece en Ajustes, con los recuerdos por categoría y sin ids en pantalla.
+  Olvidar uno lo saca y borra también el resumen (verificado en la base, con `compactado_hasta`
+  intacto).
+
 ---
 
 ## 4. Estructura del módulo

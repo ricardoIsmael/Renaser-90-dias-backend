@@ -30,11 +30,19 @@ public record Compactacion(String resumen, Map<CategoriaDeRecuerdo, List<String>
      * Lo emocional y la salud no se guardan (dato sensible, Ley 29733; decision del dueno del
      * 2026-09-25). Si el modelo igual los mete, se descartan aca. Son raices, sin tildes: se comparan
      * contra el texto normalizado. "Pastilla" y "terapia" solas NO estan: son nombres de habitos
-     * del programa (Pastilla Renacer, Audioterapia).
+     * del programa (Pastilla Renacer, Audioterapia). "Sueno" solo tampoco: "su sueno es tener un
+     * negocio" es una meta; lo que se descarta es no poder dormir.
+     *
+     * <p>Corregido 2026-09-25 (E-273): la lista no tenia preocupaciones, estres, cansancio ni el
+     * sueno, y el primer resumen real guardo "la dificultad para conciliar el sueno debido a las
+     * preocupaciones laborales". Se sumaron esas raices.
      */
     private static final List<String> SENSIBLES = List.of("ansiedad", "ansios", "depres", "suicid", "autolesi",
             "psiquiatr", "psicolog", "medicament", "diagnost", "enfermedad", "trastorno", "panico", "trauma",
-            "llora", "llanto", "tristeza", "angusti", "crisis", "adiccion", "embaraz", "violencia");
+            "llora", "llanto", "tristeza", "angusti", "crisis", "adiccion", "embaraz", "violencia",
+            "preocup", "estres", "insomn", "agobi", "frustr", "miedo", "culpa", "desanim", "desmotiv", "animo",
+            "sentimient", "se siente", "me siento", "cansad", "cansanci", "agotad", "fracas", "falland",
+            "conciliar el sueno", "dormir mal", "duerme mal", "no puede dormir", "no pudo dormir");
 
     public Compactacion {
         resumen = resumen == null ? "" : resumen.strip();
