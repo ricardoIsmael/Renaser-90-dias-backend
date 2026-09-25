@@ -8284,6 +8284,30 @@ que subir el colchón previo, y probar con frases cuya primera sílaba cambie el
 ("desactiva/activa", "no quiero/quiero"). Y en las pruebas, comparar siempre el turno guardado con
 lo que se dijo: ahí se ve lo que el modelo oyó de verdad.
 
+## E-244 · Producción dejó de mandar correos tras cambiar `SMTP_PASSWORD`: el contenedor seguía con la clave vieja
+
+**Síntoma.** Desde el 2026-09-25 04:09 UTC ningún correo transaccional salía (códigos de
+verificación y de recuperar contraseña; lo notaron con la cuenta 3). En el log de `backend`, literal:
+`[users.SmtpEnviarEmailAdapter] fallo el envio de un correo transaccional (asunto 'Tu código para
+recuperar la contraseña de Renaser', causa MailAuthenticationException)`.
+
+**Causa real.** `/renaser/prod/SMTP_PASSWORD` se cambió (versión 2) el 2026-09-24 16:10 UTC, pero el
+contenedor había arrancado el 2026-09-23 16:34 UTC. `application-prod.yaml` importa Parameter Store
+**una sola vez, al arrancar** (§6 de `docs/DESPLIEGUE_Y_CI.md`): no hay recarga en caliente, así que
+el `JavaMailSender` siguió autenticando con la clave anterior, que ya no era válida. El código no
+tenía nada mal.
+
+**Solución (2026-09-25).** `docker restart backend` en `i-0ea00f555c5fe8028` por `ssm send-command`
+(misma imagen, `UP` a los 54 s). En el arranque el log muestra `Loading property from AWS Parameter
+Store with name: /renaser/prod/`, que es cuando toma la clave nueva.
+
+**Cómo evitar que vuelva a pasar.** **Todo cambio de un parámetro de `/renaser/prod/` va seguido de
+reiniciar el contenedor `backend`** (o de un despliegue). Para diagnosticar, comparar
+`aws ssm describe-parameters ... LastModifiedDate` contra `docker inspect -f {{.State.StartedAt}}
+backend`: si el parámetro es más nuevo que el arranque, el backend no lo tiene. Si tras reiniciar
+sigue `MailAuthenticationException`, ya es la clave: con Gmail tiene que ser una contraseña de
+aplicación de la misma cuenta de `SMTP_USERNAME`.
+
 ## E-245 · El orbe dijo "No es posible pausar el hábito" sin motivo ni alternativa
 
 **Síntoma.** Prueba por voz (2026-09-24, 17:34). Clip: *"Pausa el hábito escritura libre nocturna

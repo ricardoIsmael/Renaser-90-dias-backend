@@ -550,6 +550,11 @@ aws ssm put-parameter --name "/renaser/prod/DB_PASSWORD" --type SecureString --v
 aws ssm put-parameter --name "/renaser/prod/REDIS_HOST"  --type String       --value "..."
 ```
 
+**Cambiar un parámetro no tiene efecto hasta reiniciar el contenedor.** Parameter Store se lee una
+sola vez, al arrancar; no hay recarga en caliente. Después de un `put-parameter --overwrite` va
+`docker restart backend` (o un despliegue). Olvidarlo dejó a producción una noche sin correos con
+una `SMTP_PASSWORD` vieja (**E-244**).
+
 ### 6.3 Permisos que necesita el rol de ejecución de la aplicación
 
 ```json
