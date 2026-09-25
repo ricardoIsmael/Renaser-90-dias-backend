@@ -10,7 +10,8 @@
 #   - Revisa IA_PROVEEDOR y RENASIA_CHAT_MODEL.
 #   - Crea los interruptores nuevos APAGADOS.
 #   - Apaga los barridos del semáforo, para que no salga un aviso sin pantalla donde verlo.
-# `prender` enciende todo junto: voz del orbe, voz en vivo, botones, memoria y semáforo.
+# `prender` enciende todo junto: voz del orbe, voz en vivo, botones, memoria, semáforo y, si se
+# confirma, los avisos y logros en el chat.
 #
 # Nunca sobrescribe un parámetro sin preguntar: si ya existe con otro valor, lo muestra y pregunta.
 # La key no pasa por la línea de comandos, así que no queda en el historial ni en la lista de
@@ -149,6 +150,10 @@ prender() {
   for interruptor in "${INTERRUPTORES[@]}"; do
     asegurar "$interruptor" "${PRENDIDO[$interruptor]}" "prender con la app nueva"
   done
+  if preguntar "  ? ¿Prender también los avisos de hábitos y los logros en el chat? (sus textos siguen marcados como provisorios)"; then
+    asegurar IA_ACOMPANANTE_AVISOS_EN_CHAT true "avisos de hábitos en el chat"
+    asegurar IA_ACOMPANANTE_LOGROS_EN_CHAT true "logros en el chat"
+  fi
   for cron in "${CRONES_DEL_SEMAFORO[@]}"; do
     if existe "$cron"; then
       if preguntar "  ? ¿Borrar $cron para que el semáforo vuelva a su horario de siempre?"; then
