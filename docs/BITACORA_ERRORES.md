@@ -8955,3 +8955,27 @@ el error estaba en la fecha que llegaba.
   jueves 2026-11-05. Es variación del modelo, no un error del código, y queda anotado como límite
   conocido de flash-lite en D-166.
 
+
+## E-277 · El script de parámetros de producción escribió en otra cuenta de AWS y el orbe no hablaba
+
+**Síntoma (2026-09-25, APK de prueba contra producción).** Al tocar el orbe en Hoy salía *"Mi voz no
+está disponible ahora mismo; te respondo por escrito."*. En Parameter Store, `IA_VOZ_PROVEEDOR` y
+`IA_VOZ_EN_VIVO` aparecían como `google` y `true`. El intento de ver los logs falló con
+*"An error occurred (InvalidInstanceId) when calling the SendCommand operation: Instances not in a
+valid state for account"*.
+
+**Causa real.** Las credenciales por defecto de la laptop eran de la cuenta `251917136576`, no de la
+de producción (`302277511407`, la del rol del despliegue). `parametros-acompanante.sh` escribió todo
+allá: la key nueva de Gemini, los interruptores y los crons del semáforo. Producción nunca lo vio. La
+lectura de los parámetros "confirmaba" los valores porque también leía la cuenta equivocada. El
+perfil `renaser` que usa esta guía no existía en esa máquina.
+
+**Solución.** El script verifica la cuenta con `aws sts get-caller-identity` antes de escribir, y se
+detiene si no es `302277511407`. Hay que volver a correrlo con credenciales de producción (un perfil
+configurado, o AWS CloudShell en esa cuenta) y reiniciar el backend. En la cuenta `251917136576`
+quedaron los parámetros `/renaser/prod/` creados por el script, y la `GOOGLE_GENAI_API_KEY` que había
+ahí fue reemplazada: hay que revisar si esa cuenta la usa algo.
+
+**Cómo evitar que vuelva a pasar.** El control de cuenta está en el script. Regla general: todo
+comando que toque producción empieza por confirmar la cuenta, y una lectura hecha con las mismas
+credenciales no sirve para comprobar nada, porque mira el mismo lugar equivocado.
