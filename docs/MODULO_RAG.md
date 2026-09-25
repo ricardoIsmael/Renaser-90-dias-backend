@@ -758,22 +758,38 @@ programa va.
 
 **Qué se hizo:**
 
-- `habits.api.PlanDeHabitosPort.PlanDeHabitos` trae `obligatorios`: los hábitos que la persona ve con
-  `desactivable = false` (V18: Audioterapia semanal, Pastilla Renacer, Clase diaria y Post diario en
-  comunidad). Salen de **todos** los que ve, no de los desbloqueos.
-- Herramienta nueva **`consultar_habitos_obligatorios`** (solo lee, sin flag): los obligatorios, los
-  que se pueden pausar y qué sí se puede con cada tipo.
+- `habits.api.PlanDeHabitosPort.PlanDeHabitos.habitos` trae **todos** los hábitos que la persona ve
+  (catálogo activo y personales suyos), con los obligatorios marcados (`desactivable = false`, V18:
+  Audioterapia semanal, Pastilla Renacer, Clase diaria y Post diario en comunidad) y su pausa si la
+  tiene. Antes eran solo los que tenían fila en `desbloqueos_habito`, que arranca vacía (D-99).
+- **La pausa del acompañante funciona igual que el interruptor de Plan:** `PlanDeHabitosService.pausar`
+  asegura la fila con `ElegirHabitoUseCase` (idempotente, el mismo `PUT /habit-unlocks/{id}` que manda
+  la app) y después pausa. Así cualquier hábito no obligatorio se pausa por voz o por chat, como en
+  Plan.
+- Herramienta nueva **`consultar_habitos_obligatorios`** (solo lee, sin flag): los obligatorios, qué
+  se puede con todos los demás y cuáles están pausados hoy.
 - Las negativas de `proponer_pausar_habito`, `proponer_apagar_dia` y
   `proponer_horario_por_dia_de_semana` dicen el motivo **y** la salida, con una sola redacción
-  (`LoQueSiSePuede`): con un obligatorio solo se mueve la hora (desde mañana o para un día futuro);
-  uno de la base no se pausa, pero se apaga un día o ciertos días de la semana, o se cambia de hora.
+  (`LoQueSiSePuede`): con un obligatorio solo se mueve la hora (como horario general desde mañana, o
+  solo para un día futuro, si le quedan cambios esta semana). "Reactivar" algo que no está pausado lo
+  dice y apunta a encender el día, si lo que apagó fue un día.
 - Prompt (`renasia-sistema.st`): nunca un "no es posible" a secas; el día de hoy no se reacomoda
-  (D-91: la hora cambia desde mañana; hoy solo se puede apagar, si no es obligatorio); el día del
-  programa sale del sistema y no se resta a mano. `modo-en-vivo.st` repite la regla del motivo en dos
-  frases.
+  (D-91: la hora general cambia desde mañana; también un solo día futuro o un día de la semana desde
+  su próxima vez; hoy solo se puede apagar, si no es obligatorio); el día del programa sale del
+  sistema y no se resta a mano; "qué me toca hoy" se contesta con cuántos quedan y el más próximo.
+  `modo-en-vivo.st` repite la regla del motivo en dos frases.
 
-**Lo que no cambia:** ninguna regla de negocio. Qué es obligatorio lo sigue decidiendo `habits` (V18);
-el acompañante solo lo lee y lo explica. La pausa sigue existiendo solo para lo que se suma al plan.
+**Lo que no cambia:** ninguna regla de negocio. Qué es obligatorio lo sigue decidiendo `habits` (V18),
+y qué se puede pausar es lo mismo que ya permitía Plan; el acompañante solo lo lee, lo explica y usa
+los mismos casos de uso.
+
+> **Corregido 2026-09-25 (el mismo día).** La primera versión (`be5fc8a6`) decía aquí y le hacía
+> decir al acompañante que *"la pausa es solo para los que se suman al plan"* y que un hábito de la
+> base *"no se pausa"*. Era falso: el interruptor de Plan (`PlanScreen.aplicarEstadoHabito`) manda
+> primero el `PUT` que crea la fila y recién después el `PATCH` de la pausa (D-99), así que cualquier
+> hábito no obligatorio se pausa. Lo encontró la revisión de código antes de llegar a nadie. Ahora el
+> acompañante pausa igual que Plan, en vez de explicar una regla que no existe. También se corrigió
+> *"desde el día futuro que elija"*: con una fecha, el cambio de hora vale **solo ese día**.
 
 ---
 

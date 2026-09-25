@@ -1,11 +1,12 @@
 package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.api.PlanDeHabitosPort.HabitoDelPlan;
-import com.renaser.os.habits.api.PlanDeHabitosPort.HabitoObligatorio;
 import com.renaser.os.habits.api.PlanDeHabitosPort.HabitoSemanal;
 import com.renaser.os.habits.api.PlanDeHabitosPort.PlanDeHabitos;
 import com.renaser.os.habits.application.ports.in.desbloqueo.CambiarEstadoHabitoDelPlanUseCase;
 import com.renaser.os.habits.application.ports.in.desbloqueo.CambiarEstadoHabitoDelPlanUseCase.CambiarEstadoHabitoCommand;
+import com.renaser.os.habits.application.ports.in.desbloqueo.ElegirHabitoUseCase;
+import com.renaser.os.habits.application.ports.in.desbloqueo.ElegirHabitoUseCase.ElegirHabitoCommand;
 import com.renaser.os.habits.application.ports.in.eleccion.ElegirDiaSemanalUseCase;
 import com.renaser.os.habits.application.ports.in.eleccion.ElegirDiaSemanalUseCase.ElegirDiaSemanalCommand;
 import com.renaser.os.habits.application.ports.in.habito.ConsultarMisHabitosUseCase;
@@ -29,6 +30,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -44,6 +46,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -70,6 +73,8 @@ class PlanDeHabitosServiceTest {
     @Mock
     private ConsultarMisHabitosUseCase misHabitosUseCase;
     @Mock
+    private ElegirHabitoUseCase elegirHabitoUseCase;
+    @Mock
     private CambiarEstadoHabitoDelPlanUseCase cambiarEstadoUseCase;
     @Mock
     private ElegirDiaSemanalUseCase elegirDiaUseCase;
@@ -85,7 +90,7 @@ class PlanDeHabitosServiceTest {
 
     @BeforeEach
     void setUp() {
-        servicio = new PlanDeHabitosService(misHabitosUseCase, cambiarEstadoUseCase, elegirDiaUseCase, progresoPort,
+        servicio = new PlanDeHabitosService(misHabitosUseCase, elegirHabitoUseCase, cambiarEstadoUseCase, elegirDiaUseCase, progresoPort,
                 loadDesbloqueoPort, loadEleccionPort, CLOCK);
         aprendiz = UserId.of(UUID.randomUUID());
         lenient().when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(progreso(DIA_DE_HOY, false)));
@@ -126,20 +131,20 @@ class PlanDeHabitosServiceTest {
     }
 
     @Test
-    @DisplayName("E-245: los obligatorios salen de todos los que ve, aunque no esten desbloqueados")
-    void obligatoriosDeLaBase() {
+    @DisplayName("E-245: trae todos los que ve, obligatorios marcados; sin fila de desbloqueo no esta pausado")
+    void todosLosQueVe() {
         Habito clase = habito("Clase diaria", false, false);
         Habito leer = habito("Leer", true, false);
-        Habito pastilla = habito("Pastilla Renacer", false, false);
+        Habito escritura = habito("Escritura libre nocturna", true, false);
         when(misHabitosUseCase.consultar(aprendiz)).thenReturn(List.of(conDias(clase), conDias(leer),
-                conDias(pastilla)));
-        when(loadDesbloqueoPort.deParticipante(aprendiz)).thenReturn(List.of(sinPausa(leer)));
+                conDias(escritura)));
+        when(loadDesbloqueoPort.deParticipante(aprendiz)).thenReturn(List.of(pausado(leer, DOMINGO_EN_LIMA)));
 
-        PlanDeHabitos plan = servicio.planDe(aprendiz);
+        List<HabitoDelPlan> habitos = servicio.planDe(aprendiz).habitos();
 
-        assertThat(plan.obligatorios()).containsExactly(new HabitoObligatorio(clase.id().value(), "Clase diaria"),
-                new HabitoObligatorio(pastilla.id().value(), "Pastilla Renacer"));
-        assertThat(plan.habitos()).extracting(HabitoDelPlan::titulo).containsExactly("Leer");
+        assertThat(habitos).extracting(HabitoDelPlan::titulo, HabitoDelPlan::obligatorio, HabitoDelPlan::pausadoHoy)
+                .containsExactly(tuple("Clase diaria", true, false), tuple("Leer", false, true),
+                        tuple("Escritura libre nocturna", false, false));
     }
 
     @Test
@@ -162,7 +167,7 @@ class PlanDeHabitosServiceTest {
     }
 
     @Test
-    @DisplayName("pausar, reactivar y elegir dia delegan en los casos de uso de siempre, con el comando exacto")
+    @DisplayName("pausar asegura la fila y despues pausa, como el interruptor de Plan (D-99); reactivar y elegir dia delegan")
     void escriturasDelegan() {
         UUID habitoId = UUID.randomUUID();
         LocalDate hasta = LocalDate.of(2026, 10, 1);
@@ -171,7 +176,9 @@ class PlanDeHabitosServiceTest {
         servicio.reactivar(aprendiz, habitoId);
         servicio.elegirDiaSemanal(aprendiz, habitoId, DOMINGO_EN_LIMA);
 
-        verify(cambiarEstadoUseCase).cambiarEstado(
+        InOrder orden = inOrder(elegirHabitoUseCase, cambiarEstadoUseCase);
+        orden.verify(elegirHabitoUseCase).elegir(new ElegirHabitoCommand(aprendiz, HabitoId.of(habitoId), null));
+        orden.verify(cambiarEstadoUseCase).cambiarEstado(
                 new CambiarEstadoHabitoCommand(aprendiz, HabitoId.of(habitoId), false, hasta));
         verify(cambiarEstadoUseCase).cambiarEstado(
                 new CambiarEstadoHabitoCommand(aprendiz, HabitoId.of(habitoId), true, null));

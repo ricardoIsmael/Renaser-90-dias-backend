@@ -32,8 +32,10 @@ import java.util.stream.Collectors;
  * mismo caso de uso que {@code PATCH /api/v1/habit-unlocks/{habitId}}.
  *
  * <p><b>Valida antes de proponer con los datos de {@code habits}</b> para no ofrecer un boton que
- * va a fallar: el habito tiene que estar en su plan, no ser obligatorio, y el cambio tiene que
- * cambiar algo. "Hoy" y "pausado hoy" los resuelve {@code habits} en la zona del participante.
+ * va a fallar: el habito tiene que ser suyo, no ser obligatorio, y el cambio tiene que cambiar
+ * algo. "Hoy" y "pausado hoy" los resuelve {@code habits} en la zona del participante. Cualquier
+ * habito no obligatorio se pausa, tenga o no fila en los desbloqueos: al confirmar, {@code habits}
+ * la crea primero, igual que el interruptor de Plan (D-99, E-245).
  *
  * <p>Solo existe con {@code renaser.ia.acompanante.confirmacion-con-botones} prendido: sin botones
  * en la app, una propuesta no tiene quien la confirme.
@@ -101,7 +103,8 @@ public class PropuestaDePausarHabito implements HerramientaAgente {
     private ResultadoHerramienta proponerSiCorresponde(UserId actorId, PlanDelAprendiz plan, Pedido pedido) {
         Optional<HabitoDelPlan> habito = plan.habitoDelPlan(pedido.habitoId());
         if (habito.isEmpty()) {
-            return ResultadoHerramienta.fallo(porQueNoSePausa(plan, pedido.habitoId()));
+            return ResultadoHerramienta.fallo("Ese habito_id no es de ninguno de sus habitos: consulta primero "
+                    + "sus horarios y usa el habito_id que devuelven. " + pausables(plan));
         }
         Optional<String> impedimento = pedido.pausar() ? impedimentoParaPausar(habito.get(), plan, pedido)
                 : impedimentoParaReactivar(habito.get());
@@ -118,18 +121,6 @@ public class PropuestaDePausarHabito implements HerramientaAgente {
         return AvisoDePropuesta.creada(resumen, null);
     }
 
-    /**
-     * Un habito que no esta entre los que se suman al plan: o es obligatorio del programa, o es de la
-     * base de su dia. Antes los dos casos decian "no esta en su plan", y el modelo lo resumia en "no
-     * es posible pausarlo", sin motivo ni alternativa (E-245).
-     */
-    private static String porQueNoSePausa(PlanDelAprendiz plan, UUID habitoId) {
-        return plan.obligatorio(habitoId)
-                .map(obligatorio -> LoQueSiSePuede.obligatorio(obligatorio.titulo()))
-                .orElseGet(() -> "Ese habito no se pausa: la pausa es solo para los que se suman a su plan. "
-                        + LoQueSiSePuede.CON_UNO_DE_LA_BASE + "\n" + pausables(plan));
-    }
-
     private static Optional<String> impedimentoParaPausar(HabitoDelPlan habito, PlanDelAprendiz plan, Pedido pedido) {
         if (habito.obligatorio()) {
             return Optional.of(LoQueSiSePuede.obligatorio(habito.titulo()));
@@ -144,9 +135,11 @@ public class PropuestaDePausarHabito implements HerramientaAgente {
         return Optional.empty();
     }
 
+    /** Reactivar no es encender un dia apagado: si eso es lo que quiere, se lo dice (D-165). */
     private static Optional<String> impedimentoParaReactivar(HabitoDelPlan habito) {
         return habito.pausadoHoy() ? Optional.empty()
-                : Optional.of("'" + habito.titulo() + "' no esta pausado: ya le toca normalmente.");
+                : Optional.of("'" + habito.titulo() + "' no esta pausado: ya le toca normalmente. Si lo apago un "
+                        + "dia puntual, lo que corresponde es volver a encender ese dia.");
     }
 
     /** Lo que ve la persona junto a los botones: el cambio exacto, en sus fechas. */

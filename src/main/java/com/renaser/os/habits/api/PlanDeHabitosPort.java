@@ -7,9 +7,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * El plan de habitos del aprendiz visto desde otro modulo: que habitos lleva, cuales puede pausar,
- * cuales son obligatorios del programa y que dia de esta semana puede elegir para los de eleccion
- * semanal (2026-09-23; los obligatorios, 2026-09-25, D-165).
+ * El plan de habitos del aprendiz visto desde otro modulo: que habitos lleva, cuales son
+ * obligatorios del programa, cuales estan pausados y que dia de esta semana puede elegir para los
+ * de eleccion semanal (2026-09-23).
  *
  * <p>Primer consumidor: las herramientas {@code proponer_pausar_habito} y
  * {@code proponer_dia_de_habito_semanal} del acompanante de {@code rag} (fase 2, D-153), y despues
@@ -37,7 +37,10 @@ public interface PlanDeHabitosPort {
     PlanDeHabitos planDe(UserId participanteId);
 
     /**
-     * Pausa un habito de su plan. Delega en {@code CambiarEstadoHabitoDelPlanUseCase}.
+     * Pausa un habito, igual que el interruptor de Plan (D-99): primero asegura la fila en
+     * {@code desbloqueos_habito} con {@code ElegirHabitoUseCase} (idempotente) y despues pausa con
+     * {@code CambiarEstadoHabitoDelPlanUseCase}. Sin ese primer paso, un habito de la base del
+     * programa —que nunca tuvo fila— no se podia pausar desde el acompanante y si desde Plan (E-245).
      *
      * @param hastaInclusive ultimo dia de la pausa en su zona; {@code null} = sin fecha de fin
      */
@@ -50,24 +53,19 @@ public interface PlanDeHabitosPort {
     void elegirDiaSemanal(UserId actorId, UUID habitoId, LocalDate fecha);
 
     /**
-     * @param hoy          el dia de hoy en la zona del participante
-     * @param habitos      los habitos activos de su plan ({@code desbloqueos_habito})
-     * @param semanales    los habitos de eleccion semanal que puede ver
-     * @param obligatorios los habitos que ve y que no puede apagar ningun dia ni pausar
-     *                     ({@code habitos.desactivable = false}, V18). Son de la base del programa:
-     *                     casi nunca estan en {@code habitos}, que son los desbloqueos
+     * @param hoy       el dia de hoy en la zona del participante
+     * @param habitos   TODOS los habitos que ve (catalogo activo y personales suyos), en el orden en
+     *                  que los pinta Plan, con los obligatorios marcados. Antes eran solo los que
+     *                  tenian fila en {@code desbloqueos_habito}, que arranca vacia para todos (D-99):
+     *                  los de la base y los obligatorios no aparecian (E-245)
+     * @param semanales los habitos de eleccion semanal que puede ver
      */
-    record PlanDeHabitos(LocalDate hoy, List<HabitoDelPlan> habitos, List<HabitoSemanal> semanales,
-                         List<HabitoObligatorio> obligatorios) {
-    }
-
-    /** Un habito obligatorio del programa (V18), con el titulo que ve el aprendiz. */
-    record HabitoObligatorio(UUID habitoId, String titulo) {
+    record PlanDeHabitos(LocalDate hoy, List<HabitoDelPlan> habitos, List<HabitoSemanal> semanales) {
     }
 
     /**
-     * @param obligatorio  no se puede pausar ({@code habitos.desactivable = false}, V18)
-     * @param pausadoHoy   pausado HOY segun {@code DesbloqueoHabito.estaPausadoEl}
+     * @param obligatorio  no se puede pausar ni apagar ningun dia ({@code habitos.desactivable = false}, V18)
+     * @param pausadoHoy   pausado HOY segun {@code DesbloqueoHabito.estaPausadoEl}; sin fila, {@code false}
      * @param pausadoHasta ultimo dia de la pausa registrada; {@code null} si es indefinida o no hay
      */
     record HabitoDelPlan(UUID habitoId, String titulo, boolean obligatorio, boolean pausadoHoy,

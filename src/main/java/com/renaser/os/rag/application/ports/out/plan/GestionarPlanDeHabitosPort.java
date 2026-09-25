@@ -26,7 +26,11 @@ public interface GestionarPlanDeHabitosPort {
     /** @throws RuntimeException si no hay participacion o la cuenta esta suspendida */
     PlanDelAprendiz planDe(UserId participanteId);
 
-    /** @param hastaInclusive {@code null} = pausa sin fecha de fin */
+    /**
+     * Igual que el interruptor de Plan: {@code habits} agrega el habito al plan si no estaba y lo pausa.
+     *
+     * @param hastaInclusive {@code null} = pausa sin fecha de fin
+     */
     void pausar(UserId actorId, UUID habitoId, LocalDate hastaInclusive);
 
     void reactivar(UserId actorId, UUID habitoId);
@@ -34,13 +38,11 @@ public interface GestionarPlanDeHabitosPort {
     void elegirDiaSemanal(UserId actorId, UUID habitoId, LocalDate fecha);
 
     /**
-     * @param hoy          el dia de hoy en la zona del participante, resuelto por {@code habits}
-     * @param obligatorios los que no se apagan ningun dia ni se pausan (V18). Son de la base del
-     *                     programa y casi nunca estan en {@code habitos}, que son los que se suman al
-     *                     plan (D-165)
+     * @param hoy     el dia de hoy en la zona del participante, resuelto por {@code habits}
+     * @param habitos TODOS los habitos que ve, con los obligatorios marcados: cualquiera que no sea
+     *                obligatorio se puede pausar, igual que en Plan (D-165, E-245)
      */
-    record PlanDelAprendiz(LocalDate hoy, List<HabitoDelPlan> habitos, List<HabitoSemanal> semanales,
-                           List<HabitoObligatorio> obligatorios) {
+    record PlanDelAprendiz(LocalDate hoy, List<HabitoDelPlan> habitos, List<HabitoSemanal> semanales) {
 
         public Optional<HabitoDelPlan> habitoDelPlan(UUID habitoId) {
             return habitos.stream().filter(habito -> habito.habitoId().equals(habitoId)).findFirst();
@@ -50,13 +52,10 @@ public interface GestionarPlanDeHabitosPort {
             return semanales.stream().filter(habito -> habito.habitoId().equals(habitoId)).findFirst();
         }
 
-        public Optional<HabitoObligatorio> obligatorio(UUID habitoId) {
-            return obligatorios.stream().filter(habito -> habito.habitoId().equals(habitoId)).findFirst();
+        /** Los que no se apagan ningun dia ni se pausan (V18). */
+        public List<HabitoDelPlan> obligatorios() {
+            return habitos.stream().filter(HabitoDelPlan::obligatorio).toList();
         }
-    }
-
-    /** Un habito obligatorio del programa, con el titulo que ve el aprendiz. */
-    record HabitoObligatorio(UUID habitoId, String titulo) {
     }
 
     /**

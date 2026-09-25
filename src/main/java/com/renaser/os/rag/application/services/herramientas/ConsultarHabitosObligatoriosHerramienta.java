@@ -1,7 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
-import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoObligatorio;
+import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoDelPlan;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.PlanDelAprendiz;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
  * buscaba en los desbloqueos, donde los obligatorios no estan (E-245).
  *
  * <p>Solo lee: no necesita el flag de botones. Los obligatorios los decide {@code habits}
- * ({@code habitos.desactivable = false}, V18), no esta clase.
+ * ({@code habitos.desactivable = false}, V18), no esta clase. Todo lo demas se pausa como en Plan.
  */
 @Component
 public class ConsultarHabitosObligatoriosHerramienta implements HerramientaAgente {
@@ -30,8 +30,8 @@ public class ConsultarHabitosObligatoriosHerramienta implements HerramientaAgent
     public static final String NOMBRE = "consultar_habitos_obligatorios";
 
     private static final DefinicionHerramienta DEFINICION = new DefinicionHerramienta(NOMBRE,
-            "Dice cuales habitos son obligatorios del programa (no se apagan ningun dia ni se pausan), cuales se "
-                    + "pueden pausar y que si se puede cambiar de cada uno. Usala antes de responder si la persona "
+            "Dice cuales habitos son obligatorios del programa (no se apagan ningun dia ni se pausan), que si se "
+                    + "puede con cada habito y cuales estan pausados hoy. Usala antes de responder si la persona "
                     + "pide apagar, pausar, quitar o saltarse un habito, o pregunta cuales son obligatorios o que "
                     + "puede cambiar de sus habitos.",
             List.of());
@@ -53,25 +53,26 @@ public class ConsultarHabitosObligatoriosHerramienta implements HerramientaAgent
     }
 
     static String textoDe(PlanDelAprendiz plan) {
-        return obligatorios(plan) + "\n" + pausables(plan) + "\n" + LoQueSiSePuede.CON_UNO_DE_LA_BASE;
+        return obligatorios(plan) + "\n" + LoQueSiSePuede.CON_LOS_DEMAS + "\n" + pausados(plan);
     }
 
     private static String obligatorios(PlanDelAprendiz plan) {
-        if (plan.obligatorios().isEmpty()) {
+        List<HabitoDelPlan> obligatorios = plan.obligatorios();
+        if (obligatorios.isEmpty()) {
             return "No tiene habitos obligatorios del programa.";
         }
         return "Obligatorios del programa (no se apagan ningun dia ni se pausan): "
-                + plan.obligatorios().stream().map(HabitoObligatorio::titulo).collect(Collectors.joining(", "))
+                + obligatorios.stream().map(HabitoDelPlan::titulo).collect(Collectors.joining(", "))
                 + ". " + LoQueSiSePuede.CON_UN_OBLIGATORIO;
     }
 
-    /** La pausa es solo para los que se suman a su plan (los desbloqueos), y nunca para un obligatorio. */
-    private static String pausables(PlanDelAprendiz plan) {
-        List<String> titulos = plan.habitos().stream().filter(habito -> !habito.obligatorio())
-                .map(habito -> habito.titulo() + (habito.pausadoHoy() ? " (hoy esta pausado)" : ""))
+    /** Los pausados hoy: para no ofrecer pausar lo que ya lo esta, ni olvidar que se pueden reactivar. */
+    private static String pausados(PlanDelAprendiz plan) {
+        List<String> titulos = plan.habitos().stream().filter(HabitoDelPlan::pausadoHoy)
+                .map(habito -> habito.titulo() + (habito.pausadoHasta() == null ? " (sin fecha de fin)"
+                        : " (hasta el " + FechaDelPlan.legible(habito.pausadoHasta()) + ")"))
                 .toList();
-        return titulos.isEmpty() ? "No tiene habitos que se puedan pausar: la pausa es solo para los que se suman "
-                + "a su plan." : "Se pueden pausar (hasta una fecha o sin fin) solo los que se suman a su plan: "
-                + String.join(", ", titulos) + ".";
+        return titulos.isEmpty() ? "Hoy no tiene habitos pausados."
+                : "Pausados hoy: " + String.join(", ", titulos) + ".";
     }
 }
