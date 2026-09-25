@@ -8900,3 +8900,29 @@ verá cuando lo reactive" (`HorariosParaProponer.siEstaPausado`).
 `PropuestaDeApagarDiaTest.fueraDelProgramaConLaFechaDeHoy`, `HerramientasAgenteServiceTest.pausadosAparte`
 y `PromptSistemaRenasiaTest.rondaDos`. La lección general: cuando el modelo necesita un dato para no
 equivocarse, dárselo en la salida de la herramienta rinde más que otra regla en el prompt.
+
+## E-276 · "El 2 de octubre ya queda fuera de tus 90 días", en el día 18: el modelo no sabía el año
+
+**Síntoma (prueba final de la batería, 2026-09-25, 15:52).** A "el viernes 2 de octubre quiero hacer
+ducha fría a las 8 de la noche" el acompañante contestó: *"El 2 de octubre ya queda fuera de tus 90
+días de programa, así que no se pueden programar hábitos para esa fecha."* Es el día 25. Una hora
+antes, el mismo caso había salido bien.
+
+**Causa real.** El prompt decía "Hoy es su día 18 de 90", pero no la fecha. Para armar "2 de
+octubre" como `yyyy-MM-dd`, el modelo ponía el año que recordaba de su entrenamiento, y la
+herramienta rechazaba con razón una fecha fuera del programa. El arreglo de E-275, que agrega "hoy
+es…" al rechazo, no alcanzó: el modelo repitió el rechazo en vez de reintentar. `habits` calcula
+bien el día de una fecha futura (`HorarioDelDiaFinderService`: día de hoy más los días que faltan);
+el error estaba en la fecha que llegaba.
+
+**Solución.** `SituacionDelAprendiz` trae la fecha de hoy en la zona de la persona (regla 02:
+`clock.now().atZone(zona)`), y el prompt dice "Hoy es viernes 25/09/2026, su día 18 de 90…". Vale
+para el chat y para la voz en vivo. La regla del prompt dice que toda fecha se arma a partir de esa,
+nunca de memoria.
+
+**Cómo evitar que vuelva a pasar.**
+- `ConsultarSituacionDelAprendizAdapterTest.hoyEnSuZona`, con el reloj a las 03:00 UTC, que en Lima
+  todavía es el día anterior.
+- `GoogleGenAiRenasiaChatAdapterTest.laFechaDeHoyLlegaAlPrompt`.
+- La lección: un dato que el modelo necesita para no equivocarse va en el prompt o en la salida de la
+  herramienta; nunca se da por sabido.
