@@ -8471,3 +8471,44 @@ teclas le llegan a la app) y aceptar un parecido alto con lo escrito.
 **Cómo evitar que vuelva a pasar.** Al automatizar la app en modo desarrollo, nunca mandar texto
 largo con `adb input text` de una vez. Si la pantalla queda en blanco y la app vuelve sola, es una
 recarga, no una caída: el PID de la app no cambia.
+
+## E-273 · El primer resumen de la memoria del acompañante guardó cómo dormía y sus preocupaciones
+
+**Síntoma (D-167, primera compactación real, 2026-09-25).** En el perfil, bajo "Lo que venían
+conversando", apareció: *"La persona conversó sobre su trabajo y la dificultad para conciliar el sueño
+debido a las preocupaciones laborales."* Justo encima, la misma pantalla dice "Nunca guarda cómo te
+sientes ni nada de tu salud". Los recuerdos por categoría salieron bien; lo que se coló fue el resumen.
+
+**Causa real.** Dos capas y las dos tenían el mismo hueco. El prompt de compactación listaba ánimo,
+ansiedad, tristeza, crisis y diagnósticos, pero no el sueño ni las preocupaciones, y no decía que la
+regla vale también para el resumen. El filtro del dominio (`Compactacion.SENSIBLES`) busca raíces y
+tampoco tenía "preocup" ni nada sobre dormir.
+
+**Solución.** El prompt nombra preocupaciones, estrés, cansancio, cómo duerme, miedo, culpa,
+frustración y desánimo, y dice que en el resumen va solo el tema práctico ("habló de su trabajo"). El
+filtro suma esas raíces; "sueño" solo no está, porque "su sueño es abrir un negocio" es una meta. El
+resumen que ya estaba guardado se borró al olvidar un recuerdo desde el perfil (borrar uno borra
+también el resumen).
+
+**Cómo evitar que vuelva a pasar.** `CompactacionTest.resumenConPreocupacionesYSueno` usa el texto
+real, y falla contra la lista vieja. Cuando aparezca otra fuga, se agrega su texto literal a esa
+prueba, no solo la raíz a la lista.
+
+## E-274 · El botón del chat dejó de abrir el panel después de un error de Metro y dos recargas
+
+**Síntoma.** En el emulador, después de que Metro respondiera *"The development server returned
+response error code: 500 … Got unexpected undefined … nullthrows.js"* y de recargar con "r r", la app
+cargaba bien y se podía navegar, pero tocar el botón flotante del chat no abría nada, en ninguna
+pestaña. Sin errores de JS a la vista.
+
+**Causa real.** No confirmada. El error de Metro fue pasajero: vino de agregar archivos con Metro
+corriendo (un fast-forward de la rama), y al pedir el bundle de nuevo respondió 200. Lo que quedó
+trabado fue el `Modal` del panel después de las recargas: con la app cerrada y abierta de nuevo,
+funcionó al primer toque.
+
+**Solución.** `adb shell am force-stop com.renaser.app` y abrirla de nuevo. No hubo que reiniciar
+Metro.
+
+**Cómo evitar que vuelva a pasar.** Si después de una recarga un Modal no abre, cerrar la app entera
+antes de buscar un bug en el código. No es un problema de la app instalada por una persona: solo pasa
+con las recargas de desarrollo.
