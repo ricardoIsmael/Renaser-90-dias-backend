@@ -1059,5 +1059,113 @@
    ]
   ],
   "nota": "hace la primera pregunta exacta, o dice que ya esta entregada hoy (se entrego en la prueba anterior)"
+ },
+ {
+  "id": 111,
+  "grupo": "objetivos",
+  "q": "como voy con mi semana?",
+  "propuesta": false,
+  "nota": "D-177: consultar_rocas progreso o desvio; datos de herramienta (hoy sin rocas; miercoles 23 con 3 sin completar)"
+ },
+ {
+  "id": 112,
+  "grupo": "objetivos",
+  "q": "me estoy desviando de mis objetivos?",
+  "propuesta": false,
+  "nota": "D-177: consultar_desvio; hechos sin culpa, nombra el objetivo y propone UN paso concreto"
+ },
+ {
+  "id": 113,
+  "grupo": "objetivos",
+  "q": "cual es mi objetivo de 90 dias en cuerpo?",
+  "propuesta": false,
+  "nota": "D-177: alcance noventa; meta y avance de la herramienta, no inventados"
+ },
+ {
+  "id": 114,
+  "grupo": "objetivos",
+  "q": "que corregi la semana pasada?",
+  "propuesta": false,
+  "nota": "D-177: cierre de la semana anterior; si no hay, lo dice"
+ },
+ {
+  "id": 115,
+  "grupo": "objetivos",
+  "q": "agrega para el lunes una accion de cuerpo: caminar 30 minutos a las 7",
+  "propuesta": true,
+  "max_propuestas": 1,
+  "nota": "D-177: proponer_agregar_accion para un dia futuro, directo"
+ },
+ {
+  "id": 116,
+  "grupo": "objetivos",
+  "q": "agrega hoy una accion de trabajo: llamar a un cliente",
+  "propuesta": false,
+  "nota": "hoy no se reacomoda: motivo y ofrece otro dia"
+ },
+ {
+  "id": 117,
+  "grupo": "objetivos",
+  "q": "ya hice mi accion de cuerpo de hoy, registrala",
+  "propuesta": false,
+  "nota": "D-178: hoy no tiene rocas planificadas: lo dice; no inventa ni deja tarjeta"
+ },
+ {
+  "id": 118,
+  "grupo": "objetivos",
+  "q": "cambia el obstaculo de mi objetivo de cuerpo a poco tiempo",
+  "propuesta": false,
+  "nota": "D-177: sabado, ventana de edicion cerrada: regla real y alternativa (sin inventar)"
+ },
+ {
+  "id": 119,
+  "grupo": "objetivos",
+  "q": "armame el plan de manana",
+  "propuesta": false,
+  "nota": "ventana 18:00: si no abrio, lo dice y ofrece armarlo luego; si abrio, propone plan del dia; no inventa acciones sin preguntar"
+ },
+ {
+  "id": 120,
+  "grupo": "objetivos",
+  "q": "esta semana me salte casi todo, que hago?",
+  "propuesta": false,
+  "nota": "D-175/177: sin culpa, datos del desvio, nombra objetivo, un paso concreto"
+ },
+ {
+  "id": 121,
+  "grupo": "agenda",
+  "q": "estudio los sabados de 8 a 12",
+  "propuesta": true,
+  "max_propuestas": 1,
+  "nota": "agenda: tarjeta Y pregunta en la misma frase"
+ },
+ {
+  "id": 122,
+  "grupo": "agenda",
+  "q": "si, guardalo",
+  "propuesta": false,
+  "nota": "no crea otra: dice que confirme la tarjeta que ya tiene"
+ },
+ {
+  "id": 123,
+  "grupo": "estado",
+  "q": "pausa ducha fria hasta el domingo",
+  "propuesta": true,
+  "max_propuestas": 1,
+  "nota": "ducha fria esta PAUSADA sin fin: cambia la pausa al domingo; nunca 'no la encuentro'"
+ },
+ {
+  "id": 124,
+  "grupo": "estado",
+  "q": "me salto la ultima comida hoy, no tengo tiempo",
+  "propuesta": false,
+  "nota": "ULTIMA COMIDA ya esta hecha hoy: lo dice"
+ },
+ {
+  "id": 125,
+  "grupo": "estado",
+  "q": "se me paso la hora del jugo verde, lo puedo registrar?",
+  "propuesta": false,
+  "nota": "JUGO VERDE ya esta hecho hoy: lo dice, sin boton"
  }
 ]

@@ -9322,3 +9322,6 @@ con la fecha de la roca), no cambiar la regla.
 
 **Cómo evitar que vuelva a pasar.** Al agregar una guarda de "del día" (E-288), buscar las pruebas que
 arman filas con fechas fijas y correr `verify` completo antes de commitear.
+
+> **Resuelto 2026-09-26 (commit 406135f4).** La prueba ahora arma la roca con la fecha de hoy en la zona del
+> participante, con el mismo reloj del contexto. La regla de E-288 no cambió.
