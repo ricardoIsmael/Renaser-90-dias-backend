@@ -108,6 +108,16 @@ public class PropuestasAgenteService
     }
 
     @Override
+    public Optional<PropuestaCreada> pendienteDe(UserId actorId, String herramienta) {
+        Instant ahora = clock.now();
+        return loadPort.pendientesCreadasDesde(actorId, ahora.minus(vigencia)).stream()
+                .filter(propuesta -> herramienta.equals(propuesta.invocacion().nombre()))
+                .filter(propuesta -> !propuesta.estaVencidaEn(ahora))
+                .findFirst()
+                .map(PropuestasAgenteService::aCreada);
+    }
+
+    @Override
     public List<PropuestaCreada> pendientesCreadasDesde(UserId actorId, Instant desde) {
         Instant ahora = clock.now();
         return loadPort.pendientesCreadasDesde(actorId, desde).stream()

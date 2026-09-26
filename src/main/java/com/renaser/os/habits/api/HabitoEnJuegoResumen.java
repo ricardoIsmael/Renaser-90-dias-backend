@@ -32,13 +32,26 @@ import java.util.UUID;
  *                       (2026-09-26, D-171). El acompanante la usa para no ofrecer la camara en la
  *                       Clase diaria, que se cierra con su resumen y no por el camino generico.
  *                       Nunca se empareja por {@code titulo}: la persona lo puede renombrar (D-133)
+ * @param tituloDelPrograma el titulo del catalogo cuando la persona renombro el habito (D-133), o
+ *                       {@code null} si no lo renombro: entonces {@code titulo} ya es el del
+ *                       programa (2026-09-26, E-290). Sin el, el acompanante no podia unir "jugo
+ *                       verde" con "Batido de papaya". Del renombre solo sale el titulo: el motivo
+ *                       puede tener datos de salud y no sale de {@code habits}
  */
 public record HabitoEnJuegoResumen(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
                                     Integer puntosMaximos, Instant plazo, boolean exigeEvidencia,
-                                    List<TramoPuntos> tramos, String claveSistema) {
+                                    List<TramoPuntos> tramos, String claveSistema, String tituloDelPrograma) {
 
     public HabitoEnJuegoResumen {
         tramos = tramos == null ? List.of() : List.copyOf(tramos);
+    }
+
+    /** Un habito sin renombre. */
+    public HabitoEnJuegoResumen(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
+                                Integer puntosMaximos, Instant plazo, boolean exigeEvidencia,
+                                List<TramoPuntos> tramos, String claveSistema) {
+        this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, tramos, claveSistema,
+                null);
     }
 
     /**

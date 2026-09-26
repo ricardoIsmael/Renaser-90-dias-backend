@@ -10,6 +10,7 @@ import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -19,6 +20,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -162,6 +164,51 @@ class PropuestaDePausarHabitoTest {
                 .isInstanceOf(ResultadoHerramienta.Fallo.class);
 
         verifyNoInteractions(proponerAccion);
+    }
+
+    /**
+     * E-292: "pausa ducha fria hasta el domingo", con la ducha pausada SIN fin, termino en "ya se
+     * encuentra pausado". Con la fecha pedida es un cambio de la pausa y se propone.
+     */
+    @Test
+    @DisplayName("E-292: pausado sin fin y pide hasta el domingo: propone cambiar la pausa a esa fecha")
+    void pausadoSinFinPideFecha() {
+        conPlan(leer(true, null));
+
+        ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, invocacion(LEER.toString(), "pausar",
+                "2026-09-27"));
+
+        ArgumentCaptor<InvocacionHerramienta> guardada = ArgumentCaptor.forClass(InvocacionHerramienta.class);
+        ArgumentCaptor<String> resumen = ArgumentCaptor.forClass(String.class);
+        verify(proponerAccion).proponer(eq(APRENDIZ), guardada.capture(), resumen.capture());
+        assertThat(guardada.getValue().argumento(PropuestaDePausarHabito.ARGUMENTO_HASTA)).isEqualTo("2026-09-27");
+        assertThat(resumen.getValue()).startsWith("Cambiar la pausa de 'Leer': ahora hasta el");
+        assertThat(resultado).isInstanceOf(ResultadoHerramienta.Exito.class);
+    }
+
+    @Test
+    @DisplayName("E-292: pausado sin fin y el modelo omitio la fecha: le dice que vuelva con 'hasta' si la pidio")
+    void pausadoSinFinSinFechaOrientaAlModelo() {
+        conPlan(leer(true, null));
+
+        ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, invocacion(LEER.toString(), "pausar", null));
+
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo())
+                .startsWith("'Leer' ya esta pausado sin fecha de fin.")
+                .contains("vuelve a llamar con 'pausar' y esa fecha en 'hasta'");
+        verifyNoInteractions(proponerAccion);
+    }
+
+    @Test
+    @DisplayName("E-292: pausado hasta el domingo y pide el domingo: solo dice que ya esta, sin orientar a otra fecha")
+    void pausadoHastaLaMismaFecha() {
+        conPlan(leer(true, LocalDate.of(2026, 9, 27)));
+
+        ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, invocacion(LEER.toString(), "pausar",
+                "2026-09-27"));
+
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).startsWith("'Leer' ya esta pausado hasta el")
+                .doesNotContain("vuelve a llamar");
     }
 
     @Test

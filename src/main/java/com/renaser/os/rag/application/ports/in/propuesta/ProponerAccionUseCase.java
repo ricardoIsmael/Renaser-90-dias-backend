@@ -4,6 +4,7 @@ import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -29,6 +30,17 @@ public interface ProponerAccionUseCase {
      *                   exacto ("Meditar: de 06:00 a 07:00 desde manana")
      */
     PropuestaCreada proponer(UserId actorId, InvocacionHerramienta invocacion, String resumen);
+
+    /**
+     * La propuesta PENDIENTE y sin vencer de esa herramienta que la persona todavia puede confirmar,
+     * con cualquier argumento (E-291). Mira la misma ventana que el deduplicado de {@link #proponer}:
+     * una pendiente sin vencer se creo como mucho hace la vigencia. Vacio si no hay ninguna.
+     *
+     * <p>Existe porque el deduplicado de D-176 solo ve tarjetas IDENTICAS: a un "si, guardalo" el
+     * modelo dejo otra tarjeta de agenda con dias inventados, y como los argumentos no coincidian
+     * salio la segunda.
+     */
+    Optional<PropuestaCreada> pendienteDe(UserId actorId, String herramienta);
 
     /**
      * @param yaEstabaPendiente la propuesta ya existia y no se creo otra (D-176): quien propone se lo

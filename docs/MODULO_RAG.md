@@ -1131,6 +1131,11 @@ actuar, el modelo los sigue pidiendo a las herramientas. Así se ve, debajo del 
     - CAMINAR: vencido (se le paso la hora)
     Pausados (existen, pero hoy no se le piden): DUCHA FRIA (hasta el domingo 27/09), YOGA (sin fecha de fin).
 
+> **Corregido 2026-09-26 (D-179, E-289/E-290).** El ejemplo de arriba era el formato original: una
+> línea por hábito con `hecho` al final. Con ese formato el modelo igual contestó a «me salto la ultima
+> comida» que saltársela lo alejaba de su objetivo. Ahora lo hecho abre la lista en su propia línea con
+> la instrucción pegada, y un hábito renombrado lleva también el título del programa. Ver D-179.
+
 - **Quién lo arma:** `SituacionDelTurnoService` (caso de uso `ConsultarSituacionDelTurnoUseCase`), con
   los MISMOS puertos que las herramientas: `ConsultarAgendaHabitosPort.deHoyDe` (lo que usa
   `consultar_habitos_del_dia`; los títulos ya vienen con los renombres de D-133) y
@@ -1324,6 +1329,76 @@ inválido; sin acceso), `EventoRenasiaSseMapperTest` y `VozEnVivoWebSocketHandle
 `destino`), `ConversacionRenasiaServiceTest` y `ConversacionEnVivoServiceTest` (respaldo propio),
 `ConsultarRocasHerramientaTest` (`roca_id` en hoy), `RocasDelAprendizServiceTest` (el id cruza la
 frontera) y `PromptSistemaRenasiaTest.accionDelDiaConLaCamara`. Sin migración.
+
+### D-179 — El estado de hoy le gana a la regla de saltarse, los renombres llevan los dos nombres, una sola tarjeta de agenda (2026-09-26)
+
+**El problema (batería contra Gemini flash-lite, backend local con la situación de D-176).** Cuatro
+respuestas con el dato correcto ya en el prompt o al alcance de una herramienta:
+
+| Pedido | Respuesta | Qué había | Error |
+|---|---|---|---|
+| «me salto la ultima comida hoy, no tengo tiempo» | *"Saltarte la última comida del día te aleja de tu objetivo… hazla más tarde"* | `ÚLTIMA COMIDA DEL DÍA: hecho` en la situación | E-289 |
+| «se me paso la hora del jugo verde, lo puedo registrar?» | *"Sí, puedes registrarlo"* | hecho, pero renombrado «Batido de papaya» (D-133) y la situación solo traía ese nombre | E-290 |
+| «estudio los sabados de 8 a 12» → «si, guardalo» | segunda tarjeta de agenda, con «sabado, domingo» inventado | la primera tarjeta seguía pendiente; el deduplicado de D-176 solo ve argumentos idénticos | E-291 |
+| «pausa ducha fria hasta el domingo» (pausada sin fin) | *"ya se encuentra pausado"* | la herramienta propone el cambio si recibe `hasta`; el modelo no lo mandó o no la llamó | E-292 |
+
+**1. La situación: lo hecho primero, en su línea.** `HabitosDeHoyEnElPrompt` parte la lista en dos:
+
+    Hoy es sábado 26/09/2026, su dia 12 de 90, en la fase 2 de 4.
+    Sus habitos de hoy, al empezar este turno:
+    Ya hechos hoy (no le propongas hacerlos, saltarlos ni registrarlos otra vez): Batido de papaya (JUGO VERDE del programa), ULTIMA COMIDA DEL DIA.
+    Los demas de hoy:
+    - MEDITAR: pendiente, pide foto
+    - CAMINAR: vencido (se le paso la hora)
+    Pausados (existen, pero hoy no se le piden): DUCHA FRIA (sin fecha de fin).
+
+Sin hechos dice `Ya hechos hoy: ninguno todavia.`; si hizo todos, `Los demas de hoy: ninguno, ya hizo todos.`
+
+**2. Los dos nombres de un hábito renombrado.** El título del catálogo viaja por `habits.api`, sin el
+motivo del renombre (puede tener datos de salud): `TracksDelDiaProyeccionService` lo pone en
+`TrackDelDiaConCatalogo.tituloDelPrograma` solo si hay renombre con un título distinto (si no,
+`null`); `AgendaDelDiaFinderService` lo pasa a `HabitoEnJuegoResumen.tituloDelPrograma`, y de ahí a
+`ConsultarAgendaHabitosPort.HabitoDelDia` y a `HabitosDeHoy.HabitoDeHoy`. `consultar_habitos_del_dia`
+también lo muestra: `id=… | Batido de papaya (JUGO VERDE del programa) | estado=…`. Los constructores
+viejos siguen (sin renombre), así que ningún llamador existente cambió. No viaja al móvil
+(`RegistroHabitoConCatalogoResponse` no se tocó). Los pausados siguen con el título del catálogo, como
+antes.
+
+**3. Una sola tarjeta de agenda a la vez.** `ProponerAccionUseCase.pendienteDe(actor, herramienta)`
+devuelve la PENDIENTE y sin vencer de esa herramienta, con cualquier argumento, en la misma ventana que
+el deduplicado de D-176 (la vigencia, 10 min por defecto). `proponer_guardar_agenda` la mira antes de
+proponer: si hay una, no crea otra y le contesta al modelo *"Ya tiene una tarjeta de agenda pendiente
+(…): no se creo otra. TODAVIA NO esta guardado. Dile en una frase que la confirme con el boton de esa
+tarjeta…"*. Argumento opcional nuevo `cambia_la_pendiente='si'`: solo cuando la persona pidió cambiar
+los días o las horas; no se guarda en la propuesta. Si la lectura falla, se propone igual. Que los días
+y las horas salgan de lo que ella dijo no lo puede saber el servidor: eso lo dice el prompt.
+
+**4. Pausa con otra fecha.** La lógica ya proponía «Cambiar la pausa de 'X': ahora hasta el …» cuando
+el hábito estaba pausado sin fin y llegaba `hasta` (ahora con prueba). Cambió el texto para el modelo:
+la descripción dice «usa 'pausar' con esa fecha aunque ya figure pausado», y si el modelo pide pausar
+sin `hasta` un hábito ya pausado sin fin, el fallo le dice que vuelva con la fecha si la persona la
+pidió. «Ya está pausado hasta X» solo cuando X es la fecha pedida.
+
+**5. Prompt.** Mirar si ya está hecho es el PRIMER paso de «me salto X» (antes de la regla de D-175) y
+de «registrar/marcar», con la respuesta exacta *"Ese ya lo registraste hoy, no tienes que hacer nada
+mas"*; «puede registrarlo aunque se le pasó la hora» vale solo si no está hecho; un renombrado puede
+nombrarse de las dos formas; un «sí/guárdalo/dale» después de la tarjeta es confirmar con el botón,
+nunca otra propuesta, y los días y horas no se completan ni se inventan; «pausa X hasta el domingo»
+con X ya pausado sin fin se propone.
+
+**Sin verificar contra el modelo:** las pruebas cubren el texto y la lógica; si flash-lite ahora
+contesta bien, lo dice la próxima corrida de la batería. **Pendiente, sin tocar:** con
+`cambia_la_pendiente='si'` la tarjeta anterior sigue pendiente hasta vencer (no se cancela sola).
+
+Pruebas: `HabitosDeHoyEnElPromptTest` (`hechosPrimero`, `ningunoOTodos`, `renombradoConLosDosNombres`),
+`SituacionDelTurnoServiceTest.renombradoConTituloDelPrograma`,
+`TracksDelDiaProyeccionServiceTest.elTituloEsElNombrePropioCuandoLaPersonaReemplazoElHabito`,
+`AgendaDelDiaFinderServiceTest.renombradoLlevaElTituloDelPrograma`,
+`HerramientasAgenteServiceTest.renombradoConTituloDelPrograma`,
+`PropuestasAgenteServiceTest.pendienteDeUnaHerramienta`, `AgendaGuardadaHerramientasTest`
+(`segundaTarjetaBloqueada`, `cambiarLaPendienteSiPropone`), `PropuestaDePausarHabitoTest`
+(`pausadoSinFinPideFecha`, `pausadoSinFinSinFechaOrientaAlModelo`, `pausadoHastaLaMismaFecha`),
+`PromptSistemaRenasiaTest.reglasDeLaBateriaFlashLite`.
 
 ## 4. Estructura del módulo
 

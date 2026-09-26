@@ -91,6 +91,18 @@ class SituacionDelTurnoServiceTest {
     }
 
     @Test
+    @DisplayName("E-290: un habito renombrado lleva tambien el titulo del programa")
+    void renombradoConTituloDelPrograma() {
+        when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
+        when(agendaPort.deHoyDe(APRENDIZ)).thenReturn(List.of(new HabitoDelDia(UUID.randomUUID(), "Batido de papaya",
+                "COMPLETADO", null, null, null, true, List.of(), null, "JUGO VERDE")));
+        conPlan();
+
+        assertThat(service.de(APRENDIZ).orElseThrow().habitos().deHoy()).containsExactly(
+                new HabitoDeHoy("Batido de papaya", EstadoDeHoy.HECHO, true, "JUGO VERDE"));
+    }
+
+    @Test
     @DisplayName("el dia, la fase y la fecha siguen siendo los del puerto de siempre")
     void conservaLaSituacion() {
         when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));

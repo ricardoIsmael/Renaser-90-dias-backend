@@ -42,12 +42,58 @@ class HabitosDeHoyEnElPromptTest {
         assertThat(texto).isEqualTo("""
                 Hoy es sábado 26/09/2026, su dia 12 de 90, en la fase 2 de 4.
                 Sus habitos de hoy, al empezar este turno:
-                - JUGO VERDE: hecho
-                - ULTIMA COMIDA: hecho
+                Ya hechos hoy (no le propongas hacerlos, saltarlos ni registrarlos otra vez): JUGO VERDE, \
+                ULTIMA COMIDA.
+                Los demas de hoy:
                 - MEDITAR: pendiente, pide foto
                 - CAMINAR: vencido (se le paso la hora)
                 Pausados (existen, pero hoy no se le piden): DUCHA FRIA (hasta el domingo 27/09), \
                 YOGA (sin fecha de fin).""");
+    }
+
+    /**
+     * E-289: con la ultima comida "hecho" en su propia linea de la lista, a "me salto la ultima comida"
+     * el modelo contesto que saltarsela lo alejaba de su objetivo. Lo hecho va primero, junto, y con la
+     * instruccion pegada; ningun habito hecho queda como linea "- X: hecho" entre los pendientes.
+     */
+    @Test
+    @DisplayName("E-289: los hechos abren la lista en su propia linea, antes que los demas")
+    void hechosPrimero() {
+        String texto = HabitosDeHoyEnElPrompt.texto(new HabitosDeHoy(List.of(
+                new HabitoDeHoy("MEDITAR", EstadoDeHoy.PENDIENTE, false),
+                new HabitoDeHoy("ULTIMA COMIDA DEL DIA", EstadoDeHoy.HECHO, false)), List.of()));
+
+        List<String> lineas = texto.lines().toList();
+        assertThat(lineas.get(1)).isEqualTo("Ya hechos hoy (no le propongas hacerlos, saltarlos ni registrarlos otra "
+                + "vez): ULTIMA COMIDA DEL DIA.");
+        assertThat(lineas.get(2)).isEqualTo("Los demas de hoy:");
+        assertThat(texto).doesNotContain(": hecho");
+    }
+
+    @Test
+    @DisplayName("E-289: sin hechos lo dice, y si hizo todos tambien")
+    void ningunoOTodos() {
+        assertThat(HabitosDeHoyEnElPrompt.texto(new HabitosDeHoy(List.of(
+                new HabitoDeHoy("MEDITAR", EstadoDeHoy.PENDIENTE, false)), List.of())))
+                .contains("Ya hechos hoy: ninguno todavia.").contains("- MEDITAR: pendiente");
+        assertThat(HabitosDeHoyEnElPrompt.texto(new HabitosDeHoy(List.of(
+                new HabitoDeHoy("MEDITAR", EstadoDeHoy.HECHO, false)), List.of())))
+                .contains(": MEDITAR.").contains("Los demas de hoy: ninguno, ya hizo todos.");
+    }
+
+    /**
+     * E-290: el jugo verde renombrado "Batido de papaya" solo salia con el titulo propio, y a "se me
+     * paso la hora del jugo verde" el modelo contesto que todavia podia registrarlo.
+     */
+    @Test
+    @DisplayName("E-290: un habito renombrado sale con los dos nombres, hecho o pendiente")
+    void renombradoConLosDosNombres() {
+        String texto = HabitosDeHoyEnElPrompt.texto(new HabitosDeHoy(List.of(
+                new HabitoDeHoy("Batido de papaya", EstadoDeHoy.HECHO, true, "JUGO VERDE"),
+                new HabitoDeHoy("Caminata", EstadoDeHoy.PENDIENTE, false, "CAMINAR 40 MINUTOS")), List.of()));
+
+        assertThat(texto).contains("otra vez): Batido de papaya (JUGO VERDE del programa).")
+                .contains("- Caminata (CAMINAR 40 MINUTOS del programa): pendiente");
     }
 
     @Test
@@ -89,7 +135,8 @@ class HabitosDeHoyEnElPromptTest {
                 .render(Map.of("contexto", "(vacio)", "situacion", GoogleGenAiRenasiaChatAdapter.formatearSituacion(
                         new SituacionDelAprendiz(12, 2, SABADO, DE_LA_BATERIA))));
 
-        assertThat(prompt).contains("- ULTIMA COMIDA: hecho")
+        assertThat(prompt).contains("Ya hechos hoy (no le propongas hacerlos, saltarlos ni registrarlos otra vez): "
+                        + "JUGO VERDE, ULTIMA COMIDA.")
                 .contains("DUCHA FRIA (hasta el domingo 27/09)")
                 .contains("esa lista es la verdad de como estaba su")
                 .contains("mira los\n  pausados")
@@ -101,6 +148,6 @@ class HabitosDeHoyEnElPromptTest {
     void enLaVozEnVivo() {
         String voz = new PromptDeVozEnVivo().para(new SituacionDelAprendiz(12, 2, SABADO, DE_LA_BATERIA), null);
 
-        assertThat(voz).contains("- JUGO VERDE: hecho").contains("DUCHA FRIA (hasta el domingo 27/09)");
+        assertThat(voz).contains("Ya hechos hoy (no le propongas hacerlos, saltarlos ni registrarlos otra vez): JUGO VERDE").contains("DUCHA FRIA (hasta el domingo 27/09)");
     }
 }

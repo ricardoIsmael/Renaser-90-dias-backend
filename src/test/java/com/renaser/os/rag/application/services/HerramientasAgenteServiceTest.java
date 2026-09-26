@@ -75,6 +75,19 @@ class HerramientasAgenteServiceTest {
         assertThat(salida).contains("exige_evidencia=si");
     }
 
+    /** E-290: la persona puede decir "jugo verde" aunque su habito se llame "Batido de papaya". */
+    @Test
+    @DisplayName("E-290: un habito renombrado lleva tambien el titulo del programa en la linea")
+    void renombradoConTituloDelPrograma() {
+        when(agendaHabitosPort.deHoyDe(APRENDIZ)).thenReturn(List.of(new HabitoDelDia(REGISTRO, "Batido de papaya",
+                "COMPLETADO", null, null, null, true, List.of(), null, "JUGO VERDE")));
+
+        String salida = contenidoDe(servicio().ejecutar(APRENDIZ, new InvocacionHerramienta(
+                CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA, Map.of())));
+
+        assertThat(salida).contains("| Batido de papaya (JUGO VERDE del programa) | estado=COMPLETADO");
+    }
+
     /**
      * Y solo cuando es cierto. Repetir `exige_evidencia=no` en cada habito gastaria contexto en
      * decir lo normal, y el modelo parafrasea lo que ve: con la marca presente solo donde

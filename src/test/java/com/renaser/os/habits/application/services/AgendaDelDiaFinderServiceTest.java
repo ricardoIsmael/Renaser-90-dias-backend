@@ -128,4 +128,18 @@ class AgendaDelDiaFinderServiceTest {
         assertThat(service.zonaDe(APRENDIZ)).isEqualTo(LIMA);
         assertThat(service.zonaDe(sinProgreso)).isEqualTo(ZoneId.of("UTC"));
     }
+
+    @Test
+    @DisplayName("E-290: un habito renombrado sale con el titulo propio y, aparte, el del programa")
+    void renombradoLlevaElTituloDelPrograma() {
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), APRENDIZ,
+                HabitoId.of(UUID.randomUUID()), FECHA, 5, TipoDia.DISCIPLINA, false, Instant.parse("2026-09-23T15:00:00Z"));
+        when(tracks.consultarHoyDe(APRENDIZ)).thenReturn(List.of(new TrackDelDiaConCatalogo(registro,
+                "Batido de papaya", TipoHabito.CHECKBOX, null, null, null, null, false, true, null, "JUGO VERDE")));
+
+        HabitoEnJuegoResumen resumen = service.deHoyDe(APRENDIZ).get(0);
+
+        assertThat(resumen.titulo()).isEqualTo("Batido de papaya");
+        assertThat(resumen.tituloDelPrograma()).isEqualTo("JUGO VERDE");
+    }
 }

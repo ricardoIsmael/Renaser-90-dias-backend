@@ -183,6 +183,32 @@ class PromptSistemaRenasiaTest {
     }
 
     @Test
+    @DisplayName("bateria flash-lite (E-289 a E-292): el estado va primero, dos nombres, una tarjeta de agenda, pausa con fecha")
+    void reglasDeLaBateriaFlashLite() {
+        String render = renderizar("(vacio)");
+
+        // E-289: "me salto la ultima comida" con la comida hecha -> "te aleja de tu objetivo".
+        assertThat(render).contains("salto X\", \"no voy a poder\"), el primer paso es mirar si ese habito ya esta en\n"
+                        + "\"Ya hechos hoy\"")
+                .contains("\"Ese ya lo registraste hoy, no tienes\nque hacer nada mas\"");
+        // El paso del estado va ANTES que la regla de D-175 de saltarse un habito.
+        assertThat(render.indexOf("el primer paso es mirar si ese habito ya esta en"))
+                .isLessThan(render.indexOf("que saltarselo lo aleja de su objetivo de la semana"));
+        // E-289/E-290: registrar tambien empieza por el estado.
+        assertThat(render).contains("**Si pide registrar o marcar un habito de hoy, o pregunta si todavia puede**,\n"
+                + "el primer paso es mirar si ya esta en \"Ya hechos hoy\"");
+        // E-290: los dos nombres de un habito renombrado.
+        assertThat(render).contains("\"Batido de papaya\n  (JUGO VERDE del programa)\"");
+        // E-291: un "si" despues de la tarjeta es confirmar, y los dias salen de lo que dijo.
+        assertThat(render).contains("Un \"si\", \"guardalo\" o \"dale\" despues de la tarjeta es que la\n"
+                + "  confirme con el boton, nunca una propuesta nueva")
+                .contains("nunca los completes ni los inventes");
+        // E-292: "pausa X hasta el domingo" con X pausado sin fin se propone.
+        assertThat(render).contains("no le digas que ya esta pausado, deja la propuesta\n"
+                + "  con proponer_pausar_habito y esa fecha");
+    }
+
+    @Test
     @DisplayName("D-177: sabe como esta armado el plan, que herramienta usar y como decir que se esta alejando")
     void objetivosDeLaSemanaYDesvio() {
         String render = renderizar("(vacio)");

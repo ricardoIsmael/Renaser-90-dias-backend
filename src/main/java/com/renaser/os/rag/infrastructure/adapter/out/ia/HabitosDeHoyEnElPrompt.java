@@ -19,6 +19,17 @@ import java.util.stream.Collectors;
  * que escribio la persona, y aca termina en el prompt de SISTEMA. Mismo criterio que
  * {@code GoogleGenAiRenasiaChatAdapter.enUnaSolaLinea} con el ambito: sin saltos de linea no se
  * puede dibujar una seccion falsa del prompt.
+ *
+ * <p><b>Los hechos van primero y en su propia linea (E-289).</b> Con una linea por habito
+ * ("- ULTIMA COMIDA DEL DIA: hecho") el modelo igual contesto a "me salto la ultima comida" que
+ * saltarsela lo alejaba de su objetivo: la regla de D-175 le gano al estado, que estaba ahi. Ahora
+ * lo hecho abre la lista con la instruccion pegada ("no le propongas hacerlos, saltarlos ni
+ * registrarlos otra vez"), y el resto va despues.
+ *
+ * <p><b>Un habito renombrado lleva los dos nombres (E-290).</b> "Batido de papaya (JUGO VERDE del
+ * programa)": sin el del programa, a "se me paso la hora del jugo verde" el modelo no lo podia unir
+ * con lo que la persona llama "Batido de papaya" y le contesto que todavia podia registrarlo. Del
+ * renombre solo viaja el titulo, nunca el motivo (puede tener datos de salud).
  */
 final class HabitosDeHoyEnElPrompt {
 
@@ -44,9 +55,35 @@ final class HabitosDeHoyEnElPrompt {
         if (deHoy.isEmpty()) {
             return "Sus habitos de hoy, al empezar este turno: hoy no tiene ninguno generado.";
         }
-        return "Sus habitos de hoy, al empezar este turno:\n" + deHoy.stream()
-                .map(habito -> "- " + titulo(habito.titulo()) + ": " + estado(habito))
+        List<HabitoDeHoy> hechos = deHoy.stream().filter(habito -> habito.estado() == EstadoDeHoy.HECHO).toList();
+        List<HabitoDeHoy> resto = deHoy.stream().filter(habito -> habito.estado() != EstadoDeHoy.HECHO).toList();
+        return "Sus habitos de hoy, al empezar este turno:\n" + hechos(hechos) + "\n" + resto(resto);
+    }
+
+    private static String hechos(List<HabitoDeHoy> hechos) {
+        if (hechos.isEmpty()) {
+            return "Ya hechos hoy: ninguno todavia.";
+        }
+        return "Ya hechos hoy (no le propongas hacerlos, saltarlos ni registrarlos otra vez): " + hechos.stream()
+                .map(HabitosDeHoyEnElPrompt::nombre).collect(Collectors.joining(", ")) + ".";
+    }
+
+    private static String resto(List<HabitoDeHoy> resto) {
+        if (resto.isEmpty()) {
+            return "Los demas de hoy: ninguno, ya hizo todos.";
+        }
+        return "Los demas de hoy:\n" + resto.stream()
+                .map(habito -> "- " + nombre(habito) + ": " + estado(habito))
                 .collect(Collectors.joining("\n"));
+    }
+
+    /** "Batido de papaya (JUGO VERDE del programa)" si lo renombro (D-133); si no, el titulo a secas. */
+    private static String nombre(HabitoDeHoy habito) {
+        String propio = titulo(habito.titulo());
+        if (habito.tituloDelPrograma() == null) {
+            return propio;
+        }
+        return propio + " (" + titulo(habito.tituloDelPrograma()) + " del programa)";
     }
 
     /** "pide foto" solo en lo que falta entregar: en uno hecho no aporta nada. */
