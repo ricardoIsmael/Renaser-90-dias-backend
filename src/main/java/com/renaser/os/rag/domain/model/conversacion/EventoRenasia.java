@@ -84,6 +84,29 @@ public sealed interface EventoRenasia {
     }
 
     /**
+     * D-171: la tarjeta de la camara. El acompanante no puede recibir fotos, asi que cuando la
+     * persona le pide registrar un habito que exige evidencia, le deja a la app esta tarjeta: la app
+     * abre la camara, sube la foto como evidencia FOTO de {@code registroId}, pregunta "¿Que
+     * sentiste?" y completa el habito con esa respuesta, todo con los endpoints de siempre.
+     *
+     * <p>A diferencia de {@link Propuesta}, no hay nada que confirmar en el servidor: no se guarda
+     * en {@code propuestas_acompanante}. La junta {@code ConversacionRenasiaService} al terminar el
+     * turno, de lo que pidio la herramienta, y siempre va precedida de un {@link Texto} para la app
+     * que no conoce este {@code tipo}.
+     *
+     * @param titulo  el nombre del habito como lo ve la persona
+     * @param venceEn el fin del dia local de la persona: despues ese registro ya no es el de hoy
+     */
+    record Evidencia(UUID registroId, String titulo, Instant venceEn) implements EventoRenasia {
+
+        public Evidencia {
+            Objects.requireNonNull(registroId, "registroId no puede ser null");
+            Objects.requireNonNull(titulo, "titulo no puede ser null");
+            Objects.requireNonNull(venceEn, "venceEn no puede ser null");
+        }
+    }
+
+    /**
      * D-100: el modelo no pudo responder. Antes esto se tragaba en silencio y el cliente recibia
      * un {@code Fin} pelado — tres preguntas del aprendiz y ninguna respuesta, sin saber por que.
      * {@code mensaje} es apto para mostrar (nunca lleva la traza ni datos personales).

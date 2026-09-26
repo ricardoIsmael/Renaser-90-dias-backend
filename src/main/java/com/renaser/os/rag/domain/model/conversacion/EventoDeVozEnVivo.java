@@ -49,6 +49,15 @@ public sealed interface EventoDeVozEnVivo {
         }
     }
 
+    /** Igual que el evento {@code evidencia} del SSE del chat (D-171): la tarjeta de la camara. */
+    record Evidencia(UUID registroId, String titulo, Instant venceEn) implements EventoDeVozEnVivo {
+        public Evidencia {
+            Objects.requireNonNull(registroId, "registroId es obligatorio");
+            Objects.requireNonNull(titulo, "titulo es obligatorio");
+            Objects.requireNonNull(venceEn, "venceEn es obligatorio");
+        }
+    }
+
     /** Se acabaron los minutos del dia; la app vuelve al flujo anterior. Despues se cierra. */
     record CuotaAgotada() implements EventoDeVozEnVivo {
     }

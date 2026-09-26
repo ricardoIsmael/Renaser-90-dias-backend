@@ -63,4 +63,17 @@ class EventoRenasiaSseMapperTest {
         assertThat(json).isEqualTo("{\"tipo\":\"propuesta\",\"id\":\"22222222-2222-2222-2222-222222222222\","
                 + "\"resumen\":\"Meditar: de 06:00 a 07:00\",\"venceEn\":\"2026-09-23T15:10:00Z\"}");
     }
+    /**
+     * D-171: la tarjeta de la camara. Contrato fijo con la app (la esta programando en paralelo):
+     * {@code tipo}, {@code registroId}, {@code titulo} y {@code venceEn} ISO-8601 en UTC, en ese orden.
+     */
+    @Test
+    void evidenciaSerializaConRegistroTituloYVencimientoIso() {
+        String json = EventoRenasiaSseMapper.aJson(new EventoRenasia.Evidencia(
+                UUID.fromString("44444444-4444-4444-4444-444444444444"), "JUGO VERDE",
+                Instant.parse("2026-09-27T05:00:00Z")));
+
+        assertThat(json).isEqualTo("{\"tipo\":\"evidencia\",\"registroId\":\"44444444-4444-4444-4444-444444444444\","
+                + "\"titulo\":\"JUGO VERDE\",\"venceEn\":\"2026-09-27T05:00:00Z\"}");
+    }
 }

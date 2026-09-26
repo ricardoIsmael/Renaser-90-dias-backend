@@ -47,7 +47,7 @@ class ConsultarAgendaHabitosAdapter implements ConsultarAgendaHabitosPort {
     private static HabitoDelDia aHabitoDelDia(HabitoEnJuegoResumen resumen) {
         return new HabitoDelDia(resumen.registroId(), resumen.titulo(), resumen.estado(), resumen.puntosEnJuego(),
                 resumen.puntosMaximos(), resumen.plazo(), resumen.exigeEvidencia(),
-                resumen.tramos().stream().map(ConsultarAgendaHabitosAdapter::aTramo).toList());
+                resumen.tramos().stream().map(ConsultarAgendaHabitosAdapter::aTramo).toList(), resumen.claveSistema());
     }
 
     private static TramoPuntos aTramo(HabitoEnJuegoResumen.TramoPuntos tramo) {

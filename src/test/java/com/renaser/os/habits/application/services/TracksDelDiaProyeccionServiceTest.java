@@ -11,6 +11,7 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.domain.model.guia.GuiaHabito;
 import com.renaser.os.habits.domain.model.guia.GuiaHabitoId;
+import com.renaser.os.habits.domain.model.habito.AmbitoHabito;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
@@ -126,6 +127,29 @@ class TracksDelDiaProyeccionServiceTest {
         assertThat(resultado.get(0).tituloHabito()).isEqualTo("Batido de papaya");
         // Una sola consulta de renombres para todo el dia, no una por registro (D-43).
         verify(loadRenombrePort, times(1)).deParticipante(actor);
+    }
+
+    /**
+     * D-171: la clave del catalogo viaja en la proyeccion (el acompanante distingue la Clase diaria
+     * y ubica la Audioterapia por ella, nunca por el titulo, que la persona puede renombrar).
+     */
+    @Test
+    void laProyeccionLlevaLaClaveDelCatalogo() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = Habito.rehydrate(HabitoId.of(UUID.randomUUID()), AmbitoHabito.SISTEMA, null,
+                "AUDIOTERAPIA SEMANAL", null, TipoHabito.JOURNALING, "MENTE", null, "AUDIO_THERAPY_WEEKLY",
+                ExigenciaEvidencia.OPCIONAL, false, false, true, false, null, null, null, null, true, AHORA, AHORA);
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), actor, habito.id(),
+                LocalDate.of(2026, 8, 24), 10, TipoDia.DISCIPLINA, false, AHORA);
+        when(consultarTracksUseCase.consultar(actor, actor, registro.fechaEjecucion())).thenReturn(List.of(registro));
+        when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
+        when(loadGuiaPort.porHabitos(any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
+
+        List<TrackDelDiaConCatalogo> resultado = service.consultar(actor, actor, registro.fechaEjecucion());
+
+        assertThat(resultado.get(0).claveSistema()).isEqualTo("AUDIO_THERAPY_WEEKLY");
     }
 
     /** Sin renombre manda el catalogo, como siempre: el cambio no le toca nada a quien no renombro. */

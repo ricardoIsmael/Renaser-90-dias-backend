@@ -11,13 +11,18 @@ import java.util.Objects;
  *
  * <p>Dos limites distintos, y los dos importan:
  * <ul>
- *   <li>{@code porDia}: <b>10 minutos por persona y por dia</b>, decision del dueno del 2026-09-24
- *   (§8 de {@code docs/arquitectura/PROPUESTA_GEMINI_LIVE.md}). Pasado el limite, el orbe vuelve al
- *   flujo anterior (reconocimiento de voz del telefono, chat y voz Kore).</li>
+ *   <li>{@code porDia}: <b>20 minutos por persona y por dia</b>, decision del dueno del 2026-09-25
+ *   para produccion ({@code renaser.ia.voz.en-vivo.minutos-por-dia} en {@code application.yaml}).
+ *   Pasado el limite, el orbe vuelve al flujo anterior (reconocimiento de voz del telefono, chat y
+ *   voz Kore).</li>
  *   <li>{@code maximaPorSesion}: <b>15 minutos</b>, el tope de una sesion de solo audio de Gemini
- *   Live. Con la cuota de 10 minutos no se alcanza nunca; existe para que subir la cuota no deje
- *   sesiones que Google corta a mitad de una frase.</li>
+ *   Live. Con 20 minutos por dia una sesion larga si lo alcanza (y deja 5 para otra); existe para
+ *   que Google no corte la sesion a mitad de una frase.</li>
  * </ul>
+ *
+ * <p>Corregido 2026-09-26 (D-171). Decia "10 minutos por persona y por dia" (la decision del
+ * 2026-09-24, §8 de {@code docs/arquitectura/PROPUESTA_GEMINI_LIVE.md}) y que el tope por sesion
+ * "no se alcanza nunca". La configuracion ya decia 20 desde el 2026-09-25.
  *
  * <p><b>El dia es el de la persona, no el del servidor</b> (regla 02). Un cron o un contador que
  * use la fecha UTC renueva la cuota a las 19:00 de Lima.

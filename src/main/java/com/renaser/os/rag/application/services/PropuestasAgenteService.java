@@ -1,12 +1,14 @@
 package com.renaser.os.rag.application.services;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ConsultarPropuestasDelTurnoUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ConsultarPropuestasDelTurnoUseCase.PedidoDeEvidencia;
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
 import com.renaser.os.rag.application.ports.in.propuesta.ResolverPropuestaUseCase;
 import com.renaser.os.rag.application.ports.out.propuesta.LoadPropuestaAccionPort;
 import com.renaser.os.rag.application.ports.out.propuesta.PropuestaModificadaEnParaleloException;
 import com.renaser.os.rag.application.ports.out.propuesta.SavePropuestaAccionPort;
 import com.renaser.os.rag.application.services.herramientas.AccionConfirmable;
+import com.renaser.os.rag.application.services.herramientas.PedidosDeEvidenciaDelTurno;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.rag.domain.model.propuesta.PropuestaAccion;
@@ -64,11 +66,15 @@ public class PropuestasAgenteService
     private final Clock clock;
     private final IdGenerator idGenerator;
     private final Duration vigencia;
+    /** D-171: las tarjetas de camara del turno, que no se guardan en la base. */
+    private final PedidosDeEvidenciaDelTurno evidenciasDelTurno;
 
     public PropuestasAgenteService(LoadPropuestaAccionPort loadPort, SavePropuestaAccionPort savePort,
                                    List<AccionConfirmable> acciones, UserSummaryFinder userSummaryFinder,
                                    Clock clock, IdGenerator idGenerator,
-                                   @Value("${renaser.ia.acompanante.propuesta-vigencia:PT10M}") Duration vigencia) {
+                                   @Value("${renaser.ia.acompanante.propuesta-vigencia:PT10M}") Duration vigencia,
+                                   PedidosDeEvidenciaDelTurno evidenciasDelTurno) {
+        this.evidenciasDelTurno = evidenciasDelTurno;
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.acciones = List.copyOf(acciones);
@@ -92,6 +98,11 @@ public class PropuestasAgenteService
                 .filter(propuesta -> !propuesta.estaVencidaEn(ahora))
                 .map(PropuestasAgenteService::aCreada)
                 .toList();
+    }
+
+    @Override
+    public List<PedidoDeEvidencia> evidenciasPedidasDesde(UserId actorId, Instant desde) {
+        return evidenciasDelTurno.pedidasDesde(actorId, desde);
     }
 
     /**

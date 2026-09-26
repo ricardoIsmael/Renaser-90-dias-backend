@@ -106,27 +106,61 @@ class HerramientasDeEnfoqueDiarioTest {
 
     // ─── proponer_resumen_espiritu ───────────────────────────────────────────────────────────
 
-    private ResultadoHerramienta proponerResumen(Instant ahora, String resumen) {
+    private ResultadoHerramienta proponerResumen(Instant ahora, String queSentiste, String queTeLlevas) {
         return new PropuestaDeResumenEspiritu(enfoque, proponerAccion, FixedClock.at(ahora)).ejecutar(APRENDIZ,
                 new InvocacionHerramienta(PropuestaDeResumenEspiritu.NOMBRE,
-                        Map.of(PropuestaDeResumenEspiritu.ARGUMENTO_RESUMEN, resumen)));
+                        Map.of("que_sentiste", queSentiste, "que_te_llevas", queTeLlevas)));
     }
 
+    /**
+     * D-171: el texto es el mismo que arma el modal de la app, con sus dos preguntas exactas:
+     * {@code preguntas.map((p, i) => `${p}\n${respuesta}`).join('\n\n')}.
+     */
+    private static final String TEXTO_DE_LA_APP = "¿Qué sentiste después de escuchar este audio?\nPaz, y ganas de "
+            + "llorar un rato\n\n¿Qué te llevas de este audio para tu día de hoy?\nSoltar lo que no controlo";
+
     @Test
-    @DisplayName("resumen: propone con el dia del audio de hoy y dice que suma puntos, sin enviarlo")
+    @DisplayName("resumen: arma el texto con las dos preguntas de la app, el dia del audio de hoy y los puntos")
     void proponeResumen() {
         when(enfoque.espirituDeHoy(APRENDIZ)).thenReturn(espiritu(EstadoEspiritu.PENDIENTE, null, 10));
 
-        ResultadoHerramienta resultado = proponerResumen(MANANA_EN_LIMA, "  Aprendi a soltar  ");
+        ResultadoHerramienta resultado = proponerResumen(MANANA_EN_LIMA, "  Paz, y ganas de llorar un rato ",
+                "Soltar lo que no controlo  ");
 
-        String resumen = "Enviar tu resumen de Espiritu del audio 5 'Soltar', a tiempo (vence a las 12:00): "
-                + "\"Aprendi a soltar\". Tambien marca 'Pastilla Renacer' de hoy como hecha (+10 puntos si lo "
+        String resumen = "Enviar tus respuestas de Espiritu del audio 5 'Soltar', a tiempo (vence a las 12:00): \""
+                + TEXTO_DE_LA_APP + "\". Tambien marca 'Pastilla Renacer' de hoy como hecha (+10 puntos si lo "
                 + "confirmas ahora)";
+        // Lo guardado conserva la forma vieja (resumen + dia): la confirmable no cambio.
         verify(proponerAccion).proponer(APRENDIZ, new InvocacionHerramienta(PropuestaDeResumenEspiritu.NOMBRE,
-                Map.of(PropuestaDeResumenEspiritu.ARGUMENTO_RESUMEN, "Aprendi a soltar",
+                Map.of(PropuestaDeResumenEspiritu.ARGUMENTO_RESUMEN, TEXTO_DE_LA_APP,
                         PropuestaDeResumenEspiritu.ARGUMENTO_DIA, "5")), resumen);
         verify(enfoque, never()).entregarResumenEspiritu(any(), anyInt(), anyString());
         assertThat(exito(resultado)).contains("TODAVIA NO esta hecho");
+    }
+
+    @Test
+    @DisplayName("resumen: una respuesta larga pasa entera; sin una de las dos, no propone")
+    void respuestasLargasYFaltantes() {
+        when(enfoque.espirituDeHoy(APRENDIZ)).thenReturn(espiritu(EstadoEspiritu.PENDIENTE, null, 10));
+        String larga = "Senti muchas cosas. ".repeat(80).trim();
+
+        proponerResumen(MANANA_EN_LIMA, larga, "Calma");
+        verify(proponerAccion).proponer(any(), org.mockito.ArgumentMatchers.argThat(invocacion -> invocacion
+                .argumento(PropuestaDeResumenEspiritu.ARGUMENTO_RESUMEN).contains(larga)), anyString());
+
+        assertThat(fallo(proponerResumen(MANANA_EN_LIMA, "Calma", "  "))).contains("Falta una de las dos respuestas");
+    }
+
+    @Test
+    @DisplayName("resumen: la herramienta pide las dos respuestas y le dice al modelo las preguntas exactas")
+    void definicionConLasDosPreguntas() {
+        var definicion = new PropuestaDeResumenEspiritu(enfoque, proponerAccion, FixedClock.at(MANANA_EN_LIMA))
+                .definicion();
+
+        assertThat(definicion.parametros()).extracting(p -> p.nombre())
+                .containsExactly("que_sentiste", "que_te_llevas");
+        assertThat(definicion.descripcion()).contains("¿Qué sentiste después de escuchar este audio?")
+                .contains("¿Qué te llevas de este audio para tu día de hoy?").contains("sin cortarla");
     }
 
     @Test
@@ -135,7 +169,7 @@ class HerramientasDeEnfoqueDiarioTest {
         when(enfoque.espirituDeHoy(APRENDIZ)).thenReturn(espiritu(EstadoEspiritu.ENTREGADO_A_TIEMPO,
                 MANANA_EN_LIMA, null));
 
-        assertThat(fallo(proponerResumen(NOCHE_EN_LIMA, "Algo"))).contains("ya se envio");
+        assertThat(fallo(proponerResumen(NOCHE_EN_LIMA, "Algo", "Algo mas"))).contains("ya se envio");
         verify(proponerAccion, never()).proponer(any(), any(), any());
     }
 

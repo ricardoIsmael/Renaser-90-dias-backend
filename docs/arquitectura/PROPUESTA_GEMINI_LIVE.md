@@ -164,7 +164,8 @@ mejora que justifica el cambio.
 | backend → app | `interrumpido` | — | la persona habló encima: la app corta lo que suena |
 | backend → app | `turnoCompleto` | — | terminó de responder |
 | backend → app | `propuesta` | `id`, `resumen`, `venceEn` | igual que en el SSE del chat (D-153); se confirma con el botón |
-| backend → app | `cuotaAgotada` | — | se acabó la cuota del día (10 min; 30 mientras se prueba, corregido 2026-09-24); la app vuelve al flujo anterior |
+| backend → app | `evidencia` | `registroId`, `titulo`, `venceEn` | igual que en el SSE del chat (D-171, agregado 2026-09-26): la tarjeta de la cámara para registrar un hábito que exige evidencia; `venceEn` es el fin del día local de la persona |
+| backend → app | `cuotaAgotada` | — | se acabó la cuota del día (10 min; 30 mientras se prueba, corregido 2026-09-24; **20** desde el 2026-09-25, corregido 2026-09-26); la app vuelve al flujo anterior |
 | backend → app | `error` | `valor` | texto apto para mostrar; después se cierra |
 | app → backend | `fin` | — | la persona cerró el orbe |
 
@@ -235,7 +236,7 @@ virtual de PulseAudio (`module-null-sink`), sin pasar por los parlantes. Detalle
 
 1. **Pasando por el backend (proxy).** La key no sale del servidor, las herramientas y la cuota se
    controlan ahí y el historial se guarda solo.
-2. **Cuota: 10 minutos de conversación por voz, por persona y por día** (*corregido 2026-09-24: 30 mientras se prueba, a pedido del dueño; se vuelve a decidir antes de producción*). Pasado el límite, el orbe
+2. **Cuota: 10 minutos de conversación por voz, por persona y por día** (*corregido 2026-09-24: 30 mientras se prueba, a pedido del dueño; se vuelve a decidir antes de producción*; *corregido 2026-09-26: el dueño decidió **20** para producción el 2026-09-25, y es lo que fija `application.yaml`*). Pasado el límite, el orbe
    vuelve al flujo actual (STT, chat y TTS).
 3. **Se guarda la transcripción** de lo que se habla en `mensajes_renasia`, solo el texto. El
    audio no se guarda nunca.

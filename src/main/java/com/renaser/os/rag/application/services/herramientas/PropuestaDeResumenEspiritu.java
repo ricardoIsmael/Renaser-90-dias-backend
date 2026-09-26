@@ -7,9 +7,7 @@ import com.renaser.os.rag.application.ports.out.enfoque.EnfoqueDiarioDelAprendiz
 import com.renaser.os.rag.application.ports.out.enfoque.EnfoqueDiarioDelAprendizPort.EstadoEspiritu;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
-import com.renaser.os.rag.domain.model.herramienta.ParametroHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
-import com.renaser.os.rag.domain.model.herramienta.TipoParametroHerramienta;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
@@ -17,8 +15,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * {@code proponer_resumen_espiritu} (R2, propuesta, 2026-09-23): enviar el resumen del audio de
@@ -37,29 +35,40 @@ import java.util.Map;
  * <p>El dia del audio NO lo elige el modelo: sale del audio de hoy que devuelve {@code habits}.
  * Solo se propone con el audio PENDIENTE y sin entregar; una entrega fuera de plazo ya hecha no se
  * reemplaza desde el chat.
+ *
+ * <p><b>Las dos preguntas de la app (D-171).</b> Antes recibia un {@code resumen} libre, y el
+ * modelo pedia "un resumen" en vez de las dos preguntas que hace la pantalla. Ahora recibe las dos
+ * respuestas ({@code que_sentiste}, {@code que_te_llevas}) y el texto lo arma
+ * {@link PreguntasDelAudio} con las preguntas exactas de la app, en su mismo formato. <b>Lo guardado
+ * en la propuesta no cambia</b>: sigue siendo {@code resumen} (ya formateado) y {@code dia}, asi que
+ * {@link EntregarResumenEspirituConfirmable} no se toco y una propuesta pendiente del formato viejo
+ * (vencen a los 10 minutos) se confirma igual.
  */
 @Component
 @ConditionalOnProperty(name = "renaser.ia.acompanante.confirmacion-con-botones", havingValue = "true")
 public class PropuestaDeResumenEspiritu implements HerramientaAgente {
 
     public static final String NOMBRE = "proponer_resumen_espiritu";
+    /** Lo arma la herramienta con las dos respuestas; el modelo ya no lo manda (D-171). */
     public static final String ARGUMENTO_RESUMEN = "resumen";
     /** Lo agrega la herramienta al guardar la propuesta; el modelo no lo manda. */
     public static final String ARGUMENTO_DIA = "dia";
 
-    /** Cuanto del texto se muestra junto a los botones; el texto completo va en los argumentos. */
-    private static final int LARGO_VISIBLE = 280;
+    /**
+     * Cuanto del texto se muestra junto a los botones; el texto completo va en los argumentos. Era
+     * 280 con un resumen libre; con las dos preguntas adelante (unos 95 caracteres) se sube a 600
+     * para que se lean las respuestas (D-171).
+     */
+    private static final int LARGO_VISIBLE = 600;
 
     private static final Logger log = LoggerFactory.getLogger(PropuestaDeResumenEspiritu.class);
 
     private static final DefinicionHerramienta DEFINICION = new DefinicionHerramienta(NOMBRE,
-            "Propone enviar el resumen del audio de Espiritu de hoy. NO lo envia: deja una propuesta y la persona "
-                    + "tiene que tocar Confirmar en la app. Al confirmarse tambien marca 'Pastilla Renacer' de hoy "
-                    + "y suma sus puntos. El resumen tiene que ser el texto que la persona escribio con SUS "
-                    + "palabras: no lo redactes, no lo completes ni lo mejores. Si no te lo dio, pideselo. Consulta "
-                    + "antes consultar_espiritu_de_hoy.",
-            List.of(ParametroHerramienta.obligatorio(ARGUMENTO_RESUMEN, TipoParametroHerramienta.TEXTO,
-                    "El resumen, tal cual lo escribio la persona.")));
+            "Propone enviar las respuestas del audio de Espiritu de hoy (la Pastilla Renacer). NO las envia: "
+                    + "deja una propuesta y la persona tiene que tocar Confirmar en la app. Al confirmarse tambien "
+                    + "marca 'Pastilla Renacer' de hoy y suma sus puntos. Consulta antes consultar_espiritu_de_hoy. "
+                    + PreguntasDelAudio.COMO_PREGUNTAR,
+            PreguntasDelAudio.PARAMETROS);
 
     private final EnfoqueDiarioDelAprendizPort enfoquePort;
     private final ProponerAccionUseCase proponerAccion;
@@ -79,12 +88,13 @@ public class PropuestaDeResumenEspiritu implements HerramientaAgente {
 
     @Override
     public ResultadoHerramienta ejecutar(UserId actorId, InvocacionHerramienta invocacion) {
-        String resumen = invocacion.argumento(ARGUMENTO_RESUMEN);
-        if (resumen == null || resumen.isBlank()) {
-            return ResultadoHerramienta.fallo("Falta el resumen: pideselo a la persona con sus palabras.");
+        Optional<String> resumen = PreguntasDelAudio.textoDe(invocacion);
+        if (resumen.isEmpty()) {
+            return ResultadoHerramienta.fallo("Falta una de las dos respuestas: preguntasela a la persona y pasala "
+                    + "con sus palabras.");
         }
         return LecturaDelEnfoque.con(() -> enfoquePort.espirituDeHoy(actorId), "su Espiritu de hoy",
-                espiritu -> proponerSiCorresponde(actorId, espiritu, resumen.trim()));
+                espiritu -> proponerSiCorresponde(actorId, espiritu, resumen.get()));
     }
 
     private ResultadoHerramienta proponerSiCorresponde(UserId actorId, EspirituDeHoy espiritu, String resumen) {
@@ -121,7 +131,7 @@ public class PropuestaDeResumenEspiritu implements HerramientaAgente {
                 ? ", FUERA DE PLAZO (vencio a las " + momento.horaDe(audio.fechaLimite()) + "): queda guardado pero "
                         + "no cuenta como a tiempo"
                 : ", a tiempo (vence a las " + momento.horaDe(audio.fechaLimite()) + ")";
-        return "Enviar tu resumen de Espiritu del audio " + audio.dia()
+        return "Enviar tus respuestas de Espiritu del audio " + audio.dia()
                 + (audio.titulo() == null ? "" : " '" + audio.titulo() + "'") + plazo + ": \"" + visible(resumen)
                 + "\"" + pastillaRenacer(espiritu.puntosPastillaRenacer());
     }

@@ -110,6 +110,30 @@ class HerramientasAgenteServicePropuestaTest {
     }
 
     @Test
+    @DisplayName("D-171: un habito que exige evidencia no se propone marcar; se manda a la camara")
+    void noPropone_siExigeEvidencia() {
+        when(agendaHabitosPort.deHoyDe(APRENDIZ)).thenReturn(List.of(new HabitoDelDia(REGISTRO, "JUGO VERDE",
+                "PENDIENTE", 10, 10, Instant.parse("2026-09-24T02:00:00Z"), true)));
+
+        ResultadoHerramienta resultado = servicio().ejecutar(APRENDIZ, marcar(REGISTRO.toString()));
+
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("proponer_registrar_con_foto");
+        verify(proponerAccion, never()).proponer(any(), any(), any());
+        verify(agendaHabitosPort, never()).completar(any(), any());
+    }
+
+    @Test
+    @DisplayName("D-171: la Clase diaria pide evidencia pero no va a la camara: sigue su camino de siempre")
+    void claseDiariaNoSeMandaALaCamara() {
+        when(agendaHabitosPort.deHoyDe(APRENDIZ)).thenReturn(List.of(new HabitoDelDia(REGISTRO, "Clase diaria",
+                "PENDIENTE", 10, 10, Instant.parse("2026-09-24T02:00:00Z"), true, List.of(), "DAILY_CLASS")));
+
+        ResultadoHerramienta resultado = servicio().ejecutar(APRENDIZ, marcar(REGISTRO.toString()));
+
+        assertThat(resultado).isInstanceOf(ResultadoHerramienta.Exito.class);
+    }
+
+    @Test
     @DisplayName("un id inventado se rechaza antes de mirar la agenda, igual que con el flag apagado")
     void idInventado() {
         ResultadoHerramienta resultado = servicio().ejecutar(APRENDIZ, marcar("el-de-la-manana"));

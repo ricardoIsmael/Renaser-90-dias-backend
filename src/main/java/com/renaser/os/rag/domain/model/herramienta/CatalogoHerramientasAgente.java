@@ -69,7 +69,8 @@ public final class CatalogoHerramientasAgente {
                     "Propone marcar un habito de hoy como completado: la app le muestra a la persona un boton "
                             + "Confirmar. NO lo marca ni otorga puntos hasta que la persona lo toque, asi que nunca "
                             + "digas que ya quedo hecho. Usala SOLO cuando el aprendiz pida explicitamente registrar "
-                            + "que ya lo hizo. Nunca la uses por tu cuenta ni para adivinar.",
+                            + "que ya lo hizo. Nunca la uses por tu cuenta ni para adivinar. No la uses con los "
+                            + "habitos marcados exige_evidencia=si: esos van con proponer_registrar_con_foto (D-171).",
                     List.of(PARAMETRO_REGISTRO_ID)));
 
     private CatalogoHerramientasAgente() {

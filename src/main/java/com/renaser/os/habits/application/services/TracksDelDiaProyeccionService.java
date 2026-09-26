@@ -178,7 +178,8 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         // consta", que es lo unico cierto. Mismo criterio que `titulo` y `tipo` de aca arriba.
         boolean exigeEvidencia = habito != null && habito.exigenciaEvidencia() == ExigenciaEvidencia.OBLIGATORIA;
         return new TrackDelDiaConCatalogo(registro, titulo, tipo, guia, horario.horaDisparo(), horario.horaLimite(),
-                puntosEnJuegoDe(registro, catalogo, horario, momento), tieneEvidencia, exigeEvidencia);
+                puntosEnJuegoDe(registro, catalogo, horario, momento), tieneEvidencia, exigeEvidencia,
+                habito != null ? habito.claveSistema() : null);
     }
 
     /**

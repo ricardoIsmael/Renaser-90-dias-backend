@@ -27,10 +27,15 @@ import java.util.UUID;
  * @param tramos         la escala de puntos completa del habito, en orden y hasta el
  *                       {@code plazo} (2026-09-23). Vacia cuando no hay nada que escalonar: el
  *                       registro esta en estado terminal o el habito no vence. Ver {@link TramoPuntos}
+ * @param claveSistema   la clave funcional del habito de catalogo ({@code DAILY_CLASS},
+ *                       {@code AUDIO_THERAPY_WEEKLY}...), {@code null} en los personales
+ *                       (2026-09-26, D-171). El acompanante la usa para no ofrecer la camara en la
+ *                       Clase diaria, que se cierra con su resumen y no por el camino generico.
+ *                       Nunca se empareja por {@code titulo}: la persona lo puede renombrar (D-133)
  */
 public record HabitoEnJuegoResumen(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
                                     Integer puntosMaximos, Instant plazo, boolean exigeEvidencia,
-                                    List<TramoPuntos> tramos) {
+                                    List<TramoPuntos> tramos, String claveSistema) {
 
     public HabitoEnJuegoResumen {
         tramos = tramos == null ? List.of() : List.copyOf(tramos);

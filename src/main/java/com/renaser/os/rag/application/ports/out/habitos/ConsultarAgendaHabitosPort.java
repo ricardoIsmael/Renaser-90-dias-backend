@@ -51,24 +51,45 @@ public interface ConsultarAgendaHabitosPort {
      * @param puntosEnJuego  {@code null} cuando ya esta en estado terminal (nada en juego)
      * @param plazo          {@code null} cuando el habito no vence
      * @param exigeEvidencia si el habito pide evidencia. El agente NO puede subirla —el chat no
-     *                       recibe fotos ni audios— asi que su unico uso es decirlo y mandar a la
-     *                       pantalla de Hoy. Marcar como hecho sigue funcionando igual con o sin
-     *                       ella: quien completa desde la app tampoco la entrega en ese paso
+     *                       recibe fotos ni audios—: con el flag de botones le deja a la app la
+     *                       tarjeta de la camara ({@code proponer_registrar_con_foto}, D-171); sin
+     *                       el, lo dice y manda a la pantalla de Hoy. Completar sigue funcionando
+     *                       igual con o sin ella: quien completa desde la app tampoco la entrega en
+     *                       ese paso
      * @param tramos         la escala de puntos del habito hasta el {@code plazo}, ya resuelta por
      *                       {@code habits} (2026-09-23). Vacia si no vence o ya no esta en juego.
      *                       {@code rag} solo ubica instantes en ella: nunca reconstruye la escala
+     * @param claveSistema   la clave del habito de catalogo ({@code DAILY_CLASS}...), {@code null}
+     *                       en los personales (2026-09-26, D-171). Nunca se decide por el titulo
      */
     record HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego, Integer puntosMaximos,
-                         Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos) {
+                         Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos, String claveSistema) {
+
+        /** La Clase diaria se cierra con su resumen, nunca por el camino generico ni con una foto. */
+        public static final String CLAVE_CLASE_DIARIA = "DAILY_CLASS";
 
         public HabitoDelDia {
             tramos = tramos == null ? List.of() : List.copyOf(tramos);
         }
 
+        /** Sin clave de sistema: para quien no la necesita. */
+        public HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
+                            Integer puntosMaximos, Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos) {
+            this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, tramos, null);
+        }
+
         /** Sin escala: para quien no necesita los tramos (las tres herramientas originales). */
         public HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
                             Integer puntosMaximos, Instant plazo, boolean exigeEvidencia) {
-            this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, List.of());
+            this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, List.of(), null);
+        }
+
+        /**
+         * Pide foto y se registra con la camara de la app (D-171). La Clase diaria tambien pide
+         * evidencia en el catalogo, pero se cierra con su resumen: no entra.
+         */
+        public boolean seRegistraConFoto() {
+            return exigeEvidencia && !CLAVE_CLASE_DIARIA.equals(claveSistema);
         }
 
         /** Un habito con puntos en juego es, por definicion, uno que todavia se puede entregar. */

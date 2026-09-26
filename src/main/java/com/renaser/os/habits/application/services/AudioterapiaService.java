@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.api.AudioterapiaDelAprendizPort;
 import com.renaser.os.habits.application.ports.in.audioterapia.ConsultarAudioterapiaSemanalUseCase;
 import com.renaser.os.habits.application.ports.out.audioterapia.AudioterapiaCatalogPort;
 import com.renaser.os.habits.application.ports.out.audioterapia.AudioterapiaCatalogPort.Audioterapia;
@@ -39,7 +40,8 @@ public class AudioterapiaService implements ConsultarAudioterapiaSemanalUseCase 
     /** Mismo TTL que la portada de curso (CatalogoAcademyService.TTL_PORTADA) — sin motivo para diferir. */
     private static final Duration TTL_AUDIO = Duration.ofHours(1);
 
-    static final String CLAVE_SISTEMA_AUDIOTERAPIA = "AUDIO_THERAPY_WEEKLY";
+    /** Una sola definicion de la clave (D-171): la publica, que tambien usa el acompanante. */
+    static final String CLAVE_SISTEMA_AUDIOTERAPIA = AudioterapiaDelAprendizPort.CLAVE_SISTEMA_AUDIOTERAPIA;
 
     private final LoadHabitoPort loadHabitoPort;
     private final LoadHorarioHabitoPort loadHorarioPort;

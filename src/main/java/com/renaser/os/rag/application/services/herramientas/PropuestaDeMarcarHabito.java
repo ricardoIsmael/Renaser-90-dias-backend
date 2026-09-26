@@ -27,6 +27,11 @@ import java.util.UUID;
  * reimplementa ninguna regla: si {@code deHoyDe} no lo trae con puntos en juego, no se ofrece un
  * boton que va a fallar. Al confirmar, {@code completar} vuelve a correr todas las guardas.
  *
+ * <p><b>Un habito que exige evidencia no se propone marcar</b> (D-171, decision del dueno): se
+ * registra con la tarjeta de la camara, {@link PropuestaDeRegistrarConFoto}, que existe con el mismo
+ * flag. Se devuelve un {@code Fallo} que le dice al modelo cual usar, asi la regla no depende solo
+ * de que el modelo lea el prompt. La Clase diaria no entra en esto: tiene su propio camino.
+ *
  * <p>Vive aparte de {@code HerramientasAgenteService} para no pasar ese servicio de tres
  * dependencias a cinco (regla 01, parametros ≤ 3) y porque el flag decide dos cosas —que hace
  * la herramienta y como se le describe al modelo— que tienen que leerse del mismo lugar.
@@ -59,6 +64,10 @@ public class PropuestaDeMarcarHabito {
         if (habito.isEmpty()) {
             return ResultadoHerramienta.fallo("Ese habito no esta entre los que todavia puede entregar hoy: puede "
                     + "que ya este hecho, que se le haya vencido el plazo o que no sea uno de los suyos.");
+        }
+        if (habito.get().seRegistraConFoto()) {
+            return ResultadoHerramienta.fallo("'" + habito.get().titulo() + "' exige evidencia: no se marca con "
+                    + "esta herramienta. Usa proponer_registrar_con_foto con el mismo id.");
         }
         String resumen = resumenDe(habito.get());
         try {

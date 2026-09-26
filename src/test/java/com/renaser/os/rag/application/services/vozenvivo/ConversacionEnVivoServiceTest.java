@@ -251,6 +251,30 @@ class ConversacionEnVivoServiceTest {
     }
 
     @Test
+    @DisplayName("D-171: pedir la foto de un habito manda el evento evidencia y deja el texto de respaldo en el turno")
+    void evidenciaComoEnElChat() {
+        UUID registro = UUID.randomUUID();
+        Instant finDelDia = Instant.parse("2026-09-24T05:00:00Z"); // fin del 23/09 en Lima
+        InvocacionHerramienta pedido = new InvocacionHerramienta("proponer_registrar_con_foto",
+                Map.of("registro_id", registro.toString()));
+        when(herramientas.ejecutar(actor, pedido)).thenReturn(ResultadoHerramienta.exito("Boton listo"));
+        when(propuestas.evidenciasPedidasDesde(eq(actor), any())).thenReturn(List.of(
+                new ConsultarPropuestasDelTurnoUseCase.PedidoDeEvidencia(registro, "JUGO VERDE", TRES_AM_UTC,
+                        finDelDia)));
+        service.iniciar(actor, salida);
+
+        proveedor.oyente.oido("Ya tome el jugo verde");
+        proveedor.oyente.pedidoDeHerramienta("llamada-1", pedido);
+        proveedor.oyente.turnoCompleto();
+        proveedor.oyente.dicho("Te deje abajo el boton para sacarle foto.");
+        proveedor.oyente.turnoCompleto();
+
+        assertThat(salida.eventos).contains(new EventoDeVozEnVivo.Evidencia(registro, "JUGO VERDE", finDelDia));
+        assertThat(guardados(2).get(1).contenido()).isEqualTo("Te deje abajo el boton para sacarle foto."
+                + "\n\nFoto para registrar 'JUGO VERDE': si no ves el boton de la camara, subela desde Hoy.");
+    }
+
+    @Test
     @DisplayName("cada turno completo se guarda: lo que dijo la persona y lo que respondio el acompanante")
     void guardaElTurno() {
         service.iniciar(actor, salida);

@@ -226,8 +226,9 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
      * <p>{@code exige_evidencia} se agrego el 2026-09-14. Sin el, el agente marcaba un habito como
      * hecho sin poder avisar de que ademas hay que subir una foto, y la persona se enteraba dias
      * despues por un aviso al mentor de evidencia vencida que nadie le habia pedido. El agente no
-     * puede subirla —el chat no recibe archivos—, asi que lo unico que hace con este dato es
-     * decirlo y mandar a la pantalla de Hoy. */
+     * puede subirla —el chat no recibe archivos—: con el flag de botones le deja a la app la
+     * tarjeta de la camara ({@code proponer_registrar_con_foto}, D-171); sin el, lo dice y manda a
+     * la pantalla de Hoy. (Decia que lo unico que hacia era lo segundo.) */
     private static String lineaDe(HabitoDelDia habito, Instant ahora) {
         StringBuilder linea = new StringBuilder()
                 .append("id=").append(habito.registroId())

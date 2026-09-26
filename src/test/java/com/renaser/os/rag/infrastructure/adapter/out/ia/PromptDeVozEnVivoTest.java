@@ -36,6 +36,10 @@ class PromptDeVozEnVivoTest {
                 .contains("No alcance a oirte")
                 // Directo (pedido del dueno, 2026-09-24): sin preambulos y sin describir la propuesta.
                 .contains("una o dos frases")
+                // D-171: que escuche completo, sin contestar a mitad de idea.
+                .contains("Deja que la persona termine")
+                .contains("Nunca contestes a mitad de una")
+                .contains("Una respuesta larga de su parte es")
                 .contains("Te deje la propuesta abajo")
                 .contains("Nunca un \"no es posible\" a secas")
                 .doesNotContain("!}")

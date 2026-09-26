@@ -400,6 +400,8 @@ la app por un contrato `*.api` nuevo, sin reimplementar reglas.
 | Academia | `consultar_clase_de_hoy`, `proponer_entregar_clase_de_hoy`, `consultar_mis_cursos`, `consultar_por_que_esta_bloqueado` | `academy.api.ClaseDiariaPort`, `CursosDelAprendizFinder` | entregar la clase da puntos; no entrega si cambió el día de programa entre proponer y confirmar. ~~**No lee la recomendación adaptativa**: generarla llama a la IA (C-1) y no hay lectura solo de caché~~ **Corregido 2026-09-23:** `consultar_clase_de_hoy` muestra la recomendación de hoy si ya está en caché, vía `ClaseDiariaPort.recomendacionDeHoySiExiste` → `ConsultarRecomendacionDiariaUseCase.recomendacionDeHoySiExiste` (mismo "hoy" en la zona del participante y misma fila que el `GET`, nunca llama a `RecomendarClasePort` ni guarda); si no hay, dice que se genera al abrir la Academia en la app |
 | Domingo Ritual y contratos | `proponer_cerrar_semana`, `consultar_contratos_de_fase` | `rocks.api.CierreDeSemanaPort`, `phasecontracts.api.ContratosDeFaseDelParticipanteFinder` | cerrar la semana no da puntos (verificado); **desde el chat no se pisa una revisión existente** (supuesto a confirmar por el dueño). Firmar contratos es consentimiento legal: no hay herramienta para eso |
 | Espíritu y enfoque | `consultar_espiritu_de_hoy`, `proponer_resumen_espiritu`, `proponer_iniciar_santuario`, `proponer_iniciar_dia_sin_celular` | `habits.api.EnfoqueDiarioPort` | la lectura de Espíritu **no es pura**: usa el mismo caso de uso que abrir Training (idempotente); copiar su avance duplicaría la regla. Solo se INICIA Santuario / día sin celular: completar o romper sigue en la app |
+| Audioterapia semanal (D-171, 2026-09-26) | `consultar_audioterapia`, `proponer_resumen_audioterapia` | `habits.api.AudioterapiaDelAprendizPort` | se entrega como en la app (evidencia de TEXTO + completar), nunca por `/spirit-audio/submit`, que completa la Pastilla. Las dos preguntas son las de la Pastilla (`PreguntasDelAudio`) |
+| Hábitos con evidencia (D-171, 2026-09-26) | `proponer_registrar_con_foto` | `ConsultarAgendaHabitosPort` (→ `habits.api.AgendaDelDiaFinder`) | no escribe ni guarda propuesta: emite el evento `evidencia` y la app saca la foto y completa |
 | Notificaciones y Espejo | `consultar_notificaciones`, `proponer_marcar_notificaciones_leidas`, `consultar_espejo_de_la_sombra` | `rag.api.BandejaDeNotificaciones` (la implementa `notifications`, que ya depende de `rag`) | El Espejo por chat solo muestra el informe propio. **Corregido 2026-09-23:** esta fila incluía `consultar_mis_tickets_al_mentor` y `proponer_ticket_al_mentor` ("excepción aprobada a no escribe a terceros"). Se quitaron el mismo día: los tickets al mentor **se retiraron de la app el 2026-09-07** a pedido del dueño, y para hablar con el mentor existe el chat privado. El acompañante sugiere escribirle por ese chat y puede ayudar a ordenar el mensaje, pero no escribe por la persona |
 
 **Logros en el chat (proactivo, plantilla, sin IA ni cuota):** `LogroEnChatListener` escucha
@@ -694,6 +696,13 @@ Piezas: `ConversarEnVivoUseCase`, `ConversacionEnVivoService`, `SesionDeVozEnViv
 > frases, sin "he generado" ni "en la aplicación", y ante una propuesta solo "Te dejé la propuesta
 > abajo, confírmala si estás de acuerdo", porque la persona ya la ve en pantalla. Antes, el ruido del cuarto disparaba turnos que el modelo transcribía en
 > coreano y contestaba en coreano.
+
+> **Corregido 2026-09-26 (D-171).** El silencio de fin de turno era de 800 ms, con la sensibilidad de
+> fin de voz por defecto, y el orbe contestaba a mitad de idea. El dueño: *«las personas hablan mucho,
+> debe escuchar completamente»*. Ahora **1500 ms** de silencio y `END_SENSITIVITY_LOW`
+> (`MensajesGeminiLive`); el colchón (600 ms) y el arranque (`START_SENSITIVITY_LOW`) no cambian.
+> `modo-en-vivo.st` suma «Deja que la persona termine»: una pausa no es el final, nunca contestar a
+> mitad de una idea, y una respuesta larga de la persona es bienvenida (la suya sigue corta).
 
 
 ### D-163 — Las propuestas del acompañante se confirman sobre el orbe, como en un asistente de voz (2026-09-24)
@@ -1003,6 +1012,70 @@ ya guardado se sigue viendo en el perfil (`activa=false`), para poder borrarlo.
   Olvidar uno lo saca y borra también el resumen (verificado en la base, con `compactado_hasta`
   intacto).
 
+### D-171 — Registrar con foto desde el acompañante, y las dos preguntas de los audios (2026-09-26)
+
+**Decisión del dueño.** Cuando la persona le pide al acompañante marcar un hábito que exige evidencia
+(`exige_evidencia=si`: AGUA TIBIA CON LIMÓN, JUGO VERDE, PRIMERA y ÚLTIMA COMIDA, los tres RITUAL
+TIERRA-AGUA-FUEGO), el acompañante **no lo marca** y **no manda a Hoy**: deja una tarjeta con la
+cámara. La app abre la cámara, la persona saca la foto, contesta «¿Qué sentiste?», y la app sube la
+foto como evidencia `FOTO` y completa el hábito con esa respuesta — todo con los endpoints que ya
+existen. El backend solo valida y emite la tarjeta.
+
+**`proponer_registrar_con_foto`** (`PropuestaDeRegistrarConFoto`, argumento `registro_id`, solo con
+`renaser.ia.acompanante.confirmacion-con-botones`). Valida con `ConsultarAgendaHabitosPort.deHoyDe`
+(el «hoy» ya resuelto por `habits` en la zona de la persona): el registro es suyo y de hoy, está
+PENDIENTE o EN_CURSO, y pide evidencia. Si no la pide, le dice al modelo que use
+`marcar_habito_completado`; la **Clase diaria** (`DAILY_CLASS`) también la pide en el catálogo, pero se
+cierra con su resumen: se la manda a `proponer_entregar_clase_de_hoy`. Para distinguirla por clave y
+no por título (que la persona puede renombrar, D-133) se sumó `claveSistema` a
+`TrackDelDiaConCatalogo`, `habits.api.HabitoEnJuegoResumen` y `HabitoDelDia`; **no** viaja al móvil.
+Con el mismo flag, `marcar_habito_completado` rechaza esos hábitos y manda a la cámara, para que la
+regla no dependa solo del prompt.
+
+**Evento nuevo `evidencia`** (SSE del chat y WebSocket de voz en vivo, misma forma):
+
+    {"tipo":"evidencia","registroId":"<uuid>","titulo":"JUGO VERDE","venceEn":"2026-09-27T05:00:00Z"}
+
+- `venceEn` = el **fin del día local** de la persona (medianoche de su zona, `Instant` en UTC): después
+  ese registro ya no es el de hoy. No se usa la vigencia de 10 minutos de las propuestas porque no hay
+  nada que confirmar en el servidor.
+- **No se guarda en `propuestas_acompanante`.** La herramienta lo deja en `PedidosDeEvidenciaDelTurno`
+  (memoria del proceso, 15 min de retención) y el turno lo junta como a las propuestas
+  (`ConsultarPropuestasDelTurnoUseCase.evidenciasPedidasDesde`): en el chat antes del `fin`, después de
+  las propuestas; en la voz en vivo, tras cada herramienta. La herramienta y el turno corren en el
+  mismo proceso, así que no hace falta una tabla para un dato que vive segundos.
+- Va precedido de un `texto` de respaldo, que también queda guardado:
+  `"\n\nFoto para registrar '<título>': si no ves el boton de la camara, subela desde Hoy."` La app
+  instalada ignora el `tipo` nuevo y ve eso.
+- Al modelo, la herramienta le pide una sola frase corta («Te dejé abajo el botón para sacarle foto a
+  JUGO VERDE»), sin preguntar antes y sin decir que ya quedó.
+
+**Pastilla Renacer: las dos preguntas de la app.** `proponer_resumen_espiritu` recibía un `resumen`
+libre y el modelo pedía «un resumen». Ahora recibe `que_sentiste` y `que_te_llevas`, y el texto lo arma
+el código (`PreguntasDelAudio`) con las preguntas exactas de `preguntasPastilla.ts` y el mismo formato
+del modal (`pregunta\nrespuesta`, separadas por una línea en blanco). La descripción le dice al modelo
+que haga las dos preguntas de a una, que no corte respuestas largas y que nunca invente ni resuma. **Lo
+guardado en la propuesta no cambia** (`resumen` ya formateado + `dia`): `EntregarResumenEspirituConfirmable`
+no se tocó y una propuesta pendiente del formato viejo se confirma igual. Lo visible en la tarjeta
+pasa de 280 a 600 caracteres.
+
+**Audioterapia semanal: dos herramientas nuevas.** `consultar_audioterapia` (lectura, sin flag: semana,
+título, desde qué día cambia y si hoy ya la entregó; sin URL) y `proponer_resumen_audioterapia` (con
+flag, mismas dos preguntas y mismo formato). La confirmable (`EntregarResumenAudioterapiaConfirmable`)
+hace **lo mismo que la app**: evidencia de `TEXTO` con el texto y completar el registro de hoy de
+`AUDIO_THERAPY_WEEKLY`; **nunca** `/spirit-audio/submit`, que completaría la Pastilla. La propuesta
+guarda el `registro_id` de hoy: confirmada pasada la medianoche de la persona, se rechaza. Puerto nuevo
+`habits.api.AudioterapiaDelAprendizPort` (ver `docs/MODULO_HABITS.md`), que en `rag` se ve como
+`AudioterapiaSemanalPort`.
+
+**Prompt.** «Hábitos que piden evidencia» pasa a: con la herramienta, usarla directo, una frase, nunca
+`marcar_habito_completado`; sin ella (flag apagado), lo de antes. Sección nueva «Pastilla Renacer y
+Audioterapia» con las dos preguntas.
+
+**Queda afuera:** resumir el contenido del audio (no hay transcripciones; pendiente del dueño), la app
+(la programa otro agente contra el contrato de arriba) y la reanudación de sesión / `goAway` de Gemini
+Live.
+
 ---
 
 ## 4. Estructura del módulo
@@ -1048,12 +1121,13 @@ rag/
 
 ## 4.bis Hallazgos de la verificación técnica (contra los JARs reales, no documentación)
 
-### Contrato SSE de `POST /api/v1/renasia/mensajes` (actualizado 2026-09-23, D-153)
+### Contrato SSE de `POST /api/v1/renasia/mensajes` (actualizado 2026-09-26, D-171)
 
 Formas de `data:` (fuente de verdad: `EventoRenasiaSseMapper`):
 
     data: {"tipo":"texto","valor":"..."}
     data: {"tipo":"propuesta","id":"<uuid>","resumen":"Marcar 'Meditar' como hecho (+10 puntos si lo confirmas ahora)","venceEn":"2026-09-23T15:10:00Z"}
+    data: {"tipo":"evidencia","registroId":"<uuid>","titulo":"JUGO VERDE","venceEn":"2026-09-27T05:00:00Z"}
     data: {"tipo":"fuentes","lecciones":["leccion-id-1"]}
     data: {"tipo":"error","valor":"mensaje apto para mostrar"}
     data: {"tipo":"fin"}
@@ -1062,8 +1136,12 @@ Formas de `data:` (fuente de verdad: `EventoRenasiaSseMapper`):
 - `venceEn` es `Instant.toString()` (UTC, puede traer fracciones de segundo). Pasado ese instante,
   `confirmar` responde 409; la app puede ocultar los botones.
 
+- `evidencia` (D-171): la tarjeta de la cámara para `registroId`; `venceEn` es el fin del día local de
+  la persona. No se confirma en el servidor: la app sube la foto y completa con los endpoints de hábitos.
+
 **Orden garantizado:** textos del modelo → por cada propuesta del turno (de la más vieja a la más
-nueva) un `texto` `"\n\nPropuesta: <resumen>"` seguido de su `propuesta` → texto de apoyo (D-143)
+nueva) un `texto` `"\n\nPropuesta: <resumen>"` seguido de su `propuesta` → por cada foto pedida, un
+`texto` de respaldo seguido de su `evidencia` (D-171) → texto de apoyo (D-143)
 → `fuentes` (a lo sumo una vez) → `fin` (siempre último). Si el modelo falla, el turno es
 `error` + `fin` y no trae propuestas.
 

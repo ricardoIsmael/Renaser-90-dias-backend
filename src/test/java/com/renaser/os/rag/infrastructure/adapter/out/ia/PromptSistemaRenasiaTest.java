@@ -238,4 +238,26 @@ class PromptSistemaRenasiaTest {
 
         assertThat(render).contains("no se recupero contexto");
     }
+    /**
+     * D-171, decision del dueno: un habito que exige evidencia se registra con la camara, directo y en
+     * una frase, y nunca con marcar_habito_completado. Antes el prompt decia que no podia subirla y
+     * que mandara a Hoy; eso queda solo para cuando la herramienta no esta (flag apagado).
+     */
+    @Test
+    @DisplayName("evidencia: usa la camara directo, sin preguntar y sin marcar; Pastilla y Audioterapia con las dos preguntas")
+    void evidenciaConLaCamaraYLasDosPreguntas() {
+        String render = renderizar("(vacio)");
+
+        assertThat(render).contains("usala directo con su id")
+                .contains("No preguntes antes si quiere")
+                .contains("nunca marques esos habitos con marcar_habito_completado")
+                .contains("Te deje abajo el boton para sacarle foto a JUGO")
+                .contains("Si no tienes esa herramienta");
+        assertThat(render).contains("\"¿Qué sentiste después de escuchar este audio?\"")
+                .contains("\"¿Qué te llevas de este audio para tu día de hoy?\"")
+                .contains("no la cortes")
+                .contains("Nunca inventes, resumas")
+                .contains("proponer_resumen_audioterapia");
+        assertThat(render).doesNotContain("D-171");
+    }
 }

@@ -9006,3 +9006,20 @@ si la anota. La tarjeta ya es la confirmación.
 **Cómo evitar que vuelva a pasar.** `PromptSistemaRenasiaTest.directoAlCambiarAlgo` y
 `CuotaEdicionHorarioTest.todoElProgramaEsLibre` fallan si vuelve la regla. Regla general: un límite
 traducido del repo viejo es un supuesto hasta que el dueño lo confirma, y se anota como tal.
+
+## E-279 · `NoSuchElementException` al volver a stubear un mock que ya lanzaba (test de la Audioterapia)
+
+**Síntoma (2026-09-26, D-171).** `HerramientasDeAudioterapiaTest.confirmarRechazado` falló con
+`NoSuchElement Ese registro no es la Audioterapia de hoy` en la línea del segundo
+`when(audioterapia.entregarRespuestas(APRENDIZ, REGISTRO, TEXTO)).thenThrow(...)`, no en la aserción.
+
+**Causa real.** `when(mock.metodo(args))` **llama** al método para registrar el stub. Si con esos mismos
+argumentos ya había un `thenThrow`, la llamada lanza la excepción del stub anterior antes de que el
+nuevo se registre. El código de producción estaba bien; el test era el roto.
+
+**Solución.** Para encadenar varios rechazos del mismo método con los mismos argumentos,
+`doThrow(...).when(mock).metodo(args)`, que no invoca el método.
+
+**Cómo evitar que vuelva a pasar.** Al re-stubear un método que ya lanza, usar siempre la forma
+`doThrow/doReturn(...).when(mock)`. Si un test falla en una línea de `when(...)`, sospechar de esto
+antes que del código.

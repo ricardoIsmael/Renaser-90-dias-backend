@@ -58,10 +58,17 @@ final class MensajesGeminiLive {
      * <p>Corregido 2026-09-24 (E-243): el colchon era de 200 ms y con la sensibilidad baja el detector
      * arranca tarde: "Desactiva el habito..." llego como "Activa el habito..." y el orbe contesto lo
      * contrario de lo pedido. Con 600 ms entra la primera silaba aunque la deteccion tarde.
+     *
+     * <p>Corregido 2026-09-26 (D-171): el silencio era de 800 ms, con la sensibilidad de fin de voz por
+     * defecto, y el orbe contestaba a mitad de idea: bastaba una pausa para respirar o pensar para que
+     * diera el turno por terminado. El dueno: "las personas hablan mucho, debe escuchar completamente".
+     * Ahora 1500 ms de silencio y {@code END_SENSITIVITY_LOW}, que tarda mas en decidir que la voz
+     * termino. El precio es medio segundo mas de espera antes de cada respuesta; lo eligio el dueno.
      */
     static final String SENSIBILIDAD_DE_ARRANQUE = "START_SENSITIVITY_LOW";
+    static final String SENSIBILIDAD_DE_FIN = "END_SENSITIVITY_LOW";
     static final int COLCHON_ANTES_DE_LA_VOZ_MS = 600;
-    static final int SILENCIO_FIN_DE_TURNO_MS = 800;
+    static final int SILENCIO_FIN_DE_TURNO_MS = 1500;
 
     static String setup(String modelo, String voz, String prompt, List<DefinicionHerramienta> herramientas) {
         ObjectNode setup = JSON.createObjectNode();
@@ -73,6 +80,7 @@ final class MensajesGeminiLive {
         setup.putObject("systemInstruction").putArray("parts").addObject().put("text", prompt);
         ObjectNode deteccion = setup.putObject("realtimeInputConfig").putObject("automaticActivityDetection");
         deteccion.put("startOfSpeechSensitivity", SENSIBILIDAD_DE_ARRANQUE);
+        deteccion.put("endOfSpeechSensitivity", SENSIBILIDAD_DE_FIN);
         deteccion.put("prefixPaddingMs", COLCHON_ANTES_DE_LA_VOZ_MS);
         deteccion.put("silenceDurationMs", SILENCIO_FIN_DE_TURNO_MS);
         setup.putObject("inputAudioTranscription");

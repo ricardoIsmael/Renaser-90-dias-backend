@@ -81,7 +81,8 @@ class PropuestasAgenteServiceTest {
                 .conActor(otro, UserRole.TRAINEE)
                 .conActor(suspendido, UserRole.TRAINEE, UserStatus.SUSPENDED);
         service = new PropuestasAgenteService(repositorio, repositorio, List.of(accion), usuarios, reloj,
-                UUID::randomUUID, VIGENCIA);
+                UUID::randomUUID, VIGENCIA,
+                new com.renaser.os.rag.application.services.herramientas.PedidosDeEvidenciaDelTurno(reloj));
     }
 
     private PropuestaCreada proponer(UserId actor) {

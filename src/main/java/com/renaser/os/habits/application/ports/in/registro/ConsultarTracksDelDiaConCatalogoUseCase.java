@@ -68,15 +68,29 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
      * mira la exigencia en ninguna de sus cuatro guardas—, asi que esto es informacion, no un
      * candado nuevo. Cambiar eso seria otra decision y no esta tomada.
      *
-     * <p>NO trae {@code claveSistema}, a proposito: el movil ya la recibe por
-     * {@code MiHabitoResponse.systemKey} de {@code GET /api/v1/habits} y une catalogo y track
-     * por {@code habitoId}. Repetirla aca seria un segundo lugar por donde el mismo dato puede
-     * quedar desincronizado.
+     * <p>{@code claveSistema} (2026-09-26, D-171): la clave funcional del habito de catalogo
+     * ({@code DAILY_CLASS}, {@code AUDIO_THERAPY_WEEKLY}...), {@code null} en los personales. La
+     * necesitan los llamadores de adentro del servidor —el acompanante tiene que distinguir la
+     * Clase diaria, que se cierra con su resumen, y ubicar la Audioterapia de hoy—, que no tienen
+     * el catalogo a mano. <b>No viaja al movil:</b> {@code RegistroHabitoConCatalogoResponse} la
+     * sigue sin mapear, porque la app ya la recibe por {@code MiHabitoResponse.systemKey} de
+     * {@code GET /api/v1/habits} y une catalogo y track por {@code habitoId}.
+     *
+     * <p>Corregido 2026-09-26. Aca decia "NO trae {@code claveSistema}, a proposito", con el
+     * argumento de la app (que sigue valiendo para la respuesta HTTP y por eso no se toco).
      */
     record TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
                                    GuiaResumen guia, LocalTime horaDisparo, LocalTime horaLimite,
                                    PuntosEnJuego puntosEnJuego, boolean tieneEvidencia,
-                                   boolean exigeEvidencia) {
+                                   boolean exigeEvidencia, String claveSistema) {
+
+        /** Sin clave de sistema: un habito personal, o un llamador que no la necesita. */
+        public TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
+                                      GuiaResumen guia, LocalTime horaDisparo, LocalTime horaLimite,
+                                      PuntosEnJuego puntosEnJuego, boolean tieneEvidencia, boolean exigeEvidencia) {
+            this(registro, tituloHabito, tipoHabito, guia, horaDisparo, horaLimite, puntosEnJuego, tieneEvidencia,
+                    exigeEvidencia, null);
+        }
     }
 
     record GuiaResumen(String mantraTitulo, String mantraIntro, String queHacer, String comoHacerlo) {

@@ -1005,3 +1005,40 @@ Desplegar el backend con V37 antes del frontend.
 Pruebas nuevas: `HorarioPorFechaTest`, `HorarioPorFechaPersistenceAdapterTest`,
 `HabitPreferenceControllerTest` y regresiones de los servicios. En el frontend:
 `npm run test:habits` y `npx tsc --noEmit`.
+
+## 23. La Audioterapia y la clave del catálogo, hacia el acompañante (D-171) — 2026-09-26
+
+Dos cosas nuevas en `habits.api`, las dos para el acompañante de `rag`
+(`docs/MODULO_RAG.md` D-171). Ninguna cambia un endpoint ni la respuesta al móvil.
+
+**`AudioterapiaDelAprendizPort`** (lo implementa `AudioterapiaDelAprendizService`):
+
+- `deHoyDe(participante)`: el audio de la semana (`ConsultarAudioterapiaSemanalUseCase`: semana,
+  título, día del próximo cambio; `null` si todavía no hay) y el registro de **hoy** de
+  `AUDIO_THERAPY_WEEKLY` con su estado, sacado de la proyección del día (hoy en la zona de la persona).
+- `entregarRespuestas(actor, registroId, texto)`: hace **lo mismo que la app** — sube `texto` como
+  evidencia de `TEXTO` (`SubirEvidenciaRegistroUseCase`) y completa el registro
+  (`CompletarRegistroUseCase`, todas sus guardas). **No** pasa por `/spirit-audio/submit`, que completa
+  la Pastilla Renacer. Antes de subir nada exige que haya audio esta semana, que `registroId` sea el de
+  hoy (si pasó la medianoche de la persona, `NoSuchElementException`) y que siga PENDIENTE o EN_CURSO
+  (si no, `IllegalStateException`).
+- **Sin `@Transactional` propio, a propósito:** la lectura sin cerrojo del registro de hoy y el
+  `completar` con cerrojo quedarían en el mismo contexto de persistencia, y Hibernate no rehidrata una
+  entidad ya gestionada (el bug que documenta `ClaseDiariaHabitoService`). El precio es el de la app:
+  si `completar` falla después de subir, la evidencia queda subida; por eso se valida antes.
+- Es un puerto cerrado a la Audioterapia por el mismo motivo que `CompletarClaseDiariaHabitoUseCase`:
+  un «completar con texto cualquier hábito» sería un atajo para cerrar hábitos que piden foto.
+- La clave `AUDIO_THERAPY_WEEKLY` vive ahora en el puerto; `AudioterapiaService` la reusa.
+
+**`claveSistema` en la proyección del día.** `TrackDelDiaConCatalogo` y `HabitoEnJuegoResumen` llevan
+la clave del hábito de catálogo (`null` en los personales). El acompañante la usa para no ofrecer la
+cámara a la Clase diaria (`DAILY_CLASS`, que pide evidencia pero se cierra con su resumen) y para ubicar
+la Audioterapia; nunca por título, que la persona puede renombrar (D-133). **No viaja al móvil:**
+`RegistroHabitoConCatalogoResponse` no la mapea (la app ya la tiene en `MiHabitoResponse.systemKey`).
+
+> **Corregido 2026-09-26.** El javadoc de `TrackDelDiaConCatalogo` decía «NO trae `claveSistema`, a
+> propósito», con el argumento de la app. Ese argumento sigue valiendo para la respuesta HTTP, que no
+> cambió; el registro interno sí la lleva.
+
+Pruebas: `AudioterapiaDelAprendizServiceTest` (evidencia antes que completar, otro día, ya completada,
+sin audio) y `TracksDelDiaProyeccionServiceTest.laProyeccionLlevaLaClaveDelCatalogo`.

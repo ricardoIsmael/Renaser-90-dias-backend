@@ -2,7 +2,6 @@ package com.renaser.os.rag.application.services.vozenvivo;
 
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.in.propuesta.ConsultarPropuestasDelTurnoUseCase;
-import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.in.voz.ConversarEnVivoUseCase.ConversacionEnVivo;
 import com.renaser.os.rag.application.ports.in.voz.ConversarEnVivoUseCase.MotivoDeCierre;
 import com.renaser.os.rag.application.ports.in.voz.ConversarEnVivoUseCase.SalidaDeVozEnVivo;
@@ -21,7 +20,9 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -238,20 +239,28 @@ final class SesionDeVozEnVivo implements ConversacionEnVivo, ConversacionEnVivoP
         }
     }
 
-    /** Mismo criterio que el chat: el resumen va tambien al mensaje guardado, para verlo en el historial. */
+    /**
+     * Mismo criterio que el chat: cada propuesta (D-153) y cada tarjeta de la camara (D-171) va a la
+     * app como evento, y su texto de respaldo al mensaje guardado, para verlo en el historial.
+     */
     private void avisarPropuestasDesde(Instant antes) {
-        List<PropuestaCreada> nuevas;
+        List<Map.Entry<String, EventoDeVozEnVivo>> avisos = new ArrayList<>();
         try {
-            nuevas = c.propuestas().pendientesCreadasDesde(actorId, antes);
+            c.propuestas().pendientesCreadasDesde(actorId, antes).forEach(p -> avisos.add(Map.entry(
+                    ConversacionRenasiaService.ENCABEZADO_DE_PROPUESTA + p.resumen(),
+                    new EventoDeVozEnVivo.Propuesta(p.id(), p.resumen(), p.venceEn()))));
+            c.propuestas().evidenciasPedidasDesde(actorId, antes).forEach(e -> avisos.add(Map.entry(
+                    ConversacionRenasiaService.textoDeEvidencia(e.titulo()),
+                    new EventoDeVozEnVivo.Evidencia(e.registroId(), e.titulo(), e.venceEn()))));
         } catch (RuntimeException e) {
             log.warn("No se pudieron recoger las propuestas de la voz en vivo ({})", e.getClass().getSimpleName());
             return;
         }
-        for (PropuestaCreada propuesta : nuevas) {
+        for (Map.Entry<String, EventoDeVozEnVivo> aviso : avisos) {
             synchronized (this) {
-                turno.anexar(ConversacionRenasiaService.ENCABEZADO_DE_PROPUESTA + propuesta.resumen());
+                turno.anexar(aviso.getKey());
             }
-            emitir(new EventoDeVozEnVivo.Propuesta(propuesta.id(), propuesta.resumen(), propuesta.venceEn()));
+            emitir(aviso.getValue());
         }
     }
 

@@ -730,6 +730,35 @@ class ConversacionRenasiaServiceTest {
                 new EventoRenasia.Fin());
     }
 
+    /**
+     * D-171: la tarjeta de la camara llega como {@code evidencia}, despues de las propuestas y antes
+     * del {@code fin}, precedida del texto para la app que no la conoce; y ese texto queda guardado.
+     */
+    @Test
+    void laTarjetaDeLaCamaraLlegaAntesDelFinConSuTextoDeRespaldo() {
+        stubCaminoFeliz();
+        UUID registro = UUID.fromString("44444444-4444-4444-4444-444444444444");
+        Instant finDelDia = Instant.parse("2026-08-26T05:00:00Z");
+        when(propuestasDelTurno.pendientesCreadasDesde(activo, CLOCK.now())).thenReturn(List.of(MEDITAR));
+        when(propuestasDelTurno.evidenciasPedidasDesde(activo, CLOCK.now())).thenReturn(List.of(
+                new ConsultarPropuestasDelTurnoUseCase.PedidoDeEvidencia(registro, "JUGO VERDE", CLOCK.now(),
+                        finDelDia)));
+
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
+
+        String respaldo = "\n\nFoto para registrar 'JUGO VERDE': si no ves el boton de la camara, subela desde Hoy.";
+        assertThat(eventos).containsExactly(
+                new EventoRenasia.Texto("ok"),
+                new EventoRenasia.Texto("\n\nPropuesta: Meditar: de 06:00 a 07:00 desde manana"),
+                new EventoRenasia.Propuesta(MEDITAR.id(), MEDITAR.resumen(), MEDITAR.venceEn()),
+                new EventoRenasia.Texto(respaldo),
+                new EventoRenasia.Evidencia(registro, "JUGO VERDE", finDelDia),
+                new EventoRenasia.Fin());
+        ArgumentCaptor<MensajeRenasia> captor = ArgumentCaptor.forClass(MensajeRenasia.class);
+        verify(saveMensajeRenasiaPort, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues().get(1).contenido()).endsWith(respaldo);
+    }
+
     /** Sin propuestas —casi todos los turnos— el stream es exactamente el de siempre. */
     @Test
     void sinPropuestasElStreamNoCambia() {

@@ -6,6 +6,7 @@ import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAg
 import com.renaser.os.rag.application.ports.in.memoria.CompactarMemoriaUseCase;
 import com.renaser.os.rag.application.ports.in.memoria.ConsultarMemoriaUseCase;
 import com.renaser.os.rag.application.ports.in.propuesta.ConsultarPropuestasDelTurnoUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ConsultarPropuestasDelTurnoUseCase.PedidoDeEvidencia;
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.in.seguridad.RevisarPatronDeMalestarUseCase;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort;
@@ -101,7 +102,8 @@ import java.util.Set;
  *
  * <p><b>Propuestas del turno (fase 2, D-153).</b> Una herramienta de escritura no escribe: deja
  * una propuesta pendiente. Al terminar el stream del modelo, este servicio recoge las que nacieron
- * en el turno y las manda antes del {@code fin} ({@link #conPropuestasAntesDelFin}).
+ * en el turno y las manda antes del {@code fin} ({@link #conPropuestasAntesDelFin}). Despues de
+ * ellas, con el mismo mecanismo, las tarjetas de camara que pidio el turno (D-171).
  */
 @Service
 public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, ObtenerHistorialUseCase {
@@ -136,6 +138,14 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      * "Listo": todavia no se ejecuto nada. No menciona botones porque la app vieja no los tiene.
      */
     public static final String ENCABEZADO_DE_PROPUESTA = "\n\nPropuesta: ";
+
+    /**
+     * Lo que ve una app sin la tarjeta de la camara (y el historial) por cada pedido de foto
+     * (D-171). Sirve con y sin la tarjeta: quien no la tiene, sube la foto desde Hoy como siempre.
+     */
+    public static String textoDeEvidencia(String titulo) {
+        return "\n\nFoto para registrar '" + titulo + "': si no ves el boton de la camara, subela desde Hoy.";
+    }
 
     private final UserSummaryFinder userSummaryFinder;
     private final ControlCuotaRenasiaPort controlCuotaRenasiaPort;
@@ -372,6 +382,10 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
             for (PropuestaCreada propuesta : propuestasDelTurno.pendientesCreadasDesde(actorId, inicioDelTurno)) {
                 eventos.add(new EventoRenasia.Texto(ENCABEZADO_DE_PROPUESTA + propuesta.resumen()));
                 eventos.add(new EventoRenasia.Propuesta(propuesta.id(), propuesta.resumen(), propuesta.venceEn()));
+            }
+            for (PedidoDeEvidencia pedido : propuestasDelTurno.evidenciasPedidasDesde(actorId, inicioDelTurno)) {
+                eventos.add(new EventoRenasia.Texto(textoDeEvidencia(pedido.titulo())));
+                eventos.add(new EventoRenasia.Evidencia(pedido.registroId(), pedido.titulo(), pedido.venceEn()));
             }
             return eventos;
         } catch (RuntimeException e) {
