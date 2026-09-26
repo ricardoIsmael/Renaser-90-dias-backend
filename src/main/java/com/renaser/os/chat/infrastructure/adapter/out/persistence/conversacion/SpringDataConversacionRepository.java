@@ -1,6 +1,10 @@
 package com.renaser.os.chat.infrastructure.adapter.out.persistence.conversacion;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.Collection;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,4 +23,8 @@ interface SpringDataConversacionRepository extends JpaRepository<ConversacionJpa
     List<ConversacionJpaEntity> findByTipo(TipoConversacionJpa tipo);
 
     List<ConversacionJpaEntity> findByIdIn(List<UUID> ids);
+
+    /** Solo la clave, no la fila: quien pregunta quiere saber cuales faltan, no leerlas. */
+    @Query("select c.claveDirecta from ConversacionJpaEntity c where c.claveDirecta in :claves")
+    List<String> clavesDirectasEntre(@Param("claves") Collection<String> claves);
 }

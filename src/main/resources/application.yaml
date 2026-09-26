@@ -470,6 +470,12 @@ renaser:
       semaforo-en-chat-plantilla-amarillo: "Cerraste la semana en amarillo, {etiqueta}: {porcentaje} %. Estás cerca: elige un hábito y cuídalo cada día de esta semana."
       semaforo-en-chat-plantilla-rojo: "Cerraste la semana en rojo, {etiqueta}: {porcentaje} %. No es un juicio, es un punto de partida. ¿Empezamos hoy con un paso pequeño? Aquí estoy para acompañarte."
       semaforo-en-chat-plantilla-sin-datos: "Tu semana cerró sin datos en el semáforo. ¿Planificamos juntos esta semana? Elegir hoy tus hábitos y objetivos te ayuda a empezar con claridad."
+  # D-174: bienvenida automática en el chat de soporte de cada aprendiz NUEVO (tarjeta de Canva con
+  # su primer nombre y el texto). Apagada mientras no haya remitente: el correo de la cuenta de
+  # staff que la firma (hoy, la de Kelin). En el texto, {nombre} se reemplaza por el primer nombre.
+  bienvenida:
+    remitente-email: ${BIENVENIDA_REMITENTE_EMAIL:}
+    texto: ${BIENVENIDA_TEXTO:}
   email:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}

@@ -131,6 +131,11 @@ class PresenciaServiceTest {
             }
 
             @Override
+            public java.util.Set<String> clavesDirectasExistentes(java.util.Collection<String> claves) {
+                return java.util.Set.of();
+            }
+
+            @Override
             public Optional<Conversacion> porCelulaId(UUID celulaId) {
                 return Optional.empty();
             }

@@ -112,6 +112,18 @@ class ChatPersistenceAdapterTest {
                 .containsExactly(guardada.id());
     }
 
+    /** D-173: de un lote de claves, devuelve solo las que ya tienen chat, en una consulta. */
+    @Test
+    void clavesDirectasExistentesDevuelveSoloLasQueYaTienenChat() {
+        String abierta = Conversacion.claveDirectaDe(usuarioA, usuarioB);
+        saveConversacionPort.save(Conversacion.crearDirecta(nuevaConversacionId(), abierta, Instant.now()));
+        String sinChat = Conversacion.claveDirectaDe(usuarioA, UserId.of(UUID.randomUUID()));
+
+        assertThat(loadConversacionPort.clavesDirectasExistentes(List.of(abierta, sinChat)))
+                .containsExactly(abierta);
+        assertThat(loadConversacionPort.clavesDirectasExistentes(List.of())).isEmpty();
+    }
+
     @Test
     void soloPuedeExistirUnaConversacionGlobal() {
         saveConversacionPort.save(Conversacion.crearGlobal(nuevaConversacionId(), Instant.now()));

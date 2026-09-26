@@ -75,6 +75,10 @@ class BancoDeMentoria {
             // Aprendices + acompanantes. Estas pruebas solo pueblan aprendices.
             return aprendicesVigentes(grupoId, instante);
         }
+        @Override
+        public List<UserId> acompanantesVigentes(UUID grupoId, Instant instante) {
+            return List.of();
+        }
 
         @Override
         public boolean esIntegranteVigente(UUID grupoId, UserId usuarioId, Instant instante) {

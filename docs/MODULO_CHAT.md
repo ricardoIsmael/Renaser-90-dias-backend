@@ -245,11 +245,17 @@ equivocar la palabra no lo nota ningún compilador — lo nota el teléfono de a
 |---|---|
 | CH-10 | **El relleno es un endpoint, no un barrido al arrancar.** Una corrida masiva en el arranque crea N conversaciones en todo entorno que levante —incluido el de un desarrollador— y cuando alguien lo nota ya pasó. `POST /api/v1/admin/chat/support-conversations/backfill` lo dispara una persona, y la respuesta dice `traineesReviewed / created / alreadyExisted / failed`. Idempotente. |
 | CH-11 | **Nada reconcilia participantes, nunca** — con **una excepción acotada, CH-16**. Es la consecuencia directa de la regla 4: si el staff se puede ir, una sincronización *"dejalo como debería estar"* le desharía la salida en el próximo evento. Por eso el relleno **no toca** una conversación que ya existe aunque le falte alguien del staff, y `incorporar` solo **suma**. Es la diferencia con `ParticipantesCelulaService`, que sí reconcilia — ahí la composición la manda `community`, acá la manda la persona. |
-| CH-12 | **El `nombre` es una foto del momento de creación** (`"Soporte - <nombre del aprendiz>"`). Lleva el nombre porque quien más ve estas conversaciones es el staff, y sin nombre tendría 25 filas idénticas — el mismo problema que ya arregló el listado de mensajes directos. **Limitación conocida:** si la persona se cambia el nombre después, el título no se entera. Derivarlo en cada lectura obligaría a resolver el aprendiz de cada soporte al listar; no se hizo porque nadie lo pidió, y queda escrito acá en vez de quedar como olvido. |
+| CH-12 | **El `nombre` es una foto del momento de creación** (`"<primer nombre> – Formación Renaser"` desde D-173; ver la nota al pie de la tabla). Lleva el nombre porque quien más ve estas conversaciones es el staff, y sin nombre tendría 25 filas idénticas — el mismo problema que ya arregló el listado de mensajes directos. **Limitación conocida:** si la persona se cambia el nombre después, el título no se entera. Derivarlo en cada lectura obligaría a resolver el aprendiz de cada soporte al listar; no se hizo porque nadie lo pidió, y queda escrito acá en vez de quedar como olvido. |
 | CH-13 | **Salir es solo de un SOPORTE.** Irse de una CÉLULA, de un DM o de la GLOBAL son tres preguntas distintas que nadie contestó; el caso de uso rechaza cualquier otro tipo en vez de inventarles un significado. Salir borra la fila de participación y **nunca** los mensajes. |
 | CH-14 | **`Conversacion` pasó de 7 a 11 métodos públicos** (`crearSoporte`, `claveSoporteDe`, `esAprendizDeSoporte` y, desde CH-16, `seGanaPorRolDeStaff`), por encima del techo de 7 de `.claude/rules/01`. Es el costo de una raíz de agregado con una fábrica por tipo: la alternativa —un `crear(tipo, ...)` genérico con parámetros que sobran en tres de cada cuatro llamadas— es peor. Se deja anotado en vez de disimulado. |
 | CH-15 | **`deSoporte()` no pagina.** Hay una por aprendiz del padrón (25 al 2026-09-16) y quien llama necesita el conjunto entero para compararlo contra el padrón entero. Si el padrón creciera a miles, **este es el método que hay que paginar**. |
 | CH-16 | **La baja de rol SÍ revoca** (auditoría de seguridad). Única excepción a CH-11, y acotada a eso: cuando alguien deja de ser `ADMIN`/`ALCHEMIST`, `RetirarDelSoporteUseCase` le borra la fila de toda conversación de soporte donde no sea el aprendiz dueño. **No** repone a quien se fue solo, **no** recompone conversaciones a las que les falte staff y **no** mueve a nadie más — que es lo que CH-11 prohíbe; solo revoca a quien dejó de cumplir la **regla 1**, que estaba sin cumplir en el camino de bajada. Sin esto, un ex administrador conservaba el chat privado de **cada** aprendiz: leyéndolo, escribiendo en él y recibiéndolo en vivo, sin ninguna forma de sacarlo desde el producto. Decide contra el rol **vigente** (no contra el del evento) porque el outbox entrega al-menos-una-vez y sin orden: una reentrega tardía no puede borrarle las filas a un administrador legítimo. Además, las CUATRO copias del guard (`MensajeService`, `ConversacionService`, `PresenciaService`, `AutorizacionDeConversacionService`) exigen ahora rol de staff vigente para un `SOPORTE` ajeno, así la puerta queda cerrada aunque la revocación no haya corrido. |
+
+> **Corregido 2026-09-26 (D-173).** CH-12 decía que el nombre era `"Soporte - <nombre del aprendiz>"`.
+> Operaciones nombra el grupo personal `"NOMBRE – FORMACIÓN RENASER"` (procedimiento OPE-01-01), y el
+> dueño pidió ese formato con el **primer nombre** solo, para no romper con nombres compuestos. Aplica a
+> los soportes **nuevos**: los que ya existían conservan `"Soporte - Nombre Completo"` a pedido del dueño
+> (no hay migración que los renombre). Sin nombre legible, el título es `"Formación Renaser"` (antes `"Soporte"`).
 
 ### 8.5 Anti-N+1 (D-43)
 
@@ -410,3 +416,77 @@ que pasa es que el indicador no se encienda, o sea el comportamiento anterior a 
 (conversaba solo por REST), así que no hay cliente viejo que se pueda romper. Y la app nueva tolera
 el payload **sin** `event` a propósito, para poder hablar con un backend todavía no desplegado: el
 teléfono se actualiza cuando la tienda quiere, no cuando uno despliega.
+
+## 9. El chat de dos con quien acompaña (2026-09-26, D-173)
+
+**Qué pidió el dueño.** Al aprobar la cuenta, el aprendiz entra solo a dos chats: el general y su
+soporte (§8). Cuando entra a un grupo con alguien que lo acompaña, se le abre **un chat de dos** con
+esa persona, sin staff adentro:
+
+- en la recepción (los primeros 7 días), uno con **cada guía** de la cohorte;
+- en su grupo estable, uno con **su mentor**, en cuanto el admin se lo asigna.
+
+**Los chats no se cierran.** Cuando el mentor rota (a mano por ahora: el barrido automático de
+rotación sigue apagado, V48), se abre el chat con el nuevo y el del anterior queda como historial,
+igual que cualquier DM. El dueño eligió eso sobre "cerrarlo para el exmentor".
+
+**Cómo.** `ComposicionCelulaAcompananteListener` escucha el mismo `ComposicionDeCelulaCambiadaEvent`
+que reconcilia el chat del grupo, pero en su propio listener: si uno falla, el otro igual corre.
+`ChatsConAcompananteService` arma las parejas aprendiz × acompañante con
+`AcompanamientoDelGrupoPort` (→ `community.api.AcompanamientoFinder.acompanantesVigentes`, que
+devuelve `MENTOR` y `GUIA` y deja afuera `SOPORTE`), pregunta en **una** consulta cuáles ya existen
+(`LoadConversacionPort.clavesDirectasExistentes`, anti-N+1: la recepción no tiene tope y cada ingreso
+mira el grupo entero) y crea las que faltan como `DIRECTA` normales, cada una en su transacción
+(C-10). El UNIQUE de `clave_directa` decide si dos caminos la abren a la vez.
+
+**Límites conocidos.**
+- Solo corre cuando un grupo cambia. Los aprendices que **ya** tenían mentor antes de este cambio no
+  reciben su chat hasta el próximo cambio de su grupo. No hay relleno; si se necesita, es un endpoint
+  aparte como el de §8.
+- Un chat de dos vacío aparece en la lista de ambos apenas se crea.
+
+| Clase | Qué fija |
+|---|---|
+| `ChatsConAcompananteServiceTest` (6) | Un chat por pareja con solo esos dos; uno por guía en recepción; no repite los existentes y consulta una sola vez; sin acompañante no hace nada; nadie habla solo; una pareja que falla no frena a las demás |
+| `AcompanamientoServiceTest` (+2) | `acompanantesVigentes`: mentor y guías sí; soporte, aprendices y exmentor no; grupo cerrado, vacío |
+| `ChatPersistenceAdapterTest` (+1) | `clavesDirectasExistentes` contra Postgres real |
+
+## 10. La bienvenida automática en el chat de soporte (2026-09-26, D-174)
+
+**Qué hace.** Cuando nace el soporte de un aprendiz **nuevo** (no en el relleno de §8), se mandan dos
+mensajes desde la cuenta de staff configurada (hoy la de Kelin): la tarjeta de bienvenida del Canva de
+Operaciones con su primer nombre, y después el texto de bienvenida. Es el paso 2 de OPE-01-01 que hoy
+se hace a mano por WhatsApp.
+
+**Cómo se prende** (sin cambiar código): `BIENVENIDA_REMITENTE_EMAIL` con el correo de la cuenta que
+firma, y `BIENVENIDA_TEXTO` con el texto (`{nombre}` se reemplaza por el primer nombre). Sin remitente
+está apagada; sin texto, sale solo la tarjeta. Si la cuenta no existe o está suspendida, no sale nada
+y queda un aviso en el log.
+
+**La tarjeta** la dibuja el servidor (`BienvenidaJava2dAdapter`, Java2D, sin servicios externos) sobre
+`src/main/resources/bienvenida/fondo.png` (la exportación de Canva sin nombre) con Cinzel
+(`bienvenida/Cinzel.ttf`, fuente de Google bajo licencia SIL OFL 1.1, texto en `bienvenida/OFL.txt`).
+Las medidas se tomaron comparando el fondo con la exportación "FLOR DE MARÍA": tamaño 133, letras
+7,5 px más juntas, centro x = 600, línea base y = 868, color `#153832`. Un nombre que no entra se
+achica. Sale en JPEG (~110–125 KB contra 1,2 MB en PNG). Se verificó que dibuja igual dentro de
+`eclipse-temurin:25-jre-noble`, la base de la imagen de producción.
+
+**Cómo llega al teléfono.** El servidor la sube a S3 bajo `chat/<soporte>/fotos/<uuid>` con el nuevo
+`AlmacenamientoPort.subir` (única excepción a "el backend no toca los bytes": los archivos del
+teléfono siguen por URL prefirmada), y la manda como un mensaje `IMAGEN` normal. La app instalada la
+muestra como cualquier foto del chat: no hace falta APK.
+
+**Dos mensajes, no uno:** la app muestra el texto de una foto solo cuando la foto no carga.
+
+**Sin reintento a propósito.** `SoporteNacioBienvenidaListener` es `@Async` + `@TransactionalEventListener`
+(después del commit, en otro hilo) y **no** `@ApplicationModuleListener`, que reintenta: un reintento
+después de la primera foto mandaría la bienvenida dos veces. Si falla, queda en el log y Operaciones
+la manda a mano, como hasta hoy.
+
+| Clase | Qué fija |
+|---|---|
+| `BienvenidaJava2dAdapterTest` (4) | Coincide con la exportación de Canva (la referencia está en `src/test/resources/bienvenida/`); el test distingue una tarjeta sin nombre; un nombre largo no se sale; JPEG liviano |
+| `BienvenidaEnSoporteServiceTest` (5) | Tarjeta con el primer nombre y texto, firmados por el remitente; sin texto solo la tarjeta; apagada sin remitente; remitente suspendido no manda; un fallo de S3 no lanza ni manda una foto inexistente |
+| `ConversacionSoporteServiceTest` (+1 y aserciones) | Avisa solo al crear de verdad: no si ya existía, no si perdió la carrera, no en el relleno |
+| `PrimerNombreTest` (2) | Primera palabra con inicial en mayúscula; vacío sin nombre |
+

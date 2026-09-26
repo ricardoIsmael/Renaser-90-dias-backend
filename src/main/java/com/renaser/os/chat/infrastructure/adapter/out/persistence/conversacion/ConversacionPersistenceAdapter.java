@@ -7,8 +7,11 @@ import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Component
@@ -34,6 +37,11 @@ class ConversacionPersistenceAdapter implements LoadConversacionPort, SaveConver
     @Override
     public Optional<Conversacion> porClaveDirecta(String claveDirecta) {
         return repository.findByClaveDirecta(claveDirecta).map(mapper::toDomain);
+    }
+
+    @Override
+    public Set<String> clavesDirectasExistentes(Collection<String> claves) {
+        return claves.isEmpty() ? Set.of() : new HashSet<>(repository.clavesDirectasEntre(claves));
     }
 
     @Override

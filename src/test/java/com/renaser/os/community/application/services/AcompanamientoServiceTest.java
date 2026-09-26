@@ -506,4 +506,31 @@ class AcompanamientoServiceTest {
         assertThat(tercera.aprendices()).hasSize(1);
         assertThat(tercera.siguienteCursor()).isNull();
     }
+
+    // ── D-173: quienes acompañan de persona a persona ────────────────────────
+    private AcompanamientoFinderService finder() {
+        return new AcompanamientoFinderService(cargaAsignaciones, cargaCelulas, cargaPolitica);
+    }
+
+    @Test
+    @DisplayName("acompañantes vigentes: el mentor y los guías; ni el staff de soporte, ni aprendices, ni el exmentor")
+    void acompanantesVigentesSonMentorYGuias() {
+        escenarioBase();
+        UserId guia = UserId.of(UUID.randomUUID());
+        UserId staff = UserId.of(UUID.randomUUID());
+        asignar(MI_GRUPO, guia, FuncionAcompanamiento.GUIA, AHORA.minusSeconds(86_400), null);
+        asignar(MI_GRUPO, staff, FuncionAcompanamiento.SOPORTE, AHORA.minusSeconds(86_400), null);
+        asignar(MI_GRUPO, EXMENTOR, FuncionAcompanamiento.MENTOR, AHORA.minusSeconds(172_800), AHORA.minusSeconds(86_400));
+
+        assertThat(finder().acompanantesVigentes(MI_GRUPO.value(), AHORA)).containsExactlyInAnyOrder(MENTOR, guia);
+    }
+
+    @Test
+    @DisplayName("un grupo que ya cerró no tiene acompañantes vigentes")
+    void grupoCerradoNoTieneAcompanantes() {
+        grupoConPeriodo(MI_GRUPO, "Grupo Viejo", LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 31));
+        asignar(MI_GRUPO, MENTOR, FuncionAcompanamiento.MENTOR, AHORA.minusSeconds(86_400), null);
+
+        assertThat(finder().acompanantesVigentes(MI_GRUPO.value(), AHORA)).isEmpty();
+    }
 }

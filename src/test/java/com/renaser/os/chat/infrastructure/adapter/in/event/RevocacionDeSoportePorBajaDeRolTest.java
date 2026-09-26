@@ -214,7 +214,8 @@ class RevocacionDeSoportePorBajaDeRolTest {
         when(cargarMensajes.pagina(any(), any(), anyInt())).thenReturn(List.of());
 
         soporte = new ConversacionSoporteService(conversaciones, guardarConversacion, agregarParticipante,
-                quitarParticipante, esParticipante, usuarios, participaciones, CLOCK, idGenerator, transacciones);
+                quitarParticipante, esParticipante, usuarios, participaciones, CLOCK, idGenerator, transacciones,
+                evento -> { });
         listener = new RolDeUsuarioCambiadoSoporteListener(soporte, soporte);
         autorizacion = new AutorizacionDeConversacionService(conversaciones, esParticipante,
                 pertenenciaVigente, usuarios);
