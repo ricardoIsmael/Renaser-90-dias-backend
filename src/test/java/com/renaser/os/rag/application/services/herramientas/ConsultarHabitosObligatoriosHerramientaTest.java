@@ -69,7 +69,8 @@ class ConsultarHabitosObligatoriosHerramientaTest {
         assertThat(contenido())
                 .contains("Obligatorios del programa (no se apagan ningun dia ni se pausan): Clase diaria, "
                         + "Pastilla Renacer.")
-                .contains("cambiarle la hora (el dia en que le toca no se mueve), si le quedan cambios esta semana")
+                .contains("cambiarle la hora (el dia en que le toca no se mueve): como horario general desde manana")
+                .doesNotContain("si le quedan cambios")
                 .contains("solo para un dia futuro").contains("El dia de hoy no se reacomoda")
                 .doesNotContain("Ducha fria,");
     }

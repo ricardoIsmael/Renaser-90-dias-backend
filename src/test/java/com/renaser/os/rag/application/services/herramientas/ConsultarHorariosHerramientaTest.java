@@ -52,7 +52,7 @@ class ConsultarHorariosHerramientaTest {
 
         assertThat(herramienta.definicion().obligatoriosFaltantesEn(invocacion)).isEmpty();
         assertThat(resultado).isInstanceOf(ResultadoHerramienta.Exito.class);
-        assertThat(texto(resultado)).contains("No tiene habitos activos").contains("semana de acomodo libre");
+        assertThat(texto(resultado)).contains("No tiene habitos activos").contains("sin tope");
         verify(puerto).deFecha(APRENDIZ, null);
     }
 

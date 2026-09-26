@@ -188,7 +188,8 @@ class HabitosDeAprendizAdminServiceTest {
         assertThat(vista.cuota().usados()).isEqualTo(2);
         assertThat(vista.cuota().restantes()).isEqualTo(1);
         assertThat(vista.cuota().limite()).isEqualTo(PreferenciaHorarioService.WEEKLY_SCHEDULE_EDIT_LIMIT);
-        assertThat(vista.cuota().periodo()).isEqualTo("WEEK");
+        // D-170: todo el programa es periodo libre (antes, pasado el dia 7, "WEEK").
+        assertThat(vista.cuota().periodo()).isEqualTo("FREE");
     }
 
     @Test

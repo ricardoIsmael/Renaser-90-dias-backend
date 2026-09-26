@@ -10,11 +10,13 @@ class CuotaEdicionHorarioTest {
 
     private static final LocalDate HOY = LocalDate.of(2026, 8, 24);
 
+    /** D-170: no hay tope de cambios. Antes solo los primeros 7 dias eran libres (limits.ts del repo viejo). */
     @Test
-    void losPrimerosSieteDiasSonSemanaDeAcomodoLibre() {
+    void todoElProgramaEsLibre() {
         assertThat(CuotaEdicionHorario.esSemanaDeAcomodoLibre(1)).isTrue();
-        assertThat(CuotaEdicionHorario.esSemanaDeAcomodoLibre(7)).isTrue();
-        assertThat(CuotaEdicionHorario.esSemanaDeAcomodoLibre(8)).isFalse();
+        assertThat(CuotaEdicionHorario.esSemanaDeAcomodoLibre(8)).isTrue();
+        assertThat(CuotaEdicionHorario.esSemanaDeAcomodoLibre(45)).isTrue();
+        assertThat(CuotaEdicionHorario.esSemanaDeAcomodoLibre(90)).isTrue();
     }
 
     @Test

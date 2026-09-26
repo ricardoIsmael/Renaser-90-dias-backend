@@ -4,6 +4,7 @@
 #
 #   ./scripts/despliegue/parametros-acompanante.sh preparar   # ANTES del push a master
 #   ./scripts/despliegue/parametros-acompanante.sh prender    # cuando la gente tenga la app nueva
+#   ./scripts/despliegue/parametros-acompanante.sh key        # solo cambiar la API key de Gemini
 #
 # `preparar` deja producción lista para el despliegue sin cambiarle nada a quien tiene la app de hoy.
 #   - Pide la API key nueva de Gemini sin mostrarla.
@@ -25,6 +26,10 @@ set -euo pipefail
 PREFIJO="/renaser/prod"
 REGION="${AWS_REGION:-us-east-1}"
 MODELO_DEL_CHAT="gemini-3.5-flash-lite"
+# La cuenta de AWS de producción: la del rol del despliegue (AWS_ROLE_ARN en GitHub). E-277: la
+# primera vez el script corrió con las credenciales por defecto de la laptop, que eran de OTRA
+# cuenta. Escribió todo allá, y producción siguió sin voz.
+CUENTA_DE_PRODUCCION="302277511407"
 
 # Los interruptores del acompañante: todos valen `false` por defecto en application.yaml.
 INTERRUPTORES=(IA_VOZ_PROVEEDOR IA_VOZ_EN_VIVO IA_ACOMPANANTE_CONFIRMACION_CON_BOTONES IA_ACOMPANANTE_MEMORIA)
@@ -167,8 +172,22 @@ prender() {
   echo "Listo. Falta reiniciar el contenedor para que lo tome: docker restart backend (E-244)."
 }
 
+# Antes de escribir nada: estas credenciales tienen que ser de la cuenta de producción.
+exigir_cuenta_de_produccion() {
+  local cuenta
+  cuenta="$(aws sts get-caller-identity --query Account --output text 2>/dev/null || true)"
+  if [[ "$cuenta" != "$CUENTA_DE_PRODUCCION" ]]; then
+    echo "Estas credenciales son de la cuenta '${cuenta:-desconocida}', y producción es la $CUENTA_DE_PRODUCCION." >&2
+    echo "No se escribió nada. Usa las de producción, por ejemplo: AWS_PROFILE=<perfil> $0 ${1:-}" >&2
+    exit 3
+  fi
+  echo "Cuenta de AWS: $cuenta (producción)."
+}
+
 case "${1:-}" in
-  preparar) preparar ;;
-  prender) prender ;;
-  *) echo "Uso: $0 preparar|prender" >&2; exit 2 ;;
+  preparar) exigir_cuenta_de_produccion preparar; preparar ;;
+  prender) exigir_cuenta_de_produccion prender; prender ;;
+  key) exigir_cuenta_de_produccion key; key_de_gemini
+       echo "Listo. Falta reiniciar el contenedor para que la tome: docker restart backend (E-244)." ;;
+  *) echo "Uso: $0 preparar|prender|key" >&2; exit 2 ;;
 esac

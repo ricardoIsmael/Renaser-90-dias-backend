@@ -359,6 +359,10 @@ y `esDelegable=false`, copiados del default del cliente (`posicionarPorEje`), no
 backend. Elegir el día de un hábito semanal **solo lo anota** mientras siga abierto D-H3 (el
 generador no filtra por el día elegido): el resumen dice "Anotar" y el modelo no lo promete.
 
+> **Corregido 2026-09-26 (D-170).** Ya no hay cupo de cambios de horario: la cuota es `FREE` los 90
+> días, así que el "agotado → no propone" y el "`fijar` gasta cupo" de la tabla no se disparan nunca.
+> El prompt tiene "Se directo al cambiar algo": propone de una vez, sin preguntar si lo anota.
+
 **Límites conocidos:** el pre-chequeo de cupo no ve qué hábitos ya se reacomodaron en la semana,
 así que puede negar uno que `habits` sí permitiría (el lado seguro); con cupo agotado remite a la
 app. La ambigüedad de la ventana de las 18:00 (D-152) sigue sin resolver: decide el caso de uso.

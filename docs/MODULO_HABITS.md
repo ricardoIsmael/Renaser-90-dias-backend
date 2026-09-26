@@ -374,6 +374,11 @@ Cuatro piezas nuevas, todas construidas sobre lo que ya existía en `preferencia
 
 ### 12.1 `habit-preferences` — editar el horario personal de un hábito
 
+> **Corregido 2026-09-26 (D-170, E-278).** Las dos primeras viñetas de abajo describen `limits.ts` del
+> repo viejo: 7 días libres y después 3 hábitos distintos por semana. El dueño aclaró que esa regla no
+> existe. Hoy `CuotaEdicionHorario.DIAS_DE_ACOMODO_LIBRE = 90`: los 90 días son periodo libre (`FREE`)
+> y no se consulta el historial. El código de la cuota semanal queda, pero sin efecto.
+
 > **Actualizado 2026-09-07 (D-121):** Plan envía una fecha exacta y el horario solo rige ese día.
 > La descripción histórica de abajo corresponde a peticiones sin `date`. El contrato nuevo está en §22.
 
@@ -894,6 +899,7 @@ Documentado en `docs/api/CONTRATO_DIA_A_DIA.md` §1.7.
 
 - **`domain/model/preferencia/CuotaEdicionHorario`** (nuevo, dominio puro): la regla de cuota
   (`DIAS_DE_ACOMODO_LIBRE=7`, `HABITOS_POR_SEMANA=3`, `inicioSemanaPrograma`, literales `FREE`/`WEEK`)
+  > **Corregido 2026-09-26 (D-170).** `DIAS_DE_ACOMODO_LIBRE` vale 90: no hay tope de cambios.
   dejó de ser constantes privadas de un servicio, porque ahora la comparten tres caminos que tienen que
   decir lo mismo: el PATCH que la cobra, el GET que la informa y la promoción que la cobra al regir.
   `PreferenciaHorarioService.FREE_SCHEDULE_EDITS_UNTIL_DAY`/`WEEKLY_SCHEDULE_EDIT_LIMIT` siguen
