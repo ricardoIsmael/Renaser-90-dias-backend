@@ -102,7 +102,7 @@ class PropuestaDeHorarioPorDiaDeSemanaTest {
 
         assertThat(fijar).isInstanceOf(ResultadoHerramienta.Fallo.class);
         verify(proponer).proponer(eq(APRENDIZ), any(), eq("Quitar lo propio de los lunes en 'Meditar' (hora propia "
-                + "o apagado): esos dias vuelve a su horario general. No gasta cambios de horario."));
+                + "o apagado): esos dias vuelve a su horario general."));
     }
 
     @Test

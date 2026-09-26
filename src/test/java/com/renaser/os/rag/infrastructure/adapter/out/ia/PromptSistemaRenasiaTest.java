@@ -160,6 +160,26 @@ class PromptSistemaRenasiaTest {
     }
 
     @Test
+    @DisplayName("bateria ronda 3 (2026-09-26): sin propuestas fantasma, sin cambiar un habito por otro, agenda solo si acepta")
+    void reglasDeLaRondaTres() {
+        String render = renderizar("(vacio)");
+
+        // #13 y #38: "te deje la propuesta abajo" sin haber creado ninguna.
+        assertThat(render).contains("Solo di que dejaste una propuesta o un boton si en");
+        // #25: dijo que no existia "Ducha fria", que estaba pausada.
+        assertThat(render).contains("consultar_habitos_obligatorios (lista tambien los");
+        // #18: pidio "yoga" (no existe) y contesto sobre "Caminar 40 minutos".
+        assertThat(render).contains("Nunca lo cambies por otro");
+        // #61: propuso guardar la agenda en la misma respuesta en que la contaron.
+        assertThat(render).contains("Nunca la propongas en la misma respuesta en que te cuenta su horario");
+        // #70/#72/#74: hablaba de "tu mentor" sin saber si tenia.
+        assertThat(render).contains("Tu no sabes si ya");
+        // #107/#109: hablo de saltarse o registrar tarde habitos que ya estaban completados.
+        assertThat(render).contains("Antes de hablar de un habito concreto de hoy")
+                .contains("si ya esta completado, dile que ya lo tiene hecho");
+    }
+
+    @Test
     @DisplayName("E-281: el estado de un habito pedido con foto se vuelve a consultar, nunca de memoria")
     void fotoSeVuelveAConsultar() {
         String render = renderizar("(vacio)");

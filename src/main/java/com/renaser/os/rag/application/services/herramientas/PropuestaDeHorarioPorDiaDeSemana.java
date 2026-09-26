@@ -99,10 +99,9 @@ public class PropuestaDeHorarioPorDiaDeSemana implements HerramientaAgente {
             if (habito.obligatorio()) {
                 throw new PropuestaImposibleException(LoQueSiSePuede.obligatorio(habito.titulo()));
             }
-            return "Apagar '" + habito.titulo() + "' " + dias + ", todas las semanas, hasta que lo vuelva a activar. "
-                    + "No gasta cambios de horario.";
+            return "Apagar '" + habito.titulo() + "' " + dias + ", todas las semanas, hasta que lo vuelva a activar.";
         }
         return "Quitar lo propio de " + dias + " en '" + habito.titulo() + "' (hora propia o apagado): esos dias "
-                + "vuelve a su horario general. No gasta cambios de horario.";
+                + "vuelve a su horario general.";
     }
 }

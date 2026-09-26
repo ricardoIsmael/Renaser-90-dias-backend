@@ -60,8 +60,7 @@ class PropuestaDeApagarDiaTest {
 
         verify(proponer).proponer(APRENDIZ, new InvocacionHerramienta(PropuestaDeApagarDia.NOMBRE,
                         Map.of("habito_id", MEDITAR.toString(), "fecha", "2026-09-09", "accion", "apagar")),
-                "Apagar 'Meditar' solo hoy, miércoles 2026-09-09: ese dia no se le va a pedir. No gasta cambios de "
-                        + "horario.");
+                "Apagar 'Meditar' solo hoy, miércoles 2026-09-09: ese dia no se le va a pedir.");
         assertThat(resultado).isInstanceOf(ResultadoHerramienta.Exito.class);
         assertThat(((ResultadoHerramienta.Exito) resultado).contenido()).contains("TODAVIA NO");
     }
@@ -178,6 +177,6 @@ class PropuestaDeApagarDiaTest {
 
         verify(proponer).proponer(APRENDIZ, new InvocacionHerramienta(PropuestaDeApagarDia.NOMBRE,
                         Map.of("habito_id", MEDITAR.toString(), "fecha", corregida.toString(), "accion", "apagar")),
-                "Apagar 'Meditar' solo el sábado 2026-09-12: ese dia no se le va a pedir. No gasta cambios de horario.");
+                "Apagar 'Meditar' solo el sábado 2026-09-12: ese dia no se le va a pedir.");
     }
 }

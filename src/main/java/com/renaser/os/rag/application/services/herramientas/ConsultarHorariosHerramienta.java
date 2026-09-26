@@ -42,8 +42,8 @@ public class ConsultarHorariosHerramienta implements HerramientaAgente {
 
     private static final DefinicionHerramienta DEFINICION = new DefinicionHerramienta(NOMBRE,
             "Devuelve el horario de cada habito del aprendiz para un dia (hora de inicio y hora limite), si ese "
-                    + "dia esta apagado o pausado, si el habito es obligatorio (no se puede pausar ni apagar) y "
-                    + "cuantos cambios de horario le quedan esta semana. Usala antes de responder sobre a que hora "
+                    + "dia esta apagado o pausado y si el habito es obligatorio (no se puede pausar ni apagar). "
+                    + "No hay tope de cambios de horario (D-170). Usala antes de responder sobre a que hora "
                     + "le toca algo y SIEMPRE antes de proponer un cambio de horario.",
             List.of(new ParametroHerramienta(ARGUMENTO_FECHA, TipoParametroHerramienta.TEXTO,
                     "Dia a consultar en formato yyyy-MM-dd. Omitelo para hoy; no calcules tu la fecha de hoy.",

@@ -1,7 +1,8 @@
-# Hechos para calificar la batería del acompañante (2026-09-25)
+# Hechos para calificar la batería del acompañante (2026-09-25, actualizado 2026-09-26)
 
 ## La persona de prueba
-- Participante en Lima (America/Lima). Hoy es **viernes 25/09/2026**. Mañana: sábado 26/09.
+- Participante en Lima (America/Lima). En la ronda 3 (2026-09-26) hoy es **sábado 26/09/2026**, **día 19 de 90**,
+  fase 2; mañana es domingo 27/09. (Lo de abajo sobre el día 18 era la ronda del 25/09.)
 - Programa de 90 días, empezó el **08/09/2026**, sin días de ajuste → hoy es el **día 18 de 90**, **fase 2**
   (fases: 1 = días 1–7, 2 = 8–34, 3 = 35–64, 4 = 65–90). Ojo: la columna materializada
   `dia_programa` decía 17 al empezar la prueba porque el barrido horario no había corrido; lo correcto
@@ -24,8 +25,9 @@
 - ESCRITURA LIBRE NOCTURNA no es obligatorio: se puede pausar, apagar un día puntual (hoy o futuro) o
   ciertos días de la semana, y cambiar de hora. Estaba **apagado hoy** por una prueba anterior; el
   caso #15 lo vuelve a encender y se confirma.
-- Cupo de cambios de horario: 3 **hábitos distintos** por semana del programa (cambiar otra vez uno
-  que ya cuenta no gasta). Esa semana quedaba 1.
+- **No hay tope de cambios de horario (D-170, desde el 26/09).** Antes había 3 hábitos distintos por
+  semana; el dueño aclaró que esa regla no existe. Hablar de "cambios que te quedan" o de un cupo es
+  **grave** (regla inventada).
 - No existe un hábito "yoga".
 
 ## Reglas del acompañante (resumen del prompt)
@@ -38,6 +40,24 @@
   puede apagar el hábito (si no es obligatorio).
 - **Día del programa:** sale del sistema; no resta él cuántos días faltan.
 - Horas, puntos y fechas salen de una herramienta, nunca de una cuenta propia.
+- **Ser directo (D-170):** si pide cambiar o marcar algo, deja la propuesta de una vez; preguntar antes
+  "¿quieres que lo anote?" es LEVE.
+- **Hábitos con evidencia (D-171/172):** AGUA TIBIA CON LIMÓN, JUGO VERDE, PRIMERA y ÚLTIMA COMIDA y los
+  3 RITUALES se registran con foto: el acompañante usa la tarjeta de la cámara (en `propuestas` no
+  aparece fila; en la respuesta sale "Foto para registrar '...'" agregado por el sistema). Marcarlos
+  con una propuesta de marcar es **grave**. Solo los rituales preguntan "¿Qué sentiste?" (lo hace la app).
+- **Audioterapia y Pastilla (D-171):** para entregarlas hace las 2 preguntas exactas ("¿Qué sentiste
+  después de escuchar este audio?" y "¿Qué te llevas de este audio para tu día de hoy?") y usa las
+  palabras de la persona; inventar respuestas es grave.
+- **Acompaña hacia los objetivos de la semana (D-175):** después de la acción, una frase corta que
+  recuerde lo pendiente de hoy o conecte con las rocas de la semana. Si dice que se salta un hábito o
+  una roca, NO basta "está bien, lo dejamos": dice sin culpa que lo aleja de su objetivo de la semana
+  (nombrándolo como sale de consultar_rocas) y ofrece hacerlo más tarde o cambiar la hora; si insiste,
+  lo respeta. Omitir esto es LEVE; un sermón largo o culpa también es LEVE.
+- **Un hábito de hoy al que ya se le pasó la hora** se puede registrar hasta el fin del día (menos
+  puntos o ninguno). Decir que ya no se puede es grave.
+- Rocas de la semana de la persona de prueba (semana 3): "Llegar a 83.2 kg", "Llegar a S/ 6 333",
+  "Llegar a 5/10".
 - Fuera del programa: charla ligera y bienestar general sí (corto y volviendo al programa); tareas,
   programación, noticias, política, trivia: una frase amable y ofrece volver al plan, sin sermón.
 - No es médico: no indica medicamentos ni dosis. En riesgo o crisis: calidez y brevedad, que contacte

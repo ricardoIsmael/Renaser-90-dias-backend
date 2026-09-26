@@ -356,7 +356,11 @@
   "grupo": "horario",
   "q": "quiero hacer ducha fria a las 6 de la manana desde manana",
   "propuesta": false,
-  "contiene": [["pausad"]],
+  "contiene": [
+   [
+    "pausad"
+   ]
+  ],
   "nota": "ya esta a las 06:00 y esta pausada: nada que cambiar (requireQueCambie, D-166); lo dice"
  },
  {
@@ -378,12 +382,13 @@
   "grupo": "horario",
   "q": "cuantos cambios de horario me quedan esta semana?",
   "propuesta": false,
-  "contiene": [
-   [
-    "cambio"
-   ]
-  ],
-  "nota": "cupo desde la herramienta"
+  "nota": "D-170: no hay tope; dice que puede cambiar cuantas veces quiera, sin inventar cupo",
+  "no_contiene": [
+   "te quedan",
+   "quedan 2",
+   "quedan 1",
+   "quedan 0"
+  ]
  },
  {
   "id": 38,
@@ -425,7 +430,7 @@
   "q": "pasa todos mis habitos una hora mas tarde",
   "propuesta": null,
   "max_propuestas": 3,
-  "nota": "no dispara 20 cambios; aclara el cupo"
+  "nota": "D-170: no hay cupo; puede proponer o preguntar la hora base, pero sin hablar de cupo ni disparar 20 propuestas"
  },
  {
   "id": 43,
@@ -944,5 +949,115 @@
    ]
   ],
   "nota": "combina"
+ },
+ {
+  "id": 103,
+  "grupo": "evidencia",
+  "q": "registra mi agua tibia con limon",
+  "propuesta": false,
+  "contiene": [
+   [
+    "foto"
+   ]
+  ],
+  "nota": "D-171: tarjeta de la camara (Foto para registrar), sin propuesta de marcar, sin preguntar antes"
+ },
+ {
+  "id": 104,
+  "grupo": "evidencia",
+  "q": "ya hice el ritual de la noche, marcalo",
+  "propuesta": false,
+  "contiene": [
+   [
+    "foto"
+   ]
+  ],
+  "nota": "D-171: tarjeta de la camara para el ritual; nunca marcar_habito_completado"
+ },
+ {
+  "id": 105,
+  "grupo": "objetivos",
+  "q": "hoy no voy a hacer el ritual de la noche",
+  "propuesta": false,
+  "contiene": [
+   [
+    "semana",
+    "objetivo",
+    "roca",
+    "83",
+    "6 333",
+    "5/10"
+   ]
+  ],
+  "nota": "D-175: no basta 'esta bien'; lo aleja del objetivo de la semana (nombrado) y ofrece mas tarde o cambiar la hora"
+ },
+ {
+  "id": 106,
+  "grupo": "objetivos",
+  "q": "como voy con mis objetivos de la semana?",
+  "propuesta": false,
+  "contiene": [
+   [
+    "83",
+    "6 333",
+    "5/10",
+    "semana"
+   ]
+  ],
+  "nota": "consulta rocas de la semana; datos de herramienta"
+ },
+ {
+  "id": 107,
+  "grupo": "objetivos",
+  "q": "me salto la ultima comida hoy, no tengo tiempo",
+  "propuesta": false,
+  "contiene": [
+   [
+    "semana",
+    "objetivo",
+    "83",
+    "mas tarde",
+    "hora"
+   ]
+  ],
+  "nota": "D-175: sin culpa, conecta con objetivo y ofrece salida; si ya esta hecha dice que ya quedo"
+ },
+ {
+  "id": 108,
+  "grupo": "horario",
+  "q": "cambia el ritual de la noche a las 22:00",
+  "propuesta": true,
+  "max_propuestas": 1,
+  "no_contiene": [
+   "te quedan",
+   "cupo"
+  ],
+  "nota": "D-170: propuesta directa, sin preguntar si la anota, sin cupo"
+ },
+ {
+  "id": 109,
+  "grupo": "vencido",
+  "q": "se me paso la hora del jugo verde, todavia lo puedo registrar?",
+  "propuesta": false,
+  "no_contiene": [
+   "ya no se puede",
+   "ya no puedes"
+  ],
+  "nota": "si ya esta registrado lo dice; si no, puede hasta el fin del dia con menos puntos"
+ },
+ {
+  "id": 110,
+  "grupo": "audios",
+  "q": "ayudame a entregar mi audioterapia",
+  "propuesta": false,
+  "contiene": [
+   [
+    "sentiste",
+    "ya",
+    "entregada",
+    "completad"
+   ]
+  ],
+  "nota": "hace la primera pregunta exacta, o dice que ya esta entregada hoy (se entrego en la prueba anterior)"
  }
 ]

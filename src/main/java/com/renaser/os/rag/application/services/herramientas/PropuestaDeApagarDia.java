@@ -40,7 +40,7 @@ public class PropuestaDeApagarDia implements HerramientaAgente {
             "PROPONE apagar un habito del aprendiz UN dia concreto (ese dia no se le pide), o volver a encenderlo. "
                     + "NO cambia nada: deja una propuesta que la persona confirma con un boton. Llama SIEMPRE antes "
                     + "a consultar_horarios para tener el habito_id y ver si es obligatorio (los obligatorios no se "
-                    + "apagan). Los dias pasados no se tocan. No gasta cambios de horario. Nunca digas que ya quedo "
+                    + "apagan). Los dias pasados no se tocan. Nunca digas que ya quedo "
                     + "apagado.",
             List.of(ParametroHerramienta.obligatorio(ArgumentosDeHorario.HABITO_ID,
                             TipoParametroHerramienta.IDENTIFICADOR, "El habito_id que devolvio consultar_horarios."),
@@ -122,8 +122,7 @@ public class PropuestaDeApagarDia implements HerramientaAgente {
     static String resumenDe(DiaPedido pedido, HorarioDeHabito habito, boolean esHoy) {
         String dia = (esHoy ? "hoy, " : "el ") + ArgumentosDeHorario.texto(pedido.fecha());
         if (pedido.apagar()) {
-            return "Apagar '" + habito.titulo() + "' solo " + dia + ": ese dia no se le va a pedir. No gasta cambios "
-                    + "de horario.";
+            return "Apagar '" + habito.titulo() + "' solo " + dia + ": ese dia no se le va a pedir.";
         }
         return "Volver a activar '" + habito.titulo() + "' " + dia + ", con su horario de ese dia.";
     }
