@@ -99,14 +99,23 @@ public sealed interface EventoRenasia {
      * @param venceEn     el fin del dia local de la persona: despues ese registro ya no es el de hoy
      * @param conPregunta si despues de la foto la app pregunta "¿Que sentiste?": solo en los rituales
      *                    (D-172, decision del dueno). En los demas, foto y listo
+     * @param destino     D-178: a que se sube la foto. Con {@link DestinoDeEvidencia#ROCA},
+     *                    {@code registroId} es el id de la roca diaria y la app completa la accion con
+     *                    {@code /rocks/{id}/evidence}
      */
-    record Evidencia(UUID registroId, String titulo, Instant venceEn, boolean conPregunta)
-            implements EventoRenasia {
+    record Evidencia(UUID registroId, String titulo, Instant venceEn, boolean conPregunta,
+                     DestinoDeEvidencia destino) implements EventoRenasia {
 
         public Evidencia {
             Objects.requireNonNull(registroId, "registroId no puede ser null");
             Objects.requireNonNull(titulo, "titulo no puede ser null");
             Objects.requireNonNull(venceEn, "venceEn no puede ser null");
+            Objects.requireNonNull(destino, "destino no puede ser null");
+        }
+
+        /** La tarjeta de un habito, como antes de D-178. */
+        public Evidencia(UUID registroId, String titulo, Instant venceEn, boolean conPregunta) {
+            this(registroId, titulo, venceEn, conPregunta, DestinoDeEvidencia.HABITO);
         }
     }
 

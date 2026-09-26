@@ -151,8 +151,8 @@ class RocasDelAprendizService implements RocasDelAprendizFinder {
     }
 
     private static RocaDelDia aRocaDelDia(RocaDiaria roca, boolean bloqueada) {
-        return new RocaDelDia(nombreDelEje(roca.eje()), roca.posicion(), roca.color().name(), roca.titulo(),
-                roca.horaInicio(), roca.horaFin(), roca.completada(), bloqueada);
+        return new RocaDelDia(roca.id().value(), nombreDelEje(roca.eje()), roca.posicion(), roca.color().name(),
+                roca.titulo(), roca.horaInicio(), roca.horaFin(), roca.completada(), bloqueada);
     }
 
     private static String nombreDelEje(EjeObjetivo eje) {

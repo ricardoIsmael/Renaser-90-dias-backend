@@ -49,13 +49,22 @@ public sealed interface EventoDeVozEnVivo {
         }
     }
 
-    /** Igual que el evento {@code evidencia} del SSE del chat (D-171): la tarjeta de la camara. */
-    record Evidencia(UUID registroId, String titulo, Instant venceEn, boolean conPregunta)
-            implements EventoDeVozEnVivo {
+    /**
+     * Igual que el evento {@code evidencia} del SSE del chat (D-171): la tarjeta de la camara. Con
+     * {@code destino} desde D-178 (habito o accion del dia).
+     */
+    record Evidencia(UUID registroId, String titulo, Instant venceEn, boolean conPregunta,
+                     DestinoDeEvidencia destino) implements EventoDeVozEnVivo {
         public Evidencia {
             Objects.requireNonNull(registroId, "registroId es obligatorio");
             Objects.requireNonNull(titulo, "titulo es obligatorio");
             Objects.requireNonNull(venceEn, "venceEn es obligatorio");
+            Objects.requireNonNull(destino, "destino es obligatorio");
+        }
+
+        /** La tarjeta de un habito, como antes de D-178. */
+        public Evidencia(UUID registroId, String titulo, Instant venceEn, boolean conPregunta) {
+            this(registroId, titulo, venceEn, conPregunta, DestinoDeEvidencia.HABITO);
         }
     }
 

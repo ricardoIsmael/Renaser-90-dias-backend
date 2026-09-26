@@ -53,7 +53,8 @@ final class EventoDeVozEnVivoJson {
                     .put("registroId", evidencia.registroId().toString())
                     .put("titulo", evidencia.titulo())
                     .put("venceEn", evidencia.venceEn().toString())
-                    .put("conPregunta", evidencia.conPregunta());
+                    .put("conPregunta", evidencia.conPregunta())
+                    .put("destino", evidencia.destino().valorJson());
             case EventoDeVozEnVivo.CuotaAgotada ignorado -> nodo.put("tipo", "cuotaAgotada");
             case EventoDeVozEnVivo.Error error -> nodo.put("tipo", "error").put("valor", error.valor());
         }

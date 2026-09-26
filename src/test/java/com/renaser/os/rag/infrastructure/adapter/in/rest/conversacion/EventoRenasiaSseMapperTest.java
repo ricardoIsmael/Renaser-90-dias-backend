@@ -1,5 +1,6 @@
 package com.renaser.os.rag.infrastructure.adapter.in.rest.conversacion;
 
+import com.renaser.os.rag.domain.model.conversacion.DestinoDeEvidencia;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import org.junit.jupiter.api.Test;
 
@@ -74,6 +75,22 @@ class EventoRenasiaSseMapperTest {
                 Instant.parse("2026-09-27T05:00:00Z"), true));
 
         assertThat(json).isEqualTo("{\"tipo\":\"evidencia\",\"registroId\":\"44444444-4444-4444-4444-444444444444\","
-                + "\"titulo\":\"JUGO VERDE\",\"venceEn\":\"2026-09-27T05:00:00Z\",\"conPregunta\":true}");
+                + "\"titulo\":\"JUGO VERDE\",\"venceEn\":\"2026-09-27T05:00:00Z\",\"conPregunta\":true,"
+                + "\"destino\":\"habito\"}");
+    }
+
+    /**
+     * D-178: la tarjeta de una accion del dia viaja con {@code destino=roca} y {@code registroId} = el id
+     * de la roca diaria. Los campos de D-171 no cambian: una app vieja la sigue leyendo.
+     */
+    @Test
+    void evidenciaDeUnaAccionDelDiaLlevaDestinoRoca() {
+        String json = EventoRenasiaSseMapper.aJson(new EventoRenasia.Evidencia(
+                UUID.fromString("66666666-6666-6666-6666-666666666666"), "Llamar a 3 clientes",
+                Instant.parse("2026-09-27T05:00:00Z"), false, DestinoDeEvidencia.ROCA));
+
+        assertThat(json).isEqualTo("{\"tipo\":\"evidencia\",\"registroId\":\"66666666-6666-6666-6666-666666666666\","
+                + "\"titulo\":\"Llamar a 3 clientes\",\"venceEn\":\"2026-09-27T05:00:00Z\",\"conPregunta\":false,"
+                + "\"destino\":\"roca\"}");
     }
 }

@@ -84,7 +84,7 @@ class ConsultarRocasDelAprendizAdapter implements ConsultarRocasDelAprendizPort 
 
     private static RocasDelDia aRocasDelDia(RocasDelAprendizFinder.RocasDelDia dia) {
         List<RocaDelDia> rocas = dia.rocas().stream()
-                .map(r -> new RocaDelDia(r.eje(), r.posicion(), r.color(), r.titulo(), r.horaInicio(), r.horaFin(),
+                .map(r -> new RocaDelDia(r.id(), r.eje(), r.posicion(), r.color(), r.titulo(), r.horaInicio(), r.horaFin(),
                         r.completada(), r.bloqueadaPorPareto()))
                 .toList();
         return new RocasDelDia(dia.fecha(), rocas, aPlanDeManana(dia.planificacion()));

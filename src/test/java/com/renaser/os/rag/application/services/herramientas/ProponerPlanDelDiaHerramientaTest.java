@@ -117,8 +117,8 @@ class ProponerPlanDelDiaHerramientaTest {
     @DisplayName("el dia en curso ya armado no se reacomoda: Fallo y ninguna propuesta")
     void hoyYaArmado() {
         mananaCon(SIN_PLAN);
-        when(rocas.deHoy(APRENDIZ)).thenReturn(new RocasDelDia(HOY, List.of(new RocaDelDia("CUERPO", 1, "VERDE",
-                "Caminar", null, null, false, false)), SIN_PLAN));
+        when(rocas.deHoy(APRENDIZ)).thenReturn(new RocasDelDia(HOY, List.of(new RocaDelDia(UUID.randomUUID(), "CUERPO", 1,
+                "VERDE", "Caminar", null, null, false, false)), SIN_PLAN));
 
         ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, con("{\"fecha\":\"2026-09-23\","
                 + "\"acciones\":[{\"eje\":\"CUERPO\",\"titulo\":\"Correr\"}]}"));

@@ -44,6 +44,8 @@ class ConsultarRocasHerramientaTest {
 
     private static final UserId APRENDIZ = UserId.of(UUID.randomUUID());
     private static final LocalDate HOY = LocalDate.of(2026, 9, 23);
+    private static final UUID CORRER = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID ESTIRAR = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final PlanDeManana PLAN_PENDIENTE = new PlanDeManana(false, 0, true, LocalTime.of(18, 0), true);
 
     private final ConsultarRocasDelAprendizPort puerto = mock(ConsultarRocasDelAprendizPort.class);
@@ -53,17 +55,19 @@ class ConsultarRocasHerramientaTest {
     @DisplayName("sin alcance es hoy: rocas con franja, estado, evidencia, Pareto y el plan de manana")
     void hoyPorDefecto() {
         when(puerto.deHoy(APRENDIZ)).thenReturn(new RocasDelDia(HOY, List.of(
-                new RocaDelDia("CUERPO", 1, "VERDE", "Correr 5 km", LocalTime.of(7, 0), LocalTime.of(8, 0), true,
-                        false),
-                new RocaDelDia("CUERPO", 2, "AMARILLA", "Estirar", null, null, false, true)), PLAN_PENDIENTE));
+                new RocaDelDia(CORRER, "CUERPO", 1, "VERDE", "Correr 5 km", LocalTime.of(7, 0), LocalTime.of(8, 0),
+                        true, false),
+                new RocaDelDia(ESTIRAR, "CUERPO", 2, "AMARILLA", "Estirar", null, null, false, true)), PLAN_PENDIENTE));
 
         var invocacion = InvocacionHerramienta.sinArgumentos(ConsultarRocasHerramienta.NOMBRE);
         String texto = texto(herramienta.ejecutar(APRENDIZ, invocacion));
 
         assertThat(herramienta.definicion().obligatoriosFaltantesEn(invocacion)).isEmpty();
         assertThat(texto).contains("Rocas de hoy (2026-09-23)")
-                .contains("CUERPO #1 VERDE | Correr 5 km | inicio=07:00 fin=08:00 | estado=completada | evidencia=entregada")
-                .contains("#2 AMARILLA | Estirar | sin hora fija | estado=pendiente | evidencia=pendiente | bloqueada=si")
+                .contains("- roca_id=" + CORRER + " | CUERPO #1 VERDE | Correr 5 km | inicio=07:00 fin=08:00 "
+                        + "| estado=completada | evidencia=entregada")
+                .contains("- roca_id=" + ESTIRAR + " | CUERPO #2 AMARILLA | Estirar | sin hora fija | estado=pendiente "
+                        + "| evidencia=pendiente | bloqueada=si")
                 .contains("Plan de manana: todavia no esta creado")
                 .contains("abre a las 18:00 (hora local) y ahora esta abierta")
                 .contains("La app si le deja crear");

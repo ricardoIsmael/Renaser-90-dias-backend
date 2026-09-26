@@ -4,6 +4,7 @@ import com.renaser.os.rag.application.ports.in.voz.ConversarEnVivoUseCase;
 import com.renaser.os.rag.application.ports.in.voz.ConversarEnVivoUseCase.ConversacionEnVivo;
 import com.renaser.os.rag.application.ports.in.voz.ConversarEnVivoUseCase.MotivoDeCierre;
 import com.renaser.os.rag.application.ports.in.voz.ConversarEnVivoUseCase.SalidaDeVozEnVivo;
+import com.renaser.os.rag.domain.model.conversacion.DestinoDeEvidencia;
 import com.renaser.os.rag.domain.model.conversacion.EventoDeVozEnVivo;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
@@ -182,6 +183,13 @@ class VozEnVivoWebSocketHandlerTest {
         assertThat(EventoDeVozEnVivoJson.aJson(new EventoDeVozEnVivo.Evidencia(id, "JUGO VERDE",
                 Instant.parse("2026-09-27T05:00:00Z"), false)))
                 .isEqualTo("{\"tipo\":\"evidencia\",\"registroId\":\"00000000-0000-0000-0000-000000000001\","
-                        + "\"titulo\":\"JUGO VERDE\",\"venceEn\":\"2026-09-27T05:00:00Z\",\"conPregunta\":false}");
+                        + "\"titulo\":\"JUGO VERDE\",\"venceEn\":\"2026-09-27T05:00:00Z\",\"conPregunta\":false,"
+                        + "\"destino\":\"habito\"}");
+        // D-178: la de una accion del dia, con destino roca.
+        assertThat(EventoDeVozEnVivoJson.aJson(new EventoDeVozEnVivo.Evidencia(id, "Llamar a 3 clientes",
+                Instant.parse("2026-09-27T05:00:00Z"), false, DestinoDeEvidencia.ROCA)))
+                .isEqualTo("{\"tipo\":\"evidencia\",\"registroId\":\"00000000-0000-0000-0000-000000000001\","
+                        + "\"titulo\":\"Llamar a 3 clientes\",\"venceEn\":\"2026-09-27T05:00:00Z\","
+                        + "\"conPregunta\":false,\"destino\":\"roca\"}");
     }
 }

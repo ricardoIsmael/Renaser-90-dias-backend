@@ -409,6 +409,7 @@ la app por un contrato `*.api` nuevo, sin reimplementar reglas.
 | Espíritu y enfoque | `consultar_espiritu_de_hoy`, `proponer_resumen_espiritu`, `proponer_iniciar_santuario`, `proponer_iniciar_dia_sin_celular` | `habits.api.EnfoqueDiarioPort` | la lectura de Espíritu **no es pura**: usa el mismo caso de uso que abrir Training (idempotente); copiar su avance duplicaría la regla. Solo se INICIA Santuario / día sin celular: completar o romper sigue en la app |
 | Audioterapia semanal (D-171, 2026-09-26) | `consultar_audioterapia`, `proponer_resumen_audioterapia` | `habits.api.AudioterapiaDelAprendizPort` | se entrega como en la app (evidencia de TEXTO + completar), nunca por `/spirit-audio/submit`, que completa la Pastilla. Las dos preguntas son las de la Pastilla (`PreguntasDelAudio`) |
 | Hábitos con evidencia (D-171, 2026-09-26) | `proponer_registrar_con_foto` | `ConsultarAgendaHabitosPort` (→ `habits.api.AgendaDelDiaFinder`) | no escribe ni guarda propuesta: emite el evento `evidencia` y la app saca la foto y completa |
+| Acciones del día con foto (D-178, 2026-09-26) | `proponer_registrar_accion_con_foto` | `ConsultarRocasDelAprendizPort` (→ `rocks.api.RocasDelAprendizFinder.deHoy`) | igual que la de hábitos, con `destino=roca`: la app sube la foto a `/rocks/{id}/evidence`, que completa y paga. Rechaza con el motivo Pareto y dice cuál verde va primero |
 | Notificaciones y Espejo | `consultar_notificaciones`, `proponer_marcar_notificaciones_leidas`, `consultar_espejo_de_la_sombra` | `rag.api.BandejaDeNotificaciones` (la implementa `notifications`, que ya depende de `rag`) | El Espejo por chat solo muestra el informe propio. **Corregido 2026-09-23:** esta fila incluía `consultar_mis_tickets_al_mentor` y `proponer_ticket_al_mentor` ("excepción aprobada a no escribe a terceros"). Se quitaron el mismo día: los tickets al mentor **se retiraron de la app el 2026-09-07** a pedido del dueño, y para hablar con el mentor existe el chat privado. El acompañante sugiere escribirle por ese chat y puede ayudar a ordenar el mensaje, pero no escribe por la persona |
 
 **Logros en el chat (proactivo, plantilla, sin IA ni cuota):** `LogroEnChatListener` escucha
@@ -1058,6 +1059,10 @@ regla no dependa solo del prompt.
 
     {"tipo":"evidencia","registroId":"<uuid>","titulo":"JUGO VERDE","venceEn":"2026-09-27T05:00:00Z","conPregunta":false}
 
+> **Ampliado 2026-09-26 (D-178).** El evento suma `"destino":"habito"|"roca"` al final. Los de hábitos
+> salen igual que arriba más `"destino":"habito"`; los de una acción del día (`proponer_registrar_accion_con_foto`)
+> llevan `"destino":"roca"` y `registroId` es el id de la roca diaria. Ver D-178 abajo.
+
 - `venceEn` = el **fin del día local** de la persona (medianoche de su zona, `Instant` en UTC): después
   ese registro ya no es el de hoy. No se usa la vigencia de 10 minutos de las propuestas porque no hay
   nada que confirmar en el servidor.
@@ -1250,12 +1255,75 @@ reescribir el día ni corregir un objetivo semanal, y no tenía cómo juntar "qu
 dueño sobre evidencia de texto), recordatorios proactivos de una roca a su hora, y el frontend (la
 tarjeta de las propuestas nuevas usa el resumen genérico, como las demás).
 
+> **Resuelto 2026-09-26 (D-178).** El dueño decidió cómo se completa una roca desde el chat: con
+> foto, exactamente como un hábito que exige evidencia (`proponer_registrar_accion_con_foto`). Queda
+> dicho acá porque el párrafo de arriba la daba por pendiente.
+
 **Preguntas abiertas.** (1) ¿Se puede sumar una acción al día EN CURSO? Hoy no, por el criterio de
 siempre. (2) Agregar a un día que todavía no tiene plan se permite (queda como la #1 VERDE de su eje, que
 es lo mismo que planificar ese día con una acción): confirmar que está bien. (3) Editar un objetivo ya
 cerrado (con revisión) está permitido por el caso de uso de la app y no se bloquea desde el chat.
 (4) ¿Mostrar la cantidad de cambios de horario de la semana como dato? No se incluyó: sin tope no es
 señal de nada, y el número que expone `HorarioDelDiaFinder.CuotaCambiosHorario` es de la cuota vieja.
+
+### D-178 — Registrar una acción del día con foto desde el acompañante (2026-09-26)
+
+**Decisión del dueño.** Marcar como hecha una acción del día (roca diaria) desde el chat funciona
+**exactamente** como un hábito que exige evidencia (D-171/D-172): el acompañante deja la tarjeta de la
+cámara, la persona saca la foto, la app la sube como evidencia `FOTO` de la roca, y la roca queda
+completada y paga sus puntos de siempre (cuenta para el % de coherencia). Se respeta el cerrojo Pareto:
+la verde de cada eje va primero. Completar no reacomoda el día en curso.
+
+**`rocks.api`.** `RocasDelAprendizFinder.RocaDelDia` suma `id` (el de `rocas_diarias`, el mismo de
+`POST /rocks/{id}/evidence`), y lo mismo el `RocaDelDia` del puerto de `rag`. `consultar_rocas` con
+alcance hoy lo muestra como `roca_id=<uuid> | ...` al frente de cada línea, igual que `id=` en los
+hábitos del día; mañana no (no se registra hoy). El prompt suma `roca_id` a los identificadores que no
+se le dicen a la persona.
+
+**`proponer_registrar_accion_con_foto`** (`PropuestaDeRegistrarAccionConFoto`, argumento `roca_id`, solo
+con `renaser.ia.acompanante.confirmacion-con-botones`). Valida con `RocasDelAprendizFinder.deHoy` (el
+«hoy» y el bloqueo Pareto ya resueltos por `rocks` en la zona de la persona):
+
+| Caso | Resultado |
+|---|---|
+| `roca_id` no es un UUID | Fallo, sin consultar |
+| no está entre las de hoy (otro día, otra persona, inventada) | Fallo: consultar `consultar_rocas` hoy |
+| ya completada | Fallo: «ya está registrada hoy» |
+| bloqueada por Pareto | Fallo con el motivo y **cuál verde va primero** (título y su `roca_id`, para que el modelo ofrezca esa) |
+| suspendida / sin programa | Fallo legible |
+| si no | Tarjeta con `destino=roca`, `conPregunta=false`, vence al fin del día local |
+
+La herramienta no completa nada: el que decide sigue siendo `CompletarRocaDiariaUseCase`
+(`403 GREEN_NOT_EVIDENCED`, `409 ALREADY_COMPLETED`, `400 EXIF_MISMATCH` si la foto difiere más de 15 min
+del instante de subida).
+
+**Evento `evidencia` con `destino`** (SSE del chat y WebSocket de voz en vivo):
+
+    {"tipo":"evidencia","registroId":"<id de la roca>","titulo":"Llamar a 3 clientes","venceEn":"2026-09-27T05:00:00Z","conPregunta":false,"destino":"roca"}
+
+- `DestinoDeEvidencia` (`HABITO` | `ROCA`, en el JSON `"habito"` | `"roca"`). Los records
+  (`EventoRenasia.Evidencia`, `EventoDeVozEnVivo.Evidencia`, `PedidoDeEvidencia`) conservan el
+  constructor de cuatro/cinco argumentos, que da `HABITO`: la tarjeta de hábitos no cambió de camino.
+- **Texto de respaldo propio:** `"\n\nFoto para registrar tu accion '<título>': si no ves el boton de la
+  camara, subela desde Training."` — dice «tu acción» y manda a Training (VIDA Y NEGOCIO), que es donde
+  la app completa las rocas; Hoy no las registra.
+- **Compatibilidad con la app instalada.** La que no conoce `evidencia` (antes de D-171) ve el texto de
+  respaldo. La que conoce `evidencia` pero no `destino` (el APK del 2026-09-26) ignora el campo y dibuja
+  la tarjeta como de hábito: al tocarla, consulta `GET /habit-tracks/today`, no encuentra ese id y
+  avisa «Tu día cambió» sin subir nada (en web, la subida da 404). No se rompe ni se corrompe nada,
+  pero esa tarjeta no sirve: hace falta el APK nuevo.
+
+**Prompt.** En «Tus objetivos», cuando dice que hizo una acción de hoy o pide marcarla:
+`consultar_rocas` hoy y `proponer_registrar_accion_con_foto` con su `roca_id`, directo y en una frase;
+nunca darla por hecha por texto; si está bloqueada, decir cuál verde va primero; y, como con los
+hábitos, volver a consultar si pregunta si quedó.
+
+**Pruebas.** `PropuestaDeRegistrarAccionConFotoTest` (reloj a las 03:00 UTC = día anterior en Lima:
+vence a la medianoche de Lima; Pareto con y sin la verde a la vista; completada; de otro día; id
+inválido; sin acceso), `EventoRenasiaSseMapperTest` y `VozEnVivoWebSocketHandlerTest` (JSON con
+`destino`), `ConversacionRenasiaServiceTest` y `ConversacionEnVivoServiceTest` (respaldo propio),
+`ConsultarRocasHerramientaTest` (`roca_id` en hoy), `RocasDelAprendizServiceTest` (el id cruza la
+frontera) y `PromptSistemaRenasiaTest.accionDelDiaConLaCamara`. Sin migración.
 
 ## 4. Estructura del módulo
 
@@ -1300,13 +1368,13 @@ rag/
 
 ## 4.bis Hallazgos de la verificación técnica (contra los JARs reales, no documentación)
 
-### Contrato SSE de `POST /api/v1/renasia/mensajes` (actualizado 2026-09-26, D-171)
+### Contrato SSE de `POST /api/v1/renasia/mensajes` (actualizado 2026-09-26, D-171 y D-178)
 
 Formas de `data:` (fuente de verdad: `EventoRenasiaSseMapper`):
 
     data: {"tipo":"texto","valor":"..."}
     data: {"tipo":"propuesta","id":"<uuid>","resumen":"Marcar 'Meditar' como hecho (+10 puntos si lo confirmas ahora)","venceEn":"2026-09-23T15:10:00Z"}
-    data: {"tipo":"evidencia","registroId":"<uuid>","titulo":"JUGO VERDE","venceEn":"2026-09-27T05:00:00Z","conPregunta":false}
+    data: {"tipo":"evidencia","registroId":"<uuid>","titulo":"JUGO VERDE","venceEn":"2026-09-27T05:00:00Z","conPregunta":false,"destino":"habito"}
     data: {"tipo":"fuentes","lecciones":["leccion-id-1"]}
     data: {"tipo":"error","valor":"mensaje apto para mostrar"}
     data: {"tipo":"fin"}
@@ -1317,6 +1385,8 @@ Formas de `data:` (fuente de verdad: `EventoRenasiaSseMapper`):
 
 - `evidencia` (D-171): la tarjeta de la cámara para `registroId`; `venceEn` es el fin del día local de
   la persona. No se confirma en el servidor: la app sube la foto y completa con los endpoints de hábitos.
+  Desde D-178 lleva `destino`: `"habito"` (lo de siempre) o `"roca"` (`registroId` es la roca diaria y
+  la app completa con `/rocks/{id}/evidence`). Sin el campo, la app lo trata como `"habito"`.
 
 **Orden garantizado:** textos del modelo → por cada propuesta del turno (de la más vieja a la más
 nueva) un `texto` `"\n\nPropuesta: <resumen>"` seguido de su `propuesta` → por cada foto pedida, un

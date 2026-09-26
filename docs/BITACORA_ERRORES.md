@@ -9187,3 +9187,22 @@ real, y el literal de Java quedó partido en dos líneas.
 **Cómo evitar que vuelva a pasar.** Al editar Java con un script, escribir los `\n`, `\t` y `\"` de los
 literales de Java como `\\n`, `\\t` y `\\"` (o usar un raw string `r'''...'''`), y compilar enseguida:
 el compilador lo marca en la primera pasada, y cuanto antes se compila, menos cambios hay para revisar.
+
+## E-287 · `[@RNC/AsyncStorage]: NativeModule: AsyncStorage is null.` al probar un hook de la app en Jest
+
+**Síntoma (2026-09-26, D-178, repo del frontend).** Una prueba nueva de `reglasPara`
+(`src/features/habits/hooks/__tests__/reglasPara.test.ts`) no llegó a correr:
+`Test suite failed to run` con `[@RNC/AsyncStorage]: NativeModule: AsyncStorage is null.`, señalando
+`import AsyncStorage from '@react-native-async-storage/async-storage';` en el archivo del tema.
+
+**Causa real.** Las pruebas del frontend son casi todas de funciones puras en `utils/`, que no tocan
+módulos nativos. Esta importaba `useRegistroConFoto`, y el hook trae (por `components/Alerta` → el tema,
+y por `storage/fotoPendiente`) AsyncStorage, que en Jest no tiene módulo nativo. No hay un mock global
+en `jest.config.js`.
+
+**Solución.** En esa prueba:
+`jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))`.
+
+**Cómo evitar que vuelva a pasar.** Probar la lógica en funciones puras de `utils/` (como el resto del
+repo) y, si hace falta importar un hook o un componente, agregar ese mock en la misma prueba. Si se
+repite en más archivos, llevarlo a un `setupFiles` de Jest.

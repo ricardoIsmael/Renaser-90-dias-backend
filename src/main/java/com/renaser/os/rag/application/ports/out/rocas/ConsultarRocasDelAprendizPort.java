@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Puerto propio de {@code rag} para leer las rocas del aprendiz con el que habla el acompanante
@@ -42,8 +43,12 @@ public interface ConsultarRocasDelAprendizPort {
     record RocasDelDia(LocalDate fecha, List<RocaDelDia> rocas, PlanDeManana planDeManana) {
     }
 
-    /** {@code completada=false} es "evidencia pendiente": una roca solo se completa con evidencia. */
-    record RocaDelDia(String eje, int posicion, String color, String titulo, LocalTime horaInicio,
+    /**
+     * {@code completada=false} es "evidencia pendiente": una roca solo se completa con evidencia.
+     * {@code id} es el de la roca diaria (D-178): con el, {@code proponer_registrar_accion_con_foto}
+     * pide la foto de esa accion.
+     */
+    record RocaDelDia(UUID id, String eje, int posicion, String color, String titulo, LocalTime horaInicio,
                       LocalTime horaFin, boolean completada, boolean bloqueadaPorPareto) {
     }
 

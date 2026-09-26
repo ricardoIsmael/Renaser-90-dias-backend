@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Contrato publico de {@code rocks} para LEER las rocas de un aprendiz desde otro modulo
@@ -62,13 +63,17 @@ public interface RocasDelAprendizFinder {
     }
 
     /**
+     * @param id                 el de {@code rocas_diarias}: el mismo que usan
+     *                           {@code POST /rocks/{id}/evidence} y su {@code upload-url}. Lo sumo D-178
+     *                           para que el acompanante pida la foto de UNA accion de hoy; no se le
+     *                           muestra a la persona
      * @param completada         una roca se completa SOLO entregando evidencia (R-02): {@code false}
      *                           es, a la vez, "evidencia pendiente"
      * @param bloqueadaPorPareto Ley IV: hay que completar antes la VERDE de su eje
      * @param horaInicio         hora local; {@code null} si no se fijo
      * @param horaFin            hora local; {@code null} si no se fijo
      */
-    record RocaDelDia(String eje, int posicion, String color, String titulo, LocalTime horaInicio,
+    record RocaDelDia(UUID id, String eje, int posicion, String color, String titulo, LocalTime horaInicio,
                       LocalTime horaFin, boolean completada, boolean bloqueadaPorPareto) {
     }
 

@@ -404,6 +404,11 @@ dicen abajo, y esas salen de reglas que ya existían.
 
 **Lecturas (`RocasDelAprendizFinder`).**
 
+- **D-178 (2026-09-26):** `RocaDelDia` (hoy y mañana) suma `id`, el de `rocas_diarias`, para que el
+  acompañante pida la foto de UNA acción de hoy (`proponer_registrar_accion_con_foto`); la app la
+  completa con `POST /rocks/{id}/evidence`, que sigue siendo quien aplica Pareto, EXIF y los puntos.
+  No es regla nueva: es el mismo id que la app ya recibe en `GET /rocks/today`.
+
 - `progresoDeLaSemana`: lo mismo que el dashboard (`progresoSemanalPct`, grilla, `ritmo`,
   `diasCompletadosUltimos7`, `planificacionBloqueada`) más el plan de mañana y un **balance por eje de
   los días ya terminados** (`BalanceSemanalPorEje`: una lectura por día, a lo sumo seis; hoy no se

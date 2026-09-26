@@ -24,6 +24,7 @@ import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionD
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort.Consulta;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
+import com.renaser.os.rag.domain.model.conversacion.DestinoDeEvidencia;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.FiltroDeIdentificadores;
 import com.renaser.os.rag.domain.model.conversacion.FuenteMensaje;
@@ -146,6 +147,18 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      */
     public static String textoDeEvidencia(String titulo) {
         return "\n\nFoto para registrar '" + titulo + "': si no ves el boton de la camara, subela desde Hoy.";
+    }
+
+    /**
+     * D-178: el de una accion del dia (roca) dice "tu accion" y manda a Training, que es donde la app
+     * las completa (VIDA Y NEGOCIO); Hoy no las registra. El de un habito queda igual que en D-171.
+     */
+    public static String textoDeEvidencia(PedidoDeEvidencia pedido) {
+        if (pedido.destino() == DestinoDeEvidencia.ROCA) {
+            return "\n\nFoto para registrar tu accion '" + pedido.titulo()
+                    + "': si no ves el boton de la camara, subela desde Training.";
+        }
+        return textoDeEvidencia(pedido.titulo());
     }
 
     private final UserSummaryFinder userSummaryFinder;
@@ -394,9 +407,9 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                 eventos.add(new EventoRenasia.Propuesta(propuesta.id(), propuesta.resumen(), propuesta.venceEn()));
             }
             for (PedidoDeEvidencia pedido : propuestasDelTurno.evidenciasPedidasDesde(actorId, inicioDelTurno)) {
-                eventos.add(new EventoRenasia.Texto(textoDeEvidencia(pedido.titulo())));
+                eventos.add(new EventoRenasia.Texto(textoDeEvidencia(pedido)));
                 eventos.add(new EventoRenasia.Evidencia(pedido.registroId(), pedido.titulo(), pedido.venceEn(),
-                        pedido.conPregunta()));
+                        pedido.conPregunta(), pedido.destino()));
             }
             return eventos;
         } catch (RuntimeException e) {

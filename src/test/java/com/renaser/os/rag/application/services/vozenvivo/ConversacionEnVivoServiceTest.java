@@ -20,6 +20,7 @@ import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionD
 import com.renaser.os.rag.application.ports.out.tiempo.ProgramarTareaPeriodicaPort;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.CuotaDeVozEnVivo;
+import com.renaser.os.rag.domain.model.conversacion.DestinoDeEvidencia;
 import com.renaser.os.rag.domain.model.conversacion.EventoDeVozEnVivo;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
@@ -272,6 +273,32 @@ class ConversacionEnVivoServiceTest {
         assertThat(salida.eventos).contains(new EventoDeVozEnVivo.Evidencia(registro, "JUGO VERDE", finDelDia, true));
         assertThat(guardados(2).get(1).contenido()).isEqualTo("Te deje abajo el boton para sacarle foto."
                 + "\n\nFoto para registrar 'JUGO VERDE': si no ves el boton de la camara, subela desde Hoy.");
+    }
+
+    @Test
+    @DisplayName("D-178: la foto de una accion del dia llega con destino roca y su propio texto de respaldo")
+    void evidenciaDeUnaAccionDelDia() {
+        UUID roca = UUID.randomUUID();
+        Instant finDelDia = Instant.parse("2026-09-24T05:00:00Z"); // fin del 23/09 en Lima
+        InvocacionHerramienta pedido = new InvocacionHerramienta("proponer_registrar_accion_con_foto",
+                Map.of("roca_id", roca.toString()));
+        when(herramientas.ejecutar(actor, pedido)).thenReturn(ResultadoHerramienta.exito("Boton listo"));
+        when(propuestas.evidenciasPedidasDesde(eq(actor), any())).thenReturn(List.of(
+                new ConsultarPropuestasDelTurnoUseCase.PedidoDeEvidencia(roca, "Llamar a 3 clientes", TRES_AM_UTC,
+                        finDelDia, false, DestinoDeEvidencia.ROCA)));
+        service.iniciar(actor, salida);
+
+        proveedor.oyente.oido("Ya llame a los clientes");
+        proveedor.oyente.pedidoDeHerramienta("llamada-1", pedido);
+        proveedor.oyente.turnoCompleto();
+        proveedor.oyente.dicho("Te deje abajo el boton para sacarle foto.");
+        proveedor.oyente.turnoCompleto();
+
+        assertThat(salida.eventos).contains(new EventoDeVozEnVivo.Evidencia(roca, "Llamar a 3 clientes", finDelDia,
+                false, DestinoDeEvidencia.ROCA));
+        assertThat(guardados(2).get(1).contenido()).isEqualTo("Te deje abajo el boton para sacarle foto."
+                + "\n\nFoto para registrar tu accion 'Llamar a 3 clientes': si no ves el boton de la camara, "
+                + "subela desde Training.");
     }
 
     @Test

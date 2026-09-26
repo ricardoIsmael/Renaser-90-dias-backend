@@ -25,6 +25,7 @@ import com.renaser.os.rag.application.ports.out.ia.ChatIAPort.Consulta;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
+import com.renaser.os.rag.domain.model.conversacion.DestinoDeEvidencia;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasiaId;
@@ -760,6 +761,29 @@ class ConversacionRenasiaServiceTest {
         ArgumentCaptor<MensajeRenasia> captor = ArgumentCaptor.forClass(MensajeRenasia.class);
         verify(saveMensajeRenasiaPort, times(2)).save(captor.capture());
         assertThat(captor.getAllValues().get(1).contenido()).endsWith(respaldo);
+    }
+
+    /**
+     * D-178: la tarjeta de una accion del dia sale con {@code destino=roca}, y su texto de respaldo dice
+     * "tu accion" y manda a Training (Hoy no registra acciones).
+     */
+    @Test
+    void laTarjetaDeUnaAccionDelDiaLlevaDestinoRocaYSuPropioRespaldo() {
+        stubCaminoFeliz();
+        UUID roca = UUID.fromString("66666666-6666-6666-6666-666666666666");
+        Instant finDelDia = Instant.parse("2026-08-26T05:00:00Z");
+        when(propuestasDelTurno.evidenciasPedidasDesde(activo, CLOCK.now())).thenReturn(List.of(
+                new ConsultarPropuestasDelTurnoUseCase.PedidoDeEvidencia(roca, "Llamar a 3 clientes", CLOCK.now(),
+                        finDelDia, false, DestinoDeEvidencia.ROCA)));
+
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(eventos).containsExactly(
+                new EventoRenasia.Texto("ok"),
+                new EventoRenasia.Texto("\n\nFoto para registrar tu accion 'Llamar a 3 clientes': si no ves el "
+                        + "boton de la camara, subela desde Training."),
+                new EventoRenasia.Evidencia(roca, "Llamar a 3 clientes", finDelDia, false, DestinoDeEvidencia.ROCA),
+                new EventoRenasia.Fin());
     }
 
     /** Sin propuestas —casi todos los turnos— el stream es exactamente el de siempre. */

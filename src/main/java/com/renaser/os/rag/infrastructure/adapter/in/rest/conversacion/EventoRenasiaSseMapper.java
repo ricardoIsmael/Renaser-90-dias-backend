@@ -62,6 +62,7 @@ final class EventoRenasiaSseMapper {
                 nodo.put("titulo", evidencia.titulo());
                 nodo.put("venceEn", evidencia.venceEn().toString());
                 nodo.put("conPregunta", evidencia.conPregunta());
+                nodo.put("destino", evidencia.destino().valorJson());
             }
             case EventoRenasia.Error error -> {
                 nodo.put("tipo", "error");

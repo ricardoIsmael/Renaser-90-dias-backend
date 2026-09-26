@@ -51,8 +51,17 @@ final class TextoDeRocas {
         return texto.toString().trim();
     }
 
+    /**
+     * Hoy lleva {@code roca_id} al frente, como {@code id=} en los habitos del dia (D-178): es lo que
+     * {@code proponer_registrar_accion_con_foto} necesita, y el prompt le prohibe decirselo a la
+     * persona. Manana no: una accion de manana no se registra hoy.
+     */
     private static String lineaDe(RocaDelDia roca, boolean conEstadoDelDia) {
-        StringBuilder linea = new StringBuilder("- ").append(roca.eje()).append(" #").append(roca.posicion())
+        StringBuilder linea = new StringBuilder("- ");
+        if (conEstadoDelDia) {
+            linea.append("roca_id=").append(roca.id()).append(" | ");
+        }
+        linea.append(roca.eje()).append(" #").append(roca.posicion())
                 .append(' ').append(roca.color()).append(" | ").append(roca.titulo())
                 .append(" | ").append(franjaDe(roca));
         if (!conEstadoDelDia) {

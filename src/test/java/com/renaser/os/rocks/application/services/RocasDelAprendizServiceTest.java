@@ -117,6 +117,8 @@ class RocasDelAprendizServiceTest {
         assertThat(hoy.rocas()).extracting(RocaDelDia::posicion).containsExactly(1, 2);
         RocaDelDia primera = hoy.rocas().get(0);
         assertThat(primera.color()).isEqualTo("VERDE");
+        // D-178: el id de la roca cruza la frontera, para que el acompanante pida la foto de esa.
+        assertThat(primera.id()).isEqualTo(verde.id().value());
         assertThat(primera.eje()).isEqualTo("CUERPO");
         assertThat(primera.horaInicio()).isEqualTo(LocalTime.of(7, 0));
         assertThat(primera.completada()).isTrue();

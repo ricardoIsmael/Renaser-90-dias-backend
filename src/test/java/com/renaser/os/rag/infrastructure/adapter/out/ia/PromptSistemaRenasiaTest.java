@@ -211,6 +211,20 @@ class PromptSistemaRenasiaTest {
     }
 
     @Test
+    @DisplayName("D-178: una accion del dia se registra con el boton de la camara, directo y nunca por texto")
+    void accionDelDiaConLaCamara() {
+        String render = renderizar("(vacio)");
+
+        assertThat(render).contains("Cuando dice que hizo una accion de hoy, o pide marcarla")
+                .contains("con su roca_id, proponer_registrar_accion_con_foto, directo")
+                .contains("nunca la marques ni")
+                .contains("la des por hecha por texto")
+                .contains("porque la verde de su eje va primero, dile cual es");
+        // El id se le pasa a la herramienta, nunca a la persona.
+        assertThat(render).contains("(habito_id, roca_id, ids de propuestas");
+    }
+
+    @Test
     @DisplayName("D-177: el material del programa es conocimiento de fondo, no se recita ni se adelanta")
     void materialDelProgramaComoFondo() {
         String render = renderizar("(vacio)");
