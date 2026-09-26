@@ -142,8 +142,9 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         if (roca.completada()) {
             throw new IllegalStateException("ALREADY_COMPLETED: esta roca ya tiene evidencia");
         }
-        requireNoBloqueadaPorPareto(roca);
         Instant ahora = clock.now();
+        requireDeHoy(roca, ahora.atZone(progreso.zona()).toLocalDate());
+        requireNoBloqueadaPorPareto(roca);
         if (command.tipo() == TipoEvidenciaRoca.FOTO) {
             requireExifDentroDeMargen(command.timestampExif(), ahora);
         }
@@ -303,26 +304,43 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         return saveRocaDiariaPort.save(roca);
     }
 
+    /**
+     * Solo se registran las acciones de HOY, en la zona de la persona (decision del dueno,
+     * 2026-09-26: "la accion del dia se hace ese dia"). Antes una roca de ayer o de manana se
+     * podia completar con foto desde la app, aunque el acompanante no lo ofrecia (E-288).
+     */
+    private static void requireDeHoy(RocaDiaria roca, LocalDate hoy) {
+        if (!roca.fecha().equals(hoy)) {
+            throw new IllegalStateException("NOT_TODAY: solo se registran las acciones de hoy; esta es del "
+                    + roca.fecha());
+        }
+    }
+
     private void requireNoBloqueadaPorPareto(RocaDiaria roca) {
         if (roca.color() == ColorPareto.VERDE) {
             return;
         }
         List<RocaDiaria> delDia = loadRocaDiariaPort.deParticipanteYFecha(roca.participanteId(), roca.fecha());
-        boolean verdeCompletada = delDia.stream()
-                .anyMatch(r -> r.eje() == roca.eje() && r.color() == ColorPareto.VERDE && r.completada());
-        if (RocaDiaria.bloqueadaPorPareto(roca.color(), verdeCompletada)) {
+        if (estaBloqueada(roca, delDia)) {
             throw new NotAuthorizedException(
                     "GREEN_NOT_EVIDENCED: primero hay que completar la roca VERDE de este eje");
         }
     }
 
+    /**
+     * Ley IV: sin la VERDE de su eje completada, las demas no se cierran. Si el eje no tiene VERDE
+     * ese dia (datos viejos o cargados a mano: la planificacion exige empezar en la posicion 1), no
+     * se bloquea nada: exigir una roca que no existe dejaria el eje cerrado para siempre
+     * (2026-09-26, E-288). Es la unica regla, para completar y para mostrar el candado.
+     */
     private static boolean estaBloqueada(RocaDiaria roca, List<RocaDiaria> delDia) {
         if (roca.color() == ColorPareto.VERDE) {
             return false;
         }
-        boolean verdeCompletada = delDia.stream()
-                .anyMatch(r -> r.eje() == roca.eje() && r.color() == ColorPareto.VERDE && r.completada());
-        return RocaDiaria.bloqueadaPorPareto(roca.color(), verdeCompletada);
+        List<RocaDiaria> verdesDelEje = delDia.stream()
+                .filter(r -> r.eje() == roca.eje() && r.color() == ColorPareto.VERDE).toList();
+        boolean verdeCompletada = verdesDelEje.stream().anyMatch(RocaDiaria::completada);
+        return !verdesDelEje.isEmpty() && RocaDiaria.bloqueadaPorPareto(roca.color(), verdeCompletada);
     }
 
     /** Traduce el espejo local {@code TipoEvidenciaRoca} al contrato publico de `evidence` (RK-2). */

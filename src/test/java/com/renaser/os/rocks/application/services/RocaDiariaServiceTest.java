@@ -288,6 +288,44 @@ class RocaDiariaServiceTest {
     }
 
     @Test
+    @DisplayName("E-288: si el eje no tiene VERDE ese dia, la AMARILLA no queda bloqueada para siempre")
+    void sinVerdeEnElEjeNoSeBloquea() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
+        RocaDiaria amarilla = rocaAmarilla();
+        when(loadRocaDiariaPort.byIdParaEscritura(amarilla.id())).thenReturn(Optional.of(amarilla));
+        when(loadRocaDiariaPort.deParticipanteYFecha(actorId, amarilla.fecha())).thenReturn(List.of(amarilla));
+
+        assertThat(service.completar(comandoTexto(amarilla.id())).completada()).isTrue();
+    }
+
+    @Test
+    @DisplayName("E-288: una accion de otro dia no se registra, aunque sea de la persona y este pendiente")
+    void accionDeOtroDiaNoSeCompleta() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));
+        RocaDiaria deAyer = RocaDiaria.planificar(RocaDiariaId.of(UUID.randomUUID()), actorId,
+                LocalDate.of(2026, 8, 23), 1, "verde de ayer", null, 5, false,
+                EjeObjetivo.CUERPO, null, null, null, List.of(), CLOCK);
+        when(loadRocaDiariaPort.byIdParaEscritura(deAyer.id())).thenReturn(Optional.of(deAyer));
+
+        assertThatThrownBy(() -> service.completar(comandoTexto(deAyer.id())))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("NOT_TODAY");
+        verify(registrarEvidenciaPort, never()).registrar(any());
+    }
+
+    @Test
+    @DisplayName("E-288: 'hoy' es el de la zona de la persona, no el del servidor (20:05 UTC ya es el 25 en UTC+10)")
+    void hoyEsElDeLaZonaDeLaPersona() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(
+                new ProgresoParticipanteRocks(20, LocalDate.of(2026, 1, 5), ZoneOffset.ofHours(10),
+                        RolParticipante.TRAINEE, false, false)));
+        RocaDiaria delVeinticuatro = rocaVerde(null);
+        when(loadRocaDiariaPort.byIdParaEscritura(delVeinticuatro.id())).thenReturn(Optional.of(delVeinticuatro));
+
+        assertThatThrownBy(() -> service.completar(comandoTexto(delVeinticuatro.id())))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("NOT_TODAY");
+    }
+
+    @Test
     @DisplayName("Ley VI: EXIF de una FOTO a mas de 15 min del instante de subida se rechaza")
     void exifFueraDeMargenRechazado() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolParticipante.TRAINEE, false)));

@@ -9206,3 +9206,25 @@ en `jest.config.js`.
 **Cómo evitar que vuelva a pasar.** Probar la lógica en funciones puras de `utils/` (como el resto del
 repo) y, si hace falta importar un hook o un componente, agregar ese mock en la misma prueba. Si se
 repite en más archivos, llevarlo a un `setupFiles` de Jest.
+
+## E-288 · Una acción del día se podía registrar otro día, y un eje sin VERDE quedaba bloqueado para siempre
+
+**Síntoma (2026-09-26, revisión al terminar D-178).** Dos huecos en `RocaDiariaService.completar`, sin
+error visible: (1) `POST /api/v1/rocks/{id}/evidence` aceptaba una roca de ayer o de mañana si era de la
+persona y estaba pendiente; el acompañante no lo ofrecía, pero la app sí lo permitía. (2) La Ley IV
+bloquea las AMARILLA/ROJA hasta completar la VERDE del eje; si ese día el eje no tenía VERDE, el
+candado no se abría nunca.
+
+**Causa real.** (1) El caso de uso nunca comparaba la fecha de la roca con el día de la persona. (2)
+`estaBloqueada` solo preguntaba "¿hay una VERDE completada?", no "¿hay una VERDE?". Hoy la
+planificación exige empezar en la posición 1 y agregar a un eje vacío la pone como VERDE, así que (2)
+solo pasa con datos viejos o cargados a mano, pero no tenía salida.
+
+**Solución.** (1) `requireDeHoy`: la fecha de la roca tiene que ser la de hoy en la zona de la persona
+(decisión del dueño: "la acción del día se hace ese día"); si no, `NOT_TODAY`. (2) Sin VERDE en el eje
+ese día no se bloquea; la misma regla vale para completar y para mostrar el candado. Pruebas en
+`RocaDiariaServiceTest` (`accionDeOtroDiaNoSeCompleta`, `hoyEsElDeLaZonaDeLaPersona`,
+`sinVerdeEnElEjeNoSeBloquea`).
+
+**Cómo evitar que vuelva a pasar.** Toda regla de "del día" se valida en el caso de uso, no solo en la
+herramienta del acompañante: la app entra por el mismo endpoint.
