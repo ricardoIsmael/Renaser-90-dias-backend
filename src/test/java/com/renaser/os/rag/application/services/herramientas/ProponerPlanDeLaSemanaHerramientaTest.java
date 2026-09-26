@@ -64,15 +64,29 @@ class ProponerPlanDeLaSemanaHerramientaTest {
                 .startsWith("Propuesta creada: " + resumen).contains("TODAVIA NO esta guardado");
     }
 
+    @Test
+    @DisplayName("D-177: la autoevaluacion de inicio viaja en el resumen y en el JSON guardado")
+    void llevaLaAutoevaluacionDeInicio() {
+        herramienta.ejecutar(APRENDIZ, con("{\"objetivos\":[{\"eje\":\"CUERPO\",\"titulo\":\"Correr\","
+                + "\"autoevaluacionInicio\":6}]}"));
+
+        verify(proponer).proponer(APRENDIZ, con("{\"objetivos\":[{\"eje\":\"CUERPO\",\"titulo\":\"Correr\","
+                + "\"autoevaluacionInicio\":6}]}"), "Crear los objetivos de la semana. Cuerpo: Correr (como arranca: "
+                + "6/10). Si algun eje ya tiene objetivo esa semana, se deja como esta.");
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {
             "{}",
             "{\"objetivos\":[{\"eje\":\"TRABAJO\",\"titulo\":\"Vender\",\"acciones\":[\"a\"]}]}",
             "{\"objetivos\":[{\"eje\":\"TRABAJO\",\"titulo\":\"Vender\"}],\"semana\":\"3\"}",
             "{\"objetivos\":[{\"eje\":\"NEGOCIO\",\"titulo\":\"Vender\"}]}",
-            "{\"objetivos\":[{\"eje\":\"TRABAJO\"}]}"
+            "{\"objetivos\":[{\"eje\":\"TRABAJO\"}]}",
+            "{\"objetivos\":[{\"eje\":\"TRABAJO\",\"titulo\":\"Vender\",\"autoevaluacionInicio\":11}]}",
+            "{\"objetivos\":[{\"eje\":\"TRABAJO\",\"titulo\":\"Vender\",\"autoevaluacionInicio\":\"6\"}]}",
+            "{\"objetivos\":[{\"eje\":\"TRABAJO\",\"titulo\":\"Vender\",\"autoevaluacionInicio\":6.5}]}"
     })
-    @DisplayName("campos de mas, un eje inventado o sin titulo: Fallo sin propuesta")
+    @DisplayName("campos de mas, un eje inventado, sin titulo o autoevaluacion fuera de 1-10: Fallo sin propuesta")
     void formaInvalida(String plan) {
         assertThat(herramienta.ejecutar(APRENDIZ, con(plan))).isInstanceOf(ResultadoHerramienta.Fallo.class);
         verifyNoInteractions(proponer);

@@ -117,6 +117,7 @@ rocks/
 | `CerrarSemanaUseCase` | rocasemanal | W-04, idempotente |
 | `ConsultarRocasSemanalesUseCase` | rocasemanal | lectura, agregado al encargo ("lo que falte") |
 | `CrearPlanDiarioUseCase` | rocadiaria | R-04, agregado al encargo |
+| `AgregarRocaDiariaUseCase` | rocadiaria | **2026-09-26 (D-177)**: suma UNA acción a un día que viene sin tocar las demás; solo lo usa el acompañante vía `rocks.api.AgregarAccionAlDiaPort`, sin endpoint. Ver §13 |
 | `CompletarRocaDiariaUseCase` | rocadiaria | R-02 |
 | `SolicitarUrlAdjuntoRocaUseCase` | rocadiaria | D-34, agregado al encargo |
 | `ConsultarRocasDeHoyUseCase` / `ConsultarRocasDeMananaUseCase` | rocadiaria | R-01/R-03 simplificados (sin dashboard, ver §1.8) |
@@ -395,6 +396,52 @@ Pruebas nuevas en `RocaDiariaServiceTest`: `publishedToWallConEvidenciaNoVisualE
   1. **Esquema:** `eventos_verdugo` tiene `CONSTRAINT verdugo_un_destino CHECK (num_nonnulls(registro_habito_id, roca_diaria_id) = 1)` — exactamente dos columnas de destino. Sumar `CODIGO_RENASER` necesita una tercera columna (`registro_radar_id uuid REFERENCES registros_radar(id)`) y reescribir ese CHECK. Es un cambio de esquema real contra una BD congelada (D-40), no una migración cosmética.
   2. **De fondo, y más importante:** el propio modelo de `EventoVerdugo` es "el aprendiz reacciona cuando se le vence el plazo de una roca diaria o un hábito" (javadoc de la clase, sin tocar). `registros_radar` (Código Renaser, `habits.domain.model.radar.RegistroRadar`) es un **log append-only sin ningún plazo de servidor**: `docs/MODULO_HABITS.md` §8.0 ya deja citado, contra el código real (`repository.ts` viejo y el baseline), que "no hay 'uno por día'" y que el gating de horario "es UX del cliente, nunca una restricción de servidor ni de base". No existe ningún estado "pendiente"/"vencido" para que Verdugo dispare sobre él. Inventar esa regla (¿qué cuenta como un Código Renaser "vencido"? ¿cuántos por día se esperan?) sin confirmación de negocio es exactamente lo que CLAUDE.MD prohíbe.
 - **Conclusión:** no se tocó `DestinoVerdugo` ni `eventos_verdugo`. Si en el futuro el negocio define un plazo real para el Código Renaser (ej. "debe hacerse antes de las 22:00, si no se pierde"), ese día tiene sentido volver a esta pregunta con la regla ya confirmada — hoy agregar el valor sería un enum muerto, sin ninguna regla que lo dispare.
+
+## 13. D-177 — Lo que `rocks` expone para que el acompañante acompañe los objetivos (2026-09-26)
+
+Todo por `rocks.api`, delegando en los casos de uso de la app; ninguna regla nueva salvo las que se
+dicen abajo, y esas salen de reglas que ya existían.
+
+**Lecturas (`RocasDelAprendizFinder`).**
+
+- `progresoDeLaSemana`: lo mismo que el dashboard (`progresoSemanalPct`, grilla, `ritmo`,
+  `diasCompletadosUltimos7`, `planificacionBloqueada`) más el plan de mañana y un **balance por eje de
+  los días ya terminados** (`BalanceSemanalPorEje`: una lectura por día, a lo sumo seis; hoy no se
+  cuenta porque todavía se puede completar).
+- `objetivosDeNoventaDias`: las Rocas Maestras con meta, avance, unidad, línea base y
+  `MetaCuantitativa.porcentaje()`. `unidadAdelante` usa el mismo criterio que `ObjetivoDelMesService`
+  (`eje == TRABAJO`).
+- `cierreDeLaSemanaAnterior`: la semana de programa anterior a la de hoy **en la zona de la persona**
+  (autoevaluación de inicio y fin, bloqueo, corrección). Vacío en la semana 1.
+- `RocaDeLaSemana` ganó `autoevaluacionInicio`.
+
+**Escrituras.**
+
+- `AgregarAccionAlDiaPort` → `AgregarRocaDiariaUseCase` (`AgregarRocaDiariaService`): inserta una fila
+  en la primera posición libre de su eje (`CupoDelDia`, dominio: 3 por eje por la escala Pareto y el
+  `CHECK` de la base, 9 por día por `CrearPlanDiarioCommand`). Requisitos: Rocas Maestras completas
+  (`ROCKS_LOCKED`), objetivo semanal del eje en la semana de esa fecha (`NO_WEEKLY_ROCK`), fecha dentro
+  de `FechasPlanificables` con la noche abierta (de mañana al domingo de esta semana; `INVALID_DATE`).
+  **El día en curso se rechaza siempre (`CURRENT_DAY`)**, también antes de las 18:00 cuando
+  `CrearPlanDiarioUseCase` sí lo aceptaría: si hoy admite agregados es una decisión pendiente del dueño.
+  Dos pedidos simultáneos chocan con `UNIQUE (participante_id, fecha, eje, posicion)`; no se agregó un
+  bloqueo.
+- `EdicionDeObjetivoSemanalPort` → `EditarDentroDe48hUseCase`: resuelve la roca semanal del eje en esa
+  semana y mira la ventana (W-03, RK-5) con `VentanaPlanificacionSemanal` ANTES de llamar, para devolver
+  `VENTANA_CERRADA` y no confundirla con una cuenta sin acceso (el caso de uso lanza la misma excepción
+  para las dos). Expone las horas de la ventana como constantes que salen del dominio.
+- `PlanificacionDeRocasPort.ObjetivoDeLaSemana` ganó `autoevaluacionInicio` (antes el adaptador mandaba
+  `null` siempre).
+
+**Refactor sin cambio de regla.** `RocaDiariaService.requireFechaPlanificable` pasó a usar
+`FechasPlanificables` (dominio), para que la regla viva en un solo lugar (lección de E-205).
+`AccesoARocas` es la guarda de siempre (`requireProgreso`) para los servicios nuevos; las tres copias
+viejas (`RocaDiariaService`, `RocaSemanalService`, `DashboardRocasService`) no se tocaron.
+
+Pruebas: `CupoDelDiaTest`, `FechasPlanificablesTest`, `AgregarRocaDiariaServiceTest` (con el reloj a las
+03:00 UTC, que en Lima es todavía el día anterior), `AgregarAccionAlDiaServiceTest`,
+`EdicionDeObjetivoSemanalServiceTest` (incluye domingo 12:30 UTC = 07:30 en Lima, ventana todavía
+cerrada), `RocasDelAprendizServiceTest` (progreso, noventa, cierre anterior en la zona de la persona).
 
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 

@@ -61,7 +61,7 @@ class PlanificacionDeRocasService implements PlanificacionDeRocasPort {
 
     private static ItemRocaSemanal aItemSemanal(ObjetivoDeLaSemana objetivo) {
         return new ItemRocaSemanal(ejeDe(objetivo.eje()), objetivo.titulo(), objetivo.obstaculo(),
-                objetivo.contingencia(), null);
+                objetivo.contingencia(), objetivo.autoevaluacionInicio());
     }
 
     /** {@code null} si no viene: el item lo rechaza con su propio mensaje. Un nombre inventado, {@code IllegalArgumentException}. */

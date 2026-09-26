@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Puerto propio de {@code rag} para leer las rocas del aprendiz con el que habla el acompanante
@@ -29,6 +30,15 @@ public interface ConsultarRocasDelAprendizPort {
 
     List<ObjetivoDelMes> delMes(UserId aprendizId);
 
+    /** D-177: el avance de la semana de programa en curso, como lo ve la app, y el balance por eje. */
+    ProgresoDeLaSemana progresoDeLaSemana(UserId aprendizId);
+
+    /** D-177: el objetivo de los 90 dias por eje (Roca Maestra). */
+    List<ObjetivoDeNoventaDias> objetivosDeNoventaDias(UserId aprendizId);
+
+    /** D-177: el cierre de la semana anterior; vacio en la semana 1. */
+    Optional<CierreDeLaSemanaAnterior> cierreDeLaSemanaAnterior(UserId aprendizId);
+
     record RocasDelDia(LocalDate fecha, List<RocaDelDia> rocas, PlanDeManana planDeManana) {
     }
 
@@ -45,7 +55,37 @@ public interface ConsultarRocasDelAprendizPort {
     }
 
     record RocaDeLaSemana(String eje, String titulo, String obstaculo, String contingencia, boolean editable,
-                          boolean revisada) {
+                          boolean revisada, Integer autoevaluacionInicio) {
+    }
+
+    /**
+     * @param porEje  lo planificado y completado por eje en los dias ya terminados (antes de {@code hoy})
+     * @param ritmo   {@code OK}, {@code LENTO} o {@code CRITICO}, de los 7 dias anteriores a hoy
+     */
+    record ProgresoDeLaSemana(int numeroSemana, LocalDate inicio, LocalDate fin, LocalDate hoy,
+                              int progresoSemanalPct, List<DiaDeLaSemana> dias, String ritmo,
+                              int diasCompletadosUltimos7, List<BalanceDelEje> porEje, PlanDeManana planDeManana,
+                              boolean planificacionBloqueada) {
+    }
+
+    /** {@code completadas}/{@code total} en {@code null}: el dia no llego; {@code total} tambien: sin plan. */
+    record DiaDeLaSemana(LocalDate fecha, Integer completadas, Integer total, boolean esHoy) {
+    }
+
+    record BalanceDelEje(String eje, int planificadas, int completadas) {
+    }
+
+    /** Los numeros en {@code null}: objetivo solo cualitativo. */
+    record ObjetivoDeNoventaDias(String eje, String objetivo, BigDecimal meta, BigDecimal avance, String unidad,
+                                 boolean unidadAdelante, BigDecimal lineaBase, Integer porcentaje) {
+    }
+
+    record CierreDeLaSemanaAnterior(int numeroSemana, List<CierreDelEje> ejes) {
+    }
+
+    /** {@code autoevaluacionFin} en {@code null}: ese eje no se cerro. */
+    record CierreDelEje(String eje, String titulo, Integer autoevaluacionInicio, Integer autoevaluacionFin,
+                        String bloqueoPrincipal, String correccion) {
     }
 
     record ObjetivoDelMes(String eje, int numeroMes, int diaDeCierre, String tituloPropio, BigDecimal cifra,

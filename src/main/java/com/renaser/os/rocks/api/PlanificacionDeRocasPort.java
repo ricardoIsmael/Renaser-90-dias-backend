@@ -52,8 +52,14 @@ public interface PlanificacionDeRocasPort {
                         LocalTime horaInicio, LocalTime horaFin) {
     }
 
-    /** Un objetivo semanal, tal como lo recibe {@code CrearPlanSemanalUseCase.ItemRocaSemanal}. */
-    record ObjetivoDeLaSemana(String eje, String titulo, String obstaculo, String contingencia) {
+    /**
+     * Un objetivo semanal, tal como lo recibe {@code CrearPlanSemanalUseCase.ItemRocaSemanal}.
+     *
+     * @param autoevaluacionInicio como arranca la semana en ese eje, 1 a 10; {@code null} si no la dijo
+     *                             (D-177: antes el acompanante nunca la mandaba)
+     */
+    record ObjetivoDeLaSemana(String eje, String titulo, String obstaculo, String contingencia,
+                              Integer autoevaluacionInicio) {
     }
 
     sealed interface ResultadoPlanificacion {

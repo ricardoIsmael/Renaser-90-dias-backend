@@ -26,6 +26,12 @@ import java.util.stream.Collectors;
  * estar ocupada ciertos dias, o dejarlos libres. NO guarda: la persona confirma con el boton y lo
  * aplica {@link GuardarAgendaConfirmable}. Se valida aca, antes de proponer, para que el boton
  * nunca muestre algo que despues no se pueda guardar.
+ *
+ * <p><b>Corregido 2026-09-26 (D-177, decision del dueno).</b> La descripcion decia "usala solo si la
+ * persona te conto su agenda y acepto que la recuerdes", y el prompt, que nunca se propusiera en la misma
+ * respuesta en que la contaba (bateria #61). El dueno eligio lo contrario: dejar la tarjeta y preguntar en
+ * la misma frase ("¿Quieres que recuerde tu horario? Te deje la tarjeta para confirmarlo"). La tarjeta es
+ * la pregunta: sin Confirmar no se guarda nada.
  */
 @Component
 @ConditionalOnProperty(name = "renaser.ia.acompanante.confirmacion-con-botones", havingValue = "true")
@@ -40,8 +46,9 @@ public class PropuestaDeGuardarAgenda implements HerramientaAgente {
     private static final DefinicionHerramienta DEFINICION = new DefinicionHerramienta(NOMBRE,
             "Propone guardar las horas en que la persona suele estar ocupada ciertos dias de la semana (trabajo, "
                     + "estudio), para sugerirle horarios sin volver a preguntar. NO lo guarda: la persona confirma "
-                    + "con el boton. Reemplaza lo que habia esos dias. Usala solo si la persona te conto su agenda "
-                    + "y acepto que la recuerdes; nunca la guardes sin preguntarle.",
+                    + "con el boton. Reemplaza lo que habia esos dias. Usala cuando la persona te cuente su agenda: "
+                    + "deja la tarjeta y, en la misma frase, preguntale si quiere que la recuerdes; solo se guarda "
+                    + "si confirma. Nunca la guardes sin preguntarle.",
             List.of(ParametroHerramienta.obligatorio(ARGUMENTO_DIAS, TipoParametroHerramienta.TEXTO,
                             "Dias de la semana: 'lunes-viernes', 'sabado, domingo', 'fin de semana' o 'todos'."),
                     ParametroHerramienta.obligatorio(ARGUMENTO_OCUPADO, TipoParametroHerramienta.TEXTO,

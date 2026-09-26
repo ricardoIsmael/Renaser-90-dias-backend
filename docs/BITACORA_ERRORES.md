@@ -9155,3 +9155,35 @@ es un candado: dos llamadas simultáneas todavía pueden crear dos; si eso apare
 índice único parcial sobre `(participante_id, argumentos_hash) WHERE estado = 'PENDIENTE'`, que hoy no
 hace falta.
 
+## E-285 · `IllegalState CURRENT_DAY: hoy` en la línea de un `when(...)`: otra vez re-stubear un mock que ya lanzaba (se repitió E-279)
+
+**Síntoma (2026-09-26, D-177).** `AgregarAccionAlDiaServiceTest.traduceLosRechazos` falló con
+`AgregarAccionAlDiaServiceTest.traduceLosRechazos:61->rechazoAnte:93 IllegalState CURRENT_DAY: hoy`: la
+excepción del PRIMER rechazo stubeado, lanzada en la línea del segundo `when(agregar.agregar(any())).thenThrow(...)`.
+
+**Causa real.** La misma de E-279, tres días después y en otro módulo: `when(mock.metodo(...))` invoca el
+método para registrar el stub, y si ya tenía un `thenThrow`, lanza antes de registrarse el nuevo. El
+código de producción estaba bien. Lo mismo pasó en `EdicionDeObjetivoSemanalServiceTest` con
+`misRocasMaestras`, ya corregido antes de correrlo.
+
+**Solución.** `doThrow(rechazo).when(agregar).agregar(any())` en el ayudante del test.
+
+**Cómo evitar que vuelva a pasar.** La prevención de E-279 era solo texto en esta bitácora y no alcanzó.
+Se subió a `.claude/rules/03-pruebas.md` (se lee en cada sesión): un ayudante que stubea en bucle o un
+método que ya lanza usa siempre `doThrow/doReturn(...).when(mock)`.
+
+## E-286 · `unclosed string literal` en `ConsultarRocasHerramienta` después de editar con un script de Python
+
+**Síntoma (2026-09-26, D-177).** `./mvnw compile` falló con
+`ConsultarRocasHerramienta.java:[107,20] unclosed string literal` y una cascada de `';' expected` en la
+línea 108, en un `return "\n(No pude leer el cierre de la semana anterior.)";` recién agregado.
+
+**Causa real.** El cambio se hizo con un heredoc de Python (`s.replace(viejo, nuevo)`) y el `\n` del
+literal de Java estaba dentro de un string normal de Python: Python lo convirtió en un salto de línea
+real, y el literal de Java quedó partido en dos líneas.
+
+**Solución.** Reemplazar el salto real por `\\n` (en Python, para que llegue `\n` al archivo).
+
+**Cómo evitar que vuelva a pasar.** Al editar Java con un script, escribir los `\n`, `\t` y `\"` de los
+literales de Java como `\\n`, `\\t` y `\\"` (o usar un raw string `r'''...'''`), y compilar enseguida:
+el compilador lo marca en la primera pasada, y cuanto antes se compila, menos cambios hay para revisar.

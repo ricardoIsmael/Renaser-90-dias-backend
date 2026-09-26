@@ -44,9 +44,9 @@ class ProponerCerrarSemanaHerramientaTest {
     private static final UserId APRENDIZ = UserId.of(UUID.randomUUID());
     private static final ReglasDelCierre REGLAS = new ReglasDelCierre(List.of("CUERPO", "TRABAJO", "RELACIONES"), 1, 10);
     private static final RocaDeLaSemana TRABAJO = new RocaDeLaSemana("TRABAJO", "Cerrar 2 ventas", null, null, false,
-            false);
+            false, null);
     private static final RocaDeLaSemana CUERPO_CERRADA = new RocaDeLaSemana("CUERPO", "Bajar 1 kg", null, null, false,
-            true);
+            true, null);
     private static final RocasDeLaSemana SEMANA_3 = new RocasDeLaSemana(3, LocalDate.of(2026, 9, 21),
             LocalDate.of(2026, 9, 27), List.of(CUERPO_CERRADA, TRABAJO));
     private static final String CIERRE_TRABAJO = "{\"ejes\":[{\"eje\":\"trabajo\",\"autoevaluacion\":7,"

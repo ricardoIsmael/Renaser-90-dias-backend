@@ -63,7 +63,7 @@ final class TextoDePlanDeRocas {
     static String rechazoDeLaSemana(Motivo motivo) {
         return switch (motivo) {
             case YA_PLANIFICADO -> "Esa semana ya tiene objetivo en todos los ejes que pidio. Un objetivo ya "
-                    + "guardado se cambia editandolo desde la app.";
+                    + "guardado no se pisa: se corrige editandolo, dentro de su ventana de edicion.";
             case DATOS_INVALIDOS -> "No se pudo guardar: revise que haya un solo objetivo por eje y que los textos "
                     + "no sean demasiado largos.";
             default -> rechazoComun(motivo);
@@ -107,6 +107,9 @@ final class TextoDePlanDeRocas {
         }
         if (objetivo.contingencia() != null) {
             linea.append(" (contingencia: ").append(objetivo.contingencia()).append(')');
+        }
+        if (objetivo.autoevaluacionInicio() != null) {
+            linea.append(" (como arranca: ").append(objetivo.autoevaluacionInicio()).append("/10)");
         }
         return linea.toString();
     }

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.renaser.os.rag.application.ports.out.rocas.PlanificarRocasPort;
 import com.renaser.os.rag.application.ports.out.rocas.PlanificarRocasPort.AccionDelPlan;
 import com.renaser.os.rag.application.ports.out.rocas.PlanificarRocasPort.ObjetivoSemanal;
 
@@ -45,6 +46,9 @@ final class PlanDeRocasJson {
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .build();
 
+    /** D-177: como arranca la semana en ese eje, 1 a 10, opcional. Antes el acompanante nunca la mandaba. */
+    static final String CAMPO_AUTOEVALUACION_INICIO = "autoevaluacionInicio";
+
     private PlanDeRocasJson() {
     }
 
@@ -76,15 +80,16 @@ final class PlanDeRocasJson {
         List<ObjetivoSemanal> objetivos = new ArrayList<>();
         for (JsonNode nodo : lista(raiz, "objetivos")) {
             String donde = "El objetivo " + (objetivos.size() + 1);
-            JsonNode objetivo = objeto(nodo, donde, Set.of("eje", "titulo", "obstaculo", "contingencia"));
+            JsonNode objetivo = objeto(nodo, donde, Set.of("eje", "titulo", "obstaculo", "contingencia",
+                    CAMPO_AUTOEVALUACION_INICIO));
             objetivos.add(new ObjetivoSemanal(eje(objetivo, donde, ejesValidos),
                     obligatorio(objetivo, "titulo", donde), opcional(objetivo, "obstaculo", donde),
-                    opcional(objetivo, "contingencia", donde)));
+                    opcional(objetivo, "contingencia", donde), autoevaluacionInicio(objetivo, donde)));
         }
         return List.copyOf(objetivos);
     }
 
-    private static JsonNode leer(String texto) {
+    static JsonNode leer(String texto) {
         if (texto == null || texto.isBlank()) {
             throw new PlanMalFormadoException("Falta el plan.");
         }
@@ -136,7 +141,7 @@ final class PlanDeRocasJson {
     }
 
     /** {@code null} si no viene, viene {@code null} o viene en blanco; recortado si viene. */
-    private static String opcional(JsonNode nodo, String campo, String donde) {
+    static String opcional(JsonNode nodo, String campo, String donde) {
         JsonNode valor = nodo.get(campo);
         if (valor == null || valor.isNull()) {
             return null;
@@ -148,7 +153,24 @@ final class PlanDeRocasJson {
         return limpio.isEmpty() ? null : limpio;
     }
 
-    private static LocalTime hora(JsonNode nodo, String campo, String donde) {
+    /** {@code null} si no viene; si viene, un entero en la escala de {@link PlanificarRocasPort}. */
+    static Integer autoevaluacionInicio(JsonNode nodo, String donde) {
+        JsonNode valor = nodo.get(CAMPO_AUTOEVALUACION_INICIO);
+        if (valor == null || valor.isNull()) {
+            return null;
+        }
+        boolean enEscala = valor.isIntegralNumber() && valor.canConvertToInt()
+                && valor.intValue() >= PlanificarRocasPort.AUTOEVALUACION_MINIMA
+                && valor.intValue() <= PlanificarRocasPort.AUTOEVALUACION_MAXIMA;
+        if (!enEscala) {
+            throw new PlanMalFormadoException(donde + ": '" + CAMPO_AUTOEVALUACION_INICIO + "' tiene que ser un numero "
+                    + "entero del " + PlanificarRocasPort.AUTOEVALUACION_MINIMA + " al "
+                    + PlanificarRocasPort.AUTOEVALUACION_MAXIMA + ".");
+        }
+        return valor.intValue();
+    }
+
+    static LocalTime hora(JsonNode nodo, String campo, String donde) {
         String texto = opcional(nodo, campo, donde);
         if (texto == null) {
             return null;

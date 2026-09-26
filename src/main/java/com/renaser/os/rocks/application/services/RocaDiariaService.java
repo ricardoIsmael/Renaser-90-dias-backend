@@ -28,6 +28,7 @@ import com.renaser.os.rocks.domain.model.rocadiaria.AccionDiaria;
 import com.renaser.os.rocks.domain.model.rocadiaria.ColorPareto;
 import com.renaser.os.rocks.domain.model.rocadiaria.EscalaPuntosRoca;
 import com.renaser.os.rocks.domain.model.rocadiaria.FasePremio;
+import com.renaser.os.rocks.domain.model.rocadiaria.FechasPlanificables;
 import com.renaser.os.rocks.domain.model.rocadiaria.ResultadoPremio;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
@@ -230,31 +231,22 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
     }
 
     /**
-     * Que fechas se pueden planificar hoy: <b>de manana hasta el final de la semana de programa</b>,
-     * y ademas hoy mismo mientras la ventana nocturna no haya abierto.
+     * Que fechas se pueden planificar hoy: la regla vive en {@link FechasPlanificables} desde el
+     * 2026-09-26 (D-177), porque tambien la usa {@code AgregarRocaDiariaService}. Aca solo se traduce
+     * al rechazo de siempre.
      *
      * > <b>Corregido el 2026-09-22.</b> Antes eran solo dos fechas: manana con la ventana abierta,
      * > u hoy y manana con la ventana cerrada. El dueno lo planteo con su propio ejemplo:
      * > <i>"si yo quiero planificar para manana, entonces puedo los dias miercoles y jueves, ¿no?
      * > (…) estamos martes, entonces planifico para todo lo que queda"</i>. Con la regla vieja,
      * > miercoles y jueves volvian con INVALID_DATE.
-     *
-     * <p><b>El corte es el fin de la semana de programa, y no es cosmetico:</b> cada objetivo
-     * diario cuelga del objetivo semanal de su semana ({@code NO_WEEKLY_ROCK} si no existe), asi
-     * que ofrecer el lunes que viene seria ofrecer algo que va a fallar al guardar. La semana que
-     * viene se planifica cuando se arma, el domingo.
-     *
-     * <p>Hoy sigue dependiendo de la ventana, exactamente como antes: a partir de las 18:00 el
-     * programa esta planificando el dia siguiente y volver sobre hoy es reacomodar el dia en curso.
      */
     private void requireFechaPlanificable(LocalDate fecha, LocalDate hoy, EstadoPlazo plazoAlCrear,
                                            LocalDate fechaInicio) {
-        LocalDate desde = plazoAlCrear == EstadoPlazo.EN_PLAZO ? hoy.plusDays(1) : hoy;
-        LocalDate hasta = SemanaPrograma.limites(fechaInicio,
-                SemanaPrograma.numeroSemanaParaFecha(fechaInicio, hoy)).fin();
-        if (fecha.isBefore(desde) || fecha.isAfter(hasta)) {
+        FechasPlanificables fechas = FechasPlanificables.para(hoy, plazoAlCrear, fechaInicio);
+        if (!fechas.contiene(fecha)) {
             throw new IllegalArgumentException(
-                    "INVALID_DATE: la fecha de planificacion debe estar entre " + desde + " y " + hasta);
+                    "INVALID_DATE: la fecha de planificacion debe estar entre " + fechas.desde() + " y " + fechas.hasta());
         }
     }
 

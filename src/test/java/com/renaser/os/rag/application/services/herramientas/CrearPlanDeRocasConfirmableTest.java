@@ -111,8 +111,8 @@ class CrearPlanDeRocasConfirmableTest {
     @Test
     @DisplayName("la semana se crea con los objetivos guardados, y avisa si algun eje ya tenia el suyo")
     void creaLaSemana() {
-        List<ObjetivoSemanal> objetivos = List.of(new ObjetivoSemanal("CUERPO", "Bajar 1 kg", null, null),
-                new ObjetivoSemanal("TRABAJO", "Vender", "Poco tiempo", null));
+        List<ObjetivoSemanal> objetivos = List.of(new ObjetivoSemanal("CUERPO", "Bajar 1 kg", null, null, null),
+                new ObjetivoSemanal("TRABAJO", "Vender", "Poco tiempo", null, null));
         when(planificar.crearPlanDeLaSemana(APRENDIZ, objetivos)).thenReturn(new ResultadoPlan.Creado(1));
 
         ResultadoHerramienta resultado = deLaSemana.aplicar(APRENDIZ, invocacionDeLaSemana(PLAN_DE_LA_SEMANA));
@@ -127,7 +127,7 @@ class CrearPlanDeRocasConfirmableTest {
         when(planificar.crearPlanDeLaSemana(any(), any())).thenReturn(new ResultadoPlan.Rechazado(Motivo.YA_PLANIFICADO));
 
         assertThat(deLaSemana.aplicar(APRENDIZ, invocacionDeLaSemana(PLAN_DE_LA_SEMANA))).isEqualTo(ResultadoHerramienta.fallo(
-                "Esa semana ya tiene objetivo en todos los ejes que pidio. Un objetivo ya guardado se cambia "
-                        + "editandolo desde la app."));
+                "Esa semana ya tiene objetivo en todos los ejes que pidio. Un objetivo ya guardado no se pisa: "
+                        + "se corrige editandolo, dentro de su ventana de edicion."));
     }
 }

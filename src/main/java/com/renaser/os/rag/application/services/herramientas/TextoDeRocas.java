@@ -74,7 +74,8 @@ final class TextoDeRocas {
                 + " fin=" + (roca.horaFin() == null ? "-" : roca.horaFin());
     }
 
-    private static String lineaDe(PlanDeManana plan) {
+    /** De paquete: tambien la usa {@link TextoDeObjetivos} en el progreso de la semana (D-177). */
+    static String lineaDe(PlanDeManana plan) {
         String creado = plan.creado() ? "ya esta creado (" + plan.rocasPlanificadas() + " roca(s))"
                 : "todavia no esta creado";
         return "Plan de manana: " + creado + ". La ventana de planificacion abre a las " + plan.ventanaAbreA()
@@ -89,6 +90,9 @@ final class TextoDeRocas {
         }
         if (roca.contingencia() != null) {
             linea.append(" | contingencia=").append(roca.contingencia());
+        }
+        if (roca.autoevaluacionInicio() != null) {
+            linea.append(" | como arranco la semana=").append(roca.autoevaluacionInicio()).append("/10");
         }
         linea.append(" | editable=").append(roca.editable() ? "si" : "no");
         if (roca.revisada()) {

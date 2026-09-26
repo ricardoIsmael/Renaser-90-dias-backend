@@ -17,6 +17,14 @@ import java.util.List;
  */
 public interface PlanificarRocasPort {
 
+    /**
+     * La escala de la autoevaluacion de inicio de semana, la misma de {@code RocaSemanal.requireEscala}
+     * (1 a 10). Espejo de {@code rocks.api.CierreDeSemanaPort}: {@code PlanificarRocasAdapterTest} rompe
+     * si dejan de coincidir.
+     */
+    int AUTOEVALUACION_MINIMA = 1;
+    int AUTOEVALUACION_MAXIMA = 10;
+
     /** Los nombres de eje que acepta {@code rocks} ({@code CUERPO}, {@code TRABAJO}, {@code RELACIONES}). */
     List<String> ejesValidos();
 
@@ -29,8 +37,12 @@ public interface PlanificarRocasPort {
     record AccionDelPlan(String eje, String titulo, LocalTime inicio, LocalTime fin) {
     }
 
-    /** {@code obstaculo} y {@code contingencia} son opcionales ({@code null}). */
-    record ObjetivoSemanal(String eje, String titulo, String obstaculo, String contingencia) {
+    /**
+     * {@code obstaculo}, {@code contingencia} y {@code autoevaluacionInicio} (como arranca la semana en
+     * ese eje, 1 a 10) son opcionales ({@code null}).
+     */
+    record ObjetivoSemanal(String eje, String titulo, String obstaculo, String contingencia,
+                           Integer autoevaluacionInicio) {
     }
 
     sealed interface ResultadoPlan {

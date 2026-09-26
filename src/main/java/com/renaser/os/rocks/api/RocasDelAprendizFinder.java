@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Contrato publico de {@code rocks} para LEER las rocas de un aprendiz desde otro modulo
@@ -37,6 +38,21 @@ public interface RocasDelAprendizFinder {
 
     /** El objetivo del mes en curso, uno por eje con Roca Maestra definida. */
     List<ObjetivoDelMesDelEje> delMes(UserId aprendizId);
+
+    /**
+     * El avance de la semana de programa en curso, tal como lo muestra el dashboard de la app, mas el
+     * balance por eje de los dias ya terminados (D-177).
+     */
+    ProgresoDeLaSemana progresoDeLaSemana(UserId aprendizId);
+
+    /** Los objetivos de los 90 dias (Rocas Maestras), uno por eje definido, con su meta medible si la tiene (D-177). */
+    List<ObjetivoDeNoventaDias> objetivosDeNoventaDias(UserId aprendizId);
+
+    /**
+     * Lo que la persona escribio al cerrar la semana de programa ANTERIOR a la de hoy (D-177). Vacio
+     * en la semana 1 y antes de empezar; con la lista de ejes vacia si esa semana no tuvo objetivos.
+     */
+    Optional<CierreDeLaSemanaAnterior> cierreDeLaSemanaAnterior(UserId aprendizId);
 
     /**
      * @param fecha         el dia consultado, en la zona del aprendiz
@@ -73,11 +89,54 @@ public interface RocasDelAprendizFinder {
     }
 
     /**
-     * @param editable la ventana real de edicion (W-03)
-     * @param revisada ya tiene la autoevaluacion de cierre (W-04)
+     * @param editable             la ventana real de edicion (W-03)
+     * @param revisada             ya tiene la autoevaluacion de cierre (W-04)
+     * @param autoevaluacionInicio como arrancaba la semana en ese eje, 1 a 10; {@code null} si no la dijo
      */
     record RocaDeLaSemana(String eje, String titulo, String obstaculo, String contingencia, boolean editable,
-                          boolean revisada) {
+                          boolean revisada, Integer autoevaluacionInicio) {
+    }
+
+    /**
+     * @param hoy                    el dia de hoy en la zona del aprendiz
+     * @param progresoSemanalPct     completadas/planificadas de los dias ya transcurridos (hoy incluido), 0-100
+     * @param dias                   uno por fecha de la semana, del lunes (o el inicio) al domingo
+     * @param ritmo                  nombre de {@code EstadoRitmoRocas}: {@code OK}, {@code LENTO} o {@code CRITICO}
+     * @param diasCompletadosUltimos7 dias de los 7 anteriores a hoy con al menos una roca completada
+     * @param porEje                 los tres ejes, con lo planificado y lo completado en los dias ya
+     *                               terminados de esta semana (antes de hoy)
+     * @param planificacionBloqueada Ley II: desde el dia 31, a partir de las 20:00, sin 3 rocas para manana
+     */
+    record ProgresoDeLaSemana(int numeroSemana, LocalDate inicio, LocalDate fin, LocalDate hoy,
+                              int progresoSemanalPct, List<DiaDeLaSemana> dias, String ritmo,
+                              int diasCompletadosUltimos7, List<BalanceDelEje> porEje,
+                              PlanificacionDeManana planificacion, boolean planificacionBloqueada) {
+    }
+
+    /** {@code completadas} y {@code total} en {@code null} para un dia que no llego; {@code total} tambien sin plan. */
+    record DiaDeLaSemana(LocalDate fecha, Integer completadas, Integer total, boolean esHoy) {
+    }
+
+    record BalanceDelEje(String eje, int planificadas, int completadas) {
+    }
+
+    /**
+     * Una Roca Maestra. Los numeros viajan en {@code null} si el objetivo es solo cualitativo.
+     *
+     * @param avance         el valor que lleva hoy (con linea base) o lo acumulado (sin ella)
+     * @param unidadAdelante la moneda va delante ({@code S/ 1500}), la unidad fisica detras ({@code 75 kg})
+     * @param porcentaje     cuanto del camino recorrio, 0-100 ({@code MetaCuantitativa.porcentaje})
+     */
+    record ObjetivoDeNoventaDias(String eje, String objetivo, BigDecimal meta, BigDecimal avance, String unidad,
+                                 boolean unidadAdelante, BigDecimal lineaBase, Integer porcentaje) {
+    }
+
+    record CierreDeLaSemanaAnterior(int numeroSemana, List<CierreDelEje> ejes) {
+    }
+
+    /** {@code autoevaluacionFin} en {@code null} = ese eje no se cerro; bloqueo y correccion tambien. */
+    record CierreDelEje(String eje, String titulo, Integer autoevaluacionInicio, Integer autoevaluacionFin,
+                        String bloqueoPrincipal, String correccion) {
     }
 
     /**

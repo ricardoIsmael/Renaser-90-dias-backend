@@ -277,7 +277,7 @@ se migraron: funcionan y están probadas.
 | `consultar_tiempo_para_puntos` | "¿llego a tiempo?", "¿cuánto pierdo si lo hago a las 9?", cuál vence primero | `habits.api.AgendaDelDiaFinder`: se agregaron `HabitoEnJuegoResumen.tramos` (la escala D-97, derivada de `ResultadoOtorgamiento`, el mismo cálculo que otorga los puntos) y `zonaDe` |
 | `consultar_resumen_del_programa` | día N de 90, fase, fecha y hora local, coherencia, próximo evento | `ConsultarSituacionDelAprendizPort` (día/fase, el mismo del prompt) + `points.api.PorcentajeRocasFinder` y `ProximoEventoFinder`, los mismos de `GET /home` |
 | `consultar_horarios` | horario resuelto por día, apagado/pausado/obligatorio, **cuota de cambios** restante | nuevo `habits.api.HorarioDelDiaFinder` → `ConsultarPreferenciasHorarioUseCase` (el de `GET /habit-preferences?date=`) |
-| `consultar_rocas` | rocas de hoy/mañana/semana/mes, si el plan de mañana existe, ventana de las 18:00 | nuevo `rocks.api.RocasDelAprendizFinder` → dashboard, rocas de mañana, objetivo del mes, `VentanaPlanificacionDiaria` |
+| `consultar_rocas` | rocas de hoy/mañana/semana/mes, si el plan de mañana existe, ventana de las 18:00 (D-177 sumó `progreso` y `noventa`) | nuevo `rocks.api.RocasDelAprendizFinder` → dashboard, rocas de mañana, objetivo del mes, `VentanaPlanificacionDiaria` |
 | `consultar_eventos` | eventos de hoy o de los próximos 7 días, con el RSVP | nuevo `calendar.api.EventosDelParticipanteFinder` → `ListarEventosParaVisorUseCase` (audiencia y RSVP intactos) |
 
 **Horas y fechas, siempre en código** (regla 02): "hoy", "mañana", "faltan 32 min" y la hora local
@@ -607,6 +607,10 @@ minutos y no `time` porque `LocalTime` no representa las 24:00. Tiene `CHECK` en
 - `GuardarAgendaConfirmable` relee la agenda al confirmar y reemplaza solo esos días.
 - "ninguno" deja libres los días indicados.
 - El prompt le pide ofrecer recordar la agenda y **nunca guardarla sin preguntar**.
+  > **Corregido 2026-09-26 (D-177).** Después de la batería (#61) el prompt pasó a decir que la
+  > propuesta NO se dejara en la misma respuesta en que la persona contaba su horario. El dueño decidió
+  > lo contrario: dejar la tarjeta y preguntar en la misma frase ("¿Quieres que recuerde tu horario? Te
+  > dejé la tarjeta para confirmarlo"). Sigue sin guardarse nada sin Confirmar.
 
 **Cómo se usa.**
 - `consultar_mi_agenda` (R0) muestra lo guardado.
@@ -907,7 +911,8 @@ el log para ver por qué.
 - **#41:** propuso cambiar la hora de un hábito pausado sin decir que lo estaba. Se corrigió en la
   tarjeta, con `HorariosParaProponer.siEstaPausado`.
 - **#61:** propuso guardar la agenda sin preguntarlo antes en palabras. La tarjeta pide
-  confirmación, así que no escribe nada sola.
+  confirmación, así que no escribe nada sola. *(D-177: el dueño eligió justamente esto —tarjeta y pregunta en
+  la misma frase—, así que dejó de ser un error.)*
 
 **Verificado en el emulador (2026-09-25),** repitiendo esos casos con los arreglos:
 - **#7:** "es obligatoria… si te complica el sábado, puedes cambiarle la hora".
@@ -1175,6 +1180,82 @@ exige la zona en la situación, y `consultar_tiempo_para_puntos` ya lo responde)
 efecto con la batería contra Gemini (se probó con pruebas unitarias, no con el modelo real).
 
 ---
+
+### D-177 — El acompañante ayuda a cumplir los objetivos de la semana y avisa cuando se aleja (2026-09-26)
+
+**Pedido del dueño.** Que el acompañante ayude a cumplir los objetivos semanales, recuerde, y avise
+cuando la persona se está alejando. Hasta acá leía rocas de hoy/mañana/semana/mes (D-152), proponía el
+plan del día y de la semana y el cierre (D-154, D-156), pero no veía el avance de la semana, el objetivo
+de los 90 días ni lo que la persona escribió al cerrar la semana anterior, no podía sumar una acción sin
+reescribir el día ni corregir un objetivo semanal, y no tenía cómo juntar "qué se está quedando atrás".
+
+**Herramientas nuevas o ampliadas.**
+
+| Herramienta | Tipo | Argumentos | De dónde sale |
+|---|---|---|---|
+| `consultar_rocas` alcance `progreso` | R0 | `alcance=progreso` | `rocks.api.RocasDelAprendizFinder.progresoDeLaSemana` → dashboard de la app (`progresoSemanalPct`, grilla, ritmo, Ley II) + plan de mañana |
+| `consultar_rocas` alcance `noventa` | R0 | `alcance=noventa` | `RocasDelAprendizFinder.objetivosDeNoventaDias` → Rocas Maestras (meta, avance, unidad, línea base, %) |
+| `consultar_rocas` alcance `semana` | R0 | — | además: `autoevaluacionInicio` de cada eje y el cierre de la semana anterior (`cierreDeLaSemanaAnterior`: autoevaluación final, bloqueo, corrección). Si ese agregado falla, la semana sale igual y lo dice |
+| `consultar_desvio_de_la_semana` | R0 | ninguno | rocks (progreso con **balance por eje de los días ya terminados** + objetivos), `habits.api.ObligacionesHistoricasFinder` (vencidos sin cumplir, no opcionales, de `desde` a AYER), `GestionarPlanDeHabitosPort` (pausados hoy), `points.api.SemaforoFinder.detalleDe(…, 1)` (ventana vigente y última semana cerrada, con la palabra del color) |
+| `proponer_agregar_accion` | R2, flag | `eje`, `titulo`, `fecha?` (default mañana), `inicio?`, `fin?` | `rocks.api.AgregarAccionAlDiaPort` → `AgregarRocaDiariaUseCase` (nuevo) |
+| `proponer_editar_objetivo_semanal` | R2, flag | `eje`, `titulo?`, `obstaculo?`, `contingencia?`, `autoevaluacionInicio?` (1-10), `semana?` (`actual`/`siguiente`) | `rocks.api.EdicionDeObjetivoSemanalPort` → `EditarDentroDe48hUseCase` (el de `PATCH /rocks/weekly/{id}`) |
+| `proponer_plan_de_la_semana` | R2, flag | el JSON acepta `autoevaluacionInicio` (1-10, opcional) | `PlanificacionDeRocasPort.ObjetivoDeLaSemana` ganó ese campo; antes viajaba siempre `null` |
+
+**Decisiones de diseño.**
+
+- **El desvío son hechos, no juicios.** `TextoDelDesvio` no tiene umbrales ni adjetivos: "a este ritmo no
+  llega" lo dice el modelo siguiendo el prompt. Hoy no cuenta como incumplido (todavía se puede hacer), un
+  hábito pausado tampoco, y **los cambios de horario no se cuentan**: no hay tope (D-170) y mover un hábito
+  para cumplirlo es lo contrario de alejarse. Si una fuente falla, sale el resto y el texto dice "No pude
+  leer: …"; solo es un fallo si no se sabe qué día es para la persona. Sin rocks (por ejemplo, staff sin
+  programa de rocas) la semana arranca el lunes de la fecha que da `habits`.
+- **Agregar una acción no reescribe el día.** `proponer_plan_del_dia` reemplaza el día entero y perdería
+  la descripción, las acciones internas y el puntaje de lo que la persona escribió en la app. El caso de
+  uso nuevo inserta UNA fila en la primera posición libre de su eje (`CupoDelDia`: 3 por eje, 9 por día),
+  con la ventana de fechas de `CrearPlanDiarioUseCase` (`FechasPlanificables`, movida al dominio sin
+  cambiar la regla) y el objetivo semanal como requisito. **Hoy se rechaza** ("el día en curso no se
+  reacomoda"), también antes de las 18:00: la herramienta lo corta antes de proponer (hoy = mañana − 1
+  según rocks, en la zona de la persona) y rocks lo vuelve a rechazar al confirmar (`CURRENT_DAY`).
+- **Editar respeta la ventana real (W-03, RK-5).** Para la semana en curso, `consultar_rocas` ya dice si
+  el objetivo es `editable`: fuera de la ventana no se deja un botón que va a fallar, se contesta con la
+  regla (domingo 12:00 a lunes 09:00, o 2 h desde que se creó a destiempo; las horas salen de
+  `VentanaPlanificacionSemanal` vía `EdicionDeObjetivoSemanalPort`, no copiadas) y lo que sí se puede. La
+  semana `siguiente` (la que se arma el domingo) no se ve desde el chat: la decide rocks al confirmar.
+  La semana queda escrita en la propuesta, igual que en el cierre.
+- **Prompt:** sección nueva "Tus objetivos: el plan de la semana y las acciones del día" (cómo está
+  armado, qué herramienta usar, directo como D-170, conectar con D-175 sin duplicarlo, y cómo decir sin
+  culpa que a este ritmo no llega, con UN paso concreto). Dos decisiones del dueño integradas: la agenda
+  se propone **y** se pregunta en la misma frase ("¿Quieres que recuerde tu horario? Te dejé la tarjeta
+  para confirmarlo"; antes decía no proponerla en la misma respuesta, batería #61, y la descripción de
+  `proponer_guardar_agenda` se alineó); y el material recuperado es conocimiento de fondo: no se recitan
+  ni resumen lecciones o audios enteros, ni se adelanta un día que la persona no alcanzó.
+
+**Ejemplo de `consultar_desvio_de_la_semana`** (fixture de `ConsultarDesvioDeLaSemanaHerramientaTest`):
+
+    Semana 4 del programa (2026-09-21 al 2026-09-27), hoy es jueves 2026-09-24. Dias ya terminados: del 2026-09-21 al 2026-09-23.
+    Rocas diarias por eje, en los dias ya terminados:
+    - CUERPO (objetivo de la semana: Correr 3 veces): 1 completada(s) y 3 sin completar, de 4 planificada(s)
+    - TRABAJO (sin objetivo esta semana): sin acciones planificadas
+    Dias terminados sin rocas planificadas: martes 2026-09-22.
+    Hoy (todavia en curso): 0 de 2 completadas.
+    Avance de la semana: 25%. Ritmo de los ultimos 7 dias: CRITICO.
+    Habitos vencidos sin cumplir en los dias terminados: 3
+    - Ducha fria: 2 vez/veces (2026-09-21, 2026-09-22)
+    - Leer 20 minutos: 1 vez/veces (2026-09-23)
+    Habitos en pausa hoy (no se le piden, no son incumplimiento): Caminar (hasta el 2026-09-30).
+    Semaforo de cumplimiento, ultimos 7 dias cerrados (2026-09-17 al 2026-09-23): 72.5%, Requiere atención, con 7 dia(s) con datos. [...]
+    Son hechos, no un juicio: lo de hoy todavia se puede hacer y no cuenta como incumplido. Los cambios de horario no son desvio y no se cuentan.
+
+**Quedó afuera (a propósito).** Completar una roca con evidencia desde el chat (decisión pendiente del
+dueño sobre evidencia de texto), recordatorios proactivos de una roca a su hora, y el frontend (la
+tarjeta de las propuestas nuevas usa el resumen genérico, como las demás).
+
+**Preguntas abiertas.** (1) ¿Se puede sumar una acción al día EN CURSO? Hoy no, por el criterio de
+siempre. (2) Agregar a un día que todavía no tiene plan se permite (queda como la #1 VERDE de su eje, que
+es lo mismo que planificar ese día con una acción): confirmar que está bien. (3) Editar un objetivo ya
+cerrado (con revisión) está permitido por el caso de uso de la app y no se bloquea desde el chat.
+(4) ¿Mostrar la cantidad de cambios de horario de la semana como dato? No se incluyó: sin tope no es
+señal de nada, y el número que expone `HorarioDelDiaFinder.CuotaCambiosHorario` es de la cuota vieja.
 
 ## 4. Estructura del módulo
 

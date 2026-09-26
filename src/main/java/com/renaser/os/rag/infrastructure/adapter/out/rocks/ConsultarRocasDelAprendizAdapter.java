@@ -6,6 +6,7 @@ import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Implementa {@link ConsultarRocasDelAprendizPort} delegando en {@code rocks.api} (D-41): {@code rag}
@@ -36,7 +37,7 @@ class ConsultarRocasDelAprendizAdapter implements ConsultarRocasDelAprendizPort 
         RocasDelAprendizFinder.RocasDeLaSemana semana = finder.deLaSemana(aprendizId);
         List<RocaDeLaSemana> rocas = semana.rocas().stream()
                 .map(r -> new RocaDeLaSemana(r.eje(), r.titulo(), r.obstaculo(), r.contingencia(), r.editable(),
-                        r.revisada()))
+                        r.revisada(), r.autoevaluacionInicio()))
                 .toList();
         return new RocasDeLaSemana(semana.numeroSemana(), semana.inicio(), semana.fin(), rocas);
     }
@@ -49,13 +50,43 @@ class ConsultarRocasDelAprendizAdapter implements ConsultarRocasDelAprendizPort 
                 .toList();
     }
 
+    @Override
+    public ProgresoDeLaSemana progresoDeLaSemana(UserId aprendizId) {
+        RocasDelAprendizFinder.ProgresoDeLaSemana p = finder.progresoDeLaSemana(aprendizId);
+        List<DiaDeLaSemana> dias = p.dias().stream()
+                .map(d -> new DiaDeLaSemana(d.fecha(), d.completadas(), d.total(), d.esHoy())).toList();
+        List<BalanceDelEje> porEje = p.porEje().stream()
+                .map(b -> new BalanceDelEje(b.eje(), b.planificadas(), b.completadas())).toList();
+        return new ProgresoDeLaSemana(p.numeroSemana(), p.inicio(), p.fin(), p.hoy(), p.progresoSemanalPct(), dias,
+                p.ritmo(), p.diasCompletadosUltimos7(), porEje, aPlanDeManana(p.planificacion()),
+                p.planificacionBloqueada());
+    }
+
+    @Override
+    public List<ObjetivoDeNoventaDias> objetivosDeNoventaDias(UserId aprendizId) {
+        return finder.objetivosDeNoventaDias(aprendizId).stream()
+                .map(o -> new ObjetivoDeNoventaDias(o.eje(), o.objetivo(), o.meta(), o.avance(), o.unidad(),
+                        o.unidadAdelante(), o.lineaBase(), o.porcentaje()))
+                .toList();
+    }
+
+    @Override
+    public Optional<CierreDeLaSemanaAnterior> cierreDeLaSemanaAnterior(UserId aprendizId) {
+        return finder.cierreDeLaSemanaAnterior(aprendizId).map(c -> new CierreDeLaSemanaAnterior(c.numeroSemana(),
+                c.ejes().stream().map(e -> new CierreDelEje(e.eje(), e.titulo(), e.autoevaluacionInicio(),
+                        e.autoevaluacionFin(), e.bloqueoPrincipal(), e.correccion())).toList()));
+    }
+
+    private static PlanDeManana aPlanDeManana(RocasDelAprendizFinder.PlanificacionDeManana plan) {
+        return new PlanDeManana(plan.planCreado(), plan.rocasPlanificadas(), plan.ventanaAbierta(), plan.ventanaAbreA(),
+                plan.puedeCrearPlan());
+    }
+
     private static RocasDelDia aRocasDelDia(RocasDelAprendizFinder.RocasDelDia dia) {
         List<RocaDelDia> rocas = dia.rocas().stream()
                 .map(r -> new RocaDelDia(r.eje(), r.posicion(), r.color(), r.titulo(), r.horaInicio(), r.horaFin(),
                         r.completada(), r.bloqueadaPorPareto()))
                 .toList();
-        RocasDelAprendizFinder.PlanificacionDeManana plan = dia.planificacion();
-        return new RocasDelDia(dia.fecha(), rocas, new PlanDeManana(plan.planCreado(), plan.rocasPlanificadas(),
-                plan.ventanaAbierta(), plan.ventanaAbreA(), plan.puedeCrearPlan()));
+        return new RocasDelDia(dia.fecha(), rocas, aPlanDeManana(dia.planificacion()));
     }
 }

@@ -16,12 +16,14 @@ import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -43,16 +45,22 @@ class RocasDelAprendizService implements RocasDelAprendizFinder {
     private final ConsultarRocasDeMananaUseCase rocasDeMananaUseCase;
     private final ConsultarObjetivoDelMesUseCase objetivoDelMesUseCase;
     private final ConsultarProgresoParticipanteRocksPort progresoPort;
+    private final BalanceSemanalPorEje balancePorEje;
+    private final LecturaDeObjetivosDelAprendiz objetivos;
     private final Clock clock;
 
+    /** D-177 sumo {@code balancePorEje} y {@code objetivos}: las lecturas nuevas viven en sus clases. */
     RocasDelAprendizService(ConsultarDashboardRocasUseCase dashboardUseCase,
                             ConsultarRocasDeMananaUseCase rocasDeMananaUseCase,
                             ConsultarObjetivoDelMesUseCase objetivoDelMesUseCase,
-                            ConsultarProgresoParticipanteRocksPort progresoPort, Clock clock) {
+                            ConsultarProgresoParticipanteRocksPort progresoPort, BalanceSemanalPorEje balancePorEje,
+                            LecturaDeObjetivosDelAprendiz objetivos, Clock clock) {
         this.dashboardUseCase = dashboardUseCase;
         this.rocasDeMananaUseCase = rocasDeMananaUseCase;
         this.objetivoDelMesUseCase = objetivoDelMesUseCase;
         this.progresoPort = progresoPort;
+        this.balancePorEje = balancePorEje;
+        this.objetivos = objetivos;
         this.clock = clock;
     }
 
@@ -89,7 +97,8 @@ class RocasDelAprendizService implements RocasDelAprendizFinder {
         List<RocaDeLaSemana> rocas = tablero.rocasSemanales().stream()
                 .map(vista -> new RocaDeLaSemana(nombreDelEje(ejePorMaestra.get(vista.roca().rocaMaestraId())),
                         vista.roca().titulo(), vista.roca().obstaculo(), vista.roca().contingencia(),
-                        vista.editable(), vista.roca().autoevaluacionFin() != null))
+                        vista.editable(), vista.roca().autoevaluacionFin() != null,
+                        vista.roca().autoevaluacionInicio()))
                 .sorted(Comparator.comparing(RocaDeLaSemana::eje)).toList();
         return new RocasDeLaSemana(tablero.numeroSemana(), tablero.inicioSemana(), tablero.finSemana(), rocas);
     }
@@ -99,6 +108,32 @@ class RocasDelAprendizService implements RocasDelAprendizFinder {
         return objetivoDelMesUseCase.misObjetivosMensuales(aprendizId).stream()
                 .flatMap(plan -> ProyeccionObjetivoDelMes.delMesEnCurso(plan).stream())
                 .toList();
+    }
+
+    /** La grilla, el porcentaje, el ritmo y la Ley II son los del dashboard: el mismo numero que ve la app. */
+    @Override
+    public ProgresoDeLaSemana progresoDeLaSemana(UserId aprendizId) {
+        DashboardRocas tablero = dashboardUseCase.dashboard(aprendizId);
+        List<RocaDiaria> deManana = rocasDeMananaUseCase.manana(aprendizId);
+        Instant ahora = clock.now();
+        ZoneId zona = zonaDe(aprendizId);
+        LocalDate hoy = ahora.atZone(zona).toLocalDate();
+        List<DiaDeLaSemana> dias = tablero.grillaSemanal().stream()
+                .map(dia -> new DiaDeLaSemana(dia.fecha(), dia.completadas(), dia.total(), dia.esHoy())).toList();
+        return new ProgresoDeLaSemana(tablero.numeroSemana(), tablero.inicioSemana(), tablero.finSemana(), hoy,
+                tablero.progresoSemanalPct(), dias, tablero.ritmo().name(), tablero.diasCompletadosUltimos7(),
+                balancePorEje.deDiasTerminados(aprendizId, tablero, hoy), planificacion(tablero, deManana, ahora, zona),
+                tablero.planificacionBloqueada());
+    }
+
+    @Override
+    public List<ObjetivoDeNoventaDias> objetivosDeNoventaDias(UserId aprendizId) {
+        return objetivos.deNoventaDias(aprendizId);
+    }
+
+    @Override
+    public Optional<CierreDeLaSemanaAnterior> cierreDeLaSemanaAnterior(UserId aprendizId) {
+        return objetivos.cierreDeLaSemanaAnterior(aprendizId);
     }
 
     private PlanificacionDeManana planificacion(DashboardRocas tablero, List<RocaDiaria> deManana, Instant ahora,

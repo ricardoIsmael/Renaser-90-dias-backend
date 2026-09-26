@@ -48,6 +48,9 @@ final class PlanDeRocasNormalizado {
             if (objetivo.contingencia() != null) {
                 nodo.put("contingencia", objetivo.contingencia());
             }
+            if (objetivo.autoevaluacionInicio() != null) {
+                nodo.put(PlanDeRocasJson.CAMPO_AUTOEVALUACION_INICIO, objetivo.autoevaluacionInicio());
+            }
         }
         return escribir(raiz);
     }
@@ -58,7 +61,7 @@ final class PlanDeRocasNormalizado {
         }
     }
 
-    private static String escribir(ObjectNode raiz) {
+    static String escribir(ObjectNode raiz) {
         try {
             return PlanDeRocasJson.JSON.writeValueAsString(raiz);
         } catch (JsonProcessingException imposible) {

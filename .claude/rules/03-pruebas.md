@@ -64,6 +64,12 @@ En particular, revisar si el bug se escondía en el **fixture**: el bug del relo
 durante días porque todos los tests fijaban el reloj a las 10:00 UTC, una hora que cae en el mismo
 día calendario en Lima. El código estaba mal; el fixture lo tapaba.
 
+## Mocks
+
+- Para re-stubear un método que ya lanza (o un ayudante que stubea en bucle varios rechazos), usar
+  siempre `doThrow(...)/doReturn(...).when(mock).metodo(...)`. `when(mock.metodo(...))` **invoca** el
+  método y lanza la excepción del stub anterior en la línea del `when`. Pasó dos veces (E-279, E-285).
+
 ## Fixtures
 
 Un fixture tiene que ser **internamente coherente**. Una fila con `dia_programa = 10` y

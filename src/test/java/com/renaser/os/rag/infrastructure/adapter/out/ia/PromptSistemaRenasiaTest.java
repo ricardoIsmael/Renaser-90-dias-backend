@@ -160,7 +160,7 @@ class PromptSistemaRenasiaTest {
     }
 
     @Test
-    @DisplayName("bateria ronda 3 (2026-09-26): sin propuestas fantasma, sin cambiar un habito por otro, agenda solo si acepta")
+    @DisplayName("bateria ronda 3 (2026-09-26): sin propuestas fantasma, sin cambiar un habito por otro, agenda con tarjeta y pregunta")
     void reglasDeLaRondaTres() {
         String render = renderizar("(vacio)");
 
@@ -170,13 +170,56 @@ class PromptSistemaRenasiaTest {
         assertThat(render).contains("consultar_habitos_obligatorios (lista tambien los");
         // #18: pidio "yoga" (no existe) y contesto sobre "Caminar 40 minutos".
         assertThat(render).contains("Nunca lo cambies por otro");
-        // #61: propuso guardar la agenda en la misma respuesta en que la contaron.
-        assertThat(render).contains("Nunca la propongas en la misma respuesta en que te cuenta su horario");
+        // #61 decia "nunca la propongas en la misma respuesta en que te cuenta su horario". Corregido
+        // 2026-09-26 (D-177): el dueno eligio dejar la tarjeta Y preguntar en la misma frase.
+        assertThat(render).contains("en la misma frase, preguntale si")
+                .contains("¿Quieres que recuerde tu horario? Te")
+                .doesNotContain("Nunca la propongas en la misma respuesta");
         // #70/#72/#74: hablaba de "tu mentor" sin saber si tenia.
         assertThat(render).contains("Tu no sabes si ya");
         // #107/#109: hablo de saltarse o registrar tarde habitos que ya estaban completados.
         assertThat(render).contains("Antes de hablar de un habito concreto de hoy")
                 .contains("si ya esta completado, dile que ya lo tiene hecho");
+    }
+
+    @Test
+    @DisplayName("D-177: sabe como esta armado el plan, que herramienta usar y como decir que se esta alejando")
+    void objetivosDeLaSemanaYDesvio() {
+        String render = renderizar("(vacio)");
+
+        assertThat(render).contains("## Tus objetivos: el plan de la semana y las acciones del dia")
+                .contains("CUERPO, TRABAJO y RELACIONES")
+                .contains("su obstaculo (lo que puede")
+                .contains("la primera de cada eje es la verde")
+                .contains("El plan de manana se arma desde las 18:00")
+                .contains("El domingo se cierra la semana");
+        assertThat(render).contains("consultar_rocas con alcance")
+                .contains("progreso y consultar_desvio_de_la_semana")
+                .contains("proponer_agregar_accion, que no toca las que ya tiene")
+                .contains("A hoy no")
+                .contains("proponer_editar_objetivo_semanal")
+                .contains("proponer_cerrar_semana")
+                .contains("proponer_plan_de_la_semana");
+        // D-170 tambien aca: la propuesta de una vez, sin preguntar antes.
+        assertThat(render).contains("sin preguntar antes si quiere que la armes");
+        // Integra D-175 en vez de duplicarlo.
+        assertThat(render).contains("dice \"Acompanala hacia lo que se propuso esta semana\"");
+        assertThat(render).contains("a este ritmo no llega a su")
+                .contains("sin culpa")
+                .contains("UN paso concreto")
+                .contains("un cambio de horario tampoco son desvio");
+    }
+
+    @Test
+    @DisplayName("D-177: el material del programa es conocimiento de fondo, no se recita ni se adelanta")
+    void materialDelProgramaComoFondo() {
+        String render = renderizar("(vacio)");
+
+        assertThat(render).contains("Usalo como conocimiento de fondo")
+                .contains("nunca recites ni resumas lecciones o audios enteros")
+                .contains("adelantes lo que trae un dia del programa");
+        // No afloja la atribucion de fuentes.
+        assertThat(render).contains("Nunca presentes como contenido del programa algo que no salio");
     }
 
     @Test

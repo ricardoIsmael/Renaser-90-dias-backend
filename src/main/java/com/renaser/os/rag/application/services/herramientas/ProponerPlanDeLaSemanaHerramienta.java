@@ -51,9 +51,11 @@ public class ProponerPlanDeLaSemanaHerramienta implements HerramientaAgente {
                     + "quedaron creados: dile que los confirme con el boton.",
             List.of(new ParametroHerramienta(ARGUMENTO_PLAN, TipoParametroHerramienta.TEXTO,
                     "Un JSON escrito como texto: {\"objetivos\":[{\"eje\":\"TRABAJO\",\"titulo\":\"Cerrar 2 ventas\","
-                            + "\"obstaculo\":\"Poco tiempo\",\"contingencia\":\"Llamar en la hora de almuerzo\"}]}. "
-                            + "eje es CUERPO, TRABAJO o RELACIONES, uno por objetivo. obstaculo y contingencia son "
-                            + "opcionales. No agregues otros campos.", true)));
+                            + "\"obstaculo\":\"Poco tiempo\",\"contingencia\":\"Llamar en la hora de almuerzo\","
+                            + "\"autoevaluacionInicio\":6}]}. eje es CUERPO, TRABAJO o RELACIONES, uno por objetivo. "
+                            + "obstaculo, contingencia y autoevaluacionInicio (como arranca la semana en ese eje, un "
+                            + "entero del 1 al 10, solo si la persona lo dijo) son opcionales. No agregues otros "
+                            + "campos.", true)));
 
     private final PlanificarRocasPort planificarPort;
     private final ProponerAccionUseCase proponerAccion;

@@ -95,11 +95,22 @@ class PlanificacionDeRocasServiceTest {
         when(crearPlanSemanal.crear(any())).thenReturn(List.of());
 
         ResultadoPlanificacion resultado = service.crearPlanDeLaSemana(APRENDIZ,
-                List.of(new ObjetivoDeLaSemana("TRABAJO", "Vender", "Poco tiempo", null)));
+                List.of(new ObjetivoDeLaSemana("TRABAJO", "Vender", "Poco tiempo", null, null)));
 
         assertThat(resultado).isEqualTo(new ResultadoPlanificacion.Creado(0));
         verify(crearPlanSemanal).crear(new CrearPlanSemanalCommand(APRENDIZ,
                 List.of(new ItemRocaSemanal(EjeObjetivo.TRABAJO, "Vender", "Poco tiempo", null, null))));
+    }
+
+    @Test
+    @DisplayName("D-177: la autoevaluacion de inicio llega al caso de uso; antes se mandaba siempre null")
+    void llevaLaAutoevaluacionDeInicio() {
+        when(crearPlanSemanal.crear(any())).thenReturn(List.of());
+
+        service.crearPlanDeLaSemana(APRENDIZ, List.of(new ObjetivoDeLaSemana("CUERPO", "Correr", null, null, 6)));
+
+        verify(crearPlanSemanal).crear(new CrearPlanSemanalCommand(APRENDIZ,
+                List.of(new ItemRocaSemanal(EjeObjetivo.CUERPO, "Correr", null, null, 6))));
     }
 
     @Test

@@ -52,7 +52,8 @@ class PlanificarRocasAdapter implements PlanificarRocasPort {
     @Override
     public ResultadoPlan crearPlanDeLaSemana(UserId aprendizId, List<ObjetivoSemanal> objetivos) {
         List<ObjetivoDeLaSemana> deRocks = objetivos.stream()
-                .map(o -> new ObjetivoDeLaSemana(o.eje(), o.titulo(), o.obstaculo(), o.contingencia()))
+                .map(o -> new ObjetivoDeLaSemana(o.eje(), o.titulo(), o.obstaculo(), o.contingencia(),
+                        o.autoevaluacionInicio()))
                 .toList();
         return aResultado(planificacion.crearPlanDeLaSemana(aprendizId, deRocks));
     }

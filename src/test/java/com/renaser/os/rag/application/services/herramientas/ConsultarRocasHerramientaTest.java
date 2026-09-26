@@ -1,7 +1,13 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort;
+import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.BalanceDelEje;
+import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.CierreDeLaSemanaAnterior;
+import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.CierreDelEje;
+import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.DiaDeLaSemana;
+import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.ObjetivoDeNoventaDias;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.ObjetivoDelMes;
+import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.ProgresoDeLaSemana;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.PlanDeManana;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.RocaDeLaSemana;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.RocaDelDia;
@@ -20,6 +26,7 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -80,13 +87,89 @@ class ConsultarRocasHerramientaTest {
     void semana() {
         when(puerto.deLaSemana(APRENDIZ)).thenReturn(new RocasDeLaSemana(4, LocalDate.of(2026, 9, 21),
                 LocalDate.of(2026, 9, 27), List.of(new RocaDeLaSemana("TRABAJO", "Cerrar 2 ventas", "Poco tiempo",
-                "Llamar a primera hora", false, true))));
+                "Llamar a primera hora", false, true, null))));
 
         String texto = texto(herramienta.ejecutar(APRENDIZ, conAlcance("semana")));
 
         assertThat(texto).contains("semana 4 del programa (2026-09-21 al 2026-09-27)")
                 .contains("TRABAJO | Cerrar 2 ventas | obstaculo=Poco tiempo | contingencia=Llamar a primera hora")
                 .contains("editable=no").contains("revision_de_cierre=hecha");
+    }
+
+    @Test
+    @DisplayName("D-177 semana: como arranco cada eje y lo que corrigio al cerrar la semana anterior")
+    void semanaConCierreAnterior() {
+        when(puerto.deLaSemana(APRENDIZ)).thenReturn(new RocasDeLaSemana(4, LocalDate.of(2026, 9, 21),
+                LocalDate.of(2026, 9, 27), List.of(new RocaDeLaSemana("TRABAJO", "Cerrar 2 ventas", null, null, true,
+                false, 6))));
+        when(puerto.cierreDeLaSemanaAnterior(APRENDIZ)).thenReturn(Optional.of(new CierreDeLaSemanaAnterior(3, List.of(
+                new CierreDelEje("TRABAJO", "Cerrar 1 venta", 4, 7, "Reuniones", "Bloquear mananas"),
+                new CierreDelEje("CUERPO", "Correr", null, null, null, null)))));
+
+        String texto = texto(herramienta.ejecutar(APRENDIZ, conAlcance("semana")));
+
+        assertThat(texto).contains("como arranco la semana=6/10")
+                .contains("Cierre de la semana 3 (la anterior):")
+                .contains("- TRABAJO | Cerrar 1 venta | arranco en 4/10 | cerro en 7/10 | bloqueo principal=Reuniones "
+                        + "| correccion para esta semana=Bloquear mananas")
+                .contains("- CUERPO | Correr | no se cerro");
+    }
+
+    @Test
+    @DisplayName("D-177 semana: si el cierre anterior falla, la semana sale igual y lo dice; en la semana 1 no hay")
+    void semanaSinCierreAnterior() {
+        when(puerto.deLaSemana(APRENDIZ)).thenReturn(new RocasDeLaSemana(1, LocalDate.of(2026, 9, 1),
+                LocalDate.of(2026, 9, 6), List.of()));
+        when(puerto.cierreDeLaSemanaAnterior(APRENDIZ)).thenReturn(Optional.empty());
+        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("semana")))).doesNotContain("Cierre de la semana");
+
+        when(puerto.cierreDeLaSemanaAnterior(APRENDIZ)).thenThrow(new IllegalStateException("base caida"));
+        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("semana"))))
+                .contains("Todavia no armo los objetivos de esta semana.")
+                .contains("No pude leer el cierre de la semana anterior.");
+    }
+
+    @Test
+    @DisplayName("D-177 progreso: el %, cada dia, el ritmo, el plan de manana y la Ley II solo si aplica")
+    void progreso() {
+        when(puerto.progresoDeLaSemana(APRENDIZ)).thenReturn(new ProgresoDeLaSemana(4, LocalDate.of(2026, 9, 21),
+                LocalDate.of(2026, 9, 27), HOY, 45, List.of(
+                        new DiaDeLaSemana(LocalDate.of(2026, 9, 21), 2, 3, false),
+                        new DiaDeLaSemana(LocalDate.of(2026, 9, 22), 0, null, false),
+                        new DiaDeLaSemana(HOY, 1, 3, true),
+                        new DiaDeLaSemana(LocalDate.of(2026, 9, 24), null, null, false)),
+                "LENTO", 3, List.of(new BalanceDelEje("CUERPO", 3, 2)), PLAN_PENDIENTE, true));
+
+        String texto = texto(herramienta.ejecutar(APRENDIZ, conAlcance("progreso")));
+
+        assertThat(texto).contains("Progreso de la semana 4 del programa (2026-09-21 al 2026-09-27), hoy es miercoles "
+                        + "2026-09-23")
+                .contains("Avance de la semana: 45%")
+                .contains("- lunes 2026-09-21: 2 de 3 completadas")
+                .contains("- martes 2026-09-22: sin rocas planificadas")
+                .contains("- miercoles 2026-09-23 (hoy): 1 de 3 completadas")
+                .contains("- jueves 2026-09-24: todavia no llega")
+                .contains("Ritmo de los ultimos 7 dias (sin contar hoy): LENTO, con 3 dia(s)")
+                .contains("Plan de manana: todavia no esta creado")
+                .contains("Planificar manana ya no es opcional");
+    }
+
+    @Test
+    @DisplayName("D-177 noventa: meta con su unidad donde va, punto de partida, lo que lleva y el avance")
+    void noventa() {
+        when(puerto.objetivosDeNoventaDias(APRENDIZ)).thenReturn(List.of(
+                new ObjetivoDeNoventaDias("CUERPO", "Pesar 75 kg", new BigDecimal("75"), new BigDecimal("80"), "kg",
+                        false, new BigDecimal("82"), 28),
+                new ObjetivoDeNoventaDias("TRABAJO", "Facturar", new BigDecimal("15000.00"), new BigDecimal("7500"),
+                        "S/", true, null, 50),
+                new ObjetivoDeNoventaDias("RELACIONES", "Estar presente", null, null, null, false, null, null)));
+
+        String texto = texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa")));
+
+        assertThat(texto).contains("- CUERPO | Pesar 75 kg | meta=75 kg | punto de partida=82 kg | lleva=80 kg | "
+                        + "avance=28% del camino")
+                .contains("- TRABAJO | Facturar | meta=S/ 15000 | lleva=S/ 7500 | avance=50% del camino")
+                .contains("- RELACIONES | Estar presente | sin meta numerica");
     }
 
     @Test
@@ -109,7 +192,7 @@ class ConsultarRocasHerramientaTest {
         ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, conAlcance("ayer"));
 
         assertThat(resultado).isInstanceOf(ResultadoHerramienta.Fallo.class);
-        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("hoy, manana, semana o mes");
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("hoy, manana, semana, progreso, mes o noventa");
         verifyNoInteractions(puerto);
     }
 

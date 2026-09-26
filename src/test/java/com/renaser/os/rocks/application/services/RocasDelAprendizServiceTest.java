@@ -9,6 +9,14 @@ import com.renaser.os.rocks.application.ports.in.dashboard.ConsultarDashboardRoc
 import com.renaser.os.rocks.application.ports.in.dashboard.ConsultarDashboardRocasUseCase.RocaSemanalVista;
 import com.renaser.os.rocks.application.ports.in.rocadiaria.ConsultarRocasDeHoyUseCase.RocaDiariaVista;
 import com.renaser.os.rocks.application.ports.in.rocadiaria.ConsultarRocasDeMananaUseCase;
+import com.renaser.os.rocks.application.ports.in.rocamaestra.ConsultarRocasMaestrasUseCase;
+import com.renaser.os.rocks.application.ports.in.rocasemanal.ConsultarRocasSemanalesUseCase;
+import com.renaser.os.rocks.application.ports.out.rocadiaria.LoadRocaDiariaPort;
+import com.renaser.os.rocks.api.RocasDelAprendizFinder.BalanceDelEje;
+import com.renaser.os.rocks.api.RocasDelAprendizFinder.CierreDeLaSemanaAnterior;
+import com.renaser.os.rocks.api.RocasDelAprendizFinder.ObjetivoDeNoventaDias;
+import com.renaser.os.rocks.api.RocasDelAprendizFinder.ProgresoDeLaSemana;
+import com.renaser.os.rocks.domain.model.dashboard.DiaGrillaSemanal;
 import com.renaser.os.rocks.application.ports.in.rocamensual.ConsultarObjetivoDelMesUseCase;
 import com.renaser.os.rocks.application.ports.in.rocamensual.ConsultarObjetivoDelMesUseCase.MesDelPlan;
 import com.renaser.os.rocks.application.ports.in.rocamensual.ConsultarObjetivoDelMesUseCase.PlanMensualDelEje;
@@ -46,7 +54,10 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -78,11 +89,17 @@ class RocasDelAprendizServiceTest {
     private final ConsultarRocasDeMananaUseCase manana = mock(ConsultarRocasDeMananaUseCase.class);
     private final ConsultarObjetivoDelMesUseCase objetivoDelMes = mock(ConsultarObjetivoDelMesUseCase.class);
     private final ConsultarProgresoParticipanteRocksPort progresoPort = mock(ConsultarProgresoParticipanteRocksPort.class);
+    private final LoadRocaDiariaPort rocasDiarias = mock(LoadRocaDiariaPort.class);
+    private final ConsultarRocasMaestrasUseCase maestras = mock(ConsultarRocasMaestrasUseCase.class);
+    private final ConsultarRocasSemanalesUseCase semanales = mock(ConsultarRocasSemanalesUseCase.class);
 
     private RocasDelAprendizService servicio(FixedClock reloj) {
         when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(new ProgresoParticipanteRocks(23, INICIO,
                 LIMA, RolParticipante.TRAINEE, false, true)));
-        return new RocasDelAprendizService(dashboard, manana, objetivoDelMes, progresoPort, reloj);
+        when(rocasDiarias.deParticipanteYFecha(any(), any())).thenReturn(List.of());
+        return new RocasDelAprendizService(dashboard, manana, objetivoDelMes, progresoPort,
+                new BalanceSemanalPorEje(rocasDiarias), new LecturaDeObjetivosDelAprendiz(maestras, semanales,
+                progresoPort, reloj), reloj);
     }
 
     @Test
@@ -155,7 +172,103 @@ class RocasDelAprendizServiceTest {
             assertThat(r.contingencia()).isEqualTo("Correr en el gimnasio");
             assertThat(r.editable()).isTrue();
             assertThat(r.revisada()).isFalse();
+            assertThat(r.autoevaluacionInicio()).isEqualTo(5);
         });
+    }
+
+    @Test
+    @DisplayName("D-177 progreso: a las 03:00 UTC hoy es el 23 en Lima; el balance por eje cuenta solo el 21 y el 22")
+    void progresoConBalancePorEjeDeDiasTerminados() {
+        when(dashboard.dashboard(aprendiz)).thenReturn(tableroConGrilla());
+        when(manana.manana(aprendiz)).thenReturn(List.of());
+        RocasDelAprendizService servicio = servicio(NOCHE_EN_LIMA);
+        when(rocasDiarias.deParticipanteYFecha(aprendiz, LocalDate.of(2026, 9, 21))).thenReturn(List.of(
+                roca(LocalDate.of(2026, 9, 21), 1, EjeObjetivo.CUERPO, true),
+                roca(LocalDate.of(2026, 9, 21), 2, EjeObjetivo.CUERPO, false)));
+        when(rocasDiarias.deParticipanteYFecha(aprendiz, LocalDate.of(2026, 9, 22))).thenReturn(List.of(
+                roca(LocalDate.of(2026, 9, 22), 1, EjeObjetivo.TRABAJO, false)));
+
+        ProgresoDeLaSemana progreso = servicio.progresoDeLaSemana(aprendiz);
+
+        assertThat(progreso.hoy()).isEqualTo(HOY_EN_LIMA);
+        assertThat(progreso.numeroSemana()).isEqualTo(4);
+        assertThat(progreso.progresoSemanalPct()).isEqualTo(40);
+        assertThat(progreso.ritmo()).isEqualTo("LENTO");
+        assertThat(progreso.diasCompletadosUltimos7()).isEqualTo(3);
+        assertThat(progreso.planificacionBloqueada()).isTrue();
+        assertThat(progreso.dias()).hasSize(7);
+        assertThat(progreso.dias().get(2).esHoy()).isTrue();
+        assertThat(progreso.dias().get(3).completadas()).isNull();
+        assertThat(progreso.porEje()).containsExactly(new BalanceDelEje("CUERPO", 2, 1),
+                new BalanceDelEje("TRABAJO", 1, 0), new BalanceDelEje("RELACIONES", 0, 0));
+        // Hoy (el 23 en Lima) no se lee para el balance: todavia se puede completar.
+        verify(rocasDiarias, never()).deParticipanteYFecha(aprendiz, HOY_EN_LIMA);
+        verify(rocasDiarias, never()).deParticipanteYFecha(aprendiz, LocalDate.of(2026, 9, 24));
+    }
+
+    @Test
+    @DisplayName("D-177 noventa: la meta, el punto de partida, lo que lleva y el porcentaje; sin meta, sin numeros")
+    void objetivosDeNoventaDias() {
+        RocaMaestra conMeta = new RocaMaestra(new RocaMaestraId(UUID.randomUUID()), aprendiz, EjeObjetivo.TRABAJO,
+                "Facturar 15000", MetaCuantitativa.desde(new BigDecimal("5000"), new BigDecimal("15000"), "S/")
+                .conAvance(new BigDecimal("7500")), NOCHE_EN_LIMA.now(), NOCHE_EN_LIMA.now());
+        when(maestras.misRocasMaestras(aprendiz)).thenReturn(List.of(conMeta, cuerpo));
+
+        List<ObjetivoDeNoventaDias> objetivos = servicio(NOCHE_EN_LIMA).objetivosDeNoventaDias(aprendiz);
+
+        assertThat(objetivos).extracting(ObjetivoDeNoventaDias::eje).containsExactly("CUERPO", "TRABAJO");
+        assertThat(objetivos.get(0).meta()).isNull();
+        ObjetivoDeNoventaDias trabajoNoventa = objetivos.get(1);
+        assertThat(trabajoNoventa.meta()).isEqualByComparingTo("15000");
+        assertThat(trabajoNoventa.lineaBase()).isEqualByComparingTo("5000");
+        assertThat(trabajoNoventa.avance()).isEqualByComparingTo("7500");
+        assertThat(trabajoNoventa.porcentaje()).isEqualTo(25);
+        assertThat(trabajoNoventa.unidadAdelante()).isTrue();
+    }
+
+    @Test
+    @DisplayName("D-177 cierre anterior: a las 03:00 UTC del lunes 28 sigue siendo domingo 27 en Lima, la anterior es la 3")
+    void cierreDeLaSemanaAnteriorEnLaZonaDelAprendiz() {
+        FixedClock domingoNocheEnLima = FixedClock.at(Instant.parse("2026-09-28T03:00:00Z"));
+        RocaSemanal cerrada = RocaSemanal.rehydrate(new RocaSemanalId(UUID.randomUUID()), trabajo.id(), 3, "Vender",
+                null, null, 4, 7, "Reuniones", "Bloquear mananas", domingoNocheEnLima.now(), domingoNocheEnLima.now());
+        when(maestras.misRocasMaestras(aprendiz)).thenReturn(List.of(cuerpo, trabajo, relaciones));
+        when(semanales.misRocasSemanales(aprendiz, 3)).thenReturn(List.of(cerrada));
+
+        Optional<CierreDeLaSemanaAnterior> cierre = servicio(domingoNocheEnLima).cierreDeLaSemanaAnterior(aprendiz);
+
+        assertThat(cierre).hasValueSatisfying(c -> {
+            assertThat(c.numeroSemana()).isEqualTo(3);
+            assertThat(c.ejes()).singleElement().satisfies(eje -> {
+                assertThat(eje.eje()).isEqualTo("TRABAJO");
+                assertThat(eje.autoevaluacionInicio()).isEqualTo(4);
+                assertThat(eje.autoevaluacionFin()).isEqualTo(7);
+                assertThat(eje.bloqueoPrincipal()).isEqualTo("Reuniones");
+                assertThat(eje.correccion()).isEqualTo("Bloquear mananas");
+            });
+        });
+    }
+
+    @Test
+    @DisplayName("D-177 cierre anterior: en la semana 1 no hay semana anterior")
+    void sinSemanaAnteriorEnLaPrimera() {
+        FixedClock primeraSemana = FixedClock.at(Instant.parse("2026-09-03T15:00:00Z"));
+        when(maestras.misRocasMaestras(aprendiz)).thenReturn(List.of(cuerpo, trabajo, relaciones));
+
+        assertThat(servicio(primeraSemana).cierreDeLaSemanaAnterior(aprendiz)).isEmpty();
+    }
+
+    private DashboardRocas tableroConGrilla() {
+        List<DiaGrillaSemanal> grilla = new java.util.ArrayList<>();
+        for (int dia = 21; dia <= 27; dia++) {
+            LocalDate fecha = LocalDate.of(2026, 9, dia);
+            boolean futuro = fecha.isAfter(HOY_EN_LIMA);
+            grilla.add(new DiaGrillaSemanal(fecha, fecha.getDayOfWeek(), futuro ? null : 1, futuro ? null : 3,
+                    fecha.equals(HOY_EN_LIMA)));
+        }
+        return new DashboardRocas(23, 4, LocalDate.of(2026, 9, 21), LocalDate.of(2026, 9, 27),
+                List.of(cuerpo, trabajo, relaciones), true, true, List.of(), grilla, EstadoRitmoRocas.LENTO, 3, 40,
+                true, false, true, false, List.of(), INICIO);
     }
 
     @Test
