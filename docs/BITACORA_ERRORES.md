@@ -8981,3 +8981,28 @@ ahí fue reemplazada: hay que revisar si esa cuenta la usa algo.
 **Cómo evitar que vuelva a pasar.** El control de cuenta está en el script. Regla general: todo
 comando que toque producción empieza por confirmar la cuenta, y una lectura hecha con las mismas
 credenciales no sirve para comprobar nada, porque mira el mismo lugar equivocado.
+
+## E-278 · El acompañante preguntaba "¿quieres que anote el cambio?" y hablaba de un cupo de cambios que no existe
+
+**Síntoma (2026-09-26, APK de prueba contra producción).** A "cambia tal hábito" el orbe contestaba
+preguntando si quería que anotara el cambio de ese hábito, en vez de dejar la propuesta. El dueño:
+*"debemos de ser más directo y poder avanzar rápido [...] además no existe una regla de cambios de
+hábito"*. Las herramientas y el prompt hablaban de "cambios que le quedan esta semana" y de una
+"semana de acomodo libre".
+
+**Causa real.** Dos cosas. (1) `CuotaEdicionHorario` traducía `limits.ts` del repo viejo: 7 días libres
+y después 3 hábitos distintos por semana. Nadie confirmó esa regla con el dueño (regla 00: no inventar
+reglas de negocio), y no existe en el programa. Pasado el día 7, `habits` rechazaba un cuarto hábito
+y el acompañante negaba la propuesta con "cupo agotado". (2) El prompt tenía "cuántos cambios le
+quedan... nunca lo supongas", de la batería del 2026-09-25. El modelo lo leía como que tenía que
+confirmar antes de proponer.
+
+**Solución (D-170).** `DIAS_DE_ACOMODO_LIBRE = 90`: todo el programa es periodo libre (`FREE`, literal
+que ya existía en el contrato, así que la app instalada no ve ninguna forma nueva). Textos de
+`HorariosParaProponer` y `LoQueSiSePuede` sin cupo. En el prompt, la regla del cupo se reemplazó por
+"Se directo al cambiar algo": consultar lo necesario y dejar la propuesta de una vez, sin preguntar
+si la anota. La tarjeta ya es la confirmación.
+
+**Cómo evitar que vuelva a pasar.** `PromptSistemaRenasiaTest.directoAlCambiarAlgo` y
+`CuotaEdicionHorarioTest.todoElProgramaEsLibre` fallan si vuelve la regla. Regla general: un límite
+traducido del repo viejo es un supuesto hasta que el dueño lo confirma, y se anota como tal.

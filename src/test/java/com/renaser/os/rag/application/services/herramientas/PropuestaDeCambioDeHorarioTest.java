@@ -78,7 +78,7 @@ class PropuestaDeCambioDeHorarioTest {
     }
 
     @Test
-    @DisplayName("cambio de un solo dia en la semana libre: dice que es solo ese dia y que no gasta cupo")
+    @DisplayName("cambio de un solo dia sin tope (D-170): dice que es solo ese dia y que no hay tope de cambios")
     void cambioDeUnDia() {
         LocalDate sabado = LocalDate.of(2026, 9, 12);
         hoyEsDia12();
@@ -90,7 +90,7 @@ class PropuestaDeCambioDeHorarioTest {
         verify(proponer).proponer(APRENDIZ, new InvocacionHerramienta(PropuestaDeCambioDeHorario.NOMBRE,
                         Map.of("habito_id", MEDITAR.toString(), "hora_inicio", "06:30", "fecha", "2026-09-12")),
                 "Cambiar 'Meditar' solo el sábado 2026-09-12, de 06:00-07:00 a 06:30 (sin hora limite propia) (los "
-                        + "demas dias no cambian). No gasta cambios: es su semana de acomodo libre.");
+                        + "demas dias no cambian). No tiene tope de cambios.");
     }
 
     @Test

@@ -148,41 +148,26 @@ class PreferenciaHorarioServiceTest {
         verify(historialPort, never()).distintosHabitosCambiadosDesde(any(), any());
     }
 
+    /**
+     * D-170: no hay tope de cambios de horario. Decia "pasada la semana libre, con el cupo agotado,
+     * lanza": era la regla de limits.ts del repo viejo, y el dueño aclaro que no existe.
+     */
     @Test
-    void pasadaLaSemanaLibreConCupoAgotadoLanza() {
-        UserId actor = UserId.of(UUID.randomUUID());
-        Habito habito = habito();
-        Habito habitoYaTocado = habito();
-        when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false))); // dia 10 > 7
-        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(any(), any(), any())).thenReturn(Optional.empty());
-        when(historialPort.distintosHabitosCambiadosDesde(any(), any())).thenReturn(
-                List.of(HabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()), habitoYaTocado.id()));
-
-        assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
-                LocalTime.of(7, 0), LocalTime.of(9, 0), true, null, null))).isInstanceOf(IllegalStateException.class);
-        verify(savePreferenciaPort, never()).save(any());
-    }
-
-    @Test
-    void reeditarUnHabitoYaTocadoNoConsumeCupoNuevo() {
+    void pasadaLaPrimeraSemanaUnHabitoNuevoTambienSeCambia() {
         UserId actor = UserId.of(UUID.randomUUID());
         Habito habito = habito();
         when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
+                Optional.of(new ProgresoParticipanteHabits(40, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFecha(any(), any(), any())).thenReturn(Optional.empty());
         when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
-        when(historialPort.distintosHabitosCambiadosDesde(any(), any())).thenReturn(
-                List.of(HabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()),
-                        habito.id())); // ya tocado, cupo "lleno" pero es el mismo
 
         ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
                 LocalTime.of(7, 0), LocalTime.of(9, 0), true, null, null));
 
         assertThat(resultado.diferido()).isTrue();
-        verify(savePreferenciaPort).save(any(PreferenciaHorario.class));
+        verify(saveCambioPendientePort).save(any());
+        verify(historialPort, never()).distintosHabitosCambiadosDesde(any(), any());
     }
 
     @Test
@@ -277,30 +262,6 @@ class PreferenciaHorarioServiceTest {
         verify(historialPort, never()).registrar(any(), any(), any(), any(), any(), any());
     }
 
-    /**
-     * D-91 se comia la cuota si no se contaban los pendientes: con TODO diferido, el historial de
-     * la semana esta vacio hasta que la promocion corra, asi que un aprendiz podia pedir los 18
-     * habitos la misma noche y promoverlos todos al dia siguiente.
-     */
-    @Test
-    void losCambiosYaProgramadosParaEsaSemanaTambienConsumenCupo() {
-        UserId actor = UserId.of(UUID.randomUUID());
-        Habito habito = habito();
-        when(progresoPort.deParticipante(actor)).thenReturn(
-                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
-        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
-        // Historial vacio: nada rigio todavia esta semana.
-        when(historialPort.distintosHabitosCambiadosDesde(any(), any())).thenReturn(List.of());
-        // Pero ya hay 3 habitos DISTINTOS programados para manana.
-        LocalDate manana = LocalDate.ofInstant(CLOCK.now(), java.time.ZoneId.of("UTC")).plusDays(1);
-        when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of(
-                pendienteDe(actor, manana), pendienteDe(actor, manana), pendienteDe(actor, manana)));
-
-        assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
-                LocalTime.of(7, 0), null, false, null, null))).isInstanceOf(IllegalStateException.class);
-        verify(saveCambioPendientePort, never()).save(any());
-    }
-
     private static CambioHorarioPendiente pendienteDe(UserId actor, LocalDate fechaEfectiva) {
         return CambioHorarioPendiente.programar(actor, HabitoId.of(UUID.randomUUID()), LocalTime.of(8, 0), null,
                 false, null, fechaEfectiva, CLOCK.now());
@@ -322,23 +283,6 @@ class PreferenciaHorarioServiceTest {
         assertThat(resultado.fechaEfectivaDiferido()).isEqualTo(fecha);
         verify(savePreferenciaPort, never()).save(any());
         verify(saveCambioPendientePort, never()).save(any());
-    }
-
-    @Test
-    void laCuotaCuentaFechasReservadasDeLaSemanaObjetivo() {
-        UserId actor = UserId.of(UUID.randomUUID());
-        Habito habito = habito();
-        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(
-                new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
-        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
-        LocalDate fecha = LocalDate.of(2026, 8, 26);
-        LocalDate inicio = LocalDate.of(2026, 8, 22);
-        when(loadPreferenciaPort.habitosConHorarioEntre(actor, inicio, inicio.plusDays(6)))
-                .thenReturn(List.of(HabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()),
-                        HabitoId.of(UUID.randomUUID())));
-        assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
-                LocalTime.of(9, 0), null, false, null, fecha))).isInstanceOf(IllegalStateException.class);
-        verify(savePreferenciaPort, never()).saveParaFecha(any());
     }
 
     @Test

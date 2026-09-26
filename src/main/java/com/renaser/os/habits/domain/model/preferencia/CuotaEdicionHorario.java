@@ -12,8 +12,16 @@ import java.time.LocalDate;
  */
 public record CuotaEdicionHorario(int usados, int restantes, int limite, boolean semanaDeAcomodoLibre) {
 
-    /** limits.ts — la primera semana de programa es de acomodo: los cambios inmediatos no cuestan cupo. */
-    public static final int DIAS_DE_ACOMODO_LIBRE = 7;
+    /**
+     * Hasta que dia del programa los cambios no cuestan cupo: todo el programa.
+     *
+     * <p>Corregido 2026-09-26 (D-170). Decia 7, traducido de {@code limits.ts} del repo viejo: la primera
+     * semana libre y despues {@link #HABITOS_POR_SEMANA} habitos distintos por semana. El dueño aclaro
+     * que esa regla no existe en el programa y que frenaba al acompañante ("no se avanzo"). Se deja la
+     * cuota entera como "periodo libre", el literal que ya existia en el contrato ({@code FREE}), asi no
+     * cambia la forma de ninguna respuesta y la app instalada sigue igual.
+     */
+    public static final int DIAS_DE_ACOMODO_LIBRE = 90;
 
     /** limits.ts — habitos DISTINTOS reacomodables por semana de programa, pasada la semana libre. */
     public static final int HABITOS_POR_SEMANA = 3;

@@ -143,14 +143,24 @@ class PromptSistemaRenasiaTest {
     }
 
     @Test
-    @DisplayName("bateria 2026-09-25: sin salidas inventadas, cupo solo leido, pausados, propuesta en una frase")
+    @DisplayName("D-170: pedido 'cambia tal habito' se propone de una vez, sin preguntar si lo anota")
+    void directoAlCambiarAlgo() {
+        String render = renderizar("(vacio)");
+
+        // En el APK respondia "¿quieres que anote el cambio de tal habito?" en vez de proponerlo.
+        assertThat(render).contains("Se directo al cambiar algo")
+                .contains("sin preguntar antes si quiere que la anotes");
+    }
+
+    @Test
+    @DisplayName("bateria 2026-09-25: sin salidas inventadas, sin tope de cambios, pausados, propuesta en una frase")
     void reglasDeLaBateria() {
         String render = renderizar("(vacio)");
 
         // Ofrecio "cambiar el dia" de la audioterapia, que no se elige por dia.
         assertThat(render).contains("no inventes").contains("cambiar el dia de un habito que no se elige por dia");
-        // Afirmo que no le quedaban cambios de horario sin haberlo leido.
-        assertThat(render).contains("nunca lo supongas");
+        // D-170: no hay tope de cambios de horario (antes: "cupo solo leido, nunca lo supongas").
+        assertThat(render).contains("No hay tope de cambios de horario").doesNotContain("nunca lo supongas");
         // Propuso reactivar un habito pausado cuando pidieron cambiar hasta cuando dura la pausa.
         assertThat(render).contains("Un habito pausado").contains("se cambia la pausa");
         // Repetia la propuesta con negritas en vez de una frase corta.

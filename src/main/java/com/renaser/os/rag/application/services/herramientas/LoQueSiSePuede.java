@@ -14,11 +14,11 @@ package com.renaser.os.rag.application.services.herramientas;
 final class LoQueSiSePuede {
 
     /**
-     * Con un obligatorio del programa lo unico que se mueve es la hora, y gasta cupo. El dia no: en la
+     * Con un obligatorio del programa lo unico que se mueve es la hora (sin tope desde D-170). El dia no: en la
      * bateria del 2026-09-25 el modelo ofrecio "cambiar el dia" de la audioterapia, que no se elige.
      */
     static final String CON_UN_OBLIGATORIO = "Lo que si se puede es cambiarle la hora (el dia en que le toca no "
-            + "se mueve), si le quedan cambios esta semana: como horario general desde manana, o solo para un dia "
+            + "se mueve): como horario general desde manana, o solo para un dia "
             + "futuro. El dia de hoy no se reacomoda.";
 
     /** Todo lo que no es obligatorio. */

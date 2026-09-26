@@ -174,19 +174,17 @@ class ConsultaPreferenciasHorarioServiceTest {
         verify(historialPort, never()).distintosHabitosCambiadosDesde(any(), any());
     }
 
+    /** D-170: sin tope en todo el programa. Decia que pasada la semana de acomodo informaba el cupo gastado. */
     @Test
-    void pasadaLaSemanaDeAcomodoInformaElCupoConsumido() {
+    void pasadaLaPrimeraSemanaSigueSinTope() {
         conProgreso(10, false);
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of());
-        when(historialPort.distintosHabitosCambiadosDesde(actor, LocalDate.of(2026, 8, 22)))
-                .thenReturn(List.of(habito("a").id(), habito("b").id()));
 
         var cuota = service.consultar(actor).cuota();
 
-        assertThat(cuota.periodo()).isEqualTo("WEEK");
-        assertThat(cuota.cambiosUsados()).isEqualTo(2);
-        assertThat(cuota.cambiosRestantes()).isEqualTo(1);
-        assertThat(cuota.cambiosLimite()).isEqualTo(3);
+        assertThat(cuota.periodo()).isEqualTo("FREE");
+        assertThat(cuota.cambiosUsados()).isZero();
+        verify(historialPort, never()).distintosHabitosCambiadosDesde(any(), any());
     }
 
     @Test

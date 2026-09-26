@@ -137,7 +137,7 @@ final class HorariosParaProponer {
     /** Lo que dice {@code consultar_horarios} del cupo, para que ninguna herramienta lo cuente distinto. */
     static String lineaDeCupo(CuotaCambios cuota) {
         if (cuota.semanaDeAcomodoLibre()) {
-            return "Cambios de horario: semana de acomodo libre, los cambios inmediatos no consumen cupo.";
+            return "Cambios de horario: sin tope, se puede cambiar cuantas veces quiera.";
         }
         return "Cambios de horario esta semana: " + cuota.usados() + " usados, " + cuota.restantes()
                 + " restantes de " + cuota.limite() + ".";
@@ -146,7 +146,7 @@ final class HorariosParaProponer {
     /** La parte del resumen que dice cuanto cupo gasta, con los numeros que dio {@code habits}. */
     static String gastoDeCupo(CuotaCambios cuota) {
         if (cuota.semanaDeAcomodoLibre()) {
-            return "No gasta cambios: es su semana de acomodo libre.";
+            return "No tiene tope de cambios.";
         }
         return "Usa 1 de sus " + cuota.limite() + " cambios de esa semana: le quedarian " + (cuota.restantes() - 1)
                 + ".";
