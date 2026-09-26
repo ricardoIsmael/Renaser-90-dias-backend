@@ -48,6 +48,14 @@ public interface AcompanamientoFinder {
     List<UserId> integrantesVigentes(UUID grupoId, Instant instante);
 
     /**
+     * Quienes acompañan hoy al grupo de persona a persona: su mentor y, en la recepción, sus
+     * guías. Deja afuera a {@code SOPORTE} (ADMIN/ALCHEMIST cubriendo el grupo): el staff ya
+     * tiene su propio chat con cada aprendiz (D-136), y el chat de dos es solo con quien lo
+     * acompaña (D-173). Vacío si el grupo no está operativo en ese instante.
+     */
+    List<UserId> acompanantesVigentes(UUID grupoId, Instant instante);
+
+    /**
      * Si {@code usuarioId} pertenece hoy al grupo, con cualquier función.
      *
      * <p>Existe para que el chat pueda revalidar en cada acción en vez de confiar en su

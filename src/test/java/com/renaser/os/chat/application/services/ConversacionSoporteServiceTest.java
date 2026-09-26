@@ -90,6 +90,8 @@ class ConversacionSoporteServiceTest {
     private IdGenerator idGenerator;
     @Mock
     private PlatformTransactionManager transactionManager;
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventos;
 
     private ConversacionSoporteService service;
 
@@ -97,7 +99,7 @@ class ConversacionSoporteServiceTest {
     void preparar() {
         service = new ConversacionSoporteService(loadConversacionPort, saveConversacionPort,
                 agregarParticipantePort, quitarParticipantePort, esParticipantePort, userSummaryFinder,
-                participacionProgramaFinder, CLOCK, idGenerator, transactionManager);
+                participacionProgramaFinder, CLOCK, idGenerator, transactionManager, eventos);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveConversacionPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -119,10 +121,44 @@ class ConversacionSoporteServiceTest {
         verify(saveConversacionPort).save(guardada.capture());
         assertThat(guardada.getValue().tipo()).isEqualTo(TipoConversacion.SOPORTE);
         assertThat(guardada.getValue().claveDirecta()).isEqualTo("soporte:" + ANA.value());
-        assertThat(guardada.getValue().nombre()).isEqualTo("Soporte - Ana Perez");
+        assertThat(guardada.getValue().nombre()).isEqualTo("Ana – Formación Renaser");
         // El aprendiz + los dos del staff, nadie mas. El mentor NO entra.
         verify(agregarParticipantePort, times(3)).agregar(any());
         assertThat(participantesAgregados()).containsExactlyInAnyOrder(ANA, ADMINA, ALQUIMISTA);
+        // D-174: avisa que nacio, para que salga la bienvenida.
+        verify(eventos).publishEvent(new com.renaser.os.chat.domain.model.conversacion.SoporteDeAprendizNacioEvent(
+                ConversacionId.of(ID_GENERADO), ANA));
+    }
+
+    /** D-174: si otro camino lo creo primero, la bienvenida la dispara ese, no este. */
+    @Test
+    @DisplayName("si pierde la carrera de creacion, no avisa: la bienvenida sale una sola vez")
+    void siPierdeLaCarreraNoAvisa() {
+        inscrito(ANA, UserRole.TRAINEE);
+        perfil(ANA, "Ana Perez", UserRole.TRAINEE, UserStatus.ACTIVE);
+        when(loadConversacionPort.porClaveDirecta(Conversacion.claveSoporteDe(ANA))).thenReturn(Optional.empty());
+        when(saveConversacionPort.save(any()))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("clave_directa duplicada"));
+
+        service.incorporar(ANA);
+
+        verify(eventos, never()).publishEvent(any(Object.class));
+    }
+
+    /** D-173: el formato del procedimiento de Operaciones, con el primer nombre solo. */
+    @Test
+    @DisplayName("el soporte se nombra con el primer nombre: 'María – Formación Renaser'")
+    void elNombreLlevaSoloElPrimerNombre() {
+        assertThat(ConversacionSoporteService.nombreDeSoporte("María José Ñahui Quispe")).isEqualTo("María – Formación Renaser");
+        assertThat(ConversacionSoporteService.nombreDeSoporte("  Luis   Gomez ")).isEqualTo("Luis – Formación Renaser");
+        assertThat(ConversacionSoporteService.nombreDeSoporte("Ana")).isEqualTo("Ana – Formación Renaser");
+    }
+
+    @Test
+    @DisplayName("sin nombre legible, el soporte igual nace con un título genérico")
+    void sinNombreQuedaElTituloGenerico() {
+        assertThat(ConversacionSoporteService.nombreDeSoporte(null)).isEqualTo("Formación Renaser");
+        assertThat(ConversacionSoporteService.nombreDeSoporte("   ")).isEqualTo("Formación Renaser");
     }
 
     /**
@@ -139,6 +175,7 @@ class ConversacionSoporteServiceTest {
 
         verify(saveConversacionPort, never()).save(any());
         verify(agregarParticipantePort, never()).agregar(any());
+        verify(eventos, never()).publishEvent(any(Object.class));
     }
 
     @Test
@@ -389,6 +426,8 @@ class ConversacionSoporteServiceTest {
 
         assertThat(resultado).isEqualTo(new ResultadoRelleno(2, 1, 1, 0));
         assertThat(participantesAgregados()).containsExactlyInAnyOrder(BRUNO, ADMINA);
+        // D-174: el relleno es de los que ya estaban; nadie recibe una bienvenida tarde.
+        verify(eventos, never()).publishEvent(any(Object.class));
     }
 
     /**

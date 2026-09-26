@@ -98,6 +98,11 @@ class MensajeServicePermisosDeGrupoTest {
             }
 
             @Override
+            public java.util.Set<String> clavesDirectasExistentes(java.util.Collection<String> claves) {
+                return java.util.Set.of();
+            }
+
+            @Override
             public Optional<Conversacion> porCelulaId(UUID celulaId) {
                 return Optional.empty();
             }
@@ -196,6 +201,10 @@ class MensajeServicePermisosDeGrupoTest {
             @Override
             public URI urlPublica(String ruta) {
                 return URI.create("https://ejemplo.test/" + ruta);
+            }
+
+            @Override
+            public void subir(String ruta, byte[] contenido, String tipoContenido) {
             }
 
             @Override

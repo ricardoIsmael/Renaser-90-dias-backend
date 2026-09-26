@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Utilities;
@@ -29,10 +30,11 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
  * tickets y avatares — entregaban al cliente movil una URL que no apunta a nada. Los archivos ya
  * estaban en S3 desde D-50; lo que faltaba era esto.
  *
- * <p><b>El backend nunca toca los bytes.</b> Subir y descargar van por URL prefirmada
- * directamente entre el cliente y S3: el archivo no pasa por la JVM, no ocupa un hilo mientras
- * dura la transferencia y no cuenta contra el presupuesto de latencia del §3. El unico verbo que
- * ejecuta el servidor es el borrado.
+ * <p><b>El backend nunca toca los bytes que vienen del cliente.</b> Subir y descargar van por URL
+ * prefirmada directamente entre el cliente y S3: el archivo no pasa por la JVM, no ocupa un hilo
+ * mientras dura la transferencia y no cuenta contra el presupuesto de latencia del §3. Los verbos
+ * que ejecuta el servidor son el borrado y, desde D-174, subir lo que el propio servidor genera
+ * (la imagen de bienvenida, ~200 KB).
  *
  * <p><b>Sobre la validez de las URLs:</b> cada caso de uso decide la suya y este adaptador la
  * respeta tal cual — un audio de terapia y la firma de un contrato de fase no tienen por que
@@ -103,6 +105,13 @@ public class S3AlmacenamientoAdapter implements AlmacenamientoPort {
     @Override
     public URI urlPublica(String ruta) {
         return URI.create(urls.getUrl(GetUrlRequest.builder().bucket(bucket).key(ruta).build()).toString());
+    }
+
+    @Override
+    public void subir(String ruta, byte[] contenido, String tipoContenido) {
+        cliente.putObject(PutObjectRequest.builder().bucket(bucket).key(ruta).contentType(tipoContenido).build(),
+                RequestBody.fromBytes(contenido));
+        log.info("Objeto subido a S3 por el servidor: {} ({} bytes)", ruta, contenido.length);
     }
 
     @Override

@@ -25,6 +25,13 @@ public interface AlmacenamientoPort {
      */
     URI urlPublica(String ruta);
 
+    /**
+     * Sube un objeto que generó el propio servidor. Es la excepción a "el backend nunca toca los
+     * bytes": todo archivo que viene del teléfono sigue yendo por {@link #firmarSubida}. Existe
+     * para la imagen de bienvenida (D-174), que no la sube nadie porque la dibuja el servidor.
+     */
+    void subir(String ruta, byte[] contenido, String tipoContenido);
+
     /** Borra el objeto. Idempotente: borrar lo inexistente no falla. */
     void borrar(String ruta);
 }

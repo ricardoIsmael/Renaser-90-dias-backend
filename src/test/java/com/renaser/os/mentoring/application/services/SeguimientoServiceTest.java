@@ -98,6 +98,11 @@ class SeguimientoServiceTest {
                         .toList();
             }
             @Override
+            public List<UserId> acompanantesVigentes(UUID grupoId, Instant instante) {
+                return List.of();
+            }
+
+            @Override
             public List<UserId> integrantesVigentes(UUID grupoId, Instant instante) {
                 // Aprendices + acompanantes. Estas pruebas solo pueblan aprendices.
                 return aprendicesVigentes(grupoId, instante);

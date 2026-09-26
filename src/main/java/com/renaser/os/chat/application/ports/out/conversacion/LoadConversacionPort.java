@@ -4,8 +4,10 @@ import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.shared.domain.UserId;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public interface LoadConversacionPort {
@@ -13,6 +15,13 @@ public interface LoadConversacionPort {
     Optional<Conversacion> porId(ConversacionId id);
 
     Optional<Conversacion> porClaveDirecta(String claveDirecta);
+
+    /**
+     * Cuales de estas claves ya tienen conversacion, EN UNA consulta. Existe para abrir en bloque
+     * los chats de dos de un grupo (D-173) sin una consulta por pareja: la recepcion no tiene
+     * tope y cada ingreso reconcilia el grupo entero.
+     */
+    Set<String> clavesDirectasExistentes(Collection<String> claves);
 
     Optional<Conversacion> porCelulaId(UUID celulaId);
 

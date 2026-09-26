@@ -112,6 +112,11 @@ public class BancoDelSemaforo {
         }
 
         @Override
+        public List<UserId> acompanantesVigentes(UUID grupoId, Instant instante) {
+            return vigentesDelGrupo(acompanamientos.stream(), grupoId, instante);
+        }
+
+        @Override
         public boolean esIntegranteVigente(UUID grupoId, UserId usuarioId, Instant instante) {
             return integrantesVigentes(grupoId, instante).contains(usuarioId);
         }

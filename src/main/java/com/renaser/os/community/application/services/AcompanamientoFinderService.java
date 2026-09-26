@@ -89,6 +89,20 @@ class AcompanamientoFinderService implements AcompanamientoFinder {
 
     @Override
     @Transactional(readOnly = true)
+    public List<UserId> acompanantesVigentes(UUID grupoId, Instant instante) {
+        if (!grupoOperativoEn(grupoId, instante)) {
+            return List.of();
+        }
+        return asignacionesDe(grupoId).stream()
+                .filter(a -> a.funcion() == FuncionAcompanamiento.MENTOR || a.funcion() == FuncionAcompanamiento.GUIA)
+                .filter(a -> a.vigenteEn(instante))
+                .map(AsignacionCelula::usuarioId)
+                .distinct()
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public boolean esIntegranteVigente(UUID grupoId, UserId usuarioId, Instant instante) {
         return grupoOperativoEn(grupoId, instante)
                 && asignacionesDe(grupoId).stream()

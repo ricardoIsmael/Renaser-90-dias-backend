@@ -290,6 +290,10 @@ class AccountDeletionIntegrationTest {
         }
 
         @Override
+        public void subir(String ruta, byte[] contenido, String tipoContenido) {
+        }
+
+        @Override
         public void borrar(String ruta) {
             borrados.add(ruta);
         }

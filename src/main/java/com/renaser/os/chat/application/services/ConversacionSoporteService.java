@@ -12,6 +12,8 @@ import com.renaser.os.chat.application.ports.out.participante.QuitarParticipante
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.Participante;
+import com.renaser.os.chat.domain.model.conversacion.PrimerNombre;
+import com.renaser.os.chat.domain.model.conversacion.SoporteDeAprendizNacioEvent;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
@@ -25,6 +27,7 @@ import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -66,6 +69,8 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
      * proyecto: administrador o alquimista, nadie mas — ni mentor, ni lider de mentores. */
     private static final Set<UserRole> STAFF_ADMINISTRATIVO = Set.of(UserRole.ADMIN, UserRole.ALCHEMIST);
 
+    private static final String SUFIJO_SOPORTE = "Formación Renaser";
+
     private final LoadConversacionPort loadConversacionPort;
     private final SaveConversacionPort saveConversacionPort;
     private final AgregarParticipantePort agregarParticipantePort;
@@ -76,6 +81,7 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
     private final Clock clock;
     private final IdGenerator idGenerator;
     private final TransactionTemplate transaccionPropia;
+    private final ApplicationEventPublisher eventos;
 
     public ConversacionSoporteService(LoadConversacionPort loadConversacionPort,
                                        SaveConversacionPort saveConversacionPort,
@@ -85,7 +91,8 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
                                        UserSummaryFinder userSummaryFinder,
                                        ParticipacionProgramaFinder participacionProgramaFinder,
                                        Clock clock, IdGenerator idGenerator,
-                                       PlatformTransactionManager transactionManager) {
+                                       PlatformTransactionManager transactionManager,
+                                       ApplicationEventPublisher eventos) {
         this.loadConversacionPort = loadConversacionPort;
         this.saveConversacionPort = saveConversacionPort;
         this.agregarParticipantePort = agregarParticipantePort;
@@ -95,6 +102,7 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
         this.participacionProgramaFinder = participacionProgramaFinder;
         this.clock = clock;
         this.idGenerator = idGenerator;
+        this.eventos = eventos;
         this.transaccionPropia = new TransactionTemplate(transactionManager);
         this.transaccionPropia.setPropagationBehavior(Propagation.REQUIRES_NEW.value());
     }
@@ -136,29 +144,31 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
             return;
         }
         String nombre = nombreDelSoporteDe(aprendizId);
-        crearSoporte(aprendizId, nombre, participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO));
+        crearSoporte(aprendizId, nombre, participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO))
+                .ifPresent(soporteId -> eventos.publishEvent(new SoporteDeAprendizNacioEvent(soporteId, aprendizId)));
     }
 
     /**
      * Crea la conversacion y mete a todos sus participantes, atomico y en transaccion propia.
      *
-     * @return {@code true} si la creo, {@code false} si ya existia (la creo otro primero)
+     * @return la conversacion creada, o vacio si ya existia (la creo otro primero)
      */
-    private boolean crearSoporte(UserId aprendizId, String nombre, List<UserId> staff) {
+    private Optional<ConversacionId> crearSoporte(UserId aprendizId, String nombre, List<UserId> staff) {
+        ConversacionId id = ConversacionId.of(idGenerator.newId());
         try {
             transaccionPropia.executeWithoutResult(status -> {
                 Conversacion guardada = saveConversacionPort.save(Conversacion.crearSoporte(
-                        ConversacionId.of(idGenerator.newId()), aprendizId, nombre, clock.now()));
+                        id, aprendizId, nombre, clock.now()));
                 agregarParticipantePort.agregar(Participante.unirse(guardada.id(), aprendizId, clock.now()));
                 for (UserId miembro : staff) {
                     agregarParticipantePort.agregar(Participante.unirse(guardada.id(), miembro, clock.now()));
                 }
             });
-            return true;
+            return Optional.of(id);
         } catch (DataIntegrityViolationException laCreoOtroPrimero) {
             // El UNIQUE de clave_directa hizo su trabajo: hay exactamente una y no dos.
             log.debug("[chat.soporte] el soporte de {} ya existia al intentar crearlo", aprendizId);
-            return false;
+            return Optional.empty();
         }
     }
 
@@ -177,9 +187,14 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
      * titulo no se entera. No se deriva en cada lectura porque una conversacion de grupo se
      * nombra por su columna `nombre`, igual que la GLOBAL. Queda documentado como limitacion
      * conocida en docs/MODULO_CHAT.md, no como olvido.
+     *
+     * <p>Formato del procedimiento de Operaciones ("NOMBRE – FORMACIÓN RENASER", OPE-01-01) con
+     * el PRIMER nombre solo (D-173): "María José Ñahui" se lee "María – Formación Renaser". Las
+     * que ya existian conservan su "Soporte - Nombre Completo"; el formato aplica a las nuevas.
      */
-    private static String nombreDeSoporte(String nombreCompleto) {
-        return nombreCompleto == null || nombreCompleto.isBlank() ? "Soporte" : "Soporte - " + nombreCompleto;
+    static String nombreDeSoporte(String nombreCompleto) {
+        String primerNombre = PrimerNombre.de(nombreCompleto);
+        return primerNombre.isEmpty() ? SUFIJO_SOPORTE : primerNombre + " – " + SUFIJO_SOPORTE;
     }
 
     /**
@@ -301,7 +316,7 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
     /** Un aprendiz que falla no puede detener el barrido (.claude/rules/02). */
     private ResultadoIntento intentarCrearEnElRelleno(UserSummary aprendiz, List<UserId> staff) {
         try {
-            return crearSoporte(aprendiz.id(), nombreDeSoporte(aprendiz.fullName()), staff)
+            return crearSoporte(aprendiz.id(), nombreDeSoporte(aprendiz.fullName()), staff).isPresent()
                     ? ResultadoIntento.CREADA : ResultadoIntento.YA_EXISTIA;
         } catch (RuntimeException e) {
             log.warn("[chat.soporte] relleno: fallo el aprendiz {}", aprendiz.id(), e);
