@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.domain.model.agenda.AgendaSemanal;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
@@ -10,7 +11,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -18,8 +21,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * D-161: {@code consultar_mi_agenda}, {@code proponer_guardar_agenda} y lo que aplica el boton.
@@ -51,6 +56,44 @@ class AgendaGuardadaHerramientasTest {
                 + "viernes de 09:00-18:00 (reemplaza lo guardado esos dias)");
         assertThat(resultado).isInstanceOf(ResultadoHerramienta.Exito.class);
         assertThat(agendas.de(APRENDIZ).estaVacia()).isTrue();
+    }
+
+    /**
+     * E-291: tras "estudio los sabados de 8 a 12" quedo la tarjeta; a "si, guardalo" el modelo dejo OTRA
+     * con "sabado, domingo". El deduplicado de D-176 no la vio porque los argumentos eran distintos.
+     */
+    @Test
+    @DisplayName("E-291: con una tarjeta de agenda pendiente no se deja otra; le dice al modelo que la confirme")
+    void segundaTarjetaBloqueada() {
+        when(proponer.pendienteDe(APRENDIZ, PropuestaDeGuardarAgenda.NOMBRE)).thenReturn(Optional.of(
+                new PropuestaCreada(UUID.randomUUID(), "Recordar que estas ocupado/a sabado de 08:00-12:00",
+                        Instant.parse("2026-09-26T15:10:00Z"))));
+
+        ResultadoHerramienta resultado = propuesta.ejecutar(APRENDIZ, guardar("sabado, domingo", "08:00-12:00"));
+
+        verify(proponer, never()).proponer(any(), any(), any());
+        assertThat(((ResultadoHerramienta.Exito) resultado).contenido())
+                .startsWith("Ya tiene una tarjeta de agenda pendiente (Recordar que estas ocupado/a sabado de "
+                        + "08:00-12:00): no se creo otra.")
+                .contains("la confirme con el boton").contains("cambia_la_pendiente='si'");
+    }
+
+    @Test
+    @DisplayName("E-291: si la persona pidio cambiarla, con cambia_la_pendiente='si' se propone la nueva")
+    void cambiarLaPendienteSiPropone() {
+        when(proponer.pendienteDe(APRENDIZ, PropuestaDeGuardarAgenda.NOMBRE)).thenReturn(Optional.of(
+                new PropuestaCreada(UUID.randomUUID(), "Recordar sabado", Instant.parse("2026-09-26T15:10:00Z"))));
+
+        ResultadoHerramienta resultado = propuesta.ejecutar(APRENDIZ, new InvocacionHerramienta(
+                PropuestaDeGuardarAgenda.NOMBRE, Map.of(PropuestaDeGuardarAgenda.ARGUMENTO_DIAS, "sabado",
+                PropuestaDeGuardarAgenda.ARGUMENTO_OCUPADO, "09:00-13:00",
+                PropuestaDeGuardarAgenda.ARGUMENTO_CAMBIA_LA_PENDIENTE, "si")));
+
+        ArgumentCaptor<InvocacionHerramienta> guardada = ArgumentCaptor.forClass(InvocacionHerramienta.class);
+        verify(proponer).proponer(eq(APRENDIZ), guardada.capture(), any());
+        // La bandera no viaja a lo que se ejecuta al confirmar.
+        assertThat(guardada.getValue().argumentos()).doesNotContainKey(PropuestaDeGuardarAgenda.ARGUMENTO_CAMBIA_LA_PENDIENTE);
+        assertThat(((ResultadoHerramienta.Exito) resultado).contenido()).startsWith("Propuesta creada:");
     }
 
     @Test

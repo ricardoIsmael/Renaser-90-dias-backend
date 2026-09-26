@@ -9228,3 +9228,97 @@ ese día no se bloquea; la misma regla vale para completar y para mostrar el can
 
 **Cómo evitar que vuelva a pasar.** Toda regla de "del día" se valida en el caso de uso, no solo en la
 herramienta del acompañante: la app entra por el mismo endpoint.
+
+## E-289 · «Saltarte la última comida del día te aleja de tu objetivo» con la última comida ya hecha
+
+**Síntoma (2026-09-26, batería contra Gemini flash-lite, backend local).** «me salto la ultima comida
+hoy, no tengo tiempo» → *"Saltarte la última comida del día te aleja de tu objetivo… hazla más tarde"*,
+aunque la situación del prompt decía `- ÚLTIMA COMIDA DEL DÍA: hecho`.
+
+**Causa real.** Dos reglas en conflicto y la equivocada ganaba: la de D-175 («cuando dice que no va a
+hacer un hábito… dile que lo aleja de su objetivo») era un bloque propio y enfático, y el estado era una
+línea más de la lista con `hecho` al final. El prompt decía mirar el estado, pero en otro párrafo y no
+como primer paso de esa regla.
+
+**Solución (D-179).** La situación abre con `Ya hechos hoy (no le propongas hacerlos, saltarlos ni
+registrarlos otra vez): …` y deja el resto en `Los demas de hoy`. En el prompt, mirar si ya está hecho
+es el PRIMER paso de la regla de saltarse y de la de registrar, con la respuesta exacta («Ese ya lo
+registraste hoy, no tienes que hacer nada mas»). Pruebas: `HabitosDeHoyEnElPromptTest.hechosPrimero`,
+`PromptSistemaRenasiaTest.reglasDeLaBateriaFlashLite` (que además verifica que el paso del estado va
+antes que la regla de D-175).
+
+**Cómo evitar que vuelva a pasar.** Cuando una regla de acción depende de un estado, el chequeo del
+estado va DENTRO de la regla, como primer paso y con la respuesta esperada; no en otro párrafo.
+
+## E-290 · «Sí, puedes registrarlo» del jugo verde, que estaba hecho con otro nombre
+
+**Síntoma (2026-09-26, misma batería).** «se me paso la hora del jugo verde, lo puedo registrar?» →
+*"Sí, puedes registrarlo"*. Estaba hecho: para esa persona el JUGO VERDE está renombrado «Batido de
+papaya» (D-133), y la situación solo decía `Batido de papaya: hecho`.
+
+**Causa real.** Desde D-133 la proyección del día solo exponía el título propio; el del catálogo se
+perdía antes de salir de `habits`. El modelo no tenía cómo unir «jugo verde» con «Batido de papaya».
+
+**Solución (D-179).** `TrackDelDiaConCatalogo.tituloDelPrograma` → `HabitoEnJuegoResumen.tituloDelPrograma`
+→ `HabitoDelDia` → `HabitoDeHoy`: el título del catálogo cuando hay renombre distinto. La situación y
+`consultar_habitos_del_dia` dicen `Batido de papaya (JUGO VERDE del programa)`. El motivo del renombre
+no sale de `habits` (prueba: `TracksDelDiaProyeccionServiceTest` verifica que «Gastritis» no aparece).
+
+**Cómo evitar que vuelva a pasar.** Todo texto que la persona puede reemplazar (renombres, títulos
+personales) llega al modelo junto con el nombre canónico, porque la persona usa los dos.
+
+## E-291 · Segunda tarjeta de agenda con días inventados después de «sí, guárdalo»
+
+**Síntoma (2026-09-26, misma batería).** «estudio los sabados de 8 a 12» → tarjeta de agenda y la
+pregunta de D-177. «si, guardalo» → OTRA tarjeta, con «sabado, domingo». Quedaron dos pendientes.
+
+**Causa real.** El modelo tomó el «sí» como pedido de proponer de nuevo, e inventó los días. El
+deduplicado de D-176 no lo frenó porque compara la huella (herramienta + argumentos), y los argumentos
+eran distintos.
+
+**Solución (D-179).** `ProponerAccionUseCase.pendienteDe` y, en `proponer_guardar_agenda`, si ya hay una
+pendiente sin vencer no se crea otra salvo `cambia_la_pendiente='si'`; el resultado le dice al modelo que
+la persona la confirme con el botón. En el prompt, un «sí/guárdalo/dale» después de la tarjeta es
+confirmar, y los días y horas salen solo de lo que ella dijo. Pruebas:
+`AgendaGuardadaHerramientasTest.segundaTarjetaBloqueada`, `PropuestasAgenteServiceTest.pendienteDeUnaHerramienta`.
+
+**Cómo evitar que vuelva a pasar.** Una herramienta que propone algo que la persona confirma UNA vez
+(su agenda) necesita un candado por herramienta, no por argumentos: el modelo varía los argumentos.
+
+## E-292 · «Ya se encuentra pausado» a «pausa ducha fría hasta el domingo», con la pausa sin fin
+
+**Síntoma (2026-09-26, misma batería).** Ducha fría pausada SIN fecha de fin; «pausa ducha fria hasta el
+domingo» → solo *"ya se encuentra pausado"*. Lo esperado: proponer que la pausa termine el domingo.
+
+**Causa real.** La lógica de `PropuestaDePausarHabito` ya proponía «Cambiar la pausa…» si recibía
+`hasta` distinta de la actual. El modelo no la mandó (o no llamó a la herramienta al ver «pausado» en
+la situación), y el fallo «'X' ya esta pausado sin fecha de fin.» le confirmaba el error sin decirle
+que faltaba la fecha. No se pudo ver en el log cuál de las dos pasó: se cubren las dos.
+
+**Solución (D-179).** Si el modelo pide pausar sin `hasta` algo ya pausado sin fin, el fallo le dice que
+vuelva con la fecha si la persona la pidió; la descripción dice usar 'pausar' con la fecha «aunque ya
+figure pausado»; el prompt, que «ya está pausado hasta X» solo vale si X es la fecha pedida. Pruebas:
+`PropuestaDePausarHabitoTest` (`pausadoSinFinPideFecha`, `pausadoSinFinSinFechaOrientaAlModelo`,
+`pausadoHastaLaMismaFecha`).
+
+**Cómo evitar que vuelva a pasar.** Un fallo de herramienta que dice «ya está así» tiene que decir
+también qué argumento faltaría para que fuera un cambio: el modelo lo lee como la respuesta final.
+
+## E-293 · `NOT_TODAY: solo se registran las acciones de hoy; esta es del 2026-08-24` en `RocaDiariaConcurrenciaTest`
+
+**Síntoma (2026-09-26, `./mvnw -o clean verify` de la rama `ronda4`, que parte de `ea8a0d7a`).** Surefire
+`Tests run: 4648, Failures: 1, Errors: 1`, las dos en `RocaDiariaConcurrenciaTest`:
+`completadoNormalSigueFuncionando` → `java.lang.IllegalStateException: NOT_TODAY: solo se registran las
+acciones de hoy; esta es del 2026-08-24`, y `dobleCompletadoConcurrenteNoDuplicaNada` →
+`[solo UNA de las 6 llamadas concurrentes debe completar la roca] expected: 1L but was: 0L`.
+
+**Causa real.** El fixture: la prueba (contra Postgres real) crea la roca con fecha fija 2026-08-24, y
+desde E-288 (`requireDeHoy`, commit `ea8a0d7a`) completar exige que la roca sea de hoy en la zona de la
+persona. No tiene que ver con D-179: falla igual en el commit base.
+
+**Solución.** Pendiente, no se tocó en D-179 (regla 00: se reporta, no se arregla de pasada). Lo
+correcto es que el fixture use la fecha de hoy del reloj que ve el servicio (o un `FixedClock` coherente
+con la fecha de la roca), no cambiar la regla.
+
+**Cómo evitar que vuelva a pasar.** Al agregar una guarda de "del día" (E-288), buscar las pruebas que
+arman filas con fechas fijas y correr `verify` completo antes de commitear.

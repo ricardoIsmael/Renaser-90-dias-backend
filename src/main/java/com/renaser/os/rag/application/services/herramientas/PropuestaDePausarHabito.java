@@ -58,8 +58,8 @@ public class PropuestaDePausarHabito implements HerramientaAgente {
             "Propone pausar un habito de su plan (hasta una fecha o sin fecha de fin) o reactivar uno pausado. "
                     + "NO lo pausa: deja una propuesta y la persona tiene que tocar Confirmar en la app. Nunca "
                     + "digas que ya quedo pausado o reactivado. Los habitos obligatorios no se pueden pausar. "
-                    + "Si ya esta pausado y pide que la pausa dure hasta otra fecha (o sin fin), usa 'pausar' con "
-                    + "esa fecha: eso cambia la pausa. Usa 'reactivar' solo si pide volver a hacerlo. Usala solo si "
+                    + "Si ya esta pausado y pide que la pausa dure hasta una fecha (o sin fin), usa 'pausar' con "
+                    + "esa fecha aunque ya figure pausado: eso cambia la pausa y se propone. Usa 'reactivar' solo si pide volver a hacerlo. Usala solo si "
                     + "la persona pidio pausar o reactivar; saca el habito_id de consultar_horarios, aunque ahi "
                     + "figure pausado.",
             List.of(ParametroHerramienta.obligatorio(ARGUMENTO_HABITO_ID, TipoParametroHerramienta.IDENTIFICADOR,
@@ -138,9 +138,21 @@ public class PropuestaDePausarHabito implements HerramientaAgente {
                     + "persona): la pausa tiene que terminar hoy o despues.");
         }
         if (habito.pausadoHoy() && Objects.equals(habito.pausadoHasta(), pedido.hasta())) {
-            return Optional.of("'" + habito.titulo() + "' ya esta pausado " + finDe(pedido.hasta()) + ".");
+            return Optional.of(yaPausadoIgual(habito, pedido));
         }
         return Optional.empty();
+    }
+
+    /**
+     * E-292: a "pausa ducha fria hasta el domingo", con la ducha pausada sin fin, contesto solo "ya se
+     * encuentra pausado". Lo unico que esta igual es la fecha que mando el modelo: si omitio
+     * {@code hasta} y la persona dio una, este texto le dice que vuelva con ella, que es un cambio.
+     */
+    private static String yaPausadoIgual(HabitoDelPlan habito, Pedido pedido) {
+        String igual = "'" + habito.titulo() + "' ya esta pausado " + finDe(pedido.hasta()) + ".";
+        return pedido.hasta() != null ? igual : igual + " Si la persona pidio que la pausa termine en una fecha, "
+                + "vuelve a llamar con 'pausar' y esa fecha en 'hasta' (yyyy-MM-dd): eso cambia la pausa y se "
+                + "propone. Decir que ya esta pausado solo vale si pidio esa misma fecha.";
     }
 
     /** Reactivar no es encender un dia apagado: si eso es lo que quiere, se lo dice (D-165). */

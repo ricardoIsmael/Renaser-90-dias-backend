@@ -61,9 +61,13 @@ public interface ConsultarAgendaHabitosPort {
      *                       {@code rag} solo ubica instantes en ella: nunca reconstruye la escala
      * @param claveSistema   la clave del habito de catalogo ({@code DAILY_CLASS}...), {@code null}
      *                       en los personales (2026-09-26, D-171). Nunca se decide por el titulo
+     * @param tituloDelPrograma el titulo del catalogo cuando la persona renombro el habito (D-133),
+     *                       {@code null} si no lo renombro (E-290). Para que el modelo una "jugo
+     *                       verde" con "Batido de papaya". Nunca trae el motivo del renombre
      */
     record HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego, Integer puntosMaximos,
-                         Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos, String claveSistema) {
+                         Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos, String claveSistema,
+                         String tituloDelPrograma) {
 
         /** La Clase diaria se cierra con su resumen, nunca por el camino generico ni con una foto. */
         public static final String CLAVE_CLASE_DIARIA = "DAILY_CLASS";
@@ -76,16 +80,25 @@ public interface ConsultarAgendaHabitosPort {
             tramos = tramos == null ? List.of() : List.copyOf(tramos);
         }
 
+        /** Sin renombre: el titulo es el del programa. */
+        public HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
+                            Integer puntosMaximos, Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos,
+                            String claveSistema) {
+            this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, tramos,
+                    claveSistema, null);
+        }
+
         /** Sin clave de sistema: para quien no la necesita. */
         public HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
                             Integer puntosMaximos, Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos) {
-            this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, tramos, null);
+            this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, tramos, null, null);
         }
 
         /** Sin escala: para quien no necesita los tramos (las tres herramientas originales). */
         public HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
                             Integer puntosMaximos, Instant plazo, boolean exigeEvidencia) {
-            this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, List.of(), null);
+            this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, List.of(), null,
+                    null);
         }
 
         /**

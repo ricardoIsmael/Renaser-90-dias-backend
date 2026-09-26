@@ -328,6 +328,24 @@ class PropuestasAgenteServiceTest {
         assertThat(service.pendientesCreadasDesde(dueno, inicioDelTurno)).isEmpty();
     }
 
+    @Test
+    @DisplayName("E-291: la pendiente de una herramienta se encuentra con cualquier argumento, y deja de estarlo al "
+            + "cancelarse o vencer")
+    void pendienteDeUnaHerramienta() {
+        assertThat(service.pendienteDe(dueno, HERRAMIENTA)).isEmpty();
+        PropuestaCreada primera = proponer(dueno, "r-1");
+        proponer(otro);
+
+        assertThat(service.pendienteDe(dueno, HERRAMIENTA)).map(PropuestaCreada::id).contains(primera.id());
+        assertThat(service.pendienteDe(dueno, "proponer_guardar_agenda")).isEmpty();
+
+        service.cancelar(dueno, primera.id());
+        assertThat(service.pendienteDe(dueno, HERRAMIENTA)).isEmpty();
+        proponer(dueno, "r-2");
+        reloj.avanzar(VIGENCIA);
+        assertThat(service.pendienteDe(dueno, HERRAMIENTA)).isEmpty();
+    }
+
     /** Reloj que avanza a mano: el vencimiento es derivado y hay que poder cruzarlo. */
     private static final class RelojMovible implements Clock {
 

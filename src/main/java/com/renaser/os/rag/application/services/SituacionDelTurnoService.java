@@ -67,7 +67,8 @@ public class SituacionDelTurnoService implements ConsultarSituacionDelTurnoUseCa
     private List<HabitoDeHoy> deHoy(UserId participanteId) {
         Instant ahora = clock.now();
         return agendaPort.deHoyDe(participanteId).stream()
-                .map(habito -> new HabitoDeHoy(habito.titulo(), estadoDe(habito, ahora), habito.seRegistraConFoto()))
+                .map(habito -> new HabitoDeHoy(habito.titulo(), estadoDe(habito, ahora), habito.seRegistraConFoto(),
+                        habito.tituloDelPrograma()))
                 .toList();
     }
 

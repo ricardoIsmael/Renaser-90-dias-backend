@@ -228,11 +228,15 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
      * despues por un aviso al mentor de evidencia vencida que nadie le habia pedido. El agente no
      * puede subirla —el chat no recibe archivos—: con el flag de botones le deja a la app la
      * tarjeta de la camara ({@code proponer_registrar_con_foto}, D-171); sin el, lo dice y manda a
-     * la pantalla de Hoy. (Decia que lo unico que hacia era lo segundo.) */
+     * la pantalla de Hoy. (Decia que lo unico que hacia era lo segundo.)
+     *
+     * <p>Un habito renombrado lleva tambien el titulo del programa (E-290): la persona puede
+     * nombrarlo de las dos formas. */
     private static String lineaDe(HabitoDelDia habito, Instant ahora) {
         StringBuilder linea = new StringBuilder()
                 .append("id=").append(habito.registroId())
                 .append(" | ").append(habito.titulo())
+                .append(habito.tituloDelPrograma() == null ? "" : " (" + habito.tituloDelPrograma() + " del programa)")
                 .append(" | estado=").append(habito.estado());
         if (habito.sigueEnJuego()) {
             linea.append(" | puntos_en_juego=").append(habito.puntosEnJuego())

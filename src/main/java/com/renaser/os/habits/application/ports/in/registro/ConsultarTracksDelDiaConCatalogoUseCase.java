@@ -76,20 +76,35 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
      * sigue sin mapear, porque la app ya la recibe por {@code MiHabitoResponse.systemKey} de
      * {@code GET /api/v1/habits} y une catalogo y track por {@code habitoId}.
      *
+     * <p>{@code tituloDelPrograma} (2026-09-26, E-290): el titulo del catalogo cuando la persona
+     * renombro el habito (D-133), {@code null} si no lo renombro o si el habito ya no existe.
+     * {@code tituloHabito} sigue siendo el que ella ve. Lo pide el acompanante: si la persona dice
+     * "jugo verde" y su habito se llama "Batido de papaya", sin el titulo original no los puede
+     * unir. Del renombre sale solo el titulo, nunca el motivo. Tampoco viaja al movil.
+     *
      * <p>Corregido 2026-09-26. Aca decia "NO trae {@code claveSistema}, a proposito", con el
      * argumento de la app (que sigue valiendo para la respuesta HTTP y por eso no se toco).
      */
     record TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
                                    GuiaResumen guia, LocalTime horaDisparo, LocalTime horaLimite,
                                    PuntosEnJuego puntosEnJuego, boolean tieneEvidencia,
-                                   boolean exigeEvidencia, String claveSistema) {
+                                   boolean exigeEvidencia, String claveSistema, String tituloDelPrograma) {
+
+        /** Sin renombre: {@code tituloHabito} ya es el del programa. */
+        public TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
+                                      GuiaResumen guia, LocalTime horaDisparo, LocalTime horaLimite,
+                                      PuntosEnJuego puntosEnJuego, boolean tieneEvidencia, boolean exigeEvidencia,
+                                      String claveSistema) {
+            this(registro, tituloHabito, tipoHabito, guia, horaDisparo, horaLimite, puntosEnJuego, tieneEvidencia,
+                    exigeEvidencia, claveSistema, null);
+        }
 
         /** Sin clave de sistema: un habito personal, o un llamador que no la necesita. */
         public TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
                                       GuiaResumen guia, LocalTime horaDisparo, LocalTime horaLimite,
                                       PuntosEnJuego puntosEnJuego, boolean tieneEvidencia, boolean exigeEvidencia) {
             this(registro, tituloHabito, tipoHabito, guia, horaDisparo, horaLimite, puntosEnJuego, tieneEvidencia,
-                    exigeEvidencia, null);
+                    exigeEvidencia, null, null);
         }
     }
 

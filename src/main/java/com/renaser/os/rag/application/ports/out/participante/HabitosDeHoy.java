@@ -24,14 +24,21 @@ public record HabitosDeHoy(List<HabitoDeHoy> deHoy, List<HabitoPausado> pausados
     }
 
     /**
-     * @param titulo   el que ve la persona (la agenda ya aplica sus renombres, D-133)
-     * @param pideFoto si se registra con la camara de la app (D-171)
+     * @param titulo            el que ve la persona (la agenda ya aplica sus renombres, D-133)
+     * @param pideFoto          si se registra con la camara de la app (D-171)
+     * @param tituloDelPrograma el del catalogo cuando la persona lo renombro, {@code null} si no
+     *                          (E-290): para que el modelo una "jugo verde" con "Batido de papaya"
      */
-    public record HabitoDeHoy(String titulo, EstadoDeHoy estado, boolean pideFoto) {
+    public record HabitoDeHoy(String titulo, EstadoDeHoy estado, boolean pideFoto, String tituloDelPrograma) {
 
         public HabitoDeHoy {
             Objects.requireNonNull(titulo, "titulo es obligatorio");
             Objects.requireNonNull(estado, "estado es obligatorio");
+        }
+
+        /** Un habito sin renombre. */
+        public HabitoDeHoy(String titulo, EstadoDeHoy estado, boolean pideFoto) {
+            this(titulo, estado, pideFoto, null);
         }
     }
 

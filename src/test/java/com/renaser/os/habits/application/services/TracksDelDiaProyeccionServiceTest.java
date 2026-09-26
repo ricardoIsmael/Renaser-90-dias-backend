@@ -125,6 +125,10 @@ class TracksDelDiaProyeccionServiceTest {
         List<TrackDelDiaConCatalogo> resultado = service.consultar(actor, actor, registro.fechaEjecucion());
 
         assertThat(resultado.get(0).tituloHabito()).isEqualTo("Batido de papaya");
+        // E-290: el del programa viaja aparte, para que el acompanante una "jugo verde" con este.
+        // Del renombre sale el titulo y nada mas: el motivo ("Gastritis") es un dato de salud.
+        assertThat(resultado.get(0).tituloDelPrograma()).isEqualTo("JUGO VERDE");
+        assertThat(resultado.get(0).toString()).doesNotContain("Gastritis");
         // Una sola consulta de renombres para todo el dia, no una por registro (D-43).
         verify(loadRenombrePort, times(1)).deParticipante(actor);
     }
@@ -170,6 +174,7 @@ class TracksDelDiaProyeccionServiceTest {
         List<TrackDelDiaConCatalogo> resultado = service.consultar(actor, actor, registro.fechaEjecucion());
 
         assertThat(resultado.get(0).tituloHabito()).isEqualTo("JUGO VERDE");
+        assertThat(resultado.get(0).tituloDelPrograma()).isNull();
     }
 
     @Test

@@ -179,7 +179,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         boolean exigeEvidencia = habito != null && habito.exigenciaEvidencia() == ExigenciaEvidencia.OBLIGATORIA;
         return new TrackDelDiaConCatalogo(registro, titulo, tipo, guia, horario.horaDisparo(), horario.horaLimite(),
                 puntosEnJuegoDe(registro, catalogo, horario, momento), tieneEvidencia, exigeEvidencia,
-                habito != null ? habito.claveSistema() : null);
+                habito != null ? habito.claveSistema() : null, tituloDelPrograma(habito, catalogo.renombre()));
     }
 
     /**
@@ -227,6 +227,17 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
             return renombre.tituloPersonal();
         }
         return habito != null ? habito.titulo() : null;
+    }
+
+    /**
+     * El titulo del catalogo solo si la persona lo renombro a algo distinto (E-290): el acompanante
+     * lo necesita para unir "jugo verde" con "Batido de papaya". Del renombre no sale el motivo.
+     */
+    private static String tituloDelPrograma(Habito habito, RenombreHabito renombre) {
+        if (renombre == null || habito == null || renombre.tituloPersonal().equalsIgnoreCase(habito.titulo())) {
+            return null;
+        }
+        return habito.titulo();
     }
 
     /** Contra que instante y en que zona se mide la ventana de entrega de este participante. */
