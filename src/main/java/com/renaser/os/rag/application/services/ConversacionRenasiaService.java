@@ -238,7 +238,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
             saveMensajeRenasiaPort.save(MensajeRenasia.escribirDeUsuario(
                     MensajeRenasiaId.of(idGenerator.newId()), command.actorId(), command.agente(),
                     command.pregunta(), clock.now()));
-            fragmentos = vectorStorePort.buscarSimilares(command.pregunta(), TOP_K, filtroDeContexto(command));
+            fragmentos = materialDelPrograma(command);
         } catch (RuntimeException e) {
             controlCuotaRenasiaPort.liberar(command.actorId());
             throw e;
@@ -331,6 +331,21 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      * conversacion sigue. La revision se repite en el mensaje siguiente y, como la cuenta se deriva
      * de los mensajes guardados y no de un contador, no se pierde nada por haberla salteado una vez.
      */
+    /**
+     * El material del programa para esta pregunta. Si la busqueda falla (el embedding es otra
+     * llamada a la IA: se cae si se acabo el credito de la key, 402), el turno sigue SIN material en
+     * vez de romperse: antes la excepcion subia y la persona recibia un error crudo (E-294).
+     */
+    private List<FragmentoRelevante> materialDelPrograma(PreguntarRenasiaCommand command) {
+        try {
+            return vectorStorePort.buscarSimilares(command.pregunta(), TOP_K, filtroDeContexto(command));
+        } catch (RuntimeException e) {
+            log.warn("[rag] no se pudo buscar material del programa; el turno sigue sin el ({})",
+                    e.getClass().getSimpleName());
+            return List.of();
+        }
+    }
+
     private String textoDeApoyo(PreguntarRenasiaCommand command) {
         try {
             return revisarPatronDeMalestarUseCase.revisar(command.actorId(), command.pregunta()).orElse("");

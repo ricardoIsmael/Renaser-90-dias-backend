@@ -9325,3 +9325,27 @@ arman filas con fechas fijas y correr `verify` completo antes de commitear.
 
 > **Resuelto 2026-09-26 (commit 406135f4).** La prueba ahora arma la roca con la fecha de hoy en la zona del
 > participante, con el mismo reloj del contexto. La regla de E-288 no cambió.
+
+## E-294 · "402 Your prepayment credits are depleted" en el backend local, y el turno se rompía con un error crudo
+
+**Síntoma (2026-09-26, batería de 125 preguntas contra el backend local).** Desde la pregunta #14 el log
+mostró `com.google.genai.errors.ClientException: 402 . Your prepayment credits are depleted. Please go to
+AI Studio at https://ai.studio/projects to manage your project and billing.`, lanzada desde
+`GoogleGenAiEmbeddingAdapter.generar` ← `PgVectorNativoAdapter.buscarSimilares` ←
+`ConversacionRenasiaService.preguntar`. La batería marcó "sin respuesta guardada en 120 s".
+
+**Causa real.** Dos cosas distintas. (1) Se acabó el crédito prepago del proyecto de Google AI Studio de
+la key que usa el backend LOCAL: las rondas de batería del día lo consumieron. No es un error del código;
+producción no tenía ningún 402 en esas horas (revisado en sus logs). (2) El código sí tenía un defecto:
+la búsqueda del material del programa (el embedding, otra llamada a la IA) estaba fuera del manejo de
+errores del stream, así que su excepción subía y la persona recibía un error crudo en vez del mensaje de
+"no puedo responder ahora" que ya existe para cuando falla el modelo.
+
+**Solución.** (1) Recargar el crédito en AI Studio (lo hace el dueño). (2) `materialDelPrograma`: si la
+búsqueda falla, el turno sigue sin material y se registra un warning; si el modelo también falla, entra
+el camino de error de siempre. Prueba `siFallaLaBusquedaDeMaterialElTurnoSigueSinEl` (reemplaza a la que
+esperaba la excepción).
+
+**Cómo evitar que vuelva a pasar.** Antes de una batería larga, revisar el saldo en AI Studio (cada
+pregunta cuesta un embedding y una o más llamadas al chat). Toda llamada a la IA fuera del stream tiene
+que degradar, no romper el turno.

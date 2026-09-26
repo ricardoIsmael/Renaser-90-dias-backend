@@ -198,15 +198,23 @@ class ConversacionRenasiaServiceTest {
         verify(saveMensajeRenasiaPort, never()).save(any());
     }
 
+    /**
+     * E-294: si la busqueda del material del programa falla (el embedding tambien es una llamada a
+     * la IA: 402 cuando se acaba el credito de la key), el turno sigue sin material. Antes esta
+     * prueba esperaba que la excepcion subiera, y la persona recibia un error crudo.
+     */
     @Test
-    void preguntarLiberaLaCuotaSiFallaLaBusquedaDeContexto() {
+    void siFallaLaBusquedaDeMaterialElTurnoSigueSinEl() {
         when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
         when(vectorStorePort.buscarSimilares(anyString(), eq(5), any()))
-                .thenThrow(new RuntimeException("pgvector no disponible"));
+                .thenThrow(new RuntimeException("402 prepayment credits are depleted"));
+        when(chatIAPort.responder(any())).thenReturn(streamOk());
 
-        assertThatThrownBy(() -> service.preguntar(pregunta(activo))).isInstanceOf(RuntimeException.class);
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
 
-        verify(controlCuotaRenasiaPort).liberar(activo);
+        assertThat(eventos).anyMatch(EventoRenasia.Texto.class::isInstance);
+        assertThat(consultaEnviadaAlModelo().contexto()).isEmpty();
+        verify(controlCuotaRenasiaPort, never()).liberar(activo);
     }
 
     /**
