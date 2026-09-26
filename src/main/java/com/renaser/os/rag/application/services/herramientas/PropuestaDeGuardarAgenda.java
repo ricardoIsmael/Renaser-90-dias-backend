@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.domain.model.agenda.AgendaSemanal;
 import com.renaser.os.rag.domain.model.agenda.DiasDeSemana;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
@@ -70,12 +71,16 @@ public class PropuestaDeGuardarAgenda implements HerramientaAgente {
             return ResultadoHerramienta.fallo(mal.getMessage());
         }
         String resumen = resumenDe(dias, ocupado);
+        PropuestaCreada creada;
         try {
-            proponerAccion.proponer(actorId, new InvocacionHerramienta(NOMBRE,
+            creada = proponerAccion.proponer(actorId, new InvocacionHerramienta(NOMBRE,
                     Map.of(ARGUMENTO_DIAS, diasTexto.strip(), ARGUMENTO_OCUPADO, ocupado.strip())), resumen);
         } catch (RuntimeException falla) {
             log.warn("[rag] no se pudo guardar la propuesta de {} ({})", NOMBRE, falla.getClass().getSimpleName());
             return AvisoDePropuesta.noSePudoPreparar();
+        }
+        if (AvisoDePropuesta.yaEstaba(creada)) {
+            return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
         return AvisoDePropuesta.creada(resumen, null);
     }

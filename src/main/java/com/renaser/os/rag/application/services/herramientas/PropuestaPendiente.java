@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.shared.domain.UserId;
@@ -26,11 +27,15 @@ final class PropuestaPendiente {
      */
     static ResultadoHerramienta registrar(ProponerAccionUseCase proponerAccion, UserId actorId,
                                           InvocacionHerramienta invocacion, String resumen) {
+        PropuestaCreada creada;
         try {
-            proponerAccion.proponer(actorId, invocacion, resumen);
+            creada = proponerAccion.proponer(actorId, invocacion, resumen);
         } catch (RuntimeException falla) {
             log.warn("[rag] no se pudo guardar la propuesta de {}", invocacion.nombre(), falla);
             return ResultadoHerramienta.fallo("No pude preparar la confirmacion en este momento.");
+        }
+        if (AvisoDePropuesta.yaEstaba(creada)) {
+            return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
         return ResultadoHerramienta.exito("Propuesta creada: " + resumen + " " + AvisoDePropuesta.COMO_DECIRLO);
     }

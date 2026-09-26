@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.out.enfoque.EnfoqueDiarioDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.enfoque.EnfoqueDiarioDelAprendizPort.DiaSinCelularDeHoy;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
@@ -84,12 +85,16 @@ public class PropuestaDeIniciarDiaSinCelular implements HerramientaAgente {
             return ResultadoHerramienta.fallo(impedimento.get());
         }
         String resumen = "Empezar ahora tu '" + dia.titulo() + "' con meta de " + horas + " horas";
+        PropuestaCreada creada;
         try {
-            proponerAccion.proponer(actorId, new InvocacionHerramienta(NOMBRE, Map.of(ARGUMENTO_REGISTRO_ID,
+            creada = proponerAccion.proponer(actorId, new InvocacionHerramienta(NOMBRE, Map.of(ARGUMENTO_REGISTRO_ID,
                     dia.registroId().toString(), ARGUMENTO_HORAS_OBJETIVO, String.valueOf(horas))), resumen);
         } catch (RuntimeException falla) {
             log.warn("[rag] no se pudo guardar la propuesta de {}", NOMBRE, falla);
             return AvisoDePropuesta.noSePudoPreparar();
+        }
+        if (AvisoDePropuesta.yaEstaba(creada)) {
+            return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
         return AvisoDePropuesta.creada(resumen, "Cerrarla con evidencia o cortarla se hace desde la app.");
     }

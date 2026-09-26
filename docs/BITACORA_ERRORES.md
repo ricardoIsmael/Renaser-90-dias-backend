@@ -9063,3 +9063,53 @@ quedó, y si no, se vuelve a pedir la foto. Prueba `PromptSistemaRenasiaTest.fot
 **Cómo evitar que vuelva a pasar.** Todo lo que la persona hace desde la app a partir de una tarjeta
 del acompañante (foto, confirmar) cambia datos que el modelo no ve: el prompt tiene que tratarlo como
 dato a consultar, no como algo que recuerda.
+
+## E-283 · "No encuentro ninguna ducha fría en tu plan", de un hábito pausado: el acompañante no consultaba el estado aunque el prompt se lo ordenaba
+
+**Síntoma (2026-09-26, batería de 110 preguntas contra el backend local con Gemini flash-lite).**
+- «pausa ducha fria hasta el domingo» → *"No encuentro ninguna ducha fría en tu plan"*. La DUCHA FRÍA
+  existía, PAUSADA.
+- «me salto la ultima comida hoy» → le habló de hacerla más tarde. ÚLTIMA COMIDA ya estaba COMPLETADO hoy.
+- «se me paso la hora del jugo verde, todavia lo puedo registrar?» → *"Sí… te dejé abajo el botón para
+  sacarle foto"*. JUGO VERDE estaba COMPLETADO y no se creó ninguna tarjeta (tarjeta fantasma).
+
+**Causa real.** El prompt ya tenía reglas explícitas de consultar antes ("Antes de hablar de un habito
+concreto de hoy… consulta consultar_habitos_del_dia", "Si un habito no aparece entre los de hoy, puede
+estar pausado… revisalo con consultar_habitos_obligatorios", E-281). Pero llamar a una herramienta es
+una decisión del modelo, y un modelo chico la saltea cuando cree que ya sabe la respuesta. Reforzar el
+texto una vez más (lo que se hizo en la ronda 3) no lo garantiza.
+
+**Solución (D-176).** El estado de hoy entra al prompt sin que el modelo lo pida: la situación ("Donde
+esta la persona ahora mismo") lleva cada hábito de hoy con su estado en palabras y los pausados con su
+fecha de fin (`SituacionDelTurnoService`, `HabitosDeHoyEnElPrompt`), en el chat y en la voz en vivo. El
+prompt dice que esa lista es la verdad al empezar el turno, que un hábito hecho se dice hecho y que
+antes de decir que uno no existe se miran los pausados. Si la lectura falla, el turno sigue con día y
+fase y el modelo vuelve a las herramientas.
+
+**Cómo evitar que vuelva a pasar.** Si una respuesta depende de un dato que el servidor ya tiene y que
+hace falta en casi toda conversación, no se confía en que el modelo lo pida: va en el prompt (D-123
+ampliado). Las pruebas `SituacionDelTurnoServiceTest` y `HabitosDeHoyEnElPromptTest` fallan si el
+estado o los pausados dejan de llegar al prompt. Queda pendiente repetir la batería contra Gemini para
+medir el efecto real.
+
+## E-284 · Dos tarjetas idénticas para el mismo pedido (#29, #62 de la batería)
+
+**Síntoma.** Al repetir un pedido ("pausa X hasta el domingo" dos veces, o el modelo llamando dos veces
+a la misma herramienta), la persona veía dos propuestas iguales pendientes, cada una con sus botones.
+
+**Causa real.** `PropuestasAgenteService.proponer` guardaba siempre una propuesta nueva. La huella de
+los argumentos (`argumentos_hash`, V63) existía, pero solo se usaba para verificar la integridad al
+confirmar, no para reconocer una propuesta repetida.
+
+**Solución (D-176).** Antes de guardar, se busca entre las PENDIENTE de la persona creadas dentro de la
+vigencia una sin vencer con la misma huella (`PropuestaAccion.ofreceLoMismoQue`). Si existe, se
+devuelve esa con `yaEstabaPendiente = true` y la herramienta le dice al modelo que la persona ya tiene
+esa tarjeta y que la confirme ahí. Con otros argumentos, otra persona, una cancelada o una vencida, se
+crea otra como siempre. Pruebas en `PropuestasAgenteServiceTest` y `PropuestaDePausarHabitoTest`.
+
+**Cómo evitar que vuelva a pasar.** Toda herramienta nueva que proponga tiene que pasar por
+`proponerAccion.proponer` y mirar `AvisoDePropuesta.yaEstaba(creada)` antes de anunciar una tarjeta. No
+es un candado: dos llamadas simultáneas todavía pueden crear dos; si eso aparece, el arreglo es un
+índice único parcial sobre `(participante_id, argumentos_hash) WHERE estado = 'PENDIENTE'`, que hoy no
+hace falta.
+

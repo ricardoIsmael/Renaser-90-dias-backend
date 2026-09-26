@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.out.audioterapia.AudioterapiaSemanalPort;
 import com.renaser.os.rag.application.ports.out.audioterapia.AudioterapiaSemanalPort.AudioterapiaDeHoy;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
@@ -81,12 +82,16 @@ public class PropuestaDeResumenAudioterapia implements HerramientaAgente {
             return ResultadoHerramienta.fallo(motivo.get());
         }
         String resumen = resumenDe(deHoy, texto);
+        PropuestaCreada creada;
         try {
-            proponerAccion.proponer(actorId, new InvocacionHerramienta(NOMBRE, Map.of(ARGUMENTO_TEXTO, texto,
+            creada = proponerAccion.proponer(actorId, new InvocacionHerramienta(NOMBRE, Map.of(ARGUMENTO_TEXTO, texto,
                     ARGUMENTO_REGISTRO_ID, deHoy.registroId().toString())), resumen);
         } catch (RuntimeException falla) {
             log.warn("[rag] no se pudo guardar la propuesta de {}", NOMBRE, falla);
             return AvisoDePropuesta.noSePudoPreparar();
+        }
+        if (AvisoDePropuesta.yaEstaba(creada)) {
+            return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
         return AvisoDePropuesta.creada(resumen, null);
     }

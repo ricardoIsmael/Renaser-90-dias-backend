@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.out.enfoque.EnfoqueDiarioDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.enfoque.EnfoqueDiarioDelAprendizPort.SantuarioDeHoy;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
@@ -114,12 +115,16 @@ public class PropuestaDeIniciarSantuario implements HerramientaAgente {
                     + momento.faltaPara(santuario.iniciableDesde()) + ").");
         }
         String resumen = "Iniciar tu Santuario '" + santuario.titulo() + "' ahora";
+        PropuestaCreada creada;
         try {
-            proponerAccion.proponer(actorId, new InvocacionHerramienta(NOMBRE,
+            creada = proponerAccion.proponer(actorId, new InvocacionHerramienta(NOMBRE,
                     Map.of(ARGUMENTO_REGISTRO_ID, santuario.registroId().toString())), resumen);
         } catch (RuntimeException falla) {
             log.warn("[rag] no se pudo guardar la propuesta de {}", NOMBRE, falla);
             return AvisoDePropuesta.noSePudoPreparar();
+        }
+        if (AvisoDePropuesta.yaEstaba(creada)) {
+            return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
         return AvisoDePropuesta.creada(resumen, "Completarlo o salir antes se hace desde la app.");
     }

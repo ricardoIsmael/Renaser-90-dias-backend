@@ -86,6 +86,16 @@ public final class PropuestaAccion {
         return estado == EstadoPropuesta.PENDIENTE && !ahora.isBefore(venceEn);
     }
 
+    /**
+     * Esta propuesta ya ofrece exactamente lo mismo que {@code nueva} y la persona todavia puede
+     * confirmarla (D-176): misma persona, misma huella (herramienta + argumentos normalizados, V63),
+     * PENDIENTE y sin vencer. En ese caso no se crea otra tarjeta igual (bateria, #29 y #62).
+     */
+    public boolean ofreceLoMismoQue(PropuestaAccion nueva, Instant ahora) {
+        return estado == EstadoPropuesta.PENDIENTE && !estaVencidaEn(ahora)
+                && participanteId.equals(nueva.participanteId) && huella.equals(nueva.huella);
+    }
+
     /** Los argumentos guardados son exactamente los que se propusieron. */
     public boolean argumentosIntegros() {
         return huella.coincideCon(invocacion.nombre(), invocacion.argumentos());

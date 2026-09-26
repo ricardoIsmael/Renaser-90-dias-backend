@@ -252,6 +252,13 @@ Este módulo ya aplicó el criterio una vez, y está comentado en `HerramientasA
 > "fuera del programa". La hora **no** va en el prompt: cambia durante la conversación y sale de
 > `consultar_resumen_del_programa`.
 
+> **Ampliado 2026-09-26 (D-176).** También van **los hábitos de hoy con su estado** (pendiente,
+> hecho, vencido; si pide foto) **y los pausados** con su fecha de fin. Ya no es solo "lo que siempre
+> necesita saber": la batería de 110 preguntas mostró que, con la regla escrita de consultar antes,
+> el modelo igual contestaba sin consultar. Pedir una herramienta es opcional para el modelo; lo que
+> está en el prompt, no. La fila "Si un hábito exige evidencia → herramienta" de la tabla sigue
+> valiendo para ACTUAR (los ids salen de la herramienta), pero el estado de hoy ya llega solo.
+
 ### D-152 — El acompañante como planificador: cinco herramientas de lectura (2026-09-23)
 
 Diseño completo, inventario de las ~90 operaciones del aprendiz y decisiones del dueño:
@@ -864,6 +871,10 @@ todos tienen mentor asignado, y el usuario de prueba no tiene (¿es así en prod
 del programa no la da ninguna herramienta (hay que definir si es el día 90 o el siguiente y exponerla
 desde `users.api`).
 
+> **Corregido 2026-09-26 (D-176).** Las propuestas idénticas duplicadas (#29, #62) ya no quedan
+> pendientes: una propuesta igual (misma herramienta y mismos argumentos normalizados, la huella de
+> V63) a otra PENDIENTE y sin vencer de la misma persona no se crea; se devuelve la que ya estaba.
+
 **Ronda 2 (2026-09-25): los 34 casos corregidos, con la memoria encendida (D-167).** Resultado:
 **25 bien, 4 leves, 5 graves.** Se calificó a mano, porque el chequeo automático del script solo busca
 palabras.
@@ -1081,6 +1092,87 @@ Audioterapia» con las dos preguntas.
 **Queda afuera:** resumir el contenido del audio (no hay transcripciones; pendiente del dueño), la app
 (la programa otro agente contra el contrato de arriba) y la reanudación de sesión / `goAway` de Gemini
 Live.
+
+### D-176 — Los hábitos de hoy van en la situación del prompt, y una propuesta igual no se duplica (2026-09-26)
+
+**El problema (batería de 110 preguntas contra el backend local, Gemini flash-lite).** Con reglas
+explícitas de "consulta antes" en el prompt, el acompañante igual contestaba sobre un hábito sin mirar
+su estado:
+
+- «pausa ducha fria hasta el domingo» → *"No encuentro ninguna ducha fría en tu plan"*: existía, PAUSADA.
+- «me salto la ultima comida hoy» → le habló de hacerla más tarde: ya estaba COMPLETADA.
+- «se me paso la hora del jugo verde, todavia lo puedo registrar?» → *"Sí… te dejé abajo el botón para
+  sacarle foto"*: estaba COMPLETADO y no se creó ninguna tarjeta.
+
+Más texto en el prompt no lo arregla: pedir una herramienta es una decisión del modelo. El arreglo es
+**estructural**: el dato ya está en el prompt cuando el modelo empieza (mismo razonamiento de D-123 y
+del javadoc de `ConsultarSituacionDelAprendizPort`). Detalle en E-283.
+
+**Qué se agregó a la situación.** `SituacionDelAprendiz` ganó `habitos` (`HabitosDeHoy`): cada hábito
+de hoy con su estado en palabras (`pendiente`, `en curso`, `hecho`, `vencido`, `no cumplido`) y si
+pide foto, y los pausados con "hasta el <día dd/MM>" o "sin fecha de fin". Sin ids (E-270): para
+actuar, el modelo los sigue pidiendo a las herramientas. Así se ve, debajo del día:
+
+    Hoy es sábado 26/09/2026, su dia 12 de 90, en la fase 2 de 4.
+    Sus habitos de hoy, al empezar este turno:
+    - JUGO VERDE: hecho
+    - ULTIMA COMIDA: hecho
+    - MEDITAR: pendiente, pide foto
+    - CAMINAR: vencido (se le paso la hora)
+    Pausados (existen, pero hoy no se le piden): DUCHA FRIA (hasta el domingo 27/09), YOGA (sin fecha de fin).
+
+- **Quién lo arma:** `SituacionDelTurnoService` (caso de uso `ConsultarSituacionDelTurnoUseCase`), con
+  los MISMOS puertos que las herramientas: `ConsultarAgendaHabitosPort.deHoyDe` (lo que usa
+  `consultar_habitos_del_dia`; los títulos ya vienen con los renombres de D-133) y
+  `GestionarPlanDeHabitosPort.planDe` (lo que usa `consultar_habitos_obligatorios` para los pausados;
+  ahí el título es el del catálogo, igual que en esa herramienta). Todo por `habits.api`. "Vencido"
+  sigue el criterio de `consultar_habitos_del_dia`: EXPIRADO, o pendiente con el plazo ya cumplido.
+  El puerto `ConsultarSituacionDelAprendizPort` no cambió de contrato: sigue dando día, fase y fecha,
+  y `consultar_resumen_del_programa` lo sigue usando solo (no necesita los hábitos).
+- **Lo usan el chat y la voz en vivo.** `ConversacionRenasiaService` (en cada turno) y
+  `ConversacionEnVivoService` (al abrir la llamada) piden la situación al caso de uso nuevo; el texto
+  lo arma `GoogleGenAiRenasiaChatAdapter.formatearSituacion` con `HabitosDeHoyEnElPrompt`, el mismo
+  método que usa `PromptDeVozEnVivo`. Al tutor de cursos (Sparkie) ya no se le arma la situación: su
+  prompt no la usa y le costaría esas lecturas en cada pregunta.
+- **Si falla, el turno sigue.** Si la agenda o el plan fallan, la situación sale con día y fase y sin
+  hábitos (`log.warn`), y el prompt dice *"No se pudo leer como van sus habitos de hoy: consultalo con
+  las herramientas…"*. Si falla solo el plan, tampoco se dan los de hoy: una lista sin pausados
+  afirmaría que no hay pausados, que es justo el error de la ducha fría.
+- **Títulos aplanados y acotados** (60 caracteres, sin saltos de línea): un hábito personal o un
+  renombre es texto de la persona que termina en el prompt de SISTEMA, mismo criterio que el ámbito
+  del tutor de cursos.
+- **Sin transacción y antes del modelo** (C-1): son dos lecturas cortas antes de llamar a Gemini.
+
+**El prompt** ("Donde esta la persona ahora mismo") dice cómo usarlo: la lista es la verdad de cómo
+estaba el día al empezar el turno (en una llamada, al empezar la llamada); si figura hecho, se dice
+hecho y no se habla de hacerlo más tarde ni se deja botón; antes de decir que un hábito no existe se
+miran los pausados; para actuar y para otros días, herramientas; si la persona dice que acaba de hacer
+algo o la lista no aparece, se consulta. La regla de "Antes de hablar de un habito concreto de hoy"
+ahora apunta primero a la lista.
+
+**Costo.** Tokens: unas 100 a 180 por turno para una persona con 10 a 14 hábitos (una línea corta por
+hábito más la de pausados; el ejemplo de arriba son ~330 caracteres, unas 100), sobre un prompt de
+sistema de ~19.000 caracteres (unas 5.000 a 6.000, sin contar las definiciones de herramientas); más
+unas 250 fijas del texto nuevo del prompt. Latencia: dos lecturas a la base antes del modelo (la agenda del día y el plan,
+que también lee las elecciones de los semanales), del orden de milisegundos a decenas de
+milisegundos, contra el segundo o dos que cuesta cada viaje de herramienta que ahora el modelo se
+ahorra cuando solo necesitaba saber el estado.
+
+**Propuestas duplicadas (#29, #62).** `PropuestasAgenteService.proponer` busca, entre las PENDIENTE
+de la persona creadas dentro de la vigencia, una que `ofreceLoMismoQue` la nueva
+(`PropuestaAccion`: misma persona, misma huella —herramienta + argumentos normalizados, columna
+`argumentos_hash` de V63—, sin vencer). Si la hay, no guarda otra y devuelve esa con
+`PropuestaCreada.yaEstabaPendiente = true`; las 15 herramientas que proponen le dicen entonces al
+modelo *"Ya tenia esa misma propuesta pendiente (…): no se creo otra. TODAVIA NO esta hecho. Dile en
+una frase que la confirme en la tarjeta que ya tiene, sin anunciar una nueva."*
+(`AvisoDePropuesta.yaEstabaPendiente`). No es un candado: dos llamadas simultáneas todavía pueden
+crear dos (lo de antes, y cada una se confirma una sola vez). No hizo falta migración ni método nuevo
+en el puerto: basta `pendientesCreadasDesde(persona, ahora − vigencia)`, porque una pendiente sin
+vencer se creó dentro de esa ventana.
+
+**Queda afuera:** la hora de cada hábito en la lista (el `plazo` está, pero decirlo en hora local
+exige la zona en la situación, y `consultar_tiempo_para_puntos` ya lo responde); y verificar el
+efecto con la batería contra Gemini (se probó con pruebas unitarias, no con el modelo real).
 
 ---
 

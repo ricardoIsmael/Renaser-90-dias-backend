@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.out.notificaciones.GestionarBandejaDeNotificacionesPort;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
@@ -64,11 +65,15 @@ public class PropuestaDeMarcarNotificacionesLeidas implements HerramientaAgente 
             return ResultadoHerramienta.fallo("No tiene notificaciones sin leer: no hay nada que marcar.");
         }
         String resumen = resumenPara(sinLeer);
+        PropuestaCreada creada;
         try {
-            proponerAccion.proponer(actorId, InvocacionHerramienta.sinArgumentos(NOMBRE), resumen);
+            creada = proponerAccion.proponer(actorId, InvocacionHerramienta.sinArgumentos(NOMBRE), resumen);
         } catch (RuntimeException falla) {
             log.warn("[rag] no se pudo guardar la propuesta de {}", NOMBRE, falla);
             return AvisoDePropuesta.noSePudoPreparar();
+        }
+        if (AvisoDePropuesta.yaEstaba(creada)) {
+            return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
         return AvisoDePropuesta.creada(resumen, null);
     }

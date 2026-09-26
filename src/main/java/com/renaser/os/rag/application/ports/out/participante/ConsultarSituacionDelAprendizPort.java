@@ -21,6 +21,14 @@ import java.util.Optional;
  * servidor ya tenia antes de empezar. El dia hace falta en casi toda conversacion, asi que va en
  * el prompt. La regla completa esta en D-123 de {@code docs/MODULO_RAG.md}.
  *
+ * <p><b>Los habitos de hoy, con el mismo razonamiento (D-176, 2026-09-26).</b> La bateria de 110
+ * preguntas mostro al acompanante contestando sobre un habito sin mirar su estado, aunque el prompt
+ * se lo ordenaba: "no encuentro ninguna ducha fria" (estaba pausada), "hazla mas tarde" de una
+ * ultima comida ya completada, "te deje el boton" de un jugo verde ya hecho. Pedir una herramienta
+ * es opcional para el modelo; lo que esta en el prompt no. Por eso {@link SituacionDelAprendiz#habitos}
+ * lleva el estado de hoy, que arma {@code SituacionDelTurnoService} con los puertos de habitos. Este
+ * puerto sigue devolviendo solo dia, fase y fecha: {@code habitos} llega {@code null} desde aca.
+ *
  * <p>Puerto propio de {@code rag} con su propio tipo, mismo criterio que
  * {@code ConsultarAgendaHabitosPort}: la aplicacion no acopla su firma a un contrato ajeno, y el
  * dia que ese contrato cambie la traduccion queda contenida en el adaptador.
@@ -42,11 +50,22 @@ public interface ConsultarSituacionDelAprendizPort {
      *                    la necesita. Sin ella el modelo armaba "el 2 de octubre" con el año de su
      *                    entrenamiento y la herramienta respondia "fuera del programa" (bateria del
      *                    2026-09-25, #41)
+     * @param habitos     como estaba su dia de habitos al empezar el turno (D-176). {@code null} =
+     *                    no se sabe (no se consulto o fallo): el prompt lo dice y el modelo vuelve a
+     *                    las herramientas
      */
-    record SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy) {
+    record SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy, HabitosDeHoy habitos) {
+
+        public SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy) {
+            this(diaPrograma, fase, hoy, null);
+        }
 
         public SituacionDelAprendiz(int diaPrograma, int fase) {
-            this(diaPrograma, fase, null);
+            this(diaPrograma, fase, null, null);
+        }
+
+        public SituacionDelAprendiz conHabitos(HabitosDeHoy habitosDeHoy) {
+            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitosDeHoy);
         }
     }
 }

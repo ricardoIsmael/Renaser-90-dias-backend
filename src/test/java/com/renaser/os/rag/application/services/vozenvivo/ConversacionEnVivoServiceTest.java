@@ -15,7 +15,7 @@ import com.renaser.os.rag.application.ports.out.conversacion.SaveConversacionRen
 import com.renaser.os.rag.application.ports.out.conversacion.SaveMensajeRenasiaPort;
 import com.renaser.os.rag.application.ports.out.cuota.ControlCuotaVozEnVivoPort;
 import com.renaser.os.rag.application.ports.out.ia.ConversacionEnVivoPort;
-import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
+import com.renaser.os.rag.application.ports.in.conversacion.ConsultarSituacionDelTurnoUseCase;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.application.ports.out.tiempo.ProgramarTareaPeriodicaPort;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
@@ -77,7 +77,7 @@ class ConversacionEnVivoServiceTest {
     private final RelojMovible reloj = new RelojMovible(TRES_AM_UTC);
     private final EjecutarHerramientaAgenteUseCase herramientas = mock(EjecutarHerramientaAgenteUseCase.class);
     private final ConsultarPropuestasDelTurnoUseCase propuestas = mock(ConsultarPropuestasDelTurnoUseCase.class);
-    private final ConsultarSituacionDelAprendizPort situacion = mock(ConsultarSituacionDelAprendizPort.class);
+    private final ConsultarSituacionDelTurnoUseCase situacion = mock(ConsultarSituacionDelTurnoUseCase.class);
     private final SaveMensajeRenasiaPort mensajes = mock(SaveMensajeRenasiaPort.class);
     private final LoadConversacionRenasiaPort loadConversacion = mock(LoadConversacionRenasiaPort.class);
     private final SaveConversacionRenasiaPort saveConversacion = mock(SaveConversacionRenasiaPort.class);

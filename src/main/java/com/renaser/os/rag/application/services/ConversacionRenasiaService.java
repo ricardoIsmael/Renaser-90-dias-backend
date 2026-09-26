@@ -19,7 +19,8 @@ import com.renaser.os.rag.application.ports.out.conversacion.SaveConversacionRen
 import com.renaser.os.rag.application.ports.out.conversacion.SaveMensajeRenasiaPort;
 import com.renaser.os.rag.application.ports.out.cuota.ControlCuotaRenasiaPort;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
-import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
+import com.renaser.os.rag.application.ports.in.conversacion.ConsultarSituacionDelTurnoUseCase;
+import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort.Consulta;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
@@ -160,7 +161,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      * definiciones: la ejecucion la dispara el adaptador del proveedor cuando el modelo pida una,
      * y hoy no hay ninguno conectado. */
     private final EjecutarHerramientaAgenteUseCase herramientasUseCase;
-    private final ConsultarSituacionDelAprendizPort situacionPort;
+    private final ConsultarSituacionDelTurnoUseCase situacionDelTurno;
     /** Si la persona viene repitiendo expresiones de malestar (2026-09-15). Ver
      * {@link #textoDeApoyo}: no clasifica ni diagnostica nada, cuenta repeticiones. */
     private final RevisarPatronDeMalestarUseCase revisarPatronDeMalestarUseCase;
@@ -179,7 +180,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                                        SaveMensajeRenasiaPort saveMensajeRenasiaPort, VectorStorePort vectorStorePort,
                                        ConsultarLeccionesVisiblesPort consultarLeccionesVisiblesPort,
                                        ChatIAPort chatIAPort, EjecutarHerramientaAgenteUseCase herramientasUseCase,
-                                       ConsultarSituacionDelAprendizPort situacionPort,
+                                       ConsultarSituacionDelTurnoUseCase situacionDelTurno,
                                        RevisarPatronDeMalestarUseCase revisarPatronDeMalestarUseCase,
                                        ConsultarPropuestasDelTurnoUseCase propuestasDelTurno,
                                        ConsultarMemoriaUseCase memoriaUseCase,
@@ -195,7 +196,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         this.consultarLeccionesVisiblesPort = consultarLeccionesVisiblesPort;
         this.chatIAPort = chatIAPort;
         this.herramientasUseCase = herramientasUseCase;
-        this.situacionPort = situacionPort;
+        this.situacionDelTurno = situacionDelTurno;
         this.revisarPatronDeMalestarUseCase = revisarPatronDeMalestarUseCase;
         this.propuestasDelTurno = propuestasDelTurno;
         this.memoriaUseCase = memoriaUseCase;
@@ -239,7 +240,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         Flux<EventoRenasia> delModelo = sinIdentificadores(chatIAPort.responder(new Consulta(command.agente(),
                 command.actorId(), command.pregunta(), contexto, command.ambito(), historial,
                 herramientasUseCase.disponibles(command.agente()),
-                situacionPort.de(command.actorId()).orElse(null), command.canal(), memoriaDe(command))));
+                situacionPara(command), command.canal(), memoriaDe(command))));
         return conApoyoAntesDelFin(conPropuestasAntesDelFin(delModelo, command.actorId(), inicioDelTurno), apoyo)
                 .doOnNext(evento -> acumularTexto(evento, respuestaCompleta))
                 .concatMap(evento -> agregarFuentesAntesDeFin(evento, fragmentos))
@@ -253,6 +254,15 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                 // Se emite un `error` apto para mostrar y despues el `fin` que el contrato SSE exige.
                 .onErrorResume(error -> Flux.just(new EventoRenasia.Error(mensajeParaLaPersona(error)),
                         new EventoRenasia.Fin()));
+    }
+
+    /**
+     * D-176: la situacion ahora lee tambien los habitos de hoy. El tutor de cursos no la usa (su
+     * prompt no tiene {@code situacion}), asi que a el no se le cobran esas lecturas.
+     */
+    private SituacionDelAprendiz situacionPara(PreguntarRenasiaCommand command) {
+        return command.agente() == AgenteConversacional.COMPANION
+                ? situacionDelTurno.de(command.actorId()).orElse(null) : null;
     }
 
     /** D-167: solo el acompanante recuerda; el tutor de cursos es otra memoria (D-102) y no la tiene. */

@@ -204,6 +204,22 @@ class PropuestaDePausarHabitoTest {
     }
 
     @Test
+    @DisplayName("D-176: si ya tenia esa misma propuesta pendiente, no anuncia una tarjeta nueva")
+    void yaTeniaEsaPropuesta() {
+        conPlan(leer(false, null));
+        when(proponerAccion.proponer(any(), any(), any())).thenReturn(new ProponerAccionUseCase.PropuestaCreada(
+                UUID.randomUUID(), "Pausar 'Leer' hasta el domingo 27/09", java.time.Instant.now(), true));
+
+        ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ,
+                invocacion(LEER.toString(), "pausar", "2026-09-27"));
+
+        assertThat(((ResultadoHerramienta.Exito) resultado).contenido())
+                .startsWith("Ya tenia esa misma propuesta pendiente (Pausar 'Leer' hasta el domingo 27/09)")
+                .contains("la confirme en la tarjeta que ya tiene")
+                .doesNotContain("Propuesta creada");
+    }
+
+    @Test
     @DisplayName("la descripcion le dice al modelo que propone y que nunca diga que ya quedo hecho")
     void descripcion() {
         assertThat(herramienta.definicion().nombre()).isEqualTo("proponer_pausar_habito");

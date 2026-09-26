@@ -86,8 +86,43 @@ class PropuestasAgenteServiceTest {
     }
 
     private PropuestaCreada proponer(UserId actor) {
-        return service.proponer(actor, new InvocacionHerramienta(HERRAMIENTA, Map.of("registro_id", "r-1")),
+        return proponer(actor, "r-1");
+    }
+
+    private PropuestaCreada proponer(UserId actor, String registroId) {
+        return service.proponer(actor, new InvocacionHerramienta(HERRAMIENTA, Map.of("registro_id", registroId)),
                 "Marcar Meditar como hecho");
+    }
+
+    @Test
+    @DisplayName("D-176: la misma propuesta todavia pendiente no se duplica: devuelve la que ya estaba")
+    void propuestaIgualPendienteNoSeDuplica() {
+        PropuestaCreada primera = proponer(dueno);
+        reloj.avanzar(Duration.ofMinutes(2));
+
+        PropuestaCreada segunda = proponer(dueno);
+
+        assertThat(segunda.id()).isEqualTo(primera.id());
+        assertThat(segunda.yaEstabaPendiente()).isTrue();
+        assertThat(segunda.venceEn()).isEqualTo(primera.venceEn());
+        assertThat(primera.yaEstabaPendiente()).isFalse();
+        assertThat(repositorio.cantidad()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("D-176: con otros argumentos, de otra persona, cancelada o vencida, si se crea otra")
+    void loQueNoCuentaComoLaMisma() {
+        PropuestaCreada primera = proponer(dueno);
+
+        assertThat(proponer(dueno, "r-2").yaEstabaPendiente()).isFalse();
+        assertThat(proponer(otro).yaEstabaPendiente()).isFalse();
+        service.cancelar(dueno, proponer(dueno, "r-3").id());
+        assertThat(proponer(dueno, "r-3").yaEstabaPendiente()).isFalse();
+        reloj.avanzar(VIGENCIA);
+        PropuestaCreada trasVencer = proponer(dueno);
+
+        assertThat(trasVencer.yaEstabaPendiente()).isFalse();
+        assertThat(trasVencer.id()).isNotEqualTo(primera.id());
     }
 
     @Test
@@ -279,8 +314,9 @@ class PropuestasAgenteServiceTest {
         PropuestaCreada anterior = proponer(dueno);
         reloj.avanzar(Duration.ofMinutes(1));
         Instant inicioDelTurno = reloj.now();
-        PropuestaCreada delTurno = proponer(dueno);
-        PropuestaCreada cancelada = proponer(dueno);
+        // Argumentos distintos: la misma propuesta pendiente ya no se duplica (D-176).
+        PropuestaCreada delTurno = proponer(dueno, "r-2");
+        PropuestaCreada cancelada = proponer(dueno, "r-3");
         service.cancelar(dueno, cancelada.id());
         proponer(otro);
 
@@ -328,6 +364,10 @@ class PropuestasAgenteServiceTest {
 
         void devolverUnaVez(PropuestaAccion vieja) {
             lecturaVieja = vieja;
+        }
+
+        int cantidad() {
+            return filas.size();
         }
 
         EstadoPropuesta estadoDe(UUID id) {

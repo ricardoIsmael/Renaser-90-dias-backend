@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoDelPlan;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.PlanDelAprendiz;
@@ -115,11 +116,15 @@ public class PropuestaDePausarHabito implements HerramientaAgente {
             return ResultadoHerramienta.fallo(impedimento.get());
         }
         String resumen = resumenDe(habito.get(), pedido);
+        PropuestaCreada creada;
         try {
-            proponerAccion.proponer(actorId, invocacionPara(pedido), resumen);
+            creada = proponerAccion.proponer(actorId, invocacionPara(pedido), resumen);
         } catch (RuntimeException falla) {
             log.warn("[rag] no se pudo guardar la propuesta de {}", NOMBRE, falla);
             return AvisoDePropuesta.noSePudoPreparar();
+        }
+        if (AvisoDePropuesta.yaEstaba(creada)) {
+            return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
         return AvisoDePropuesta.creada(resumen, null);
     }

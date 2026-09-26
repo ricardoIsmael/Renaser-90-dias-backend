@@ -243,6 +243,10 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
      * activo el programa no tiene dia. Se dice asi, en una frase que el modelo puede leer, en vez
      * de omitir la seccion — si el marcador quedara vacio, el prompt afirmaria implicitamente que
      * hay un dia y el modelo intentaria encontrarlo.
+     *
+     * <p>D-176: debajo del dia van sus habitos de hoy con su estado y los pausados
+     * ({@link HabitosDeHoyEnElPrompt}), por la misma razon. Tambien los usa la voz en vivo, que
+     * arma su prompt con este mismo metodo.
      */
     static String formatearSituacion(SituacionDelAprendiz situacion) {
         if (situacion == null) {
@@ -251,7 +255,7 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
         }
         String fecha = situacion.hoy() == null ? "" : situacion.hoy().format(FECHA_DE_HOY) + ", ";
         return "Hoy es " + fecha + "su dia " + situacion.diaPrograma() + " de 90, en la fase " + situacion.fase()
-                + " de 4.";
+                + " de 4.\n" + HabitosDeHoyEnElPrompt.texto(situacion.habitos());
     }
 
     /** "viernes 25/09/2026": con el año, para que el modelo arme bien "el 2 de octubre" (bateria, #41). */

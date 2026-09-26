@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.out.rocas.PlanificarRocasPort;
 import com.renaser.os.rag.application.ports.out.rocas.PlanificarRocasPort.ObjetivoSemanal;
 import com.renaser.os.rag.application.services.herramientas.PlanDeRocasJson.PlanMalFormadoException;
@@ -79,11 +80,15 @@ public class ProponerPlanDeLaSemanaHerramienta implements HerramientaAgente {
         String resumen = TextoDePlanDeRocas.resumenDeLaSemana(objetivos);
         InvocacionHerramienta normalizada = new InvocacionHerramienta(NOMBRE,
                 Map.of(ARGUMENTO_PLAN, PlanDeRocasNormalizado.deLaSemana(objetivos)));
+        PropuestaCreada creada;
         try {
-            proponerAccion.proponer(actorId, normalizada, resumen);
+            creada = proponerAccion.proponer(actorId, normalizada, resumen);
         } catch (RuntimeException falla) {
             log.warn("[rag] no se pudo guardar la propuesta de {}", NOMBRE, falla);
             return ResultadoHerramienta.fallo("No pude preparar la confirmacion en este momento.");
+        }
+        if (AvisoDePropuesta.yaEstaba(creada)) {
+            return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
         return ResultadoHerramienta.exito("Propuesta creada: " + resumen + TextoDePlanDeRocas.NO_ESTA_HECHO);
     }

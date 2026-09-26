@@ -86,9 +86,25 @@ public class PropuestasAgenteService
 
     @Override
     public PropuestaCreada proponer(UserId actorId, InvocacionHerramienta invocacion, String resumen) {
+        Instant ahora = clock.now();
         PropuestaAccion propuesta = PropuestaAccion.crear(PropuestaAccionId.of(idGenerator.newId()), actorId,
-                invocacion, resumen, clock.now(), vigencia);
-        return aCreada(savePort.save(propuesta));
+                invocacion, resumen, ahora, vigencia);
+        return pendienteIgual(propuesta, ahora)
+                .map(existente -> new PropuestaCreada(existente.id().value(), existente.resumen(),
+                        existente.venceEn(), true))
+                .orElseGet(() -> aCreada(savePort.save(propuesta)));
+    }
+
+    /**
+     * D-176: la bateria vio dos tarjetas identicas para el mismo pedido (#29, #62). Una PENDIENTE
+     * sin vencer se creo como mucho hace {@code vigencia} ({@code venceEn = creadaEn + vigencia}),
+     * asi que alcanza con leer las de esa ventana. No es un candado: dos llamadas simultaneas pueden
+     * crear dos igual, que es lo que ya pasaba y no rompe nada (cada una se confirma una sola vez).
+     */
+    private Optional<PropuestaAccion> pendienteIgual(PropuestaAccion nueva, Instant ahora) {
+        return loadPort.pendientesCreadasDesde(nueva.participanteId(), ahora.minus(vigencia)).stream()
+                .filter(existente -> existente.ofreceLoMismoQue(nueva, ahora))
+                .findFirst();
     }
 
     @Override

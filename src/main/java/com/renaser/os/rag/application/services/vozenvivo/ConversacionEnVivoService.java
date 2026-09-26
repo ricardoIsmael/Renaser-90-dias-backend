@@ -7,7 +7,7 @@ import com.renaser.os.rag.application.ports.in.voz.ConversarEnVivoUseCase;
 import com.renaser.os.rag.application.ports.out.ia.ConversacionEnVivoPort;
 import com.renaser.os.rag.application.ports.out.ia.ConversacionEnVivoPort.ConversacionEnVivoNoDisponibleException;
 import com.renaser.os.rag.application.ports.out.ia.ConversacionEnVivoPort.SesionEnVivo;
-import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
+import com.renaser.os.rag.application.ports.in.conversacion.ConsultarSituacionDelTurnoUseCase;
 import com.renaser.os.rag.application.ports.out.tiempo.ProgramarTareaPeriodicaPort;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.EventoDeVozEnVivo;
@@ -50,20 +50,20 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
 
     private final UserSummaryFinder userSummaryFinder;
     private final ConversacionEnVivoPort conversacionPort;
-    private final ConsultarSituacionDelAprendizPort situacionPort;
+    private final ConsultarSituacionDelTurnoUseCase situacionDelTurno;
     /** D-167: la misma memoria que el chat escrito; se lee una vez, al abrir la sesion. */
     private final ConsultarMemoriaUseCase memoriaUseCase;
     private final SesionDeVozEnVivo.Colaboradores colaboradores;
 
     public ConversacionEnVivoService(UserSummaryFinder userSummaryFinder, ConversacionEnVivoPort conversacionPort,
-                                     ConsultarSituacionDelAprendizPort situacionPort,
+                                     ConsultarSituacionDelTurnoUseCase situacionDelTurno,
                                      ConsultarMemoriaUseCase memoriaUseCase,
                                      EjecutarHerramientaAgenteUseCase herramientas,
                                      ConsultarPropuestasDelTurnoUseCase propuestas, TurnosDeVozEnVivo turnos,
                                      TiempoDeVozEnVivo tiempo, ProgramarTareaPeriodicaPort programador, Clock clock) {
         this.userSummaryFinder = userSummaryFinder;
         this.conversacionPort = conversacionPort;
-        this.situacionPort = situacionPort;
+        this.situacionDelTurno = situacionDelTurno;
         this.memoriaUseCase = memoriaUseCase;
         this.colaboradores = new SesionDeVozEnVivo.Colaboradores(herramientas, propuestas, turnos, tiempo,
                 programador, clock, INTERVALO_DE_COBRO);
@@ -122,7 +122,7 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
     }
 
     private ConversacionEnVivoPort.Apertura apertura(UserId actorId) {
-        return new ConversacionEnVivoPort.Apertura(situacionPort.de(actorId).orElse(null),
+        return new ConversacionEnVivoPort.Apertura(situacionDelTurno.de(actorId).orElse(null),
                 colaboradores.herramientas().disponibles(AgenteConversacional.COMPANION),
                 memoriaUseCase.paraConversar(actorId).orElse(null));
     }

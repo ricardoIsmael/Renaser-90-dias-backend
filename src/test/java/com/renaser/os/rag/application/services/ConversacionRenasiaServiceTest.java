@@ -5,7 +5,7 @@ import com.renaser.os.rag.application.ports.in.memoria.ConsultarMemoriaUseCase;
 import com.renaser.os.rag.domain.model.memoria.CategoriaDeRecuerdo;
 import com.renaser.os.rag.domain.model.memoria.MemoriaDeRenasia;
 import com.renaser.os.rag.domain.model.memoria.Recuerdo;
-import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
+import com.renaser.os.rag.application.ports.in.conversacion.ConsultarSituacionDelTurnoUseCase;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase.PreguntarRenasiaCommand;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.in.propuesta.ConsultarPropuestasDelTurnoUseCase;
@@ -107,7 +107,7 @@ class ConversacionRenasiaServiceTest {
     @Mock
     private EjecutarHerramientaAgenteUseCase herramientasUseCase;
     @Mock
-    private ConsultarSituacionDelAprendizPort situacionPort;
+    private ConsultarSituacionDelTurnoUseCase situacionPort;
     @Mock
     private RevisarPatronDeMalestarUseCase revisarPatronDeMalestarUseCase;
     @Mock
@@ -382,6 +382,9 @@ class ConversacionRenasiaServiceTest {
         Consulta consulta = consultaEnviadaAlModelo();
         assertThat(consulta.agente()).isEqualTo(COURSE_TUTOR);
         assertThat(consulta.ambito()).isEqualTo("el curso \"X\"");
+        // D-176: la situacion lee los habitos de hoy, y el prompt del tutor no la usa
+        verify(situacionPort, never()).de(any());
+        assertThat(consulta.situacion()).isNull();
     }
 
     /** Un tutor sin curso (cliente que no lo mando) usa todo lo visible: mejor que quedarse sin material. */

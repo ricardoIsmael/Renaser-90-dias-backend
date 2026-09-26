@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.out.diario.DiarioYRadarDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.diario.DiarioYRadarDelAprendizPort.CheckInRadar;
 import com.renaser.os.rag.application.ports.out.diario.DiarioYRadarDelAprendizPort.RespuestasRadar;
@@ -100,11 +101,15 @@ public class PropuestaDeCheckInRadar implements HerramientaAgente {
 
     private ResultadoHerramienta proponer(UserId actorId, CheckInRadarPedido pedido) {
         String resumen = resumenDe(pedido.respuestas());
+        PropuestaCreada creada;
         try {
-            proponerAccion.proponer(actorId, pedido.invocacion(NOMBRE), resumen);
+            creada = proponerAccion.proponer(actorId, pedido.invocacion(NOMBRE), resumen);
         } catch (RuntimeException falla) {
             log.warn("[rag] no se pudo guardar la propuesta de {}: {}", NOMBRE, falla.getClass().getSimpleName());
             return AvisoDePropuesta.noSePudoPreparar();
+        }
+        if (AvisoDePropuesta.yaEstaba(creada)) {
+            return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
         return AvisoDePropuesta.creada(resumen, null);
     }

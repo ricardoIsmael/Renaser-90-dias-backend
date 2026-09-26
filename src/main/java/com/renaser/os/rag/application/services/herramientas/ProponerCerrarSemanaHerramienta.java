@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.out.rocas.CerrarSemanaDeRocasPort;
 import com.renaser.os.rag.application.ports.out.rocas.CerrarSemanaDeRocasPort.ReglasDelCierre;
 import com.renaser.os.rag.application.ports.out.rocas.CerrarSemanaDeRocasPort.RevisionDelEje;
@@ -113,11 +114,15 @@ public class ProponerCerrarSemanaHerramienta implements HerramientaAgente {
         String resumen = TextoDeCierreDeSemana.resumen(semana, revisiones, reglas);
         InvocacionHerramienta normalizada = new InvocacionHerramienta(NOMBRE,
                 Map.of(ARGUMENTO_CIERRE, CierreDeSemanaJson.normalizado(semana.numeroSemana(), revisiones)));
+        PropuestaCreada creada;
         try {
-            proponerAccion.proponer(actorId, normalizada, resumen);
+            creada = proponerAccion.proponer(actorId, normalizada, resumen);
         } catch (RuntimeException falla) {
             log.warn("[rag] no se pudo guardar la propuesta de {}", NOMBRE, falla);
             return ResultadoHerramienta.fallo("No pude preparar la confirmacion en este momento.");
+        }
+        if (AvisoDePropuesta.yaEstaba(creada)) {
+            return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
         return ResultadoHerramienta.exito("Propuesta creada: " + resumen + TextoDeCierreDeSemana.SIN_PUNTOS
                 + TextoDePlanDeRocas.NO_ESTA_HECHO);

@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
 import com.renaser.os.rag.domain.model.herramienta.CatalogoHerramientasAgente;
@@ -70,12 +71,16 @@ public class PropuestaDeMarcarHabito {
                     + "esta herramienta. Usa proponer_registrar_con_foto con el mismo id.");
         }
         String resumen = resumenDe(habito.get());
+        PropuestaCreada creada;
         try {
-            proponerAccion.proponer(actorId, invocacionPara(registroId), resumen);
+            creada = proponerAccion.proponer(actorId, invocacionPara(registroId), resumen);
         } catch (RuntimeException falla) {
             log.warn("[rag] no se pudo guardar la propuesta de {}", CatalogoHerramientasAgente.MARCAR_HABITO_COMPLETADO,
                     falla);
             return ResultadoHerramienta.fallo("No pude preparar la confirmacion en este momento.");
+        }
+        if (AvisoDePropuesta.yaEstaba(creada)) {
+            return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
         return ResultadoHerramienta.exito("Propuesta creada: " + resumen + ". TODAVIA NO esta marcado: la persona "
                 + "tiene que tocar Confirmar en la app para que se registre. No digas que ya quedo hecho; dile "

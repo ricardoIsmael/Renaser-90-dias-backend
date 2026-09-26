@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
+import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
 import com.renaser.os.rag.application.ports.out.enfoque.EnfoqueDiarioDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.enfoque.EnfoqueDiarioDelAprendizPort.AudioDeHoy;
 import com.renaser.os.rag.application.ports.out.enfoque.EnfoqueDiarioDelAprendizPort.EspirituDeHoy;
@@ -103,12 +104,16 @@ public class PropuestaDeResumenEspiritu implements HerramientaAgente {
         }
         MomentoDelAprendiz momento = new MomentoDelAprendiz(clock.now(), espiritu.zona());
         String textoResumen = resumenDe(espiritu, resumen, momento);
+        PropuestaCreada creada;
         try {
-            proponerAccion.proponer(actorId, new InvocacionHerramienta(NOMBRE, Map.of(ARGUMENTO_RESUMEN, resumen,
+            creada = proponerAccion.proponer(actorId, new InvocacionHerramienta(NOMBRE, Map.of(ARGUMENTO_RESUMEN, resumen,
                     ARGUMENTO_DIA, String.valueOf(espiritu.audio().dia()))), textoResumen);
         } catch (RuntimeException falla) {
             log.warn("[rag] no se pudo guardar la propuesta de {}", NOMBRE, falla);
             return AvisoDePropuesta.noSePudoPreparar();
+        }
+        if (AvisoDePropuesta.yaEstaba(creada)) {
+            return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
         return AvisoDePropuesta.creada(textoResumen, null);
     }
