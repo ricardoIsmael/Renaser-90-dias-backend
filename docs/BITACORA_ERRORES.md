@@ -9064,6 +9064,48 @@ quedó, y si no, se vuelve a pedir la foto. Prueba `PromptSistemaRenasiaTest.fot
 del acompañante (foto, confirmar) cambia datos que el modelo no ve: el prompt tiene que tratarlo como
 dato a consultar, no como algo que recuerda.
 
+## E-282 · El indexador del RAG contaba el 429 de Gemini como un error más y dejaba lecciones a medias (985 chunks donde tenía que haber 1.022)
+
+**Síntoma (2026-09-06, visto al revisar el script el 2026-09-26).** `scripts/sparkie-indexacion/indexar.py`
+cortó la primera tanda por la cuota de Gemini. La salida de esa corrida no se guardó; lo que quedó
+escrito es el `LEEME.md`: *"Chunks indexados en `renaser.base_conocimiento` (producción) | **985** (47
+lecciones)"* y *"Los 985 están completos y **todos con su vector**"*. El `LEEME.md` las dio por "completas" porque
+`SELECT count(*) FROM renaser.base_conocimiento WHERE embedding IS NULL` daba 0, y dijo que se
+retomaba con `--desde 47`. Pero las primeras 47 lecciones de `sorted(salida/*.json)`, con el mismo
+troceo (450 palabras, solape 60), suman **1.022** chunks: faltaban ~37, repartidos en lecciones que
+quedaron con partes sueltas sin indexar.
+
+**Causa real.** Tres fallas del script, juntas:
+1. Un 4xx (incluido el **429** de cuota agotada de Gemini) se contaba en `err` y el script seguía con
+   el chunk siguiente; solo cortaba al pasar de 20 errores. Con la cuota al límite, algunos chunks
+   entraban y otros no, dentro de la misma lección.
+2. No había registro de qué chunk había entrado: relanzar una lección la duplicaba entera, y no
+   existe endpoint para listar ni borrar.
+3. `--desde N` era una posición en `sorted(glob)`, sin relación con lo que hay en la base.
+Además `embedding IS NULL = 0` no prueba nada sobre filas faltantes: solo que las que existen tienen
+vector.
+
+**Solución.** Se reescribió el indexador (misma carpeta):
+- Corta **en el acto** ante cualquier respuesta que no sea 200/201 (429, 5xx, 401/403, red caída), y
+  dice qué documento quedó a medias, qué partes faltan y cómo retomar.
+- Registro local `indexados.jsonl` con cada `(clave, parte)` aceptada, con `clave = leccionId` (o
+  `documentoId` si no hay lección). El id del video **no** sirve de clave: 124 lecciones comparten
+  90 videos.
+- `consulta-indexados.sh` (solo lectura, transacción `READ ONLY`) genera desde producción el
+  archivo de salteo: documentos completos se saltean enteros, los **a medias** se saltean parte por
+  parte (el indexador manda solo las que faltan, sin DELETE), los duplicados se saltean enteros y se
+  informan (limpiarlos es un DELETE que requiere aprobación y respaldo).
+- Modo ensayo por defecto, `--enviar` explícito, `https` obligatorio, token solo por variable de
+  entorno, tope de 900 embeddings por corrida que no empieza un documento que no entra entero.
+- Se eliminó `--desde`.
+
+**Cómo evitar que vuelva a pasar.** `test_indexar.py` (python `unittest`, sin red) prueba que un
+429 corta en la llamada donde ocurre, que el relanzamiento sigue exactamente en la parte que faltaba,
+que el tope no deja documentos a medias y que el troceo sigue dando 2.526/1.022 chunks (si cambia,
+las partes `k/N` ya indexadas dejan de coincidir). Regla general: un proceso por lotes contra una
+cuota externa **para** ante el primer "cuota agotada"; contar y seguir es la forma segura de dejar
+datos a medias. Y "completo" se verifica contando contra lo esperado, no mirando que no haya nulos.
+
 ## E-283 · "No encuentro ninguna ducha fría en tu plan", de un hábito pausado: el acompañante no consultaba el estado aunque el prompt se lo ordenaba
 
 **Síntoma (2026-09-26, batería de 110 preguntas contra el backend local con Gemini flash-lite).**
