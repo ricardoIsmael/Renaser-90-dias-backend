@@ -143,6 +143,16 @@ class PromptSistemaRenasiaTest {
     }
 
     @Test
+    @DisplayName("E-281: el estado de un habito pedido con foto se vuelve a consultar, nunca de memoria")
+    void fotoSeVuelveAConsultar() {
+        String render = renderizar("(vacio)");
+
+        // En el emulador contesto "ya te deje el boton" a un habito que la persona ya habia registrado.
+        assertThat(render).contains("Tu no te enteras cuando saca la foto")
+                .contains("contestes de memoria (\"ya te deje el boton\")");
+    }
+
+    @Test
     @DisplayName("D-170: pedido 'cambia tal habito' se propone de una vez, sin preguntar si lo anota")
     void directoAlCambiarAlgo() {
         String render = renderizar("(vacio)");

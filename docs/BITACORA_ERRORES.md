@@ -9044,3 +9044,22 @@ viejo). Reprobado en el emulador: foto, respuesta y COMPLETADO con 0 puntos, una
 
 **Cómo evitar que vuelva a pasar.** Una guarda nueva del cliente no puede ser más estricta que el
 backend sin una decisión escrita: antes de bloquear algo en la app, confirmar qué rechaza el servidor.
+
+## E-281 · El acompañante dijo "Ya te dejé el botón abajo para sacarle la foto" de un hábito que ya estaba registrado
+
+**Síntoma (2026-09-26, prueba e2e en el emulador).** Se registró "Batido de papaya" (el JUGO VERDE
+renombrado) con la tarjeta de la cámara: COMPLETADO, 10 puntos, una evidencia FOTO. Enseguida, a
+"marca otra vez mi batido de papaya", el acompañante contestó *"Ya te dejé el botón abajo para sacarle
+la foto a tu batido de papaya."*, sin tarjeta nueva y sin decir que ya estaba hecho.
+
+**Causa real.** El registro con foto pasa en la app (endpoints de `habit-tracks`), fuera de la
+conversación: el modelo solo ve en el historial que dejó el botón, y contestó de memoria sin volver a
+consultar los hábitos del día. Nada en el prompt le decía que ese estado cambia sin que él se entere.
+
+**Solución.** Regla en `renasia-sistema.st` ("Tu no te enteras cuando saca la foto"): si vuelve a
+pedir ese hábito o pregunta si quedó, se consulta de nuevo; si figura completado, se dice que ya
+quedó, y si no, se vuelve a pedir la foto. Prueba `PromptSistemaRenasiaTest.fotoSeVuelveAConsultar`.
+
+**Cómo evitar que vuelva a pasar.** Todo lo que la persona hace desde la app a partir de una tarjeta
+del acompañante (foto, confirmar) cambia datos que el modelo no ve: el prompt tiene que tratarlo como
+dato a consultar, no como algo que recuerda.
