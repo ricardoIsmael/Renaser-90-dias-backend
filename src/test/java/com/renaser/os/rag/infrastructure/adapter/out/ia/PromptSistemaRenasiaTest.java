@@ -143,6 +143,18 @@ class PromptSistemaRenasiaTest {
     }
 
     @Test
+    @DisplayName("D-175: despues de la accion, una frase que recuerde lo pendiente y conecte con los objetivos de la semana")
+    void acompanaHaciaLosObjetivosDeLaSemana() {
+        String render = renderizar("(vacio)");
+
+        assertThat(render).contains("Acompanala hacia lo que se propuso esta semana")
+                .contains("consultar_rocas con alcance semana")
+                .contains("sin eso no llega a lo que se propuso esta semana")
+                .contains("igual puede registrarlo hasta")
+                .contains("la accion va primero");
+    }
+
+    @Test
     @DisplayName("E-281: el estado de un habito pedido con foto se vuelve a consultar, nunca de memoria")
     void fotoSeVuelveAConsultar() {
         String render = renderizar("(vacio)");
