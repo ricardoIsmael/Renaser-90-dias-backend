@@ -1021,6 +1021,12 @@ cámara. La app abre la cámara, la persona saca la foto, contesta «¿Qué sent
 foto como evidencia `FOTO` y completa el hábito con esa respuesta — todo con los endpoints que ya
 existen. El backend solo valida y emite la tarjeta.
 
+> **Corregido 2026-09-26 (D-172).** El párrafo de arriba decía que la pregunta sale en todos. El
+> dueño, probando en el emulador: *«solo para los rituales debe de salir el qué sentiste, nada más,
+> no en los otros»*. Los tres rituales tienen ahora `clave_sistema` (V69: `RITUAL_MORNING`,
+> `RITUAL_MIDDAY`, `RITUAL_NIGHT`) y el evento lleva `conPregunta` (`true` solo en ellos,
+> `HabitoDelDia.preguntaQueSintio()`). En los demás es foto y listo, sin respuesta.
+
 **`proponer_registrar_con_foto`** (`PropuestaDeRegistrarConFoto`, argumento `registro_id`, solo con
 `renaser.ia.acompanante.confirmacion-con-botones`). Valida con `ConsultarAgendaHabitosPort.deHoyDe`
 (el «hoy» ya resuelto por `habits` en la zona de la persona): el registro es suyo y de hoy, está
@@ -1034,7 +1040,7 @@ regla no dependa solo del prompt.
 
 **Evento nuevo `evidencia`** (SSE del chat y WebSocket de voz en vivo, misma forma):
 
-    {"tipo":"evidencia","registroId":"<uuid>","titulo":"JUGO VERDE","venceEn":"2026-09-27T05:00:00Z"}
+    {"tipo":"evidencia","registroId":"<uuid>","titulo":"JUGO VERDE","venceEn":"2026-09-27T05:00:00Z","conPregunta":false}
 
 - `venceEn` = el **fin del día local** de la persona (medianoche de su zona, `Instant` en UTC): después
   ese registro ya no es el de hoy. No se usa la vigencia de 10 minutos de las propuestas porque no hay
@@ -1127,7 +1133,7 @@ Formas de `data:` (fuente de verdad: `EventoRenasiaSseMapper`):
 
     data: {"tipo":"texto","valor":"..."}
     data: {"tipo":"propuesta","id":"<uuid>","resumen":"Marcar 'Meditar' como hecho (+10 puntos si lo confirmas ahora)","venceEn":"2026-09-23T15:10:00Z"}
-    data: {"tipo":"evidencia","registroId":"<uuid>","titulo":"JUGO VERDE","venceEn":"2026-09-27T05:00:00Z"}
+    data: {"tipo":"evidencia","registroId":"<uuid>","titulo":"JUGO VERDE","venceEn":"2026-09-27T05:00:00Z","conPregunta":false}
     data: {"tipo":"fuentes","lecciones":["leccion-id-1"]}
     data: {"tipo":"error","valor":"mensaje apto para mostrar"}
     data: {"tipo":"fin"}

@@ -71,9 +71,9 @@ class EventoRenasiaSseMapperTest {
     void evidenciaSerializaConRegistroTituloYVencimientoIso() {
         String json = EventoRenasiaSseMapper.aJson(new EventoRenasia.Evidencia(
                 UUID.fromString("44444444-4444-4444-4444-444444444444"), "JUGO VERDE",
-                Instant.parse("2026-09-27T05:00:00Z")));
+                Instant.parse("2026-09-27T05:00:00Z"), true));
 
         assertThat(json).isEqualTo("{\"tipo\":\"evidencia\",\"registroId\":\"44444444-4444-4444-4444-444444444444\","
-                + "\"titulo\":\"JUGO VERDE\",\"venceEn\":\"2026-09-27T05:00:00Z\"}");
+                + "\"titulo\":\"JUGO VERDE\",\"venceEn\":\"2026-09-27T05:00:00Z\",\"conPregunta\":true}");
     }
 }

@@ -180,8 +180,8 @@ class VozEnVivoWebSocketHandlerTest {
                         + "\"resumen\":\"Marcar Meditar\",\"venceEn\":\"2026-09-24T15:10:00Z\"}");
         // D-171: la tarjeta de la camara, igual que en el SSE del chat.
         assertThat(EventoDeVozEnVivoJson.aJson(new EventoDeVozEnVivo.Evidencia(id, "JUGO VERDE",
-                Instant.parse("2026-09-27T05:00:00Z"))))
+                Instant.parse("2026-09-27T05:00:00Z"), false)))
                 .isEqualTo("{\"tipo\":\"evidencia\",\"registroId\":\"00000000-0000-0000-0000-000000000001\","
-                        + "\"titulo\":\"JUGO VERDE\",\"venceEn\":\"2026-09-27T05:00:00Z\"}");
+                        + "\"titulo\":\"JUGO VERDE\",\"venceEn\":\"2026-09-27T05:00:00Z\",\"conPregunta\":false}");
     }
 }

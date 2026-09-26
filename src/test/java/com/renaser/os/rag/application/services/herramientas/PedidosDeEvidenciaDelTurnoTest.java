@@ -25,7 +25,7 @@ class PedidosDeEvidenciaDelTurnoTest {
     private final PedidosDeEvidenciaDelTurno pedidos = new PedidosDeEvidenciaDelTurno(reloj);
 
     private static PedidoDeEvidencia pedido(UUID registro, String titulo, Instant en) {
-        return new PedidoDeEvidencia(registro, titulo, en, FIN_DEL_DIA);
+        return new PedidoDeEvidencia(registro, titulo, en, FIN_DEL_DIA, false);
     }
 
     @Test

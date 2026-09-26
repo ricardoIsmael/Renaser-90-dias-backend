@@ -11,7 +11,7 @@ import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
  * <pre>
  * data: {"tipo":"texto","valor":"fragmento de la respuesta"}
  * data: {"tipo":"propuesta","id":"<uuid>","resumen":"Meditar: de 06:00 a 07:00","venceEn":"2026-09-23T15:10:00Z"}
- * data: {"tipo":"evidencia","registroId":"<uuid>","titulo":"JUGO VERDE","venceEn":"2026-09-27T05:00:00Z"}
+ * data: {"tipo":"evidencia","registroId":"<uuid>","titulo":"JUGO VERDE","venceEn":"2026-09-27T05:00:00Z","conPregunta":false}
  * data: {"tipo":"fuentes","lecciones":["leccion-id-1","leccion-id-2"]}
  * data: {"tipo":"error","valor":"mensaje apto para mostrar"}
  * data: {"tipo":"fin"}
@@ -61,6 +61,7 @@ final class EventoRenasiaSseMapper {
                 nodo.put("registroId", evidencia.registroId().toString());
                 nodo.put("titulo", evidencia.titulo());
                 nodo.put("venceEn", evidencia.venceEn().toString());
+                nodo.put("conPregunta", evidencia.conPregunta());
             }
             case EventoRenasia.Error error -> {
                 nodo.put("tipo", "error");

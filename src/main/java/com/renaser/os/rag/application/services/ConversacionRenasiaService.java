@@ -385,7 +385,8 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
             }
             for (PedidoDeEvidencia pedido : propuestasDelTurno.evidenciasPedidasDesde(actorId, inicioDelTurno)) {
                 eventos.add(new EventoRenasia.Texto(textoDeEvidencia(pedido.titulo())));
-                eventos.add(new EventoRenasia.Evidencia(pedido.registroId(), pedido.titulo(), pedido.venceEn()));
+                eventos.add(new EventoRenasia.Evidencia(pedido.registroId(), pedido.titulo(), pedido.venceEn(),
+                        pedido.conPregunta()));
             }
             return eventos;
         } catch (RuntimeException e) {

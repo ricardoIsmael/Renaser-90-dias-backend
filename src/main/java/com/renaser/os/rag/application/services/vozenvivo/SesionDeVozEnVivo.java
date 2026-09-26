@@ -251,7 +251,7 @@ final class SesionDeVozEnVivo implements ConversacionEnVivo, ConversacionEnVivoP
                     new EventoDeVozEnVivo.Propuesta(p.id(), p.resumen(), p.venceEn()))));
             c.propuestas().evidenciasPedidasDesde(actorId, antes).forEach(e -> avisos.add(Map.entry(
                     ConversacionRenasiaService.textoDeEvidencia(e.titulo()),
-                    new EventoDeVozEnVivo.Evidencia(e.registroId(), e.titulo(), e.venceEn()))));
+                    new EventoDeVozEnVivo.Evidencia(e.registroId(), e.titulo(), e.venceEn(), e.conPregunta()))));
         } catch (RuntimeException e) {
             log.warn("No se pudieron recoger las propuestas de la voz en vivo ({})", e.getClass().getSimpleName());
             return;

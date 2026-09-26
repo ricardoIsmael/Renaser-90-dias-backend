@@ -68,6 +68,10 @@ public interface ConsultarAgendaHabitosPort {
         /** La Clase diaria se cierra con su resumen, nunca por el camino generico ni con una foto. */
         public static final String CLAVE_CLASE_DIARIA = "DAILY_CLASS";
 
+        /** Los tres RITUAL TIERRA - AGUA - FUEGO (V69): los unicos que preguntan "¿Que sentiste?" (D-172). */
+        public static final java.util.Set<String> CLAVES_DE_RITUAL =
+                java.util.Set.of("RITUAL_MORNING", "RITUAL_MIDDAY", "RITUAL_NIGHT");
+
         public HabitoDelDia {
             tramos = tramos == null ? List.of() : List.copyOf(tramos);
         }
@@ -90,6 +94,11 @@ public interface ConsultarAgendaHabitosPort {
          */
         public boolean seRegistraConFoto() {
             return exigeEvidencia && !CLAVE_CLASE_DIARIA.equals(claveSistema);
+        }
+
+        /** Despues de la foto, la app pregunta "¿Que sentiste?" solo en los rituales (D-172). */
+        public boolean preguntaQueSintio() {
+            return claveSistema != null && CLAVES_DE_RITUAL.contains(claveSistema);
         }
 
         /** Un habito con puntos en juego es, por definicion, uno que todavia se puede entregar. */

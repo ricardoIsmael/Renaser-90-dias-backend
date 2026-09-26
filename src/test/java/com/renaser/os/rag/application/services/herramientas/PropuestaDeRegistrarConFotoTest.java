@@ -67,11 +67,28 @@ class PropuestaDeRegistrarConFotoTest {
         ResultadoHerramienta resultado = pedirFoto(" " + JUGO + " ");
 
         assertThat(pedidosDelTurno()).containsExactly(
-                new PedidoDeEvidencia(JUGO, "JUGO VERDE", NOCHE_EN_LIMA, FIN_DEL_VIERNES_EN_LIMA));
+                new PedidoDeEvidencia(JUGO, "JUGO VERDE", NOCHE_EN_LIMA, FIN_DEL_VIERNES_EN_LIMA, false));
         assertThat(((ResultadoHerramienta.Exito) resultado).contenido())
                 .contains("TODAVIA NO esta registrado")
                 .contains("Te deje abajo el boton para sacarle foto a JUGO VERDE")
                 .contains("No preguntes si quiere");
+    }
+
+    @Test
+    @DisplayName("D-172: solo en los rituales la tarjeta pide ademas \"¿Que sentiste?\"; en el jugo verde, foto y listo")
+    void soloLosRitualesPreguntan() {
+        when(agenda.zonaDe(APRENDIZ)).thenReturn(LIMA);
+        when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(habito("PENDIENTE", true, "RITUAL_NIGHT")));
+
+        ResultadoHerramienta ritual = pedirFoto(JUGO.toString());
+
+        assertThat(pedidosDelTurno()).extracting(PedidoDeEvidencia::conPregunta).containsExactly(true);
+        assertThat(((ResultadoHerramienta.Exito) ritual).contenido()).contains("saque la foto y cuente que sintio");
+
+        when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(habito("PENDIENTE", true, "GREEN_JUICE")));
+        ResultadoHerramienta jugo = pedirFoto(JUGO.toString());
+
+        assertThat(((ResultadoHerramienta.Exito) jugo).contenido()).doesNotContain("cuente que sintio");
     }
 
     @Test

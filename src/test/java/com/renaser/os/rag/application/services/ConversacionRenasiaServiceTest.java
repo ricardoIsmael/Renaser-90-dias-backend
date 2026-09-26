@@ -742,7 +742,7 @@ class ConversacionRenasiaServiceTest {
         when(propuestasDelTurno.pendientesCreadasDesde(activo, CLOCK.now())).thenReturn(List.of(MEDITAR));
         when(propuestasDelTurno.evidenciasPedidasDesde(activo, CLOCK.now())).thenReturn(List.of(
                 new ConsultarPropuestasDelTurnoUseCase.PedidoDeEvidencia(registro, "JUGO VERDE", CLOCK.now(),
-                        finDelDia)));
+                        finDelDia, true)));
 
         List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
 
@@ -752,7 +752,7 @@ class ConversacionRenasiaServiceTest {
                 new EventoRenasia.Texto("\n\nPropuesta: Meditar: de 06:00 a 07:00 desde manana"),
                 new EventoRenasia.Propuesta(MEDITAR.id(), MEDITAR.resumen(), MEDITAR.venceEn()),
                 new EventoRenasia.Texto(respaldo),
-                new EventoRenasia.Evidencia(registro, "JUGO VERDE", finDelDia),
+                new EventoRenasia.Evidencia(registro, "JUGO VERDE", finDelDia, true),
                 new EventoRenasia.Fin());
         ArgumentCaptor<MensajeRenasia> captor = ArgumentCaptor.forClass(MensajeRenasia.class);
         verify(saveMensajeRenasiaPort, times(2)).save(captor.capture());

@@ -30,8 +30,11 @@ public interface ConsultarPropuestasDelTurnoUseCase {
     /**
      * La tarjeta de la camara para un habito de hoy que exige evidencia.
      *
-     * @param venceEn el fin del dia local de la persona (despues, ese registro ya no es el de hoy)
+     * @param venceEn     el fin del dia local de la persona (despues, ese registro ya no es el de hoy)
+     * @param conPregunta si la app pregunta "¿Que sentiste?" despues de la foto: solo en los rituales
+     *                    (D-172)
      */
-    record PedidoDeEvidencia(UUID registroId, String titulo, Instant pedidoEn, Instant venceEn) {
+    record PedidoDeEvidencia(UUID registroId, String titulo, Instant pedidoEn, Instant venceEn,
+                             boolean conPregunta) {
     }
 }

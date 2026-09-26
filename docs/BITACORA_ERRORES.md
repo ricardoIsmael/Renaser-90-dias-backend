@@ -9023,3 +9023,24 @@ nuevo se registre. El código de producción estaba bien; el test era el roto.
 **Cómo evitar que vuelva a pasar.** Al re-stubear un método que ya lanza, usar siempre la forma
 `doThrow/doReturn(...).when(mock)`. Si un test falla en una línea de `when(...)`, sospechar de esto
 antes que del código.
+
+## E-280 · La app decía "Este hábito ya venció... ya no acepta evidencia" a un hábito PENDIENTE que el backend sí acepta
+
+**Síntoma (2026-09-26, prueba e2e en el emulador, rama `evidencia-foto` de la app).** Al tocar AGUA
+TIBIA CON LIMÓN (07:00) a las 10:52 de Lima salía el aviso *"Este hábito ya venció — Pasó el plazo
+para registrarlo hoy, así que ya no acepta evidencia."*, y la cámara no abría. En la base el registro
+estaba `PENDIENTE`, sin evidencia.
+
+**Causa real.** El chequeo previo a la cámara (`estadoParaFoto`, `features/habits/utils/registroConFoto.ts`
+del frontend) trataba `plazoEvidencia` ya pasado como vencido. Pero pasado ese plazo el backend sigue
+aceptando la evidencia y el completado: paga 0 puntos y queda como tarde (el 409 por vencido se quitó
+a propósito en `RegistroService`). La app de antes tampoco lo bloqueaba. Además, el acompañante sí
+ofrecía la tarjeta de la cámara para ese mismo hábito (lo valida por estado), así que el chat y
+Training se contradecían.
+
+**Solución.** Solo cortan `EXPIRADO` y `FALLIDO`; pasado el plazo sigue disponible. La prueba
+`registroConFoto.test.ts` ahora afirma que pasado el plazo queda `disponible` (falla contra el código
+viejo). Reprobado en el emulador: foto, respuesta y COMPLETADO con 0 puntos, una sola evidencia FOTO.
+
+**Cómo evitar que vuelva a pasar.** Una guarda nueva del cliente no puede ser más estricta que el
+backend sin una decisión escrita: antes de bloquear algo en la app, confirmar qué rechaza el servidor.

@@ -50,7 +50,8 @@ public sealed interface EventoDeVozEnVivo {
     }
 
     /** Igual que el evento {@code evidencia} del SSE del chat (D-171): la tarjeta de la camara. */
-    record Evidencia(UUID registroId, String titulo, Instant venceEn) implements EventoDeVozEnVivo {
+    record Evidencia(UUID registroId, String titulo, Instant venceEn, boolean conPregunta)
+            implements EventoDeVozEnVivo {
         public Evidencia {
             Objects.requireNonNull(registroId, "registroId es obligatorio");
             Objects.requireNonNull(titulo, "titulo es obligatorio");

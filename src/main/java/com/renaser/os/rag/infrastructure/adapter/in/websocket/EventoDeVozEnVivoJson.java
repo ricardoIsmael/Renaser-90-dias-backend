@@ -17,7 +17,7 @@ import com.renaser.os.rag.domain.model.conversacion.EventoDeVozEnVivo;
  * {"tipo":"interrumpido"}
  * {"tipo":"turnoCompleto"}
  * {"tipo":"propuesta","id":"&lt;uuid&gt;","resumen":"...","venceEn":"2026-09-24T15:10:00Z"}
- * {"tipo":"evidencia","registroId":"&lt;uuid&gt;","titulo":"JUGO VERDE","venceEn":"2026-09-27T05:00:00Z"}
+ * {"tipo":"evidencia","registroId":"&lt;uuid&gt;","titulo":"JUGO VERDE","venceEn":"2026-09-27T05:00:00Z","conPregunta":false}
  * {"tipo":"cuotaAgotada"}
  * {"tipo":"error","valor":"texto apto para mostrar"}
  * </pre>
@@ -52,7 +52,8 @@ final class EventoDeVozEnVivoJson {
             case EventoDeVozEnVivo.Evidencia evidencia -> nodo.put("tipo", "evidencia")
                     .put("registroId", evidencia.registroId().toString())
                     .put("titulo", evidencia.titulo())
-                    .put("venceEn", evidencia.venceEn().toString());
+                    .put("venceEn", evidencia.venceEn().toString())
+                    .put("conPregunta", evidencia.conPregunta());
             case EventoDeVozEnVivo.CuotaAgotada ignorado -> nodo.put("tipo", "cuotaAgotada");
             case EventoDeVozEnVivo.Error error -> nodo.put("tipo", "error").put("valor", error.valor());
         }

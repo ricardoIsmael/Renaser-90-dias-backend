@@ -260,7 +260,7 @@ class ConversacionEnVivoServiceTest {
         when(herramientas.ejecutar(actor, pedido)).thenReturn(ResultadoHerramienta.exito("Boton listo"));
         when(propuestas.evidenciasPedidasDesde(eq(actor), any())).thenReturn(List.of(
                 new ConsultarPropuestasDelTurnoUseCase.PedidoDeEvidencia(registro, "JUGO VERDE", TRES_AM_UTC,
-                        finDelDia)));
+                        finDelDia, true)));
         service.iniciar(actor, salida);
 
         proveedor.oyente.oido("Ya tome el jugo verde");
@@ -269,7 +269,7 @@ class ConversacionEnVivoServiceTest {
         proveedor.oyente.dicho("Te deje abajo el boton para sacarle foto.");
         proveedor.oyente.turnoCompleto();
 
-        assertThat(salida.eventos).contains(new EventoDeVozEnVivo.Evidencia(registro, "JUGO VERDE", finDelDia));
+        assertThat(salida.eventos).contains(new EventoDeVozEnVivo.Evidencia(registro, "JUGO VERDE", finDelDia, true));
         assertThat(guardados(2).get(1).contenido()).isEqualTo("Te deje abajo el boton para sacarle foto."
                 + "\n\nFoto para registrar 'JUGO VERDE': si no ves el boton de la camara, subela desde Hoy.");
     }
