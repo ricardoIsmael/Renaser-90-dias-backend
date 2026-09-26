@@ -152,6 +152,11 @@ class PromptSistemaRenasiaTest {
                 .contains("sin eso no llega a lo que se propuso esta semana")
                 .contains("igual puede registrarlo hasta")
                 .contains("la accion va primero");
+        // Emulador 2026-09-26: a "hoy no voy a hacer el ritual de la noche" contesto "Esta bien, lo
+        // dejamos por hoy", sin objetivos ni salida.
+        assertThat(render).contains("nunca contestes solo \"esta bien, lo dejamos\"")
+                .contains("lo aleja de su objetivo de la semana")
+                .contains("si insiste, respetalo");
     }
 
     @Test
