@@ -134,10 +134,20 @@ los interruptores de "Notificaciones & Alarmas" en Yo **no guardan nada**.
 | Jue 01 | Batería completa, regresión, correcciones |
 | Vie 02 | Subida a producción y verificación |
 
-## 9. Decisiones que necesita el dueño
+## 9. Decisiones del dueño (26/09)
 
-1. **V-9** cambiar CloudFront a todos los países (centavos al mes).
-2. **E-10** alarma con sonido propio (requiere cambio nativo y APK).
-3. **E-6** ¿los mentores también crean eventos para su grupo, o solo admin?
-4. **E-4** ¿los 5 temas de notificación propuestos están bien?
-5. Mantener la decisión actual de que el ex-mentor conserva el chat con el aprendiz (G, riesgo R6).
+1. **V-9 — Sí.** CloudFront pasó a `PriceClass_All` el 26/09 (distribución E3O4M4W7JW3TJQ, cuenta
+   302277511407). Verificar que Perú use el POP de Lima.
+2. **E-10 — Sí.** En **Yo** una sección "Alarmas" para personalizar: activar o no cada alarma
+   (Despertar, eventos), elegir el sonido y la hora. Sin tablas nuevas (preferencias existentes y el
+   teléfono). El sonido propio requiere APK con el plugin de notificaciones.
+3. **E-6 — Crea eventos el Alquimista** (y el Admin, que puede todo; supuesto a confirmar). El mentor
+   ya no crea eventos.
+4. **E-4 — Temas:** sin interruptor de "Hábitos" (ya se configura en cada hábito); **sí** "Eventos y
+   clases". Los eventos se ven sobre todo en **Comunidad**.
+5. **Meet / Drive:** el evento lleva un **link** que pega quien lo crea (Meet, Zoom o Drive) y el alumno
+   ve un botón grande "Unirme". No se crean Meet automáticamente (exigiría OAuth de Google Calendar:
+   más complejo y frágil).
+6. **Semáforo:** se mantienen los colores, umbrales (≥80 verde, ≥60 amarillo) y palabras actuales; al
+   dueño le gustan. Solo cambia lo de alrededor.
+7. Pendiente de confirmar: que el ex-mentor conserve el chat con el aprendiz (G, riesgo R6).
