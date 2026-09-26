@@ -67,6 +67,9 @@ class RocaDiariaConcurrenciaTest {
     private JdbcTemplate jdbcTemplate;
     @Autowired
     private CapturaEventos capturaEventos;
+    /** El reloj real del contexto: el que usa {@code completar} para decidir que roca es "de hoy". */
+    @Autowired
+    private com.renaser.os.shared.domain.Clock relojDelSistema;
 
     private UserId participanteId;
 
@@ -89,10 +92,17 @@ class RocaDiariaConcurrenciaTest {
         jdbcTemplate.update("DELETE FROM renaser.usuarios WHERE id = ?", participanteId.value());
     }
 
-    /** Sin horaFin: EscalaPuntosRoca.calcular siempre da A_TIEMPO (10 puntos), sin depender del reloj real. */
+    /**
+     * Sin horaFin: EscalaPuntosRoca.calcular siempre da A_TIEMPO (10 puntos), sin depender del reloj real.
+     *
+     * <p>La fecha es la de HOY en la zona del participante (el default de
+     * {@code participantes_programa.timezone}), con el mismo reloj que usa el servicio: desde E-288 solo
+     * se completan las rocas de hoy. Decia {@code LocalDate.of(2026, 8, 24)} fijo (E-293).
+     */
     private RocaDiariaId crearRocaVerdeSinCompletar() {
         RocaDiariaId id = RocaDiariaId.of(UUID.randomUUID());
-        RocaDiaria roca = RocaDiaria.planificar(id, participanteId, LocalDate.of(2026, 8, 24), 1, "Meditar 10 min",
+        LocalDate hoyEnSuZona = relojDelSistema.now().atZone(java.time.ZoneId.of(zonaDelParticipante())).toLocalDate();
+        RocaDiaria roca = RocaDiaria.planificar(id, participanteId, hoyEnSuZona, 1, "Meditar 10 min",
                 null, 5, false, EjeObjetivo.CUERPO, null, null, null, List.of(), CLOCK);
         saveRocaDiariaPort.save(roca);
         return id;
@@ -180,6 +190,11 @@ class RocaDiariaConcurrenciaTest {
     }
 
     /** Captura in-memory de {@link RocaCompletadaEvent} para verificar que se publique una sola vez. */
+    private String zonaDelParticipante() {
+        return jdbcTemplate.queryForObject("SELECT timezone FROM renaser.participantes_programa WHERE usuario_id = ?",
+                String.class, participanteId.value());
+    }
+
     @TestConfiguration
     static class CapturaEventosConfig {
         @Bean
