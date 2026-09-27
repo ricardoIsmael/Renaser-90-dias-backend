@@ -28,8 +28,12 @@ public interface ConsultarDashboardRocasUseCase {
      *
      * @param diaPrograma               día de programa del actor (0 si el programa no arrancó)
      * @param numeroSemana              semana de programa a la que pertenece hoy
-     * @param inicioSemana              lunes de esa semana (o {@code fechaInicio} si es la semana 1 corta)
-     * @param finSemana                 último día de esa semana de programa (D-192), recortado al fin del programa (día 90)
+     * @param inicioSemana              lunes de esa semana (o el primer día efectivo si es la semana 1 corta);
+     *                                  {@code null} mientras no eligió su Día 1 (D-201, D-203)
+     * @param finSemana                 domingo de esa semana; en la 13, el día 90, que puede caer antes o
+     *                                  después de su domingo (D-203). Hasta D-203 decía «último día de esa
+     *                                  semana de programa (D-192), recortado al fin del programa (día 90)».
+     *                                  {@code null} mientras no eligió su Día 1
      * @param rocasMaestras             las (0-3) Rocas Maestras del actor
      * @param rocasDesbloqueadas        {@code rocasMaestras.size() == 3} (onboarding completo)
      * @param tieneRocaSemanal          hay una Roca Semanal por cada eje para {@code numeroSemana}
@@ -43,7 +47,9 @@ public interface ConsultarDashboardRocasUseCase {
      * @param puedeCrearPlanSemanal     compuerta real de {@code CrearPlanSemanalUseCase} (onboarding completo)
      * @param planificacionSemanalTardia si se planificara AHORA, ¿contaría a destiempo? (para avisar antes de entrar)
      * @param rocasDeHoy                las Rocas Diarias de hoy, con bloqueo Ley IV ya resuelto
-     * @param fechaInicioPrograma       para que el cliente sepa si el programa todavía no arrancó
+     * @param fechaInicioPrograma       para que el cliente sepa si el programa todavía no arrancó: el Día 1
+     *                                  elegido, o {@code null} si todavía no lo eligió. Hasta D-203 viajaba
+     *                                  {@code fecha_inicio} sin filtro, que antes de activar es provisional (D-201)
      */
     record DashboardRocas(int diaPrograma, int numeroSemana, LocalDate inicioSemana, LocalDate finSemana,
                            List<RocaMaestra> rocasMaestras, boolean rocasDesbloqueadas, boolean tieneRocaSemanal,

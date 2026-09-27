@@ -33,7 +33,8 @@ final class TextoDeRocas {
 
     static String deLaSemana(RocasDeLaSemana semana) {
         StringBuilder texto = new StringBuilder("Objetivos de la semana ").append(semana.numeroSemana())
-                .append(" del programa (").append(semana.inicio()).append(" al ").append(semana.fin()).append("):\n");
+                .append(" del programa ").append(TextoDePlanDeRocas.rangoDeLaSemana(semana.inicio(), semana.fin()))
+                .append(":\n");
         if (semana.rocas().isEmpty()) {
             return texto.append("Todavia no armo los objetivos de esta semana.").toString();
         }

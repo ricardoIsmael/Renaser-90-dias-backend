@@ -122,21 +122,30 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
         ProgresoParticipanteRocks progreso = requireProgreso(actorId);
         List<RocaMaestraId> idsMaestras = loadRocaMaestraPort.deParticipante(actorId).stream()
                 .map(RocaMaestra::id).toList();
-        LocalDate hoy = hoyEn(progreso.zona());
-        int semana = numeroSemana != null ? numeroSemana : progreso.semanas(hoy).numeroSemanaParaFecha(hoy);
+        int semana = numeroSemana != null ? numeroSemana : numeroSemanaDeHoy(progreso, hoyEn(progreso.zona()));
         return loadRocaSemanalPort.deParticipanteYSemana(idsMaestras, semana);
     }
 
+    /** La semana en curso; sin Día 1 elegido todavía, la 1 (D-203, D-201). */
+    private static int numeroSemanaDeHoy(ProgresoParticipanteRocks progreso, LocalDate hoy) {
+        return progreso.semanas(hoy).map(semanas -> semanas.numeroSemanaParaFecha(hoy)).orElse(1);
+    }
+
     /**
-     * Qué semana se está planificando: la de hoy, salvo el último día de la semana de programa, que
-     * prepara la que empieza mañana.
+     * Qué semana se está planificando: la de hoy, salvo el domingo, que prepara la que empieza el lunes
+     * (el Domingo Ritual). Antes del día 1 es la 1, también sin Día 1 elegido, y nunca pasa de la 13
+     * ({@code SemanaPrograma}).
      *
      * > <b>Corregido 2026-09-26 (D-192).</b> Decia "el +1 SOLO vale el domingo: las semanas son
      * > lunes-domingo". Las semanas pasaron a ser bloques de siete dias del programa, que terminan el
      * > dia 7, 14 … 84 y no necesariamente en domingo; la regla es la misma, trasladada a ese corte.
+     * >
+     * > <b>Corregido 2026-09-27 (D-203).</b> Lo de arriba se revirtio: las semanas volvieron a ser de
+     * > lunes a domingo y el +1 vuelve al domingo. Se quedan dos cosas nuevas: la 13 nunca pide una
+     * > 14, y el domingo previo al dia 1 prepara la semana 1 (la cuenta vieja pedia la 2).
      */
     private static int numeroSemanaAPlanificar(ProgresoParticipanteRocks progreso, LocalDate hoy) {
-        return progreso.semanas(hoy).semanaAPlanificar(hoy);
+        return progreso.semanas(hoy).map(semanas -> semanas.semanaAPlanificar(hoy)).orElse(1);
     }
 
     /**

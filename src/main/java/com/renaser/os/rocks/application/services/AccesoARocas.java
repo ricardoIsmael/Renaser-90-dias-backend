@@ -3,9 +3,11 @@ package com.renaser.os.rocks.application.services;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort.ProgresoParticipanteRocks;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort.RolParticipante;
+import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 
+import java.time.LocalDate;
 import java.util.NoSuchElementException;
 
 /**
@@ -33,5 +35,15 @@ final class AccesoARocas {
             throw new NotAuthorizedException("Solo un aprendiz opera sus propias rocas");
         }
         return progreso;
+    }
+
+    /**
+     * Las semanas con las que se planifica un DIA (D-203). Sin Día 1 elegido todavía no hay días del
+     * programa: se rechaza la fecha, con el mismo código que una fecha fuera de la ventana, en vez de
+     * contarla desde la fecha provisional del alta, que no es un Día 1 (D-201).
+     */
+    static SemanaPrograma semanasParaPlanificarUnDia(ProgresoParticipanteRocks progreso, LocalDate hoy) {
+        return progreso.semanas(hoy).orElseThrow(() -> new IllegalArgumentException(
+                "INVALID_DATE: todavia no eligio su Dia 1, asi que no hay dias del programa para planificar"));
     }
 }

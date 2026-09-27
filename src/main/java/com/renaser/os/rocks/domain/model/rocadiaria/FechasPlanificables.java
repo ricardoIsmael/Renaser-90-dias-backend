@@ -19,11 +19,24 @@ import java.util.Objects;
  * cuelga del objetivo semanal de su semana ({@code NO_WEEKLY_ROCK} si no existe), asi que ofrecer el
  * lunes que viene seria ofrecer algo que va a fallar al guardar.
  *
- * <p><b>2026-09-26 (D-192):</b> la semana de programa pasó a ser un bloque de siete días del programa
- * (ver {@link SemanaPrograma}); el corte ya no es el domingo sino el último día de ESA semana.
+ * <p><b>El corte es el domingo de la semana de hoy</b> (lunes a domingo, D-203), salvo en la semana 13,
+ * que termina el día 90: ahí el corte es el día 90 aunque caiga después del domingo (inicio de
+ * miércoles a domingo) o antes (inicio en lunes). Pasado el día 90 no queda ninguna fecha.
+ *
+ * <p><b>Corregido 2026-09-27 (D-203).</b> D-192 (2026-09-26) decía: «la semana de programa pasó a ser un
+ * bloque de siete días del programa (ver {@link SemanaPrograma}); el corte ya no es el domingo sino el
+ * último día de ESA semana». La semana volvió a ser de lunes a domingo y el corte, al domingo.
+ *
+ * <p><b>Mañana siempre entra, si es un día del programa (E-340).</b> El domingo, mañana ya es otra semana:
+ * con solo el corte, la ventana quedaba "del lunes al domingo" al revés y el plan del lunes no se podía
+ * armar el domingo a la noche —la ventana nocturna existe para eso, y el tablero ya lo ofrecía—. Pasaba
+ * desde E-208 (2026-09-22), que amplió la regla vieja ({@code mañana} con la ventana abierta, o hoy y
+ * {@code mañana} sin ella) al resto de la semana y sin querer le sacó el lunes al domingo. El lunes
+ * cuelga igual de SU objetivo semanal: sin el plan de la semana que empieza, {@code NO_WEEKLY_ROCK}.
  *
  * @param desde inclusivo
- * @param hasta inclusivo, el último día de la semana de programa de hoy
+ * @param hasta inclusivo, el domingo de la semana de programa de hoy (el día 90 en la 13); el domingo,
+ *              el lunes
  */
 public record FechasPlanificables(LocalDate desde, LocalDate hasta) {
 
@@ -39,8 +52,15 @@ public record FechasPlanificables(LocalDate desde, LocalDate hasta) {
      */
     public static FechasPlanificables para(LocalDate hoy, EstadoPlazo plazo, SemanaPrograma semanas) {
         LocalDate desde = plazo == EstadoPlazo.EN_PLAZO ? hoy.plusDays(1) : hoy;
-        LocalDate hasta = semanas.limites(semanas.numeroSemanaParaFecha(hoy)).fin();
-        return new FechasPlanificables(desde, hasta);
+        return new FechasPlanificables(desde, hastaCuando(hoy, semanas));
+    }
+
+    /** El fin de la semana de hoy; el domingo, el lunes, si todavía es un día del programa. */
+    private static LocalDate hastaCuando(LocalDate hoy, SemanaPrograma semanas) {
+        LocalDate finDeLaSemana = semanas.limites(semanas.numeroSemanaParaFecha(hoy)).fin();
+        LocalDate manana = hoy.plusDays(1);
+        boolean mananaEmpiezaOtraSemana = manana.isAfter(finDeLaSemana) && !manana.isAfter(semanas.finDelPrograma());
+        return mananaEmpiezaOtraSemana ? manana : finDeLaSemana;
     }
 
     public boolean contiene(LocalDate fecha) {

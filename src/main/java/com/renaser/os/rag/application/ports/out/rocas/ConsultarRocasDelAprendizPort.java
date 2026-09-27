@@ -56,6 +56,7 @@ public interface ConsultarRocasDelAprendizPort {
                         boolean puedeCrearlo) {
     }
 
+    /** {@code inicio}/{@code fin} en {@code null} mientras la persona no eligio su Dia 1: la semana 1 no tiene fechas (D-203). */
     record RocasDeLaSemana(int numeroSemana, LocalDate inicio, LocalDate fin, List<RocaDeLaSemana> rocas) {
     }
 
@@ -64,6 +65,8 @@ public interface ConsultarRocasDelAprendizPort {
     }
 
     /**
+     * {@code inicio}/{@code fin}: como en {@link RocasDeLaSemana}, en {@code null} sin Dia 1 elegido.
+     *
      * @param porEje  lo planificado y completado por eje en los dias ya terminados (antes de {@code hoy})
      * @param ritmo   {@code OK}, {@code LENTO} o {@code CRITICO}, de los 7 dias anteriores a hoy
      */

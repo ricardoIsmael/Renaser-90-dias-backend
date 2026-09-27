@@ -64,7 +64,8 @@ class ConsultarProgresoParticipanteRocksPersistenceAdapterTest {
         assertThat(progreso.get().rol()).isEqualTo(RolParticipante.TRAINEE);
         assertThat(progreso.get().suspendido()).isFalse();
         assertThat(progreso.get().zona()).isEqualTo(ZoneId.of("America/Lima"));
-        assertThat(progreso.get().fechaInicio()).isEqualTo(LocalDate.of(2026, 8, 1));
+        // Sin programa_activado_en: la fecha_inicio es la provisional del alta y no viaja como Dia 1 (D-201, D-203).
+        assertThat(progreso.get().diaUnoElegido()).isNull();
     }
 
     @Test
@@ -80,5 +81,79 @@ class ConsultarProgresoParticipanteRocksPersistenceAdapterTest {
     @Test
     void devuelveVacioSiElParticipanteNoExiste() {
         assertThat(adapter.deParticipante(UserId.of(UUID.randomUUID()))).isEmpty();
+    }
+
+    /* --------------------------------------------------------------------------------------------
+     * D-203 (E-339): de qué fecha sale la semana de rocas, contra el users.api real. Desde el día 90
+     * users da el día acotado, y el adaptador trae la fecha real del día 90; antes no la pide.
+     * ------------------------------------------------------------------------------------------ */
+
+    private static final ZoneId LIMA = ZoneId.of("America/Lima");
+
+    private UserId crearActivado(LocalDate fechaInicio, int diasAjuste) {
+        UserId id = crearParticipante("APRENDIZ", "ACTIVO", 0, "America/Lima", fechaInicio);
+        entityManager.createNativeQuery("""
+                        UPDATE renaser.participantes_programa
+                           SET programa_activado_en = now(), dias_ajuste_programa = :ajuste
+                         WHERE usuario_id = :id
+                        """)
+                .setParameter("ajuste", diasAjuste)
+                .setParameter("id", id.value())
+                .executeUpdate();
+        return id;
+    }
+
+    @Test
+    void unGraduadoSinAjusteTraeSuDiaNoventaYSuSemanaSaleDeLaFechaDeInicio() {
+        LocalDate hoy = LocalDate.now(LIMA);
+        LocalDate inicio = hoy.minusDays(100);
+        UserId id = crearActivado(inicio, 0);
+
+        var progreso = adapter.deParticipante(id).orElseThrow();
+
+        assertThat(progreso.diaUnoElegido()).isEqualTo(inicio);
+        assertThat(progreso.diaPrograma()).isEqualTo(90);
+        assertThat(progreso.ultimaFechaDelPrograma()).isEqualTo(inicio.plusDays(89));
+        assertThat(progreso.semanas(hoy).orElseThrow().primerDia()).isEqualTo(inicio);
+    }
+
+    @Test
+    void unGraduadoConAjusteTraeElDiaNoventaCorridoYLaSemanaLoAcompana() {
+        LocalDate hoy = LocalDate.now(LIMA);
+        LocalDate inicio = hoy.minusDays(110);
+        UserId id = crearActivado(inicio, 5);
+
+        var progreso = adapter.deParticipante(id).orElseThrow();
+
+        assertThat(progreso.diaPrograma()).isEqualTo(90);
+        assertThat(progreso.ultimaFechaDelPrograma()).isEqualTo(inicio.plusDays(94));
+        assertThat(progreso.semanas(hoy).orElseThrow().primerDia()).isEqualTo(inicio.plusDays(5));
+    }
+
+    @Test
+    void enCursoNoPideLaFechaDelDiaNoventaYElAnclaSaleDelDia() {
+        LocalDate hoy = LocalDate.now(LIMA);
+        LocalDate inicio = hoy.minusDays(40);
+        UserId id = crearActivado(inicio, -3);
+
+        var progreso = adapter.deParticipante(id).orElseThrow();
+
+        assertThat(progreso.diaPrograma()).isEqualTo(44);
+        assertThat(progreso.ultimaFechaDelPrograma()).isNull();
+        assertThat(progreso.semanas(hoy).orElseThrow().primerDia()).isEqualTo(inicio.minusDays(3));
+    }
+
+    /** D-201: la fecha provisional del alta (ya pasada: tardo en activar) no es un Dia 1 ni ancla ninguna semana. */
+    @Test
+    void sinActivarNoHayDiaUnoNiSemanasConFechas() {
+        LocalDate hoy = LocalDate.now(LIMA);
+        LocalDate provisional = hoy.minusDays(12);
+        UserId id = crearParticipante("APRENDIZ", "ACTIVO", 0, "America/Lima", provisional);
+
+        var progreso = adapter.deParticipante(id).orElseThrow();
+
+        assertThat(progreso.programaActivado()).isFalse();
+        assertThat(progreso.diaUnoElegido()).isNull();
+        assertThat(progreso.semanas(hoy)).isEmpty();
     }
 }

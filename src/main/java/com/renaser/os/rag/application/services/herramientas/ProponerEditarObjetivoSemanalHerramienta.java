@@ -34,7 +34,8 @@ import java.util.Optional;
  * <p><b>La ventana se respeta antes de proponer.</b> Para la semana en curso, {@code consultar_rocas}
  * ya dice si el objetivo es editable: fuera de la ventana se contesta con el motivo real y lo que si se
  * puede, sin dejar un boton que va a fallar. La semana siguiente (la que se arma el domingo) no se ve
- * desde aca: la decide {@code rocks} al confirmar.
+ * desde aca: la decide {@code rocks} al confirmar. Lo unico que se mira es que exista: la 13 es la
+ * ultima del programa y nunca se propone una 14 (D-203).
  *
  * <p><b>La semana queda escrita en la propuesta</b>, como en el cierre: una propuesta del domingo 23:55
  * confirmada el lunes 00:05 edita la semana que la persona vio.
@@ -68,8 +69,7 @@ public class ProponerEditarObjetivoSemanalHerramienta implements HerramientaAgen
                             TipoParametroHerramienta.ENTERO, "Como arranca la semana en ese eje, del 1 al 10, si "
                             + "la persona lo dijo.", false),
                     new ParametroHerramienta(ArgumentosDeAjusteDeRocas.SEMANA, TipoParametroHerramienta.TEXTO,
-                            "actual (por defecto) o siguiente: la que empieza manana, si hoy es el ultimo dia de su semana "
-                            + "de programa y ya la armo.",
+                            "actual (por defecto) o siguiente: la que empieza el lunes, si la armo este domingo.",
                             false)));
 
     private final ConsultarRocasDelAprendizPort rocasPort;
@@ -113,7 +113,9 @@ public class ProponerEditarObjetivoSemanalHerramienta implements HerramientaAgen
             return ResultadoHerramienta.fallo("No pude consultar su semana en este momento.");
         }
         if (pedida.siguiente()) {
-            return proponer(actorId, semana.numeroSemana() + 1, pedida);
+            return semana.numeroSemana() >= EditarObjetivoSemanalPort.ULTIMA_SEMANA
+                    ? ResultadoHerramienta.fallo(TextoDeAjustesDeRocas.SIN_SEMANA_SIGUIENTE)
+                    : proponer(actorId, semana.numeroSemana() + 1, pedida);
         }
         return impedimentoEnLaSemanaEnCurso(semana, pedida.eje())
                 .map(ResultadoHerramienta::fallo)

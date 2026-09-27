@@ -106,7 +106,8 @@ class AjustesDeRocasHerramientasTest {
     void formaInvalida() {
         assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE,
                 "eje", "CUERPO", "titulo", "Estirar", "fecha", "2026-09-20"))).isEqualTo(ResultadoHerramienta.fallo(
-                "Ese dia ya paso. Se puede agregar desde manana hasta el ultimo dia de esta semana de programa."));
+                "Ese dia ya paso. Se puede agregar desde manana hasta el domingo de esta semana (si hoy es domingo, el "
+                        + "lunes; en la ultima semana del programa, hasta el dia 90)."));
         assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE,
                 "eje", "NEGOCIO", "titulo", "Vender"))).isInstanceOf(ResultadoHerramienta.Fallo.class);
         assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE,
@@ -213,6 +214,31 @@ class AjustesDeRocasHerramientasTest {
         verify(proponer).proponer(APRENDIZ, invocacion(ProponerEditarObjetivoSemanalHerramienta.NOMBRE, "semana", "5",
                 "eje", "TRABAJO", "titulo", "Vender 3"), "Cambiar el objetivo de Trabajo de la semana 5. objetivo: "
                 + "Vender 3. Lo que no se nombra queda como esta.");
+    }
+
+    /** D-203 (E-340): la 13 es la ultima semana del programa; proponer la 14 dejaba un boton que no podia andar. */
+    @Test
+    @DisplayName("en la semana 13 no hay semana siguiente: no se propone una 14")
+    void enLaTreceNoHaySemanaSiguiente() {
+        when(rocas.deLaSemana(APRENDIZ)).thenReturn(new RocasDeLaSemana(13, LocalDate.of(2026, 11, 30),
+                LocalDate.of(2026, 12, 7), List.of(new RocaDeLaSemana("TRABAJO", "Vender 2", null, null, true, false,
+                null))));
+
+        ResultadoHerramienta resultado = editarObjetivo.ejecutar(APRENDIZ, invocacion(
+                ProponerEditarObjetivoSemanalHerramienta.NOMBRE, "eje", "TRABAJO", "titulo", "Vender 3", "semana",
+                "siguiente"));
+
+        assertThat(resultado).isEqualTo(ResultadoHerramienta.fallo("Esta es la ultima semana del programa (la 13): "
+                + "no hay una semana siguiente para cambiar. Se puede corregir el objetivo de esta semana."));
+        verifyNoInteractions(proponer);
+    }
+
+    @Test
+    @DisplayName("el rechazo de una fecha que rocks no deja planificar dice hasta cuando se puede: domingo y semana 13")
+    void rechazoDeFechaNoPlanificable() {
+        assertThat(TextoDeAjustesDeRocas.rechazoDeAccion(AgregarAccionAlPlanPort.Motivo.FECHA_NO_PLANIFICABLE))
+                .isEqualTo("Ese dia ya no se puede planificar: se puede agregar desde manana hasta el domingo de esta "
+                        + "semana (si hoy es domingo, el lunes; en la ultima semana del programa, hasta el dia 90).");
     }
 
     @Test

@@ -64,7 +64,7 @@ class AgregarRocaDiariaService implements AgregarRocaDiariaUseCase {
         ProgresoParticipanteRocks progreso = AccesoARocas.exigir(progresoPort, command.actorId());
         RocaMaestra maestra = maestraDelEje(command.actorId(), command.eje());
         LocalDate hoy = clock.now().atZone(progreso.zona()).toLocalDate();
-        SemanaPrograma semanas = progreso.semanas(hoy);
+        SemanaPrograma semanas = AccesoARocas.semanasParaPlanificarUnDia(progreso, hoy);
         requireDiaQueTodaviaNoLlego(command.fecha(), hoy, semanas);
         RocaSemanal semanal = semanalDeLaFecha(maestra, semanas, command.fecha());
         List<RocaDiaria> delDia = loadRocaDiariaPort.deParticipanteYFecha(command.actorId(), command.fecha());
@@ -87,8 +87,11 @@ class AgregarRocaDiariaService implements AgregarRocaDiariaUseCase {
 
     /**
      * Hoy nunca (decision del dueno pendiente, ver el javadoc del caso de uso). De manana en adelante,
-     * la ventana de {@code CrearPlanDiarioUseCase} con la noche ya abierta: hasta el ultimo dia de esta
-     * semana de programa (D-192).
+     * la ventana de {@code CrearPlanDiarioUseCase} con la noche ya abierta: hasta el domingo de esta
+     * semana (en la 13, hasta el dia 90; D-203).
+     *
+     * <p><b>Corregido 2026-09-27 (D-203).</b> Decia "hasta el ultimo dia de esta semana de programa
+     * (D-192)", cuando la semana era un bloque de siete dias del programa.
      */
     private static void requireDiaQueTodaviaNoLlego(LocalDate fecha, LocalDate hoy, SemanaPrograma semanas) {
         if (fecha.equals(hoy)) {

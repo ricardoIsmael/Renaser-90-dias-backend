@@ -5,8 +5,9 @@ package com.renaser.os.rocks.domain.model.rocamensual;
  * 90, tal como lo definio el cliente ("tres objetivos maestros, para 30/60/90 dias").
  *
  * <p><b>Por que 30 dias y no 4 semanas.</b> Son cosas distintas y conviene no confundirlas: la
- * semana de programa la calcula {@code SemanaPrograma} en bloques de siete dias (D-192), y cuatro de
- * esas dan 28 dias, no 30. Si el mes se definiera como "cuatro semanas", el mes 3 terminaria el dia 84 y
+ * semana de programa la calcula {@code SemanaPrograma} de lunes a domingo (D-203; D-192 la habia hecho
+ * bloques de siete dias del programa, sin llegar a produccion), y cuatro de esas dan 28 dias, no 30. Si
+ * el mes se definiera como "cuatro semanas", el mes 3 terminaria el dia 84 y
  * quedarian seis dias del programa fuera de todo mes. Contando de a 30 dias los tres meses cubren
  * los 90 exactos y ninguno queda huerfano. La consecuencia es que el corte mensual no cae siempre
  * en domingo, y eso esta bien: el mes es un hito del plan, no una semana calendario.
@@ -64,8 +65,8 @@ public final class MesPrograma {
      * Cuantas semanas quedan del mes, contando la que se esta transitando. De 1 a 5.
      *
      * <p><b>Ojo: no usa {@code SemanaPrograma} y es a proposito.</b> Aquella cuenta semanas
-     * de siete dias del programa entero (D-192; antes eran semanas calendario lunes-domingo), y cuatro
-     * de esas dan 28 dias, no 30 — mezclarlas dejaria dias
+     * calendario de lunes a domingo (D-203; con D-192, que no llego a produccion, fueron bloques de siete
+     * dias del programa), y cuatro de esas dan 28 dias, no 30 — mezclarlas dejaria dias
      * del mes fuera de toda semana, que es el mismo error que el javadoc de esta clase explica para
      * los meses. Aca la semana es un bloque de siete dias de programa dentro del mes, que es lo que
      * necesita repartir una cifra mensual: la cuenta cierra exacta y no depende de en que dia de la

@@ -47,6 +47,15 @@ final class TextoDePlanDeRocas {
         return DIAS[fecha.getDayOfWeek().getValue() - 1] + " " + fecha;
     }
 
+    /**
+     * "(2026-09-21 al 2026-09-27)". Sin Dia 1 elegido {@code rocks} manda la semana 1 sin fechas, y aca se
+     * dice eso en vez de inventar un rango (D-203, D-201): antes salia de la fecha provisional del alta.
+     */
+    static String rangoDeLaSemana(LocalDate inicio, LocalDate fin) {
+        return inicio == null || fin == null ? "(todavia sin fechas: no eligio su Dia 1)"
+                : "(" + inicio + " al " + fin + ")";
+    }
+
     /** Lo que se le dice cuando {@code rocks} rechaza el plan del dia al confirmar. */
     static String rechazoDelDia(Motivo motivo) {
         return switch (motivo) {

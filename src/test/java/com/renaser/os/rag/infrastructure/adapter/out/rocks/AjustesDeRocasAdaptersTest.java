@@ -76,12 +76,13 @@ class AjustesDeRocasAdaptersTest {
     }
 
     @Test
-    @DisplayName("la ventana y la escala que usa rag para explicar son las de rocks")
+    @DisplayName("la ventana, la escala y la ultima semana que usa rag para explicar son las de rocks")
     void reglasDeRocks() {
         assertThat(editarAdapter.ventanaDeEdicion()).isEqualTo(new EditarObjetivoSemanalPort.VentanaDeEdicion(
                 EdicionDeObjetivoSemanalPort.VENTANA_ABRE_DOMINGO_HORA, EdicionDeObjetivoSemanalPort.VENTANA_CIERRA_LUNES_HORA,
                 EdicionDeObjetivoSemanalPort.MARGEN_TARDIO_HORAS));
         assertThat(PlanificarRocasPort.AUTOEVALUACION_MINIMA).isEqualTo(CierreDeSemanaPort.AUTOEVALUACION_MINIMA);
         assertThat(PlanificarRocasPort.AUTOEVALUACION_MAXIMA).isEqualTo(CierreDeSemanaPort.AUTOEVALUACION_MAXIMA);
+        assertThat(EditarObjetivoSemanalPort.ULTIMA_SEMANA).isEqualTo(EdicionDeObjetivoSemanalPort.ULTIMA_SEMANA);
     }
 }

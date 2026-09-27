@@ -101,7 +101,7 @@ public class ProponerAgregarAccionHerramienta implements HerramientaAgente {
         LocalDate fecha = pedida.fecha() == null ? manana : pedida.fecha();
         if (fecha.isBefore(manana)) {
             return ResultadoHerramienta.fallo(fecha.equals(manana.minusDays(1)) ? TextoDeAjustesDeRocas.DIA_EN_CURSO
-                    : "Ese dia ya paso. Se puede agregar desde manana hasta el ultimo dia de esta semana de programa.");
+                    : "Ese dia ya paso. Se puede agregar " + TextoDeAjustesDeRocas.FECHAS_QUE_SE_PUEDEN_AGREGAR + ".");
         }
         return proponer(actorId, fecha, pedida);
     }

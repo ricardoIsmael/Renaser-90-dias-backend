@@ -44,8 +44,10 @@ import static org.mockito.Mockito.when;
  * D-177: agregar UNA accion a un dia que viene, sin tocar las demas.
  *
  * <p>Fixture coherente: programa iniciado el martes 2026-09-01; el miercoles 23 es el dia 23, semana
- * 4 (dias 22 a 28: martes 22 a lunes 28, D-192). El reloj por defecto esta a las 03:00 UTC del jueves 24, que en Lima es
+ * 4 (lunes 21 a domingo 27, D-203). El reloj por defecto esta a las 03:00 UTC del jueves 24, que en Lima es
  * todavia el MIERCOLES 23 a las 22:00 (regla 02: el caso que esconde un reloj a las 10:00 UTC).
+ *
+ * <p><b>Corregido 2026-09-27 (D-203).</b> Con D-192 decia "dias 22 a 28: martes 22 a lunes 28".
  */
 class AgregarRocaDiariaServiceTest {
 
@@ -116,14 +118,37 @@ class AgregarRocaDiariaServiceTest {
     }
 
     @Test
-    @DisplayName("despues del ultimo dia de la semana de programa, o un dia que paso: INVALID_DATE")
+    @DisplayName("hasta el domingo de la semana si; el lunes que viene, o un dia que paso: INVALID_DATE")
     void fueraDeLaVentanaDeFechas() {
         AgregarRocaDiariaService servicio = servicio(NOCHE_DEL_MIERCOLES_EN_LIMA);
 
-        assertThatThrownBy(() -> servicio.agregar(comando(LocalDate.of(2026, 9, 29), EjeObjetivo.CUERPO)))
+        assertThat(servicio.agregar(comando(LocalDate.of(2026, 9, 27), EjeObjetivo.CUERPO)).fecha())
+                .isEqualTo(LocalDate.of(2026, 9, 27));
+        assertThatThrownBy(() -> servicio.agregar(comando(LocalDate.of(2026, 9, 28), EjeObjetivo.CUERPO)))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageStartingWith("INVALID_DATE");
         assertThatThrownBy(() -> servicio.agregar(comando(LocalDate.of(2026, 9, 22), EjeObjetivo.CUERPO)))
                 .hasMessageStartingWith("INVALID_DATE");
+    }
+
+    /**
+     * E-340: el domingo 27 a las 22:00 en Lima (03:00 UTC del lunes 28) se suma una accion al lunes 28, que ya es
+     * la semana 5 y cuelga de su objetivo. Con solo el corte de la semana, INVALID_DATE.
+     */
+    @Test
+    @DisplayName("E-340: el domingo a la noche se puede sumar una accion al lunes, con el objetivo de su semana")
+    void elDomingoALaNocheSeAgregaAlLunes() {
+        AgregarRocaDiariaService servicio = servicio(FixedClock.at(Instant.parse("2026-09-28T03:00:00Z")));
+        when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(new ProgresoParticipanteRocks(27, INICIO,
+                LIMA, RolParticipante.TRAINEE, false, true)));
+        RocaSemanal semana5 = RocaSemanal.rehydrate(new RocaSemanalId(UUID.randomUUID()), tresMaestras.get(0).id(), 5,
+                "Correr 4 veces", null, null, null, null, null, null, NOCHE_DEL_MIERCOLES_EN_LIMA.now(),
+                NOCHE_DEL_MIERCOLES_EN_LIMA.now());
+        when(semanales.deMaestraYSemana(tresMaestras.get(0).id(), 5)).thenReturn(Optional.of(semana5));
+
+        RocaDiaria agregada = servicio.agregar(comando(LocalDate.of(2026, 9, 28), EjeObjetivo.CUERPO));
+
+        assertThat(agregada.fecha()).isEqualTo(LocalDate.of(2026, 9, 28));
+        assertThat(agregada.rocaSemanalId()).isEqualTo(semana5.id());
     }
 
     @Test
@@ -134,6 +159,19 @@ class AgregarRocaDiariaServiceTest {
 
         assertThatThrownBy(() -> servicio.agregar(comando(JUEVES, EjeObjetivo.TRABAJO)))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageStartingWith("NO_WEEKLY_ROCK");
+    }
+
+    @Test
+    @DisplayName("D-203: sin Dia 1 elegido no hay dias del programa que planificar: INVALID_DATE, sin guardar")
+    void sinDiaUnoNoSePlanificaNingunDia() {
+        AgregarRocaDiariaService servicio = servicio(NOCHE_DEL_MIERCOLES_EN_LIMA);
+        when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(new ProgresoParticipanteRocks(0, null,
+                LIMA, RolParticipante.TRAINEE, false, false)));
+
+        assertThatThrownBy(() -> servicio.agregar(comando(JUEVES, EjeObjetivo.CUERPO)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageStartingWith("INVALID_DATE")
+                .hasMessageContaining("todavia no eligio su Dia 1");
+        verify(guardar, never()).save(any());
     }
 
     @Test

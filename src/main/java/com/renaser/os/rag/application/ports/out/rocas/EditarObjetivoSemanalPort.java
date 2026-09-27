@@ -12,6 +12,13 @@ import com.renaser.os.shared.domain.UserId;
  */
 public interface EditarObjetivoSemanalPort {
 
+    /**
+     * La ultima semana del programa: nunca hay una 14 (D-203). Espejo de
+     * {@code rocks.api.EdicionDeObjetivoSemanalPort.ULTIMA_SEMANA}: {@code AjustesDeRocasAdaptersTest} rompe
+     * si dejan de coincidir.
+     */
+    int ULTIMA_SEMANA = 13;
+
     /** Cuando se puede editar, segun {@code rocks}: para explicar un rechazo con la regla real. */
     VentanaDeEdicion ventanaDeEdicion();
 

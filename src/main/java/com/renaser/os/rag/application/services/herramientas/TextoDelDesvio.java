@@ -53,8 +53,8 @@ final class TextoDelDesvio {
 
     private static String encabezado(DesvioDeLaSemana desvio) {
         String semana = desvio.progreso() == null ? "Semana en curso (desde el " + desvio.desde() + ")"
-                : "Semana " + desvio.progreso().numeroSemana() + " del programa (" + desvio.progreso().inicio()
-                + " al " + desvio.progreso().fin() + ")";
+                : "Semana " + desvio.progreso().numeroSemana() + " del programa "
+                + TextoDePlanDeRocas.rangoDeLaSemana(desvio.progreso().inicio(), desvio.progreso().fin());
         return semana + ", hoy es " + TextoDePlanDeRocas.diaYFecha(desvio.hoy()) + ". Dias ya terminados: "
                 + (desvio.hoy().isAfter(desvio.desde()) ? "del " + desvio.desde() + " al " + desvio.hoy().minusDays(1)
                 : "ninguno todavia") + ".";

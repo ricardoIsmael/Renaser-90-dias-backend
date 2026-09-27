@@ -12,7 +12,6 @@ import com.renaser.os.rocks.domain.model.rocamaestra.MetaCuantitativa;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraId;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
-import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
@@ -60,9 +59,10 @@ class LecturaDeObjetivosDelAprendiz {
         ProgresoParticipanteRocks progreso = progresoPort.deParticipante(aprendizId)
                 .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + aprendizId));
         LocalDate hoy = clock.now().atZone(progreso.zona()).toLocalDate();
-        SemanaPrograma semanas = progreso.semanas(hoy);
-        int semanaDeHoy = semanas.numeroSemanaParaFecha(hoy);
-        if (hoy.isBefore(semanas.primerDia()) || semanaDeHoy <= 1) {
+        // Sin Dia 1 elegido, o antes de que llegue, no hay semana anterior (D-203).
+        int semanaDeHoy = progreso.semanas(hoy).filter(semanas -> !hoy.isBefore(semanas.primerDia()))
+                .map(semanas -> semanas.numeroSemanaParaFecha(hoy)).orElse(1);
+        if (semanaDeHoy <= 1) {
             return Optional.empty();
         }
         int anterior = semanaDeHoy - 1;

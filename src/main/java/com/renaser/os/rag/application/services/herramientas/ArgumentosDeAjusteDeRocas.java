@@ -45,7 +45,11 @@ final class ArgumentosDeAjusteDeRocas {
     record AccionPedida(LocalDate fecha, AccionDelPlan accion) {
     }
 
-    /** @param siguiente la semana de programa que empieza manana (D-192), en vez de la que esta en curso */
+    /**
+     * @param siguiente la semana que empieza el lunes (la que se arma el domingo), en vez de la que esta en
+     *                  curso. D-192 la habia cambiado a "la semana de programa que empieza manana"; D-203 la
+     *                  devolvio al lunes
+     */
     record EdicionPedida(String eje, Cambio cambio, boolean siguiente) {
     }
 

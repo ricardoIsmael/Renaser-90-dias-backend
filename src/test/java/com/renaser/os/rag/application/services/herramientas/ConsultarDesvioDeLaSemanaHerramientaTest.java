@@ -115,6 +115,24 @@ class ConsultarDesvioDeLaSemanaHerramientaTest {
     }
 
     @Test
+    @DisplayName("D-203: sin Dia 1 elegido la semana 1 va sin fechas, no hay dias terminados ni se consultan vencidos")
+    void sinDiaUnoNoHayFechas() {
+        when(rocas.progresoDeLaSemana(APRENDIZ)).thenReturn(new ProgresoDeLaSemana(1, null, null, JUEVES, 0, List.of(),
+                "OK", 0, List.of(), plan(), false));
+        when(rocas.deLaSemana(APRENDIZ)).thenReturn(new RocasDeLaSemana(1, null, null, List.of()));
+        when(plan.planDe(APRENDIZ)).thenReturn(new PlanDelAprendiz(JUEVES, List.of(), List.of()));
+        when(semaforo.de(APRENDIZ)).thenReturn(Optional.empty());
+
+        String texto = texto(herramienta.ejecutar(APRENDIZ, InvocacionHerramienta.sinArgumentos(
+                ConsultarDesvioDeLaSemanaHerramienta.NOMBRE)));
+
+        assertThat(texto).contains("Semana 1 del programa (todavia sin fechas: no eligio su Dia 1), hoy es jueves "
+                        + "2026-09-24. Dias ya terminados: ninguno todavia.")
+                .doesNotContain("null");
+        verifyNoInteractions(vencidos);
+    }
+
+    @Test
     @DisplayName("el lunes todavia no hay dias terminados: no se consultan vencidos, y un semaforo caido no tumba el resto")
     void lunesSinDiasTerminados() {
         when(rocas.progresoDeLaSemana(APRENDIZ)).thenReturn(new ProgresoDeLaSemana(4, LUNES, LUNES.plusDays(6), LUNES,

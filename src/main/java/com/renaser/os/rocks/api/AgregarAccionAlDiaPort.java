@@ -50,7 +50,10 @@ public interface AgregarAccionAlDiaPort {
         ROCAS_BLOQUEADAS,
         /** {@code CURRENT_DAY}: es el dia en curso, que no se reacomoda. */
         DIA_EN_CURSO,
-        /** {@code INVALID_DATE}: ya paso, o cae despues del ultimo dia de esta semana de programa (D-192). */
+        /**
+         * {@code INVALID_DATE}: ya paso, o cae despues del domingo de esta semana (en la semana 13, del dia
+         * 90). Hasta D-203 decia "despues del ultimo dia de esta semana de programa (D-192)".
+         */
         FECHA_NO_PLANIFICABLE,
         /** {@code NO_WEEKLY_ROCK}: el eje no tiene objetivo semanal en la semana de esa fecha. */
         SIN_OBJETIVO_SEMANAL,

@@ -111,7 +111,8 @@ class RocaDiariaServiceTest {
     /**
      * Coherente con el reloj (regla 03): el lunes 2026-08-24 es el dia 22, primer dia de la semana 4
      * (lunes 24 a domingo 30), porque el programa empezo el lunes 2026-08-03. Antes decia dia 20 con
-     * inicio el 2026-01-05, y la semana salia del calendario; desde D-192 sale del dia.
+     * inicio el 2026-01-05. La semana se ancla en el primer dia efectivo (D-192, D-203), asi que un dia
+     * que no coincide con la fecha de inicio probaria otra cosa.
      */
     private static ProgresoParticipanteRocks progreso(RolParticipante rol, boolean suspendido) {
         return new ProgresoParticipanteRocks(22, INICIO, ZoneOffset.UTC, rol, suspendido, false);
@@ -209,6 +210,46 @@ class RocaDiariaServiceTest {
         conPlanDiarioPosible();
         assertThatThrownBy(() -> crearPara(LocalDate.of(2026, 9, 7)))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("INVALID_DATE");
+    }
+
+    /**
+     * D-203: sin Dia 1 elegido (programa sin activar, D-201) no hay dias del programa. Antes la fecha se
+     * contaba desde la fecha provisional del alta, que no es un Dia 1, y quedaba colgada de una semana inventada.
+     */
+    @Test
+    @DisplayName("D-203: sin Dia 1 elegido no se planifica ningun dia: INVALID_DATE")
+    void sinDiaUnoNoSePlanifica() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(new ProgresoParticipanteRocks(0, null,
+                ZoneOffset.UTC, RolParticipante.TRAINEE, false, false)));
+        when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(tresMaestrasParaDiaria());
+
+        assertThatThrownBy(() -> crearPara(LocalDate.of(2026, 8, 25)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageStartingWith("INVALID_DATE")
+                .hasMessageContaining("todavia no eligio su Dia 1");
+        verify(saveRocaDiariaPort, never()).saveAll(any());
+    }
+
+    /**
+     * E-340: el domingo 30 a las 20:05 (la ventana nocturna abierta) se arma el lunes 31, que ya es la semana
+     * que empieza. En produccion daba {@code INVALID_DATE: la fecha de planificacion debe estar entre
+     * 2026-08-31 y 2026-08-30}. El lunes cuelga del objetivo de SU semana (la 5).
+     */
+    @Test
+    @DisplayName("E-340: el domingo a la noche se planifica el lunes, con el objetivo de la semana que empieza")
+    void elDomingoALaNocheSePlanificaElLunes() {
+        FixedClock domingoALaNoche = FixedClock.at(Instant.parse("2026-08-30T20:05:00Z"));
+        RocaDiariaService elDomingo = new RocaDiariaService(loadRocaMaestraPort, loadRocaSemanalPort, loadRocaDiariaPort,
+                saveRocaDiariaPort, registrarEvidenciaPort, progresoPort, almacenamientoPort, ajustarPuntosPort,
+                publicarEnMuroPort, events, domingoALaNoche, idGenerator);
+        conPlanDiarioPosible();
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(new ProgresoParticipanteRocks(28, INICIO,
+                ZoneOffset.UTC, RolParticipante.TRAINEE, false, true)));
+
+        List<RocaDiaria> creadas = elDomingo.crear(new CrearPlanDiarioCommand(actorId, LocalDate.of(2026, 8, 31),
+                List.of(itemDiario(EjeObjetivo.CUERPO, 1))));
+
+        assertThat(creadas).singleElement().satisfies(roca -> assertThat(roca.fecha()).isEqualTo(LocalDate.of(2026, 8, 31)));
+        verify(loadRocaSemanalPort).deMaestraYSemana(any(), eq(5));
     }
 
     @Test

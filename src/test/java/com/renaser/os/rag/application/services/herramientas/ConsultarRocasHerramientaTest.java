@@ -158,6 +158,24 @@ class ConsultarRocasHerramientaTest {
                 .contains("Planificar manana ya no es opcional");
     }
 
+    /** D-203: sin Dia 1 elegido {@code rocks} manda la semana 1 sin fechas; antes se leia "(null al null)". */
+    @Test
+    @DisplayName("D-203 semana y progreso: sin Dia 1 elegido no se inventan fechas")
+    void sinDiaUnoNoHayFechas() {
+        when(puerto.deLaSemana(APRENDIZ)).thenReturn(new RocasDeLaSemana(1, null, null, List.of()));
+        when(puerto.cierreDeLaSemanaAnterior(APRENDIZ)).thenReturn(Optional.empty());
+        when(puerto.progresoDeLaSemana(APRENDIZ)).thenReturn(new ProgresoDeLaSemana(1, null, null, HOY, 0, List.of(),
+                "OK", 0, List.of(new BalanceDelEje("CUERPO", 0, 0)), PLAN_PENDIENTE, false));
+
+        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("semana"))))
+                .contains("Objetivos de la semana 1 del programa (todavia sin fechas: no eligio su Dia 1):")
+                .doesNotContain("null");
+        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("progreso"))))
+                .contains("Progreso de la semana 1 del programa (todavia sin fechas: no eligio su Dia 1), hoy es "
+                        + "miercoles 2026-09-23")
+                .doesNotContain("null");
+    }
+
     @Test
     @DisplayName("D-177 noventa: meta con su unidad donde va, punto de partida, lo que lleva y el avance")
     void noventa() {
