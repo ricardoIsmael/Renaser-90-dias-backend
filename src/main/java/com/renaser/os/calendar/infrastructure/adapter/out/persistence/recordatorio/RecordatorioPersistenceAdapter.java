@@ -80,11 +80,6 @@ class RecordatorioPersistenceAdapter implements LoadRecordatorioPort, SaveRecord
     }
 
     @Override
-    public int cancelarPorAsistencia(UserId usuarioId, EventoId eventoId, Instant inicioOcurrencia, String motivo) {
-        return repository.cancelarPorAsistencia(usuarioId.value(), eventoId.value(), inicioOcurrencia, motivo);
-    }
-
-    @Override
     public int cancelarPorOcurrencia(EventoId eventoId, Instant inicioOcurrencia, String motivo) {
         return repository.cancelarPorOcurrencia(eventoId.value(), inicioOcurrencia, motivo);
     }

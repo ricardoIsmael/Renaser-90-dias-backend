@@ -14,6 +14,7 @@ import com.renaser.os.calendar.application.ports.out.recordatorio.LoadRecordator
 import com.renaser.os.calendar.application.ports.out.recordatorio.SaveRecordatorioPort;
 import com.renaser.os.calendar.domain.model.evento.Evento;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
+import com.renaser.os.calendar.domain.model.evento.ReglaRecordatorio;
 import com.renaser.os.calendar.domain.model.evento.TipoAudiencia;
 import com.renaser.os.calendar.domain.model.evento.TipoEvento;
 import com.renaser.os.calendar.domain.model.evento.TipoUbicacion;
@@ -21,6 +22,7 @@ import com.renaser.os.calendar.domain.model.recordatorio.RecordatorioEvento;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -39,6 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -108,6 +111,7 @@ class RecordatorioServiceTest {
         verify(events).publishEvent(captor.capture());
         assertThat(captor.getValue().eventoId()).isEqualTo(eventoId.value());
         assertThat(captor.getValue().destinatarioId()).isEqualTo(usuarioId);
+        assertThat(captor.getValue().confirmoAsistencia()).isFalse();
         verify(saveRecordatorioPort).marcarEnviados(List.of(1L), CLOCK.now());
     }
 
@@ -135,5 +139,83 @@ class RecordatorioServiceTest {
 
         assertThat(creados).isZero();
         verify(saveRecordatorioPort, never()).encolarSiFalta(anyList());
+    }
+
+    /**
+     * Evento creado dias antes del recordatorio. Con {@link #evento} (creado a la misma hora del
+     * reloj, 18:50) un aviso de las 18:50 cuenta como ANUNCIO ({@code esAnuncio}: enviarEn no
+     * posterior a la creacion), y un anuncio nunca se trata como cubierto por el "Voy".
+     */
+    private Evento eventoCreadoDiasAntes() {
+        return Evento.crear(eventoId, "Sesion", null, Instant.parse("2026-09-10T19:00:00Z"), 60,
+                ZoneId.of("America/Lima"), TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS,
+                null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(), usuarioId,
+                FixedClock.at(Instant.parse("2026-09-01T00:00:00Z")));
+    }
+
+    /** Ocurrencia a las 01:00 UTC del 11 = 20:00 del 10 en Lima: la fecha UTC y la local difieren (regla 03). */
+    private static final Instant OCURRENCIA_NOCHE = Instant.parse("2026-09-11T01:00:00Z");
+
+    /**
+     * D-189: antes {@code generar()} dejaba afuera de la cola a quien ya habia dicho "Voy" (y
+     * {@code confirmar()} cancelaba lo ya encolado). Quien respondia desde la web, sin alarma
+     * local, no recibia ningun aviso. Ahora se encola igual; si el telefono lo cubre lo decide
+     * {@code notifications} al entregar. Contra el codigo viejo esta prueba falla: no se encola nada.
+     */
+    @Test
+    @DisplayName("D-189: generar encola los avisos aunque la persona ya haya dicho Voy")
+    void generarEncolaAunqueLaPersonaYaDijoVoy() {
+        Evento evento = Evento.crear(eventoId, "Sesion", null, OCURRENCIA_NOCHE, 60, ZoneId.of("America/Lima"),
+                TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null,
+                TipoEvento.ESPONTANEO, false, false, true, null, Set.of(),
+                List.of(ReglaRecordatorio.minutosAntes(1, 30)), usuarioId, CLOCK);
+        when(loadEventoPort.candidatosParaRecordatorios(any(), any(), any())).thenReturn(List.of(evento));
+        when(audienciaMasivaPort.traineesActivos()).thenReturn(List.of(usuarioId));
+        lenient().when(loadConfirmacionPort.confirmadosAsistencia(any(), anyList()))
+                .thenReturn(Set.of(OCURRENCIA_NOCHE + "|" + usuarioId));
+        when(saveRecordatorioPort.encolarSiFalta(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
+
+        int creados = service.generar(CLOCK.now());
+
+        assertThat(creados).isEqualTo(1);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<RecordatorioEvento>> filas = ArgumentCaptor.forClass(List.class);
+        verify(saveRecordatorioPort).encolarSiFalta(filas.capture());
+        assertThat(filas.getValue()).extracting(RecordatorioEvento::usuarioId).containsExactly(usuarioId);
+    }
+
+    @Test
+    @DisplayName("D-189: al despachar, el evento dice si la persona dijo Voy a esa ocurrencia (leido en ese momento)")
+    void despacharAvisaQueLaPersonaDijoVoy() {
+        RecordatorioEvento recordatorio = RecordatorioEvento.rehydrate(1L, eventoId, Instant.parse("2026-09-10T19:00:00Z"),
+                usuarioId, Instant.parse("2026-09-10T18:50:00Z"), null, null, Instant.parse("2026-09-01T00:00:00Z"));
+        when(loadRecordatorioPort.vencidosPendientes(any(), anyInt())).thenReturn(List.of(recordatorio));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoCreadoDiasAntes()));
+        when(loadConfirmacionPort.confirmadosAsistencia(eventoId, List.of(recordatorio.inicioOcurrencia())))
+                .thenReturn(Set.of(recordatorio.inicioOcurrencia() + "|" + usuarioId));
+
+        service.despachar(CLOCK.now());
+
+        ArgumentCaptor<RecordatorioEventoDebidoEvent> captor = ArgumentCaptor.forClass(RecordatorioEventoDebidoEvent.class);
+        verify(events).publishEvent(captor.capture());
+        assertThat(captor.getValue().confirmoAsistencia()).isTrue();
+        verify(saveRecordatorioPort).marcarEnviados(List.of(1L), CLOCK.now());
+    }
+
+    @Test
+    @DisplayName("D-189: el Voy de OTRA persona no marca el recordatorio de esta")
+    void despacharNoMezclaLaConfirmacionDeOtraPersona() {
+        RecordatorioEvento recordatorio = RecordatorioEvento.rehydrate(1L, eventoId, Instant.parse("2026-09-10T19:00:00Z"),
+                usuarioId, Instant.parse("2026-09-10T18:50:00Z"), null, null, Instant.parse("2026-09-01T00:00:00Z"));
+        when(loadRecordatorioPort.vencidosPendientes(any(), anyInt())).thenReturn(List.of(recordatorio));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoCreadoDiasAntes()));
+        when(loadConfirmacionPort.confirmadosAsistencia(any(), anyList()))
+                .thenReturn(Set.of(recordatorio.inicioOcurrencia() + "|" + UUID.randomUUID()));
+
+        service.despachar(CLOCK.now());
+
+        ArgumentCaptor<RecordatorioEventoDebidoEvent> captor = ArgumentCaptor.forClass(RecordatorioEventoDebidoEvent.class);
+        verify(events).publishEvent(captor.capture());
+        assertThat(captor.getValue().confirmoAsistencia()).isFalse();
     }
 }

@@ -131,24 +131,17 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase, Despach
             return creados;
         }
 
-        Set<String> confirmados = loadConfirmacionPort.confirmadosAsistencia(evento.id(),
-                ocurrencias.stream().map(Ocurrencia::inicioOcurrencia).toList());
-
+        // D-189: ya NO se deja afuera a quien dijo "Voy". Si su alarma local lo cubre lo decide
+        // `notifications` al entregar (solo si tiene un telefono registrado); quien respondio desde
+        // la web no tiene alarma local y necesita estos avisos.
         for (Ocurrencia occ : ocurrencias) {
             List<InstanteRecordatorio> instantes = CalculadoraRecordatorios.instantesPara(occ.inicioOcurrencia(),
                     reglas, evento.timezone(), ahora);
             if (instantes.isEmpty()) {
                 continue;
             }
-            String claveOcurrencia = occ.inicioOcurrencia().toString();
-            List<UserId> pendientes = usuarios.stream()
-                    .filter(u -> !confirmados.contains(claveOcurrencia + "|" + u))
-                    .toList();
-            if (pendientes.isEmpty()) {
-                continue;
-            }
             List<RecordatorioEvento> filas = new ArrayList<>();
-            for (UserId u : pendientes) {
+            for (UserId u : usuarios) {
                 for (InstanteRecordatorio instante : instantes) {
                     filas.add(RecordatorioEvento.programar(evento.id(), instante.inicioOcurrencia(), u,
                             instante.enviarEn(), clock));
@@ -261,6 +254,7 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase, Despach
             return 0;
         }
 
+        AsistenciasConfirmadasDelLote asistencias = AsistenciasConfirmadasDelLote.de(pendientes, loadConfirmacionPort);
         List<Long> despachadosIds = new ArrayList<>();
         for (RecordatorioEvento recordatorio : pendientes) {
             var eventoOpt = loadEventoPort.byId(recordatorio.eventoId());
@@ -275,9 +269,10 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase, Despach
             }
 
             boolean esAnuncio = recordatorio.esAnuncio(evento.creadoEn());
+            boolean asistenciaConfirmada = !esAnuncio && asistencias.incluye(recordatorio);
             events.publishEvent(new RecordatorioEventoDebidoEvent(recordatorio.id(), evento.id().value(),
                     recordatorio.usuarioId(), recordatorio.inicioOcurrencia(), evento.titulo(), esAnuncio,
-                    evento.timezone().getId(), ahora));
+                    asistenciaConfirmada, evento.timezone().getId(), ahora));
             despachadosIds.add(recordatorio.id());
         }
 
@@ -288,4 +283,5 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase, Despach
                 despachadosIds.size(), pendientes.size());
         return despachadosIds.size();
     }
+
 }

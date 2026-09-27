@@ -81,20 +81,6 @@ class RecordatorioPersistenceAdapterTest {
     }
 
     @Test
-    void cancelarPorAsistenciaSoloAlcanzaAEsaPersonaEnEsaOcurrencia() {
-        EventoId eventoId = crearEvento();
-        UserId confirmo = crearUsuario();
-        UserId otro = crearUsuario();
-        adapter.encolarSiFalta(List.of(aviso(eventoId, confirmo, VENCIDO), aviso(eventoId, otro, VENCIDO)));
-
-        int cancelados = adapter.cancelarPorAsistencia(confirmo, eventoId, INICIA_EN,
-                RecordatorioEvento.MOTIVO_ASISTIRA);
-
-        assertThat(cancelados).isEqualTo(1);
-        assertThat(colaDe(eventoId, AHORA)).extracting(RecordatorioEvento::usuarioId).containsExactly(otro);
-    }
-
-    @Test
     void cancelarPorOcurrenciaAlcanzaATodosLosAvisosDeEsaOcurrencia() {
         EventoId eventoId = crearEvento();
         adapter.encolarSiFalta(List.of(aviso(eventoId, crearUsuario(), VENCIDO),

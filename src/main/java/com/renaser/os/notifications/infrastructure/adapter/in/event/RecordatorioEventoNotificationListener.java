@@ -1,6 +1,7 @@
 package com.renaser.os.notifications.infrastructure.adapter.in.event;
 
 import com.renaser.os.calendar.api.RecordatorioEventoDebidoEvent;
+import com.renaser.os.notifications.application.ports.in.alarmalocal.ConsultarAlarmaLocalUseCase;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase.EmitirNotificacionCommand;
 import com.renaser.os.notifications.domain.model.evento.AvisoDeEvento;
@@ -32,6 +33,12 @@ import java.time.ZoneId;
  * <p><b>Preferencias y cuentas suspendidas</b> no se deciden aca: {@code NotificacionService.emitir}
  * no crea la fila si la persona apago {@code RECORDATORIO_EVENTO}, y no empuja al telefono de una
  * cuenta sin acceso vigente (E-38).
+ *
+ * <p><b>"Voy" y alarma local (D-189).</b> Quien respondio "Voy" desde la app del telefono tiene
+ * una alarma local para esa ocurrencia, y un aviso del servidor encima seria doble. Pero la web no
+ * programa nada: hasta el 2026-09-26 {@code calendar} apagaba los avisos al confirmar y quien
+ * respondia desde el navegador se quedaba sin ninguno. Ahora el aviso se descarta aca, solo si la
+ * persona dijo "Voy" Y tiene al menos un token de Android/iOS en este momento.
  */
 @Component
 class RecordatorioEventoNotificationListener {
@@ -39,10 +46,13 @@ class RecordatorioEventoNotificationListener {
     private static final Logger log = LoggerFactory.getLogger(RecordatorioEventoNotificationListener.class);
 
     private final EmitirNotificacionUseCase emitirNotificacionUseCase;
+    private final ConsultarAlarmaLocalUseCase alarmaLocal;
     private final Clock clock;
 
-    RecordatorioEventoNotificationListener(EmitirNotificacionUseCase emitirNotificacionUseCase, Clock clock) {
+    RecordatorioEventoNotificationListener(EmitirNotificacionUseCase emitirNotificacionUseCase,
+                                           ConsultarAlarmaLocalUseCase alarmaLocal, Clock clock) {
         this.emitirNotificacionUseCase = emitirNotificacionUseCase;
+        this.alarmaLocal = alarmaLocal;
         this.clock = clock;
     }
 
@@ -54,6 +64,12 @@ class RecordatorioEventoNotificationListener {
         if (aviso.yaNoSirve(ahora)) {
             log.info("[notifications.RecordatorioEventoNotificationListener] recordatorio {} descartado: "
                     + "la ocurrencia del {} ya empezo", event.recordatorioId(), event.inicioOcurrencia());
+            return;
+        }
+        if (event.confirmoAsistencia() && alarmaLocal.tieneAlarmaLocal(event.destinatarioId())) {
+            log.info("[notifications.RecordatorioEventoNotificationListener] recordatorio {} no se envia: "
+                    + "{} dijo \"Voy\" y su telefono tiene la alarma local", event.recordatorioId(),
+                    event.destinatarioId());
             return;
         }
         emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(event.destinatarioId(),

@@ -40,13 +40,6 @@ interface SpringDataRecordatorioRepository extends JpaRepository<RecordatorioEve
 
     @Modifying(clearAutomatically = true)
     @Query("UPDATE RecordatorioEventoJpaEntity r SET r.motivoCancelacion = :motivo "
-            + "WHERE r.usuarioId = :usuarioId AND r.eventoId = :eventoId AND r.inicioOcurrencia = :inicioOcurrencia "
-            + "AND r.enviadoEn IS NULL AND r.motivoCancelacion IS NULL")
-    int cancelarPorAsistencia(@Param("usuarioId") UUID usuarioId, @Param("eventoId") UUID eventoId,
-                               @Param("inicioOcurrencia") Instant inicioOcurrencia, @Param("motivo") String motivo);
-
-    @Modifying(clearAutomatically = true)
-    @Query("UPDATE RecordatorioEventoJpaEntity r SET r.motivoCancelacion = :motivo "
             + "WHERE r.eventoId = :eventoId AND r.inicioOcurrencia = :inicioOcurrencia "
             + "AND r.enviadoEn IS NULL AND r.motivoCancelacion IS NULL")
     int cancelarPorOcurrencia(@Param("eventoId") UUID eventoId, @Param("inicioOcurrencia") Instant inicioOcurrencia,
