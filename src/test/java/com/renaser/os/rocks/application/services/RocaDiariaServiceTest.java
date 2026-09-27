@@ -47,9 +47,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -229,27 +232,147 @@ class RocaDiariaServiceTest {
         verify(saveRocaDiariaPort, never()).saveAll(any());
     }
 
+    /* ------------------------------------------------------------------------------------------
+     * E-340: EL DOMINGO SE PLANIFICA EL LUNES
+     *
+     * Portadas del arreglo de produccion (b3d172b8) a la estructura de D-203. Fixture coherente, en
+     * Lima: Dia 1 el lunes 2026-09-07, asi que el domingo 27 es el dia 21 y cierra la semana 3, y el
+     * lunes 28 abre la semana 4. El reloj va en horas UTC que caen en el dia local ANTERIOR (regla 02,
+     * E-91): el lunes 03:00 UTC es el domingo 22:00 en Lima. Con el reloj a una hora que cae el mismo dia
+     * en UTC y en Lima, estas pruebas no distinguirian la zona.
+     *
+     * > Reemplazan a la version de semanas-lunes (2379358e) de elDomingoALaNocheSePlanificaElLunes, que usaba
+     * > ZoneOffset.UTC con el reloj a las 20:05 del domingo: esa hora cae el mismo dia en las dos fechas y
+     * > la prueba no distinguia la zona.
+     * ---------------------------------------------------------------------------------------- */
+
+    private static final ZoneId LIMA = ZoneId.of("America/Lima");
+    private static final LocalDate DIA_UNO_LUNES = LocalDate.of(2026, 9, 7);
+    private static final LocalDate DOMINGO = LocalDate.of(2026, 9, 27);
+    private static final LocalDate LUNES = LocalDate.of(2026, 9, 28);
+    /** Domingo 27, 22:00 en Lima: la ventana nocturna esta abierta. */
+    private static final FixedClock DOMINGO_22_EN_LIMA = FixedClock.at(Instant.parse("2026-09-28T03:00:00Z"));
+    /** Domingo 27, 10:00 en Lima: la ventana nocturna todavia no abrio. */
+    private static final FixedClock DOMINGO_10_EN_LIMA = FixedClock.at(Instant.parse("2026-09-27T15:00:00Z"));
+
+    private RocaDiariaService conReloj(FixedClock reloj) {
+        return new RocaDiariaService(loadRocaMaestraPort, loadRocaSemanalPort, loadRocaDiariaPort,
+                saveRocaDiariaPort, registrarEvidenciaPort, progresoPort, almacenamientoPort, ajustarPuntosPort,
+                publicarEnMuroPort, events, reloj, idGenerator);
+    }
+
     /**
-     * E-340: el domingo 30 a las 20:05 (la ventana nocturna abierta) se arma el lunes 31, que ya es la semana
-     * que empieza. En produccion daba {@code INVALID_DATE: la fecha de planificacion debe estar entre
-     * 2026-08-31 y 2026-08-30}. El lunes cuelga del objetivo de SU semana (la 5).
+     * Aprendiz en Lima con su Dia 1 elegido y sin ajuste: el dia de programa sale de las fechas, como lo
+     * deriva {@code users}, y desde el dia 90 viaja tambien la fecha del dia 90, como la trae el adaptador
+     * (D-203).
+     */
+    private void enLima(LocalDate diaUno, LocalDate hoy) {
+        int diaDeHoy = (int) ChronoUnit.DAYS.between(diaUno, hoy) + 1;
+        LocalDate diaNoventa = diaDeHoy >= 90 ? diaUno.plusDays(89) : null;
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(new ProgresoParticipanteRocks(diaDeHoy,
+                diaUno, LIMA, RolParticipante.TRAINEE, false, true, diaNoventa)));
+        when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(tresMaestrasParaDiaria());
+        lenient().when(saveRocaDiariaPort.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
+    }
+
+    /** Solo esas semanas tienen objetivo: un plan que buscara el de otra semana daria NO_WEEKLY_ROCK. */
+    private void conObjetivoEnLasSemanas(Integer... semanas) {
+        Set<Integer> conObjetivo = Set.of(semanas);
+        lenient().when(loadRocaSemanalPort.deMaestraYSemana(any(), anyInt())).thenAnswer(inv -> {
+            int numeroSemana = inv.getArgument(1);
+            return conObjetivo.contains(numeroSemana)
+                    ? Optional.of(RocaSemanal.planificar(RocaSemanalId.of(UUID.randomUUID()), inv.getArgument(0),
+                            numeroSemana, "objetivo", null, null, null, CLOCK))
+                    : Optional.empty();
+        });
+    }
+
+    private CrearPlanDiarioCommand planPara(LocalDate fecha) {
+        return new CrearPlanDiarioCommand(actorId, fecha, List.of(itemDiario(EjeObjetivo.CUERPO, 1)));
+    }
+
+    /**
+     * E-340: en produccion ({@code 7429a09c}) daba {@code INVALID_DATE: la fecha de planificacion debe estar
+     * entre 2026-09-28 y 2026-09-27}: la ventana iba de manana al fin de la semana de hoy, y el domingo manana
+     * ya es la semana siguiente.
      */
     @Test
-    @DisplayName("E-340: el domingo a la noche se planifica el lunes, con el objetivo de la semana que empieza")
+    @DisplayName("E-340: el domingo 22:00 en Lima (lunes 03:00 UTC) se planifica el lunes, con el objetivo de SU semana")
     void elDomingoALaNocheSePlanificaElLunes() {
-        FixedClock domingoALaNoche = FixedClock.at(Instant.parse("2026-08-30T20:05:00Z"));
-        RocaDiariaService elDomingo = new RocaDiariaService(loadRocaMaestraPort, loadRocaSemanalPort, loadRocaDiariaPort,
-                saveRocaDiariaPort, registrarEvidenciaPort, progresoPort, almacenamientoPort, ajustarPuntosPort,
-                publicarEnMuroPort, events, domingoALaNoche, idGenerator);
-        conPlanDiarioPosible();
-        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(new ProgresoParticipanteRocks(28, INICIO,
-                ZoneOffset.UTC, RolParticipante.TRAINEE, false, true)));
+        enLima(DIA_UNO_LUNES, DOMINGO);
+        conObjetivoEnLasSemanas(4);
 
-        List<RocaDiaria> creadas = elDomingo.crear(new CrearPlanDiarioCommand(actorId, LocalDate.of(2026, 8, 31),
-                List.of(itemDiario(EjeObjetivo.CUERPO, 1))));
+        List<RocaDiaria> creadas = conReloj(DOMINGO_22_EN_LIMA).crear(planPara(LUNES));
 
-        assertThat(creadas).singleElement().satisfies(roca -> assertThat(roca.fecha()).isEqualTo(LocalDate.of(2026, 8, 31)));
-        verify(loadRocaSemanalPort).deMaestraYSemana(any(), eq(5));
+        assertThat(creadas).singleElement().satisfies(roca -> assertThat(roca.fecha()).isEqualTo(LUNES));
+        verify(loadRocaSemanalPort).deMaestraYSemana(any(), eq(4));
+    }
+
+    @Test
+    @DisplayName("E-340: el lunes cuelga del objetivo de la semana que empieza; si no existe, NO_WEEKLY_ROCK")
+    void elLunesSinElObjetivoDeSuSemanaNoSeGuarda() {
+        enLima(DIA_UNO_LUNES, DOMINGO);
+        conObjetivoEnLasSemanas(3);
+
+        assertThatThrownBy(() -> conReloj(DOMINGO_22_EN_LIMA).crear(planPara(LUNES)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageStartingWith("NO_WEEKLY_ROCK");
+        verify(saveRocaDiariaPort, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("E-340: el domingo 10:00 en Lima (ventana cerrada) entran hoy y el lunes, como antes de E-208")
+    void elDomingoALaMananaHoyYElLunes() {
+        enLima(DIA_UNO_LUNES, DOMINGO);
+        conObjetivoEnLasSemanas(3, 4);
+        RocaDiariaService elDomingoALaManana = conReloj(DOMINGO_10_EN_LIMA);
+
+        assertThatCode(() -> elDomingoALaManana.crear(planPara(LUNES))).doesNotThrowAnyException();
+        assertThatCode(() -> elDomingoALaManana.crear(planPara(DOMINGO))).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("E-340: el domingo el martes sigue fuera, con la ventana abierta o cerrada: solo se suma manana")
+    void elDomingoElMartesSigueFuera() {
+        enLima(DIA_UNO_LUNES, DOMINGO);
+        LocalDate martes = LUNES.plusDays(1);
+
+        assertThatThrownBy(() -> conReloj(DOMINGO_22_EN_LIMA).crear(planPara(martes)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageStartingWith("INVALID_DATE");
+        assertThatThrownBy(() -> conReloj(DOMINGO_10_EN_LIMA).crear(planPara(martes)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageStartingWith("INVALID_DATE");
+    }
+
+    @Test
+    @DisplayName("E-340: un dia de semana no cambia: el miercoles 22:00 en Lima, de manana al domingo y nada mas")
+    void unDiaDeSemanaNoCambia() {
+        LocalDate miercoles = LocalDate.of(2026, 9, 23);
+        enLima(DIA_UNO_LUNES, miercoles);
+        conObjetivoEnLasSemanas(3, 4);
+        RocaDiariaService elMiercolesALaNoche = conReloj(FixedClock.at(Instant.parse("2026-09-24T03:00:00Z")));
+        String fueraDeLaVentana = "INVALID_DATE: la fecha de planificacion debe estar entre 2026-09-24 y 2026-09-27";
+
+        assertThatCode(() -> elMiercolesALaNoche.crear(planPara(miercoles.plusDays(1)))).doesNotThrowAnyException();
+        assertThatCode(() -> elMiercolesALaNoche.crear(planPara(DOMINGO))).doesNotThrowAnyException();
+        assertThatThrownBy(() -> elMiercolesALaNoche.crear(planPara(miercoles))).hasMessage(fueraDeLaVentana);
+        assertThatThrownBy(() -> elMiercolesALaNoche.crear(planPara(LUNES))).hasMessage(fueraDeLaVentana);
+    }
+
+    /**
+     * El lunes entra solo si todavia es un dia del programa. Dia 1 el martes 2026-07-07: el dia 90 es el
+     * domingo 2026-10-04 y el lunes 5 ya no es del programa. Lo rechaza la ventana, antes de buscar un
+     * objetivo semanal.
+     */
+    @Test
+    @DisplayName("E-340: el domingo del dia 90 no abre el lunes: ya no es un dia del programa")
+    void elDomingoDelDiaNoventaNoAbreElLunes() {
+        LocalDate diaNoventa = LocalDate.of(2026, 10, 4);
+        enLima(LocalDate.of(2026, 7, 7), diaNoventa);
+
+        assertThatThrownBy(() -> conReloj(FixedClock.at(Instant.parse("2026-10-05T03:00:00Z")))
+                .crear(planPara(diaNoventa.plusDays(1))))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageStartingWith("INVALID_DATE");
+        verify(loadRocaSemanalPort, never()).deMaestraYSemana(any(), anyInt());
     }
 
     @Test

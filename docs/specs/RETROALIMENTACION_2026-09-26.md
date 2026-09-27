@@ -122,7 +122,9 @@ ve "1 necesita tu ayuda" en Hoy.
 | A-5 | Hecho y verificado | «Asignar mentor» pide confirmación (D-187) |
 | Agregado: «Cambiar día» | Hecho y verificado | Administración adelanta o retrocede el día de un aprendiz desde su ficha: días 1 a 89 (D-194), 409 antes del Día 1 (D-195), los hábitos del Plan que ya venía haciendo siguen (D-196), el barrido no pisa el ajuste (D-197) y los hábitos de hoy no se rehacen (D-198). Pruebas + e2e por API y en emulador (frontend 0b6fffa a a3eeac8) |
 | Retroceder con hábitos propios o con horario | En curso (D-200) | El dueño decidió el 27/09 que, si ya venían corriendo, se mantienen activos (§9.20) |
-| Semanas de rocas | En curso (D-203) | Con «Cambiar día» pasaron a contarse por día del programa (D-192); el dueño eligió volver a lunes a domingo para todos, sin «semana 14» (§12, pregunta 1) |
+| Semanas de rocas | Hecho y verificado con pruebas (D-203) | Semanas de lunes a domingo para todos, contadas desde la semana del primer día efectivo (siguen al ajuste de día); la 13 suma los días de la que sería la 14 y termina el día 90; el plan semanal del domingo prepara la semana que empieza el lunes; sin Día 1 elegido, la semana 1 va sin fechas. Sin ajuste, cada fecha cae en la misma semana que en producción (§12, pregunta 1). En `integracion-27`, sin subir |
+
+> **Corregido 2026-09-27.** La fila «Semanas de rocas» decía: «En curso (D-203) | Con «Cambiar día» pasaron a contarse por día del programa (D-192); el dueño eligió volver a lunes a domingo para todos, sin «semana 14» (§12, pregunta 1)».
 
 ## 4. Eventos, recordatorios, notificaciones y calendario
 
@@ -279,8 +281,11 @@ los interruptores de "Notificaciones & Alarmas" en Yo **no guardan nada**.
     nunca en la 14) y seguía al día cuando se lo ajustaba.
     > **Corregido 2026-09-27 (D-203).** El 27/09 el dueño eligió volver a semanas de lunes a domingo para todos: el
     > domingo cierra la semana de todos, como dice el documento del programa, y la «semana 14» se sigue evitando
-    > sumando los últimos días a la semana 13 (§12, pregunta 1). Lo implementa D-203 (en curso); hasta que entre, el
-    > código de `evidencia-foto` sigue contando por día del programa.
+    > sumando los últimos días a la semana 13 (§12, pregunta 1). Lo implementó D-203: hecho y verificado con pruebas,
+    > en `integracion-27` (sin subir).
+    >
+    > **Corregido 2026-09-27.** La última frase decía: «Lo implementa D-203 (en curso); hasta que entre, el código de
+    > `evidencia-foto` sigue contando por día del programa».
 14. **Pacto saltado por un ajuste (D-193):** queda pendiente y se firma después. El 27/09 el dueño lo confirmó también
     para quien no lo firmó a tiempo (§12, pregunta 2).
 15. **«Cambiar día» acepta solo los días 1 a 89 (D-194).** Graduar no se hace por ahí.
@@ -304,7 +309,9 @@ los interruptores de "Notificaciones & Alarmas" en Yo **no guardan nada**.
 25. **Fecha de inicio guardada en UTC y latidos del chat en vivo:** en curso (D-201 y D-202).
 26. **Costo del acompañante:** la reducción de herramientas queda pendiente; sin crédito de Gemini no se puede
     verificar.
-27. **Domingo Ritual: opción A**, semanas de lunes a domingo para todos (D-203, en curso). Ver §12, pregunta 1.
+27. **Domingo Ritual: opción A**, semanas de lunes a domingo para todos (D-203, hecho y verificado con pruebas, en
+    `integracion-27`). Ver §12, pregunta 1.
+    > **Corregido 2026-09-27.** Decía «(D-203, en curso)».
 28. **Pacto atrasado: queda como está** (confirma D-193). Ver §12, pregunta 2.
 29. **Bienvenida del grupo: sale del programa**, con un texto amigable y el mismo interruptor (D-204, en curso). Ver
     §12, pregunta 3.
@@ -382,7 +389,8 @@ propio creado después del día destino al retroceder; orden de la lista de chat
 > - «(390e465 + chat)»: el arreglo del chat en vivo (044159f) ya está dentro de 390e465. «Sin subir» quiere decir sin
 >   subir a producción: las ramas `evidencia-foto` sí están en GitHub (backend 7e63e8dd, frontend 390e465).
 > - «semanas de rocas por día del programa»: el 27/09 el dueño eligió volver a semanas de lunes a domingo para todos,
->   sin «semana 14» (D-203, en curso; §12, pregunta 1).
+>   sin «semana 14» (D-203, hecho y verificado con pruebas, en `integracion-27`; §12, pregunta 1).
+>   > **Corregido 2026-09-27.** Decía «(D-203, en curso; §12, pregunta 1)».
 > - «bienvenida del mentor en el grupo (D-191, V71)»: pasa a salir del programa (D-204, en curso; §12, pregunta 3).
 > - «cuenta de Kelin como remitente»: ya no se pide; la bienvenida del soporte sale del programa (D-199, en curso).
 >   Siguen pendientes del dueño los textos oficiales, que se aprueban antes de prender `BIENVENIDA_ACTIVA`.
@@ -402,7 +410,8 @@ Estas eran las preguntas abiertas («Por decidir»). Quedan escritas como se hic
   día de inicio y mover el ritual de cada persona al último día de SU semana.
 - *Decidió:* **opción A.** Semanas de lunes a domingo para todos: el domingo cierra la semana de todos, como dice el
   documento del programa, y los últimos días del programa se suman a la semana 13, así que no hay «semana 14». Corrige
-  D-192; lo implementa D-203 (en curso).
+  D-192; lo implementó D-203 (hecho y verificado con pruebas, en `integracion-27`).
+  > **Corregido 2026-09-27.** Decía «lo implementa D-203 (en curso)».
 
 **2. Pacto atrasado.**
 
