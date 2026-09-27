@@ -9753,3 +9753,55 @@ el directorio del proyecto como directorio de trabajo), con un comentario que ex
 **Cómo evitar que vuelva a pasar.** Una prueba que verifica la configuración que va a producción lee el archivo de
 `src/main/resources` del disco, nunca por nombre del classpath. Y toda prueba de «esta clave NO está» va acompañada de una
 de «esta otra SÍ está» del mismo archivo, para que un archivo equivocado (o vacío) no la haga pasar sola.
+
+## E-319 · La bitácora del ajuste de día anotaba como «día anterior» el de ayer (`expected: 26 but was: 25`)
+
+**Síntoma.** Revisando los riesgos de exponer `PUT /api/v1/admin/trainees/{id}/program-day` en la app (2026-09-26): con el
+reloj a las 00:03 de Lima (05:03 UTC), un aprendiz en su día 26 —el que muestra `GET /api/v1/admin/trainees/{id}`, porque la
+lectura deriva— movido al 30 quedaba en `ajustes_dia_programa` como `dia_anterior = 25`. La prueba nueva, contra el código
+viejo: `ParticipacionProgramaServiceTest.laBitacoraAnotaElDiaQueElAprendizEstaViviendoAunqueElBarridoNoLoHayaMaterializado`
+→ `expected: 26` / `but was: 25`.
+
+**Causa real.** `ParticipacionProgramaService.fijarDia` tomaba `diaAnterior` de `participacion.diaPrograma()`, la columna
+materializada, que solo escribe el barrido del reloj en el minuto :05 de cada hora. Entre la medianoche local y ese
+barrido —o durante cualquier caída del backend— la columna sigue en el día de ayer, mientras todo lo que se lee (panel,
+Inicio, hábitos) ya deriva el de hoy. El `dias_ajuste` que se guardaba sí era correcto (sale de las fechas); lo que
+mentía era el registro de «desde qué día se movió».
+
+**Solución.** Método de dominio `ParticipacionPrograma.diaVigente(Clock)`: el derivado de las fechas en la zona del
+participante si su reloj ya arrancó, y si no, lo guardado (el mismo criterio que `diaVigente` de la proyección de lectura).
+`fijarDia` del servicio lo usa para `diaAnterior`. Pruebas: la de arriba (falla con el código viejo, verificado revirtiendo
+la línea) y `laBitacoraUsaElDiaDeLaZonaDelAprendizNoLaFechaDelServidor` (04:30 UTC, que en Lima todavía es el día anterior,
+regla 03), más dos de dominio (`diaVigenteEsElDerivadoAunqueElBarridoNoHayaCorrido`, `diaVigenteAntesDelDiaUnoEsElGuardado`).
+
+**Cómo evitar que vuelva a pasar.** Es la misma lección de A-1 y E-91 por otra puerta: la columna `dia_programa` es un
+caché para quien no conoce la zona, no la verdad. **Nada que muestre o registre «el día de hoy» de alguien lee la columna
+directamente**: se deriva con `diaProgramaDerivado`/`diaVigente`. Todo test de algo que dependa del día lleva un caso entre
+la medianoche local y el barrido de las :05.
+
+**Riesgos del mismo análisis que quedaron como preguntas (no son este error, no se tocaron):** ver
+`docs/PROPUESTA_AJUSTE_DIAS_PROGRAMA.md` §4.1 — hábitos con `dia_desbloqueo` posterior al día destino que dejan de generarse
+al retroceder; rocas que cuentan semanas desde `fecha_inicio` sin el ajuste (semana 14 al retroceder); pacto de fase
+salteado al adelantar; ajuste antes del Día 1 que no sobrevive; fijar 90 por error gradúa en el barrido siguiente.
+
+## E-320 · SIN RESOLVER — Rocas: el final del programa cae en la «semana 14», que `RocaSemanal` rechaza (`numeroSemana debe estar entre 1 y 13: 14`)
+
+**Síntoma (por lectura de código y prueba de caracterización, no visto todavía en producción).** Crear el plan semanal de
+las últimas semanas falla con `IllegalArgumentException: numeroSemana debe estar entre 1 y 13: 14` (400), y sin roca
+semanal las acciones diarias caen en `NO_WEEKLY_ROCK`. Pruebas:
+`SemanaProgramaTest.caracterizacionInicioEnMiercolesTerminaEnLaSemanaCatorce` y
+`caracterizacionRetrocederLlevaElFinalDelProgramaALaSemanaCatorce`.
+
+**Causa real.** `SemanaPrograma` cuenta semanas lunes-domingo con una semana 1 corta desde `fecha_inicio`, y el límite
+1..13 (dominio + `CHECK` de V1) solo alcanza si la semana 1 tiene 6 o 7 días. **Sin ningún ajuste**, un inicio en
+miércoles, jueves, viernes, sábado o domingo deja los últimos 1-5 días del programa en la semana 14 (lunes y martes caben).
+Y como rocks cuenta desde `fecha_inicio` **sin** `dias_ajuste_programa` (la proyección `users.api.ParticipacionPrograma`
+no lo expone), retroceder a un aprendiz lo empuja todavía más allá: con inicio lunes, retroceder 2 días o más ya basta, y
+`finDelPrograma(fechaInicio)` deja la grilla vacía mientras el aprendiz sigue en su día 8x.
+
+**Solución.** Pendiente: exige decidir (dueño) si las semanas de rocas siguen el calendario desde `fecha_inicio` o el día
+del programa con el ajuste, y qué hacer con los `numero_semana` ya guardados. No se tocó código.
+
+**Cómo evitar que vuelva a pasar.** Cualquier cuenta de semanas o de fin del programa sale de
+`ParticipacionPrograma.primeraFechaDelPrograma()`/`ultimaFechaDelPrograma()` (que ya incluyen el ajuste), nunca de
+`fecha_inicio + 89` copiado en otro módulo — es la misma lección que la columna generada de V22.

@@ -271,6 +271,24 @@ public final class ParticipacionPrograma {
     }
 
     /**
+     * El dia que el participante esta viviendo AHORA, aunque el barrido todavia no lo haya
+     * materializado: el derivado de las fechas si su reloj ya arranco, y si no, el guardado
+     * (mismo criterio que la proyeccion de lectura, {@code ConsultarResumenParticipacion...}).
+     *
+     * <p>Existe por E-319: la bitacora de {@link #fijarDia} anotaba como "dia anterior" la
+     * columna {@link #diaPrograma}, que entre la medianoche local y el barrido de las :05 (o
+     * durante una caida del backend) sigue en el dia de AYER — el panel mostraba 26, el admin
+     * lo movia, y la bitacora decia que lo habia movido desde el 25.
+     */
+    public int diaVigente(Clock clock) {
+        LocalDate hoy = hoyEnMiZona(clock);
+        if (!estaActivado() || fechaInicio.isAfter(hoy)) {
+            return diaPrograma;
+        }
+        return diaProgramaDerivado(hoy);
+    }
+
+    /**
      * Ajuste operativo de un ADMIN/ALCHEMIST (panel admin de aprendices, gap #7 de
      * docs/PLAN_INTEGRACION_FRONTEND.md): "este aprendiz viajo dos semanas, devolvelo al
      * dia 34". El limite [0, 90] es la misma invariante de siempre.

@@ -362,6 +362,76 @@ class ParticipacionProgramaServiceTest {
         assertThat(ajuste.motivo()).isEqualTo("Viaje, aviso al volver");
     }
 
+    /**
+     * E-319. A las 00:03 de Lima (05:03 UTC) el barrido del reloj (minuto :05) todavia no
+     * materializo el dia de hoy: la columna dice 25 y el aprendiz vive su dia 26 — que es lo que
+     * el panel muestra, porque la lectura deriva. La bitacora tiene que decir "de 26 a 30", no
+     * "de 25 a 30". Contra el codigo viejo esta prueba falla con {@code expected: 26 but was: 25}.
+     */
+    @Test
+    void laBitacoraAnotaElDiaQueElAprendizEstaViviendoAunqueElBarridoNoLoHayaMaterializado() {
+        FixedClock pasadaLaMedianocheDeLima = FixedClock.at(Instant.parse("2026-09-26T05:03:00Z"));
+        var servicio = servicioCon(pasadaLaMedianocheDeLima);
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        var materializadaAyer = ParticipacionPrograma.rehydrate(traineeId, null, null, 25,
+                com.renaser.os.users.api.FasePrograma.paraDiaPrograma(25), java.time.LocalDate.of(2026, 9, 1),
+                Instant.parse("2026-08-31T15:00:00Z"), java.time.ZoneId.of("America/Lima"), false, 0,
+                Instant.parse("2026-08-31T15:00:00Z"), Instant.parse("2026-09-25T05:05:00Z"), null, null, null,
+                java.time.LocalDate.of(2026, 9, 25), 0);
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId)).thenReturn(Optional.of(materializadaAyer));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN,
+                UserStatus.ACTIVE)));
+        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        servicio.fijarDia(new SetProgramDayCommand(actorId, traineeId, 30, "Se adelanta"));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.renaser.os.users.domain.model.ajustediaprograma.AjusteDiaPrograma.class);
+        verify(saveAjusteDiaProgramaPort).save(captor.capture());
+        assertThat(captor.getValue().diaAnterior()).isEqualTo(26);
+        assertThat(captor.getValue().diaNuevo()).isEqualTo(30);
+        assertThat(captor.getValue().diasAjusteNuevo()).isEqualTo(-4);
+    }
+
+    /**
+     * La otra cara de E-319, con el reloj en la hora que esconde los bugs de zona (regla 03): a
+     * las 04:30 UTC del 27 en Lima todavia es el 26. El dia anterior es 26 (el de Lima), no 27
+     * (el que daria la fecha UTC del servidor).
+     */
+    @Test
+    void laBitacoraUsaElDiaDeLaZonaDelAprendizNoLaFechaDelServidor() {
+        FixedClock nocheDelVeintiseisEnLima = FixedClock.at(Instant.parse("2026-09-27T04:30:00Z"));
+        var servicio = servicioCon(nocheDelVeintiseisEnLima);
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        var participacion = ParticipacionPrograma.rehydrate(traineeId, null, null, 26,
+                com.renaser.os.users.api.FasePrograma.paraDiaPrograma(26), java.time.LocalDate.of(2026, 9, 1),
+                Instant.parse("2026-08-31T15:00:00Z"), java.time.ZoneId.of("America/Lima"), false, 0,
+                Instant.parse("2026-08-31T15:00:00Z"), Instant.parse("2026-09-26T05:05:00Z"), null, null, null,
+                java.time.LocalDate.of(2026, 9, 26), 0);
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId)).thenReturn(Optional.of(participacion));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN,
+                UserStatus.ACTIVE)));
+        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        servicio.fijarDia(new SetProgramDayCommand(actorId, traineeId, 20, "Viaje"));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.renaser.os.users.domain.model.ajustediaprograma.AjusteDiaPrograma.class);
+        verify(saveAjusteDiaProgramaPort).save(captor.capture());
+        assertThat(captor.getValue().diaAnterior()).isEqualTo(26);
+        assertThat(captor.getValue().diasAjusteNuevo()).isEqualTo(6);
+    }
+
+    private ParticipacionProgramaService servicioCon(FixedClock reloj) {
+        return new ParticipacionProgramaService(new RequireActiveUserGuard(loadUserPort),
+                loadParticipacionProgramaPort, saveParticipacionProgramaPort, deleteParticipacionProgramaPort,
+                consultarResumenParticipacionPort, loadMentorProfilePort, loadUserPort,
+                new RequireAdminGuard(loadUserPort), saveAjusteDiaProgramaPort, loadUltimoAjusteDiaProgramaPort,
+                UUID::randomUUID, reloj);
+    }
+
     /** Un ajuste rechazado no puede dejar rastro en la bitacora. */
     @Test
     void fijarDiaRechazadoNoEscribeEnLaBitacora() {
