@@ -126,8 +126,8 @@ class AcompanamientoEnMemoria {
         }
 
         @Override
-        public Optional<Celula> porMentor(UserId mentorId) {
-            return celulas.values().stream().filter(c -> mentorId.equals(c.mentorId())).findFirst();
+        public List<Celula> porMentor(UserId mentorId) {
+            return celulas.values().stream().filter(c -> mentorId.equals(c.mentorId())).toList();
         }
     };
 

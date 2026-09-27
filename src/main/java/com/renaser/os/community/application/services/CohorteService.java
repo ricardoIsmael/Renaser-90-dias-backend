@@ -26,7 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Optional;
 
 @Service
 public class CohorteService implements CrearCohorteUseCase, ActualizarCohorteUseCase, CambiarEstadoCohorteUseCase,
@@ -97,13 +96,16 @@ public class CohorteService implements CrearCohorteUseCase, ActualizarCohorteUse
     public List<CohorteResumen> listar(UserId actorId, EstadoCohorte filtroEstado) {
         UserSummary actor = requireActorActivo(actorId);
         if (actor.role() == UserRole.MENTOR) {
-            Optional<Celula> propia = loadCelulaPort.porMentor(actorId);
-            if (propia.isEmpty()) {
-                return List.of();
-            }
-            return requireCohorte(propia.get().cohorteId()).estado() == EstadoCohorte.COMPLETADA
-                    ? List.of()
-                    : List.of(aResumen(propia.get().cohorteId()));
+            /* Las cohortes de los grupos que lidera, cada una una vez y sin las completadas. Desde D-141
+               pueden ser varios grupos, y de varias cohortes (E-371: antes se buscaba "el" grupo y con dos
+               la consulta reventaba). */
+            return loadCelulaPort.porMentor(actorId).stream()
+                    .map(Celula::cohorteId)
+                    .distinct()
+                    .map(this::requireCohorte)
+                    .filter(cohorte -> cohorte.estado() != EstadoCohorte.COMPLETADA)
+                    .map(this::aResumen)
+                    .toList();
         }
         requireRolAdmin(actor);
         return loadCohortePort.listar(filtroEstado).stream().map(c -> aResumen(c.id())).toList();
@@ -113,9 +115,11 @@ public class CohorteService implements CrearCohorteUseCase, ActualizarCohorteUse
     public CohorteResumen obtener(UserId actorId, CohorteId cohorteId) {
         UserSummary actor = requireActorActivo(actorId);
         if (actor.role() == UserRole.MENTOR) {
-            Celula propia = loadCelulaPort.porMentor(actorId)
-                    .orElseThrow(() -> new NotAuthorizedException("No lideras ninguna celula"));
-            if (!propia.cohorteId().equals(cohorteId)) {
+            List<Celula> propias = loadCelulaPort.porMentor(actorId);
+            if (propias.isEmpty()) {
+                throw new NotAuthorizedException("No lideras ninguna celula");
+            }
+            if (propias.stream().noneMatch(celula -> celula.cohorteId().equals(cohorteId))) {
                 throw new NotAuthorizedException("No tienes acceso a esta cohorte");
             }
         } else {

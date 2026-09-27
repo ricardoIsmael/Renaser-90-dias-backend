@@ -30,6 +30,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -173,7 +174,7 @@ class CohorteServiceTest {
     void obtenerComoMentorDeOtraCohorteEsRechazado() {
         Celula propia = Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Celula 1", mentor,
                 CohorteId.of(UUID.randomUUID()), null, null, CLOCK.now(), CLOCK.now());
-        when(loadCelulaPort.porMentor(mentor)).thenReturn(Optional.of(propia));
+        when(loadCelulaPort.porMentor(mentor)).thenReturn(List.of(propia));
 
         CohorteId ajena = CohorteId.of(UUID.randomUUID());
         assertThatThrownBy(() -> service.obtener(mentor, ajena)).isInstanceOf(NotAuthorizedException.class);

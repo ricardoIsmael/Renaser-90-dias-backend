@@ -104,8 +104,8 @@ class AcompanamientoServiceTest {
         }
 
         @Override
-        public Optional<Celula> porMentor(UserId mentorId) {
-            return Optional.empty();
+        public List<Celula> porMentor(UserId mentorId) {
+            return List.of();
         }
     };
 
