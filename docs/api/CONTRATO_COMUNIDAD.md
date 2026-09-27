@@ -42,7 +42,7 @@ Todo lo que sigue está confirmado contra ese código. Donde algo no se pudo con
 | `DateTimeParseException` (fecha/hora mal formada en un parámetro parseado a mano: `cursor`, `from`/`to`, `occurrenceStart`, `startsAt`) | 400, mensaje pide ISO-8601 |
 | Verbo HTTP no soportado en la ruta | 405 |
 
-**Trampa transversal:** `IllegalStateException` (conflictos de negocio: "ya existe", "tiene N publicaciones asociadas", "ese mentor ya lidera otra célula") mapea a **409**, no a 400. Si estás armando asserts automáticos, no asumas que todo error de negocio es 400.
+**Trampa transversal:** `IllegalStateException` (conflictos de negocio: "ya existe", "tiene N publicaciones asociadas") mapea a **409**, no a 400. Si estás armando asserts automáticos, no asumas que todo error de negocio es 400. *Corregido 2026-09-27: el ejemplo incluía «ese mentor ya lidera otra célula», que no existe desde D-141 (un mentor puede liderar varios grupos).*
 
 ---
 
@@ -307,7 +307,9 @@ Servicio: `CelulaService`. Mismo patrón de roles que cohortes: `ADMIN`/`ALCHEMI
 2. Usuario no `ACTIVE` → 400 `"El usuario seleccionado no esta activo"`.
 3. Rol no es `MENTOR`/`ADMIN`/`ALCHEMIST` → 400 `"El usuario seleccionado no puede liderar una celula"`.
 4. No tiene fila en `perfiles_mentor` todavía → **409** `"El usuario todavia no tiene un perfil de mentor (perfiles_mentor) — debe crearse desde el modulo de usuarios antes de poder liderar una celula"`.
-5. Ya lidera **otra** célula distinta → **409** `"Ese mentor ya lidera otra celula"`.
+5. ~~Ya lidera **otra** célula distinta → **409** `"Ese mentor ya lidera otra celula"`.~~ *Corregido 2026-09-27: esta
+   validación no existe desde D-141 (2026-09-17): un mentor puede liderar varios grupos a la vez. Volver a poner a un
+   mentor que ya lideró el grupo reabre su jefatura (E-316).*
 **Respuesta:** 200, `CelulaDetalleResponse`.
 
 ### 5.6 `DELETE /api/v1/admin/cells/{id}/mentor` — quitar mentor
@@ -382,10 +384,15 @@ Servicios: `EventoService`, `ConfirmacionService`, con reglas de acceso comparti
 
 **Quién puede administrar (crear/editar/eliminar/cancelar ocurrencia/portada):**
 - `ADMIN`/`ALCHEMIST`: cualquier evento.
-- `MENTOR`: solo eventos que **él mismo creó** (`requirePropioSiMentor`) — editar/eliminar/cancelar/portada de un evento creado por otro mentor u otro admin → 403 `"Solo puedes <editar/eliminar/cancelar una ocurrencia de> los eventos que creaste"`.
+- `MENTOR`: nada, ni siquiera un evento que él mismo creó → 403 `"No tienes permiso para administrar el calendario"` (D-186). ~~Solo eventos que **él mismo creó** (`requirePropioSiMentor`) — editar/eliminar/cancelar/portada de un evento creado por otro mentor u otro admin → 403 `"Solo puedes <editar/eliminar/cancelar una ocurrencia de> los eventos que creaste"`.~~
 - `TRAINEE`/`MENTOR_LEAD`: no pueden administrar nada → 403 `"No tienes permiso para administrar el calendario"`.
 
-**Trampa grande para `MENTOR` al crear/editar:** si el actor es `MENTOR`, el backend **ignora y sobreescribe** lo que mandaste en `audienceType`/`minLevelId`/`courseId`/`targetRoles` — fuerza `audienceType=CELL` con la célula que ese mentor lidera (`requireCelulaLiderada`). Si el mentor no lidera ninguna célula → 403 `"Todavia no lideras una celula — no puedes administrar sesiones"`. No es un error silencioso del cliente: el servidor decide la audiencia por vos.
+~~**Trampa grande para `MENTOR` al crear/editar:** si el actor es `MENTOR`, el backend **ignora y sobreescribe** lo que mandaste en `audienceType`/`minLevelId`/`courseId`/`targetRoles` — fuerza `audienceType=CELL` con la célula que ese mentor lidera (`requireCelulaLiderada`). Si el mentor no lidera ninguna célula → 403 `"Todavia no lideras una celula — no puedes administrar sesiones"`. No es un error silencioso del cliente: el servidor decide la audiencia por vos.~~
+
+> **Corregido 2026-09-27.** Desde D-186 (2026-09-26) solo `ADMIN` y `ALCHEMIST` administran el calendario: se
+> eliminaron `requirePropioSiMentor` y `requireCelulaLiderada`, y la audiencia que manda el creador se respeta tal
+> cual. Los eventos de célula que un mentor ya había creado quedan, y los administran `ADMIN`/`ALCHEMIST`. Lo tachado
+> arriba es lo que decía.
 
 **Acceso de lectura (ver eventos / listar):** lo consulta cualquier rol, sin restricción de rol — la visibilidad depende de la **audiencia** del evento (ver tabla abajo), no de quién puede administrar.
 
@@ -446,7 +453,7 @@ curl -s "http://localhost:8080/api/v1/calendar/events?from=2026-08-01T00:00:00Z&
 | `recurrenceUntil` | opcional, ISO instant; si viene tiene que ser **posterior** a `startsAt` → si no, 400 `"recurrencia.hasta debe ser posterior a iniciaEn"` |
 | `recurrenceCount` | opcional |
 
-Recordá el override de audiencia si el actor es `MENTOR` (arriba).
+~~Recordá el override de audiencia si el actor es `MENTOR` (arriba).~~ *Corregido 2026-09-27: ya no hay override; el mentor no crea eventos (D-186).*
 **Respuesta:** `201`, `EventoResponse` con `coverUrl:null` (todavía no tiene portada — ver §8.8/8.9).
 
 **curl (evento simple, admin):**
@@ -465,10 +472,10 @@ curl -s -X POST "http://localhost:8080/api/v1/calendar/events" \
 ```
 
 ### 8.4 `PUT /api/v1/calendar/events/{id}` — editar (PUT, reenvío completo)
-Mismo body y mismas reglas que crear. `MENTOR` solo si es el creador. Al editar, además se intentan borrar los avisos pendientes futuros de la versión anterior (best-effort — si falla, solo queda un warning en el log, no rompe la request).
+Mismo body y mismas reglas que crear. Solo `ADMIN`/`ALCHEMIST` (D-186; *corregido 2026-09-27, decía «`MENTOR` solo si es el creador»*). Al editar, además se intentan borrar los avisos pendientes futuros de la versión anterior (best-effort — si falla, solo queda un warning en el log, no rompe la request).
 
 ### 8.5 `DELETE /api/v1/calendar/events/{id}` — eliminar
-`204`. `MENTOR` solo si es el creador. Si tenía portada, se intenta borrar del storage (best-effort, no rompe la request si falla).
+`204`. Solo `ADMIN`/`ALCHEMIST` (D-186; *corregido 2026-09-27, decía «`MENTOR` solo si es el creador»*). Si tenía portada, se intenta borrar del storage (best-effort, no rompe la request si falla).
 
 ### 8.6 `PUT /api/v1/calendar/events/{id}/rsvp` — confirmar asistencia
 **Body** (`RsvpRequest`): `{"occurrenceStart":"2026-09-01T18:00:00Z, @NotBlank","status":"GOING"}` (`status` en `GOING`/`NOT_GOING`/`MAYBE`).
@@ -476,12 +483,12 @@ Mismo body y mismas reglas que crear. `MENTOR` solo si es el creador. Al editar,
 **Trampas de `occurrenceStart`:**
 - Tiene que corresponder a una ocurrencia **real** de la serie (tolerancia de 3 minutos / 180000ms) — si no, 400 `"inicioOcurrencia no corresponde a una ocurrencia real de este evento"`.
 - No podés confirmar asistencia a una ocurrencia de **más de 12 horas en el pasado** → **409** `"No puedes confirmar asistencia a una ocurrencia de dias pasados"`.
-**Efecto colateral:** marcar `GOING` cancela los avisos/recordatorios pendientes de esa ocurrencia para vos (no pasa con `NOT_GOING`/`MAYBE`).
+**Efecto colateral:** marcar `GOING` no cancela nada en el momento. Al entregar cada recordatorio de esa ocurrencia, el servidor lo omite solo si dijiste «Voy» **y** tenés un teléfono (`IOS`/`ANDROID`) con push activo, donde suena la alarma de la app; con solo la web, o sin teléfono registrado, los recordatorios siguen llegando (D-189). *Corregido 2026-09-27: decía «marcar `GOING` cancela los avisos/recordatorios pendientes de esa ocurrencia para vos (no pasa con `NOT_GOING`/`MAYBE`)».*
 **Respuesta:** `200`, sin body.
 
 ### 8.7 `POST /api/v1/calendar/events/{id}/cancel-occurrence` — cancelar una ocurrencia puntual
 **Body** (`CancelarOcurrenciaRequest`): `{"occurrenceStart":"..."}`.
-**Quién puede:** mismo criterio que editar (`ADMIN`/`ALCHEMIST`, o `MENTOR` dueño del evento).
+**Quién puede:** mismo criterio que editar: solo `ADMIN`/`ALCHEMIST` (D-186; *corregido 2026-09-27, decía «o `MENTOR` dueño del evento»*).
 **Errores:** evento no recurrente → 400 `"Este evento no es recurrente — eliminalo en vez de cancelar una ocurrencia"`. `occurrenceStart` no real → 400 (mismo mensaje que RSVP).
 **Respuesta:** `200`, sin body. Es un upsert — cancelar dos veces la misma ocurrencia no falla, reemplaza el override existente.
 

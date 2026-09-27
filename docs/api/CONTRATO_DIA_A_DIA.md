@@ -385,12 +385,17 @@ curl -s "http://localhost:8080/api/v1/radar/history" -H "X-Actor-Id: <UUID_TRAIN
 
 ### 1.7 Horario personal de los hábitos (`/api/v1/habit-preferences`)
 
-Cada aprendiz puede correr la hora de disparo/límite de un hábito dentro de una cuota semanal. Dos reglas
+Cada aprendiz puede correr la hora de disparo/límite de un hábito, **sin tope de cambios** (D-170). Dos reglas
 gobiernan todo lo de acá y conviene tenerlas presentes antes de leer los campos:
 
-- **Semana de acomodo**: hasta el **día 7** de programa (o el propio límite del hábito, si es mayor) los
-  cambios inmediatos son ilimitados. Después, hasta **3 hábitos DISTINTOS** por semana de programa —
-  reeditar uno ya tocado esa semana no gasta cupo nuevo.
+- **Sin tope**: todo el programa cuenta como «semana de acomodo» (`period` siempre `"FREE"`), así que no hay
+  cupo que se agote. `scheduleEdits` se sigue mandando con la misma forma para no romper la app instalada,
+  pero no limita nada.
+
+> **Corregido 2026-09-27.** Decía «dentro de una cuota semanal» y, como primera regla, «**Semana de acomodo**:
+> hasta el **día 7** de programa (…) los cambios inmediatos son ilimitados. Después, hasta **3 hábitos DISTINTOS**
+> por semana de programa». El dueño aclaró el 2026-09-26 que esa regla no existe (D-170): la constante de la
+> semana libre pasó a 90 días. Lo que dice la regla de abajo sobre el día en curso no se revisó en esta corrección.
 - **"No se improvisa el día"**: si la ventana de hoy de ese hábito **ya arrancó** (su hora de disparo
   vigente ya pasó), el cambio **no se rechaza**: queda programado para mañana. El horario de hoy no se
   toca, y el cambio pasa a regir de madrugada (barrido nocturno). Recién ahí gasta cupo.
@@ -427,7 +432,7 @@ Configuración de horarios del propio actor: qué rige hoy, qué quedó programa
       "pendingChange": null
     }
   ],
-  "scheduleEdits": { "used": 1, "remaining": 2, "limit": 3, "period": "WEEK" }
+  "scheduleEdits": { "used": 1, "remaining": 2, "limit": 3, "period": "FREE" }
 }
 ```
 
@@ -439,9 +444,10 @@ Configuración de horarios del propio actor: qué rige hoy, qué quedó programa
   `customized`: `true` si el horario sale de una preferencia propia, `false` si viene de fábrica.
   `pendingChange`: `null` salvo que haya un cambio programado esperando su fecha. Sus horas son las que
   regirán **desde** `effectiveDate`, no las de hoy.
-  `scheduleEdits`: idéntico en forma y literales al que devuelve el PATCH. `period`: `"FREE"` (semana de
-  acomodo, sin cupo) o `"WEEK"`. Un cambio todavía programado **no** figura en `used` — lo hará el día que
-  pase a regir.
+  `scheduleEdits`: idéntico en forma y literales al que devuelve el PATCH. `period`: siempre `"FREE"` desde
+  D-170 (sin cupo en todo el programa); `"WEEK"` ya no sale. Un cambio todavía programado **no** figura en
+  `used` — lo hará el día que pase a regir. *Corregido 2026-09-27: decía «`"FREE"` (semana de acomodo, sin
+  cupo) o `"WEEK"`»; los ejemplos de esta sección decían `"period": "WEEK"`.*
 
 - **Quién puede llamarlo**: cualquier actor, siempre sobre sí mismo (no toma id de nadie en la URL).
 - **Errores**: `403` si la cuenta está suspendida; `404` si el actor no es un participante del programa.
@@ -466,7 +472,7 @@ Cambia el horario de un hábito.
 {
   "habitId": "uuid", "triggerTime": "07:00:00", "limitTime": "09:00:00",
   "deferred": true, "deferredEffectiveDate": "2026-09-01",
-  "scheduleEdits": { "used": 1, "remaining": 2, "limit": 3, "period": "WEEK" }
+  "scheduleEdits": { "used": 1, "remaining": 2, "limit": 3, "period": "FREE" }
 }
 ```
 
@@ -475,8 +481,9 @@ Cambia el horario de un hábito.
   `deferredEffectiveDate`: `null` cuando `deferred` es `false`.
 
 - **Errores**: `403` cuenta suspendida; `404` hábito o participante inexistente; `400` `limitTime` anterior
-  o igual a `triggerTime`; `409` cupo semanal agotado
-  (`"Esta semana ya reacomodaste 3 habitos. Puedes seguir ajustando esos, y el resto la semana que viene."`).
+  o igual a `triggerTime`. ~~`409` cupo semanal agotado
+  (`"Esta semana ya reacomodaste 3 habitos. Puedes seguir ajustando esos, y el resto la semana que viene."`)~~
+  *Corregido 2026-09-27: ese 409 ya no ocurre, porque todo el programa es `FREE` (D-170).*
 
 ```bash
 curl -s http://localhost:8080/api/v1/habit-preferences -H "X-Actor-Id: <UUID_TRAINEE>"
@@ -506,7 +513,7 @@ autorización de admin de hábitos ya vive ahí (`HabitoAdminGuard`).
   "programDay": 30,
   "localDate": "2026-08-25",
   "timeZone": "America/Lima",
-  "scheduleEdits": { "used": 2, "remaining": 1, "limit": 3, "period": "WEEK" },
+  "scheduleEdits": { "used": 2, "remaining": 1, "limit": 3, "period": "FREE" },
   "habits": [
     {
       "habitId": "3ab7…",
@@ -536,7 +543,7 @@ Cómo leer cada campo:
 | Campo | Qué es |
 |---|---|
 | `programDay` / `localDate` / `timeZone` | Contexto contra el que se resolvió la vista — **zona del aprendiz**, no la del servidor ni la del admin. El horario vigente y el día semanal dependen de él |
-| `scheduleEdits` | Cuota semanal de reacomodo de horario ya gastada, contada sobre `historial_cambios_horario` (hábitos **distintos** cambiados en la semana de programa). `period`: `"FREE"` durante la semana de acomodo inicial (día ≤ 7, sin cupo), `"WEEK"` después. Mismos literales que ya devuelve el autoservicio |
+| `scheduleEdits` | Cuota semanal de reacomodo de horario ya gastada, contada sobre `historial_cambios_horario` (hábitos **distintos** cambiados en la semana de programa). `period`: siempre `"FREE"` desde D-170 (no hay tope; el campo sigue por compatibilidad). Mismos literales que ya devuelve el autoservicio. *Corregido 2026-09-27: decía «`"FREE"` durante la semana de acomodo inicial (día ≤ 7, sin cupo), `"WEEK"` después».* |
 | `catalogTitle` / `personalTitle` | Título del catálogo y el renombre del aprendiz (`renombres_habito`). `personalTitle` es `null` si no lo renombró |
 | `isPersonal` | `true` = hábito propio del aprendiz (`ambito='PERSONAL'`); `false` = del catálogo del sistema |
 | `triggerTime` / `limitTime` | Horario **vigente**: su preferencia (`preferencias_horario`) pisando al del catálogo (`horarios_habito` del tramo vigente para `programDay`). Misma precedencia que aplica `RegistroService` |
@@ -703,9 +710,12 @@ Planifica las Rocas Diarias de una fecha — **1 a 3 rocas por eje**, con **posi
 | `esDelegable` | `boolean` | — |
 | `horaInicio`/`horaFin` | `LocalTime` | opcionales |
 
-  **Fecha admitida**: si estás DENTRO de la ventana de planificación diaria (`VentanaPlanificacionDiaria`),
-  solo se admite planificar **mañana**; si estás A DESTIEMPO, se admite **hoy o mañana**. Fuera de esas
-  fechas: `400 "INVALID_DATE: la fecha de planificacion debe ser [fechas]"`.
+  **Fecha admitida** (`FechasPlanificables`): si estás DENTRO de la ventana de planificación diaria
+  (`VentanaPlanificacionDiaria`), desde **mañana**; si estás A DESTIEMPO, desde **hoy**. En los dos casos, hasta el
+  último día de la semana del plan semanal de hoy (qué días forman esa semana lo define `docs/MODULO_ROCKS.md` §1.3).
+  Fuera de ese rango: `400 "INVALID_DATE: la fecha de planificacion debe estar entre <desde> y <hasta>"`.
+  *Corregido 2026-09-27: decía «solo se admite planificar **mañana**; si estás A DESTIEMPO, se admite **hoy o
+  mañana**» y el mensaje «debe ser [fechas]».*
 
 - **Response 201** — `List<RocaDiariaResponse>`.
 - **Errores**: `403` `"ROCKS_LOCKED..."` (sin las 3 Rocas Maestras); `400` `"cada eje debe tener entre 1 y 3

@@ -76,7 +76,8 @@ Métodos puros, 100% testeados sin Spring/Postgres (`FaseProgramaTest`, matriz c
 
 - `paraDiaPrograma(int)`: fase actual (equivalente a `phaseForDay`).
 - `firmaDesbloqueadaEnDia(int)`: ¿ya corresponde firmar ESTA fase a ese día? (equivalente a la comparación `programDay < unlockDay` de `service.ts`).
-- `faseAFirmarEnDia(int)`: la fase que corresponde firmar hoy, o `null` — combina las dos anteriores, usado tanto por `firmar` como por `consultarPendiente` para no duplicar la regla.
+- `faseAFirmarEnDia(int)`: la fase en curso si su firma ya se desbloqueó, o `null` — combina las dos anteriores.
+- `faseAFirmar(int, Set<FasePrograma>)` (D-193): la que decide qué pacto toca, usada por `consultarPendiente`, `upload-url` y `firmar`. Primero la fase en curso (lo mismo que `faseAFirmarEnDia`); si esa no está pendiente, la fase anterior más vieja sin firmar. *Corregido 2026-09-27: decía que `faseAFirmarEnDia` era la «usada tanto por `firmar` como por `consultarPendiente`».*
 - `numero()` / `porNumero(int)`: 1..4, usado para nombrar la ruta de S3 y para el puerto público `api.ContratoFaseFinder` (ver §5).
 
 `ContratoFase` (agregado, `domain/model/contrato/ContratoFase.java`): construcción vía `firmar(participanteId, diaProgramaActual, clock)`, que deriva la fase del día — **nunca la recibe como parámetro de confianza** (mismo principio que el `role` ausente en `SubmitAccountRequestCommand` de `users`, CLAUDE.MD §5.3.3). Rechaza con `IllegalArgumentException` (→ 400) si la fase es Fase I o si el día de desbloqueo no llegó.
@@ -113,7 +114,7 @@ No se puede arreglar acá: tocar `users/**` está fuera de alcance de esta tarea
 
 El repo viejo no tenía "pedir URL prefirmada" porque la app subía directo a Supabase Storage. Con D-34 (AWS S3 real, sin credenciales en el cliente) hace falta un paso más. Diseño adoptado:
 
-1. **`POST /api/v1/phase-contracts/upload-url`** (nuevo) — el servidor deriva la fase EN CURSO del participante (mismo cálculo que firmar), calcula la ruta **determinística** `firmas/{participanteId}/fase_{N}.svg` (`ContratoFase.rutaFirma`) y devuelve una URL PUT prefirmada (`AlmacenamientoPort.firmarSubida`, 10 min de validez). La ruta nunca la elige el cliente — mismo blindaje anti mass-assignment que el `role` ausente en `users`.
+1. **`POST /api/v1/phase-contracts/upload-url`** (nuevo) — el servidor deriva la fase A FIRMAR del participante: la en curso o, si esa no está pendiente, la atrasada más vieja (`FasePrograma.faseAFirmar`, D-193; mismo cálculo que firmar; *corregido 2026-09-27, decía «la fase EN CURSO»*), calcula la ruta **determinística** `firmas/{participanteId}/fase_{N}.svg` (`ContratoFase.rutaFirma`) y devuelve una URL PUT prefirmada (`AlmacenamientoPort.firmarSubida`, 10 min de validez). La ruta nunca la elige el cliente — mismo blindaje anti mass-assignment que el `role` ausente en `users`.
 2. La app sube el SVG directo a esa URL (fuera de esta API).
 3. **`POST /api/v1/phase-contracts`** (preservado) — ya no recibe body: el servidor ya sabe la ruta (es determinística), solo falta registrar el pacto. Persiste `bucket` (siempre `onboarding-signatures`, el mismo default que ya tenía la tabla) + la ruta calculada + `firmado_en`. Idéntico bloqueo de negocio que el repo viejo (Fase I rechazada, día no desbloqueado rechazado, ya firmada → idempotente).
 

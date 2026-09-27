@@ -460,7 +460,11 @@ todos, igual que en §4.3.
 
 ---
 
-## 7. Preguntas abiertas (S-8, revisión del 2026-09-26)
+## 7. Un borde conocido y una pregunta abierta (S-8, revisión del 2026-09-26)
+
+> **Corregido 2026-09-27.** El título decía «Preguntas abiertas». El dueño decidió el 26/09 que el cierre semanal
+> «no se toca» (`docs/specs/RETROALIMENTACION_2026-09-26.md` §9.9): el punto 1 queda como borde conocido. El punto 2,
+> los días de suspensión, sigue abierto: §9.9 no lo nombra.
 
 **1. Ventanas que cruzan la medianoche del viernes.** Un hábito del viernes con ventana 22:00 → 02:00
 (`habits.VentanaEntrega`) vence el **sábado a las 02:10** en Lima, pero el barrido cierra esa semana en la
@@ -470,7 +474,8 @@ caracterización: `VentanaEntregaTest.ventanaDelViernesCruzaElCierreDelSemaforo`
 cualquier arreglo mueve la regla que el dueño confirmó («se cierra el sábado 00:00 hora local»): por ejemplo,
 cerrar el sábado después del plazo más tardío de los hábitos del viernes, o cerrar a una hora fija (03:00).
 Hoy afecta solo a quien tenga un hábito con hora de fin después de la medianoche; ninguno del catálogo
-del programa la tiene, pero un hábito personal sí puede tenerla.
+del programa la tiene, pero un hábito personal sí puede tenerla. **Decidido por el dueño el 26/09: no se toca**
+(«son reglas que ya están establecidas, no confundamos eso»); queda como borde conocido.
 
 **2. Días de suspensión.** Mientras una cuenta está suspendida el barrido no la calcula y no cierra sus
 semanas. Al reactivarla, la próxima corrida calcula **todos** los días que faltan, incluidos los de la
@@ -482,3 +487,5 @@ decidir cómo guardarlo. Opción sin tabla nueva: registrar la suspensión como 
 (desde el día de la suspensión, `reanudada_el` el día de la reactivación), que ya hace que esos días no se
 midan; pero hoy la regla dice que el semáforo del aprendiz **no se puede pausar**, así que lo decide el dueño.
 Mientras tanto, «Reprocesar la semana de una persona» (`docs/DESPLIEGUE_Y_CI.md`) no ayuda: recalcularía los mismos días.
+**Sigue abierta al 2026-09-27**: la decisión del 26/09 («no se toca») habla del cierre semanal y de la ventana del
+viernes, no de los días de suspensión.

@@ -50,7 +50,7 @@ graph TB
     subgraph INFRA["Infraestructura"]
         PG[("PostgreSQL 16<br/>+ pgvector")]
         REDIS[("Redis 7<br/>cuotas · pub/sub · fanout de chat")]
-        GEMINI["Gemini (Spring AI)<br/>hoy: NoOp, D-39"]
+        GEMINI["Gemini (Spring AI)<br/>acompañante en producción"]
         S3["AWS S3<br/>evidencias · media"]
     end
 
@@ -66,6 +66,10 @@ graph TB
     CORE --> GEMINI
     CORE --> S3
 ```
+
+> **Corregido 2026-09-27.** El nodo de Gemini decía «hoy: NoOp, D-39». El acompañante (chat, embeddings, voz y voz en
+> vivo) llama a Gemini y está prendido en producción (`docs/DESPLIEGUE_Y_CI.md` §6.4); siguen en `NoOp` la validación
+> de evidencia y la del V90, la recomendación de clase, el Espejo de la Sombra y los clasificadores.
 
 **Dentro de cada módulo** (ejemplo real, `habits/`):
 
@@ -189,7 +193,7 @@ sequenceDiagram
     participant R as Redis<br/>(ControlCuotaRenasiaPort)
     participant DB as Postgres<br/>(Conversacion/Mensaje)
     participant V as pgvector<br/>(VectorStorePort)
-    participant IA as Gemini / Spring AI<br/>(ChatIAPort — hoy NoOp, D-39)
+    participant IA as Gemini / Spring AI<br/>(ChatIAPort — Gemini con IA_PROVEEDOR=google)
 
     A->>C: POST /api/v1/renasia/mensajes<br/>{question} + X-Actor-Id
     C->>S: preguntar(actorId, question)
@@ -234,6 +238,9 @@ sequenceDiagram
     end
 ```
 
+> **Corregido 2026-09-27.** El participante de la IA decía «ChatIAPort — hoy NoOp, D-39». En producción responde
+> Gemini; el `NoOp` solo queda con `IA_PROVEEDOR=noop`, el valor por defecto en local.
+
 **Por qué el orden importa (y por qué se corrigió una vez):** la cuota se descuenta en Redis *antes* de saber si la IA va a responder, porque el chequeo de cuota tiene que pasar antes de gastar cómputo en buscar contexto y llamar al modelo. Eso significa que un fallo posterior (pgvector caído, Gemini con timeout) le cobraría un mensaje al aprendiz sin darle nada a cambio — por eso el flujo libera la cuota (`ControlCuotaRenasiaPort.liberar`) tanto si falla la búsqueda de contexto como si el streaming termina en error. Es uno de los hallazgos reales de la auditoría adversarial de esta sesión (`docs/BITACORA_ERRORES.md`, E-41).
 
 **Por qué la transacción se corta donde se corta:** `@Transactional` sobre un método que devuelve un `Flux` solo envuelve la parte **síncrona** — Spring cierra la transacción JDBC apenas el método `retorna` el `Flux`, no cuando termina de emitir. Por eso "guardar la pregunta del usuario" es atómico con "verificar cuota y crear la conversación", pero "guardar la respuesta del asistente" ocurre en su propia transacción implícita, después, cuando el stream ya terminó.
@@ -273,7 +280,7 @@ sequenceDiagram
 | Persistencia | PostgreSQL 16 + Flyway (baseline de 90 tablas, esquema `renaser`) |
 | Vectores (RAG) | `pgvector` sobre el mismo Postgres — SQL nativo propio (D-45), no el `PgVectorStore` genérico de Spring AI |
 | Caché / cuotas / fanout | Redis 7 |
-| IA | Spring AI 2.0 sobre Gemini — hoy adaptadores `NoOp` (sin credenciales, D-39) |
+| IA | Spring AI 2.0 sobre Gemini: el acompañante lo usa en producción (`IA_PROVEEDOR=google`); siguen en `NoOp` la validación de evidencia y la del V90, la recomendación de clase, el Espejo de la Sombra y los clasificadores. *Corregido 2026-09-27: decía «hoy adaptadores `NoOp` (sin credenciales, D-39)».* |
 | Storage de archivos | AWS S3 (URLs prefirmadas) |
 | Build | Maven (`mvnw`) |
 | Tests | JUnit 5, Testcontainers (Postgres + Redis reales), ArchUnit / Spring Modulith test |
@@ -289,7 +296,7 @@ docker compose up -d              # Postgres + pgvector, Redis
 
 `JAVA_HOME` tiene que apuntar al JDK 25 (`C:\Program Files\Java\jdk-25.0.2`). Si está mal, `mvnw` **termina en `exit 0` sin ejecutar una sola prueba**: hay que mirar la línea `Tests run:` de la salida, no el código de retorno (E-111).
 
-> **`clean test` ya no es el gate completo.** Desde que existe `maven-failsafe-plugin`, las 10 pruebas de integración (`*IT.java`, Testcontainers contra Postgres y Redis reales) corren en `verify`, no en `test`, y el reporte de cobertura también se genera ahí.
+> **`clean test` ya no es el gate completo.** Desde que existe `maven-failsafe-plugin`, las pruebas de integración (`*IT.java`, Testcontainers contra Postgres y Redis reales: 35 clases y 130 pruebas al 2026-09-27) corren en `verify`, no en `test`, y el reporte de cobertura también se genera ahí. *Corregido 2026-09-27: decía «las 10 pruebas de integración».*
 
 Variables de entorno relevantes (ver `src/main/resources/application.yaml`): `DB_URL`/`DB_USERNAME`/`DB_PASSWORD`, `REDIS_HOST`/`REDIS_PORT`/`REDIS_USERNAME`/`REDIS_PASSWORD`/`REDIS_SSL_ENABLED`/`REDIS_SESSION_NAMESPACE`, `GOOGLE_GENAI_API_KEY` (opcional — sin ella, `rag`/`evidence`/`onboarding` usan adaptadores NoOp sin romper nada), `AWS_S3_BUCKET`/`AWS_REGION`, `CORS_ORIGENES`, `RENASIA_LIMITE_DIARIO`.
 
@@ -299,8 +306,10 @@ Variables de entorno relevantes (ver `src/main/resources/application.yaml`): `DB
 
 Todo lo que tiene que ver con empaquetar y desplegar está en **[`docs/DESPLIEGUE_Y_CI.md`](docs/DESPLIEGUE_Y_CI.md)**: cobertura con JaCoCo, los tres workflows de GitHub Actions (CI, SonarCloud, publicación en ECR), el `Dockerfile` multi-etapa, y la configuración remota con AWS Systems Manager Parameter Store — incluida la lista de parámetros a crear y los roles de IAM.
 
-**Nada de la parte remota está encendida todavía** (no existen la organización de SonarCloud, el rol de IAM, el repositorio de ECR ni los parámetros): los workflows se saltean solos con un aviso mientras falte lo que necesitan, y §9 de ese documento es la lista de lo que hay que crear.
+**La parte remota ya existe, salvo SonarCloud:** el rol de IAM, el repositorio de ECR, los parámetros de `/renaser/prod/` y la instancia EC2 con la base en RDS (ver la actualización del 2026-09-06 al comienzo de ese documento y su §9). Los workflows se saltean solos con un aviso mientras falte lo que necesitan, y §9 de ese documento es la lista de lo que queda por crear.
+
+> **Corregido 2026-09-27.** Decía «**Nada de la parte remota está encendida todavía** (no existen la organización de SonarCloud, el rol de IAM, el repositorio de ECR ni los parámetros)».
 
 ## 7. Estado actual
 
-Los 14 módulos están construidos, con `./mvnw clean test` en verde (1112 tests), auditados por agentes adversariales (seguridad, concurrencia, invariantes de dominio, límites de Modulith) y probados de punta a punta contra la app real — ver `docs/BITACORA_ERRORES.md` y `docs/PRUEBAS_ENDPOINTS_RAG.md`. Preguntas de negocio abiertas, pendientes de decisión del producto (no inventadas por diseño, CLAUDE.md §0.6): `docs/MODULO_ONBOARDING.md` (Q-O1) y `docs/MODULO_POINTS.md` (Q-6).
+Los 14 módulos están construidos, con `./mvnw clean verify` en verde (al 2026-09-27: 4889 pruebas unitarias y 130 de integración; *corregido 2026-09-27, decía «`./mvnw clean test` en verde (1112 tests)»*), auditados por agentes adversariales (seguridad, concurrencia, invariantes de dominio, límites de Modulith) y probados de punta a punta contra la app real — ver `docs/BITACORA_ERRORES.md` y `docs/PRUEBAS_ENDPOINTS_RAG.md`. Preguntas de negocio abiertas, pendientes de decisión del producto (no inventadas por diseño, CLAUDE.md §0.6): `docs/MODULO_ONBOARDING.md` (Q-O1) y `docs/MODULO_POINTS.md` (Q-6).

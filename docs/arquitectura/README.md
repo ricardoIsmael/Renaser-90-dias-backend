@@ -54,7 +54,7 @@ es el precio de que el diagrama no pueda envejecer sin avisar.
 | 9 jobs `@Scheduled` | `*/infrastructure/adapter/in/scheduler` |
 | Redis para sesión, pub/sub de chat, cuota de RAG y tokens | `spring.session.data.redis` en `application.yaml` + adaptadores `adapter/out/redis` de `chat`, `rag` y `users` |
 | Auth propia + OIDC (Google, Apple, Facebook) | `V3__auth_credenciales_e_identidades.sql` + `users/.../adapter/out/oauth` |
-| La IA está **apagada**: los adaptadores activos son `NoOp` | `spring.ai.model.chat: none` y `embedding: none` en `application.yaml`; clases `NoOp*IAAdapter` |
+| ~~La IA está **apagada**: los adaptadores activos son `NoOp`~~ La IA depende de `IA_PROVEEDOR`: `noop` por defecto; en producción `google`, y el acompañante usa Gemini (chat, embeddings, voz). *Corregido 2026-09-27: el diagrama todavía dice «apagada» y hay que regenerarlo.* | `spring.ai.model.*: none` y autoconfiguraciones excluidas en `application.yaml`; los modelos se arman en `rag/.../GoogleGenAiClientesConfig` con `renaser.ia.proveedor=google`; `docs/DESPLIEGUE_Y_CI.md` §6.4 |
 | El outbox es una tabla del **mismo** Postgres | `V2__spring_modulith_event_publication.sql` |
 
 > **Nota sobre el idioma:** el contenido está en español, pero la interfaz del visor (botones

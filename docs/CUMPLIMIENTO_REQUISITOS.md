@@ -50,7 +50,7 @@ Esto es lo que justifica haberlo leído con cuidado. Varias reglas que dejamos e
 | **Semáforo diario** (no lo teníamos ni como pregunta) | Verde ≥80%, Amarillo 60–79%, Rojo <60% | **Implementado (D-168, 2026-09-25):** % del día sobre hábitos + objetivos y semáforo = promedio de los últimos 7 días cerrados, con esos umbrales (`points.ReglaDelSemaforo`). *Decía: «Regla nueva, hoy no existe en el código».* |
 | **Ciclos de intoxicación** — `resolverTipoDia` los deja fuera con un comentario explícito | Días **8-10 (VER)**, **17-19 (CORTAR)**, **26-28 (RENASER)**. Todos los hábitos pasan a opcionales **salvo la publicación diaria en comunidad** | ✅ **Implementado (D-169, 2026-09-25).** `CicloIntoxicacion` + `Habito.esOpcionalEnDia`: el registro del día nace con `es_opcional = true` salvo los `obligatorio_en_intoxicacion` (POST DIARIO EN COMUNIDAD, ya marcado en V4). `TipoDia.INTOXICACION` no hizo falta: el tipo del día elige horario, no exigencia. *(Decía: «Desbloquea `TipoDia.INTOXICACION` y `Habito.obligatorioEnIntoxicacion`, que ya están modelados pero nunca se activan».)* |
 | **Disparo del Verdugo** — teníamos el registro de eventos, no la detección | Semáforo Rojo **o** 2 días seguidos críticos → `EnforcerEvent` ACTIVE | Regla concreta, implementable |
-| **Cupo de cambio de horarios** | Máximo **3 por semana de programa**, y aplican desde las **00:00 del día siguiente** (para que nadie manipule el día en curso) | Justifica `historial_cambios_horario` + `cambios_horario_pendientes`, hoy sin uso |
+| **Cupo de cambio de horarios** | Máximo **3 por semana de programa**, y aplican desde las **00:00 del día siguiente** (para que nadie manipule el día en curso) | **Superado por D-170 (2026-09-26):** el dueño aclaró que no hay tope de cambios; el cupo se construyó y quedó sin efecto. Que todo cambio rija desde el día siguiente sí se aplica (D-91). *Corregido 2026-09-27: decía «Justifica `historial_cambios_horario` + `cambios_horario_pendientes`, hoy sin uso».* |
 | **Penalizaciones de puntos** | Evidencia rechazada por IA: **−5**. Override manual del admin: **+5**. Semana sin phone-free: **−10**. Roca diaria completada: **+10** | Números duros para `points` |
 | **Q-1 / GAP-24** (ranking agregado) | RF-27 exige tabla de posiciones **global y por célula** | Confirma que el agregador de ranking es requisito real, no un capricho del frontend |
 | **GAP-30** (reportar alucinación de RenasIA) | RF-40 lo exige como requisito formal, con `overriddenByAdmin` | Confirma que no es "frontend adelantado": falta backend de verdad |
@@ -92,7 +92,7 @@ Mismo criterio, más chico: el documento describe la fase II como "Días 8 a 34"
 | RF-04 | Cambio de rol auditado | ⚠️ | `PATCH /users/{id}/role` existe; **la auditoría no se escribe** (`auditoria_cambios_rol` sin uso). La Ley del documento exige registro inmutable |
 | RF-05 | Diagnóstico inicial | ✅ | Cuestionario + respuestas + hitos |
 | RF-06 | Video Variable 90 | ✅ | `v90-recordings` + subida por URL firmada |
-| RF-07 | Validación IA de onboarding | ⚠️ | Flujo async 202+polling completo; adaptador `NoOp` por **D-39** (faltan credenciales) |
+| RF-07 | Validación IA de onboarding | ⚠️ | Flujo async 202+polling completo; adaptador `NoOp`: falta escribir el adaptador real, la credencial de Gemini ya existe (la usa el acompañante en producción). *Corregido 2026-09-27: decía «por **D-39** (faltan credenciales)».* |
 | RF-08 | Firma de pacto y desbloqueo | ⚠️ | `POST /onboarding/complete` existe pero **sin precondiciones** — es nuestra **Q-O1**, y el documento ahora la responde: bloqueo total hasta cuestionario + V90 + pacto firmado |
 
 ### Hábitos
@@ -101,7 +101,7 @@ Mismo criterio, más chico: el documento describe la fase II como "Días 8 a 34"
 |---|---|---|---|
 | RF-09 | Generación diaria de hábitos (cron) | ⚠️ | Existe el scheduler de expiración; la **generación** nocturna de tracks no está cerrada |
 | RF-10 | Desbloqueo escalonado por rampa | ❌ | `desbloqueos_habito` sin uso |
-| RF-11 | Personalización de horarios (cupo 3/semana) | ⚠️ | `PreferenciaHorario` existe; **el cupo no** (`historial_cambios_horario` sin uso) |
+| RF-11 | Personalización de horarios (cupo 3/semana) | ✅ | `PreferenciaHorario` existe y los horarios funcionan (`docs/ESTADO_DEL_PROYECTO.md` §2). **Sin cupo, por decisión del dueño (D-170):** no hay tope de cambios. *Corregido 2026-09-27: decía «⚠️ … **el cupo no** (`historial_cambios_horario` sin uso)».* |
 | RF-12 | Cambio de horario diferido a D+1 | ⚠️ | `CambioHorarioPendiente` modelado; sin caso de uso/endpoint |
 | RF-13 | Ventanas de entrega y gracia | ✅ | Más preciso que el documento — ver §3 |
 | RF-14 | Phone-Free 24h (cruza medianoche) | ✅ | `RachaSinCelular`, estado que el cron no expira (Ley IV cumplida) |
@@ -114,7 +114,7 @@ Mismo criterio, más chico: el documento describe la fase II como "Días 8 a 34"
 | RF | Requisito | Estado | Dónde está / qué falta |
 |---|---|---|---|
 | RF-18 | Envío de evidencias multimedia | ✅ | Con URL firmada en dos pasos |
-| RF-19 | Validación con Gemini Vision (−5) | ⚠️ | Máquina de estados + reintentos + caída a revisión manual, todo probado; IA `NoOp` (D-39) |
+| RF-19 | Validación con Gemini Vision (−5) | ⚠️ | Máquina de estados + reintentos + caída a revisión manual, todo probado; IA `NoOp`: falta el adaptador real, la credencial ya existe. *Corregido 2026-09-27: decía «IA `NoOp` (D-39)».* |
 | RF-20 | Revisión manual y devolución (+5) | ⚠️ | `review`/`void` existen; **falta el listado** de la cola (GAP-20) |
 
 ### Rocas y puntaje
@@ -149,7 +149,7 @@ Mismo criterio, más chico: el documento describe la fase II como "Días 8 a 34"
 | RF-36 | Clase diaria | ⚠️ | `GET` sí; **`POST` de completar no existe** (GAP-23) |
 | RF-37 | Audioterapia + sincronización Drive | ❌ | `audioterapias` sin uso; el puerto de catálogo de audios existe sin adaptador real |
 | RF-38 | Recomendación adaptativa de cursos | ⚠️ | Endpoint real; IA `NoOp` |
-| RF-39 | Chatbot RAG RenasIA | ✅ | pgvector 768 dim + citas de lección + cuota diaria (D-48). IA `NoOp` |
+| RF-39 | Chatbot RAG RenasIA | ✅ | pgvector 768 dim + citas de lección + cuota diaria (D-48). IA: Gemini, prendido en producción (`docs/DESPLIEGUE_Y_CI.md` §6.4). *Corregido 2026-09-27: decía «IA `NoOp`».* |
 | RF-40 | Auditoría de alucinaciones | ❌ | Ni el campo ni la ruta (GAP-30) — el documento lo confirma como requisito |
 | RF-41 | Calendario y eventos segmentados | ✅ | Con audiencia por rol/nivel/célula y cola de recordatorios |
 | RF-42 | Tickets de bloqueo SMART | ✅ | Con el fix de "mentor asignado ≠ cualquier mentor" (E-38) |
@@ -191,7 +191,9 @@ El [`PLAN_INTEGRACION_FRONTEND.md`](PLAN_INTEGRACION_FRONTEND.md) listaba 31 GAP
 
 **Prioridad 4 — Personalización de hábitos (RF-10, 11, 12, 16, 17).** Es la bolsa grande. Son 5 requisitos y 5 de las 7 tablas sin uso. Merece su propio lote.
 
-**Prioridad 5 — Lo que espera credenciales (RF-07, 19, 38, 39).** No es código: es D-39. El fallback a revisión manual ya funciona y está probado, así que **se puede salir a producción sin Gemini** y encenderlo después. Vale decidirlo como negocio, no dejarlo bloqueando.
+**Prioridad 5 — Lo que espera su adaptador de IA (RF-07, 19, 38).** La credencial de Gemini ya existe y RF-39 (RenasIA) la usa en producción; lo que falta en estos tres es escribir el adaptador real. El fallback a revisión manual ya funciona y está probado, así que **no bloquea la operación**. Vale decidirlo como negocio, no dejarlo bloqueando.
+
+> **Corregido 2026-09-27.** Decía «**Prioridad 5 — Lo que espera credenciales (RF-07, 19, 38, 39).** No es código: es D-39 (…) **se puede salir a producción sin Gemini** y encenderlo después». Gemini ya está encendido para RF-39, y en los otros tres lo que falta es código.
 
 **No prioridad — lo que el documento pide y nuestra arquitectura ya resolvió mejor.** RF-35 (tiempo real) está cumplido con WebSocket propio en vez de Supabase Realtime; el documento describe Vercel Cron y nosotros usamos `@Scheduled` sobre virtual threads. Eso no se "cumple" más de lo que ya está: es la migración misma.
 

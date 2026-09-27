@@ -80,8 +80,11 @@ que mirar la línea `Tests run:` de la salida y no el código de retorno.
 
 | Fase | Plugin | Qué archivos | Cuántos | Necesita Docker |
 |---|---|---|---|---|
-| `test` | `maven-surefire-plugin` | `**/*Test.java` | 331 archivos | No |
-| `integration-test` | `maven-failsafe-plugin` | `**/*IT.java` | 10 archivos | **Sí** |
+| `test` | `maven-surefire-plugin` | `**/*Test.java` | 603 archivos (4889 pruebas, 2026-09-27) | No |
+| `integration-test` | `maven-failsafe-plugin` | `**/*IT.java` | 35 archivos (130 pruebas, 2026-09-27) | **Sí** |
+
+> **Corregido 2026-09-27.** La tabla decía «331 archivos» y «10 archivos»: eran los del día en que se sumó failsafe.
+> Las menciones a «los 10» que siguen en esta sección cuentan ese momento.
 
 La convención ya existía en el repo; **no se renombró ningún archivo**. Lo que se agregó es
 failsafe, y con él **los 10 archivos `*IT.java` empezaron a ejecutarse en el build**: antes no los
@@ -92,8 +95,9 @@ IDE.
 Los 10 son `@SpringBootTest` + `@Import(TestcontainersConfiguration.class)` contra Postgres
 (`pgvector/pgvector:pg16`) y Redis (`redis:7-alpine`) reales.
 
-> **Consecuencia práctica:** `./mvnw clean test` ya **no** es el gate completo. Deja fuera esas 10
-> clases y no genera el reporte de cobertura. El gate es `./mvnw clean verify`.
+> **Consecuencia práctica:** `./mvnw clean test` ya **no** es el gate completo. Deja fuera las clases
+> `*IT` (35 al 2026-09-27; decía «esas 10», corregido 2026-09-27) y no genera el reporte de cobertura. El gate es
+> `./mvnw clean verify`.
 
 ### 1.2 No correr dos builds a la vez sobre el mismo checkout
 
@@ -134,8 +138,9 @@ entiende los class files de versión 69 y rompe la instrumentación.
 
 Corre en cada push a cualquier rama y en cada PR.
 
-- Runner **`ubuntu-latest`**: es el único que trae un demonio de Docker listo, y sin Docker las 10
+- Runner **`ubuntu-latest`**: es el único que trae un demonio de Docker listo, y sin Docker las
   pruebas de integración no pueden levantar Testcontainers. Un runner de Windows o macOS no sirve.
+  *Corregido 2026-09-27: decía «las 10 pruebas de integración»; hoy son 130 en 35 clases.*
 - JDK 25 Temurin, con caché de `~/.m2` por hash del `pom.xml`.
 - `./mvnw -B -ntp clean verify`.
 - Publica `target/site/jacoco/` y `target/jacoco.exec` como artefacto (14 días), y los informes de
