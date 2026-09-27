@@ -3,6 +3,7 @@ package com.renaser.os.shared.infrastructure.storage;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +16,7 @@ import software.amazon.awssdk.services.s3.S3Utilities;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetUrlRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -35,6 +37,10 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
  * mientras dura la transferencia y no cuenta contra el presupuesto de latencia del §3. Los verbos
  * que ejecuta el servidor son el borrado y, desde D-174, subir lo que el propio servidor genera
  * (la imagen de bienvenida, ~200 KB).
+ *
+ * <p><b>Corregido 2026-09-27 (D-212).</b> Se suman dos verbos por la foto propia de un grupo: subir la
+ * que el servidor preparó (la lee, la recorta y la reescribe; ~50 KB) y {@link #leer} para servirla con
+ * sesión desde la API del chat. El resto de los archivos del teléfono sigue yendo por URL prefirmada.
  *
  * <p><b>Sobre la validez de las URLs:</b> cada caso de uso decide la suya y este adaptador la
  * respeta tal cual — un audio de terapia y la firma de un contrato de fase no tienen por que
@@ -112,6 +118,18 @@ public class S3AlmacenamientoAdapter implements AlmacenamientoPort {
         cliente.putObject(PutObjectRequest.builder().bucket(bucket).key(ruta).contentType(tipoContenido).build(),
                 RequestBody.fromBytes(contenido));
         log.info("Objeto subido a S3 por el servidor: {} ({} bytes)", ruta, contenido.length);
+    }
+
+    /** {@code NoSuchKey} es "no existe", no un error: vacío. Cualquier otra falla de S3 sube. */
+    @Override
+    public Optional<byte[]> leer(String ruta) {
+        try {
+            return Optional.of(cliente.getObjectAsBytes(GetObjectRequest.builder().bucket(bucket).key(ruta).build())
+                    .asByteArray());
+        } catch (NoSuchKeyException noExiste) {
+            log.warn("Objeto pedido que no está en S3: {}", ruta);
+            return Optional.empty();
+        }
     }
 
     @Override

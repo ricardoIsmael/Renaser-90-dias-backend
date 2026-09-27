@@ -53,7 +53,9 @@ Verificado end-to-end contra el backend corriendo, no solo con tests.
   D-91 (2026-09-04) se difiere todo cambio, no solo el de una ventana que ya arrancó.*
 - **Puntos de liga**: completar un hábito, una evidencia o una roca otorga puntos, síncrono.
 - **Almacenamiento S3**: los 37 objetos de cursos y los 13 mp3 de audioterapias están subidos, con
-  URLs prefirmadas — el backend nunca toca los bytes.
+  URLs prefirmadas — el backend nunca toca los bytes. *(Corregido 2026-09-27: con dos excepciones, la
+  tarjeta de bienvenida que genera el servidor, D-174, y la foto propia de un grupo, que el servidor
+  prepara y sirve, D-212; ver `docs/INFRA_S3_BUCKET.md`.)*
 - **Identidad propia**: sesión como token opaco en Redis, credenciales propias, login social
   contra Google/Apple/Facebook. Sin proveedor externo.
 

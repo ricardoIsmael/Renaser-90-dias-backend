@@ -20,6 +20,7 @@ import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.Participante;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
+import com.renaser.os.community.api.FotoPropiaDelGrupoFinder;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -56,6 +57,8 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     private final LoadMensajePort loadMensajePort;
     private final ListarUsuariosDeConversacionPort listarUsuariosPort;
     private final UserSummaryFinder userSummaryFinder;
+    /** D-212: cuándo cambió la foto propia de cada grupo, para la ruta de su foto en la lista. */
+    private final FotoPropiaDelGrupoFinder fotosDeGrupos;
     private final Clock clock;
     private final IdGenerator idGenerator;
     /**
@@ -72,8 +75,8 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
                                 PertenenciaVigentePort pertenenciaVigentePort, MarcarLeidoPort marcarLeidoPort,
                                 ContarNoLeidosPort contarNoLeidosPort, LoadMensajePort loadMensajePort,
                                 ListarUsuariosDeConversacionPort listarUsuariosPort,
-                                UserSummaryFinder userSummaryFinder, Clock clock, IdGenerator idGenerator,
-                                PlatformTransactionManager transactionManager) {
+                                UserSummaryFinder userSummaryFinder, FotoPropiaDelGrupoFinder fotosDeGrupos,
+                                Clock clock, IdGenerator idGenerator, PlatformTransactionManager transactionManager) {
         this.loadConversacionPort = loadConversacionPort;
         this.saveConversacionPort = saveConversacionPort;
         this.agregarParticipantePort = agregarParticipantePort;
@@ -84,6 +87,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         this.loadMensajePort = loadMensajePort;
         this.listarUsuariosPort = listarUsuariosPort;
         this.userSummaryFinder = userSummaryFinder;
+        this.fotosDeGrupos = fotosDeGrupos;
         this.clock = clock;
         this.idGenerator = idGenerator;
         this.transaccionPropia = new TransactionTemplate(transactionManager);
@@ -154,16 +158,31 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
            donde no existe responde 404, con lo que la bandeja de DMs se quedaba sin nombres por
            culpa de otra conversacion. Una bandeja de mensajes directos tiene que nombrarse sola. */
         Map<UserId, UserSummary> perfiles = userSummaryFinder.findByIds(otros.values().stream().distinct().toList());
+        Map<UUID, Instant> fotosPropias = fotosPropiasDeLosGrupos(conversaciones);
         return conversaciones.stream()
                 .map(c -> {
                     UserId otro = c.tipo() == TipoConversacion.DIRECTA ? otros.get(c.id()) : null;
                     UserSummary perfil = otro != null ? perfiles.get(otro) : null;
                     return new ConversacionResumen(c, ultimos.get(c.id()), noLeidos.getOrDefault(c.id(), 0L),
                             otro, perfil != null ? perfil.fullName() : null,
-                            perfil != null ? perfil.avatarUrl() : null);
+                            perfil != null ? perfil.avatarUrl() : null,
+                            c.celulaId() != null ? fotosPropias.get(c.celulaId()) : null);
                 })
                 .sorted(Comparator.comparing(ConversacionService::actividadDe).reversed())
                 .toList();
+    }
+
+    /**
+     * D-212: cuándo cambió la foto propia de cada grupo de la lista, en UNA consulta a community (sin
+     * grupos, ninguna). Los que usan la foto de Renaser no figuran.
+     */
+    private Map<UUID, Instant> fotosPropiasDeLosGrupos(List<Conversacion> conversaciones) {
+        List<UUID> grupos = conversaciones.stream()
+                .filter(c -> c.tipo() == TipoConversacion.CELULA && c.celulaId() != null)
+                .map(Conversacion::celulaId)
+                .distinct()
+                .toList();
+        return grupos.isEmpty() ? Map.of() : fotosDeGrupos.cambiadasEn(grupos);
     }
 
     /** Conversacion sin mensajes: ordena por su fecha de creacion. */

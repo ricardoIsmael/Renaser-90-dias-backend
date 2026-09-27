@@ -28,6 +28,8 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
@@ -205,6 +207,22 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<ApiErrorResponse> handleMissingHeader(MissingRequestHeaderException ex) {
         return respond(HttpStatus.BAD_REQUEST, "Falta el header obligatorio '" + ex.getHeaderName() + "'");
+    }
+
+    /**
+     * Un archivo multipart que pasa {@code spring.servlet.multipart.max-file-size} (2 MB). Hoy el unico
+     * multipart es la foto propia de un grupo (D-212). Sin esto salia el 413 de Spring sin el cuerpo que
+     * la app sabe mostrar.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleArchivoDemasiadoGrande(MaxUploadSizeExceededException ex) {
+        return respond(HttpStatus.CONTENT_TOO_LARGE, "La foto pesa más de 2 MB");
+    }
+
+    /** Falta una parte obligatoria de un multipart (ej. {@code foto} en la foto de un grupo, D-212). */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiErrorResponse> handleMissingPart(MissingServletRequestPartException ex) {
+        return respond(HttpStatus.BAD_REQUEST, "Falta la parte obligatoria '" + ex.getRequestPartName() + "'");
     }
 
     /** JSON malformado, tipo incorrecto (ej. `energyLevel:"alto"` en vez de numero), o body vacio donde se requiere. */

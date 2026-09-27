@@ -484,3 +484,67 @@ la app ignora la foto subida cuando llega la ruta de la tarjeta.
 | `FotosDeLaGenteDelGrupoResponseTest` (3) | `mentorId` con el uuid pelado y `mentorPhotoPath`; sin mentor, los dos en `null`; `photoPath` por aprendiz y `null` en el endpoint viejo |
 | `FotosDelChatIT` (+4) | Contra Postgres y el Tomcat real: `/me/cells` trae `mentorId` y la ruta del mentor, y esa ruta sirve su tarjeta; `/me/cells/{id}/members` trae la de cada aprendiz y la ven el mentor y los compañeros (ver `docs/MODULO_CHAT.md` §12.1) |
 | `MisCelulasIT` (ajuste) | `integrantesDe` devuelve cada integrante con su ruta (`IntegranteDelGrupo`); la lista sigue siendo la misma gente |
+
+---
+
+## 14. 2026-09-27 — La foto propia de un grupo (D-212)
+
+**Qué decidió el dueño.** La foto de un grupo se puede cambiar, y la cambian «Admin y el mentor de ese
+grupo». Sin foto propia, el grupo sigue con la de Renaser: la tarjeta de Canva sin nombre que trae la app.
+
+**Quién puede** (`FotoDelGrupoService`, en este orden):
+
+| Paso | Si falla |
+|---|---|
+| La cuenta existe y está activa | 404 / 403 (suspendida) |
+| El grupo existe | 404 |
+| Es ADMIN (cualquier grupo) o el mentor que acompaña HOY a ese grupo (asignación vigente con función MENTOR) | 403 |
+
+El Alquimista no: administra los grupos en todo lo demás (`CelulaService.requireRolAdmin`), pero el dueño
+nombró solo a «Admin». El mentor sale de las asignaciones y no de `celulas.mentor_id`: desde D-141 un
+mentor puede acompañar varios grupos, y el puntero nombra uno solo. El endpoint lleva `MANAGE_CELLS`, como
+`/admin/cells`: el interceptor corta al aprendiz; al mentor lo deja pasar (su rol todavía no tiene matriz,
+A-1) y el caso de uso lo acota a su grupo.
+
+**Endpoints** (`FotoDelGrupoController`, bajo `/api/v1/admin/cells/{id}/photo`, el árbol que el mentor ya
+usa para su grupo):
+
+| Método | Qué hace | Respuesta |
+|---|---|---|
+| `PUT` multipart, parte `foto` | Cambia la foto: JPEG o PNG de hasta 2 MB | 200 `{cellId, photoChangedAt}`; 400 si no es una imagen legible o no es JPEG/PNG; 413 si pesa más |
+| `DELETE` | Vuelve a la foto de Renaser (sin foto propia, no cambia nada) | 204 |
+| `GET` | Si hay foto propia y desde cuándo, para el panel de admin | 200 `{cellId, photoChangedAt}` (`null` = la de Renaser) |
+
+**La foto la prepara el servidor** (`FotoDelGrupoJava2dAdapter`): la lee de verdad (eso prueba que es una
+imagen), la recorta al centro en cuadrado, la lleva a 512 px y la reescribe como JPEG. Queda sin los
+metadatos del teléfono (el EXIF puede traer la ubicación) y siempre del mismo tamaño (unos 50 KB). Antes de
+leer los píxeles mira las medidas de la cabecera: más de 10.000 px por lado es un 400, y una grande se lee
+submuestreada, así un archivo chico con medidas absurdas no le pide cientos de MB a la JVM. Es el único
+multipart de la API (`spring.servlet.multipart.max-file-size: 2MB`, el exceso sale 413 con mensaje).
+
+**Datos** (V75): `celulas.foto_ruta` es la clave del objeto (`grupos/<id>/foto-<milisegundos>.jpg`, nueva
+en cada cambio, así nunca se pisa uno que un teléfono tenga guardado) y `foto_cambiada_en` cuándo se eligió;
+las dos NULL = la de Renaser (CHECK). JPA no las mapea: las lee y escribe `FotoDelGrupoJdbcAdapter`, que al
+reemplazar o quitar devuelve la clave anterior en el mismo UPDATE (la fila se toma con `FOR UPDATE`), así se
+borra exactamente el objeto que se dejó de usar aunque dos personas la cambien a la vez. Primero se sube la
+nueva y después se cambia la referencia; borrar la anterior es lo último y no hace fallar el cambio.
+
+**Almacenamiento:** el mismo `AlmacenamientoPort` de las evidencias. Se sumó `leer(ruta)` (por defecto
+vacío, como `guardaObjetos`; el de S3 hace `GetObject`, y una clave que no existe es vacío). En local el
+almacenamiento es el de marcador y no guarda nada: la foto «se cambia» pero el grupo sigue mostrando la
+tarjeta, igual que las fotos de evidencia en local.
+
+**Quién la sirve:** el chat del grupo, a quien puede verlo (`docs/MODULO_CHAT.md` §12.2). Community se la da
+por `community.api.FotoPropiaDelGrupoFinder`: los bytes para servirla, y cuándo cambió la de cada grupo (una
+consulta) para la ruta con `?v=` de la lista de chats.
+
+| Clase | Qué fija |
+|---|---|
+| `FotoDelGrupoServiceTest` (13) | El ADMIN la cambia (clave nueva, sube la preparada, borra la anterior); su mentor de hoy también; el mentor de otro grupo, un aprendiz y el Alquimista, 403 sin tocar nada; un mentor con la asignación cerrada, 403; ADMIN suspendido, 403; sin grupo, 404; tipo y peso, 400 después de ver quién es; la misma clave no se borra; si borrar falla, el cambio queda; volver a la de Renaser; lo que lee el chat; cuándo cambió cada una; la actual |
+| `FotoDelGrupoJava2dAdapterTest` (5) | Apaisada sale cuadrada de 512 recortada al centro; siempre JPEG (la transparencia, blanca); una grande se lee submuestreada; lo que no es imagen, 400; medidas absurdas en la cabecera, 400 sin leer píxeles |
+| `FotoDelGrupoControllerTest` (6) | El multipart llega entero con su tipo; sin la parte, 400; 403/404/400 del caso de uso; `DELETE` 204; `GET`; aprendiz y suspendida, 403 del interceptor |
+| `FotoDelGrupoIT` (4) | Tomcat, Postgres y la foto preparada de verdad: el mentor la cambia y la lista trae la ruta con `?v=` que sirve la foto (200, `Cache-Control`, 304); el ADMIN la cambia dos veces (la primera se borra) y vuelve a la de Renaser (sin ruta en la lista, 404 en la foto); aprendiz, mentor de otro grupo, Alquimista, ADMIN suspendido y sin sesión, 403; lo que no es imagen y el GIF, 400; más de 2 MB, 413; sin la parte, 400; sin grupo, 404 |
+
+**Lo que queda afuera.** Borrar un grupo no borra su foto del almacenamiento (queda sin referencia). Ver
+la foto actual desde el panel de admin: el panel sabe si hay una y desde cuándo, pero la foto la sirve el
+chat solo a los integrantes, y el ADMIN no lo es.

@@ -14,6 +14,9 @@ import java.util.UUID;
  * 2026-09-27):
  * <ul>
  *   <li><b>La del chat de soporte</b> (D-205): la tarjeta con el primer nombre de su aprendiz.</li>
+ *   <li><b>La de un grupo con foto propia</b> (D-212): la que eligió el administrador o su mentor, que
+ *       guarda {@code community} ({@code community.api.FotoPropiaDelGrupoFinder}). Sin foto propia el
+ *       grupo usa la tarjeta sin nombre que trae la app.</li>
  *   <li><b>La de cada integrante</b> de un grupo o de un soporte (D-206): su tarjeta con su primer
  *       nombre, para la lista de integrantes de la info del chat. Si se la muestra aunque haya subido
  *       una foto lo decide el modo del servidor ({@link FotoDeIntegrantes}).</li>
@@ -27,11 +30,17 @@ import java.util.UUID;
 public interface VerFotosDelChatUseCase {
 
     /**
-     * @throws java.util.NoSuchElementException si la conversación no existe o no es un soporte (404)
+     * La foto propia de una conversación: en un soporte, la tarjeta de su aprendiz; en un grupo, la foto
+     * que le eligieron (D-212).
+     *
+     * @throws java.util.NoSuchElementException si la conversación no existe, es la comunidad o un 1 a 1,
+     *                                          o es un grupo que usa la foto de Renaser (404)
      * @throws com.renaser.os.shared.domain.NotAuthorizedException si quien pide no puede verla o su
      *                                                             cuenta está suspendida (403)
+     * <blockquote><b>Corregido 2026-09-27 (D-212).</b> Se llamaba {@code fotoDelSoporte} y un grupo daba
+     * 404 siempre.</blockquote>
      */
-    FotoDelChat fotoDelSoporte(UserId actorId, ConversacionId soporteId);
+    FotoDelChat fotoDeLaConversacion(UserId actorId, ConversacionId conversacionId);
 
     /**
      * La tarjeta de un integrante de un grupo o de un soporte. Es integrante quien puede ver esa

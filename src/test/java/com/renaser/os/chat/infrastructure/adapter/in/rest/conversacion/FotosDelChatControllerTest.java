@@ -41,6 +41,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class FotosDelChatControllerTest {
 
     private static final String FOTO_DEL_SOPORTE = "/api/v1/chat/conversations/{id}/foto";
+    /** D-212: la de un grupo va por la misma ruta, con {@code ?v=} para el caché del teléfono. */
+    private static final String FOTO_DEL_GRUPO = "/api/v1/chat/conversations/{id}/foto?v={v}";
     private static final String FOTO_DE_INTEGRANTE = "/api/v1/chat/conversations/{id}/miembros/{usuarioId}/foto";
     private static final byte[] JPEG = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 1, 2, 3};
 
@@ -66,7 +68,7 @@ class FotosDelChatControllerTest {
     @DisplayName("soporte, 200: la tarjeta en image/jpeg, privada por un día y con el ETag de su huella")
     void laTarjetaDelSoporte() throws Exception {
         UUID actorId = actor(UserStatus.ACTIVE);
-        when(fotos.fotoDelSoporte(UserId.of(actorId), ConversacionId.of(conversacion))).thenReturn(new FotoDelChat(JPEG, "abc123"));
+        when(fotos.fotoDeLaConversacion(UserId.of(actorId), ConversacionId.of(conversacion))).thenReturn(new FotoDelChat(JPEG, "abc123"));
 
         mockMvc.perform(get(FOTO_DEL_SOPORTE, conversacion).header("X-Actor-Id", actorId.toString()))
                 .andExpect(status().isOk())
@@ -80,7 +82,7 @@ class FotosDelChatControllerTest {
     @DisplayName("soporte, 304 sin cuerpo si el teléfono ya tiene esa misma tarjeta (If-None-Match)")
     void noCambio() throws Exception {
         UUID actorId = actor(UserStatus.ACTIVE);
-        when(fotos.fotoDelSoporte(UserId.of(actorId), ConversacionId.of(conversacion))).thenReturn(new FotoDelChat(JPEG, "abc123"));
+        when(fotos.fotoDeLaConversacion(UserId.of(actorId), ConversacionId.of(conversacion))).thenReturn(new FotoDelChat(JPEG, "abc123"));
 
         mockMvc.perform(get(FOTO_DEL_SOPORTE, conversacion).header("X-Actor-Id", actorId.toString())
                         .header("If-None-Match", "\"abc123\""))
@@ -94,9 +96,9 @@ class FotosDelChatControllerTest {
     void rechazosDelSoporte() throws Exception {
         UUID actorId = actor(UserStatus.ACTIVE);
         UUID otra = UUID.randomUUID();
-        when(fotos.fotoDelSoporte(UserId.of(actorId), ConversacionId.of(conversacion)))
+        when(fotos.fotoDeLaConversacion(UserId.of(actorId), ConversacionId.of(conversacion)))
                 .thenThrow(new NotAuthorizedException("No eres participante de esta conversación"));
-        when(fotos.fotoDelSoporte(UserId.of(actorId), ConversacionId.of(otra)))
+        when(fotos.fotoDeLaConversacion(UserId.of(actorId), ConversacionId.of(otra)))
                 .thenThrow(new NoSuchElementException("Solo el chat de soporte tiene foto propia"));
 
         mockMvc.perform(get(FOTO_DEL_SOPORTE, conversacion).header("X-Actor-Id", actorId.toString()))
@@ -106,6 +108,20 @@ class FotosDelChatControllerTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get(FOTO_DEL_SOPORTE, otra).header("X-Actor-Id", actorId.toString()))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("grupo con foto propia (D-212): la misma ruta con ?v= sirve su foto con los mismos encabezados")
+    void laFotoPropiaDeUnGrupo() throws Exception {
+        UUID actorId = actor(UserStatus.ACTIVE);
+        when(fotos.fotoDeLaConversacion(UserId.of(actorId), ConversacionId.of(conversacion)))
+                .thenReturn(new FotoDelChat(JPEG, "fed789"));
+
+        mockMvc.perform(get(FOTO_DEL_GRUPO, conversacion, 1790000000000L).header("X-Actor-Id", actorId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.IMAGE_JPEG))
+                .andExpect(header().string("ETag", "\"fed789\""))
+                .andExpect(header().string("Cache-Control", allOf(containsString("max-age=86400"), containsString("private"))));
     }
 
     @Test

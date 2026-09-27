@@ -10,6 +10,7 @@ import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.FotoDeIntegrantes;
 import com.renaser.os.chat.domain.model.conversacion.PrimerNombre;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
+import com.renaser.os.community.api.FotoPropiaDelGrupoFinder;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserStatus;
@@ -20,8 +21,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -30,8 +34,9 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Las tarjetas con nombre del chat: la del soporte (D-205) y la de cada integrante de un grupo o de un
- * soporte (D-206).
+ * Las fotos del chat que sirve el backend: la tarjeta con nombre del soporte (D-205), la de cada
+ * integrante de un grupo o de un soporte (D-206) y la foto propia de un grupo (D-212), que guarda
+ * {@code community} y se lee de su contrato público.
  *
  * <p><b>El orden importa.</b> Cuenta activa (403), la conversación existe (404), quien pide puede verla
  * (403) y recién entonces si es del tipo que corresponde y, para un integrante, si lo es (404): así, a
@@ -65,26 +70,42 @@ public class FotosDelChatService implements VerFotosDelChatUseCase {
     private final AutorizarAccesoAConversacionUseCase autorizarAcceso;
     private final UserSummaryFinder userSummaryFinder;
     private final TarjetaConNombrePort tarjetaPort;
+    private final FotoPropiaDelGrupoFinder fotosDeGrupos;
     private final FotoDeIntegrantes modo;
 
     public FotosDelChatService(LoadConversacionPort loadConversacionPort,
                                AutorizarAccesoAConversacionUseCase autorizarAcceso,
                                UserSummaryFinder userSummaryFinder, TarjetaConNombrePort tarjetaPort,
+                               FotoPropiaDelGrupoFinder fotosDeGrupos,
                                @Value("${renaser.chat.foto-de-integrantes:TARJETA}") String modo) {
         this.loadConversacionPort = loadConversacionPort;
         this.autorizarAcceso = autorizarAcceso;
         this.userSummaryFinder = userSummaryFinder;
         this.tarjetaPort = tarjetaPort;
+        this.fotosDeGrupos = fotosDeGrupos;
         this.modo = modoDe(modo);
         log.info("[chat.fotos] foto de los integrantes en grupos y soporte: {} (CHAT_FOTO_DE_INTEGRANTES)", this.modo);
     }
 
+    /**
+     * El soporte, la tarjeta de su aprendiz; un grupo, su foto propia si la tiene (D-212). Un grupo que usa
+     * la de Renaser da 404, como antes, y la app muestra la tarjeta que trae.
+     */
     @Override
-    public FotoDelChat fotoDelSoporte(UserId actorId, ConversacionId soporteId) {
-        Conversacion conversacion = laQuePuedeVer(actorId, soporteId);
-        UserId aprendiz = conversacion.aprendizDelSoporte().orElseThrow(() -> new NoSuchElementException(
-                "Solo el chat de soporte tiene foto propia; los grupos usan la tarjeta sin nombre"));
-        return tarjetaDe(aprendiz);
+    public FotoDelChat fotoDeLaConversacion(UserId actorId, ConversacionId conversacionId) {
+        Conversacion conversacion = laQuePuedeVer(actorId, conversacionId);
+        return switch (conversacion.tipo()) {
+            case SOPORTE -> tarjetaDe(conversacion.aprendizDelSoporte().orElseThrow(() -> new NoSuchElementException(
+                    "El soporte no tiene aprendiz reconocible: " + conversacionId)));
+            case CELULA -> fotoPropiaDe(conversacion);
+            default -> throw new NoSuchElementException("La comunidad y los 1 a 1 no tienen foto propia");
+        };
+    }
+
+    private FotoDelChat fotoPropiaDe(Conversacion grupo) {
+        return fotosDeGrupos.fotoDe(grupo.celulaId())
+                .map(foto -> new FotoDelChat(foto.jpeg(), huellaDe(foto.jpeg())))
+                .orElseThrow(() -> new NoSuchElementException("El grupo usa la foto de Renaser"));
     }
 
     @Override
@@ -138,6 +159,15 @@ public class FotosDelChatService implements VerFotosDelChatUseCase {
         boolean activo = userSummaryFinder.findById(actorId).map(u -> u.status() == UserStatus.ACTIVE).orElse(false);
         if (!activo) {
             throw new NotAuthorizedException("La cuenta esta suspendida");
+        }
+    }
+
+    /** Mismo criterio que las tarjetas: SHA-256 del contenido, 32 caracteres. Cambia si y solo si cambia la foto. */
+    private static String huellaDe(byte[] jpeg) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(jpeg)).substring(0, 32);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("La JVM no trae SHA-256", e);
         }
     }
 

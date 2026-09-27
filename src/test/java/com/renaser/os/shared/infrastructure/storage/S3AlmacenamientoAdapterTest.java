@@ -7,18 +7,25 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 import java.net.URI;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * Prueba del adaptador real de S3 <b>sin red y sin credenciales de verdad</b>.
@@ -146,5 +153,27 @@ class S3AlmacenamientoAdapterTest {
 
         verify(s3Client).deleteObject(any(DeleteObjectRequest.class));
         verifyNoMoreInteractions(s3Client);
+    }
+
+    /** D-212: la foto propia de un grupo la sirve el backend, así que la lee de S3. */
+    @Test
+    void leerTraeLosBytesDelObjetoExactoContraElBucketConfigurado() {
+        ArgumentCaptor<GetObjectRequest> pedido = ArgumentCaptor.forClass(GetObjectRequest.class);
+        when(s3Client.getObjectAsBytes(pedido.capture())).thenReturn(
+                ResponseBytes.fromByteArray(GetObjectResponse.builder().build(), new byte[] {1, 2, 3}));
+
+        assertThat(adapter().leer("grupos/g-1/foto-1.jpg")).hasValueSatisfying(bytes -> assertThat(bytes).containsExactly(1, 2, 3));
+        assertThat(pedido.getValue().bucket()).isEqualTo(BUCKET);
+        assertThat(pedido.getValue().key()).isEqualTo("grupos/g-1/foto-1.jpg");
+    }
+
+    @Test
+    void leerLoQueNoExisteEsVacioPeroOtraFallaDeS3Sube() {
+        when(s3Client.getObjectAsBytes(any(GetObjectRequest.class)))
+                .thenThrow(NoSuchKeyException.builder().message("no existe").build())
+                .thenThrow(S3Exception.builder().message("acceso denegado").statusCode(403).build());
+
+        assertThat(adapter().leer("grupos/g-1/foto-borrada.jpg")).isEmpty();
+        assertThatThrownBy(() -> adapter().leer("grupos/g-1/foto-1.jpg")).isInstanceOf(S3Exception.class);
     }
 }

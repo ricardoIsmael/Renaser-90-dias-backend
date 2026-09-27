@@ -2,6 +2,7 @@ package com.renaser.os.shared.application.ports.out;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.Optional;
 
 public interface AlmacenamientoPort {
 
@@ -29,8 +30,24 @@ public interface AlmacenamientoPort {
      * Sube un objeto que generó el propio servidor. Es la excepción a "el backend nunca toca los
      * bytes": todo archivo que viene del teléfono sigue yendo por {@link #firmarSubida}. Existe
      * para la imagen de bienvenida (D-174), que no la sube nadie porque la dibuja el servidor.
+     *
+     * <p><b>Corregido 2026-09-27 (D-212).</b> Decía que existía solo para la bienvenida. También sube
+     * la foto propia de un grupo: llega del teléfono, pero el servidor la lee, la recorta y la
+     * reescribe como JPEG de 512 px antes de guardarla, así que lo que se sube es lo que generó él.
      */
     void subir(String ruta, byte[] contenido, String tipoContenido);
+
+    /**
+     * Los bytes de un objeto, para lo poco que el servidor sirve él mismo en vez de dar una URL: hoy,
+     * la foto propia de un grupo (D-212), que la app pide con la sesión a la API del chat. Vacío si el
+     * objeto no existe.
+     *
+     * <p>Por defecto vacío, como {@link #guardaObjetos()}: el adaptador de marcador (local y pruebas)
+     * no guarda nada que leer. El de S3 lo lee de verdad.
+     */
+    default Optional<byte[]> leer(String ruta) {
+        return Optional.empty();
+    }
 
     /** Borra el objeto. Idempotente: borrar lo inexistente no falla. */
     void borrar(String ruta);

@@ -60,4 +60,21 @@ class ConversacionResponseTest {
         assertThat(ConversacionResponse.from(Conversacion.crearDirecta(ID, Conversacion.claveDirectaDe(aprendiz, otro), AHORA))
                 .photoPath()).isNull();
     }
+
+    /**
+     * D-212: un grupo con foto propia trae la ruta con {@code ?v=} y los milisegundos de cuándo cambió; con
+     * otra foto, otra ruta, y el teléfono la baja sin esperar el día del caché. Sin foto propia, nada.
+     */
+    @Test
+    @DisplayName("photoPath de un grupo: solo con foto propia, y con ?v= de cuándo cambió")
+    void laRutaDeLaFotoDeUnGrupoConFotoPropia() {
+        Conversacion grupo = Conversacion.crearCelula(ID, UUID.randomUUID(), AHORA);
+        Instant cambiada = Instant.parse("2026-09-27T15:00:00.123Z");
+
+        assertThat(ConversacionResponse.from(grupo, cambiada).photoPath())
+                .isEqualTo("/api/v1/chat/conversations/" + ID + "/foto?v=" + cambiada.toEpochMilli());
+        assertThat(ConversacionResponse.from(grupo, null).photoPath()).as("usa la foto de Renaser").isNull();
+        assertThat(ConversacionResponse.from(Conversacion.crearGlobal(ID, AHORA), cambiada).photoPath())
+                .as("la comunidad nunca").isNull();
+    }
 }

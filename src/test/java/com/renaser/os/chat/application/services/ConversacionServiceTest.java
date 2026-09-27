@@ -14,6 +14,7 @@ import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigente
 import com.renaser.os.chat.application.ports.out.participante.ListarUsuariosDeConversacionPort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
+import com.renaser.os.community.api.FotoPropiaDelGrupoFinder;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.IdGenerator;
@@ -81,6 +82,9 @@ class ConversacionServiceTest {
     private ListarUsuariosDeConversacionPort listarUsuariosPort;
     @Mock
     private UserSummaryFinder userSummaryFinder;
+    /** D-212: cuándo cambió la foto propia de cada grupo de la lista. */
+    @Mock
+    private FotoPropiaDelGrupoFinder fotosDeGrupos;
     @Mock
     private IdGenerator idGenerator;
     /** No necesita stubbing: TransactionTemplate.execute con getTransaction()==null solo
@@ -99,7 +103,7 @@ class ConversacionServiceTest {
     void setUp() {
         service = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
                 esParticipantePort, pertenenciaVigentePort, marcarLeidoPort, contarNoLeidosPort, loadMensajePort,
-                listarUsuariosPort, userSummaryFinder,
+                listarUsuariosPort, userSummaryFinder, fotosDeGrupos,
                 CLOCK, idGenerator, transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
@@ -229,6 +233,45 @@ class ConversacionServiceTest {
                         .isNull());
         // Nunca N+1: una sola consulta en lote para todas las conversaciones del actor.
         verify(listarUsuariosPort, times(1)).otroParticipanteDeDirectas(any(), any());
+    }
+
+    /**
+     * D-212: un grupo con foto propia lleva en la lista cuándo cambió (de ahí sale su {@code photoPath} con
+     * {@code ?v=}); uno con la foto de Renaser, no. Una sola consulta a community para todos los grupos, y
+     * ninguna si la lista no tiene grupos.
+     */
+    @Test
+    void laListaTraeCuandoCambioLaFotoPropiaDeCadaGrupoEnUnaSolaConsulta() {
+        UUID conFoto = UUID.randomUUID();
+        UUID sinFoto = UUID.randomUUID();
+        Conversacion fenix = Conversacion.crearCelula(ConversacionId.of(UUID.randomUUID()), conFoto, CLOCK.now());
+        Conversacion aurora = Conversacion.crearCelula(ConversacionId.of(UUID.randomUUID()), sinFoto, CLOCK.now());
+        Conversacion comunidad = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
+        Instant cambiada = Instant.parse("2026-09-27T15:00:00Z");
+        when(loadConversacionPort.misConversaciones(activo)).thenReturn(List.of(fenix, aurora, comunidad));
+        when(loadMensajePort.ultimosPorConversacion(any())).thenReturn(Map.of());
+        when(contarNoLeidosPort.contarNoLeidos(eq(activo), any())).thenReturn(Map.of());
+        when(fotosDeGrupos.cambiadasEn(List.of(conFoto, sinFoto))).thenReturn(Map.of(conFoto, cambiada));
+
+        Map<ConversacionId, Instant> fotos = new java.util.HashMap<>();
+        service.listar(activo).forEach(r -> fotos.put(r.conversacion().id(), r.fotoDelGrupoCambiadaEn()));
+
+        assertThat(fotos.get(fenix.id())).isEqualTo(cambiada);
+        assertThat(fotos.get(aurora.id())).as("usa la foto de Renaser").isNull();
+        assertThat(fotos.get(comunidad.id())).isNull();
+        verify(fotosDeGrupos, times(1)).cambiadasEn(any());
+    }
+
+    @Test
+    void sinGruposEnLaListaNoSeLePreguntaACommunityPorLasFotos() {
+        Conversacion comunidad = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
+        when(loadConversacionPort.misConversaciones(activo)).thenReturn(List.of(comunidad));
+        when(loadMensajePort.ultimosPorConversacion(any())).thenReturn(Map.of());
+        when(contarNoLeidosPort.contarNoLeidos(eq(activo), any())).thenReturn(Map.of());
+
+        service.listar(activo);
+
+        verify(fotosDeGrupos, never()).cambiadasEn(any());
     }
 
     @Test

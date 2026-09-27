@@ -24,6 +24,7 @@ import com.renaser.os.chat.application.services.PresenciaService;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.Participante;
+import com.renaser.os.community.api.FotoPropiaDelGrupoFinder;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.IdGenerator;
@@ -223,7 +224,7 @@ class RevocacionDeSoportePorBajaDeRolTest {
                 guardarMensaje, cargarMensajes, fanoutMensajes, usuarios, almacenamiento, CLOCK, idGenerator);
         bandeja = new ConversacionService(conversaciones, guardarConversacion, agregarParticipante,
                 esParticipante, pertenenciaVigente, marcarLeidoPort, contarNoLeidos, cargarMensajes, roster,
-                usuarios, CLOCK, idGenerator, transacciones);
+                usuarios, sinFotosPropias(), CLOCK, idGenerator, transacciones);
         presencia = new PresenciaService(presenciaPort, fanoutPresencia, conversacionesDeUsuario, roster,
                 conversaciones, esParticipante, pertenenciaVigente, usuarios);
     }
@@ -369,6 +370,21 @@ class RevocacionDeSoportePorBajaDeRolTest {
 
     private List<ConversacionId> conversacionesEnLaBandejaDe(UserId actorId) {
         return bandeja.listar(actorId).stream().map(resumen -> resumen.conversacion().id()).toList();
+    }
+
+    /** D-212: la bandeja de esta prueba no tiene grupos; community no tiene fotos propias que dar. */
+    private static FotoPropiaDelGrupoFinder sinFotosPropias() {
+        return new FotoPropiaDelGrupoFinder() {
+            @Override
+            public Optional<FotoPropia> fotoDe(UUID grupoId) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Map<UUID, java.time.Instant> cambiadasEn(java.util.Collection<UUID> grupos) {
+                return Map.of();
+            }
+        };
     }
 
     private static Optional<Conversacion> porId(ConversacionId id) {

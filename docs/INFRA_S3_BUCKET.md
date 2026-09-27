@@ -15,6 +15,13 @@ El backend **nunca toca los bytes**: todo sube y baja por URL prefirmada, direct
 y S3. El puerto es `AlmacenamientoPort` (4 métodos: `firmarSubida`, `firmarLectura`, `urlPublica`,
 `borrar`) y su implementación real es `S3AlmacenamientoAdapter`.
 
+> **Corregido 2026-09-27 (D-212).** Ya no son cuatro métodos ni «nunca». Desde D-174 el servidor sube lo que
+> genera él (`subir`: la tarjeta de bienvenida, prefijo `bienvenida/`), y desde D-212 también la foto propia
+> de un grupo, que llega del teléfono pero el servidor lee, recorta y reescribe antes de guardarla (prefijo
+> `grupos/<id>/foto-<ms>.jpg`), y la **lee** (`leer`) para servirla con sesión desde la API del chat. Todo
+> lo demás sigue yendo por URL prefirmada. Los permisos IAM del backend no cambian: ya tiene `GetObject`,
+> `PutObject` y `DeleteObject` sobre todo el bucket.
+
 **Ojo con esto antes que nada:** el adaptador real **solo se activa con `STORAGE_PROVEEDOR=s3`**.
 Sin esa variable manda `NoOpAlmacenamientoAdapter` y toda URL sale como
 `about:blank#pendiente-s3/...`. Es lo primero a verificar cuando un archivo "no se ve".

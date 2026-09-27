@@ -8,6 +8,8 @@ import com.renaser.os.chat.application.ports.out.bienvenida.TarjetaConNombrePort
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
+import com.renaser.os.community.api.FotoPropiaDelGrupoFinder;
+import com.renaser.os.community.api.FotoPropiaDelGrupoFinder.FotoPropia;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -65,6 +67,9 @@ class FotosDelChatServiceTest {
     private UserSummaryFinder userSummaryFinder;
     @Mock
     private TarjetaConNombrePort tarjetaPort;
+    /** D-212: la foto propia de un grupo, que guarda community. */
+    @Mock
+    private FotoPropiaDelGrupoFinder fotosDeGrupos;
 
     private FotosDelChatService servicio;
 
@@ -88,7 +93,7 @@ class FotosDelChatServiceTest {
     void laAprendizVeSuTarjeta() {
         when(autorizarAcceso.puedeVer(SOPORTE, ANA)).thenReturn(true);
 
-        FotoDelChat foto = servicio.fotoDelSoporte(ANA, SOPORTE);
+        FotoDelChat foto = servicio.fotoDeLaConversacion(ANA, SOPORTE);
 
         verify(tarjetaPort).tarjetaDe("María");
         assertThat(foto.jpeg()).isSameAs(TARJETA.jpeg());
@@ -100,7 +105,7 @@ class FotosDelChatServiceTest {
     void elStaffVeLaTarjetaDeLaAprendiz() {
         when(autorizarAcceso.puedeVer(SOPORTE, KELIN)).thenReturn(true);
 
-        servicio.fotoDelSoporte(KELIN, SOPORTE);
+        servicio.fotoDeLaConversacion(KELIN, SOPORTE);
 
         verify(tarjetaPort).tarjetaDe("María");
     }
@@ -110,17 +115,53 @@ class FotosDelChatServiceTest {
     void soporteSinAccesoEs403() {
         when(autorizarAcceso.puedeVer(SOPORTE, KELIN)).thenReturn(false);
 
-        assertThatThrownBy(() -> servicio.fotoDelSoporte(KELIN, SOPORTE)).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> servicio.fotoDeLaConversacion(KELIN, SOPORTE)).isInstanceOf(NotAuthorizedException.class);
         verifyNoInteractions(tarjetaPort);
     }
 
     @Test
-    @DisplayName("soporte: un grupo o la comunidad no tienen foto propia (404), aunque se pueda verlos")
-    void soporteDeAlgoQueNoEsSoporteEs404() {
+    @DisplayName("la comunidad y un 1 a 1 no tienen foto propia (404), aunque se pueda verlos")
+    void laComunidadYUnUnoAUnoSon404() {
         when(autorizarAcceso.puedeVer(GLOBAL, ANA)).thenReturn(true);
+        when(autorizarAcceso.puedeVer(DIRECTA, ANA)).thenReturn(true);
 
-        assertThatThrownBy(() -> servicio.fotoDelSoporte(ANA, GLOBAL)).isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> servicio.fotoDeLaConversacion(ANA, GLOBAL)).isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> servicio.fotoDeLaConversacion(ANA, DIRECTA)).isInstanceOf(NoSuchElementException.class);
+        verifyNoInteractions(tarjetaPort, fotosDeGrupos);
+    }
+
+    // ── La foto propia de un grupo (D-212) ─────────────────────────────────
+
+    @Test
+    @DisplayName("grupo con foto propia: quien lo ve recibe esa foto, con la huella de su contenido para el ETag")
+    void unGrupoConFotoPropiaLaSirve() {
+        byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, 7, 7, 7};
+        when(autorizarAcceso.puedeVer(GRUPO, ANA)).thenReturn(true);
+        when(fotosDeGrupos.fotoDe(GRUPO_FENIX)).thenReturn(Optional.of(new FotoPropia(jpeg, AHORA)));
+
+        FotoDelChat foto = servicio.fotoDeLaConversacion(ANA, GRUPO);
+
+        assertThat(foto.jpeg()).isSameAs(jpeg);
+        assertThat(foto.huella()).hasSize(32).isNotEqualTo(TARJETA.huella());
         verifyNoInteractions(tarjetaPort);
+    }
+
+    @Test
+    @DisplayName("grupo sin foto propia: 404 como antes, y la app muestra la tarjeta que trae")
+    void unGrupoConLaFotoDeRenaserEs404() {
+        when(autorizarAcceso.puedeVer(GRUPO, ANA)).thenReturn(true);
+        when(fotosDeGrupos.fotoDe(GRUPO_FENIX)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> servicio.fotoDeLaConversacion(ANA, GRUPO)).isInstanceOf(NoSuchElementException.class);
+    }
+
+    @Test
+    @DisplayName("autorización negativa: quien no puede ver el grupo recibe 403 sin preguntarle a community")
+    void laFotoDeUnGrupoAjenoEs403() {
+        when(autorizarAcceso.puedeVer(GRUPO, KELIN)).thenReturn(false);
+
+        assertThatThrownBy(() -> servicio.fotoDeLaConversacion(KELIN, GRUPO)).isInstanceOf(NotAuthorizedException.class);
+        verifyNoInteractions(fotosDeGrupos);
     }
 
     @Test
@@ -129,7 +170,7 @@ class FotosDelChatServiceTest {
         ConversacionId inexistente = ConversacionId.of(UUID.randomUUID());
         when(loadConversacionPort.porId(inexistente)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> servicio.fotoDelSoporte(ANA, inexistente)).isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> servicio.fotoDeLaConversacion(ANA, inexistente)).isInstanceOf(NoSuchElementException.class);
         assertThatThrownBy(() -> servicio.fotoDeIntegrante(ANA, inexistente, RICARDO))
                 .isInstanceOf(NoSuchElementException.class);
         verifyNoInteractions(autorizarAcceso, tarjetaPort);
@@ -141,7 +182,7 @@ class FotosDelChatServiceTest {
         when(userSummaryFinder.findById(ANA)).thenReturn(Optional.empty());
         when(autorizarAcceso.puedeVer(SOPORTE, KELIN)).thenReturn(true);
 
-        servicio.fotoDelSoporte(KELIN, SOPORTE);
+        servicio.fotoDeLaConversacion(KELIN, SOPORTE);
 
         verify(tarjetaPort).tarjetaDe("");
     }
@@ -189,8 +230,9 @@ class FotosDelChatServiceTest {
 
         assertThatThrownBy(() -> servicio.fotoDeIntegrante(ANA, GRUPO, RICARDO))
                 .isInstanceOf(NotAuthorizedException.class);
-        assertThatThrownBy(() -> servicio.fotoDelSoporte(ANA, SOPORTE)).isInstanceOf(NotAuthorizedException.class);
-        verifyNoInteractions(tarjetaPort);
+        assertThatThrownBy(() -> servicio.fotoDeLaConversacion(ANA, SOPORTE)).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> servicio.fotoDeLaConversacion(ANA, GRUPO)).isInstanceOf(NotAuthorizedException.class);
+        verifyNoInteractions(tarjetaPort, fotosDeGrupos);
     }
 
     @Test
@@ -284,7 +326,8 @@ class FotosDelChatServiceTest {
     }
 
     private FotosDelChatService conModo(String modo) {
-        return new FotosDelChatService(loadConversacionPort, autorizarAcceso, userSummaryFinder, tarjetaPort, modo);
+        return new FotosDelChatService(loadConversacionPort, autorizarAcceso, userSummaryFinder, tarjetaPort,
+                fotosDeGrupos, modo);
     }
 
     private void grupoConChat() {

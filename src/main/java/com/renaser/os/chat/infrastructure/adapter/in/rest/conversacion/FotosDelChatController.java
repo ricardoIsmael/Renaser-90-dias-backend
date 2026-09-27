@@ -15,15 +15,18 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Las fotos del chat que son la tarjeta de Canva con un primer nombre (2026-09-27): la del chat de
- * soporte (D-205) y la de cada integrante de un grupo o de un soporte (D-206).
+ * Las fotos del chat que sirve el backend (2026-09-27): la del chat de soporte (D-205, la tarjeta con el
+ * primer nombre de su aprendiz), la de cada integrante de un grupo o de un soporte (D-206) y la foto
+ * propia de un grupo (D-212), que va por la misma ruta que la del soporte.
  *
- * <p>Las dos salen privadas por un día y con el ETag de su contenido: pasado el día se revalidan y, si
- * la tarjeta es la misma, el servidor contesta 304 sin mandarla de nuevo (lo resuelve Spring al
- * escribir el {@code ResponseEntity} con un {@code If-None-Match} igual).
+ * <p>Todas salen privadas por un día y con el ETag de su contenido: pasado el día se revalidan y, si
+ * la foto es la misma, el servidor contesta 304 sin mandarla de nuevo (lo resuelve Spring al escribir
+ * el {@code ResponseEntity} con un {@code If-None-Match} igual). La de un grupo, además, llega a la app
+ * con {@code ?v=} (cuándo cambió): con otra foto la ruta es otra y el teléfono no espera el día.
  * <blockquote><b>Corregido 2026-09-27 (D-206).</b> La foto del soporte vivía en
  * {@code ConversacionSoporteController}; se mudó acá al sumarse la de los integrantes, con la misma
  * ruta y la misma respuesta.</blockquote>
@@ -31,7 +34,7 @@ import java.util.UUID;
 @RestController
 public class FotosDelChatController {
 
-    static final String RUTA_FOTO_DEL_SOPORTE = "/api/v1/chat/conversations/{id}/foto";
+    static final String RUTA_FOTO_DE_LA_CONVERSACION = "/api/v1/chat/conversations/{id}/foto";
     static final String RUTA_FOTO_DE_INTEGRANTE = "/api/v1/chat/conversations/{id}/miembros/{usuarioId}/foto";
 
     /** Un día en el teléfono, y solo en el suyo ({@code private}: la foto sale con sesión). */
@@ -44,13 +47,17 @@ public class FotosDelChatController {
     }
 
     /**
-     * La tarjeta con el primer nombre del aprendiz dueño del soporte (D-205). 404 si la conversación no
-     * existe o no es un soporte; 403 si quien pide no participa.
+     * La foto de la conversación: en un soporte, la tarjeta con el primer nombre de su aprendiz (D-205);
+     * en un grupo, su foto propia (D-212). 403 si quien pide no puede verla; 404 si no existe, si es la
+     * comunidad o un 1 a 1, o si es un grupo que usa la foto de Renaser. El {@code ?v=} que trae la ruta
+     * de un grupo no se lee: solo cambia la URL para el caché del teléfono.
+     * <blockquote><b>Corregido 2026-09-27 (D-212).</b> El método se llamaba {@code fotoDelSoporte} y un grupo
+     * siempre daba 404.</blockquote>
      */
-    @RequiresPermission(value = Permission.USE_APP, scope = "participante del chat de soporte")
-    @GetMapping(RUTA_FOTO_DEL_SOPORTE)
-    public ResponseEntity<byte[]> fotoDelSoporte(@ActorAutenticado UserId actorId, @PathVariable UUID id) {
-        return comoImagen(fotos.fotoDelSoporte(actorId, ConversacionId.of(id)));
+    @RequiresPermission(value = Permission.USE_APP, scope = "quien puede ver el soporte o el grupo")
+    @GetMapping(RUTA_FOTO_DE_LA_CONVERSACION)
+    public ResponseEntity<byte[]> fotoDeLaConversacion(@ActorAutenticado UserId actorId, @PathVariable UUID id) {
+        return comoImagen(fotos.fotoDeLaConversacion(actorId, ConversacionId.of(id)));
     }
 
     /**
@@ -68,7 +75,15 @@ public class FotosDelChatController {
 
     /** Lo que {@link ConversacionResponse#photoPath} le da a la app para la foto de un soporte. */
     public static String rutaDeLaFotoDelSoporte(ConversacionId soporteId) {
-        return RUTA_FOTO_DEL_SOPORTE.replace("{id}", soporteId.toString());
+        return RUTA_FOTO_DE_LA_CONVERSACION.replace("{id}", soporteId.toString());
+    }
+
+    /**
+     * La de un grupo con foto propia (D-212): la misma ruta con {@code ?v=} y los milisegundos de cuándo
+     * cambió, para que el teléfono baje la nueva en cuanto la ruta cambia.
+     */
+    public static String rutaDeLaFotoDelGrupo(ConversacionId grupoId, Instant cambiadaEn) {
+        return RUTA_FOTO_DE_LA_CONVERSACION.replace("{id}", grupoId.toString()) + "?v=" + cambiadaEn.toEpochMilli();
     }
 
     /** La ruta de la tarjeta de un integrante, la que llega a la info del chat (D-206). */

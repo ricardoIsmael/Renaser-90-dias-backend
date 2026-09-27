@@ -10273,7 +10273,10 @@ arreglo: `elDomingoElMartesSigueFuera`, `unDiaDeSemanaNoCambia` y `elDomingoDelD
 semana), el día previo al Día 1, el último domingo del programa y la semana 13, con el reloj en una hora UTC que cae en el
 día local anterior (regla 02). Si una regla nueva amplía otra, se prueba que siga cubriendo todo lo que cubría la vieja.
 
-## E-341 · SIN ARREGLAR (fuera de alcance) — «Escribirle» en la ficha de un aprendiz abierta desde «Mi grupo» dentro de Comunidad no se ve hacer nada: el chat se abre detrás de la ficha
+## E-341 · RESUELTO (frontend ce8e3d6, 2026-09-27) — «Escribirle» en la ficha de un aprendiz abierta desde «Mi grupo» dentro de Comunidad no se ve hacer nada: el chat se abre detrás de la ficha
+
+> **Corregido 2026-09-27.** El título decía «SIN ARREGLAR (fuera de alcance)»: se registró así al encontrarlo durante
+> D-207 y el coordinador pidió arreglarlo después, en un commit aparte.
 
 **Síntoma.** Un mentor en Comunidad → Tribu → «Mi grupo» → un aprendiz → «Escribirle»: la ficha sigue a la vista y
 parece que el botón no hizo nada. Recién al volver dos veces («←» a «Mi grupo» y «←» otra vez) aparece el chat 1 a 1 ya
@@ -10285,12 +10288,40 @@ abrirChatConversacionId })`. Estando ya en Comunidad, el efecto que consume ese 
 Tribu y pide el chat, pero no toca `vistaMentor`: el `return` temprano de `vistaMentor === 'alumno'` sigue dibujando la
 ficha encima de todo.
 
-**Solución.** Ninguna todavía: es un defecto anterior a D-207 y se reportó en vez de arreglarlo en el mismo cambio (regla
-00). El arreglo probable es de una línea: en ese mismo efecto, `setVistaMentor('ninguna')`. La ficha que se abre desde la
-info del grupo (D-207) ya cierra la ficha y la info en ese efecto (`setFichaDesdeLaInfo(null)`,
-`setGroupInfoVisible(false)`), así que ese camino nuevo no tiene el problema.
+**Solución.** Al registrarlo no se arregló: era un defecto anterior a D-207 y se reportó en vez de arreglarlo en el mismo
+cambio (regla 00). Se arregló después (frontend `ce8e3d6`): las tres vistas que tapan Comunidad («Mi grupo», su ficha y la
+ficha abierta desde la info del grupo) pasaron a un reductor (`mentor/utils/vistasDelMentor.ts`) con una sola acción,
+`pedir-un-chat`, que las despeja todas; el efecto que recibe `abrirChatConversacionId` la usa y además cierra la info.
+En vez del `setVistaMentor('ninguna')` suelto que se había propuesto, porque así una vista de ese tipo que se agregue
+mañana entra al mismo reductor y la despeja la misma acción. La navegación con «←» no cambió.
+
+**Prueba de regresión.** `vistasDelMentor.test.ts`: con «Mi grupo» o su ficha abiertos, pedir un chat no deja nada
+tapando Comunidad. Con la versión anterior del cierre (que solo cerraba la ficha de la info) fallan esas dos pruebas;
+se comprobó dejándola y corriéndolas.
 
 **Cómo evitar que vuelva a pasar.** Toda vista de `ComunidadScreen` que se dibuja con un `return` temprano (las del
+mentor, la ficha) tiene que cerrarse en los efectos que llevan a otra parte de la pantalla, o tapa lo que se pidió: se
+agrega al reductor `vistasDelMentor`, que ya la despeja al pedir un chat. Queda sin probar en el emulador (desde Hoy y
+desde Comunidad).
+
+## E-342 · `The module factory of \`jest.mock()\` is not allowed to reference any out-of-scope variables. Invalid variable access: apiFetch` al escribir la prueba de la foto del grupo (D-212)
+
+**Síntoma.** `fotoDelGrupoApi.test.ts` (frontend `eventos-app`) no llegaba a correr: *Test suite failed to run —
+ReferenceError: … The module factory of `jest.mock()` is not allowed to reference any out-of-scope variables.
+Invalid variable access: apiFetch*.
+
+**Causa real.** `babel-plugin-jest-hoist` sube cada `jest.mock(...)` por encima de los `import` y de las
+declaraciones del archivo. La fábrica del mock usaba una constante `apiFetch` declarada arriba, que en el
+momento de ejecutarse todavía no existe; el plugin lo rechaza a propósito. La única excepción que acepta
+son las variables cuyo nombre empieza con `mock`, porque se asume que se leen recién cuando se llama al mock.
+
+**Solución.** La constante pasó a llamarse `mockApiFetch` y la fábrica la usa dentro de una función
+(`apiFetch: (ruta, opciones) => mockApiFetch(ruta, opciones)`), así se lee al llamar y no al declarar.
+
+**Cómo evitar que vuelva a pasar.** Un `jest.fn()` que se usa dentro de la fábrica de un `jest.mock` se nombra
+`mock…` y se lee dentro de una función; o se crea dentro de la misma fábrica, como hace `sesionVencida.test.ts`
+con `almacenamientoSeguro`.
+
 mentor, la ficha) tiene que cerrarse en los efectos que llevan a otra parte de la pantalla, o tapa lo que se pidió.
 Probarlo en el emulador después de arreglarlo: desde Hoy y desde Comunidad.
 
