@@ -464,7 +464,7 @@ minutos, `EventPublicationMaintenanceScheduler`): el reintento solo abre las que
 | `AcompanamientoServiceTest` (+2) | `acompanantesVigentes`: mentor y guías sí; soporte, aprendices y exmentor no; grupo cerrado, vacío |
 | `ChatPersistenceAdapterTest` (+1) | `clavesDirectasExistentes` contra Postgres real |
 
-## 10. La bienvenida automática en el chat de soporte (2026-09-26, D-174)
+## 10. La bienvenida automática en el chat de soporte y en el del grupo (2026-09-26, D-174, D-191)
 
 **Qué hace.** Cuando nace el soporte de un aprendiz **nuevo** (no en el relleno de §8), se mandan tres
 mensajes desde la cuenta de staff configurada (hoy la de Kelin), en el orden de OPE-01-01: la tarjeta de
@@ -487,13 +487,28 @@ aviso en el log.
 > por el primer nombre). […] sin texto, sale solo la tarjeta». El dueño pidió que el texto no vaya en
 > una variable de entorno y que cada parte del ingreso tenga su mensaje. `BIENVENIDA_TEXTO` ya no se lee.
 
-**La bienvenida en el grupo estable: pendiente (D-190).** OPE-01-01 pide también un mensaje del mentor
-en el grupo, reforzando pertenencia y compromiso, cuando el aprendiz se integra a su grupo. **No está
-implementado:** para no repetirlo con cada reentrega del outbox o cada reconciliación de
-`ComposicionDeCelulaCambiadaEvent` hace falta una marca por aprendiz **y grupo**, y
-`mensajes_bienvenida` no la admite (su PK es solo `usuario_destinatario_id`, que ya ocupa la bienvenida
-del soporte). Eso pide una columna o tabla nueva, que queda para decisión del dueño. El borrador del
-texto (`grupo`, con `{nombre}` y `{mentor}`) ya está en `mensajes.yaml`, sin uso.
+**La bienvenida en el grupo estable (D-191, V71).** OPE-01-01 pide también un mensaje del mentor en
+el grupo, reforzando pertenencia y compromiso, cuando el aprendiz se integra a su grupo.
+`ComposicionCelulaBienvenidaListener` (`@ApplicationModuleListener`: después del commit, en otro hilo,
+separado de los otros dos listeners del mismo evento) llama a `BienvenidaEnGrupoService`, que:
+
+1. Pide a `community.api.BienvenidaDeGrupo` (vía `BienvenidaEnGrupoPort`) las pertenencias de aprendiz
+   **vigentes y sin marca** del grupo y su **mentor vigente**. Vacío si el grupo es la **recepción**, está
+   fuera de su periodo o **no tiene mentor**.
+2. Lee las cuentas del grupo en una consulta; mentor o aprendiz no activos quedan pendientes.
+3. Por cada aprendiz, en **su** transacción: primero `marcarDada` (`UPDATE asignaciones_celula SET
+   bienvenida_enviada_en = … WHERE … IS NULL`; sigue solo si afectó 1 fila) y después el mensaje `TEXTO`
+   en el chat del grupo, firmado por el mentor, con el texto `grupo` de `mensajes.yaml` (`{nombre}` y
+   `{mentor}` = primeros nombres). Sin tarjeta. O quedan la marca y el mensaje, o ninguno.
+4. Un fallo que no es «ya estaba marcada» se lanza al final, después de intentar a todos (G-3).
+
+La marca es por pertenencia (`asignaciones_celula`, una fila por aprendiz y grupo), así que un traslado
+recibe la bienvenida del grupo nuevo. V71 marcó a todos los que ya estaban en un grupo al desplegar. Un
+grupo sin mentor deja las bienvenidas pendientes: salen con el cambio de composición que le pone mentor,
+si la pertenencia sigue abierta.
+> **Corregido 2026-09-26 (D-191).** Este apartado decía «**No está implementado:** […] hace falta una
+> marca por aprendiz **y grupo**, y `mensajes_bienvenida` no la admite […]. Eso pide una columna o tabla
+> nueva, que queda para decisión del dueño». El dueño eligió una columna en `asignaciones_celula`.
 
 **La tarjeta** la dibuja el servidor (`BienvenidaJava2dAdapter`, Java2D, sin servicios externos) sobre
 `src/main/resources/bienvenida/fondo.png` (la exportación de Canva sin nombre) con Cinzel
@@ -548,7 +563,9 @@ crea el soporte, así que los dos commitean juntos (E-299).
 |---|---|
 | `BienvenidaJava2dAdapterTest` (4) | Coincide con la exportación de Canva (la referencia está en `src/test/resources/bienvenida/`); el test distingue una tarjeta sin nombre; un nombre largo no se sale; JPEG liviano |
 | `BienvenidaEnSoporteServiceTest` (9) | Tarjeta con el primer nombre, mensaje que la acompaña y formal, con los textos del puerto y firmados por el remitente (D-190); con los dos textos vacíos solo la tarjeta; apagada sin remitente; remitente suspendido no manda; un fallo de S3 no manda una foto inexistente y lanza (G-2); deja la marca con la tarjeta; una reentrega con marca no hace nada; la carrera con otra entrega no es error; con `noop` solo el formal (G-5) |
-| `TextosDeBienvenidaYamlAdapterTest` (4) | El `mensajes.yaml` del repo trae los dos textos del soporte con `{nombre}` y el borrador del grupo; una clave vacía apaga ese mensaje; sin archivo falla al arrancar; `application.yaml` ya no tiene `renaser.bienvenida.texto` y el remitente sigue por `BIENVENIDA_REMITENTE_EMAIL` (D-190) |
+| `BienvenidaEnGrupoServiceTest` (6) | Marca y después manda el texto del recurso en el chat del grupo, firmado por el mentor, con los dos primeros nombres; marca ya puesta no manda; sin pendientes (recepción, sin mentor) no manda; sin texto no marca; mentor suspendido no marca; un fallo no frena a los demás y se lanza al final |
+| `BienvenidaEnGrupoIT` (5) | Postgres real: un mensaje y la reentrega no duplica; dos entregas cruzadas en dos hilos dan un mensaje; recepción no; sin mentor queda pendiente y sale al ponerle mentor; V71 marca las pertenencias de aprendiz existentes y no las de mentor (base aparte migrada a V70, semilla, V71) |
+| `TextosDeBienvenidaYamlAdapterTest` (4) | El `mensajes.yaml` del repo trae los dos textos del soporte y el del grupo con sus marcadores; una clave vacía apaga ese mensaje; sin archivo falla al arrancar; `application.yaml` ya no tiene `renaser.bienvenida.texto` y el remitente sigue por `BIENVENIDA_REMITENTE_EMAIL` (D-190) |
 | `MarcaDeBienvenidaJdbcAdapterTest` (1) | La marca contra Postgres real: una por destinatario, la segunda choca con la PK |
 | `ConversacionSoporteServiceTest` (+2 y aserciones) | Avisa solo al crear de verdad: no si ya existía, no si perdió la carrera, no en el relleno; el aviso se publica dentro de la transacción que crea el soporte (R2) |
 | `PrimerNombreTest` (2) | Primera palabra con inicial en mayúscula; vacío sin nombre |

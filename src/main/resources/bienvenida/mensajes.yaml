@@ -32,10 +32,10 @@ soporte:
 
     Antes de esa sesión te enviaremos por aquí la información que necesitas para aprovecharla. Si tienes cualquier duda, escríbenos en este chat: estamos para acompañarte.
 
-# Al integrarse a su GRUPO estable con mentor: mensaje personalizado que refuerza pertenencia y
-# compromiso, en el chat del grupo, firmado por el mentor. Marcador extra: {mentor} = primer
-# nombre del mentor.
-# TODAVÍA NO SE ENVÍA: falta decidir dónde se guarda la marca de «ya se le dio la bienvenida en
-# este grupo» (ver D-190 en docs/MODULOS_A_AVANZAR.md). El texto queda acá para revisarlo.
+# Al integrarse a su GRUPO estable con mentor (no la recepción): mensaje personalizado que refuerza
+# pertenencia y compromiso, en el chat del grupo, firmado por el mentor vigente de ese grupo (D-191).
+# Marcador extra: {mentor} = primer nombre del mentor. Sin tarjeta. Una vez por aprendiz y grupo
+# (marca en asignaciones_celula.bienvenida_enviada_en); si el grupo no tiene mentor, espera a que
+# lo tenga. Vacío ("") = no se manda y queda pendiente.
 grupo: |
   ¡{nombre}, te damos la bienvenida a tu grupo! Soy {mentor} y voy a acompañarte en estos días. Desde hoy eres parte de este grupo: aquí nos sostenemos, compartimos avances y cumplimos juntos lo que nos proponemos. Cuento contigo.

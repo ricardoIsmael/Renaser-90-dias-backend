@@ -20,15 +20,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class TextosDeBienvenidaYamlAdapterTest {
 
     @Test
-    @DisplayName("D-190: el recurso del repo trae los dos textos del soporte, con {nombre}, y el borrador del grupo")
+    @DisplayName("D-190: el recurso del repo trae los dos textos del soporte y el del grupo (D-191), con sus marcadores")
     void elRecursoDelRepoTraeLosTextos() throws Exception {
         TextosDeBienvenidaYamlAdapter textos = new TextosDeBienvenidaYamlAdapter();
 
         assertThat(textos.soporteConLaTarjeta()).contains("{nombre}").doesNotEndWith("\n");
         assertThat(textos.soporteFormal()).contains("{nombre}").contains("confirmado").contains("sesión técnica");
+        assertThat(textos.grupo()).contains("{nombre}").contains("{mentor}");
         String crudo = new ClassPathResource(TextosDeBienvenidaYamlAdapter.RECURSO)
                 .getContentAsString(StandardCharsets.UTF_8);
-        assertThat(crudo).contains("BORRADORES").contains("grupo:").contains("{mentor}");
+        assertThat(crudo).contains("BORRADORES");
     }
 
     @Test
@@ -39,6 +40,7 @@ class TextosDeBienvenidaYamlAdapterTest {
 
         assertThat(textos.soporteConLaTarjeta()).isEmpty();
         assertThat(textos.soporteFormal()).isEmpty();
+        assertThat(textos.grupo()).isEmpty();
     }
 
     @Test

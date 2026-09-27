@@ -229,5 +229,9 @@ class BienvenidaEnSoporteServiceTest {
     }
 
     private record TextosFijos(String soporteConLaTarjeta, String soporteFormal) implements TextosDeBienvenidaPort {
+        @Override
+        public String grupo() {
+            return "";
+        }
     }
 }

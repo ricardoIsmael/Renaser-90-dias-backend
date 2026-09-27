@@ -21,6 +21,7 @@ class TextosDeBienvenidaYamlAdapter implements TextosDeBienvenidaPort {
 
     private final String soporteConLaTarjeta;
     private final String soporteFormal;
+    private final String grupo;
 
     TextosDeBienvenidaYamlAdapter() {
         this(new ClassPathResource(RECURSO));
@@ -30,6 +31,7 @@ class TextosDeBienvenidaYamlAdapter implements TextosDeBienvenidaPort {
         Properties textos = leer(recurso);
         this.soporteConLaTarjeta = texto(textos, "soporte.con-la-tarjeta");
         this.soporteFormal = texto(textos, "soporte.formal");
+        this.grupo = texto(textos, "grupo");
     }
 
     @Override
@@ -40,6 +42,11 @@ class TextosDeBienvenidaYamlAdapter implements TextosDeBienvenidaPort {
     @Override
     public String soporteFormal() {
         return soporteFormal;
+    }
+
+    @Override
+    public String grupo() {
+        return grupo;
     }
 
     private static Properties leer(Resource recurso) {
