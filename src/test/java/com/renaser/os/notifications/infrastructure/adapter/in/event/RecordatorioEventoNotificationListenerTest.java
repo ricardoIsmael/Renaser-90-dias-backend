@@ -107,7 +107,7 @@ class RecordatorioEventoNotificationListenerTest {
         when(loadPreferenciasPort.habilitadaPara(any(), any())).thenReturn(Optional.empty());
         when(loadTokenPushPort.tokensDe(aprendiz)).thenReturn(List.of(TokenPush.registrar(
                 TokenPushId.of(UUID.randomUUID()), aprendiz, "ExponentPushToken[x]", PlataformaPush.ANDROID, clock)));
-        when(pushPort.enviar(anyList(), any(), any(), any())).thenReturn(List.of());
+        when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
         cuentaConEstado(UserStatus.ACTIVE);
     }
 
@@ -132,7 +132,7 @@ class RecordatorioEventoNotificationListenerTest {
         assertThat(fila.rutaApp()).isEqualTo("/eventos/" + EVENTO);
         assertThat(fila.titulo()).isEqualTo("Mentoria");
         assertThat(fila.cuerpo()).isEqualTo("Empieza en 10 min, a las 19:30.");
-        verify(pushPort, times(1)).enviar(anyList(), any(), any(), any());
+        verify(pushPort, times(1)).enviar(anyList(), any());
     }
 
     @Test
@@ -142,7 +142,7 @@ class RecordatorioEventoNotificationListenerTest {
         listener.on(recordatorio(10L, aprendiz));
 
         assertThat(bandeja).hasSize(1);
-        verify(pushPort, times(1)).enviar(anyList(), any(), any(), any());
+        verify(pushPort, times(1)).enviar(anyList(), any());
     }
 
     @Test
@@ -163,7 +163,7 @@ class RecordatorioEventoNotificationListenerTest {
         listener.on(recordatorio(10L, aprendiz));
 
         assertThat(bandeja).isEmpty();
-        verify(pushPort, never()).enviar(anyList(), any(), any(), any());
+        verify(pushPort, never()).enviar(anyList(), any());
     }
 
     @Test
@@ -174,7 +174,7 @@ class RecordatorioEventoNotificationListenerTest {
         listener.on(recordatorio(10L, aprendiz));
 
         assertThat(bandeja).hasSize(1);
-        verify(pushPort, never()).enviar(anyList(), any(), any(), any());
+        verify(pushPort, never()).enviar(anyList(), any());
     }
 
     @Test

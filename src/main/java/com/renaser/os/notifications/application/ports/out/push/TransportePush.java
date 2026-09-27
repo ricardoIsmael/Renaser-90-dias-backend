@@ -10,9 +10,8 @@ import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
  * ni el caso de uso. Cada transporte declara qué plataforma atiende y responde qué pasó; decidir
  * a cuál mandarle cada token es trabajo del despachador.
  *
- * @param rutaApp destino lógico dentro de la app. Viaja como dato del push para que al tocarlo se
- *                abra donde corresponde — el contenido sigue siendo discreto y el detalle se carga
- *                adentro, ya autorizado (plan.md §9).
+ * <p>El {@link MensajePush#rutaApp} viaja como dato del push para que al tocarlo se abra donde
+ * corresponde, y el detalle se carga adentro, ya autorizado (plan.md §9).
  */
 public interface TransportePush {
 
@@ -27,5 +26,5 @@ public interface TransportePush {
     String nombre();
 
     /** No lanza: los fallos se devuelven como estado. Un canal caído no puede tumbar a los otros. */
-    ResultadoEnvioPush entregar(TokenPush token, String titulo, String cuerpo, String rutaApp);
+    ResultadoEnvioPush entregar(TokenPush token, MensajePush mensaje);
 }

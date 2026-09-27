@@ -307,6 +307,50 @@ la del recordatorio (`CalculadoraAvisosHabito.conRecordatorioDelAprendiz`, míni
 El mensaje del acompañante en el chat (`rag.AvisoHabitoEnChatListener`) no cambia: el evento se sigue
 publicando aunque el recordatorio esté apagado.
 
+### 10.3 Canal de Android del push de Expo (D-188, E-9)
+
+En Android 8+ el sonido y el silencio son del **canal**. Hasta D-188 el cuerpo que arma
+`ExpoPushTransporte` no llevaba `channelId` y todo caía al canal por defecto: no se podían callar los
+recordatorios de eventos sin callar el resto. Ahora el tipo del aviso viaja hasta el transporte
+(`MensajePush`, que reemplaza los cuatro parámetros sueltos de `PushPort.enviar` y
+`TransportePush.entregar`) y `CanalAndroidExpo` elige el canal. Solo para tokens `ANDROID`: en iOS el
+campo no existe y no se manda.
+
+| Tipo | `channelId` | Cuándo |
+|---|---|---|
+| `ACOMPANAMIENTO_ALUMNO` | `avisos-acompanamiento` | Siempre |
+| `RECORDATORIO_EVENTO` | `recordatorios-eventos` | Solo con `renaser.notifications.expo-push.canales-de-recordatorios=true` |
+| `RECORDATORIO_HABITO` | `recordatorios-habitos` | Solo con esa misma propiedad |
+| Todo lo demás | (ninguno: canal por defecto) | — |
+
+Los ids son los **base** que crea la app (`src/features/alarmas/sonidoDeAlarma.ts`, `CANAL_BASE`), sin
+el sufijo `-campana`/`-vibrar` del sonido que la persona elige para sus alarmas locales. El de hábitos
+conserva el id de siempre (`recordatorios-habitos`), el mismo del APK de producción.
+
+**Por qué la propiedad y por qué está apagada.** La documentación de Expo
+(docs.expo.dev/push-notifications/sending-notifications, campo `channelId`, verificada el 2026-09-26)
+dice: *«If an ID is specified but the corresponding channel does not exist on the device (that has not
+yet been created by your app), the notification will not be displayed to the user.»* El código de
+`expo-notifications` 57.0.17 dice otra cosa (`BaseNotificationBuilder.kt`: *«Channel '%s' doesn't
+exists. Fallback to …»*, cae al canal `expo_notifications_fallback_notification_channel`), pero eso
+solo cubre los mensajes que arma la librería, y no se probó en un teléfono. Ante la contradicción se
+toma la lectura que no pierde avisos: **no se nombra un canal que el teléfono puede no tener.**
+
+| Canal | APK en producción (sin `eventos-app`) | APK nuevo (`eventos-app`) |
+|---|---|---|
+| `avisos-acompanamiento` | Lo crea `pushNativo.ts` **antes** de pedir el token: todo Android con token lo tiene | Igual |
+| `recordatorios-habitos` | Recién al programar la primera alarma local de un hábito | Al entrar (`AbridorDeEventos`) |
+| `recordatorios-eventos` | Nunca | Al entrar (`AbridorDeEventos`) |
+
+Encender `canales-de-recordatorios` cuando el APK nuevo sea el único en uso (la app no se actualiza
+por aire). Hasta entonces los recordatorios de eventos y hábitos salen por el canal por defecto, como
+antes de D-188. Ojo: `avisos-acompanamiento` la app lo crea con importancia `DEFAULT` (suena, pero
+Android no lo muestra como banner emergente), y el canal de respaldo de `expo-notifications` es
+`HIGH`. Si el canal por defecto del teléfono era `HIGH`, desde D-188 el aviso de acompañamiento deja
+de aparecer como banner. No se verificó en un teléfono; si molesta, se cambia en la app, no acá.
+
+Pruebas: `ExpoPushTransporteCanalTest` (cuerpo JSON por tipo, plataforma y propiedad).
+
 ---
 
 ## Auditoría de arquitectura (2026-08-28) — agente automático

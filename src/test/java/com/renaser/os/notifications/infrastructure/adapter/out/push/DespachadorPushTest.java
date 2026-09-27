@@ -1,5 +1,6 @@
 package com.renaser.os.notifications.infrastructure.adapter.out.push;
 
+import com.renaser.os.notifications.application.ports.out.push.MensajePush;
 import com.renaser.os.notifications.application.ports.out.push.ResultadoEnvioPush;
 import com.renaser.os.notifications.application.ports.out.push.ResultadoEnvioPush.Estado;
 import com.renaser.os.notifications.application.ports.out.push.TransportePush;
@@ -30,6 +31,10 @@ class DespachadorPushTest {
     private static final Instant AHORA = Instant.parse("2026-09-10T15:00:00Z");
     private static final UserId USUARIO = UserId.of(UUID.randomUUID());
 
+    private static MensajePush mensaje(String titulo, String cuerpo, String rutaApp) {
+        return new MensajePush(null, titulo, cuerpo, rutaApp);
+    }
+
     private static TokenPush token(PlataformaPush plataforma) {
         return TokenPush.rehydrate(TokenPushId.of(UUID.randomUUID()), USUARIO, "tok-" + plataforma,
                 plataforma, AHORA, AHORA);
@@ -58,8 +63,8 @@ class DespachadorPushTest {
         }
 
         @Override
-        public ResultadoEnvioPush entregar(TokenPush token, String titulo, String cuerpo, String rutaApp) {
-            rutasRecibidas.add(rutaApp);
+        public ResultadoEnvioPush entregar(TokenPush token, MensajePush mensaje) {
+            rutasRecibidas.add(mensaje.rutaApp());
             return new ResultadoEnvioPush(token.id(), respuesta, null);
         }
     }
@@ -74,7 +79,7 @@ class DespachadorPushTest {
 
         List<ResultadoEnvioPush> resultados = despachador.enviar(
                 List.of(token(PlataformaPush.WEB), token(PlataformaPush.IOS), token(PlataformaPush.ANDROID)),
-                "Hay novedades", "de acompanamiento", "/mentor/groups/x/learners/y");
+                mensaje("Hay novedades", "de acompanamiento", "/mentor/groups/x/learners/y"));
 
         assertThat(resultados).hasSize(3);
         assertThat(resultados).allSatisfy(r -> assertThat(r.estado()).isEqualTo(Estado.ENTREGADO));
@@ -89,7 +94,8 @@ class DespachadorPushTest {
         DespachadorPush despachador = new DespachadorPush(List.of(soloWeb));
 
         List<ResultadoEnvioPush> resultados = despachador.enviar(
-                List.of(token(PlataformaPush.ANDROID)), "t", "c", null);
+                List.of(token(PlataformaPush.ANDROID)),
+                mensaje("t", "c", null));
 
         assertThat(resultados).singleElement()
                 .satisfies(r -> assertThat(r.estado()).isEqualTo(Estado.SIN_TRANSPORTE));
@@ -101,7 +107,8 @@ class DespachadorPushTest {
         TransporteDoble web = new TransporteDoble(List.of(PlataformaPush.WEB), Estado.ENTREGADO);
         DespachadorPush despachador = new DespachadorPush(List.of(web));
 
-        despachador.enviar(List.of(token(PlataformaPush.WEB)), "t", "c", "/mentor/groups/g/learners/a");
+        despachador.enviar(List.of(token(PlataformaPush.WEB)),
+                mensaje("t", "c", "/mentor/groups/g/learners/a"));
 
         assertThat(web.rutasRecibidas).containsExactly("/mentor/groups/g/learners/a");
     }
@@ -121,7 +128,7 @@ class DespachadorPushTest {
             }
 
             @Override
-            public ResultadoEnvioPush entregar(TokenPush t, String titulo, String cuerpo, String ruta) {
+            public ResultadoEnvioPush entregar(TokenPush t, MensajePush mensaje) {
                 throw new IllegalStateException("proveedor caido");
             }
         };
@@ -129,7 +136,8 @@ class DespachadorPushTest {
         DespachadorPush despachador = new DespachadorPush(List.of(explota, nativo));
 
         List<ResultadoEnvioPush> resultados = despachador.enviar(
-                List.of(token(PlataformaPush.WEB), token(PlataformaPush.ANDROID)), "t", "c", null);
+                List.of(token(PlataformaPush.WEB), token(PlataformaPush.ANDROID)),
+                mensaje("t", "c", null));
 
         assertThat(resultados.get(0).estado()).isEqualTo(Estado.FALLO_TEMPORAL);
         // El segundo se entrega igual: aislar el fallo es el punto.
@@ -153,7 +161,8 @@ class DespachadorPushTest {
     void sinTokensNoHaceNada() {
         TransporteDoble web = new TransporteDoble(List.of(PlataformaPush.WEB), Estado.ENTREGADO);
 
-        assertThat(new DespachadorPush(List.of(web)).enviar(List.of(), "t", "c", null)).isEmpty();
+        assertThat(new DespachadorPush(List.of(web)).enviar(List.of(),
+                mensaje("t", "c", null))).isEmpty();
         assertThat(web.rutasRecibidas).isEmpty();
     }
 
@@ -188,7 +197,7 @@ class DespachadorPushTest {
         }
 
         @Override
-        public ResultadoEnvioPush entregar(TokenPush token, String titulo, String cuerpo, String rutaApp) {
+        public ResultadoEnvioPush entregar(TokenPush token, MensajePush mensaje) {
             Estado estado = secuencia.get(Math.min(intentos, secuencia.size() - 1));
             intentos++;
             return new ResultadoEnvioPush(token.id(), estado, null);
@@ -214,7 +223,8 @@ class DespachadorPushTest {
         DespachadorPush despachador = new DespachadorPush(List.of(transporte), espera);
 
         List<ResultadoEnvioPush> resultados = despachador.enviar(
-                List.of(token(PlataformaPush.ANDROID)), "t", "c", null);
+                List.of(token(PlataformaPush.ANDROID)),
+                mensaje("t", "c", null));
 
         assertThat(resultados).singleElement()
                 .satisfies(r -> assertThat(r.estado()).isEqualTo(Estado.ENTREGADO));
@@ -230,7 +240,8 @@ class DespachadorPushTest {
         DespachadorPush despachador = new DespachadorPush(List.of(transporte), espera);
 
         List<ResultadoEnvioPush> resultados = despachador.enviar(
-                List.of(token(PlataformaPush.IOS)), "t", "c", null);
+                List.of(token(PlataformaPush.IOS)),
+                mensaje("t", "c", null));
 
         // 1 intento + 2 reintentos. Si alguien agrega un tercero sin pensarlo, esto lo dice.
         assertThat(transporte.intentos).isEqualTo(3);
@@ -246,7 +257,8 @@ class DespachadorPushTest {
         EsperaFingida espera = new EsperaFingida();
         DespachadorPush despachador = new DespachadorPush(List.of(transporte), espera);
 
-        despachador.enviar(List.of(token(PlataformaPush.ANDROID)), "t", "c", null);
+        despachador.enviar(List.of(token(PlataformaPush.ANDROID)),
+                mensaje("t", "c", null));
 
         assertThat(transporte.intentos).isEqualTo(1);
         assertThat(espera.esperas).isEmpty();
@@ -259,7 +271,8 @@ class DespachadorPushTest {
         EsperaFingida espera = new EsperaFingida();
         DespachadorPush despachador = new DespachadorPush(List.of(transporte), espera);
 
-        despachador.enviar(List.of(token(PlataformaPush.WEB)), "t", "c", null);
+        despachador.enviar(List.of(token(PlataformaPush.WEB)),
+                mensaje("t", "c", null));
 
         assertThat(transporte.intentos).isEqualTo(1);
         assertThat(espera.esperas).isEmpty();
@@ -273,7 +286,8 @@ class DespachadorPushTest {
         DespachadorPush despachador = new DespachadorPush(List.of(transporte), espera);
 
         despachador.enviar(
-                List.of(token(PlataformaPush.ANDROID), token(PlataformaPush.IOS)), "t", "c", null);
+                List.of(token(PlataformaPush.ANDROID), token(PlataformaPush.IOS)),
+                mensaje("t", "c", null));
 
         assertThat(transporte.intentos).isEqualTo(6);
         assertThat(espera.esperas).containsExactly(250L, 750L, 250L, 750L);
