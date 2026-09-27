@@ -10425,3 +10425,20 @@ list` muestra `AWS_REGION`, `AWS_ROLE_ARN`, `EC2_INSTANCE_ID` y `ECR_REPOSITORY`
 
 **Cómo evitar que vuelva a pasar.** Quien crea o cambia infraestructura actualiza el documento en el mismo cambio
 (regla 05). Antes de afirmar algo sobre el CD, comprobarlo con `gh variable list` y `gh run list --workflow cd.yml`.
+
+## E-358 · Un commit de integración quedó con marcas de conflicto (`<<<<<<< HEAD`) en la bitácora
+
+**Síntoma (2026-09-27, rama `integracion-27`).** Después de resolver la fusión de `velocidad-backend` (D-212), la
+verificación `grep -c "^<<<<<<<\|^>>>>>>>" docs/BITACORA_ERRORES.md` dio `2` cuando el commit ya estaba hecho.
+
+**Causa real.** El script que resolvía el conflicto solo tomaba el PRIMER bloque (`next(... '<<<<<<<')`), y esa fusión
+tenía dos: E-341 cambiado en las dos ramas, y E-342 agregado al final junto a E-356/E-357. El segundo bloque quedó con
+las marcas y se hizo commit igual.
+
+**Solución.** Se resolvió el segundo bloque (E-342 antes de E-356, por número) y se corrigió el mismo commit de fusión
+con `--amend`, antes de cualquier push. Ninguna otra rama lo tomó.
+
+**Cómo evitar que vuelva a pasar.** Los scripts de resolución recorren TODOS los bloques (`bloques()` devuelve la lista
+entera, y se exige que no quede ninguno), y ningún commit de fusión se hace sin
+`! git grep -n "^<<<<<<<\|^>>>>>>>" -- docs src` en la misma línea del `git commit`.
+
