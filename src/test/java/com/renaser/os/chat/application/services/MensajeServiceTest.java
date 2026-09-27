@@ -12,11 +12,13 @@ import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigente
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
+import com.renaser.os.chat.domain.model.mensaje.ConfirmacionDeLectura;
 import com.renaser.os.chat.domain.model.mensaje.ContenidoDelPrograma;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -26,6 +28,7 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -94,10 +97,7 @@ class MensajeServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new MensajeService(loadConversacionPort, esParticipantePort, pertenenciaVigentePort,
-                marcarLeidoPort, saveMensajePort,
-                loadMensajePort, publicarMensajeFanoutPort, userSummaryFinder, almacenamientoPort, CLOCK,
-                idGenerator);
+        service = servicioCon(CLOCK);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
                 Optional.of(new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
@@ -106,6 +106,13 @@ class MensajeServiceTest {
         lenient().when(loadConversacionPort.porId(conversacionId))
                 .thenReturn(Optional.of(Conversacion.crearGlobal(conversacionId, CLOCK.now())));
         lenient().when(saveMensajePort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    /** La lectura no se prueba acá (ver {@code MarcaDeLeidoEnElListadoTest}): la comunidad no la tiene. */
+    private MensajeService servicioCon(Clock reloj) {
+        return new MensajeService(loadConversacionPort, esParticipantePort, pertenenciaVigentePort,
+                marcarLeidoPort, saveMensajePort, loadMensajePort, publicarMensajeFanoutPort, userSummaryFinder,
+                almacenamientoPort, conversacion -> ConfirmacionDeLectura.sinDobleMarca(), reloj, idGenerator);
     }
 
     private EnviarMensajeCommand comandoDeTexto(UserId actorId) {
@@ -140,6 +147,26 @@ class MensajeServiceTest {
         assertThat(enviado.texto()).isEqualTo("hola");
         verify(saveMensajePort).save(any());
         verify(marcarLeidoPort).marcarLeido(conversacionId, activo, CLOCK.now());
+    }
+
+    /**
+     * E-344: {@code Instant.now()} trae nanosegundos y {@code timestamptz} guarda microsegundos. La
+     * respuesta de enviar decía un {@code createdAt} que no era el guardado, y la app lo compara con la
+     * marca de lectura (D-208): si la base redondeaba hacia abajo, el mensaje quedaba en ✓ aunque todos
+     * lo hubieran leído. Contra el código viejo, el mensaje y la marca del emisor salían con los
+     * nanosegundos.
+     */
+    @Test
+    @DisplayName("E-344: el mensaje y la marca de leído del emisor van en microsegundos, lo que guarda la base")
+    void enviarGuardaElInstanteEnMicrosegundos() {
+        Instant conNanos = Instant.parse("2026-09-27T17:00:26.869554501Z");
+        Instant enMicros = Instant.parse("2026-09-27T17:00:26.869554Z");
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+
+        Mensaje enviado = servicioCon(FixedClock.at(conNanos)).enviar(comandoDeTexto(activo));
+
+        assertThat(enviado.creadoEn()).isEqualTo(enMicros);
+        verify(marcarLeidoPort).marcarLeido(conversacionId, activo, enMicros);
     }
 
     @Test

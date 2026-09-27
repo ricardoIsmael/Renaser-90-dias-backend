@@ -3,6 +3,7 @@ package com.renaser.os.chat.infrastructure.adapter.in.rest.mensaje;
 import com.renaser.os.chat.application.ports.in.mensaje.MensajeEnriquecido;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.ContenidoDelPrograma;
+import com.renaser.os.chat.domain.model.mensaje.EstadoDeEntrega;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
@@ -71,5 +72,22 @@ class MensajeResponseTest {
 
         assertThat(cable.type()).isEqualTo("TEXT");
         assertThat(cable.senderId()).isEqualTo(ANA.toString());
+    }
+
+    /**
+     * D-208: la marca viaja en inglés, como el resto del cable (D-36). En la bandeja y en la respuesta
+     * de enviar va {@code null}, que la app toma como ✓: el campo es nuevo y un APK sin él lo ignora.
+     */
+    @Test
+    @DisplayName("D-208: status sale SENT o READ en el listado, y null donde no se resuelve o el mensaje no es de quien mira")
+    void laMarcaDeEntregaEnElCable() {
+        Mensaje dePersona = Mensaje.escribir(MensajeId.of(UUID.randomUUID()), SOPORTE, ANA, TipoMensaje.TEXTO, "hola",
+                null, null, null, null, null, null, AHORA);
+        MensajeEnriquecido enriquecido = new MensajeEnriquecido(dePersona, "Ana", null, null, null);
+
+        assertThat(MensajeResponse.from(enriquecido.conEstadoDeEntrega(EstadoDeEntrega.LEIDO)).status()).isEqualTo("READ");
+        assertThat(MensajeResponse.from(enriquecido.conEstadoDeEntrega(EstadoDeEntrega.ENVIADO)).status()).isEqualTo("SENT");
+        assertThat(MensajeResponse.from(enriquecido).status()).as("de otra persona").isNull();
+        assertThat(MensajeResponse.from(dePersona).status()).as("bandeja y respuesta de enviar").isNull();
     }
 }

@@ -3,6 +3,7 @@ package com.renaser.os.chat.infrastructure.adapter.out.persistence;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.conversacion.SaveConversacionPort;
+import com.renaser.os.chat.application.ports.out.lectura.MarcasDeLecturaPort;
 import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
 import com.renaser.os.chat.application.ports.out.mensaje.SaveMensajePort;
 import com.renaser.os.chat.application.ports.out.participante.AgregarParticipantePort;
@@ -57,6 +58,8 @@ class ChatPersistenceAdapterTest {
     private EsParticipantePort esParticipantePort;
     @Autowired
     private MarcarLeidoPort marcarLeidoPort;
+    @Autowired
+    private MarcasDeLecturaPort marcasDeLecturaPort;
     @Autowired
     private ContarNoLeidosPort contarNoLeidosPort;
     @Autowired
@@ -217,6 +220,54 @@ class ChatPersistenceAdapterTest {
 
         Map<ConversacionId, Long> conteo = contarNoLeidosPort.contarNoLeidos(usuarioA, List.of(c1.id()));
         assertThat(conteo.getOrDefault(c1.id(), 0L)).isZero();
+    }
+
+    /**
+     * D-208: de esta marca sale el ✓✓ de los mensajes de los demás, y un ✓✓ no puede volver a ✓. Contra
+     * el código viejo (leer la fila, pisarla y guardarla) una lectura que llegaba tarde la hacía
+     * retroceder.
+     */
+    @Test
+    void marcarLeidoSoloAvanzaYLasMarcasSeLeenDeUnaConversacion() {
+        Conversacion c1 = saveConversacionPort.save(
+                Conversacion.crearDirecta(nuevaConversacionId(),
+                        Conversacion.claveDirectaDe(usuarioA, usuarioB), Instant.now()));
+        agregarParticipantePort.agregar(Participante.unirse(c1.id(), usuarioA, Instant.parse("2026-08-20T10:00:00Z")));
+        agregarParticipantePort.agregar(Participante.rehydrate(c1.id(), usuarioB, null, Instant.parse("2026-08-20T10:00:00Z")));
+        Instant leyoTarde = Instant.parse("2026-08-21T10:00:00.123456Z");
+
+        marcarLeidoPort.marcarLeido(c1.id(), usuarioA, leyoTarde);
+        marcarLeidoPort.marcarLeido(c1.id(), usuarioA, leyoTarde.minusSeconds(3600));
+
+        assertThat(marcasDeLecturaPort.participantesDe(c1.id()))
+                .extracting(Participante::usuarioId, Participante::ultimoLeidoEn)
+                .containsExactlyInAnyOrder(org.assertj.core.groups.Tuple.tuple(usuarioA, leyoTarde),
+                        org.assertj.core.groups.Tuple.tuple(usuarioB, null));
+    }
+
+    /**
+     * El UPDATE de la marca corre, dentro de {@code MensajeService.enviar}, justo después de guardar el
+     * mensaje: no puede adelantarse al INSERT pendiente ni descartarlo (la trampa de
+     * {@code ConfirmacionPersistenceAdapter}).
+     */
+    @Test
+    void marcarLeidoDespuesDeGuardarUnMensajeNoLoPierde() {
+        Conversacion c1 = saveConversacionPort.save(
+                Conversacion.crearDirecta(nuevaConversacionId(),
+                        Conversacion.claveDirectaDe(usuarioA, usuarioB), Instant.now()));
+        agregarParticipantePort.agregar(Participante.unirse(c1.id(), usuarioA, Instant.parse("2026-08-20T10:00:00Z")));
+        Instant ahora = Instant.parse("2026-08-21T10:00:00Z");
+        MensajeId id = nuevoMensajeId();
+
+        saveMensajePort.save(Mensaje.escribir(id, c1.id(), usuarioA, TipoMensaje.TEXTO, "hola",
+                null, null, null, null, null, null, ahora));
+        marcarLeidoPort.marcarLeido(c1.id(), usuarioA, ahora);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(loadMensajePort.porId(id)).isPresent();
+        assertThat(marcasDeLecturaPort.participantesDe(c1.id())).singleElement()
+                .extracting(Participante::ultimoLeidoEn).isEqualTo(ahora);
     }
 
     @Test

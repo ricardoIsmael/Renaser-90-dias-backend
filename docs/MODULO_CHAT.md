@@ -17,7 +17,7 @@
 
 - `conversaciones`: `tipo` (`CELULA`/`DIRECTA`/`GLOBAL`/`SOPORTE`) con el CHECK `tipo_coherente` — cada tipo exige exactamente un campo identificador propio (`celula_id`, `clave_directa` para DIRECTA **y SOPORTE**, o ninguno para GLOBAL). Índice único parcial `conversacion_global_unica_uk` garantiza una sola fila `GLOBAL`.
   > **Corregido 2026-09-16 (D-136).** Esta línea decía `tipo` (`CELULA`/`DIRECTA`/`GLOBAL`) y que el CHECK cubría esos tres. `V53` agregó el valor `SOPORTE` y `V54` amplió el CHECK con su rama — ver §8.
-- `participantes_conversacion`: PK compuesta `(conversacion_id, usuario_id)`, con `ultimo_leido_en` nullable — es la base del conteo de no-leídos.
+- `participantes_conversacion`: PK compuesta `(conversacion_id, usuario_id)`, con `ultimo_leido_en` nullable — es la base del conteo de no-leídos y, desde el 2026-09-27, de la doble marca de leído (✓✓, §14, D-208).
 - `mensajes`: `tipo` (`TEXTO`/`IMAGEN`/`AUDIO`/`VIDEO`/`SISTEMA`), dos CHECK (`mensaje_con_contenido`, `media_completa`), `respuesta_a_id` auto-referencial (hilos), `oculto`/`eliminado_en` para moderación (sin caso de uso que los mute en esta pasada — ver §6).
 - `mensajes_bienvenida`: **no se tocó** — no hay caso de uso que la use (ver §6). *(Actualizado 2026-09-26: desde G-2 la usa la bienvenida automática como marca de idempotencia, §10.)*
 - Comentario del baseline (línea 1293-1295): *"todo usuario nuevo se agrega AUTOMÁTICAMENTE a la conversación GLOBAL"* — es la única regla de negocio que el propio schema deja explícita en un comentario; se implementó tal cual (§4).
@@ -63,6 +63,9 @@ Los tres tests unitarios existentes (`AccountRequestServiceTest`, `UserAccountSe
 | POST | `/api/v1/chat/conversations/{conversationId}/messages/share-wall-post` | `{postId}` → comparte una publicación del Muro, 201 con el mismo `MensajeResponse` que enviar |
 | GET | `/api/v1/chat/conversations/{conversationId}/messages?cursor=&limit=` | paginación keyset por `creado_en`, descendente |
 
+> **Actualizado 2026-09-27 (D-208, §14).** `POST .../{id}/read` además avisa en vivo hasta dónde leyeron todos (evento `READ`,
+> nunca en la comunidad) y la marca solo avanza; `GET .../messages` trae en cada mensaje propio `status` (`SENT` / `READ`).
+
 Todos reciben el actor por `X-Actor-Id` (mismo patrón temporal que el resto de los módulos ya construidos, sin JWT — bloqueante del usuario documentado en `docs/MODULOS_A_AVANZAR.md`).
 
 **D-36 aplicado:** `TipoConversacion`/`TipoMensaje` viven en español en dominio y base; el wire habla inglés (`CELL`/`DIRECT`/`GLOBAL`/`SUPPORT`, `TEXT`/`IMAGE`/`AUDIO`/`VIDEO`/`SYSTEM`) — la traducción vive solo en `ConversacionResponse.toWireTipo`/`MensajeResponse.toWireTipo` (salida) y `MensajeController.parseTipoMensaje` (entrada), nunca en dominio ni persistencia.
@@ -92,6 +95,10 @@ Todos reciben el actor por `X-Actor-Id` (mismo patrón temporal que el resto de 
 - **`EnviarMensaje`**: el emisor debe ser participante (`NotAuthorizedException` si no) — chequeado ANTES de escribir el mensaje. Si `respuestaAId` viene, se verifica que el mensaje original pertenezca a la MISMA conversación (`requireRespuestaEnMismaConversacion`) — evita citar un mensaje de otra conversación por error de cliente o ataque de enumeración de IDs. Al enviar, se actualiza `ultimo_leido_en` del EMISOR (ya "leyó" lo que acaba de escribir).
 - **`ListarConversaciones` sin N+1**: `ultimosPorConversacion`/`contarNoLeidos` reciben la lista completa de `ConversacionId` y devuelven un `Map` en una sola consulta cada uno — nunca una consulta por conversación. Verificado con `verify(..., times(1))` en `ConversacionServiceTest` y contra Postgres real en `ChatPersistenceAdapterTest`.
 - **`MarcarLeido`**: exige participante (`NotAuthorizedException` si no).
+  > **Actualizado 2026-09-27 (D-208).** La marca solo avanza (un UPDATE condicionado: antes leer, pisar y guardar podía hacerla
+  > retroceder con dos lecturas a la vez), y después de guardarla se avisa en vivo `READ` si corresponde (§14). Por eso
+  > `ConversacionService.marcarLeido` dejó de ser `@Transactional`: el aviso tiene que salir con la lectura ya guardada y
+  > calcularse con las de los demás ya guardadas.
 - **Paginación de mensajes**: keyset por `creado_en` (`WHERE creado_en < :cursor ORDER BY creado_en DESC`), nunca `OFFSET` — mismo criterio que el feed de `community`, y mismo cuidado con el bug E-31 (ver §5.1 más abajo: acá se evitó de entrada partiendo en dos métodos, `paginaSinCursor`/`paginaConCursor`).
 
 ---
@@ -350,6 +357,9 @@ podía leer lo que esa persona escribe.
 
 Los dos eventos se distinguen por el campo **`event`** del payload (`MESSAGE` / `PRESENCE`), que se
 agregó a `MensajeFanoutPayload` en este mismo cambio.
+> **Corregido 2026-09-27 (D-208).** Decía «Los dos eventos»: desde la doble marca de leído hay un tercero, `READ`
+> (`{"event":"READ","readUpTo":"…"}`, §14), por el mismo canal y con la misma autorización. La app publicada lo descarta
+> por desconocido sin romperse.
 
 ### 9.4 Se cuentan sockets, no personas
 
@@ -972,3 +982,96 @@ la portada; el historial completo en la app (se ve el último cambio de cada pie
 | `S3AlmacenamientoAdapterTest` (+3) | `leer` baja del bucket configurado; no baja un objeto más pesado que el tope (por lo que declara S3 o al leer); lo que no existe da vacío |
 | `BienvenidaEditableIT` (5) | Tomcat real con sesión, Postgres con V73 y la bienvenida prendida: el texto guardado sale en la próxima bienvenida y la vuelta al original saca el del repo, con las filas de la bitácora; ALCHEMIST puede y sin `{nombre}` es 400; MENTOR, MENTOR_LEAD, TRAINEE, ADMIN suspendido y sin sesión, 403; sin almacenamiento la URL es de marcador, `confirm` 409 y la tarjeta de muestra sale; los CHECK de V73 y el SET NULL al borrar la cuenta |
 | `PortadaDeBienvenidaIT` (2) | Con un almacenamiento en memoria: subir, ver la candidata antes de usarla (la foto del soporte todavía da 304), confirmar, y la foto sale sobre la portada nueva con otro `ETag` (con el viejo ya no es 304); al volver a la original, el `ETag` de antes. Una portada oscura: 400 con el motivo en la vista previa y al confirmar. Contra la caché de D-205 falla: `expected: 200 but was: 304` (E-351) |
+
+## 14. La doble marca de leído: ✓ guardado, ✓✓ leído (2026-09-27, D-208)
+
+**Qué pidió el dueño.** En la página de decisiones eligió «Quiero ✓✓ de leído (trabajo extra en el servidor)». Hasta ahora
+los mensajes propios llevaban un solo ✓ (el servidor lo guardó): el backend no informaba lectura por mensaje.
+
+**La regla.**
+
+| Conversación | ✓✓ cuando… |
+| 1 a 1 (DIRECTA) | el otro lo leyó |
+| Grupo (CELULA) y soporte (SOPORTE) | lo leyeron **todos** los demás participantes, como WhatsApp |
+| Comunidad (GLOBAL) | nunca: queda un solo ✓ |
+
+La comunidad no tiene ✓✓ porque es el chat de toda la generación, con cientos de personas que entran cuando quieren: «leído
+por todos» no llegaría nunca o no diría nada, y avisar cada lectura les llegaría en vivo a todos los conectados. Ahí el
+servidor ni calcula ni avisa (`TipoConversacion.confirmaLectura`).
+
+**Cómo se calcula (sin tablas ni índices nuevos).** Con `participantes_conversacion.ultimo_leido_en`, que ya existía y que
+mueven abrir el chat (`POST .../read`) y escribir (`MensajeService.enviar`). La marca de agua es el mínimo entre los
+participantes que pueden leer (`ConfirmacionDeLectura`, dominio puro): un mensaje escrito en ese instante o antes está
+leído.
+
+- **La misma marca sirve para los mensajes de cualquiera.** La pregunta es «¿lo leyeron los DEMÁS?», que depende de quién
+  escribió; pero quien escribe queda marcado en el mismo instante de su mensaje y su marca solo avanza, así que para un
+  mensaje suyo el mínimo entre todos y el mínimo entre los demás coinciden. Por eso el aviso en vivo es uno solo para todos
+  los que miran y no uno por destinatario.
+- **Quiénes cuentan:** los participantes con la cuenta activa. Suspender no saca a nadie de un chat, y una cuenta
+  suspendida congelaría el ✓✓ de su grupo o, si es del staff, de todos los soportes (E-345). En un soporte coincide con la
+  regla 1 de D-136 (el aprendiz y el staff *activo*).
+- **Sin ✓✓** si alguno nunca abrió la conversación (marca nula) o si del otro lado no queda nadie activo.
+- **Quien se suma después** arranca con la marca en el momento en que entró (CH-1): no le quita el ✓✓ a lo que ya estaba leído.
+- **Una lectura por conversación, no por mensaje:** los participantes de la conversación sobre la clave primaria
+  `(conversacion_id, usuario_id)` (el `EXPLAIN` local muestra `Bitmap Index Scan on participantes_conversacion_pkey`; por eso no
+  hizo falta V74), más una consulta en lote a `users.api` por el estado de esas cuentas. En el listado es una por página, y
+  ninguna si en la página no hay mensajes propios; en la comunidad, ninguna.
+
+**El contrato.**
+
+- `MensajeResponse.status`: `SENT` (✓) o `READ` (✓✓) en los mensajes propios de quien mira, en `GET .../messages`. En la
+  comunidad siempre `SENT`. `null` en los de otras personas y en los del programa (la bienvenida guardada a nombre del
+  aprendiz no es suya). Como `senderName`, solo se resuelve en el listado: en la respuesta de enviar y en el último mensaje
+  de la bandeja va `null`, que la app toma como ✓.
+- Evento nuevo por `/topic/conversaciones/{id}`: `{"event":"READ","readUpTo":"2026-09-27T17:00:26.869554Z"}` («todos
+  leyeron hasta»). Sale después de cada `POST .../read` que deja una marca (`ConversacionService.marcarLeido` →
+  `LecturaService.anunciar` → `RedisChatPublisher.publicarLectura`), nunca en la comunidad, y no dice quién leyó ni cuándo leyó
+  cada uno. Nunca falla hacia arriba: la lectura ya quedó guardada.
+
+**En vivo, de punta a punta.** Ana escribe. Luis, con el chat abierto, recibe el `MESSAGE`, recarga el historial y marca
+leído; el servidor publica `READ` con la marca nueva; la app de Ana pasa a ✓✓ sus mensajes escritos hasta ahí, sin recargar.
+Un aviso de lectura nunca dispara otra lectura (la app no marca leído por un `READ`): así dos teléfonos con el chat abierto
+no se avisan sin fin.
+
+**Cambios de comportamiento que vienen con esto.**
+
+- La marca de lectura solo avanza, en un UPDATE condicionado (`marcarLeidoSiAvanza`, con `flushAutomatically` y sin
+  `clearAutomatically`, ver su javadoc). Antes era leer la fila, pisarla y guardarla: dos lecturas a la vez (el teléfono y
+  la web) podían dejar la más vieja, y un ✓✓ habría vuelto a ✓.
+- `ConversacionService.marcarLeido` ya no es `@Transactional`: el aviso sale con la lectura guardada, y calcula la marca
+  con las de los demás ya guardadas. Dentro de una sola transacción, dos lecturas simultáneas calcularían cada una sin ver
+  la otra y la última en avisar podría anunciar una marca vieja.
+- `MensajeService.enviar` guarda y devuelve el instante en microsegundos (E-344): la app compara ese `createdAt` con la marca.
+
+**Compatibilidad con la app publicada** (sin actualización por aire), verificada corriendo el código de `origin/master` del
+frontend con los cuerpos nuevos: su esquema del mensaje es `passthrough` y su mapeador arma la burbuja campo por campo, así
+que `status` se ignora (con `READ`, `SENT`, `null` o un valor desconocido la página valida igual); su `leerEventoDelChat`
+devuelve `null` para un `READ` —también si trae campos de mensaje— y el manejador sale sin tocar nada. Además, ese APK nunca
+completa el CONNECT (E-331).
+
+**Autorización.** No hay endpoint nuevo. `status` solo sale en `GET .../messages`, que exige cuenta activa y participación
+(la pertenencia vigente en un grupo, el rol vigente en un soporte); el `READ` viaja por el mismo destino que ya autoriza
+`SubscripcionAutorizadaInterceptor` al suscribirse y `EntregaAutorizadaInterceptor` en cada entrega.
+
+**Pregunta abierta (para el dueño).** En el soporte, el aprendiz ve ✓✓ cuando leyó TODO el staff activo, como pidió. Si
+algún administrador no abre nunca los soportes, el ✓✓ no llega. Si se prefiere que baste con que lea uno del staff, es otra
+regla y no se implementó.
+
+**No incluye:** «entregado» (el servidor no sabe cuándo un mensaje llegó a un teléfono), marcas en la fila de la lista de
+chats, y recuperar un `READ` perdido con el socket caído (la marca se pone al día al volver a abrir el chat o con el próximo
+mensaje, que recarga el historial).
+
+| `ConfirmacionDeLecturaTest` (9) | 1 a 1: leído si el otro leyó después, también en el mismo instante; nada si nunca leyó o no queda nadie; grupo y soporte: hacen falta todos; la misma marca vale para los mensajes de cada uno; la comunidad nunca; solo los propios, y no los del programa |
+| `LecturaServiceTest` (6) | El aviso lleva el mínimo; la comunidad no consulta ni avisa; sin aviso si alguien nunca leyó o no queda nadie activo; una cuenta suspendida no frena; nunca falla hacia arriba |
+| `MarcaDeLeidoEnElListadoTest` (7) | El listado con el servicio real: 1 a 1, grupo, soporte con una suspendida, comunidad siempre `SENT`, una lectura por página y ninguna sin propios, el mensaje del programa sin marca, 403 a quien no participa y a una cuenta suspendida |
+| `ConversacionServiceTest` (+2) | Marcar leído guarda y DESPUÉS avisa; una cuenta suspendida no marca ni avisa |
+| `MensajeServiceTest` (+1) | E-344: el mensaje y la marca del emisor van en microsegundos |
+| `MensajeResponseTest` (+1) | `status` sale `SENT` o `READ`, y `null` donde no se resuelve |
+| `LecturaFanoutPayloadTest` (2) | El cuerpo exacto `{"event":"READ","readUpTo":"…"}` por el canal de la conversación; Redis caído no lanza |
+| `ChatPersistenceAdapterTest` (+2) | Contra Postgres: la marca no retrocede y se lee con la nula incluida; el UPDATE ve lo pendiente de la misma transacción |
+| `LecturaEnVivoIT` (5) | Tomcat, Postgres, Redis y un cliente STOMP en binario: a Ana le llega `READ` cuando Luis abre el chat; el listado pasa de `SENT` a `READ`; el soporte llega a `READ` con una administradora suspendida adentro; la comunidad queda `SENT` y no avisa; 403 al que no participa y a la suspendida, y el que no participa no se suscribe |
+
+Contra el código anterior, `LecturaEnVivoIT` falla en 4 de sus 5 pruebas (la de autorización negativa ya pasaba: es la
+guarda); la del aviso en vivo, con `No llegó lo esperado tras 20 intentos; llegó: []`. Las demás usan clases nuevas y no
+compilan contra él.
