@@ -8,9 +8,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletResponseWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.Ordered;
-import org.springframework.core.annotation.Order;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerMapping;
 
@@ -28,7 +25,7 @@ import java.util.regex.Pattern;
  *   <li>Una linea INFO {@code [http] GET /api/v1/habit-tracks/today 200 42ms} por pedido.</li>
  * </ul>
  *
- * <p><b>Primero de la cadena</b> ({@link Ordered#HIGHEST_PRECEDENCE}): mide tambien la sesion de
+ * <p><b>Primero de la cadena</b> ({@code Ordered.HIGHEST_PRECEDENCE}, en {@link TiempoDeRespuestaConfig}): mide tambien la sesion de
  * Redis y Spring Security, que son parte de lo que paga cada pedido.
  *
  * <p><b>El header se escribe justo antes del primer byte del cuerpo</b>, no al final: cuando la
@@ -42,9 +39,12 @@ import java.util.regex.Pattern;
  * endpoint; si el pedido no llego a un controller (401, 404), los UUID de la ruta se reemplazan
  * por {@code {id}}. {@code /actuator} queda afuera: el health check del CD lo llama cada pocos
  * segundos y solo haria ruido.
+ *
+ * <p><b>No es un bean</b>: lo registra {@link TiempoDeRespuestaConfig} con un {@code new} (E-307).
+ * Como {@code @Component}, {@code spring-modulith-observability} lo envolvia en un proxy CGLIB y
+ * Tomcat llamaba {@code GenericFilterBean.init()} (final) sobre el proxy, cuyo {@code logger} es
+ * null: la aplicacion no arrancaba.
  */
-@Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
 public class TiempoDeRespuestaFilter extends OncePerRequestFilter {
 
     static final String HEADER = "Server-Timing";

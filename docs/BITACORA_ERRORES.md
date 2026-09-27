@@ -9537,3 +9537,26 @@ Pruebas `AtencionDelSemaforoServiceTest` y `SemaforoAdministrativoControllerTest
 
 **Cómo evitar que vuelva a pasar.** Una vista de "a quién atender" parte de las personas, no de los grupos:
 un grupo puede no tener mentor, y una persona puede no tener grupo.
+
+---
+
+## E-307 · `Cannot invoke "org.apache.commons.logging.Log.isDebugEnabled()" because "this.logger" is null` y `Unable to start embedded Tomcat`
+
+**Síntoma.** `./mvnw clean verify` sobre la integración del 26/09 (515c800c): `VozEnVivoWebSocketIT` 4 errores,
+`Failed to load ApplicationContext` → `Unable to start web server` → `Exception starting filter
+[tiempoDeRespuestaFilter]` → `java.lang.NullPointerException: Cannot invoke "org.apache.commons.logging.Log.isDebugEnabled()"
+because "this.logger" is null` en `GenericFilterBean.init(GenericFilterBean.java:235)`. Es la única IT que levanta un
+Tomcat real; las demás usan MockMvc y pasaban. **En producción la app no hubiera arrancado.**
+
+**Causa real.** `TiempoDeRespuestaFilter` (V-7, D-180) se declaró `@Component` dentro de `shared.web`.
+`spring-modulith-observability-core` (runtime) envuelve en un proxy CGLIB los beans de cada módulo. `GenericFilterBean.init()`
+es `final`, así que Tomcat lo ejecuta sobre el proxy, cuyos campos de instancia (`logger`) nunca se inicializan.
+Las pruebas focalizadas del agente pasaban porque la unitaria usa `new TiempoDeRespuestaFilter()`.
+
+**Solución.** El filtro dejó de ser bean: `TiempoDeRespuestaConfig` lo registra con `new` dentro de un
+`FilterRegistrationBean` (clase de Spring, fuera de los módulos, no se proxia) con `Ordered.HIGHEST_PRECEDENCE`.
+Verificado: `VozEnVivoWebSocketIT` 4/4 y el log muestra `[http] GET /api/v1/renasia/voz/en-vivo 101 50ms`.
+
+**Cómo evitar que vuelva a pasar.** Ningún `Filter`/`GenericFilterBean` como `@Component` en un paquete de módulo: se
+registra con `FilterRegistrationBean` y `new`. Un cambio que toque la cadena de filtros no se da por probado sin una IT
+que levante el servidor real (`VozEnVivoWebSocketIT` sirve) — las pruebas focalizadas con MockMvc no lo detectan.
