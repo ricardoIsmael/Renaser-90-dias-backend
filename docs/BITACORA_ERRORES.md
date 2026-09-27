@@ -10122,7 +10122,10 @@ Audioterapia tiene en la base. `crear` pasa la hora de cierre por `VentanaDelDia
 **Cómo evitar que vuelva a pasar.** En un fixture con `HorarioHabito.crear`, las horas de cierre después de las 23:50 salen
 acotadas. Para reproducir una fila real tal cual está en la base, usar `rehydrate`.
 
-## E-341 · SIN ARREGLAR (fuera de alcance) — «Escribirle» en la ficha de un aprendiz abierta desde «Mi grupo» dentro de Comunidad no se ve hacer nada: el chat se abre detrás de la ficha
+## E-341 · RESUELTO (frontend ce8e3d6, 2026-09-27) — «Escribirle» en la ficha de un aprendiz abierta desde «Mi grupo» dentro de Comunidad no se ve hacer nada: el chat se abre detrás de la ficha
+
+> **Corregido 2026-09-27.** El título decía «SIN ARREGLAR (fuera de alcance)»: se registró así al encontrarlo durante
+> D-207 y el coordinador pidió arreglarlo después, en un commit aparte.
 
 **Síntoma.** Un mentor en Comunidad → Tribu → «Mi grupo» → un aprendiz → «Escribirle»: la ficha sigue a la vista y
 parece que el botón no hizo nada. Recién al volver dos veces («←» a «Mi grupo» y «←» otra vez) aparece el chat 1 a 1 ya
@@ -10134,11 +10137,18 @@ abrirChatConversacionId })`. Estando ya en Comunidad, el efecto que consume ese 
 Tribu y pide el chat, pero no toca `vistaMentor`: el `return` temprano de `vistaMentor === 'alumno'` sigue dibujando la
 ficha encima de todo.
 
-**Solución.** Ninguna todavía: es un defecto anterior a D-207 y se reportó en vez de arreglarlo en el mismo cambio (regla
-00). El arreglo probable es de una línea: en ese mismo efecto, `setVistaMentor('ninguna')`. La ficha que se abre desde la
-info del grupo (D-207) ya cierra la ficha y la info en ese efecto (`setFichaDesdeLaInfo(null)`,
-`setGroupInfoVisible(false)`), así que ese camino nuevo no tiene el problema.
+**Solución.** Al registrarlo no se arregló: era un defecto anterior a D-207 y se reportó en vez de arreglarlo en el mismo
+cambio (regla 00). Se arregló después (frontend `ce8e3d6`): las tres vistas que tapan Comunidad («Mi grupo», su ficha y la
+ficha abierta desde la info del grupo) pasaron a un reductor (`mentor/utils/vistasDelMentor.ts`) con una sola acción,
+`pedir-un-chat`, que las despeja todas; el efecto que recibe `abrirChatConversacionId` la usa y además cierra la info.
+En vez del `setVistaMentor('ninguna')` suelto que se había propuesto, porque así una vista de ese tipo que se agregue
+mañana entra al mismo reductor y la despeja la misma acción. La navegación con «←» no cambió.
+
+**Prueba de regresión.** `vistasDelMentor.test.ts`: con «Mi grupo» o su ficha abiertos, pedir un chat no deja nada
+tapando Comunidad. Con la versión anterior del cierre (que solo cerraba la ficha de la info) fallan esas dos pruebas;
+se comprobó dejándola y corriéndolas.
 
 **Cómo evitar que vuelva a pasar.** Toda vista de `ComunidadScreen` que se dibuja con un `return` temprano (las del
-mentor, la ficha) tiene que cerrarse en los efectos que llevan a otra parte de la pantalla, o tapa lo que se pidió.
-Probarlo en el emulador después de arreglarlo: desde Hoy y desde Comunidad.
+mentor, la ficha) tiene que cerrarse en los efectos que llevan a otra parte de la pantalla, o tapa lo que se pidió: se
+agrega al reductor `vistasDelMentor`, que ya la despeja al pedir un chat. Queda sin probar en el emulador (desde Hoy y
+desde Comunidad).
