@@ -466,15 +466,34 @@ minutos, `EventPublicationMaintenanceScheduler`): el reintento solo abre las que
 
 ## 10. La bienvenida automática en el chat de soporte (2026-09-26, D-174)
 
-**Qué hace.** Cuando nace el soporte de un aprendiz **nuevo** (no en el relleno de §8), se mandan dos
-mensajes desde la cuenta de staff configurada (hoy la de Kelin): la tarjeta de bienvenida del Canva de
-Operaciones con su primer nombre, y después el texto de bienvenida. Es el paso 2 de OPE-01-01 que hoy
-se hace a mano por WhatsApp.
+**Qué hace.** Cuando nace el soporte de un aprendiz **nuevo** (no en el relleno de §8), se mandan tres
+mensajes desde la cuenta de staff configurada (hoy la de Kelin), en el orden de OPE-01-01: la tarjeta de
+bienvenida del Canva de Operaciones con su primer nombre, el mensaje que acompaña la tarjeta («valor
+agregado, experiencia premium») y el mensaje formal de bienvenida (confirma el ingreso, dice que el
+equipo confirmará el horario de la sesión técnica y que antes le mandará la información para esa
+sesión). Es el paso 2 de OPE-01-01 que hoy se hace a mano por WhatsApp.
+
+**Dónde están los textos (D-190).** En `src/main/resources/bienvenida/mensajes.yaml`, versionado con el
+código: claves `soporte.con-la-tarjeta` y `soporte.formal` (`{nombre}` = primer nombre). Los lee
+`TextosDeBienvenidaYamlAdapter` (puerto `TextosDeBienvenidaPort`) una vez al arrancar; si el archivo
+falta, el arranque falla. **Se cambian editando ese archivo y redesplegando**, no por entorno. Un texto
+vacío apaga ese mensaje. Hoy son **borradores** del equipo técnico, marcados así en el archivo: se
+reemplazan por los de la hoja de Operaciones.
 
 **Cómo se prende** (sin cambiar código): `BIENVENIDA_REMITENTE_EMAIL` con el correo de la cuenta que
-firma, y `BIENVENIDA_TEXTO` con el texto (`{nombre}` se reemplaza por el primer nombre). Sin remitente
-está apagada; sin texto, sale solo la tarjeta. Si la cuenta no existe o está suspendida, no sale nada
-y queda un aviso en el log.
+firma. Sin remitente está apagada. Si la cuenta no existe o está suspendida, no sale nada y queda un
+aviso en el log.
+> **Corregido 2026-09-26 (D-190).** Decía «y `BIENVENIDA_TEXTO` con el texto (`{nombre}` se reemplaza
+> por el primer nombre). […] sin texto, sale solo la tarjeta». El dueño pidió que el texto no vaya en
+> una variable de entorno y que cada parte del ingreso tenga su mensaje. `BIENVENIDA_TEXTO` ya no se lee.
+
+**La bienvenida en el grupo estable: pendiente (D-190).** OPE-01-01 pide también un mensaje del mentor
+en el grupo, reforzando pertenencia y compromiso, cuando el aprendiz se integra a su grupo. **No está
+implementado:** para no repetirlo con cada reentrega del outbox o cada reconciliación de
+`ComposicionDeCelulaCambiadaEvent` hace falta una marca por aprendiz **y grupo**, y
+`mensajes_bienvenida` no la admite (su PK es solo `usuario_destinatario_id`, que ya ocupa la bienvenida
+del soporte). Eso pide una columna o tabla nueva, que queda para decisión del dueño. El borrador del
+texto (`grupo`, con `{nombre}` y `{mentor}`) ya está en `mensajes.yaml`, sin uso.
 
 **La tarjeta** la dibuja el servidor (`BienvenidaJava2dAdapter`, Java2D, sin servicios externos) sobre
 `src/main/resources/bienvenida/fondo.png` (la exportación de Canva sin nombre) con Cinzel
@@ -492,7 +511,8 @@ muestra como cualquier foto del chat: no hace falta APK.
 **Con almacenamiento de marcador no hay tarjeta (G-5, 2026-09-26).** Con `STORAGE_PROVEEDOR=noop` (el
 default local) `subir` no guarda nada, y antes igual se mandaba el mensaje `IMAGEN`: una foto rota en
 el chat. Ahora `AlmacenamientoPort.guardaObjetos()` (false solo en el adaptador de marcador) decide: sin
-almacenamiento real se manda solo el texto y queda un `WARN` en el log. **Ojo:** el default de
+almacenamiento real se manda solo el mensaje formal (el que acompaña la tarjeta no tiene sentido sin
+ella, D-190) y queda un `WARN` en el log. **Ojo:** el default de
 `AWS_S3_BUCKET` es el bucket de producción; en local con `STORAGE_PROVEEDOR=s3` hay que poner uno propio
 (`docs/DESPLIEGUE_Y_CI.md` §6.4).
 
@@ -507,7 +527,7 @@ que existía sin uso: una fila por destinatario apuntando al primer mensaje, CH-
 
 1. Si la marca ya existe, no se hace nada (ni dibujar ni subir).
 2. Se dibuja y se sube la tarjeta **fuera** de toda transacción.
-3. En **una** transacción: los dos mensajes y la marca. O queda todo o nada. Si dos entregas se cruzan,
+3. En **una** transacción: los mensajes y la marca. O queda todo o nada. Si dos entregas se cruzan,
    la PK de la marca deshace la que perdió (sin error).
 4. Cualquier otro fallo **se lanza**, para que el outbox reintente.
 
@@ -527,7 +547,8 @@ crea el soporte, así que los dos commitean juntos (E-299).
 | Clase | Qué fija |
 |---|---|
 | `BienvenidaJava2dAdapterTest` (4) | Coincide con la exportación de Canva (la referencia está en `src/test/resources/bienvenida/`); el test distingue una tarjeta sin nombre; un nombre largo no se sale; JPEG liviano |
-| `BienvenidaEnSoporteServiceTest` (9) | Tarjeta con el primer nombre y texto, firmados por el remitente; sin texto solo la tarjeta; apagada sin remitente; remitente suspendido no manda; un fallo de S3 no manda una foto inexistente y lanza (G-2); deja la marca con la tarjeta; una reentrega con marca no hace nada; la carrera con otra entrega no es error; con `noop` solo el texto (G-5) |
+| `BienvenidaEnSoporteServiceTest` (9) | Tarjeta con el primer nombre, mensaje que la acompaña y formal, con los textos del puerto y firmados por el remitente (D-190); con los dos textos vacíos solo la tarjeta; apagada sin remitente; remitente suspendido no manda; un fallo de S3 no manda una foto inexistente y lanza (G-2); deja la marca con la tarjeta; una reentrega con marca no hace nada; la carrera con otra entrega no es error; con `noop` solo el formal (G-5) |
+| `TextosDeBienvenidaYamlAdapterTest` (4) | El `mensajes.yaml` del repo trae los dos textos del soporte con `{nombre}` y el borrador del grupo; una clave vacía apaga ese mensaje; sin archivo falla al arrancar; `application.yaml` ya no tiene `renaser.bienvenida.texto` y el remitente sigue por `BIENVENIDA_REMITENTE_EMAIL` (D-190) |
 | `MarcaDeBienvenidaJdbcAdapterTest` (1) | La marca contra Postgres real: una por destinatario, la segunda choca con la PK |
 | `ConversacionSoporteServiceTest` (+2 y aserciones) | Avisa solo al crear de verdad: no si ya existía, no si perdió la carrera, no en el relleno; el aviso se publica dentro de la transacción que crea el soporte (R2) |
 | `PrimerNombreTest` (2) | Primera palabra con inicial en mayúscula; vacío sin nombre |

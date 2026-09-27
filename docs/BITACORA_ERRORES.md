@@ -9734,3 +9734,22 @@ era texto fijo en masculino.
 
 **Cómo evitar que vuelva a pasar.** Cuando una regla se apaga dejando el campo por compatibilidad (D-170), buscar en la app
 todo lo que lo muestra y quitarlo en el mismo cambio. Textos sobre una persona, en neutro.
+
+---
+
+## E-318 · Una prueba que leía `application.yaml` del classpath veía el de pruebas, no el de producción
+
+**Síntoma.** `TextosDeBienvenidaYamlAdapterTest.elTextoYaNoVienePorEntorno` (D-190), al leer
+`new ClassPathResource("application.yaml")` y pedir `renaser.bienvenida.remitente-email`:
+`expected: "${BIENVENIDA_REMITENTE_EMAIL:}" but was: null`.
+
+**Causa real.** Existe `src/test/resources/application.yaml`, y en las pruebas `target/test-classes` va antes que
+`target/classes` en el classpath: `ClassPathResource("application.yaml")` devuelve el de pruebas, que no tiene esa clave.
+La aserción de «no está `renaser.bienvenida.texto`» pasaba igual, por la razón equivocada.
+
+**Solución.** La prueba lee `new FileSystemResource("src/main/resources/application.yaml")` (Maven corre las pruebas con
+el directorio del proyecto como directorio de trabajo), con un comentario que explica por qué.
+
+**Cómo evitar que vuelva a pasar.** Una prueba que verifica la configuración que va a producción lee el archivo de
+`src/main/resources` del disco, nunca por nombre del classpath. Y toda prueba de «esta clave NO está» va acompañada de una
+de «esta otra SÍ está» del mismo archivo, para que un archivo equivocado (o vacío) no la haga pasar sola.

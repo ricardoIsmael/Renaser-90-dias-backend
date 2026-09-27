@@ -6,6 +6,7 @@ import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.Env
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.OrigenMedia;
 import com.renaser.os.chat.application.ports.out.bienvenida.DibujarBienvenidaPort;
 import com.renaser.os.chat.application.ports.out.bienvenida.MarcaDeBienvenidaPort;
+import com.renaser.os.chat.application.ports.out.bienvenida.TextosDeBienvenidaPort;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.PrimerNombre;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
@@ -24,14 +25,22 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
  * La bienvenida automática del procedimiento OPE-01-01 (D-174): la tarjeta de Canva con el primer
- * nombre y después el texto, como se manda por WhatsApp, desde la cuenta de staff configurada
- * (hoy la de Kelin).
+ * nombre, el mensaje que la acompaña y el mensaje formal de bienvenida, como se manda por WhatsApp,
+ * desde la cuenta de staff configurada (hoy la de Kelin).
  *
- * <p><b>Dos mensajes y no una foto con texto:</b> la app instalada muestra el texto de una foto
+ * <p><b>Los textos salen de un recurso versionado</b> ({@link TextosDeBienvenidaPort}, D-190), no de
+ * una variable de entorno: se cambian editando {@code bienvenida/mensajes.yaml} y redesplegando.
+ * <blockquote><b>Corregido 2026-09-26 (D-190).</b> Antes había un solo texto, en
+ * {@code renaser.bienvenida.texto} ({@code BIENVENIDA_TEXTO}). El dueño pidió que el texto no vaya
+ * en el entorno y que cada parte del procedimiento tenga su mensaje.</blockquote>
+ *
+ * <p><b>Mensajes separados y no una foto con texto:</b> la app instalada muestra el texto de una foto
  * solo cuando la foto no carga, así que en un solo mensaje el texto no se vería.
  *
  * <p><b>Idempotente</b> (G-2, 2026-09-26). El evento que la dispara queda en el outbox de Modulith y
@@ -46,7 +55,7 @@ import java.util.Optional;
  *
  * <p><b>Sin almacenamiento de verdad no hay tarjeta</b> (G-5): con el adaptador de marcador (local,
  * pruebas) subir no guarda nada, y el mensaje apuntaría a una foto inexistente. Se manda solo el
- * texto y queda en el log.
+ * mensaje formal (el que acompaña la tarjeta no tiene sentido sin ella) y queda en el log.
  *
  * <p>Dibujar y subir a S3 van FUERA de la transacción: no deben retener una conexión de la base.
  */
@@ -64,14 +73,13 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
     private final IdGenerator idGenerator;
     private final TransactionTemplate transaccion;
     private final String remitenteEmail;
-    private final String texto;
+    private final TextosDeBienvenidaPort textos;
 
     public BienvenidaEnSoporteService(DibujarBienvenidaPort dibujarPort, AlmacenamientoPort almacenamientoPort,
                                        EnviarMensajeUseCase enviarMensaje, UserSummaryFinder userSummaryFinder,
-                                       MarcaDeBienvenidaPort marcaPort, IdGenerator idGenerator,
-                                       PlatformTransactionManager transactionManager,
-                                       @Value("${renaser.bienvenida.remitente-email:}") String remitenteEmail,
-                                       @Value("${renaser.bienvenida.texto:}") String texto) {
+                                       MarcaDeBienvenidaPort marcaPort, TextosDeBienvenidaPort textos,
+                                       IdGenerator idGenerator, PlatformTransactionManager transactionManager,
+                                       @Value("${renaser.bienvenida.remitente-email:}") String remitenteEmail) {
         this.dibujarPort = dibujarPort;
         this.almacenamientoPort = almacenamientoPort;
         this.enviarMensaje = enviarMensaje;
@@ -80,7 +88,7 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
         this.idGenerator = idGenerator;
         this.transaccion = new TransactionTemplate(transactionManager);
         this.remitenteEmail = remitenteEmail == null ? "" : remitenteEmail.strip();
-        this.texto = texto == null ? "" : texto.strip();
+        this.textos = textos;
     }
 
     @Override
@@ -130,14 +138,20 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
         return Optional.of(new TarjetaSubida(ruta, contenido.length));
     }
 
-    /** Los mensajes y la marca, juntos. Sin ningún mensaje que mandar no hay marca que dejar. */
+    /**
+     * Los mensajes y la marca, juntos, en el orden del procedimiento: tarjeta, el mensaje que la
+     * acompaña (solo si hubo tarjeta) y el formal. Sin ningún mensaje no hay marca que dejar.
+     */
     private void enviarYMarcar(UserId remitenteId, ConversacionId soporteId, UserId aprendizId,
                                Optional<TarjetaSubida> tarjeta, String nombre) {
-        Mensaje primero = tarjeta.map(t -> enviarTarjeta(remitenteId, soporteId, t)).orElse(null);
-        Mensaje delTexto = enviarTexto(remitenteId, soporteId, nombre);
-        primero = primero != null ? primero : delTexto;
-        if (primero != null) {
-            marcaPort.marcar(aprendizId, primero.id());
+        List<Mensaje> enviados = new ArrayList<>();
+        tarjeta.ifPresent(t -> {
+            enviados.add(enviarTarjeta(remitenteId, soporteId, t));
+            enviarTexto(remitenteId, soporteId, textos.soporteConLaTarjeta(), nombre).ifPresent(enviados::add);
+        });
+        enviarTexto(remitenteId, soporteId, textos.soporteFormal(), nombre).ifPresent(enviados::add);
+        if (!enviados.isEmpty()) {
+            marcaPort.marcar(aprendizId, enviados.get(0).id());
         }
     }
 
@@ -147,14 +161,15 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
                 null, OrigenMedia.CLIENTE));
     }
 
-    /** @return el mensaje, o null si no hay texto configurado */
-    private Mensaje enviarTexto(UserId remitenteId, ConversacionId soporteId, String nombre) {
-        if (texto.isEmpty()) {
-            return null;
+    /** @return el mensaje, o vacío si ese texto está vacío en el recurso */
+    private Optional<Mensaje> enviarTexto(UserId remitenteId, ConversacionId soporteId, String plantilla,
+                                          String nombre) {
+        if (plantilla.isEmpty()) {
+            return Optional.empty();
         }
-        String mensaje = texto.replace(MARCA_NOMBRE, nombre.isEmpty() ? "" : nombre);
-        return enviarMensaje.enviar(new EnviarMensajeCommand(remitenteId, soporteId, TipoMensaje.TEXTO, mensaje,
-                null, null, null, null, null, null, OrigenMedia.CLIENTE));
+        String mensaje = plantilla.replace(MARCA_NOMBRE, nombre);
+        return Optional.of(enviarMensaje.enviar(new EnviarMensajeCommand(remitenteId, soporteId, TipoMensaje.TEXTO,
+                mensaje, null, null, null, null, null, null, OrigenMedia.CLIENTE)));
     }
 
     private record TarjetaSubida(String ruta, int bytes) {
