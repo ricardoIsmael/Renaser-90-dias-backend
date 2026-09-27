@@ -67,7 +67,8 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
 
     /** Quienes acompañan a TODO aprendiz desde su chat de soporte. Confirmado por el dueño del
      * proyecto: administrador o alquimista, nadie mas — ni mentor, ni lider de mentores.
-     * Visible en el paquete: {@code BienvenidaEnSoporteService} exige lo mismo al remitente (E-330). */
+     * (Hasta el 2026-09-27 {@code BienvenidaEnSoporteService} exigia lo mismo al remitente de la
+     * bienvenida, E-330; desde D-199 la bienvenida la firma el programa y ya no hay remitente.) */
     static final Set<UserRole> STAFF_ADMINISTRATIVO = Set.of(UserRole.ADMIN, UserRole.ALCHEMIST);
 
     private static final String SUFIJO_SOPORTE = "Formación Renaser";

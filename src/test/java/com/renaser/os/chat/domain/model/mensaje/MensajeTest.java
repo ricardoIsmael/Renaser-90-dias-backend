@@ -34,14 +34,69 @@ class MensajeTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * E-332: SISTEMA es la voz del programa (D-199). Antes {@code escribir} aceptaba un SISTEMA de
+     * cualquier emisor —hasta vacío— y {@code POST .../messages} con {@code type: SYSTEM} lo guardaba:
+     * cualquier participante podía firmar como el programa.
+     */
     @Test
-    void unMensajeSistemaNoNecesitaTextoNiMedia() {
-        Mensaje mensaje = Mensaje.escribir(MENSAJE_ID, CONVERSACION_ID, EMISOR_ID, TipoMensaje.SISTEMA, null, null,
-                null, null, null, null, null, AHORA);
+    void unaPersonaNoEscribeMensajesDeSistemaNiVaciosNiConTexto() {
+        assertThatThrownBy(() -> Mensaje.escribir(MENSAJE_ID, CONVERSACION_ID, EMISOR_ID, TipoMensaje.SISTEMA, null,
+                null, null, null, null, null, null, AHORA))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("lo escribe el programa");
+        assertThatThrownBy(() -> Mensaje.escribir(MENSAJE_ID, CONVERSACION_ID, EMISOR_ID, TipoMensaje.SISTEMA,
+                "Formación Renaser te da la bienvenida", null, null, null, null, null, null, AHORA))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 
-        assertThat(mensaje.id()).isEqualTo(MENSAJE_ID);
-        assertThat(mensaje.tipo()).isEqualTo(TipoMensaje.SISTEMA);
-        assertThat(mensaje.texto()).isNull();
+    /** D-199: el programa sí escribe SISTEMA, guardado a nombre de la persona a quien se refiere. */
+    @Test
+    void elProgramaEscribeSistemaConTextoOConImagen() {
+        Mensaje texto = Mensaje.delPrograma(MENSAJE_ID, CONVERSACION_ID, EMISOR_ID,
+                ContenidoDelPrograma.texto("Te damos la bienvenida"), AHORA);
+        Mensaje tarjeta = Mensaje.delPrograma(MensajeId.of(UUID.randomUUID()), CONVERSACION_ID, EMISOR_ID,
+                ContenidoDelPrograma.imagen("chat/c/fotos/t", "image/jpeg", 120_000), AHORA);
+
+        assertThat(texto.tipo()).isEqualTo(TipoMensaje.SISTEMA);
+        assertThat(texto.esDelPrograma()).isTrue();
+        assertThat(texto.emisorId()).isEqualTo(EMISOR_ID);
+        assertThat(tarjeta.tipo()).isEqualTo(TipoMensaje.SISTEMA);
+        assertThat(tarjeta.mediaBucket()).isEqualTo(Mensaje.BUCKET_DEFAULT);
+        assertThat(tarjeta.mediaRuta()).isEqualTo("chat/c/fotos/t");
+        assertThat(tarjeta.mediaBytes()).isEqualTo(120_000);
+    }
+
+    @Test
+    void unMensajeDelProgramaSinContenidoOSinPersonaEsInvalido() {
+        assertThatThrownBy(() -> Mensaje.delPrograma(MENSAJE_ID, CONVERSACION_ID, EMISOR_ID,
+                ContenidoDelPrograma.texto("  "), AHORA)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Mensaje.delPrograma(MENSAJE_ID, CONVERSACION_ID, null,
+                ContenidoDelPrograma.texto("hola"), AHORA)).isInstanceOf(NullPointerException.class);
+    }
+
+    /**
+     * D-199: hacia afuera un mensaje del programa lo firma el UUID nulo, nunca la persona guardada (que
+     * puede ser quien lo mira). Uno de una persona, su emisor.
+     */
+    @Test
+    void elRemitentePublicoDeUnMensajeDelProgramaEsElProgramaYNoLaPersonaGuardada() {
+        Mensaje delPrograma = Mensaje.delPrograma(MENSAJE_ID, CONVERSACION_ID, EMISOR_ID,
+                ContenidoDelPrograma.texto("hola"), AHORA);
+        Mensaje dePersona = Mensaje.escribir(MensajeId.of(UUID.randomUUID()), CONVERSACION_ID, EMISOR_ID,
+                TipoMensaje.TEXTO, "hola", null, null, null, null, null, null, AHORA);
+
+        assertThat(delPrograma.remitentePublico()).isEqualTo(new UUID(0L, 0L)).isNotEqualTo(EMISOR_ID.value());
+        assertThat(dePersona.remitentePublico()).isEqualTo(EMISOR_ID.value());
+        assertThat(dePersona.esDelPrograma()).isFalse();
+    }
+
+    @Test
+    void unSistemaYaGuardadoSeSigueLeyendo() {
+        Mensaje guardado = Mensaje.rehydrate(MENSAJE_ID, CONVERSACION_ID, EMISOR_ID, TipoMensaje.SISTEMA, null, null,
+                null, null, null, null, false, null, null, AHORA);
+
+        assertThat(guardado.tipo()).isEqualTo(TipoMensaje.SISTEMA);
     }
 
     @Test

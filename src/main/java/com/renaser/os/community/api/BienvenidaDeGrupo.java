@@ -35,6 +35,10 @@ public interface BienvenidaDeGrupo {
     record Pendientes(UUID grupoId, UserId mentorId, List<Pendiente> aprendices) {
     }
 
-    record Pendiente(UUID asignacionId, UserId aprendizId) {
+    /**
+     * @param desde el {@code inicio} de la pertenencia: {@code chat} no le da la bienvenida a quien
+     *              entró hace días (D-204)
+     */
+    record Pendiente(UUID asignacionId, UserId aprendizId, Instant desde) {
     }
 }

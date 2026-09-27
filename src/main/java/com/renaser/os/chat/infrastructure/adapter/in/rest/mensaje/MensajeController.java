@@ -97,6 +97,7 @@ public class MensajeController {
             case "IMAGE" -> TipoMensaje.IMAGEN;
             case "AUDIO" -> TipoMensaje.AUDIO;
             case "VIDEO" -> TipoMensaje.VIDEO;
+            // Se traduce para que el 400 lo explique el dominio: una persona no escribe SISTEMA (E-332).
             case "SYSTEM" -> TipoMensaje.SISTEMA;
             default -> throw new IllegalArgumentException("Tipo de mensaje invalido: " + type);
         };

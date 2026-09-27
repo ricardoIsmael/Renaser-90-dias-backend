@@ -24,7 +24,8 @@ import java.util.concurrent.CountDownLatch;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * La bienvenida del mentor en el chat del grupo estable contra Postgres de verdad (D-191, V71).
+ * La bienvenida en el chat del grupo estable contra Postgres de verdad (D-191, V71), firmada por el
+ * programa (D-204): un SISTEMA guardado a nombre del aprendiz, que la base acepta sin tocar el esquema.
  *
  * <p>Lo que un doble no puede probar: que el {@code UPDATE … WHERE bienvenida_enviada_en IS NULL}
  * frena de verdad a una segunda entrega (también cruzada, en dos hilos), que la columna existe y que
@@ -32,8 +33,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>Se llama al caso de uso directo, sin el evento: la semilla es SQL y no publica nada. Sin
  * {@code @Transactional} de clase: el caso de uso abre las suyas y hay que ver lo comprometido.
+ *
+ * <p>Con el interruptor PRENDIDO (D-204: apagado por defecto); que apagada no manda ni marca lo fija
+ * {@code BienvenidaEnGrupoServiceTest}.
  */
-@SpringBootTest
+@SpringBootTest(properties = "renaser.chat.bienvenida.activa=true")
 @Import(TestcontainersConfiguration.class)
 class BienvenidaEnGrupoIT {
 
@@ -67,7 +71,7 @@ class BienvenidaEnGrupoIT {
     }
 
     @Test
-    @DisplayName("un aprendiz nuevo en un grupo estable con mentor recibe UN mensaje del mentor; la reentrega no lo repite")
+    @DisplayName("un aprendiz nuevo en un grupo estable con mentor recibe UN mensaje del PROGRAMA (SISTEMA, a su nombre y no del mentor, D-204); la reentrega no lo repite")
     void unMensajeYLaReentregaNoDuplica() {
         UUID grupo = grupo("REGULAR");
         UUID mentor = usuario("MENTOR", "Carlos Ramírez");
@@ -78,10 +82,14 @@ class BienvenidaEnGrupoIT {
         assertThat(darBienvenidas.darBienvenidas(grupo)).isEqualTo(1);
         assertThat(darBienvenidas.darBienvenidas(grupo)).as("reentrega").isZero();
 
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM renaser.mensajes m JOIN renaser.conversaciones c ON c.id = m.conversacion_id
+                WHERE c.celula_id = ? AND m.emisor_id = ?
+                """, Integer.class, grupo, mentor)).as("nada a nombre del mentor").isZero();
         List<String> textos = jdbcTemplate.queryForList("""
                 SELECT m.texto FROM renaser.mensajes m JOIN renaser.conversaciones c ON c.id = m.conversacion_id
-                WHERE c.celula_id = ? AND m.emisor_id = ?
-                """, String.class, grupo, mentor);
+                WHERE c.celula_id = ? AND m.emisor_id = ? AND m.tipo = 'SISTEMA'
+                """, String.class, grupo, ana);
         assertThat(textos).singleElement().satisfies(t -> assertThat(t).contains("Ana").contains("Carlos")
                 .doesNotContain("{nombre}").doesNotContain("{mentor}"));
         assertThat(marca(asignacion)).isTrue();
@@ -128,6 +136,25 @@ class BienvenidaEnGrupoIT {
         asignar(grupo, usuario("MENTOR", "Carlos Ramírez"), "MENTOR");
         assertThat(darBienvenidas.darBienvenidas(grupo)).isEqualTo(1);
         assertThat(marca(asignacion)).isTrue();
+    }
+
+    @Test
+    @DisplayName("D-204: quien entró al grupo hace 3 días no recibe una bienvenida atrasada ni queda marcado; quien entró hace 1 h sí")
+    void sinBienvenidaAtrasada() {
+        UUID grupo = grupo("REGULAR");
+        asignar(grupo, usuario("MENTOR", "Carlos Ramírez"), "MENTOR");
+        UUID antigua = asignarDesde(grupo, usuario("APRENDIZ", "Luis Soto"), "APRENDIZ", "3 days");
+        UUID nueva = asignar(grupo, usuario("APRENDIZ", "Ana Pérez"), "APRENDIZ");
+
+        assertThat(darBienvenidas.darBienvenidas(grupo)).isEqualTo(1);
+
+        assertThat(marca(nueva)).isTrue();
+        assertThat(marca(antigua)).isFalse();
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT m.texto FROM renaser.mensajes m JOIN renaser.conversaciones c ON c.id = m.conversacion_id
+                WHERE c.celula_id = ?
+                """, String.class, grupo)).singleElement().satisfies(t -> assertThat(t).contains("Ana")
+                .doesNotContain("Luis"));
     }
 
     @Test
@@ -207,13 +234,21 @@ class BienvenidaEnGrupoIT {
         return asignarEn(jdbcTemplate, celula, usuario, funcion);
     }
 
+    private UUID asignarDesde(UUID celula, UUID usuario, String funcion, String haceCuanto) {
+        return asignarEn(jdbcTemplate, celula, usuario, funcion, haceCuanto);
+    }
+
     private static UUID asignarEn(JdbcTemplate jdbc, UUID celula, UUID usuario, String funcion) {
+        return asignarEn(jdbc, celula, usuario, funcion, "1 hour");
+    }
+
+    private static UUID asignarEn(JdbcTemplate jdbc, UUID celula, UUID usuario, String funcion, String haceCuanto) {
         UUID id = UUID.randomUUID();
         jdbc.update("""
                 INSERT INTO renaser.asignaciones_celula (id, celula_id, usuario_id, funcion, inicio, motivo, clave_operacion)
-                VALUES (?, ?, ?, CAST(? AS renaser.funcion_acompanamiento), now() - interval '1 hour',
+                VALUES (?, ?, ?, CAST(? AS renaser.funcion_acompanamiento), now() - CAST(? AS interval),
                         'ADMINISTRATIVO', ?)
-                """, id, celula, usuario, funcion, "prueba|" + id);
+                """, id, celula, usuario, funcion, haceCuanto, "prueba|" + id);
         return id;
     }
 

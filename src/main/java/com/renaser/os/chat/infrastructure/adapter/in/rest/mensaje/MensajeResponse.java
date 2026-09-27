@@ -18,7 +18,13 @@ import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
  * <p>Lo mismo vale para {@code mediaUrl}, la URL de lectura firmada del adjunto: solo viene en el
  * listado de mensajes, que es la unica pantalla que muestra la foto o reproduce el audio. En el
  * resumen de conversacion alcanza con {@code type} para escribir "Foto" o "Audio" al lado del
- * chat, y firmar una URL por conversacion que nadie va a abrir seria trabajo tirado. */
+ * chat, y firmar una URL por conversacion que nadie va a abrir seria trabajo tirado.
+ *
+ * <p><b>Un mensaje del programa (SISTEMA, D-199/D-204) nunca sale a nombre de la persona guardada en
+ * {@code emisor_id}</b>: {@code senderId} es el UUID nulo ({@code Mensaje.ID_PUBLICO_DEL_PROGRAMA}),
+ * {@code senderName} «Formación Renaser» (en el listado) y {@code senderAvatarUrl} {@code null}. Nunca
+ * {@code senderId: null}: todas las versiones publicadas de la app lo validan como texto obligatorio
+ * y un {@code null} les vaciaría la bandeja. */
 public record MensajeResponse(String id, String conversationId, String senderId, String senderName,
                                String senderAvatarUrl, String type, String text, String mediaBucket,
                                String mediaPath, String mediaMime, Integer mediaBytes,
@@ -26,15 +32,15 @@ public record MensajeResponse(String id, String conversationId, String senderId,
                                ReplyPreviewResponse replyTo, String createdAt) {
 
     public static MensajeResponse from(Mensaje m) {
-        return new MensajeResponse(m.id().toString(), m.conversacionId().toString(), m.emisorId().toString(), null,
-                null, toWireTipo(m.tipo()), m.texto(), m.mediaBucket(), m.mediaRuta(), m.mediaMime(), m.mediaBytes(),
+        return new MensajeResponse(m.id().toString(), m.conversacionId().toString(), m.remitentePublico().toString(),
+                null, null, toWireTipo(m.tipo()), m.texto(), m.mediaBucket(), m.mediaRuta(), m.mediaMime(), m.mediaBytes(),
                 m.mediaDuracionS(), null, m.oculto(),
                 m.respuestaAId() != null ? m.respuestaAId().toString() : null, null, m.creadoEn().toString());
     }
 
     public static MensajeResponse from(MensajeEnriquecido enriquecido) {
         Mensaje m = enriquecido.mensaje();
-        return new MensajeResponse(m.id().toString(), m.conversacionId().toString(), m.emisorId().toString(),
+        return new MensajeResponse(m.id().toString(), m.conversacionId().toString(), m.remitentePublico().toString(),
                 enriquecido.nombreEmisor(), enriquecido.avatarEmisor(), toWireTipo(m.tipo()), m.texto(),
                 m.mediaBucket(), m.mediaRuta(), m.mediaMime(), m.mediaBytes(), m.mediaDuracionS(),
                 enriquecido.mediaUrl(), m.oculto(), m.respuestaAId() != null ? m.respuestaAId().toString() : null,

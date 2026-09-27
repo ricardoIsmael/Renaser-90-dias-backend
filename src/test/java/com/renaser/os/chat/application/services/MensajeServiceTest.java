@@ -12,6 +12,7 @@ import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigente
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
+import com.renaser.os.chat.domain.model.mensaje.ContenidoDelPrograma;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
@@ -422,5 +423,41 @@ class MensajeServiceTest {
 
         assertThat(pagina.mensajes().get(0).respuestaPreview()).isNull();
         verify(loadMensajePort, never()).porIds(any());
+    }
+
+    /**
+     * D-199: un mensaje del programa lo firma «Formación Renaser», sin avatar, aunque en emisor_id
+     * esté guardada la persona a quien se refiere (acá, quien lo mira). Ni siquiera se la busca.
+     */
+    @Test
+    void listarFirmaComoElProgramaLosMensajesDeSistemaSinBuscarALaPersonaGuardada() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+        Mensaje delPrograma = Mensaje.delPrograma(nuevoMensajeId(), conversacionId, activo,
+                ContenidoDelPrograma.texto("Te damos la bienvenida"), CLOCK.now());
+        when(loadMensajePort.pagina(conversacionId, null, 31)).thenReturn(List.of(delPrograma));
+
+        var pagina = service.listar(activo, conversacionId, null, 30);
+
+        assertThat(pagina.mensajes().get(0).nombreEmisor()).isEqualTo("Formación Renaser");
+        assertThat(pagina.mensajes().get(0).avatarEmisor()).isNull();
+        verify(userSummaryFinder).findByIds(java.util.Set.of());
+    }
+
+    @Test
+    void listarFirmaComoElProgramaElPreviewDeUnaRespuestaAUnMensajeDeSistema() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+        Mensaje delPrograma = Mensaje.delPrograma(nuevoMensajeId(), conversacionId, activo,
+                ContenidoDelPrograma.texto("Te damos la bienvenida"), CLOCK.now());
+        Mensaje respuesta = Mensaje.escribir(nuevoMensajeId(), conversacionId, activo, TipoMensaje.TEXTO,
+                "¡Gracias!", null, null, null, null, null, delPrograma.id(), CLOCK.now());
+        when(loadMensajePort.pagina(conversacionId, null, 31)).thenReturn(List.of(respuesta));
+        when(loadMensajePort.porIds(List.of(delPrograma.id()))).thenReturn(Map.of(delPrograma.id(), delPrograma));
+        when(userSummaryFinder.findByIds(any())).thenReturn(Map.of(
+                activo, new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+
+        var pagina = service.listar(activo, conversacionId, null, 30);
+
+        assertThat(pagina.mensajes().get(0).nombreEmisor()).isEqualTo("Activo");
+        assertThat(pagina.mensajes().get(0).respuestaPreview().nombreEmisor()).isEqualTo("Formación Renaser");
     }
 }
