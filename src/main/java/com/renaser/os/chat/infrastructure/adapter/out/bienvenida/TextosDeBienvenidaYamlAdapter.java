@@ -1,6 +1,7 @@
 package com.renaser.os.chat.infrastructure.adapter.out.bienvenida;
 
-import com.renaser.os.chat.application.ports.out.bienvenida.TextosDeBienvenidaPort;
+import com.renaser.os.chat.application.ports.out.bienvenida.TextosOriginalesDeBienvenidaPort;
+import com.renaser.os.chat.domain.model.bienvenida.PiezaDeBienvenida;
 import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -13,9 +14,15 @@ import java.util.Properties;
  *
  * <p>Si el archivo falta, el arranque falla: es parte del artefacto, y que falte es un error de
  * empaquetado, no una configuración. Una clave que falta o viene vacía solo apaga ese mensaje.
+ *
+ * <p><b>Son los ORIGINALES</b> (D-210): salen mientras Administración no guarde otro desde la app, y a
+ * ellos se vuelve con «Volver al texto original». Los que salen de verdad los arma
+ * {@link TextosDeBienvenidaVigentes}.
+ * <blockquote><b>Corregido 2026-09-27 (D-210).</b> Implementaba {@code TextosDeBienvenidaPort}: era la
+ * única fuente de los textos que se mandaban.</blockquote>
  */
 @Component
-class TextosDeBienvenidaYamlAdapter implements TextosDeBienvenidaPort {
+class TextosDeBienvenidaYamlAdapter implements TextosOriginalesDeBienvenidaPort {
 
     static final String RECURSO = "bienvenida/mensajes.yaml";
 
@@ -35,17 +42,24 @@ class TextosDeBienvenidaYamlAdapter implements TextosDeBienvenidaPort {
     }
 
     @Override
-    public String soporteConLaTarjeta() {
+    public String original(PiezaDeBienvenida pieza) {
+        return switch (pieza) {
+            case SOPORTE_CON_LA_TARJETA -> soporteConLaTarjeta;
+            case SOPORTE_FORMAL -> soporteFormal;
+            case GRUPO -> grupo;
+            case PORTADA -> throw new IllegalArgumentException("La portada no es un texto de bienvenida");
+        };
+    }
+
+    String soporteConLaTarjeta() {
         return soporteConLaTarjeta;
     }
 
-    @Override
-    public String soporteFormal() {
+    String soporteFormal() {
         return soporteFormal;
     }
 
-    @Override
-    public String grupo() {
+    String grupo() {
         return grupo;
     }
 

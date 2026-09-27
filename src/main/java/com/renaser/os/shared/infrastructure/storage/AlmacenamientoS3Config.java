@@ -48,7 +48,14 @@ class AlmacenamientoS3Config {
                 .build();
     }
 
-    /** Solo para borrar: subir y leer van por URL prefirmada, sin pasar por el backend. */
+    /**
+     * Para lo que hace el propio servidor: borrar, subir lo que genera (la tarjeta de bienvenida,
+     * D-174) y bajar la portada de esa tarjeta, que tiene que abrir (D-210). Lo que sube o baja el
+     * telefono sigue yendo por URL prefirmada, sin pasar por el backend.
+     *
+     * <blockquote><b>Corregido 2026-09-27 (D-210).</b> Decia <i>"Solo para borrar: subir y leer van
+     * por URL prefirmada, sin pasar por el backend"</i>, que ya no era cierto desde D-174.</blockquote>
+     */
     @Bean
     S3Client s3Client() {
         return S3Client.builder()

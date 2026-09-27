@@ -35,6 +35,7 @@ Verificado sobre los 12 lugares que llaman a `firmarSubida`:
 | `firmas/` | Firma del Pacto de Sangre | `ContratoService` |
 | `calendar/` | Portadas de evento | `EventoService` |
 | `soporte/` | Adjuntos de ticket | `TicketSoporteService` |
+| `bienvenida/portadas/` | Portada de la tarjeta de bienvenida que sube Administración (D-210). Es el único prefijo que el servidor también **baja** (`AlmacenamientoPort.leer`, `s3:GetObject`): la revisa y dibuja encima | `PortadaDeBienvenidaAdminService` |
 
 Dentro de cada prefijo la ruta lleva el id del usuario y el de la entidad; por ejemplo
 `evidencia-habitos/{actorId}/{registroId}/{idGenerado}`. Eso ya está bien: **particiona por

@@ -9,16 +9,24 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
+import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * Prueba del adaptador real de S3 <b>sin red y sin credenciales de verdad</b>.
@@ -146,5 +154,43 @@ class S3AlmacenamientoAdapterTest {
 
         verify(s3Client).deleteObject(any(DeleteObjectRequest.class));
         verifyNoMoreInteractions(s3Client);
+    }
+
+    /** D-210: la portada de la bienvenida la baja el servidor, del bucket configurado. */
+    @Test
+    void leerBajaElObjetoDelBucketConfigurado() {
+        byte[] contenido = {1, 2, 3, 4};
+        when(s3Client.getObject(any(GetObjectRequest.class))).thenReturn(objeto(contenido, 4L));
+
+        assertThat(adapter().leer("bienvenida/portadas/abc", 10)).hasValue(contenido);
+
+        ArgumentCaptor<GetObjectRequest> captor = ArgumentCaptor.forClass(GetObjectRequest.class);
+        verify(s3Client).getObject(captor.capture());
+        assertThat(captor.getValue().bucket()).isEqualTo(BUCKET);
+        assertThat(captor.getValue().key()).isEqualTo("bienvenida/portadas/abc");
+    }
+
+    /** Un objeto más pesado que el tope no llega entero a la memoria: se corta con lo que declara S3 o al leer. */
+    @Test
+    void leerNoBajaUnObjetoMasPesadoQueElTope() {
+        when(s3Client.getObject(any(GetObjectRequest.class)))
+                .thenReturn(objeto(new byte[20], 20L), objeto(new byte[20], null));
+
+        assertThatThrownBy(() -> adapter().leer("bienvenida/portadas/grande", 10))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("MB");
+        assertThatThrownBy(() -> adapter().leer("bienvenida/portadas/sin-largo", 10))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void leerLoQueNoExisteDaVacio() {
+        when(s3Client.getObject(any(GetObjectRequest.class))).thenThrow(NoSuchKeyException.builder().build());
+
+        assertThat(adapter().leer("bienvenida/portadas/no-existe", 10)).isEmpty();
+    }
+
+    private static ResponseInputStream<GetObjectResponse> objeto(byte[] contenido, Long declarado) {
+        return new ResponseInputStream<>(GetObjectResponse.builder().contentLength(declarado).build(),
+                AbortableInputStream.create(new ByteArrayInputStream(contenido)));
     }
 }

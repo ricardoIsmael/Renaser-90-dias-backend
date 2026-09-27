@@ -98,6 +98,20 @@ public enum Permission {
     /** Guard: {@code ConversacionService.requireActivoAdmin} -> "Solo ADMIN/ALCHEMIST puede renombrar el chat global". */
     RENAME_GLOBAL_CHAT,
 
+    /**
+     * Cambiar desde la app la bienvenida automatica: sus tres mensajes y la portada de la tarjeta, y
+     * volver a los originales del repo (D-210, pedido del dueño del 2026-09-27). Guard:
+     * {@code BienvenidaParaAdministrar.exigirQuePuedaCambiarla} -> "Solo Administración y Alquimista
+     * pueden cambiar la bienvenida" / "La cuenta esta suspendida".
+     *
+     * <p>Roles que lo satisfacen: ADMIN y ALCHEMIST activos, y nadie mas (el mismo criterio que D-186 para
+     * el calendario). Como MENTOR, ADMIN y ALCHEMIST todavia no tienen matriz (A-1, falla-abierto en
+     * {@code UserRole}), el 403 de un MENTOR y el de una cuenta ADMIN suspendida los da el servicio; el de
+     * TRAINEE lo da el interceptor, y el de MENTOR_LEAD el servicio mientras su cumplimiento siga en modo
+     * sombra.
+     */
+    MANAGE_WELCOME,
+
     // ---------------------------------------------------------------------------------
     // calendar
     // ---------------------------------------------------------------------------------

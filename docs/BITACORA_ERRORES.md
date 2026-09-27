@@ -10121,3 +10121,48 @@ Audioterapia tiene en la base. `crear` pasa la hora de cierre por `VentanaDelDia
 
 **Cómo evitar que vuelva a pasar.** En un fixture con `HorarioHabito.crear`, las horas de cierre después de las 23:50 salen
 acotadas. Para reproducir una fila real tal cual está en la base, usar `rehydrate`.
+
+## E-350 · `AlmacenamientoPortQueRegistra is not abstract and does not override abstract method leer(java.lang.String,long)` al agregar un método a `AlmacenamientoPort`
+
+**Síntoma (2026-09-27, D-210).** Al compilar las pruebas:
+
+```
+[ERROR] .../AccountDeletionIntegrationTest.java:[276,13] com.renaser.os.users.application.services.AccountDeletionIntegrationTest.AlmacenamientoPortQueRegistra is not abstract and does not override abstract method leer(java.lang.String,long) in com.renaser.os.shared.application.ports.out.AlmacenamientoPort
+```
+
+**Causa real.** D-210 agregó `leer(ruta, pesoMaximo)` —abstracto— al puerto compartido `AlmacenamientoPort`. Además de
+los dos adaptadores de producción, lo implementan a mano dos dobles de prueba de OTROS módulos: una clase anónima en
+`MensajeServicePermisosDeGrupoTest` (chat) y un `record` en `AccountDeletionIntegrationTest` (users). La búsqueda
+(`grep "implements AlmacenamientoPort\|new AlmacenamientoPort()"`) listó los dos, pero solo se abrió y corrigió el
+primero; el `record` escribe los tipos con el paquete completo (`java.net.URI`) y pasó desapercibido.
+
+**Solución.** El `record` devuelve `Optional.empty()` en `leer`: esa prueba solo anota lo que se borra.
+
+**Cómo evitar que vuelva a pasar.** Antes de agregar un método abstracto a un puerto de `shared`, abrir CADA resultado de
+`grep -rn "implements <Puerto>\|new <Puerto>()" src/`, y correr `test-compile` antes que cualquier prueba suelta: el
+error aparece en un módulo que la tarea no toca. Se descartó hacer `leer` un método `default` que devuelva vacío: un
+adaptador nuevo que se olvidara de implementarlo «no encontraría» la portada, en silencio.
+
+## E-351 · RIESGO EVITADO (D-210) — Con la portada editable, la foto del soporte habría seguido sirviendo la tarjeta vieja: `expected: "ANA@bienvenida/portadas/p1" but was: "ANA@original"`
+
+**Síntoma (reproducido con la prueba nueva contra la clase de D-205).**
+`TarjetasConNombreYPortadaTest.conLaPortadaNuevaNoSirveLaVieja`: `expected: "ANA@bienvenida/portadas/p1" but was:
+"ANA@original"`; `alVolverALaOriginal`: `Expected size: 2 but was: 1`. En producción se habría visto así: Administración
+cambia la portada, y la foto del chat de soporte de cada aprendiz ya dibujado sigue mostrando la vieja.
+
+**Causa real.** `TarjetasConNombreEnMemoria` (D-205) guardaba las tarjetas solo por primer nombre. Después de cambiar la
+portada, cada nombre ya dibujado se seguía sirviendo con la vieja hasta salir por el tope de peso (6 MB: pueden ser
+días), y el `ETag` —que sale del contenido— tampoco cambiaba, porque el contenido guardado era el viejo. Había además una
+carrera más fina: si la clave tomara la portada vigente y el dibujo la volviera a leer, un cambio justo en el medio
+guardaría bajo la clave «original» una tarjeta de la nueva, y al volver a la original se serviría la equivocada.
+
+**Solución (D-210).** La clave es (portada, nombre) y se dibuja sobre la portada DE LA CLAVE
+(`DibujarBienvenidaPort.dibujar(nombre, portada)`), no sobre la que esté vigente al terminar. Cambio mínimo en la clase,
+que trabaja otro agente en paralelo: ni su constructor ni su puerto cambian; `DibujarBienvenidaPort` suma
+`portadaVigente()` y `dibujar(nombre, portada)` como métodos por defecto, así los dobles de prueba que ya existen siguen
+compilando igual.
+
+**Cómo evitar que vuelva a pasar.** Todo caché de algo que se dibuja o se deriva de contenido editable lleva en la clave
+la versión de ese contenido, y lo guardado se calcula con esa misma versión, no con la que se lee después.
+`TarjetasConNombreYPortadaTest` (3) falla contra la clase de D-205 (verificado: las 3 en rojo con la clase vieja; las 3 de
+`TarjetasConNombreEnMemoriaTest`, en verde con las dos).

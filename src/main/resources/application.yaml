@@ -491,6 +491,9 @@ renaser:
   # Corregido 2026-09-26 (D-190): también estaba `texto: ${BIENVENIDA_TEXTO:}`. Los textos NO van por
   # entorno: viven en src/main/resources/bienvenida/mensajes.yaml y se cambian editando ese archivo y
   # redesplegando. BIENVENIDA_TEXTO ya no se lee.
+  # Corregido 2026-09-27 (D-210): ese archivo (y bienvenida/fondo.png) son ahora los ORIGINALES. ADMIN y
+  # ALQUIMISTA cambian los textos y la portada de la tarjeta desde la app; lo guardado queda en la
+  # tabla cambios_bienvenida (V73) y reemplaza al original hasta volver a él. Sigue sin haber entorno.
   chat:
     bienvenida:
       activa: ${BIENVENIDA_ACTIVA:false}

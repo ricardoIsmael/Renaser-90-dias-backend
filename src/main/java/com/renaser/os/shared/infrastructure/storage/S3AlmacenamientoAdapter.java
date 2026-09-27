@@ -1,20 +1,27 @@
 package com.renaser.os.shared.infrastructure.storage;
 
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Locale;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Utilities;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.GetUrlRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -34,7 +41,8 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
  * prefirmada directamente entre el cliente y S3: el archivo no pasa por la JVM, no ocupa un hilo
  * mientras dura la transferencia y no cuenta contra el presupuesto de latencia del §3. Los verbos
  * que ejecuta el servidor son el borrado y, desde D-174, subir lo que el propio servidor genera
- * (la imagen de bienvenida, ~200 KB).
+ * (la imagen de bienvenida, ~200 KB). Desde D-210 tambien baja UN tipo de objeto que tiene que abrir
+ * el mismo: la portada de la tarjeta de bienvenida que sube Administracion ({@link #leer}).
  *
  * <p><b>Sobre la validez de las URLs:</b> cada caso de uso decide la suya y este adaptador la
  * respeta tal cual — un audio de terapia y la firma de un contrato de fase no tienen por que
@@ -112,6 +120,41 @@ public class S3AlmacenamientoAdapter implements AlmacenamientoPort {
         cliente.putObject(PutObjectRequest.builder().bucket(bucket).key(ruta).contentType(tipoContenido).build(),
                 RequestBody.fromBytes(contenido));
         log.info("Objeto subido a S3 por el servidor: {} ({} bytes)", ruta, contenido.length);
+    }
+
+    /**
+     * Baja el objeto con el {@code S3Client} (D-210, la portada de la bienvenida). Mira el tamaño que
+     * declara S3 antes de leer y, por si no lo declara, no lee más de {@code pesoMaximo + 1} bytes: un
+     * archivo enorme subido con la URL prefirmada no llega entero a la memoria del proceso.
+     */
+    @Override
+    public Optional<byte[]> leer(String ruta, long pesoMaximo) {
+        GetObjectRequest pedido = GetObjectRequest.builder().bucket(bucket).key(ruta).build();
+        try (ResponseInputStream<GetObjectResponse> objeto = cliente.getObject(pedido)) {
+            Long declarado = objeto.response().contentLength();
+            if (declarado != null && declarado > pesoMaximo) {
+                objeto.abort();
+                throw demasiadoPesado(declarado, pesoMaximo);
+            }
+            byte[] contenido = objeto.readNBytes((int) Math.min(pesoMaximo + 1, Integer.MAX_VALUE - 8));
+            if (contenido.length > pesoMaximo) {
+                objeto.abort();
+                throw demasiadoPesado(contenido.length, pesoMaximo);
+            }
+            return Optional.of(contenido);
+        } catch (NoSuchKeyException sinObjeto) {
+            return Optional.empty();
+        } catch (IOException e) {
+            throw new UncheckedIOException("No se pudo leer de S3 el objeto " + ruta, e);
+        }
+    }
+
+    private static IllegalArgumentException demasiadoPesado(long peso, long pesoMaximo) {
+        return new IllegalArgumentException("El archivo pesa " + mb(peso) + " MB: el máximo es " + mb(pesoMaximo) + " MB.");
+    }
+
+    private static String mb(long bytes) {
+        return String.format(Locale.forLanguageTag("es"), "%.1f", bytes / (1024.0 * 1024.0));
     }
 
     @Override

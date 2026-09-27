@@ -2,6 +2,7 @@ package com.renaser.os.shared.application.ports.out;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.Optional;
 
 public interface AlmacenamientoPort {
 
@@ -34,6 +35,18 @@ public interface AlmacenamientoPort {
 
     /** Borra el objeto. Idempotente: borrar lo inexistente no falla. */
     void borrar(String ruta);
+
+    /**
+     * Baja un objeto que el propio servidor tiene que ABRIR. Es la otra excepción a "el backend nunca
+     * toca los bytes", y tan acotada como {@link #subir}: existe para la portada de la tarjeta de
+     * bienvenida (D-210), que el servidor revisa (que el nombre se lea encima) y sobre la que dibuja.
+     * Todo lo que solo se MUESTRA sigue bajando por {@link #firmarLectura}, directo al teléfono.
+     *
+     * @param pesoMaximo en bytes: un objeto más pesado no se baja entero
+     * @return vacío si el objeto no existe, o si el almacenamiento es de marcador (no guarda nada)
+     * @throws IllegalArgumentException si el objeto pesa más que {@code pesoMaximo}
+     */
+    Optional<byte[]> leer(String ruta, long pesoMaximo);
 
     /**
      * Si {@link #subir} deja el objeto guardado de verdad. {@code false} en el adaptador de

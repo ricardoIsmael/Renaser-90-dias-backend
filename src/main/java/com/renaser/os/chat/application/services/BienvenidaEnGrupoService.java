@@ -34,8 +34,9 @@ import java.util.UUID;
 
 /**
  * La bienvenida en el chat del grupo estable (OPE-01-01, D-191): «un mensaje personalizado de
- * bienvenida reforzando pertenencia y compromiso», con el texto {@code grupo} de
- * {@code bienvenida/mensajes.yaml}. Sin tarjeta: la tarjeta es del soporte.
+ * bienvenida reforzando pertenencia y compromiso», con el texto {@code grupo} vigente: el que guardó
+ * Administración desde la app (D-210) o el original de {@code bienvenida/mensajes.yaml}. Sin tarjeta: la
+ * tarjeta es del soporte.
  *
  * <p><b>La firma el programa, no el mentor</b> (D-204, 2026-09-27): sale como mensaje de SISTEMA
  * ({@link EnviarMensajeDelProgramaUseCase}), guardado a nombre del aprendiz al que se le da. El mentor

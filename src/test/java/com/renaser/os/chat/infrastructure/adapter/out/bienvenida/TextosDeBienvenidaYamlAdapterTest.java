@@ -1,5 +1,7 @@
 package com.renaser.os.chat.infrastructure.adapter.out.bienvenida;
 
+import com.renaser.os.chat.domain.model.bienvenida.PiezaDeBienvenida;
+import com.renaser.os.chat.domain.model.bienvenida.TextoDeBienvenida;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
@@ -41,6 +43,28 @@ class TextosDeBienvenidaYamlAdapterTest {
                 .endsWith("¡Te damos la bienvenida!");
         // Antes: «Soy {mentor} y voy a acompañarte…», el mentor en primera persona.
         assertThat(grupo).doesNotContain("Soy {mentor}").doesNotContain("http").doesNotContainPattern("\\d{1,2}:\\d{2}");
+    }
+
+    @Test
+    @DisplayName("D-210: son los ORIGINALES, por pieza; la portada no es un texto")
+    void losOriginalesPorPieza() {
+        TextosDeBienvenidaYamlAdapter textos = new TextosDeBienvenidaYamlAdapter();
+
+        assertThat(textos.original(PiezaDeBienvenida.SOPORTE_CON_LA_TARJETA)).isEqualTo(textos.soporteConLaTarjeta());
+        assertThat(textos.original(PiezaDeBienvenida.SOPORTE_FORMAL)).isEqualTo(textos.soporteFormal());
+        assertThat(textos.original(PiezaDeBienvenida.GRUPO)).isEqualTo(textos.grupo());
+        assertThatThrownBy(() -> textos.original(PiezaDeBienvenida.PORTADA)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("D-210: los originales del repo cumplen las reglas de un texto guardado desde la app")
+    void losOriginalesCumplenLasReglas() {
+        TextosDeBienvenidaYamlAdapter textos = new TextosDeBienvenidaYamlAdapter();
+
+        for (PiezaDeBienvenida pieza : PiezaDeBienvenida.textos()) {
+            assertThat(TextoDeBienvenida.validar(pieza, textos.original(pieza))).as(pieza.name())
+                    .isEqualTo(textos.original(pieza));
+        }
     }
 
     @Test

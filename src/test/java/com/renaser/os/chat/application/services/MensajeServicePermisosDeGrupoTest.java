@@ -210,6 +210,11 @@ class MensajeServicePermisosDeGrupoTest {
             @Override
             public void borrar(String ruta) {
             }
+
+            @Override
+            public Optional<byte[]> leer(String ruta, long pesoMaximo) {
+                return Optional.empty();
+            }
         };
 
         servicio = new MensajeService(conversaciones, esParticipante, pertenencia, marcarLeido, guardar,
