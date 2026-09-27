@@ -498,10 +498,15 @@ grupo». Sin foto propia, el grupo sigue con la de Renaser: la tarjeta de Canva 
 |---|---|
 | La cuenta existe y está activa | 404 / 403 (suspendida) |
 | El grupo existe | 404 |
-| Es ADMIN (cualquier grupo) o el mentor que acompaña HOY a ese grupo (asignación vigente con función MENTOR) | 403 |
+| Es ADMIN o Alquimista (cualquier grupo) o el mentor que acompaña HOY a ese grupo (asignación vigente con función MENTOR) | 403 |
 
-El Alquimista no: administra los grupos en todo lo demás (`CelulaService.requireRolAdmin`), pero el dueño
-nombró solo a «Admin». El mentor sale de las asignaciones y no de `celulas.mentor_id`: desde D-141 un
+> **Corregido 2026-09-27.** La tabla decía «Es ADMIN (cualquier grupo)» y seguía «El Alquimista no: administra
+> los grupos en todo lo demás, pero el dueño nombró solo a "Admin"». En la página de decisiones el dueño sumó al
+> Alquimista («sí»): tiene el mismo alcance que en el resto de la administración de grupos
+> (`UserRole.canManageRoles`), y la app le muestra el control. `FotoDelGrupoServiceTest` y `FotoDelGrupoIT`
+> prueban que ahora puede, y que una cuenta de Alquimista suspendida sigue recibiendo 403.
+
+El mentor sale de las asignaciones y no de `celulas.mentor_id`: desde D-141 un
 mentor puede acompañar varios grupos, y el puntero nombra uno solo. El endpoint lleva `MANAGE_CELLS`, como
 `/admin/cells`: el interceptor corta al aprendiz; al mentor lo deja pasar (su rol todavía no tiene matriz,
 A-1) y el caso de uso lo acota a su grupo.
@@ -548,3 +553,36 @@ consulta) para la ruta con `?v=` de la lista de chats.
 **Lo que queda afuera.** Borrar un grupo no borra su foto del almacenamiento (queda sin referencia). Ver
 la foto actual desde el panel de admin: el panel sabe si hay una y desde cuándo, pero la foto la sirve el
 chat solo a los integrantes, y el ADMIN no lo es.
+
+---
+
+## 15. 2026-09-27 — Un mentor con varios grupos en el panel de administración (E-371, E-372)
+
+Dos defectos que D-141 (un mentor puede liderar varios grupos) no había alcanzado, encontrados en el e2e del
+mismo día.
+
+**`LoadCelulaPort.porMentor` devolvía uno solo** (E-371, SEG-02). Era un `Optional<Celula>` sobre
+`findByMentorId`, que daba por hecho el `UNIQUE` de `celulas.mentor_id` que V58 levantó. Con dos grupos, la
+consulta reventaba (`NonUniqueResultException`) y `/admin/cells?cohortId=` y `/admin/cohorts` le respondían 500
+a ese mentor. Ahora devuelve la lista, por nombre:
+
+| Ruta, pedida por un MENTOR | Antes (con varios grupos) | Ahora |
+|---|---|---|
+| `GET /admin/cells?cohortId=` | 500 | Los grupos que lidera en esa cohorte |
+| `GET /admin/cohorts` | 500 | La cohorte de cada grupo que lidera, una vez, sin las completadas |
+| `GET /admin/cohorts/{id}` | 500 | 200 si lidera algún grupo de esa cohorte; si no, 403 |
+
+Que estas rutas le respondan 200 a un mentor es a propósito (el `scope` de sus `@RequiresPermission` lo dice):
+la app del mentor las encadenaba antes de tener `/mentor/context` (2026-09-09). Hoy ninguna app las usa para un
+mentor —ni la publicada (`e71f8c2`) ni la nueva—, así que si deberían darle 403 queda como pregunta para el dueño.
+
+**«Asignar mentor» trasladaba siempre** (E-372, ADM-13). Lo arregla la app: suma por defecto
+(`POST …/additional-mentor`) y el traslado (`PUT …/mentor`) queda como opción aparte, con un aviso que nombra los
+grupos que se quedan sin mentor. Un grupo sigue teniendo un solo mentor, así que sumar a un grupo que ya tiene
+otro es quitar al de ese grupo (`DELETE …/mentor`) y después sumar: dos operaciones, no una. Si la segunda falla,
+el grupo queda sin mentor y la app lo dice para que se reintente. Sin cambios en el backend.
+
+| Clase | Qué fija |
+|---|---|
+| `MentorEnVariosGruposIT` (+2) | A un mentor con dos grupos, `/admin/cells?cohortId=` le lista los dos; `/admin/cohorts` le muestra su cohorte una vez, `/admin/cohorts/{id}` le responde la suya y 403 una ajena. Fallan contra el código anterior con `IncorrectResultSizeDataAccessException` |
+

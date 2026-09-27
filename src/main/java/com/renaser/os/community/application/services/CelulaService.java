@@ -163,9 +163,10 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         UserSummary actor = requireActorActivo(actorId);
         List<Celula> celulas;
         if (actor.role() == UserRole.MENTOR) {
-            celulas = loadCelulaPort.porMentor(actorId)
+            // Todos los que lidera en esa cohorte: desde D-141 pueden ser varios (E-371).
+            celulas = loadCelulaPort.porMentor(actorId).stream()
                     .filter(c -> c.cohorteId().equals(cohorteId))
-                    .map(List::of).orElseGet(List::of);
+                    .toList();
         } else {
             requireRolAdmin(actor);
             celulas = loadCelulaPort.porCohorte(cohorteId);

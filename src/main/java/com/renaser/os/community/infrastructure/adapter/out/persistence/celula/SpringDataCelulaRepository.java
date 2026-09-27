@@ -6,7 +6,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 interface SpringDataCelulaRepository extends JpaRepository<CelulaJpaEntity, UUID> {
@@ -15,7 +14,8 @@ interface SpringDataCelulaRepository extends JpaRepository<CelulaJpaEntity, UUID
 
     List<CelulaJpaEntity> findAllByOrderByNombreAsc();
 
-    Optional<CelulaJpaEntity> findByMentorId(UUID mentorId);
+    /** Varias desde V58 (D-141): un mentor puede liderar varios grupos. Antes era un {@code Optional} (E-371). */
+    List<CelulaJpaEntity> findByMentorIdOrderByNombreAsc(UUID mentorId);
 
     /**
      * Grupos cuyo periodo cierra dentro de la ventana, ambos extremos inclusive.

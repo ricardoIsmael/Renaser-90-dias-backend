@@ -1075,3 +1075,27 @@ mensaje, que recarga el historial).
 Contra el código anterior, `LecturaEnVivoIT` falla en 4 de sus 5 pruebas (la de autorización negativa ya pasaba: es la
 guarda); la del aviso en vivo, con `No llegó lo esperado tras 20 intentos; llegó: []`. Las demás usan clases nuevas y no
 compilan contra él.
+
+---
+
+## 15. El largo máximo de un mensaje (2026-09-27, D-215; E-374)
+
+**Qué pasaba.** CHT-06 del e2e: `POST /api/v1/chat/conversations/{id}/messages` con 1.048.576 caracteres → 201, y
+se guardaba entero. Ni el request ni el dominio tenían tope, y `mensajes.texto` es `text`.
+
+**El tope.** `Mensaje.LARGO_MAXIMO_DEL_TEXTO = 6.000`, en `Mensaje.escribir`: lo que escribe una persona, sea un
+texto, el epígrafe de una foto o una publicación del Muro compartida (que usa el mismo camino). Más es un 400
+«El mensaje puede tener hasta 6000 caracteres». Los mensajes del programa (`Mensaje.delPrograma`: bienvenidas,
+semáforo) no llevan tope, porque los escribe el servidor.
+
+**Por qué 6.000** (propuesta, D-215): alcanza de sobra para escribir y deja entrar una publicación del Muro
+compartida, que puede tener 5.000 más su encabezado. Se cuenta con `String.length()`, lo mismo que el
+`maxLength` del campo de la app, así los dos cuentan igual (un emoji son dos). La app limita el campo al mismo
+número (`LARGO_MAXIMO_DEL_MENSAJE`).
+
+**Sin `CHECK` en la base.** La fila de 1 MB del e2e ya existe y el tope del dominio alcanza para lo nuevo.
+
+| Clase | Qué fija |
+|---|---|
+| `MensajeTest` (+2) | 6.000 entra y 6.001 es 400 con su texto (también el epígrafe de una foto); se cuentan caracteres y no bytes. Fallan contra el código anterior |
+

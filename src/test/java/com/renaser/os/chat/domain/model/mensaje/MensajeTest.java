@@ -151,4 +151,34 @@ class MensajeTest {
         assertThat(mensaje.oculto()).isFalse();
         assertThat(mensaje.eliminadoEn()).isNull();
     }
+
+    /**
+     * CHT-06 del e2e del 2026-09-27 (E-374, D-215): un mensaje de 1 MB entraba entero. Lo que escribe una
+     * persona tiene un tope: {@value Mensaje#LARGO_MAXIMO_DEL_TEXTO} caracteres, que alcanza para
+     * compartir una publicación del Muro (hasta 5.000) con su encabezado.
+     */
+    @Test
+    void unMensajeDeUnaPersonaTieneUnLargoMaximo() {
+        String alTope = "a".repeat(6_000);
+        String pasado = "a".repeat(6_001);
+
+        assertThat(Mensaje.escribir(MENSAJE_ID, CONVERSACION_ID, EMISOR_ID, TipoMensaje.TEXTO, alTope, null, null,
+                null, null, null, null, AHORA).texto()).hasSize(6_000);
+        assertThatThrownBy(() -> Mensaje.escribir(MENSAJE_ID, CONVERSACION_ID, EMISOR_ID, TipoMensaje.TEXTO, pasado,
+                null, null, null, null, null, null, AHORA))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("El mensaje puede tener hasta 6000 caracteres");
+        assertThatThrownBy(() -> Mensaje.escribir(MENSAJE_ID, CONVERSACION_ID, EMISOR_ID, TipoMensaje.IMAGEN, pasado,
+                "bucket", "ruta.jpg", null, null, null, null, AHORA))
+                .as("también el epígrafe de una foto").isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void elTopeCuentaCaracteresNoBytes() {
+        // Un emoji o una letra con tilde es UN carácter para quien escribe, aunque ocupe varios bytes.
+        String conTildes = "ñ".repeat(6_000);
+
+        assertThat(Mensaje.escribir(MENSAJE_ID, CONVERSACION_ID, EMISOR_ID, TipoMensaje.TEXTO, conTildes, null, null,
+                null, null, null, null, AHORA).texto()).isEqualTo(conTildes);
+    }
 }

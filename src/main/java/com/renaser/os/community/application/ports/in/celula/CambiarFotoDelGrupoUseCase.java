@@ -10,9 +10,11 @@ import java.util.Optional;
 
 /**
  * La foto propia de un grupo (D-212, decisión del dueño del 2026-09-27): la cambian «Admin y el mentor de
- * ese grupo». El administrador, la de cualquier grupo; el mentor, solo la del grupo que acompaña hoy
- * (su asignación vigente con función MENTOR). Nadie más: ni los aprendices, ni el mentor de otro grupo,
- * ni el Alquimista, ni una cuenta suspendida.
+ * ese grupo», y el Alquimista (lo agregó el dueño el mismo día). Admin y Alquimista, la de cualquier
+ * grupo; el mentor, solo la del grupo que acompaña hoy (su asignación vigente con función MENTOR). Nadie
+ * más: ni los aprendices, ni el mentor de otro grupo, ni una cuenta suspendida.
+ * <blockquote><b>Corregido 2026-09-27.</b> Decía «ni el Alquimista»: así lo había nombrado el dueño la
+ * primera vez, y en la página de decisiones lo sumó.</blockquote>
  *
  * <p>En los tres métodos, en este orden: la cuenta está activa (403), el grupo existe (404) y quien pide
  * puede cambiarla (403).

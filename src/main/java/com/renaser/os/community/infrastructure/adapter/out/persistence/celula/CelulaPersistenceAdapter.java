@@ -39,8 +39,8 @@ class CelulaPersistenceAdapter implements LoadCelulaPort, SaveCelulaPort, Elimin
     }
 
     @Override
-    public Optional<Celula> porMentor(UserId mentorId) {
-        return repository.findByMentorId(mentorId.value()).map(mapper::toDomain);
+    public List<Celula> porMentor(UserId mentorId) {
+        return repository.findByMentorIdOrderByNombreAsc(mentorId.value()).stream().map(mapper::toDomain).toList();
     }
 
     @Override

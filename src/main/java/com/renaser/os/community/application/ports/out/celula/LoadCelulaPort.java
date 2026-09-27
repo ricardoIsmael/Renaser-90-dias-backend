@@ -16,9 +16,15 @@ public interface LoadCelulaPort {
 
     List<Celula> todas();
 
-    /** La celula que lidera un mentor (`celulas.mentor_id` es UNIQUE — a lo sumo una,
-     * V1__baseline_renaser.sql:245). Resuelve el alcance de un MENTOR sin tocar
-     * `perfiles_mentor` (tabla que no es de este modulo): `mentor_id` en `celulas` YA es el
-     * `usuario_id`, asi que la busqueda es puramente sobre una tabla propia. */
-    Optional<Celula> porMentor(UserId mentorId);
+    /**
+     * Las celulas que lidera un mentor (las que lo nombran en `celulas.mentor_id`), por nombre. Resuelve el
+     * alcance de un MENTOR sin tocar `perfiles_mentor` (tabla que no es de este modulo): `mentor_id` en
+     * `celulas` YA es el `usuario_id`, asi que la busqueda es puramente sobre una tabla propia.
+     *
+     * <p><b>Corregido 2026-09-27 (E-371).</b> Devolvia {@code Optional<Celula>} y decia que
+     * {@code celulas.mentor_id} es UNIQUE, "a lo sumo una". V58 levanto ese UNIQUE (D-141: un mentor
+     * puede liderar varios grupos), y con dos grupos la consulta de "uno solo" reventaba con
+     * {@code NonUniqueResultException}: 500 en {@code /admin/cells?cohortId=} y en {@code /admin/cohorts}.
+     */
+    List<Celula> porMentor(UserId mentorId);
 }

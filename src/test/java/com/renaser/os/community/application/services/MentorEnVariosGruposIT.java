@@ -3,12 +3,16 @@ package com.renaser.os.community.application.services;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase.AsignarMentorCelulaCommand;
+import com.renaser.os.community.application.ports.in.celula.ConsultarCelulasUseCase;
 import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUseCase.QuitarMentorCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.SumarMentorAGrupoUseCase;
 import com.renaser.os.community.application.ports.in.celula.SumarMentorAGrupoUseCase.SumarMentorAGrupoCommand;
+import com.renaser.os.community.application.ports.in.cohorte.ConsultarCohortesUseCase;
 import com.renaser.os.community.domain.model.acompanamiento.AsignacionInvalidaException;
 import com.renaser.os.community.domain.model.celula.CelulaId;
+import com.renaser.os.community.domain.model.cohorte.CohorteId;
+import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,6 +58,10 @@ class MentorEnVariosGruposIT {
     private AsignarMentorCelulaUseCase trasladar;
     @Autowired
     private QuitarMentorCelulaUseCase quitarMentor;
+    @Autowired
+    private ConsultarCelulasUseCase consultarCelulas;
+    @Autowired
+    private ConsultarCohortesUseCase consultarCohortes;
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
@@ -173,6 +181,43 @@ class MentorEnVariosGruposIT {
         assertThat(jefaturasVigentesDe(mentor)).isEqualTo(1);
         assertThat(jefaturasDe(mentor)).as("una cerrada y una abierta: el PUT repetido no abre otra")
                 .isEqualTo(2);
+    }
+
+    /**
+     * SEG-02 del e2e del 2026-09-27 (E-371): el panel de grupos, pedido por un mentor al frente de varios
+     * grupos, respondía 500 ({@code NonUniqueResultException}): la búsqueda de «el grupo del mentor»
+     * esperaba uno solo, y desde D-141 puede haber varios con su {@code mentor_id}.
+     */
+    @Test
+    @DisplayName("E-371: a un mentor con dos grupos, /admin/cells le lista los dos, sin 500")
+    void elPanelDeGruposLeListaSusDosGrupos() {
+        UUID primero = nuevoGrupo("Primero");
+        UUID segundo = nuevoGrupo("Segundo");
+        nuevoGrupo("Ajeno");
+        UserId mentor = nuevoMentorConPerfil();
+        trasladar.asignar(new AsignarMentorCelulaCommand(admin, CelulaId.of(primero), mentor));
+        sumar.sumar(new SumarMentorAGrupoCommand(admin, CelulaId.of(segundo), mentor));
+
+        assertThat(consultarCelulas.listarPorCohorte(mentor, CohorteId.of(cohorteId)))
+                .extracting(resumen -> resumen.celula().id())
+                .containsExactlyInAnyOrder(CelulaId.of(primero), CelulaId.of(segundo));
+    }
+
+    @Test
+    @DisplayName("E-371: a un mentor con dos grupos de la misma generación, /admin/cohorts le muestra esa una vez")
+    void elPanelDeGeneracionesLeMuestraLaSuyaUnaVez() {
+        UUID primero = nuevoGrupo("Primero");
+        UUID segundo = nuevoGrupo("Segundo");
+        UserId mentor = nuevoMentorConPerfil();
+        trasladar.asignar(new AsignarMentorCelulaCommand(admin, CelulaId.of(primero), mentor));
+        sumar.sumar(new SumarMentorAGrupoCommand(admin, CelulaId.of(segundo), mentor));
+
+        assertThat(consultarCohortes.listar(mentor, null)).extracting(resumen -> resumen.cohorte().id())
+                .containsExactly(CohorteId.of(cohorteId));
+        assertThat(consultarCohortes.obtener(mentor, CohorteId.of(cohorteId)).cohorte().id())
+                .isEqualTo(CohorteId.of(cohorteId));
+        assertThatThrownBy(() -> consultarCohortes.obtener(mentor, CohorteId.of(UUID.randomUUID())))
+                .isInstanceOf(NotAuthorizedException.class);
     }
 
     // ── Semilla ─────────────────────────────────────────────────────────────

@@ -212,7 +212,7 @@ class FotoDelGrupoIT {
     }
 
     @Test
-    @DisplayName("autorización negativa: aprendiz del grupo, mentor de otro grupo, Alquimista, ADMIN suspendido y sin sesión: 403")
+    @DisplayName("autorización negativa: aprendiz del grupo, mentor de otro grupo, ADMIN suspendido y sin sesión: 403")
     void nadieMasLaCambia() throws Exception {
         UUID adminSuspendido = usuario("ADMIN", "Admin suspendido");
         String sesionSuspendida = sesionDe(adminSuspendido);
@@ -220,8 +220,6 @@ class FotoDelGrupoIT {
 
         assertThat(subir(fenix, sesionDe(ana), "foto", "image/png", png(50, 50)).statusCode()).as("aprendiz").isEqualTo(403);
         assertThat(subir(fenix, sesionDe(otroMentor), "foto", "image/png", png(50, 50)).statusCode()).as("mentor de Aurora")
-                .isEqualTo(403);
-        assertThat(subir(fenix, sesionDe(alquimista), "foto", "image/png", png(50, 50)).statusCode()).as("Alquimista")
                 .isEqualTo(403);
         assertThat(subir(fenix, sesionSuspendida, "foto", "image/png", png(50, 50)).statusCode()).as("suspendido")
                 .isEqualTo(403);
@@ -231,6 +229,18 @@ class FotoDelGrupoIT {
         assertThat(almacenamiento.objetos).isEmpty();
         assertThat(jdbcTemplate.queryForObject("SELECT foto_ruta FROM renaser.celulas WHERE id = ?", String.class, fenix))
                 .isNull();
+    }
+
+    @Test
+    @DisplayName("el Alquimista también la cambia (decisión del dueño del 2026-09-27) y vuelve a la de Renaser")
+    void elAlquimistaTambienLaCambia() throws Exception {
+        String sesion = sesionDe(alquimista);
+
+        assertThat(subir(aurora, sesion, "foto", "image/png", png(80, 80)).statusCode()).isEqualTo(200);
+        assertThat(jdbcTemplate.queryForObject("SELECT foto_ruta FROM renaser.celulas WHERE id = ?", String.class, aurora))
+                .startsWith("grupos/" + aurora + "/foto-");
+        assertThat(pedir("DELETE", "/api/v1/admin/cells/" + aurora + "/photo", sesion).statusCode()).isEqualTo(204);
+        assertThat(almacenamiento.objetos).isEmpty();
     }
 
     @Test

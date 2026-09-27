@@ -22,8 +22,9 @@ import java.io.IOException;
 import java.util.UUID;
 
 /**
- * {@code /api/v1/admin/cells/{id}/photo} — la foto propia de un grupo (D-212). La cambian el ADMIN (de
- * cualquier grupo) y el mentor que acompaña ese grupo (solo el suyo); lo decide el caso de uso.
+ * {@code /api/v1/admin/cells/{id}/photo} — la foto propia de un grupo (D-212). La cambian el ADMIN y el
+ * Alquimista (de cualquier grupo) y el mentor que acompaña ese grupo (solo el suyo); lo decide el caso de
+ * uso. <i>Corregido 2026-09-27: el Alquimista se sumó por decisión del dueño.</i>
  *
  * <p><b>Por qué bajo {@code /admin/cells} aunque la use el mentor.</b> Es el mismo árbol y el mismo permiso
  * que {@code GET /api/v1/admin/cells/{id}}, que un mentor ya consulta sobre su grupo; el filtro de
@@ -39,7 +40,7 @@ import java.util.UUID;
 @RequestMapping("/api/v1/admin/cells/{id}/photo")
 public class FotoDelGrupoController {
 
-    private static final String ALCANCE = "ADMIN, cualquier grupo; el mentor que lo acompaña hoy, solo el suyo";
+    private static final String ALCANCE = "ADMIN y ALCHEMIST, cualquier grupo; el mentor que lo acompaña hoy, solo el suyo";
 
     private final CambiarFotoDelGrupoUseCase fotoUseCase;
 
