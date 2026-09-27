@@ -16,6 +16,12 @@ import com.renaser.os.shared.domain.UserId;
  * ADMIN/ALCHEMIST/MENTOR (siempre elegibles, `rol_privilegiado` en el repo viejo) se
  * resuelve en el servicio de aplicacion ANTES de llamar a este puerto — nunca se pregunta
  * para esos roles.
+ *
+ * <blockquote><b>Corregido 2026-09-27 (E-362, D-213).</b> Con el NoOp en {@code false}, ninguna Mentoria del
+ * Alquimista le llegaba a ningun aprendiz, aunque fuera "para todos". El adaptador pasa a ser
+ * {@code ElegibilidadSegunAudienciaAdapter}: la audiencia que el evento declara decide, sin criterio extra.
+ * El 80 % semanal del repo viejo NO esta confirmado para este sistema y queda como pregunta para el dueño;
+ * si lo confirma, se implementa en otro adaptador de este mismo puerto.</blockquote>
  */
 public interface ConsultarElegibilidadEventoPort {
 

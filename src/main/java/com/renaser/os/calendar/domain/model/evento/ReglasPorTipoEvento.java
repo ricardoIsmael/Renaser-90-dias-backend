@@ -59,6 +59,10 @@ public final class ReglasPorTipoEvento {
      * Hoy solo MENTORIA_ALQUIMISTA (mentoriaEligibility.ts, repo viejo): requiere un %
      * de cumplimiento semanal de habitos+rocas que este modulo NO calcula — ver
      * {@code ConsultarElegibilidadEventoPort} y CL-xx en docs/MODULO_CALENDAR.md §6.
+     *
+     * <p><b>Corregido 2026-09-27 (E-362, D-213).</b> "Requiere elegibilidad" dice que el tipo tiene un enchufe
+     * para un criterio extra, no cual es: el 80 % semanal del repo viejo no esta confirmado para este sistema,
+     * y mientras el dueño no lo defina el adaptador deja pasar a toda la audiencia declarada.
      */
     public static boolean requiereElegibilidad(TipoEvento tipo) {
         return REQUIERE_ELEGIBILIDAD.get(tipo);
