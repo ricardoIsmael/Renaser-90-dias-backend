@@ -9414,7 +9414,7 @@ que faltan. Prueba `ChatsConAcompananteServiceTest.unFalloDeVerdadSePropagaDespu
 **Cómo evitar que vuelva a pasar.** En un listener del outbox, un `catch (RuntimeException)` que solo loguea
 convierte un error pasajero en una pérdida permanente. Se atrapa lo que se sabe manejar; lo demás se lanza.
 
-## E-301 · Se abría un chat de dos con un aprendiz o un acompañante SUSPENDIDO
+## E-304 · Se abría un chat de dos con un aprendiz o un acompañante SUSPENDIDO
 
 **Síntoma (revisión de D-173, 2026-09-26).** Al cambiar la composición de un grupo, las parejas se armaban
 con `acompanantesVigentes` × `aprendicesVigentes`, que miran la asignación y no la cuenta.
@@ -9429,7 +9429,7 @@ próximo cambio de composición del grupo, no en el acto.
 **Cómo evitar que vuelva a pasar.** Lo mismo que E-258: toda pregunta de pertenencia que termine en darle
 acceso a alguien mira también el estado de la cuenta.
 
-## E-302 · Con almacenamiento `noop`, la bienvenida mandaba una foto que no existía
+## E-305 · Con almacenamiento `noop`, la bienvenida mandaba una foto que no existía
 
 **Síntoma (local, 2026-09-26).** En el chat de soporte aparecía una foto rota; el log decía
 `AlmacenamientoPort.subir(chat/…/fotos/…) NO ejecutado de verdad: faltan credenciales AWS S3 (D-34).` y
@@ -9447,7 +9447,7 @@ Prueba `BienvenidaEnSoporteServiceTest.sinAlmacenamientoRealSoloElTexto`.
 **Cómo evitar que vuelva a pasar.** Lo que el servidor sube y después referencia en un mensaje pregunta
 antes si el almacenamiento guarda de verdad. En local, `AWS_S3_BUCKET` propio siempre que se use `s3`.
 
-## E-303 · Aprendices en rojo de la recepción, de un grupo sin mentor o sin grupo no aparecían en ninguna vista de administración
+## E-306 · Aprendices en rojo de la recepción, de un grupo sin mentor o sin grupo no aparecían en ninguna vista de administración
 
 **Síntoma (retroalimentación del 2026-09-26, S-4).** Administración no veía a todos los que necesitaban
 atención: el resumen por grupos (`SemaforoPorGruposService`) solo lista grupos regulares con mentor vigente
