@@ -9651,3 +9651,40 @@ backend del IDE levantado desde ese mismo checkout. Maven recompiló `target/cla
 **Cómo evitar que vuelva a pasar.** Toda prueba de Maven —aunque sea una sola clase— se corre en un worktree propio
 (`scratchpad/verify-be` o `.claude/worktrees/*`), nunca en el checkout que usa el IDE. Síntoma para reconocerlo: la app dice
 «No se pudo guardar» en todo y el health da conexión rechazada con el proceso `java` todavía vivo.
+
+---
+
+## E-314 · Las alarmas locales quedaban hasta 1 h tarde (`window=+1h0m0s0ms` en `dumpsys alarm`)
+
+**Síntoma.** e2e en emulador (Android SDK 37) del 26/09: la alarma de «Voy» (20:50) salía en `dumpsys alarm` con
+`window=+39m53s`, y Despertar y los hábitos con `window=+1h0m0s0ms`. `adb shell appops get com.renaser.app
+SCHEDULE_EXACT_ALARM` → `default`: en Android 14+ ese permiso NO se concede solo aunque esté en `app.json`.
+
+**Causa real.** `ExpoSchedulingDelegate.kt` programa exacta solo si `alarmManager.canScheduleExactAlarms()`; si no,
+`setAndAllowWhileIdle`, que Android puede correr hasta ~1 h. Y una alarma programada antes de dar el permiso sigue inexacta
+aunque después se dé.
+
+**Solución.** Frontend: aviso fijo en Yo → Alarmas con «Revisar permiso de alarmas exactas», que abre
+`android.settings.REQUEST_SCHEDULE_EXACT_ALARM` (4fa48d6); y `RearmadorDeAlarmas` (18b4376), que al abrir la app y al volver
+a primer plano (cada ≥10 min) reprograma las alarmas existentes con el mismo id/contenido/disparador. Verificado: con el
+permiso dado, las cinco alarmas pasaron a `window=0 exactAllowReason=permission`, sin duplicarse.
+
+**Cómo evitar que vuelva a pasar.** Toda alarma local se verifica con `dumpsys alarm` (no basta con que «se programó»). La
+app no puede saber si el permiso está dado sin un módulo nativo: por eso el aviso queda siempre visible.
+
+---
+
+## E-315 · Un evento creado por el Alquimista no aparecía en Comunidad → Eventos hasta reabrir la app
+
+**Síntoma.** e2e del 26/09: con el mentor dentro de la app, el Alquimista creó «Clase desde la app» desde la web; la lista
+del mentor seguía mostrando dos eventos, ni al volver a la sección ni deslizando. `GET /api/v1/calendar/events` como mentor
+sí lo devolvía. Al cerrar y reabrir la app, apareció.
+
+**Causa real.** `useEventos` leía la lista una sola vez al montar y la sección no tenía pull-to-refresh.
+
+**Solución.** Frontend cfbe62f: relee al volver a la pestaña, al volver del detalle/agenda/formulario y deslizando (lista y
+Mi agenda), en silencio si ya hay datos, con pedido compartido y sin que una respuesta vieja pise a la nueva. Verificado:
+un evento creado por API con la lista abierta aparece al cambiar de pestaña y volver.
+
+**Cómo evitar que vuelva a pasar.** Toda lista que otro rol puede cambiar (eventos, grupos, solicitudes) se relee al ganar
+el foco; «lo pedido queda pedido» (V-3) vale para no repetir la PRIMERA carga, no para no refrescar nunca.
