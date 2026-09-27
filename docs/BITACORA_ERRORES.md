@@ -10165,4 +10165,5 @@ compilando igual.
 **Cómo evitar que vuelva a pasar.** Todo caché de algo que se dibuja o se deriva de contenido editable lleva en la clave
 la versión de ese contenido, y lo guardado se calcula con esa misma versión, no con la que se lee después.
 `TarjetasConNombreYPortadaTest` (3) falla contra la clase de D-205 (verificado: las 3 en rojo con la clase vieja; las 3 de
-`TarjetasConNombreEnMemoriaTest`, en verde con las dos).
+`TarjetasConNombreEnMemoriaTest`, en verde con las dos). De punta a punta, `PortadaDeBienvenidaIT.cambiarLaPortada` también:
+con la clase vieja, después de confirmar la portada nueva la foto responde `expected: 200 but was: 304` al `ETag` viejo.
