@@ -420,7 +420,8 @@ Además es el mismo mecanismo que ya se venía usando a mano — por ejemplo
    `ssm send-command --document-name AWS-RunShellScript`.
 3. Dentro de la instancia: `docker login` contra ECR → `docker pull` de **la etiqueta del commit**
    → `docker rm -f backend` → `docker run` con la red `renaser`, `-p 8080:8080`,
-   `--restart unless-stopped`, `SPRING_PROFILES_ACTIVE=prod` y `AWS_REGION=us-east-1`.
+   `--restart unless-stopped`, `--memory 1400m`, `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=60.0`,
+   `SPRING_PROFILES_ACTIVE=prod` y `AWS_REGION=us-east-1` (los dos de memoria desde V-8, ver §7).
 4. Consulta `http://localhost:8080/actuator/health` cada 3 s hasta que diga `"status":"UP"`, con un
    tope de 240 s (`DESPLIEGUE_ESPERA_SEGUNDOS`). **Medido: la aplicación tarda 43 s en responder
    `UP`**, así que el tope tiene más de 5× de margen para una migración larga o una RDS fría.
@@ -743,10 +744,31 @@ resultado sería `extracted/application/renaser-backend-0.0.1-SNAPSHOT.jar` y el
 `ENTRYPOINT ["java", "-jar", "application.jar"]` no encontraría nada. Renombrar primero es lo que
 hace que el `ENTRYPOINT` sea estable entre versiones.
 
-`JAVA_TOOL_OPTIONS` lleva `-XX:MaxRAMPercentage=75.0` porque una JVM en contenedor toma por defecto
+`JAVA_TOOL_OPTIONS` lleva `-XX:MaxRAMPercentage=60.0` porque una JVM en contenedor toma por defecto
 ~25% de la memoria del cgroup. Se pasa por variable de entorno y no por el `ENTRYPOINT` para que
 `java` siga siendo el PID 1 en forma *exec*: así recibe el `SIGTERM` del orquestador y Spring apaga
 ordenado, en vez de que un `sh -c` se coma la señal.
+
+> **Corregido 2026-09-26 (V-8, D-180).** Decía `-XX:MaxRAMPercentage=75.0` y el `docker run` del CD
+> no ponía tope de memoria. Sin tope, el cgroup del contenedor es la máquina entera: en la t3.small
+> (1.909 MB, **sin swap**) eso daba **1,43 GB de heap** posible, con Redis, Docker y el agente de SSM
+> repartiéndose el resto. Si el heap llegaba a crecer hasta ahí, el que moría por falta de memoria
+> podía ser cualquier proceso de la máquina — incluido el agente de SSM, que es el único canal para
+> mandar un arreglo (así se perdieron siete horas en E-155).
+>
+> Ahora el CD corre el contenedor con **`--memory 1400m`** y **`-e JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=60.0`**:
+> heap máximo ≈ **840 MB**, y ~560 MB para metaspace, code cache, hilos y buffers directos (Lettuce,
+> cliente de Gemini). Quedan ~500 MB de la máquina para Redis, Docker, SSM y el sistema. Si el
+> backend se pasara del tope, el kernel mata **ese contenedor** y no otro proceso, y
+> `--restart unless-stopped` lo vuelve a levantar solo (~45 s de caída, lo mismo que un despliegue).
+> El `ENV` del `Dockerfile` también pasó a 60, pero el que manda en producción es el del `docker run`:
+> se repite ahí a propósito, y también en la línea de vuelta atrás (`VOLVER`), porque la imagen
+> anterior trae horneado 75 % y con el tope nuevo eso serían ~1 GB de heap sin aire para lo demás.
+>
+> **Qué mirar después de desplegar:** `docker stats backend` (uso contra el tope de 1,367 GiB) y
+> `docker inspect -f '{{.State.OOMKilled}}' backend`. Si el heap se queda corto (GC muy seguido,
+> `OutOfMemoryError` en el log), subir `MEMORIA` en `cd.yml` antes que el porcentaje, y nunca por
+> encima de ~1600m en esta máquina.
 
 El `.dockerignore` deja fuera `.env` y `.run/`, que hoy contienen credenciales reales en texto
 plano. No es prolijidad: cualquier `COPY . .` futuro las metería en una capa de la imagen, de donde

@@ -258,7 +258,12 @@ jobs:
           docker pull "$IMAGEN"
 
           ANTERIOR=$(docker inspect --format '{{.Config.Image}}' "$CONTENEDOR" 2>/dev/null || echo ninguna)
-          VOLVER="docker rm -f $CONTENEDOR; docker run -d --name $CONTENEDOR --network $RED -p $PUERTO:$PUERTO --restart unless-stopped -e SPRING_PROFILES_ACTIVE=prod -e AWS_REGION=$REGION $ANTERIOR"
+          # V-8 (D-180): tope de memoria del contenedor y porcentaje de heap. Van tambien en la vuelta
+          # atras porque la imagen anterior trae horneado MaxRAMPercentage=75: con el tope de 1400m
+          # eso dejaria 1 GB de heap y casi nada para metaspace, hilos y buffers.
+          MEMORIA=1400m
+          JVM_OPCIONES="-XX:MaxRAMPercentage=60.0"
+          VOLVER="docker rm -f $CONTENEDOR; docker run -d --name $CONTENEDOR --network $RED -p $PUERTO:$PUERTO --restart unless-stopped --memory $MEMORIA -e JAVA_TOOL_OPTIONS=$JVM_OPCIONES -e SPRING_PROFILES_ACTIVE=prod -e AWS_REGION=$REGION $ANTERIOR"
           echo "== Imagen que estaba corriendo: $ANTERIOR =="
 
           # Aca empiezan los segundos de caida (~45 s: lo que tarda la aplicacion en responder).
@@ -278,6 +283,8 @@ jobs:
             --network "$RED" \
             -p "$PUERTO:$PUERTO" \
             --restart unless-stopped \
+            --memory "$MEMORIA" \
+            -e JAVA_TOOL_OPTIONS="$JVM_OPCIONES" \
             -e SPRING_PROFILES_ACTIVE=prod \
             -e AWS_REGION="$REGION" \
             "$IMAGEN"

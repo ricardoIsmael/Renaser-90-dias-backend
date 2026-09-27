@@ -209,4 +209,44 @@ class ComentarioMuroServiceTest {
         assertThat(comentario.oculto()).isFalse();
         verify(saveComentarioPort, never()).save(any());
     }
+
+    /**
+     * V-6 (D-180): los autores de una pagina de comentarios se resuelven en UNA consulta. Contra el
+     * codigo anterior falla, porque pedia el perfil de cada comentario por separado (N+1).
+     */
+    @Test
+    void laPaginaResuelveLosAutoresEnUnaSolaConsulta() {
+        Publicacion publicacion = publicacionVisible();
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        List<Comentario> filas = List.of(comentarioDe(autor, publicacion.id()), comentarioDe(otro, publicacion.id()),
+                comentarioDe(autor, publicacion.id()));
+        when(loadComentarioPort.pagina(publicacion.id(), null, 30)).thenReturn(filas);
+        when(loadComentarioPort.contar(publicacion.id())).thenReturn(3);
+        when(consultarPerfilUsuarioPort.porIds(java.util.Set.of(autor, otro))).thenReturn(java.util.Map.of(
+                autor, new ConsultarPerfilUsuarioPort.PerfilUsuario(autor, "Autor", "https://cdn/a.jpg"),
+                otro, new ConsultarPerfilUsuarioPort.PerfilUsuario(otro, "Otro", null)));
+
+        var pagina = service.pagina(publicacion.id(), null);
+
+        assertThat(pagina.comentarios()).extracting(c -> c.autorNombre()).containsExactly("Autor", "Otro", "Autor");
+        assertThat(pagina.comentarios().get(0).autorAvatarUrl()).isEqualTo("https://cdn/a.jpg");
+        assertThat(pagina.total()).isEqualTo(3);
+        verify(consultarPerfilUsuarioPort, org.mockito.Mockito.times(1)).porIds(any());
+        verify(consultarPerfilUsuarioPort, never()).porId(any());
+    }
+
+    /** Un autor que ya no existe no rompe la pagina: sale sin nombre ni avatar, como antes. */
+    @Test
+    void unAutorInexistenteSaleSinNombre() {
+        Publicacion publicacion = publicacionVisible();
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        when(loadComentarioPort.pagina(publicacion.id(), null, 30))
+                .thenReturn(List.of(comentarioDe(autor, publicacion.id())));
+        when(consultarPerfilUsuarioPort.porIds(any())).thenReturn(java.util.Map.of());
+
+        var pagina = service.pagina(publicacion.id(), null);
+
+        assertThat(pagina.comentarios().get(0).autorNombre()).isNull();
+        assertThat(pagina.comentarios().get(0).autorAvatarUrl()).isNull();
+    }
 }

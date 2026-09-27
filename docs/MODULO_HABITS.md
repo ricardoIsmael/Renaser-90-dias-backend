@@ -1042,3 +1042,48 @@ la Audioterapia; nunca por título, que la persona puede renombrar (D-133). **No
 
 Pruebas: `AudioterapiaDelAprendizServiceTest` (evidencia antes que completar, otro día, ya completada,
 sin audio) y `TracksDelDiaProyeccionServiceTest.laProyeccionLlevaLaClaveDelCatalogo`.
+
+---
+
+## 24. `GET /habit-tracks/today` más barato (V-5, D-180) — 2026-09-26
+
+Pedido del spec `docs/specs/RETROALIMENTACION_2026-09-26.md` §1 (Training tarda ~3 s). El servidor
+estaba ocioso; lo que sobraba eran viajes a la base.
+
+**Antes, camino normal (el día ya tiene registros):** ~10 consultas, cada una en su propia
+transacción implícita (pedir conexión, `BEGIN`, consulta, `COMMIT`, devolverla), y el progreso del
+participante leído **tres** veces: para saber qué día es hoy en su zona, dentro de `requireSelf` y para
+la ventana de entrega.
+
+**Ahora:** una transacción `readOnly` (`TransactionTemplate` en `TracksDelDiaProyeccionService`) con
+ocho consultas y el progreso una sola vez. `ConsultarTracksDelDiaUseCase` suma `consultarHoy` y
+`consultarEnSuZona`, que devuelven `RegistrosDelDia(registros, fecha, zona)`: la zona sale de la misma
+lectura que autoriza, y la proyección ya no tiene puerto de progreso propio. "Hoy" se sigue resolviendo
+en la zona del participante (E-91, E-105), ahora dentro de `RegistroService.consultarHoy`.
+
+**La red de seguridad (día sin registros) no cambió de comportamiento:** sigue llamando a
+`generarDisponiblesAhora` solo para el propio aprendiz y relee. Cambian dos cosas:
+
+- La generación corre en **su** transacción de escritura, **fuera** de la de lectura. Anidarla con
+  `REQUIRES_NEW` habría pedido una segunda conexión teniendo ya una; con el pool lleno eso se traba.
+- `RegistroService.generarInterno` (el mismo que usa el barrido nocturno) lee lo que ya existe ese día y
+  los horarios de todo el catálogo en **dos consultas de lote** (`porParticipanteYFecha`, `porHabitos`)
+  en vez de `porParticipanteHabitoYFecha` + `porHabito` por cada hábito. Con ~25 hábitos eran ~50
+  consultas, y un día que no tenía nada que generar las repetía en **cada** GET. La decisión hábito por
+  hábito (pausa, día de desbloqueo, apagado, ya existe, horario que aplica, hora de corte) es la misma;
+  el `INSERT ... ON CONFLICT DO NOTHING` (E-230) sigue cuidando los pedidos simultáneos. El progreso
+  entra por parámetro y ya no se relee.
+
+Pruebas: `TracksDeHoyConsultasTest` conecta la proyección con el `RegistroService` real (solo los
+puertos de salida son mocks) con el reloj a las 01:50 UTC (20:50 del día anterior en Lima, regla 02) y
+verifica: progreso leído una vez, ninguna escritura en el camino normal, una sola transacción de solo
+lectura, la generación fuera de la lectura, y que la generación a demanda y la nocturna decidan igual
+que antes con las dos consultas de lote. Contra el código anterior fallan las cuatro primeras
+aserciones de conteo y la de lote. Los tests viejos de la proyección se adaptaron al contrato nuevo sin
+cambiar lo que verifican; el de E-105 del lado de la proyección ahora verifica que delega en
+`consultarHoy`.
+
+**Qué no se hizo:** caché del catálogo de hábitos (ver D-180: `Habito` es mutable y se compartiría entre
+hilos) y la carga repetida del usuario en el interceptor de permisos + el servicio (2–3 lecturas por
+pedido): queda anotada, no se tocó.
+

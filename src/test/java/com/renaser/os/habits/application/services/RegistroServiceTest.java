@@ -471,9 +471,7 @@ class RegistroServiceTest {
         when(loadHabitoPort.personalesActivosDe(participante)).thenReturn(List.of());
         when(loadDesbloqueoPort.deParticipante(participante)).thenReturn(List.of(
                 DesbloqueoHabito.rehydrate(participante, habito.id(), 2, CLOCK.now(), CLOCK.now(), CLOCK.now())));
-        when(loadRegistroPort.porParticipanteHabitoYFecha(eq(participante), eq(habito.id()), any()))
-                .thenReturn(Optional.empty());
-        when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of(
+        when(loadHorarioPort.porHabitos(List.of(habito.id()))).thenReturn(List.of(
                 HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null, TipoDia.TODOS,
                         LocalTime.of(7, 0), null, CLOCK.now())));
 
@@ -497,9 +495,7 @@ class RegistroServiceTest {
                 Optional.of(new ProgresoParticipanteHabits(2, "UTC", RolParticipante.TRAINEE, false, false)));
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
         when(loadHabitoPort.personalesActivosDe(participante)).thenReturn(List.of());
-        when(loadRegistroPort.porParticipanteHabitoYFecha(eq(participante), eq(habito.id()), any()))
-                .thenReturn(Optional.empty());
-        when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of(
+        when(loadHorarioPort.porHabitos(List.of(habito.id()))).thenReturn(List.of(
                 HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null, TipoDia.TODOS,
                         LocalTime.of(7, 0), null, CLOCK.now())));
         when(saveRegistroPort.insertarSiNoExiste(any())).thenReturn(false);

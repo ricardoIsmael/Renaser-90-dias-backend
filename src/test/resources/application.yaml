@@ -48,6 +48,11 @@ spring:
   # el espejo de hilos virtuales de C-14, arriba.
   jpa:
     open-in-view: false
+    # Espejo de V-6 (D-180) en src/main/resources/application.yaml: los IT tienen que cargar
+    # las colecciones igual que produccion.
+    properties:
+      hibernate:
+        default_batch_fetch_size: 50
   autoconfigure:
     exclude:
       # Sin credenciales de Gemini/Vertex en este entorno de test — los tests no llaman

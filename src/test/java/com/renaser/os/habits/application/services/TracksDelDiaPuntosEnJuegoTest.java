@@ -3,13 +3,11 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.evidence.api.RegistrosConEvidenciaFinder;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.TrackDelDiaConCatalogo;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
+import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase.RegistrosDelDia;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.guia.LoadGuiaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
@@ -35,8 +33,8 @@ import org.mockito.quality.Strictness;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -83,22 +81,22 @@ class TracksDelDiaPuntosEnJuegoTest {
     @Mock
     private LoadGuiaHabitoPort loadGuiaPort;
     @Mock
-    private ConsultarProgresoParticipanteHabitsPort progresoPort;
-    @Mock
     private RegistrosConEvidenciaFinder registrosConEvidenciaFinder;
 
     private TracksDelDiaProyeccionService servicio() {
         return new TracksDelDiaProyeccionService(consultarTracksUseCase, generarTracksUseCase, loadHabitoPort,
-                loadHorarioPort, loadPreferenciaPort, loadGuiaPort, progresoPort, registrosConEvidenciaFinder,
+                loadHorarioPort, loadPreferenciaPort, loadGuiaPort, registrosConEvidenciaFinder,
                 // Sin renombres: estas pruebas no miran el titulo (D-133). Mockito devuelve lista vacia.
                 org.mockito.Mockito.mock(
                         com.renaser.os.habits.application.ports.out.renombre.LoadRenombreHabitoPort.class),
-                FixedClock.at(MADRUGADA_UTC));
+                FixedClock.at(MADRUGADA_UTC),
+                org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
     }
 
-    private void participanteEnLima() {
-        when(progresoPort.deParticipante(PARTICIPANTE)).thenReturn(Optional.of(
-                new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, false, false)));
+    /** Desde V-5 (D-180) la zona llega junto con los registros, de la misma lectura que autoriza. */
+    private void hoyEnLimaCon(RegistroHabito registro) {
+        when(consultarTracksUseCase.consultarHoy(PARTICIPANTE, PARTICIPANTE))
+                .thenReturn(new RegistrosDelDia(List.of(registro), DIA_EN_LIMA, ZoneId.of("America/Lima")));
     }
 
     private static RegistroHabito registro(EstadoRegistro estado) {
@@ -119,25 +117,24 @@ class TracksDelDiaPuntosEnJuegoTest {
     @Test
     @DisplayName("E-105: consultarHoyDe usa el dia del aprendiz, no la fecha del servidor")
     void consultaElDiaDelAprendizYNoElDelServidor() {
-        participanteEnLima();
         catalogoConHorario(LocalTime.of(21, 0), LocalTime.of(22, 0));
-        when(consultarTracksUseCase.consultar(PARTICIPANTE, PARTICIPANTE, DIA_EN_LIMA))
-                .thenReturn(List.of(registro(EstadoRegistro.PENDIENTE)));
+        hoyEnLimaCon(registro(EstadoRegistro.PENDIENTE));
 
         List<TrackDelDiaConCatalogo> vista = servicio().consultarHoyDe(PARTICIPANTE);
 
         assertThat(vista).hasSize(1);
-        verify(consultarTracksUseCase).consultar(PARTICIPANTE, PARTICIPANTE, DIA_EN_LIMA);
-        verify(consultarTracksUseCase, never()).consultar(PARTICIPANTE, PARTICIPANTE, DIA_EN_EL_SERVIDOR);
+        // Desde V-5 el dia lo resuelve consultarHoy (probado con reloj de madrugada en
+        // RegistroServiceTest); aca se cuida que la proyeccion no vuelva a pedir una fecha propia.
+        verify(consultarTracksUseCase).consultarHoy(PARTICIPANTE, PARTICIPANTE);
+        verify(consultarTracksUseCase, never()).consultarEnSuZona(PARTICIPANTE, PARTICIPANTE, DIA_EN_EL_SERVIDOR);
+        verify(consultarTracksUseCase, never()).consultar(any(), any(), any());
     }
 
     @Test
     @DisplayName("un track vivo trae puntos en juego y plazo, calculados en la zona del aprendiz")
     void traeLosPuntosEnJuegoDeUnTrackVivo() {
-        participanteEnLima();
         catalogoConHorario(LocalTime.of(21, 0), LocalTime.of(22, 0));
-        when(consultarTracksUseCase.consultar(PARTICIPANTE, PARTICIPANTE, DIA_EN_LIMA))
-                .thenReturn(List.of(registro(EstadoRegistro.PENDIENTE)));
+        hoyEnLimaCon(registro(EstadoRegistro.PENDIENTE));
 
         PuntosEnJuego enJuego = servicio().consultarHoyDe(PARTICIPANTE).get(0).puntosEnJuego();
 
@@ -153,10 +150,8 @@ class TracksDelDiaPuntosEnJuegoTest {
     @Test
     @DisplayName("un track ya completado no tiene nada en juego")
     void elCompletadoNoTienePuntosEnJuego() {
-        participanteEnLima();
         catalogoConHorario(LocalTime.of(21, 0), LocalTime.of(22, 0));
-        when(consultarTracksUseCase.consultar(PARTICIPANTE, PARTICIPANTE, DIA_EN_LIMA))
-                .thenReturn(List.of(registro(EstadoRegistro.COMPLETADO)));
+        hoyEnLimaCon(registro(EstadoRegistro.COMPLETADO));
 
         assertThat(servicio().consultarHoyDe(PARTICIPANTE).get(0).puntosEnJuego()).isNull();
     }
@@ -164,10 +159,8 @@ class TracksDelDiaPuntosEnJuegoTest {
     @Test
     @DisplayName("un habito sin horario paga completo y no tiene plazo")
     void sinHorarioPagaCompletoYNoVence() {
-        participanteEnLima();
         catalogoConHorario(null, null);
-        when(consultarTracksUseCase.consultar(PARTICIPANTE, PARTICIPANTE, DIA_EN_LIMA))
-                .thenReturn(List.of(registro(EstadoRegistro.PENDIENTE)));
+        hoyEnLimaCon(registro(EstadoRegistro.PENDIENTE));
 
         PuntosEnJuego enJuego = servicio().consultarHoyDe(PARTICIPANTE).get(0).puntosEnJuego();
 

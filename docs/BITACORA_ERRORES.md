@@ -5425,7 +5425,13 @@ Todo lo que se probo antes de eso habia salido bien y no era el problema: la con
 - **Causa:** el contenedor corre con `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75.0` y **sin límite de memoria de Docker** (`HostConfig.Memory=0`). Sin límite de cgroup, la JVM ve la máquina entera y se autoriza el 75 % de ella: `MaxHeapSize = 1.503.657.984` (**1.434 MB**). La instancia es una `t3.small` de **1.909 MB y sin swap**, de la que el sistema, `dockerd`, `containerd`, `redis` y el agente de SSM ya se llevan ~250 MB fijos. Es decir: **el techo del heap está por encima de lo que la máquina puede dar.** Mientras nada empuje al proceso a crecer, aguanta; en cuanto algo lo empuja, el kernel dispara el OOM-killer y el proceso más grande es siempre la JVM.
 - **La confusión que hay que evitar:** `constraint=CONSTRAINT_NONE` + `global_oom` significa que se quedó sin memoria **el host**, no el contenedor. Por eso `docker inspect` muestra `OOMKilled=false` y parece que Docker no tuvo nada que ver — es exactamente al revés: si hubiera habido un límite de contenedor, la JVM se habría dimensionado dentro de él y esto no pasaría.
 - **Cómo reconocerlo rápido:** SSM en `ConnectionLost` con la instancia `running` y los status checks en `ok` es, casi siempre, presión de memoria (ver E-155). Lo primero al recuperar el acceso es `free -m` y `journalctl | grep -i oom`, no los logs de la aplicación: la aplicación no llegó a loguear nada porque la mataron desde afuera.
-- **Estado:** **abierto, sin corregir.** Medido el 2026-09-07 con el servicio arriba: `java` en 1.005 MB de 1.865 GiB (54 %), 70 MB libres, 527 MB disponibles, **swap en 0**. Doce horas sin reiniciarse, pero con el mismo techo mal puesto.
+- **Estado (2026-09-26, V-8 / D-180): corregido en el CD, falta desplegarlo.** `cd.yml` corre ahora el
+  contenedor con `--memory 1400m` y `-e JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=60.0` (≈840 MB de heap),
+  también en la línea de vuelta atrás; el `Dockerfile` pasó a 60 como default. Se eligieron 60 %/1400m
+  y no los 40 %/1300m propuestos abajo porque el `java` medido ya ocupaba ~1.005 MB de RSS: con 760 MB
+  de heap el margen era demasiado justo. El swap (punto 2) sigue sin hacerse. Detalle en
+  `docs/DESPLIEGUE_Y_CI.md` §7.
+- **Estado original:** **abierto, sin corregir.** Medido el 2026-09-07 con el servicio arriba: `java` en 1.005 MB de 1.865 GiB (54 %), 70 MB libres, 527 MB disponibles, **swap en 0**. Doce horas sin reiniciarse, pero con el mismo techo mal puesto.
 - **Corrección propuesta** (no aplicada, requiere reinicio del contenedor y por lo tanto la ventana de ~45 s):
   1. Bajar `MaxRAMPercentage` de 75 a ~40 (≈760 MB de heap) y ponerle `--memory=1300m` al contenedor, para que la JVM se dimensione contra un límite real y no contra la máquina entera.
   2. Agregar **2 GB de swap**. No requiere reiniciar nada y convierte "el proceso muere" en "el proceso va más lento": el kernel pagina en vez de matar.

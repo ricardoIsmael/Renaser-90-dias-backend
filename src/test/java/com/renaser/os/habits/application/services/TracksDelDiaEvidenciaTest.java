@@ -3,11 +3,11 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.evidence.api.RegistrosConEvidenciaFinder;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.TrackDelDiaConCatalogo;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
+import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase.RegistrosDelDia;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.guia.LoadGuiaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
@@ -60,6 +60,8 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class TracksDelDiaEvidenciaTest {
 
+    private static final java.time.ZoneId UTC = java.time.ZoneId.of("UTC");
+
     private static final Instant AHORA = Instant.parse("2026-09-05T14:00:00Z");
     private static final LocalDate HOY = LocalDate.of(2026, 9, 5);
     private static final UserId PARTICIPANTE = UserId.of(UUID.randomUUID());
@@ -77,17 +79,16 @@ class TracksDelDiaEvidenciaTest {
     @Mock
     private LoadGuiaHabitoPort loadGuiaPort;
     @Mock
-    private ConsultarProgresoParticipanteHabitsPort progresoPort;
-    @Mock
     private RegistrosConEvidenciaFinder registrosConEvidenciaFinder;
 
     private TracksDelDiaProyeccionService servicio() {
         return new TracksDelDiaProyeccionService(consultarTracksUseCase, generarTracksUseCase, loadHabitoPort,
-                loadHorarioPort, loadPreferenciaPort, loadGuiaPort, progresoPort, registrosConEvidenciaFinder,
+                loadHorarioPort, loadPreferenciaPort, loadGuiaPort, registrosConEvidenciaFinder,
                 // Sin renombres: estas pruebas no miran el titulo (D-133). Mockito devuelve lista vacia.
                 org.mockito.Mockito.mock(
                         com.renaser.os.habits.application.ports.out.renombre.LoadRenombreHabitoPort.class),
-                FixedClock.at(AHORA));
+                FixedClock.at(AHORA),
+                org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
     }
 
     private static Habito habito() {
@@ -117,7 +118,8 @@ class TracksDelDiaEvidenciaTest {
         }
         RegistroHabito elUltimo = registros.get(24);
         catalogoDe(habito);
-        when(consultarTracksUseCase.consultar(PARTICIPANTE, PARTICIPANTE, HOY)).thenReturn(registros);
+        when(consultarTracksUseCase.consultarEnSuZona(PARTICIPANTE, PARTICIPANTE, HOY))
+                .thenReturn(new RegistrosDelDia(registros, HOY, UTC));
         when(registrosConEvidenciaFinder.deEntre(any())).thenReturn(Set.of(elUltimo.id().value()));
 
         List<TrackDelDiaConCatalogo> resultado = servicio().consultar(PARTICIPANTE, PARTICIPANTE, HOY);
@@ -134,7 +136,8 @@ class TracksDelDiaEvidenciaTest {
         Habito habito = habito();
         List<RegistroHabito> registros = List.of(registroDe(habito), registroDe(habito), registroDe(habito));
         catalogoDe(habito);
-        when(consultarTracksUseCase.consultar(PARTICIPANTE, PARTICIPANTE, HOY)).thenReturn(registros);
+        when(consultarTracksUseCase.consultarEnSuZona(PARTICIPANTE, PARTICIPANTE, HOY))
+                .thenReturn(new RegistrosDelDia(registros, HOY, UTC));
         when(registrosConEvidenciaFinder.deEntre(any())).thenReturn(Set.of());
 
         servicio().consultar(PARTICIPANTE, PARTICIPANTE, HOY);
@@ -151,8 +154,8 @@ class TracksDelDiaEvidenciaTest {
     void sinEvidenciaTodosEnFalse() {
         Habito habito = habito();
         catalogoDe(habito);
-        when(consultarTracksUseCase.consultar(PARTICIPANTE, PARTICIPANTE, HOY))
-                .thenReturn(List.of(registroDe(habito), registroDe(habito)));
+        when(consultarTracksUseCase.consultarEnSuZona(PARTICIPANTE, PARTICIPANTE, HOY))
+                .thenReturn(new RegistrosDelDia(List.of(registroDe(habito), registroDe(habito)), HOY, UTC));
         when(registrosConEvidenciaFinder.deEntre(any())).thenReturn(Set.of());
 
         List<TrackDelDiaConCatalogo> resultado = servicio().consultar(PARTICIPANTE, PARTICIPANTE, HOY);
@@ -163,7 +166,8 @@ class TracksDelDiaEvidenciaTest {
     @Test
     @DisplayName("un dia sin habitos no le cuesta una consulta a evidence")
     void sinRegistrosNoPreguntaAEvidence() {
-        when(consultarTracksUseCase.consultar(PARTICIPANTE, PARTICIPANTE, HOY)).thenReturn(List.of());
+        when(consultarTracksUseCase.consultarEnSuZona(PARTICIPANTE, PARTICIPANTE, HOY))
+                .thenReturn(new RegistrosDelDia(List.of(), HOY, UTC));
 
         assertThat(servicio().consultar(PARTICIPANTE, PARTICIPANTE, HOY)).isEmpty();
 
