@@ -20,12 +20,15 @@ Estas reglas **tienen prioridad sobre cualquier comportamiento por defecto**. Se
 
 ### 0.2 Pruebas: siempre, no cuando conviene
 
-- **Toda tarea que toque código termina con `./mvnw clean test` ejecutado y en verde.** No se reporta algo como terminado sin haber corrido las pruebas.
+- **Toda tarea que toque código termina con `./mvnw clean verify` ejecutado y en verde.** No se reporta algo como terminado sin haber corrido las pruebas.
+  > **Corregido 2026-09-27.** Decía `./mvnw clean test`. Desde D-114 (2026-09-05) la regla es `clean verify` (`.claude/rules/03-pruebas.md`): `test` deja afuera las pruebas de integración `*IT` (Testcontainers) y el reporte de cobertura.
 - **Pruebas unitarias** de dominio: obligatorias para toda regla de negocio nueva. Sin Spring, sin base de datos.
 - **Pruebas de integración** con Testcontainers: obligatorias para todo adaptador nuevo (persistencia, web, IA).
 - **`ArchitectureTest` debe pasar siempre.** Si una regla de arquitectura estorba, se discute la regla — no se borra el test ni se le agrega una excepción sin dejarlo documentado.
 - **Si una prueba falla, se reporta el fallo con su salida.** Nunca se declara terminado algo que no pasó las pruebas, ni se omite mencionar un test roto.
 - Si algo quedó sin probar (por falta de credenciales, de Docker, de un dato), **se dice explícitamente qué quedó sin verificar y por qué**.
+- **Maven nunca corre en el checkout que usa el IDE**, ni para una sola clase: recompila `target/` y el backend levantado deja de responder sin avisar (la app dice «No se pudo guardar» y el health da conexión rechazada). Se corre en un worktree propio (E-313, E-104). El `clean verify` completo no lleva `-DargLine=-Xmx600m`, que solo alcanza para pruebas sueltas (E-322, E-329).
+- **Un canal en vivo (chat, voz) se prueba con un mensaje de OTRA cuenta**: el mensaje propio la pantalla lo agrega sola y esconde que el canal no funciona (E-331).
 
 ### 0.3 Pruebas de seguridad
 
@@ -70,6 +73,7 @@ Se registra **aunque el error haya sido de configuración, del entorno o "una to
 - El objetivo literal de **"<1 ms"** no es alcanzable de punta a punta para un cliente móvil sobre HTTP (la vuelta de red sola ya son varios ms). Es alcanzable, y es donde hay que apuntar, para el **tiempo de procesamiento dentro del servidor** en operaciones cacheadas o de cómputo puro. Ver el desglose realista en §3.
 - Java 25 (LTS) + Virtual Threads/Structured Concurrency maduros son el motivo técnico real para migrar desde Node/Next si el driver es rendimiento bajo alta concurrencia I/O-bound (llamadas a Postgres, Redis, S3, SMTP y los proveedores OIDC) — no la sintaxis ni el tipado.
 - El dominio actual (Users, Habits, Rocks, Community, Academy, Chat, Calendar, Notifications, Onboarding+IA, RAG, Renasia, Support/Tickets, Phase Contracts, Points/Ranking) mapea de forma natural a **14 módulos** hexagonales. Ver §5.
+  > **Actualizado 2026-09-27.** Hoy son 16 módulos de Spring Modulith: los 14 de la tabla de §5, más `mentoring` y `shared` (ver `src/main/java/com/renaser/os/`; `docs/MODULO_RAG.md` ya lo había corregido el 2026-09-14).
 
 ---
 
@@ -407,7 +411,7 @@ Analogía: un módulo es un **restaurante**.
 
 **La distinción que más cuesta — `port/out/` vs `adapter/out/`:** el puerto dice *qué necesito*, el adaptador dice *cómo se consigue*. `LoadUserPort` (puerto) no sabe que existe Postgres; `UserPersistenceAdapter` (adaptador) sí. Por eso el puerto se llama por intención de negocio y nunca por tecnología (§5.4.8).
 
-**Cómo saber si algo va en `domain/` o en `application/`:** si la regla es verdad **siempre**, sin importar quién la invoque ni desde dónde (*"un aprendiz se gradúa 90 días después de empezar"*), va en `domain/`. Si describe **una secuencia de pasos** que incluye hablar con el exterior (*"buscá el usuario, validá que no exista, guardalo, mandá el mail"*), va en `application/`.
+**Cómo saber si algo va en `domain/` o en `application/`:** si la regla es verdad **siempre**, sin importar quién la invoque ni desde dónde (*"un aprendiz se gradúa al completar el día 90 de su programa"*), va en `domain/`. Si describe **una secuencia de pasos** que incluye hablar con el exterior (*"buscá el usuario, validá que no exista, guardalo, mandá el mail"*), va en `application/`.
 
 #### La regla de `domain/`: subcarpeta por agregado, NUNCA por capa ni "para ordenar"
 
@@ -526,6 +530,8 @@ public final class User {
 
 `AlchemistProfile`, `AdminProfile`, `MentorLeadProfile`, `MentorProfile`, `TraineeProfile` son cinco clases de dominio separadas (no una jerarquía de herencia JPA con discriminador — el propio documento del feature prohíbe mezclar roles/perfiles). `TraineeProfile` lleva las reglas ya conocidas como invariantes de constructor: `expectedGraduationDate = startDate.plusDays(90)`, `programDay`/`coherenceScore`/`leaguePoints` sin setters públicos (solo mutables desde dentro del módulo, vía métodos con nombre de intención: `advanceProgramDay()`, no `setProgramDay()`).
 
+> **Corregido 2026-09-27.** Este párrafo describe el diseño propuesto el 2026-08-22, no lo construido, y lo del día del programa contradice reglas vigentes. En `users/domain/model` el único perfil de rol es `MentorProfile`; el programa del aprendiz vive en el agregado `ParticipacionPrograma` (`participantes_programa`, D-33 y D-52 de `docs/MODULO_USERS.md`), no en un `TraineeProfile` (vale también para los perfiles que nombran §5.3.1 y §5.4.8). El día del programa **se deriva** de las fechas y de `dias_ajuste_programa`: nunca se incrementa con algo como `advanceProgramDay()` (`.claude/rules/02` §2, E-91). La graduación no es `startDate.plusDays(90)` sino `ParticipacionPrograma.fechaGraduacionEsperada()` = `fecha_inicio + 90 + dias_ajuste_programa` (la columna generada que ignoraba el ajuste se borró en V22). El día solo lo mueve un admin con `fijarDia`, entre 1 y 89 (D-194) y nunca antes del Día 1 (D-195). Por lo mismo se cambiaron dos ejemplos: §5.1.2 decía *«un aprendiz se gradúa 90 días después de empezar»* y §5.4.3, `expectedGraduationDate = startDate.plusDays(90)`.
+
 ### 5.3.3 Casos de uso (paquete `users/application`)
 
 | Caso de uso | Reemplaza (Next.js) | Nota de migración |
@@ -635,7 +641,7 @@ Entre módulos viaja un quinto, deliberadamente pobre: `users/api/UserSummary` (
 |---|---|---|---|
 | **Sintáctica** | `adapter/in/web/dto` | Formato: `@NotBlank`, `@Email`, `@Size` | Bean Validation + `@Valid` en el controller |
 | **Contrato del caso de uso** | `application/*Command` | El comando es estructuralmente imposible de construir mal | **Self-validating**: el constructor del `record` valida y explota |
-| **Semántica / invariantes** | `domain/` | Reglas de negocio: `expectedGraduationDate = startDate.plusDays(90)`, `actor.canManageRoles()` | Código Java plano. **Nunca anotaciones** |
+| **Semántica / invariantes** | `domain/` | Reglas de negocio: `ParticipacionPrograma.fechaGraduacionEsperada()` (fechas + ajuste, ver §5.3.2), `actor.canManageRoles()` | Código Java plano. **Nunca anotaciones** |
 
 El nivel 2 es el que casi todos se saltan, y es el importante: si el `@Valid` vive **solo** en el `@RestController`, el día que un `@Scheduled` o un listener de evento invoque el mismo caso de uso, entra sin validar. El comando self-validating hace que eso sea imposible venga de donde venga.
 
@@ -698,7 +704,7 @@ Y su `Money.java` (value object) usa `@Value` (todo `final`, sin setters, `equal
 
 **Lo que sigue prohibido, sin excepción:** `@Data`, `@Setter`, `@NoArgsConstructor` público — cualquier cosa que abra una forma de mutar el estado sin pasar por un método con nombre de intención. Y `@ToString`/`@EqualsAndHashCode` sin acotar (`of = "..."`) porque puede filtrar campos con PII (email, etc.) a un log — el `toString()` de una entidad con datos personales se escribe a mano, corto, sin PII (ver `User.toString()`).
 
-**Dónde SÍ van `@Entity`/`@NoArgsConstructor`:** nunca en `domain/`. Van en la clase JPA separada de `adapter/out/persistence/` (ej. `UserJpaEntity`), que ni siquiera se ve desde el dominio. `buckpal` lo prueba en el mismo repo: `AccountJpaEntity` (con `@Entity @Table @Data @AllArgsConstructor @NoArgsConstructor`) vive en `adapter/out/persistence/`, es una clase totalmente distinta de `Account`, y un `AccountMapper` a mano traduce entre las dos. Ese paso (adaptador de persistencia) es el paso 6 del orden de construcción de `docs/MODULOS_A_AVANZAR.md` §4.4 — **todavía no se llegó ahí** en `users`, por eso hoy no hay ningún `@Entity` en el repo.
+**Dónde SÍ van `@Entity`/`@NoArgsConstructor`:** nunca en `domain/`. Van en la clase JPA separada de `adapter/out/persistence/` (ej. `UserJpaEntity`), que ni siquiera se ve desde el dominio. `buckpal` lo prueba en el mismo repo: `AccountJpaEntity` (con `@Entity @Table @Data @AllArgsConstructor @NoArgsConstructor`) vive en `adapter/out/persistence/`, es una clase totalmente distinta de `Account`, y un `AccountMapper` a mano traduce entre las dos. Ese paso (adaptador de persistencia) es el paso 6 del orden de construcción de `docs/MODULOS_A_AVANZAR.md` §4.4, y ya está hecho: hoy hay 88 clases `@Entity` en el repo, todas `*JpaEntity` dentro de `adapter/out/persistence/`. *Corregido 2026-09-27: decía «**todavía no se llegó ahí** en `users`, por eso hoy no hay ningún `@Entity` en el repo».*
 
 ### 5.4.6 El controller es tonto: sin lógica de negocio, sin repositorio
 
@@ -825,12 +831,12 @@ Confirmado contra los releases reales a la fecha (agosto 2026):
 | Java | **25 (LTS)** | Virtual Threads sin *pinning* en secciones sincronizadas, Structured Concurrency (JEP 505, 5ª preview), Scoped Values finalizados (JEP 506) |
 | Spring Boot | **4.1** (GA jun-2026) | Sobre Spring Framework 7.0.8; grpc auto-config, `spring.datasource.connection-fetch=lazy`, OTel toggle nativo |
 | Spring AI | **2.0** (GA jun-2026) | Baseline Boot 4.x, tool-calling unificado entre providers, MCP con transporte movido al propio Spring AI (Streamable HTTP por defecto) |
-| Persistencia | Spring Data JPA + **Flyway** | Reemplaza `prisma migrate`. **La base es propia: Supabase quedó descartado (§11).** Hoy corre sobre Docker local; falta elegir dónde se hostea en produccion, y las migraciones son independientes de esa elección |
+| Persistencia | Spring Data JPA + **Flyway** | Reemplaza `prisma migrate`. **La base es propia: Supabase quedó descartado (§11).** En producción corre en RDS (AWS) y en local sobre Docker; las migraciones son las mismas en los dos. *Corregido 2026-09-27: decía «Hoy corre sobre Docker local; falta elegir dónde se hostea en produccion». Se eligió RDS (`docs/DESPLIEGUE_Y_CI.md` §9).* |
 | Caché local | **Caffeine** | Para el hot path de <1 ms real (§3) |
 | Caché distribuida / rate limit | Redis | Solo para lo que debe ser compartido entre instancias |
 | Auth | **Identidad propia**: sesión como token opaco en Redis + cookie `HttpOnly`, credenciales con `DelegatingPasswordEncoder`, y OIDC contra Google/Apple/Facebook resuelto por el backend | Decisión del dueño del proyecto (2026-08-26), tomada sobre la recomendación contraria. Sin proveedor externo de identidad. Ver [`docs/MODULO_AUTH.md`](docs/MODULO_AUTH.md) |
-| Vector store (RAG) | `pgvector` sobre el mismo Postgres, vía Spring AI `VectorStore` | Evita sumar una base de datos nueva |
-| IA generativa | Spring AI 2.0 con el starter de **Google GenAI**, declarado y **apagado** | `spring.ai.model.chat`, `embedding` y `vectorstore` estan en `none`, las autoconfiguraciones estan excluidas y `GOOGLE_GENAI_API_KEY` viene vacia. **Los 7 adaptadores de IA del repo son `NoOp`**: ningun modelo se llamo nunca desde este backend |
+| Vector store (RAG) | `pgvector` sobre el mismo Postgres, con SQL nativo (`PgVectorNativoAdapter`, D-45 de `docs/MODULO_RAG.md`) | Evita sumar una base de datos nueva. *Corregido 2026-09-27: decía «vía Spring AI `VectorStore`»; el `PgVectorStore` de Spring AI no sirve para las columnas de `base_conocimiento` y su autoconfiguración está excluida.* |
+| IA generativa | Spring AI 2.0 con **Google GenAI (Gemini)**, armado a mano en `rag` (`GoogleGenAiClientesConfig`) | Las autoconfiguraciones siguen excluidas y `spring.ai.model.*` en `none`: los modelos se crean solo con `renaser.ia.proveedor=google` (`IA_PROVEEDOR`, por defecto `noop`), y la voz y la voz en vivo tienen su propio interruptor (`IA_VOZ_PROVEEDOR`, `IA_VOZ_EN_VIVO`). Así funcionan el chat del acompañante (Renasia y Sparkie), los embeddings, la voz, la voz en vivo y el resumen de la conversación; en producción está prendido (`docs/DESPLIEGUE_Y_CI.md` §6.4). Siguen en `NoOp`: la validación de evidencia y la del V90, la recomendación de clase, el Espejo de la Sombra y los clasificadores de intención y de riesgo. *Corregido 2026-09-27: decía «declarado y **apagado**» y «**Los 7 adaptadores de IA del repo son `NoOp`**: ningun modelo se llamo nunca desde este backend».* |
 | Mensajería interna | Spring Modulith Events (outbox JPA) | No hace falta Kafka/RabbitMQ para el volumen de este dominio; si aparece, se agrega sin tocar el dominio (está detrás de un puerto) |
 | Concurrencia | **Virtual Threads** (`spring.threads.virtual.enabled=true`) | Tomcat/Netty con un hilo virtual por request; ideal para I/O-bound (Postgres, Redis, S3, SMTP) |
 | Observabilidad | Micrometer + OpenTelemetry (nativo en Boot 4.1) | Medir p50/p99 reales en vez de asumir |
@@ -856,6 +862,14 @@ Confirmado contra los releases reales a la fecha (agosto 2026):
 > se prueba de verdad.** Presupuestar esa integración como trabajo con riesgo, no como cambiar
 > una línea de configuración.
 
+> **Corregido 2026-09-27.** El recuadro de arriba es la foto del 2026-08-31 y hoy es falso en lo principal: el
+> acompañante sí llama a Gemini, también en producción (chat, embeddings, voz, voz en vivo y resumen de la
+> conversación; ver §6 y `docs/DESPLIEGUE_Y_CI.md` §6.4, que corrigió lo mismo el 2026-09-25). El RAG no usa el
+> `PgVectorStore` de Spring AI que propone la lista de abajo, sino SQL nativo (D-45). Lo que sigue valiendo, solo para
+> lo que todavía es `NoOp` (validación de evidencia y del V90, recomendación de clase, Espejo de la Sombra,
+> clasificadores de intención y de riesgo): la primera vez que se enchufe un proveedor real es la primera vez que se
+> prueba de verdad.
+
 El repo viejo ya resolvió el patrón difícil (async + polling + reintentos acotados + fallback a revisión humana). En Spring AI 2.0 se traduce así:
 
 - **`ChatClient`** encapsula la llamada a Gemini; se configura con `retry`, `timeout` (los 45 s que ya calibraron para audio) y `ToolExecutionEligibilityChecker` si en el futuro Renasia necesita tool-calling (MCP ya viene integrado en 2.0).
@@ -872,6 +886,7 @@ El repo viejo ya resolvió el patrón difícil (async + polling + reintentos aco
 - Documentar con **springdoc-openapi** (OpenAPI 3.1) para regenerar tipos TypeScript del lado del cliente RN automáticamente y detectar drift de contrato en CI.
 - DTOs de salida siempre como proyecciones específicas del caso de uso (nunca serializar la entidad JPA completa) — controla payload y evita fugas de campos internos, además de evitar el costo de serialización de grafos completos.
 - Para `chat`, considerar upgrade real a WebSocket/SSE (Spring soporta ambos nativamente) en vez de polling — mejora percibida de latencia más grande que casi cualquier optimización de servidor.
+  > **Actualizado 2026-09-27.** Ya está hecho: el chat usa WebSocket con STOMP (`/ws`, `WebSocketConfig` del módulo `chat`) y reparte los mensajes entre instancias por Redis Pub/Sub (§5.2.1). En la app, los mensajes de otras personas no llegaban en vivo desde el 17/09 por el carácter NUL de STOMP en React Native (E-331); el arreglo está en el frontend `evidencia-foto` (044159f), sin subir todavía. Los latidos del broker para detectar conexiones muertas están en curso (D-202).
 
 ---
 
@@ -925,7 +940,7 @@ Dos formas de organizar la Saga: **coreografía** (cada servicio escucha eventos
 | Auth | Identidad propia en Spring Security | Validar JWT de Supabase (Resource Server) | **A — resuelto 2026-08-26.** Esta tabla recomendaba **B**; el dueño del proyecto eligió **A** y esa es la decisión vigente. Se deja la recomendación original a la vista para que quede claro que fue una decisión informada contra el consejo, no un descuido |
 | Storage de binarios | S3 | Google Drive | **S3, funcionando (D-34 cerrado).** Los 37 objetos de cursos y los 13 mp3 de audioterapias estan subidos a `s3-renaser90dias`, y las rutas guardadas en la BD apuntan ahi. `AlmacenamientoPort` ya tiene su implementacion real, `S3AlmacenamientoAdapter`, que **solo se activa con `STORAGE_PROVEEDOR=s3`**; sin esa variable sigue mandando `NoOpAlmacenamientoAdapter` y toda URL sale como `about:blank#pendiente-s3/...` — es lo primero a verificar cuando un archivo "no se ve". Subir y leer van por URL prefirmada directo entre el cliente y S3: el backend nunca toca los bytes. Lo que **sigue faltando** es la bucket policy de lectura publica anonima sobre `avatares/*` (D-55): sin ella la URL del avatar es correcta pero responde 403. Google Drive **nunca se integro** — `AudioCatalogPort` solo tiene `NoOpAudioCatalogAdapter`, y los audios de Espiritu siguen sin fuente real |
 | ORM | JPA/Hibernate | jOOQ / JDBC Client puro | JPA para CRUD de dominio; **JDBC Client** (nuevo en Spring 6.1+, ideal con virtual threads) para las queries de reporting/ranking que son lectura pura y sensibles a latencia |
-| Base de datos | Instancia propia | Supabase Postgres | **A — resuelto 2026-08-31.** **Supabase queda descartado**: la base del producto final es propia y la define nuestro esquema Flyway (schema `renaser`, 92 tablas), no un proyecto de Supabase. Hoy corre en Docker local (`pgvector/pgvector:pg16`, puerto 5433) y no hay entorno desplegado. De Supabase solo quedan **datos de origen ya extraidos**; ninguna pieza del backend le habla. Lo unico abierto es **donde se hostea** esa instancia propia (RDS / Cloud SQL / VPS), que es infraestructura y no bloquea nada |
+| Base de datos | Instancia propia | Supabase Postgres | **A — resuelto 2026-08-31.** **Supabase queda descartado**: la base del producto final es propia y la define nuestro esquema Flyway (schema `renaser`, 92 tablas), no un proyecto de Supabase. En producción corre en RDS (AWS), detrás del backend desplegado en EC2 con Docker (`docs/DESPLIEGUE_Y_CI.md` §5.3 y §9); en local, en Docker (`pgvector/pgvector:pg16`, puerto 5433). De Supabase solo quedan **datos de origen ya extraidos**; ninguna pieza del backend le habla. *Corregido 2026-09-27: decía «Hoy corre en Docker local (…) y no hay entorno desplegado» y «Lo unico abierto es **donde se hostea** esa instancia propia (RDS / Cloud SQL / VPS)»: se eligió RDS.* |
 | Empaquetado | JVM tradicional | GraalVM Native Image | JVM tradicional al inicio (mejor tooling, throughput mejor en cargas sostenidas); Native Image si más adelante hay requisito de cold-start (serverless/escala-a-cero) |
 
 ---
@@ -933,6 +948,8 @@ Dos formas de organizar la Saga: **coreografía** (cada servicio escucha eventos
 ## 12. Checklist técnico de arranque
 
 Estado real al **2026-08-22**. El plan detallado por módulo está en [`docs/MODULOS_A_AVANZAR.md`](docs/MODULOS_A_AVANZAR.md).
+
+> **Corregido 2026-09-27.** Esta lista es la foto del 2026-08-22 y no el estado actual: varias casillas de «Pendiente» ya se hicieron y otras cambiaron de rumbo (por ejemplo, el programa del aprendiz es `ParticipacionPrograma` y no un `TraineeProfile`, §5.3.2). Hoy hay 16 módulos (§1) y el backend está en producción (§11). El avance por módulo está en `docs/MODULOS_A_AVANZAR.md`, y la última verificación completa (2026-09-27) fue `./mvnw clean verify` con 4889 pruebas unitarias y 130 de integración en verde, no las 21 de abajo.
 
 **Hecho**
 
