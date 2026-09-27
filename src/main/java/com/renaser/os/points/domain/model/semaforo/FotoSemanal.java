@@ -16,7 +16,8 @@ import java.util.Objects;
  *
  * @param porcentaje   null si ningún día medido tuvo algo programado
  * @param diasConDatos días medidos con algo programado (los que entran al promedio)
- * @param diasMedidos  días de la semana dentro del programa y sin pausa
+ * @param diasMedidos  días de la semana dentro del programa, sin pausa y sin la cuenta suspendida
+ *                     (una semana suspendida entera queda con 0: «Sin datos» y sin aviso, D-209)
  */
 public record FotoSemanal(LocalDate semanaHasta, LocalDate semanaDesde, BigDecimal porcentaje, int diasConDatos,
                           int diasMedidos, String versionFormula, Instant cerradaEn) {

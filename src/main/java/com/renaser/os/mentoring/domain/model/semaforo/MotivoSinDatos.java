@@ -25,6 +25,11 @@ public enum MotivoSinDatos {
     NO_ACTIVADO,
     /** Sus días del programa en la ventana todavía no los calculó el barrido horario. */
     PENDIENTE_DE_CALCULO,
+    /**
+     * Su cuenta estuvo suspendida en los días del programa de la ventana (D-209): no se miden. Solo se
+     * ve después de reactivarla; mientras está suspendida no aparece en las vistas de grupo.
+     */
+    CUENTA_SUSPENDIDA,
     /** Staff con programa propio que pausó su semáforo toda la ventana. */
     PAUSADO,
     /** La ventana entera cae antes de su día 1 (día 0) o después de su día 90 (graduado). */
@@ -33,7 +38,7 @@ public enum MotivoSinDatos {
     /**
      * El motivo que explican los días de una ventana sin ningún día medido. Si hay mezcla, gana el
      * que más dice de la persona: un día del programa sin nada programado pesa más que uno pendiente,
-     * pausado o fuera del programa.
+     * suspendido, pausado o fuera del programa.
      */
     public static MotivoSinDatos de(Collection<DiaDelSemaforo> dias) {
         if (hayDia(dias, EstadoDiaSemaforo.SIN_DATOS)) {
@@ -41,6 +46,9 @@ public enum MotivoSinDatos {
         }
         if (hayDia(dias, EstadoDiaSemaforo.PENDIENTE)) {
             return PENDIENTE_DE_CALCULO;
+        }
+        if (hayDia(dias, EstadoDiaSemaforo.CUENTA_SUSPENDIDA)) {
+            return CUENTA_SUSPENDIDA;
         }
         if (hayDia(dias, EstadoDiaSemaforo.PAUSADO)) {
             return PAUSADO;

@@ -120,6 +120,83 @@ class MedicionDeLaPersonaTest {
         assertThat(foto.color()).isEqualTo(ColorSemaforo.SIN_DATOS);
     }
 
+    // ---------------------------------------------------------------------------------------
+    // D-209: los días con la cuenta suspendida no se miden
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * Suspendida el lunes 21 y reactivada el jueves 24: esos cuatro días no cuentan ni arriba ni abajo,
+     * aunque haya filas con lo que {@code habits} le siguió generando. Con esas filas contadas, la semana
+     * daba (100 + 100 + 25 + 0 + 0 + 0 + 100) / 7 = 46,4: rojo.
+     */
+    @Test
+    void losDiasConLaCuentaSuspendidaNoCuentanNiArribaNiAbajo() {
+        PausaDeMedicion suspension = PausaDeMedicion.porSuspension(PausaId.of(UUID.randomUUID()),
+                UserId.of(UUID.randomUUID()), LocalDate.of(2026, 9, 21), AHORA);
+        suspension.terminarSuspension(LocalDate.of(2026, 9, 24), AHORA);
+        CalendarioDeMedicion calendario = new CalendarioDeMedicion(LocalDate.of(2026, 9, 1),
+                LocalDate.of(2026, 11, 29), List.of(suspension));
+        Map<LocalDate, CumplimientoDelDia> filas = new HashMap<>();
+        int[] cumplidos = {4, 4, 1, 0, 0, 0, 4};   // sábado 19 a viernes 25, 4 hábitos por día
+        for (int i = 0; i < cumplidos.length; i++) {
+            LocalDate fecha = LocalDate.of(2026, 9, 19).plusDays(i);
+            filas.put(fecha, dia(fecha, 4, cumplidos[i]));
+        }
+        MedicionDeLaPersona medicion = new MedicionDeLaPersona(calendario, filas, LocalDate.of(2026, 9, 26));
+
+        FotoSemanal foto = medicion.fotoDe(VIERNES_25, AHORA);
+        VentanaDelSemaforo semana = medicion.semana(VIERNES_25, null);
+
+        assertThat(foto.diasMedidos()).isEqualTo(3);
+        assertThat(foto.diasConDatos()).isEqualTo(3);
+        assertThat(foto.porcentaje()).isEqualByComparingTo("100.0");
+        assertThat(foto.color()).isEqualTo(ColorSemaforo.VERDE);
+        var suspendido = EstadoDiaSemaforo.CUENTA_SUSPENDIDA;
+        assertThat(estados(semana)).containsExactly(EstadoDiaSemaforo.MEDIDO, EstadoDiaSemaforo.MEDIDO,
+                suspendido, suspendido, suspendido, suspendido, EstadoDiaSemaforo.MEDIDO);
+        assertThat(semana.porcentaje()).isEqualByComparingTo("100.0");
+    }
+
+    /** Toda la semana con la cuenta suspendida: «Sin datos», ni rojo ni verde, y sin días medidos (sin aviso). */
+    @Test
+    void unaSemanaEnteraConLaCuentaSuspendidaQuedaSinDatos() {
+        PausaDeMedicion suspension = PausaDeMedicion.porSuspension(PausaId.of(UUID.randomUUID()),
+                UserId.of(UUID.randomUUID()), LocalDate.of(2026, 9, 18), AHORA);
+        CalendarioDeMedicion calendario = new CalendarioDeMedicion(LocalDate.of(2026, 9, 1),
+                LocalDate.of(2026, 11, 29), List.of(suspension));
+        Map<LocalDate, CumplimientoDelDia> filas = new HashMap<>();
+        for (LocalDate f = LocalDate.of(2026, 9, 19); !f.isAfter(VIERNES_25); f = f.plusDays(1)) {
+            filas.put(f, dia(f, 4, 0));
+        }
+        MedicionDeLaPersona medicion = new MedicionDeLaPersona(calendario, filas, LocalDate.of(2026, 9, 26));
+
+        FotoSemanal foto = medicion.fotoDe(VIERNES_25, AHORA);
+
+        assertThat(foto.porcentaje()).isNull();
+        assertThat(foto.color()).isEqualTo(ColorSemaforo.SIN_DATOS);
+        assertThat(foto.diasMedidos()).isZero();
+        assertThat(foto.tuvoDiasMedidos()).isFalse();
+        assertThat(estados(medicion.vigente())).containsOnly(EstadoDiaSemaforo.CUENTA_SUSPENDIDA);
+        assertThat(medicion.vigente().color()).isEqualTo(ColorSemaforo.SIN_DATOS);
+    }
+
+    /** Si una pausa del staff y una suspensión se pisan, el día se ve como suspendido. */
+    @Test
+    void conPausaYSuspensionElMismoDiaSeVeLaSuspension() {
+        UserId staff = UserId.of(UUID.randomUUID());
+        PausaDeMedicion pausa = PausaDeMedicion.iniciar(PausaId.of(UUID.randomUUID()), staff,
+                LocalDate.of(2026, 9, 22), LocalDate.of(2026, 9, 30), AHORA);
+        PausaDeMedicion suspension = PausaDeMedicion.porSuspension(PausaId.of(UUID.randomUUID()), staff,
+                LocalDate.of(2026, 9, 24), AHORA);
+        CalendarioDeMedicion calendario = new CalendarioDeMedicion(LocalDate.of(2026, 9, 1),
+                LocalDate.of(2026, 11, 29), List.of(pausa, suspension));
+
+        assertThat(calendario.estadoSinCalculo(LocalDate.of(2026, 9, 23))).isEqualTo(EstadoDiaSemaforo.PAUSADO);
+        assertThat(calendario.estadoSinCalculo(LocalDate.of(2026, 9, 24))).isEqualTo(EstadoDiaSemaforo.CUENTA_SUSPENDIDA);
+        assertThat(calendario.seMide(LocalDate.of(2026, 9, 21))).isTrue();
+        assertThat(calendario.seMide(LocalDate.of(2026, 9, 24))).isFalse();
+    }
+
     @Test
     void unaSemanaCerradaMuestraElResultadoDeLaFoto() {
         Map<LocalDate, CumplimientoDelDia> filas = Map.of(VIERNES_25, dia(VIERNES_25, 1, 0));

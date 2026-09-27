@@ -10325,6 +10325,75 @@ con `almacenamientoSeguro`.
 mentor, la ficha) tiene que cerrarse en los efectos que llevan a otra parte de la pantalla, o tapa lo que se pidió.
 Probarlo en el emulador después de arreglarlo: desde Hoy y desde Comunidad.
 
+## E-347 · Semáforo: al reactivar una cuenta suspendida, los días de la suspensión contaban como no cumplidos (`expected: VERDE but was: ROJO`)
+
+**Síntoma.** El dueño lo leyó en la página de decisiones del 27/09: «Semáforo: días en que una cuenta estuvo
+suspendida. Hoy cuentan: al reactivar la cuenta, pueden dejar la semana en rojo» (estaba documentado como pregunta
+abierta en `docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md` §7, punto 2). Con el arreglo apagado, las pruebas nuevas lo
+muestran: `SuspensionDelSemaforoServiceTest.unaSemanaConDiasSuspendidosEnElMedioYaNoQuedaEnRojo` →
+`expected: VERDE but was: ROJO` (la semana daba 46,4 %); `unaSemanaSuspendidaEnteraQuedaSinDatos` →
+`expected: null but was: 0.0` (siete días suspendidos en 0 %, rojo y con aviso); `unaReactivacionAMitadDeSemana` → el
+barrido del jueves guardaba lunes, martes y miércoles (`and keys not expected: [2026-09-21, 2026-09-22, 2026-09-23]`);
+y de punta a punta, `SuspensionEnElSemaforoIT` → `expected: VERDE but was: ROJO`.
+
+**Causa real.** El barrido solo calcula cuentas ACTIVAS. Al reactivar, se pone al día (bien: es derivado, regla 02
+§2) y calcula todos los días pendientes, incluidos los de la suspensión. `habits` le siguió generando hábitos esos
+días (quedan vencidos) y los objetivos planificados seguían ahí: 0 %. No había forma de excluirlos porque no quedaba
+registrado desde cuándo hasta cuándo estuvo suspendida (E-348).
+
+**Solución (D-209).** `points` escucha `users.api.EstadoDeCuentaCambiadoEvent` (`EstadoDeCuentaSemaforoListener` →
+`SuspensionDelSemaforoService`) y anota el tramo en `semaforo_pausas` con `motivo = 'CUENTA_SUSPENDIDA'` (V72), con
+el instante del evento en la zona de la persona: el día de la suspensión, el de la reactivación y los del medio no se
+miden. `CalendarioDeMedicion` los excluye igual que una pausa y los muestra como `EstadoDiaSemaforo.CUENTA_SUSPENDIDA`
+(«Cuenta en pausa» en la app); una semana suspendida entera queda «Sin datos» y sin aviso. El barrido no cambió. Las
+cuentas suspendidas al desplegar reciben la suspensión desde ese día (relleno de V72); lo anterior no se inventa.
+Verificado que las pruebas fallan contra el comportamiento viejo: con `alSuspender` anulado fallan 8 de las 10 de
+`SuspensionDelSemaforoServiceTest` (6 fallas, 2 errores, con los mensajes de arriba), y con la exclusión del calendario
+anulada falla `SuspensionEnElSemaforoIT`.
+
+**Cómo evitar que vuelva a pasar.** Una regla nueva de «estos días no se miden» se resuelve en `CalendarioDeMedicion`
+a partir de fechas registradas (el instante de un hecho), no de lo que el barrido alcance a ver: el barrido puede no
+correr, y derivado de fechas se pone al día solo. Toda prueba del semáforo con un evento lleva el instante en la
+madrugada UTC (el día anterior en Lima), como las de D-209.
+
+## E-348 · `usuarios.estado_cambiado_en` y `motivo_estado` existen desde V1 y nadie los escribe: no hay historial de suspensiones
+
+**Síntoma.** Buscando «desde cuándo estuvo suspendida» para D-209: `estado_cambiado_en` es NULL para el aprendiz
+suspendido de la base local (`SELECT rol, estado, estado_cambiado_en FROM renaser.usuarios WHERE estado='SUSPENDIDO'`
+→ `APRENDIZ|SUSPENDIDO|`). La única fila local con valor es la de un mentor activo, escrita a mano: ningún código ni
+script del repositorio escribe esa columna, ni `motivo_estado`.
+
+**Causa real.** El baseline las previó, pero el dominio nunca las usó: `UserJpaEntity` no las mapea (su javadoc lo dice:
+«telefono/ciudad/pais/motivo_estado/creado_en/actualizado_en quedan fuera a proposito») y `StaffAdminService.updateStatus`
+solo cambia `estado`. El único rastro de un cambio de estado es `EstadoDeCuentaCambiadoEvent`, y el outbox de Modulith
+corre con `completion-mode: DELETE`: una vez entregado, no queda.
+
+**Solución.** No se tocó `users` (es otro módulo, y la columna guardaría solo el ÚLTIMO cambio: al reactivar se pierde
+el comienzo de la suspensión). El semáforo anota su propio tramo al recibir el evento (D-209, V72). Las suspensiones
+anteriores a V72 no tienen fecha y no se inventa (`docs/DESPLIEGUE_Y_CI.md` §6.4, «Anotar a mano una suspensión
+anterior a V72»).
+
+**Cómo evitar que vuelva a pasar.** Quedó escrito en `.claude/rules/04-base-de-datos-y-migraciones.md` («Cosas de este
+esquema que hay que saber»): esas columnas no son un historial. Quien necesite cuándo cambió el estado de una cuenta lo
+anota al recibir el evento.
+
+## E-349 · `-Dtest='*Semaforo*'` corrió también los `*IT` en la fase de surefire
+
+**Síntoma.** Una corrida focalizada `./mvnw ... -Dtest='*Semaforo*,...' test` (solo `test`, sin `verify`) listó en
+`target/surefire-reports` a `SemaforoDeExtremoAExtremoIT`, `SuspensionEnElSemaforoIT` y `ResumenSemanalDelSemaforoIT`
+(`Tests run: 1 … in com.renaser.os.points.application.services.SuspensionEnElSemaforoIT`), con sus contenedores de
+Testcontainers. Pasaron, pero no se esperaba que corrieran ahí.
+
+**Causa real.** Surefire solo excluye los `*IT` porque no están en sus `includes` por defecto; `-Dtest` reemplaza esos
+`includes`, así que un patrón que calza con el nombre de un `*IT` lo corre en la fase de unitarias. Es el
+comportamiento documentado de Maven, no un defecto del proyecto.
+
+**Solución.** Ninguna. Para separar, las unitarias van con nombres de clase `*Test` en `-Dtest` y los IT con
+`verify -Dit.test=...`.
+
+**Cómo evitar que vuelva a pasar.** En una corrida focalizada, un comodín en `-Dtest` también toma los `*IT`: hay que
+contar con Docker y más memoria, o nombrar las clases. La línea `Tests run:` de surefire, en ese caso, incluye integración.
+
 ## E-356 · `PRUEBAS_EN_CLOUD.md` apuntaba a un puerto viejo: Testcontainers ya no pasa por el agente de Cloud sino por Testcontainers Desktop (`tc.host=tcp://127.0.0.1:42405`)
 
 **Síntoma (2026-09-27, `clean verify` del arreglo E-340).** Según el informe del agente, las pruebas de integración
@@ -10356,4 +10425,3 @@ list` muestra `AWS_REGION`, `AWS_ROLE_ARN`, `EC2_INSTANCE_ID` y `ECR_REPOSITORY`
 
 **Cómo evitar que vuelva a pasar.** Quien crea o cambia infraestructura actualiza el documento en el mismo cambio
 (regla 05). Antes de afirmar algo sobre el CD, comprobarlo con `gh variable list` y `gh run list --workflow cd.yml`.
-

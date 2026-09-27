@@ -35,6 +35,10 @@ Supabase quedó descartado (2026-08-31). El esquema del producto lo define **nue
   recalcula nunca. Cualquier cambio del reloj deja registros viejos con el día anterior — eso es
   deliberado (es historia), pero hay que tenerlo presente al diseñar.
 - `participantes_programa.habitos_escalonados_en` existe en la base y **nadie la lee ni la escribe**.
+- `usuarios.estado_cambiado_en` y `usuarios.motivo_estado` tampoco: **no hay historial de cuándo se suspendió
+  o se reactivó una cuenta**, y el outbox borra los eventos entregados (`completion-mode: DELETE`). Quien
+  necesite ese dato lo anota al recibir `users.api.EstadoDeCuentaCambiadoEvent`, como el semáforo
+  (`semaforo_pausas` con `motivo = 'CUENTA_SUSPENDIDA'`, V72, D-209, E-348).
 - Ninguna credencial que use la app móvil puede tener `INSERT` sobre `usuarios`: el alta pasa
   obligatoriamente por `ApproveAccountRequestUseCase` o `InviteAndCreateUserUseCase`.
 

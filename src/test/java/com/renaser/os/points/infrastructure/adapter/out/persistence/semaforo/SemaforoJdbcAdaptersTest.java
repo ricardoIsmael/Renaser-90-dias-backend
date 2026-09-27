@@ -3,6 +3,7 @@ package com.renaser.os.points.infrastructure.adapter.out.persistence.semaforo;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.points.domain.model.semaforo.CumplimientoDelDia;
 import com.renaser.os.points.domain.model.semaforo.FotoSemanal;
+import com.renaser.os.points.domain.model.semaforo.MotivoDePausa;
 import com.renaser.os.points.domain.model.semaforo.PausaDeMedicion;
 import com.renaser.os.points.domain.model.semaforo.PausaId;
 import com.renaser.os.points.domain.model.semaforo.ReglaDelSemaforo;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,11 +24,12 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Los tres adaptadores del semáforo contra Postgres real con la migración V68 aplicada: que el
- * upsert no reescriba un día sin cambios, que la foto semanal sea append-only y que las pausas
- * vayan y vuelvan enteras.
+ * Los tres adaptadores del semáforo contra Postgres real con las migraciones V68 y V72 aplicadas: que
+ * el upsert no reescriba un día sin cambios, que la foto semanal sea append-only y que las pausas (las
+ * del staff y las suspensiones de cuenta, D-209) vayan y vuelvan enteras.
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
@@ -117,8 +120,82 @@ class SemaforoJdbcAdaptersTest {
         assertThat(leidas).containsOnlyKeys(beto);
         PausaDeMedicion leida = leidas.get(beto).getFirst();
         assertThat(leida.id()).isEqualTo(pausa.id());
+        assertThat(leida.motivo()).isEqualTo(MotivoDePausa.PEDIDA_POR_LA_PERSONA);
         assertThat(leida.reanudadaEl()).isEqualTo(MARTES);
         assertThat(leida.cubre(LUNES)).isTrue();
         assertThat(leida.cubre(MARTES)).isFalse();
+    }
+
+    /** D-209 (V72): una suspensión se guarda sin fecha de regreso y vuelve igual; al reactivar, se cierra. */
+    @Test
+    void unaSuspensionVaYVuelveSinFechaDeRegreso() {
+        PausaDeMedicion suspension = PausaDeMedicion.porSuspension(PausaId.of(UUID.randomUUID()), ana, LUNES, AHORA);
+        pausas.guardar(suspension);
+
+        PausaDeMedicion abierta = pausas.de(List.of(ana)).get(ana).getFirst();
+        assertThat(abierta.motivo()).isEqualTo(MotivoDePausa.CUENTA_SUSPENDIDA);
+        assertThat(abierta.hasta()).isNull();
+        assertThat(abierta.suspensionEnCurso()).isTrue();
+        assertThat(abierta.cubre(LUNES.plusMonths(2))).isTrue();
+
+        abierta.terminarSuspension(MARTES, AHORA.plusSeconds(86_400));
+        pausas.guardar(abierta);
+
+        PausaDeMedicion cerrada = pausas.de(List.of(ana)).get(ana).getFirst();
+        assertThat(cerrada.reanudadaEl()).isEqualTo(MARTES.plusDays(1));
+        assertThat(cerrada.reanudadaEn()).isEqualTo(AHORA.plusSeconds(86_400));
+        assertThat(cerrada.cubre(MARTES)).isTrue();
+        assertThat(cerrada.cubre(MARTES.plusDays(1))).isFalse();
+    }
+
+    /**
+     * Una entrega repetida del evento de la suspensión que llega después de la reactivación guarda una
+     * copia vieja, todavía abierta: el upsert no la vuelve a abrir (si no, la persona quedaría sin medir
+     * para siempre).
+     */
+    @Test
+    void unaSuspensionTerminadaNoSeVuelveAAbrir() {
+        PausaId id = PausaId.of(UUID.randomUUID());
+        PausaDeMedicion cerrada = PausaDeMedicion.porSuspension(id, ana, LUNES, AHORA);
+        cerrada.terminarSuspension(MARTES, AHORA.plusSeconds(86_400));
+        pausas.guardar(cerrada);
+
+        pausas.guardar(PausaDeMedicion.porSuspension(id, ana, LUNES, AHORA));
+
+        assertThat(pausas.de(List.of(ana)).get(ana)).singleElement()
+                .satisfies(p -> assertThat(p.reanudadaEl()).isEqualTo(MARTES.plusDays(1)));
+    }
+
+    private static final String INSERTAR_PAUSA = """
+            INSERT INTO renaser.semaforo_pausas (id, usuario_id, motivo, desde, hasta, creada_en)
+            VALUES (:id, :usuario, :motivo, :desde, :hasta, now())
+            """;
+
+    private void insertarPausa(String motivo, LocalDate hasta) {
+        jdbcClient.sql(INSERTAR_PAUSA).param("id", UUID.randomUUID()).param("usuario", ana.value())
+                .param("motivo", motivo).param("desde", LUNES).param("hasta", hasta).update();
+    }
+
+    /** V72: la pausa del staff sigue exigiendo su fecha de regreso. */
+    @Test
+    void laBaseRechazaUnaPausaDelStaffSinFecha() {
+        assertThatThrownBy(() -> insertarPausa("PEDIDA_POR_LA_PERSONA", null))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("semaforo_pausas_hasta_segun_motivo");
+    }
+
+    /** V72: una suspensión no tiene fecha de regreso; termina al reactivar la cuenta. */
+    @Test
+    void laBaseRechazaUnaSuspensionConFecha() {
+        assertThatThrownBy(() -> insertarPausa("CUENTA_SUSPENDIDA", MARTES))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("semaforo_pausas_hasta_segun_motivo");
+    }
+
+    @Test
+    void laBaseRechazaUnMotivoDesconocido() {
+        assertThatThrownBy(() -> insertarPausa("VACACIONES", MARTES))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("semaforo_pausas_motivo_valido");
     }
 }
