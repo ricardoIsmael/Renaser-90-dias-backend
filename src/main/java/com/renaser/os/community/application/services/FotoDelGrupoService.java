@@ -14,7 +14,6 @@ import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -33,11 +32,14 @@ import java.util.stream.Collectors;
 /**
  * La foto propia de un grupo (D-212, decisión del dueño del 2026-09-27: «Admin y el mentor de ese grupo»).
  *
- * <p><b>Quién la cambia.</b> El rol ADMIN, la de cualquier grupo. El mentor, solo la del grupo que acompaña
- * HOY: su asignación vigente con función MENTOR, la misma fuente que usa {@link MisCelulasService} para
- * decir quién está en un grupo (desde D-141 un mentor puede acompañar varios, y el puntero
- * {@code celulas.mentor_id} nombra uno solo). Nadie más. El Alquimista tampoco, aunque administre los
- * grupos en todo lo demás ({@code CelulaService.requireRolAdmin}): el dueño nombró a «Admin».
+ * <p><b>Quién la cambia.</b> ADMIN y ALCHEMIST, la de cualquier grupo. El mentor, solo la del grupo que
+ * acompaña HOY: su asignación vigente con función MENTOR, la misma fuente que usa {@link MisCelulasService}
+ * para decir quién está en un grupo (desde D-141 un mentor puede acompañar varios, y el puntero
+ * {@code celulas.mentor_id} nombra uno solo). Nadie más.
+ *
+ * <p><b>Corregido 2026-09-27.</b> Decía «El Alquimista tampoco, aunque administre los grupos en todo lo
+ * demás: el dueño nombró a "Admin"». En la página de decisiones el dueño agregó al Alquimista («sí»), el
+ * mismo alcance que ya tiene en el resto de la administración de grupos ({@code UserRole.canManageRoles}).
  *
  * <p><b>Sin {@code @Transactional}.</b> Subir, leer y borrar son llamadas al almacenamiento, que no deben
  * retener una conexión de la base. Cada escritura va en su propia sentencia: {@link FotoDelGrupoPort}
@@ -124,8 +126,8 @@ public class FotoDelGrupoService implements CambiarFotoDelGrupoUseCase, FotoProp
             throw new NotAuthorizedException("La cuenta esta suspendida");
         }
         loadCelulaPort.porId(celulaId).orElseThrow(() -> new NoSuchElementException("Celula no encontrada: " + celulaId));
-        if (actor.role() != UserRole.ADMIN && !esSuMentorHoy(actorId, celulaId)) {
-            throw new NotAuthorizedException("Solo el administrador o el mentor de este grupo cambian su foto");
+        if (!actor.role().canManageRoles() && !esSuMentorHoy(actorId, celulaId)) {
+            throw new NotAuthorizedException("Solo Administración, el Alquimista o el mentor de este grupo cambian su foto");
         }
     }
 

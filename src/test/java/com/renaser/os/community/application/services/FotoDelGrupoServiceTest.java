@@ -130,15 +130,33 @@ class FotoDelGrupoServiceTest {
     }
 
     @Test
-    @DisplayName("autorización negativa: el mentor de OTRO grupo, un aprendiz del grupo y el Alquimista reciben 403, sin subir nada")
+    @DisplayName("autorización negativa: el mentor de OTRO grupo y un aprendiz del grupo reciben 403, sin subir nada")
     void nadieMasLaCambia() {
-        for (UserId intruso : List.of(MENTOR_DE_AURORA, ANA, ALQUIMISTA)) {
+        for (UserId intruso : List.of(MENTOR_DE_AURORA, ANA)) {
             assertThatThrownBy(() -> servicio.cambiar(new CambiarFotoDelGrupoCommand(intruso, FENIX, SUBIDA, "image/jpeg")))
                     .as("%s", intruso).isInstanceOf(NotAuthorizedException.class);
             assertThatThrownBy(() -> servicio.volverALaDeRenaser(intruso, FENIX)).isInstanceOf(NotAuthorizedException.class);
             assertThatThrownBy(() -> servicio.actual(intruso, FENIX)).isInstanceOf(NotAuthorizedException.class);
         }
         verifyNoInteractions(prepararFoto, almacenamiento, fotoDelGrupoPort);
+    }
+
+    /**
+     * El dueño lo decidió en la página de decisiones (2026-09-27): el Alquimista también cambia la foto de un
+     * grupo, como administra los grupos en todo lo demás. Falla contra el código de D-212, que solo nombraba
+     * al ADMIN.
+     */
+    @Test
+    @DisplayName("el Alquimista también la cambia, la de cualquier grupo, y vuelve a la de Renaser")
+    void elAlquimistaTambienLaCambia() {
+        when(fotoDelGrupoPort.reemplazar(eq(AURORA), any())).thenReturn(Optional.empty());
+        when(fotoDelGrupoPort.quitar(AURORA)).thenReturn(Optional.empty());
+
+        assertThat(servicio.cambiar(new CambiarFotoDelGrupoCommand(ALQUIMISTA, AURORA, SUBIDA, "image/jpeg"))).isNotNull();
+        servicio.volverALaDeRenaser(ALQUIMISTA, AURORA);
+
+        verify(almacenamiento).subir(anyString(), eq(PREPARADA), eq("image/jpeg"));
+        verify(fotoDelGrupoPort).quitar(AURORA);
     }
 
     @Test
@@ -154,11 +172,14 @@ class FotoDelGrupoServiceTest {
     }
 
     @Test
-    @DisplayName("autorización negativa: una cuenta SUSPENDIDA recibe 403 aunque sea ADMIN")
+    @DisplayName("autorización negativa: una cuenta SUSPENDIDA recibe 403 aunque sea ADMIN o Alquimista")
     void unaCuentaSuspendidaNoLaCambia() {
         cuenta(ADMIN, UserRole.ADMIN, UserStatus.SUSPENDED);
+        cuenta(ALQUIMISTA, UserRole.ALCHEMIST, UserStatus.SUSPENDED);
 
         assertThatThrownBy(() -> servicio.cambiar(new CambiarFotoDelGrupoCommand(ADMIN, FENIX, SUBIDA, "image/jpeg")))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> servicio.cambiar(new CambiarFotoDelGrupoCommand(ALQUIMISTA, FENIX, SUBIDA, "image/jpeg")))
                 .isInstanceOf(NotAuthorizedException.class);
         verifyNoInteractions(almacenamiento);
     }
