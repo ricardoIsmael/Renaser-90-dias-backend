@@ -9633,3 +9633,21 @@ sola; git las unió sin quejarse.
 **Cómo evitar que vuelva a pasar.** Dos agentes en paralelo sobre el mismo módulo: después de integrar el segundo, compilar
 los tests antes de dar nada por bueno (`clean verify` o al menos `test-compile`). Un merge sin conflictos no prueba que el
 código resultante compile.
+
+---
+
+## E-313 · «No se pudo guardar» en Yo → Alarmas: el backend local dejó de escuchar en 8080 con la JVM viva
+
+**Síntoma.** e2e en emulador del 26/09 ~20:10: prender/apagar Despertar mostraba «No se pudo guardar. Intenta de nuevo en
+unos segundos.»; `curl localhost:8080/actuator/health` → código 7 (conexión rechazada), pero el `java` del IDE seguía vivo
+(39 min, solo escuchando el puerto de JMX).
+
+**Causa real.** Quien orquestaba corrió `./mvnw -o test -Dtest=...` en el checkout PRINCIPAL para verificar E-312, con el
+backend del IDE levantado desde ese mismo checkout. Maven recompiló `target/classes`; el reinicio automático del backend
+(devtools) arrancó sobre clases a medio escribir y el servidor web no volvió. Es exactamente lo que prohíbe la regla 03 (E-104).
+
+**Solución.** Reiniciar el backend desde el IDE. Nada del código estaba mal.
+
+**Cómo evitar que vuelva a pasar.** Toda prueba de Maven —aunque sea una sola clase— se corre en un worktree propio
+(`scratchpad/verify-be` o `.claude/worktrees/*`), nunca en el checkout que usa el IDE. Síntoma para reconocerlo: la app dice
+«No se pudo guardar» en todo y el health da conexión rechazada con el proceso `java` todavía vivo.
