@@ -17,6 +17,7 @@ import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPo
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.habits.domain.model.preferencia.CuotaEdicionHorario;
 import com.renaser.os.habits.domain.model.preferencia.HorarioPorFecha;
@@ -239,10 +240,11 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         return new VentanaVigenteHoy(horaDisparo, horaLimite, preferencia.isPresent());
     }
 
+    /** D-200: si el registro de hoy se genero por debajo del inicio de su horario, rige ese horario. */
     private HorarioHabito horarioDeCatalogoVigente(HabitoId habitoId, RegistroHabito registroDeHoy) {
-        return loadHorarioPort.porHabito(habitoId).stream()
-                .filter(h -> h.aplicaEnDia(registroDeHoy.diaPrograma(), registroDeHoy.tipoDia()))
-                .findFirst().orElse(null);
+        HorariosDelHabito horarios = HorariosDelHabito.de(loadHorarioPort.porHabito(habitoId));
+        int dia = horarios.diaEfectivoDeUnRegistro(registroDeHoy.diaPrograma(), registroDeHoy.tipoDia());
+        return horarios.vigentesEn(dia, registroDeHoy.tipoDia()).stream().findFirst().orElse(null);
     }
 
     private static LocalTime primeraNoNula(LocalTime dePreferencia, LocalTime deCatalogo) {

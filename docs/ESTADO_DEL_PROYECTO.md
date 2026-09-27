@@ -37,8 +37,9 @@ Verificado end-to-end contra el backend corriendo, no solo con tests.
 - **Ajustar el día de un aprendiz** — `PUT /api/v1/admin/trainees/{id}/program-day`. El caso del
   cliente: "viajé, devolveme al día 34". El ajuste persiste, corre la graduación, y queda en una
   bitácora append-only con motivo y autor (D-82). Días 1 a 89; antes del Día 1, 409 (D-194, D-195).
-  Al retroceder, los hábitos del Plan que ya corrían siguen (D-196), y el barrido del reloj no pisa
-  un ajuste hecho mientras corre (D-197).
+  Al retroceder, los hábitos del Plan que ya corrían siguen (D-196), también los propios y los que
+  arrancan después del día destino (D-200), y el barrido del reloj no pisa un ajuste hecho mientras
+  corre (D-197).
 - **Elegir, quitar y pausar hábitos** — `PUT`/`DELETE`/`PATCH /api/v1/habit-unlocks/{id}`. El
   interruptor ACTIVO/PAUSADO por fin guarda (D-87).
 - **Horarios de hábitos**, con cuota semanal de reacomodo y cambios diferidos al día siguiente

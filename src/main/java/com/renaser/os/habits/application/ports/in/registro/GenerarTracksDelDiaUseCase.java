@@ -10,7 +10,9 @@ import java.util.List;
  * Genera los registros PENDIENTE de un participante para una fecha, a partir
  * del catalogo (habitos SISTEMA activos) + sus habitos PERSONAL activos, cuyo
  * {@code HorarioHabito.aplicaEnDia(diaPrograma, tipoDia)} de cada uno de estos
- * habitos aplica ese dia.
+ * habitos aplica ese dia. Desde D-200 la pregunta la contesta
+ * {@code HorariosDelHabito}: un habito que ya corrio y quedo por debajo del inicio de su
+ * horario (retroceso de dia) se sigue generando, como en el primer dia de ese horario.
  *
  * <p>Simplificacion deliberada de esta primera version (ver docs/MODULO_HABITS.md
  * "que quedo simplificado"): NO incluye el escalonamiento por lotes

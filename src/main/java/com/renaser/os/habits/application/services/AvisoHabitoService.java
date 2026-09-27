@@ -14,6 +14,7 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioResuelto;
+import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.PuntosEnJuego;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
@@ -129,11 +130,14 @@ public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
                 preferencia.minutosRecordatorio());
     }
 
-    /** {@code null} cuando el habito no tiene ninguna hora configurada: no vence y no se avisa. */
+    /**
+     * {@code null} cuando el habito no tiene ninguna hora configurada: no vence y no se avisa. D-200:
+     * un registro generado por debajo del inicio de su horario avisa con la hora de ese horario.
+     */
     private VentanaEntrega ventanaDe(RegistroHabito registro, Habito habito, AgendaDelDia agenda, ZoneId zona) {
-        HorarioHabito vigente = agenda.horarios().getOrDefault(habito.id(), List.of()).stream()
-                .filter(horario -> horario.aplicaEnDia(registro.diaPrograma(), registro.tipoDia()))
-                .findFirst().orElse(null);
+        HorariosDelHabito horarios = HorariosDelHabito.de(agenda.horarios().getOrDefault(habito.id(), List.of()));
+        int dia = horarios.diaEfectivoDeUnRegistro(registro.diaPrograma(), registro.tipoDia());
+        HorarioHabito vigente = horarios.vigentesEn(dia, registro.tipoDia()).stream().findFirst().orElse(null);
         HorarioResuelto resuelto = HorarioResuelto.de(vigente, agenda.preferencias().get(habito.id()));
         if (resuelto.sinHorario()) {
             return null;

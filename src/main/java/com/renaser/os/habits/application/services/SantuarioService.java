@@ -16,6 +16,7 @@ import com.renaser.os.habits.application.ports.out.santuario.LoadSesionBloqueoPo
 import com.renaser.os.habits.application.ports.out.santuario.SaveSesionBloqueoPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.FaseOtorgamiento;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
@@ -182,11 +183,12 @@ public class SantuarioService implements IniciarSesionBloqueoUseCase, CompletarS
     }
 
     /** Mismo horario resuelto que VentanaEntrega, pero necesita AMBOS instantes (disparo y limite),
-     * no solo el ancla — blocking.ts:22-50. Sin horario configurado (ninguno de los dos), null. */
+     * no solo el ancla — blocking.ts:22-50. Sin horario configurado (ninguno de los dos), null.
+     * D-200: el horario de un registro generado por debajo de su inicio es el de ese primer dia. */
     private VentanaBloqueo resolverVentana(RegistroHabito registro, Habito habito) {
-        HorarioHabito vigente = loadHorarioPort.porHabito(habito.id()).stream()
-                .filter(h -> h.aplicaEnDia(registro.diaPrograma(), registro.tipoDia()))
-                .findFirst().orElse(null);
+        HorariosDelHabito horarios = HorariosDelHabito.de(loadHorarioPort.porHabito(habito.id()));
+        int dia = horarios.diaEfectivoDeUnRegistro(registro.diaPrograma(), registro.tipoDia());
+        HorarioHabito vigente = horarios.vigentesEn(dia, registro.tipoDia()).stream().findFirst().orElse(null);
 
         LocalTime horaDisparo = vigente != null ? vigente.horaDisparo() : null;
         LocalTime horaLimite = vigente != null ? vigente.horaLimite() : null;

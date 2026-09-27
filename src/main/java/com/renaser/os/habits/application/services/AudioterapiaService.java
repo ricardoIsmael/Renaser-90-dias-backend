@@ -9,8 +9,10 @@ import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
+import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
-import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -48,25 +50,32 @@ public class AudioterapiaService implements ConsultarAudioterapiaSemanalUseCase 
     private final AudioterapiaCatalogPort catalogoPort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final AlmacenamientoPort almacenamientoPort;
+    /** D-200: si la Audioterapia ya corrio cuando un retroceso deja a la persona antes de su inicio. */
+    private final LoadRegistroHabitoPort loadRegistroPort;
 
     public AudioterapiaService(LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
                                 AudioterapiaCatalogPort catalogoPort,
                                 ConsultarProgresoParticipanteHabitsPort progresoPort,
-                                AlmacenamientoPort almacenamientoPort) {
+                                AlmacenamientoPort almacenamientoPort, LoadRegistroHabitoPort loadRegistroPort) {
         this.loadHabitoPort = loadHabitoPort;
         this.loadHorarioPort = loadHorarioPort;
         this.catalogoPort = catalogoPort;
         this.progresoPort = progresoPort;
         this.almacenamientoPort = almacenamientoPort;
+        this.loadRegistroPort = loadRegistroPort;
     }
 
     @Override
     @Transactional(readOnly = true)
     public EstadoAudioterapia consultar(UserId actorId) {
         ProgresoParticipanteHabits progreso = requireParticipanteHabilitado(actorId);
-        int diaInicio = diaInicioDelHabito();
+        Habito habito = requireHabitoAudioterapia();
+        HorariosDelHabito horarios = HorariosDelHabito.de(loadHorarioPort.porHabito(habito.id()));
+        int diaInicio = horarios.primerDia().orElseThrow(
+                () -> new NoSuchElementException("AUDIOTERAPIA SEMANAL no tiene horario configurado"));
+        int dia = diaDelContenido(actorId, habito.id(), horarios, progreso.diaPrograma());
 
-        if (progreso.diaPrograma() < diaInicio) {
+        if (dia < diaInicio) {
             return new EsperandoContenido();
         }
 
@@ -74,7 +83,7 @@ public class AudioterapiaService implements ConsultarAudioterapiaSemanalUseCase 
         int diaAcumulado = diaInicio;
         for (Audioterapia audioterapia : catalogo) {
             int diaFinVentana = diaAcumulado + audioterapia.duracionDias() - 1;
-            if (progreso.diaPrograma() <= diaFinVentana) {
+            if (dia <= diaFinVentana) {
                 int diaSiguienteCambio = diaFinVentana + 1;
                 String url = firmarAudio(audioterapia.rutaStorage());
                 return new AudioDeLaSemana(audioterapia.semana(), audioterapia.titulo(), url,
@@ -87,14 +96,32 @@ public class AudioterapiaService implements ConsultarAudioterapiaSemanalUseCase 
         return new EsperandoContenido();
     }
 
-    private int diaInicioDelHabito() {
-        Habito habito = loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_AUDIOTERAPIA)
+    private Habito requireHabitoAudioterapia() {
+        return loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_AUDIOTERAPIA)
                 .orElseThrow(() -> new NoSuchElementException(
                         "No existe en el catalogo un habito con claveSistema=" + CLAVE_SISTEMA_AUDIOTERAPIA));
-        List<HorarioHabito> horarios = loadHorarioPort.porHabito(habito.id());
-        return horarios.stream().findFirst()
-                .orElseThrow(() -> new NoSuchElementException("AUDIOTERAPIA SEMANAL no tiene horario configurado"))
-                .diaInicio();
+    }
+
+    /**
+     * El dia con el que se elige el audio: el del programa, salvo que la persona haya quedado por
+     * debajo del dia de inicio de la Audioterapia despues de haberla hecho (D-200, un retroceso).
+     * Ese track se sigue generando ({@code RegistroService}), asi que tambien tiene audio: el de su
+     * primer dia, la semana 1. Sin esto el track aparecia y aca decia "esperando contenido" (y el
+     * acompanante no podia entregarla). Los registros se leen solo en ese caso.
+     *
+     * <p>El dia de inicio es el {@code dia_inicio} mas chico de sus horarios
+     * ({@link HorariosDelHabito#primerDia}), el mismo que usa "Mis habitos"; antes se tomaba el del
+     * primer horario que devolviera la base. Con un solo horario, que es el catalogo real, es el
+     * mismo numero.
+     */
+    private int diaDelContenido(UserId actorId, HabitoId habitoId, HorariosDelHabito horarios, int diaPrograma) {
+        if (horarios.diasParaArrancar(diaPrograma, null) == 0) {
+            return diaPrograma;
+        }
+        Integer diaMasAlto = loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(actorId, List.of(habitoId))
+                .get(habitoId);
+        return horarios.diasParaArrancar(diaPrograma, diaMasAlto) == 0
+                ? horarios.primerDia().orElse(diaPrograma) : diaPrograma;
     }
 
     private String firmarAudio(String rutaStorage) {

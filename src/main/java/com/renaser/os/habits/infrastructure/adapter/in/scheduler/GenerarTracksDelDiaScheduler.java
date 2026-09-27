@@ -26,7 +26,8 @@ import java.util.List;
  * <p><b>Horario elegido: 05:02 UTC.</b> Corre despues de
  * {@code users.AvanzarDiaProgramaScheduler} (04:50 UTC) porque necesita el
  * {@code dia_programa} ya avanzado &mdash; el catalogo del dia se resuelve con
- * {@code HorarioHabito.aplicaEnDia(diaPrograma, tipoDia)}, y generar con el dia de programa
+ * {@code HorarioHabito.aplicaEnDia(diaPrograma, tipoDia)} (desde D-200, via
+ * {@code HorariosDelHabito}, que mantiene lo que ya corrio tras un retroceso), y generar con el dia de programa
  * de AYER generaria el catalogo equivocado. El resto del publico de este programa es de
  * Peru (America/Lima, UTC-5 fijo, sin horario de verano) &mdash; con el cron a las 05:02 UTC,
  * la hora local en Lima es las 00:02, es decir DESPUES de la medianoche local: cuando
