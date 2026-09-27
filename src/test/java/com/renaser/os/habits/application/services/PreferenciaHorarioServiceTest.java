@@ -298,6 +298,100 @@ class PreferenciaHorarioServiceTest {
         verify(savePreferenciaPort, never()).saveParaFecha(any());
     }
 
+    // ---- PLN-08 (e2e del 2026-09-27): la respuesta dice el horario que quedo guardado ----
+
+    /**
+     * PLN-08: un cierre ANTERIOR al arranque (10:00 a 09:00) se acomoda a las 23:50 (D-122: la
+     * ventana cabe siempre dentro del dia), pero la respuesta devolvia las 09:00 pedidas mientras la
+     * base guardaba 10:00 a 23:50. Contra el codigo viejo la respuesta dice 09:00.
+     */
+    @Test
+    void conFechaLaRespuestaDiceElCierreQueSeGuardo() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(
+                new ProgresoParticipanteHabits(1, "America/Lima", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+
+        ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor,
+                habito.id(), LocalTime.of(10, 0), LocalTime.of(9, 0), false, null, LocalDate.of(2026, 8, 26)));
+
+        var guardado = ArgumentCaptor.forClass(com.renaser.os.habits.domain.model.preferencia.HorarioPorFecha.class);
+        verify(savePreferenciaPort).saveParaFecha(guardado.capture());
+        assertThat(guardado.getValue().preferencia().horaLimite()).isEqualTo(LocalTime.of(23, 50));
+        assertThat(resultado.horaDisparo()).isEqualTo(guardado.getValue().preferencia().horaDisparo());
+        assertThat(resultado.horaLimite()).isEqualTo(guardado.getValue().preferencia().horaLimite());
+    }
+
+    /**
+     * PLN-08 por el camino sin fecha (el cambio general desde mañana): 22:00 a 02:00 cruza la
+     * medianoche, D-122 lo acomoda a 22:00 a 23:50 al programarlo, y la respuesta tiene que decir
+     * eso mismo. Contra el codigo viejo la respuesta dice 02:00.
+     */
+    @Test
+    void sinFechaLaRespuestaDiceElCierreQueQuedoProgramado() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFecha(any(), any(), any())).thenReturn(Optional.empty());
+        when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
+
+        ResultadoEdicionPreferencia resultado = service.editar(new EditarPreferenciaHorarioCommand(actor,
+                habito.id(), LocalTime.of(22, 0), LocalTime.of(2, 0), false, null, null));
+
+        ArgumentCaptor<CambioHorarioPendiente> programado = ArgumentCaptor.forClass(CambioHorarioPendiente.class);
+        verify(saveCambioPendientePort).save(programado.capture());
+        assertThat(programado.getValue().horaLimite()).isEqualTo(LocalTime.of(23, 50));
+        assertThat(resultado.horaDisparo()).isEqualTo(programado.getValue().horaDisparo());
+        assertThat(resultado.horaLimite()).isEqualTo(programado.getValue().horaLimite());
+    }
+
+    // ---- PLN-09 (e2e del 2026-09-27): minutos de recordatorio fuera del rango de la base ----
+
+    /**
+     * PLN-09: {@code minutos_recordatorio} es {@code smallint} con {@code CHECK (>= 0)}. Un -5, o un
+     * 99999 (que no entra en un {@code smallint} y al convertirlo queda negativo), llegaban hasta la
+     * base y volvian como 409 «La operacion entra en conflicto con datos que ya existen». Es un dato
+     * invalido y no un conflicto: se rechaza antes de escribir nada, con el rango. Contra el codigo
+     * viejo el servicio no rechazaba nada.
+     */
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {-5, 99_999})
+    void rechazaMinutosDeRecordatorioFueraDeRangoSinEscribirNada(int minutos) {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(3, "UTC", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        lenient().when(loadRegistroPort.porParticipanteHabitoYFecha(any(), any(), any())).thenReturn(Optional.empty());
+        lenient().when(loadPreferenciaPort.porParticipanteYHabito(actor, habito.id())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
+                LocalTime.of(11, 45), null, true, minutos, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("entre 0 y 32767");
+        verify(savePreferenciaPort, never()).save(any());
+        verify(saveCambioPendientePort, never()).save(any());
+    }
+
+    /** PLN-09 por el camino con fecha: tampoco llega a guardar el horario de ese dia. */
+    @Test
+    void conFechaTambienRechazaMinutosDeRecordatorioNegativos() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito();
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(
+                new ProgresoParticipanteHabits(1, "America/Lima", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+
+        assertThatThrownBy(() -> service.editar(new EditarPreferenciaHorarioCommand(actor, habito.id(),
+                LocalTime.of(9, 0), null, true, -5, LocalDate.of(2026, 8, 26))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("entre 0 y 32767");
+        verify(savePreferenciaPort, never()).saveParaFecha(any());
+    }
+
     // ---- E-214: horario por dia de semana y por fecha, mismas guardas que `editar` ----
     //
     // Antes `apagar` y `quitar` no pasaban por `requireProgreso` (cuenta suspendida) y ninguno de

@@ -10616,3 +10616,44 @@ tienen foto: lo creado hoy recién genera mañana.
 tocado un día en que no se le generó registro (por ejemplo uno de domingo tocado un martes, o uno propio tocado el mismo día
 en que se creó) queda afuera si retroceden a la persona por debajo de ese día. «Mis hábitos» no mira esa tabla, así que ahí
 no se ve el candado. Va como pregunta en D-216.
+
+## E-376 · `PATCH /habit-preferences` responde `"limitTime":"09:00:00"` pero guarda 10:00 a 23:50
+
+**Síntoma (e2e PLN-08, 2026-09-27).** Horario por fecha (D-121) del Jugo verde para el 30/09, de 10:00 a 09:00 → 200 con
+`{"triggerTime":"10:00:00","limitTime":"09:00:00",…}`, y en la base (`horarios_habito_por_fecha`) quedó 10:00 a 23:50.
+
+**Causa real.** D-122 decide que una ventana nunca cruza la medianoche: un cierre que queda antes del arranque, o que pasa de
+las 23:50, se ACOMODA a las 23:50 en vez de devolver 400 (`VentanaDelDia.horaLimiteAjustada`, en `PreferenciaHorario.crear`
+y en `CambioHorarioPendiente.programar`). Eso se guardaba bien. Pero `PreferenciaHorarioService.construirResultado`
+devolvía `command.horaDisparo()` y `command.horaLimite()`, lo PEDIDO, y no lo que el dominio había guardado. Por el camino
+sin fecha (cambio general desde mañana) pasaba lo mismo: 22:00 a 02:00 respondía 02:00 y programaba 23:50.
+
+**Solución.** `aplicarEdicion` devuelve las horas tal como quedaron guardadas y la respuesta sale de ahí, en los dos caminos.
+La regla de D-122 no cambió: ventanas que cruzan la medianoche (22:00 a 02:00) no se guardan, se acomodan a las 23:50.
+`VentanaEntrega` sigue sabiendo leer una de antes de D-122, que es el borde que anota el semáforo (§7).
+
+**Cómo evitar que vuelva a pasar.** `PreferenciaHorarioServiceTest` compara la respuesta con lo capturado al guardar, con
+fecha y sin fecha (rojas contra el código viejo: `expected: 23:50 but was: 09:00`). **Lección:** si el dominio normaliza un
+dato, la respuesta sale del objeto del dominio, nunca del pedido.
+
+## E-377 · Recordatorio de −5 o 99999 minutos → 409 «La operacion entra en conflicto con datos que ya existen»
+
+**Síntoma (e2e PLN-09, 2026-09-27).** `PATCH /api/v1/habit-preferences/{id}` con `"reminderMinutesBefore": -5` y con
+`99999` → 409 `{"message":"La operacion entra en conflicto con datos que ya existen"}`. En el log:
+`WARN … 409 -> Conflict: violacion de integridad en la base`.
+
+**Causa real.** Nadie validaba los minutos. La columna es `smallint` con `CHECK (minutos_recordatorio >= 0)` en
+`preferencias_horario` (V1) y `horarios_habito_por_fecha` (V37); en `cambios_horario_pendientes` es `smallint` SIN check. El
+-5 lo frenaba el CHECK; el 99999 no entra en un `smallint` y el mapper lo convierte con `shortValue()` en -31073, que también
+frena el CHECK. `GlobalExceptionHandler` traduce toda violación de integridad a 409 porque está pensado para dos pedidos que
+compiten (el doble toque), no para un dato inválido.
+
+**Solución.** `AntelacionDelRecordatorio` (dominio): de 0 a 32767, el rango que ya tiene la columna. Lo aplican
+`PreferenciaHorario.actualizarRecordatorio` (antes de tocar nada), `CambioHorarioPendiente.programar` y el principio de
+`PreferenciaHorarioService.editar`. Responde 400 «Los minutos del recordatorio deben estar entre 0 y 32767; llegaron -5», sin
+escribir nada. `null` sigue valiendo.
+
+**Cómo evitar que vuelva a pasar.** `RecordatorioFueraDeRangoTest` y `PreferenciaHorarioServiceTest` (rojas contra el código
+viejo). **Lección:** un 409 «conflicto» en un pedido solo, sin concurrencia, casi siempre es una validación que falta y que
+atajó la base: buscar la línea `violacion de integridad` en el log. **Pregunta abierta (D-216):** la app deja elegir de 0 a
+1440 (un día); si el servidor tiene que acotar a eso, lo decide el dueño.
