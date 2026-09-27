@@ -56,10 +56,16 @@ final class TextoDePlanDeRocas {
                 : "(" + inicio + " al " + fin + ")";
     }
 
-    /** Lo que se le dice cuando {@code rocks} rechaza el plan del dia al confirmar. */
+    /**
+     * Lo que se le dice cuando {@code rocks} rechaza el plan del dia al confirmar.
+     *
+     * <p><b>Corregido 2026-09-27 (E-340).</b> El de la fecha decia solo "Elige uno que quede de la semana":
+     * el domingo a la noche no queda ninguno, y el lunes si se puede ({@code FechasPlanificables}).
+     */
     static String rechazoDelDia(Motivo motivo) {
         return switch (motivo) {
-            case FECHA_NO_PLANIFICABLE -> "Ese dia ya no se puede planificar. Elige uno que quede de la semana.";
+            case FECHA_NO_PLANIFICABLE -> "Ese dia ya no se puede planificar. Elige uno que quede de la semana "
+                    + "(si hoy es domingo, tambien el lunes).";
             case SIN_OBJETIVO_SEMANAL -> "Primero tiene que armar su plan de la semana: las acciones del dia salen de ahi.";
             case YA_PLANIFICADO -> "El dia en curso ya esta armado y no se reacomoda. Puede cambiar los que vienen.";
             case DATOS_INVALIDOS -> "No se pudo guardar ese plan: revise que sean de 1 a 3 acciones por eje y que "

@@ -79,14 +79,16 @@ class CrearPlanDeRocasConfirmableTest {
         verify(planificar).crearPlanDelDia(APRENDIZ, JUEVES, acciones);
     }
 
+    /** E-340: el domingo no queda nada de la semana, pero el lunes si se puede; el texto no puede callarlo. */
     @Test
-    @DisplayName("si entre proponer y confirmar la fecha dejo de ser planificable, Fallo legible")
+    @DisplayName("si entre proponer y confirmar la fecha dejo de ser planificable, Fallo legible que incluye el lunes del domingo")
     void rechazoDelDia() {
         when(planificar.crearPlanDelDia(any(), any(), any()))
                 .thenReturn(new ResultadoPlan.Rechazado(Motivo.FECHA_NO_PLANIFICABLE));
 
         assertThat(delDia.aplicar(APRENDIZ, invocacionDelDia(PLAN_DEL_DIA))).isEqualTo(ResultadoHerramienta.fallo(
-                "Ese dia ya no se puede planificar. Elige uno que quede de la semana."));
+                "Ese dia ya no se puede planificar. Elige uno que quede de la semana (si hoy es domingo, tambien "
+                        + "el lunes)."));
     }
 
     @Test

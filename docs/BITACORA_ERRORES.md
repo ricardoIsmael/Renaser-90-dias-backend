@@ -10231,3 +10231,44 @@ semana el domingo previo al Día 1, esas filas quedaron como semana 2; no se ree
 **Cómo evitar que vuelva a pasar.** Todo «+1», toda «semana siguiente» y toda ventana de fechas se prueban en los bordes:
 el día previo al Día 1, el domingo (el último día de la semana), el último domingo del programa y la semana 13. Si una
 regla nueva amplía otra, se prueba que siga cubriendo todo lo que cubría la vieja.
+
+### E-340 en producción: arreglo del 2026-09-27 sobre `7429a09c`
+
+> **Integrado 2026-09-27.** Esta subsección era una E-340 aparte en la rama `hotfix-domingo-lunes` (commit `b3d172b8`),
+> hecha sobre el backend de producción `7429a09c` porque `FechasPlanificables` (D-203) todavía no existe allí. Se subió
+> con OK del dueño en el merge `49fbc15f` a `master`. En esta rama, la regla vive en `FechasPlanificables.hastaCuando`
+> (commit `2379358e`), y el arreglo de producción se descarta al integrar porque hace lo mismo sobre el código viejo.
+
+
+**Síntoma (2026-09-27, producción).** El domingo con la ventana nocturna abierta, el plan del lunes se rechaza. La prueba
+`RocaDiariaServiceTest.elDomingoALaNocheSePlanificaElLunes` corrida contra `7429a09c` (domingo 27/09 a las 22:00 de Lima,
+lunes 03:00 UTC) da:
+```
+IllegalArgumentException: INVALID_DATE: la fecha de planificacion debe estar entre 2026-09-28 y 2026-09-27
+```
+La ventana queda al revés (del lunes al domingo anterior): el domingo a la noche no se puede planificar ningún día, aunque el
+tablero ofrece «planificar mañana» (`puedeCrearPlanDiario` mira el objetivo de la semana de mañana). Antes de las 18:00 solo
+entraba el domingo mismo (`… entre 2026-09-27 y 2026-09-27`). El lunes solo se podía armar el mismo lunes antes de las
+18:00, y contaba a destiempo. Vale igual para `proponer_plan_del_dia` del acompañante, que al confirmar pasa por el mismo
+caso de uso (`PlanificacionDeRocasService` → `CrearPlanDiarioUseCase`). Viene de E-208 (commit `00021d98`, 2026-09-22),
+que ya está en producción: el primer domingo a la noche con esa regla es el 27/09.
+
+**Causa real.** La ventana del plan diario (E-208) va de mañana «hasta el fin de la semana de hoy»: el domingo, mañana ya
+es otra semana. E-208 quiso ampliar la regla vieja (mañana con la ventana abierta; hoy y mañana sin ella) al resto de la
+semana, y sin querer le sacó el lunes al domingo.
+
+**Solución (`hotfix-domingo-lunes`, sobre `7429a09c`; sin migración).** `RocaDiariaService.ultimaFechaPlanificable`:
+mañana siempre entra si todavía es un día del programa, así que el domingo se puede el lunes, y solo el lunes de la semana
+que empieza, que cuelga de SU objetivo semanal (sin él, `NO_WEEKLY_ROCK`). «Día del programa» llega hasta
+`SemanaPrograma.finDelPrograma` (`fecha_inicio + 89`), la misma cuenta sin ajuste con la que producción numera las semanas y
+recorta la grilla del tablero; con un ajuste de día, un lunes posterior cae siempre en la semana 14 o más, que nunca tiene
+objetivo (`CHECK (numero_semana BETWEEN 1 AND 13)`), y `NO_WEEKLY_ROCK` lo rechaza igual. El texto que recibe el acompañante
+cuando se rechaza la fecha (`TextoDePlanDeRocas.rechazoDelDia`) decía «Elige uno que quede de la semana», y el domingo a la
+noche no queda ninguno: ahora agrega «(si hoy es domingo, tambien el lunes)». Pruebas que fallan contra `7429a09c`:
+`RocaDiariaServiceTest.elDomingoALaNocheSePlanificaElLunes`, `elLunesSinElObjetivoDeSuSemanaNoSeGuarda`,
+`elDomingoALaMananaHoyYElLunes` y `CrearPlanDeRocasConfirmableTest.rechazoDelDia`. De guarda, que pasan con y sin el
+arreglo: `elDomingoElMartesSigueFuera`, `unDiaDeSemanaNoCambia` y `elDomingoDelDiaNoventaNoAbreElLunes`.
+
+**Cómo evitar que vuelva a pasar.** Toda ventana de fechas se prueba en los bordes: el domingo (el último día de la
+semana), el día previo al Día 1, el último domingo del programa y la semana 13, con el reloj en una hora UTC que cae en el
+día local anterior (regla 02). Si una regla nueva amplía otra, se prueba que siga cubriendo todo lo que cubría la vieja.
