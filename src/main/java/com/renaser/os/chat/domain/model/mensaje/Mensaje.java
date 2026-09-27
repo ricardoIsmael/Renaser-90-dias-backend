@@ -63,6 +63,15 @@ public final class Mensaje {
     /** Con qué nombre firma el programa: el mismo que cierra el nombre de cada chat de soporte. */
     public static final String NOMBRE_DEL_PROGRAMA = "Formación Renaser";
 
+    /**
+     * El largo máximo del texto de un mensaje que escribe una persona (D-215, 2026-09-27; E-374: uno de 1 MB
+     * entraba entero). Se cuenta como lo cuenta la app ({@code String.length()}, igual que el
+     * {@code maxLength} de su campo), así la app y el servidor nunca discrepan. 6.000 alcanza de sobra para
+     * escribir y para compartir una publicación del Muro, que puede tener 5.000 más su encabezado. Los
+     * mensajes del programa no llevan tope: los escribe el servidor.
+     */
+    public static final int LARGO_MAXIMO_DEL_TEXTO = 6_000;
+
     private final MensajeId id;
     private final ConversacionId conversacionId;
     private final UserId emisorId;
@@ -91,6 +100,7 @@ public final class Mensaje {
         Objects.requireNonNull(id, "id es obligatorio");
         requireEscritoPorUnaPersona(tipo);
         requireConContenido(texto, mediaRuta);
+        requireLargoAdmitido(texto);
         requireMediaCompleta(mediaBucket, mediaRuta);
         requirePositivosSiVienen(mediaBytes, mediaDuracionS);
         return new Mensaje(id, conversacionId, emisorId, tipo, texto, mediaBucket, mediaRuta,
@@ -154,6 +164,12 @@ public final class Mensaje {
     private static void requireConContenido(String texto, String mediaRuta) {
         if ((texto == null || texto.isBlank()) && mediaRuta == null) {
             throw new IllegalArgumentException("El mensaje necesita texto o media");
+        }
+    }
+
+    private static void requireLargoAdmitido(String texto) {
+        if (texto != null && texto.length() > LARGO_MAXIMO_DEL_TEXTO) {
+            throw new IllegalArgumentException("El mensaje puede tener hasta " + LARGO_MAXIMO_DEL_TEXTO + " caracteres");
         }
     }
 
