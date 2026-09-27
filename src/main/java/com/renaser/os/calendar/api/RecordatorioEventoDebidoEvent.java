@@ -34,8 +34,22 @@ import java.util.UUID;
  *                       de pared correcta ("hoy a las 05:30") y no la hora UTC. Agregada con D-182:
  *                       no hay publicaciones viejas de este evento en el outbox, porque sin
  *                       consumidor Modulith no registraba ninguna
+ * @param asistenciaConfirmada la persona respondio "Voy" a ESTA ocurrencia, leido al despachar
+ *                       (D-189). {@code calendar} ya no apaga los avisos al confirmar: la app del
+ *                       telefono programa una alarma local, pero la web no, y solo {@code notifications}
+ *                       sabe si la persona tiene un telefono registrado. Siempre {@code false} en un
+ *                       anuncio. Es {@code Boolean} y no {@code boolean} a proposito: una
+ *                       publicacion vieja del outbox (anterior a D-189) no trae el campo, y con
+ *                       Jackson 3 un primitivo ausente puede fallar al leerse; llega {@code null}
+ *                       y {@link #confirmoAsistencia()} lo trata como "no confirmo", el lado seguro
  */
 public record RecordatorioEventoDebidoEvent(Long recordatorioId, UUID eventoId, UserId destinatarioId,
                                              Instant inicioOcurrencia, String tituloEvento, boolean esAnuncio,
-                                             String zonaHoraria, Instant occurredAt) implements DomainEvent {
+                                             Boolean asistenciaConfirmada, String zonaHoraria,
+                                             Instant occurredAt) implements DomainEvent {
+
+    /** {@code true} solo si la persona dijo "Voy" a esta ocurrencia; {@code null} cuenta como no. */
+    public boolean confirmoAsistencia() {
+        return Boolean.TRUE.equals(asistenciaConfirmada);
+    }
 }

@@ -27,6 +27,8 @@ import java.util.Objects;
 @EqualsAndHashCode(of = "id")
 public final class RecordatorioEvento {
 
+    /** Historico: ya no se escribe desde D-189 (confirmar "Voy" dejo de apagar avisos), pero
+     * quedan filas viejas con este motivo en {@code recordatorios_evento}. */
     public static final String MOTIVO_ASISTIRA = "confirmo_asistencia";
     public static final String MOTIVO_NO_ELEGIBLE = "dejo_de_ser_elegible";
     public static final String MOTIVO_EVENTO_CANCELADO = "evento_cancelado";

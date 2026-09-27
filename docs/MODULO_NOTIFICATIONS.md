@@ -273,6 +273,11 @@ A diferencia de `habits`→`points` y `rocks`→`points` (síncrono, misma trans
   reintenta (ver `MODULO_CALENDAR.md` §4 para qué significa `enviado_en`).
 - **Reintento tardío:** si la ocurrencia ya empezó cuando el listener corre, el recordatorio se
   descarta (diría «empieza en…» de algo que ya pasó). El anuncio de evento nuevo se manda igual.
+- **«Voy» y alarma local (D-189):** si el evento trae `asistenciaConfirmada` y la persona tiene
+  al menos un token `IOS`/`ANDROID` (`ConsultarAlarmaLocalUseCase`, `AlarmaLocalService`), el aviso
+  se descarta: ni fila ni push, porque la app del teléfono ya le programó la alarma. Con solo web o
+  sin tokens, sale normal. Se evalúa al entregar, con los tokens de ese momento (ver
+  `MODULO_CALENDAR.md` §4.1).
 - **Preferencias y suspendidos:** como todo lo demás, por `NotificacionService.emitir` — con
   `RECORDATORIO_EVENTO` apagado no se crea la fila; a una cuenta sin acceso vigente no le sale el
   push (la fila sí queda, E-38). El interruptor «Eventos y clases» de E-4 guarda este tipo.

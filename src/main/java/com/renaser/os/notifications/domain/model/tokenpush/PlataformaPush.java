@@ -4,5 +4,13 @@ package com.renaser.os.notifications.domain.model.tokenpush;
 public enum PlataformaPush {
     IOS,
     ANDROID,
-    WEB
+    WEB;
+
+    /**
+     * La app del telefono programa una alarma local cuando la persona responde "Voy" a un evento;
+     * el navegador no tiene nada equivalente (D-189).
+     */
+    public boolean programaAlarmaLocal() {
+        return this == IOS || this == ANDROID;
+    }
 }

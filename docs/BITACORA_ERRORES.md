@@ -9597,3 +9597,20 @@ de emulador.
 
 **Cómo evitar que vuelva a pasar.** Un estado local que espeja datos del servidor y decide lo que se muestra se sincroniza
 en `useLayoutEffect` (o se deriva sin estado); con `useEffect` siempre hay un cuadro intermedio.
+
+## E-311 · `RecordatorioServiceTest.despacharAvisaQueLaPersonaDijoVoy:189` — un recordatorio del fixture contaba como anuncio
+
+**Síntoma.** Escribiendo las pruebas de D-189: `Expecting value to be true but was false` en
+`assertThat(captor.getValue().confirmoAsistencia()).isTrue()`, con la confirmación «Voy» bien simulada.
+
+**Causa real.** El fixture. `evento(...)` crea el evento con el reloj fijo (18:50 UTC) y el recordatorio vence a las
+18:50. `RecordatorioEvento.esAnuncio(creadoEn)` es `!enviarEn.isAfter(creadoEn)`: un aviso que sale en el mismo
+instante en que se creó el evento **es** el anuncio de «evento nuevo», y un anuncio nunca se marca como cubierto por
+el «Voy». El código estaba bien; el fixture decía «recordatorio» y era un anuncio. `despacharPublicaUnEventoPorRecordatorioVencido`
+tiene el mismo fixture y pasa solo porque no mira `esAnuncio`.
+
+**Solución.** `eventoCreadoDiasAntes()` en `RecordatorioServiceTest`: evento creado el 1/09, recordatorio del 10/09.
+
+**Cómo evitar que vuelva a pasar.** En un fixture de recordatorios, el evento se crea **antes** del `enviarEn` del
+aviso (regla 03, fixtures coherentes). Si el test habla de un recordatorio de ocurrencia, `creadoEn == enviarEn` lo
+convierte en anuncio.

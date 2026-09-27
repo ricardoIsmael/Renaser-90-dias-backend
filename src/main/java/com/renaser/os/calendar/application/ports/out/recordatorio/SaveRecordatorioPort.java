@@ -2,7 +2,6 @@ package com.renaser.os.calendar.application.ports.out.recordatorio;
 
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.recordatorio.RecordatorioEvento;
-import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
 import java.util.List;
@@ -17,9 +16,6 @@ public interface SaveRecordatorioPort {
     void marcarEnviados(List<Long> ids, Instant enviadoEn);
 
     int cancelarPorIds(List<Long> ids, String motivo);
-
-    /** cancelarPorAsistencia() del repo viejo — solo alcanza a `sentAt IS NULL`. */
-    int cancelarPorAsistencia(UserId usuarioId, EventoId eventoId, Instant inicioOcurrencia, String motivo);
 
     /** cancelarPorOcurrencia() del repo viejo. */
     int cancelarPorOcurrencia(EventoId eventoId, Instant inicioOcurrencia, String motivo);

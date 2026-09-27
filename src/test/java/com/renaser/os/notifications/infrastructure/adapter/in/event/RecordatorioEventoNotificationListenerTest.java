@@ -7,6 +7,7 @@ import com.renaser.os.notifications.application.ports.out.preferencia.LoadPrefer
 import com.renaser.os.notifications.application.ports.out.push.DesactivarTokenPushPort;
 import com.renaser.os.notifications.application.ports.out.push.PushPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPushPort;
+import com.renaser.os.notifications.application.services.AlarmaLocalService;
 import com.renaser.os.notifications.application.services.NotificacionService;
 import com.renaser.os.notifications.application.services.NotificacionServiceDePrueba;
 import com.renaser.os.notifications.domain.model.notificacion.Notificacion;
@@ -92,7 +93,7 @@ class RecordatorioEventoNotificationListenerTest {
         NotificacionService service = NotificacionServiceDePrueba.con(new NotificacionServiceDePrueba.Puertos(
                 loadNotificacionPort, saveNotificacionPort, loadPreferenciasPort, loadTokenPushPort, pushPort,
                 desactivarTokenPushPort, userSummaryFinder, transactionManager), clock);
-        listener = new RecordatorioEventoNotificationListener(service, clock);
+        listener = new RecordatorioEventoNotificationListener(service, new AlarmaLocalService(loadTokenPushPort), clock);
 
         when(loadNotificacionPort.existePorOrigen(any(), any(), any())).thenAnswer(inv -> bandeja.stream()
                 .anyMatch(n -> n.usuarioId().equals(inv.getArgument(0)) && n.tipo() == inv.getArgument(1)
@@ -117,8 +118,22 @@ class RecordatorioEventoNotificationListenerTest {
     }
 
     private static RecordatorioEventoDebidoEvent recordatorio(long id, UserId destinatario) {
-        return new RecordatorioEventoDebidoEvent(id, EVENTO, destinatario, INICIO, "Mentoria", false,
+        return conAsistencia(id, destinatario, false);
+    }
+
+    private static RecordatorioEventoDebidoEvent conAsistencia(long id, UserId destinatario, Boolean dijoVoy) {
+        return new RecordatorioEventoDebidoEvent(id, EVENTO, destinatario, INICIO, "Mentoria", false, dijoVoy,
                 "America/Lima", AHORA);
+    }
+
+    private void tokensDelAprendiz(PlataformaPush... plataformas) {
+        FixedClock clock = FixedClock.at(AHORA);
+        List<TokenPush> tokens = new ArrayList<>();
+        for (PlataformaPush plataforma : plataformas) {
+            tokens.add(TokenPush.registrar(TokenPushId.of(UUID.randomUUID()), aprendiz,
+                    "token-" + plataforma + "-" + UUID.randomUUID(), plataforma, clock));
+        }
+        when(loadTokenPushPort.tokensDe(aprendiz)).thenReturn(tokens);
     }
 
     @Test
@@ -181,11 +196,65 @@ class RecordatorioEventoNotificationListenerTest {
     @DisplayName("un reintento que llega con la ocurrencia ya empezada no avisa nada")
     void reintentoTardioSeDescarta() {
         var tardio = new RecordatorioEventoDebidoEvent(10L, EVENTO, aprendiz, AHORA.minusSeconds(60), "Mentoria",
-                false, "America/Lima", AHORA.minusSeconds(3600));
+                false, false, "America/Lima", AHORA.minusSeconds(3600));
 
         listener.on(tardio);
 
         assertThat(bandeja).isEmpty();
+    }
+
+    /**
+     * D-189: la app del telefono programa una alarma local al responder "Voy"; un aviso del
+     * servidor encima seria doble. Antes esto lo resolvia {@code calendar} apagando los avisos al
+     * confirmar, sin mirar si habia telefono.
+     */
+    @Test
+    @DisplayName("D-189: dijo Voy y tiene telefono (Android) -> ni fila ni push: lo cubre la alarma local")
+    void voyConTelefonoNoSeEnvia() {
+        listener.on(conAsistencia(10L, aprendiz, true));
+
+        assertThat(bandeja).isEmpty();
+        verify(pushPort, never()).enviar(anyList(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("D-189: dijo Voy con iOS y web -> alcanza un telefono para no enviar")
+    void voyConIosYWebNoSeEnvia() {
+        tokensDelAprendiz(PlataformaPush.WEB, PlataformaPush.IOS);
+
+        listener.on(conAsistencia(10L, aprendiz, true));
+
+        assertThat(bandeja).isEmpty();
+    }
+
+    /** El bug de D-189: quien respondia "Voy" desde la web se quedaba sin ningun recordatorio. */
+    @Test
+    @DisplayName("D-189: dijo Voy pero solo tiene web -> el recordatorio sale (fila y push)")
+    void voySoloWebSigueRecibiendo() {
+        tokensDelAprendiz(PlataformaPush.WEB);
+
+        listener.on(conAsistencia(10L, aprendiz, true));
+
+        assertThat(bandeja).hasSize(1);
+        verify(pushPort, times(1)).enviar(anyList(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("D-189: dijo Voy y no tiene ningun token -> la fila queda en su bandeja")
+    void voySinTokensSigueRecibiendo() {
+        tokensDelAprendiz();
+
+        listener.on(conAsistencia(10L, aprendiz, true));
+
+        assertThat(bandeja).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("D-189: publicacion vieja del outbox sin el campo (null) -> se entrega, lado seguro")
+    void publicacionViejaSinCampoSeEntrega() {
+        listener.on(conAsistencia(10L, aprendiz, null));
+
+        assertThat(bandeja).hasSize(1);
     }
 
     /**

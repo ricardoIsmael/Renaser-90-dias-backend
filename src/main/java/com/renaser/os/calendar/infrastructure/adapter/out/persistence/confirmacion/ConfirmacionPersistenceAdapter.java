@@ -60,6 +60,8 @@ class ConfirmacionPersistenceAdapter implements LoadConfirmacionPort, SaveConfir
         // @Modifying(clearAutomatically=true) que limpia el contexto y descarta este save si
         // no esta flusheado (encontrado probando el endpoint: RSVP "GOING" respondia 200 sin
         // persistir nada; "NOT_GOING"/"MAYBE" andaban porque no disparan esa llamada).
+        // Desde D-189 esa llamada ya no existe; el flush se deja porque no cuesta nada y evita que
+        // el bug vuelva si algun dia otra operacion @Modifying corre despues en la misma transaccion.
         repository.saveAndFlush(new ConfirmacionEventoJpaEntity(confirmacion.eventoId().value(),
                 confirmacion.inicioOcurrencia(), confirmacion.usuarioId().value(), toJpa(confirmacion.estado()),
                 creadoEn, confirmacion.actualizadoEn()));
