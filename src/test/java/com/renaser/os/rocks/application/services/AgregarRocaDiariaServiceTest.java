@@ -130,6 +130,27 @@ class AgregarRocaDiariaServiceTest {
                 .hasMessageStartingWith("INVALID_DATE");
     }
 
+    /**
+     * E-340: el domingo 27 a las 22:00 en Lima (03:00 UTC del lunes 28) se suma una accion al lunes 28, que ya es
+     * la semana 5 y cuelga de su objetivo. Con solo el corte de la semana, INVALID_DATE.
+     */
+    @Test
+    @DisplayName("E-340: el domingo a la noche se puede sumar una accion al lunes, con el objetivo de su semana")
+    void elDomingoALaNocheSeAgregaAlLunes() {
+        AgregarRocaDiariaService servicio = servicio(FixedClock.at(Instant.parse("2026-09-28T03:00:00Z")));
+        when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(new ProgresoParticipanteRocks(27, INICIO,
+                LIMA, RolParticipante.TRAINEE, false, true)));
+        RocaSemanal semana5 = RocaSemanal.rehydrate(new RocaSemanalId(UUID.randomUUID()), tresMaestras.get(0).id(), 5,
+                "Correr 4 veces", null, null, null, null, null, null, NOCHE_DEL_MIERCOLES_EN_LIMA.now(),
+                NOCHE_DEL_MIERCOLES_EN_LIMA.now());
+        when(semanales.deMaestraYSemana(tresMaestras.get(0).id(), 5)).thenReturn(Optional.of(semana5));
+
+        RocaDiaria agregada = servicio.agregar(comando(LocalDate.of(2026, 9, 28), EjeObjetivo.CUERPO));
+
+        assertThat(agregada.fecha()).isEqualTo(LocalDate.of(2026, 9, 28));
+        assertThat(agregada.rocaSemanalId()).isEqualTo(semana5.id());
+    }
+
     @Test
     @DisplayName("sin objetivo semanal del eje en esa semana: NO_WEEKLY_ROCK")
     void sinObjetivoSemanal() {

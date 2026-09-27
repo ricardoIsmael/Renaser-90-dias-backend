@@ -42,10 +42,43 @@ class FechasPlanificablesTest {
     @Test
     @DisplayName("el dia 90 ya no ofrece manana: el programa termina ese dia")
     void elDiaNoventaNoOfreceManana() {
-        LocalDate dia90 = INICIO.plusDays(89);
+        LocalDate dia90 = INICIO.plusDays(89); // domingo 2026-11-29
         FechasPlanificables fechas = FechasPlanificables.para(dia90, EstadoPlazo.EN_PLAZO, SEMANAS);
 
         assertThat(fechas.contiene(dia90.plusDays(1))).isFalse();
+    }
+
+    /**
+     * E-340: el domingo a la noche se arma el lunes. Con solo el corte de la semana la ventana quedaba del lunes
+     * 28 al domingo 27 (al reves) y el plan del lunes se rechazaba con INVALID_DATE, como en produccion desde
+     * E-208.
+     */
+    @Test
+    @DisplayName("E-340: el domingo a la noche se puede planificar el lunes, y nada mas de la semana que empieza")
+    void elDomingoALaNocheSePlanificaElLunes() {
+        LocalDate domingo = LocalDate.of(2026, 9, 27);
+
+        assertThat(FechasPlanificables.para(domingo, EstadoPlazo.EN_PLAZO, SEMANAS))
+                .isEqualTo(new FechasPlanificables(LocalDate.of(2026, 9, 28), LocalDate.of(2026, 9, 28)));
+    }
+
+    @Test
+    @DisplayName("E-340: el domingo antes de las 18:00, hoy y el lunes")
+    void elDomingoALaTardeHoyYElLunes() {
+        LocalDate domingo = LocalDate.of(2026, 9, 27);
+
+        assertThat(FechasPlanificables.para(domingo, EstadoPlazo.A_DESTIEMPO, SEMANAS))
+                .isEqualTo(new FechasPlanificables(domingo, LocalDate.of(2026, 9, 28)));
+    }
+
+    @Test
+    @DisplayName("pasado el dia 90 no queda ninguna fecha, tampoco hoy antes de las 18:00")
+    void pasadoElDiaNoventaNoQuedaNinguna() {
+        LocalDate graduado = INICIO.plusDays(95);
+        FechasPlanificables fechas = FechasPlanificables.para(graduado, EstadoPlazo.A_DESTIEMPO, SEMANAS);
+
+        assertThat(fechas.contiene(graduado)).isFalse();
+        assertThat(fechas.contiene(graduado.plusDays(1))).isFalse();
     }
 
     @Test

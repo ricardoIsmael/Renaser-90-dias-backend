@@ -25,10 +25,10 @@ final class TextoDeAjustesDeRocas {
      * rechazos que lo dicen, para que no se desincronicen.
      *
      * <p><b>Corregido 2026-09-27 (D-203).</b> D-192 habia cambiado el del dia que ya paso a "desde manana
-     * hasta el ultimo dia de esta semana de programa".
+     * hasta el ultimo dia de esta semana de programa". Y el domingo se puede el lunes que viene (E-340).
      */
-    static final String FECHAS_QUE_SE_PUEDEN_AGREGAR = "desde manana hasta el domingo de esta semana (en la "
-            + "ultima semana del programa, hasta el dia 90)";
+    static final String FECHAS_QUE_SE_PUEDEN_AGREGAR = "desde manana hasta el domingo de esta semana (si hoy es "
+            + "domingo, el lunes; en la ultima semana del programa, hasta el dia 90)";
 
     /** "siguiente" pedida en la semana 13: no hay semana 14 (D-203, E-320). */
     static final String SIN_SEMANA_SIGUIENTE = "Esta es la ultima semana del programa (la 13): no hay una semana "

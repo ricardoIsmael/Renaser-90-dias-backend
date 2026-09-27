@@ -7267,6 +7267,10 @@ Un minimo de creacion de 3 no hace que nadie planifique mejor — hace que no pu
 
 ## E-208 · No se podia planificar el jueves, ni corregir el plan de manana
 
+> **Actualizado 2026-09-27 (E-340).** La ventana de abajo («de mañana hasta el fin de la semana de programa») dejó al
+> domingo sin el lunes: el domingo, mañana ya es otra semana y la ventana quedaba al revés (`INVALID_DATE: la fecha de
+> planificacion debe estar entre 2026-08-31 y 2026-08-30`). Desde E-340 mañana siempre entra si es un día del programa.
+
 **Sintoma.** Dos cosas que el dueno noto probando, y las dos vuelven del servidor:
 
 ```
@@ -10134,7 +10138,7 @@ en curso, sin activar), y los casos sin Día 1 del tablero, del plan semanal y d
 se deduce. Y una fecha que una columna `NOT NULL` guarda "por ahora" no es un dato: se lee por el accessor que la filtra
 (`diaUnoElegido()`), nunca cruda.
 
-## E-340 · Bordes de la semana: el domingo previo al Día 1 se planificaba la semana 2, y el acompañante proponía la «semana 14»
+## E-340 · Bordes de la semana: el domingo previo al Día 1 se planificaba la semana 2, el acompañante proponía la «semana 14» y el domingo a la noche no se podía planificar el lunes (`INVALID_DATE: la fecha de planificacion debe estar entre 2026-08-31 y 2026-08-30`)
 
 **Síntoma.** (1) En producción (backend `7429a09c`), el domingo antes del Día 1 `POST /rocks/weekly` guardaba el plan como
 semana 2: `RocaSemanalServiceTest.elDomingoAntesDelDiaUnoPreparaLaPrimera` corrido contra ese código da
@@ -10142,18 +10146,30 @@ semana 2: `RocaSemanalServiceTest.elDomingoAntesDelDiaUnoPreparaLaPrimera` corri
 (2) `proponer_editar_objetivo_semanal` con `semana=siguiente` en la semana 13 proponía la 14:
 `Exito[contenido=Propuesta creada: Cambiar el objetivo de Trabajo de la semana 14. objetivo: Vender 3. …]`; al confirmar,
 `rocks` respondía `SIN_OBJETIVO_SEMANAL` y el texto invitaba a crearla «con el plan de la semana», que no existe.
+(3) En producción, el domingo con la ventana nocturna abierta, el plan del lunes se rechaza (prueba descartable con el código de `7429a09c`, domingo 2026-08-30 a las 20:05):
+```
+IllegalArgumentException: INVALID_DATE: la fecha de planificacion debe estar entre 2026-08-31 y 2026-08-30
+```
+La ventana queda al revés (del lunes al domingo anterior): el domingo no se puede planificar ningún día, aunque el tablero
+ofrece «planificar mañana» (`puedeCrearPlanDiario` mira el objetivo de la semana de mañana). El lunes solo se puede armar
+el mismo lunes antes de las 18:00, y cuenta a destiempo. Vale igual para `proponer_plan_del_dia` y
+`proponer_agregar_accion` del acompañante. Viene de E-208 (commit `00021d98`, 2026-09-22), que ya está en producción
+(`c22fa09a`, `7429a09c`): el primer domingo a la noche con esa regla es el 27/09.
 
 **Causa real.** Las dos sumaban uno sin mirar los bordes. La cuenta de producción da 1 para toda fecha anterior al primer
 domingo y el `+1` del domingo se aplicaba igual antes de empezar. La herramienta (D-177) sumaba uno a la semana en curso
-sin tope.
+sin tope. Y la ventana del plan diario (E-208) va de mañana «hasta el fin de la semana de hoy»: el domingo, mañana ya es
+otra semana. E-208 quiso ampliar la regla vieja (mañana con la ventana abierta; hoy y mañana sin ella) al resto de la
+semana, y sin querer le sacó el lunes al domingo.
 
 **Solución.** `SemanaPrograma.semanaAPlanificar` (D-203): antes del día 1, la 1; el domingo, +1 hasta la 13. La herramienta
 rechaza «siguiente» en la 13 con `EditarObjetivoSemanalPort.ULTIMA_SEMANA`, espejo de
 `rocks.api.EdicionDeObjetivoSemanalPort.ULTIMA_SEMANA` (`AjustesDeRocasAdaptersTest` rompe si dejan de coincidir).
 Pruebas: `RocaSemanalServiceTest.elDomingoAntesDelDiaUnoPreparaLaPrimera` y `alFinalNuncaSePlanificaLaSemanaCatorce`
 (contra producción: `IllegalArgumentException: numeroSemana debe estar entre 1 y 13: 14`),
-`AjustesDeRocasHerramientasTest.enLaTreceNoHaySemanaSiguiente`. **Datos:** si alguien de producción planificó su primera
+`AjustesDeRocasHerramientasTest.enLaTreceNoHaySemanaSiguiente`. `FechasPlanificables.para`: mañana siempre entra si es un día del programa, así que el domingo se puede el lunes (y solo el lunes de la semana que empieza, que cuelga de SU objetivo: sin él, `NO_WEEKLY_ROCK`); pruebas `FechasPlanificablesTest.elDomingoALaNocheSePlanificaElLunes` y `elDomingoALaTardeHoyYElLunes`, `RocaDiariaServiceTest.elDomingoALaNocheSePlanificaElLunes` y `AgregarRocaDiariaServiceTest.elDomingoALaNocheSeAgregaAlLunes`, que fallan contra el código anterior. **Datos:** si alguien de producción planificó su primera
 semana el domingo previo al Día 1, esas filas quedaron como semana 2; no se reescriben (D-203 no toca filas).
 
-**Cómo evitar que vuelva a pasar.** Todo «+1» y toda «semana siguiente» se prueban en los bordes: el día previo al Día 1,
-el último domingo del programa y la semana 13.
+**Cómo evitar que vuelva a pasar.** Todo «+1», toda «semana siguiente» y toda ventana de fechas se prueban en los bordes:
+el día previo al Día 1, el domingo (el último día de la semana), el último domingo del programa y la semana 13. Si una
+regla nueva amplía otra, se prueba que siga cubriendo todo lo que cubría la vieja.

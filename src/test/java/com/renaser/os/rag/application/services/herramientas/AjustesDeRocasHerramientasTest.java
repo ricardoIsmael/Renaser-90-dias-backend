@@ -106,8 +106,8 @@ class AjustesDeRocasHerramientasTest {
     void formaInvalida() {
         assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE,
                 "eje", "CUERPO", "titulo", "Estirar", "fecha", "2026-09-20"))).isEqualTo(ResultadoHerramienta.fallo(
-                "Ese dia ya paso. Se puede agregar desde manana hasta el domingo de esta semana (en la ultima semana "
-                        + "del programa, hasta el dia 90)."));
+                "Ese dia ya paso. Se puede agregar desde manana hasta el domingo de esta semana (si hoy es domingo, el "
+                        + "lunes; en la ultima semana del programa, hasta el dia 90)."));
         assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE,
                 "eje", "NEGOCIO", "titulo", "Vender"))).isInstanceOf(ResultadoHerramienta.Fallo.class);
         assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE,
@@ -234,11 +234,11 @@ class AjustesDeRocasHerramientasTest {
     }
 
     @Test
-    @DisplayName("el rechazo de una fecha que rocks no deja planificar dice hasta cuando se puede, con la semana 13")
+    @DisplayName("el rechazo de una fecha que rocks no deja planificar dice hasta cuando se puede: domingo y semana 13")
     void rechazoDeFechaNoPlanificable() {
         assertThat(TextoDeAjustesDeRocas.rechazoDeAccion(AgregarAccionAlPlanPort.Motivo.FECHA_NO_PLANIFICABLE))
                 .isEqualTo("Ese dia ya no se puede planificar: se puede agregar desde manana hasta el domingo de esta "
-                        + "semana (en la ultima semana del programa, hasta el dia 90).");
+                        + "semana (si hoy es domingo, el lunes; en la ultima semana del programa, hasta el dia 90).");
     }
 
     @Test
