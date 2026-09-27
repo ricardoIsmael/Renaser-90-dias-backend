@@ -404,11 +404,13 @@ Servicios: `EventoService`, `ConfirmacionService`, con reglas de acceso comparti
 | `MIN_LEVEL` | Solo `TRAINEE` cuyo rango de nivel (calculado del % de progreso del programa) sea ≥ el rango del nivel mínimo del evento. |
 | `COURSE` | Solo quien tenga acceso a ese curso (`ResolverAudienciaCursoPort`). |
 | `ROLES` | Solo los roles listados en `targetRoles`. |
-| `CELL` | Solo miembros de esa célula específica (comparando `celulaId` del visor). |
+| `CELL` | Solo miembros de esa célula específica (comparando `celulaId` del visor). *Corregido 2026-09-27 (E-363): o quien tenga asignación vigente en ese grupo, con cualquier función (aprendiz adicional, su mentor aunque lidere varios, guía); antes el mentor del grupo recibía 403.* |
 
 `ADMIN`/`ALCHEMIST` **siempre ven todo**, sin importar la audiencia (bypass total, primera línea de `puedeVer`).
 
 **Elegibilidad adicional para `MENTORIA_ALQUIMISTA`:** además de pasar la audiencia, si el visor es `TRAINEE` tiene que ser "elegible" (`ConsultarElegibilidadEventoPort.esElegible` — % de cumplimiento semanal de hábitos+rocas, calculado fuera de este módulo). `ADMIN`/`ALCHEMIST`/`MENTOR` son elegibles siempre, sin consulta. Los otros 3 tipos de evento (`ESPONTANEO`, `SEMANA_MANIFESTACION`, `SESION_ESPECIAL`) no exigen elegibilidad.
+
+> **Corregido 2026-09-27 (E-362, D-213).** Ese % nunca se calculó: el adaptador respondía «no elegible» a todo aprendiz y ninguno veía una Mentoría. Hoy la audiencia declarada decide también en `MENTORIA_ALQUIMISTA`; si hace falta un criterio extra es una pregunta abierta para el dueño (D-213).
 
 ### 8.1 `GET /api/v1/calendar/events` — listar ocurrencias en un rango
 
@@ -439,7 +441,7 @@ curl -s "http://localhost:8080/api/v1/calendar/events?from=2026-08-01T00:00:00Z&
 | `durationMinutes` | opcional, si viene tiene que ser positivo |
 | `timezone` | opcional, default `America/Lima`; **atención:** un valor inválido pasa a `ZoneId.of(...)`, que lanza `DateTimeException` — **no** `DateTimeParseException` — así que puede no estar cubierto por el handler de fechas del `GlobalExceptionHandler` y devolver un 500 en vez de 400 (no confirmado con un test real; verificar antes de asumir 400 acá) |
 | `locationType` | `@NotBlank`, uno de `INTERNAL_CALL`/`WEBINAR`/`ZOOM`/`MEET`/`ADDRESS`/`LINK` |
-| `locationValue` | obligatorio y no vacío si `locationType` es `ZOOM`/`MEET`/`LINK` (mensaje: `"La URL es obligatoria para este tipo de ubicacion"`) o `ADDRESS` (`"La direccion es obligatoria"`); tiene que ir **vacío** si es `INTERNAL_CALL`/`WEBINAR` (`"valorUbicacion debe ser nulo para <tipo>"`). Máx 600 |
+| `locationValue` | obligatorio y no vacío si `locationType` es `ZOOM`/`MEET`/`LINK` (mensaje: `"La URL es obligatoria para este tipo de ubicacion"`) o `ADDRESS` (`"La direccion es obligatoria"`); tiene que ir **vacío** si es `INTERNAL_CALL`/`WEBINAR` (`"valorUbicacion debe ser nulo para <tipo>"`). Máx 600. *Corregido 2026-09-27 (E-364): con `ZOOM`/`MEET`/`LINK` tiene que ser una dirección `https://` o `http://` con servidor; si no, 400 `"El link tiene que empezar con https:// o http://"`.* |
 | `audienceType` | opcional, default `ALL_MEMBERS`; uno de `ALL_MEMBERS`/`MIN_LEVEL`/`COURSE`/`ROLES`/`CELL` |
 | `minLevelId` | obligatorio **solo si** `audienceType=MIN_LEVEL`, y tiene que existir en el catálogo de niveles — si no, 400 `"El nivel minimo indicado no existe: <id>"` |
 | `courseId` | obligatorio **solo si** `audienceType=COURSE` |
