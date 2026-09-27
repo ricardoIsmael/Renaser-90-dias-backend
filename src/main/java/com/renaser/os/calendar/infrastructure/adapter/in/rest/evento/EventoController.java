@@ -98,7 +98,7 @@ class EventoController {
         return EventoResponse.from(vista.evento(), vista.coverUrl());
     }
 
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "un MENTOR ademas tiene que liderar una celula, y la audiencia se le fuerza a esa celula")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
     @PostMapping
     public ResponseEntity<EventoResponse> crear(@ActorAutenticado UserId actor,
                                                  @Valid @RequestBody EventoRequest request) {
@@ -106,7 +106,7 @@ class EventoController {
         return ResponseEntity.status(HttpStatus.CREATED).body(EventoResponse.from(creado.evento(), creado.coverUrl()));
     }
 
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "un MENTOR solo puede editar los eventos que creo")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
     @PutMapping("/{id}")
     public EventoResponse actualizar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                       @Valid @RequestBody EventoRequest request) {
@@ -114,7 +114,7 @@ class EventoController {
         return EventoResponse.from(actualizado.evento(), actualizado.coverUrl());
     }
 
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "un MENTOR solo puede eliminar los eventos que creo")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actor, @PathVariable UUID id) {
         eliminarUseCase.eliminar(actor, EventoId.of(id));
@@ -130,7 +130,7 @@ class EventoController {
         return ResponseEntity.ok().build();
     }
 
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "un MENTOR solo sobre los eventos que creo")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
     @PostMapping("/{id}/cancel-occurrence")
     public ResponseEntity<Void> cancelarOcurrencia(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                                     @Valid @RequestBody CancelarOcurrenciaRequest request) {
@@ -138,7 +138,7 @@ class EventoController {
         return ResponseEntity.ok().build();
     }
 
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "un MENTOR solo sobre los eventos que creo")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
     @PostMapping("/{id}/portada/upload-url")
     public UrlPortadaResponse solicitarUrlPortada(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                                    @Valid @RequestBody SolicitarUrlPortadaRequest request) {
@@ -146,7 +146,7 @@ class EventoController {
         return UrlPortadaResponse.from(url);
     }
 
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "un MENTOR solo sobre los eventos que creo")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
     @PostMapping("/{id}/portada/confirm")
     public EventoResponse confirmarPortada(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                             @Valid @RequestBody ConfirmarPortadaRequest request) {
