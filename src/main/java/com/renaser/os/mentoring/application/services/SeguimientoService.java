@@ -98,6 +98,9 @@ public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase,
         if (!acompanamientoFinder.acompanaVigente(consulta.actorId(), consulta.grupoId(), ahora)) {
             throw new NotAuthorizedException("No acompanas ese grupo");
         }
+        // El interceptor no mira a MENTOR (A-1): un mentor SUSPENDIDO con la asignacion abierta
+        // llegaba hasta aca con su token todavia valido (E-258).
+        requireCuentaActiva(consulta.actorId());
         // Y ademas que el alumno pedido sea de ESE grupo: sin esto, un mentor legitimo podria
         // pedir el detalle de cualquiera pasando el id de su propio grupo (V12).
         if (!acompanamientoFinder.aprendicesVigentes(consulta.grupoId(), ahora).contains(alumnoId)) {
@@ -165,14 +168,19 @@ public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase,
      * guard interno de `users`: ese es suyo y no es API publica (ARF-15).
      */
     private void requireAdminActivo(UserId actorId) {
+        UserSummary actor = requireCuentaActiva(actorId);
+        if (actor.role() != UserRole.ADMIN && actor.role() != UserRole.ALCHEMIST) {
+            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST consultan la semana de cualquier aprendiz");
+        }
+    }
+
+    private UserSummary requireCuentaActiva(UserId actorId) {
         UserSummary actor = userSummaryFinder.findById(actorId)
                 .orElseThrow(() -> new NoSuchElementException("Actor no encontrado: " + actorId));
         if (actor.status() != UserStatus.ACTIVE) {
             throw new NotAuthorizedException("La cuenta esta suspendida");
         }
-        if (actor.role() != UserRole.ADMIN && actor.role() != UserRole.ALCHEMIST) {
-            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST consultan la semana de cualquier aprendiz");
-        }
+        return actor;
     }
 
     private List<DiaDelAlumno> armarDias(LocalDate lunes, LocalDate domingo, List<ObligacionHabito> obligaciones,

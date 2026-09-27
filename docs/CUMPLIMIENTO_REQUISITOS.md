@@ -155,7 +155,7 @@ Mismo criterio, más chico: el documento describe la fase II como "Días 8 a 34"
 | RF-42 | Tickets de bloqueo SMART | ✅ | Con el fix de "mentor asignado ≠ cualquier mentor" (E-38) |
 | RF-43 | Biblioteca de sabiduría | ✅ | Búsqueda full-text en español |
 | RF-44 | Tickets de soporte con ClientLog | ⚠️ | Tickets sí (incluida la regla deliberada de que un suspendido **sí** puede abrirlos); **el adjunto automático de logs del cliente no está verificado** |
-| RF-45 | Tarjetas de bienvenida idempotentes | ❌ | `mensajes_bienvenida` sin uso |
+| RF-45 | Tarjetas de bienvenida idempotentes | ✅ | Bienvenida automática en el soporte (D-174), idempotente por destinatario con `mensajes_bienvenida` desde G-2 (2026-09-26, `docs/MODULO_CHAT.md` §10). *Decía: ❌, `mensajes_bienvenida` sin uso.* |
 
 ---
 

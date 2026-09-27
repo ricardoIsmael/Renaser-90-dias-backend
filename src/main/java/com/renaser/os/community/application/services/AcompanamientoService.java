@@ -181,6 +181,14 @@ public class AcompanamientoService
             // le confirmaria a quien prueba ids que ese grupo existe.
             throw new NotAuthorizedException("No acompanas ese grupo");
         }
+        // El interceptor no mira a MENTOR (A-1): sin esto, un mentor SUSPENDIDO con la asignacion
+        // todavia abierta seguia leyendo el padron de su grupo (E-258).
+        boolean activo = userSummaryFinder.findById(actorId)
+                .map(actor -> actor.status() == UserStatus.ACTIVE)
+                .orElse(false);
+        if (!activo) {
+            throw new NotAuthorizedException("La cuenta esta suspendida");
+        }
     }
 
     private static AprendizDelGrupo aAprendiz(UserSummary usuario) {

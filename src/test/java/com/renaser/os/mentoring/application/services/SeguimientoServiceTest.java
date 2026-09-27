@@ -69,6 +69,7 @@ class SeguimientoServiceTest {
     private final Map<UUID, List<AcompanamientoFinder.TramoDeAprendiz>> tramosPorGrupo = new LinkedHashMap<>();
     private final List<ObligacionHabito> obligaciones = new ArrayList<>();
     private final Map<UUID, EntregaDeEvidencia> entregas = new LinkedHashMap<>();
+    private final Set<UserId> suspendidos = new java.util.HashSet<>();
 
     private SeguimientoService servicio;
 
@@ -128,6 +129,11 @@ class SeguimientoServiceTest {
             @Override
             public List<GrupoAcompanado> gruposConMentorVigente(Instant instante) {
                 // Esta prueba no barre grupos: el seguimiento siempre parte de uno pedido.
+                return List.of();
+            }
+
+            @Override
+            public List<GrupoConAprendices> gruposOperativos(Instant instante) {
                 return List.of();
             }
         };
@@ -198,7 +204,8 @@ class SeguimientoServiceTest {
 
             @Override
             public Optional<UserSummary> findById(UserId id) {
-                return Optional.of(new UserSummary(id, "Ana Perez", null, UserRole.TRAINEE, UserStatus.ACTIVE));
+                return Optional.of(new UserSummary(id, "Ana Perez", null, UserRole.TRAINEE,
+                        suspendidos.contains(id) ? UserStatus.SUSPENDED : UserStatus.ACTIVE));
             }
 
             @Override
@@ -261,6 +268,20 @@ class SeguimientoServiceTest {
         assertThatThrownBy(() -> servicio.semanaDe(
                 new ConsultaSemana(MENTOR, MI_GRUPO, AJENO.value(), LocalDate.of(2026, 9, 7))))
                 .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("E-258: un mentor SUSPENDIDO con la asignacion abierta recibe 403 y no lee la semana")
+    void mentorSuspendidoProhibido() {
+        acompanaTodoElMes();
+        alumnoEnGrupo(ANA, Instant.parse("2026-09-01T05:00:00Z"), null);
+        obligacion(ANA, LocalDate.of(2026, 9, 9), "Caminar", EstadoObligacion.COMPLETADO, true);
+        suspendidos.add(MENTOR);
+
+        assertThatThrownBy(() -> servicio.semanaDe(
+                new ConsultaSemana(MENTOR, MI_GRUPO, ANA.value(), LocalDate.of(2026, 9, 9))))
+                .isInstanceOf(NotAuthorizedException.class)
+                .hasMessageContaining("suspendida");
     }
 
     // ── semana ──────────────────────────────────────────────────────────────

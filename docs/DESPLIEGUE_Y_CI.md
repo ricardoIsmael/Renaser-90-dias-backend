@@ -620,11 +620,18 @@ va cifrado.
 | Parámetro | Tipo | Qué es |
 |---|---|---|
 | `STORAGE_PROVEEDOR` | String | `noop` o `s3` |
-| `AWS_S3_BUCKET` | String | Default `s3-renaser90dias` |
+| `AWS_S3_BUCKET` | String | Default `s3-renaser90dias`, **que es el bucket de producción** |
 | `AWS_REGION` | String | Default `us-east-1` |
 
 Las credenciales de S3 **no van acá**: `AlmacenamientoS3Config` usa `DefaultCredentialsProvider`,
 que las toma del rol de la tarea o de la instancia. No hay que crear un `AWS_SECRET_ACCESS_KEY`.
+
+> **Ojo en local (G-5, 2026-09-26).** El default de `AWS_S3_BUCKET` es el bucket de **producción**.
+> Producción depende de ese default (no carga el parámetro), así que no se cambia; quien prenda
+> `STORAGE_PROVEEDOR=s3` en su máquina **tiene que** poner su propio `AWS_S3_BUCKET` en la configuración
+> de ejecución, o lo que suba el backend local (la tarjeta de bienvenida, por ejemplo) cae en el bucket
+> real. Con `STORAGE_PROVEEDOR=noop` (el default local) no se sube nada, y desde G-5 la bienvenida
+> tampoco manda una foto que no existe: sale solo el texto.
 
 **Para el login social** (los adaptadores fallan al *invocarse* sin configurar, no al arrancar):
 
@@ -691,6 +698,71 @@ otra cuenta).
 
 Si alguna da otra cosa, el parámetro no se tomó: revisar el nombre exacto y que el contenedor haya
 arrancado **después** de cargarlo (E-244).
+
+#### Checklist para encender el semáforo (S-7, 2026-09-26)
+
+Se enciende **de lunes a jueves**, nunca viernes, sábado ni domingo. El barrido de las :25 cierra la
+semana (sábado→viernes) en la primera corrida después de la medianoche del viernes en la zona de cada
+persona, y los avisos del cierre salen solo si ese cierre cae sábado o domingo local. Encendido un
+viernes, la primera semana se cierra a las pocas horas con uno o dos días medidos; encendido el
+sábado, se cierran de golpe todas las semanas atrasadas desde el día 1 (sin avisos, pero quedan como
+historial). Con lunes a jueves, cuando llega el primer sábado ya hay de 2 a 5 días medidos y nadie
+recibe un color por un solo día (además, desde S-7 el chat no cuenta la semana con color si tuvo
+menos de 3 días con datos: `SemaforoEnChat.DIAS_MINIMOS_PARA_EL_COLOR`).
+
+1. `parametros-acompanante.sh prender` y `docker restart backend` (ver arriba).
+2. **Pasadas las :25 de la primera hora**, en la base de producción:
+   ```sql
+   -- el barrido corrió y tomó su lock
+   SELECT name, locked_at, lock_until FROM renaser.shedlock WHERE name = 'points-cerrar-semaforo';
+   -- guardó días de hoy para la gente con programa activado (debe ser > 0 si hay aprendices en el programa)
+   SELECT count(*) AS dias, count(DISTINCT participante_id) AS personas, max(calculado_en)
+     FROM renaser.semaforo_dias;
+   -- ninguna semana cerrada todavía si se encendió de lunes a jueves
+   SELECT count(*) FROM renaser.semaforo_semanas;
+   ```
+   Y en el log, `[points.CerrarSemaforoScheduler] evaluados=… fallidos=0`.
+3. **El sábado siguiente, pasadas las 00:25 de Lima (05:25 UTC) y las :40:**
+   ```sql
+   -- una foto por persona medida para el viernes que terminó
+   SELECT semana_hasta, count(*), count(porcentaje) AS con_datos, min(dias_con_datos), max(dias_con_datos)
+     FROM renaser.semaforo_semanas GROUP BY semana_hasta ORDER BY semana_hasta DESC LIMIT 2;
+   -- avisos del sábado: persona, mentor y resumen general, sin duplicados
+   SELECT tipo, count(*), count(DISTINCT origen_evento_id)
+     FROM renaser.notificaciones WHERE tipo = 'RESUMEN_SEMANAL' AND creado_en > now() - interval '6 hours'
+     GROUP BY tipo;
+   -- nada trabado en el outbox
+   SELECT event_type, count(*) FROM event_publication WHERE completion_date IS NULL GROUP BY event_type;
+   ```
+4. **Apagado de urgencia:** `renaser.scheduling.semaforo.cron=-` y `renaser.scheduling.resumen-semaforo.cron=-`
+   en Parameter Store y `docker restart backend`; solo el mensaje del chat:
+   `IA_ACOMPANANTE_SEMAFORO_EN_CHAT=false`. Apagar no borra nada: al volver, el barrido se pone al día
+   solo (es derivado, regla 02 §2).
+
+#### Reprocesar la semana de una persona (S-7, 2026-09-26)
+
+Cuándo: un error ya corregido dejó mal la foto de una semana (`semaforo_semanas`), por ejemplo días que
+`habits` contó mal. La foto es **append-only** para el código: ningún camino la reescribe. Reprocesar es
+una operación manual y excepcional, que queda anotada en la bitácora con la foto anterior.
+
+1. **Guardar la foto de antes** y pegarla en la entrada de la bitácora:
+   ```sql
+   SELECT * FROM renaser.semaforo_semanas
+    WHERE participante_id = :persona AND semana_hasta >= :viernes ORDER BY semana_hasta;
+   ```
+2. **Borrar desde esa semana en adelante** (no una sola del medio: el barrido recalcula a partir de la
+   **última** semana cerrada que queda, así que un hueco en el medio no se vuelve a llenar nunca):
+   ```sql
+   DELETE FROM renaser.semaforo_semanas WHERE participante_id = :persona AND semana_hasta >= :viernes;
+   ```
+   Los días (`semaforo_dias`) no se borran: el barrido los vuelve a calcular y el upsert solo reescribe
+   los que cambiaron.
+3. **Esperar a la próxima corrida de las :25.** La persona tiene que tener la cuenta ACTIVA y el
+   programa activado; si no, el barrido no la toca.
+4. **Verificar** con la consulta del paso 1: las semanas vuelven con `cerrada_en` de hoy. No hay avisos
+   repetidos: el cierre tardío (fuera del sábado o domingo de esa semana) no avisa, y dentro del fin de
+   semana la clave del aviso es la misma (`SemanaDelSemaforoCerradaEvent.claveDe`), así que la bandeja
+   y el chat la descartan.
 
 **Opcionales — solo si hay que apartarse del default:** `DB_POOL_MAX_SIZE`, `DB_POOL_MIN_IDLE`,
 `DB_POOL_CONNECTION_TIMEOUT_MS`, `ASYNC_IA_CONCURRENCY_LIMIT`, `RENASIA_LIMITE_DIARIO`,

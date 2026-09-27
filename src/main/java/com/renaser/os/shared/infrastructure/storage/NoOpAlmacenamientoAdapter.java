@@ -46,4 +46,10 @@ public class NoOpAlmacenamientoAdapter implements AlmacenamientoPort {
     public void borrar(String ruta) {
         log.warn("AlmacenamientoPort.borrar({}) NO ejecutado de verdad: faltan credenciales AWS S3 (D-34).", ruta);
     }
+
+    /** Acá {@link #subir} no guarda nada: un objeto "subido" no existe. */
+    @Override
+    public boolean guardaObjetos() {
+        return false;
+    }
 }

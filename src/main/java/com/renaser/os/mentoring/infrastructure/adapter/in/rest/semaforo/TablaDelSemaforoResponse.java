@@ -27,15 +27,26 @@ public record TablaDelSemaforoResponse(UUID grupoId, String grupoNombre, LocalDa
                 tabla.aprendices().stream().map(AprendizResponse::from).toList());
     }
 
-    /** Un aprendiz que no se mide llega con {@code color: SIN_DATOS}, {@code porcentaje: null} y sin días. */
+    /**
+     * Un aprendiz que no se mide llega con {@code color: SIN_DATOS}, {@code porcentaje: null} y sin días.
+     *
+     * <p>{@code motivo} (S-5, aditivo: la app instalada lo ignora) dice por qué está «Sin datos»
+     * —{@code SIN_NADA_PLANIFICADO}, {@code NO_ACTIVADO}, {@code PENDIENTE_DE_CALCULO}, {@code PAUSADO}
+     * o {@code FUERA_DEL_PROGRAMA}— y es null si tiene color.
+     */
     public record AprendizResponse(UUID aprendizId, String nombre, String avatarUrl, BigDecimal porcentaje,
-                                   String color, String etiqueta, int diasConDatos, List<DiaResponse> dias) {
+                                   String color, String etiqueta, int diasConDatos, List<DiaResponse> dias,
+                                   String motivo) {
 
         static AprendizResponse from(FilaDelSemaforo fila) {
-            MedicionDelAprendiz medicion = fila.medicion();
-            return new AprendizResponse(fila.aprendizId(), fila.nombre(), fila.avatarUrl(), medicion.porcentaje(),
+            return from(fila.aprendizId(), fila.nombre(), fila.avatarUrl(), fila.medicion());
+        }
+
+        static AprendizResponse from(UUID aprendizId, String nombre, String avatarUrl, MedicionDelAprendiz medicion) {
+            return new AprendizResponse(aprendizId, nombre, avatarUrl, medicion.porcentaje(),
                     medicion.color().name(), medicion.color().etiqueta(), medicion.diasConDatos(),
-                    medicion.dias().stream().map(DiaResponse::from).toList());
+                    medicion.dias().stream().map(DiaResponse::from).toList(),
+                    medicion.motivo() == null ? null : medicion.motivo().name());
         }
     }
 

@@ -34,4 +34,14 @@ public interface AlmacenamientoPort {
 
     /** Borra el objeto. Idempotente: borrar lo inexistente no falla. */
     void borrar(String ruta);
+
+    /**
+     * Si {@link #subir} deja el objeto guardado de verdad. {@code false} en el adaptador de
+     * marcador ({@code renaser.storage.proveedor=noop}, el de local y las pruebas): ahí subir no
+     * guarda nada, y quien genera un objeto en el servidor no debe mandar un mensaje que apunte a
+     * un objeto inexistente (G-5, 2026-09-26: la bienvenida dejaba una foto rota).
+     */
+    default boolean guardaObjetos() {
+        return true;
+    }
 }

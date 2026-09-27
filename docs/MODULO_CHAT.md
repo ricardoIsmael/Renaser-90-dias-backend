@@ -19,7 +19,7 @@
   > **Corregido 2026-09-16 (D-136).** Esta línea decía `tipo` (`CELULA`/`DIRECTA`/`GLOBAL`) y que el CHECK cubría esos tres. `V53` agregó el valor `SOPORTE` y `V54` amplió el CHECK con su rama — ver §8.
 - `participantes_conversacion`: PK compuesta `(conversacion_id, usuario_id)`, con `ultimo_leido_en` nullable — es la base del conteo de no-leídos.
 - `mensajes`: `tipo` (`TEXTO`/`IMAGEN`/`AUDIO`/`VIDEO`/`SISTEMA`), dos CHECK (`mensaje_con_contenido`, `media_completa`), `respuesta_a_id` auto-referencial (hilos), `oculto`/`eliminado_en` para moderación (sin caso de uso que los mute en esta pasada — ver §6).
-- `mensajes_bienvenida`: **no se tocó** — no hay caso de uso que la use (ver §6).
+- `mensajes_bienvenida`: **no se tocó** — no hay caso de uso que la use (ver §6). *(Actualizado 2026-09-26: desde G-2 la usa la bienvenida automática como marca de idempotencia, §10.)*
 - Comentario del baseline (línea 1293-1295): *"todo usuario nuevo se agrega AUTOMÁTICAMENTE a la conversación GLOBAL"* — es la única regla de negocio que el propio schema deja explícita en un comentario; se implementó tal cual (§4).
 
 ---
@@ -99,7 +99,7 @@ Todos reciben el actor por `X-Actor-Id` (mismo patrón temporal que el resto de 
 | CH-3 | **`CrearConversacionCelulaUseCase` solo crea la fila de la conversación**, no agrega participantes. `community` no publica hoy un evento de "miembro agregado/quitado de célula" (solo `CelulaCreadaEvent`, agregado en este mismo encargo) — sin esa señal, no hay forma de saber quién debería ser participante del chat de una célula. Ver §6. |
 | CH-4 | **`DELETE`/edición/moderación de mensajes NO se construyó** — `Mensaje.oculto`/`eliminadoEn` existen en el dominio (reflejan lo que ya persiste la base) pero sin mutadores ni caso de uso: el encargo original solo pidió enviar/listar/marcar-leído/crear-o-obtener-directa. Igual que `oculto`/`eliminado_en`, quedan listos para cuando se pida moderación. |
 | CH-5 | **Retención de 12 meses de GLOBAL (cron) NO se construyó** — explícitamente fuera de alcance por instrucción del encargo original. |
-| CH-6 | **`mensajes_bienvenida` NO se tocó** — ningún caso de uso de este encargo escribe ni lee esa tabla; no hay evidencia de una regla de negocio confirmada sobre cuándo/cómo se genera un mensaje de bienvenida (¿automático al unirse a GLOBAL? ¿manual de un mentor?). Se documenta en vez de inventarla. |
+| CH-6 | **`mensajes_bienvenida` NO se tocó** — ningún caso de uso de este encargo escribe ni lee esa tabla; no hay evidencia de una regla de negocio confirmada sobre cuándo/cómo se genera un mensaje de bienvenida (¿automático al unirse a GLOBAL? ¿manual de un mentor?). Se documenta en vez de inventarla. **Actualizado 2026-09-26:** desde G-2 es la marca de idempotencia de la bienvenida automática (§10, D-174). |
 | CH-7 | **Redis Pub/Sub, no STOMP broker relay a RabbitMQ** — CLAUDE.MD §5.2.1 ya deja esto resuelto ("con Redis ya en el stack por caché, es el punto de partida por defecto"); se siguió tal cual. |
 | CH-8 | **El fanout de Redis (`MensajeFanoutPayload`) es un DTO liviano, no el `Mensaje` completo ni el `MensajeResponse` del contrato REST** — el cliente que recibe el push solo necesita saber "hay un mensaje nuevo, refrescá"; el contenido completo con paginación keyset sigue viniendo de `GET .../messages`. Evita acoplar el adaptador de Redis al contrato REST. |
 | CH-9 | **`EnviarMensaje` no valida `mediaBucket`/`mediaRuta` contra un `AlmacenamientoPort`** — a diferencia de `community` (`SolicitarUrlSubidaMediaUseCase`), este encargo no pidió el flujo de subida prefirmada para chat; el request acepta los campos de media ya resueltos (asumiendo que el cliente los obtuvo por otra vía, hoy inexistente). Documentado como hueco, no como decisión definitiva — ver §6. |
@@ -439,15 +439,28 @@ devuelve `MENTOR` y `GUIA` y deja afuera `SOPORTE`), pregunta en **una** consult
 mira el grupo entero) y crea las que faltan como `DIRECTA` normales, cada una en su transacción
 (C-10). El UNIQUE de `clave_directa` decide si dos caminos la abren a la vez.
 
+**Solo cuentas activas (G-4, 2026-09-26).** Antes de armar las parejas se leen las cuentas de todo el
+grupo en una consulta (`UserSummaryFinder.findByIds`) y se deja afuera a quien no está ACTIVE: no se abre
+un chat de dos con un aprendiz suspendido ni con un mentor o guía suspendido.
+
+**Un fallo se reintenta (G-3, 2026-09-26).** Se intentan todas las parejas; la carrera con el UNIQUE
+de `clave_directa` es lo único que se traga. Si alguna falló por otra cosa, el servicio lanza al
+final, la publicación del outbox queda incompleta y Modulith la reentrega (al reiniciar o a los 5
+minutos, `EventPublicationMaintenanceScheduler`): el reintento solo abre las que faltan.
+> **Corregido 2026-09-26.** Antes cualquier excepción se registraba con `log.warn` y la publicación
+> quedaba completa: el chat que faltaba no se volvía a intentar nunca (E-300).
+
 **Límites conocidos.**
 - Solo corre cuando un grupo cambia. Los aprendices que **ya** tenían mentor antes de este cambio no
   reciben su chat hasta el próximo cambio de su grupo. No hay relleno; si se necesita, es un endpoint
   aparte como el de §8.
+- Lo mismo para una cuenta que se reactiva: su chat de dos se abre con el próximo cambio de su grupo,
+  no al reactivarla.
 - Un chat de dos vacío aparece en la lista de ambos apenas se crea.
 
 | Clase | Qué fija |
 |---|---|
-| `ChatsConAcompananteServiceTest` (6) | Un chat por pareja con solo esos dos; uno por guía en recepción; no repite los existentes y consulta una sola vez; sin acompañante no hace nada; nadie habla solo; una pareja que falla no frena a las demás |
+| `ChatsConAcompananteServiceTest` (8) | Un chat por pareja con solo esos dos; uno por guía en recepción; no repite los existentes y consulta una sola vez; sin acompañante no hace nada; nadie habla solo; la carrera no es error y no frena a las demás; un fallo de verdad se lanza después de intentar las demás (G-3); sin chat con suspendidos (G-4) |
 | `AcompanamientoServiceTest` (+2) | `acompanantesVigentes`: mentor y guías sí; soporte, aprendices y exmentor no; grupo cerrado, vacío |
 | `ChatPersistenceAdapterTest` (+1) | `clavesDirectasExistentes` contra Postgres real |
 
@@ -476,17 +489,46 @@ achica. Sale en JPEG (~110–125 KB contra 1,2 MB en PNG). Se verificó que dibu
 teléfono siguen por URL prefirmada), y la manda como un mensaje `IMAGEN` normal. La app instalada la
 muestra como cualquier foto del chat: no hace falta APK.
 
+**Con almacenamiento de marcador no hay tarjeta (G-5, 2026-09-26).** Con `STORAGE_PROVEEDOR=noop` (el
+default local) `subir` no guarda nada, y antes igual se mandaba el mensaje `IMAGEN`: una foto rota en
+el chat. Ahora `AlmacenamientoPort.guardaObjetos()` (false solo en el adaptador de marcador) decide: sin
+almacenamiento real se manda solo el texto y queda un `WARN` en el log. **Ojo:** el default de
+`AWS_S3_BUCKET` es el bucket de producción; en local con `STORAGE_PROVEEDOR=s3` hay que poner uno propio
+(`docs/DESPLIEGUE_Y_CI.md` §6.4).
+
 **Dos mensajes, no uno:** la app muestra el texto de una foto solo cuando la foto no carga.
 
-**Sin reintento a propósito.** `SoporteNacioBienvenidaListener` es `@Async` + `@TransactionalEventListener`
-(después del commit, en otro hilo) y **no** `@ApplicationModuleListener`, que reintenta: un reintento
-después de la primera foto mandaría la bienvenida dos veces. Si falla, queda en el log y Operaciones
-la manda a mano, como hasta hoy.
+**Se reintenta, y es idempotente (G-2, 2026-09-26).** `SoporteNacioBienvenidaListener` es `@Async` +
+`@TransactionalEventListener` (después del commit, en otro hilo). Aunque no sea
+`@ApplicationModuleListener`, Spring Modulith guarda su publicación en el outbox (`event_publication`)
+igual: si el proceso muere a mitad de camino o el caso de uso lanza, se reentrega al reiniciar o a los
+5 minutos. Para que eso no duplique, la marca es la tabla **`mensajes_bienvenida`** del baseline (V1,
+que existía sin uso: una fila por destinatario apuntando al primer mensaje, CH-6):
+
+1. Si la marca ya existe, no se hace nada (ni dibujar ni subir).
+2. Se dibuja y se sube la tarjeta **fuera** de toda transacción.
+3. En **una** transacción: los dos mensajes y la marca. O queda todo o nada. Si dos entregas se cruzan,
+   la PK de la marca deshace la que perdió (sin error).
+4. Cualquier otro fallo **se lanza**, para que el outbox reintente.
+
+**Riesgo R2, cerrado.** `SoporteDeAprendizNacioEvent` se publicaba en la transacción del listener que
+crea el soporte, *después* de que el soporte commiteaba en su transacción propia (REQUIRES_NEW). Si la
+del listener se deshacía, el soporte quedaba y el evento se perdía; el reintento encontraba el soporte
+y no volvía a publicar: la bienvenida no salía nunca. Ahora se publica **dentro** de la transacción que
+crea el soporte, así que los dos commitean juntos (E-299).
+
+> **Corregido 2026-09-26.** Este apartado decía «**Sin reintento a propósito.** […] **no**
+> `@ApplicationModuleListener`, que reintenta: un reintento después de la primera foto mandaría la
+> bienvenida dos veces. Si falla, queda en el log y Operaciones la manda a mano». Era falso: el outbox
+> también guarda y reentrega las publicaciones de un `@TransactionalEventListener`, así que una
+> reentrega (reinicio a mitad de camino) sí podía duplicar, y un fallo que se tragaba perdía la
+> bienvenida (E-298).
 
 | Clase | Qué fija |
 |---|---|
 | `BienvenidaJava2dAdapterTest` (4) | Coincide con la exportación de Canva (la referencia está en `src/test/resources/bienvenida/`); el test distingue una tarjeta sin nombre; un nombre largo no se sale; JPEG liviano |
-| `BienvenidaEnSoporteServiceTest` (5) | Tarjeta con el primer nombre y texto, firmados por el remitente; sin texto solo la tarjeta; apagada sin remitente; remitente suspendido no manda; un fallo de S3 no lanza ni manda una foto inexistente |
-| `ConversacionSoporteServiceTest` (+1 y aserciones) | Avisa solo al crear de verdad: no si ya existía, no si perdió la carrera, no en el relleno |
+| `BienvenidaEnSoporteServiceTest` (9) | Tarjeta con el primer nombre y texto, firmados por el remitente; sin texto solo la tarjeta; apagada sin remitente; remitente suspendido no manda; un fallo de S3 no manda una foto inexistente y lanza (G-2); deja la marca con la tarjeta; una reentrega con marca no hace nada; la carrera con otra entrega no es error; con `noop` solo el texto (G-5) |
+| `MarcaDeBienvenidaJdbcAdapterTest` (1) | La marca contra Postgres real: una por destinatario, la segunda choca con la PK |
+| `ConversacionSoporteServiceTest` (+2 y aserciones) | Avisa solo al crear de verdad: no si ya existía, no si perdió la carrera, no en el relleno; el aviso se publica dentro de la transacción que crea el soporte (R2) |
 | `PrimerNombreTest` (2) | Primera palabra con inicial en mayúscula; vacío sin nombre |
 

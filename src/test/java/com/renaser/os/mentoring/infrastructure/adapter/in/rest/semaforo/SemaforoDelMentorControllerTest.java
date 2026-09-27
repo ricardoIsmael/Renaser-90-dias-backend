@@ -125,10 +125,11 @@ class SemaforoDelMentorControllerTest {
                                   "etiqueta": "Al día" },
                                 { "fecha": "2026-09-24", "estado": "SIN_DATOS", "porcentaje": null, "color": "SIN_DATOS",
                                   "etiqueta": "Sin datos" }
-                              ] },
+                              ],
+                              "motivo": null },
                             { "aprendizId": "00000000-0000-0000-0000-0000000000b2", "nombre": "Luis Díaz",
                               "avatarUrl": null, "porcentaje": null, "color": "SIN_DATOS", "etiqueta": "Sin datos",
-                              "diasConDatos": 0, "dias": [] }
+                              "diasConDatos": 0, "dias": [], "motivo": "NO_ACTIVADO" }
                           ]
                         }
                         """, JsonCompareMode.STRICT));

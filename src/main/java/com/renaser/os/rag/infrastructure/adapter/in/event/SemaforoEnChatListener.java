@@ -30,7 +30,7 @@ class SemaforoEnChatListener {
     @ApplicationModuleListener
     void onSemanaCerrada(SemanaDelSemaforoCerradaEvent event) {
         CierreDeSemana cierre = new CierreDeSemana(espejo(event.color()), event.color().etiqueta(),
-                event.porcentaje());
+                event.porcentaje(), event.diasConDatos());
         dejarSemaforoEnChatUseCase.dejarEnElChat(
                 new SemaforoEnChatCommand(UserId.of(event.participanteId()), cierre, event.claveDeduplicacion()));
     }

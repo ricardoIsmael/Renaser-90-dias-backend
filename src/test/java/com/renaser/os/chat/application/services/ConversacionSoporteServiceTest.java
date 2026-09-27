@@ -130,6 +130,26 @@ class ConversacionSoporteServiceTest {
                 ConversacionId.of(ID_GENERADO), ANA));
     }
 
+    /**
+     * G-2 (riesgo R2 de D-174): el aviso se publica DENTRO de la transaccion propia que crea el
+     * soporte, antes de su commit. Publicado despues, quedaba en la transaccion del listener: si esa
+     * se deshacia, el soporte ya existia y la bienvenida no salia nunca.
+     */
+    @Test
+    @DisplayName("el aviso de que nacio se publica dentro de la transaccion que crea el soporte, no despues")
+    void elAvisoViajaEnLaMismaTransaccionQueElSoporte() {
+        inscrito(ANA, UserRole.TRAINEE);
+        perfil(ANA, "Ana Perez", UserRole.TRAINEE, UserStatus.ACTIVE);
+        when(loadConversacionPort.porClaveDirecta(Conversacion.claveSoporteDe(ANA))).thenReturn(Optional.empty());
+
+        service.incorporar(ANA);
+
+        var orden = org.mockito.Mockito.inOrder(transactionManager, eventos);
+        orden.verify(transactionManager).getTransaction(any());
+        orden.verify(eventos).publishEvent(any(Object.class));
+        orden.verify(transactionManager).commit(any());
+    }
+
     /** D-174: si otro camino lo creo primero, la bienvenida la dispara ese, no este. */
     @Test
     @DisplayName("si pierde la carrera de creacion, no avisa: la bienvenida sale una sola vez")

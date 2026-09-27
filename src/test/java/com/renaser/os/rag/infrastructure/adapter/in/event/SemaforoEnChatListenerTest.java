@@ -40,7 +40,7 @@ class SemaforoEnChatListenerTest {
                 Instant.parse("2026-09-26T05:25:03Z")));
 
         verify(useCase).dejarEnElChat(new SemaforoEnChatCommand(UserId.of(persona),
-                new CierreDeSemana(ColorDeLaSemana.AMARILLO, "Requiere atención", new BigDecimal("72.4")), clave));
+                new CierreDeSemana(ColorDeLaSemana.AMARILLO, "Requiere atención", new BigDecimal("72.4"), 6), clave));
     }
 
     @Test

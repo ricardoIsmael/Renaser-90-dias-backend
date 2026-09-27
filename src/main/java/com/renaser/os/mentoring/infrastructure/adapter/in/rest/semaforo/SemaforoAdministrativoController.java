@@ -1,5 +1,7 @@
 package com.renaser.os.mentoring.infrastructure.adapter.in.rest.semaforo;
 
+import com.renaser.os.mentoring.application.ports.in.ConsultarAtencionDelSemaforoUseCase;
+import com.renaser.os.mentoring.application.ports.in.ConsultarAtencionDelSemaforoUseCase.ConsultaAtencion;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSemaforoDelAprendizAdministrativoUseCase;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSemaforoDelAprendizAdministrativoUseCase.ConsultaDetalleAdministrativa;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSemaforoDelGrupoAdministrativoUseCase;
@@ -25,6 +27,9 @@ import java.util.UUID;
  *       del mentor, con nombres, de cualquier grupo.</li>
  *   <li>{@code GET /api/v1/admin/trainees/{traineeId}/semaforo?semanas=8} — el detalle de cualquier
  *       persona; cuelga de la misma ficha que {@code /admin/trainees/{id}/weekly-progress}.</li>
+ *   <li>{@code GET /api/v1/admin/semaforo/atencion} — «¿A quién atiendo hoy?» (S-4): todo aprendiz
+ *       activo en rojo o amarillo, esté en un grupo, en la recepción, en un grupo sin mentor o en
+ *       ninguno.</li>
  * </ul>
  *
  * <p>Mismo contenido que {@link SemaforoDelMentorController}, otra puerta y otra autorización: acá
@@ -38,11 +43,21 @@ public class SemaforoAdministrativoController {
 
     private final ConsultarSemaforoDelGrupoAdministrativoUseCase consultarTabla;
     private final ConsultarSemaforoDelAprendizAdministrativoUseCase consultarDetalle;
+    private final ConsultarAtencionDelSemaforoUseCase consultarAtencion;
 
     public SemaforoAdministrativoController(ConsultarSemaforoDelGrupoAdministrativoUseCase consultarTabla,
-                                            ConsultarSemaforoDelAprendizAdministrativoUseCase consultarDetalle) {
+                                            ConsultarSemaforoDelAprendizAdministrativoUseCase consultarDetalle,
+                                            ConsultarAtencionDelSemaforoUseCase consultarAtencion) {
         this.consultarTabla = consultarTabla;
         this.consultarDetalle = consultarDetalle;
+        this.consultarAtencion = consultarAtencion;
+    }
+
+    @RequiresPermission(value = Permission.MANAGE_TRAINEES,
+            scope = "AccesoAVistasDelSemaforo.requireAdminActivo: ADMIN/ALCHEMIST activo; lista con nombres de todo el padron")
+    @GetMapping("/semaforo/atencion")
+    public AtencionDelSemaforoResponse atencion(@ActorAutenticado UserId actorId) {
+        return AtencionDelSemaforoResponse.from(consultarAtencion.atencionDe(new ConsultaAtencion(actorId)));
     }
 
     @RequiresPermission(value = Permission.MANAGE_TRAINEES,

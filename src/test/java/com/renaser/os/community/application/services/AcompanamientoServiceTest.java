@@ -228,6 +228,11 @@ class AcompanamientoServiceTest {
                                       Instant desde, Instant hasta) {
         AsignacionCelula a = AsignacionCelula.abrir(AsignacionId.of(UUID.randomUUID()), celula, usuario, funcion,
                 desde, MotivoAsignacion.ADMINISTRATIVO, null, UUID.randomUUID().toString());
+        if (funcion != FuncionAcompanamiento.APRENDIZ) {
+            // Quien acompaña tiene cuenta, y activa salvo que la prueba diga otra cosa (E-258).
+            usuarios.putIfAbsent(usuario, new UserSummary(usuario, "Acompanante", null, UserRole.MENTOR,
+                    UserStatus.ACTIVE));
+        }
         if (hasta != null) {
             a.cerrar(hasta, MotivoAsignacion.ROTACION);
         }
@@ -360,6 +365,18 @@ class AcompanamientoServiceTest {
 
         // Y su contexto ya no lista el grupo.
         assertThat(servicio().contexto(EXMENTOR).asignaciones()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("E-258: un mentor SUSPENDIDO con la asignacion abierta no lee el roster (403)")
+    void mentorSuspendidoNoLee() {
+        escenarioBase();
+        usuarios.put(MENTOR, new UserSummary(MENTOR, "Mentor", null, UserRole.MENTOR, UserStatus.SUSPENDED));
+
+        assertThatThrownBy(() -> servicio().aprendices(
+                new ConsultaAprendices(MENTOR, MI_GRUPO.value(), null, 25)))
+                .isInstanceOf(NotAuthorizedException.class)
+                .hasMessageContaining("suspendida");
     }
 
     // ── el periodo del GRUPO, no solo el de la asignacion ───────────────────
@@ -532,5 +549,34 @@ class AcompanamientoServiceTest {
         asignar(MI_GRUPO, MENTOR, FuncionAcompanamiento.MENTOR, AHORA.minusSeconds(86_400), null);
 
         assertThat(finder().acompanantesVigentes(MI_GRUPO.value(), AHORA)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("S-4: grupos operativos incluye la recepción y los grupos sin mentor, y deja fuera al grupo cerrado")
+    void gruposOperativosNoDejaAfueraANadie() {
+        escenarioBase();
+        CelulaId recepcion = CelulaId.of(UUID.randomUUID());
+        CelulaId sinMentor = CelulaId.of(UUID.randomUUID());
+        CelulaId cerrado = CelulaId.of(UUID.randomUUID());
+        celulas.put(recepcion.value(), Celula.rehydrate(recepcion,
+                "Bienvenida", null, COHORTE, null, null, AHORA, AHORA,
+                com.renaser.os.community.domain.model.acompanamiento.TipoCelula.RECEPCION, null));
+        grupo(sinMentor, "Grupo Sin Mentor");
+        grupoConPeriodo(cerrado, "Grupo Viejo", LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 31));
+        UserId nuevo = UserId.of(UUID.randomUUID());
+        asignar(recepcion, nuevo, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(86_400), null);
+        asignar(sinMentor, AJENO, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(86_400), null);
+        asignar(cerrado, LUIS, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(86_400), null);
+
+        var operativos = finder().gruposOperativos(AHORA);
+
+        assertThat(operativos).extracting(g -> g.nombre())
+                .containsExactlyInAnyOrder("Grupo Amanecer", "Grupo Ajeno", "Bienvenida", "Grupo Sin Mentor");
+        var bienvenida = operativos.stream().filter(g -> g.recepcion()).findFirst().orElseThrow();
+        assertThat(bienvenida.mentorId()).isNull();
+        assertThat(bienvenida.aprendices()).containsExactly(nuevo);
+        var amanecer = operativos.stream().filter(g -> g.nombre().equals("Grupo Amanecer")).findFirst().orElseThrow();
+        assertThat(amanecer.mentorId()).isEqualTo(MENTOR);
+        assertThat(amanecer.aprendices()).containsExactlyInAnyOrder(ANA, LUIS);
     }
 }

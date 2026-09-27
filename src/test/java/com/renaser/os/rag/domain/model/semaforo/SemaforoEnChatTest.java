@@ -109,4 +109,25 @@ class SemaforoEnChatTest {
         assertThat(soloVerde.aplicaA(new CierreDeSemana(ColorDeLaSemana.VERDE, "Al día", new BigDecimal("90.0"))))
                 .isTrue();
     }
+
+    @Test
+    @DisplayName("S-7: alta de viernes con 1 o 2 dias con datos no recibe «Cerraste la semana en rojo»")
+    void conMenosDeTresDiasNoHayMensajeDeColor() {
+        var unDiaEnRojo = new CierreDeSemana(ColorDeLaSemana.ROJO, "Con problemas", new BigDecimal("40.0"), 1);
+        var dosDiasEnVerde = new CierreDeSemana(ColorDeLaSemana.VERDE, "Al día", new BigDecimal("90.0"), 2);
+
+        assertThat(prendido().aplicaA(unDiaEnRojo)).isFalse();
+        assertThat(prendido().redactar(unDiaEnRojo)).isEmpty();
+        assertThat(prendido().redactar(dosDiasEnVerde)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("S-7: con 3 dias con datos el color ya se cuenta; y sin datos nunca lleva color, sale igual")
+    void conTresDiasSiYSinDatosSiempre() {
+        var tresDiasEnRojo = new CierreDeSemana(ColorDeLaSemana.ROJO, "Con problemas", new BigDecimal("40.0"), 3);
+        var sinDatos = new CierreDeSemana(ColorDeLaSemana.SIN_DATOS, "Sin datos", null, 0);
+
+        assertThat(prendido().redactar(tresDiasEnRojo)).isPresent();
+        assertThat(prendido().redactar(sinDatos)).isPresent();
+    }
 }

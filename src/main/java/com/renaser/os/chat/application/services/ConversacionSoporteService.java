@@ -144,16 +144,24 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
             return;
         }
         String nombre = nombreDelSoporteDe(aprendizId);
-        crearSoporte(aprendizId, nombre, participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO))
-                .ifPresent(soporteId -> eventos.publishEvent(new SoporteDeAprendizNacioEvent(soporteId, aprendizId)));
+        crearSoporte(aprendizId, nombre, participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO), true);
     }
 
     /**
      * Crea la conversacion y mete a todos sus participantes, atomico y en transaccion propia.
      *
+     * <p><b>El aviso de que nacio se publica DENTRO de esa transaccion</b> (G-2, riesgo R2 de
+     * D-174). Antes se publicaba afuera, en la transaccion del listener que llama: si esa
+     * transaccion se deshacia despues de que esta ya habia commiteado, el soporte quedaba creado y
+     * el evento se perdia; el reintento del outbox encontraba el soporte y ya no publicaba nada, asi
+     * que la bienvenida no salia nunca. Adentro, el soporte y la publicacion del outbox commitean
+     * juntos, y la bienvenida (AFTER_COMMIT) sale cuando ESTA transaccion commitea.
+     *
+     * @param avisarQueNacio true solo para un aprendiz que acaba de entrar; el relleno no avisa
      * @return la conversacion creada, o vacio si ya existia (la creo otro primero)
      */
-    private Optional<ConversacionId> crearSoporte(UserId aprendizId, String nombre, List<UserId> staff) {
+    private Optional<ConversacionId> crearSoporte(UserId aprendizId, String nombre, List<UserId> staff,
+                                                  boolean avisarQueNacio) {
         ConversacionId id = ConversacionId.of(idGenerator.newId());
         try {
             transaccionPropia.executeWithoutResult(status -> {
@@ -162,6 +170,9 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
                 agregarParticipantePort.agregar(Participante.unirse(guardada.id(), aprendizId, clock.now()));
                 for (UserId miembro : staff) {
                     agregarParticipantePort.agregar(Participante.unirse(guardada.id(), miembro, clock.now()));
+                }
+                if (avisarQueNacio) {
+                    eventos.publishEvent(new SoporteDeAprendizNacioEvent(guardada.id(), aprendizId));
                 }
             });
             return Optional.of(id);
@@ -316,7 +327,7 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
     /** Un aprendiz que falla no puede detener el barrido (.claude/rules/02). */
     private ResultadoIntento intentarCrearEnElRelleno(UserSummary aprendiz, List<UserId> staff) {
         try {
-            return crearSoporte(aprendiz.id(), nombreDeSoporte(aprendiz.fullName()), staff).isPresent()
+            return crearSoporte(aprendiz.id(), nombreDeSoporte(aprendiz.fullName()), staff, false).isPresent()
                     ? ResultadoIntento.CREADA : ResultadoIntento.YA_EXISTIA;
         } catch (RuntimeException e) {
             log.warn("[chat.soporte] relleno: fallo el aprendiz {}", aprendiz.id(), e);

@@ -46,7 +46,7 @@ contratos: backend, app y agentes trabajan contra lo que dice acá. Si algo camb
 | Destinatario | Canal | Contenido |
 |---|---|---|
 | Cada persona medida | Push + bandeja (`RESUMEN_SEMANAL`, tipo ya existente y sin uso) | Texto según el caso (tabla de abajo). **Sin cifras ni colores** (regla de la app: el push no lleva métricas). Ruta `/semaforo`. |
-| Cada persona medida | Mensaje del acompañante (`rag.SemaforoEnChatListener`, plantilla sin IA, flag `renaser.ia.acompanante.semaforo-en-chat`, **encendido por defecto**) | Color, palabra y %: «Cerraste la semana en verde, Al día: 86 %». Una plantilla por color en `application.yaml`; la de «sin datos» nunca lleva número. Si una plantilla deja un marcador sin reemplazar, sale un texto de respaldo (`SemaforoEnChat.TEXTO_DE_RESPALDO`). |
+| Cada persona medida | Mensaje del acompañante (`rag.SemaforoEnChatListener`, plantilla sin IA, flag `renaser.ia.acompanante.semaforo-en-chat`, **encendido por defecto**) | Color, palabra y %: «Cerraste la semana en verde, Al día: 86 %». Una plantilla por color en `application.yaml`; la de «sin datos» nunca lleva número. Si una plantilla deja un marcador sin reemplazar, sale un texto de respaldo (`SemaforoEnChat.TEXTO_DE_RESPALDO`). **Una semana con color y menos de 3 días con datos no pasa al chat** (S-7, 2026-09-26: quien se dio de alta un viernes no recibe «Cerraste la semana en rojo» por un día); el push del cierre, que no lleva color, sale igual. |
 | Mentor | Bandeja + push (`RESUMEN_SEMANAL`) | Un aviso por grupo, con texto según el caso. **Sin cifras ni colores**; nombra al grupo, nunca a una persona. Ruta `/mentor/groups/{grupoId}/semaforo`. |
 | Líder, admin, alquimista | Bandeja + push (`RESUMEN_SEMANAL`) | Un aviso general, con texto según el caso. **Sin cifras ni colores**; los conteos viajan en el evento y se ven al abrir la ruta. Ruta `/semaforo/grupos`. |
 
@@ -309,7 +309,8 @@ Sin `semanaHasta` = ventana vigente (últimos 7 días cerrados). Con `semanaHast
 }
 ```
 
-Orden: rojo, amarillo, sin datos, verde; dentro de cada color, por nombre. Solo aprendices vigentes del grupo
+Orden: rojo, amarillo, sin datos, verde; dentro de cada color, por nombre. Dentro de «sin datos», primero
+por `motivo` (el más desconectado arriba) y después por nombre. Solo aprendices vigentes del grupo
 (nunca el mentor que además cursa). `dias` trae los 7 días con el mismo formato que §4.1, `etiqueta` incluida
 (el ejemplo está abreviado).
 
@@ -329,6 +330,27 @@ Cómo queda hoy:
 - Quien **no se mide** (sin programa activado, día 0 o ya graduado) llega igual que quien no tuvo nada
   programado: `SIN_DATOS`, `diasConDatos: 0`, `dias: []`. La fila dice «Sin datos · 0 de 7 días con datos».
 
+**`motivo` de «Sin datos» (S-5, 2026-09-26, aditivo).** Cada aprendiz trae `motivo`: `null` si tiene color
+y, si está en `SIN_DATOS`, por qué. Es un campo **calculado** de los días de su ventana
+(`mentoring.MotivoSinDatos`): no se guarda, no toca el color, el porcentaje ni la regla (el dueño pidió el
+2026-09-26 no cambiarlos). La app instalada lo ignora.
+
+| `motivo` | Cuándo | Para el mentor |
+|---|---|---|
+| `SIN_NADA_PLANIFICADO` | Tuvo días del programa en la ventana y en ninguno había hábitos ni objetivos | En el programa y desconectado: es a quien hay que llamar |
+| `NO_ACTIVADO` | No activó su programa (el semáforo no trae su ventana) | No arrancó |
+| `PENDIENTE_DE_CALCULO` | Sus días todavía no los calculó el barrido (entre las 00:00 y las :25, o si el barrido no corrió) | Esperar |
+| `PAUSADO` | Staff con programa propio que pausó toda la ventana | — |
+| `FUERA_DEL_PROGRAMA` | La ventana entera cae antes del día 1 (día 0) o después del día 90 | No arrancó todavía o ya se graduó |
+
+Si en una ventana hay mezcla, gana el primero de la tabla que aparezca. **Por qué «sin datos» no sube por
+encima del amarillo:** el bloque mezcla al desconectado con gente a la que nadie puede ayudar esa semana
+(día 0, graduados, cálculo pendiente); subirlo entero enterraría a los amarillos debajo de filas sin acción
+posible. Por eso se ordena por `motivo` dentro del bloque y los colores quedan donde estaban.
+
+> **Corregido 2026-09-26.** El ejemplo de §4.3 no traía `motivo`; ahora cada aprendiz lo trae (`null`
+> cuando tiene color), y `SemaforoDelMentorControllerTest.tablaConElFormatoDelContrato` lo exige.
+
 ### 4.4 Resumen por grupos — líder, admin, alquimista (sin nombres de aprendices)
 
 `GET /api/v1/semaforo/groups?semanaHasta=YYYY-MM-DD` · permiso `USE_APP` · guard: rol MENTOR_LEAD, ADMIN o
@@ -346,7 +368,8 @@ ALCHEMIST **y** cuenta activa (el permiso no alcanza: MENTOR/ADMIN/ALCHEMIST pas
 }
 ```
 
-Grupos regulares con mentor vigente (`gruposConMentorVigente`, sin recepción). `promedio` = promedio de los %
+Grupos regulares con mentor vigente (`gruposConMentorVigente`, sin recepción). Un aprendiz de la recepción, de un grupo sin mentor o
+sin grupo no suma acá: lo muestra la lista de administración de §4.6. `promedio` = promedio de los %
 de sus aprendices con datos, 1 decimal, o `null`. `color` y `etiqueta` son los del promedio, con **los mismos
 umbrales que una persona** (decisión del dueño, 2026-09-25): los calcula el servidor
 (`ColorSemaforo.delPorcentaje`, que delega en `ReglaDelSemaforo`) y la app los pinta sin aplicar umbrales. Sin
@@ -372,6 +395,40 @@ Confirmado por el dueño (2026-09-25):
 
 `/semaforo` (persona) · `/mentor/groups/{grupoId}/semaforo` (mentor) · `/semaforo/grupos` (líder/admin).
 La app instalada ignora rutas que no conoce y solo se abre: no rompe nada.
+
+### 4.6 «¿A quién atiendo hoy?» — administración (S-4, 2026-09-26)
+
+`GET /api/v1/admin/semaforo/atencion` · permiso `MANAGE_TRAINEES` · guard: ADMIN o ALCHEMIST **y** cuenta
+activa (`AccesoAVistasDelSemaforo.requireAdminActivo`). MENTOR, MENTOR_LEAD (no ve nombres, RL-07),
+TRAINEE y un admin suspendido reciben 403.
+
+**Por qué existe:** §4.4 mira solo grupos regulares con mentor vigente, así que un aprendiz de la
+recepción, de un grupo sin mentor o sin grupo no aparecía en ninguna vista de administración. Esta lista
+parte del **padrón de aprendices activos** (`UserSummaryFinder.aprendicesActivos`), no de los grupos, y le
+agrega a cada uno los grupos que están corriendo donde está (`AcompanamientoFinder.gruposOperativos`:
+regulares y recepción, con o sin mentor). Solo lectura, sin tabla nueva; el semáforo se lee una vez para
+todos, igual que en §4.3.
+
+```json
+{
+  "desde": "2026-09-18", "hasta": "2026-09-24", "cerrada": false,
+  "resumen": { "rojo": 1, "amarillo": 1, "total": 2 },
+  "aprendices": [
+    { "aprendizId": "…", "nombre": "Ana Pérez", "avatarUrl": null, "porcentaje": 55.0, "color": "ROJO",
+      "etiqueta": "Con problemas", "diasConDatos": 7, "dias": [ … ], "motivo": null,
+      "grupos": [ { "grupoId": "…", "grupoNombre": "Grupo Fénix", "recepcion": false, "mentorNombre": "Luisa Ramírez" } ] },
+    { "aprendizId": "…", "nombre": "Beto Paz", "avatarUrl": null, "porcentaje": 70.0, "color": "AMARILLO",
+      "etiqueta": "Requiere atención", "diasConDatos": 7, "dias": [ … ], "motivo": null,
+      "grupos": [ { "grupoId": "…", "grupoNombre": "Bienvenida", "recepcion": true, "mentorNombre": null } ] }
+  ]
+}
+```
+
+- Solo **rojo y amarillo** de la ventana vigente (la aceptación de S-4). Mismo color y porcentaje que la
+  tabla de su grupo: salen del mismo `MedicionDelAprendiz`.
+- Orden: rojo, amarillo; dentro de cada color, por nombre.
+- `grupos: []` = no está en ningún grupo que esté corriendo. Un aprendiz de dos grupos (D-139) trae los dos.
+- Solo cuentas activas y solo rol TRAINEE: el staff con programa propio no entra en esta lista.
 
 ---
 
@@ -400,3 +457,28 @@ La app instalada ignora rutas que no conoce y solo se abre: no rompe nada.
 - Verdugo por semáforo rojo (RF-28): no se pidió.
 - Días de intoxicación como opcionales: es de `habits` (ver §1), y ya está hecho allá (D-169) sin tocar el semáforo.
 - El «semáforo» del punto 10 del Excel (días sin responder): otro indicador.
+
+---
+
+## 7. Preguntas abiertas (S-8, revisión del 2026-09-26)
+
+**1. Ventanas que cruzan la medianoche del viernes.** Un hábito del viernes con ventana 22:00 → 02:00
+(`habits.VentanaEntrega`) vence el **sábado a las 02:10** en Lima, pero el barrido cierra esa semana en la
+corrida del sábado **00:25** (05:25 UTC). Lo que la persona cumpla a tiempo entre las 00:25 y las 02:10 ya no
+entra a su semana: la foto es append-only y los días de una semana cerrada no se recalculan. Prueba de
+caracterización: `VentanaEntregaTest.ventanaDelViernesCruzaElCierreDelSemaforo`. **No se arregló** porque
+cualquier arreglo mueve la regla que el dueño confirmó («se cierra el sábado 00:00 hora local»): por ejemplo,
+cerrar el sábado después del plazo más tardío de los hábitos del viernes, o cerrar a una hora fija (03:00).
+Hoy afecta solo a quien tenga un hábito con hora de fin después de la medianoche; ninguno del catálogo
+del programa la tiene, pero un hábito personal sí puede tenerla.
+
+**2. Días de suspensión.** Mientras una cuenta está suspendida el barrido no la calcula y no cierra sus
+semanas. Al reactivarla, la próxima corrida calcula **todos** los días que faltan, incluidos los de la
+suspensión, y cierra las semanas atrasadas con esos días. Si `habits` generó hábitos esos días (o la persona
+tenía objetivos planificados), cuentan como no cumplidos y la semana puede salir en rojo; la ventana vigente
+de Hoy también los muestra. No hay registro de desde cuándo hasta cuándo estuvo suspendida (el evento
+`EstadoDeCuentaCambiadoEvent` no se guarda en ninguna tabla del dominio), así que no hay arreglo seguro sin
+decidir cómo guardarlo. Opción sin tabla nueva: registrar la suspensión como una pausa en `semaforo_pausas`
+(desde el día de la suspensión, `reanudada_el` el día de la reactivación), que ya hace que esos días no se
+midan; pero hoy la regla dice que el semáforo del aprendiz **no se puede pausar**, así que lo decide el dueño.
+Mientras tanto, «Reprocesar la semana de una persona» (`docs/DESPLIEGUE_Y_CI.md`) no ayuda: recalcularía los mismos días.
