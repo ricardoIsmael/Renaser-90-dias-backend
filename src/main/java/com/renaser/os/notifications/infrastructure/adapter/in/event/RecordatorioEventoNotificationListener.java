@@ -30,6 +30,13 @@ import java.time.ZoneId;
  * reintento no duplica: la clave {@link AvisoDeEvento#claveDeduplicacion()} es una por fila de la
  * cola, y {@code notificaciones_origen_evento_uk} (V16) rechaza la segunda.
  *
+ * <p><b>Corregido 2026-09-27 (E-360).</b> Lo de arriba no pasaba: el despacho marcaba las filas despues de
+ * publicar, con un UPDATE que vaciaba el contexto de persistencia y se llevaba las publicaciones sin
+ * escribirlas. Ninguna quedo nunca en {@code event_publication}, y un aviso que fallaba se perdia (17 de 29 el
+ * 2026-09-27, cuando el pool se agoto). Ademas este metodo corria en un hilo nuevo por aviso, sin tope. Ahora
+ * corre en el ejecutor de eventos ({@code renaser.eventos.concurrencia} hilos, {@code EjecucionAsincronaConfig})
+ * y la publicacion se guarda de verdad ({@code AvisosDeEventoEnMasaIT}).
+ *
  * <p><b>Preferencias y cuentas suspendidas</b> no se deciden aca: {@code NotificacionService.emitir}
  * no crea la fila si la persona apago {@code RECORDATORIO_EVENTO}, y no empuja al telefono de una
  * cuenta sin acceso vigente (E-38).

@@ -1,10 +1,7 @@
 package com.renaser.os.calendar.application.services;
 
-import com.renaser.os.calendar.api.RecordatorioEventoDebidoEvent;
-import com.renaser.os.calendar.application.ports.in.recordatorio.DespacharRecordatoriosUseCase;
 import com.renaser.os.calendar.application.ports.in.recordatorio.GenerarRecordatoriosUseCase;
 import com.renaser.os.calendar.application.ports.out.celula.ConsultarMiembrosCelulaPort;
-import com.renaser.os.calendar.application.ports.out.confirmacion.LoadConfirmacionPort;
 import com.renaser.os.calendar.application.ports.out.curso.ResolverAudienciaCursoPort;
 import com.renaser.os.calendar.application.ports.out.elegibilidad.ConsultarElegibilidadEventoPort;
 import com.renaser.os.calendar.application.ports.out.evento.LoadEventoPort;
@@ -12,11 +9,8 @@ import com.renaser.os.calendar.application.ports.out.evento.LoadExcepcionPort;
 import com.renaser.os.calendar.application.ports.out.nivelmembresia.LoadNivelMembresiaPort;
 import com.renaser.os.calendar.application.ports.out.participante.ConsultarProgresoParticipanteCalendarPort;
 import com.renaser.os.calendar.application.ports.out.participante.ResolverAudienciaMasivaPort;
-import com.renaser.os.calendar.application.ports.out.recordatorio.LoadRecordatorioPort;
 import com.renaser.os.calendar.application.ports.out.recordatorio.SaveRecordatorioPort;
-import com.renaser.os.calendar.domain.model.evento.EstadoEvento;
 import com.renaser.os.calendar.domain.model.evento.Evento;
-import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.evento.Excepcion;
 import com.renaser.os.calendar.domain.model.evento.ExpansorOcurrencias;
 import com.renaser.os.calendar.domain.model.evento.Ocurrencia;
@@ -30,9 +24,6 @@ import com.renaser.os.calendar.domain.model.recordatorio.InstanteRecordatorio;
 import com.renaser.os.calendar.domain.model.recordatorio.RecordatorioEvento;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,26 +34,23 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Puerto directo de las dos operaciones de {@code reminderService.ts} (repo viejo):
- * {@code generar()} deja en la cola los avisos que faltan; {@code despachar()} toma los
- * vencidos y PUBLICA {@link RecordatorioEventoDebidoEvent} (en vez de mandar push directo
- * — `notifications` decide el canal, fuera de este modulo).
+ * Puerto directo de {@code generar()} de {@code reminderService.ts} (repo viejo): deja en la cola los
+ * avisos que faltan. {@code despachar()} vive en {@link DespachoDeRecordatoriosService}.
+ *
+ * <p><b>Corregido 2026-09-27 (E-360).</b> Esta clase implementaba tambien {@code despachar()}, en una
+ * sola transaccion de hasta 500 filas. Paso a su propia clase al partirlo en lotes: con los dos casos de
+ * uso juntos la clase pasaba el techo de 300 lineas.
  */
 @Service
-public class RecordatorioService implements GenerarRecordatoriosUseCase, DespacharRecordatoriosUseCase {
-
-    private static final Logger log = LoggerFactory.getLogger(RecordatorioService.class);
+public class RecordatorioService implements GenerarRecordatoriosUseCase {
 
     /** VENTANA_DIAS del repo viejo: suelo de la ventana de generacion. */
     private static final int VENTANA_DIAS_DEFECTO = 3;
     /** ANUNCIO_VALIDEZ_MS del repo viejo: 24h desde creado el evento. */
     private static final long ANUNCIO_VALIDEZ_HORAS = 24;
-    private static final int LIMITE_DESPACHO = 500;
 
     private final LoadEventoPort loadEventoPort;
     private final LoadExcepcionPort loadExcepcionPort;
-    private final LoadConfirmacionPort loadConfirmacionPort;
-    private final LoadRecordatorioPort loadRecordatorioPort;
     private final SaveRecordatorioPort saveRecordatorioPort;
     private final LoadNivelMembresiaPort nivelPort;
     private final ConsultarProgresoParticipanteCalendarPort progresoPort;
@@ -70,20 +58,16 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase, Despach
     private final ConsultarMiembrosCelulaPort celulaPort;
     private final ResolverAudienciaCursoPort cursoPort;
     private final ConsultarElegibilidadEventoPort elegibilidadPort;
-    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public RecordatorioService(LoadEventoPort loadEventoPort, LoadExcepcionPort loadExcepcionPort,
-                                LoadConfirmacionPort loadConfirmacionPort, LoadRecordatorioPort loadRecordatorioPort,
                                 SaveRecordatorioPort saveRecordatorioPort, LoadNivelMembresiaPort nivelPort,
                                 ConsultarProgresoParticipanteCalendarPort progresoPort,
                                 ResolverAudienciaMasivaPort audienciaMasivaPort, ConsultarMiembrosCelulaPort celulaPort,
                                 ResolverAudienciaCursoPort cursoPort, ConsultarElegibilidadEventoPort elegibilidadPort,
-                                ApplicationEventPublisher events, Clock clock) {
+                                Clock clock) {
         this.loadEventoPort = loadEventoPort;
         this.loadExcepcionPort = loadExcepcionPort;
-        this.loadConfirmacionPort = loadConfirmacionPort;
-        this.loadRecordatorioPort = loadRecordatorioPort;
         this.saveRecordatorioPort = saveRecordatorioPort;
         this.nivelPort = nivelPort;
         this.progresoPort = progresoPort;
@@ -91,7 +75,6 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase, Despach
         this.celulaPort = celulaPort;
         this.cursoPort = cursoPort;
         this.elegibilidadPort = elegibilidadPort;
-        this.events = events;
         this.clock = clock;
     }
 
@@ -228,60 +211,4 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase, Despach
                 .collect(Collectors.toSet());
         return List.copyOf(cursoPort.filtrarConAcceso(evento.cursoId(), candidatos));
     }
-
-    /**
-     * <b>Que significa "enviado" (D-182).</b> {@code enviado_en} quiere decir "entregado al outbox",
-     * no "llego al telefono". Es correcto marcarlo en esta misma transaccion porque el evento se
-     * publica DENTRO de ella: Spring Modulith guarda la publicacion en {@code event_publication} en
-     * el mismo commit que el {@code UPDATE} de {@code enviado_en}. O se guardan las dos cosas o
-     * ninguna; no hay ventana en que la fila quede marcada y el aviso sin registrar.
-     *
-     * <p>Despues del commit, {@code notifications} crea la notificacion. Si eso falla, la
-     * publicacion queda incompleta y {@code EventPublicationMaintenanceScheduler} la reintenta
-     * cada 5 minutos (y al arrancar); el reintento no duplica porque la notificacion se deduplica
-     * por el {@code id} de esta fila.
-     *
-     * <p><b>La garantia depende de que exista un consumidor.</b> Sin ningun
-     * {@code @ApplicationModuleListener} para este evento, Modulith no guarda nada y la fila se
-     * marca igual: asi se perdieron todos los recordatorios hasta el 2026-09-26 (E-301).
-     * {@code RecordatorioEventoNotificationListenerTest} verifica que el consumidor exista.
-     */
-    @Override
-    @Transactional
-    public int despachar(Instant ahora) {
-        List<RecordatorioEvento> pendientes = loadRecordatorioPort.vencidosPendientes(ahora, LIMITE_DESPACHO);
-        if (pendientes.isEmpty()) {
-            return 0;
-        }
-
-        AsistenciasConfirmadasDelLote asistencias = AsistenciasConfirmadasDelLote.de(pendientes, loadConfirmacionPort);
-        List<Long> despachadosIds = new ArrayList<>();
-        for (RecordatorioEvento recordatorio : pendientes) {
-            var eventoOpt = loadEventoPort.byId(recordatorio.eventoId());
-            if (eventoOpt.isEmpty()) {
-                // FK ON DELETE CASCADE deberia impedir esto; guard defensivo.
-                continue;
-            }
-            Evento evento = eventoOpt.get();
-            if (evento.estado() == EstadoEvento.CANCELADO) {
-                saveRecordatorioPort.cancelarPorIds(List.of(recordatorio.id()), RecordatorioEvento.MOTIVO_EVENTO_CANCELADO);
-                continue;
-            }
-
-            boolean esAnuncio = recordatorio.esAnuncio(evento.creadoEn());
-            boolean asistenciaConfirmada = !esAnuncio && asistencias.incluye(recordatorio);
-            events.publishEvent(new RecordatorioEventoDebidoEvent(recordatorio.id(), evento.id().value(),
-                    recordatorio.usuarioId(), recordatorio.inicioOcurrencia(), evento.titulo(), esAnuncio,
-                    asistenciaConfirmada, evento.timezone().getId(), ahora));
-            despachadosIds.add(recordatorio.id());
-        }
-
-        if (!despachadosIds.isEmpty()) {
-            saveRecordatorioPort.marcarEnviados(despachadosIds, ahora);
-        }
-        log.debug("[RecordatorioService.despachar] {} recordatorio(s) despachado(s) de {} pendiente(s)",
-                despachadosIds.size(), pendientes.size());
-        return despachadosIds.size();
-    }
-
 }

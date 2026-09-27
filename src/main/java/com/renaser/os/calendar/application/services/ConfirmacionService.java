@@ -67,7 +67,7 @@ public class ConfirmacionService implements ConfirmarAsistenciaUseCase {
         // persona para esta ocurrencia (en transaccion propia, C-15). Se quito: la alarma local
         // existe solo en la app del telefono, y quien respondia "Voy" desde la web se quedaba sin
         // ningun aviso. Si el aviso sigue haciendo falta se decide al entregarlo, con los tokens de
-        // ese momento (RecordatorioService.despachar + notifications.RecordatorioEventoNotificationListener).
+        // ese momento (DespachoDeRecordatoriosService.despachar + notifications.RecordatorioEventoNotificationListener).
     }
 
     private boolean esOcurrenciaReal(Evento evento, Instant inicioOcurrencia) {

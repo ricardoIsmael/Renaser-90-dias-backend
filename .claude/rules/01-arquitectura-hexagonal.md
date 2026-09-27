@@ -29,6 +29,11 @@ Si una clase de dominio "necesita" `@Entity`, esa anotación va en un `*JpaEntit
 - **Ninguna clase con anotaciones de dos mundos** (`@Entity` + `@JsonProperty` juntas).
 - **Ninguna llamada a un puerto de IA dentro de `@Transactional`** (C-1). Una IA real puede tardar
   45 s reteniendo una conexión de Hikari, y agota el pool para toda la API.
+- **Todo `@Async` corre en un ejecutor de `shared.infrastructure.async.EjecucionAsincronaConfig`** (E-360). El de
+  por defecto es el de los listeners de eventos, con `renaser.eventos.concurrencia` hilos. No suponer que
+  `spring.task.execution.*` aplica: con el broker STOMP, Spring Boot no arma su ejecutor y `@Async` caía en un
+  hilo nuevo por tarea, sin tope. Una tarea que espera a la IA o a HTTP largo va con su propio ejecutor
+  (`@Async(EjecucionAsincronaConfig.EJECUTOR_DE_IA)`, como la V90).
 - **Nombres de puerto por intención de negocio**, no por tecnología: `LoadUserPort`, no
   `JpaUserFinder`. Los adaptadores sí nombran la tecnología.
 - Prohibidos: `Util`, `Helper`, `Manager`, `Processor`, `Data`, `Info` sueltos.

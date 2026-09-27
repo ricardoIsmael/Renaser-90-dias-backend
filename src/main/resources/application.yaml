@@ -49,6 +49,13 @@ spring:
   # de una transaccion). Se deja `reject-tasks-when-limit-reached` en su default (false):
   # al llegar al tope, el despacho espera un permiso en vez de fallar — no retiene ninguna
   # conexion de base mientras espera, asi que esperar es mas barato que romper el flujo.
+  #
+  # Corregido 2026-09-27 (E-360): este tope NUNCA se aplico. Spring Boot solo arma su ejecutor si no
+  # hay otro `Executor` en el contexto, y el broker STOMP del chat declara cuatro: @Async (los 36
+  # @ApplicationModuleListener y la V90) caia en un SimpleAsyncTaskExecutor sin tope. Los
+  # ejecutores ahora se declaran en `shared.infrastructure.async.EjecucionAsincronaConfig`: este
+  # valor acota el de IA (validacion V90); los listeners van al de eventos
+  # (`renaser.eventos.concurrencia`, abajo).
   task:
     execution:
       simple:
@@ -186,6 +193,8 @@ spring:
       # avalancha al reiniciar queda acotado por el mismo tope de C-1
       # (spring.task.execution.simple.concurrency-limit), que gobierna el executor que Modulith
       # reutiliza para @ApplicationModuleListener.
+      # Corregido 2026-09-27 (E-360): ese tope no gobernaba nada (ver `task.execution` arriba). Lo
+      # acota `renaser.eventos.concurrencia`, el ejecutor de todos los @ApplicationModuleListener.
       republish-outstanding-events-on-restart: true
       # UPDATE (el default) marca completion_date y deja la fila para siempre: crecimiento sin
       # limite (E-4). DELETE la borra apenas se completa, asi que en el camino feliz no queda
@@ -225,6 +234,12 @@ renaser:
   # milisegundos entren las dos. Justificacion de cada valor en docs/informes/auditoria-fixes/C-5.md
   # EventPublicationMaintenanceScheduler (shared/infrastructure/event), C-7.
   eventos:
+    # E-360 (2026-09-27): cuantos listeners de eventos (@ApplicationModuleListener) corren a la vez;
+    # el resto espera en una cola en memoria (y en el outbox). Cada uno puede tener DOS conexiones a
+    # la vez (la suya y la transaccion propia del INSERT de la notificacion), asi que 2 x este valor
+    # tiene que dejar margen para la API dentro de DB_POOL_MAX_SIZE: 4 -> 8 de 20. Subir el pool no
+    # arregla una rafaga; acotar la concurrencia si. Ver EjecucionAsincronaConfig.
+    concurrencia: ${EVENTOS_CONCURRENCIA:4}
     # Cada cuanto reintenta publicaciones incompletas SIN esperar a un restart: el backend
     # corre siempre-arriba y entre un deploy y el siguiente pueden pasar dias. El umbral es
     # mayor a cualquier ejecucion normal de un listener (hoy solo escrituras a Postgres) para
