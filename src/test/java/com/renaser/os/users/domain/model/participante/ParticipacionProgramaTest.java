@@ -568,6 +568,75 @@ class ParticipacionProgramaTest {
         assertThat(p.fechaGraduacionEsperada()).isEqualTo(inicio.plusDays(96));
     }
 
+    // --- CARACTERIZACION (riesgos del ajuste de dia, 2026-09-26): preguntas abiertas al dueño ---
+
+    /**
+     * CARACTERIZACION, no regla confirmada. Con el programa activado pero el Dia 1 todavia en el
+     * futuro, {@code fijarDia} escribe el dia y NO el ajuste (la cuenta derivada no puede
+     * representar "dia 5" antes del dia 1). El endpoint responde 204 y la bitacora registra el
+     * cambio, pero al llegar la fecha de inicio el barrido deriva 1 y el ajuste desaparece.
+     */
+    @Test
+    void caracterizacionFijarDiaAntesDelDiaUnoNoSobreviveAlArranque() {
+        ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
+
+        p.fijarDia(5, CLOCK);
+        assertThat(p.diaPrograma()).isEqualTo(5);
+        assertThat(p.diasAjuste()).isZero();
+
+        p.sincronizarDiaDelPrograma(p.fechaInicio(), relojEn(p.fechaInicio(), p));
+
+        assertThat(p.diaPrograma()).isEqualTo(1);
+    }
+
+    /**
+     * CARACTERIZACION. Fijar 90 no gradua en el acto: gradua la corrida siguiente del barrido
+     * (minuto :05 de cada hora), y desde ahi ya no se des-gradua. Un 90 puesto por error y
+     * corregido despues de las :05 deja al aprendiz graduado para siempre.
+     */
+    @Test
+    void caracterizacionFijarNoventaGraduaRecienEnElBarridoYNoSeDeshace() {
+        ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
+        LocalDate diaVeinte = p.fechaInicio().plusDays(19);
+
+        p.fijarDia(90, relojEn(diaVeinte, p));
+        assertThat(p.programaCompletado()).isFalse();
+
+        p.sincronizarDiaDelPrograma(diaVeinte, relojEn(diaVeinte, p));
+        assertThat(p.programaCompletado()).isTrue();
+
+        p.fijarDia(20, relojEn(diaVeinte, p));
+        assertThat(p.diaPrograma()).isEqualTo(20);
+        assertThat(p.programaCompletado()).isTrue();
+    }
+
+    /** E-319: el dia vigente es el derivado aunque la columna siga en el de ayer. */
+    @Test
+    void diaVigenteEsElDerivadoAunqueElBarridoNoHayaCorrido() {
+        ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
+        LocalDate diaDiez = p.fechaInicio().plusDays(9);
+        p.sincronizarDiaDelPrograma(diaDiez, relojEn(diaDiez, p));
+
+        // 00:30 del dia siguiente en Lima = 05:30 UTC: el barrido de ese dia no corrio todavia.
+        FixedClock pasadaLaMedianoche = FixedClock.at(
+                diaDiez.plusDays(1).atTime(0, 30).atZone(p.timezone()).toInstant());
+
+        assertThat(p.diaPrograma()).isEqualTo(10);
+        assertThat(p.diaVigente(pasadaLaMedianoche)).isEqualTo(11);
+    }
+
+    /** Antes del Dia 1 no hay cuenta que derivar: manda lo guardado (igual que la lectura). */
+    @Test
+    void diaVigenteAntesDelDiaUnoEsElGuardado() {
+        ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
+
+        assertThat(p.diaVigente(CLOCK)).isZero();
+    }
+
     /** Reloj posicionado al mediodia de `dia` en la zona del participante. */
     private static FixedClock relojEn(LocalDate dia, ParticipacionPrograma p) {
         return FixedClock.at(dia.atTime(12, 0).atZone(p.timezone()).toInstant());

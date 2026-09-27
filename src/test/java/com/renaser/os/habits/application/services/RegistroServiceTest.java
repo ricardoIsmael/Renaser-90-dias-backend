@@ -482,6 +482,32 @@ class RegistroServiceTest {
     }
 
     /**
+     * CARACTERIZACION, no regla confirmada (riesgos del ajuste de dia, 2026-09-26; pregunta
+     * abierta al dueño). {@code dia_desbloqueo} es un numero ABSOLUTO de dia de programa, y el
+     * interruptor del Plan crea la fila con el dia en que se toco (D-99). Si el aprendiz toco el
+     * habito en su dia 30 y un admin lo retrocede al 25, el habito que venia haciendo deja de
+     * generarse del 25 al 29 — aunque "Mis habitos" lo muestre desbloqueado. Esta prueba fija el
+     * comportamiento de HOY; si el dueño decide que un habito ya activo sobrevive al retroceso,
+     * es la que hay que invertir.
+     */
+    @Test
+    @DisplayName("caracterizacion: tras retroceder al 25, un habito activado el dia 30 deja de generar")
+    void caracterizacionRetrocederApagaUnHabitoActivadoDespuesDelDiaDestino() {
+        UserId participante = participante();
+        Habito habito = habitoCheckbox();
+        when(progresoPort.deParticipante(participante)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(25, "UTC", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
+        when(loadHabitoPort.personalesActivosDe(participante)).thenReturn(List.of());
+        when(loadDesbloqueoPort.deParticipante(participante)).thenReturn(List.of(
+                DesbloqueoHabito.rehydrate(participante, habito.id(), 30, CLOCK.now(), CLOCK.now(), CLOCK.now())));
+
+        List<RegistroHabito> generados = service.generar(participante, LocalDate.of(2026, 8, 24));
+
+        assertThat(generados).isEmpty();
+    }
+
+    /**
      * E-230: dos pedidos a /hoy en el mismo milisegundo ven "no existe" y los dos insertan. El que
      * pierde ya no revienta con la UNIQUE (antes: 409): el INSERT idempotente dice que ya estaba y
      * la generacion sigue sin agregarlo.

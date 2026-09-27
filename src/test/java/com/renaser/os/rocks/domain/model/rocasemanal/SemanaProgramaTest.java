@@ -71,4 +71,37 @@ class SemanaProgramaTest {
         LocalDate inicio = LocalDate.of(2026, 1, 1);
         assertThat(SemanaPrograma.finDelPrograma(inicio)).isEqualTo(LocalDate.of(2026, 3, 31)); // 89 dias despues
     }
+
+    /**
+     * CARACTERIZACION (riesgos del ajuste de dia, 2026-09-26; pregunta abierta al dueño). Las
+     * semanas de rocas se cuentan desde {@code fechaInicio} SIN {@code dias_ajuste_programa},
+     * y {@code RocaSemanal} solo admite semanas 1..13 (CHECK de V1). Inicio lunes 2026-06-01,
+     * retrocedido 7 dias: su dia 90 cae el 2026-09-05, que para rocks es la semana 14 y ya esta
+     * pasado el fin del programa — crear el plan de esas semanas falla con 400.
+     */
+    @Test
+    @DisplayName("caracterizacion: tras retroceder 7 dias, el final del programa cae en la semana 14")
+    void caracterizacionRetrocederLlevaElFinalDelProgramaALaSemanaCatorce() {
+        LocalDate lunes = LocalDate.of(2026, 6, 1);
+        LocalDate diaNoventaConAjuste = lunes.plusDays(90 + 7 - 1);
+
+        assertThat(SemanaPrograma.numeroSemanaParaFecha(lunes, diaNoventaConAjuste)).isEqualTo(14);
+        assertThat(SemanaPrograma.finDelPrograma(lunes)).isBefore(diaNoventaConAjuste);
+    }
+
+    /**
+     * CARACTERIZACION de un hallazgo SIN ajuste de por medio (preexistente, reportado aparte): con
+     * inicio en miercoles la semana 1 dura 5 dias, las semanas 2..13 suman 84, y el dia 90 ya cae
+     * en la semana 14. Solo los inicios en lunes o martes caben en 13 semanas.
+     */
+    @Test
+    @DisplayName("caracterizacion: con inicio en miercoles, el dia 90 cae en la semana 14 sin ningun ajuste")
+    void caracterizacionInicioEnMiercolesTerminaEnLaSemanaCatorce() {
+        LocalDate miercoles = LocalDate.of(2026, 8, 26);
+
+        assertThat(SemanaPrograma.numeroSemanaParaFecha(miercoles, SemanaPrograma.finDelPrograma(miercoles)))
+                .isEqualTo(14);
+        assertThat(SemanaPrograma.numeroSemanaParaFecha(LocalDate.of(2026, 9, 1), // martes
+                SemanaPrograma.finDelPrograma(LocalDate.of(2026, 9, 1)))).isEqualTo(13);
+    }
 }

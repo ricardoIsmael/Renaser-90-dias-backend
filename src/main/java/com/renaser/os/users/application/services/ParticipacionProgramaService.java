@@ -265,7 +265,9 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
                         "Participante no inscripto en el programa: " + command.traineeId()));
         requireAdminGuard.requireAdminActivo(command.actorId());
 
-        int diaAnterior = participacion.diaPrograma();
+        // E-319: el dia que el admin tenia en pantalla (derivado), no la columna, que entre la
+        // medianoche local y el barrido de las :05 todavia dice el dia de ayer.
+        int diaAnterior = participacion.diaVigente(clock);
         int ajusteAnterior = participacion.diasAjuste();
 
         participacion.fijarDia(command.newProgramDay(), clock);
