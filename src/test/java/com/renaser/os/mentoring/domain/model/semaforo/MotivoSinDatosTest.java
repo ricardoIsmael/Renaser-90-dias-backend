@@ -63,6 +63,21 @@ class MotivoSinDatosTest {
     }
 
     @Test
+    @DisplayName("D-209: con la cuenta suspendida toda la ventana: CUENTA_SUSPENDIDA, no «fuera del programa»")
+    void cuentaSuspendida() {
+        var suspendido = EstadoDiaSemaforo.CUENTA_SUSPENDIDA;
+        var fuera = EstadoDiaSemaforo.FUERA_DEL_PROGRAMA;
+
+        assertThat(MedicionDelAprendiz.de(sinDatos(siete(suspendido))).motivo()).isEqualTo(MotivoSinDatos.CUENTA_SUSPENDIDA);
+        assertThat(MedicionDelAprendiz.de(sinDatos(fuera, fuera, suspendido, suspendido, suspendido, suspendido, suspendido))
+                .motivo()).isEqualTo(MotivoSinDatos.CUENTA_SUSPENDIDA);
+        // Volvió y no planificó nada: eso dice más de la persona que la suspensión.
+        assertThat(MedicionDelAprendiz.de(sinDatos(suspendido, suspendido, suspendido, suspendido, suspendido,
+                EstadoDiaSemaforo.SIN_DATOS, EstadoDiaSemaforo.SIN_DATOS)).motivo())
+                .isEqualTo(MotivoSinDatos.SIN_NADA_PLANIFICADO);
+    }
+
+    @Test
     @DisplayName("con color no hay motivo, y el motivo no toca color ni porcentaje")
     void conColorSinMotivo() {
         var medicion = new MedicionDelAprendiz(new BigDecimal("55.0"), ColorSemaforo.ROJO, 7, List.of());

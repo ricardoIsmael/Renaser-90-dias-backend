@@ -95,7 +95,11 @@ public class CierreDelSemaforoService implements CerrarSemaforoUseCase {
         return ejecutar(conTrabajo, medibles.size(), ahora);
     }
 
-    /** Programas con fechas coherentes de cuentas ACTIVAS: un suspendido no se mide mientras lo esté. */
+    /**
+     * Programas con fechas coherentes de cuentas ACTIVAS: un suspendido no se mide mientras lo esté. Al
+     * reactivarlo, esta corrida se pone al día, pero los días de la suspensión no se miden: su calendario
+     * los trae como tramo sin medir ({@code SuspensionDelSemaforoService}, D-209).
+     */
     private List<ProgramaActivado> medibles(List<ProgramaActivado> pagina) {
         List<ProgramaActivado> conFechas = pagina.stream()
                 .filter(p -> p.primeraFecha() != null && p.ultimaFecha() != null)

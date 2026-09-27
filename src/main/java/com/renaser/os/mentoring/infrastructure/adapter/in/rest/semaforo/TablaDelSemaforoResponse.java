@@ -31,8 +31,9 @@ public record TablaDelSemaforoResponse(UUID grupoId, String grupoNombre, LocalDa
      * Un aprendiz que no se mide llega con {@code color: SIN_DATOS}, {@code porcentaje: null} y sin días.
      *
      * <p>{@code motivo} (S-5, aditivo: la app instalada lo ignora) dice por qué está «Sin datos»
-     * —{@code SIN_NADA_PLANIFICADO}, {@code NO_ACTIVADO}, {@code PENDIENTE_DE_CALCULO}, {@code PAUSADO}
-     * o {@code FUERA_DEL_PROGRAMA}— y es null si tiene color.
+     * —{@code SIN_NADA_PLANIFICADO}, {@code NO_ACTIVADO}, {@code PENDIENTE_DE_CALCULO},
+     * {@code CUENTA_SUSPENDIDA} (D-209), {@code PAUSADO} o {@code FUERA_DEL_PROGRAMA}— y es null si tiene
+     * color.
      */
     public record AprendizResponse(UUID aprendizId, String nombre, String avatarUrl, BigDecimal porcentaje,
                                    String color, String etiqueta, int diasConDatos, List<DiaResponse> dias,

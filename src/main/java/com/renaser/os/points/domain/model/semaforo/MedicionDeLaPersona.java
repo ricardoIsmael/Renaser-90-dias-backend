@@ -92,8 +92,9 @@ public record MedicionDeLaPersona(CalendarioDeMedicion calendario, Map<LocalDate
     }
 
     /**
-     * Un día sin medir (fuera del programa o pausado) nunca muestra porcentaje, aunque haya una fila
-     * vieja; uno que todavía no cerró o que el barrido no calculó es PENDIENTE.
+     * Un día sin medir (fuera del programa, pausado o con la cuenta suspendida) nunca muestra
+     * porcentaje, aunque haya una fila vieja; uno que todavía no cerró o que el barrido no calculó es
+     * PENDIENTE.
      */
     private DiaDelSemaforo diaDe(LocalDate fecha) {
         if (!calendario.seMide(fecha)) {

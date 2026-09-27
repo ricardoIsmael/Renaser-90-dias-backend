@@ -770,6 +770,48 @@ una operación manual y excepcional, que queda anotada en la bitácora con la fo
    semana la clave del aviso es la misma (`SemanaDelSemaforoCerradaEvent.claveDe`), así que la bandeja
    y el chat la descartan.
 
+#### Anotar a mano una suspensión anterior a V72 (D-209, 2026-09-27)
+
+Desde V72 los días con la cuenta suspendida no se miden: `points` anota cada suspensión y cada
+reactivación al ocurrir. De las anteriores al despliegue no hay registro (no existe un historial de estados
+de cuenta), así que siguen midiéndose como antes. **Solo** si alguien conoce las fechas por fuera (quien la
+suspendió, un mensaje con fecha) y hay que corregir una semana que quedó en rojo por eso:
+
+1. **Anotar la suspensión** con sus días locales: `:desde` es el día de la suspensión y `:hasta` el de la
+   reactivación, los dos quedan sin medir (`reanudada_el` es el día siguiente). Si la persona seguía suspendida al
+   desplegar, V72 ya le abrió una desde ese día: en vez de insertar, se corre su `desde` hacia atrás.
+   ```sql
+   -- ya reactivada antes del despliegue
+   INSERT INTO renaser.semaforo_pausas (id, usuario_id, motivo, desde, hasta, reanudada_el, creada_en, reanudada_en)
+   VALUES (gen_random_uuid(), :persona, 'CUENTA_SUSPENDIDA', :desde, NULL, :hasta + 1, :suspendida_en, :reactivada_en);
+   -- suspendida todavía al desplegar (la abrió el relleno de V72)
+   UPDATE renaser.semaforo_pausas SET desde = :desde
+    WHERE usuario_id = :persona AND motivo = 'CUENTA_SUSPENDIDA' AND desde > :desde;
+   ```
+2. **Reprocesar** desde la semana (viernes) que contiene `:desde`, con el procedimiento de arriba. Las filas
+   viejas de `semaforo_dias` de esos días quedan, pero ya no se muestran ni cuentan: un día que no se mide
+   nunca muestra porcentaje.
+3. **Anotarlo en la bitácora** con las fechas, de dónde salieron y las fotos de antes.
+
+Nunca con fechas estimadas: un día anotado de más deja de medirse para siempre.
+
+#### Volver a una imagen anterior a V72 (D-209)
+
+El código anterior a V72 no sabe leer una suspensión (`hasta` NULL): falla al armar la ventana de esa
+persona, y con ella la tarjeta del semáforo de Hoy y la tabla de su grupo. **Antes** de desplegar una imagen
+anterior:
+
+```sql
+-- anotar el resultado en la bitácora: sin estas filas no hay forma de reconstruirlas
+SELECT id, usuario_id, desde, reanudada_el, creada_en, reanudada_en
+  FROM renaser.semaforo_pausas WHERE motivo = 'CUENTA_SUSPENDIDA';
+DELETE FROM renaser.semaforo_pausas WHERE motivo = 'CUENTA_SUSPENDIDA';
+```
+
+Esas personas vuelven al comportamiento de antes (los días de la suspensión se miden al reactivarlas). La
+columna `motivo` puede quedar: el código anterior no la lee y su DEFAULT cubre la pausa del staff. Al volver
+a la imagen nueva las filas no vuelven solas: se reinsertan con lo anotado.
+
 **Opcionales — solo si hay que apartarse del default:** `DB_POOL_MAX_SIZE`, `DB_POOL_MIN_IDLE`,
 `DB_POOL_CONNECTION_TIMEOUT_MS`, `ASYNC_IA_CONCURRENCY_LIMIT`, `RENASIA_LIMITE_DIARIO`,
 `ACCOUNT_DELETION_GRACE_DAYS`, `ONBOARDING_V90_HABILITADO`, `HABITS_AVISO_ANTELACION_INICIO`,

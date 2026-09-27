@@ -17,10 +17,13 @@ prueba de punta a punta.
 2. **Pruebas e2e siempre**: emulador + base local + backend local, verificando en la pantalla y en la
    base. Un ítem no se da por hecho sin su prueba e2e.
 3. **Sin tablas nuevas ni datos duplicados.** Se reusa lo que existe. Si algo del esquema es inevitable,
-   se justifica acá: un valor de enum (`RECORDATORIO_EVENTO`, V70, ver E-3 y D-183) y una columna
-   (`asignaciones_celula.bienvenida_enviada_en`, V71, D-191). Tablas nuevas: ninguna.
+   se justifica acá: un valor de enum (`RECORDATORIO_EVENTO`, V70, ver E-3 y D-183), una columna
+   (`asignaciones_celula.bienvenida_enviada_en`, V71, D-191) y una columna más un `hasta` opcional en la tabla de
+   pausas del semáforo (`semaforo_pausas.motivo`, V72, D-209: los días con la cuenta suspendida). Tablas nuevas:
+   ninguna.
    > **Corregido 2026-09-27.** Decía «(hoy solo aparece un valor de enum, ver E-3)». Después entró V71: la marca de
    > la bienvenida del grupo, una columna que eligió el dueño para no crear una tabla (§9.12).
+   > **Corregido 2026-09-27 (más tarde).** No nombraba V72: entró con la decisión de §9.30.
 4. **Usuarios de 30 a 60 años**: letra de 16 px o más en el cuerpo, botones de 48–56 px, una acción
    principal por pantalla, palabras simples, pocos pasos.
 5. **Trabajo en agentes en paralelo**, cada uno en su rama y worktree; lo que toca los mismos archivos
@@ -97,7 +100,7 @@ ve "1 necesita tu ayuda" en Hoy.
 | S-5 | Hecho y verificado | «Sin datos» con su motivo, calculado y sin tabla (D-181); en mentor y admin se lee «Todavía sin actividad para medir» (D-187) |
 | S-6 | Hecho y verificado | Texto fijo del cierre del sábado en el detalle y en la ficha (D-187) |
 | S-7 | Hecho y verificado con pruebas | Sin color en el chat si la semana tuvo menos de 3 días con datos; checklist de encendido y reproceso en `docs/DESPLIEGUE_Y_CI.md` §6.4 (D-181) |
-| S-8 | No se toca (decisión del dueño, §9.9) · días de suspensión: pregunta abierta | El borde del viernes queda fijado con la prueba `VentanaEntregaTest.ventanaDelViernesCruzaElCierreDelSemaforo`. Los días de suspensión siguen abiertos porque §9.9 no los nombra (§12) |
+| S-8 | No se toca (decisión del dueño, §9.9) · días de suspensión: hecho y verificado con pruebas (D-209) | El borde del viernes queda fijado con la prueba `VentanaEntregaTest.ventanaDelViernesCruzaElCierreDelSemaforo`. Los días en que la cuenta estuvo suspendida **no se miden** (§9.30): pruebas con reloj en la madrugada UTC y de punta a punta contra Postgres (`SuspensionEnElSemaforoIT`). *Corregido 2026-09-27: decía «días de suspensión: pregunta abierta» y «siguen abiertos porque §9.9 no los nombra (§12)».* |
 | S-9 | E-258 hecho · **E-257 falta** | El mentor suspendido ya no pasa (D-181, E-258). La tarjeta «Hábitos de hoy» del aprendiz sigue diciendo «Al día» cuando no hay datos (`HoyScreen.tsx`, frontend 390e465): E-257 no se arregló |
 | Prueba e2e | Hecho y verificado | Mismo %, color y fechas para aprendiz, mentor y admin: pruebas, emulador y Playwright del 26/09 (§10) |
 
@@ -222,6 +225,9 @@ los interruptores de "Notificaciones & Alarmas" en Yo **no guardan nada**.
 > - Paso 1: la batería completa espera crédito de Gemini (E-11, §6).
 > - Paso 2: entran V70 (tipo `RECORDATORIO_EVENTO`) y V71 (marca de la bienvenida del grupo). V71 marca como ya
 >   bienvenidos a todos los que hoy están en un grupo, así que nadie recibe una bienvenida atrasada (D-191).
+>   También V72 (días con la cuenta suspendida, D-209): a quien esté suspendido al desplegar le abre la suspensión
+>   desde ese día; volver a una imagen anterior a V72 exige antes borrar esas filas (`docs/DESPLIEGUE_Y_CI.md` §6.4).
+>   *Corregido 2026-09-27: no nombraba V72.*
 > - Paso 3: las dos bienvenidas quedan apagadas con `BIENVENIDA_ACTIVA` hasta que el dueño apruebe los textos
 >   (D-199 y D-204, en curso).
 > - Paso 4: el APK lleva además Eventos con calendario y portada, Alarmas con aviso con voz, los recordatorios de las
@@ -308,6 +314,12 @@ los interruptores de "Notificaciones & Alarmas" en Yo **no guardan nada**.
 28. **Pacto atrasado: queda como está** (confirma D-193). Ver §12, pregunta 2.
 29. **Bienvenida del grupo: sale del programa**, con un texto amigable y el mismo interruptor (D-204, en curso). Ver
     §12, pregunta 3.
+30. **Semáforo: días en que una cuenta estuvo suspendida → «Que no se midan»** (D-209). Leyó «Hoy cuentan: al
+    reactivar la cuenta, pueden dejar la semana en rojo». No se mide ningún día en que la cuenta estuvo suspendida:
+    ni el de la suspensión ni el de la reactivación (supuesto a confirmar: el de la reactivación). La semana sale
+    solo de los días medidos; entera suspendida, «Sin datos». En la app, cada día así dice «Cuenta en pausa».
+    Suspensiones anteriores al despliegue: se cubren desde el día del despliegue, sin inventar fechas anteriores.
+    Detalle en `docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md` §7, punto 2.
 
 ## 10. Estado al 26/09 (noche) — qué está hecho y qué falta
 
@@ -424,6 +436,9 @@ Estas eran las preguntas abiertas («Por decidir»). Quedan escritas como se hic
 
 - Si el aviso de acompañamiento del servidor debe salir como banner en Android. Hasta decidirlo, su canal propio queda
   apagado (D-188).
-- Qué pasa con los días en que una cuenta estuvo suspendida: al reactivarla, esos días cuentan como no cumplidos y la
-  semana puede salir en rojo. La decisión del 26/09 («no se toca», §9.9) no los nombra. Detalle y opción sin tabla
-  nueva en `docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md` §7, punto 2.
+- Si el día en que se reactiva una cuenta suspendida se mide o no. Se asumió que **no** (D-209, §9.30): la persona lo
+  vivió en parte sin poder usar la app.
+
+> **Corregido 2026-09-27.** Esta lista tenía además: «Qué pasa con los días en que una cuenta estuvo suspendida: al
+> reactivarla, esos días cuentan como no cumplidos y la semana puede salir en rojo […]». El dueño lo decidió el
+> 27/09: **que no se midan** (§9.30, D-209). Queda abierto solo el borde del día de la reactivación.

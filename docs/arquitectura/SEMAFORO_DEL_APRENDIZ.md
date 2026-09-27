@@ -1,7 +1,8 @@
 # Semáforo de cumplimiento del aprendiz — diseño y contratos
 
 **Fecha:** 2026-09-25 · **Decisión:** D-168 (`docs/MODULOS_A_AVANZAR.md` §8) · **Rama:** `semaforo-aprendiz`
-(backend) y `semaforo-app` (frontend).
+(backend) y `semaforo-app` (frontend). **Actualizado 2026-09-27:** D-209, los días con la cuenta suspendida no se
+miden (§1, §2.1, §7).
 
 **Origen del pedido:** punto 9 del Excel *PROBLEMAS EN PROGRAMA FORMACIÓN RENASER* («se envía el semáforo a
 los que están activos en la formación, para indicar si cumplen o no con las actividades») y el encargo del dueño
@@ -27,7 +28,7 @@ contratos: backend, app y agentes trabajan contra lo que dice acá. Si algo camb
 | Palabras (siempre junto al color) | Verde «Al día» · Amarillo «Requiere atención» · Rojo «Con problemas» · Sin datos «Sin datos». |
 | **Semana** | De **sábado a viernes**. Se cierra el **sábado 00:00 hora local** de cada persona (medianoche de viernes a sábado). Al cerrar, el vigente coincide con la semana. |
 | Lo completado **tarde** | Hoy la app permite completar días pasados (hábito EXPIRADO→COMPLETADO, objetivo sin límite de fecha). Cuenta para su día **hasta el cierre del sábado**; lo reportado ya no cambia. |
-| Qué días se miden | Del **día 1 al día 90** del programa (con los ajustes de día del admin). Día 0 y días después de graduarse, no. |
+| Qué días se miden | Del **día 1 al día 90** del programa (con los ajustes de día del admin). Día 0 y días después de graduarse, no. **Tampoco los días en que la cuenta estuvo suspendida**, aunque sea un rato: el de la suspensión, el de la reactivación y los del medio, en la zona de la persona (decisión del dueño del 2026-09-27, D-209; ver §7, punto 2). Esos días no cuentan ni arriba ni abajo, como una pausa; la semana sale solo de los días medidos, y una semana suspendida entera queda «Sin datos». *(Corregido 2026-09-27. Decía solo «Día 0 y días después de graduarse, no»: los días de suspensión se medían al reactivar la cuenta y contaban como no cumplidos.)* |
 | Quién se mide | **Aprendiz** con programa activado: obligatorio, no se puede apagar. **Mentor, líder, admin y alquimista con programa propio**: se mide por defecto y lo pueden **pausar con fecha de regreso** (esos días no se miden ni salen en rojo; lo anterior se conserva; al pasar la fecha vuelve solo; no borra nada). |
 | Días de intoxicación (8-10, 17-19, 26-28) | `habits` los genera opcionales salvo la publicación diaria en comunidad (D-169). **El semáforo no lo inventa**: cuenta lo que `habits` marque como opcional (`ConteoDiarioHabitos.calificables()`), así que un hábito de esos días sin cumplir no cuenta y uno cumplido suma arriba y abajo. No cambió nada del semáforo para tomarlo. Vale para lo generado desde el 2026-09-25: los registros anteriores conservan su foto. *(Decía: «La especificación los vuelve opcionales, pero `habits` todavía no lo hace (`TipoDia.INTOXICACION` sin uso). […] Cuando `habits` lo implemente, el semáforo lo toma solo.»)* |
 
@@ -114,7 +115,7 @@ después; `ElegibilidadEventoNoOpAdapter` no se toca.
 consultas por debajo de «2 en lote por página, una vez por día cerrado», y dejaría la regla de qué cuenta como
 cumplido en Java **y** en SQL — exactamente lo que D-43 y D-63 descartaron.
 
-### 2.1 Tablas (V68, dueño `points`)
+### 2.1 Tablas (V68 y V72, dueño `points`)
 
 - `semaforo_dias (participante_id, fecha)`: conteos del día (`habitos_programados`, `habitos_cumplidos`,
   `objetivos_programados`, `objetivos_cumplidos`) y `calculado_en`. **No guarda % ni color**: se derivan de los
@@ -128,6 +129,26 @@ cumplido en Java **y** en SQL — exactamente lo que D-43 y D-63 descartaron.
   > **Corregido 2026-09-25.** Decía `terminada_en` como única columna de cierre. La migración quedó con
   > `reanudada_el` (fecha, para saber qué días se miden) y `reanudada_en` (instante, para auditoría): con
   > solo el instante habría que convertirlo a la zona de la persona en cada lectura.
+- **Días con la cuenta suspendida (V72, D-209)**, en la misma `semaforo_pausas`, con `motivo`:
+  `PEDIDA_POR_LA_PERSONA` (la pausa del staff, todas las filas anteriores) o `CUENTA_SUSPENDIDA`. Una
+  suspensión va **sin `hasta`** (no tiene fecha de regreso; un CHECK lo ata al motivo), `desde` es el día local
+  de la suspensión, `creada_en` su instante, y al reactivar la cuenta `reanudada_el` = el día **siguiente** a
+  la reactivación (el primer día que se vuelve a medir) y `reanudada_en` = el instante de la reactivación.
+  No se muestra como `pausa` ni se cambia con `PUT`/`DELETE /pausa`. Una pausa ya terminada no se vuelve a
+  abrir (el upsert conserva `reanudada_*`).
+  > **Corregido 2026-09-27.** Decía que `semaforo_pausas` guardaba solo «pausas del staff», y el comentario de
+  > la tabla, «Nunca de un aprendiz». Desde V72 también guarda los días con la cuenta suspendida, de cualquier
+  > rol (casi siempre aprendices).
+
+**De dónde sale la suspensión (D-209).** No hay historial de estados de cuenta en la base (`usuarios.estado_cambiado_en`
+existe desde V1 pero nadie la escribe; el outbox borra los eventos entregados). `points` escucha
+`users.api.EstadoDeCuentaCambiadoEvent` (`EstadoDeCuentaSemaforoListener` → `SuspensionDelSemaforoService`) y
+anota el tramo con el **instante del evento** en la zona de la persona: las fechas salen exactas aunque el
+evento se procese tarde o el barrido esté apagado. Es idempotente (id determinista por evento) y tolera
+reintentos fuera de orden: una reactivación solo cierra una suspensión que empezó antes que ella, y una
+suspensión que llega cuando la cuenta ya fue reactivada se cierra ese mismo día. El barrido no cambió: sigue
+salteando cuentas suspendidas y, al reactivarlas, se pone al día sin medir esos días porque el calendario
+de la persona ya los excluye.
 
 ---
 
@@ -160,7 +181,8 @@ Un día sin filas no aparece.
 
 ```java
 enum ColorSemaforo { VERDE, AMARILLO, ROJO, SIN_DATOS; String etiqueta(); }   // «Al día», «Requiere atención», «Con problemas», «Sin datos»
-enum EstadoDiaSemaforo { MEDIDO, SIN_DATOS, PAUSADO, PENDIENTE, FUERA_DEL_PROGRAMA }
+enum EstadoDiaSemaforo { MEDIDO, SIN_DATOS, PAUSADO, CUENTA_SUSPENDIDA, PENDIENTE, FUERA_DEL_PROGRAMA }
+// CUENTA_SUSPENDIDA: agregado el 2026-09-27 (D-209). Antes eran cinco valores, sin él.
 
 final class SemanaDelSemaforo {                          // la regla sábado→viernes, en un solo lugar
     static LocalDate ultimaCerradaAl(LocalDate hoyLocal);    // el viernes de la última semana cerrada
@@ -264,6 +286,11 @@ solo rompe esa prueba.
   > de más abajo: las pausas empiezan siempre hoy, así que no existe una «por empezar».
 - `vigente.dias` siempre trae **7 días** (del más viejo al más nuevo; el ejemplo de arriba está abreviado).
   `porcentaje` y `color` de un día son `null`/`SIN_DATOS` si `estado ≠ MEDIDO`. Cada día trae su `etiqueta`.
+- `estado` de un día: `MEDIDO`, `SIN_DATOS`, `PAUSADO`, `CUENTA_SUSPENDIDA` (D-209), `PENDIENTE` o
+  `FUERA_DEL_PROGRAMA`. La app nueva dice «Cuenta en pausa» para `CUENTA_SUSPENDIDA`; el APK publicado no lo
+  conoce y lo lee como «Sin datos», neutro (su esquema lee `estado` como texto abierto: verificado el
+  2026-09-27 contra el `origin/master` del frontend). Los días de una suspensión **no** salen como `pausa`:
+  `pausa` es solo la que pidió la persona.
 - La ventana vigente se calcula **en el momento de la lectura** con el reloj del servidor en la zona de la
   persona: `vigente.hasta` es siempre su «ayer» y su «hoy» es `vigente.hasta + 1`. Entre las 00:00 y el
   barrido de las 00:25, el día de ayer puede venir `PENDIENTE`.
@@ -325,6 +352,10 @@ calcula a cuentas activas. El mentor tampoco abre su detalle (403). Si la cuenta
 > **Corregido 2026-09-25 (mismo día).** Decía que el suspendido aparecía en la tabla con sus días
 > «Pendiente» y después «Sin datos», pendiente de confirmar. El dueño confirmó que no debe aparecer.
 
+Cuando vuelve a aparecer, los días en que estuvo suspendida llegan como `CUENTA_SUSPENDIDA` y no cuentan
+(D-209): su color sale solo de los días medidos, y si en su ventana no queda ninguno está «Sin datos» con
+`motivo: CUENTA_SUSPENDIDA`.
+
 Cómo queda hoy:
 
 - Quien **no se mide** (sin programa activado, día 0 o ya graduado) llega igual que quien no tuvo nada
@@ -340,8 +371,14 @@ y, si está en `SIN_DATOS`, por qué. Es un campo **calculado** de los días de 
 | `SIN_NADA_PLANIFICADO` | Tuvo días del programa en la ventana y en ninguno había hábitos ni objetivos | En el programa y desconectado: es a quien hay que llamar |
 | `NO_ACTIVADO` | No activó su programa (el semáforo no trae su ventana) | No arrancó |
 | `PENDIENTE_DE_CALCULO` | Sus días todavía no los calculó el barrido (entre las 00:00 y las :25, o si el barrido no corrió) | Esperar |
+| `CUENTA_SUSPENDIDA` | Sus días del programa en la ventana cayeron con la cuenta suspendida (D-209). Solo se ve ya reactivada | Volvió: nada que medir todavía |
 | `PAUSADO` | Staff con programa propio que pausó toda la ventana | — |
 | `FUERA_DEL_PROGRAMA` | La ventana entera cae antes del día 1 (día 0) o después del día 90 | No arrancó todavía o ya se graduó |
+
+> **Corregido 2026-09-27.** La tabla tenía cinco motivos; `CUENTA_SUSPENDIDA` se agregó con D-209. Sin él, una
+> ventana entera con la cuenta suspendida habría caído en `FUERA_DEL_PROGRAMA` («No arrancó todavía o ya se
+> graduó»), que es falso. La app no muestra el `motivo` por persona (dice «Todavía sin actividad para medir»);
+> el de cada día sí: «Cuenta en pausa».
 
 Si en una ventana hay mezcla, gana el primero de la tabla que aparezca. **Por qué «sin datos» no sube por
 encima del amarillo:** el bloque mezcla al desconectado con gente a la que nadie puede ayudar esa semana
@@ -460,11 +497,14 @@ todos, igual que en §4.3.
 
 ---
 
-## 7. Un borde conocido y una pregunta abierta (S-8, revisión del 2026-09-26)
+## 7. Un borde conocido y los días de suspensión (S-8, revisión del 2026-09-26)
 
 > **Corregido 2026-09-27.** El título decía «Preguntas abiertas». El dueño decidió el 26/09 que el cierre semanal
 > «no se toca» (`docs/specs/RETROALIMENTACION_2026-09-26.md` §9.9): el punto 1 queda como borde conocido. El punto 2,
 > los días de suspensión, sigue abierto: §9.9 no lo nombra.
+>
+> **Corregido 2026-09-27 (más tarde).** El título decía «Un borde conocido y una pregunta abierta». La pregunta
+> del punto 2 ya tiene respuesta: el dueño eligió que esos días **no se midan** (D-209).
 
 **1. Ventanas que cruzan la medianoche del viernes.** Un hábito del viernes con ventana 22:00 → 02:00
 (`habits.VentanaEntrega`) vence el **sábado a las 02:10** en Lima, pero el barrido cierra esa semana en la
@@ -477,15 +517,31 @@ Hoy afecta solo a quien tenga un hábito con hora de fin después de la medianoc
 del programa la tiene, pero un hábito personal sí puede tenerla. **Decidido por el dueño el 26/09: no se toca**
 («son reglas que ya están establecidas, no confundamos eso»); queda como borde conocido.
 
-**2. Días de suspensión.** Mientras una cuenta está suspendida el barrido no la calcula y no cierra sus
-semanas. Al reactivarla, la próxima corrida calcula **todos** los días que faltan, incluidos los de la
-suspensión, y cierra las semanas atrasadas con esos días. Si `habits` generó hábitos esos días (o la persona
-tenía objetivos planificados), cuentan como no cumplidos y la semana puede salir en rojo; la ventana vigente
-de Hoy también los muestra. No hay registro de desde cuándo hasta cuándo estuvo suspendida (el evento
-`EstadoDeCuentaCambiadoEvent` no se guarda en ninguna tabla del dominio), así que no hay arreglo seguro sin
-decidir cómo guardarlo. Opción sin tabla nueva: registrar la suspensión como una pausa en `semaforo_pausas`
-(desde el día de la suspensión, `reanudada_el` el día de la reactivación), que ya hace que esos días no se
-midan; pero hoy la regla dice que el semáforo del aprendiz **no se puede pausar**, así que lo decide el dueño.
-Mientras tanto, «Reprocesar la semana de una persona» (`docs/DESPLIEGUE_Y_CI.md`) no ayuda: recalcularía los mismos días.
-**Sigue abierta al 2026-09-27**: la decisión del 26/09 («no se toca») habla del cierre semanal y de la ventana del
-viernes, no de los días de suspensión.
+**2. Días de suspensión — decidido el 2026-09-27: no se miden (D-209).** El dueño leyó «Semáforo: días en que
+una cuenta estuvo suspendida. Hoy cuentan: al reactivar la cuenta, pueden dejar la semana en rojo» y eligió
+**«Que no se midan»**.
+
+- **Regla:** no se mide ningún día en que la cuenta estuvo suspendida, aunque sea un rato, en la zona de la
+  persona: el día de la suspensión, el de la reactivación y los del medio. Esos días no cuentan ni arriba ni
+  abajo (`EstadoDiaSemaforo.CUENTA_SUSPENDIDA`, «Cuenta en pausa» en la app). La semana sale solo de los días
+  medidos; si ninguno lo fue, queda «Sin datos» y el sábado no se le avisa (`FotoSemanal.tuvoDiasMedidos`).
+  Lo demás de la regla no cambió: umbrales, promedio, cierre del sábado, aviso con menos de 3 días.
+- **Cómo:** `points` escucha `EstadoDeCuentaCambiadoEvent` y anota el tramo en `semaforo_pausas` con
+  `motivo = CUENTA_SUSPENDIDA` (V72, §2.1). No es una pausa de la persona: no la ve como tal, no la puede
+  cambiar, y la regla «el aprendiz no puede pausar» sigue igual.
+- **Suspensiones anteriores al despliegue de V72:** no hay de dónde saber cuándo empezaron, y no se inventa. A
+  las cuentas que están suspendidas al desplegar, V72 les abre la suspensión **desde el día del despliegue**;
+  los días anteriores en que ya estaban suspendidas se siguen midiendo como antes al reactivarlas. Una
+  suspensión que ya terminó antes del despliegue deja sus semanas como quedaron. Si alguien conoce las fechas
+  por fuera, `docs/DESPLIEGUE_Y_CI.md` §6.4 dice cómo anotarla y reprocesar las semanas.
+- **Supuesto a confirmar con el dueño:** que el día de la reactivación tampoco se mide. La persona lo vivió en
+  parte sin poder usar la app (el de la suspensión, igual). Si prefiere medir el día de la reactivación, es
+  cambiar una línea de `PausaDeMedicion.terminarSuspension`.
+
+> **Corregido 2026-09-27.** Este punto decía: «Mientras una cuenta está suspendida el barrido no la calcula y no
+> cierra sus semanas. Al reactivarla, la próxima corrida calcula **todos** los días que faltan, incluidos los de la
+> suspensión […] cuentan como no cumplidos y la semana puede salir en rojo […] No hay registro de desde cuándo
+> hasta cuándo estuvo suspendida […] Opción sin tabla nueva: registrar la suspensión como una pausa en
+> `semaforo_pausas` (desde el día de la suspensión, `reanudada_el` el día de la reactivación) […] **Sigue abierta
+> al 2026-09-27**». Se tomó esa opción, con dos diferencias: el día de la reactivación tampoco se mide
+> (`reanudada_el` es el día siguiente), y la suspensión no se muestra como una pausa de la persona.

@@ -113,7 +113,11 @@ public class ConsultaDelSemaforoService implements SemaforoFinder, ConsultarMiSe
                 suya.medicion().vigente(), historial, diasPort.ultimoCalculoDe(participante).orElse(null));
     }
 
-    /** La pausa que rige hoy, si hay una; es la que se muestra y la que se puede cambiar. */
+    /**
+     * La pausa que pidió la persona y rige hoy, si hay una; es la que se muestra y la que se puede
+     * cambiar. Los días con la cuenta suspendida (D-209) no son una pausa suya: {@code vigenteEl} no
+     * los toma, así que no salen como {@code pausa} ni como {@code pausado} en Hoy.
+     */
     static PausaDelSemaforo pausaEnCurso(MedicionDeLaPersona medicion) {
         return medicion.calendario().pausas().stream()
                 .filter(p -> p.vigenteEl(medicion.hoyLocal()))

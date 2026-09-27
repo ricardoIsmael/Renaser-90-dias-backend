@@ -226,15 +226,21 @@ formación, RF-25). Reglas, contratos JSON, quién ve qué y avisos del sábado 
 | Lectura para otros módulos | `api/SemaforoFinder` → `ConsultaDelSemaforoService` (solo lee lo guardado) |
 | Conteos por día | `api/ConteoDiarioHabitosFinder` (lo implementa `habits`) y `api/ConteoDiarioObjetivosFinder` (lo implementa `rocks`), DIP como D-43, sin SQL nuevo |
 | Fechas del programa | `users.api.ProgramasActivadosFinder` (el día 1 y el 90 los calcula el agregado de `users`) |
-| Tablas | `semaforo_dias` (conteos), `semaforo_semanas` (foto append-only), `semaforo_pausas` — V68 |
+| Días con la cuenta suspendida (D-209) | `adapter/in/event/EstadoDeCuentaSemaforoListener` (escucha `users.api.EstadoDeCuentaCambiadoEvent`) → `SuspensionDelSemaforoService` → `PausaDeMedicion.porSuspension`/`terminarSuspension`, con `motivo = CUENTA_SUSPENDIDA`. El calendario de la persona excluye esos días; el barrido no cambió |
+| Tablas | `semaforo_dias` (conteos), `semaforo_semanas` (foto append-only), `semaforo_pausas` (pausas del staff y, desde V72, días con la cuenta suspendida) — V68, V72 |
 | Endpoints propios | `GET /api/v1/me/semaforo`, `PUT`/`DELETE /api/v1/me/semaforo/pausa`, campo `semaforo` de `GET /api/v1/home` |
+
+> **Corregido 2026-09-27.** La fila de tablas decía «`semaforo_pausas` — V68» y no había fila de suspensiones:
+> hasta D-209 los días con la cuenta suspendida se medían al reactivarla.
 
 **Pruebas:** dominio sin Spring (`ReglaDelSemaforoTest`, `CumplimientoDelDiaTest`, `MedicionDeLaPersonaTest`,
 `CierreSemanalTest`, `PausaDeMedicionTest`, `SemanaDelSemaforoTest`), aplicación con tablas en memoria
 (`CierreDelSemaforoServiceTest` —incluye el sábado 04:30 UTC, que en Lima todavía es viernes—,
-`ConsultaYPausaDelSemaforoTest`), endpoint contra el interceptor real (`MiSemaforoControllerTest`),
-persistencia (`SemaforoJdbcAdaptersTest`) y punta a punta con los cuatro módulos reales
-(`SemaforoDeExtremoAExtremoIT`).
+`ConsultaYPausaDelSemaforoTest`, `SuspensionDelSemaforoServiceTest` —suspensión y reactivación en la madrugada
+UTC—), el listener (`EstadoDeCuentaSemaforoListenerTest`), endpoint contra el interceptor real
+(`MiSemaforoControllerTest`), persistencia (`SemaforoJdbcAdaptersTest`, con los CHECK de V72) y punta a punta con
+los cuatro módulos reales (`SemaforoDeExtremoAExtremoIT`) y con la suspensión por el caso de uso real de `users` y
+el outbox (`SuspensionEnElSemaforoIT`).
 
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 

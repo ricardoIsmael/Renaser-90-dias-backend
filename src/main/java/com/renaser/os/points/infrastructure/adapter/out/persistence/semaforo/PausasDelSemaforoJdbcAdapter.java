@@ -1,6 +1,7 @@
 package com.renaser.os.points.infrastructure.adapter.out.persistence.semaforo;
 
 import com.renaser.os.points.application.ports.out.semaforo.PausasDelSemaforoPort;
+import com.renaser.os.points.domain.model.semaforo.MotivoDePausa;
 import com.renaser.os.points.domain.model.semaforo.PausaDeMedicion;
 import com.renaser.os.points.domain.model.semaforo.PausaId;
 import com.renaser.os.shared.domain.UserId;
@@ -18,20 +19,31 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** {@code semaforo_pausas} con {@link JdbcClient}, mapeo a mano (mismo criterio que los otros dos). */
+/**
+ * {@code semaforo_pausas} con {@link JdbcClient}, mapeo a mano (mismo criterio que los otros dos). Guarda
+ * los dos motivos: la pausa que pide el staff y los días con la cuenta suspendida (V72, D-209).
+ *
+ * <p><b>Una pausa terminada no se vuelve a abrir.</b> El upsert conserva {@code reanudada_el} y
+ * {@code reanudada_en} si ya estaban: el dominio nunca las borra, y así una entrega repetida del evento
+ * de la suspensión (el outbox entrega al menos una vez) que llegue después de la reactivación no deja
+ * a la persona sin medir para siempre.
+ */
 @Component
 class PausasDelSemaforoJdbcAdapter implements PausasDelSemaforoPort {
 
     private static final String DE = """
-            SELECT id, usuario_id, desde, hasta, reanudada_el, creada_en, reanudada_en
+            SELECT id, usuario_id, motivo, desde, hasta, reanudada_el, creada_en, reanudada_en
             FROM renaser.semaforo_pausas WHERE usuario_id IN (:usuarios) ORDER BY desde, creada_en
             """;
 
     private static final String GUARDAR = """
-            INSERT INTO renaser.semaforo_pausas (id, usuario_id, desde, hasta, reanudada_el, creada_en, reanudada_en)
-            VALUES (:id, :usuario, :desde, :hasta, :reanudadaEl, :creadaEn, :reanudadaEn)
+            INSERT INTO renaser.semaforo_pausas (id, usuario_id, motivo, desde, hasta, reanudada_el, creada_en,
+                                                 reanudada_en)
+            VALUES (:id, :usuario, :motivo, :desde, :hasta, :reanudadaEl, :creadaEn, :reanudadaEn)
             ON CONFLICT (id) DO UPDATE
-               SET hasta = EXCLUDED.hasta, reanudada_el = EXCLUDED.reanudada_el, reanudada_en = EXCLUDED.reanudada_en
+               SET hasta = EXCLUDED.hasta,
+                   reanudada_el = COALESCE(renaser.semaforo_pausas.reanudada_el, EXCLUDED.reanudada_el),
+                   reanudada_en = COALESCE(renaser.semaforo_pausas.reanudada_en, EXCLUDED.reanudada_en)
             """;
 
     private final JdbcClient jdbcClient;
@@ -62,6 +74,7 @@ class PausasDelSemaforoJdbcAdapter implements PausasDelSemaforoPort {
         jdbcClient.sql(GUARDAR)
                 .param("id", pausa.id().value())
                 .param("usuario", pausa.usuarioId().value())
+                .param("motivo", pausa.motivo().name())
                 .param("desde", pausa.desde())
                 .param("hasta", pausa.hasta())
                 .param("reanudadaEl", pausa.reanudadaEl())
@@ -73,8 +86,9 @@ class PausasDelSemaforoJdbcAdapter implements PausasDelSemaforoPort {
     private static PausaDeMedicion pausa(ResultSet rs) throws SQLException {
         Timestamp reanudadaEn = rs.getTimestamp("reanudada_en");
         return PausaDeMedicion.rehidratar(PausaId.of(rs.getObject("id", UUID.class)),
-                UserId.of(rs.getObject("usuario_id", UUID.class)), rs.getObject("desde", LocalDate.class),
-                rs.getObject("hasta", LocalDate.class), rs.getObject("reanudada_el", LocalDate.class),
-                rs.getTimestamp("creada_en").toInstant(), reanudadaEn == null ? null : reanudadaEn.toInstant());
+                UserId.of(rs.getObject("usuario_id", UUID.class)), MotivoDePausa.valueOf(rs.getString("motivo")),
+                rs.getObject("desde", LocalDate.class), rs.getObject("hasta", LocalDate.class),
+                rs.getObject("reanudada_el", LocalDate.class), rs.getTimestamp("creada_en").toInstant(),
+                reanudadaEn == null ? null : reanudadaEn.toInstant());
     }
 }
