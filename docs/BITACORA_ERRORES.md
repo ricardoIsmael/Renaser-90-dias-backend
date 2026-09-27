@@ -9969,3 +9969,25 @@ marca, avisa), staff no participante, `ALCHEMIST` participante (manda) y el avis
 participante fallan contra el código viejo. `docs/MODULO_CHAT.md` §10 dice qué cuenta puede ser remitente. Regla
 general: cuando un caso de uso delega en otro que valida permisos, la precondición de configuración se mira ANTES y sin
 lanzar; lanzar queda para lo que un reintento puede arreglar.
+
+---
+
+## E-331 · Los mensajes de otros nunca llegaban en vivo al chat abierto: `processed CONNECT(0)` con el socket conectado
+
+**Síntoma.** e2e en emulador del 26/09 (23:50): con la conversación de grupo abierta, otra cuenta envió un mensaje por API (201) y
+no apareció en pantalla. El backend mostraba el socket abierto (`[http] GET /ws 101`) y `WebSocketMessageBrokerStats … 
+stompSubProtocol[processed CONNECT(0)-CONNECTED(0)-DISCONNECT(0)]`. Los mensajes propios sí aparecían (se agregan localmente).
+
+**Causa real.** Estaba roto desde que existe el chat en vivo (frontend 0da52a4, 17/09), no lo rompió el rediseño. React Native corta
+en el primer carácter NUL los textos que cruzan al código nativo (`JavaTurboModule.cpp:406` `NewStringUTF(...c_str())`; en iOS
+`RCTTurboModule.mm:113`). `WebSocket.send(texto)` pasa por ahí, así que cada trama STOMP salía sin el NUL que la cierra: Spring nunca
+procesaba el CONNECT y la app nunca llegaba a suscribirse. El socket quedaba abierto sin hacer nada, y nada lo delataba.
+
+**Solución.** Frontend 044159f: las tramas al servidor salen en BINARIO (`tramaEnBytes`), que no pasa por ese corte; si una trama del
+servidor llega sin su NUL se le repone; si el saludo no se completa se cierra y reintenta; el vigilante de silencio respeta
+`heart-beat:0,0`. Verificado en emulador el 27/09 00:04: `CONNECTED` recibido y un mensaje enviado por API desde otra cuenta
+aparece solo en el chat abierto. `conexionStomp.test.ts` (4) falla contra el código viejo.
+
+**Cómo evitar que vuelva a pasar.** Nada que dependa de un carácter NUL puede cruzar como texto el puente de React Native. Un canal
+en vivo se verifica con un mensaje de OTRA cuenta, no con uno propio. Pendiente propuesto (no aplicado): latidos del broker
+(`WebSocketConfig.java:58`, `enableSimpleBroker("/topic")` sin `setHeartbeatValue`) para detectar conexiones muertas.
