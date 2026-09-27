@@ -157,3 +157,47 @@ los interruptores de "Notificaciones & Alarmas" en Yo **no guardan nada**.
    ya está establecido. Un hábito del viernes cuya ventana cruza la medianoche queda solo documentado
    como borde (test de caracterización), sin cambiar la regla. Palabras del dueño: «son reglas que ya
    están establecidas, no confundamos eso».
+
+## 10. Estado al 26/09 (noche) — qué está hecho y qué falta
+
+Todo integrado en `evidencia-foto` (backend y frontend). **Nada subido a master ni a producción** (decisión del dueño:
+todavía no). Verificación: backend `clean verify` 4771 unitarias + 120 integración en verde; frontend 100 suites / 841
+pruebas; Playwright admin/alquimista 26 ok + 1 saltada por datos; e2e en emulador con capturas en `~/Imágenes/e2e-26-09-*`.
+
+**Eventos ≠ recordatorios de hábito.** Son dos cosas distintas y así se tratan aquí:
+- *Recordatorio de hábito*: se elige en cada hábito (Training → dimensión → Planificar → «Recordatorio»: sin aviso /
+  30 min / 10 min / a la hora / otra). Suena como alarma local del teléfono.
+- *Evento*: clase o encuentro que crea el Alquimista/Admin; la persona dice «Voy» y suena una alarma antes.
+
+| Ítem | Estado | Cómo se verificó |
+|---|---|---|
+| V-1..V-4 velocidad app | ✅ | Emulador: Training y Muro con datos en ~1 s (build de desarrollo) |
+| V-5..V-7 velocidad backend y medición | ✅ | Pruebas; `Server-Timing` visible en local |
+| V-8 memoria del contenedor | ✅ código · ⏳ vigilar `docker stats` después de subir | — |
+| V-9 CloudFront `PriceClass_All` | ✅ aplicado · ⏳ confirmar nodo de Lima | AWS |
+| S-1..S-7, S-9 semáforo mentor/admin | ✅ colores y palabras sin cambios | Pruebas + emulador + Playwright |
+| S-8 cierre semanal | ✅ **no se toca** (decisión del dueño, §9.9) | — |
+| A-1..A-5 administración simple | ✅ | Pruebas + Playwright |
+| E-1..E-3 avisos de eventos del servidor | ✅ | Pruebas + base |
+| E-4 interruptores de Yo | ✅ «Eventos y clases», «Logros», «Resumen semanal» · sin «Hábitos» · «Mi grupo y mensajes» no (el backend no emite esos tipos) | Emulador + base |
+| E-5 Eventos en Comunidad | ✅ funciona · 🔄 **rediseño en curso**: vista Calendario del mes + vista Tarjetas estilo cursos (el dueño no quiere el diseño de filas) | Emulador |
+| E-6 formulario del Alquimista | ✅ · ⏳ portada del evento (en el rediseño) | Web |
+| E-7 alarma del «Voy» | ✅ exacta con el permiso «Alarmas y recordatorios» | `dumpsys alarm` |
+| E-8 Mi agenda (+ semáforo) | ✅ | Emulador |
+| E-9 canales de Android | ✅ código · apagado por propiedad hasta que solo quede el APK nuevo (D-188) | Pruebas |
+| E-10 Alarmas en Yo (Despertar, eventos, sonido, permiso exacto) | ✅ | Emulador + `dumpsys alarm` |
+| Recordatorio de hábito según lo elegido | ✅ «10 min antes» del ritual de 13:00 → alarma exacta 12:50 del día siguiente (el día en curso no se reacomoda) | Emulador + `dumpsys alarm` |
+| E-11 batería del acompañante (eventos/semáforo) | ⏳ sin crédito de Gemini | — |
+| G-1 grupos con cuenta nueva | ⏳ espera la cuenta nueva | — |
+| G-2..G-5, G-7 grupos | ✅ | Pruebas |
+| G-6 grupo de bienvenida local | ⏳ | — |
+| Subida (§7) y APK nuevo | ⏳ espera el OK del dueño | — |
+
+**Nuevo, por decidir con el dueño (26/09 noche):**
+1. **Recordatorio de objetivos y acciones del día (rocas).** Hoy no existe: solo los hábitos tienen recordatorio.
+2. **Aviso con voz** («tu hábito está por empezar»). Hoy el aviso es una notificación con sonido (del teléfono o la
+   campana). Opción liviana: un audio con voz grabada como sonido del canal (igual que la campana, solo APK nuevo);
+   dice una frase fija y el nombre del hábito va en el texto. Que diga el nombre en voz con la app cerrada exige un
+   módulo nativo (texto a voz), más pesado.
+3. Si el teléfono no deja dar el permiso «Alarmas y recordatorios», la alarma igual suena, pero Android puede demorarla
+   hasta ~1 h.
