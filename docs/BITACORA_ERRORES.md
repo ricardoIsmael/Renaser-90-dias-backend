@@ -9718,3 +9718,19 @@ que ocurre una vez en la vida del par; si la operación se puede repetir en el t
 lleva el contador de llegadas o la idempotencia se decide por el estado vigente. **Pendiente, no arreglado acá:**
 `claveDeAlta` (`alta-manual|<aprendiz>|<celula>`) del alta manual de aprendiz en el mismo servicio tiene la misma forma:
 mover a un aprendiz A → B → A por `PUT` de aprendiz debería quedar igual de mudo.
+
+---
+
+## E-317 · La ficha del mentor decía «Cambios de horario: 0 de 3 · quedan 3» y «Hoy para él es…» de una alumna
+
+**Síntoma.** e2e en emulador del 26/09, cuenta mentor → Mi grupo → ficha de «Lucía Prueba Grupos» → «Sus hábitos»:
+«Hoy para él es 26 de septiembre · horarios en America/Lima» y «Cambios de horario: 0 de 3 · quedan 3».
+
+**Causa real.** `HabitosDelAlumno.tsx` (frontend) seguía mostrando `scheduleEdits` del servidor, que D-170 dejó sin efecto (todo el
+programa es `FREE`) pero se sigue mandando para no romper APKs viejos: la ficha anunciaba un tope que ya no existe. El «para él»
+era texto fijo en masculino.
+
+**Solución.** Frontend 6e392ae: se quita la línea del tope (y su helper) y el texto pasa a «Su día hoy: …». El backend no cambia.
+
+**Cómo evitar que vuelva a pasar.** Cuando una regla se apaga dejando el campo por compatibilidad (D-170), buscar en la app
+todo lo que lo muestra y quitarlo en el mismo cambio. Textos sobre una persona, en neutro.
