@@ -10026,7 +10026,7 @@ permiso, no un formato; hay que decidir quién puede escribirlo antes de pintarl
 
 ---
 
-## E-333 · El evento en vivo de un mensaje manda `type` en español (`TEXTO`, `SISTEMA`) y el REST en inglés (`TEXT`, `SYSTEM`)
+## E-333 · RESUELTO (D-205, 2026-09-27) — El evento en vivo de un mensaje manda `type` en español (`TEXTO`, `SISTEMA`) y el REST en inglés (`TEXT`, `SYSTEM`)
 
 **Síntoma.** Armando el contrato del mensaje del programa (D-199, 2026-09-27): `MensajeResponse` traduce el tipo (D-36:
 `TEXT`/`IMAGE`/`AUDIO`/`VIDEO`/`SYSTEM`), pero `MensajeFanoutPayload.from` hace `mensaje.tipo().name()`, así que por
@@ -10035,10 +10035,12 @@ permiso, no un formato; hay que decidir quién puede escribirlo antes de pintarl
 **Causa real.** El payload del fanout (CH-8) se escribió aparte del contrato REST, a propósito, y la traducción de D-36 quedó solo
 en el REST.
 
-**Solución.** **No aplicada** (fuera del encargo). Hoy no rompe nada: el APK publicado nunca completa el CONNECT (E-331) y la app
-nueva usa el evento para recargar la conversación; según el agente del frontend, la de `eventos-app` (ec461ad) acepta `SYSTEM` y
-`SISTEMA`. Quedó escrito en el contrato de D-199. Arreglo propuesto: traducir con la misma tabla que `MensajeResponse.toWireTipo`,
-ahora que la app acepta los dos valores.
+**Solución (2026-09-27, junto con D-205).** `MensajeFanoutPayload.from` usa `MensajeResponse.toWireTipo` (ahora pública): el
+evento en vivo lleva el mismo `type` que el REST (`TEXT`, `IMAGE`, `AUDIO`, `VIDEO`, `SYSTEM`). Es seguro: el APK publicado nunca
+completa el CONNECT (E-331) y la app nueva (`eventos-app`, ec461ad) acepta `SYSTEM` y `SISTEMA`. `MensajeFanoutPayloadTest` fija
+`"SYSTEM"` y `"TEXT"`; contra el código viejo daba `SISTEMA` y `TEXTO`.
+> **Corregido 2026-09-27.** Esta sección decía «**No aplicada** (fuera del encargo) […] Arreglo propuesto: traducir con la misma
+> tabla que `MensajeResponse.toWireTipo`, ahora que la app acepta los dos valores». Se aplicó ese arreglo.
 
 **Cómo evitar que vuelva a pasar.** Toda salida al cable pasa por la traducción de D-36, también la del socket; un test del payload
 del fanout que fije `"type":"TEXT"` lo dejaría escrito.

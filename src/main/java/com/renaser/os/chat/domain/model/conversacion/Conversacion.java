@@ -9,6 +9,7 @@ import lombok.experimental.Accessors;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -175,6 +176,26 @@ public final class Conversacion {
      */
     public boolean seGanaPorRolDeStaff(UserId usuarioId) {
         return tipo == TipoConversacion.SOPORTE && !esAprendizDeSoporte(usuarioId);
+    }
+
+    /**
+     * El aprendiz dueño de este soporte (D-205: la foto del chat es su tarjeta con su nombre), leído
+     * de la clave {@code soporte:<uuid>}. Vacío si no es un soporte.
+     *
+     * <p>Acá sí hay que descomponer la clave —{@link #esAprendizDeSoporte} la arma hacia adelante
+     * porque ya sabe a quién pregunta; esta no—, así que una clave con otra forma no lanza: da vacío.
+     * Nadie la escribe distinto ({@link #crearSoporte} es el único camino), pero un dato raro en la
+     * base no puede tumbar una lectura.
+     */
+    public Optional<UserId> aprendizDelSoporte() {
+        if (tipo != TipoConversacion.SOPORTE || claveDirecta == null || !claveDirecta.startsWith(PREFIJO_SOPORTE)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(UserId.of(UUID.fromString(claveDirecta.substring(PREFIJO_SOPORTE.length()))));
+        } catch (IllegalArgumentException claveConOtraForma) {
+            return Optional.empty();
+        }
     }
 
     @Override

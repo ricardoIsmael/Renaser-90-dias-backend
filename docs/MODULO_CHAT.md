@@ -554,7 +554,7 @@ programa.
 | `text` | el texto; `null` en la tarjeta |
 | `mediaBucket`/`mediaPath`/`mediaMime`/`mediaBytes`/`mediaUrl` | solo en la tarjeta: `chat`, `chat/<soporte>/fotos/<uuid>`, `image/jpeg`, el tamaño y la URL firmada |
 | `replyTo.senderName` | `"Formación Renaser"` si alguien responde a un mensaje del programa |
-| Evento en vivo (`MensajeFanoutPayload`) | `senderId` = el mismo UUID nulo (si fuera el aprendiz, su app lo descartaría como eco propio); `type` viaja en español (`SISTEMA`, E-333) |
+| Evento en vivo (`MensajeFanoutPayload`) | `senderId` = el mismo UUID nulo (si fuera el aprendiz, su app lo descartaría como eco propio); `type` = `SYSTEM`, como en el REST (E-333, resuelto el 2026-09-27; antes viajaba `SISTEMA`) |
 
 **Riesgo con el APK publicado (sin actualización por aire):** todas sus versiones validan `senderId:
 z.string()` dentro del arreglo de mensajes y del `lastMessage` de cada conversación: un `null` haría fallar
@@ -709,3 +709,54 @@ latido no sale; el cliente, al no oír nada, cierra y reconecta, y el handshake 
 | Clase | Qué fija |
 |---|---|
 | `LatidosDelChatIT` (2) | Tomcat real, cliente STOMP en binario como la app: el `CONNECTED` negocia `10000,10000` (antes `0,0`); la conexión muda se cierra con `Session closed.` y 1002, la que late sigue abierta y recibe latidos, y la que ofreció `0,0` no se corta |
+
+## 12. La foto del chat de soporte: la tarjeta con el nombre de su aprendiz (2026-09-27, D-205)
+
+**Qué pidió el dueño.** La foto del chat de SOPORTE de cada persona es SU tarjeta de Canva con SU primer
+nombre, la misma que le manda la bienvenida (`BienvenidaJava2dAdapter`, §10). Los grupos y la comunidad
+usan la tarjeta sin nombre, que la app ya trae como asset (frontend 8971acf, `tarjeta-renaser.jpg`).
+
+**El endpoint.** `GET /api/v1/chat/conversations/{id}/foto` (`ConversacionSoporteController`,
+`@RequiresPermission(USE_APP)`) responde `image/jpeg` con la tarjeta del aprendiz dueño del soporte.
+
+| Caso | Respuesta |
+|---|---|
+| La aprendiz o el staff del soporte (ADMIN/ALCHEMIST participante, mismo `puedeVer` que el resto del chat) | 200, la tarjeta; `Cache-Control: max-age=86400, private` y `ETag` |
+| El mismo `If-None-Match` | 304 sin cuerpo (lo resuelve Spring al escribir el `ResponseEntity`) |
+| Quien no puede ver la conversación, o sin sesión | 403 |
+| Una conversación que no existe, o que no es un soporte (grupo, comunidad, 1 a 1) | 404 |
+
+El orden es existe → puede verla → es un soporte: a quien no participa no se le dice qué tipo de chat es.
+Spring Security no pisa el `Cache-Control` de la foto (lo fija `FotoDelSoporteIT` contra el Tomcat real).
+
+**De dónde sale el nombre.** El aprendiz dueño sale de la clave del soporte (`soporte:<uuid>`,
+`Conversacion.aprendizDelSoporte()`; una clave con otra forma da vacío, no lanza) y su primer nombre de
+`users.api` (`PrimerNombre`). Si su cuenta ya no existe, va la tarjeta sin nombre.
+
+**Sin tablas, sin S3, sin columnas.** La tarjeta se dibuja al pedirla y se guarda en memoria
+(`TarjetasConNombreEnMemoria`, Caffeine): **por primer nombre** (el dibujo lo pasa a mayúsculas, así que
+«Ana» y «ANA» son la misma entrada), **acotada por peso** a 6 MB (unas cincuenta tarjetas de ~120 KB: el
+contenedor de producción tiene tope de memoria, V-8) y con el mismo nombre dibujado una sola vez aunque lo
+pidan a la vez. El `ETag` es la huella del contenido (SHA-256 del JPEG, 32 caracteres), no del nombre: si
+cambia el fondo o la letra, cambia sola y los teléfonos la vuelven a bajar. Dibujar no va dentro de una
+transacción.
+
+**`ConversacionResponse.photoPath`.** Campo nuevo y opcional: en un soporte, la ruta de su foto
+(`/api/v1/chat/conversations/{id}/foto`); `null` en lo demás. Las versiones publicadas de la app lo
+ignoran: su esquema de conversación es `passthrough` en todas (verificado en el historial de
+`chatSchemas.ts` de `origin/master`). Si el primer nombre cambia, la ruta no: la foto vieja puede verse
+hasta un día (el `max-age`) y después se revalida por el `ETag`.
+
+**La app** (frontend `eventos-app`) la muestra en la lista, la cabecera y la info del soporte. La pide con
+la sesión: en Android/iOS con las cabeceras del `Image`; en web trae el blob y usa un object URL guardado
+por conversación. Mientras carga o si falla queda la tarjeta sin nombre.
+
+| Clase | Qué fija |
+|---|---|
+| `FotoDelSoporteServiceTest` (7) | La aprendiz ve su tarjeta (primer nombre y huella); el staff ve la de la aprendiz; sin acceso 403 sin dibujar; un grupo o la comunidad 404; la que no existe 404 antes de preguntar el acceso; suspendida 403; sin la cuenta de la aprendiz, sin nombre |
+| `TarjetasConNombreEnMemoriaTest` (3) | Un dibujo por nombre sin importar mayúsculas ni espacios; huella del contenido; acotada por peso |
+| `FotoDelSoporteControllerTest` (5) | 200 con `image/jpeg`, `Cache-Control` y `ETag`; 304 con `If-None-Match`; 403 (también pidiendo `Accept: image/jpeg`); 404; suspendida 403 sin llegar al caso de uso |
+| `FotoDelSoporteIT` (2) | Tomcat real con sesión: la aprendiz y el staff reciben el JPEG entero con el mismo `ETag` y el `Cache-Control` sin pisar; 304; 403 al que no participa y sin sesión; 404 en un 1 a 1 y en una que no existe |
+| `ConversacionTest` (+3) | `aprendizDelSoporte`: el soporte lo sabe; lo demás no tiene; una clave rara da vacío |
+| `ConversacionResponseTest` (+1) | `photoPath` solo en un soporte |
+| `MensajeFanoutPayloadTest` (+1 aserción) | El evento en vivo lleva `SYSTEM` y `TEXT`, como el REST (E-333) |

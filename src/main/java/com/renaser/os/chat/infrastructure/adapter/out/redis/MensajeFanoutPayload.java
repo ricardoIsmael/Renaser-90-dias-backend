@@ -1,6 +1,7 @@
 package com.renaser.os.chat.infrastructure.adapter.out.redis;
 
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
+import com.renaser.os.chat.infrastructure.adapter.in.rest.mensaje.MensajeResponse;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -17,8 +18,13 @@ import java.util.UUID;
  * por "tiene campo texto" habria sido exactamente eso.
  *
  * <p>{@code senderId} es el de {@code Mensaje.remitentePublico}: en un mensaje del programa (D-199), el
- * UUID nulo y no la persona guardada, que si no descartaría el aviso como «eco propio». {@code type}
- * sale con el nombre del dominio ({@code SISTEMA}, {@code TEXTO}), no traducido como en el REST (E-333).
+ * UUID nulo y no la persona guardada, que si no descartaría el aviso como «eco propio».
+ *
+ * <p>{@code type} lleva el mismo valor que el REST ({@code TEXT}, {@code IMAGE}, {@code SYSTEM}…, D-36),
+ * sacado de {@link MensajeResponse#toWireTipo}.
+ * <blockquote><b>Corregido 2026-09-27 (E-333).</b> Salía con el nombre del dominio
+ * ({@code mensaje.tipo().name()}: {@code TEXTO}, {@code SISTEMA}). La app nueva acepta los dos y el APK
+ * publicado nunca completa el CONNECT (E-331), así que cambiarlo no rompe a nadie.</blockquote>
  */
 record MensajeFanoutPayload(String event, UUID id, UUID conversationId, UUID senderId, String type,
                              String text, Instant createdAt) {
@@ -27,6 +33,7 @@ record MensajeFanoutPayload(String event, UUID id, UUID conversationId, UUID sen
 
     static MensajeFanoutPayload from(Mensaje mensaje) {
         return new MensajeFanoutPayload(EVENTO, mensaje.id().value(), mensaje.conversacionId().value(),
-                mensaje.remitentePublico(), mensaje.tipo().name(), mensaje.texto(), mensaje.creadoEn());
+                mensaje.remitentePublico(), MensajeResponse.toWireTipo(mensaje.tipo()), mensaje.texto(),
+                mensaje.creadoEn());
     }
 }

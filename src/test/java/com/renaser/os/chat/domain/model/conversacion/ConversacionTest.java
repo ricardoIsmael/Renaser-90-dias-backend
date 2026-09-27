@@ -215,4 +215,31 @@ class ConversacionTest {
 
         assertThatThrownBy(() -> soporte.renombrada("Otro")).isInstanceOf(IllegalStateException.class);
     }
+
+    /** D-205: la foto del soporte es la tarjeta con el nombre de SU aprendiz, que sale de la clave. */
+    @Test
+    void elSoporteSabeQuienEsSuAprendiz() {
+        Conversacion soporte = Conversacion.crearSoporte(ID, APRENDIZ, "Ana - Formación Renaser", AHORA);
+
+        assertThat(soporte.aprendizDelSoporte()).contains(APRENDIZ);
+    }
+
+    @Test
+    void loQueNoEsUnSoporteNoTieneAprendiz() {
+        assertThat(Conversacion.crearGlobal(ID, AHORA).aprendizDelSoporte()).isEmpty();
+        assertThat(Conversacion.crearDirecta(ID, Conversacion.claveDirectaDe(APRENDIZ, STAFF), AHORA)
+                .aprendizDelSoporte()).isEmpty();
+        assertThat(Conversacion.crearCelula(ID, UUID.randomUUID(), AHORA).aprendizDelSoporte()).isEmpty();
+    }
+
+    @Test
+    void unSoporteConUnaClaveRaraNoLanzaDaVacio() {
+        Conversacion rara = Conversacion.rehydrate(ID, TipoConversacion.SOPORTE, null, "soporte:no-es-un-uuid",
+                "Soporte", AHORA);
+        Conversacion sinPrefijo = Conversacion.rehydrate(ID, TipoConversacion.SOPORTE, null, APRENDIZ.toString(),
+                "Soporte", AHORA);
+
+        assertThat(rara.aprendizDelSoporte()).isEmpty();
+        assertThat(sinPrefijo.aprendizDelSoporte()).isEmpty();
+    }
 }

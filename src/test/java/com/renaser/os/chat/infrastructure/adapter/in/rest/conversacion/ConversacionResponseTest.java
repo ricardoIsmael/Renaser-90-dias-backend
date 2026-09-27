@@ -45,4 +45,19 @@ class ConversacionResponseTest {
         assertThat(respuesta.nombre()).isEqualTo("Soporte - Ana Perez");
         assertThat(respuesta.celulaId()).isNull();
     }
+
+    /** D-205: solo un soporte trae la ruta de su foto; lo demás usa la tarjeta sin nombre de la app. */
+    @Test
+    @DisplayName("photoPath: la ruta de la foto solo en un soporte; null en grupo, comunidad y 1 a 1")
+    void laRutaDeLaFotoSoloEnUnSoporte() {
+        UserId aprendiz = UserId.of(UUID.randomUUID());
+        UserId otro = UserId.of(UUID.randomUUID());
+
+        assertThat(ConversacionResponse.from(Conversacion.crearSoporte(ID, aprendiz, "Ana - Formación Renaser", AHORA))
+                .photoPath()).isEqualTo("/api/v1/chat/conversations/" + ID + "/foto");
+        assertThat(ConversacionResponse.from(Conversacion.crearGlobal(ID, AHORA)).photoPath()).isNull();
+        assertThat(ConversacionResponse.from(Conversacion.crearCelula(ID, UUID.randomUUID(), AHORA)).photoPath()).isNull();
+        assertThat(ConversacionResponse.from(Conversacion.crearDirecta(ID, Conversacion.claveDirectaDe(aprendiz, otro), AHORA))
+                .photoPath()).isNull();
+    }
 }
