@@ -40,7 +40,8 @@ import java.util.Optional;
  * <p><b>Canal de Android (D-188).</b> El {@code channelId} sale del tipo del aviso
  * ({@link CanalAndroidExpo}), y solo para tokens de Android: en iOS el campo no existe. Un canal
  * que el teléfono podría no tener no se nombra — la documentación de Expo dice que entonces el
- * aviso no se muestra.
+ * aviso no se muestra. Con las dos propiedades de canal apagadas (el default) el cuerpo es el
+ * mismo de antes de D-188.
  */
 @Component
 class ExpoPushTransporte implements TransportePush {
@@ -62,11 +63,13 @@ class ExpoPushTransporte implements TransportePush {
 
     ExpoPushTransporte(@Value("${renaser.notifications.expo-push.access-token:}") String accessToken,
                         @Value("${renaser.notifications.expo-push.habilitado:true}") boolean habilitado,
+                        @Value("${renaser.notifications.expo-push.canal-de-acompanamiento:false}")
+                        boolean canalDeAcompanamiento,
                         @Value("${renaser.notifications.expo-push.canales-de-recordatorios:false}")
                         boolean canalesDeRecordatorios) {
         this.accessToken = accessToken == null ? "" : accessToken.trim();
         this.habilitado = habilitado;
-        this.canales = new CanalAndroidExpo(canalesDeRecordatorios);
+        this.canales = new CanalAndroidExpo(canalDeAcompanamiento, canalesDeRecordatorios);
         this.http = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
     }
 

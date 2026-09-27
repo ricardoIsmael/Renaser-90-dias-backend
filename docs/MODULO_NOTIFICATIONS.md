@@ -318,7 +318,7 @@ campo no existe y no se manda.
 
 | Tipo | `channelId` | Cuándo |
 |---|---|---|
-| `ACOMPANAMIENTO_ALUMNO` | `avisos-acompanamiento` | Siempre |
+| `ACOMPANAMIENTO_ALUMNO` | `avisos-acompanamiento` | Solo con `renaser.notifications.expo-push.canal-de-acompanamiento=true` |
 | `RECORDATORIO_EVENTO` | `recordatorios-eventos` | Solo con `renaser.notifications.expo-push.canales-de-recordatorios=true` |
 | `RECORDATORIO_HABITO` | `recordatorios-habitos` | Solo con esa misma propiedad |
 | Todo lo demás | (ninguno: canal por defecto) | — |
@@ -326,6 +326,10 @@ campo no existe y no se manda.
 Los ids son los **base** que crea la app (`src/features/alarmas/sonidoDeAlarma.ts`, `CANAL_BASE`), sin
 el sufijo `-campana`/`-vibrar` del sonido que la persona elige para sus alarmas locales. El de hábitos
 conserva el id de siempre (`recordatorios-habitos`), el mismo del APK de producción.
+
+**Las dos propiedades vienen apagadas.** Con las dos apagadas el cuerpo del mensaje de Expo es
+idéntico al de antes de D-188, para todo tipo (lo afirma `ExpoPushTransporteCanalTest`): este cambio
+no altera nada en producción hasta que alguien encienda una.
 
 **Por qué la propiedad y por qué está apagada.** La documentación de Expo
 (docs.expo.dev/push-notifications/sending-notifications, campo `channelId`, verificada el 2026-09-26)
@@ -344,10 +348,14 @@ toma la lectura que no pierde avisos: **no se nombra un canal que el teléfono p
 
 Encender `canales-de-recordatorios` cuando el APK nuevo sea el único en uso (la app no se actualiza
 por aire). Hasta entonces los recordatorios de eventos y hábitos salen por el canal por defecto, como
-antes de D-188. Ojo: `avisos-acompanamiento` la app lo crea con importancia `DEFAULT` (suena, pero
-Android no lo muestra como banner emergente), y el canal de respaldo de `expo-notifications` es
-`HIGH`. Si el canal por defecto del teléfono era `HIGH`, desde D-188 el aviso de acompañamiento deja
-de aparecer como banner. No se verificó en un teléfono; si molesta, se cambia en la app, no acá.
+antes de D-188.
+
+**Por qué el de acompañamiento tiene su propia propiedad, también apagada.** Ese canal lo tienen todos
+los teléfonos con token, así que no hay riesgo de aviso perdido; el riesgo es otro. La app lo crea con
+importancia `DEFAULT` (suena, pero Android no lo muestra como banner emergente), y hoy el aviso cae al
+canal por defecto, que puede ser `HIGH` (el de respaldo de `expo-notifications` lo es) y salir como
+banner. Encenderlo podría quitarle el banner al mentor. No se verificó en un teléfono; antes de
+encender `canal-de-acompanamiento` conviene probarlo, o subir la importancia del canal en la app.
 
 Pruebas: `ExpoPushTransporteCanalTest` (cuerpo JSON por tipo, plataforma y propiedad).
 
