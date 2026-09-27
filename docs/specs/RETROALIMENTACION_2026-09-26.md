@@ -201,3 +201,20 @@ pruebas; Playwright admin/alquimista 26 ok + 1 saltada por datos; e2e en emulado
    módulo nativo (texto a voz), más pesado.
 3. Si el teléfono no deja dar el permiso «Alarmas y recordatorios», la alarma igual suena, pero Android puede demorarla
    hasta ~1 h.
+
+## 11. Cierre del 26–27/09 (madrugada) — todo integrado y probado, sin subir
+
+Backend `evidencia-foto` baa48665: `clean verify` 4889 unitarias + 130 integración en verde. Frontend `evidencia-foto`
+(390e465 + chat): 113 suites / 972 pruebas. Playwright 27/27 contra el backend nuevo. e2e por API y en emulador con capturas
+(`~/Imágenes/e2e-26-09-*`) y el log del servidor revisado (0 ERROR con configuración válida, ningún 5xx).
+
+Agregado después de §10 (decisiones del dueño): Eventos con calendario del mes y tarjetas como cursos; aviso con voz (audios
+provisionales) y recordatorios de objetivos; chat estilo WhatsApp a pantalla completa, integrantes para el mentor, foto de grupo
+(fénix de la tarjeta de Canva), mensajes en vivo (E-331, roto desde el 17/09); bienvenidas con textos versionados (D-190) y
+bienvenida del mentor en el grupo (D-191, V71); remitente inválido apaga con aviso (E-330); «Cambiar día» en Administración con
+riesgos cerrados (D-192..D-198: semanas de rocas por día del programa —resuelve la «semana 14» que hoy existe en producción—,
+pactos firmables tarde, rango 1–89, 409 antes del Día 1, hábitos activos al retroceder, bloqueo contra el barrido).
+
+Pendiente del dueño: textos oficiales de bienvenida (hoja de Operaciones) y cuenta de Kelin como remitente; re-exportar la foto de
+perfil del grupo; preguntas abiertas (Domingo Ritual con semanas por día; pacto pendiente para quien no firmó a tiempo; hábito
+propio creado después del día destino al retroceder; orden de la lista de chats). Subida (§7) y APK nuevo: esperan el OK.
