@@ -9788,6 +9788,11 @@ salteado al adelantar; ajuste antes del Día 1 que no sobrevive; fijar 90 por er
 
 > **Actualizado 2026-09-26.** El título decía «SIN RESOLVER» y la solución, «Pendiente: exige decidir (dueño)…». El dueño
 > decidió (D-192) y se resolvió; lo de abajo se conserva como estaba y la solución real va al final de la entrada.
+>
+> **Actualizado 2026-09-27 (D-203).** La solución de abajo (semana = `ceil(día/7)`) se revirtió: las semanas volvieron
+> a ser de lunes a domingo para todos (E-338). La «semana 14» sigue sin existir —sus días se suman a la 13, que termina
+> el día 90— y la semana sigue acompañando el ajuste de día. El «Cómo evitar (actualizado)» de abajo vale con
+> `ProgresoParticipanteRocks.semanas(hoy)`, que ahora devuelve vacío mientras no hay Día 1 elegido.
 
 **Síntoma (por lectura de código y prueba de caracterización, no visto todavía en producción).** Crear el plan semanal de
 las últimas semanas falla con `IllegalArgumentException: numeroSemana debe estar entre 1 y 13: 14` (400), y sin roca
@@ -10068,3 +10073,87 @@ Audioterapia tiene en la base. `crear` pasa la hora de cierre por `VentanaDelDia
 
 **Cómo evitar que vuelva a pasar.** En un fixture con `HorarioHabito.crear`, las horas de cierre después de las 23:50 salen
 acotadas. Para reproducir una fila real tal cual está en la base, usar `rehydrate`.
+
+## E-338 · Semanas de rocas que no terminaban el domingo (D-192): «la semana 4 va del martes 22 al lunes 28»
+
+**Síntoma.** Con D-192 (2026-09-26, no llegó a producción), para quien no empezó un lunes la semana de rocas empezaba el
+mismo día de la semana en que había empezado su programa: la semana 4 de quien empezó el martes 1 iba del martes 22 al
+lunes 28 (`FechasPlanificablesTest` fijaba `hasta=2026-09-28`), el `+1` del plan semanal caía el día 7, 14 … de cada bloque
+y no el domingo, y el Domingo Ritual (domingo 12:00 → lunes 09:00) quedaba en medio de la semana. D-192 lo dejó como
+pregunta abierta; el 27/09 el dueño eligió volver a lunes a domingo para todos (opción A): el documento del programa define
+el domingo como día de cierre y descanso («Formulario de cierre de domingo»).
+
+**Causa real.** Para resolver la «semana 14» (E-320) se cambió la UNIDAD de la semana —bloques de siete días del programa—
+en vez de tocar solo el borde (los días que sobraban al final). Esa unidad contradice el calendario del programa, que cierra
+el domingo para todos, y desacopla la semana de la ventana del Domingo Ritual.
+
+**Solución.** D-203: semana calendario desde la semana del primer día efectivo, la 13 absorbe los días de una 14 y el `+1`
+vuelve al domingo. Las pruebas nuevas fallan contra el código de D-192: `SemanaProgramaTest.laSemanaEsLaDeCalendario`
+(inicio de lunes a domingo × días 1, 7, 8, 84, 85, 90: 12 de las 42 filas, `expected: 2 but was: 1` y
+`expected: 13 but was: 12`), `sinAjusteCoincideConProduccion` (`[inicio 2025-12-02, fecha 2025-12-08] expected: 2 but
+was: 1`), `RocaSemanalServiceTest.elDomingoPreparaLaSemanaQueEmpiezaElLunes` (`expected: 2 but was: 1`) y
+`FechasPlanificablesTest.enPlazo` (`expected: FechasPlanificables[desde=2026-09-24, hasta=2026-09-27] but was:
+FechasPlanificables[desde=2026-09-24, hasta=2026-09-28]`).
+
+**Cómo evitar que vuelva a pasar.** Antes de cambiar la unidad de tiempo de una regla (semana, mes), contrastarla con el
+documento del programa y con las ventanas que ya existen (Domingo Ritual, cierre del sábado del semáforo). Para arreglar un
+borde, tocar el borde. `SemanaProgramaTest.lasTreceSemanasCubrenLosNoventaDias` fija que de la 2 a la 12 van de lunes a
+domingo, empiece el día que empiece.
+
+## E-339 · El ancla de la semana `hoy − (día − 1)` se corría para el graduado y, sin Día 1 elegido, caía en mañana
+
+**Síntoma.** Al verificar para D-203 que la numeración nueva coincide con la de producción para quien no tiene ajuste, el
+ancla de D-192 (`SemanaPrograma.desde(fechaInicio, día, hoy)`) no daba el Día 1 en dos casos (prueba descartable corrida
+contra el código de D-192):
+```
+graduado sin ajuste (inicio 2026-05-17, hoy 2026-08-24; users.api da el día 90):
+expected: 2026-05-17 (java.time.LocalDate)
+ but was: 2026-05-27 (java.time.LocalDate)
+sin activar, con la fecha provisional del alta ya pasada (2026-09-10; hoy 2026-09-24):
+expected: 2026-09-10 (java.time.LocalDate)
+ but was: 2026-09-25 (java.time.LocalDate)
+```
+
+**Causa real.** `users.api` da el día acotado a 0..90. Desde el día 90, `hoy − (día − 1)` es `hoy − 89`: un ancla que
+avanza un día por cada día que pasa (el «Límite conocido» de D-192), así que las filas de un graduado se leían contra
+fechas que no eran las suyas. Sin activar, el día que da `users.api` es el guardado (0) y el ancla quedaba en mañana;
+producción, en cambio, anclaba en `fecha_inicio`, que antes de activar es una fecha PROVISIONAL del alta y tampoco es un
+Día 1 (D-201, E-336): de ahí salían la «semana 1 del programa (X al Y)» del acompañante y `fechaInicioPrograma`.
+
+**Solución.** `ProgresoParticipanteRocks.primerDiaEfectivo` (D-203): sin Día 1 elegido (el adaptador manda
+`users.api.ParticipacionPrograma.diaUnoElegido()`, `null` sin activar) no hay ancla: la semana es la 1 sin fechas, el
+tablero manda `inicioSemana`, `finSemana` y `fechaInicioPrograma` en `null`, planificar un día es `INVALID_DATE` y el
+acompañante dice «(todavia sin fechas: no eligio su Dia 1)»; antes de que llegue el Día 1, el Día 1; en curso,
+`hoy − (día − 1)`; desde el 90, `ProgramasActivadosFinder.de(…).ultimaFecha() − 89`, que calcula `users` con el ajuste y
+que el adaptador pide solo en ese caso. Pruebas: `ProgresoParticipanteRocksTest` (sin ajuste antes del día 1, en curso y
+graduado contra `CuentaDeSemanasDeProduccion`; con ajuste de −25 a +20; sin Día 1),
+`ConsultarProgresoParticipanteRocksPersistenceAdapterTest` contra Postgres y el `users.api` real (graduado con y sin ajuste,
+en curso, sin activar), y los casos sin Día 1 del tablero, del plan semanal y diario, de `consultar_rocas` y del desvío.
+
+**Cómo evitar que vuelva a pasar.** Un valor acotado no sirve para reconstruir una fecha pasado el tope: se pide la fecha, no
+se deduce. Y una fecha que una columna `NOT NULL` guarda "por ahora" no es un dato: se lee por el accessor que la filtra
+(`diaUnoElegido()`), nunca cruda.
+
+## E-340 · Bordes de la semana: el domingo previo al Día 1 se planificaba la semana 2, y el acompañante proponía la «semana 14»
+
+**Síntoma.** (1) En producción (backend `7429a09c`), el domingo antes del Día 1 `POST /rocks/weekly` guardaba el plan como
+semana 2: `RocaSemanalServiceTest.elDomingoAntesDelDiaUnoPreparaLaPrimera` corrido contra ese código da
+`expected: 1 but was: 2`. La semana 1 quedaba sin objetivo y el lunes el tablero decía que la semana no estaba armada.
+(2) `proponer_editar_objetivo_semanal` con `semana=siguiente` en la semana 13 proponía la 14:
+`Exito[contenido=Propuesta creada: Cambiar el objetivo de Trabajo de la semana 14. objetivo: Vender 3. …]`; al confirmar,
+`rocks` respondía `SIN_OBJETIVO_SEMANAL` y el texto invitaba a crearla «con el plan de la semana», que no existe.
+
+**Causa real.** Las dos sumaban uno sin mirar los bordes. La cuenta de producción da 1 para toda fecha anterior al primer
+domingo y el `+1` del domingo se aplicaba igual antes de empezar. La herramienta (D-177) sumaba uno a la semana en curso
+sin tope.
+
+**Solución.** `SemanaPrograma.semanaAPlanificar` (D-203): antes del día 1, la 1; el domingo, +1 hasta la 13. La herramienta
+rechaza «siguiente» en la 13 con `EditarObjetivoSemanalPort.ULTIMA_SEMANA`, espejo de
+`rocks.api.EdicionDeObjetivoSemanalPort.ULTIMA_SEMANA` (`AjustesDeRocasAdaptersTest` rompe si dejan de coincidir).
+Pruebas: `RocaSemanalServiceTest.elDomingoAntesDelDiaUnoPreparaLaPrimera` y `alFinalNuncaSePlanificaLaSemanaCatorce`
+(contra producción: `IllegalArgumentException: numeroSemana debe estar entre 1 y 13: 14`),
+`AjustesDeRocasHerramientasTest.enLaTreceNoHaySemanaSiguiente`. **Datos:** si alguien de producción planificó su primera
+semana el domingo previo al Día 1, esas filas quedaron como semana 2; no se reescriben (D-203 no toca filas).
+
+**Cómo evitar que vuelva a pasar.** Todo «+1» y toda «semana siguiente» se prueban en los bordes: el día previo al Día 1,
+el último domingo del programa y la semana 13.

@@ -22,8 +22,8 @@ final class TextoDeObjetivos {
 
     static String progreso(ProgresoDeLaSemana progreso) {
         StringBuilder texto = new StringBuilder("Progreso de la semana ").append(progreso.numeroSemana())
-                .append(" del programa (").append(progreso.inicio()).append(" al ").append(progreso.fin())
-                .append("), hoy es ").append(TextoDePlanDeRocas.diaYFecha(progreso.hoy())).append(":\n")
+                .append(" del programa ").append(TextoDePlanDeRocas.rangoDeLaSemana(progreso.inicio(), progreso.fin()))
+                .append(", hoy es ").append(TextoDePlanDeRocas.diaYFecha(progreso.hoy())).append(":\n")
                 .append("Avance de la semana: ").append(progreso.progresoSemanalPct())
                 .append("% de las rocas planificadas en los dias que ya pasaron, hoy incluido.\n");
         progreso.dias().forEach(dia -> texto.append(lineaDe(dia)).append('\n'));

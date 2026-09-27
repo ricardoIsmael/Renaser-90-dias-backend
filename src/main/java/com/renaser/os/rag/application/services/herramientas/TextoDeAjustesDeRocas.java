@@ -19,6 +19,21 @@ final class TextoDeAjustesDeRocas {
     static final String DIA_EN_CURSO = "El dia en curso no se reacomoda: la accion se puede agregar a manana o a "
             + "otro dia que quede de esta semana.";
 
+    /**
+     * Las fechas que acepta {@code rocks} ({@code FechasPlanificables}): la semana es de lunes a domingo y
+     * la ultima (la 13) termina el dia 90, que puede no ser domingo (D-203). Un solo texto para los dos
+     * rechazos que lo dicen, para que no se desincronicen.
+     *
+     * <p><b>Corregido 2026-09-27 (D-203).</b> D-192 habia cambiado el del dia que ya paso a "desde manana
+     * hasta el ultimo dia de esta semana de programa".
+     */
+    static final String FECHAS_QUE_SE_PUEDEN_AGREGAR = "desde manana hasta el domingo de esta semana (en la "
+            + "ultima semana del programa, hasta el dia 90)";
+
+    /** "siguiente" pedida en la semana 13: no hay semana 14 (D-203, E-320). */
+    static final String SIN_SEMANA_SIGUIENTE = "Esta es la ultima semana del programa (la 13): no hay una semana "
+            + "siguiente para cambiar. Se puede corregir el objetivo de esta semana.";
+
     private TextoDeAjustesDeRocas() {
     }
 
@@ -37,8 +52,8 @@ final class TextoDeAjustesDeRocas {
     static String rechazoDeAccion(AgregarAccionAlPlanPort.Motivo motivo) {
         return switch (motivo) {
             case DIA_EN_CURSO -> DIA_EN_CURSO;
-            case FECHA_NO_PLANIFICABLE -> "Ese dia ya no se puede planificar: se puede agregar desde manana hasta el "
-                    + "domingo de esta semana.";
+            case FECHA_NO_PLANIFICABLE -> "Ese dia ya no se puede planificar: se puede agregar "
+                    + FECHAS_QUE_SE_PUEDEN_AGREGAR + ".";
             case SIN_OBJETIVO_SEMANAL -> "Ese eje no tiene objetivo esta semana, y las acciones del dia salen de ahi: "
                     + "primero hay que armar el objetivo de la semana de ese eje.";
             case EJE_COMPLETO -> "Ese eje ya tiene sus 3 acciones ese dia. Se puede elegir otro dia, o rehacer el plan "

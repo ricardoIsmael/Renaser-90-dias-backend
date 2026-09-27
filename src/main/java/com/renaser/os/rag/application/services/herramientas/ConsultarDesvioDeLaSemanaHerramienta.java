@@ -91,7 +91,7 @@ public class ConsultarDesvioDeLaSemanaHerramienta implements HerramientaAgente {
         if (hoy == null) {
             return ResultadoHerramienta.fallo("No pude leer como va su semana en este momento.");
         }
-        LocalDate desde = progreso != null ? progreso.inicio() : hoy.with(DayOfWeek.MONDAY);
+        LocalDate desde = desdeCuandoSeMira(progreso, hoy);
         List<HabitoVencido> vencidos = !hoy.isAfter(desde) ? List.of() : leer("sus habitos vencidos", faltantes,
                 () -> vencidosPort.vencidosEntre(actorId, desde, hoy.minusDays(1)));
         Optional<SemaforoDelAprendiz> semaforo = leer("su semaforo", faltantes, () -> semaforoPort.de(actorId));
@@ -100,6 +100,17 @@ public class ConsultarDesvioDeLaSemanaHerramienta implements HerramientaAgente {
         return ResultadoHerramienta.exito(TextoDelDesvio.componer(new DesvioDeLaSemana(desde, hoy, progreso,
                 objetivos, vencidos, pausados, semaforo == null ? null : semaforo.orElse(null),
                 semaforo != null && semaforo.isEmpty(), List.copyOf(faltantes))));
+    }
+
+    /**
+     * El primer dia de la semana que se mira: el de la semana de programa; sin avance legible, el lunes. Sin
+     * Dia 1 elegido la semana no tiene fechas (D-203) y todavia no hay dias terminados: hoy.
+     */
+    private static LocalDate desdeCuandoSeMira(ProgresoDeLaSemana progreso, LocalDate hoy) {
+        if (progreso == null) {
+            return hoy.with(DayOfWeek.MONDAY);
+        }
+        return progreso.inicio() != null ? progreso.inicio() : hoy;
     }
 
     /** {@code null} si la fuente fallo; en ese caso anota que falto. Nunca propaga. */

@@ -1,75 +1,62 @@
 package com.renaser.os.rocks.domain.model.rocasemanal;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Objects;
 
 /**
- * Semanas de programa: <b>bloques de siete días del programa</b>. Días 1-7 son la semana 1, 8-14 la 2,
- * y así hasta 85-90, que es la 13 (seis días). Nunca hay semana 14.
+ * Semanas de programa: <b>semanas calendario de LUNES A DOMINGO</b> (D-203), contadas desde la que
+ * contiene el primer día efectivo del programa. La semana 1 va del día 1 al primer domingo (corta si no
+ * se empezó un lunes) y desde ahí cada semana es de lunes a domingo. <b>Nunca hay semana 14</b>: los días
+ * que caerían en ella (inicio de miércoles a domingo) se suman a la 13, que siempre termina el día 90 y
+ * dura de 6 a 12 días según el día de la semana en que se empezó.
  *
- * <p><b>Corregido 2026-09-26 (D-192, E-320).</b> Antes contaba semanas calendario lunes-domingo desde
- * {@code fecha_inicio}, con una semana 1 corta si no se empezaba en lunes (portado de
- * {@code week.ts} del repo viejo). Eso tenía dos defectos: con un inicio de miércoles a domingo los
- * últimos días del programa caían en una «semana 14» que {@code RocaSemanal} y el {@code CHECK} de V1
- * rechazan, y no veía {@code dias_ajuste_programa}, así que tras mover el día de alguien su semana
- * quedaba en otro lado («día 35, semana 4»). El dueño decidió que la semana sale del día del
- * programa y lo sigue cuando se ajusta. Para quien empezó un lunes y nunca fue ajustado, las dos
- * cuentas dan exactamente lo mismo.
+ * <p>Es de calendario porque el programa define el domingo como el día de cierre y descanso, y el
+ * Domingo Ritual ({@link VentanaPlanificacionSemanal}, domingo 12:00 a lunes 09:00) prepara la semana
+ * que empieza el lunes: con semanas de calendario las dos cosas coinciden para todos.
  *
- * <p><b>El ancla es el primer día efectivo del programa</b>, no {@code fecha_inicio}: se reconstruye
- * con el día de programa de HOY (ya derivado con el ajuste por {@code users.api}) como
- * {@code hoy − (día − 1)}. Así la semana sigue al día sin que {@code rocks} tenga que conocer el
- * ajuste. Límite conocido: pasado el día 90 el día viene acotado a 90 y el ancla asume que hoy es el
- * 90 (solo afecta a quien ya se graduó; ver D-192).
+ * <p><b>El ancla es el primer día efectivo, no {@code fecha_inicio}.</b> Si a alguien se le ajustó el día,
+ * la semana acompaña el ajuste (no vuelve el «día 35, semana 4» de E-320). El ancla la resuelve quien ve
+ * el ajuste ({@code ProgresoParticipanteRocks.primerDiaEfectivo}); acá solo se cuenta el calendario. Sin
+ * ajuste, el ancla es {@code fecha_inicio} y esta cuenta da <b>exactamente</b> la de producción anterior a
+ * D-192 para las semanas 1 a 13: las {@code rocas_semanales} ya guardadas siguen significando lo mismo.
+ * Lo único distinto es que lo que aquella contaba como semana 14 o más (que el {@code CHECK} de V1 nunca
+ * dejó guardar) ahora es la 13.
+ *
+ * <p><b>Corregido 2026-09-27 (D-203).</b> D-192 (2026-09-26, no llegó a producción) la había convertido en
+ * bloques de siete días del programa: «Días 1-7 son la semana 1, 8-14 la 2, y así hasta 85-90, que es la
+ * 13 (seis días)», con el {@code +1} de la planificación en el último día de cada bloque (7, 14 … 84) en
+ * vez del domingo. El dueño decidió volver a lunes a domingo para todos; de D-192 se conserva lo que
+ * arregló: ni semana 14 ni semana corrida tras un ajuste.
  */
 public final class SemanaPrograma {
 
-    public static final int DIAS_POR_SEMANA = 7;
     public static final int ULTIMA_SEMANA = 13;
     public static final int ULTIMO_DIA = 90;
 
+    private static final int DIAS_POR_SEMANA = 7;
+
     private final LocalDate primerDia;
+    private final LocalDate lunesDeLaSemanaUno;
 
     private SemanaPrograma(LocalDate primerDia) {
         this.primerDia = Objects.requireNonNull(primerDia, "primerDia es obligatorio");
+        this.lunesDeLaSemanaUno = primerDia.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
     }
 
     /**
-     * @param fechaInicio      {@code participantes_programa.fecha_inicio}
-     * @param diaProgramaDeHoy el día de programa de {@code hoy}, ya derivado con el ajuste
-     * @param hoy              la fecha de hoy EN LA ZONA del participante
+     * @param primerDia el día 1 del programa con el ajuste ya aplicado ({@code fecha_inicio} si no hubo
+     *                  ajuste o si el reloj todavía no arrancó)
      */
-    public static SemanaPrograma desde(LocalDate fechaInicio, int diaProgramaDeHoy, LocalDate hoy) {
-        if (hoy.isBefore(fechaInicio)) {
-            // El reloj no arrancó: no puede haber ajuste y el día guardado no sirve de ancla.
-            return new SemanaPrograma(fechaInicio);
-        }
-        return new SemanaPrograma(hoy.minusDays(diaProgramaDeHoy - 1L));
-    }
-
-    /** La semana (1 a 13) de un día de programa: {@code ceil(día / 7)}, con el día acotado a 1..90. */
-    public static int numeroDeDia(int diaPrograma) {
-        int dia = Math.min(Math.max(diaPrograma, 1), ULTIMO_DIA);
-        return (dia + DIAS_POR_SEMANA - 1) / DIAS_POR_SEMANA;
+    public static SemanaPrograma desde(LocalDate primerDia) {
+        return new SemanaPrograma(primerDia);
     }
 
     /** La fecha que es (o fue, o será) el día 1 del programa, con el ajuste ya aplicado. */
     public LocalDate primerDia() {
         return primerDia;
-    }
-
-    /** El número de semana de programa (1 a 13) al que pertenece {@code fecha}. */
-    public int numeroSemanaParaFecha(LocalDate fecha) {
-        return numeroDeDia(diaDe(fecha));
-    }
-
-    /** Inicio y fin de una semana de programa. La 13 termina el día 90 (dura seis días). */
-    public LimitesSemana limites(int numeroSemana) {
-        int semana = Math.min(Math.max(numeroSemana, 1), ULTIMA_SEMANA);
-        LocalDate inicio = primerDia.plusDays((semana - 1L) * DIAS_POR_SEMANA);
-        LocalDate fin = inicio.plusDays(DIAS_POR_SEMANA - 1L);
-        return new LimitesSemana(inicio, fin.isAfter(finDelPrograma()) ? finDelPrograma() : fin);
     }
 
     /** Último día del programa: el día 90, contando el ajuste. */
@@ -78,24 +65,39 @@ public final class SemanaPrograma {
     }
 
     /**
-     * Qué semana se planifica {@code hoy}: la de hoy, salvo el ÚLTIMO día de una semana (7, 14 … 84),
-     * que ya prepara la siguiente. Antes del día 1 se planifica la semana 1. Nunca pasa de la 13.
-     *
-     * <p>Es la traducción directa de la regla vieja («el +1 solo vale el domingo, porque el domingo
-     * prepara la semana que empieza mañana») a semanas que ya no terminan en domingo.
+     * La semana (1 a 13) de {@code fecha}: cuántos lunes pasaron desde la semana del día 1. Lo anterior al
+     * día 1 cuenta como la 1, y todo lo que va del lunes de la 13 en adelante (incluido lo que queda después
+     * del día 90) como la 13.
      */
-    public int semanaAPlanificar(LocalDate hoy) {
-        int dia = diaDe(hoy);
-        if (dia < 1) {
-            return 1;
-        }
-        int semana = numeroDeDia(dia);
-        boolean ultimoDiaDeSuSemana = dia % DIAS_POR_SEMANA == 0;
-        return ultimoDiaDeSuSemana ? Math.min(semana + 1, ULTIMA_SEMANA) : semana;
+    public int numeroSemanaParaFecha(LocalDate fecha) {
+        long lunesTranscurridos = Math.floorDiv(ChronoUnit.DAYS.between(lunesDeLaSemanaUno, fecha), DIAS_POR_SEMANA);
+        return Math.clamp(lunesTranscurridos + 1, 1, ULTIMA_SEMANA);
     }
 
-    private int diaDe(LocalDate fecha) {
-        return (int) ChronoUnit.DAYS.between(primerDia, fecha) + 1;
+    /**
+     * Inicio y fin de una semana. La 1 empieza el día 1; de la 2 a la 12 van de lunes a domingo; la 13
+     * empieza su lunes y termina el día 90, sume los días que sume.
+     */
+    public LimitesSemana limites(int numeroSemana) {
+        int semana = Math.clamp(numeroSemana, 1, ULTIMA_SEMANA);
+        LocalDate lunes = lunesDeLaSemanaUno.plusWeeks(semana - 1L);
+        LocalDate inicio = semana == 1 ? primerDia : lunes;
+        LocalDate fin = semana == ULTIMA_SEMANA ? finDelPrograma() : lunes.plusDays(DIAS_POR_SEMANA - 1L);
+        return new LimitesSemana(inicio, fin);
+    }
+
+    /**
+     * Qué semana se planifica {@code hoy}: la de hoy, salvo el DOMINGO, que ya prepara la que empieza el
+     * lunes (el Domingo Ritual). Antes del día 1 se planifica la 1, aunque sea domingo: la semana que
+     * empieza el lunes es la primera. Nunca pasa de la 13: un domingo que cae dentro de la 13 la vuelve a
+     * pedir a ella.
+     */
+    public int semanaAPlanificar(LocalDate hoy) {
+        if (hoy.isBefore(primerDia)) {
+            return 1;
+        }
+        int semana = numeroSemanaParaFecha(hoy);
+        return hoy.getDayOfWeek() == DayOfWeek.SUNDAY ? Math.min(semana + 1, ULTIMA_SEMANA) : semana;
     }
 
     public record LimitesSemana(LocalDate inicio, LocalDate fin) {

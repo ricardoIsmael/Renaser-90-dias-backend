@@ -28,8 +28,9 @@ final class TextoDeCierreDeSemana {
     /** "Cerrar la semana 3 (2026-09-21 al 2026-09-27). Trabajo (Cerrar 2 ventas): autoevaluacion 7/10; ..." */
     static String resumen(RocasDeLaSemana semana, List<RevisionDelEje> revisiones, ReglasDelCierre reglas) {
         String ejes = revisiones.stream().map(r -> lineaDe(semana, r, reglas)).collect(Collectors.joining(". "));
-        return "Cerrar la semana " + semana.numeroSemana() + " (" + semana.inicio() + " al " + semana.fin() + "). "
-                + ejes + ". Una vez cerrada, desde el chat no se reescribe.";
+        return "Cerrar la semana " + semana.numeroSemana() + " "
+                + TextoDePlanDeRocas.rangoDeLaSemana(semana.inicio(), semana.fin()) + ". " + ejes
+                + ". Una vez cerrada, desde el chat no se reescribe.";
     }
 
     /** Vacio si se puede proponer; si no, el motivo para el modelo. */

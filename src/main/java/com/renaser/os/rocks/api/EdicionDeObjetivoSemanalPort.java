@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.api;
 
+import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
 import com.renaser.os.rocks.domain.model.rocasemanal.VentanaPlanificacionSemanal;
 import com.renaser.os.shared.domain.UserId;
 
@@ -25,6 +26,12 @@ public interface EdicionDeObjetivoSemanalPort {
     int VENTANA_ABRE_DOMINGO_HORA = VentanaPlanificacionSemanal.ABRE_HORA_DOMINGO;
     int VENTANA_CIERRA_LUNES_HORA = VentanaPlanificacionSemanal.CIERRA_HORA_LUNES;
     int MARGEN_TARDIO_HORAS = (int) VentanaPlanificacionSemanal.MARGEN_TARDIO.toHours();
+
+    /**
+     * La ultima semana del programa ({@code SemanaPrograma.ULTIMA_SEMANA}): quien propone "la semana
+     * siguiente" no puede pedir una 14 (D-203, E-320).
+     */
+    int ULTIMA_SEMANA = SemanaPrograma.ULTIMA_SEMANA;
 
     /**
      * @param numeroSemana la semana de programa que la persona vio al proponer

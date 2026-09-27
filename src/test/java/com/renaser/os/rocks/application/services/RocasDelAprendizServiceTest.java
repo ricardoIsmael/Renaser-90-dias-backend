@@ -214,6 +214,34 @@ class RocasDelAprendizServiceTest {
         verify(rocasDiarias, never()).deParticipanteYFecha(aprendiz, LocalDate.of(2026, 9, 24));
     }
 
+    /**
+     * D-203: sin Dia 1 elegido el tablero viene sin fechas (la semana 1 sin rango, D-201). El progreso sale igual,
+     * con el balance por eje en cero y sin leer ningun dia, y no hay semana anterior que contar.
+     */
+    @Test
+    @DisplayName("D-203: sin Dia 1 elegido, progreso sin fechas y en cero, y sin cierre de semana anterior")
+    void sinDiaUnoElegido() {
+        when(dashboard.dashboard(aprendiz)).thenReturn(new DashboardRocas(0, 1, null, null,
+                List.of(cuerpo, trabajo, relaciones), true, false, List.of(), List.of(), EstadoRitmoRocas.OK, 0, 0,
+                false, false, false, false, List.of(), null));
+        when(manana.manana(aprendiz)).thenReturn(List.of());
+        when(maestras.misRocasMaestras(aprendiz)).thenReturn(List.of(cuerpo, trabajo, relaciones));
+        when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(new ProgresoParticipanteRocks(0, null, LIMA,
+                RolParticipante.TRAINEE, false, false)));
+        RocasDelAprendizService servicio = new RocasDelAprendizService(dashboard, manana, objetivoDelMes, progresoPort,
+                new BalanceSemanalPorEje(rocasDiarias), new LecturaDeObjetivosDelAprendiz(maestras, semanales,
+                progresoPort, NOCHE_EN_LIMA), NOCHE_EN_LIMA);
+
+        ProgresoDeLaSemana progreso = servicio.progresoDeLaSemana(aprendiz);
+
+        assertThat(progreso.inicio()).isNull();
+        assertThat(progreso.fin()).isNull();
+        assertThat(progreso.porEje()).containsExactly(new BalanceDelEje("CUERPO", 0, 0),
+                new BalanceDelEje("TRABAJO", 0, 0), new BalanceDelEje("RELACIONES", 0, 0));
+        assertThat(servicio.cierreDeLaSemanaAnterior(aprendiz)).isEmpty();
+        verify(rocasDiarias, never()).deParticipanteYFecha(any(), any());
+    }
+
     @Test
     @DisplayName("D-177 noventa: la meta, el punto de partida, lo que lleva y el porcentaje; sin meta, sin numeros")
     void objetivosDeNoventaDias() {

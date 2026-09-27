@@ -89,7 +89,12 @@ public interface RocasDelAprendizFinder {
                                  LocalTime ventanaAbreA, boolean puedeCrearPlan) {
     }
 
-    /** {@code inicio}/{@code fin}: la semana de programa (siete dias del programa, D-192); la 13 termina el dia 90. */
+    /**
+     * {@code inicio}/{@code fin}: lunes a domingo, recortados al inicio del programa en la semana 1; la 13
+     * termina el dia 90 y suma los dias que caerian en una 14 (D-203). Hasta D-203 decia "la semana de
+     * programa (siete dias del programa, D-192)". Los dos en {@code null} mientras la persona no eligio su
+     * Dia 1: la semana es la 1 y todavia no tiene fechas (D-201). Quien lo muestre no inventa un rango.
+     */
     record RocasDeLaSemana(int numeroSemana, LocalDate inicio, LocalDate fin, List<RocaDeLaSemana> rocas) {
     }
 
@@ -103,9 +108,12 @@ public interface RocasDelAprendizFinder {
     }
 
     /**
+     * {@code inicio}/{@code fin}: como en {@link RocasDeLaSemana}, en {@code null} sin Dia 1 elegido.
+     *
      * @param hoy                    el dia de hoy en la zona del aprendiz
      * @param progresoSemanalPct     completadas/planificadas de los dias ya transcurridos (hoy incluido), 0-100
-     * @param dias                   uno por fecha de la semana de programa, de su primer a su ultimo dia
+     * @param dias                   uno por fecha de la semana, del lunes (o el inicio) al domingo (o el dia
+     *                               90 en la semana 13)
      * @param ritmo                  nombre de {@code EstadoRitmoRocas}: {@code OK}, {@code LENTO} o {@code CRITICO}
      * @param diasCompletadosUltimos7 dias de los 7 anteriores a hoy con al menos una roca completada
      * @param porEje                 los tres ejes, con lo planificado y lo completado en los dias ya
