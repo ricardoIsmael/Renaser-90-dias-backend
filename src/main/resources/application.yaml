@@ -53,6 +53,15 @@ spring:
     execution:
       simple:
         concurrency-limit: ${ASYNC_IA_CONCURRENCY_LIMIT:20}
+  # D-212 (2026-09-27): el unico multipart de la API es la foto propia de un grupo
+  # (`PUT /api/v1/admin/cells/{id}/photo`). El tope es el mismo que `FotoSubidaDelGrupo.PESO_MAXIMO`:
+  # la foto de la app pesa unos 100 KB (512 px), asi que 2 MB solo frena lo que no viene de ella. Lo
+  # que se pasa sale como 413 con un mensaje legible (GlobalExceptionHandler). El default de Spring
+  # era 1 MB.
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 3MB
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/renaser}
     username: ${DB_USERNAME:postgres}

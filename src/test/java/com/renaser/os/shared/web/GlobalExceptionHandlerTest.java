@@ -59,4 +59,19 @@ class GlobalExceptionHandlerTest {
         assertThat(handler.handleNotFound(new NoSuchElementException("nada")).getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND);
     }
+
+    @Test
+    @DisplayName("D-212: una foto de más de 2 MB sale 413 con un motivo legible; sin la parte del multipart, 400")
+    void elMultipartDeLaFotoDelGrupo() {
+        var pesada = handler.handleArchivoDemasiadoGrande(
+                new org.springframework.web.multipart.MaxUploadSizeExceededException(2 * 1024 * 1024));
+        var sinParte = handler.handleMissingPart(
+                new org.springframework.web.multipart.support.MissingServletRequestPartException("foto"));
+
+        assertThat(pesada.getStatusCode().value()).isEqualTo(413);
+        assertThat(pesada.getBody()).isNotNull();
+        assertThat(pesada.getBody().message()).contains("2 MB");
+        assertThat(sinParte.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(sinParte.getBody().message()).contains("foto");
+    }
 }

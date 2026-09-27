@@ -4,6 +4,7 @@ import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.shared.domain.UserId;
 
+import java.time.Instant;
 import java.util.List;
 
 public interface ListarConversacionesUseCase {
@@ -23,9 +24,11 @@ public interface ListarConversacionesUseCase {
      * conversacion GLOBAL —{@code MiembroService.requireGlobal}— y donde no existe devuelve 404:
      * el listado de mensajes directos quedaba sin nombres por culpa de OTRA conversacion que no
      * tiene nada que ver. Una bandeja de DMs tiene que poder nombrarse sola.
+     * @param fotoDelGrupoCambiadaEn en un grupo con foto propia, cuándo se eligió (D-212); va en la ruta de
+     *                               su foto para que el teléfono baje la nueva. {@code null} en lo demás.
      */
     record ConversacionResumen(Conversacion conversacion, Mensaje ultimoMensaje, long noLeidos,
                                 UserId otroParticipante, String otroParticipanteNombre,
-                                String otroParticipanteAvatar) {
+                                String otroParticipanteAvatar, Instant fotoDelGrupoCambiadaEn) {
     }
 }

@@ -10152,3 +10152,21 @@ se comprobó dejándola y corriéndolas.
 mentor, la ficha) tiene que cerrarse en los efectos que llevan a otra parte de la pantalla, o tapa lo que se pidió: se
 agrega al reductor `vistasDelMentor`, que ya la despeja al pedir un chat. Queda sin probar en el emulador (desde Hoy y
 desde Comunidad).
+
+## E-342 · `The module factory of \`jest.mock()\` is not allowed to reference any out-of-scope variables. Invalid variable access: apiFetch` al escribir la prueba de la foto del grupo (D-212)
+
+**Síntoma.** `fotoDelGrupoApi.test.ts` (frontend `eventos-app`) no llegaba a correr: *Test suite failed to run —
+ReferenceError: … The module factory of `jest.mock()` is not allowed to reference any out-of-scope variables.
+Invalid variable access: apiFetch*.
+
+**Causa real.** `babel-plugin-jest-hoist` sube cada `jest.mock(...)` por encima de los `import` y de las
+declaraciones del archivo. La fábrica del mock usaba una constante `apiFetch` declarada arriba, que en el
+momento de ejecutarse todavía no existe; el plugin lo rechaza a propósito. La única excepción que acepta
+son las variables cuyo nombre empieza con `mock`, porque se asume que se leen recién cuando se llama al mock.
+
+**Solución.** La constante pasó a llamarse `mockApiFetch` y la fábrica la usa dentro de una función
+(`apiFetch: (ruta, opciones) => mockApiFetch(ruta, opciones)`), así se lee al llamar y no al declarar.
+
+**Cómo evitar que vuelva a pasar.** Un `jest.fn()` que se usa dentro de la fábrica de un `jest.mock` se nombra
+`mock…` y se lee dentro de una función; o se crea dentro de la misma fábrica, como hace `sesionVencida.test.ts`
+con `almacenamientoSeguro`.

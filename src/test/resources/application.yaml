@@ -26,6 +26,12 @@ spring:
     execution:
       simple:
         concurrency-limit: 20
+  # D-212: espeja el tope del multipart de main (la foto propia de un grupo). Sin esto las pruebas
+  # correrian con el 1 MB por defecto de Spring y no probarian el limite que tiene produccion.
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 3MB
   # Espeja el bloque de main: sin esto, Spring Session no registra su repositorio Redis y
   # GestionSesionesService (que inyecta FindByIndexNameSessionRepository para cerrar todas
   # las sesiones de un usuario) rompe el contexto de TODO test @SpringBootTest. El contenedor

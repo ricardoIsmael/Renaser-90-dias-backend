@@ -734,6 +734,9 @@ usan la tarjeta sin nombre, que la app ya trae como asset (frontend 8971acf, `ta
 | Quien no puede ver la conversación, o sin sesión | 403 |
 | Una conversación que no existe, o que no es un soporte (grupo, comunidad, 1 a 1) | 404 |
 
+> **Corregido 2026-09-27 (D-212).** El grupo ya no es siempre 404: con foto propia, la sirve por esta misma
+> ruta (§12.2). Sin foto propia sigue siendo 404, igual que la comunidad y un 1 a 1.
+
 El orden es existe → puede verla → es un soporte: a quien no participa no se le dice qué tipo de chat es.
 Spring Security no pisa el `Cache-Control` de la foto (lo fija `FotoDelSoporteIT` contra el Tomcat real).
 
@@ -834,3 +837,29 @@ se ve.
 | `FotosDelChatControllerTest` (7 en total) | 200 y 304 de la tarjeta de un integrante; 403 y 404; `usuarioId` que no es UUID, 400 sin llegar al caso de uso; suspendida 403 en las dos rutas |
 | `FotosDeIntegrantesDelGrupoAdapterTest` (4) | La ruta de cada uno en el chat del grupo; quien no lleva tarjeta no figura; sin chat, vacío; sin integrantes no consulta |
 | `FotosDelChatIT` (+4; 6 en total) | Postgres y Tomcat reales: `/me/cells` trae `mentorId` y la ruta del mentor, que sirve su tarjeta (200, 304, otra `ETag` que la del soporte); `/me/cells/{id}/members` trae la ruta de cada aprendiz —también de quien subió foto, en el modo por defecto— y la ven el mentor y los compañeros; 403 a quien no está en el grupo, a una cuenta suspendida y sin sesión; 404 a alguien de afuera, en un 1 a 1 y en una que no existe; en el soporte, la del staff sí |
+
+### 12.2 La foto propia de un grupo (2026-09-27, D-212)
+
+La eligen el ADMIN o el mentor de ese grupo (`docs/MODULO_COMMUNITY.md` §14, donde vive: las columnas de
+`celulas`, el caso de uso y quién puede). El chat solo la sirve y la anuncia.
+
+**Servirla.** `GET /api/v1/chat/conversations/{id}/foto` (`FotosDelChatController.fotoDeLaConversacion`,
+antes `fotoDelSoporte`): en un grupo, su foto propia, que el chat le pide a community
+(`community.api.FotoPropiaDelGrupoFinder.fotoDe`), con el mismo `Cache-Control: max-age=86400, private` y
+un `ETag` de su contenido (SHA-256, 32 caracteres). Mismo orden de siempre: existe (404) → quien pide
+puede ver el chat del grupo (403) → tiene foto propia (404 si no: la app muestra la tarjeta del APK).
+
+**Anunciarla.** `ConversacionResponse.photoPath` de un grupo viene solo con foto propia:
+`/api/v1/chat/conversations/{id}/foto?v=<milisegundos de cuándo cambió>`. El `?v=` no lo lee el servidor;
+cambia la URL, y con otra foto el teléfono la baja aunque tenga la anterior en su caché de un día. La lista
+de chats (`ConversacionService.listar`) pide cuándo cambió la de cada grupo en UNA consulta
+(`cambiadasEn`), y ninguna si la lista no tiene grupos. Los APK publicados ignoran el campo (`passthrough`);
+los que ya leen el de D-205 lo usan solo en un soporte.
+
+| Clase | Qué fija |
+|---|---|
+| `FotosDelChatServiceTest` (+3) | Un grupo con foto propia la sirve con la huella de su contenido; sin foto propia, 404; a quien no ve el grupo, 403 sin preguntarle a community; la cuenta suspendida, 403 también en el grupo |
+| `ConversacionServiceTest` (+2) | La lista trae cuándo cambió la de cada grupo en una consulta; sin grupos, no pregunta |
+| `ConversacionResponseTest` (+1) | La ruta del grupo solo con foto propia y con `?v=` |
+| `FotosDelChatControllerTest` (+1) | La ruta con `?v=` sirve la foto con los mismos encabezados |
+| `FotoDelGrupoIT` | De punta a punta: ver `docs/MODULO_COMMUNITY.md` §14 |
