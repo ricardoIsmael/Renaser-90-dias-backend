@@ -3,6 +3,7 @@ package com.renaser.os.shared.infrastructure.storage;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -45,6 +46,13 @@ public class NoOpAlmacenamientoAdapter implements AlmacenamientoPort {
     @Override
     public void borrar(String ruta) {
         log.warn("AlmacenamientoPort.borrar({}) NO ejecutado de verdad: faltan credenciales AWS S3 (D-34).", ruta);
+    }
+
+    /** Acá no hay objetos: nada se subió de verdad, así que no hay nada que bajar. */
+    @Override
+    public Optional<byte[]> leer(String ruta, long pesoMaximo) {
+        log.warn("AlmacenamientoPort.leer({}) sin objeto: faltan credenciales AWS S3 (D-34).", ruta);
+        return Optional.empty();
     }
 
     /** Acá {@link #subir} no guarda nada: un objeto "subido" no existe. */

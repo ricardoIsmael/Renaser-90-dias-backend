@@ -107,7 +107,7 @@ public class FotoDelGrupoService implements CambiarFotoDelGrupoUseCase, FotoProp
     @Override
     public Optional<FotoPropia> fotoDe(UUID grupoId) {
         return fotoDelGrupoPort.deGrupo(CelulaId.of(grupoId))
-                .flatMap(foto -> almacenamiento.leer(foto.ruta()).map(jpeg -> new FotoPropia(jpeg, foto.cambiadaEn())));
+                .flatMap(foto -> almacenamiento.leer(foto.ruta(), FotoSubidaDelGrupo.PESO_MAXIMO).map(jpeg -> new FotoPropia(jpeg, foto.cambiadaEn())));
     }
 
     @Override

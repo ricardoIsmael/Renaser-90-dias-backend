@@ -482,12 +482,16 @@ por WhatsApp.
 > (hoy la de Kelin)». El dueño decidió que salgan del programa: «mejor que salga mensaje automático sin
 > una persona, ¿no sería lo correcto?». Lo mismo para la del grupo (D-204, más abajo).
 
-**Dónde están los textos (D-190).** En `src/main/resources/bienvenida/mensajes.yaml`, versionado con el
-código: claves `soporte.con-la-tarjeta` y `soporte.formal` (`{nombre}` = primer nombre). Los lee
-`TextosDeBienvenidaYamlAdapter` (puerto `TextosDeBienvenidaPort`) una vez al arrancar; si el archivo
-falta, el arranque falla. **Se cambian editando ese archivo y redesplegando**, no por entorno. Un texto
-vacío apaga ese mensaje. Hoy son **borradores** del equipo técnico, marcados así en el archivo: se
-reemplazan por los de la hoja de Operaciones.
+**Dónde están los textos (D-190, D-210).** Los ORIGINALES, en `src/main/resources/bienvenida/mensajes.yaml`,
+versionado con el código: claves `soporte.con-la-tarjeta` y `soporte.formal` (`{nombre}` = primer nombre).
+Los lee `TextosDeBienvenidaYamlAdapter` (puerto `TextosOriginalesDeBienvenidaPort`) una vez al arrancar; si
+el archivo falta, el arranque falla. **ADMIN y ALCHEMIST los cambian desde la app** (§13): lo que guardan
+reemplaza al original desde la próxima bienvenida, hasta que alguien vuelva al original. Los que salen los
+arma `TextosDeBienvenidaVigentes` (puerto `TextosDeBienvenidaPort`), que lee la bitácora en cada bienvenida.
+Nada va por entorno. Un texto vacío en el archivo apaga ese mensaje (desde la app no se guarda vacío). Hoy
+el archivo todavía los marca como **borradores** del equipo técnico.
+> **Corregido 2026-09-27 (D-210).** Decía «**Se cambian editando ese archivo y redesplegando**, no por
+> entorno», y que los leía `TextosDeBienvenidaYamlAdapter` detrás de `TextosDeBienvenidaPort`.
 
 **El interruptor (D-199/D-204, 2026-09-27).** `BIENVENIDA_ACTIVA` (`renaser.chat.bienvenida.activa`),
 **apagado por defecto**, prende o apaga las dos bienvenidas, la del soporte y la del grupo. Los textos
@@ -607,13 +611,16 @@ paso. ¡Te damos la bienvenida!». Nombra al mentor en tercera persona: lo dice 
 > marca por aprendiz **y grupo**, y `mensajes_bienvenida` no la admite […]. Eso pide una columna o tabla
 > nueva, que queda para decisión del dueño». El dueño eligió una columna en `asignaciones_celula`.
 
-**La tarjeta** la dibuja el servidor (`BienvenidaJava2dAdapter`, Java2D, sin servicios externos) sobre
-`src/main/resources/bienvenida/fondo.png` (la exportación de Canva sin nombre) con Cinzel
+**La tarjeta** la dibuja el servidor (`BienvenidaJava2dAdapter`, Java2D, sin servicios externos) sobre la
+**portada vigente** —la exportación de Canva sin nombre, `src/main/resources/bienvenida/fondo.png`, o la que
+subió Administración desde la app (§13)— con Cinzel
 (`bienvenida/Cinzel.ttf`, fuente de Google bajo licencia SIL OFL 1.1, texto en `bienvenida/OFL.txt`).
 Las medidas se tomaron comparando el fondo con la exportación "FLOR DE MARÍA": tamaño 133, letras
 7,5 px más juntas, centro x = 600, línea base y = 868, color `#153832`. Un nombre que no entra se
 achica. Sale en JPEG (~110–125 KB contra 1,2 MB en PNG). Se verificó que dibuja igual dentro de
 `eclipse-temurin:25-jre-noble`, la base de la imagen de producción.
+> **Corregido 2026-09-27 (D-210).** Decía que se dibujaba «sobre `src/main/resources/bienvenida/fondo.png`»:
+> ese es ahora el original, y la portada se puede cambiar.
 
 **Cómo llega al teléfono.** El servidor la sube a S3 bajo `chat/<soporte>/fotos/<uuid>` con el nuevo
 `AlmacenamientoPort.subir` (única excepción a "el backend no toca los bytes": los archivos del
@@ -745,18 +752,22 @@ Spring Security no pisa el `Cache-Control` de la foto (lo fija `FotoDelSoporteIT
 `users.api` (`PrimerNombre`). Si su cuenta ya no existe, va la tarjeta sin nombre.
 
 **Sin tablas, sin S3, sin columnas.** La tarjeta se dibuja al pedirla y se guarda en memoria
-(`TarjetasConNombreEnMemoria`, Caffeine): **por primer nombre** (el dibujo lo pasa a mayúsculas, así que
-«Ana» y «ANA» son la misma entrada), **acotada por peso** a 6 MB (unas cincuenta tarjetas de ~120 KB: el
+(`TarjetasConNombreEnMemoria`, Caffeine): **por portada y primer nombre** (el dibujo pasa el nombre a
+mayúsculas, así que «Ana» y «ANA» son la misma entrada; la portada es la vigente, §13), **acotada por peso** a 6 MB (unas cincuenta tarjetas de ~120 KB: el
 contenedor de producción tiene tope de memoria, V-8) y con el mismo nombre dibujado una sola vez aunque lo
 pidan a la vez. El `ETag` es la huella del contenido (SHA-256 del JPEG, 32 caracteres), no del nombre: si
 cambia el fondo o la letra, cambia sola y los teléfonos la vuelven a bajar. Dibujar no va dentro de una
 transacción.
+> **Corregido 2026-09-27 (D-210).** Decía «**por primer nombre**»: con la portada editable desde la app, una
+> clave solo por nombre seguía sirviendo la tarjeta de la portada vieja (E-351). Ahora la clave es (portada,
+> nombre), se dibuja sobre la portada de la clave, y las tarjetas de una portada vieja salen solas por el
+> tope de peso. Cada foto lee la portada vigente de la bitácora (una fila por índice).
 
 **`ConversacionResponse.photoPath`.** Campo nuevo y opcional: en un soporte, la ruta de su foto
 (`/api/v1/chat/conversations/{id}/foto`); `null` en lo demás. Las versiones publicadas de la app lo
 ignoran: su esquema de conversación es `passthrough` en todas (verificado en el historial de
 `chatSchemas.ts` de `origin/master`). Si el primer nombre cambia, la ruta no: la foto vieja puede verse
-hasta un día (el `max-age`) y después se revalida por el `ETag`.
+hasta un día (el `max-age`) y después se revalida por el `ETag`. Lo mismo al cambiar la portada (§13).
 
 **La app** (frontend `eventos-app`) la muestra en la lista, la cabecera y la info del soporte. La pide con
 la sesión: en Android/iOS con las cabeceras del `Image`; en web trae el blob y usa un object URL guardado
@@ -863,3 +874,101 @@ los que ya leen el de D-205 lo usan solo en un soporte.
 | `ConversacionResponseTest` (+1) | La ruta del grupo solo con foto propia y con `?v=` |
 | `FotosDelChatControllerTest` (+1) | La ruta con `?v=` sirve la foto con los mismos encabezados |
 | `FotoDelGrupoIT` | De punta a punta: ver `docs/MODULO_COMMUNITY.md` §14 |
+
+## 13. La bienvenida editable desde la app: portada y mensajes (2026-09-27, D-210)
+
+**Qué pidió el dueño.** Al aprobar los tres textos: *«Y si es posible poder hacer el cambio en administrador y
+alquimista […] de la portada y el mensaje»*. ADMIN y ALCHEMIST cambian desde la app la **portada** (la imagen de
+fondo de la tarjeta) y los **tres mensajes** (el que acompaña la tarjeta, el formal y el del grupo), y vuelven a
+los originales cuando quieren. En la app: Administración → Más opciones → Bienvenida (frontend `3e4b1ad`).
+
+**Dónde se guarda.** `cambios_bienvenida` (V73), una bitácora que solo crece, como `ajustes_dia_programa`:
+
+| Columna | Qué guarda |
+|---|---|
+| `id` | Identidad creciente: «el último» es el de `id` más alto, no el de `cambiado_en` (dos cambios en el mismo instante tendrían un orden ambiguo) |
+| `pieza` | `SOPORTE_CON_LA_TARJETA`, `SOPORTE_FORMAL`, `GRUPO` o `PORTADA` (`PiezaDeBienvenida`) |
+| `texto` | El mensaje nuevo (1 a 1000 caracteres); NULL en la portada |
+| `portada_ruta` | La clave del objeto, bajo `bienvenida/portadas/`; NULL en un texto |
+| `cambiado_por` | Quién (ON DELETE SET NULL: borrar la cuenta deja el cambio, sin autor) |
+| `cambiado_en` | Cuándo (el `Clock` del servidor) |
+
+Lo vigente de cada pieza es su **última fila**; si no tiene, o la última es una vuelta al original (`texto` y
+`portada_ruta` en NULL), sale el original: el texto de `bienvenida/mensajes.yaml` o `bienvenida/fondo.png`. Los
+originales no se copian a la base. La regla vive en `EstadoDePieza` y la usan los tres lectores: los textos que se
+mandan (`TextosDeBienvenidaVigentes`), la portada que se dibuja (`PortadasDeBienvenida`) y la pantalla de
+Administración. Guardar lo que ya sale, o volver al original cuando ya sale el original, no escribe nada.
+
+**Qué se acepta** (dominio; los números son técnicos, a confirmar con el dueño):
+
+| Pieza | Regla | Mensaje (la app lo muestra tal cual) |
+|---|---|---|
+| Texto | No vacío | «El mensaje no puede quedar vacío.» |
+| Texto | Hasta 1000 caracteres, contados como `char_length` (un emoji es uno) | «El mensaje tiene 1001 caracteres: el máximo es 1000.» |
+| Texto | Con sus marcadores: `{nombre}` en los tres, `{mentor}` en el del grupo | «Al mensaje le falta {nombre}: es donde va el nombre de la persona.» |
+| Texto | Sin marcadores que nadie reemplaza (un `{…}` que no es suyo) | «El mensaje tiene {mentor}, que no se reemplaza por nada: en este mensaje solo se puede usar {nombre}.» (con `{Nombre}`, sugiere `{nombre}`) |
+| Portada | JPEG o PNG, por el contenido | «Esa imagen no es JPG ni PNG.» |
+| Portada | Hasta 5 MB | «La imagen pesa 7,2 MB: el máximo es 5 MB.» |
+| Portada | De 600 a 8000 px por lado; si no es cuadrada se usa el centro, llevado a 1200 × 1200 | «La imagen es muy chica (…)» / «demasiado grande (…)» |
+| Portada | El nombre se lee: como mucho el 10 % de su franja (abajo al centro, donde lo escribe `BienvenidaJava2dAdapter`) con contraste < 3:1 contra el verde de la letra (WCAG, letra grande) | «El nombre no se leería: la franja donde va (abajo, al centro) es muy oscura. Elige una imagen más clara en esa parte.» |
+
+La portada de Operaciones pasa holgada (menos del 1 % oscuro, `ImagenDePortadaTest.laOriginalPasa`). La imagen se
+abre leyendo antes las medidas de la cabecera y salteando píxeles al decodificar: una foto de 8000 px ocupa unos
+17 MB y no 190 (tope de memoria de producción, V-8).
+
+**La imagen, en el mismo almacenamiento que las fotos de evidencia.** El teléfono la sube directo con URL
+prefirmada, como la portada de un evento (D-186): `upload-url` → `PUT` → `confirm`. El servidor la baja con
+`AlmacenamientoPort.leer` —nuevo, acotado al peso máximo; es la segunda excepción a «el backend no toca los bytes»,
+tan acotada como `subir`— para revisarla y para dibujar, y la guarda abierta en memoria (la vigente y una
+candidata). Una ruta no se reescribe nunca (cada subida lleva un id nuevo). Si la portada vigente deja de abrir
+(se borró, o el proceso corre con el almacenamiento de marcador), se dibuja sobre la original y queda un `WARN`: la
+bienvenida y la foto del soporte siguen saliendo. Permiso IAM: `s3:GetObject`, que el principal ya tiene (D-54).
+
+**En local** el almacenamiento es de marcador y **no se prende S3**: el default de `AWS_S3_BUCKET` es el bucket de
+producción (E-305). La URL de subida sale `about:blank#pendiente-s3/…`, la app lo detecta y lo dice, y `confirm`
+responde 409. `sePuedeCambiar` viene en `false` y la app deja el botón deshabilitado con la explicación. Los textos
+sí se cambian en local.
+
+**Quién puede.** `Permission.MANAGE_WELCOME`, solo ADMIN y ALCHEMIST activos, con el patrón de D-186:
+`BienvenidaParaAdministrar.exigirQuePuedaCambiarla` pide cuenta ACTIVA y `canManageRoles()` antes de mirar nada
+(también antes de validar la clave o el texto: 403 antes que 400). El 403 de TRAINEE lo da el interceptor; el de
+MENTOR, el de MENTOR_LEAD (en modo sombra) y el de un ADMIN o ALCHEMIST suspendido, el servicio.
+
+**Los endpoints** (todos con sesión y `@RequiresPermission(MANAGE_WELCOME)`; los errores, JSON `{message, timestamp}`):
+
+| Método y ruta | Cuerpo | Respuesta |
+|---|---|---|
+| `GET /api/v1/admin/bienvenida` | — | 200 la bienvenida (abajo) |
+| `PUT /api/v1/admin/bienvenida/textos/{clave}` | `{"texto": "…"}` | 200 la bienvenida; 400 con el motivo, o si la clave no es SOPORTE_CON_LA_TARJETA, SOPORTE_FORMAL ni GRUPO |
+| `DELETE /api/v1/admin/bienvenida/textos/{clave}` | — | 200 la bienvenida (vuelve al original) |
+| `POST /api/v1/admin/bienvenida/portada/upload-url` | `{"contentType": "image/jpeg"}` (o `image/png`) | 200 `{"url", "ruta"}`; 400 otro tipo |
+| `POST /api/v1/admin/bienvenida/portada/confirm` | `{"ruta": "bienvenida/portadas/<uuid>"}` | 200 la bienvenida; 400 con el motivo; 404 sin imagen en esa ruta; 409 sin almacenamiento de verdad |
+| `DELETE /api/v1/admin/bienvenida/portada` | — | 200 la bienvenida (vuelve a la original) |
+| `GET /api/v1/admin/bienvenida/tarjeta?nombre=María[&portada=<ruta>]` | — | 200 `image/jpeg`, `Cache-Control: no-store`: la tarjeta con el primer nombre de ejemplo sobre la vigente o sobre la candidata (revisada: 400/404/409 como `confirm`) |
+
+La bienvenida: `{"activa", "largoMaximo", "textos": [{"clave", "texto", "original", "cambiado", "marcadores",
+"ultimoCambio": {"por", "en", "volvioAlOriginal"} | null}], "portada": {"cambiada", "sePuedeCambiar",
+"ultimoCambio"}}`. `activa` es `BIENVENIDA_ACTIVA`: apagada, lo que se cambie vale recién cuando se prenda.
+**Los endpoints que ya existían no cambian de forma**: `GET /api/v1/chat/conversations/{id}/foto` sigue igual y su
+`ETag` sale del contenido, así que cambia solo con la portada.
+
+**Afuera, a propósito.** Borrar del almacenamiento las imágenes rechazadas o reemplazadas (quedan sin uso, como la
+portada de un evento que no se confirma); la foto de grupos y comunidad, que la app trae como asset y no cambia con
+la portada; el historial completo en la app (se ve el último cambio de cada pieza; la historia está en la tabla).
+
+| Clase | Qué fija |
+|---|---|
+| `TextoDeBienvenidaTest` (13) | Vacío, sin `{nombre}` (los tres), el del grupo sin `{mentor}`, `{mentor}` en el soporte, `{Nombre}` con sugerencia, 1000 caracteres con emojis, sin espacios en los bordes |
+| `PortadaDeBienvenidaTest` (12) | Tipos que se suben; solo rutas de portadas (ni firmas ni `..`); formato, peso y medidas con su mensaje; el 10 % |
+| `EstadoDePiezaTest` (6) | Sin cambios el original; el guardado; la vuelta al original; la portada; otra pieza no se mezcla; las claves de la API |
+| `ImagenDePortadaTest` (8) | La portada de Operaciones pasa; una negra no; importa solo la franja del nombre; el límite es el contraste 3:1 (gris #808080 sí, #707070 no); el centro de una apaisada; una de 4000 × 3000; PNG transparente queda blanco; GIF, basura, chica y dañada |
+| `PortadasDeBienvenidaTest` (5) | La vigente; revisada una vez no se vuelve a bajar; la oscura se rechaza; ruta ajena y sin subir; sin la subida, la original |
+| `TarjetasConNombreYPortadaTest` (3) | Con la portada nueva no se sirve la vieja y cambia la huella; al volver, la original sin redibujar; se dibuja sobre la portada de la clave aunque la vigente cambie mientras tanto. Falla contra la clase de D-205 (E-351) |
+| `BienvenidaJava2dAdapterTest` (+2) | Con la portada nueva la tarjeta sale sobre ella y el nombre queda donde estaba; se puede dibujar sobre una portada dada |
+| `TextosDeBienvenidaVigentesTest` (2) · `TextosDeBienvenidaYamlAdapterTest` (+2) | Sin cambios salen los del repo; el guardado reemplaza solo a su mensaje y la vuelta lo devuelve; los originales cumplen las reglas de un texto guardado |
+| `BienvenidaConTextosCambiadosTest` (2) | El formal guardado sale en la próxima bienvenida del soporte y, al volver, el del repo; el del grupo guardado sale con el nombre y el mentor |
+| `TextosDeBienvenidaAdminServiceTest` (12) · `PortadaDeBienvenidaAdminServiceTest` (11) | ADMIN y ALCHEMIST sí; TRAINEE, MENTOR, MENTOR_LEAD y cuentas suspendidas, 403 sin escribir nada (403 antes que 400); bitácora con quién y cuándo; sin `{nombre}` se rechaza; sin cambios repetidos; URL de subida; confirmar revisa; 409 sin almacenamiento; vista previa con el primer nombre |
+| `BienvenidaAdminControllerTest` (9) | El JSON de la bienvenida; PUT/DELETE; 400/404/409 con el motivo en JSON (también pidiendo la imagen); la tarjeta `image/jpeg` con `no-store`; TRAINEE y TRAINEE suspendido, 403 del interceptor sin llamar al caso de uso; el 403 del servicio sale como 403 |
+| `S3AlmacenamientoAdapterTest` (+3) | `leer` baja del bucket configurado; no baja un objeto más pesado que el tope (por lo que declara S3 o al leer); lo que no existe da vacío |
+| `BienvenidaEditableIT` (5) | Tomcat real con sesión, Postgres con V73 y la bienvenida prendida: el texto guardado sale en la próxima bienvenida y la vuelta al original saca el del repo, con las filas de la bitácora; ALCHEMIST puede y sin `{nombre}` es 400; MENTOR, MENTOR_LEAD, TRAINEE, ADMIN suspendido y sin sesión, 403; sin almacenamiento la URL es de marcador, `confirm` 409 y la tarjeta de muestra sale; los CHECK de V73 y el SET NULL al borrar la cuenta |
+| `PortadaDeBienvenidaIT` (2) | Con un almacenamiento en memoria: subir, ver la candidata antes de usarla (la foto del soporte todavía da 304), confirmar, y la foto sale sobre la portada nueva con otro `ETag` (con el viejo ya no es 304); al volver a la original, el `ETag` de antes. Una portada oscura: 400 con el motivo en la vista previa y al confirmar. Contra la caché de D-205 falla: `expected: 200 but was: 304` (E-351) |

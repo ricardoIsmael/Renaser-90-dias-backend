@@ -36,8 +36,12 @@ import java.util.Optional;
  * soporte (E-330). El dueño decidió que salgan del programa: ya no hay remitente que configurar ni
  * validar.</blockquote>
  *
- * <p><b>Los textos salen de un recurso versionado</b> ({@link TextosDeBienvenidaPort}, D-190), no de
- * una variable de entorno: se cambian editando {@code bienvenida/mensajes.yaml} y redesplegando.
+ * <p><b>Los textos son los vigentes</b> ({@link TextosDeBienvenidaPort}): el que guardó Administración
+ * o Alquimista desde la app (D-210) o, si no hay, el original de {@code bienvenida/mensajes.yaml}
+ * (D-190), nunca una variable de entorno. Se leen en cada bienvenida: un cambio vale desde la próxima.
+ * La tarjeta sale sobre la portada vigente, que también se cambia desde la app ({@link DibujarBienvenidaPort}).
+ * <blockquote><b>Corregido 2026-09-27 (D-210).</b> Decía «Los textos salen de un recurso versionado
+ * [...]: se cambian editando {@code bienvenida/mensajes.yaml} y redesplegando».</blockquote>
  *
  * <p><b>Mensajes separados y no una foto con texto:</b> el APK publicado muestra el texto de una foto
  * solo cuando la foto no carga, así que en un solo mensaje el texto no se vería.

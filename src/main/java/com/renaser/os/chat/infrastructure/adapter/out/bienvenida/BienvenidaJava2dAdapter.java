@@ -35,29 +35,46 @@ import java.util.Locale;
  *
  * <p>Sale en JPEG y no en PNG: el fondo es una foto con degradés, y en PNG pesa 1,2 MB contra
  * ~200 KB, que es lo que tarda en cargar con datos móviles.
+ *
+ * <p><b>El fondo es la portada vigente</b> (D-210): la de Operaciones ({@code bienvenida/fondo.png}) o
+ * la que subió Administración, que {@link PortadasDeBienvenida} deja en el mismo lienzo de 1200 × 1200.
+ * Las medidas del nombre no cambian con la portada; por eso una portada nueva se revisa para que el
+ * nombre se lea en ese lugar ({@link ImagenDePortada}).
  */
 @Component
 class BienvenidaJava2dAdapter implements DibujarBienvenidaPort {
 
     private static final float TAMANO = 133f;
     private static final float SEPARACION_EN_EM = -7.5f / 133f;
-    private static final float CENTRO_X = 600f;
-    private static final float LINEA_BASE_Y = 868f;
-    private static final float ANCHO_MAXIMO = 1040f;
-    private static final Color VERDE_RENASER = new Color(0x15, 0x38, 0x32);
+    /** Las medidas del nombre, que {@link ImagenDePortada} usa para saber dónde tiene que leerse. */
+    static final float CENTRO_X = 600f;
+    static final float LINEA_BASE_Y = 868f;
+    static final float ANCHO_MAXIMO = 1040f;
+    static final Color VERDE_RENASER = new Color(0x15, 0x38, 0x32);
     private static final float CALIDAD_JPEG = 0.88f;
     private static final Locale ESPANOL = Locale.forLanguageTag("es");
 
-    private final BufferedImage fondo;
+    private final PortadasDeBienvenida portadas;
     private final Font cinzel;
 
-    BienvenidaJava2dAdapter() {
-        this.fondo = leerFondo("/bienvenida/fondo.png");
+    BienvenidaJava2dAdapter(PortadasDeBienvenida portadas) {
+        this.portadas = portadas;
         this.cinzel = leerFuente("/bienvenida/Cinzel.ttf");
     }
 
     @Override
     public byte[] dibujar(String nombre) {
+        return dibujar(nombre, portadas.vigente());
+    }
+
+    @Override
+    public String portadaVigente() {
+        return portadas.vigente();
+    }
+
+    @Override
+    public byte[] dibujar(String nombre, String portada) {
+        BufferedImage fondo = portadas.imagen(portada);
         BufferedImage lienzo = new BufferedImage(fondo.getWidth(), fondo.getHeight(), BufferedImage.TYPE_INT_RGB);
         Graphics2D g = lienzo.createGraphics();
         try {
@@ -122,14 +139,6 @@ class BienvenidaJava2dAdapter implements DibujarBienvenidaPort {
             escritor.dispose();
         }
         return salida.toByteArray();
-    }
-
-    private static BufferedImage leerFondo(String recurso) {
-        try (InputStream entrada = abrir(recurso)) {
-            return ImageIO.read(entrada);
-        } catch (IOException e) {
-            throw new UncheckedIOException("No se pudo leer el fondo de bienvenida " + recurso, e);
-        }
     }
 
     private static Font leerFuente(String recurso) {

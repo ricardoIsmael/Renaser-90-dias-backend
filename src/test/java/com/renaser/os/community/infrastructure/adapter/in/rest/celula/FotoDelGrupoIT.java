@@ -96,7 +96,7 @@ class FotoDelGrupoIT {
         }
 
         @Override
-        public Optional<byte[]> leer(String ruta) {
+        public Optional<byte[]> leer(String ruta, long pesoMaximo) {
             return Optional.ofNullable(objetos.get(ruta));
         }
     }

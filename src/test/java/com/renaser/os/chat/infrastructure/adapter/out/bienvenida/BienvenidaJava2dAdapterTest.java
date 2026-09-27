@@ -1,5 +1,9 @@
 package com.renaser.os.chat.infrastructure.adapter.out.bienvenida;
 
+import com.renaser.os.chat.application.ports.out.bienvenida.CambiosDeBienvenidaEnMemoria;
+import com.renaser.os.chat.domain.model.bienvenida.CambioDeBienvenida;
+import com.renaser.os.shared.application.ports.out.AlmacenamientoEnMemoria;
+import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -8,6 +12,8 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Instant;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -25,7 +31,12 @@ class BienvenidaJava2dAdapterTest {
     private static final int Y0 = 730;
     private static final int Y1 = 890;
 
-    private final BienvenidaJava2dAdapter adapter = new BienvenidaJava2dAdapter();
+    private static final String NUEVA = "bienvenida/portadas/22222222-bbbb-4bbb-8bbb-222222222222";
+
+    private final CambiosDeBienvenidaEnMemoria cambios = new CambiosDeBienvenidaEnMemoria();
+    private final AlmacenamientoEnMemoria almacenamiento = new AlmacenamientoEnMemoria();
+    private final BienvenidaJava2dAdapter adapter =
+            new BienvenidaJava2dAdapter(new PortadasDeBienvenida(cambios, almacenamiento));
 
     @Test
     @DisplayName("con el nombre de la referencia, la tarjeta coincide con la exportación de Canva")
@@ -67,6 +78,47 @@ class BienvenidaJava2dAdapterTest {
         assertThat(jpeg[0] & 0xFF).isEqualTo(0xFF);
         assertThat(jpeg[1] & 0xFF).isEqualTo(0xD8);
         assertThat(jpeg.length).isLessThan(400_000);
+    }
+
+    @Test
+    @DisplayName("D-210: con la portada nueva, la tarjeta sale sobre la nueva y el nombre se sigue leyendo")
+    void conLaPortadaNueva() throws IOException {
+        almacenamiento.guardar(NUEVA, ImagenesDePrueba.lisa(1200, 1200, ImagenesDePrueba.CELESTE, "jpeg"));
+        cambios.registrar(CambioDeBienvenida.portada(NUEVA, UserId.of(UUID.randomUUID()), Instant.parse("2026-09-27T04:30:00Z")));
+
+        BufferedImage tarjeta = leer(adapter.dibujar("Flor de María"));
+
+        assertThat(adapter.portadaVigente()).isEqualTo(NUEVA);
+        assertThat(ImagenesDePrueba.parecido(tarjeta.getRGB(100, 100), ImagenesDePrueba.CELESTE))
+                .as("fuera del nombre se ve la portada nueva").isTrue();
+        BufferedImage referencia = ImageIO.read(recurso("/bienvenida/referencia-flor-de-maria.png"));
+        assertThat(tintaDelNombre(tarjeta)).as("el nombre está en el mismo lugar y con la misma letra")
+                .isBetween(tintaDelNombre(referencia) * 8 / 10, tintaDelNombre(referencia) * 12 / 10);
+    }
+
+    @Test
+    @DisplayName("D-210: se puede dibujar sobre una portada dada aunque la vigente sea otra")
+    void sobreUnaPortadaDada() throws IOException {
+        almacenamiento.guardar(NUEVA, ImagenesDePrueba.lisa(1200, 1200, ImagenesDePrueba.CELESTE, "jpeg"));
+        cambios.registrar(CambioDeBienvenida.portada(NUEVA, UserId.of(UUID.randomUUID()), Instant.parse("2026-09-27T04:30:00Z")));
+
+        BufferedImage sobreLaOriginal = leer(adapter.dibujar("Flor de María", "original"));
+        BufferedImage referencia = ImageIO.read(recurso("/bienvenida/referencia-flor-de-maria.png"));
+
+        assertThat(pixelesDistintos(sobreLaOriginal, referencia)).isLessThan(9_000);
+    }
+
+    /** Cuántos puntos de la franja del nombre tienen la tinta verde oscura de la letra. */
+    private static int tintaDelNombre(BufferedImage tarjeta) {
+        int tinta = 0;
+        for (int y = Y0; y < Y1; y++) {
+            for (int x = X0; x < X1; x++) {
+                if (diferencia(tarjeta.getRGB(x, y), 0x153832) < 40) {
+                    tinta++;
+                }
+            }
+        }
+        return tinta;
     }
 
     private static int pixelesDistintos(BufferedImage a, BufferedImage b) {

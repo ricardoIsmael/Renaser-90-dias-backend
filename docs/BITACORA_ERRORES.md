@@ -10394,6 +10394,52 @@ comportamiento documentado de Maven, no un defecto del proyecto.
 **Cómo evitar que vuelva a pasar.** En una corrida focalizada, un comodín en `-Dtest` también toma los `*IT`: hay que
 contar con Docker y más memoria, o nombrar las clases. La línea `Tests run:` de surefire, en ese caso, incluye integración.
 
+## E-350 · `AlmacenamientoPortQueRegistra is not abstract and does not override abstract method leer(java.lang.String,long)` al agregar un método a `AlmacenamientoPort`
+
+**Síntoma (2026-09-27, D-210).** Al compilar las pruebas:
+
+```
+[ERROR] .../AccountDeletionIntegrationTest.java:[276,13] com.renaser.os.users.application.services.AccountDeletionIntegrationTest.AlmacenamientoPortQueRegistra is not abstract and does not override abstract method leer(java.lang.String,long) in com.renaser.os.shared.application.ports.out.AlmacenamientoPort
+```
+
+**Causa real.** D-210 agregó `leer(ruta, pesoMaximo)` —abstracto— al puerto compartido `AlmacenamientoPort`. Además de
+los dos adaptadores de producción, lo implementan a mano dos dobles de prueba de OTROS módulos: una clase anónima en
+`MensajeServicePermisosDeGrupoTest` (chat) y un `record` en `AccountDeletionIntegrationTest` (users). La búsqueda
+(`grep "implements AlmacenamientoPort\|new AlmacenamientoPort()"`) listó los dos, pero solo se abrió y corrigió el
+primero; el `record` escribe los tipos con el paquete completo (`java.net.URI`) y pasó desapercibido.
+
+**Solución.** El `record` devuelve `Optional.empty()` en `leer`: esa prueba solo anota lo que se borra.
+
+**Cómo evitar que vuelva a pasar.** Antes de agregar un método abstracto a un puerto de `shared`, abrir CADA resultado de
+`grep -rn "implements <Puerto>\|new <Puerto>()" src/`, y correr `test-compile` antes que cualquier prueba suelta: el
+error aparece en un módulo que la tarea no toca. Se descartó hacer `leer` un método `default` que devuelva vacío: un
+adaptador nuevo que se olvidara de implementarlo «no encontraría» la portada, en silencio.
+
+## E-351 · RIESGO EVITADO (D-210) — Con la portada editable, la foto del soporte habría seguido sirviendo la tarjeta vieja: `expected: "ANA@bienvenida/portadas/p1" but was: "ANA@original"`
+
+**Síntoma (reproducido con la prueba nueva contra la clase de D-205).**
+`TarjetasConNombreYPortadaTest.conLaPortadaNuevaNoSirveLaVieja`: `expected: "ANA@bienvenida/portadas/p1" but was:
+"ANA@original"`; `alVolverALaOriginal`: `Expected size: 2 but was: 1`. En producción se habría visto así: Administración
+cambia la portada, y la foto del chat de soporte de cada aprendiz ya dibujado sigue mostrando la vieja.
+
+**Causa real.** `TarjetasConNombreEnMemoria` (D-205) guardaba las tarjetas solo por primer nombre. Después de cambiar la
+portada, cada nombre ya dibujado se seguía sirviendo con la vieja hasta salir por el tope de peso (6 MB: pueden ser
+días), y el `ETag` —que sale del contenido— tampoco cambiaba, porque el contenido guardado era el viejo. Había además una
+carrera más fina: si la clave tomara la portada vigente y el dibujo la volviera a leer, un cambio justo en el medio
+guardaría bajo la clave «original» una tarjeta de la nueva, y al volver a la original se serviría la equivocada.
+
+**Solución (D-210).** La clave es (portada, nombre) y se dibuja sobre la portada DE LA CLAVE
+(`DibujarBienvenidaPort.dibujar(nombre, portada)`), no sobre la que esté vigente al terminar. Cambio mínimo en la clase,
+que trabaja otro agente en paralelo: ni su constructor ni su puerto cambian; `DibujarBienvenidaPort` suma
+`portadaVigente()` y `dibujar(nombre, portada)` como métodos por defecto, así los dobles de prueba que ya existen siguen
+compilando igual.
+
+**Cómo evitar que vuelva a pasar.** Todo caché de algo que se dibuja o se deriva de contenido editable lleva en la clave
+la versión de ese contenido, y lo guardado se calcula con esa misma versión, no con la que se lee después.
+`TarjetasConNombreYPortadaTest` (3) falla contra la clase de D-205 (verificado: las 3 en rojo con la clase vieja; las 3 de
+`TarjetasConNombreEnMemoriaTest`, en verde con las dos). De punta a punta, `PortadaDeBienvenidaIT.cambiarLaPortada` también:
+con la clase vieja, después de confirmar la portada nueva la foto responde `expected: 200 but was: 304` al `ETag` viejo.
+
 ## E-356 · `PRUEBAS_EN_CLOUD.md` apuntaba a un puerto viejo: Testcontainers ya no pasa por el agente de Cloud sino por Testcontainers Desktop (`tc.host=tcp://127.0.0.1:42405`)
 
 **Síntoma (2026-09-27, `clean verify` del arreglo E-340).** Según el informe del agente, las pruebas de integración
@@ -10441,4 +10487,24 @@ con `--amend`, antes de cualquier push. Ninguna otra rama lo tomó.
 **Cómo evitar que vuelva a pasar.** Los scripts de resolución recorren TODOS los bloques (`bloques()` devuelve la lista
 entera, y se exige que no quede ninguno), y ningún commit de fusión se hace sin
 `! git grep -n "^<<<<<<<\|^>>>>>>>" -- docs src` en la misma línea del `git commit`.
+
+## E-359 · Dos agentes en paralelo agregaron cada uno su `leer` al mismo puerto de almacenamiento (`leer(ruta)` y `leer(ruta, pesoMaximo)`)
+
+**Síntoma (2026-09-27, al integrar D-210 en `integracion-27`).** Conflicto en `S3AlmacenamientoAdapter.java` y su
+prueba, y el puerto `AlmacenamientoPort` auto-fusionado con **dos** métodos para lo mismo: D-212 (foto propia del
+grupo) agregó `default Optional<byte[]> leer(String ruta)`, sin tope, y D-210 (portada de la bienvenida)
+`Optional<byte[]> leer(String ruta, long pesoMaximo)`, que no baja entero un objeto más pesado que el tope.
+
+**Causa real.** Los dos encargos corrieron a la vez sobre el mismo puerto compartido (`shared`), y cada agente lo
+extendió sin saber del otro. El aviso llegó en los informes («posible choque con el otro agente»), pero recién al
+integrar.
+
+**Solución.** Queda un solo método, el que tiene tope (`leer(ruta, pesoMaximo)`), porque también protege la memoria
+del proceso (límite V-8). La foto del grupo lo llama con `FotoSubidaDelGrupo.PESO_MAXIMO` (2 MB). Se borraron el
+`leer(ruta)` del puerto y su implementación en S3. La prueba de D-212 «otra falla de S3 sube» pasó al método con
+tope (`leerOtraFallaDeS3Sube`), y el doble en memoria de `FotoDelGrupoIT` implementa el de dos argumentos.
+
+**Cómo evitar que vuelva a pasar.** Cuando dos encargos en paralelo pueden tocar un puerto de `shared`, el que
+coordina le asigna ese puerto a UNO solo, y el otro usa lo que ese agregue. Al repartir el trabajo, listar los
+puertos compartidos que cada encargo podría extender.
 

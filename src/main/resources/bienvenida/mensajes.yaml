@@ -6,8 +6,12 @@
 #  contener cada mensaje. NO son los textos oficiales: esos viven en una hoja de Google de
 #  Operaciones que el repo no tiene. Cuando Operaciones pase los textos, se reemplazan acá.
 #
-#  CÓMO SE CAMBIAN: editando ESTE archivo y redesplegando. NO van en variables de entorno
-#  (decisión del dueño, 2026-09-26, D-190). Lo único configurable por entorno es el interruptor.
+#  CÓMO SE CAMBIAN: desde la app, Administración → Más opciones → Bienvenida (ADMIN y ALQUIMISTA,
+#  D-210): lo que se guarda ahí REEMPLAZA a estos textos hasta que alguien toque «Volver al texto
+#  original». Estos son los ORIGINALES: editarlos acá (y redesplegar) solo cambia lo que sale donde
+#  nadie guardó otro desde la app. NO van en variables de entorno (decisión del dueño, 2026-09-26,
+#  D-190). Lo único configurable por entorno es el interruptor.
+#  Corregido 2026-09-27 (D-210): decía «CÓMO SE CAMBIAN: editando ESTE archivo y redesplegando».
 #  Corregido 2026-09-27 (D-199): también lo era la cuenta que firmaba la bienvenida del soporte
 #  (BIENVENIDA_REMITENTE_EMAIL). Ahora todas las firma el PROGRAMA («Formación Renaser»).
 #

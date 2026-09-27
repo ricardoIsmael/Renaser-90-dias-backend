@@ -10,6 +10,8 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
@@ -17,6 +19,7 @@ import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
+import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.time.Duration;
 
@@ -155,25 +158,50 @@ class S3AlmacenamientoAdapterTest {
         verifyNoMoreInteractions(s3Client);
     }
 
-    /** D-212: la foto propia de un grupo la sirve el backend, así que la lee de S3. */
+    /** D-212: una falla de S3 que no es "no existe" (por ejemplo, acceso denegado) sube: no se disfraza de vacío. */
     @Test
-    void leerTraeLosBytesDelObjetoExactoContraElBucketConfigurado() {
-        ArgumentCaptor<GetObjectRequest> pedido = ArgumentCaptor.forClass(GetObjectRequest.class);
-        when(s3Client.getObjectAsBytes(pedido.capture())).thenReturn(
-                ResponseBytes.fromByteArray(GetObjectResponse.builder().build(), new byte[] {1, 2, 3}));
+    void leerOtraFallaDeS3Sube() {
+        when(s3Client.getObject(any(GetObjectRequest.class)))
+                .thenThrow(S3Exception.builder().message("acceso denegado").statusCode(403).build());
 
-        assertThat(adapter().leer("grupos/g-1/foto-1.jpg")).hasValueSatisfying(bytes -> assertThat(bytes).containsExactly(1, 2, 3));
-        assertThat(pedido.getValue().bucket()).isEqualTo(BUCKET);
-        assertThat(pedido.getValue().key()).isEqualTo("grupos/g-1/foto-1.jpg");
+        assertThatThrownBy(() -> adapter().leer("grupos/g-1/foto-1.jpg", 10)).isInstanceOf(S3Exception.class);
+    }
+
+    /** D-210: la portada de la bienvenida la baja el servidor, del bucket configurado. */
+    @Test
+    void leerBajaElObjetoDelBucketConfigurado() {
+        byte[] contenido = {1, 2, 3, 4};
+        when(s3Client.getObject(any(GetObjectRequest.class))).thenReturn(objeto(contenido, 4L));
+
+        assertThat(adapter().leer("bienvenida/portadas/abc", 10)).hasValue(contenido);
+
+        ArgumentCaptor<GetObjectRequest> captor = ArgumentCaptor.forClass(GetObjectRequest.class);
+        verify(s3Client).getObject(captor.capture());
+        assertThat(captor.getValue().bucket()).isEqualTo(BUCKET);
+        assertThat(captor.getValue().key()).isEqualTo("bienvenida/portadas/abc");
+    }
+
+    /** Un objeto más pesado que el tope no llega entero a la memoria: se corta con lo que declara S3 o al leer. */
+    @Test
+    void leerNoBajaUnObjetoMasPesadoQueElTope() {
+        when(s3Client.getObject(any(GetObjectRequest.class)))
+                .thenReturn(objeto(new byte[20], 20L), objeto(new byte[20], null));
+
+        assertThatThrownBy(() -> adapter().leer("bienvenida/portadas/grande", 10))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("MB");
+        assertThatThrownBy(() -> adapter().leer("bienvenida/portadas/sin-largo", 10))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void leerLoQueNoExisteEsVacioPeroOtraFallaDeS3Sube() {
-        when(s3Client.getObjectAsBytes(any(GetObjectRequest.class)))
-                .thenThrow(NoSuchKeyException.builder().message("no existe").build())
-                .thenThrow(S3Exception.builder().message("acceso denegado").statusCode(403).build());
+    void leerLoQueNoExisteDaVacio() {
+        when(s3Client.getObject(any(GetObjectRequest.class))).thenThrow(NoSuchKeyException.builder().build());
 
-        assertThat(adapter().leer("grupos/g-1/foto-borrada.jpg")).isEmpty();
-        assertThatThrownBy(() -> adapter().leer("grupos/g-1/foto-1.jpg")).isInstanceOf(S3Exception.class);
+        assertThat(adapter().leer("bienvenida/portadas/no-existe", 10)).isEmpty();
+    }
+
+    private static ResponseInputStream<GetObjectResponse> objeto(byte[] contenido, Long declarado) {
+        return new ResponseInputStream<>(GetObjectResponse.builder().contentLength(declarado).build(),
+                AbortableInputStream.create(new ByteArrayInputStream(contenido)));
     }
 }

@@ -37,20 +37,22 @@ public interface AlmacenamientoPort {
      */
     void subir(String ruta, byte[] contenido, String tipoContenido);
 
-    /**
-     * Los bytes de un objeto, para lo poco que el servidor sirve él mismo en vez de dar una URL: hoy,
-     * la foto propia de un grupo (D-212), que la app pide con la sesión a la API del chat. Vacío si el
-     * objeto no existe.
-     *
-     * <p>Por defecto vacío, como {@link #guardaObjetos()}: el adaptador de marcador (local y pruebas)
-     * no guarda nada que leer. El de S3 lo lee de verdad.
-     */
-    default Optional<byte[]> leer(String ruta) {
-        return Optional.empty();
-    }
-
     /** Borra el objeto. Idempotente: borrar lo inexistente no falla. */
     void borrar(String ruta);
+
+    /**
+     * Baja un objeto que el propio servidor tiene que ABRIR. Es la otra excepción a "el backend nunca
+     * toca los bytes", y tan acotada como {@link #subir}: existe para la portada de la tarjeta de
+     * bienvenida (D-210), que el servidor revisa (que el nombre se lea encima) y sobre la que dibuja, y
+     * para la foto propia de un grupo (D-212), que la app pide con la sesión a la API del chat. Hasta la
+     * integración del 2026-09-27 D-212 tenía su propio {@code leer(ruta)} sin tope: se unificó en este.
+     * Todo lo que solo se MUESTRA sigue bajando por {@link #firmarLectura}, directo al teléfono.
+     *
+     * @param pesoMaximo en bytes: un objeto más pesado no se baja entero
+     * @return vacío si el objeto no existe, o si el almacenamiento es de marcador (no guarda nada)
+     * @throws IllegalArgumentException si el objeto pesa más que {@code pesoMaximo}
+     */
+    Optional<byte[]> leer(String ruta, long pesoMaximo);
 
     /**
      * Si {@link #subir} deja el objeto guardado de verdad. {@code false} en el adaptador de

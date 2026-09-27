@@ -39,6 +39,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -223,7 +224,7 @@ class FotoDelGrupoServiceTest {
     void elChatLaLee() {
         FotoDelGrupo actual = new FotoDelGrupo("grupos/actual.jpg", AHORA);
         when(fotoDelGrupoPort.deGrupo(FENIX)).thenReturn(Optional.of(actual));
-        when(almacenamiento.leer("grupos/actual.jpg")).thenReturn(Optional.of(PREPARADA)).thenReturn(Optional.empty());
+        when(almacenamiento.leer(eq("grupos/actual.jpg"), anyLong())).thenReturn(Optional.of(PREPARADA)).thenReturn(Optional.empty());
 
         assertThat(servicio.fotoDe(FENIX.value())).hasValueSatisfying(foto -> {
             assertThat(foto.jpeg()).isSameAs(PREPARADA);

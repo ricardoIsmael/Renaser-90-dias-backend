@@ -281,6 +281,9 @@ los interruptores de "Notificaciones & Alarmas" en Yo **no guardan nada**.
 11. **Textos de bienvenida (D-190):** no van en una variable de entorno. Viven en un archivo del programa
     (`src/main/resources/bienvenida/mensajes.yaml`) y cada parte del ingreso lleva su mensaje, como en OPE-01-01. Los
     de hoy son borradores.
+    > **Actualizado 2026-09-27 (D-210).** Ese archivo quedó como el ORIGINAL: a pedido del dueño, Administración y
+    > Alquimista cambian desde la app los tres mensajes y la portada de la tarjeta, y pueden volver al original
+    > (`docs/MODULO_CHAT.md` §13).
 12. **Marca de la bienvenida del grupo (D-191):** una columna nueva en `asignaciones_celula` (V71), sin tabla nueva.
     Nadie que ya estaba en un grupo recibe una bienvenida atrasada.
 13. **Semanas de rocas por día del programa (D-192):** la semana pasaba a ser `ceil(día/7)` (días 85 a 90 en la 13,

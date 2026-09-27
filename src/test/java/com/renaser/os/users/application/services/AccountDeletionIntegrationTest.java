@@ -297,5 +297,10 @@ class AccountDeletionIntegrationTest {
         public void borrar(String ruta) {
             borrados.add(ruta);
         }
+
+        @Override
+        public java.util.Optional<byte[]> leer(String ruta, long pesoMaximo) {
+            return java.util.Optional.empty();
+        }
     }
 }
