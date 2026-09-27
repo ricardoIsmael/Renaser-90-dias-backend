@@ -10272,3 +10272,36 @@ arreglo: `elDomingoElMartesSigueFuera`, `unDiaDeSemanaNoCambia` y `elDomingoDelD
 **Cómo evitar que vuelva a pasar.** Toda ventana de fechas se prueba en los bordes: el domingo (el último día de la
 semana), el día previo al Día 1, el último domingo del programa y la semana 13, con el reloj en una hora UTC que cae en el
 día local anterior (regla 02). Si una regla nueva amplía otra, se prueba que siga cubriendo todo lo que cubría la vieja.
+
+## E-356 · `PRUEBAS_EN_CLOUD.md` apuntaba a un puerto viejo: Testcontainers ya no pasa por el agente de Cloud sino por Testcontainers Desktop (`tc.host=tcp://127.0.0.1:42405`)
+
+**Síntoma (2026-09-27, `clean verify` del arreglo E-340).** Según el informe del agente, las pruebas de integración
+corrieron por `tc.host=tcp://127.0.0.1:42405` aunque había exportado las variables que indica el documento
+(`DOCKER_HOST`, `TESTCONTAINERS_TC_HOST`, `TESTCONTAINERS_DOCKER_HOST` al socket). El documento decía que
+`~/.testcontainers.properties` apuntaba al agente de Cloud en `tcp://127.0.0.1:37843` y que, sin el agente, Maven no
+encontraba Docker.
+
+**Causa real.** El archivo cambió: hoy tiene `docker.host` y `tc.host` en `tcp://127.0.0.1:42405`, y en ese puerto
+escucha Testcontainers Desktop (`ss -ltnp` → proceso `testcontainers-`), que manda los contenedores al Docker local. El
+documento no se actualizó cuando se instaló.
+
+**Solución.** Se corrigió `docs/PRUEBAS_EN_CLOUD.md` con una nota visible. No afecta resultados: el `clean verify` pasó
+entero (4526 + 122).
+
+**Cómo evitar que vuelva a pasar.** Antes de seguir una receta de entorno, mirar el archivo real y quién escucha en el
+puerto. La prueba de que las pruebas corrieron es la línea `Tests run:`, no el código de salida (E-111).
+
+## E-357 · `DESPLIEGUE_Y_CI.md` decía que GitHub no tenía variables de Actions y que el CD se salteaba entero, cuando despliega solo desde el 26/09
+
+**Síntoma (2026-09-27).** El documento decía: *"el repositorio de GitHub no tiene ni una sola variable de Actions
+cargada (`gh api .../actions/variables` devuelve `total_count: 0`)… el `cd.yml` se saltea entero"*. Pero `gh variable
+list` muestra `AWS_REGION`, `AWS_ROLE_ARN`, `EC2_INSTANCE_ID` y `ECR_REPOSITORY`, y el CD desplegó `7429a09c` (corrida
+`36258213585`, 26/09) y el arreglo `49fbc15f` (corrida `36334605150`, 27/09).
+
+**Causa real.** Las variables se crearon después de escribir esa nota y nadie la actualizó.
+
+**Solución.** Nota «Corregido 2026-09-27 (E-357)» en el mismo recuadro, sin borrar lo que decía.
+
+**Cómo evitar que vuelva a pasar.** Quien crea o cambia infraestructura actualiza el documento en el mismo cambio
+(regla 05). Antes de afirmar algo sobre el CD, comprobarlo con `gh variable list` y `gh run list --workflow cd.yml`.
+

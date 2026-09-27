@@ -39,6 +39,9 @@ hermano de [`CLAUDE.md`](../CLAUDE.MD) (por qué cada decisión de arquitectura)
 >   15 segundos — que es exactamente lo que vienen haciendo las últimas corridas. **Las imágenes
 >   que hay en ECR se subieron a mano, no las publicó el workflow.** Crear esas cuatro variables
 >   (§5.1 e) es el único paso que falta para que la cadena completa funcione sola.
+> - **Corregido 2026-09-27 (E-357).** El punto anterior ya no vale: las cuatro variables existen
+>   (`gh variable list`: `AWS_REGION`, `AWS_ROLE_ARN`, `EC2_INSTANCE_ID`, `ECR_REPOSITORY`) y el `cd.yml`
+>   despliega solo con cada push a `master` (corridas `36258213585` del 26/09 y `36334605150` del 27/09, verdes).
 > - **Qué se verificó del despliegue, el 2026-09-06:** la secuencia entera se corrió a mano con la
 >   CLI, paso por paso, extrayendo los `run:` del propio `cd.yml` para no probar una copia. Bajó la
 >   imagen, reemplazó el contenedor, y `/actuator/health` respondió `UP` **a los 43 s**. También se

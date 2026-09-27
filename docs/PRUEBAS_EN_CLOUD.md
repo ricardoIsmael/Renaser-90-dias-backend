@@ -59,6 +59,13 @@ TESTCONTAINERS_DOCKER_HOST=unix:///var/run/docker.sock \
 ./mvnw clean verify
 ```
 
+> **Corregido 2026-09-27 (E-356).** Arriba dice que `~/.testcontainers.properties` apunta al agente de
+> Testcontainers Cloud en `tcp://127.0.0.1:37843` y que, con el agente apagado, Maven no encuentra Docker. Hoy apunta
+> a `tcp://127.0.0.1:42405`, donde escucha **Testcontainers Desktop** (`ss -ltnp` muestra el proceso `testcontainers-`),
+> que manda los contenedores al Docker local: con él prendido, `./mvnw clean verify` corre sin token de Cloud (así
+> pasó el del arreglo E-340: 4526 + 122). Antes de fiarse de este párrafo, mirar el archivo y quién escucha en ese
+> puerto. La prueba de que corrió sigue siendo la línea `Tests run:` (E-111).
+
 ## Estado de la conexión
 
 La integración y el agente están preparados. Falta proporcionar el token para comprobar una
