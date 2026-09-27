@@ -10580,3 +10580,60 @@ tope (`leerOtraFallaDeS3Sube`), y el doble en memoria de `FotoDelGrupoIT` implem
 **Cómo evitar que vuelva a pasar.** Cuando dos encargos en paralelo pueden tocar un puerto de `shared`, el que
 coordina le asigna ese puerto a UNO solo, y el otro usa lo que ese agregue. Al repartir el trabajo, listar los
 puertos compartidos que cada encargo podría extender.
+
+## E-390 · La app de producción no deja agendar el lunes el domingo: `Received ["DOM"]` antes de las 18:00 y `Received []` después
+
+**Síntoma (2026-09-27, domingo).** En «Agendar mis acciones», el domingo la fila de días dibuja la semana SIGUIENTE, pero el
+candado se calculaba contra la semana de hoy. Antes de las 18:00 solo quedaba abierto el domingo próximo (04/10), que el
+servidor rechaza con `INVALID_DATE`, y desde las 18:00 ninguno. El lunes 28 salía con candado aunque el pie decía «Se
+agendan para el 2026-09-28». Reproducido con reloj fijo contra `e71f8c2` (frontend de producción).
+
+**Causa real.** `diaAgendable` contaba desde `INDICE_DE_HOY` (6 el domingo) mientras la fila muestra la semana siguiente
+(`MOSTRAR_SEMANA_SIGUIENTE`). Es la otra mitad de E-340: el servidor ya se arregló en producción (`49fbc15f`); la app no.
+
+**Solución.** Frontend `c5f6c36` (rama `hotfix-domingo-lunes-app`, sobre `e71f8c2`, SIN subir) y su versión en la
+integración (`9d0a908` + `f728170`, que además arma el domingo la semana que empieza). El dueño decidió no subir la web ni
+armar APK: todo sale con la Play Store. Mientras tanto, el domingo el lunes se planifica con el acompañante.
+
+**Cómo evitar que vuelva a pasar.** Las pruebas de días agendables usan reloj fijo en Lima (`relojDeLima.ts`), con el
+domingo antes y después de las 18:00 y horas que en UTC ya son el día siguiente.
+
+## E-391 · Una prueba de la app fallaba solo los domingos: `Expected: false`, `Received: true`
+
+**Síntoma.** En `master` del frontend, `diaAgendable › NO es la misma regla que la de hábitos: ahí hoy siempre va con
+candado` fallaba el domingo 27/09 (1 de 670).
+
+**Causa real.** La prueba usaba el reloj real del equipo, y el domingo la regla cambia (E-390).
+
+**Solución.** Reescrita con reloj fijo (frontend `c5f6c36` y la integración).
+
+**Cómo evitar que vuelva a pasar.** Ninguna prueba de reglas de calendario usa el reloj real (regla 02 del backend,
+aplicada también a la app).
+
+## E-392 · `process.env.TZ` dentro de una prueba de jest no cambia la zona, y el CI corre en UTC
+
+**Síntoma.** `{"envTZ":"Asia/Tokyo","antes":300,"despues":300,"resolved":"America/Lima"}`: asignar la zona dentro de la
+prueba no tuvo efecto.
+
+**Causa real.** Node fija la zona al arrancar el proceso de jest; cambiarla después no la mueve.
+
+**Solución.** `process.env.TZ = 'America/Lima'` en `jest.config.js`, que sí llega a los procesos de jest (con
+`--maxWorkers=2` y con `--runInBand`), aunque el entorno tenga `TZ=UTC`.
+
+**Cómo evitar que vuelva a pasar.** Las pruebas que dependen de la zona la reciben de la configuración, no de la prueba.
+
+## E-393 · La app contaba las semanas del plan distinto que el servidor: `Expected: 13`, `Received: 12`
+
+**Síntoma (e2e OBJ-03).** «Vas por la semana 2 de 12» mientras el servidor guardaba la semana 3. Contra la cuenta vieja
+fallan 49 casos de `periodoDelPrograma.test.ts`, por ejemplo `inicio LUNES, día 85 → semana 13` (`Received: 12`) e
+`inicio MARTES, día 7 → semana 2` (`Received: 1`).
+
+**Causa real.** La app contaba `⌈día/7⌉` (12 semanas) y el domingo mostraba una semana y guardaba la siguiente; el
+servidor, desde D-203, cuenta semanas de lunes a domingo, 13, nunca 14.
+
+**Solución.** Frontend `f728170` en la integración: la misma cuenta que `SemanaPrograma`, con 68 casos calcados de sus
+tablas. Agrupar el mes 3 como semanas 9 a 13 queda por confirmar con el dueño.
+
+**Cómo evitar que vuelva a pasar.** Una regla de calendario que vive en los dos lados se prueba con las MISMAS tablas en
+los dos (`SemanaProgramaTest` ↔ `periodoDelPrograma.test.ts`).
+
