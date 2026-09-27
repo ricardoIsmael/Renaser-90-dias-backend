@@ -14,8 +14,15 @@ import com.renaser.os.shared.domain.UserId;
  * <blockquote><b>Corregido 2026-09-26 (G-2).</b> Decía «Nunca lanza: si algo falla, […] Operaciones
  * manda la bienvenida a mano». Sin marca, reintentar duplicaba; con la marca, tragarse el fallo solo
  * perdía la bienvenida.</blockquote>
+ *
+ * <p>Un remitente que no puede escribir en el soporte (rol fuera de ADMIN/ALCHEMIST, o no
+ * participante) es configuración inválida, no un fallo: no manda, no marca, no lanza, y avisa en el
+ * log (E-330).
  */
 public interface DarBienvenidaEnSoporteUseCase {
 
     void darBienvenida(ConversacionId soporteId, UserId aprendizId);
+
+    /** Al arrancar: un {@code WARN} si el remitente configurado no puede firmar la bienvenida (E-330). */
+    void revisarRemitenteConfigurado();
 }

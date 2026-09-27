@@ -66,8 +66,9 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
     private static final Logger log = LoggerFactory.getLogger(ConversacionSoporteService.class);
 
     /** Quienes acompañan a TODO aprendiz desde su chat de soporte. Confirmado por el dueño del
-     * proyecto: administrador o alquimista, nadie mas — ni mentor, ni lider de mentores. */
-    private static final Set<UserRole> STAFF_ADMINISTRATIVO = Set.of(UserRole.ADMIN, UserRole.ALCHEMIST);
+     * proyecto: administrador o alquimista, nadie mas — ni mentor, ni lider de mentores.
+     * Visible en el paquete: {@code BienvenidaEnSoporteService} exige lo mismo al remitente (E-330). */
+    static final Set<UserRole> STAFF_ADMINISTRATIVO = Set.of(UserRole.ADMIN, UserRole.ALCHEMIST);
 
     private static final String SUFIJO_SOPORTE = "Formación Renaser";
 

@@ -483,6 +483,20 @@ reemplazan por los de la hoja de Operaciones.
 **Cómo se prende** (sin cambiar código): `BIENVENIDA_REMITENTE_EMAIL` con el correo de la cuenta que
 firma. Sin remitente está apagada. Si la cuenta no existe o está suspendida, no sale nada y queda un
 aviso en el log.
+
+**Qué cuenta puede ser remitente (E-330, 2026-09-26).** Solo una cuenta **ACTIVA con rol `ADMIN` o
+`ALCHEMIST`**: es el staff que `ConversacionSoporteService` mete en todo soporte (§8), y `MensajeService`
+solo deja escribir a quien participa de la conversación. Un `MENTOR`, `MENTOR_LEAD` o `TRAINEE` **no**
+sirve. Con una cuenta así (o con una de staff que no participe de ese soporte) la bienvenida de ese
+evento queda **apagada**: no dibuja, no manda, **no lanza** y **no deja marca** en
+`mensajes_bienvenida`, con un `WARN` por evento
+(`[chat.bienvenida] BIENVENIDA_REMITENTE_EMAIL=… tiene rol MENTOR, no es ADMIN/ALCHEMIST del soporte:
+bienvenida apagada para el aprendiz …`). Al arrancar, `RemitenteDeBienvenidaAlArrancarListener` deja el
+mismo `WARN` si el remitente configurado no existe, no está activo o no es staff.
+**Ojo:** que no se lance significa que el outbox da esa publicación por **completada**. Corregir la
+variable y reiniciar **no** reenvía las bienvenidas de los aprendices que entraron mientras estaba mal:
+esas se mandan a mano (el `WARN` trae el id del aprendiz; al no haber marca, no hay nada que deshacer).
+Antes del arreglo se lanzaba `NotAuthorizedException` y el outbox reintentaba cada 5 minutos sin fin.
 > **Corregido 2026-09-26 (D-190).** Decía «y `BIENVENIDA_TEXTO` con el texto (`{nombre}` se reemplaza
 > por el primer nombre). […] sin texto, sale solo la tarjeta». El dueño pidió que el texto no vaya en
 > una variable de entorno y que cada parte del ingreso tenga su mensaje. `BIENVENIDA_TEXTO` ya no se lee.
@@ -562,7 +576,7 @@ crea el soporte, así que los dos commitean juntos (E-299).
 | Clase | Qué fija |
 |---|---|
 | `BienvenidaJava2dAdapterTest` (4) | Coincide con la exportación de Canva (la referencia está en `src/test/resources/bienvenida/`); el test distingue una tarjeta sin nombre; un nombre largo no se sale; JPEG liviano |
-| `BienvenidaEnSoporteServiceTest` (9) | Tarjeta con el primer nombre, mensaje que la acompaña y formal, con los textos del puerto y firmados por el remitente (D-190); con los dos textos vacíos solo la tarjeta; apagada sin remitente; remitente suspendido no manda; un fallo de S3 no manda una foto inexistente y lanza (G-2); deja la marca con la tarjeta; una reentrega con marca no hace nada; la carrera con otra entrega no es error; con `noop` solo el formal (G-5) |
+| `BienvenidaEnSoporteServiceTest` (14) | Tarjeta con el primer nombre, mensaje que la acompaña y formal, con los textos del puerto y firmados por el remitente (D-190); con los dos textos vacíos solo la tarjeta; apagada sin remitente; remitente suspendido no manda; un fallo de S3 no manda una foto inexistente y lanza (G-2); deja la marca con la tarjeta; una reentrega con marca no hace nada; la carrera con otra entrega no es error; con `noop` solo el formal (G-5); remitente `MENTOR` o staff no participante: no lanza, no manda, no marca y avisa; `ALCHEMIST` participante manda como siempre; aviso al arrancar solo con remitente no staff (E-330) |
 | `BienvenidaEnGrupoServiceTest` (6) | Marca y después manda el texto del recurso en el chat del grupo, firmado por el mentor, con los dos primeros nombres; marca ya puesta no manda; sin pendientes (recepción, sin mentor) no manda; sin texto no marca; mentor suspendido no marca; un fallo no frena a los demás y se lanza al final |
 | `BienvenidaEnGrupoIT` (5) | Postgres real: un mensaje y la reentrega no duplica; dos entregas cruzadas en dos hilos dan un mensaje; recepción no; sin mentor queda pendiente y sale al ponerle mentor; V71 marca las pertenencias de aprendiz existentes y no las de mentor (base aparte migrada a V70, semilla, V71) |
 | `TextosDeBienvenidaYamlAdapterTest` (4) | El `mensajes.yaml` del repo trae los dos textos del soporte y el del grupo con sus marcadores; una clave vacía apaga ese mensaje; sin archivo falla al arrancar; `application.yaml` ya no tiene `renaser.bienvenida.texto` y el remitente sigue por `BIENVENIDA_REMITENTE_EMAIL` (D-190) |
