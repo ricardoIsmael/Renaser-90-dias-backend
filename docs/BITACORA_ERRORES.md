@@ -10657,3 +10657,22 @@ escribir nada. `null` sigue valiendo.
 viejo). **Lección:** un 409 «conflicto» en un pedido solo, sin concurrencia, casi siempre es una validación que falta y que
 atajó la base: buscar la línea `violacion de integridad` en el log. **Pregunta abierta (D-216):** la app deja elegir de 0 a
 1440 (un día); si el servidor tiene que acotar a eso, lo decide el dueño.
+
+## E-379 · `PUT /journal/today` con 1 MB de texto → 200 y se guardan los 1.048.576 caracteres
+
+**Síntoma (e2e TRN-18, 2026-09-27).** `PUT /api/v1/journal/today` con 1 MB de texto → 200
+`{"date":"2026-09-27","type":"BITACORA_NOCTURNA","exists":true,"textContent":"Renaser e2e 1MB. …"}` y el largo guardado es
+`1048576`.
+
+**Causa real.** La bitácora no tenía tope en ningún lado: ni en el pedido, ni en `EntradaDiario`, y
+`entradas_diario.contenido_texto` es `text`.
+
+**Solución.** `EntradaDiario.TEXTO_MAXIMO_CARACTERES = 4000`, contados como caracteres de persona (un emoji es uno), en
+`escribir` y en `actualizarTexto`: 400 «El texto puede tener hasta 4000 caracteres y este tiene 1048576», sin guardar nada.
+Vale igual para el `PUT` y para la bitácora que guarda el acompañante. 4000 es el tope que ya tiene el texto de un hábito de
+escritura (`CompletarRegistroRequest.respuestaTexto`); el número lo confirma el dueño (pregunta de D-216). Una fila vieja más
+larga se sigue leyendo.
+
+**Cómo evitar que vuelva a pasar.** `EntradaDiarioTest` y `BitacoraNocturnaServiceTest` (rojas contra el código viejo).
+**Queda afuera:** SEG-16 encontró lo mismo en la biografía, el departamento (`users`) y el chat (`chat`), que son de otros
+encargos en paralelo; no se tocaron.

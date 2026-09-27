@@ -103,4 +103,40 @@ class BitacoraNocturnaServiceTest {
 
         assertThat(resultado.contenidoTexto()).isEqualTo("version final");
     }
+
+    /**
+     * TRN-18 (e2e del 2026-09-27): {@code PUT /journal/today} con 1 MB de texto (1.048.576
+     * caracteres) respondia 200 y lo guardaba entero. La bitacora tiene un largo maximo del lado del
+     * servidor: lo que se pasa es un 400 claro y no se escribe nada. Contra el codigo viejo se
+     * guardaba.
+     */
+    @Test
+    void unTextoDeUnMegaSeRechazaSinGuardarNada() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "America/Lima", RolParticipante.TRAINEE, false, false)));
+        String unMega = "Renaser e2e 1MB. ".repeat(61_681).substring(0, 1_048_576);
+
+        assertThatThrownBy(() -> service.escribir(new EscribirBitacoraNocturnaCommand(actor, unMega, null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("1048576");
+        org.mockito.Mockito.verify(savePort, org.mockito.Mockito.never()).save(any());
+    }
+
+    /** Lo mismo al reescribir la del dia: pisar el texto tampoco se salta el tope. */
+    @Test
+    void reescribirConUnTextoDemasiadoLargoTampocoGuarda() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
+        EntradaDiario existente = EntradaDiario.escribir(EntradaDiarioId.of(UUID.randomUUID()), actor,
+                LocalDate.of(2026, 8, 26), TipoEntradaDiario.BITACORA_NOCTURNA, "primer intento", CLOCK.now());
+        when(loadPort.porParticipanteFechaYTipo(actor, LocalDate.of(2026, 8, 26), TipoEntradaDiario.BITACORA_NOCTURNA))
+                .thenReturn(Optional.of(existente));
+
+        assertThatThrownBy(() -> service.escribir(new EscribirBitacoraNocturnaCommand(actor, "x".repeat(20_000),
+                null, null))).isInstanceOf(IllegalArgumentException.class);
+        assertThat(existente.contenidoTexto()).isEqualTo("primer intento");
+        org.mockito.Mockito.verify(savePort, org.mockito.Mockito.never()).save(any());
+    }
 }
