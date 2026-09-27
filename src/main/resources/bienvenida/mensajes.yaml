@@ -1,0 +1,41 @@
+# ============================================================================================
+#  BORRADORES — REEMPLAZAR POR EL TEXTO OFICIAL DE LA HOJA DE OPERACIONES
+#  (procedimiento OPE-01-01 / atención al cliente Rev 04).
+#
+#  Estos textos los redactó el equipo técnico a partir de lo que el procedimiento dice que debe
+#  contener cada mensaje. NO son los textos oficiales: esos viven en una hoja de Google de
+#  Operaciones que el repo no tiene. Cuando Operaciones pase los textos, se reemplazan acá.
+#
+#  CÓMO SE CAMBIAN: editando ESTE archivo y redesplegando. NO van en variables de entorno
+#  (decisión del dueño, 2026-09-26, D-190). Lo único configurable por entorno es la cuenta que
+#  firma la bienvenida del soporte (BIENVENIDA_REMITENTE_EMAIL).
+#
+#  Marcadores: {nombre} = primer nombre del aprendiz (lo pone el servidor).
+#  Tuteo, español neutro de Perú. Un texto vacío ("") hace que ese mensaje no se mande.
+#  No poner horarios, links ni nombres concretos: el mismo texto va a todos los aprendices.
+# ============================================================================================
+
+# Al nacer el chat de SOPORTE de un aprendiz nuevo (en WhatsApp: «NOMBRE – FORMACIÓN RENASER»).
+# Firma la cuenta de BIENVENIDA_REMITENTE_EMAIL. Salen en este orden: la tarjeta de Canva con el
+# nombre, el mensaje que acompaña la tarjeta y el mensaje formal.
+soporte:
+  # Va junto con la tarjeta, «para darle valor agregado, una experiencia premium». Si no hay
+  # tarjeta (almacenamiento de marcador en local), este mensaje no se manda.
+  con-la-tarjeta: |
+    {nombre}, esta tarjeta es para ti 🌿 Hoy empiezas tu Formación Renaser y nos alegra mucho que estés aquí. Este camino es tuyo, y vamos a acompañarte en cada paso.
+  # El mensaje formal de bienvenida: confirma el ingreso al programa, la sesión técnica y la
+  # información para esa sesión. El horario NO va acá: lo confirma el equipo por este chat.
+  formal: |
+    Hola, {nombre}. Te damos la bienvenida oficial a la Formación Renaser: tu ingreso al programa ya está confirmado.
+
+    Sesión técnica: el equipo te confirmará por este chat el horario de tu sesión técnica.
+
+    Antes de esa sesión te enviaremos por aquí la información que necesitas para aprovecharla. Si tienes cualquier duda, escríbenos en este chat: estamos para acompañarte.
+
+# Al integrarse a su GRUPO estable con mentor: mensaje personalizado que refuerza pertenencia y
+# compromiso, en el chat del grupo, firmado por el mentor. Marcador extra: {mentor} = primer
+# nombre del mentor.
+# TODAVÍA NO SE ENVÍA: falta decidir dónde se guarda la marca de «ya se le dio la bienvenida en
+# este grupo» (ver D-190 en docs/MODULOS_A_AVANZAR.md). El texto queda acá para revisarlo.
+grupo: |
+  ¡{nombre}, te damos la bienvenida a tu grupo! Soy {mentor} y voy a acompañarte en estos días. Desde hoy eres parte de este grupo: aquí nos sostenemos, compartimos avances y cumplimos juntos lo que nos proponemos. Cuento contigo.

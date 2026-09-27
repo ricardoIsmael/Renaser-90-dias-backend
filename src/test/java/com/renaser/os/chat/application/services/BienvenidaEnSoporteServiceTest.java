@@ -4,6 +4,7 @@ import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.EnviarMensajeCommand;
 import com.renaser.os.chat.application.ports.out.bienvenida.DibujarBienvenidaPort;
 import com.renaser.os.chat.application.ports.out.bienvenida.MarcaDeBienvenidaPort;
+import com.renaser.os.chat.application.ports.out.bienvenida.TextosDeBienvenidaPort;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
@@ -44,7 +45,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * La bienvenida automática del procedimiento OPE-01-01 (D-174), idempotente por destinatario (G-2).
+ * La bienvenida automática del procedimiento OPE-01-01 (D-174), idempotente por destinatario (G-2),
+ * con los textos del recurso versionado y no del entorno (D-190).
  *
  * <p>Sin Spring: {@code PlatformTransactionManager} sin stubbing hace que {@code TransactionTemplate}
  * ejecute el callback directo, mismo criterio que {@code ConversacionSoporteServiceTest}.
@@ -76,30 +78,38 @@ class BienvenidaEnSoporteServiceTest {
     @Mock
     private PlatformTransactionManager transactionManager;
 
-    private BienvenidaEnSoporteService servicio(String remitente, String texto) {
+    private static final TextosDeBienvenidaPort TEXTOS =
+            new TextosFijos("Esta tarjeta es para ti, {nombre}", "Hola {nombre}, tu ingreso está confirmado");
+
+    private BienvenidaEnSoporteService servicio(String remitente) {
+        return servicio(remitente, TEXTOS);
+    }
+
+    private BienvenidaEnSoporteService servicio(String remitente, TextosDeBienvenidaPort textos) {
         return new BienvenidaEnSoporteService(dibujarPort, almacenamientoPort, enviarMensaje, userSummaryFinder,
-                marcaPort, idGenerator, transactionManager, remitente, texto);
+                marcaPort, textos, idGenerator, transactionManager, remitente);
     }
 
     @Test
-    @DisplayName("manda la tarjeta con el primer nombre y después el texto, firmados por Kelin")
-    void mandaTarjetaYTextoDesdeKelin() {
+    @DisplayName("D-190: manda la tarjeta, el mensaje que la acompaña y el formal, con los textos del recurso, firmados por Kelin")
+    void mandaTarjetaYTextosDesdeKelin() {
         preparar("maría josé ñahui", UserStatus.ACTIVE);
 
-        servicio(KELIN, "¡Bienvenida, {nombre}! 💚").darBienvenida(SOPORTE, ANA);
+        servicio(KELIN).darBienvenida(SOPORTE, ANA);
 
         verify(dibujarPort).dibujar("María");
         String ruta = "chat/" + SOPORTE.value() + "/fotos/" + ID_FOTO;
         verify(almacenamientoPort).subir(ruta, TARJETA, "image/jpeg");
         ArgumentCaptor<EnviarMensajeCommand> enviados = ArgumentCaptor.forClass(EnviarMensajeCommand.class);
-        verify(enviarMensaje, times(2)).enviar(enviados.capture());
+        verify(enviarMensaje, times(3)).enviar(enviados.capture());
         EnviarMensajeCommand foto = enviados.getAllValues().get(0);
-        EnviarMensajeCommand texto = enviados.getAllValues().get(1);
         assertThat(foto.tipo()).isEqualTo(TipoMensaje.IMAGEN);
         assertThat(foto.mediaRuta()).isEqualTo(ruta);
         assertThat(foto.mediaBytes()).isEqualTo(TARJETA.length);
-        assertThat(texto.tipo()).isEqualTo(TipoMensaje.TEXTO);
-        assertThat(texto.texto()).isEqualTo("¡Bienvenida, María! 💚");
+        assertThat(enviados.getAllValues().subList(1, 3)).extracting(EnviarMensajeCommand::tipo)
+                .containsOnly(TipoMensaje.TEXTO);
+        assertThat(enviados.getAllValues().subList(1, 3)).extracting(EnviarMensajeCommand::texto)
+                .containsExactly("Esta tarjeta es para ti, María", "Hola María, tu ingreso está confirmado");
         assertThat(enviados.getAllValues()).allSatisfy(c -> {
             assertThat(c.actorId()).isEqualTo(KELIN_ID);
             assertThat(c.conversacionId()).isEqualTo(SOPORTE);
@@ -107,11 +117,11 @@ class BienvenidaEnSoporteServiceTest {
     }
 
     @Test
-    @DisplayName("sin texto configurado, manda solo la tarjeta")
-    void sinTextoSoloLaTarjeta() {
+    @DisplayName("con los dos textos vacíos en el recurso, manda solo la tarjeta")
+    void sinTextosSoloLaTarjeta() {
         preparar("Ana Perez", UserStatus.ACTIVE);
 
-        servicio(KELIN, "  ").darBienvenida(SOPORTE, ANA);
+        servicio(KELIN, new TextosFijos("", "")).darBienvenida(SOPORTE, ANA);
 
         verify(enviarMensaje, times(1)).enviar(any());
     }
@@ -119,7 +129,7 @@ class BienvenidaEnSoporteServiceTest {
     @Test
     @DisplayName("sin remitente configurado está apagada: no dibuja, no sube, no manda")
     void apagadaSinRemitente() {
-        servicio("", "Hola").darBienvenida(SOPORTE, ANA);
+        servicio("").darBienvenida(SOPORTE, ANA);
 
         verifyNoInteractions(userSummaryFinder, dibujarPort, almacenamientoPort, enviarMensaje);
     }
@@ -130,7 +140,7 @@ class BienvenidaEnSoporteServiceTest {
         when(userSummaryFinder.findByEmail(KELIN)).thenReturn(Optional.of(
                 new UserSummary(KELIN_ID, "Kelin", KELIN, UserRole.ALCHEMIST, UserStatus.SUSPENDED)));
 
-        servicio(KELIN, "Hola").darBienvenida(SOPORTE, ANA);
+        servicio(KELIN).darBienvenida(SOPORTE, ANA);
 
         verify(almacenamientoPort, never()).subir(anyString(), any(), anyString());
         verify(enviarMensaje, never()).enviar(any());
@@ -142,7 +152,7 @@ class BienvenidaEnSoporteServiceTest {
         preparar("Ana", UserStatus.ACTIVE);
         doThrow(new IllegalStateException("S3 caído")).when(almacenamientoPort).subir(anyString(), any(), anyString());
 
-        assertThatThrownBy(() -> servicio(KELIN, "Hola").darBienvenida(SOPORTE, ANA))
+        assertThatThrownBy(() -> servicio(KELIN).darBienvenida(SOPORTE, ANA))
                 .isInstanceOf(IllegalStateException.class);
         verify(enviarMensaje, never()).enviar(any());
         verify(marcaPort, never()).marcar(any(), any());
@@ -153,7 +163,7 @@ class BienvenidaEnSoporteServiceTest {
     void dejaLaMarcaConLaTarjeta() {
         preparar("Ana", UserStatus.ACTIVE);
 
-        servicio(KELIN, "Hola {nombre}").darBienvenida(SOPORTE, ANA);
+        servicio(KELIN).darBienvenida(SOPORTE, ANA);
 
         verify(marcaPort).marcar(eq(ANA), eq(ID_MENSAJE_1));
     }
@@ -163,7 +173,7 @@ class BienvenidaEnSoporteServiceTest {
     void reentregaNoDuplica() {
         when(marcaPort.yaSeDio(ANA)).thenReturn(true);
 
-        servicio(KELIN, "Hola").darBienvenida(SOPORTE, ANA);
+        servicio(KELIN).darBienvenida(SOPORTE, ANA);
 
         verifyNoInteractions(dibujarPort, almacenamientoPort, enviarMensaje);
         verify(marcaPort, never()).marcar(any(), any());
@@ -176,23 +186,23 @@ class BienvenidaEnSoporteServiceTest {
         when(marcaPort.yaSeDio(ANA)).thenReturn(false, true);
         doThrow(new DuplicateKeyException("mensajes_bienvenida_pkey")).when(marcaPort).marcar(any(), any());
 
-        assertThatCode(() -> servicio(KELIN, "Hola").darBienvenida(SOPORTE, ANA)).doesNotThrowAnyException();
+        assertThatCode(() -> servicio(KELIN).darBienvenida(SOPORTE, ANA)).doesNotThrowAnyException();
     }
 
     @Test
-    @DisplayName("G-5: con almacenamiento noop no manda una imagen inexistente: solo el texto, y marca con él")
+    @DisplayName("G-5: con almacenamiento noop no manda una imagen inexistente ni el texto que la acompaña: solo el formal, y marca con él")
     void sinAlmacenamientoRealSoloElTexto() {
         preparar("Ana", UserStatus.ACTIVE);
         when(almacenamientoPort.guardaObjetos()).thenReturn(false);
 
-        servicio(KELIN, "Hola {nombre}").darBienvenida(SOPORTE, ANA);
+        servicio(KELIN).darBienvenida(SOPORTE, ANA);
 
         verify(dibujarPort, never()).dibujar(anyString());
         verify(almacenamientoPort, never()).subir(anyString(), any(), anyString());
         ArgumentCaptor<EnviarMensajeCommand> enviados = ArgumentCaptor.forClass(EnviarMensajeCommand.class);
         verify(enviarMensaje, times(1)).enviar(enviados.capture());
         assertThat(enviados.getValue().tipo()).isEqualTo(TipoMensaje.TEXTO);
-        assertThat(enviados.getValue().texto()).isEqualTo("Hola Ana");
+        assertThat(enviados.getValue().texto()).isEqualTo("Hola Ana, tu ingreso está confirmado");
         verify(marcaPort).marcar(eq(ANA), eq(ID_MENSAJE_1));
     }
 
@@ -216,5 +226,8 @@ class BienvenidaEnSoporteServiceTest {
                         c.mediaRuta(), c.mediaMime(), c.mediaBytes(), null, null, Instant.parse("2026-09-26T15:00:00Z"));
             }
         });
+    }
+
+    private record TextosFijos(String soporteConLaTarjeta, String soporteFormal) implements TextosDeBienvenidaPort {
     }
 }

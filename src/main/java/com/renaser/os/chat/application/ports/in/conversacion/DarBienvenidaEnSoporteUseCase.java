@@ -5,8 +5,8 @@ import com.renaser.os.shared.domain.UserId;
 
 /**
  * Manda la bienvenida de Operaciones al chat de soporte recién nacido (D-174): la tarjeta de
- * Canva con el primer nombre y, si está configurado, el texto de bienvenida, firmados por la
- * cuenta de staff que configure el dueño.
+ * Canva con el primer nombre, el mensaje que la acompaña y el mensaje formal (textos en
+ * {@code bienvenida/mensajes.yaml}, D-190), firmados por la cuenta de staff que configure el dueño.
  *
  * <p>Apagada mientras no haya remitente configurado. Idempotente por destinatario
  * ({@code mensajes_bienvenida}, G-2): una reentrega no la repite. Si algo falla LANZA, para que el
