@@ -1,9 +1,14 @@
 package com.renaser.os.habits.domain.model.horario;
 
+import com.renaser.os.habits.domain.model.habito.Habito;
+import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalInt;
+import java.util.stream.Collectors;
 
 /**
  * Los horarios de UN habito y la pregunta que se hacen todos sus lectores: con que dia del programa
@@ -27,21 +32,73 @@ import java.util.OptionalInt;
  * PRIMER DIA de ese horario ({@link #diaEfectivo}): rige ese horario, con su hora, su guia y su
  * contenido. El registro guarda igual el dia real, que es historia; solo cambia con que dia se lo
  * lee.
+ *
+ * <p><b>D-216 (2026-09-27, TZ-15 del e2e): un habito PERSONAL corre desde que se crea.</b> Su
+ * {@code dia_inicio} no lo elige el programa: es el dia en que la persona estaba cuando lo creo. Asi
+ * que crearlo ya prueba que llego a ese dia con el habito andando, aunque todavia no tenga ningun
+ * registro (los del dia ya estaban generados cuando lo creo, y el primero sale al dia siguiente).
+ * Antes, si el mismo dia la retrocedian, el habito que acababa de crear quedaba con candado
+ * ("FALTAN 5 DIAS") y sin generarse hasta volver a ese dia. Para el catalogo no cambia nada: su
+ * {@code dia_inicio} es del programa y el "ya corrio" sigue saliendo de los registros.
  */
 public final class HorariosDelHabito {
 
     /** Antes del Dia 1 el programa no arranco: no hay retroceso que valga ni habito que haya corrido. */
     private static final int PRIMER_DIA_DEL_PROGRAMA = 1;
 
+    /** Sin nada que pruebe a que dia llego la persona con el habito: el caso del catalogo. */
+    private static final int NINGUN_DIA = 0;
+
     private final List<HorarioHabito> horarios;
 
-    private HorariosDelHabito(List<HorarioHabito> horarios) {
+    /**
+     * El dia del programa al que la persona seguro llego con el habito ya existente, sin leer
+     * registros: el primer dia de un habito PERSONAL, porque lo creo estando en ese dia (D-216).
+     * {@link #NINGUN_DIA} en el catalogo.
+     */
+    private final int diaAlcanzadoAlCrearlo;
+
+    private HorariosDelHabito(List<HorarioHabito> horarios, int diaAlcanzadoAlCrearlo) {
         this.horarios = List.copyOf(horarios);
+        this.diaAlcanzadoAlCrearlo = diaAlcanzadoAlCrearlo;
     }
 
-    /** Los horarios de un mismo habito; la lista puede venir vacia (habito sin horario). */
+    /**
+     * Los horarios de un habito del catalogo; la lista puede venir vacia (habito sin horario). Sirve
+     * tambien, sea de quien sea el habito, para leer un registro YA GENERADO
+     * ({@link #diaEfectivoDeUnRegistro}), que no depende de si ya corrio.
+     */
     public static HorariosDelHabito de(List<HorarioHabito> horarios) {
-        return new HorariosDelHabito(horarios);
+        return new HorariosDelHabito(horarios, NINGUN_DIA);
+    }
+
+    /**
+     * Los horarios de ESE habito: si es PERSONAL, su primer dia cuenta como alcanzado (D-216). Desde
+     * afuera se entra por {@link #porHabito}, que es lo que usan los que deciden si el habito corre
+     * hoy: la generacion, el candado de "Mis habitos" y el horario del dia.
+     */
+    static HorariosDelHabito de(Habito habito, List<HorarioHabito> horarios) {
+        if (habito.esDeSistema()) {
+            return de(horarios);
+        }
+        int primerDia = horarios.stream().mapToInt(HorarioHabito::diaInicio).min().orElse(NINGUN_DIA);
+        return new HorariosDelHabito(horarios, primerDia);
+    }
+
+    /**
+     * Los horarios de varios habitos, uno por habito y con {@link #de(Habito, List)}. Cada habito
+     * tiene su entrada, aunque no tenga horarios.
+     *
+     * @param horarios los de todos esos habitos juntos (una sola consulta de lote, V-5)
+     */
+    public static Map<HabitoId, HorariosDelHabito> porHabito(List<Habito> habitos, List<HorarioHabito> horarios) {
+        Map<HabitoId, List<HorarioHabito>> agrupados = horarios.stream()
+                .collect(Collectors.groupingBy(HorarioHabito::habitoId));
+        Map<HabitoId, HorariosDelHabito> porHabito = new HashMap<>();
+        for (Habito habito : habitos) {
+            porHabito.put(habito.id(), de(habito, agrupados.getOrDefault(habito.id(), List.of())));
+        }
+        return porHabito;
     }
 
     /**
@@ -79,12 +136,16 @@ public final class HorariosDelHabito {
 
     /**
      * Si para resolver ese dia hace falta saber si el habito ya corrio: ningun horario lo cubre,
-     * pero alguno lo cubriria de no ser por su inicio. Existe para no leer los registros en el caso
-     * comun, en que un horario rige o ninguno podria regir.
+     * pero alguno lo cubriria de no ser por su inicio, y eso no esta probado ya sin leer registros
+     * (el primer dia de un habito PERSONAL lo esta, D-216). Existe para no leer los registros en el
+     * caso comun, en que un horario rige o ninguno podria regir.
      */
     public boolean necesitaSaberSiYaCorrio(int diaPrograma, TipoDia tipoDia) {
-        return diaPrograma >= PRIMER_DIA_DEL_PROGRAMA && !algunoAplica(diaPrograma, tipoDia)
-                && primerInicioPorEncima(diaPrograma, tipoDia).isPresent();
+        if (diaPrograma < PRIMER_DIA_DEL_PROGRAMA || algunoAplica(diaPrograma, tipoDia)) {
+            return false;
+        }
+        OptionalInt inicio = primerInicioPorEncima(diaPrograma, tipoDia);
+        return inicio.isPresent() && !yaCorrioDesde(inicio.getAsInt(), null);
     }
 
     /**
@@ -122,8 +183,14 @@ public final class HorariosDelHabito {
                 .mapToInt(HorarioHabito::diaInicio).min();
     }
 
-    /** El criterio de D-196 y D-200: algun registro del habito se genero en un dia &gt;= a ese inicio. */
-    private static boolean yaCorrioDesde(int inicio, Integer diaMasAltoYaGenerado) {
-        return diaMasAltoYaGenerado != null && diaMasAltoYaGenerado >= inicio;
+    /**
+     * El criterio de D-196 y D-200: la persona llego a ese inicio con el habito ya existente. Lo
+     * prueba algun registro del habito generado en un dia &gt;= a ese inicio, o, en un habito
+     * PERSONAL, haberlo creado en ese dia (D-216).
+     */
+    private boolean yaCorrioDesde(int inicio, Integer diaMasAltoYaGenerado) {
+        int alcanzado = Math.max(diaAlcanzadoAlCrearlo,
+                diaMasAltoYaGenerado == null ? NINGUN_DIA : diaMasAltoYaGenerado);
+        return alcanzado >= Math.max(inicio, PRIMER_DIA_DEL_PROGRAMA);
     }
 }

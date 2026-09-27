@@ -27,11 +27,14 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * D-200 de punta a punta, contra Postgres real: el habito PERSONAL que se crea el dia 30 nace con
- * {@code horarios_habito.dia_inicio = 30}. Si la persona ya lo venia haciendo y la retroceden al 25,
- * se le sigue generando y "Mis habitos" no le pone candado; si nunca lo hizo, sigue esperando su dia.
- * Lo que un test con mocks no prueba: que el "ya corrio" salga de los registros que de verdad dejo
- * la generacion, y que el cableado de Spring les de el puerto de registros a los servicios.
+ * D-200 y D-216 de punta a punta, contra Postgres real: el habito PERSONAL que se crea el dia 30 nace
+ * con {@code horarios_habito.dia_inicio = 30}. Si la retroceden al 25, se le sigue generando y "Mis
+ * habitos" no le pone candado, lo haya hecho ya o no: crearlo prueba que llego a su primer dia.
+ * Lo que un test con mocks no prueba: que los servicios reales, con el cableado de Spring, armen los
+ * horarios sabiendo de quien es el habito.
+ *
+ * <p><b>Corregido 2026-09-27 (D-216).</b> Decia «si nunca lo hizo, sigue esperando su dia». TZ-15 del
+ * e2e lo marco como falla P0 y el dueño ya habia decidido que lo propio que venia corriendo sigue.
  *
  * <p>El participante se siembra SIN activar: su dia es la columna {@code dia_programa}
  * ({@code users} la devuelve tal cual mientras el reloj no arranco), asi que el "retroceso" es un
@@ -107,18 +110,29 @@ class RetrocesoConHabitoPropioIT {
         assertThat(vista.diaDesbloqueo()).isEqualTo(30);
     }
 
+    /**
+     * TZ-15 del e2e (D-216): la persona crea su habito el dia 30 y, antes de que se le genere ningun
+     * registro, la retroceden al 25. Crearlo ya prueba que llego al dia 30 con el habito andando: se
+     * le sigue generando y "Mis habitos" no le pone candado.
+     *
+     * <p><b>Corregido 2026-09-27 (D-216).</b> Esta prueba se llamaba «el habito propio del dia 30
+     * que nunca corrio sigue esperando su dia tras bajar al 25» y afirmaba lo contrario: que no se
+     * generaba y viajaba con candado, a 5 dias. Es exactamente lo que el e2e marco como falla P0.
+     */
     @Test
-    @DisplayName("D-200: el habito propio del dia 30 que nunca corrio sigue esperando su dia tras bajar al 25")
-    void unHabitoPropioQueNuncaCorrioSigueEsperando() {
+    @DisplayName("D-216: el habito propio creado el dia 30, sin registros todavia, sigue activo tras bajar al 25")
+    void unHabitoPropioSinRegistrosSigueActivoTrasRetroceder() {
         seedParticipanteEnElDia(30);
         Habito propio = crearHabitoPropio();
 
         pasarAlDia(25);
         List<RegistroHabito> generados = generarUseCase.generar(participanteId, LocalDate.of(2026, 9, 22));
 
-        assertThat(generados).extracting(RegistroHabito::habitoId).doesNotContain(propio.id());
+        assertThat(generados).filteredOn(r -> r.habitoId().equals(propio.id())).singleElement()
+                .satisfies(r -> assertThat(r.diaPrograma()).as("snapshot: el dia real").isEqualTo(25));
         HabitoConDias vista = enMisHabitos(propio);
-        assertThat(vista.bloqueado()).isTrue();
-        assertThat(vista.diasParaDesbloqueo()).isEqualTo(5);
+        assertThat(vista.bloqueado()).isFalse();
+        assertThat(vista.diasParaDesbloqueo()).isZero();
+        assertThat(vista.diaDesbloqueo()).isEqualTo(30);
     }
 }

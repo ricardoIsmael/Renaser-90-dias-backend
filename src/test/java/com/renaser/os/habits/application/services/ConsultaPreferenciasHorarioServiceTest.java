@@ -149,6 +149,29 @@ class ConsultaPreferenciasHorarioServiceTest {
         assertThat(vista.horaLimite()).isEqualTo(LocalTime.of(8, 0));
     }
 
+    /**
+     * TZ-15 (D-216): el habito PROPIO creado el dia 30, sin ningun registro todavia, con la persona
+     * retrocedida al 25. Se le sigue generando, asi que Plan y el acompanante le muestran su hora.
+     * Contra el codigo viejo salia sin hora, como si nunca hubiera corrido.
+     */
+    @Test
+    void unHabitoPropioCreadoAntesDelRetrocesoMuestraSuHoraAunqueNoTengaRegistros() {
+        conProgreso(25, false);
+        Habito propio = Habito.crearPersonal(HabitoId.of(UUID.randomUUID()), actor, "Caminata", TipoHabito.CHECKBOX,
+                "CUERPO", com.renaser.os.habits.domain.model.habito.PlantillaHabitoPersonal.OTRO, null, CLOCK.now());
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of());
+        when(loadHabitoPort.personalesActivosDe(actor)).thenReturn(List.of(propio));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), propio.id(), 30, null, TipoDia.TODOS,
+                        LocalTime.of(6, 0), null, CLOCK.now())));
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
+        when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
+
+        var vista = service.consultar(actor).habitos().get(0);
+
+        assertThat(vista.horaDisparo()).isEqualTo(LocalTime.of(6, 0));
+    }
+
     /** Lo que nunca corrio desde su inicio sigue como antes: todavia no tiene hora que mostrar. */
     @Test
     void unHabitoQueNuncaCorrioDesdeSuInicioSigueSinHora() {

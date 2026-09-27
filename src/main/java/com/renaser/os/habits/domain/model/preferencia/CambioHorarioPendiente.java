@@ -44,9 +44,11 @@ public final class CambioHorarioPendiente {
         // D-122: el cambio diferido se normaliza al programarlo, no al promoverlo. Si no, la
         // ventana que se guarda hoy y la que rige maniana serian dos datos distintos (E-159).
         LocalTime disparo = VentanaDelDia.requireHoraDisparoDentroDelDia(horaDisparo);
+        // PLN-09: la columna de esta tabla es smallint SIN el CHECK de preferencias_horario, asi que
+        // sin esto un 99999 convertido a smallint quedaba negativo sin que nada lo frenara aca.
         return new CambioHorarioPendiente(participanteId, habitoId, disparo,
                 VentanaDelDia.horaLimiteAjustada(disparo, horaLimite), recordatorioActivo,
-                minutosRecordatorio, fechaEfectiva, ahora);
+                AntelacionDelRecordatorio.requireDentroDelRango(minutosRecordatorio), fechaEfectiva, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */

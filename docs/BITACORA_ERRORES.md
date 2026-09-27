@@ -10666,6 +10666,126 @@ app limita el campo al mismo número. Los mensajes del programa no llevan tope: 
 **Cómo evitar que vuelva a pasar.** Todo texto libre que entra por la API lleva un tope, en el dominio y en el
 campo de la app, con el mismo número.
 
+## E-375 · Retroceder el día le pone candado a un hábito propio recién creado: `"unlockDay":30,"daysUntilUnlock":5,"locked":true`
+
+**Síntoma (e2e TZ-15, 2026-09-27, P0).** `e2e-t-ajustado` estaba en su día 30 y creó «Caminata E2E» (`POST /habits` →
+201). El mismo día un admin la pasó al 25 (`PUT /admin/trainees/{id}/program-day` → 204). Antes, «Mis hábitos»
+(`GET /api/v1/habits`) la daba `locked:false, unlockDay:30, daysUntilUnlock:0`; después,
+`{"title":"Caminata E2E",…,"unlockDay":30,"daysUntilUnlock":5,"locked":true}`. Y desde el día siguiente no se generaba:
+iba a esperar a volver al día 30. Lo demás del caso estaba bien (los tracks de hoy no se rehacen, la bitácora anota 30→25).
+
+**Causa real.** `MisHabitosService.crear` le pone al horario de un hábito PERSONAL `dia_inicio` = el día en que la persona lo
+crea. D-200 decide «ya corrió» solo con los registros (`registros_habito.dia_programa ≥ dia_inicio`), y un hábito creado
+después de que se generaran los tracks del día no tiene ninguno: su primer registro sale al día siguiente. Para D-200 «nunca
+corrió» y esperaba su día. No era un descuido: D-200 lo había dejado así a propósito, con pruebas que lo afirmaban
+(`RetrocesoConHabitoPropioIT.unHabitoPropioQueNuncaCorrioSigueEsperando`; `HorariosDelHabitoTest` con un fixture llamado
+`PERSONAL_DEL_DIA_30`). El e2e y la decisión del dueño («un hábito propio que ya venía corriendo se mantiene activo», §9.20
+de la spec del 26/09) lo leen como activo: la persona lo creó y lo tenía sin candado.
+
+**Solución (D-216).** Crear un hábito propio prueba que la persona llegó a su primer día con el hábito andando: para un
+PERSONAL, `HorariosDelHabito` da ese día por alcanzado sin leer registros (`HorariosDelHabito.de(Habito, horarios)` y
+`porHabito`). Lo usan los tres que deciden si el hábito corre hoy, así siguen coincidiendo: la generación
+(`RegistroService`), el candado (`MisHabitosService`) y el horario del día (`ConsultaPreferenciasHorarioService`, que
+también lee el acompañante). El catálogo sigue igual: su `dia_inicio` es del programa y el «ya corrió» sale de los
+registros. Solo cuenta el PRIMER día: un tramo posterior que nunca corrió sigue esperando. No hay migración ni se
+reescribe nada.
+
+**Cómo evitar que vuelva a pasar.** Pruebas que fallaban contra el código viejo: `MisHabitosServiceTest` (sin candado, sin
+registros), `RegistroServiceTest` (se genera, con el reloj a las 03:00 UTC, que en Lima es el día anterior: regla 02) y
+`ConsultaPreferenciasHorarioServiceTest` (muestra su hora). El IT se corrigió con nota visible. Las pruebas de D-200 que
+usaban un hábito personal para probar el criterio de los registros pasaron a uno del catálogo que arranca tarde (como la
+Audioterapia, día 11). **Lección:** cuando «ya pasó» se deriva de una foto (un registro), preguntarse qué casos todavía no
+tienen foto: lo creado hoy recién genera mañana.
+
+**Queda abierto (no se tocó).** El mismo agujero existe en el interruptor del Plan (D-196, `desbloqueos_habito`): un hábito
+tocado un día en que no se le generó registro (por ejemplo uno de domingo tocado un martes, o uno propio tocado el mismo día
+en que se creó) queda afuera si retroceden a la persona por debajo de ese día. «Mis hábitos» no mira esa tabla, así que ahí
+no se ve el candado. Va como pregunta en D-216.
+
+## E-376 · `PATCH /habit-preferences` responde `"limitTime":"09:00:00"` pero guarda 10:00 a 23:50
+
+**Síntoma (e2e PLN-08, 2026-09-27).** Horario por fecha (D-121) del Jugo verde para el 30/09, de 10:00 a 09:00 → 200 con
+`{"triggerTime":"10:00:00","limitTime":"09:00:00",…}`, y en la base (`horarios_habito_por_fecha`) quedó 10:00 a 23:50.
+
+**Causa real.** D-122 decide que una ventana nunca cruza la medianoche: un cierre que queda antes del arranque, o que pasa de
+las 23:50, se ACOMODA a las 23:50 en vez de devolver 400 (`VentanaDelDia.horaLimiteAjustada`, en `PreferenciaHorario.crear`
+y en `CambioHorarioPendiente.programar`). Eso se guardaba bien. Pero `PreferenciaHorarioService.construirResultado`
+devolvía `command.horaDisparo()` y `command.horaLimite()`, lo PEDIDO, y no lo que el dominio había guardado. Por el camino
+sin fecha (cambio general desde mañana) pasaba lo mismo: 22:00 a 02:00 respondía 02:00 y programaba 23:50.
+
+**Solución.** `aplicarEdicion` devuelve las horas tal como quedaron guardadas y la respuesta sale de ahí, en los dos caminos.
+La regla de D-122 no cambió: ventanas que cruzan la medianoche (22:00 a 02:00) no se guardan, se acomodan a las 23:50.
+`VentanaEntrega` sigue sabiendo leer una de antes de D-122, que es el borde que anota el semáforo (§7).
+
+**Cómo evitar que vuelva a pasar.** `PreferenciaHorarioServiceTest` compara la respuesta con lo capturado al guardar, con
+fecha y sin fecha (rojas contra el código viejo: `expected: 23:50 but was: 09:00`). **Lección:** si el dominio normaliza un
+dato, la respuesta sale del objeto del dominio, nunca del pedido.
+
+## E-377 · Recordatorio de −5 o 99999 minutos → 409 «La operacion entra en conflicto con datos que ya existen»
+
+**Síntoma (e2e PLN-09, 2026-09-27).** `PATCH /api/v1/habit-preferences/{id}` con `"reminderMinutesBefore": -5` y con
+`99999` → 409 `{"message":"La operacion entra en conflicto con datos que ya existen"}`. En el log:
+`WARN … 409 -> Conflict: violacion de integridad en la base`.
+
+**Causa real.** Nadie validaba los minutos. La columna es `smallint` con `CHECK (minutos_recordatorio >= 0)` en
+`preferencias_horario` (V1) y `horarios_habito_por_fecha` (V37); en `cambios_horario_pendientes` es `smallint` SIN check. El
+-5 lo frenaba el CHECK; el 99999 no entra en un `smallint` y el mapper lo convierte con `shortValue()` en -31073, que también
+frena el CHECK. `GlobalExceptionHandler` traduce toda violación de integridad a 409 porque está pensado para dos pedidos que
+compiten (el doble toque), no para un dato inválido.
+
+**Solución.** `AntelacionDelRecordatorio` (dominio): de 0 a 32767, el rango que ya tiene la columna. Lo aplican
+`PreferenciaHorario.actualizarRecordatorio` (antes de tocar nada), `CambioHorarioPendiente.programar` y el principio de
+`PreferenciaHorarioService.editar`. Responde 400 «Los minutos del recordatorio deben estar entre 0 y 32767; llegaron -5», sin
+escribir nada. `null` sigue valiendo.
+
+**Cómo evitar que vuelva a pasar.** `RecordatorioFueraDeRangoTest` y `PreferenciaHorarioServiceTest` (rojas contra el código
+viejo). **Lección:** un 409 «conflicto» en un pedido solo, sin concurrencia, casi siempre es una validación que falta y que
+atajó la base: buscar la línea `violacion de integridad` en el log. **Pregunta abierta (D-216):** la app deja elegir de 0 a
+1440 (un día); si el servidor tiene que acotar a eso, lo decide el dueño.
+
+## E-378 · Dos `POST /phase-contracts` seguidos firman dos pactos (IV y II), el segundo sin su firma dibujada
+
+**Síntoma (e2e TRN-21, 2026-09-27).** `e2e-t-dia84`, con tres pactos pendientes: `POST /api/v1/phase-contracts` (sin
+cuerpo) → 201 `"phase":"FASE_4_ASCENSION"`, y el segundo, enseguida → 201 `"phase":"FASE_2_DESARROLLO"`. En la base
+quedaron los dos (`e2e-t-dia84@renaser.test:FASE_4_ASCENSION, e2e-t-dia84@renaser.test:FASE_2_DESARROLLO`).
+
+**Causa real.** Desde D-193 el `POST` firma «el pacto que toca» (`FasePrograma.faseAFirmar`) y el pedido no dice cuál. Firmado
+el IV, el que toca pasa a ser el II, así que repetir el pedido (un doble toque, un reintento) firma OTRO pacto, sin la firma
+dibujada que se subió para el primero. D-193 ya lo había anotado como riesgo y recomendaba que el cliente mande la fase.
+
+**Solución (D-216).** `POST /phase-contracts` acepta un cuerpo OPCIONAL `{"phase":"FASE_4_ASCENSION"}`, el mismo valor que
+devuelve `GET /pending`. Con la fase: si ya está firmado devuelve el que estaba (idempotente); si no, tiene que ser el que toca
+(409 «Ahora te toca firmar el pacto de …» si es otro). Sin cuerpo: firma solo si hay UN pendiente; con dos o más responde 409
+«Tienes 3 pactos por firmar: indica cual firmas. Ahora toca el de Fase IV · El Ascenso», sin firmar nada. El orden no cambió:
+el de D-193 (en el día 84, IV, II, III). Ningún cliente llama hoy a este endpoint (ni el APK en producción ni la app de
+`integracion-27`), así que no se rompe nadie; el cambio del pedido es aditivo y la respuesta no cambió.
+
+**Cómo evitar que vuelva a pasar.** `ContratoServiceTest.unDobleEnvioSinFaseNuncaFirmaDosPactos` (roja contra el código
+viejo: dos pactos firmados), más la idempotencia con fase, el 409 sin fase y el orden IV, II, III; `ContratoControllerTest`
+(cuerpo opcional). La prueba que prohibía el campo `fase` en el comando (§5.3.3) se corrigió con nota visible: la fase no
+elige qué se firma. **Lección:** un endpoint cuyo objetivo lo decide el servidor con estado que cambia no es idempotente; el
+pedido tiene que llevar la intención. **Efecto en el e2e:** los pasos que firman sin cuerpo con dos o más pendientes (TZ-16,
+TRN-21) ahora reciben 409 y tienen que mandar la fase.
+
+## E-379 · `PUT /journal/today` con 1 MB de texto → 200 y se guardan los 1.048.576 caracteres
+
+**Síntoma (e2e TRN-18, 2026-09-27).** `PUT /api/v1/journal/today` con 1 MB de texto → 200
+`{"date":"2026-09-27","type":"BITACORA_NOCTURNA","exists":true,"textContent":"Renaser e2e 1MB. …"}` y el largo guardado es
+`1048576`.
+
+**Causa real.** La bitácora no tenía tope en ningún lado: ni en el pedido, ni en `EntradaDiario`, y
+`entradas_diario.contenido_texto` es `text`.
+
+**Solución.** `EntradaDiario.TEXTO_MAXIMO_CARACTERES = 4000`, contados como caracteres de persona (un emoji es uno), en
+`escribir` y en `actualizarTexto`: 400 «El texto puede tener hasta 4000 caracteres y este tiene 1048576», sin guardar nada.
+Vale igual para el `PUT` y para la bitácora que guarda el acompañante. 4000 es el tope que ya tiene el texto de un hábito de
+escritura (`CompletarRegistroRequest.respuestaTexto`); el número lo confirma el dueño (pregunta de D-216). Una fila vieja más
+larga se sigue leyendo.
+
+**Cómo evitar que vuelva a pasar.** `EntradaDiarioTest` y `BitacoraNocturnaServiceTest` (rojas contra el código viejo).
+**Queda afuera:** SEG-16 encontró lo mismo en la biografía, el departamento (`users`) y el chat (`chat`), que son de otros
+encargos en paralelo; no se tocaron.
+
 ## E-380 · Un solo toque en un Despertar o Dormir ya cumplido: «No pudimos registrar la hora / Este registro no puede completarse: COMPLETADO»
 
 **Síntoma (2026-09-27, e2e web TRN-02).** No hacía falta el doble toque: tocar la tarjeta o «VER» de un Despertar o

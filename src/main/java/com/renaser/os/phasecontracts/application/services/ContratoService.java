@@ -80,23 +80,64 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
     @Override
     @Transactional
     public ContratoFase firmar(FirmarContratoCommand command) {
-        ProgresoParticipante progreso = requireProgreso(command.participanteId(), ROLES_PUEDEN_FIRMAR);
-        int dia = progreso.diaPrograma();
-        FasePrograma pendiente = FasePrograma.faseAFirmar(dia, fasesFirmadas(command.participanteId()));
-        FasePrograma fase = pendiente != null ? pendiente : FasePrograma.paraDiaPrograma(dia);
+        UserId participante = command.participanteId();
+        int dia = requireProgreso(participante, ROLES_PUEDEN_FIRMAR).diaPrograma();
+        List<ContratoFase> firmados = loadContratoPort.todosDeParticipante(participante);
+        return command.fase() != null
+                ? firmarLaFasePedida(participante, command.fase(), dia, firmados)
+                : firmarSinFasePedida(participante, dia, fasesDe(firmados));
+    }
 
-        if (pendiente == null && fase != FasePrograma.FASE_1_RENACER) {
-            Optional<ContratoFase> existente = loadContratoPort.porParticipanteYFase(command.participanteId(), fase);
+    /**
+     * D-216 (TRN-21 del e2e): el pedido dice que pacto firma, asi que repetirlo no firma otro. Si ese
+     * pacto ya esta firmado se devuelve el que estaba (idempotente, nunca se sobreescribe). Si no, tiene
+     * que ser el que toca ahora (D-193): otro ya desbloqueado es un 409 que dice cual toca. La Fase I y
+     * una fase que todavia no llego las rechaza el dominio, con los 400 de siempre.
+     */
+    private ContratoFase firmarLaFasePedida(UserId participante, FasePrograma pedida, int dia,
+                                            List<ContratoFase> firmados) {
+        Optional<ContratoFase> yaFirmado = firmados.stream().filter(c -> c.fase() == pedida).findFirst();
+        if (yaFirmado.isPresent()) {
+            return yaFirmado.get();
+        }
+        FasePrograma toca = FasePrograma.faseAFirmar(dia, fasesDe(firmados));
+        if (pedida != toca && pedida.firmaDesbloqueadaEnDia(dia)) {
+            throw new IllegalStateException("Ahora te toca firmar el pacto de " + toca.etiqueta()
+                    + ", no el de " + pedida.etiqueta());
+        }
+        return guardarFirma(participante, pedida, dia);
+    }
+
+    /**
+     * El pedido que no dice que pacto firma (el unico que habia antes de D-216). Firma el que toca si es
+     * el UNICO pendiente. Con dos o mas es ambiguo: un doble envio firmaba el primero y enseguida el
+     * siguiente, este sin su firma dibujada (TRN-21), asi que se pide la fase (409). Sin pendientes, lo
+     * de siempre: devuelve el de la fase en curso si ya esta firmado, o el dominio rechaza (Fase I, o
+     * fase sin desbloquear).
+     */
+    private ContratoFase firmarSinFasePedida(UserId participante, int dia, Set<FasePrograma> firmadas) {
+        List<FasePrograma> pendientes = FasePrograma.pendientes(dia, firmadas);
+        if (pendientes.size() > 1) {
+            throw new IllegalStateException("Tienes " + pendientes.size() + " pactos por firmar: indica cual "
+                    + "firmas. Ahora toca el de " + pendientes.getFirst().etiqueta());
+        }
+        FasePrograma fase = pendientes.isEmpty() ? FasePrograma.paraDiaPrograma(dia) : pendientes.getFirst();
+        if (pendientes.isEmpty() && fase != FasePrograma.FASE_1_RENACER) {
+            Optional<ContratoFase> existente = loadContratoPort.porParticipanteYFase(participante, fase);
             if (existente.isPresent()) {
                 return existente.get(); // idempotente: nunca sobreescribe (service.ts:94-99)
             }
         }
+        return guardarFirma(participante, fase, dia);
+    }
 
-        // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
-        // Sin pendiente, `ContratoFase.firmar` rechaza igual que antes (Fase I, o fase sin desbloquear).
-        ContratoFase firmado = ContratoFase.firmar(ContratoFaseId.of(idGenerator.newId()),
-                command.participanteId(), fase, dia, clock);
-        return saveContratoPort.save(firmado);
+    /**
+     * La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
+     * {@code ContratoFase.firmar} rechaza la Fase I y una fase sin desbloquear (400).
+     */
+    private ContratoFase guardarFirma(UserId participante, FasePrograma fase, int dia) {
+        return saveContratoPort.save(ContratoFase.firmar(ContratoFaseId.of(idGenerator.newId()), participante,
+                fase, dia, clock));
     }
 
     @Override
@@ -148,7 +189,11 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
      * {@link FasePrograma#faseAFirmar} deja la regla en un solo lugar para pendiente, URL y firma.
      */
     private Set<FasePrograma> fasesFirmadas(UserId participanteId) {
-        return loadContratoPort.todosDeParticipante(participanteId).stream()
+        return fasesDe(loadContratoPort.todosDeParticipante(participanteId));
+    }
+
+    private static Set<FasePrograma> fasesDe(List<ContratoFase> firmados) {
+        return firmados.stream()
                 .map(ContratoFase::fase)
                 .collect(Collectors.toUnmodifiableSet());
     }

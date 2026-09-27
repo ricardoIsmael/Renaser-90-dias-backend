@@ -358,4 +358,114 @@ class ContratoServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         verify(saveContratoPort, never()).save(any());
     }
+
+    // ── TRN-21 (e2e del 2026-09-27): un doble envio no firma dos pactos ────────
+
+    /** Los pactos "en la base": lo que firma una llamada lo ve la siguiente, como pasa de verdad. */
+    private List<ContratoFase> conPactosEnMemoria() {
+        List<ContratoFase> firmados = new java.util.ArrayList<>();
+        when(loadContratoPort.todosDeParticipante(participanteId)).thenAnswer(inv -> List.copyOf(firmados));
+        lenient().when(saveContratoPort.save(any())).thenAnswer(inv -> {
+            ContratoFase contrato = inv.getArgument(0);
+            firmados.add(contrato);
+            return contrato;
+        });
+        return firmados;
+    }
+
+    /**
+     * TRN-21: dia 84 sin ningun pacto firmado, asi que hay tres pendientes (IV, II y III, D-193). El
+     * {@code POST} no decia que fase firmaba: dos seguidos (un doble toque) firmaban el IV y
+     * enseguida el II, este sin su firma dibujada. Un doble envio nunca puede firmar dos pactos.
+     * Contra el codigo viejo quedan dos firmados.
+     */
+    @Test
+    @DisplayName("TRN-21: dos firmas seguidas sin fase, con varios pactos pendientes, nunca firman dos pactos")
+    void unDobleEnvioSinFaseNuncaFirmaDosPactos() {
+        progreso(84, RolParticipante.TRAINEE, false);
+        List<ContratoFase> firmados = conPactosEnMemoria();
+
+        for (int envio = 1; envio <= 2; envio++) {
+            try {
+                service.firmar(new FirmarContratoCommand(participanteId));
+            } catch (IllegalStateException rechazadoConConflicto) {
+                // 409: tambien vale. Lo que no vale es que el segundo envio firme OTRO pacto.
+            }
+        }
+
+        assertThat(firmados).as("pactos firmados por el doble envio").hasSizeLessThanOrEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("D-216: sin fase y con varios pendientes -> 409 que dice cuantos hay y cual toca, sin firmar nada")
+    void sinFaseConVariosPendientesPideLaFase() {
+        progreso(84, RolParticipante.TRAINEE, false);
+        when(loadContratoPort.todosDeParticipante(participanteId)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.firmar(new FirmarContratoCommand(participanteId)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("3 pactos por firmar")
+                .hasMessageContaining(FasePrograma.FASE_4_ASCENSION.etiqueta());
+        verify(saveContratoPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("D-216: con la fase en el pedido, el doble envio firma una sola vez y devuelve el mismo pacto")
+    void conLaFaseElDobleEnvioEsIdempotente() {
+        progreso(84, RolParticipante.TRAINEE, false);
+        List<ContratoFase> firmados = conPactosEnMemoria();
+
+        ContratoFase primero = service.firmar(new FirmarContratoCommand(participanteId, FasePrograma.FASE_4_ASCENSION));
+        ContratoFase segundo = service.firmar(new FirmarContratoCommand(participanteId, FasePrograma.FASE_4_ASCENSION));
+
+        assertThat(firmados).extracting(ContratoFase::fase).containsExactly(FasePrograma.FASE_4_ASCENSION);
+        assertThat(segundo).isEqualTo(primero);
+        assertThat(primero.rutaFirma())
+                .isEqualTo(ContratoFase.rutaFirma(participanteId, FasePrograma.FASE_4_ASCENSION));
+    }
+
+    @Test
+    @DisplayName("D-216: con la fase, los tres atrasados del dia 84 se firman en el orden de D-193 (IV, II, III)")
+    void conLaFaseSeFirmanLosTresEnElOrdenDeD193() {
+        progreso(84, RolParticipante.TRAINEE, false);
+        List<ContratoFase> firmados = conPactosEnMemoria();
+
+        for (FasePrograma fase : List.of(FasePrograma.FASE_4_ASCENSION, FasePrograma.FASE_2_DESARROLLO,
+                FasePrograma.FASE_3_GUERRERO_ALQUIMISTA)) {
+            assertThat(service.consultarPendiente(participanteId).fase()).isEqualTo(fase);
+            service.firmar(new FirmarContratoCommand(participanteId, fase));
+        }
+
+        assertThat(firmados).extracting(ContratoFase::fase).containsExactly(FasePrograma.FASE_4_ASCENSION,
+                FasePrograma.FASE_2_DESARROLLO, FasePrograma.FASE_3_GUERRERO_ALQUIMISTA);
+        assertThat(service.consultarPendiente(participanteId).pendiente()).isFalse();
+    }
+
+    @Test
+    @DisplayName("D-216: una fase desbloqueada que no es la que toca -> 409 que dice cual toca, sin firmar")
+    void unaFaseQueNoEsLaQueTocaSeRechaza() {
+        progreso(84, RolParticipante.TRAINEE, false);
+        when(loadContratoPort.todosDeParticipante(participanteId)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.firmar(
+                new FirmarContratoCommand(participanteId, FasePrograma.FASE_2_DESARROLLO)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(FasePrograma.FASE_4_ASCENSION.etiqueta());
+        verify(saveContratoPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("D-216: con la fase, la Fase I y una fase que todavia no llego siguen siendo 400")
+    void conLaFaseLosRechazosDelDominioSiguenIgual() {
+        progreso(20, RolParticipante.TRAINEE, false);
+        when(loadContratoPort.todosDeParticipante(participanteId)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.firmar(
+                new FirmarContratoCommand(participanteId, FasePrograma.FASE_1_RENACER)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("onboarding");
+        assertThatThrownBy(() -> service.firmar(
+                new FirmarContratoCommand(participanteId, FasePrograma.FASE_3_GUERRERO_ALQUIMISTA)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("dia 35");
+        verify(saveContratoPort, never()).save(any());
+    }
 }

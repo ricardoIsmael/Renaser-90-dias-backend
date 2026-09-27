@@ -22,6 +22,14 @@ import java.util.Objects;
 @EqualsAndHashCode(of = "id")
 public final class EntradaDiario {
 
+    /**
+     * Largo maximo del texto, en caracteres (TRN-18 del e2e, 2026-09-27). No habia ninguno: un
+     * {@code PUT /journal/today} con 1 MB respondia 200 y se guardaba entero. 4000 es el tope que ya
+     * tiene el texto de un habito de escritura ({@code CompletarRegistroRequest.respuestaTexto}),
+     * que es el mismo tipo de escrito; el numero lo confirma el dueño (pregunta de D-216).
+     */
+    public static final int TEXTO_MAXIMO_CARACTERES = 4_000;
+
     private final EntradaDiarioId id;
     private final UserId participanteId;
     private final LocalDate fecha;
@@ -45,7 +53,7 @@ public final class EntradaDiario {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Objects.requireNonNull(fecha, "fecha es obligatoria");
         Objects.requireNonNull(tipo, "tipo es obligatorio");
-        return new EntradaDiario(id, participanteId, fecha, tipo, contenidoTexto, null, null,
+        return new EntradaDiario(id, participanteId, fecha, tipo, requireDentroDelTope(contenidoTexto), null, null,
                 null, ahora, ahora);
     }
 
@@ -59,8 +67,25 @@ public final class EntradaDiario {
     }
 
     public void actualizarTexto(String contenidoTexto, Instant ahora) {
-        this.contenidoTexto = contenidoTexto;
+        this.contenidoTexto = requireDentroDelTope(contenidoTexto);
         this.actualizadoEn = ahora;
+    }
+
+    /**
+     * Cuenta caracteres como los cuenta una persona (un emoji es uno), no unidades UTF-16. Sin texto
+     * vale: una entrada puede ser solo audio. Una fila vieja mas larga se sigue leyendo
+     * ({@link #rehydrate} no pasa por aca); lo que no se puede es escribir una nueva.
+     */
+    private static String requireDentroDelTope(String texto) {
+        if (texto == null) {
+            return null;
+        }
+        int caracteres = texto.codePointCount(0, texto.length());
+        if (caracteres > TEXTO_MAXIMO_CARACTERES) {
+            throw new IllegalArgumentException("El texto puede tener hasta " + TEXTO_MAXIMO_CARACTERES
+                    + " caracteres y este tiene " + caracteres);
+        }
+        return texto;
     }
 
     public void adjuntarAudio(String bucket, String ruta, Instant ahora) {

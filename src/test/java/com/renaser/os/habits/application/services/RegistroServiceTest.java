@@ -564,25 +564,38 @@ class RegistroServiceTest {
         when(loadHorarioPort.porHabitos(List.of(habito.id()))).thenReturn(List.of(horario));
     }
 
+    /** Como {@link #conUnHabitoPersonal}, pero del catalogo: su {@code dia_inicio} es del programa. */
+    private void conUnHabitoDelCatalogo(UserId participante, Habito habito, int diaDeHoy, HorarioHabito horario) {
+        when(progresoPort.deParticipante(participante)).thenReturn(Optional.of(
+                new ProgresoParticipanteHabits(diaDeHoy, "America/Lima", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
+        when(loadHabitoPort.personalesActivosDe(participante)).thenReturn(List.of());
+        when(loadHorarioPort.porHabitos(List.of(habito.id()))).thenReturn(List.of(horario));
+    }
+
     /**
-     * El caso que quedo abierto en D-196: el habito PERSONAL creado el dia 30 nace con
-     * {@code dia_inicio = 30}. La persona lo hizo del 30 al 32 y un admin la retrocede al 25.
-     * Contra el codigo viejo {@code generados} sale vacio.
+     * Un habito del catalogo que arranca tarde, como la Audioterapia (dia 11). La persona lo hizo del
+     * 11 al 12 y un admin la retrocede al 9. Contra el codigo anterior a D-200 {@code generados}
+     * salia vacio.
+     *
+     * <p><b>Corregido 2026-09-27 (D-216).</b> Esta prueba y la siguiente usaban el habito PERSONAL
+     * del dia 30. Desde D-216 crear un habito personal ya prueba que la persona llego a su primer
+     * dia (se prueba abajo, TZ-15), asi que el criterio de los registros se prueba con el catalogo.
      */
     @Test
-    @DisplayName("D-200: tras retroceder al 25, un habito PERSONAL creado el dia 30 que ya corrio se sigue generando")
-    void retrocederNoApagaUnHabitoPersonalQueYaCorria() {
+    @DisplayName("D-200: tras retroceder al 9, un habito del catalogo que arranca el 11 y ya corrio se sigue generando")
+    void retrocederNoApagaUnHabitoDelCatalogoQueYaCorria() {
         UserId participante = participante();
-        Habito personal = habitoPersonalDe(participante);
-        conUnHabitoPersonal(participante, personal, 25, horarioDesdeElDia(personal.id(), 30, TipoDia.TODOS));
-        when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(participante, List.of(personal.id())))
-                .thenReturn(Map.of(personal.id(), 32));
+        Habito audioterapia = habitoCheckbox();
+        conUnHabitoDelCatalogo(participante, audioterapia, 9, horarioDesdeElDia(audioterapia.id(), 11, TipoDia.TODOS));
+        when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(participante, List.of(audioterapia.id())))
+                .thenReturn(Map.of(audioterapia.id(), 12));
 
         List<RegistroHabito> generados = service.generar(participante, LocalDate.of(2026, 8, 24));
 
-        assertThat(generados).extracting(RegistroHabito::habitoId).containsExactly(personal.id());
+        assertThat(generados).extracting(RegistroHabito::habitoId).containsExactly(audioterapia.id());
         assertThat(generados.get(0).diaPrograma()).as("el snapshot es el dia REAL, no el del horario")
-                .isEqualTo(25);
+                .isEqualTo(9);
     }
 
     /** Registros anteriores al inicio del horario no cuentan: ese habito nunca llego a correr desde ahi. */
@@ -590,12 +603,41 @@ class RegistroServiceTest {
     @DisplayName("D-200: un habito cuyo horario arranca despues y nunca corrio desde ahi sigue esperando su dia")
     void unHabitoQueNuncaCorrioDesdeSuInicioSigueEsperando() {
         UserId participante = participante();
-        Habito personal = habitoPersonalDe(participante);
-        conUnHabitoPersonal(participante, personal, 25, horarioDesdeElDia(personal.id(), 30, TipoDia.TODOS));
-        when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(participante, List.of(personal.id())))
-                .thenReturn(Map.of(personal.id(), 29));
+        Habito audioterapia = habitoCheckbox();
+        conUnHabitoDelCatalogo(participante, audioterapia, 9, horarioDesdeElDia(audioterapia.id(), 11, TipoDia.TODOS));
+        when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(participante, List.of(audioterapia.id())))
+                .thenReturn(Map.of(audioterapia.id(), 10));
 
         assertThat(service.generar(participante, LocalDate.of(2026, 8, 24))).isEmpty();
+    }
+
+    /**
+     * TZ-15 (e2e del 2026-09-27, D-216), con el reloj en madrugada UTC (regla 03): el 28/09 a las
+     * 03:00 UTC en Lima todavia es el 27 a las 22:00. La persona creo su habito propio el dia 30,
+     * cuando los registros de ese dia ya estaban hechos, y la retrocedieron al 25: no tiene ningun
+     * registro, pero lo creo estando en el dia 30, asi que venia corriendo. Se genera para el 27 de
+     * Lima con el dia REAL como snapshot. Contra el codigo viejo no se generaba hasta volver al 30.
+     */
+    @Test
+    @DisplayName("TZ-15: tras retroceder al 25, un habito propio creado el dia 30 sin registros todavia se sigue generando")
+    void unHabitoPropioCreadoAntesDelRetrocesoSeGeneraAunqueNoTengaRegistros() {
+        RegistroService deMadrugada = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort,
+                loadHorarioPort, loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder,
+                loadDesbloqueoPort, events, FixedClock.at(Instant.parse("2026-09-28T03:00:00Z")), idGenerator,
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()),
+                transactionManager);
+        UserId participante = participante();
+        Habito personal = habitoPersonalDe(participante);
+        conUnHabitoPersonal(participante, personal, 25, horarioDesdeElDia(personal.id(), 30, TipoDia.TODOS));
+
+        List<RegistroHabito> generados = deMadrugada.generarDiaCompletoEnSuZona(participante);
+
+        assertThat(generados).singleElement().satisfies(registro -> {
+            assertThat(registro.habitoId()).isEqualTo(personal.id());
+            assertThat(registro.fechaEjecucion()).as("el dia de Lima, no el del servidor")
+                    .isEqualTo(LocalDate.of(2026, 9, 27));
+            assertThat(registro.diaPrograma()).as("snapshot: el dia real").isEqualTo(25);
+        });
     }
 
     /** El barrido del padron no paga una consulta mas cuando nada quedo por encima del dia de hoy. */

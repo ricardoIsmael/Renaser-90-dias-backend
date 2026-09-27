@@ -60,9 +60,13 @@ public final class PreferenciaHorario {
         this.actualizadoEn = ahora;
     }
 
+    /**
+     * PLN-09: los minutos se validan ANTES de tocar nada, asi un rechazo no deja la preferencia a
+     * medio escribir ({@link AntelacionDelRecordatorio}).
+     */
     public void actualizarRecordatorio(boolean activo, Integer minutosAntes, Instant ahora) {
+        this.minutosRecordatorio = AntelacionDelRecordatorio.requireDentroDelRango(minutosAntes);
         this.recordatorioActivo = activo;
-        this.minutosRecordatorio = minutosAntes;
         this.actualizadoEn = ahora;
     }
 

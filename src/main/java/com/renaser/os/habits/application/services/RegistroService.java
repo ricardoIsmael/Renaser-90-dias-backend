@@ -334,11 +334,13 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
                 .collect(Collectors.toCollection(HashSet::new));
     }
 
-    /** Los horarios de todo el catalogo del participante, en UNA consulta (V-5), agrupados por habito. */
+    /**
+     * Los horarios de todo el catalogo del participante, en UNA consulta (V-5), agrupados por habito
+     * y con el habito al lado: el primer dia de uno PERSONAL ya esta alcanzado (D-216, TZ-15).
+     */
     private Map<HabitoId, HorariosDelHabito> horariosDe(List<Habito> catalogo) {
-        return loadHorarioPort.porHabitos(catalogo.stream().map(Habito::id).toList()).stream()
-                .collect(Collectors.groupingBy(HorarioHabito::habitoId,
-                        Collectors.collectingAndThen(Collectors.toList(), HorariosDelHabito::de)));
+        return HorariosDelHabito.porHabito(catalogo,
+                loadHorarioPort.porHabitos(catalogo.stream().map(Habito::id).toList()));
     }
 
     /**

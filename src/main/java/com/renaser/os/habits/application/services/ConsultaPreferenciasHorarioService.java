@@ -106,9 +106,8 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
             return List.of();
         }
         Set<HabitoId> ids = habitos.stream().map(Habito::id).collect(Collectors.toSet());
-        Map<HabitoId, HorariosDelHabito> horarios = loadHorarioPort.porHabitos(ids).stream()
-                .collect(Collectors.groupingBy(HorarioHabito::habitoId,
-                        Collectors.collectingAndThen(Collectors.toList(), HorariosDelHabito::de)));
+        // D-216 (TZ-15): con el habito al lado, porque el primer dia de uno PERSONAL ya esta alcanzado.
+        Map<HabitoId, HorariosDelHabito> horarios = HorariosDelHabito.porHabito(habitos, loadHorarioPort.porHabitos(ids));
         Map<HabitoId, PreferenciaHorario> preferencias = loadPreferenciaPort.porParticipanteHabitosYFecha(actorId, ids, hoy)
                 .stream().collect(Collectors.toMap(PreferenciaHorario::habitoId, p -> p));
         Map<HabitoId, CambioHorarioPendiente> programados = loadCambioPendientePort.deParticipante(actorId).stream()

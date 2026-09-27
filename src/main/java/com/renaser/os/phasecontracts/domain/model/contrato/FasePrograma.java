@@ -1,5 +1,7 @@
 package com.renaser.os.phasecontracts.domain.model.contrato;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 public enum FasePrograma {
@@ -77,17 +79,33 @@ public enum FasePrograma {
      * @param firmadas las fases que la persona ya firmó
      */
     public static FasePrograma faseAFirmar(int diaProgramaActual, Set<FasePrograma> firmadas) {
+        List<FasePrograma> pendientes = pendientes(diaProgramaActual, firmadas);
+        return pendientes.isEmpty() ? null : pendientes.getFirst();
+    }
+
+    /**
+     * Todos los pactos pendientes, en el orden en que se ofrecen (D-193): el de la fase en curso primero,
+     * si ya se desbloqueó y no se firmó; después los que quedaron atrás, del más viejo al más nuevo. En el
+     * día 84 sin nada firmado: IV, II, III. Vacía si no hay ninguno. {@link #faseAFirmar} es el primero.
+     *
+     * <p>Existe desde D-216 (TRN-21 del e2e): con dos o más pendientes, un pedido de firma que no dice la
+     * fase es ambiguo, y quien lo atiende necesita saber cuántos hay, no solo cuál va primero.
+     *
+     * @param firmadas las fases que la persona ya firmó
+     */
+    public static List<FasePrograma> pendientes(int diaProgramaActual, Set<FasePrograma> firmadas) {
         FasePrograma actual = paraDiaPrograma(diaProgramaActual);
+        List<FasePrograma> pendientes = new ArrayList<>();
         if (actual.firmaDesbloqueadaEnDia(diaProgramaActual) && !firmadas.contains(actual)) {
-            return actual;
+            pendientes.add(actual);
         }
         for (FasePrograma anterior : values()) {
             boolean quedoAtras = anterior.numero < actual.numero;
             if (quedoAtras && anterior.firmaDesbloqueadaEnDia(diaProgramaActual) && !firmadas.contains(anterior)) {
-                return anterior;
+                pendientes.add(anterior);
             }
         }
-        return null;
+        return List.copyOf(pendientes);
     }
 
     /** Inverso de {@link #numero()} — usado por ContratoFaseFinder (api) para no exponer este enum afuera. */

@@ -18,6 +18,7 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
+import com.renaser.os.habits.domain.model.preferencia.AntelacionDelRecordatorio;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.habits.domain.model.preferencia.CuotaEdicionHorario;
 import com.renaser.os.habits.domain.model.preferencia.HorarioPorFecha;
@@ -96,6 +97,8 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         Habito habito = requireHabito(command.habitoId());
         VentanaDelDia.requireHoraDisparoDentroDelDia(command.horaDisparo());
+        // PLN-09: un dato invalido es un 400 con el rango, antes de leer cuotas o escribir nada.
+        AntelacionDelRecordatorio.requireDentroDelRango(command.minutosRecordatorio());
         requirePropio(command.actorId(), habito);
         if (!habito.activo()) throw new IllegalArgumentException("El habito no esta activo");
 
@@ -103,9 +106,9 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         Instant ahora = clock.now();
 
         ContextoCuota contexto = resolverContextoCuota(command, habito, progreso.diaPrograma(), zona, ahora);
-        aplicarEdicion(command, contexto, ahora);
+        HorarioGuardado guardado = aplicarEdicion(command, contexto, ahora);
 
-        return construirResultado(command, contexto);
+        return construirResultado(command, contexto, guardado);
     }
 
     /**
@@ -172,21 +175,33 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         }
     }
 
-    /** Con fecha guarda una excepcion puntual. Sin fecha conserva el cambio general diferido legado. */
-    private void aplicarEdicion(EditarPreferenciaHorarioCommand command, ContextoCuota contexto, Instant ahora) {
+    /**
+     * Con fecha guarda una excepcion puntual. Sin fecha conserva el cambio general diferido legado.
+     *
+     * <p>Devuelve las horas TAL COMO QUEDARON GUARDADAS (PLN-08 del e2e, 2026-09-27): el dominio
+     * acomoda el cierre a las 23:50 cuando queda antes del arranque o pasa de esa hora (D-122), y la
+     * respuesta devolvia el cierre pedido. Con 10:00 a 09:00 decia 09:00 y la base tenia 23:50.
+     */
+    private HorarioGuardado aplicarEdicion(EditarPreferenciaHorarioCommand command, ContextoCuota contexto,
+                                           Instant ahora) {
         if (command.fecha() != null) {
             var preferencia = PreferenciaHorario.crear(command.actorId(), command.habitoId(),
                     command.horaDisparo(), command.horaLimite(), ahora);
             preferencia.actualizarRecordatorio(command.recordatorioActivo(), command.minutosRecordatorio(), ahora);
             var horario = new HorarioPorFecha(command.fecha(), preferencia);
             savePreferenciaPort.saveParaFecha(horario);
-            return;
+            return new HorarioGuardado(preferencia.horaDisparo(), preferencia.horaLimite());
         }
         asegurarPreferenciaYRecordatorio(command, contexto.ventanaVigente(), ahora);
         CambioHorarioPendiente pendiente = CambioHorarioPendiente.programar(command.actorId(), command.habitoId(),
                 command.horaDisparo(), command.horaLimite(), command.recordatorioActivo(),
                 command.minutosRecordatorio(), contexto.fechaEfectivaDiferido(), ahora);
         saveCambioPendientePort.save(pendiente);
+        return new HorarioGuardado(pendiente.horaDisparo(), pendiente.horaLimite());
+    }
+
+    /** Las horas que quedaron guardadas, ya acomodadas por el dominio (D-122): las que se responden. */
+    private record HorarioGuardado(LocalTime horaDisparo, LocalTime horaLimite) {
     }
 
     /**
@@ -258,9 +273,11 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
      * esta editando ({@code habitoLibre}). Un cambio DIFERIDO tampoco suma aca: recien cobra
      * cupo el dia que pasa a regir (ver {@code PromocionCambioHorarioService}).
      * Ver docs/MODULO_HABITS.md.
+     *
+     * <p>Las horas son las GUARDADAS, no las pedidas (PLN-08): {@code guardado}.
      */
     private static ResultadoEdicionPreferencia construirResultado(EditarPreferenciaHorarioCommand command,
-                                                                    ContextoCuota contexto) {
+                                                                    ContextoCuota contexto, HorarioGuardado guardado) {
         // D-91: el habito que se acaba de editar SIEMPRE cuenta. Antes se lo excluia cuando el
         // cambio era diferido, porque entonces "diferido" queria decir "todavia no cobra"; ahora
         // todo cambio deja un pendiente que va a regir manana, y `habitosConCupoComprometido` ya
@@ -277,7 +294,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
             usados = conjunto.size();
         }
         CuotaEdicionHorario cuota = CuotaEdicionHorario.de(usados, contexto.semanaLibreGlobal());
-        return new ResultadoEdicionPreferencia(command.habitoId(), command.horaDisparo(), command.horaLimite(),
+        return new ResultadoEdicionPreferencia(command.habitoId(), guardado.horaDisparo(), guardado.horaLimite(),
                 true, contexto.fechaEfectivaDiferido(), cuota.usados(), cuota.restantes(),
                 cuota.limite(), cuota.periodo());
     }

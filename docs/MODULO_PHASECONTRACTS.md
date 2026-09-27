@@ -116,7 +116,7 @@ El repo viejo no tenía "pedir URL prefirmada" porque la app subía directo a Su
 
 1. **`POST /api/v1/phase-contracts/upload-url`** (nuevo) — el servidor deriva la fase A FIRMAR del participante: la en curso o, si esa no está pendiente, la atrasada más vieja (`FasePrograma.faseAFirmar`, D-193; mismo cálculo que firmar; *corregido 2026-09-27, decía «la fase EN CURSO»*), calcula la ruta **determinística** `firmas/{participanteId}/fase_{N}.svg` (`ContratoFase.rutaFirma`) y devuelve una URL PUT prefirmada (`AlmacenamientoPort.firmarSubida`, 10 min de validez). La ruta nunca la elige el cliente — mismo blindaje anti mass-assignment que el `role` ausente en `users`.
 2. La app sube el SVG directo a esa URL (fuera de esta API).
-3. **`POST /api/v1/phase-contracts`** (preservado) — ya no recibe body: el servidor ya sabe la ruta (es determinística), solo falta registrar el pacto. Persiste `bucket` (siempre `onboarding-signatures`, el mismo default que ya tenía la tabla) + la ruta calculada + `firmado_en`. Idéntico bloqueo de negocio que el repo viejo (Fase I rechazada, día no desbloqueado rechazado, ya firmada → idempotente).
+3. **`POST /api/v1/phase-contracts`** (preservado) — ya no recibe body: el servidor ya sabe la ruta (es determinística), solo falta registrar el pacto. *Corregido 2026-09-27 (D-216, TRN-21 del e2e): ahora acepta un cuerpo OPCIONAL `{"phase": "FASE_4_ASCENSION"}`, la fase que la persona cree firmar (el mismo valor que devuelve `/pending`). No elige qué se firma ni la ruta: con ella el pedido es idempotente y tiene que ser la que toca (409 si es otra); sin ella firma solo si hay un pendiente, y con dos o más responde 409 y pide la fase. Antes, con varios pactos atrasados (D-193), dos `POST` seguidos firmaban dos pactos distintos.* Persiste `bucket` (siempre `onboarding-signatures`, el mismo default que ya tenía la tabla) + la ruta calculada + `firmado_en`. Idéntico bloqueo de negocio que el repo viejo (Fase I rechazada, día no desbloqueado rechazado, ya firmada → idempotente).
 
 Esto es una **decisión de este módulo**, no confirmada por nadie fuera de la tarea — documentada acá como corresponde a una duda menor (§0.6 de CLAUDE.MD: "ante una duda menor, decidir, avanzar y avisar qué se asumió"). Alternativas descartadas: (a) que el POST siga recibiendo `{bucket, ruta}` en el body — reintroduce la superficie de mass-assignment que D-34 buscaba cerrar; (b) que el POST reciba solo `contentType` — no hay necesidad, es siempre SVG.
 
@@ -129,7 +129,7 @@ Base: `/api/v1/phase-contracts`. Actor resuelto por header `X-Actor-Id` (tempora
 | Método | Ruta | Repo viejo | Rol permitido | Notas |
 |---|---|---|---|---|
 | GET | `/pending` | `GET .../pending` (preservado) | TRAINEE, MENTOR | `{pending:false}` o `{pending:true, phase, phaseLabel}` — misma forma exacta |
-| POST | `/` | `POST /` (preservado, body cambia — ver §3) | TRAINEE | Sin body. Idempotente |
+| POST | `/` | `POST /` (preservado, body cambia — ver §3) | TRAINEE | Sin body, o `{"phase": …}` opcional (D-216). Idempotente con la fase; sin ella, 409 si hay dos o más pactos pendientes. *Corregido 2026-09-27: decía «Sin body. Idempotente»* |
 | GET | `/` | **Nuevo** | TRAINEE, MENTOR | Lista los pactos ya firmados, con URL de lectura prefirmada c/u |
 | POST | `/upload-url` | **Nuevo** (D-34) | TRAINEE | URL PUT prefirmada para la firma |
 
