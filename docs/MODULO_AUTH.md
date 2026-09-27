@@ -615,7 +615,7 @@ Por módulo: `community` 45, `habits` 40, `users` 40, `onboarding` 15, `rocks` 1
 
 Ninguno se corrigió acá — cambiarlos altera comportamiento y son decisiones de producto, no de refactor:
 
-- **`MANAGE_CALENDAR` no incluye `MENTOR_LEAD`.** `EventoService.requireRolCreador` acepta ADMIN, ALCHEMIST y MENTOR. Es exactamente la omisión que el vocabulario de permisos existe para no repetir.
+- **`MANAGE_CALENDAR` no incluye `MENTOR_LEAD`.** `EventoService.requireRolCreador` acepta ADMIN, ~~ALCHEMIST y MENTOR~~ y ALCHEMIST. Es exactamente la omisión que el vocabulario de permisos existe para no repetir. *Corregido 2026-09-27: decía «acepta ADMIN, ALCHEMIST y MENTOR»; desde D-186 (2026-09-26) el MENTOR recibe 403 en las seis operaciones de administración del calendario.*
 - **`PUBLISH_ON_WALL` tiene un guard que hoy no puede fallar.** `requireActorPuedePublicar` enumera *en negativo* los 5 roles, así que cualquier cuenta activa pasa. Recién morderá cuando exista un rol nuevo, y lo hará en silencio: nadie habrá decidido que ese rol no publica. Se le dio un permiso propio en vez de colapsarlo en `USE_APP` justamente para que la decisión sea explícita en la matriz.
 - **`GET /api/v1/evidence/{id}` deja leer a una cuenta suspendida** si es la suya: `requireDuenoOAdmin` retorna sin chequear estado cuando el actor es el dueño. Es el único endpoint del sistema con esa forma.
 - **`GET /api/v1/chat/members` no exige ser participante del grupo GLOBAL**, mientras `/chat/conversations/global/members` sí — y leen el mismo roster.

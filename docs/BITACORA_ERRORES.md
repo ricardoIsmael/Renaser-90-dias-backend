@@ -6859,6 +6859,11 @@ Hoy además **ningún cliente abre `/ws`** —la app móvil conversa por REST—
 de explotación accidental era cero. Pero el endpoint está publicado y responde, y eso no es lo
 mismo que "nadie lo alcanza": es exactamente el razonamiento que este repo ya rechazó una vez.
 
+> **Corregido 2026-09-27.** «Ningún cliente abre `/ws`» no era exacto: la app abría `/ws` desde el 17/09 (frontend
+> 0da52a4), pero nunca completaba el saludo STOMP porque sus tramas salían sin el NUL final, así que nunca llegaba a
+> suscribirse. Ver **E-331**, arreglado en el frontend `evidencia-foto` (044159f), todavía sin subir. Con ese arreglo,
+> este canal sí lo usa la app.
+
 **Causa.** `ActorHandshakeInterceptor` leía la sesión de Redis **una sola vez**, en el handshake, y
 copiaba el UUID del actor a los atributos del socket. Desde ese instante nadie volvía a mirarla:
 

@@ -25,16 +25,21 @@ nada como terminado sin haber corrido las pruebas.
   pasó, ni se omite mencionar un test roto.
 - Si algo quedó sin probar (faltan credenciales, Docker, un dato), **se dice explícitamente qué
   quedó sin verificar y por qué**.
-- `JAVA_HOME` debe apuntar al JDK 25: **`C:\Program Files\Java\jdk-25.0.2`**. Si Maven dice
+- `JAVA_HOME` debe apuntar al JDK 25. En esta laptop (Linux) lo pone sdkman:
+  **`~/.sdkman/candidates/java/current`** → `25.0.4-tem` (Temurin 25.0.4). Si Maven dice
   `release version 25 not supported`, es eso — no el código.
+  > **Corregido 2026-09-27.** Decía **`C:\Program Files\Java\jdk-25.0.2`**, la ruta de la máquina Windows
+  > anterior; en esta laptop esa carpeta no existe. Verificado con `ls -la ~/.sdkman/candidates/java/` y
+  > `"$JAVA_HOME/bin/java" -version` (`Temurin-25.0.4+7`, `25.0.4+7-LTS`).
   > **Corregido 2026-09-05 (E-111).** Acá decía `C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot`,
   > y afirmaba que E-103 había corregido la ruta *desde* `C:\Program Files\Java\jdk-25.0.2`. Era al
   > revés: no existe ninguna carpeta `Eclipse Adoptium` en esta máquina, y E-103 cambió la ruta
   > buena por una rota. Verificado con `ls` y `"$JAVA_HOME/bin/java" -version` (`25.0.2+10-LTS-69`).
 - **Con `JAVA_HOME` mal, `./mvnw clean test` termina en `exit 0` sin correr una sola prueba** (E-111).
   Por eso la verificación no es el código de salida sino la línea **`Tests run:`** de la salida: si no
-  aparece, no se probó nada. Hay **dos** líneas de resumen: la de surefire (unitarias, 2421 al
-  2026-09-05) y la de failsafe (integración, 21). El CI las suma y falla si no aparece ninguna.
+  aparece, no se probó nada. Hay **dos** líneas de resumen: la de surefire (unitarias, 4889 al
+  2026-09-27) y la de failsafe (integración, 130). El CI las suma y falla si no aparece ninguna.
+  *Corregido 2026-09-27: decía «2421 al 2026-09-05» y «21».*
 - **Dos builds no pueden compartir el mismo `target/`** (E-104), y una app levantada desde el IDE
   también lo bloquea (`Failed to delete ... target`). Si hay que compilar con el repo ocupado, se
   trabaja en un `git worktree` propio o sobre una copia aparte del checkout.

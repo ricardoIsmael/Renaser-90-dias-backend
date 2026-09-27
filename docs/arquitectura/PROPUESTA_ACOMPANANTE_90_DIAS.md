@@ -90,7 +90,7 @@ incidente D-132 (un "Hola" que marcó un hábito).
 | Tema | Decisión del dueño |
 |---|---|
 | Escrituras R2 de la v1 | horarios (cambiar hora, apagar un día, elegir día semanal), plan de rocas (diario y semanal), pausar hábito. Todas con confirmación y **sin saltarse ninguna regla existente** |
-| Cuota de cambios de horario | **Se respeta la regla que ya existe** (`CuotaEdicionHorario`): la primera semana del programa es libre; después, 3 hábitos distintos por semana de programa. No es ilimitada, y el acompañante no tiene cuota propia: usa el mismo caso de uso que la app. Lo que sí puede hacer es avisar cuántos cambios quedan antes de proponer uno |
+| Cuota de cambios de horario | **Superado por D-170 (2026-09-26): no hay tope.** El dueño aclaró que esa regla no existe en el programa; `CuotaEdicionHorario` deja libre todo el programa y el acompañante propone el cambio de una vez, sin hablar de cupos. Sigue valiendo que el acompañante usa el mismo caso de uso que la app. *Corregido 2026-09-27: decía «**Se respeta la regla que ya existe** (`CuotaEdicionHorario`): la primera semana del programa es libre; después, 3 hábitos distintos por semana de programa. No es ilimitada (…) Lo que sí puede hacer es avisar cuántos cambios quedan antes de proponer uno».* |
 | Avisos proactivos | **Sí**: el acompañante escribe primero. Diseño en §5.1 |
 | Confirmación | **Botones en la app** (corregido el mismo día: primero se había elegido "solo texto"). Verificado: el backend **no** tiene hoy ningún mecanismo de confirmación en el chat. `EventoRenasia` tiene solo `Texto`, `Fuentes`, `Error` y `Fin`, y la "confirmación" de `calendar` es el RSVP de eventos, otra cosa. Hay que construirlo (§5.2) |
 

@@ -18,12 +18,17 @@ contra la base corriendo — no contra la memoria ni contra lo que dicen otros d
 | | |
 |---|---|
 | Backend | Java 25 · Spring Boot 4.1 · monolito modular hexagonal · **15 módulos** |
-| Base | PostgreSQL propia (`pgvector/pgvector:pg16`, Docker local puerto 5433) · **94 tablas** · **22 migraciones** Flyway |
+| Base | PostgreSQL propia (`pgvector/pgvector:pg16`): RDS en producción, Docker local (puerto 5433) en desarrollo · **94 tablas** · **22 migraciones** Flyway |
 | API | **230 endpoints** |
-| Pruebas backend | **2224 en verde** (`./mvnw clean test`) |
-| Pruebas frontend | **Ninguna.** Sin script `test`, sin un solo archivo `.test.tsx` |
+| Pruebas backend | **4889 unitarias + 130 de integración en verde** (`./mvnw clean verify`, 2026-09-27) |
+| Pruebas frontend | **113 suites / 972 pruebas** de Jest y 27 de Playwright (rama `evidencia-foto`, 2026-09-27) |
 | Cliente | React Native (repo aparte) |
-| Entorno desplegado | **No existe.** El backend corre en la laptop del dueño |
+| Entorno desplegado | **EC2 (t3.small) + RDS en AWS** (`docs/DESPLIEGUE_Y_CI.md` §5.3 y §9) |
+
+> **Corregido 2026-09-27.** Esta tabla decía: base «Docker local puerto 5433» (sin producción), «**2224 en verde**
+> (`./mvnw clean test`)» (la regla es `clean verify` desde D-114), pruebas frontend «**Ninguna.** Sin script `test`, sin
+> un solo archivo `.test.tsx`» y entorno desplegado «**No existe.** El backend corre en la laptop del dueño». Los
+> conteos de tablas, migraciones y endpoints son del 2026-09-04 y no se revisaron en esta corrección.
 
 ---
 
@@ -41,8 +46,10 @@ Verificado end-to-end contra el backend corriendo, no solo con tests.
   un ajuste hecho mientras corre (D-197).
 - **Elegir, quitar y pausar hábitos** — `PUT`/`DELETE`/`PATCH /api/v1/habit-unlocks/{id}`. El
   interruptor ACTIVO/PAUSADO por fin guarda (D-87).
-- **Horarios de hábitos**, con cuota semanal de reacomodo y cambios diferidos al día siguiente
-  cuando la ventana del día ya arrancó (D-85).
+- **Horarios de hábitos**, sin tope de cambios (D-170); todo cambio rige desde el día siguiente (D-91).
+  *Corregido 2026-09-27: decía «con cuota semanal de reacomodo y cambios diferidos al día siguiente
+  cuando la ventana del día ya arrancó (D-85)». El dueño aclaró el 2026-09-26 que no hay tope, y desde
+  D-91 (2026-09-04) se difiere todo cambio, no solo el de una ventana que ya arrancó.*
 - **Puntos de liga**: completar un hábito, una evidencia o una roca otorga puntos, síncrono.
 - **Almacenamiento S3**: los 37 objetos de cursos y los 13 mp3 de audioterapias están subidos, con
   URLs prefirmadas — el backend nunca toca los bytes.
@@ -88,7 +95,14 @@ con la misma coherencia que uno perfecto.
 **Antes de codear hace falta decidir:** ¿cómo se define la coherencia — % de hábitos completados
 sobre los esperados del día, acumulada o ventana móvil? ¿Expirar penaliza puntos, o solo coherencia?
 
-### 3.2 La IA nunca se llamó
+### 3.2 La IA: el acompañante ya usa Gemini; lo demás sigue en `NoOp`
+
+> **Corregido 2026-09-27.** El título decía «La IA nunca se llamó» y lo que sigue describe el 2026-09-04. Hoy el
+> acompañante (chat de Renasia y Sparkie, embeddings, voz, voz en vivo y resumen de la conversación) llama a Gemini
+> y está prendido en producción: los modelos se arman en `GoogleGenAiClientesConfig` con `IA_PROVEEDOR=google`
+> (`docs/DESPLIEGUE_Y_CI.md` §6.4). Siguen en `NoOp` la validación de evidencia y la del V90, la recomendación de
+> clase, el Espejo de la Sombra y los clasificadores de intención y de riesgo; para ellos vale todavía la
+> consecuencia de abajo.
 
 `spring.ai.model.chat`, `embedding` y `vectorstore` están en `none`, las autoconfiguraciones de
 Google GenAI están excluidas, y **los adaptadores de IA del repo son `NoOp`**: loguean y devuelven
@@ -150,10 +164,12 @@ persisten—, falta la pantalla:
 
 **Infraestructura:**
 
-- **Dónde se hostea** la base en producción (RDS / Cloud SQL / VPS)
+- ~~**Dónde se hostea** la base en producción (RDS / Cloud SQL / VPS)~~ **Resuelto: RDS** (`docs/DESPLIEGUE_Y_CI.md` §9).
+  *Corregido 2026-09-27.*
 - Gateway/proxy de transición
 - Dashboard de p50/p99 por endpoint, para validar los SLO con datos y no con supuestos
-- **Tests en el frontend** — hoy no hay ninguno
+- **Tests en el frontend** — ~~hoy no hay ninguno~~ hoy hay 113 suites / 972 pruebas de Jest y 27 de Playwright
+  (2026-09-27). *Corregido 2026-09-27: decía «hoy no hay ninguno».*
 
 ---
 
@@ -162,8 +178,8 @@ persisten—, falta la pantalla:
 | Riesgo | Detalle |
 |---|---|
 | **Credenciales en texto plano** | `.run/RenaserOsApplication.run.xml` tiene 5 secretos reales (AWS secret key, Google GenAI, OAuth client secret, SMTP password). Ya está en `.gitignore`, pero **conviene rotarlas**: el archivo vive en una carpeta sincronizada con OneDrive |
-| **El frontend sin tests** | Todo cambio de pantalla se verifica a ojo. Ya hubo bugs que solo aparecieron probando contra el backend real |
-| **Sin entorno desplegado** | Los crons diarios dependen de que la laptop esté prendida. Fue la causa práctica de que el reloj no avanzara (E-91) |
+| **El frontend ~~sin tests~~ con pocas pruebas de pantalla** | Hoy tiene 113 suites / 972 pruebas de Jest, casi todas de lógica, y 27 de Playwright del panel web; las pantallas del teléfono se siguen verificando en el emulador. Ya hubo bugs que solo aparecieron probando contra el backend real. *Corregido 2026-09-27: decía «sin tests» y «Todo cambio de pantalla se verifica a ojo».* |
+| ~~**Sin entorno desplegado**~~ | ~~Los crons diarios dependen de que la laptop esté prendida. Fue la causa práctica de que el reloj no avanzara (E-91)~~ *Corregido 2026-09-27: ya no es un riesgo; producción corre en EC2 + RDS y los crons corren en el servidor.* |
 | **Bucket policy de avatares** | Falta la lectura pública anónima sobre `avatares/*` (D-55): la URL es correcta pero responde 403 |
 | **`registros_habito.dia_programa` es un snapshot** | No se recalcula nunca. Mover el reloj deja registros viejos con el día anterior — deliberado, pero hay que tenerlo presente |
 

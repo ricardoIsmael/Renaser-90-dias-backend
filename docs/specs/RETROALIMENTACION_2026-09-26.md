@@ -97,7 +97,7 @@ ve "1 necesita tu ayuda" en Hoy.
 | S-5 | Hecho y verificado | «Sin datos» con su motivo, calculado y sin tabla (D-181); en mentor y admin se lee «Todavía sin actividad para medir» (D-187) |
 | S-6 | Hecho y verificado | Texto fijo del cierre del sábado en el detalle y en la ficha (D-187) |
 | S-7 | Hecho y verificado con pruebas | Sin color en el chat si la semana tuvo menos de 3 días con datos; checklist de encendido y reproceso en `docs/DESPLIEGUE_Y_CI.md` §6.4 (D-181) |
-| S-8 | No se toca (decisión del dueño, §9.9) | El borde del viernes queda fijado con la prueba `VentanaEntregaTest.ventanaDelViernesCruzaElCierreDelSemaforo` |
+| S-8 | No se toca (decisión del dueño, §9.9) · días de suspensión: pregunta abierta | El borde del viernes queda fijado con la prueba `VentanaEntregaTest.ventanaDelViernesCruzaElCierreDelSemaforo`. Los días de suspensión siguen abiertos porque §9.9 no los nombra (§12) |
 | S-9 | E-258 hecho · **E-257 falta** | El mentor suspendido ya no pasa (D-181, E-258). La tarjeta «Hábitos de hoy» del aprendiz sigue diciendo «Al día» cuando no hay datos (`HoyScreen.tsx`, frontend 390e465): E-257 no se arregló |
 | Prueba e2e | Hecho y verificado | Mismo %, color y fechas para aprendiz, mentor y admin: pruebas, emulador y Playwright del 26/09 (§10) |
 
@@ -420,5 +420,10 @@ Estas eran las preguntas abiertas («Por decidir»). Quedan escritas como se hic
   del soporte y la del grupo, quedan detrás del interruptor `BIENVENIDA_ACTIVA`, apagado hasta que el dueño apruebe los
   textos.
 
-**Sigue abierto** (todavía no se preguntó): si el aviso de acompañamiento del servidor debe salir como banner en Android.
-Hasta decidirlo, su canal propio queda apagado (D-188).
+**Sigue abierto** (todavía no se preguntó):
+
+- Si el aviso de acompañamiento del servidor debe salir como banner en Android. Hasta decidirlo, su canal propio queda
+  apagado (D-188).
+- Qué pasa con los días en que una cuenta estuvo suspendida: al reactivarla, esos días cuentan como no cumplidos y la
+  semana puede salir en rojo. La decisión del 26/09 («no se toca», §9.9) no los nombra. Detalle y opción sin tabla
+  nueva en `docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md` §7, punto 2.

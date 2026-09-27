@@ -3,8 +3,11 @@
 ## La base es propia
 
 Supabase quedó descartado (2026-08-31). El esquema del producto lo define **nuestro Flyway**
-(schema `renaser`, ~92 tablas). Hoy corre en Docker local (`pgvector/pgvector:pg16`, puerto **5433**,
-`postgres/postgres`, db `renaser`). No hay entorno desplegado.
+(schema `renaser`, ~92 tablas). En desarrollo corre en Docker local (`pgvector/pgvector:pg16`, puerto
+**5433**, `postgres/postgres`, db `renaser`); en producción, en RDS (AWS), detrás del backend en EC2
+(`docs/DESPLIEGUE_Y_CI.md` §5.3 y §9).
+
+> **Corregido 2026-09-27.** Decía «Hoy corre en Docker local (…). No hay entorno desplegado.»
 
 ## Migraciones
 

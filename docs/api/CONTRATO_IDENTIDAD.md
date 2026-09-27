@@ -668,7 +668,7 @@ el `X-Actor-Id` del header **es** siempre `participanteId`.
 - **Response body** (`ContratoPendienteResponse`): `{ "pending": true|false, "phase": "FASE_2_DESARROLLO|null", "phaseLabel": "string|null" }`
 - **Código de éxito:** 200.
 - **Quién puede llamarlo:** TRAINEE o MENTOR (mismo set que `listar`).
-- **Regla de dominio:** según el día de programa del participante (`FasePrograma.faseAFirmarEnDia`) — Fase II se desbloquea día 8, Fase III día 35, Fase IV día 65. Si ya está firmada, `pending: false`.
+- **Regla de dominio:** según el día de programa del participante y las fases que ya firmó (`FasePrograma.faseAFirmar(día, firmadas)`, D-193): primero la fase en curso, si su firma ya se desbloqueó y no está firmada; si no, la fase anterior más vieja sin firmar. La firma se desbloquea el día 17 para la Fase II (que empieza el día 8), el 35 para la III y el 65 para la IV. Sin nada pendiente, `pending: false`. *Corregido 2026-09-27: decía «según el día de programa del participante (`FasePrograma.faseAFirmarEnDia`) — Fase II se desbloquea día 8, Fase III día 35, Fase IV día 65. Si ya está firmada, `pending: false`».*
 - **curl:**
   ```bash
   curl http://localhost:8080/api/v1/phase-contracts/pending -H "X-Actor-Id: <uuid-trainee>"

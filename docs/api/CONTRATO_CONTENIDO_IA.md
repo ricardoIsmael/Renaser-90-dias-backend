@@ -425,23 +425,31 @@ curl -s -X POST http://localhost:8080/api/v1/push-tokens \
   -d '{"token": "ExponentPushToken[xxxxxxx]", "platform": "ANDROID"}'
 ```
 
-### 3.7 Enum `TipoNotificacion` — los 13 valores exactos (español)
+### 3.7 Enum `TipoNotificacion` — los 17 valores exactos (español)
 
 ```
 RECORDATORIO_HABITO, RECORDATORIO_ROCA, RECORDATORIO_RADAR, MENSAJE_MENTOR,
 ANUNCIO_SISTEMA, RESUMEN_SEMANAL, LOGRO_DESBLOQUEADO, HITO_PROGRAMA,
 MENSAJE_CHAT, TICKET_RESPONDIDO, TICKET_ABIERTO, SANTUARIO_ROTO,
-HABITO_PERSONAL_MODIFICADO
+HABITO_PERSONAL_MODIFICADO, ACOMPANAMIENTO_ALUMNO, GRUPO_POR_VENCER,
+PATRON_DE_MALESTAR_REPETIDO, RECORDATORIO_EVENTO
 ```
 
-`PlataformaPush`: `IOS`, `ANDROID`.
+`PlataformaPush`: `IOS`, `ANDROID`, `WEB`.
+
+> **Corregido 2026-09-27.** Decía «los 13 valores exactos» (sin los cuatro últimos; `RECORDATORIO_EVENTO` entró con
+> V70, D-183) y `PlataformaPush`: `IOS`, `ANDROID` (sin `WEB`). Verificado contra `TipoNotificacion.java` y
+> `PlataformaPush.java`.
 
 **Quién dispara cada tipo hoy** (vía eventos de dominio, `@ApplicationModuleListener`, asíncrono post-commit — no hay endpoint que emita a mano):
 - `HabitoCompletadoEvent` (de `habits`) → `LOGRO_DESBLOQUEADO`.
 - `RachaCompletadaEvent` (de `habits`) → `LOGRO_DESBLOQUEADO`.
 - `RocaCompletadaEvent` (de `rocks`) → `HITO_PROGRAMA`.
 - `SantuarioRotoEvent` (de `habits`) → `SANTUARIO_ROTO`.
-- Los 9 tipos restantes no tienen listener dentro de `notifications` — quedan sin confirmar si algún otro módulo los emite directamente.
+- Además, hoy `notifications` escucha los recordatorios de eventos (`RecordatorioEventoNotificationListener` →
+  `RECORDATORIO_EVENTO`, D-182), los avisos de hábito, los tickets, los resúmenes semanales, el cierre del semáforo,
+  el acompañamiento, los grupos por vencer y el patrón de malestar. El detalle está en `docs/MODULO_NOTIFICATIONS.md`
+  §10. *Corregido 2026-09-27: decía «Los 9 tipos restantes no tienen listener dentro de `notifications`».*
 
 ---
 
@@ -630,7 +638,7 @@ Prefijos confirmados: `/api/v1/admin/conocimiento`, `/api/v1/renasia/mensajes`, 
   - `tipoFuente`: `@NotBlank`. `contenido`: `@NotBlank`. Resto (`clase`, `documentoId`, `leccionId`, `metadatos`) opcionales; `metadatos` ausente se normaliza a `{}`.
 - **200 OK** → `{"id": "<uuid>"}`.
 - **Quién puede llamarlo:** **solo ADMIN o ALCHEMIST**. 403 `"Solo ADMIN/ALCHEMIST indexan conocimiento"` para cualquier otro rol; 403 `"Cuenta suspendida"`; 404 `"Actor no encontrado: <id>"`.
-- El `EmbeddingPort` real (Gemini `text-embedding-004`, 768 dimensiones) todavía no tiene credenciales — hoy usa `NoOpEmbeddingAdapter` (vector de 768 ceros), así que el chunk se guarda pero sin similaridad semántica real todavía.
+- El `EmbeddingPort` real es Gemini (`gemini-embedding-001` por defecto, 768 dimensiones; `text-embedding-004` fue retirado por Google) y está activo con `IA_PROVEEDOR=google`, como en producción. Con `noop`, el valor por defecto en local, se usa `NoOpEmbeddingAdapter` (vector de 768 ceros): el chunk se guarda sin similaridad semántica real. *Corregido 2026-09-27: decía «El `EmbeddingPort` real (Gemini `text-embedding-004`, 768 dimensiones) todavía no tiene credenciales — hoy usa `NoOpEmbeddingAdapter`».*
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/admin/conocimiento \
@@ -647,7 +655,12 @@ curl -s -X POST http://localhost:8080/api/v1/admin/conocimiento \
 
 **200 OK**, `Content-Type: text/event-stream`. Implementación real: un `@RestController` de **Spring MVC clásico** (no WebFlux) que devuelve `Flux<String>` (Reactor) — Spring MVC lo adapta a streaming sobre `HttpServletResponse` vía su `ReactiveTypeHandler`. Cada elemento del `Flux` se emite como una línea `data:<contenido>` plana (sin `event:`/`id:`/`retry:`, no son `ServerSentEvent` tipados), y el stream simplemente termina cuando el `Flux` completa (sin evento de cierre tipo `data:[DONE]`).
 
-**Con el adaptador NoOp actual (sin credenciales Gemini, D-39): un único evento `data:`**, con el mensaje fijo `Renasia todavia no esta disponible: faltan credenciales de IA por configurar (D-39).` — **esto no es representativo del comportamiento final**: con Gemini real conectado, `ChatClient...stream().content()` emitiría **tokens sueltos en múltiples eventos `data:`**, no un mensaje completo de una vez.
+**Con `IA_PROVEEDOR=noop` (el valor por defecto en local): un único evento `data:`**, con el mensaje fijo `El asistente todavia no esta disponible: faltan credenciales de IA por configurar (D-39).` — **esto no es representativo del comportamiento real**: en producción (`google`) responde Gemini y el texto llega en varios eventos `data:`, no de una vez.
+
+> **Corregido 2026-09-27.** Decía «Con el adaptador NoOp actual (sin credenciales Gemini, D-39)», con el mensaje
+> «Renasia todavia no esta disponible…», y que con Gemini real conectado «emitiría» tokens sueltos: Gemini ya está
+> conectado en producción. El formato de los eventos del stream no se revisó en esta corrección (desde D-171 el chat
+> manda también eventos con `tipo`, como la tarjeta de la cámara).
 
 - **Cuota diaria — valor real confirmado en `application.yaml`:** `renaser.renasia.limite-diario`, **default 25**, sobreescribible por la variable de entorno `RENASIA_LIMITE_DIARIO`. Se cuenta en **Redis** (clave `renasia:cuota:{usuarioId}:{fecha}`, `INCR` atómico, TTL hasta medianoche UTC) — no en Postgres. El mensaje número 25 pasa, el 26 rebota. Si Redis falla, el adaptador **no bloquea** (asume permitido — es protección de abuso, no fuente de verdad de negocio).
 - **Al superar la cuota:** **429**, `{"message": "Se alcanzo el limite diario de mensajes a Renasia"}`.

@@ -320,7 +320,7 @@ Esto es lo más barato del backlog. Hay dominio, puertos y persistencia construi
 |---|---|
 | Logros / badges | No hay dominio de "logro" en ningún módulo |
 | Reportar alucinación de RenasIA | Ni campo ni ruta (el frontend ya tiene la UI) |
-| Tarjetas de bienvenida | Activaría `mensajes_bienvenida` |
+| ~~Tarjetas de bienvenida~~ | **Ya existe** (D-174, D-185, D-191): el servidor manda la tarjeta y los textos de bienvenida, y `mensajes_bienvenida` se usa como marca para no repetirla (`docs/MODULO_CHAT.md` §10). *Corregido 2026-09-27: decía «Activaría `mensajes_bienvenida`».* |
 | Audioterapia + sincronización con Drive | Activaría `audioterapias`; el puerto de catálogo existe sin adaptador |
 | Paneles admin de `staff` y `trainees` | Listar/editar personal y aprendices |
 | Baja de cuenta (GDPR) | Requisito de Google Play / Apple |
