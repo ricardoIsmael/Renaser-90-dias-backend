@@ -22,7 +22,8 @@ import java.util.UUID;
  * Quién espera su bienvenida de grupo y la marca (D-191). No escribe mensajes: eso es de {@code chat}.
  *
  * <p>Solo el grupo ESTABLE: la recepción es el grupo temporal de los primeros días y la atienden
- * guías, no un mentor. Y solo con mentor vigente: sin quien la firme, la pertenencia queda pendiente.
+ * guías, no un mentor. Y solo con mentor vigente: la bienvenida lo nombra (la firma el programa desde
+ * D-204; antes la firmaba él), así que sin mentor la pertenencia queda pendiente.
  */
 @Service
 class BienvenidaDeGrupoService implements BienvenidaDeGrupo {
@@ -76,7 +77,7 @@ class BienvenidaDeGrupoService implements BienvenidaDeGrupo {
         Set<UUID> sinMarca = marcaPort.sinBienvenida(aprendices.stream().map(a -> a.id().value()).toList());
         return aprendices.stream()
                 .filter(a -> sinMarca.contains(a.id().value()))
-                .map(a -> new Pendiente(a.id().value(), a.usuarioId()))
+                .map(a -> new Pendiente(a.id().value(), a.usuarioId(), a.periodo().inicio()))
                 .toList();
     }
 }

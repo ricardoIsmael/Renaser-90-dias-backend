@@ -9969,6 +9969,9 @@ marca, avisa), staff no participante, `ALCHEMIST` participante (manda) y el avis
 participante fallan contra el código viejo. `docs/MODULO_CHAT.md` §10 dice qué cuenta puede ser remitente. Regla
 general: cuando un caso de uso delega en otro que valida permisos, la precondición de configuración se mira ANTES y sin
 lanzar; lanzar queda para lo que un reintento puede arreglar.
+> **Actualizado 2026-09-27 (D-199).** El remitente ya no existe: el dueño decidió que la bienvenida la firme el
+> programa (mensajes `SISTEMA`), así que `BIENVENIDA_REMITENTE_EMAIL`, esta validación, su aviso y
+> `RemitenteDeBienvenidaAlArrancarListener` se quitaron junto con sus pruebas. La regla general de arriba sigue valiendo.
 
 ---
 
@@ -9991,6 +9994,54 @@ aparece solo en el chat abierto. `conexionStomp.test.ts` (4) falla contra el có
 **Cómo evitar que vuelva a pasar.** Nada que dependa de un carácter NUL puede cruzar como texto el puente de React Native. Un canal
 en vivo se verifica con un mensaje de OTRA cuenta, no con uno propio. Pendiente propuesto (no aplicado): latidos del broker
 (`WebSocketConfig.java:58`, `enableSimpleBroker("/topic")` sin `setHeartbeatValue`) para detectar conexiones muertas.
+> **Actualizado 2026-09-27 (D-202).** Los latidos ya están aplicados: `setHeartbeatValue({10000, 10000})` con el
+> `messageBrokerTaskScheduler`. Se verificó antes que no cortaran a nadie: la web no abre el socket, el APK publicado nunca
+> completa el CONNECT (este mismo error) y la app nueva late cada 10 s. `LatidosDelChatIT` fija la negociación y el cierre de
+> la conexión muda. El frontend dice todavía en sus comentarios que el backend contesta `heart-beat:0,0`: ya no es así.
+
+---
+
+## E-332 · Cualquier participante podía mandar un mensaje `SYSTEM` (incluso vacío) y firmar como «el programa»
+
+**Síntoma.** Revisando cómo sacar la bienvenida «del programa» (D-199, 2026-09-27), leyendo el código: `POST
+/api/v1/chat/conversations/{id}/messages` con `{"type":"SYSTEM"}` y sin texto llegaba hasta el `save`.
+`MensajeController.parseTipoMensaje` traducía `SYSTEM` → `SISTEMA` y `Mensaje.escribir` lo aceptaba: el CHECK
+`mensaje_con_contenido` exime a `SISTEMA` de llevar contenido, y el dominio lo replicaba tal cual. La prueba nueva contra el código
+viejo lo confirma en el dominio (`Expecting code to raise a throwable.`); el camino HTTP no se ejecutó contra un servidor. Ningún
+cliente del repo lo manda (la app solo manda `TEXT`, `IMAGE`, `AUDIO` y `VIDEO`).
+
+**Causa real.** `SISTEMA` existía en el enum desde V1 sin dueño: nada del servidor lo escribía y nadie definió quién podía
+escribirlo. Mientras la app lo pintaba como texto común no se notaba. Con D-199 la app nueva lo va a pintar como «Formación
+Renaser», con el fénix: cualquier participante habría podido suplantar al programa en un grupo o en su soporte.
+
+**Solución.** `Mensaje.escribir` rechaza `SISTEMA` con `IllegalArgumentException` («Un mensaje de sistema lo escribe el programa,
+no una persona»), que `GlobalExceptionHandler` convierte en 400 sin escribir nada. El controller sigue traduciendo `SYSTEM` para que
+el 400 lo explique el dominio. `rehydrate` sigue leyendo los `SISTEMA` que ya estén guardados. En la base local no hay ninguno; en
+producción no se pudo verificar (`SELECT count(*) FROM renaser.mensajes WHERE tipo = 'SISTEMA'`): si hubiera, la app nueva los pintaría
+como del programa.
+
+**Cómo evitar que vuelva a pasar.** `MensajeTest.unaPersonaNoEscribeMensajesDeSistemaNiVaciosNiConTexto` falla contra el código viejo.
+Regla general: un valor de enum que el cliente puede mandar y que la interfaz pinta distinto (una firma, un rol, «del sistema») es un
+permiso, no un formato; hay que decidir quién puede escribirlo antes de pintarlo distinto.
+
+---
+
+## E-333 · El evento en vivo de un mensaje manda `type` en español (`TEXTO`, `SISTEMA`) y el REST en inglés (`TEXT`, `SYSTEM`)
+
+**Síntoma.** Armando el contrato del mensaje del programa (D-199, 2026-09-27): `MensajeResponse` traduce el tipo (D-36:
+`TEXT`/`IMAGE`/`AUDIO`/`VIDEO`/`SYSTEM`), pero `MensajeFanoutPayload.from` hace `mensaje.tipo().name()`, así que por
+`/topic/conversaciones/{id}` viaja `"type":"TEXTO"`, `"IMAGEN"` o `"SISTEMA"`.
+
+**Causa real.** El payload del fanout (CH-8) se escribió aparte del contrato REST, a propósito, y la traducción de D-36 quedó solo
+en el REST.
+
+**Solución.** **No aplicada** (fuera del encargo). Hoy no rompe nada: el APK publicado nunca completa el CONNECT (E-331) y la app
+nueva usa el evento para recargar la conversación; según el agente del frontend, la de `eventos-app` (ec461ad) acepta `SYSTEM` y
+`SISTEMA`. Quedó escrito en el contrato de D-199. Arreglo propuesto: traducir con la misma tabla que `MensajeResponse.toWireTipo`,
+ahora que la app acepta los dos valores.
+
+**Cómo evitar que vuelva a pasar.** Toda salida al cable pasa por la traducción de D-36, también la del socket; un test del payload
+del fanout que fije `"type":"TEXT"` lo dejaría escrito.
 
 ---
 

@@ -66,11 +66,15 @@ Los tres tests unitarios existentes (`AccountRequestServiceTest`, `UserAccountSe
 Todos reciben el actor por `X-Actor-Id` (mismo patrón temporal que el resto de los módulos ya construidos, sin JWT — bloqueante del usuario documentado en `docs/MODULOS_A_AVANZAR.md`).
 
 **D-36 aplicado:** `TipoConversacion`/`TipoMensaje` viven en español en dominio y base; el wire habla inglés (`CELL`/`DIRECT`/`GLOBAL`/`SUPPORT`, `TEXT`/`IMAGE`/`AUDIO`/`VIDEO`/`SYSTEM`) — la traducción vive solo en `ConversacionResponse.toWireTipo`/`MensajeResponse.toWireTipo` (salida) y `MensajeController.parseTipoMensaje` (entrada), nunca en dominio ni persistencia.
+> **Corregido 2026-09-27 (E-332).** La entrada sigue traduciendo `SYSTEM`, pero `Mensaje.escribir` lo rechaza con 400: un mensaje de
+> sistema lo escribe el programa, no una persona (D-199). Antes cualquier participante podía mandar un `SYSTEM`, incluso vacío.
 > **Corregido 2026-09-16 (D-136).** Esta línea listaba solo `CELL`/`DIRECT`/`GLOBAL`. `SOPORTE` -> `SUPPORT` se suma en §8, y la lista de endpoints de arriba no incluye los dos de soporte (`POST .../{id}/leave` y `POST /api/v1/admin/chat/support-conversations/backfill`): están en §8.3.
 
 ### 3.4 WebSocket + Redis Pub/Sub
 
 - `infrastructure/adapter/in/websocket/WebSocketConfig`: endpoint STOMP `/ws`, broker simple `/topic`, prefijo de aplicación `/app`. El cliente se suscribe a `/topic/conversaciones/{conversacionId}`.
+  **Latidos de 10 s en los dos sentidos (D-202, 2026-09-27):** el `CONNECTED` dice `heart-beat:10000,10000` y el broker cierra la
+  sesión del cliente que no escribe nada en 30 a 40 s. Ver §11.
 - `infrastructure/adapter/out/redis/RedisChatPublisher` (implementa `PublicarMensajeFanoutPort`): publica a Redis (canal `chat:conversacion:{id}`) **después** del commit de la transacción que guardó el mensaje — `MensajeService.publicarDespuesDelCommit` usa `TransactionSynchronizationManager.registerSynchronization(...).afterCommit(...)`, el mismo mecanismo que ya usa `AccountRequestService` de `users` para su compensación de Supabase. Fire-and-forget: si Redis falla, se loguea y se sigue (el mensaje ya está durable en Postgres).
 - `infrastructure/adapter/out/redis/RedisChatSubscriberConfig`: cada instancia se suscribe al patrón `chat:conversacion:*` y reenvía el payload (JSON crudo, sin re-serializar) a `/topic/conversaciones/{id}` vía `SimpMessagingTemplate` — así una instancia distinta a la que recibió el POST también entrega el mensaje en vivo (CLAUDE.MD §5.2.1).
 - **Honestidad sobre lo que esto prueba:** la arquitectura compila y el mecanismo (persistir → publicar tras commit → re-suscribir → STOMP) sigue el patrón documentado en CLAUDE.MD §5.2.1 al pie de la letra, pero **no hay verificación E2E con un cliente STOMP/WebSocket real** en este encargo (no hay herramienta de este agente para abrir un socket real contra la app corriendo) — queda pendiente para una fase de pruebas manuales o un test de integración con un cliente STOMP de prueba (`spring-websocket` trae uno).
@@ -82,7 +86,9 @@ Todos reciben el actor por `X-Actor-Id` (mismo patrón temporal que el resto de 
 - **`Conversacion`**: invariante `tipo_coherente` replicada en dominio (`requireTipoCoherente`) — falla con `IllegalArgumentException` (400) antes de llegar al CHECK de Postgres (500), tanto en las fábricas (`crearCelula`/`crearDirecta`/`crearGlobal`) como en `rehydrate` (defensivo contra datos corruptos).
 - **GLOBAL única e idempotente**: `ConversacionService.unirse()` hace busca-o-crea (`loadConversacionPort.global().orElseGet(...)`), protegido además por el índice único parcial de la base. Ventana de carrera teórica entre dos altas simultáneas (dos instancias sin GLOBAL creando cada una la suya) documentada como aceptada — el mismo criterio que ya explica `GlobalExceptionHandler.handleIntegridad` para el "doble tap" del cliente: la segunda pierde la carrera y su `INSERT` viola el índice único, se traduce a 409. Como esto corre en un listener de evento (no en un request HTTP), el 409 no llega a ningún cliente — Modulith reintenta el evento según su política de outbox.
 - **`claveDirectaDe`**: orden lexicográfico `menor_mayor` de los dos UUID como string — determinístico sin importar quién inicia la conversación.
-- **`Mensaje`**: invariantes `mensaje_con_contenido` (SISTEMA no necesita texto/media, cualquier otro tipo sí) y `media_completa` (`mediaBucket`/`mediaRuta` viajan juntos o ninguno) replicadas en `Mensaje.escribir`.
+- **`Mensaje`**: invariantes `mensaje_con_contenido` (todo mensaje que escribe una persona lleva texto o media) y `media_completa` (`mediaBucket`/`mediaRuta` viajan juntos o ninguno) replicadas en `Mensaje.escribir`, que además rechaza `SISTEMA`: es la voz del programa, no de una persona (E-332).
+  > **Corregido 2026-09-27 (E-332).** Decía «SISTEMA no necesita texto/media, cualquier otro tipo sí»: `escribir` aceptaba un `SISTEMA`
+  > de cualquier emisor, incluso vacío. La base sigue eximiendo a `SISTEMA` del CHECK; `rehydrate` lee los que ya estén guardados.
 - **`EnviarMensaje`**: el emisor debe ser participante (`NotAuthorizedException` si no) — chequeado ANTES de escribir el mensaje. Si `respuestaAId` viene, se verifica que el mensaje original pertenezca a la MISMA conversación (`requireRespuestaEnMismaConversacion`) — evita citar un mensaje de otra conversación por error de cliente o ataque de enumeración de IDs. Al enviar, se actualiza `ultimo_leido_en` del EMISOR (ya "leyó" lo que acaba de escribir).
 - **`ListarConversaciones` sin N+1**: `ultimosPorConversacion`/`contarNoLeidos` reciben la lista completa de `ConversacionId` y devuelven un `Map` en una sola consulta cada uno — nunca una consulta por conversación. Verificado con `verify(..., times(1))` en `ConversacionServiceTest` y contra Postgres real en `ChatPersistenceAdapterTest`.
 - **`MarcarLeido`**: exige participante (`NotAuthorizedException` si no).
@@ -464,14 +470,17 @@ minutos, `EventPublicationMaintenanceScheduler`): el reintento solo abre las que
 | `AcompanamientoServiceTest` (+2) | `acompanantesVigentes`: mentor y guías sí; soporte, aprendices y exmentor no; grupo cerrado, vacío |
 | `ChatPersistenceAdapterTest` (+1) | `clavesDirectasExistentes` contra Postgres real |
 
-## 10. La bienvenida automática en el chat de soporte y en el del grupo (2026-09-26, D-174, D-191)
+## 10. La bienvenida automática en el chat de soporte y en el del grupo (2026-09-26, D-174, D-191; 2026-09-27, D-199, D-204)
 
-**Qué hace.** Cuando nace el soporte de un aprendiz **nuevo** (no en el relleno de §8), se mandan tres
-mensajes desde la cuenta de staff configurada (hoy la de Kelin), en el orden de OPE-01-01: la tarjeta de
-bienvenida del Canva de Operaciones con su primer nombre, el mensaje que acompaña la tarjeta («valor
-agregado, experiencia premium») y el mensaje formal de bienvenida (confirma el ingreso, dice que el
-equipo confirmará el horario de la sesión técnica y que antes le mandará la información para esa
-sesión). Es el paso 2 de OPE-01-01 que hoy se hace a mano por WhatsApp.
+**Qué hace.** Cuando nace el soporte de un aprendiz **nuevo** (no en el relleno de §8), **el programa**
+manda tres mensajes, en el orden de OPE-01-01: la tarjeta de bienvenida del Canva de Operaciones con su
+primer nombre, el mensaje que acompaña la tarjeta («valor agregado, experiencia premium») y el mensaje
+formal de bienvenida (confirma el ingreso, dice que el equipo confirmará el horario de la sesión técnica
+y que antes le mandará la información para esa sesión). Es el paso 2 de OPE-01-01 que hoy se hace a mano
+por WhatsApp.
+> **Corregido 2026-09-27 (D-199).** Decía «se mandan tres mensajes desde la cuenta de staff configurada
+> (hoy la de Kelin)». El dueño decidió que salgan del programa: «mejor que salga mensaje automático sin
+> una persona, ¿no sería lo correcto?». Lo mismo para la del grupo (D-204, más abajo).
 
 **Dónde están los textos (D-190).** En `src/main/resources/bienvenida/mensajes.yaml`, versionado con el
 código: claves `soporte.con-la-tarjeta` y `soporte.formal` (`{nombre}` = primer nombre). Los lee
@@ -480,46 +489,120 @@ falta, el arranque falla. **Se cambian editando ese archivo y redesplegando**, n
 vacío apaga ese mensaje. Hoy son **borradores** del equipo técnico, marcados así en el archivo: se
 reemplazan por los de la hoja de Operaciones.
 
-**Cómo se prende** (sin cambiar código): `BIENVENIDA_REMITENTE_EMAIL` con el correo de la cuenta que
-firma. Sin remitente está apagada. Si la cuenta no existe o está suspendida, no sale nada y queda un
-aviso en el log.
+**El interruptor (D-199/D-204, 2026-09-27).** `BIENVENIDA_ACTIVA` (`renaser.chat.bienvenida.activa`),
+**apagado por defecto**, prende o apaga las dos bienvenidas, la del soporte y la del grupo. Los textos
+son borradores y no pueden llegar a aprendices reales hasta que el dueño los apruebe. Apagada, ninguna
+de las dos mira nada: no dibuja, no sube, no manda y **no deja marca** (ni `mensajes_bienvenida` ni
+`asignaciones_celula.bienvenida_enviada_en`). Al arrancar apagada queda un `INFO`
+(`bienvenidas automáticas apagadas (BIENVENIDA_ACTIVA=false)`). En producción se prende con
+`/renaser/prod/BIENVENIDA_ACTIVA=true` en Parameter Store y reiniciando el contenedor.
 
-**Qué cuenta puede ser remitente (E-330, 2026-09-26).** Solo una cuenta **ACTIVA con rol `ADMIN` o
-`ALCHEMIST`**: es el staff que `ConversacionSoporteService` mete en todo soporte (§8), y `MensajeService`
-solo deja escribir a quien participa de la conversación. Un `MENTOR`, `MENTOR_LEAD` o `TRAINEE` **no**
-sirve. Con una cuenta así (o con una de staff que no participe de ese soporte) la bienvenida de ese
-evento queda **apagada**: no dibuja, no manda, **no lanza** y **no deja marca** en
-`mensajes_bienvenida`, con un `WARN` por evento
-(`[chat.bienvenida] BIENVENIDA_REMITENTE_EMAIL=… tiene rol MENTOR, no es ADMIN/ALCHEMIST del soporte:
-bienvenida apagada para el aprendiz …`). Al arrancar, `RemitenteDeBienvenidaAlArrancarListener` deja el
-mismo `WARN` si el remitente configurado no existe, no está activo o no es staff.
-**Ojo:** que no se lance significa que el outbox da esa publicación por **completada**. Corregir la
-variable y reiniciar **no** reenvía las bienvenidas de los aprendices que entraron mientras estaba mal:
-esas se mandan a mano (el `WARN` trae el id del aprendiz; al no haber marca, no hay nada que deshacer).
-Antes del arreglo se lanzaba `NotAuthorizedException` y el outbox reintentaba cada 5 minutos sin fin.
+**Al prenderla no salen bienvenidas atrasadas.** La del soporte se dispara una sola vez por aprendiz
+(`SoporteDeAprendizNacioEvent`): con el interruptor apagado ese evento se da por completado y no vuelve.
+La del grupo se dispara con cada cambio del grupo y apagada no marca a nadie, así que sin un corte el
+primer cambio después de prenderla le daría la bienvenida a quien lleva días ahí: por eso solo la
+recibe quien entró al grupo hace menos de 48 h (ver «La bienvenida en el grupo estable»).
+
+**Cómo se prende** (sin cambiar código): `BIENVENIDA_ACTIVA=true`. Nada más: ya no hay remitente.
+> **Corregido 2026-09-27 (D-199).** Decía «`BIENVENIDA_REMITENTE_EMAIL` con el correo de la cuenta que
+> firma. Sin remitente está apagada. Si la cuenta no existe o está suspendida, no sale nada y queda un
+> aviso en el log». `BIENVENIDA_REMITENTE_EMAIL` ya no se lee.
+
+**Qué cuenta podía ser remitente (E-330, 2026-09-26): ya no aplica.**
+> **Corregido 2026-09-27 (D-199).** Este apartado explicaba que solo una cuenta ACTIVA con rol `ADMIN` o
+> `ALCHEMIST` que participara del soporte podía firmar; que con otra la bienvenida de ese evento quedaba
+> apagada, sin lanzar ni dejar marca, con un `WARN` por evento; y que `RemitenteDeBienvenidaAlArrancarListener`
+> dejaba el mismo aviso al arrancar. Con la firma del programa no hay remitente: esa validación, el aviso
+> y el listener se quitaron. La lección general de E-330 sigue en la bitácora.
 > **Corregido 2026-09-26 (D-190).** Decía «y `BIENVENIDA_TEXTO` con el texto (`{nombre}` se reemplaza
 > por el primer nombre). […] sin texto, sale solo la tarjeta». El dueño pidió que el texto no vaya en
 > una variable de entorno y que cada parte del ingreso tenga su mensaje. `BIENVENIDA_TEXTO` ya no se lee.
 
-**La bienvenida en el grupo estable (D-191, V71).** OPE-01-01 pide también un mensaje del mentor en
-el grupo, reforzando pertenencia y compromiso, cuando el aprendiz se integra a su grupo.
+**La firma del programa (D-199/D-204, 2026-09-27).** Las dos bienvenidas salen como mensajes de
+**`SISTEMA`** por `EnviarMensajeDelProgramaUseCase` (`MensajeDelProgramaService`): sin actor (nadie tiene
+que estar activo ni ser participante), sin marcar leído a nadie (es nuevo para todos los del chat) y
+empujadas en vivo después del commit. Una persona no puede escribir `SISTEMA` (E-332): es la voz del
+programa.
+
+- **Sin migración, sin tablas y sin cuenta «sistema».** `mensajes.emisor_id` es `NOT NULL REFERENCES
+  usuarios (id) ON DELETE CASCADE` (V1). En un mensaje del programa guarda **a quién se refiere**: el
+  aprendiz que recibe la bienvenida, en el soporte y en el grupo. Consecuencias: la cascada lo borra con
+  la cuenta de esa persona (y, por `mensajes_bienvenida.mensaje_id`, su marca); la media `chat/...` sigue
+  sin purgarse con ninguna cuenta (`ClavesDeCuenta` las deja afuera a propósito), igual que antes; y quien
+  cuente «lo que escribió» alguien leyendo `emisor_id` directo tiene que excluir `tipo = 'SISTEMA'` (hoy
+  nadie lo hace; `users` lee `emisor_id` solo para la purga, y ahí el resultado es el correcto).
+- **Hacia afuera nunca es de esa persona:** `Mensaje.remitentePublico()` es el UUID nulo, y el nombre,
+  «Formación Renaser» (el mismo sufijo de cada chat de soporte).
+- **Alternativas descartadas.** (a) Una migración (V72: `emisor_id` nullable con `CHECK (emisor_id IS NOT
+  NULL OR tipo = 'SISTEMA')`): más fiel sobre la autoría, pero el pedido era detenerse si hacía falta; queda
+  como camino si el dueño prefiere que la base no guarde a nadie. (b) Una cuenta de staff (la de Kelin o
+  cualquier staff del soporte) como emisor técnico: el mensaje quedaba a nombre de una persona y la cascada
+  lo borraba de todos los soportes al dar de baja esa cuenta.
+- **Mensajes `SISTEMA` viejos:** si en producción hubiera alguno escrito por un cliente antes de E-332
+  (en la base local no hay; no se verificó en producción:
+  `SELECT count(*) FROM renaser.mensajes WHERE tipo = 'SISTEMA'`), desde este cambio se vería como del
+  programa.
+
+**El contrato**, lo que la app nueva pinta como «Formación Renaser» con el fénix (`MensajeResponseTest`):
+
+| Campo de `MensajeResponse` | Valor en un mensaje del programa |
+|---|---|
+| `type` | `"SYSTEM"` (los tres del soporte y el del grupo) |
+| `senderId` | `"00000000-0000-0000-0000-000000000000"`, **nunca `null`** (ni la persona guardada) |
+| `senderName` | `"Formación Renaser"` en `GET .../messages` (en `lastMessage` de `GET /conversations` viaja `null`, como para todos) |
+| `senderAvatarUrl` | `null` (el fénix lo pone la app) |
+| `text` | el texto; `null` en la tarjeta |
+| `mediaBucket`/`mediaPath`/`mediaMime`/`mediaBytes`/`mediaUrl` | solo en la tarjeta: `chat`, `chat/<soporte>/fotos/<uuid>`, `image/jpeg`, el tamaño y la URL firmada |
+| `replyTo.senderName` | `"Formación Renaser"` si alguien responde a un mensaje del programa |
+| Evento en vivo (`MensajeFanoutPayload`) | `senderId` = el mismo UUID nulo (si fuera el aprendiz, su app lo descartaría como eco propio); `type` viaja en español (`SISTEMA`, E-333) |
+
+**Riesgo con el APK publicado (sin actualización por aire):** todas sus versiones validan `senderId:
+z.string()` dentro del arreglo de mensajes y del `lastMessage` de cada conversación: un `null` haría fallar
+la validación entera y dejaría **sin bandeja y sin historial** al aprendiz y a todo el staff (que está en
+cada soporte). Por eso el UUID nulo. `type: "SYSTEM"` lo aceptan todas (antes como `z.enum` con `SYSTEM`,
+hoy `z.string()`) y lo pintan como una burbuja de texto de «Formación Renaser» a la izquierda (`isMe` es
+falso: nadie tiene ese id). Lo que **no** hacen es mostrar la imagen de un `SYSTEM`: en el APK publicado
+la tarjeta se ve como «Mensaje del sistema» (y en la bandeja, si fuera el último). No rompe nada, pero
+conviene **publicar el APK nuevo antes de prender `BIENVENIDA_ACTIVA`**: la bienvenida del soporte va a
+aprendices recién aprobados, que instalan la app de la tienda.
+
+**La bienvenida en el grupo estable (D-191, V71; del programa desde D-204).** OPE-01-01 pide también un
+mensaje en el grupo, reforzando pertenencia y compromiso, cuando el aprendiz se integra a su grupo.
 `ComposicionCelulaBienvenidaListener` (`@ApplicationModuleListener`: después del commit, en otro hilo,
 separado de los otros dos listeners del mismo evento) llama a `BienvenidaEnGrupoService`, que:
 
+0. Con `BIENVENIDA_ACTIVA` apagado (el default, D-204) no hace nada: ni consulta ni marca.
 1. Pide a `community.api.BienvenidaDeGrupo` (vía `BienvenidaEnGrupoPort`) las pertenencias de aprendiz
    **vigentes y sin marca** del grupo y su **mentor vigente**. Vacío si el grupo es la **recepción**, está
-   fuera de su periodo o **no tiene mentor**.
+   fuera de su periodo o **no tiene mentor**. De esas deja solo las que **empezaron hace menos de 48 h**
+   (`asignaciones_celula.inicio`, expuesto como `Pendiente.desde`): sin bienvenidas atrasadas (D-204).
 2. Lee las cuentas del grupo en una consulta; mentor o aprendiz no activos quedan pendientes.
 3. Por cada aprendiz, en **su** transacción: primero `marcarDada` (`UPDATE asignaciones_celula SET
-   bienvenida_enviada_en = … WHERE … IS NULL`; sigue solo si afectó 1 fila) y después el mensaje `TEXTO`
-   en el chat del grupo, firmado por el mentor, con el texto `grupo` de `mensajes.yaml` (`{nombre}` y
-   `{mentor}` = primeros nombres). Sin tarjeta. O quedan la marca y el mensaje, o ninguno.
+   bienvenida_enviada_en = … WHERE … IS NULL`; sigue solo si afectó 1 fila) y después el mensaje **del
+   programa** (`SISTEMA`, guardado a nombre del aprendiz) en el chat del grupo, con el texto `grupo` de
+   `mensajes.yaml` (`{nombre}` y `{mentor}` = primeros nombres). Sin tarjeta. O quedan la marca y el
+   mensaje, o ninguno. El mentor sigue haciendo falta porque el texto lo nombra.
+   > **Corregido 2026-09-27 (D-204).** Decía «el mensaje `TEXTO` en el chat del grupo, firmado por el
+   > mentor».
 4. Un fallo que no es «ya estaba marcada» se lanza al final, después de intentar a todos (G-3).
 
 La marca es por pertenencia (`asignaciones_celula`, una fila por aprendiz y grupo), así que un traslado
 recibe la bienvenida del grupo nuevo. V71 marcó a todos los que ya estaban en un grupo al desplegar. Un
 grupo sin mentor deja las bienvenidas pendientes: salen con el cambio de composición que le pone mentor,
-si la pertenencia sigue abierta.
+si la pertenencia sigue abierta **y empezó hace menos de 48 h**. Pasada esa ventana la pertenencia queda
+sin marca y sin mensaje, a propósito: «Qué alegría que te sumes a este grupo» no se le dice a quien lleva
+días ahí. La ventana es una decisión técnica (D-204) a confirmar con el dueño.
+> **Corregido 2026-09-27 (D-204).** Decía que las pendientes salían con el cambio que le pone mentor, sin
+> límite de tiempo. Con el interruptor apagado por defecto (que no marca), eso habría mandado bienvenidas
+> atrasadas a todos los que entraron mientras estuvo apagado.
+
+**El texto del grupo cambió (D-204, 2026-09-27).** Lo dice el programa y es más amigable, sin género para
+la persona ni para el mentor, sin horarios ni links (sigue siendo borrador): «¡Hola, {nombre}! 🌿 Qué
+alegría que te sumes a este grupo. Aquí vas a compartir el camino con cada integrante y con {mentor}, que
+te va a acompañar en estos días. Este es tu espacio para contar tus avances, pedir apoyo y celebrar cada
+paso. ¡Te damos la bienvenida!». Nombra al mentor en tercera persona: lo dice el programa.
+> **Corregido 2026-09-27 (D-204).** Decía «¡{nombre}, te damos la bienvenida a tu grupo! Soy {mentor} y voy
+> a acompañarte en estos días. […] Cuento contigo.», en primera persona del mentor.
 > **Corregido 2026-09-26 (D-191).** Este apartado decía «**No está implementado:** […] hace falta una
 > marca por aprendiz **y grupo**, y `mensajes_bienvenida` no la admite […]. Eso pide una columna o tabla
 > nueva, que queda para decisión del dueño». El dueño eligió una columna en `asignaciones_celula`.
@@ -576,11 +659,53 @@ crea el soporte, así que los dos commitean juntos (E-299).
 | Clase | Qué fija |
 |---|---|
 | `BienvenidaJava2dAdapterTest` (4) | Coincide con la exportación de Canva (la referencia está en `src/test/resources/bienvenida/`); el test distingue una tarjeta sin nombre; un nombre largo no se sale; JPEG liviano |
-| `BienvenidaEnSoporteServiceTest` (14) | Tarjeta con el primer nombre, mensaje que la acompaña y formal, con los textos del puerto y firmados por el remitente (D-190); con los dos textos vacíos solo la tarjeta; apagada sin remitente; remitente suspendido no manda; un fallo de S3 no manda una foto inexistente y lanza (G-2); deja la marca con la tarjeta; una reentrega con marca no hace nada; la carrera con otra entrega no es error; con `noop` solo el formal (G-5); remitente `MENTOR` o staff no participante: no lanza, no manda, no marca y avisa; `ALCHEMIST` participante manda como siempre; aviso al arrancar solo con remitente no staff (E-330) |
-| `BienvenidaEnGrupoServiceTest` (6) | Marca y después manda el texto del recurso en el chat del grupo, firmado por el mentor, con los dos primeros nombres; marca ya puesta no manda; sin pendientes (recepción, sin mentor) no manda; sin texto no marca; mentor suspendido no marca; un fallo no frena a los demás y se lanza al final |
-| `BienvenidaEnGrupoIT` (5) | Postgres real: un mensaje y la reentrega no duplica; dos entregas cruzadas en dos hilos dan un mensaje; recepción no; sin mentor queda pendiente y sale al ponerle mentor; V71 marca las pertenencias de aprendiz existentes y no las de mentor (base aparte migrada a V70, semilla, V71) |
-| `TextosDeBienvenidaYamlAdapterTest` (4) | El `mensajes.yaml` del repo trae los dos textos del soporte y el del grupo con sus marcadores; una clave vacía apaga ese mensaje; sin archivo falla al arrancar; `application.yaml` ya no tiene `renaser.bienvenida.texto` y el remitente sigue por `BIENVENIDA_REMITENTE_EMAIL` (D-190) |
+| `BienvenidaEnSoporteServiceTest` (9) | La firma el programa: los tres en orden (tarjeta con el primer nombre, el que la acompaña y el formal, con los textos del puerto) como `SISTEMA` a nombre de la aprendiz (D-199); apagada no mira nada, no dibuja, no manda, no marca; sin ninguna cuenta de staff igual sale (ya no hay remitente); con los dos textos vacíos solo la tarjeta; un fallo de S3 no manda una foto inexistente y lanza (G-2); deja la marca con la tarjeta; una reentrega con marca no hace nada; la carrera con otra entrega no es error; con `noop` solo el formal (G-5). *Corregido 2026-09-27: las pruebas del remitente (suspendido, `MENTOR`, staff no participante, aviso al arrancar, E-330) se quitaron con el remitente.* |
+| `BienvenidaEnSoporteIT` (1) | Postgres real, interruptor prendido: la base acepta el `SISTEMA` a nombre de la aprendiz sin tocar el esquema, la marca queda con él, la reentrega no lo repite y el listado lo devuelve como `SYSTEM` del UUID nulo, «Formación Renaser», sin avatar (D-199) |
+| `BienvenidaEnGrupoServiceTest` (11) | Marca y después manda el texto del recurso en el chat del grupo, firmado por el programa (a nombre de la aprendiz, nada a nombre del mentor, D-204), con los dos primeros nombres; el texto nuevo del repo con los reemplazos (D-204); apagada no consulta ni marca (D-204); quien entró hace 3 días no la recibe ni se marca y quien entró hace 1 h sí; borde 47 h sí / 49 h no; todos fuera de la ventana: no busca chat ni cuentas; marca ya puesta no manda; sin pendientes (recepción, sin mentor) no manda; sin texto no marca; mentor suspendido no marca; un fallo no frena a los demás y se lanza al final |
+| `BienvenidaEnGrupoIT` (6) | Postgres real, con el interruptor prendido: un mensaje y la reentrega no duplica; quien entró hace 3 días no recibe una bienvenida atrasada ni se marca (D-204); dos entregas cruzadas en dos hilos dan un mensaje; recepción no; sin mentor queda pendiente y sale al ponerle mentor; V71 marca las pertenencias de aprendiz existentes y no las de mentor (base aparte migrada a V70, semilla, V71) |
+| `TextosDeBienvenidaYamlAdapterTest` (6) | El `mensajes.yaml` del repo trae los dos textos del soporte y el del grupo con sus marcadores; el del grupo lo dice el programa, sin «Soy {mentor}», sin horarios ni links (D-204); `renaser.chat.bienvenida.activa` existe y viene apagado (D-199); una clave vacía apaga ese mensaje; sin archivo falla al arrancar; `application.yaml` ya no tiene `renaser.bienvenida.texto` (D-190) ni `renaser.bienvenida.remitente-email` (D-199; antes exigía que el remitente siguiera por entorno) |
 | `MarcaDeBienvenidaJdbcAdapterTest` (1) | La marca contra Postgres real: una por destinatario, la segunda choca con la PK |
 | `ConversacionSoporteServiceTest` (+2 y aserciones) | Avisa solo al crear de verdad: no si ya existía, no si perdió la carrera, no en el relleno; el aviso se publica dentro de la transacción que crea el soporte (R2) |
 | `PrimerNombreTest` (2) | Primera palabra con inicial en mayúscula; vacío sin nombre |
+| `MensajeTest` (+5) | Una persona no escribe `SISTEMA`, ni vacío ni con texto (E-332); un `SISTEMA` ya guardado se sigue leyendo; el programa escribe `SISTEMA` con texto o con imagen, a nombre de la persona a quien se refiere; sin contenido o sin persona es inválido; hacia afuera lo firma el UUID nulo, nunca la persona guardada (D-199) |
+| `MensajeDelProgramaServiceTest` (2) | Guarda un `SISTEMA` a nombre de la persona y lo empuja en vivo, sin actor ni participante; sin la conversación no guarda nada |
+| `MensajeServiceTest` (+2) | El listado firma como «Formación Renaser», sin avatar, los mensajes del programa sin buscar a la persona guardada; y el preview de una respuesta a uno de ellos |
+| `MensajeResponseTest` (3) | El contrato del cable: `SYSTEM`, `senderId` UUID nulo (nunca `null` ni la persona), «Formación Renaser», avatar `null`; la tarjeta con su media; en la bandeja también firma el programa; el mensaje de una persona no cambia |
+| `MensajeFanoutPayloadTest` (2) | El aviso en vivo de un mensaje del programa lleva el UUID nulo (si no, la app de la aprendiz lo descartaría como eco propio) |
 
+## 11. Latidos del canal en vivo (2026-09-27, D-202)
+
+**Qué había.** `WebSocketConfig` hacía `enableSimpleBroker("/topic")` sin latidos: el `CONNECTED` decía
+`heart-beat:0,0`. Una conexión muerta (el teléfono que pasa de wifi a datos o se queda sin señal) seguía
+«abierta» del lado del servidor, con sus suscripciones y su «en línea», hasta que la cortara el sistema
+operativo. Lo dejó propuesto E-331.
+
+**Qué hay.** `setHeartbeatValue({10000, 10000})` con `setTaskScheduler(messageBrokerTaskScheduler)`: el
+`CONNECTED` dice `heart-beat:10000,10000`, el broker late cada 10 s y cierra la sesión STOMP del cliente que
+no escribe nada en 3 × 10 s (la revisa cada 10 s, así que en 30 a 40 s): `ERROR` con `Session closed.` y
+cierre 1002. El `SessionDisconnectEvent` apaga la presencia (§9). Un cliente que ofrece `heart-beat:0,0` no
+promete latir y no se corta.
+
+**Por qué 10 s.** Es lo que ofrecen los dos clientes que existen (`conexionStomp.ts`,
+`heart-beat:10000,10000`). La app nueva manda su latido cada 10 s y, cuando el servidor late, da la conexión
+por muerta tras 32 s de silencio (`latidosNegociados`): holgado contra los 10 s del servidor.
+
+**A quién podía cortar, verificado antes de activarlo** (frontend `origin/master` y `evidencia-foto`):
+
+| Cliente | ¿Abre el socket? | ¿Late? | Efecto de D-202 |
+|---|---|---|---|
+| Web de producción | No: `HAY_CHAT_EN_VIVO` es falso en web | — | Ninguno |
+| APK publicado | Sí, pero el CONNECT nunca llega entero (E-331, tramas sin NUL) | — | Ninguno: el broker no registra su sesión |
+| App nueva (044159f) | Sí, tramas en binario | Cada 10 s | Sigue conectada; detecta el silencio del servidor |
+
+**El programador.** Se usa el `messageBrokerTaskScheduler` que Spring ya crea para el broker, inyectado
+`@Lazy` (vive en la misma configuración que consume `WebSocketConfig`). No se declaró uno propio: los
+`@Scheduled` de toda la app buscan un `TaskScheduler` único y con dos caerían a uno local de un solo hilo.
+
+**Costo.** Cada latido del servidor pasa por `EntregaAutorizadaInterceptor`, que mira la sesión HTTP con la
+memoria de `SesionViva`: como mucho una lectura de Redis por socket cada 10 s. Si la sesión se revocó, el
+latido no sale; el cliente, al no oír nada, cierra y reconecta, y el handshake lo rechaza con 403.
+
+| Clase | Qué fija |
+|---|---|
+| `LatidosDelChatIT` (2) | Tomcat real, cliente STOMP en binario como la app: el `CONNECTED` negocia `10000,10000` (antes `0,0`); la conexión muda se cierra con `Session closed.` y 1002, la que late sigue abierta y recibe latidos, y la que ofreció `0,0` no se corta |

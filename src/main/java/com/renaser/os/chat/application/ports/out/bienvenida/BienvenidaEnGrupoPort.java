@@ -2,6 +2,7 @@ package com.renaser.os.chat.application.ports.out.bienvenida;
 
 import com.renaser.os.shared.domain.UserId;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,6 +26,7 @@ public interface BienvenidaEnGrupoPort {
     record Pendientes(UserId mentorId, List<Pendiente> aprendices) {
     }
 
-    record Pendiente(UUID asignacionId, UserId aprendizId) {
+    /** @param desde cuándo empezó esa pertenencia ({@code asignaciones_celula.inicio}): sin bienvenidas atrasadas (D-204) */
+    record Pendiente(UUID asignacionId, UserId aprendizId, Instant desde) {
     }
 }

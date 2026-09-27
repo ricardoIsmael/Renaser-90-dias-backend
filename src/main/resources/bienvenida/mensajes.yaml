@@ -7,8 +7,12 @@
 #  Operaciones que el repo no tiene. Cuando Operaciones pase los textos, se reemplazan acá.
 #
 #  CÓMO SE CAMBIAN: editando ESTE archivo y redesplegando. NO van en variables de entorno
-#  (decisión del dueño, 2026-09-26, D-190). Lo único configurable por entorno es la cuenta que
-#  firma la bienvenida del soporte (BIENVENIDA_REMITENTE_EMAIL).
+#  (decisión del dueño, 2026-09-26, D-190). Lo único configurable por entorno es el interruptor.
+#  Corregido 2026-09-27 (D-199): también lo era la cuenta que firmaba la bienvenida del soporte
+#  (BIENVENIDA_REMITENTE_EMAIL). Ahora todas las firma el PROGRAMA («Formación Renaser»).
+#
+#  APAGADAS POR DEFECTO (D-199/D-204, 2026-09-27): ni el soporte ni el grupo mandan nada mientras
+#  BIENVENIDA_ACTIVA no sea true. Se prende cuando el dueño apruebe estos textos.
 #
 #  Marcadores: {nombre} = primer nombre del aprendiz (lo pone el servidor).
 #  Tuteo, español neutro de Perú. Un texto vacío ("") hace que ese mensaje no se mande.
@@ -16,7 +20,7 @@
 # ============================================================================================
 
 # Al nacer el chat de SOPORTE de un aprendiz nuevo (en WhatsApp: «NOMBRE – FORMACIÓN RENASER»).
-# Firma la cuenta de BIENVENIDA_REMITENTE_EMAIL. Salen en este orden: la tarjeta de Canva con el
+# Los firma el PROGRAMA (D-199), no una persona. Salen en este orden: la tarjeta de Canva con el
 # nombre, el mensaje que acompaña la tarjeta y el mensaje formal.
 soporte:
   # Va junto con la tarjeta, «para darle valor agregado, una experiencia premium». Si no hay
@@ -33,9 +37,16 @@ soporte:
     Antes de esa sesión te enviaremos por aquí la información que necesitas para aprovecharla. Si tienes cualquier duda, escríbenos en este chat: estamos para acompañarte.
 
 # Al integrarse a su GRUPO estable con mentor (no la recepción): mensaje personalizado que refuerza
-# pertenencia y compromiso, en el chat del grupo, firmado por el mentor vigente de ese grupo (D-191).
+# pertenencia y compromiso, en el chat del grupo (D-191). Lo firma el PROGRAMA, no el mentor (D-204):
+# habla del mentor en tercera persona.
 # Marcador extra: {mentor} = primer nombre del mentor. Sin tarjeta. Una vez por aprendiz y grupo
 # (marca en asignaciones_celula.bienvenida_enviada_en); si el grupo no tiene mentor, espera a que
-# lo tenga. Vacío ("") = no se manda y queda pendiente.
+# lo tenga, hasta 48 h desde que la persona entró al grupo: después ya no sale (sin bienvenidas
+# atrasadas). Vacío ("") = no se manda y queda pendiente.
+# Sin género gramatical para la persona ni para el mentor. Sin horarios ni links.
+# Corregido 2026-09-27 (D-204): decía «¡{nombre}, te damos la bienvenida a tu grupo! Soy {mentor} y
+# voy a acompañarte en estos días. Desde hoy eres parte de este grupo: aquí nos sostenemos,
+# compartimos avances y cumplimos juntos lo que nos proponemos. Cuento contigo.» (primera persona del
+# mentor). El dueño pidió que lo diga el programa y con un tono más amigable.
 grupo: |
-  ¡{nombre}, te damos la bienvenida a tu grupo! Soy {mentor} y voy a acompañarte en estos días. Desde hoy eres parte de este grupo: aquí nos sostenemos, compartimos avances y cumplimos juntos lo que nos proponemos. Cuento contigo.
+  ¡Hola, {nombre}! 🌿 Qué alegría que te sumes a este grupo. Aquí vas a compartir el camino con cada integrante y con {mentor}, que te va a acompañar en estos días. Este es tu espacio para contar tus avances, pedir apoyo y celebrar cada paso. ¡Te damos la bienvenida!

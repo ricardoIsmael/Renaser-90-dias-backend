@@ -33,6 +33,17 @@ class TextosDeBienvenidaYamlAdapterTest {
     }
 
     @Test
+    @DisplayName("D-204: el texto del grupo lo dice el programa (el mentor en tercera persona), sin horarios ni links")
+    void elTextoDelGrupoLoDiceElPrograma() {
+        String grupo = new TextosDeBienvenidaYamlAdapter().grupo();
+
+        assertThat(grupo).startsWith("¡Hola, {nombre}!").contains("con {mentor}, que te va a acompañar")
+                .endsWith("¡Te damos la bienvenida!");
+        // Antes: «Soy {mentor} y voy a acompañarte…», el mentor en primera persona.
+        assertThat(grupo).doesNotContain("Soy {mentor}").doesNotContain("http").doesNotContainPattern("\\d{1,2}:\\d{2}");
+    }
+
+    @Test
     @DisplayName("una clave que falta o viene vacía apaga solo ese mensaje")
     void claveVaciaApagaEseMensaje() {
         TextosDeBienvenidaYamlAdapter textos = new TextosDeBienvenidaYamlAdapter(new ByteArrayResource(
@@ -52,7 +63,7 @@ class TextosDeBienvenidaYamlAdapterTest {
     }
 
     @Test
-    @DisplayName("D-190: application.yaml ya no lee el texto de BIENVENIDA_TEXTO; el remitente sigue por entorno")
+    @DisplayName("D-190/D-199: application.yaml ya no lee el texto de BIENVENIDA_TEXTO ni el remitente de BIENVENIDA_REMITENTE_EMAIL: la firma el programa")
     void elTextoYaNoVienePorEntorno() {
         YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
         // Del disco y no del classpath: en las pruebas src/test/resources/application.yaml la tapa.
@@ -60,6 +71,17 @@ class TextosDeBienvenidaYamlAdapterTest {
         Properties config = yaml.getObject();
 
         assertThat(config).doesNotContainKey("renaser.bienvenida.texto");
-        assertThat(config.getProperty("renaser.bienvenida.remitente-email")).isEqualTo("${BIENVENIDA_REMITENTE_EMAIL:}");
+        // Corregido 2026-09-27 (D-199): acá se exigía que el remitente siguiera por entorno.
+        assertThat(config).doesNotContainKey("renaser.bienvenida.remitente-email");
+    }
+
+    @Test
+    @DisplayName("D-199/D-204: el interruptor de las bienvenidas existe en application.yaml y viene APAGADO")
+    void elInterruptorVieneApagado() {
+        YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
+        // Del disco y no del classpath: en las pruebas src/test/resources/application.yaml la tapa (E-318).
+        yaml.setResources(new FileSystemResource("src/main/resources/application.yaml"));
+
+        assertThat(yaml.getObject().getProperty("renaser.chat.bienvenida.activa")).isEqualTo("${BIENVENIDA_ACTIVA:false}");
     }
 }

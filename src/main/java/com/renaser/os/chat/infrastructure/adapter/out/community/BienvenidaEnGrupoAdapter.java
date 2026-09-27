@@ -23,7 +23,8 @@ class BienvenidaEnGrupoAdapter implements BienvenidaEnGrupoPort {
     @Override
     public Optional<Pendientes> pendientes(UUID celulaId) {
         return bienvenidaDeGrupo.pendientes(celulaId, clock.now()).map(p -> new Pendientes(p.mentorId(),
-                p.aprendices().stream().map(a -> new Pendiente(a.asignacionId(), a.aprendizId())).toList()));
+                p.aprendices().stream().map(a -> new Pendiente(a.asignacionId(), a.aprendizId(), a.desde()))
+                        .toList()));
     }
 
     @Override

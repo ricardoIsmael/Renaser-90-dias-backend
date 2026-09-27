@@ -6,8 +6,8 @@ import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Da la bienvenida del mentor en el chat del grupo cuando cambia la composición (D-191): entra un
- * aprendiz, o el grupo recibe mentor y tenía aprendices esperando.
+ * Da la bienvenida en el chat del grupo cuando cambia la composición (D-191; la firma el programa
+ * desde D-204): entra un aprendiz, o el grupo recibe mentor y tenía aprendices esperando.
  *
  * <p>Un listener propio, igual que {@code ComposicionCelulaAcompananteListener}: cada
  * {@code @ApplicationModuleListener} corre después del commit, en otro hilo y en su transacción, así

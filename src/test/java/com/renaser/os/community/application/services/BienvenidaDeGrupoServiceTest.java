@@ -72,7 +72,8 @@ class BienvenidaDeGrupoServiceTest {
 
         assertThat(pendientes).hasValueSatisfying(p -> {
             assertThat(p.mentorId()).isEqualTo(MENTOR);
-            assertThat(p.aprendices()).containsExactly(new Pendiente(ana.id().value(), ANA));
+            // D-204: con su inicio, para que chat no le dé la bienvenida a quien entró hace días.
+            assertThat(p.aprendices()).containsExactly(new Pendiente(ana.id().value(), ANA, AHORA.minusSeconds(3600)));
         });
         assertThat(luis.id()).isNotNull();
     }

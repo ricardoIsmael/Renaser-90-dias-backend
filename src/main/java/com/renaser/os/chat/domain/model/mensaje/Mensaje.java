@@ -10,15 +10,31 @@ import lombok.experimental.Accessors;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * Un mensaje dentro de una conversacion (tabla `mensajes`). Replica en dominio los dos
  * CHECK de la base ANTES de llegar a Postgres (CLAUDE.MD sec. 5.4.4):
  * <ul>
- *   <li>{@code mensaje_con_contenido}: SISTEMA no necesita texto/media; cualquier otro tipo
- *   necesita al menos uno de los dos.</li>
+ *   <li>{@code mensaje_con_contenido}: todo mensaje que escribe una persona necesita texto o
+ *   media. (La base exime a SISTEMA, pero una persona ya no puede escribir SISTEMA: ver abajo.)</li>
  *   <li>{@code media_completa}: bucket y ruta viajan juntos o no viaja ninguno.</li>
  * </ul>
+ *
+ * <p><b>SISTEMA es la voz del programa</b> (D-199/D-204, 2026-09-27): lo que no escribe ninguna
+ * persona, como las bienvenidas. La app nueva lo pinta como «Formación Renaser», con el fénix.
+ * <ul>
+ *   <li>Solo se crea con {@link #delPrograma}. {@link #escribir} (una persona) lo rechaza con 400
+ *   (E-332): si no, cualquier participante podría firmar como el programa.</li>
+ *   <li>{@code mensajes.emisor_id} es NOT NULL (V1) y no se inventa un usuario técnico, así que en
+ *   un mensaje del programa {@link #emisorId} guarda a QUIÉN se refiere: la persona a quien se le da
+ *   la bienvenida. Así la cascada de {@code emisor_id} lo borra con su cuenta, junto con lo suyo.</li>
+ *   <li>Hacia afuera nunca se atribuye a esa persona: {@link #remitentePublico} devuelve
+ *   {@link #ID_PUBLICO_DEL_PROGRAMA}.</li>
+ * </ul>
+ * <blockquote><b>Corregido 2026-09-27.</b> Decía «SISTEMA no necesita texto/media; cualquier otro
+ * tipo necesita al menos uno de los dos», y {@code escribir} aceptaba un SISTEMA vacío de
+ * cualquier emisor.</blockquote>
  *
  * <p>Sin mutadores de moderacion (ocultar/eliminar): ningun caso de uso de este encargo los
  * pide (ver docs/MODULO_CHAT.md §6, fuera de alcance explicito). {@code oculto}/{@code
@@ -36,6 +52,16 @@ public final class Mensaje {
      * mensaje con media, no un detalle del adaptador de S3.
      */
     public static final String BUCKET_DEFAULT = "chat";
+
+    /**
+     * Con qué id firma hacia afuera un mensaje del programa (D-199): el UUID nulo, que ningún usuario
+     * tiene. No {@code null}: todas las versiones publicadas de la app validan {@code senderId} como
+     * texto obligatorio, y un {@code null} dejaría sin bandeja a quien lo reciba.
+     */
+    public static final UUID ID_PUBLICO_DEL_PROGRAMA = new UUID(0L, 0L);
+
+    /** Con qué nombre firma el programa: el mismo que cierra el nombre de cada chat de soporte. */
+    public static final String NOMBRE_DEL_PROGRAMA = "Formación Renaser";
 
     private final MensajeId id;
     private final ConversacionId conversacionId;
@@ -63,11 +89,29 @@ public final class Mensaje {
                                     Integer mediaBytes, Short mediaDuracionS, MensajeId respuestaAId,
                                     Instant ahora) {
         Objects.requireNonNull(id, "id es obligatorio");
-        requireConContenido(tipo, texto, mediaRuta);
+        requireEscritoPorUnaPersona(tipo);
+        requireConContenido(texto, mediaRuta);
         requireMediaCompleta(mediaBucket, mediaRuta);
         requirePositivosSiVienen(mediaBytes, mediaDuracionS);
         return new Mensaje(id, conversacionId, emisorId, tipo, texto, mediaBucket, mediaRuta,
                 mediaMime, mediaBytes, mediaDuracionS, false, null, respuestaAId, ahora);
+    }
+
+    /**
+     * Un mensaje del programa (SISTEMA): nadie lo escribe, así que no hay emisor que validar.
+     *
+     * @param sobreQuien la persona a quien se refiere (ver la clase): queda en {@code emisor_id}
+     */
+    public static Mensaje delPrograma(MensajeId id, ConversacionId conversacionId, UserId sobreQuien,
+                                      ContenidoDelPrograma contenido, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
+        Objects.requireNonNull(sobreQuien, "un mensaje del programa se guarda a nombre de la persona a quien se refiere");
+        requireConContenido(contenido.texto(), contenido.mediaRuta());
+        requireMediaCompleta(contenido.mediaBucket(), contenido.mediaRuta());
+        requirePositivosSiVienen(contenido.mediaBytes(), null);
+        return new Mensaje(id, conversacionId, sobreQuien, TipoMensaje.SISTEMA, contenido.texto(),
+                contenido.mediaBucket(), contenido.mediaRuta(), contenido.mediaMime(), contenido.mediaBytes(), null,
+                false, null, null, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */
@@ -79,9 +123,28 @@ public final class Mensaje {
                 mediaDuracionS, oculto, eliminadoEn, respuestaAId, creadoEn);
     }
 
-    private static void requireConContenido(TipoMensaje tipo, String texto, String mediaRuta) {
-        if (tipo != TipoMensaje.SISTEMA && (texto == null || texto.isBlank()) && mediaRuta == null) {
-            throw new IllegalArgumentException("El mensaje necesita texto o media (salvo tipo SISTEMA)");
+    public boolean esDelPrograma() {
+        return tipo == TipoMensaje.SISTEMA;
+    }
+
+    /**
+     * Quién firma este mensaje ante quien lo lee: el emisor, o el programa si es de SISTEMA. Nunca la
+     * persona guardada en un mensaje del programa, aunque sea quien lo está mirando.
+     */
+    public UUID remitentePublico() {
+        return esDelPrograma() ? ID_PUBLICO_DEL_PROGRAMA : emisorId.value();
+    }
+
+    /** SISTEMA es la voz del programa, no de una persona (E-332). */
+    private static void requireEscritoPorUnaPersona(TipoMensaje tipo) {
+        if (tipo == TipoMensaje.SISTEMA) {
+            throw new IllegalArgumentException("Un mensaje de sistema lo escribe el programa, no una persona");
+        }
+    }
+
+    private static void requireConContenido(String texto, String mediaRuta) {
+        if ((texto == null || texto.isBlank()) && mediaRuta == null) {
+            throw new IllegalArgumentException("El mensaje necesita texto o media");
         }
     }
 

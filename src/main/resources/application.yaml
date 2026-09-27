@@ -479,14 +479,21 @@ renaser:
       semaforo-en-chat-plantilla-amarillo: "Cerraste la semana en amarillo, {etiqueta}: {porcentaje} %. Estás cerca: elige un hábito y cuídalo cada día de esta semana."
       semaforo-en-chat-plantilla-rojo: "Cerraste la semana en rojo, {etiqueta}: {porcentaje} %. No es un juicio, es un punto de partida. ¿Empezamos hoy con un paso pequeño? Aquí estoy para acompañarte."
       semaforo-en-chat-plantilla-sin-datos: "Tu semana cerró sin datos en el semáforo. ¿Planificamos juntos esta semana? Elegir hoy tus hábitos y objetivos te ayuda a empezar con claridad."
-  # D-174: bienvenida automática en el chat de soporte de cada aprendiz NUEVO (tarjeta de Canva con
-  # su primer nombre y los mensajes de OPE-01-01). Apagada mientras no haya remitente: el correo de
-  # la cuenta de staff que la firma (hoy, la de Kelin).
-  # Corregido 2026-09-26 (D-190): aca estaba tambien `texto: ${BIENVENIDA_TEXTO:}`. Los textos ya NO
-  # van por entorno: viven en src/main/resources/bienvenida/mensajes.yaml y se cambian editando ese
-  # archivo y redesplegando. BIENVENIDA_TEXTO ya no se lee.
-  bienvenida:
-    remitente-email: ${BIENVENIDA_REMITENTE_EMAIL:}
+  # D-199/D-204 (2026-09-27): el interruptor de las bienvenidas automáticas, la del soporte (D-174) y
+  # la del grupo (D-191). Las dos las firma el PROGRAMA («Formación Renaser»), no una persona.
+  # APAGADO por defecto: los textos de bienvenida/mensajes.yaml son borradores y no pueden llegar a
+  # aprendices reales hasta que el dueño los apruebe. Apagado no manda ni marca nada, y al prenderlo
+  # no salen bienvenidas atrasadas (docs/MODULO_CHAT.md §10). En producción:
+  # /renaser/prod/BIENVENIDA_ACTIVA=true y reiniciar el contenedor.
+  # Corregido 2026-09-27 (D-199): acá estaba `bienvenida: remitente-email: ${BIENVENIDA_REMITENTE_EMAIL:}`,
+  # el correo de la cuenta de staff que firmaba la bienvenida del soporte (la de Kelin); sin remitente
+  # estaba apagada. Ahora la firma el programa: BIENVENIDA_REMITENTE_EMAIL ya no se lee.
+  # Corregido 2026-09-26 (D-190): también estaba `texto: ${BIENVENIDA_TEXTO:}`. Los textos NO van por
+  # entorno: viven en src/main/resources/bienvenida/mensajes.yaml y se cambian editando ese archivo y
+  # redesplegando. BIENVENIDA_TEXTO ya no se lee.
+  chat:
+    bienvenida:
+      activa: ${BIENVENIDA_ACTIVA:false}
   email:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}

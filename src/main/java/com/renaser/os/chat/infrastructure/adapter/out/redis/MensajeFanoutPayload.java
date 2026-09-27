@@ -15,6 +15,10 @@ import java.util.UUID;
  * este mismo canal ({@link PresenciaFanoutPayload}). Va SIEMPRE y con valor fijo: un cliente
  * que recibe una forma que no reconoce tiene que poder descartarla sin adivinar, y adivinar
  * por "tiene campo texto" habria sido exactamente eso.
+ *
+ * <p>{@code senderId} es el de {@code Mensaje.remitentePublico}: en un mensaje del programa (D-199), el
+ * UUID nulo y no la persona guardada, que si no descartaría el aviso como «eco propio». {@code type}
+ * sale con el nombre del dominio ({@code SISTEMA}, {@code TEXTO}), no traducido como en el REST (E-333).
  */
 record MensajeFanoutPayload(String event, UUID id, UUID conversationId, UUID senderId, String type,
                              String text, Instant createdAt) {
@@ -23,6 +27,6 @@ record MensajeFanoutPayload(String event, UUID id, UUID conversationId, UUID sen
 
     static MensajeFanoutPayload from(Mensaje mensaje) {
         return new MensajeFanoutPayload(EVENTO, mensaje.id().value(), mensaje.conversacionId().value(),
-                mensaje.emisorId().value(), mensaje.tipo().name(), mensaje.texto(), mensaje.creadoEn());
+                mensaje.remitentePublico(), mensaje.tipo().name(), mensaje.texto(), mensaje.creadoEn());
     }
 }

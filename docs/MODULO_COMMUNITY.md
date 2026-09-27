@@ -433,6 +433,8 @@ hacia afuera se expone por `community.api.BienvenidaDeGrupo` (`BienvenidaDeGrupo
 
 - `pendientes(grupo, instante)`: mentor vigente + pertenencias de aprendiz vigentes sin marca. Vacío si el
   grupo es la recepción, no existe, está fuera de su periodo o no tiene mentor.
+  Cada pendiente trae además `desde`, el `inicio` de la pertenencia (2026-09-27, D-204): `chat` no le da la
+  bienvenida a quien entró al grupo hace más de 48 h. La regla vive en `chat`; `community` solo informa.
 - `marcarDada(asignacion, instante)`: `UPDATE … WHERE funcion = 'APRENDIZ' AND fin IS NULL AND
   bienvenida_enviada_en IS NULL`; `true` solo si esa llamada afectó la fila. Se llama dentro de la
   transacción de `chat` que guarda el mensaje.
@@ -442,4 +444,4 @@ bienvenida. El mensaje lo escribe `chat` (`BienvenidaEnGrupoService`, `docs/MODU
 
 | Clase | Qué fija |
 |---|---|
-| `BienvenidaDeGrupoServiceTest` (5) | Solo las vigentes sin marca, con su mentor; recepción no; sin mentor no; grupo fuera de periodo no; marcar delega en el UPDATE condicional |
+| `BienvenidaDeGrupoServiceTest` (5) | Solo las vigentes sin marca, con su mentor y el inicio de cada pertenencia (D-204); recepción no; sin mentor no; grupo fuera de periodo no; marcar delega en el UPDATE condicional |

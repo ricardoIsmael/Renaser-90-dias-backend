@@ -198,9 +198,10 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
                 .distinct().toList();
         Map<MensajeId, Mensaje> originales = idsRespuesta.isEmpty() ? Map.of() : loadMensajePort.porIds(idsRespuesta);
 
+        // Los mensajes del programa no se atribuyen a la persona guardada en emisor_id (D-199): no se la busca.
         Set<UserId> idsUsuarios = new LinkedHashSet<>();
-        mensajes.forEach(m -> idsUsuarios.add(m.emisorId()));
-        originales.values().forEach(o -> idsUsuarios.add(o.emisorId()));
+        mensajes.stream().filter(m -> !m.esDelPrograma()).forEach(m -> idsUsuarios.add(m.emisorId()));
+        originales.values().stream().filter(o -> !o.esDelPrograma()).forEach(o -> idsUsuarios.add(o.emisorId()));
         Map<UserId, UserSummary> usuarios = userSummaryFinder.findByIds(idsUsuarios);
 
         return mensajes.stream().map(m -> aEnriquecido(m, originales, usuarios)).toList();
@@ -208,9 +209,12 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
 
     private MensajeEnriquecido aEnriquecido(Mensaje mensaje, Map<MensajeId, Mensaje> originales,
                                               Map<UserId, UserSummary> usuarios) {
-        UserSummary emisor = usuarios.get(mensaje.emisorId());
         RespuestaPreview preview = mensaje.respuestaAId() == null ? null
                 : previewDe(originales.get(mensaje.respuestaAId()), usuarios);
+        if (mensaje.esDelPrograma()) {
+            return new MensajeEnriquecido(mensaje, Mensaje.NOMBRE_DEL_PROGRAMA, null, preview, urlDeLectura(mensaje));
+        }
+        UserSummary emisor = usuarios.get(mensaje.emisorId());
         return new MensajeEnriquecido(mensaje, emisor != null ? emisor.fullName() : null,
                 emisor != null ? emisor.avatarUrl() : null, preview, urlDeLectura(mensaje));
     }
@@ -234,9 +238,17 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         if (original == null) {
             return null;
         }
-        UserSummary emisorOriginal = usuarios.get(original.emisorId());
-        return new RespuestaPreview(original.id(), emisorOriginal != null ? emisorOriginal.fullName() : null,
-                original.tipo(), recortar(original.texto()), original.eliminadoEn());
+        return new RespuestaPreview(original.id(), nombreDeQuienFirma(original, usuarios), original.tipo(),
+                recortar(original.texto()), original.eliminadoEn());
+    }
+
+    /** El programa firma sus mensajes; los demás, su emisor (o nadie si su cuenta ya no está). */
+    private static String nombreDeQuienFirma(Mensaje mensaje, Map<UserId, UserSummary> usuarios) {
+        if (mensaje.esDelPrograma()) {
+            return Mensaje.NOMBRE_DEL_PROGRAMA;
+        }
+        UserSummary emisor = usuarios.get(mensaje.emisorId());
+        return emisor != null ? emisor.fullName() : null;
     }
 
     private static String recortar(String texto) {
