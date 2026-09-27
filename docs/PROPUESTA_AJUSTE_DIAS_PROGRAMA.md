@@ -174,8 +174,8 @@ caracterización que fija el comportamiento de hoy):
 |---|---|
 | Retroceder y hábitos elegidos en el Plan | `desbloqueos_habito.dia_desbloqueo` es un día ABSOLUTO; un hábito tocado el día 30 deja de generarse si se retrocede al 25, hasta volver al 30 (`RegistroService.generarInterno`). «Mis hábitos» lo sigue mostrando desbloqueado |
 | Los tracks de HOY no se rehacen | Conservan `dia_programa`, `es_opcional` (ciclos D-169) y horario del día viejo hasta mañana. D-169 pregunta abierta 4 |
-| Rocas | Semanas y fin del programa desde `fecha_inicio` sin ajuste: «día 34, semana 7», y al retroceder el final cae en la semana 14 (E-320) |
-| Adelantar saltándose un día de firma | El pacto de la fase saltada ya no se puede firmar (solo se firma la fase actual) |
+| Rocas | **Resuelto (D-192, 2026-09-26).** La semana es `ceil(día/7)` (1 a 13) y sigue al día ajustado; el fin del programa también. Decía: «Semanas y fin del programa desde `fecha_inicio` sin ajuste: «día 34, semana 7», y al retroceder el final cae en la semana 14 (E-320)» |
+| Adelantar saltándose un día de firma | **Resuelto (D-193, 2026-09-26).** El pacto saltado queda pendiente y se firma después del de la fase en curso. Decía: «El pacto de la fase saltada ya no se puede firmar (solo se firma la fase actual)» |
 | Ajustar antes del Día 1 | Se guarda el día pero no el ajuste; al arrancar el programa vuelve a 1 sin aviso (204 y fila en la bitácora igual) |
 | Fijar 90 | No gradúa en el acto: gradúa el barrido siguiente (:05) y ya no se des-gradúa |
 | Fijar 0 a alguien en curso | Válido hoy: queda «día 0» un día (sin hábitos nuevos, sin elección semanal, «día 0 de 90» en Renasia) y mañana es 1 |

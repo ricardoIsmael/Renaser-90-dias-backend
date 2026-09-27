@@ -2,106 +2,129 @@ package com.renaser.os.rocks.domain.model.rocasemanal;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * D-192 (E-320): la semana de programa es {@code ceil(dia / 7)}, de 1 a 13, y sigue al dia cuando se
+ * ajusta. Reemplaza a las pruebas de la cuenta calendario lunes-domingo, incluidas las dos de
+ * caracterizacion que fijaban la «semana 14».
+ */
 class SemanaProgramaTest {
 
-    @Test
-    @DisplayName("inicio en lunes: semana 1 dura la semana completa hasta el domingo")
-    void inicioEnLunesSemanaCompleta() {
-        LocalDate lunes = LocalDate.of(2026, 8, 24); // lunes
-        assertThat(SemanaPrograma.primerDomingoDesde(lunes)).isEqualTo(LocalDate.of(2026, 8, 30));
-        assertThat(SemanaPrograma.numeroSemanaParaFecha(lunes, lunes)).isEqualTo(1);
-        assertThat(SemanaPrograma.numeroSemanaParaFecha(lunes, LocalDate.of(2026, 8, 30))).isEqualTo(1);
-        assertThat(SemanaPrograma.numeroSemanaParaFecha(lunes, LocalDate.of(2026, 8, 31))).isEqualTo(2);
+    /** Lunes 2026-09-07; los seis dias siguientes cubren martes a domingo. */
+    private static final LocalDate UN_LUNES = LocalDate.of(2026, 9, 7);
+
+    static Stream<Arguments> inicioEnCadaDiaDeLaSemanaPorDia() {
+        int[][] diaYSemana = {{1, 1}, {7, 1}, {8, 2}, {84, 12}, {85, 13}, {90, 13}};
+        return Stream.iterate(0, i -> i + 1).limit(7)
+                .flatMap(desplazamiento -> Stream.of(diaYSemana)
+                        .map(par -> Arguments.of(UN_LUNES.plusDays(desplazamiento), par[0], par[1])));
+    }
+
+    @ParameterizedTest(name = "inicio {0}, dia {1} -> semana {2}")
+    @MethodSource("inicioEnCadaDiaDeLaSemanaPorDia")
+    @DisplayName("inicio en cualquier dia de la semana: la semana sale del dia de programa")
+    void laSemanaSaleDelDiaDePrograma(LocalDate inicio, int dia, int semanaEsperada) {
+        LocalDate hoy = inicio.plusDays(dia - 1L);
+        SemanaPrograma semanas = SemanaPrograma.desde(inicio, dia, hoy);
+
+        assertThat(semanas.numeroSemanaParaFecha(hoy)).isEqualTo(semanaEsperada);
+        assertThat(SemanaPrograma.numeroDeDia(dia)).isEqualTo(semanaEsperada);
+    }
+
+    @ParameterizedTest(name = "inicio en {0}")
+    @MethodSource("inicios")
+    @DisplayName("los 90 dias caen en las semanas 1 a 13, nunca en la 14, empiece el dia que empiece")
+    void nuncaHaySemanaCatorce(DayOfWeek diaDeInicio) {
+        LocalDate inicio = UN_LUNES.plusDays(diaDeInicio.getValue() - 1L);
+        SemanaPrograma semanas = SemanaPrograma.desde(inicio, 1, inicio);
+
+        for (int dia = 1; dia <= 90; dia++) {
+            assertThat(semanas.numeroSemanaParaFecha(inicio.plusDays(dia - 1L))).isBetween(1, 13);
+        }
+        assertThat(semanas.numeroSemanaParaFecha(inicio.plusDays(89))).isEqualTo(13);
+        assertThat(semanas.limites(13)).isEqualTo(
+                new SemanaPrograma.LimitesSemana(inicio.plusDays(84), inicio.plusDays(89)));
+        assertThat(semanas.finDelPrograma()).isEqualTo(inicio.plusDays(89));
+    }
+
+    static Stream<DayOfWeek> inicios() {
+        return Stream.of(DayOfWeek.values());
     }
 
     @Test
-    @DisplayName("inicio a mitad de semana: semana 1 es corta (flexible)")
-    void inicioAMitadDeSemanaEsCorta() {
-        LocalDate miercoles = LocalDate.of(2026, 8, 26); // miercoles
-        assertThat(SemanaPrograma.primerDomingoDesde(miercoles)).isEqualTo(LocalDate.of(2026, 8, 30));
-        assertThat(SemanaPrograma.numeroSemanaParaFecha(miercoles, LocalDate.of(2026, 8, 30))).isEqualTo(1);
-        assertThat(SemanaPrograma.numeroSemanaParaFecha(miercoles, LocalDate.of(2026, 8, 31))).isEqualTo(2);
+    @DisplayName("limites: siete dias del programa, empezando el dia de inicio, sea el dia que sea")
+    void limitesSonBloquesDeSieteDias() {
+        LocalDate miercoles = LocalDate.of(2026, 9, 9);
+        SemanaPrograma semanas = SemanaPrograma.desde(miercoles, 1, miercoles);
+
+        assertThat(semanas.limites(1)).isEqualTo(new SemanaPrograma.LimitesSemana(miercoles, miercoles.plusDays(6)));
+        assertThat(semanas.limites(2)).isEqualTo(
+                new SemanaPrograma.LimitesSemana(miercoles.plusDays(7), miercoles.plusDays(13)));
     }
 
     @Test
-    @DisplayName("inicio en domingo: el primer domingo es el mismo dia de inicio")
-    void inicioEnDomingoEsElMismoDia() {
-        LocalDate domingo = LocalDate.of(2026, 8, 23);
-        assertThat(SemanaPrograma.primerDomingoDesde(domingo)).isEqualTo(domingo);
-        assertThat(SemanaPrograma.numeroSemanaParaFecha(domingo, domingo)).isEqualTo(1);
-        assertThat(SemanaPrograma.numeroSemanaParaFecha(domingo, LocalDate.of(2026, 8, 24))).isEqualTo(2);
+    @DisplayName("empezar un lunes sin ajuste da lo mismo que la cuenta vieja lunes-domingo")
+    void inicioEnLunesCoincideConLaCuentaVieja() {
+        SemanaPrograma semanas = SemanaPrograma.desde(UN_LUNES, 1, UN_LUNES);
+
+        assertThat(semanas.limites(1)).isEqualTo(new SemanaPrograma.LimitesSemana(UN_LUNES, UN_LUNES.plusDays(6)));
+        assertThat(semanas.limites(1).fin().getDayOfWeek()).isEqualTo(DayOfWeek.SUNDAY);
+        assertThat(semanas.limites(5).inicio().getDayOfWeek()).isEqualTo(DayOfWeek.MONDAY);
     }
 
     @Test
-    @DisplayName("semanas avanzan de 7 en 7 despues de la semana 1")
-    void semanasAvanzanDeSieteEnSiete() {
-        LocalDate lunes = LocalDate.of(2026, 8, 24);
-        assertThat(SemanaPrograma.numeroSemanaParaFecha(lunes, LocalDate.of(2026, 9, 6))).isEqualTo(2); // domingo semana 2
-        assertThat(SemanaPrograma.numeroSemanaParaFecha(lunes, LocalDate.of(2026, 9, 7))).isEqualTo(3); // lunes semana 3
+    @DisplayName("adelantar el dia: la semana sigue al dia, no al calendario (dia 35 -> semana 5)")
+    void trasAdelantarLaSemanaSigueAlDia() {
+        LocalDate inicio = LocalDate.of(2026, 9, 1);
+        LocalDate hoy = inicio.plusDays(9); // dia 10 de calendario, adelantado al 35
+        SemanaPrograma semanas = SemanaPrograma.desde(inicio, 35, hoy);
+
+        assertThat(semanas.numeroSemanaParaFecha(hoy)).isEqualTo(5);
+        assertThat(semanas.limites(5)).isEqualTo(new SemanaPrograma.LimitesSemana(hoy.minusDays(6), hoy));
+        assertThat(semanas.finDelPrograma()).isEqualTo(hoy.plusDays(55));
     }
 
     @Test
-    @DisplayName("limites: inicio en miercoles, semana 1 corta va de miercoles al primer domingo")
-    void limitesSemana1CortaConInicioAMitadDeSemana() {
-        LocalDate miercoles = LocalDate.of(2026, 8, 26);
-        var limites = SemanaPrograma.limites(miercoles, 1);
-        assertThat(limites.inicio()).isEqualTo(miercoles);
-        assertThat(limites.fin()).isEqualTo(LocalDate.of(2026, 8, 30));
+    @DisplayName("retroceder el dia: el final del programa se corre y sigue cayendo en la semana 13")
+    void trasRetrocederElFinalSigueEnLaSemanaTrece() {
+        LocalDate inicio = LocalDate.of(2026, 9, 7);
+        LocalDate hoy = inicio.plusDays(39); // dia 40 de calendario, retrocedido al 34
+        SemanaPrograma semanas = SemanaPrograma.desde(inicio, 34, hoy);
+
+        assertThat(semanas.numeroSemanaParaFecha(hoy)).isEqualTo(5);
+        assertThat(semanas.primerDia()).isEqualTo(inicio.plusDays(6));
+        assertThat(semanas.finDelPrograma()).isEqualTo(inicio.plusDays(95));
+        assertThat(semanas.numeroSemanaParaFecha(semanas.finDelPrograma())).isEqualTo(13);
     }
 
     @Test
-    @DisplayName("limites: semana 2+ siempre lunes-domingo completa, sin importar el dia de inicio")
-    void limitesSemanaCompletaLunesADomingo() {
-        LocalDate miercoles = LocalDate.of(2026, 8, 26);
-        var limites = SemanaPrograma.limites(miercoles, 2);
-        assertThat(limites.inicio()).isEqualTo(LocalDate.of(2026, 8, 31)); // lunes siguiente al primer domingo
-        assertThat(limites.fin()).isEqualTo(LocalDate.of(2026, 9, 6));
-        assertThat(limites.inicio().getDayOfWeek().getValue()).isEqualTo(1);
-        assertThat(limites.fin().getDayOfWeek().getValue()).isEqualTo(7);
+    @DisplayName("antes del inicio: el ancla es fecha_inicio y todo lo anterior es semana 1")
+    void antesDelInicio() {
+        LocalDate inicio = LocalDate.of(2026, 9, 10);
+        SemanaPrograma semanas = SemanaPrograma.desde(inicio, 0, inicio.minusDays(3));
+
+        assertThat(semanas.primerDia()).isEqualTo(inicio);
+        assertThat(semanas.numeroSemanaParaFecha(inicio.minusDays(3))).isEqualTo(1);
+        assertThat(semanas.semanaAPlanificar(inicio.minusDays(1))).isEqualTo(1);
     }
 
-    @Test
-    @DisplayName("finDelPrograma: dia 90, inclusive de fechaInicio como dia 1")
-    void finDelProgramaEsNoventaDias() {
-        LocalDate inicio = LocalDate.of(2026, 1, 1);
-        assertThat(SemanaPrograma.finDelPrograma(inicio)).isEqualTo(LocalDate.of(2026, 3, 31)); // 89 dias despues
-    }
+    @ParameterizedTest(name = "dia {0} -> planifica la semana {1}")
+    @CsvSource({"1, 1", "6, 1", "7, 2", "8, 2", "14, 3", "83, 12", "84, 13", "85, 13", "90, 13"})
+    @DisplayName("semanaAPlanificar: el ultimo dia de cada semana prepara la siguiente, nunca la 14")
+    void semanaAPlanificar(int dia, int esperada) {
+        LocalDate inicio = LocalDate.of(2026, 9, 10); // jueves: el corte ya no es el domingo
+        LocalDate hoy = inicio.plusDays(dia - 1L);
 
-    /**
-     * CARACTERIZACION (riesgos del ajuste de dia, 2026-09-26; pregunta abierta al dueño). Las
-     * semanas de rocas se cuentan desde {@code fechaInicio} SIN {@code dias_ajuste_programa},
-     * y {@code RocaSemanal} solo admite semanas 1..13 (CHECK de V1). Inicio lunes 2026-06-01,
-     * retrocedido 7 dias: su dia 90 cae el 2026-09-05, que para rocks es la semana 14 y ya esta
-     * pasado el fin del programa — crear el plan de esas semanas falla con 400.
-     */
-    @Test
-    @DisplayName("caracterizacion: tras retroceder 7 dias, el final del programa cae en la semana 14")
-    void caracterizacionRetrocederLlevaElFinalDelProgramaALaSemanaCatorce() {
-        LocalDate lunes = LocalDate.of(2026, 6, 1);
-        LocalDate diaNoventaConAjuste = lunes.plusDays(90 + 7 - 1);
-
-        assertThat(SemanaPrograma.numeroSemanaParaFecha(lunes, diaNoventaConAjuste)).isEqualTo(14);
-        assertThat(SemanaPrograma.finDelPrograma(lunes)).isBefore(diaNoventaConAjuste);
-    }
-
-    /**
-     * CARACTERIZACION de un hallazgo SIN ajuste de por medio (preexistente, reportado aparte): con
-     * inicio en miercoles la semana 1 dura 5 dias, las semanas 2..13 suman 84, y el dia 90 ya cae
-     * en la semana 14. Solo los inicios en lunes o martes caben en 13 semanas.
-     */
-    @Test
-    @DisplayName("caracterizacion: con inicio en miercoles, el dia 90 cae en la semana 14 sin ningun ajuste")
-    void caracterizacionInicioEnMiercolesTerminaEnLaSemanaCatorce() {
-        LocalDate miercoles = LocalDate.of(2026, 8, 26);
-
-        assertThat(SemanaPrograma.numeroSemanaParaFecha(miercoles, SemanaPrograma.finDelPrograma(miercoles)))
-                .isEqualTo(14);
-        assertThat(SemanaPrograma.numeroSemanaParaFecha(LocalDate.of(2026, 9, 1), // martes
-                SemanaPrograma.finDelPrograma(LocalDate.of(2026, 9, 1)))).isEqualTo(13);
+        assertThat(SemanaPrograma.desde(inicio, dia, hoy).semanaAPlanificar(hoy)).isEqualTo(esperada);
     }
 }

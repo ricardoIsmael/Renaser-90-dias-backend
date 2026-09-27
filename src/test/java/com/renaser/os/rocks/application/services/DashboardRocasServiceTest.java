@@ -81,13 +81,23 @@ class DashboardRocasServiceTest {
         lenient().when(conteoPort.conteoDiarioPorParticipante(any(), any(), any())).thenReturn(Map.of());
     }
 
+    /**
+     * {@code fecha_inicio} coherente con el dia pedido (regla 03): desde D-192 la semana se ancla en el
+     * dia de programa, y un fixture con dia 40 y 10 dias transcurridos probaria otra cosa.
+     */
     private static ProgresoParticipanteRocks progreso(int diaPrograma, RolParticipante rol, boolean suspendido) {
-        return new ProgresoParticipanteRocks(diaPrograma, FECHA_INICIO, ZoneOffset.UTC, rol, suspendido, false);
+        return new ProgresoParticipanteRocks(diaPrograma, inicioParaDia(diaPrograma), ZoneOffset.UTC, rol,
+                suspendido, false);
     }
 
     /** Igual que {@link #progreso} pero con el programa ANDANDO: el caso de E-169. */
     private static ProgresoParticipanteRocks progresoActivado(int diaPrograma, RolParticipante rol, boolean suspendido) {
-        return new ProgresoParticipanteRocks(diaPrograma, FECHA_INICIO, ZoneOffset.UTC, rol, suspendido, true);
+        return new ProgresoParticipanteRocks(diaPrograma, inicioParaDia(diaPrograma), ZoneOffset.UTC, rol,
+                suspendido, true);
+    }
+
+    private static LocalDate inicioParaDia(int diaPrograma) {
+        return CLOCK.now().atZone(ZoneOffset.UTC).toLocalDate().minusDays(diaPrograma - 1L);
     }
 
     private static List<RocaMaestra> tresMaestras(UserId participante) {
@@ -208,8 +218,8 @@ class DashboardRocasServiceTest {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(10, RolParticipante.TRAINEE, false)));
         when(rocasMaestrasUseCase.misRocasMaestras(actorId)).thenReturn(tresMaestras(actorId));
         LocalDate hoy = CLOCK.now().atZone(ZoneOffset.UTC).toLocalDate();
-        int numeroSemana = SemanaPrograma.numeroSemanaParaFecha(FECHA_INICIO, hoy);
-        var limites = SemanaPrograma.limites(FECHA_INICIO, numeroSemana);
+        SemanaPrograma semanas = SemanaPrograma.desde(FECHA_INICIO, 10, hoy);
+        var limites = semanas.limites(semanas.numeroSemanaParaFecha(hoy));
         when(conteoPort.conteoDiarioPorParticipante(List.of(actorId), limites.inicio(), limites.fin()))
                 .thenReturn(Map.of(actorId, List.of(new DiaRocas(hoy, 3, 1))));
 
@@ -220,7 +230,7 @@ class DashboardRocasServiceTest {
         assertThat(diaDeHoy.total()).isEqualTo(3);
         assertThat(diaDeHoy.esHoy()).isTrue();
 
-        // hoy es lunes (inicio de la semana calendario) -> el resto de la semana es futuro.
+        // dia 10: la semana 2 va del dia 8 al 14 -> quedan cuatro dias futuros en la grilla.
         var futuro = dashboard.grillaSemanal().stream().filter(d -> d.fecha().isAfter(hoy)).findFirst()
                 .orElseThrow(() -> new AssertionError("se esperaba al menos un dia futuro en la grilla"));
         assertThat(futuro.completadas()).isNull();
@@ -241,5 +251,61 @@ class DashboardRocasServiceTest {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progresoActivado(40, RolParticipante.MENTOR, false)));
 
         GuardDeRol.noRechaza(() -> service.dashboard(actorId), "Solo un aprendiz opera sus propias rocas");
+    }
+
+    @Test
+    @DisplayName("D-192: tras adelantar el dia (10 de calendario -> 35), la semana es la 5 y sus limites siguen al dia")
+    void trasAdelantarElDiaLaSemanaSigueAlDia() {
+        LocalDate hoy = CLOCK.now().atZone(ZoneOffset.UTC).toLocalDate();
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(new ProgresoParticipanteRocks(35,
+                hoy.minusDays(9), ZoneOffset.UTC, RolParticipante.TRAINEE, false, false)));
+        when(rocasMaestrasUseCase.misRocasMaestras(actorId)).thenReturn(tresMaestras(actorId));
+
+        DashboardRocas dashboard = service.dashboard(actorId);
+
+        assertThat(dashboard.numeroSemana()).isEqualTo(5);
+        assertThat(dashboard.inicioSemana()).isEqualTo(hoy.minusDays(6));
+        assertThat(dashboard.finSemana()).isEqualTo(hoy);
+    }
+
+    @Test
+    @DisplayName("D-192: dia 90 con inicio en miercoles -> semana 13, que termina ese dia (antes: semana 14)")
+    void elDiaNoventaEsSemanaTrece() {
+        LocalDate hoy = CLOCK.now().atZone(ZoneOffset.UTC).toLocalDate();
+        LocalDate inicio = hoy.minusDays(89);
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(new ProgresoParticipanteRocks(90,
+                inicio, ZoneOffset.UTC, RolParticipante.TRAINEE, false, false)));
+        when(rocasMaestrasUseCase.misRocasMaestras(actorId)).thenReturn(tresMaestras(actorId));
+
+        DashboardRocas dashboard = service.dashboard(actorId);
+
+        assertThat(inicio.getDayOfWeek()).isEqualTo(java.time.DayOfWeek.WEDNESDAY);
+        assertThat(dashboard.numeroSemana()).isEqualTo(13);
+        assertThat(dashboard.inicioSemana()).isEqualTo(inicio.plusDays(84));
+        assertThat(dashboard.finSemana()).isEqualTo(hoy);
+        assertThat(dashboard.grillaSemanal()).hasSize(6);
+        assertThat(dashboard.puedeCrearPlanDiario()).isFalse();
+    }
+
+    /**
+     * Regla 02: a las 03:00 UTC en Lima todavia es el dia anterior. El 15 en UTC seria el dia 8 (semana
+     * 2); en Lima es el 14, dia 7, ultimo dia de la semana 1.
+     */
+    @Test
+    @DisplayName("D-192: de madrugada UTC la semana es la del dia LOCAL del participante")
+    void deMadrugadaUtcMandaElDiaLocal() {
+        FixedClock madrugada = FixedClock.at(Instant.parse("2026-09-15T03:00:00Z"));
+        DashboardRocasService enMadrugada = new DashboardRocasService(progresoPort, rocasMaestrasUseCase,
+                rocasSemanalesUseCase, rocasDeHoyUseCase, loadRocaDiariaPort, conteoPort, madrugada);
+        LocalDate inicio = LocalDate.of(2026, 9, 8);
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(new ProgresoParticipanteRocks(7, inicio,
+                java.time.ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, false)));
+        when(rocasMaestrasUseCase.misRocasMaestras(actorId)).thenReturn(tresMaestras(actorId));
+
+        DashboardRocas dashboard = enMadrugada.dashboard(actorId);
+
+        assertThat(dashboard.numeroSemana()).isEqualTo(1);
+        assertThat(dashboard.inicioSemana()).isEqualTo(inicio);
+        assertThat(dashboard.finSemana()).isEqualTo(LocalDate.of(2026, 9, 14));
     }
 }

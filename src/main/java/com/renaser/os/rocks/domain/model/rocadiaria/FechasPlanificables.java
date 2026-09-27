@@ -19,8 +19,11 @@ import java.util.Objects;
  * cuelga del objetivo semanal de su semana ({@code NO_WEEKLY_ROCK} si no existe), asi que ofrecer el
  * lunes que viene seria ofrecer algo que va a fallar al guardar.
  *
+ * <p><b>2026-09-26 (D-192):</b> la semana de programa pasó a ser un bloque de siete días del programa
+ * (ver {@link SemanaPrograma}); el corte ya no es el domingo sino el último día de ESA semana.
+ *
  * @param desde inclusivo
- * @param hasta inclusivo, el domingo de la semana de programa de hoy
+ * @param hasta inclusivo, el último día de la semana de programa de hoy
  */
 public record FechasPlanificables(LocalDate desde, LocalDate hasta) {
 
@@ -34,10 +37,9 @@ public record FechasPlanificables(LocalDate desde, LocalDate hasta) {
      *              programa esta planificando el dia siguiente y volver sobre hoy es reacomodar el dia
      *              en curso
      */
-    public static FechasPlanificables para(LocalDate hoy, EstadoPlazo plazo, LocalDate fechaInicio) {
+    public static FechasPlanificables para(LocalDate hoy, EstadoPlazo plazo, SemanaPrograma semanas) {
         LocalDate desde = plazo == EstadoPlazo.EN_PLAZO ? hoy.plusDays(1) : hoy;
-        LocalDate hasta = SemanaPrograma.limites(fechaInicio, SemanaPrograma.numeroSemanaParaFecha(fechaInicio, hoy))
-                .fin();
+        LocalDate hasta = semanas.limites(semanas.numeroSemanaParaFecha(hoy)).fin();
         return new FechasPlanificables(desde, hasta);
     }
 

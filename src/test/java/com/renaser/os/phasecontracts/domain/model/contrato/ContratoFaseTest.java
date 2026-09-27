@@ -95,4 +95,19 @@ class ContratoFaseTest {
 
         assertThat(a).isEqualTo(b);
     }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("D-193: se puede firmar una fase anterior a la en curso, nunca una que no llego")
+    void firmarUnaFaseAnteriorPeroNoUnaFutura() {
+        var reloj = com.renaser.os.shared.domain.FixedClock.at(java.time.Instant.parse("2026-08-24T10:00:00Z"));
+        var participante = com.renaser.os.shared.domain.UserId.of(java.util.UUID.randomUUID());
+
+        ContratoFase atrasado = ContratoFase.firmar(ContratoFaseId.of(java.util.UUID.randomUUID()), participante,
+                FasePrograma.FASE_2_DESARROLLO, 40, reloj);
+
+        org.assertj.core.api.Assertions.assertThat(atrasado.fase()).isEqualTo(FasePrograma.FASE_2_DESARROLLO);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> ContratoFase.firmar(
+                ContratoFaseId.of(java.util.UUID.randomUUID()), participante, FasePrograma.FASE_4_ASCENSION, 40,
+                reloj)).isInstanceOf(IllegalArgumentException.class);
+    }
 }

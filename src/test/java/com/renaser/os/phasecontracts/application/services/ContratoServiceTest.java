@@ -88,8 +88,7 @@ class ContratoServiceTest {
     @DisplayName("firmar(): TRAINEE en dia desbloqueado, sin firma previa -> crea y guarda")
     void firmarCreaYGuardaCuandoNoHayFirmaPrevia() {
         progreso(20, RolParticipante.TRAINEE, false);
-        when(loadContratoPort.porParticipanteYFase(participanteId, FasePrograma.FASE_2_DESARROLLO))
-                .thenReturn(Optional.empty());
+        when(loadContratoPort.todosDeParticipante(participanteId)).thenReturn(List.of());
         when(saveContratoPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ContratoFase resultado = service.firmar(new FirmarContratoCommand(participanteId));
@@ -103,6 +102,7 @@ class ContratoServiceTest {
     void firmarEsIdempotente() {
         progreso(20, RolParticipante.TRAINEE, false);
         ContratoFase existente = ContratoFase.firmar(ContratoFaseId.of(UUID.randomUUID()), participanteId, 20, CLOCK);
+        when(loadContratoPort.todosDeParticipante(participanteId)).thenReturn(List.of(existente));
         when(loadContratoPort.porParticipanteYFase(participanteId, FasePrograma.FASE_2_DESARROLLO))
                 .thenReturn(Optional.of(existente));
 
@@ -116,8 +116,7 @@ class ContratoServiceTest {
     @DisplayName("firmar(): ADMIN que activo su programa -> firma su propio contrato (SDD 003, ARF-16)")
     void firmarComoAdminQueCursa() {
         progreso(20, RolParticipante.ADMIN, false);
-        when(loadContratoPort.porParticipanteYFase(participanteId, FasePrograma.FASE_2_DESARROLLO))
-                .thenReturn(Optional.empty());
+        when(loadContratoPort.todosDeParticipante(participanteId)).thenReturn(List.of());
         when(saveContratoPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ContratoFase resultado = service.firmar(new FirmarContratoCommand(participanteId));
@@ -181,8 +180,7 @@ class ContratoServiceTest {
     @DisplayName("consultarPendiente(): desbloqueada y sin firmar -> pendiente=true con la fase")
     void consultarPendienteDesbloqueadaSinFirmar() {
         progreso(20, RolParticipante.MENTOR, false); // MENTOR SI puede consultar (no firmar)
-        when(loadContratoPort.porParticipanteYFase(participanteId, FasePrograma.FASE_2_DESARROLLO))
-                .thenReturn(Optional.empty());
+        when(loadContratoPort.todosDeParticipante(participanteId)).thenReturn(List.of());
 
         ContratoPendiente resultado = service.consultarPendiente(participanteId);
 
@@ -195,9 +193,8 @@ class ContratoServiceTest {
     @DisplayName("consultarPendiente(): ya firmada -> pendiente=false")
     void consultarPendienteYaFirmada() {
         progreso(20, RolParticipante.TRAINEE, false);
-        when(loadContratoPort.porParticipanteYFase(participanteId, FasePrograma.FASE_2_DESARROLLO))
-                .thenReturn(Optional.of(ContratoFase.firmar(ContratoFaseId.of(UUID.randomUUID()),
-                        participanteId, 20, CLOCK)));
+        when(loadContratoPort.todosDeParticipante(participanteId)).thenReturn(List.of(ContratoFase.firmar(
+                ContratoFaseId.of(UUID.randomUUID()), participanteId, 20, CLOCK)));
 
         assertThat(service.consultarPendiente(participanteId).pendiente()).isFalse();
     }
@@ -282,5 +279,83 @@ class ContratoServiceTest {
                 .thenReturn(Optional.of(firmado));
 
         assertThat(service.estaFirmado(participanteId, 3)).isTrue();
+    }
+
+    // ── D-193: pactos que quedaron atras por un ajuste de dia ───────────────
+
+    private ContratoFase firmadoDe(FasePrograma fase) {
+        int diaDeFirma = fase.diaDesbloqueoFirma();
+        return ContratoFase.firmar(ContratoFaseId.of(UUID.randomUUID()), participanteId, diaDeFirma, CLOCK);
+    }
+
+    @Test
+    @DisplayName("D-193: salto del 10 al 40 -> primero el pacto de la fase en curso (III), despues el saltado (II)")
+    void trasSaltarElDiaDeFirmaElPactoQuedaPendiente() {
+        progreso(40, RolParticipante.TRAINEE, false);
+        when(loadContratoPort.todosDeParticipante(participanteId)).thenReturn(List.of());
+        assertThat(service.consultarPendiente(participanteId).fase()).isEqualTo(FasePrograma.FASE_3_GUERRERO_ALQUIMISTA);
+
+        when(loadContratoPort.todosDeParticipante(participanteId))
+                .thenReturn(List.of(firmadoDe(FasePrograma.FASE_3_GUERRERO_ALQUIMISTA)));
+
+        ContratoPendiente pendiente = service.consultarPendiente(participanteId);
+        assertThat(pendiente.pendiente()).isTrue();
+        assertThat(pendiente.fase()).isEqualTo(FasePrograma.FASE_2_DESARROLLO);
+    }
+
+    @Test
+    @DisplayName("D-193: salto del 10 al 40 con la fase III firmada -> la URL y la firma son del pacto de la fase II")
+    void elPactoSaltadoSeFirmaDespues() {
+        progreso(40, RolParticipante.TRAINEE, false);
+        when(loadContratoPort.todosDeParticipante(participanteId))
+                .thenReturn(List.of(firmadoDe(FasePrograma.FASE_3_GUERRERO_ALQUIMISTA)));
+        when(almacenamientoPort.firmarSubida(anyString(), anyString(), any(Duration.class)))
+                .thenReturn(URI.create("https://s3.example/firmas/x/fase_2.svg?sig=upload"));
+        when(saveContratoPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var url = service.obtenerUrlSubida(new ObtenerUrlFirmaContratoCommand(participanteId));
+        ContratoFase firmado = service.firmar(new FirmarContratoCommand(participanteId));
+
+        assertThat(url.ruta()).isEqualTo(ContratoFase.rutaFirma(participanteId, FasePrograma.FASE_2_DESARROLLO));
+        assertThat(firmado.fase()).isEqualTo(FasePrograma.FASE_2_DESARROLLO);
+        assertThat(firmado.rutaFirma()).isEqualTo(url.ruta());
+    }
+
+    @Test
+    @DisplayName("D-193: salto del 10 al 70 -> fase IV primero, despues las saltadas de la mas vieja a la mas nueva")
+    void dosPactosSaltadosSeOfrecenDelMasViejoAlMasNuevo() {
+        progreso(70, RolParticipante.TRAINEE, false);
+        when(loadContratoPort.todosDeParticipante(participanteId))
+                .thenReturn(List.of(firmadoDe(FasePrograma.FASE_4_ASCENSION)));
+
+        assertThat(service.consultarPendiente(participanteId).fase()).isEqualTo(FasePrograma.FASE_2_DESARROLLO);
+    }
+
+    @Test
+    @DisplayName("D-193: sin salto, igual que antes -> con la fase en curso firmada no hay pendiente y firmar es idempotente")
+    void sinSaltoTodoSigueIgual() {
+        progreso(34, RolParticipante.TRAINEE, false);
+        ContratoFase fase2 = firmadoDe(FasePrograma.FASE_2_DESARROLLO);
+        when(loadContratoPort.todosDeParticipante(participanteId)).thenReturn(List.of(fase2));
+        when(loadContratoPort.porParticipanteYFase(participanteId, FasePrograma.FASE_2_DESARROLLO))
+                .thenReturn(Optional.of(fase2));
+
+        assertThat(service.consultarPendiente(participanteId).pendiente()).isFalse();
+        assertThat(service.firmar(new FirmarContratoCommand(participanteId))).isEqualTo(fase2);
+        assertThatThrownBy(() -> service.obtenerUrlSubida(new ObtenerUrlFirmaContratoCommand(participanteId)))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("fase 2 ya fue firmado");
+        verify(saveContratoPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("D-193: una fase que todavia no llego no se firma -> dia 16 sin nada firmado sigue siendo 400")
+    void unaFaseQueNoLlegoNoSeFirma() {
+        progreso(16, RolParticipante.TRAINEE, false);
+        when(loadContratoPort.todosDeParticipante(participanteId)).thenReturn(List.of());
+
+        assertThat(service.consultarPendiente(participanteId).pendiente()).isFalse();
+        assertThatThrownBy(() -> service.firmar(new FirmarContratoCommand(participanteId)))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(saveContratoPort, never()).save(any());
     }
 }

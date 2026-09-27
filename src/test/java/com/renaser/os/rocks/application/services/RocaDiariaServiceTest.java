@@ -69,6 +69,7 @@ import static org.mockito.Mockito.when;
 class RocaDiariaServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T20:05:00Z"));
+    private static final LocalDate INICIO = LocalDate.of(2026, 8, 3);
 
     @Mock
     private LoadRocaMaestraPort loadRocaMaestraPort;
@@ -107,13 +108,18 @@ class RocaDiariaServiceTest {
                 .thenReturn(new EvidenciaRegistrada(UUID.randomUUID(), EstadoValidacion.PENDIENTE));
     }
 
+    /**
+     * Coherente con el reloj (regla 03): el lunes 2026-08-24 es el dia 22, primer dia de la semana 4
+     * (lunes 24 a domingo 30), porque el programa empezo el lunes 2026-08-03. Antes decia dia 20 con
+     * inicio el 2026-01-05, y la semana salia del calendario; desde D-192 sale del dia.
+     */
     private static ProgresoParticipanteRocks progreso(RolParticipante rol, boolean suspendido) {
-        return new ProgresoParticipanteRocks(20, LocalDate.of(2026, 1, 5), ZoneOffset.UTC, rol, suspendido, false);
+        return new ProgresoParticipanteRocks(22, INICIO, ZoneOffset.UTC, rol, suspendido, false);
     }
 
     /** Igual que {@link #progreso} pero con el programa ANDANDO: el caso de E-169. */
     private static ProgresoParticipanteRocks progresoActivado(RolParticipante rol, boolean suspendido) {
-        return new ProgresoParticipanteRocks(20, LocalDate.of(2026, 1, 5), ZoneOffset.UTC, rol, suspendido, true);
+        return new ProgresoParticipanteRocks(22, INICIO, ZoneOffset.UTC, rol, suspendido, true);
     }
 
     private RocaDiaria rocaVerde(LocalTime horaFin) {
@@ -316,7 +322,7 @@ class RocaDiariaServiceTest {
     @DisplayName("E-288: 'hoy' es el de la zona de la persona, no el del servidor (20:05 UTC ya es el 25 en UTC+10)")
     void hoyEsElDeLaZonaDeLaPersona() {
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(
-                new ProgresoParticipanteRocks(20, LocalDate.of(2026, 1, 5), ZoneOffset.ofHours(10),
+                new ProgresoParticipanteRocks(23, INICIO, ZoneOffset.ofHours(10),
                         RolParticipante.TRAINEE, false, false)));
         RocaDiaria delVeinticuatro = rocaVerde(null);
         when(loadRocaDiariaPort.byIdParaEscritura(delVeinticuatro.id())).thenReturn(Optional.of(delVeinticuatro));

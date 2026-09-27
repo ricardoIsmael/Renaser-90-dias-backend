@@ -1,6 +1,7 @@
 package com.renaser.os.phasecontracts.domain.model.contrato;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -105,5 +106,41 @@ class FaseProgramaTest {
     @EnumSource(FasePrograma.class)
     void etiquetaSiempreDefinida(FasePrograma fase) {
         assertThat(fase.etiqueta()).isNotBlank();
+    }
+
+    @Test
+    @DisplayName("D-193 faseAFirmar: sin salto es igual a faseAFirmarEnDia menos lo ya firmado")
+    void faseAFirmarSinSaltoEsLaDeSiempre() {
+        for (int dia = 0; dia <= 90; dia++) {
+            FasePrograma esperada = FasePrograma.faseAFirmarEnDia(dia);
+            java.util.Set<FasePrograma> firmadasAntes = java.util.EnumSet.noneOf(FasePrograma.class);
+            for (FasePrograma fase : FasePrograma.values()) {
+                if (esperada != null && fase.numero() > 1 && fase.numero() < esperada.numero()) {
+                    firmadasAntes.add(fase);
+                }
+            }
+            if (esperada == null) {
+                FasePrograma actual = FasePrograma.paraDiaPrograma(dia);
+                for (FasePrograma fase : FasePrograma.values()) {
+                    if (fase.numero() > 1 && fase.numero() < actual.numero()) {
+                        firmadasAntes.add(fase);
+                    }
+                }
+            }
+            assertThat(FasePrograma.faseAFirmar(dia, firmadasAntes)).as("dia %d", dia).isEqualTo(esperada);
+        }
+    }
+
+    @Test
+    @DisplayName("D-193 faseAFirmar: la en curso primero; despues la saltada mas vieja; nunca una futura")
+    void faseAFirmarConPactosSaltados() {
+        var nada = java.util.Set.<FasePrograma>of();
+        assertThat(FasePrograma.faseAFirmar(40, nada)).isEqualTo(FasePrograma.FASE_3_GUERRERO_ALQUIMISTA);
+        assertThat(FasePrograma.faseAFirmar(40, java.util.Set.of(FasePrograma.FASE_3_GUERRERO_ALQUIMISTA)))
+                .isEqualTo(FasePrograma.FASE_2_DESARROLLO);
+        assertThat(FasePrograma.faseAFirmar(40, java.util.Set.of(FasePrograma.FASE_2_DESARROLLO,
+                FasePrograma.FASE_3_GUERRERO_ALQUIMISTA))).isNull();
+        assertThat(FasePrograma.faseAFirmar(34, java.util.Set.of(FasePrograma.FASE_2_DESARROLLO))).isNull();
+        assertThat(FasePrograma.faseAFirmar(16, nada)).isNull();
     }
 }

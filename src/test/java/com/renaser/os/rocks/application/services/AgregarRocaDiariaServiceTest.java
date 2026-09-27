@@ -44,7 +44,7 @@ import static org.mockito.Mockito.when;
  * D-177: agregar UNA accion a un dia que viene, sin tocar las demas.
  *
  * <p>Fixture coherente: programa iniciado el martes 2026-09-01; el miercoles 23 es el dia 23, semana
- * 4 (lunes 21 a domingo 27). El reloj por defecto esta a las 03:00 UTC del jueves 24, que en Lima es
+ * 4 (dias 22 a 28: martes 22 a lunes 28, D-192). El reloj por defecto esta a las 03:00 UTC del jueves 24, que en Lima es
  * todavia el MIERCOLES 23 a las 22:00 (regla 02: el caso que esconde un reloj a las 10:00 UTC).
  */
 class AgregarRocaDiariaServiceTest {
@@ -116,11 +116,11 @@ class AgregarRocaDiariaServiceTest {
     }
 
     @Test
-    @DisplayName("despues del domingo de la semana, o un dia que paso: INVALID_DATE")
+    @DisplayName("despues del ultimo dia de la semana de programa, o un dia que paso: INVALID_DATE")
     void fueraDeLaVentanaDeFechas() {
         AgregarRocaDiariaService servicio = servicio(NOCHE_DEL_MIERCOLES_EN_LIMA);
 
-        assertThatThrownBy(() -> servicio.agregar(comando(LocalDate.of(2026, 9, 28), EjeObjetivo.CUERPO)))
+        assertThatThrownBy(() -> servicio.agregar(comando(LocalDate.of(2026, 9, 29), EjeObjetivo.CUERPO)))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageStartingWith("INVALID_DATE");
         assertThatThrownBy(() -> servicio.agregar(comando(LocalDate.of(2026, 9, 22), EjeObjetivo.CUERPO)))
                 .hasMessageStartingWith("INVALID_DATE");

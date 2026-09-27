@@ -319,4 +319,51 @@ class RocaSemanalServiceTest {
                 List.of(item(EjeObjetivo.CUERPO), item(EjeObjetivo.TRABAJO), item(EjeObjetivo.RELACIONES)));
         GuardDeRol.noRechaza(() -> service.crear(command), "Solo un aprendiz opera sus propias rocas");
     }
+
+    /**
+     * D-192: la semana que se planifica sale del dia de programa, en la zona del participante. El reloj
+     * esta de madrugada UTC a proposito (regla 02): en Lima todavia es el dia anterior.
+     */
+    private int semanaPlanificadaCon(String instante, int diaPrograma, LocalDate fechaInicio) {
+        RocaSemanalService enEseMomento = new RocaSemanalService(loadRocaMaestraPort, loadRocaSemanalPort,
+                saveRocaSemanalPort, progresoPort, FixedClock.at(Instant.parse(instante)), idGenerator);
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(new ProgresoParticipanteRocks(diaPrograma,
+                fechaInicio, java.time.ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, false)));
+        when(loadRocaMaestraPort.deParticipante(actorId)).thenReturn(tresMaestras());
+        when(loadRocaSemanalPort.deParticipanteYSemana(anyList(), anyInt())).thenReturn(List.of());
+        when(saveRocaSemanalPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        return enEseMomento.crear(new CrearPlanSemanalCommand(actorId, List.of(item(EjeObjetivo.CUERPO))))
+                .get(0).numeroSemana();
+    }
+
+    @Test
+    @DisplayName("D-192: el domingo ya no suma uno si no es el ultimo dia de la semana de programa")
+    void elDomingoNoAdelantaLaSemanaDeQuienEmpezoUnJueves() {
+        // Jueves 2026-09-10 = dia 1. Domingo 13 a las 22:00 en Lima (03:00 UTC del lunes 14) = dia 4.
+        // La cuenta vieja planificaba la semana 2 por ser domingo; la semana 1 va del 10 al 16.
+        assertThat(semanaPlanificadaCon("2026-09-14T03:00:00Z", 4, LocalDate.of(2026, 9, 10))).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("D-192: el ultimo dia de la semana de programa (dia 7) prepara la semana 2")
+    void elUltimoDiaDeLaSemanaPreparaLaSiguiente() {
+        // Miercoles 16 a las 22:00 en Lima (03:00 UTC del jueves 17) = dia 7.
+        assertThat(semanaPlanificadaCon("2026-09-17T03:00:00Z", 7, LocalDate.of(2026, 9, 10))).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("D-192: tras adelantar el dia (10 de calendario -> 34) se planifica la semana 5, no la 2")
+    void trasAdelantarElDiaSePlanificaLaSemanaDelDia() {
+        // Dia 10 de calendario = viernes 19 en Lima; ajustado al 34 (el 35 ya prepararia la 6).
+        assertThat(semanaPlanificadaCon("2026-09-20T03:00:00Z", 34, LocalDate.of(2026, 9, 10))).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("D-192: el dia 84 prepara la 13 y el 90 no pide una semana 14")
+    void alFinalNuncaSePlanificaLaSemanaCatorce() {
+        // Miercoles 2026-06-03 = dia 1: el dia 90 es el lunes 31 de agosto; el 84, el martes 25.
+        assertThat(semanaPlanificadaCon("2026-08-26T03:00:00Z", 84, LocalDate.of(2026, 6, 3))).isEqualTo(13);
+        assertThat(semanaPlanificadaCon("2026-09-01T03:00:00Z", 90, LocalDate.of(2026, 6, 3))).isEqualTo(13);
+    }
 }

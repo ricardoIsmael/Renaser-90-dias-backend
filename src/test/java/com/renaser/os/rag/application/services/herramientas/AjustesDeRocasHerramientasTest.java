@@ -106,7 +106,7 @@ class AjustesDeRocasHerramientasTest {
     void formaInvalida() {
         assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE,
                 "eje", "CUERPO", "titulo", "Estirar", "fecha", "2026-09-20"))).isEqualTo(ResultadoHerramienta.fallo(
-                "Ese dia ya paso. Se puede agregar desde manana hasta el domingo de esta semana."));
+                "Ese dia ya paso. Se puede agregar desde manana hasta el ultimo dia de esta semana de programa."));
         assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE,
                 "eje", "NEGOCIO", "titulo", "Vender"))).isInstanceOf(ResultadoHerramienta.Fallo.class);
         assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE,

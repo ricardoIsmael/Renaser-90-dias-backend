@@ -60,8 +60,9 @@ class LecturaDeObjetivosDelAprendiz {
         ProgresoParticipanteRocks progreso = progresoPort.deParticipante(aprendizId)
                 .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + aprendizId));
         LocalDate hoy = clock.now().atZone(progreso.zona()).toLocalDate();
-        int semanaDeHoy = SemanaPrograma.numeroSemanaParaFecha(progreso.fechaInicio(), hoy);
-        if (hoy.isBefore(progreso.fechaInicio()) || semanaDeHoy <= 1) {
+        SemanaPrograma semanas = progreso.semanas(hoy);
+        int semanaDeHoy = semanas.numeroSemanaParaFecha(hoy);
+        if (hoy.isBefore(semanas.primerDia()) || semanaDeHoy <= 1) {
             return Optional.empty();
         }
         int anterior = semanaDeHoy - 1;

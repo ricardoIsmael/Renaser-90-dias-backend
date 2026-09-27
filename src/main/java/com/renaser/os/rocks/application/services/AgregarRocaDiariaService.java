@@ -64,8 +64,9 @@ class AgregarRocaDiariaService implements AgregarRocaDiariaUseCase {
         ProgresoParticipanteRocks progreso = AccesoARocas.exigir(progresoPort, command.actorId());
         RocaMaestra maestra = maestraDelEje(command.actorId(), command.eje());
         LocalDate hoy = clock.now().atZone(progreso.zona()).toLocalDate();
-        requireDiaQueTodaviaNoLlego(command.fecha(), hoy, progreso.fechaInicio());
-        RocaSemanal semanal = semanalDeLaFecha(maestra, progreso.fechaInicio(), command.fecha());
+        SemanaPrograma semanas = progreso.semanas(hoy);
+        requireDiaQueTodaviaNoLlego(command.fecha(), hoy, semanas);
+        RocaSemanal semanal = semanalDeLaFecha(maestra, semanas, command.fecha());
         List<RocaDiaria> delDia = loadRocaDiariaPort.deParticipanteYFecha(command.actorId(), command.fecha());
         int posicion = CupoDelDia.siguientePosicion(delDia, command.eje());
         return saveRocaDiariaPort.save(RocaDiaria.planificar(RocaDiariaId.of(idGenerator.newId()),
@@ -86,22 +87,22 @@ class AgregarRocaDiariaService implements AgregarRocaDiariaUseCase {
 
     /**
      * Hoy nunca (decision del dueno pendiente, ver el javadoc del caso de uso). De manana en adelante,
-     * la ventana de {@code CrearPlanDiarioUseCase} con la noche ya abierta: hasta el domingo de esta
-     * semana de programa.
+     * la ventana de {@code CrearPlanDiarioUseCase} con la noche ya abierta: hasta el ultimo dia de esta
+     * semana de programa (D-192).
      */
-    private static void requireDiaQueTodaviaNoLlego(LocalDate fecha, LocalDate hoy, LocalDate fechaInicio) {
+    private static void requireDiaQueTodaviaNoLlego(LocalDate fecha, LocalDate hoy, SemanaPrograma semanas) {
         if (fecha.equals(hoy)) {
             throw new IllegalStateException("CURRENT_DAY: el dia en curso no se reacomoda");
         }
-        FechasPlanificables fechas = FechasPlanificables.para(hoy, EstadoPlazo.EN_PLAZO, fechaInicio);
+        FechasPlanificables fechas = FechasPlanificables.para(hoy, EstadoPlazo.EN_PLAZO, semanas);
         if (!fechas.contiene(fecha)) {
             throw new IllegalArgumentException(
                     "INVALID_DATE: la fecha debe estar entre " + fechas.desde() + " y " + fechas.hasta());
         }
     }
 
-    private RocaSemanal semanalDeLaFecha(RocaMaestra maestra, LocalDate fechaInicio, LocalDate fecha) {
-        int numeroSemana = SemanaPrograma.numeroSemanaParaFecha(fechaInicio, fecha);
+    private RocaSemanal semanalDeLaFecha(RocaMaestra maestra, SemanaPrograma semanas, LocalDate fecha) {
+        int numeroSemana = semanas.numeroSemanaParaFecha(fecha);
         return loadRocaSemanalPort.deMaestraYSemana(maestra.id(), numeroSemana)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "NO_WEEKLY_ROCK: no hay plan semanal activo para el eje " + maestra.eje()));
