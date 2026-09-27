@@ -231,7 +231,8 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
 
     /**
      * Que fechas se pueden planificar hoy: <b>de manana hasta el final de la semana de programa</b>,
-     * y ademas hoy mismo mientras la ventana nocturna no haya abierto.
+     * y ademas hoy mismo mientras la ventana nocturna no haya abierto. <b>Manana entra siempre</b> que
+     * todavia sea un dia del programa: el domingo, eso es el lunes de la semana que empieza (E-340).
      *
      * > <b>Corregido el 2026-09-22.</b> Antes eran solo dos fechas: manana con la ventana abierta,
      * > u hoy y manana con la ventana cerrada. El dueno lo planteo con su propio ejemplo:
@@ -239,10 +240,19 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
      * > (…) estamos martes, entonces planifico para todo lo que queda"</i>. Con la regla vieja,
      * > miercoles y jueves volvian con INVALID_DATE.
      *
+     * > <b>Corregido el 2026-09-27 (E-340).</b> El tope era solo el fin de la semana de hoy, y el
+     * > domingo manana ya es otra semana: la ventana quedaba al reves y el domingo a la noche no entraba
+     * > ninguna fecha ({@code INVALID_DATE: la fecha de planificacion debe estar entre 2026-09-28 y
+     * > 2026-09-27}), aunque el tablero ofrecia planificar manana. La correccion del 2026-09-22 amplio la
+     * > regla vieja al resto de la semana y sin querer le saco el lunes al domingo. El parrafo siguiente
+     * > decia "ofrecer el lunes que viene seria ofrecer algo que va a fallar al guardar": vale para los
+     * > dias de la semana que viene, no para manana.
+     *
      * <p><b>El corte es el fin de la semana de programa, y no es cosmetico:</b> cada objetivo
      * diario cuelga del objetivo semanal de su semana ({@code NO_WEEKLY_ROCK} si no existe), asi
-     * que ofrecer el lunes que viene seria ofrecer algo que va a fallar al guardar. La semana que
-     * viene se planifica cuando se arma, el domingo.
+     * que ofrecer los dias de la semana que viene seria ofrecer algo que va a fallar al guardar. La
+     * semana que viene se planifica cuando se arma, el domingo; ese domingo ya se puede planificar su
+     * lunes, que cuelga del objetivo de SU semana ({@code crear} busca la semana de la fecha planificada).
      *
      * <p>Hoy sigue dependiendo de la ventana, exactamente como antes: a partir de las 18:00 el
      * programa esta planificando el dia siguiente y volver sobre hoy es reacomodar el dia en curso.
@@ -250,12 +260,28 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
     private void requireFechaPlanificable(LocalDate fecha, LocalDate hoy, EstadoPlazo plazoAlCrear,
                                            LocalDate fechaInicio) {
         LocalDate desde = plazoAlCrear == EstadoPlazo.EN_PLAZO ? hoy.plusDays(1) : hoy;
-        LocalDate hasta = SemanaPrograma.limites(fechaInicio,
-                SemanaPrograma.numeroSemanaParaFecha(fechaInicio, hoy)).fin();
+        LocalDate hasta = ultimaFechaPlanificable(hoy, fechaInicio);
         if (fecha.isBefore(desde) || fecha.isAfter(hasta)) {
             throw new IllegalArgumentException(
                     "INVALID_DATE: la fecha de planificacion debe estar entre " + desde + " y " + hasta);
         }
+    }
+
+    /**
+     * El fin de la semana de hoy; o manana, si cae despues (el domingo) y todavia es un dia del programa.
+     *
+     * <p>"Dia del programa" llega hasta {@link SemanaPrograma#finDelPrograma}: la misma cuenta, sin ajuste
+     * de dia, con la que este modulo numera las semanas y recorta la grilla del tablero. Con un ajuste, el
+     * dia 90 real puede caer despues de ese corte, pero un lunes posterior cae siempre en la semana 14 o
+     * mas, que nunca tiene objetivo semanal: {@code NO_WEEKLY_ROCK} lo rechaza igual.
+     */
+    private static LocalDate ultimaFechaPlanificable(LocalDate hoy, LocalDate fechaInicio) {
+        LocalDate finDeLaSemana = SemanaPrograma.limites(fechaInicio,
+                SemanaPrograma.numeroSemanaParaFecha(fechaInicio, hoy)).fin();
+        LocalDate manana = hoy.plusDays(1);
+        boolean mananaEsOtraSemanaDelPrograma = manana.isAfter(finDeLaSemana)
+                && !manana.isAfter(SemanaPrograma.finDelPrograma(fechaInicio));
+        return mananaEsOtraSemanaDelPrograma ? manana : finDeLaSemana;
     }
 
     private RocaDiaria planificarUna(UserId actorId, LocalDate fecha, ItemRocaDiaria item,
