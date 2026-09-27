@@ -14,9 +14,9 @@ import java.util.List;
 public interface PushPort {
 
     /**
-     * @param rutaApp destino dentro de la app al tocar la notificación. Puede ser {@code null}.
+     * @param mensaje título, cuerpo, destino al tocarla y tipo del aviso ({@link MensajePush}).
      * @return un resultado por token. Nunca lanza: un proveedor caído no puede tumbar la emisión,
      *         que ya guardó la notificación en la bandeja.
      */
-    List<ResultadoEnvioPush> enviar(List<TokenPush> tokens, String titulo, String cuerpo, String rutaApp);
+    List<ResultadoEnvioPush> enviar(List<TokenPush> tokens, MensajePush mensaje);
 }

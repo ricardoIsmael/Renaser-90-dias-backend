@@ -1,6 +1,7 @@
 package com.renaser.os.notifications.infrastructure.adapter.out.push;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.renaser.os.notifications.application.ports.out.push.MensajePush;
 import com.renaser.os.notifications.application.ports.out.push.ResultadoEnvioPush;
 import com.renaser.os.notifications.application.ports.out.push.TransportePush;
 import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
@@ -69,11 +70,11 @@ public class WebPushAdapter implements TransportePush {
      * contrato real—, pero un endpoint vencido ya no se reintenta para siempre en silencio: el
      * proveedor responde 404 o 410 para una suscripción muerta, y eso se traduce a token inválido.
      *
-     * @param rutaApp destino al tocar la notificación. Antes iba fijo en "/", así que un aviso de
-     *                acompañamiento abría el inicio en vez del alumno.
+     * <p>El {@code rutaApp} del mensaje es el destino al tocarla. Antes iba fijo en "/", así que un
+     * aviso de acompañamiento abría el inicio en vez del alumno.
      */
     @Override
-    public ResultadoEnvioPush entregar(TokenPush token, String titulo, String cuerpo, String rutaApp) {
+    public ResultadoEnvioPush entregar(TokenPush token, MensajePush mensaje) {
         if (vapidPublicKey.isBlank() || vapidPrivateKey.isBlank() || vapidSubject.isBlank()) {
             log.warn("[notifications.WebPushAdapter] WEB_PUSH_VAPID_* no configurado; no se envia push web");
             return ResultadoEnvioPush.sinTransporte(token.id(), PlataformaPush.WEB.name());
@@ -92,9 +93,9 @@ public class WebPushAdapter implements TransportePush {
             Subscription subscription = new Subscription(suscripcion.endpoint(),
                     new Subscription.Keys(suscripcion.keys().p256dh(), suscripcion.keys().auth()));
             String payload = objectMapper.writeValueAsString(Map.of(
-                    "title", titulo,
-                    "body", cuerpo,
-                    "data", Map.of("url", rutaApp == null || rutaApp.isBlank() ? "/" : rutaApp)));
+                    "title", mensaje.titulo(),
+                    "body", mensaje.cuerpo(),
+                    "data", Map.of("url", destino(mensaje.rutaApp()))));
             HttpResponse response = servicio().send(new Notification(subscription, payload));
             int status = response.getStatusLine().getStatusCode();
             EntityUtils.consumeQuietly(response.getEntity());
@@ -197,5 +198,9 @@ public class WebPushAdapter implements TransportePush {
             return false;
         }
         return true;
+    }
+
+    private static String destino(String rutaApp) {
+        return rutaApp == null || rutaApp.isBlank() ? "/" : rutaApp;
     }
 }

@@ -5,6 +5,7 @@ import com.renaser.os.notifications.application.ports.out.notificacion.LoadNotif
 import com.renaser.os.notifications.application.ports.out.notificacion.SaveNotificacionPort;
 import com.renaser.os.notifications.application.ports.out.preferencia.LoadPreferenciasPort;
 import com.renaser.os.notifications.application.ports.out.push.DesactivarTokenPushPort;
+import com.renaser.os.notifications.application.ports.out.push.MensajePush;
 import com.renaser.os.notifications.application.ports.out.push.PushPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPushPort;
 import com.renaser.os.notifications.domain.model.notificacion.EntregaPush;
@@ -142,7 +143,7 @@ class NotificacionServiceTest {
         when(loadPreferenciasPort.habilitadaPara(any(), any())).thenReturn(Optional.empty());
         when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(TokenPush.registrar(
                 TokenPushId.of(UUID.randomUUID()), usuario, "tok-1", PlataformaPush.ANDROID, CLOCK)));
-        doThrow(new RuntimeException("Expo caido")).when(pushPort).enviar(anyList(), any(), any(), any());
+        doThrow(new RuntimeException("Expo caido")).when(pushPort).enviar(anyList(), any());
 
         Optional<Notificacion> resultado = service.emitir(
                 new EmitirNotificacionCommand(usuario, TipoNotificacion.ANUNCIO_SISTEMA, "T", "C", null, null));
@@ -261,7 +262,7 @@ class NotificacionServiceTest {
 
         assertThat(emitida).isPresent();
         verify(saveNotificacionPort).guardar(any());
-        verify(pushPort, never()).enviar(anyList(), any(), any(), any());
+        verify(pushPort, never()).enviar(anyList(), any());
     }
 
     /** El otro lado de la regresion: el arreglo no puede dejar sin push a quien si corresponde. */
@@ -274,13 +275,14 @@ class NotificacionServiceTest {
         TokenPush token = TokenPush.registrar(TokenPushId.of(UUID.randomUUID()), mentorActivo,
                 "ExponentPushToken[vigente]", PlataformaPush.ANDROID, CLOCK);
         when(loadTokenPushPort.tokensDe(mentorActivo)).thenReturn(List.of(token));
-        when(pushPort.enviar(anyList(), any(), any(), any())).thenReturn(List.of());
+        when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
 
         service.emitir(new EmitirNotificacionCommand(mentorActivo, TipoNotificacion.ACOMPANAMIENTO_ALUMNO,
                 "Novedades de acompañamiento", "Ana Quispe tiene 3 evidencias pendientes.", null, null));
 
-        verify(pushPort).enviar(eq(List.of(token)), eq("Novedades de acompañamiento"),
-                eq("Ana Quispe tiene 3 evidencias pendientes."), eq(null));
+        // D-188: el tipo viaja hasta el transporte, que elige con él el canal de Android.
+        verify(pushPort).enviar(eq(List.of(token)), eq(new MensajePush(TipoNotificacion.ACOMPANAMIENTO_ALUMNO,
+                "Novedades de acompañamiento", "Ana Quispe tiene 3 evidencias pendientes.", null)));
     }
 
     /** Un destinatario que ya no existe no es un fallo del envio: no hay a quien entregarle. */
@@ -298,7 +300,7 @@ class NotificacionServiceTest {
                 TipoNotificacion.ANUNCIO_SISTEMA, "T", "C", null, null));
 
         assertThat(emitida).isPresent();
-        verify(pushPort, never()).enviar(anyList(), any(), any(), any());
+        verify(pushPort, never()).enviar(anyList(), any());
     }
 
     /**
@@ -329,7 +331,7 @@ class NotificacionServiceTest {
                         origenEventoId));
 
         assertThat(resultado).isEmpty();
-        verify(pushPort, never()).enviar(anyList(), any(), any(), any());
+        verify(pushPort, never()).enviar(anyList(), any());
     }
 
     // ─── D-184: a que dispositivos se empuja ─────────────────────────────────────────────────
@@ -352,7 +354,7 @@ class NotificacionServiceTest {
 
         assertThat(emitida).isPresent();
         verify(saveNotificacionPort).guardar(any());
-        verify(pushPort, never()).enviar(anyList(), any(), any(), any());
+        verify(pushPort, never()).enviar(anyList(), any());
     }
 
     @Test
@@ -364,12 +366,13 @@ class NotificacionServiceTest {
         TokenPush android = token(usuario, PlataformaPush.ANDROID);
         TokenPush web = token(usuario, PlataformaPush.WEB);
         when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(android, web));
-        when(pushPort.enviar(anyList(), any(), any(), any())).thenReturn(List.of());
+        when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
 
         service.emitir(new EmitirNotificacionCommand(usuario, TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null,
                 null), EntregaPush.SOLO_NAVEGADOR);
 
-        verify(pushPort).enviar(eq(List.of(web)), eq("T"), eq("C"), eq(null));
+        verify(pushPort).enviar(eq(List.of(web)),
+                eq(new MensajePush(TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null)));
     }
 
     @Test
@@ -381,11 +384,12 @@ class NotificacionServiceTest {
         TokenPush android = token(usuario, PlataformaPush.ANDROID);
         TokenPush web = token(usuario, PlataformaPush.WEB);
         when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(android, web));
-        when(pushPort.enviar(anyList(), any(), any(), any())).thenReturn(List.of());
+        when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
 
         service.emitir(new EmitirNotificacionCommand(usuario, TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null,
                 null));
 
-        verify(pushPort).enviar(eq(List.of(android, web)), eq("T"), eq("C"), eq(null));
+        verify(pushPort).enviar(eq(List.of(android, web)),
+                eq(new MensajePush(TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null)));
     }
 }

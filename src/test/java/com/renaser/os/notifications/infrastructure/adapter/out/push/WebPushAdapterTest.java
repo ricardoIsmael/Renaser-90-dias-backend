@@ -1,5 +1,6 @@
 package com.renaser.os.notifications.infrastructure.adapter.out.push;
 
+import com.renaser.os.notifications.application.ports.out.push.MensajePush;
 import com.renaser.os.notifications.application.ports.out.push.ResultadoEnvioPush;
 import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
@@ -31,11 +32,11 @@ class WebPushAdapterTest {
         WebPushAdapter adapter = new WebPushAdapter("", "", "");
         TokenPush token = web();
 
-        assertThatCode(() -> adapter.entregar(token, "Aviso", "Cuerpo", null)).doesNotThrowAnyException();
+        assertThatCode(() -> adapter.entregar(token, new MensajePush(null, "Aviso", "Cuerpo", null))).doesNotThrowAnyException();
 
         // El cambio respecto de antes: el resultado deja de ser invisible. Sin credencial no hay
         // canal, y eso no es lo mismo que "entregado".
-        assertThat(adapter.entregar(token, "Aviso", "Cuerpo", null).estado())
+        assertThat(adapter.entregar(token, new MensajePush(null, "Aviso", "Cuerpo", null)).estado())
                 .isEqualTo(ResultadoEnvioPush.Estado.SIN_TRANSPORTE);
     }
 

@@ -1,5 +1,6 @@
 package com.renaser.os.notifications.infrastructure.adapter.out.push;
 
+import com.renaser.os.notifications.application.ports.out.push.MensajePush;
 import com.renaser.os.notifications.application.ports.out.push.PushPort;
 import com.renaser.os.notifications.application.ports.out.push.ResultadoEnvioPush;
 import com.renaser.os.notifications.application.ports.out.push.TransportePush;
@@ -113,7 +114,7 @@ class DespachadorPush implements PushPort {
      * ese hueco pide guardar el pendiente y reentregarlo desde un job, no esperar más acá.
      */
     @Override
-    public List<ResultadoEnvioPush> enviar(List<TokenPush> tokens, String titulo, String cuerpo, String rutaApp) {
+    public List<ResultadoEnvioPush> enviar(List<TokenPush> tokens, MensajePush mensaje) {
         if (tokens == null || tokens.isEmpty()) {
             return List.of();
         }
@@ -124,14 +125,13 @@ class DespachadorPush implements PushPort {
                 resultados.add(ResultadoEnvioPush.sinTransporte(token.id(), token.plataforma().name()));
                 continue;
             }
-            resultados.add(conReintentos(transporte, token, titulo, cuerpo, rutaApp));
+            resultados.add(conReintentos(transporte, token, mensaje));
         }
         return resultados;
     }
 
-    private ResultadoEnvioPush conReintentos(TransportePush transporte, TokenPush token,
-                                             String titulo, String cuerpo, String rutaApp) {
-        ResultadoEnvioPush resultado = unIntento(transporte, token, titulo, cuerpo, rutaApp);
+    private ResultadoEnvioPush conReintentos(TransportePush transporte, TokenPush token, MensajePush mensaje) {
+        ResultadoEnvioPush resultado = unIntento(transporte, token, mensaje);
         for (int i = 0; i < ESPERAS_MS.length && resultado.estado() == ResultadoEnvioPush.Estado.FALLO_TEMPORAL; i++) {
             if (!esperar(ESPERAS_MS[i])) {
                 // Interrumpido: el que manda es quien apaga la aplicación. Se devuelve lo último
@@ -139,15 +139,14 @@ class DespachadorPush implements PushPort {
                 return resultado;
             }
             log.debug("[notifications.DespachadorPush] reintento {} para el token {}", i + 1, token.id());
-            resultado = unIntento(transporte, token, titulo, cuerpo, rutaApp);
+            resultado = unIntento(transporte, token, mensaje);
         }
         return resultado;
     }
 
-    private ResultadoEnvioPush unIntento(TransportePush transporte, TokenPush token,
-                                         String titulo, String cuerpo, String rutaApp) {
+    private ResultadoEnvioPush unIntento(TransportePush transporte, TokenPush token, MensajePush mensaje) {
         try {
-            return transporte.entregar(token, titulo, cuerpo, rutaApp);
+            return transporte.entregar(token, mensaje);
         } catch (RuntimeException e) {
             // El contrato dice que un transporte no lanza. Si igual lo hace, se trata como
             // fallo temporal: es preferible reintentar de mas que perder el aviso en silencio.

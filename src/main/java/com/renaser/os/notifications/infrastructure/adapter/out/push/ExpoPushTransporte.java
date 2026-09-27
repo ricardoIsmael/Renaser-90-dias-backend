@@ -1,5 +1,6 @@
 package com.renaser.os.notifications.infrastructure.adapter.out.push;
 
+import com.renaser.os.notifications.application.ports.out.push.MensajePush;
 import com.renaser.os.notifications.application.ports.out.push.ResultadoEnvioPush;
 import com.renaser.os.notifications.application.ports.out.push.TransportePush;
 import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
@@ -16,6 +17,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Locale;
+import java.util.Optional;
 
 /**
  * Entrega a iOS y Android por Expo Push.
@@ -34,6 +36,12 @@ import java.util.Locale;
  * toca el mentor puede haber rotado. Quién puede recibir un push lo decide
  * {@code NotificacionService.intentarPush}, no este transporte: acá ya no se sabe de quién es el
  * token.
+ *
+ * <p><b>Canal de Android (D-188).</b> El {@code channelId} sale del tipo del aviso
+ * ({@link CanalAndroidExpo}), y solo para tokens de Android: en iOS el campo no existe. Un canal
+ * que el teléfono podría no tener no se nombra — la documentación de Expo dice que entonces el
+ * aviso no se muestra. Con las dos propiedades de canal apagadas (el default) el cuerpo es el
+ * mismo de antes de D-188.
  */
 @Component
 class ExpoPushTransporte implements TransportePush {
@@ -51,11 +59,17 @@ class ExpoPushTransporte implements TransportePush {
     private final HttpClient http;
     private final String accessToken;
     private final boolean habilitado;
+    private final CanalAndroidExpo canales;
 
     ExpoPushTransporte(@Value("${renaser.notifications.expo-push.access-token:}") String accessToken,
-                        @Value("${renaser.notifications.expo-push.habilitado:true}") boolean habilitado) {
+                        @Value("${renaser.notifications.expo-push.habilitado:true}") boolean habilitado,
+                        @Value("${renaser.notifications.expo-push.canal-de-acompanamiento:false}")
+                        boolean canalDeAcompanamiento,
+                        @Value("${renaser.notifications.expo-push.canales-de-recordatorios:false}")
+                        boolean canalesDeRecordatorios) {
         this.accessToken = accessToken == null ? "" : accessToken.trim();
         this.habilitado = habilitado;
+        this.canales = new CanalAndroidExpo(canalDeAcompanamiento, canalesDeRecordatorios);
         this.http = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
     }
 
@@ -70,7 +84,7 @@ class ExpoPushTransporte implements TransportePush {
     }
 
     @Override
-    public ResultadoEnvioPush entregar(TokenPush token, String titulo, String cuerpo, String rutaApp) {
+    public ResultadoEnvioPush entregar(TokenPush token, MensajePush mensaje) {
         if (!habilitado) {
             return ResultadoEnvioPush.sinTransporte(token.id(), token.plataforma().name());
         }
@@ -83,8 +97,7 @@ class ExpoPushTransporte implements TransportePush {
                     .header("Content-Type", "application/json")
                     .header("Accept", "application/json")
                     .headers(cabecerasDeAutorizacion())
-                    .POST(HttpRequest.BodyPublishers.ofString(cuerpoJson(token, titulo, cuerpo, rutaApp),
-                            StandardCharsets.UTF_8))
+                    .POST(HttpRequest.BodyPublishers.ofString(cuerpoJson(token, mensaje), StandardCharsets.UTF_8))
                     .build();
 
             HttpResponse<String> respuesta = http.send(peticion, HttpResponse.BodyHandlers.ofString());
@@ -128,16 +141,23 @@ class ExpoPushTransporte implements TransportePush {
                 : new String[] {"Authorization", "Bearer " + accessToken};
     }
 
-    private static String cuerpoJson(TokenPush token, String titulo, String cuerpo, String rutaApp) {
+    /** Paquete y no privado para poder probar el cuerpo sin salir a la red. */
+    String cuerpoJson(TokenPush token, MensajePush mensaje) {
         StringBuilder json = new StringBuilder(256);
         json.append("{\"to\":").append(comillas(token.token()))
-                .append(",\"title\":").append(comillas(titulo))
-                .append(",\"body\":").append(comillas(cuerpo))
+                .append(",\"title\":").append(comillas(mensaje.titulo()))
+                .append(",\"body\":").append(comillas(mensaje.cuerpo()))
                 .append(",\"sound\":\"default\"");
+        canalDe(token, mensaje).ifPresent(canal -> json.append(",\"channelId\":").append(comillas(canal)));
+        String rutaApp = mensaje.rutaApp();
         if (rutaApp != null && !rutaApp.isBlank()) {
             json.append(",\"data\":{\"route\":").append(comillas(rutaApp)).append("}");
         }
         return json.append('}').toString();
+    }
+
+    private Optional<String> canalDe(TokenPush token, MensajePush mensaje) {
+        return token.plataforma() == PlataformaPush.ANDROID ? canales.para(mensaje.tipo()) : Optional.empty();
     }
 
     /** Escape mínimo. Se arma a mano para no arrastrar un ObjectMapper por tres campos. */

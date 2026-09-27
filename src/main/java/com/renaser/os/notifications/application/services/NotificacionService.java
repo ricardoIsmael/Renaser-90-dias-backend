@@ -8,6 +8,7 @@ import com.renaser.os.notifications.application.ports.out.notificacion.LoadNotif
 import com.renaser.os.notifications.application.ports.out.notificacion.SaveNotificacionPort;
 import com.renaser.os.notifications.application.ports.out.preferencia.LoadPreferenciasPort;
 import com.renaser.os.notifications.application.ports.out.push.DesactivarTokenPushPort;
+import com.renaser.os.notifications.application.ports.out.push.MensajePush;
 import com.renaser.os.notifications.application.ports.out.push.PushPort;
 import com.renaser.os.notifications.application.ports.out.push.ResultadoEnvioPush;
 import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPushPort;
@@ -226,8 +227,8 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
                         command.usuarioId(), command.tipo());
                 return;
             }
-            List<ResultadoEnvioPush> resultados = pushPort.enviar(tokens, command.titulo(), command.cuerpo(),
-                    command.rutaApp());
+            List<ResultadoEnvioPush> resultados = pushPort.enviar(tokens, new MensajePush(command.tipo(),
+                    command.titulo(), command.cuerpo(), command.rutaApp()));
             procesarResultados(command, resultados);
         } catch (RuntimeException e) {
             log.warn("[notifications.NotificacionService] push best-effort fallo para tipo {}: {}", command.tipo(),
