@@ -10580,3 +10580,88 @@ tope (`leerOtraFallaDeS3Sube`), y el doble en memoria de `FotoDelGrupoIT` implem
 **Cómo evitar que vuelva a pasar.** Cuando dos encargos en paralelo pueden tocar un puerto de `shared`, el que
 coordina le asigna ese puerto a UNO solo, y el otro usa lo que ese agregue. Al repartir el trabajo, listar los
 puertos compartidos que cada encargo podría extender.
+
+## E-370 · `PATCH /api/v1/admin/audio-therapies/{week}` sin `durationDays` da 500: `NullPointerException: Cannot invoke "java.lang.Integer.intValue()" because the return value of "…UpdateAudioTherapyDurationRequest.durationDays()" is null`
+
+**Síntoma.** SEG-02 del e2e del 2026-09-27: un `PATCH` con cuerpo `{}` (o `durationDays: null`) respondía 500, y
+el log mostraba la `NullPointerException` de arriba en `AudioTherapyAdminController.java:32`.
+
+**Causa real.** `UpdateAudioTherapyDurationRequest` tenía `@Positive Integer durationDays` y nada más: `@Positive`
+deja pasar un `null` (Bean Validation valida los nulos como válidos salvo `@NotNull`). El controller lo
+desenvuelve a `int` para el comando antes de que el servicio mire el rol, y ahí reventaba.
+
+**Solución.** `@NotNull @Positive`: el cuerpo sin el campo es un 400 de validación y el caso de uso ni se llama
+(`AudioTherapyAdminControllerTest`, que falla contra el código anterior con la misma NPE). Está en `habits`,
+fuera del carril del agente que lo arregló: va en un commit aparte para que se pueda integrar o descartar solo.
+
+**Cómo evitar que vuelva a pasar.** Un `Integer`, `Long` o `Boolean` de un request que el controller desenvuelve
+a primitivo lleva `@NotNull`. `@Positive`, `@Min` y compañía no rechazan el `null`.
+
+## E-371 · `NonUniqueResultException: Query did not return a unique result: 5 results were returned` en `GET /admin/cells?cohortId=` y `GET /admin/cohorts` como mentor con varios grupos
+
+**Síntoma.** SEG-02 del e2e: un mentor al frente de cinco grupos recibía 500 en las dos rutas, con
+`IncorrectResultSizeDataAccessException` / `NonUniqueResultException` desde `CelulaPersistenceAdapter.porMentor`.
+
+**Causa real.** `LoadCelulaPort.porMentor` devolvía `Optional<Celula>` sobre `findByMentorId`, porque
+`celulas.mentor_id` era UNIQUE («un mentor lidera a lo sumo una célula», V1). V58 (D-141) levantó ese UNIQUE y
+`SumarMentorAGrupoService` escribe `mentor_id` en cada grupo que suma: con dos grupos, la consulta de «uno solo»
+revienta. D-141 corrigió `CelulaService.mentores`, que tenía el mismo supuesto, pero no este puerto.
+
+**Solución.** `porMentor` devuelve `List<Celula>` (`findByMentorIdOrderByNombreAsc`). `/admin/cells?cohortId=` le
+lista al mentor todos los que lidera en esa cohorte; `/admin/cohorts`, la cohorte de cada uno una vez y sin las
+completadas; `/admin/cohorts/{id}`, cualquiera en la que tenga un grupo. `MentorEnVariosGruposIT` (+2) falla
+contra el código anterior con el mismo `IncorrectResultSizeDataAccessException`.
+
+**Cómo evitar que vuelva a pasar.** Al levantar una restricción de unicidad, buscar los `Optional<…>` y los
+`findBy…` de un solo resultado que se apoyaban en ella: con `grep` sobre el nombre de la columna. Queda como
+pregunta para el dueño si `/admin/cohorts` le tiene que seguir respondiendo 200 a un mentor (ver D-141).
+
+## E-372 · «Asignar mentor» del panel trasladaba al mentor: sus otros grupos quedaban sin mentor, en silencio
+
+**Síntoma.** ADM-13 del e2e (P0): asignar a un mentor que ya acompañaba cuatro grupos a un quinto lo sacó de los
+cuatro (`fin` en el mismo instante) y los dejó sin mentor. El diálogo solo decía «Hoy ya acompaña otro grupo.».
+
+**Causa real.** El panel llamaba siempre a `PUT /admin/cells/{id}/mentor`, que es el TRASLADO
+(`ComposicionDeCelulaService.asignar` → `cerrarMentorEnOtrosGrupos`). D-141 dejó la suma en su propia ruta
+(`POST …/additional-mentor`) pero la app nunca la usó, y seguía leyendo `cellId` (uno solo) en vez de `cellIds`.
+
+**Solución (app, rama `admin-fix`).** Por defecto se SUMA: si el mentor ya acompaña otros grupos, se lo
+suma a este y sigue en los otros (`POST …/additional-mentor`; si el grupo ya tiene otro mentor, antes se lo quita
+con `DELETE …/mentor`, porque un grupo sigue teniendo un solo mentor). El traslado queda como botón aparte,
+«Trasladar aquí», con un aviso que nombra los grupos que se quedan sin mentor (sus nombres salen de
+`GET /admin/cells/dashboard`). Sin cambios en el backend.
+
+**Cómo evitar que vuelva a pasar.** Una operación destructiva no se elige por defecto ni en silencio: va aparte y
+dice qué se pierde, con nombres. Cuando el backend separa dos operaciones por su efecto (D-139, D-141), la app
+tiene que ofrecer las dos, no solo la que existía antes.
+
+## E-373 · El panel decía «No se pudo guardar el grupo.» y «Inténtalo de nuevo en un momento.» en vez del motivo que mandaba el servidor
+
+**Síntoma.** ADM-12 y ADM-14 del e2e (P2): con un nombre de 201 caracteres el servidor respondía 400
+`El nombre de la celula no puede pasar de 200 caracteres`, y con el grupo lleno 409 con su motivo; la app solo
+mostraba el texto genérico.
+
+**Causa real.** `admin/utils/mensajes.mensajeDeFallo` devolvía el texto genérico para TODO error de la API que no
+fuera de red, 401 o 403: descartaba el `message` del servidor aunque estuviera pensado para leerse.
+
+**Solución (app).** Para 400, 409, 413, 415 y 422 muestra el motivo del servidor, salvo que parezca interno
+(`Clase.campo:`, el mismo filtro de `apiClient.mensajeDeError`) o sea el `Error NNN` de relleno; un 404 y un 5xx
+siguen con el genérico (un 404 trae ids, un 500 no explica nada).
+
+**Cómo evitar que vuelva a pasar.** Un error de negocio que el servidor explica (cupo, largo, estado) se muestra
+tal cual; lo genérico queda para lo que no tiene explicación útil.
+
+## E-374 · Un mensaje de chat de 1 MB entraba entero (CHT-06)
+
+**Síntoma.** CHT-06 del e2e: `POST /api/v1/chat/conversations/{id}/messages` con 1.048.576 caracteres → 201, y se
+guardaba entero. Mismo defecto de fondo que SEG-16 (biografía, bitácora), que es de otros carriles.
+
+**Causa real.** Ni el request ni `Mensaje.escribir` tenían tope; `mensajes.texto` es `text`.
+
+**Solución.** `Mensaje.LARGO_MAXIMO_DEL_TEXTO = 6.000` (D-215) en el dominio, para lo que escribe una persona: más
+es un 400 «El mensaje puede tener hasta 6000 caracteres» (`MensajeTest`, que falla contra el código anterior). La
+app limita el campo al mismo número. Los mensajes del programa no llevan tope: los escribe el servidor. Sin
+`CHECK` en la base: la fila de 1 MB del e2e ya existe, y validar el tope en el dominio alcanza para lo nuevo.
+
+**Cómo evitar que vuelva a pasar.** Todo texto libre que entra por la API lleva un tope, en el dominio y en el
+campo de la app, con el mismo número.
