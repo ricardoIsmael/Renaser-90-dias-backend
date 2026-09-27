@@ -5,6 +5,7 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.in.participante.ActivateProgramUseCase;
 import com.renaser.os.users.application.ports.in.participante.AvanzarDiaProgramaUseCase;
 import com.renaser.os.users.application.ports.in.participante.ConsultarActivacionProgramaUseCase;
+import com.renaser.os.users.application.ports.out.participante.GuardarAvanceDelRelojPort;
 import com.renaser.os.users.application.ports.out.participante.ListarParticipantesConProgramaActivoPort;
 import com.renaser.os.users.application.ports.out.participante.LoadParticipacionProgramaPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 /**
  * D-66: el reloj del programa de 90 dias — separado de {@link ParticipacionProgramaService}
@@ -40,17 +42,19 @@ public class RelojProgramaService
     private final LoadParticipacionProgramaPort loadParticipacionProgramaPort;
     private final SaveParticipacionProgramaPort saveParticipacionProgramaPort;
     private final ListarParticipantesConProgramaActivoPort listarParticipantesConProgramaActivoPort;
+    private final GuardarAvanceDelRelojPort guardarAvanceDelRelojPort;
     private final Clock clock;
 
     public RelojProgramaService(RequireActiveUserGuard requireActiveUserGuard,
                                  LoadParticipacionProgramaPort loadParticipacionProgramaPort,
                                  SaveParticipacionProgramaPort saveParticipacionProgramaPort,
                                  ListarParticipantesConProgramaActivoPort listarParticipantesConProgramaActivoPort,
-                                 Clock clock) {
+                                 GuardarAvanceDelRelojPort guardarAvanceDelRelojPort, Clock clock) {
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.loadParticipacionProgramaPort = loadParticipacionProgramaPort;
         this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
         this.listarParticipantesConProgramaActivoPort = listarParticipantesConProgramaActivoPort;
+        this.guardarAvanceDelRelojPort = guardarAvanceDelRelojPort;
         this.clock = clock;
     }
 
@@ -122,31 +126,64 @@ public class RelojProgramaService
         return new ResultadoAvance(evaluados, avanzados);
     }
 
+    /** Lo que paso con una fila del barrido. */
+    private enum Avance { SIN_CAMBIOS, GUARDADO, AJUSTADA_MIENTRAS_TANTO }
+
     /**
      * Devuelve {@code true} solo si esta fila cambio y se guardo. Ver el javadoc de arriba.
      *
-     * <p>La graduacion se registra en INFO y no en DEBUG como el resto del barrido: es el unico
-     * evento de negocio del cron —pasa una vez por participante en 90 dias— y es lo que se va a
-     * buscar en el log el dia que alguien pregunte "¿se gradúo o no?".
+     * <p><b>D-197: un ajuste de dia hecho en el medio no se pierde.</b> La fila se leyo con la
+     * pagina, a veces segundos antes; si un admin le ajusto el dia despues, el guardado condicional
+     * no escribe nada ({@link GuardarAvanceDelRelojPort}) y se relee la fila UNA vez para derivar
+     * con el ajuste nuevo. Si vuelve a cambiar, se deja para la corrida siguiente: el dia es
+     * derivado, asi que esperar una hora no atrasa a nadie.
      */
     private boolean sincronizarUno(ParticipacionPrograma participacion) {
         try {
-            LocalDate hoyEnSuZona = clock.now().atZone(participacion.timezone()).toLocalDate();
-            boolean yaEstabaGraduado = participacion.programaCompletado();
-            if (!participacion.sincronizarDiaDelPrograma(hoyEnSuZona, clock)) {
-                return false;
+            Avance avance = sincronizarYGuardar(participacion);
+            if (avance == Avance.AJUSTADA_MIENTRAS_TANTO) {
+                avance = reintentarConLaFilaFresca(participacion.participanteId());
             }
-            saveParticipacionProgramaPort.save(participacion);
-            if (!yaEstabaGraduado && participacion.programaCompletado()) {
-                log.info("[users.RelojPrograma] participante {} graduado: llego al dia {} el {} en su zona",
-                        participacion.participanteId(), participacion.diaPrograma(), hoyEnSuZona);
-            }
-            return true;
+            return avance == Avance.GUARDADO;
         } catch (RuntimeException e) {
             log.error("[users.RelojPrograma] no se pudo sincronizar el dia del participante {}: {}",
                     participacion.participanteId(), e.toString(), e);
             return false;
         }
+    }
+
+    private Avance reintentarConLaFilaFresca(UserId participanteId) {
+        Optional<ParticipacionPrograma> fresca = loadParticipacionProgramaPort.byParticipanteId(participanteId);
+        if (fresca.isEmpty()) {
+            return Avance.SIN_CAMBIOS;
+        }
+        Avance avance = sincronizarYGuardar(fresca.get());
+        if (avance == Avance.AJUSTADA_MIENTRAS_TANTO) {
+            log.warn("[users.RelojPrograma] el dia de {} se volvio a ajustar durante el barrido; queda para la "
+                    + "corrida siguiente", participanteId);
+        }
+        return avance;
+    }
+
+    /**
+     * La graduacion se registra en INFO y no en DEBUG como el resto del barrido: es el unico
+     * evento de negocio del cron —pasa una vez por participante en 90 dias— y es lo que se va a
+     * buscar en el log el dia que alguien pregunte "¿se gradúo o no?".
+     */
+    private Avance sincronizarYGuardar(ParticipacionPrograma participacion) {
+        LocalDate hoyEnSuZona = clock.now().atZone(participacion.timezone()).toLocalDate();
+        boolean yaEstabaGraduado = participacion.programaCompletado();
+        if (!participacion.sincronizarDiaDelPrograma(hoyEnSuZona, clock)) {
+            return Avance.SIN_CAMBIOS;
+        }
+        if (!guardarAvanceDelRelojPort.guardarSiNoSeAjusto(participacion)) {
+            return Avance.AJUSTADA_MIENTRAS_TANTO;
+        }
+        if (!yaEstabaGraduado && participacion.programaCompletado()) {
+            log.info("[users.RelojPrograma] participante {} graduado: llego al dia {} el {} en su zona",
+                    participacion.participanteId(), participacion.diaPrograma(), hoyEnSuZona);
+        }
+        return Avance.GUARDADO;
     }
 
     private ParticipacionPrograma requireParticipacionDe(UserId usuarioId) {

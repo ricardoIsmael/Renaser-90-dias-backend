@@ -320,8 +320,9 @@ class ParticipacionProgramaServiceTest {
     void fijarDiaAdminActivoFijaElDiaExacto() {
         UserId actorId = UserId.of(UUID.randomUUID());
         UserId traineeId = UserId.of(UUID.randomUUID());
+        // Antes usaba `inscribirTraineeAprobado` (sin Dia 1): desde D-195 ese caso es un 409.
         when(loadParticipacionProgramaPort.byParticipanteId(traineeId))
-                .thenReturn(Optional.of(ParticipacionPrograma.inscribirTraineeAprobado(traineeId, CLOCK)));
+                .thenReturn(Optional.of(ParticipacionPrograma.activarSeguimientoPersonal(traineeId, CLOCK)));
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN,
                 UserStatus.ACTIVE)));
         when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -331,6 +332,62 @@ class ParticipacionProgramaServiceTest {
         var captor = org.mockito.ArgumentCaptor.forClass(ParticipacionPrograma.class);
         verify(saveParticipacionProgramaPort).save(captor.capture());
         assertThat(captor.getValue().diaPrograma()).isEqualTo(45);
+    }
+
+    /**
+     * D-195. Contra el codigo viejo: respondia 204, guardaba el dia sin el ajuste y escribia la
+     * bitacora; al llegar el Dia 1 el barrido lo devolvia a 1 sin aviso.
+     */
+    @Test
+    void fijarDiaAntesDelDiaUnoEsConflictoYNoEscribeNadaNiEnLaBitacora() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId))
+                .thenReturn(Optional.of(ParticipacionPrograma.inscribirTraineeAprobado(traineeId, CLOCK)));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN,
+                UserStatus.ACTIVE)));
+
+        assertThatThrownBy(() -> service.fijarDia(new SetProgramDayCommand(actorId, traineeId, 45, "Viaje")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Esta persona todavía no empezó su Día 1: el día se puede ajustar desde que empieza");
+
+        verify(saveParticipacionProgramaPort, never()).save(any());
+        verify(saveAjusteDiaProgramaPort, never()).save(any());
+    }
+
+    /**
+     * Regla 03, madrugada UTC: eligio empezar el 27; a las 04:30 UTC del 27 en Lima todavia es el
+     * 26, asi que todavia no empezo. Con la fecha del servidor se habria tomado como su Dia 1.
+     */
+    @Test
+    void fijarDiaEnLaMadrugadaUtcDeSuDiaUnoTodaviaEsConflicto() {
+        var servicio = servicioCon(FixedClock.at(Instant.parse("2026-09-27T04:30:00Z")));
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        var arrancaEl27 = ParticipacionPrograma.rehydrate(traineeId, null, null, 0,
+                com.renaser.os.users.api.FasePrograma.paraDiaPrograma(0), java.time.LocalDate.of(2026, 9, 27),
+                Instant.parse("2026-09-25T15:00:00Z"), java.time.ZoneId.of("America/Lima"), false, 0,
+                Instant.parse("2026-09-20T15:00:00Z"), Instant.parse("2026-09-25T15:00:00Z"), null, null, null,
+                null, 0);
+        when(loadParticipacionProgramaPort.byParticipanteId(traineeId)).thenReturn(Optional.of(arrancaEl27));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN,
+                UserStatus.ACTIVE)));
+
+        assertThatThrownBy(() -> servicio.fijarDia(new SetProgramDayCommand(actorId, traineeId, 5, "x")))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(saveAjusteDiaProgramaPort, never()).save(any());
+    }
+
+    @Test
+    void elComandoRechazaElCeroYElNoventa() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        UserId traineeId = UserId.of(UUID.randomUUID());
+
+        assertThatThrownBy(() -> new SetProgramDayCommand(actorId, traineeId, 0))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("entre 1 y 89");
+        assertThatThrownBy(() -> new SetProgramDayCommand(actorId, traineeId, 90))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("entre 1 y 89");
     }
 
     // --- bitacora de ajustes (D-82) -------------------------------------

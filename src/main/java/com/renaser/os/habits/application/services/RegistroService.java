@@ -208,17 +208,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         // PAUSADO o todavia no le toca. Un habito sin fila en `desbloqueos_habito` se sigue
         // generando como siempre. Filtrar por "esta en el plan" habria dejado a TODO el padron
         // sin habitos de un dia para el otro, porque hoy esa tabla esta vacia para todos.
-        ZoneId zona = ZoneId.of(progreso.timezone());
-        Set<HabitoId> fueraDelPlanDeHoy = loadDesbloqueoPort.deParticipante(participanteId).stream()
-                // `estaPausadoEl(fecha)` y no `estaPausado()`: desde V31 una pausa puede tener
-                // fecha de fin, y pasada esa fecha el habito vuelve a generarse SOLO — la
-                // reanudacion se deriva del calendario, no la ejecuta ningun cron.
-                //
-                // La zona entra por parametro desde 2026-09-07: la pausa tambien tiene extremo de
-                // ABAJO (`pausadoEn`), y sin el apagaba retroactivamente todos los dias anteriores.
-                .filter(d -> d.estaPausadoEl(fecha, zona) || d.diaDesbloqueo() > progreso.diaPrograma())
-                .map(DesbloqueoHabito::habitoId)
-                .collect(Collectors.toSet());
+        Set<HabitoId> fueraDelPlanDeHoy = fueraDelPlanDelDia(progreso, participanteId, fecha);
 
         // V38: los que el aprendiz apago para ESE dia. Se suman al mismo conjunto de descarte
         // porque responden la misma pregunta que la pausa y el dia de desbloqueo — "¿va hoy?" —, y
@@ -276,6 +266,37 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
             conRegistroEseDia.add(habito.id());
         }
         return generados;
+    }
+
+    /**
+     * Los habitos del plan que ese dia NO van: pausados ese dia, o cuyo dia de desbloqueo no llego.
+     *
+     * <p>{@code estaPausadoEl(fecha)} y no {@code estaPausado()}: desde V31 una pausa puede tener
+     * fecha de fin, y pasada esa fecha el habito vuelve a generarse SOLO — la reanudacion se deriva
+     * del calendario, no la ejecuta ningun cron. La zona entra por parametro desde 2026-09-07: la
+     * pausa tambien tiene extremo de ABAJO ({@code pausadoEn}), y sin el apagaba retroactivamente
+     * todos los dias anteriores.
+     *
+     * <p><b>D-196:</b> un desbloqueo por encima del dia de hoy ya no alcanza para dejar el habito
+     * afuera: si el habito YA CORRIO (retroceso de dia, ver
+     * {@link DesbloqueoHabito#todaviaNoLeToca}), sigue. La consulta de registros se hace solo si
+     * hay algun candidato, que es la excepcion: el barrido del padron no paga una consulta mas.
+     */
+    private Set<HabitoId> fueraDelPlanDelDia(ProgresoParticipanteHabits progreso, UserId participanteId,
+                                             LocalDate fecha) {
+        ZoneId zona = ZoneId.of(progreso.timezone());
+        int dia = progreso.diaPrograma();
+        List<DesbloqueoHabito> plan = loadDesbloqueoPort.deParticipante(participanteId);
+        List<HabitoId> porEncimaDeHoy = plan.stream()
+                .filter(d -> d.diaDesbloqueo() > dia)
+                .map(DesbloqueoHabito::habitoId)
+                .toList();
+        Map<HabitoId, Integer> yaGenerados = porEncimaDeHoy.isEmpty() ? Map.of()
+                : loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(participanteId, porEncimaDeHoy);
+        return plan.stream()
+                .filter(d -> d.estaPausadoEl(fecha, zona) || d.todaviaNoLeToca(dia, yaGenerados.get(d.habitoId())))
+                .map(DesbloqueoHabito::habitoId)
+                .collect(Collectors.toCollection(HashSet::new));
     }
 
     /** Los habitos que ya tienen registro ese dia, en UNA consulta (V-5). Mutable: el bucle suma los que inserta. */

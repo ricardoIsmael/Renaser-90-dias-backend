@@ -110,6 +110,36 @@ public final class DesbloqueoHabito {
         return pausadoHasta == null || !diaEnSuZona.isAfter(pausadoHasta);
     }
 
+    /**
+     * Si el habito todavia no le toca a esta persona en {@code diaPrograma}: su dia de desbloqueo
+     * no llego <b>y</b> nunca llego a correr.
+     *
+     * <p><b>D-196 (decision del dueño 2026-09-26): al retroceder, lo ya activo sigue activo.</b>
+     * {@code dia_desbloqueo} es un dia ABSOLUTO del programa, y el interruptor del Plan lo crea con
+     * el dia en que se toco (D-99). Antes, un habito tocado el dia 30 dejaba de generarse si un
+     * admin retrocedia a la persona al 25 —aunque "Mis habitos" lo seguia mostrando desbloqueado—
+     * hasta volver a llegar al 30.
+     *
+     * <p>"Ya estuvo activo" se DERIVA de lo que paso, no se guarda (regla 02): el snapshot
+     * {@code registros_habito.dia_programa} dice en que dia del programa se genero cada registro.
+     * Si alguno se genero en un dia &gt;= al de desbloqueo, la persona llego a ese dia y el habito
+     * corrio. No se reescribe nada: ni el desbloqueo ni la historia de registros.
+     *
+     * <p>Lo que se eligio para MAS ADELANTE y todavia no llego (ningun registro con ese dia) sigue
+     * su regla normal: espera a su dia absoluto. Igual que un habito que ya venia generandose sin
+     * fila y se "posterga" eligiendolo para un dia futuro: sus registros viejos tienen un dia menor
+     * al de desbloqueo, asi que no cuentan como activacion.
+     *
+     * @param diaMasAltoYaGenerado el {@code dia_programa} mas alto de los registros de este habito
+     *                             para esta persona, o {@code null} si no tiene ninguno
+     */
+    public boolean todaviaNoLeToca(int diaPrograma, Integer diaMasAltoYaGenerado) {
+        if (diaDesbloqueo <= diaPrograma) {
+            return false;
+        }
+        return diaMasAltoYaGenerado == null || diaMasAltoYaGenerado < diaDesbloqueo;
+    }
+
     /** Ultimo dia de la pausa, o {@code null} si es indefinida o si no hay pausa. */
     public LocalDate pausadoHasta() {
         return pausadoHasta;

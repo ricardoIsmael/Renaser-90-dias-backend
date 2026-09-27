@@ -14,8 +14,12 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /** Implementa ademas {@link HabitoLogrosFinder}, el contrato PUBLICO hacia otros modulos
  * — mismo patron que {@code EntradaDiarioPersistenceAdapter} de este mismo modulo. */
@@ -59,6 +63,19 @@ class RegistroHabitoPersistenceAdapter implements LoadRegistroHabitoPort, SaveRe
     public List<RegistroHabito> porParticipanteYFecha(UserId participanteId, LocalDate fecha) {
         return repository.findByParticipanteIdAndFechaEjecucion(participanteId.value(), fecha).stream()
                 .map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public Map<HabitoId, Integer> diaProgramaMasAltoGeneradoPorHabito(UserId participanteId,
+                                                                      Collection<HabitoId> habitos) {
+        if (habitos.isEmpty()) {
+            return Map.of();
+        }
+        Map<HabitoId, Integer> resultado = new HashMap<>();
+        repository.diaProgramaMasAltoPorHabito(participanteId.value(),
+                        habitos.stream().map(HabitoId::value).distinct().toList())
+                .forEach(fila -> resultado.put(HabitoId.of((UUID) fila[0]), ((Number) fila[1]).intValue()));
+        return resultado;
     }
 
     @Override

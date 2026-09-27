@@ -168,20 +168,21 @@ hábitos ya marcados hoy no se pierden ni se duplican (UNIQUE participante+hábi
 no cambian, la fase se recalcula al instante (D-67), `phasecontracts`, academia, calendario, RAG y la cabecera de Inicio leen el
 día derivado sin caché, y el semáforo no reescribe semanas cerradas. **Arreglado:** la bitácora anotaba como «día anterior» el
 de ayer entre la medianoche local y el barrido de las :05 (E-319). **Abierto, a decidir por el dueño** (cada uno con prueba de
-caracterización que fija el comportamiento de hoy):
+caracterización que fija el comportamiento de hoy). **Actualizado 2026-09-26:** el dueño decidió seis de las filas
+(D-194 a D-198); las que dicen «Resuelto» o «Decidido» ya no están abiertas:
 
 | Riesgo | Qué pasa hoy |
 |---|---|
-| Retroceder y hábitos elegidos en el Plan | `desbloqueos_habito.dia_desbloqueo` es un día ABSOLUTO; un hábito tocado el día 30 deja de generarse si se retrocede al 25, hasta volver al 30 (`RegistroService.generarInterno`). «Mis hábitos» lo sigue mostrando desbloqueado |
-| Los tracks de HOY no se rehacen | Conservan `dia_programa`, `es_opcional` (ciclos D-169) y horario del día viejo hasta mañana. D-169 pregunta abierta 4 |
+| Retroceder y hábitos elegidos en el Plan | **Resuelto (D-196, E-327).** Decía: «un hábito tocado el día 30 deja de generarse si se retrocede al 25, hasta volver al 30; «Mis hábitos» lo sigue mostrando desbloqueado». Ahora lo que ya corrió (algún registro con día ≥ `dia_desbloqueo`) se sigue generando; lo elegido para más adelante espera su día. **Sigue abierto:** hábitos PERSONAL (`dia_inicio` = día de creación) y horarios de catálogo que arrancan después del día destino |
+| Los tracks de HOY no se rehacen | **Decidido (D-198): se mantiene así.** Conservan `dia_programa`, `es_opcional` (ciclos D-169) y horario del día viejo hasta mañana; lo generado conserva su foto |
 | Rocas | Semanas y fin del programa desde `fecha_inicio` sin ajuste: «día 34, semana 7», y al retroceder el final cae en la semana 14 (E-320) |
 | Adelantar saltándose un día de firma | El pacto de la fase saltada ya no se puede firmar (solo se firma la fase actual) |
-| Ajustar antes del Día 1 | Se guarda el día pero no el ajuste; al arrancar el programa vuelve a 1 sin aviso (204 y fila en la bitácora igual) |
-| Fijar 90 | No gradúa en el acto: gradúa el barrido siguiente (:05) y ya no se des-gradúa |
-| Fijar 0 a alguien en curso | Válido hoy: queda «día 0» un día (sin hábitos nuevos, sin elección semanal, «día 0 de 90» en Renasia) y mañana es 1 |
+| Ajustar antes del Día 1 | **Resuelto (D-195, E-326).** Decía: «se guarda el día pero no el ajuste; al arrancar vuelve a 1 sin aviso (204 y fila en la bitácora igual)». Ahora 409 «Esta persona todavía no empezó su Día 1…», sin escribir nada |
+| Fijar 90 | **Resuelto (D-194).** Decía: «no gradúa en el acto: gradúa el barrido siguiente y ya no se des-gradúa». Ahora el endpoint acepta 1..89: el 90 es un 400 |
+| Fijar 0 a alguien en curso | **Resuelto (D-194).** Decía: «válido hoy: queda día 0 un día y mañana es 1». Ahora el 0 es un 400 |
 | Semáforo al retroceder | Excluye los PRIMEROS N días del programa, no los del viaje; los del viaje siguen contando como incumplidos |
 | Semáforo: retroceder a un graduado con la semana final ya cerrada | Los días entre el viejo día 90 y el cierre de esa semana vuelven a «medirse» pero caen en una semana cerrada: quedan `PENDIENTE` para siempre (`CierreSemanal` arranca después de la última semana cerrada) |
-| Concurrencia | Sin bloqueo optimista: el barrido guarda el agregado entero cargado segundos antes; un ajuste que cae en esa ventana (00:05 de Lima) se pierde en silencio aunque quede en la bitácora |
+| Concurrencia | **Resuelto (D-197, E-328).** Decía: «sin bloqueo optimista: el barrido guarda el agregado entero cargado segundos antes; un ajuste en esa ventana se pierde en silencio». Ahora el barrido guarda con un `UPDATE` condicionado a que el ajuste y el inicio sigan siendo los leídos, y si no, relee y vuelve a derivar |
 
 ---
 

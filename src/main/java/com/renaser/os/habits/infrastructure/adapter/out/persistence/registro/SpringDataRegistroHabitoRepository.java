@@ -67,6 +67,13 @@ interface SpringDataRegistroHabitoRepository extends JpaRepository<RegistroHabit
 
     List<RegistroHabitoJpaEntity> findByParticipanteIdAndFechaEjecucion(UUID participanteId, LocalDate fechaEjecucion);
 
+    /** D-196: por habito, el `dia_programa` mas alto con el que ya se genero un registro. Filas (habitoId, max). */
+    @Query("SELECT r.habitoId, MAX(r.diaPrograma) FROM RegistroHabitoJpaEntity r "
+            + "WHERE r.participanteId = :participanteId AND r.habitoId IN :habitos AND r.diaPrograma IS NOT NULL "
+            + "GROUP BY r.habitoId")
+    List<Object[]> diaProgramaMasAltoPorHabito(@Param("participanteId") UUID participanteId,
+                                               @Param("habitos") Collection<UUID> habitos);
+
     List<RegistroHabitoJpaEntity> findByEstadoAndFechaEjecucionLessThan(EstadoRegistroJpa estado, LocalDate fecha);
 
     /**
