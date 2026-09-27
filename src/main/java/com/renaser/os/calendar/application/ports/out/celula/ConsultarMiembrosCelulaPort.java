@@ -13,6 +13,10 @@ import java.util.UUID;
 public interface ConsultarMiembrosCelulaPort {
 
     /** Aprendices activos de la celula + el MENTOR que la lidera — findActiveMembersInCell()
-     * del repo viejo: quien dirige la sesion tambien recibe su propio aviso. */
+     * del repo viejo: quien dirige la sesion tambien recibe su propio aviso.
+     *
+     * <p><b>Corregido 2026-09-27 (E-363).</b> Tambien cuentan las asignaciones vigentes del grupo
+     * ({@code asignaciones_celula}): los aprendices sumados a este grupo sin ser el principal (D-139) y quien
+     * lo acompaña aunque lidere varios (D-141). Antes solo contaba {@code participantes_programa.celula_id}. */
     List<UserId> miembrosActivos(UUID celulaId);
 }

@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.application.services;
 
+import com.renaser.os.calendar.application.ports.out.celula.ConsultarPertenenciaAGrupoPort;
 import com.renaser.os.calendar.application.ports.out.curso.ResolverAudienciaCursoPort;
 import com.renaser.os.calendar.application.ports.out.elegibilidad.ConsultarElegibilidadEventoPort;
 import com.renaser.os.calendar.application.ports.out.nivelmembresia.LoadNivelMembresiaPort;
@@ -11,7 +12,6 @@ import com.renaser.os.calendar.domain.model.evento.ResolverAudiencia;
 import com.renaser.os.calendar.domain.model.evento.ResolverAudiencia.EventoAudiencia;
 import com.renaser.os.calendar.domain.model.evento.ResolverAudiencia.VisorContexto;
 import com.renaser.os.calendar.domain.model.evento.RolUsuario;
-import com.renaser.os.calendar.domain.model.evento.TipoAudiencia;
 import com.renaser.os.calendar.domain.model.nivelmembresia.NivelMembresia;
 import com.renaser.os.calendar.domain.model.nivelmembresia.ProgresoNivel;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -34,13 +34,16 @@ class AccesoEventoService {
     private final LoadNivelMembresiaPort nivelPort;
     private final ResolverAudienciaCursoPort cursoPort;
     private final ConsultarElegibilidadEventoPort elegibilidadPort;
+    private final ConsultarPertenenciaAGrupoPort pertenenciaAGrupoPort;
 
     AccesoEventoService(ConsultarProgresoParticipanteCalendarPort progresoPort, LoadNivelMembresiaPort nivelPort,
-                         ResolverAudienciaCursoPort cursoPort, ConsultarElegibilidadEventoPort elegibilidadPort) {
+                         ResolverAudienciaCursoPort cursoPort, ConsultarElegibilidadEventoPort elegibilidadPort,
+                         ConsultarPertenenciaAGrupoPort pertenenciaAGrupoPort) {
         this.progresoPort = progresoPort;
         this.nivelPort = nivelPort;
         this.cursoPort = cursoPort;
         this.elegibilidadPort = elegibilidadPort;
+        this.pertenenciaAGrupoPort = pertenenciaAGrupoPort;
     }
 
     /** SUSPENDIDO -> 403. No exige ningun rol especifico: el calendario lo consultan todos los roles. */
@@ -73,9 +76,28 @@ class AccesoEventoService {
         }
 
         EventoAudiencia audiencia = proyectarAudiencia(evento);
-        boolean tieneAccesoCurso = evento.tipoAudiencia() == TipoAudiencia.CURSO
-                && evento.cursoId() != null && cursoPort.tieneAcceso(actorId, evento.cursoId());
-        return ResolverAudiencia.puedeVer(visor, audiencia, tieneAccesoCurso);
+        return ResolverAudiencia.puedeVer(visor, audiencia, perteneceAlDestino(actorId, visor, evento));
+    }
+
+    /**
+     * Si el visor pertenece al destino concreto del evento: el curso (audiencia CURSO) o el grupo (audiencia
+     * CELULA). Se pregunta solo cuando hace falta: ADMIN/ALCHEMIST ven todo sin consultar nada, y en un evento
+     * de grupo el puntero del visor ({@code participantes_programa.celula_id}) ya alcanza si coincide.
+     *
+     * <p><b>El grupo sale de las asignaciones vigentes (E-363, 2026-09-27).</b> Antes solo contaba ese puntero,
+     * que nombra UN grupo y que un mentor no tiene: el mentor del grupo recibia el aviso del evento pero le
+     * daba 403 al abrirlo, y los integrantes adicionales (D-139, D-141) tampoco tenian acceso.
+     */
+    private boolean perteneceAlDestino(UserId actorId, VisorContexto visor, Evento evento) {
+        if (visor.rol() == RolUsuario.ADMIN || visor.rol() == RolUsuario.ALCHEMIST) {
+            return false;
+        }
+        return switch (evento.tipoAudiencia()) {
+            case CURSO -> evento.cursoId() != null && cursoPort.tieneAcceso(actorId, evento.cursoId());
+            case CELULA -> evento.celulaDestinoId() != null && !evento.celulaDestinoId().equals(visor.celulaId())
+                    && pertenenciaAGrupoPort.perteneceHoy(evento.celulaDestinoId(), actorId);
+            case TODOS, NIVEL_MINIMO, ROLES -> false;
+        };
     }
 
     private EventoAudiencia proyectarAudiencia(Evento evento) {

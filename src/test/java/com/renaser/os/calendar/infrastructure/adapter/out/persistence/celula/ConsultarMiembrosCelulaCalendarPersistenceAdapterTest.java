@@ -3,6 +3,7 @@ package com.renaser.os.calendar.infrastructure.adapter.out.persistence.celula;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -68,6 +69,52 @@ class ConsultarMiembrosCelulaCalendarPersistenceAdapterTest {
         assertThat(adapter.miembrosActivos(UUID.randomUUID())).isEmpty();
     }
 
+    // ─── E-363: las asignaciones vigentes, ademas del puntero ─────────────────
+
+    /** Contra el adaptador anterior falla: solo miraba {@code participantes_programa.celula_id}. */
+    @Test
+    @DisplayName("E-363: un aprendiz sumado a un segundo grupo (D-139) recibe los avisos de ese grupo y pertenece a el")
+    void incluyeAlAprendizAdicionalPorSuAsignacionVigente() {
+        UUID principal = crearCelula(crearUsuario("MENTOR", "ACTIVO"));
+        UserId mentorDelAdicional = crearUsuario("MENTOR", "ACTIVO");
+        UUID adicional = crearCelula(mentorDelAdicional);
+        UserId aprendiz = crearUsuario("APRENDIZ", "ACTIVO");
+        crearParticipante(aprendiz, principal);
+        asignar(adicional, aprendiz, "APRENDIZ");
+
+        assertThat(adapter.miembrosActivos(adicional)).containsExactlyInAnyOrder(mentorDelAdicional, aprendiz);
+        assertThat(adapter.perteneceHoy(adicional, aprendiz)).isTrue();
+        assertThat(adapter.perteneceHoy(principal, aprendiz)).as("sin asignacion en el principal").isFalse();
+    }
+
+    @Test
+    @DisplayName("E-363: el mentor que lidera dos grupos (D-141) pertenece a los dos, y a ninguno mas")
+    void elMentorDeDosGruposPerteneceALosDos() {
+        UserId mentor = crearUsuario("MENTOR", "ACTIVO");
+        UUID primero = crearCelula(mentor);
+        UUID segundo = crearCelula(mentor);
+        UUID ajeno = crearCelula(crearUsuario("MENTOR", "ACTIVO"));
+        asignar(primero, mentor, "MENTOR");
+        asignar(segundo, mentor, "MENTOR");
+
+        assertThat(adapter.perteneceHoy(primero, mentor)).isTrue();
+        assertThat(adapter.perteneceHoy(segundo, mentor)).isTrue();
+        assertThat(adapter.perteneceHoy(ajeno, mentor)).isFalse();
+    }
+
+    @Test
+    @DisplayName("E-363: un integrante adicional suspendido no recibe avisos, y una asignacion cerrada no cuenta")
+    void dejaAfueraAlSuspendidoYALaAsignacionCerrada() {
+        UUID grupo = crearCelula(crearUsuario("MENTOR", "ACTIVO"));
+        UserId suspendido = crearUsuario("APRENDIZ", "SUSPENDIDO");
+        UserId quienSalio = crearUsuario("APRENDIZ", "ACTIVO");
+        asignar(grupo, suspendido, "APRENDIZ");
+        asignarCerrada(grupo, quienSalio);
+
+        assertThat(adapter.miembrosActivos(grupo)).doesNotContain(suspendido, quienSalio);
+        assertThat(adapter.perteneceHoy(grupo, quienSalio)).isFalse();
+    }
+
     // ─── Fixtures ───────────────────────────────────────────────────────────────
 
     private UserId crearUsuario(String rolCrudo, String estadoCrudo) {
@@ -92,7 +139,8 @@ class ConsultarMiembrosCelulaCalendarPersistenceAdapterTest {
                         "INSERT INTO renaser.cohortes (id, nombre, fecha_inicio) VALUES (:id, 'Cohorte test', current_date)")
                 .setParameter("id", cohorteId)
                 .executeUpdate();
-        entityManager.createNativeQuery("INSERT INTO renaser.perfiles_mentor (usuario_id) VALUES (:mentorId)")
+        entityManager.createNativeQuery(
+                        "INSERT INTO renaser.perfiles_mentor (usuario_id) VALUES (:mentorId) ON CONFLICT DO NOTHING")
                 .setParameter("mentorId", mentorUsuarioId.value())
                 .executeUpdate();
 
@@ -106,6 +154,32 @@ class ConsultarMiembrosCelulaCalendarPersistenceAdapterTest {
                 .setParameter("cohorteId", cohorteId)
                 .executeUpdate();
         return celulaId;
+    }
+
+    private void asignar(UUID celulaId, UserId usuario, String funcion) {
+        entityManager.createNativeQuery("""
+                        INSERT INTO renaser.asignaciones_celula (celula_id, usuario_id, funcion, inicio, motivo, clave_operacion)
+                        VALUES (:celula, :usuario, CAST(:funcion AS renaser.funcion_acompanamiento),
+                                now() - interval '1 day', 'ADMINISTRATIVO', :clave)
+                        """)
+                .setParameter("celula", celulaId)
+                .setParameter("usuario", usuario.value())
+                .setParameter("funcion", funcion)
+                .setParameter("clave", "prueba-" + UUID.randomUUID())
+                .executeUpdate();
+    }
+
+    private void asignarCerrada(UUID celulaId, UserId usuario) {
+        entityManager.createNativeQuery("""
+                        INSERT INTO renaser.asignaciones_celula (celula_id, usuario_id, funcion, inicio, fin, motivo,
+                                                                 clave_operacion)
+                        VALUES (:celula, :usuario, 'APRENDIZ', now() - interval '10 days', now() - interval '2 days',
+                                'ADMINISTRATIVO', :clave)
+                        """)
+                .setParameter("celula", celulaId)
+                .setParameter("usuario", usuario.value())
+                .setParameter("clave", "prueba-" + UUID.randomUUID())
+                .executeUpdate();
     }
 
     private void crearParticipante(UserId id, UUID celulaId) {

@@ -100,7 +100,8 @@ class EventoServiceAutorizacionTest {
 
     @BeforeEach
     void setUp() {
-        var acceso = new AccesoEventoService(progresoPort, nivelPort, cursoSinAcceso(), (usuario, tipo) -> false);
+        var acceso = new AccesoEventoService(progresoPort, nivelPort, cursoSinAcceso(), (usuario, tipo) -> false,
+                (celula, usuario) -> false);
         service = new EventoService(loadEventoPort, saveEventoPort, loadExcepcionPort, saveExcepcionPort,
                 loadConfirmacionPort, saveRecordatorioPort, nivelPort, almacenamientoPort, acceso, CLOCK,
                 idGenerator);
