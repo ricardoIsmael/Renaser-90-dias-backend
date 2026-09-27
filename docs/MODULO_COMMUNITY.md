@@ -445,3 +445,42 @@ bienvenida. El mensaje lo escribe `chat` (`BienvenidaEnGrupoService`, `docs/MODU
 | Clase | Qué fija |
 |---|---|
 | `BienvenidaDeGrupoServiceTest` (5) | Solo las vigentes sin marca, con su mentor y el inicio de cada pertenencia (D-204); recepción no; sin mentor no; grupo fuera de periodo no; marcar delega en el UPDATE condicional |
+
+---
+
+## 13. 2026-09-27 — La tarjeta con nombre de cada integrante en la info del grupo (D-206)
+
+**Qué pidió el dueño.** La lista de integrantes de la info del chat de un grupo mostraba iniciales; tiene
+que mostrar la tarjeta de Canva con el primer nombre de cada persona, el mentor incluido (la foto subida,
+si la hay, sigue primero). Captura del reporte: «Ricardo Palomino, E2E Libre 01 y E2E Libre 02» con
+«RP», «EL», «EL».
+
+**De dónde sale esa lista.** No del chat: la app la arma con `GET /api/v1/me/cells` (el mentor) y
+`GET /api/v1/me/cells/{cellId}/members` (los aprendices), las lecturas de D-142 (`MisCelulasService`).
+Por eso la ruta de la tarjeta viaja ahí:
+
+| Respuesta | Campo nuevo | Qué trae |
+|---|---|---|
+| `MiCelulaResponse` (`/me/cells`) | `mentorId` | El id del mentor (uuid). La app lo compara con la sesión: si el que mira es el mentor, su fila dice «Tú» y ve el botón «Ver ficha» de cada aprendiz; si no, abre con él el 1 a 1 (D-207) |
+| `MiCelulaResponse` (`/me/cells`) | `mentorPhotoPath` | `/api/v1/chat/conversations/{chat del grupo}/miembros/{mentor}/foto`; `null` sin mentor, sin chat o si el modo es `FOTO_SUBIDA` y el mentor subió foto |
+| `CellMemberResponse` (`/me/cells/{id}/members`) | `photoPath` | La misma ruta para cada aprendiz; `null` si el grupo no tiene chat o si el modo es `FOTO_SUBIDA` y esa persona subió foto |
+
+Los endpoints viejos (`/me/cell`, `/me/cell/members`) comparten esos records y mandan `mentorId` con el
+mentor de siempre, pero `mentorPhotoPath` y `photoPath` en `null`: los usa un APK repartido y no se les
+suma una consulta más. Los campos son aditivos y todas las versiones publicadas de la app los ignoran
+(`celulaSchemas.ts` es `passthrough` en todo su historial).
+
+**Quién sabe la ruta: chat, por un SPI.** La ruta nombra la conversación del grupo, que es de `chat`, y
+`chat` ya depende de `community.api`; que `community` le pregunte a `chat` directo sería un ciclo. Por eso
+`community.api.FotosDeIntegrantesDelGrupo` es una interfaz de `community` que implementa `chat`
+(`FotosDeIntegrantesDelGrupoAdapter`), el mismo criterio que `ReferenciasExternasDeMediaDelMuro`. Una sola
+consulta por grupo (el chat del grupo por `celula_id`), no una por integrante. El endpoint que sirve la
+tarjeta, su autorización y el modo del servidor (`CHAT_FOTO_DE_INTEGRANTES`: `TARJETA` por defecto, o
+`FOTO_SUBIDA`) están en `docs/MODULO_CHAT.md` §12.1. `avatarUrl` y `mentorAvatarUrl` siguen viajando igual:
+la app ignora la foto subida cuando llega la ruta de la tarjeta.
+
+| Clase | Qué fija |
+|---|---|
+| `FotosDeLaGenteDelGrupoResponseTest` (3) | `mentorId` con el uuid pelado y `mentorPhotoPath`; sin mentor, los dos en `null`; `photoPath` por aprendiz y `null` en el endpoint viejo |
+| `FotosDelChatIT` (+4) | Contra Postgres y el Tomcat real: `/me/cells` trae `mentorId` y la ruta del mentor, y esa ruta sirve su tarjeta; `/me/cells/{id}/members` trae la de cada aprendiz y la ven el mentor y los compañeros (ver `docs/MODULO_CHAT.md` §12.1) |
+| `MisCelulasIT` (ajuste) | `integrantesDe` devuelve cada integrante con su ruta (`IntegranteDelGrupo`); la lista sigue siendo la misma gente |

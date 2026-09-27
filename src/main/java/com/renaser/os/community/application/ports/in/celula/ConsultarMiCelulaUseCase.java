@@ -23,7 +23,13 @@ public interface ConsultarMiCelulaUseCase {
 
     List<PerfilBasico> misCompaneros(UserId traineeId);
 
+    /**
+     * @param rutaFotoMentor la ruta de la tarjeta con nombre del mentor en el chat del grupo (D-206);
+     *                       {@code null} si no hay mentor, si el grupo no tiene chat, si el modo del chat
+     *                       es «su foto si la subió» y la subió, o en {@code /me/cell}, que no la calcula
+     *                       (endpoint viejo, D-142)
+     */
     record MiCelula(Celula celula, Cohorte cohorte, PerfilBasico mentor, int cantidadMiembros,
-                     int totalCelulasEnCohorte) {
+                     int totalCelulasEnCohorte, String rutaFotoMentor) {
     }
 }

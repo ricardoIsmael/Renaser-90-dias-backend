@@ -708,6 +708,13 @@ otra cuenta).
 Si alguna da otra cosa, el parámetro no se tomó: revisar el nombre exacto y que el contenedor haya
 arrancado **después** de cargarlo (E-244).
 
+**Para el chat** (se leen al arrancar: se cambia el parámetro y `docker restart backend`):
+
+| Parámetro | Valor por defecto | Qué decide | Ojo |
+|---|---|---|---|
+| `BIENVENIDA_ACTIVA` | `false` | Las bienvenidas automáticas del soporte y del grupo, firmadas por el programa (D-199, D-204) | Se prende cuando el dueño apruebe los textos de `bienvenida/mensajes.yaml` |
+| `CHAT_FOTO_DE_INTEGRANTES` | `TARJETA` | Qué foto muestra la info de un grupo de cada integrante (D-206): `TARJETA`, siempre su tarjeta con nombre; `FOTO_SUBIDA`, su foto si la subió y si no la tarjeta | No hace falta cargarlo para el modo por defecto. Cambiarlo no pide APK. El log de arranque dice el modo que tomó: `[chat.fotos] foto de los integrantes…` |
+
 #### Checklist para encender el semáforo (S-7, 2026-09-26)
 
 Se enciende **de lunes a jueves**, nunca viernes, sábado ni domingo. El barrido de las :25 cierra la

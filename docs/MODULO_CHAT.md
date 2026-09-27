@@ -716,8 +716,16 @@ latido no sale; el cliente, al no oír nada, cierra y reconecta, y el handshake 
 nombre, la misma que le manda la bienvenida (`BienvenidaJava2dAdapter`, §10). Los grupos y la comunidad
 usan la tarjeta sin nombre, que la app ya trae como asset (frontend 8971acf, `tarjeta-renaser.jpg`).
 
+> **Corregido 2026-09-27 (D-206).** La frase de arriba ya no vale para la comunidad: el dueño pidió que el
+> chat global vuelva al fénix («de la plantilla que te pasé los 2 png […] solo afecta esos 2 primeros»: el
+> grupo y el soporte). La tarjeta sin nombre queda para los grupos y de respaldo del soporte.
+
 **El endpoint.** `GET /api/v1/chat/conversations/{id}/foto` (`ConversacionSoporteController`,
 `@RequiresPermission(USE_APP)`) responde `image/jpeg` con la tarjeta del aprendiz dueño del soporte.
+
+> **Corregido 2026-09-27 (D-206).** El endpoint pasó a `FotosDelChatController`, junto al de los
+> integrantes (§12.1); el servicio se llama `FotosDelChatService` (antes `FotoDelSoporteService`) y la
+> prueba contra el Tomcat real `FotosDelChatIT` (antes `FotoDelSoporteIT`). La ruta y el contrato no cambiaron.
 
 | Caso | Respuesta |
 |---|---|
@@ -753,10 +761,76 @@ por conversación. Mientras carga o si falla queda la tarjeta sin nombre.
 
 | Clase | Qué fija |
 |---|---|
-| `FotoDelSoporteServiceTest` (7) | La aprendiz ve su tarjeta (primer nombre y huella); el staff ve la de la aprendiz; sin acceso 403 sin dibujar; un grupo o la comunidad 404; la que no existe 404 antes de preguntar el acceso; suspendida 403; sin la cuenta de la aprendiz, sin nombre |
+| `FotosDelChatServiceTest` (antes `FotoDelSoporteServiceTest`, 7) | La aprendiz ve su tarjeta (primer nombre y huella); el staff ve la de la aprendiz; sin acceso 403 sin dibujar; un grupo o la comunidad 404; la que no existe 404 antes de preguntar el acceso; suspendida 403; sin la cuenta de la aprendiz, sin nombre |
 | `TarjetasConNombreEnMemoriaTest` (3) | Un dibujo por nombre sin importar mayúsculas ni espacios; huella del contenido; acotada por peso |
-| `FotoDelSoporteControllerTest` (5) | 200 con `image/jpeg`, `Cache-Control` y `ETag`; 304 con `If-None-Match`; 403 (también pidiendo `Accept: image/jpeg`); 404; suspendida 403 sin llegar al caso de uso |
-| `FotoDelSoporteIT` (2) | Tomcat real con sesión: la aprendiz y el staff reciben el JPEG entero con el mismo `ETag` y el `Cache-Control` sin pisar; 304; 403 al que no participa y sin sesión; 404 en un 1 a 1 y en una que no existe |
+| `FotosDelChatControllerTest` (antes `FotoDelSoporteControllerTest`, 5) | 200 con `image/jpeg`, `Cache-Control` y `ETag`; 304 con `If-None-Match`; 403 (también pidiendo `Accept: image/jpeg`); 404; suspendida 403 sin llegar al caso de uso |
+| `FotosDelChatIT` (antes `FotoDelSoporteIT`, 2) | Tomcat real con sesión: la aprendiz y el staff reciben el JPEG entero con el mismo `ETag` y el `Cache-Control` sin pisar; 304; 403 al que no participa y sin sesión; 404 en un 1 a 1 y en una que no existe |
 | `ConversacionTest` (+3) | `aprendizDelSoporte`: el soporte lo sabe; lo demás no tiene; una clave rara da vacío |
 | `ConversacionResponseTest` (+1) | `photoPath` solo en un soporte |
 | `MensajeFanoutPayloadTest` (+1 aserción) | El evento en vivo lleva `SYSTEM` y `TEXT`, como el REST (E-333) |
+
+### 12.1 La tarjeta de cada integrante en la info del grupo (2026-09-27, D-206)
+
+**Qué pidió el dueño.** La lista de integrantes de la info del chat de un grupo mostraba iniciales
+(captura: «Ricardo Palomino, E2E Libre 01 y E2E Libre 02» con «RP», «EL», «EL»); tiene que mostrar la
+tarjeta de Canva con el primer nombre de cada uno, el mentor incluido. En la página de decisiones eligió
+«Siempre su tarjeta con nombre» aunque la persona haya subido foto en «Yo», y pidió dejar listo el otro
+modo por si cambia de idea.
+
+**El endpoint.** `GET /api/v1/chat/conversations/{id}/miembros/{usuarioId}/foto` (`FotosDelChatController`,
+`@RequiresPermission(USE_APP)`) responde `image/jpeg` con la tarjeta del primer nombre de ese integrante,
+con el mismo `Cache-Control`, `ETag` y 304 que la del soporte.
+
+| Caso | Respuesta |
+|---|---|
+| Quien puede ver el grupo (o el soporte) pide la de un integrante | 200, su tarjeta |
+| Cuenta suspendida, quien no puede ver la conversación, o sin sesión | 403 |
+| La conversación no existe | 404 |
+| La comunidad o un 1 a 1 (aunque se los pueda ver) | 404 |
+| Alguien que no es integrante de ese grupo o soporte | 404, sin dibujar nada |
+| Un `usuarioId` que no es un UUID | 400 |
+
+El orden es existe → puede verla → es un grupo o un soporte y esa persona es integrante: a quien no
+participa no se le dice quién está adentro. **Integrante = quien puede ver la conversación**, con el mismo
+`puedeVer` del resto del módulo (en un grupo, la pertenencia vigente, mentor incluido; en un soporte, la
+aprendiz y el staff que participa). No se escribió otra regla.
+
+**Dónde viaja la ruta.** La lista de la info no sale de chat sino de `community` (`/me/cells` para el
+mentor, `/me/cells/{id}/members` para los aprendices), así que la ruta va ahí: `mentorId` y
+`mentorPhotoPath` en la primera, `photoPath` en la segunda (`docs/MODULO_COMMUNITY.md` §13). Community se la
+pide a chat por `community.api.FotosDeIntegrantesDelGrupo`, que chat implementa
+(`FotosDeIntegrantesDelGrupoAdapter`, adaptador de entrada): chat ya depende de `community.api` y al revés
+sería un ciclo. Una consulta por grupo (el chat por `celula_id`).
+
+**El modo** (`FotoDeIntegrantes`; `renaser.chat.foto-de-integrantes`, `CHAT_FOTO_DE_INTEGRANTES` en
+Parameter Store):
+
+| Valor | A quién se le manda la ruta de la tarjeta | Qué ve la info |
+|---|---|---|
+| `TARJETA` (default) | A todos | La tarjeta de cada uno, aunque haya subido foto |
+| `FOTO_SUBIDA` | Solo a quien no subió foto (una consulta en lote a `users.api`) | Su foto si la subió; si no, la tarjeta |
+
+Se lee al arrancar, como `BIENVENIDA_ACTIVA`: se cambia el parámetro y se reinicia el contenedor; el log de
+arranque dice el modo que tomó (`[chat.fotos] foto de los integrantes en grupos y soporte: …`). Un valor que
+no es ninguno de los dos no tumba el arranque: queda `TARJETA` y lo avisa un WARN. El endpoint sirve la
+tarjeta en los dos modos: el modo decide a quién se le manda la ruta, no qué tarjetas existen.
+
+**Por qué el servidor decide a quién le manda la ruta, y no un campo con el modo.** Porque así la app tiene
+una sola regla que sirve para los dos modos: si llega la ruta, muestra la tarjeta e ignora `avatarUrl`
+(con las iniciales mientras carga o si falla); si no llega, la foto subida; si tampoco hay, las iniciales.
+Cambiar de modo no pide APK. `avatarUrl` sigue viajando igual porque esas respuestas también alimentan
+pantallas que no cambian.
+
+**Qué muestra cada chat.** El global, el fénix (vuelve a como estaba antes de 8971acf); los grupos, la
+tarjeta sin nombre; el soporte, la tarjeta de su aprendiz (D-205) en los dos modos, porque es la foto de la
+conversación y no la de un integrante. El soporte no tiene lista de integrantes en la app y las burbujas
+de un grupo muestran solo el nombre, así que la lista de la info del grupo es el único lugar donde el modo
+se ve.
+
+| Clase | Qué fija |
+|---|---|
+| `FotosDelChatServiceTest` (+10; 17 en total) | Grupo: la aprendiz ve la tarjeta del mentor; soporte: la del staff; 403 a quien no puede ver el grupo, antes de mirar al integrante; suspendida 403 en las dos fotos; la comunidad y un 1 a 1, 404; alguien de afuera, 404 sin dibujar; modo `TARJETA`: todos, sin consultar a nadie; `FOTO_SUBIDA`: solo quien no subió (una URL en blanco no es foto); un modo mal escrito queda en `TARJETA`; grupo sin chat, vacío; `application.yaml` trae `TARJETA` por defecto |
+| `FotoDeIntegrantesTest` (3) | La regla de cada modo; se lee sin importar mayúsculas ni espacios y no adivina un valor mal escrito |
+| `FotosDelChatControllerTest` (7 en total) | 200 y 304 de la tarjeta de un integrante; 403 y 404; `usuarioId` que no es UUID, 400 sin llegar al caso de uso; suspendida 403 en las dos rutas |
+| `FotosDeIntegrantesDelGrupoAdapterTest` (4) | La ruta de cada uno en el chat del grupo; quien no lleva tarjeta no figura; sin chat, vacío; sin integrantes no consulta |
+| `FotosDelChatIT` (+4; 6 en total) | Postgres y Tomcat reales: `/me/cells` trae `mentorId` y la ruta del mentor, que sirve su tarjeta (200, 304, otra `ETag` que la del soporte); `/me/cells/{id}/members` trae la ruta de cada aprendiz —también de quien subió foto, en el modo por defecto— y la ven el mentor y los compañeros; 403 a quien no está en el grupo, a una cuenta suspendida y sin sesión; 404 a alguien de afuera, en un 1 a 1 y en una que no existe; en el soporte, la del staff sí |

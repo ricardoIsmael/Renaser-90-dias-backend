@@ -235,7 +235,8 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         PerfilBasico mentor = celula.mentorId() != null ? perfilBasico(celula.mentorId()) : null;
         int cantidadMiembros = consultarMiembrosCelulaPort.contarMiembros(celulaId);
         int totalCelulas = loadCelulaPort.porCohorte(celula.cohorteId()).size();
-        return Optional.of(new MiCelula(celula, cohorte, mentor, cantidadMiembros, totalCelulas));
+        // Sin la foto del mentor (D-206): este es el `/me/cell` viejo y no se le cambia lo que calcula.
+        return Optional.of(new MiCelula(celula, cohorte, mentor, cantidadMiembros, totalCelulas, null));
     }
 
     @Override

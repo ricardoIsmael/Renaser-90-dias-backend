@@ -29,8 +29,6 @@ public record ConversacionResponse(String id, String type, String celulaId, Stri
     }
 
     private static String rutaDeLaFoto(Conversacion c) {
-        return c.tipo() == TipoConversacion.SOPORTE
-                ? ConversacionSoporteController.RUTA_DE_LA_FOTO.replace("{id}", c.id().toString())
-                : null;
+        return c.tipo() == TipoConversacion.SOPORTE ? FotosDelChatController.rutaDeLaFotoDelSoporte(c.id()) : null;
     }
 }

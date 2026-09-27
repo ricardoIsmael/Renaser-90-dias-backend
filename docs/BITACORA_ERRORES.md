@@ -10273,6 +10273,27 @@ arreglo: `elDomingoElMartesSigueFuera`, `unDiaDeSemanaNoCambia` y `elDomingoDelD
 semana), el día previo al Día 1, el último domingo del programa y la semana 13, con el reloj en una hora UTC que cae en el
 día local anterior (regla 02). Si una regla nueva amplía otra, se prueba que siga cubriendo todo lo que cubría la vieja.
 
+## E-341 · SIN ARREGLAR (fuera de alcance) — «Escribirle» en la ficha de un aprendiz abierta desde «Mi grupo» dentro de Comunidad no se ve hacer nada: el chat se abre detrás de la ficha
+
+**Síntoma.** Un mentor en Comunidad → Tribu → «Mi grupo» → un aprendiz → «Escribirle»: la ficha sigue a la vista y
+parece que el botón no hizo nada. Recién al volver dos veces («←» a «Mi grupo» y «←» otra vez) aparece el chat 1 a 1 ya
+abierto. Encontrado leyendo el código mientras se hacía D-207 (frontend `eventos-app`); **no se reprodujo en el
+emulador**. Desde Hoy el mismo botón sí funciona, porque cambia de pestaña.
+
+**Causa real.** `AlumnoScreen.escribirle` abre la conversación y navega con `irAPestana('Comunidad', {
+abrirChatConversacionId })`. Estando ya en Comunidad, el efecto que consume ese parámetro (`ComunidadScreen`) pasa a
+Tribu y pide el chat, pero no toca `vistaMentor`: el `return` temprano de `vistaMentor === 'alumno'` sigue dibujando la
+ficha encima de todo.
+
+**Solución.** Ninguna todavía: es un defecto anterior a D-207 y se reportó en vez de arreglarlo en el mismo cambio (regla
+00). El arreglo probable es de una línea: en ese mismo efecto, `setVistaMentor('ninguna')`. La ficha que se abre desde la
+info del grupo (D-207) ya cierra la ficha y la info en ese efecto (`setFichaDesdeLaInfo(null)`,
+`setGroupInfoVisible(false)`), así que ese camino nuevo no tiene el problema.
+
+**Cómo evitar que vuelva a pasar.** Toda vista de `ComunidadScreen` que se dibuja con un `return` temprano (las del
+mentor, la ficha) tiene que cerrarse en los efectos que llevan a otra parte de la pantalla, o tapa lo que se pidió.
+Probarlo en el emulador después de arreglarlo: desde Hoy y desde Comunidad.
+
 ## E-356 · `PRUEBAS_EN_CLOUD.md` apuntaba a un puerto viejo: Testcontainers ya no pasa por el agente de Cloud sino por Testcontainers Desktop (`tc.host=tcp://127.0.0.1:42405`)
 
 **Síntoma (2026-09-27, `clean verify` del arreglo E-340).** Según el informe del agente, las pruebas de integración

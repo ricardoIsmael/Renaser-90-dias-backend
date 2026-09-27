@@ -55,7 +55,7 @@ public class MisCelulasController {
     public Map<String, List<CellMemberResponse>> integrantes(@ActorAutenticado UserId traineeId,
                                                               @PathVariable UUID cellId) {
         List<CellMemberResponse> miembros = consultarUseCase.integrantesDe(traineeId, CelulaId.of(cellId)).stream()
-                .map(p -> CellMemberResponse.from(p, p.id().equals(traineeId)))
+                .map(i -> CellMemberResponse.from(i, i.perfil().id().equals(traineeId)))
                 .toList();
         return Map.of("members", miembros);
     }

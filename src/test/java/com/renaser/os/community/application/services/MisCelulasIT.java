@@ -109,11 +109,11 @@ class MisCelulasIT {
 
         assertThat(misCelulas.integrantesDe(aprendiz, CelulaId.of(nuevo)))
                 .as("la info del grupo nuevo trae a los del grupo nuevo")
-                .extracting(p -> p.id())
+                .extracting(i -> i.perfil().id())
                 .containsExactlyInAnyOrder(aprendiz, soloDelNuevo);
         assertThat(misCelulas.integrantesDe(aprendiz, CelulaId.of(general)))
                 .as("y la del general, a los del general")
-                .extracting(p -> p.id())
+                .extracting(i -> i.perfil().id())
                 .containsExactlyInAnyOrder(aprendiz, soloDelGeneral);
     }
 
@@ -191,7 +191,7 @@ class MisCelulasIT {
         assertThat(misCelulas.misCelulas(mentor)).extracting(mc -> mc.celula().id())
                 .containsExactly(CelulaId.of(grupo));
         assertThat(misCelulas.integrantesDe(mentor, CelulaId.of(grupo)))
-                .extracting(p -> p.id()).containsExactly(aprendiz);
+                .extracting(i -> i.perfil().id()).containsExactly(aprendiz);
     }
 
     // ── Semilla ─────────────────────────────────────────────────────────────
