@@ -10121,3 +10121,24 @@ Audioterapia tiene en la base. `crear` pasa la hora de cierre por `VentanaDelDia
 
 **Cómo evitar que vuelva a pasar.** En un fixture con `HorarioHabito.crear`, las horas de cierre después de las 23:50 salen
 acotadas. Para reproducir una fila real tal cual está en la base, usar `rehydrate`.
+
+## E-341 · SIN ARREGLAR (fuera de alcance) — «Escribirle» en la ficha de un aprendiz abierta desde «Mi grupo» dentro de Comunidad no se ve hacer nada: el chat se abre detrás de la ficha
+
+**Síntoma.** Un mentor en Comunidad → Tribu → «Mi grupo» → un aprendiz → «Escribirle»: la ficha sigue a la vista y
+parece que el botón no hizo nada. Recién al volver dos veces («←» a «Mi grupo» y «←» otra vez) aparece el chat 1 a 1 ya
+abierto. Encontrado leyendo el código mientras se hacía D-207 (frontend `eventos-app`); **no se reprodujo en el
+emulador**. Desde Hoy el mismo botón sí funciona, porque cambia de pestaña.
+
+**Causa real.** `AlumnoScreen.escribirle` abre la conversación y navega con `irAPestana('Comunidad', {
+abrirChatConversacionId })`. Estando ya en Comunidad, el efecto que consume ese parámetro (`ComunidadScreen`) pasa a
+Tribu y pide el chat, pero no toca `vistaMentor`: el `return` temprano de `vistaMentor === 'alumno'` sigue dibujando la
+ficha encima de todo.
+
+**Solución.** Ninguna todavía: es un defecto anterior a D-207 y se reportó en vez de arreglarlo en el mismo cambio (regla
+00). El arreglo probable es de una línea: en ese mismo efecto, `setVistaMentor('ninguna')`. La ficha que se abre desde la
+info del grupo (D-207) ya cierra la ficha y la info en ese efecto (`setFichaDesdeLaInfo(null)`,
+`setGroupInfoVisible(false)`), así que ese camino nuevo no tiene el problema.
+
+**Cómo evitar que vuelva a pasar.** Toda vista de `ComunidadScreen` que se dibuja con un `return` temprano (las del
+mentor, la ficha) tiene que cerrarse en los efectos que llevan a otra parte de la pantalla, o tapa lo que se pidió.
+Probarlo en el emulador después de arreglarlo: desde Hoy y desde Comunidad.
