@@ -427,3 +427,40 @@ Estas eran las preguntas abiertas («Por decidir»). Quedan escritas como se hic
 - Qué pasa con los días en que una cuenta estuvo suspendida: al reactivarla, esos días cuentan como no cumplidos y la
   semana puede salir en rojo. La decisión del 26/09 («no se toca», §9.9) no los nombra. Detalle y opción sin tabla
   nueva en `docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md` §7, punto 2.
+  > **Decidido 2026-09-27 (§13, punto 46).** El dueño eligió que esos días **no se midan**. Queda como pregunta
+  > abierta solo hasta que se integre D-209.
+
+## 13. Decisiones del dueño en la página del 27/09 (mediodía)
+
+El dueño respondió la página de decisiones (artifact «Decisiones Renaser», 19 puntos) el 27/09 entre las 11:28 y las
+11:36 de Lima. Esto también cierra la pregunta de los días de suspensión (§12). Las notas van literales.
+
+**Arreglo urgente en producción, el mismo día.** El domingo desde las 18:00 de Lima no se podía planificar el lunes
+(`INVALID_DATE … entre 2026-09-28 y 2026-09-27`, E-340; venía de E-208). Con OK del dueño («arregla eso bro de
+producción no puede pasar») se subió solo ese arreglo del backend, hecho sobre `7429a09c` (merge `49fbc15f` a `master`).
+
+| # | Punto | Decisión | Nota del dueño | Estado |
+|---|---|---|---|---|
+| 30 | Quién cambia la foto del grupo | **Admin y el mentor de ese grupo** | — | Después de las tarjetas (D-212 reservada) |
+| 31 | Foto de cada integrante en grupo y soporte | **Siempre su tarjeta con nombre**, con un interruptor del servidor para pasar a «su foto, si la subió» sin APK | «Posible q cambios hazlo los 2 por si acaso ya que su dirección cambia a cada rato bro» | En curso (D-206, D-207) |
+| 32 | Lista de chats | Dos partes, como está | — | Sin cambios |
+| 33 | Menú de abajo dentro de un chat | Oculto, como está | — | Sin cambios |
+| 34 | Marcas de enviado y leído | **✓✓ de leído** (1 a 1, grupo y soporte; la comunidad queda con ✓) | — | En curso (D-208) |
+| 35 | Ficha del aprendiz desde la info del grupo | **Agregar**, bien visible | «El público es objetivo lo mejor visible posible» | En curso, con las tarjetas |
+| 36 | Escribirle al mentor desde la info del grupo | **Agregar** | — | En curso, con las tarjetas |
+| 37 | Ventana de la bienvenida del grupo al prenderla | **48 horas** | — | Confirma D-204 |
+| 38 | Texto que acompaña la tarjeta | **Aprobado** | «Y si es posible poder hacer el cambio en administrador y alquimista … el cambio de la portada y el mensaje» | Edición por Admin y Alquimista en curso (D-210) |
+| 39 | Mensaje formal de bienvenida | **Aprobado** | — | Listo |
+| 40 | Bienvenida del grupo | **Aprobada** | — | Listo |
+| 41 | Aviso con voz | Ninguna de las provisionales | «No me gusta ninguna debe de ser un voz natural básica herramientas Open source … y el tema de alarmas también … para alertar como también relajar bro ASMR» | Candidatos open source en curso (D-211 reservada); el dueño elige antes de integrar |
+| 42 | Sonido elegido en Yo → Alarmas | Vale para todos los hábitos, como está | — | Sin cambios |
+| 43 | Recordatorios de las acciones de objetivos | Como están | — | Sin cambios |
+| 44 | «Solo a los que voy» en Eventos | Se queda | — | Sin cambios |
+| 45 | Hábitos que nunca se configuraron | Se quedan los dos avisos del servidor | «Siempre notifica o hacerle ese seguimiento» | Sin cambios |
+| 46 | Días de suspensión en el semáforo | **No se miden** | — | En curso (D-209) |
+| 47 | Subir a producción todo lo nuevo | **Todavía no** | «Pasamos todas las e2e bro pruebas todos los flujos en varios casos como las personas también pueden romper desde el detalle mínimo» | Después de un e2e completo, con casos de uso indebido |
+| 48 | Bajar el costo del acompañante | Después | «Lo dejamos todavía bro cuando le den las crédito para probar miles de respuestas» | Espera crédito de Gemini |
+
+**Numeración reservada** para los agentes en paralelo, para que no se repita lo de D-66: D-206 a D-212; E-341 a E-355
+(E-356 en adelante para el e2e y la integración).
+
