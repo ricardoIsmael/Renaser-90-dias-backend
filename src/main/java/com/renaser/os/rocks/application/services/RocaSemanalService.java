@@ -17,7 +17,6 @@ import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraId;
 import com.renaser.os.rocks.domain.model.rocasemanal.EstadoPlazo;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanalId;
-import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
 import com.renaser.os.rocks.domain.model.rocasemanal.VentanaPlanificacionSemanal;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
@@ -26,7 +25,6 @@ import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -124,19 +122,21 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
         ProgresoParticipanteRocks progreso = requireProgreso(actorId);
         List<RocaMaestraId> idsMaestras = loadRocaMaestraPort.deParticipante(actorId).stream()
                 .map(RocaMaestra::id).toList();
-        int semana = numeroSemana != null ? numeroSemana
-                : SemanaPrograma.numeroSemanaParaFecha(progreso.fechaInicio(), hoyEn(progreso.zona()));
+        LocalDate hoy = hoyEn(progreso.zona());
+        int semana = numeroSemana != null ? numeroSemana : progreso.semanas(hoy).numeroSemanaParaFecha(hoy);
         return loadRocaSemanalPort.deParticipanteYSemana(idsMaestras, semana);
     }
 
     /**
-     * Qué semana se está planificando. El +1 SOLO vale el domingo: las semanas
-     * son lunes-domingo, asi que planificar el domingo prepara la que empieza
-     * mañana; cualquier otro día ya se está dentro de la que se quiere llenar.
+     * Qué semana se está planificando: la de hoy, salvo el último día de la semana de programa, que
+     * prepara la que empieza mañana.
+     *
+     * > <b>Corregido 2026-09-26 (D-192).</b> Decia "el +1 SOLO vale el domingo: las semanas son
+     * > lunes-domingo". Las semanas pasaron a ser bloques de siete dias del programa, que terminan el
+     * > dia 7, 14 … 84 y no necesariamente en domingo; la regla es la misma, trasladada a ese corte.
      */
-    private int numeroSemanaAPlanificar(ProgresoParticipanteRocks progreso, LocalDate hoy) {
-        int semanaDeHoy = SemanaPrograma.numeroSemanaParaFecha(progreso.fechaInicio(), hoy);
-        return hoy.getDayOfWeek() == DayOfWeek.SUNDAY ? semanaDeHoy + 1 : semanaDeHoy;
+    private static int numeroSemanaAPlanificar(ProgresoParticipanteRocks progreso, LocalDate hoy) {
+        return progreso.semanas(hoy).semanaAPlanificar(hoy);
     }
 
     /**

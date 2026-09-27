@@ -76,11 +76,12 @@ public class DashboardRocasService implements ConsultarDashboardRocasUseCase {
         Instant ahora = clock.now();
         LocalDate hoy = ahora.atZone(zona).toLocalDate();
 
-        if (hoy.isBefore(progreso.fechaInicio())) {
-            return dashboardProgramaNoIniciado(actorId, progreso);
+        SemanaPrograma semanas = progreso.semanas(hoy);
+        if (hoy.isBefore(semanas.primerDia())) {
+            return dashboardProgramaNoIniciado(actorId, progreso, semanas);
         }
 
-        ContextoSemana semana = resolverSemana(progreso, hoy);
+        ContextoSemana semana = resolverSemana(semanas, hoy);
         List<RocaMaestra> maestras = rocasMaestrasUseCase.misRocasMaestras(actorId);
         boolean rocasDesbloqueadas = maestras.size() >= EjeObjetivo.values().length;
 
@@ -99,7 +100,7 @@ public class DashboardRocasService implements ConsultarDashboardRocasUseCase {
         EstadoRitmoRocas ritmo = EstadoRitmoRocas.calcular(diasCompletados);
 
         boolean planificacionBloqueada = calcularPlanificacionBloqueada(actorId, progreso, ahora, zona, hoy);
-        Compuertas compuertas = resolverCompuertas(actorId, progreso, rocasDesbloqueadas, ahora, zona, hoy);
+        Compuertas compuertas = resolverCompuertas(actorId, semanas, rocasDesbloqueadas, ahora, zona);
         List<RocaDiariaVista> rocasDeHoy = rocasDeHoyUseCase.hoy(actorId);
 
         return new DashboardRocas(progreso.diaPrograma(), semana.numeroSemana(), semana.inicio(), semana.fin(),
@@ -116,22 +117,24 @@ public class DashboardRocasService implements ConsultarDashboardRocasUseCase {
      * para que la pantalla de Rocas no se rompa antes del día 1. Las Rocas
      * Maestras SÍ se devuelven — se definen en el onboarding, antes de empezar.
      */
-    private DashboardRocas dashboardProgramaNoIniciado(UserId actorId, ProgresoParticipanteRocks progreso) {
+    private DashboardRocas dashboardProgramaNoIniciado(UserId actorId, ProgresoParticipanteRocks progreso,
+                                                       SemanaPrograma semanas) {
         List<RocaMaestra> maestras = rocasMaestrasUseCase.misRocasMaestras(actorId);
-        SemanaPrograma.LimitesSemana limites = SemanaPrograma.limites(progreso.fechaInicio(), 1);
+        SemanaPrograma.LimitesSemana limites = semanas.limites(1);
         boolean rocasDesbloqueadas = maestras.size() >= EjeObjetivo.values().length;
         return new DashboardRocas(progreso.diaPrograma(), 1, limites.inicio(), limites.fin(), maestras,
                 rocasDesbloqueadas, false, List.of(), List.of(), EstadoRitmoRocas.OK, 0, 0, false, false, false,
                 false, List.of(), progreso.fechaInicio());
     }
 
-    /** Semana de programa de {@code hoy}, recortada al fin del programa (día 90). */
-    private static ContextoSemana resolverSemana(ProgresoParticipanteRocks progreso, LocalDate hoy) {
-        int numeroSemana = SemanaPrograma.numeroSemanaParaFecha(progreso.fechaInicio(), hoy);
-        SemanaPrograma.LimitesSemana limites = SemanaPrograma.limites(progreso.fechaInicio(), numeroSemana);
-        LocalDate finPrograma = SemanaPrograma.finDelPrograma(progreso.fechaInicio());
-        LocalDate fin = limites.fin().isBefore(finPrograma) ? limites.fin() : finPrograma;
-        return new ContextoSemana(numeroSemana, limites.inicio(), fin);
+    /**
+     * Semana de programa de {@code hoy}: un bloque de siete días del programa, con el ajuste (D-192).
+     * {@link SemanaPrograma#limites} ya recorta la 13 al día 90.
+     */
+    private static ContextoSemana resolverSemana(SemanaPrograma semanas, LocalDate hoy) {
+        int numeroSemana = semanas.numeroSemanaParaFecha(hoy);
+        SemanaPrograma.LimitesSemana limites = semanas.limites(numeroSemana);
+        return new ContextoSemana(numeroSemana, limites.inicio(), limites.fin());
     }
 
     private List<RocaSemanalVista> cargarRocasSemanalesVista(UserId actorId, int numeroSemana, ZoneId zona,
@@ -205,12 +208,15 @@ public class DashboardRocasService implements ConsultarDashboardRocasUseCase {
         return BloqueoPlanificacion.bloqueada(progreso.diaPrograma(), horaLocal, rocasManana);
     }
 
-    private Compuertas resolverCompuertas(UserId actorId, ProgresoParticipanteRocks progreso,
-                                           boolean rocasDesbloqueadas, Instant ahora, ZoneId zona, LocalDate hoy) {
+    private Compuertas resolverCompuertas(UserId actorId, SemanaPrograma semanas, boolean rocasDesbloqueadas,
+                                           Instant ahora, ZoneId zona) {
         boolean ventanaDiariaAbierta = VentanaPlanificacionDiaria.abierta(ahora, zona);
-        LocalDate manana = hoy.plusDays(1);
-        int semanaManana = SemanaPrograma.numeroSemanaParaFecha(progreso.fechaInicio(), manana);
-        boolean tieneSemanalParaManana = !rocasSemanalesUseCase.misRocasSemanales(actorId, semanaManana).isEmpty();
+        LocalDate manana = ahora.atZone(zona).toLocalDate().plusDays(1);
+        int semanaManana = semanas.numeroSemanaParaFecha(manana);
+        /* Pasado el dia 90 la semana se acota a la 13 (D-192) y "manana" tendria objetivo semanal, pero
+           ya no es un dia del programa: FechasPlanificables lo rechazaria al guardar. */
+        boolean tieneSemanalParaManana = !manana.isAfter(semanas.finDelPrograma())
+                && !rocasSemanalesUseCase.misRocasSemanales(actorId, semanaManana).isEmpty();
         boolean puedeCrearPlanDiario = rocasDesbloqueadas && ventanaDiariaAbierta && tieneSemanalParaManana;
         boolean planificacionSemanalTardia = !VentanaPlanificacionSemanal.abierta(ahora, zona);
         return new Compuertas(puedeCrearPlanDiario, rocasDesbloqueadas, planificacionSemanalTardia);

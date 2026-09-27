@@ -65,7 +65,8 @@ import static org.mockito.Mockito.when;
  * que se prueba aca es que la fecha y la ventana salgan de la zona del aprendiz, no del servidor.
  *
  * <p>Fixture coherente: programa iniciado el martes 2026-09-01, asi que el miercoles 2026-09-23 es
- * el dia 23, semana 4 (lunes 21 a domingo 27; la semana 1 es corta, del 1 al 6) y mes 1.
+ * el dia 23, semana 4 y mes 1. La grilla del tablero es un dato del doble del dashboard, no un
+ * calculo de este servicio.
  */
 class RocasDelAprendizServiceTest {
 
@@ -94,12 +95,17 @@ class RocasDelAprendizServiceTest {
     private final ConsultarRocasSemanalesUseCase semanales = mock(ConsultarRocasSemanalesUseCase.class);
 
     private RocasDelAprendizService servicio(FixedClock reloj) {
-        when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(new ProgresoParticipanteRocks(23, INICIO,
-                LIMA, RolParticipante.TRAINEE, false, true)));
+        when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(new ProgresoParticipanteRocks(
+                diaEn(reloj), INICIO, LIMA, RolParticipante.TRAINEE, false, true)));
         when(rocasDiarias.deParticipanteYFecha(any(), any())).thenReturn(List.of());
         return new RocasDelAprendizService(dashboard, manana, objetivoDelMes, progresoPort,
                 new BalanceSemanalPorEje(rocasDiarias), new LecturaDeObjetivosDelAprendiz(maestras, semanales,
                 progresoPort, reloj), reloj);
+    }
+
+    /** El dia que {@code users.api} daria con ese reloj, en Lima y sin ajuste: fixture coherente (regla 03). */
+    private static int diaEn(FixedClock reloj) {
+        return (int) java.time.temporal.ChronoUnit.DAYS.between(INICIO, reloj.now().atZone(LIMA).toLocalDate()) + 1;
     }
 
     @Test

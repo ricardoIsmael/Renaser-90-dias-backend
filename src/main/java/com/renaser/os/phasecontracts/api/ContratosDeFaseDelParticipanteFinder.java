@@ -16,7 +16,7 @@ import java.util.List;
  *
  * <p><b>Delega, no reimplementa.</b> Usa {@code ConsultarContratosUseCase} y
  * {@code ConsultarContratosPendientesUseCase}: que fase toca firmar segun el dia de programa
- * ({@code FasePrograma.faseAFirmarEnDia}) y si ya se firmo se deciden ahi.
+ * ({@code FasePrograma.faseAFirmar}, D-193) y si ya se firmo se deciden ahi.
  *
  * <p><b>Misma autorizacion que la app:</b> propaga {@code NoSuchElementException} si el participante
  * no existe y {@code NotAuthorizedException} si esta suspendido, su rol no consulta contratos, o no
@@ -31,7 +31,8 @@ public interface ContratosDeFaseDelParticipanteFinder {
 
     /**
      * @param firmados    los contratos que la persona ya firmo, en el orden en que los guarda la base
-     * @param pendienteHoy la fase que le corresponde firmar HOY y todavia no firmo; {@code null} si ninguna
+     * @param pendienteHoy la fase cuyo pacto toca firmar ahora: la en curso o, desde D-193, una anterior que
+     *                     quedo sin firmar (p. ej. tras un ajuste de dia); {@code null} si ninguna
      */
     record ContratosDeFase(List<FaseDelContrato> firmados, FaseDelContrato pendienteHoy) {
 

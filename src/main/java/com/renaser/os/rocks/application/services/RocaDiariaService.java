@@ -116,7 +116,8 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         EstadoPlazo plazoAlCrear = VentanaPlanificacionDiaria.abierta(ahora, zona) ? EstadoPlazo.EN_PLAZO
                 : EstadoPlazo.A_DESTIEMPO;
         LocalDate hoy = ahora.atZone(zona).toLocalDate();
-        requireFechaPlanificable(command.fecha(), hoy, plazoAlCrear, progreso.fechaInicio());
+        SemanaPrograma semanas = progreso.semanas(hoy);
+        requireFechaPlanificable(command.fecha(), hoy, plazoAlCrear, semanas);
 
         /* Un dia que TODAVIA NO LLEGO se puede volver a planificar: es el "hasta la noche tengo
            para cambiar la hora" del dueno. El dia en curso no — igual que los habitos (D-91), lo
@@ -127,7 +128,7 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
             throw new IllegalStateException("ALREADY_PLANNED: ya existen rocas planificadas para " + command.fecha());
         }
 
-        int numeroSemana = SemanaPrograma.numeroSemanaParaFecha(progreso.fechaInicio(), command.fecha());
+        int numeroSemana = semanas.numeroSemanaParaFecha(command.fecha());
         List<RocaDiaria> creadas = command.rocas().stream()
                 .map(item -> planificarUna(command.actorId(), command.fecha(), item, maestras, numeroSemana))
                 .toList();
@@ -243,8 +244,8 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
      * > miercoles y jueves volvian con INVALID_DATE.
      */
     private void requireFechaPlanificable(LocalDate fecha, LocalDate hoy, EstadoPlazo plazoAlCrear,
-                                           LocalDate fechaInicio) {
-        FechasPlanificables fechas = FechasPlanificables.para(hoy, plazoAlCrear, fechaInicio);
+                                           SemanaPrograma semanas) {
+        FechasPlanificables fechas = FechasPlanificables.para(hoy, plazoAlCrear, semanas);
         if (!fechas.contiene(fecha)) {
             throw new IllegalArgumentException(
                     "INVALID_DATE: la fecha de planificacion debe estar entre " + fechas.desde() + " y " + fechas.hasta());

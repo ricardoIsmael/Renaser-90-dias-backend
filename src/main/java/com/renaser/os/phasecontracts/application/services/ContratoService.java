@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class ContratoService implements FirmarContratoUseCase, ConsultarContratosPendientesUseCase,
@@ -80,9 +81,11 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
     @Transactional
     public ContratoFase firmar(FirmarContratoCommand command) {
         ProgresoParticipante progreso = requireProgreso(command.participanteId(), ROLES_PUEDEN_FIRMAR);
-        FasePrograma fase = FasePrograma.paraDiaPrograma(progreso.diaPrograma());
+        int dia = progreso.diaPrograma();
+        FasePrograma pendiente = FasePrograma.faseAFirmar(dia, fasesFirmadas(command.participanteId()));
+        FasePrograma fase = pendiente != null ? pendiente : FasePrograma.paraDiaPrograma(dia);
 
-        if (fase != FasePrograma.FASE_1_RENACER) {
+        if (pendiente == null && fase != FasePrograma.FASE_1_RENACER) {
             Optional<ContratoFase> existente = loadContratoPort.porParticipanteYFase(command.participanteId(), fase);
             if (existente.isPresent()) {
                 return existente.get(); // idempotente: nunca sobreescribe (service.ts:94-99)
@@ -90,20 +93,17 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
         }
 
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
+        // Sin pendiente, `ContratoFase.firmar` rechaza igual que antes (Fase I, o fase sin desbloquear).
         ContratoFase firmado = ContratoFase.firmar(ContratoFaseId.of(idGenerator.newId()),
-                command.participanteId(), progreso.diaPrograma(), clock);
+                command.participanteId(), fase, dia, clock);
         return saveContratoPort.save(firmado);
     }
 
     @Override
     public ContratoPendiente consultarPendiente(UserId participanteId) {
         ProgresoParticipante progreso = requireProgreso(participanteId, ROLES_PUEDEN_CONSULTAR);
-        FasePrograma faseAFirmar = FasePrograma.faseAFirmarEnDia(progreso.diaPrograma());
-        if (faseAFirmar == null) {
-            return ContratoPendiente.ninguno();
-        }
-        boolean yaFirmado = loadContratoPort.porParticipanteYFase(participanteId, faseAFirmar).isPresent();
-        return yaFirmado ? ContratoPendiente.ninguno() : ContratoPendiente.de(faseAFirmar);
+        FasePrograma faseAFirmar = FasePrograma.faseAFirmar(progreso.diaPrograma(), fasesFirmadas(participanteId));
+        return faseAFirmar == null ? ContratoPendiente.ninguno() : ContratoPendiente.de(faseAFirmar);
     }
 
     @Override
@@ -117,12 +117,10 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
     @Override
     public UrlFirmaContrato obtenerUrlSubida(ObtenerUrlFirmaContratoCommand command) {
         ProgresoParticipante progreso = requireProgreso(command.participanteId(), ROLES_PUEDEN_FIRMAR);
-        FasePrograma fase = FasePrograma.paraDiaPrograma(progreso.diaPrograma());
-        if (fase == FasePrograma.FASE_1_RENACER || !fase.firmaDesbloqueadaEnDia(progreso.diaPrograma())) {
-            throw new IllegalArgumentException("Todavia no corresponde firmar ningun pacto de fase");
-        }
-        if (loadContratoPort.porParticipanteYFase(command.participanteId(), fase).isPresent()) {
-            throw new IllegalStateException("El pacto de la fase " + fase.numero() + " ya fue firmado");
+        int dia = progreso.diaPrograma();
+        FasePrograma fase = FasePrograma.faseAFirmar(dia, fasesFirmadas(command.participanteId()));
+        if (fase == null) {
+            throw sinPactoQueFirmar(FasePrograma.paraDiaPrograma(dia), dia);
         }
         String ruta = ContratoFase.rutaFirma(command.participanteId(), fase);
         URI url = almacenamientoPort.firmarSubida(ruta, TIPO_CONTENIDO_FIRMA, VALIDEZ_URL_SUBIDA);
@@ -132,6 +130,27 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
     @Override
     public boolean estaFirmado(UserId participanteId, int numeroFase) {
         return loadContratoPort.porParticipanteYFase(participanteId, FasePrograma.porNumero(numeroFase)).isPresent();
+    }
+
+    /**
+     * Por qué no hay pacto que firmar: los mismos dos errores de siempre. O la fase en curso no se firma
+     * todavía (400), o ya está firmada y no quedó ninguna anterior pendiente (409).
+     */
+    private static RuntimeException sinPactoQueFirmar(FasePrograma actual, int dia) {
+        if (actual == FasePrograma.FASE_1_RENACER || !actual.firmaDesbloqueadaEnDia(dia)) {
+            return new IllegalArgumentException("Todavia no corresponde firmar ningun pacto de fase");
+        }
+        return new IllegalStateException("El pacto de la fase " + actual.numero() + " ya fue firmado");
+    }
+
+    /**
+     * Las fases que la persona ya firmó (D-193). Son a lo sumo cuatro filas: leerlas todas y decidir en
+     * {@link FasePrograma#faseAFirmar} deja la regla en un solo lugar para pendiente, URL y firma.
+     */
+    private Set<FasePrograma> fasesFirmadas(UserId participanteId) {
+        return loadContratoPort.todosDeParticipante(participanteId).stream()
+                .map(ContratoFase::fase)
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     private ContratoConUrlLectura conUrlLectura(ContratoFase contrato) {

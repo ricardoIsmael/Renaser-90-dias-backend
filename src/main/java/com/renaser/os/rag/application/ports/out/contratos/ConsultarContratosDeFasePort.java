@@ -19,7 +19,7 @@ public interface ConsultarContratosDeFasePort {
 
     ContratosDeFase delAprendiz(UserId aprendizId);
 
-    /** @param pendienteHoy la fase que le toca firmar hoy y todavia no firmo, o {@code null} */
+    /** @param pendienteHoy la fase cuyo pacto toca firmar ahora (la en curso o una saltada, D-193), o {@code null} */
     record ContratosDeFase(List<Fase> firmados, Fase pendienteHoy) {
 
         public ContratosDeFase {

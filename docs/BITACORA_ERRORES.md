@@ -9784,7 +9784,10 @@ la medianoche local y el barrido de las :05.
 al retroceder; rocas que cuentan semanas desde `fecha_inicio` sin el ajuste (semana 14 al retroceder); pacto de fase
 salteado al adelantar; ajuste antes del Día 1 que no sobrevive; fijar 90 por error gradúa en el barrido siguiente.
 
-## E-320 · SIN RESOLVER — Rocas: el final del programa cae en la «semana 14», que `RocaSemanal` rechaza (`numeroSemana debe estar entre 1 y 13: 14`)
+## E-320 · RESUELTO (D-192, 2026-09-26) — Rocas: el final del programa cae en la «semana 14», que `RocaSemanal` rechaza (`numeroSemana debe estar entre 1 y 13: 14`)
+
+> **Actualizado 2026-09-26.** El título decía «SIN RESOLVER» y la solución, «Pendiente: exige decidir (dueño)…». El dueño
+> decidió (D-192) y se resolvió; lo de abajo se conserva como estaba y la solución real va al final de la entrada.
 
 **Síntoma (por lectura de código y prueba de caracterización, no visto todavía en producción).** Crear el plan semanal de
 las últimas semanas falla con `IllegalArgumentException: numeroSemana debe estar entre 1 y 13: 14` (400), y sin roca
@@ -9805,6 +9808,51 @@ del programa con el ajuste, y qué hacer con los `numero_semana` ya guardados. N
 **Cómo evitar que vuelva a pasar.** Cualquier cuenta de semanas o de fin del programa sale de
 `ParticipacionPrograma.primeraFechaDelPrograma()`/`ultimaFechaDelPrograma()` (que ya incluyen el ajuste), nunca de
 `fecha_inicio + 89` copiado en otro módulo — es la misma lección que la columna generada de V22.
+
+**Solución (2026-09-26, D-192).** El dueño decidió que la semana de rocas sale del **día del programa**: `ceil(día/7)`,
+días 85-90 → 13, y sigue al día cuando se ajusta. `SemanaPrograma` pasó a ser un valor anclado en el primer día efectivo
+(`hoy − (día − 1)`, con el día que ya deriva `users.api` con `dias_ajuste_programa`), sin que `rocks` necesite conocer el
+ajuste. Las dos pruebas de caracterización se reemplazaron por `SemanaProgramaTest` (inicio lunes..domingo × días 1, 7, 8,
+84, 85, 90; los 90 días nunca en la 14; tras adelantar y retroceder) y casos de servicio con el reloj de madrugada UTC.
+**Datos existentes:** no se reescribió ninguna fila de `rocas_semanales`; el análisis de qué cambia para quien está en
+curso está en D-192.
+
+**Cómo evitar que vuelva a pasar (actualizado).** Además de lo de arriba: la semana y el fin del programa en `rocks` salen
+SOLO de `ProgresoParticipanteRocks.semanas(hoy)`; `SemanaPrograma` ya no tiene métodos estáticos que reciban
+`fecha_inicio`, así que no hay forma de volver a contar desde el calendario sin que se note en la firma.
+
+## E-321 · `The display name pattern defined for the parameterized test is invalid` al escribir la prueba de D-192
+
+**Síntoma.** `SemanaProgramaTest.laSemanaSaleDelDiaDePrograma(LocalDate, int, int) » JUnit The display name pattern defined
+for the parameterized test is invalid. See nested exception for further details.` La prueba ni siquiera corrió (cuenta como
+`Errors: 1`, no como falla).
+
+**Causa real.** El `name` de `@ParameterizedTest` usaba `{0.dayOfWeek}` pensando que JUnit navega propiedades del argumento.
+No lo hace: el patrón es de `java.text.MessageFormat`, que solo acepta `{índice}` o `{índice,tipo,formato}`.
+
+**Solución.** Quitar la propiedad del patrón (`"inicio {0}, dia {1} -> semana {2}"`).
+
+**Cómo evitar que vuelva a pasar.** En `@ParameterizedTest(name = …)` solo `{0}`, `{1}`… y los marcadores propios de JUnit
+(`{index}`, `{arguments}`, `{displayName}`). Si hace falta mostrar algo derivado, se pasa como argumento más del `@MethodSource`.
+
+
+## E-322 · `java.lang.OutOfMemoryError: Java heap space` en `ArchitectureTest` con `./mvnw clean verify -DargLine=-Xmx600m`
+
+**Síntoma.** El `clean verify` completo cortó en surefire con `There was an error in the forked process` /
+`java.lang.OutOfMemoryError: Java heap space`; el `.dump` apunta a
+`com.tngtech.archunit.core.importer.ClassGraphCreator.createFieldAccessesFor`. Solo aparecieron `Tests run: 14` (surefire)
+y `Tests run: 84` (failsafe), con `BUILD FAILURE`.
+
+**Causa real.** `-Xmx600m` alcanza para las corridas focalizadas (`-Dtest=…`), pero no para `ArchitectureTest`, que importa
+las ~2400 clases del proyecto en un solo grafo. No es un defecto del código: es el techo de heap pasado a mano.
+
+**Solución.** Correr el `clean verify` completo con `-DargLine=-Xmx1536m` (verde: 4868 unitarias + integración).
+
+**Cómo evitar que vuelva a pasar.** `-Xmx600m` es para pruebas focalizadas. Para el `clean verify` entero, al menos
+`-Xmx1536m` (o sin `-DargLine`, si hay memoria libre). Si la corrida termina con muy pocas pruebas en la línea
+`Tests run:`, buscar un `.dump` en `target/surefire-reports` antes de sospechar del código.
+
+---
 
 ## E-326 · Ajustar el día antes del Día 1 respondía 204, dejaba fila en la bitácora y el ajuste se perdía al arrancar
 

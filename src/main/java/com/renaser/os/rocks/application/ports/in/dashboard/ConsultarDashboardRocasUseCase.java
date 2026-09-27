@@ -29,7 +29,7 @@ public interface ConsultarDashboardRocasUseCase {
      * @param diaPrograma               día de programa del actor (0 si el programa no arrancó)
      * @param numeroSemana              semana de programa a la que pertenece hoy
      * @param inicioSemana              lunes de esa semana (o {@code fechaInicio} si es la semana 1 corta)
-     * @param finSemana                 domingo de esa semana, recortado al fin del programa (día 90)
+     * @param finSemana                 último día de esa semana de programa (D-192), recortado al fin del programa (día 90)
      * @param rocasMaestras             las (0-3) Rocas Maestras del actor
      * @param rocasDesbloqueadas        {@code rocasMaestras.size() == 3} (onboarding completo)
      * @param tieneRocaSemanal          hay una Roca Semanal por cada eje para {@code numeroSemana}

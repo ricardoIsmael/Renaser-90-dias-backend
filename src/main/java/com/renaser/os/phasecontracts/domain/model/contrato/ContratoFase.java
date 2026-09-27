@@ -31,9 +31,19 @@ public final class ContratoFase {
     private final Instant creadoEn;
 
     public static ContratoFase firmar(ContratoFaseId id, UserId participanteId, int diaProgramaActual, Clock clock) {
+        return firmar(id, participanteId, FasePrograma.paraDiaPrograma(diaProgramaActual), diaProgramaActual, clock);
+    }
+
+    /**
+     * Firma el pacto de {@code fase}, que puede ser una fase ANTERIOR a la en curso cuyo pacto quedó sin
+     * firmar (D-193, p. ej. tras un ajuste de día que saltó el día de firma). Una fase que todavía no
+     * llegó no se puede firmar: su día de desbloqueo es posterior al día actual.
+     */
+    public static ContratoFase firmar(ContratoFaseId id, UserId participanteId, FasePrograma fase,
+                                      int diaProgramaActual, Clock clock) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
-        FasePrograma fase = FasePrograma.paraDiaPrograma(diaProgramaActual);
+        Objects.requireNonNull(fase, "fase es obligatoria");
         requireFirmable(fase, diaProgramaActual);
         Instant ahora = clock.now();
         return new ContratoFase(id, participanteId, fase, BUCKET_DEFAULT,

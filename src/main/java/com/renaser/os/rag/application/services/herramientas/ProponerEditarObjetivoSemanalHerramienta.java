@@ -68,7 +68,8 @@ public class ProponerEditarObjetivoSemanalHerramienta implements HerramientaAgen
                             TipoParametroHerramienta.ENTERO, "Como arranca la semana en ese eje, del 1 al 10, si "
                             + "la persona lo dijo.", false),
                     new ParametroHerramienta(ArgumentosDeAjusteDeRocas.SEMANA, TipoParametroHerramienta.TEXTO,
-                            "actual (por defecto) o siguiente: la que empieza el lunes, si la armo este domingo.",
+                            "actual (por defecto) o siguiente: la que empieza manana, si hoy es el ultimo dia de su semana "
+                            + "de programa y ya la armo.",
                             false)));
 
     private final ConsultarRocasDelAprendizPort rocasPort;

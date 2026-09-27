@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.application.ports.out.participante;
 
+import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
@@ -37,6 +38,14 @@ public interface ConsultarProgresoParticipanteRocksPort {
      */
     record ProgresoParticipanteRocks(int diaPrograma, LocalDate fechaInicio, ZoneId zona, RolParticipante rol,
                                       boolean suspendido, boolean programaActivado) {
+
+        /**
+         * Las semanas de programa de esta persona, ancladas en su día de HOY (D-192): la semana sigue
+         * al día cuando se ajusta. {@code hoy} es la fecha en SU zona, no la del servidor.
+         */
+        public SemanaPrograma semanas(LocalDate hoy) {
+            return SemanaPrograma.desde(fechaInicio, diaPrograma, hoy);
+        }
     }
 
     /** Espejo LOCAL (a este modulo) del enum Postgres `rol_usuario`. */

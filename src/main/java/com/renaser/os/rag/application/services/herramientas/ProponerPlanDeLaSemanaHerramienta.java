@@ -26,8 +26,8 @@ import java.util.Map;
  * el mismo de {@code POST /rocks/weekly}.
  *
  * <p><b>Antes de proponer solo se valida la forma del JSON.</b> No se mira si algun eje ya tiene
- * objetivo: la semana que se planifica la decide {@code rocks} (el domingo es la que empieza el
- * lunes) y {@code consultar_rocas} expone la semana EN CURSO, asi que compararlas daria un falso
+ * objetivo: la semana que se planifica la decide {@code rocks} (el ultimo dia de la semana de
+ * programa es la que empieza manana, D-192) y {@code consultar_rocas} expone la semana EN CURSO, asi que compararlas daria un falso
  * "ya lo tiene" justo el dia del ritual. Lo que ya existe {@code rocks} lo deja como esta, y el
  * resumen lo avisa.
  *

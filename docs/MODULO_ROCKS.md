@@ -39,7 +39,9 @@ La tabla nueva `eventos_verdugo` (baseline `V1__baseline_renaser.sql:735-751`) e
 
 ### 1.3 Semanas de programa (`week.ts`, completo)
 
-Semanas lunes-domingo, semana 1 flexible (corta si `fechaInicio` no cae lunes). Portado 1:1 en `SemanaPrograma` (`primerDomingoDesde`, `numeroSemanaParaFecha`). El `+1` al planificar semanal SOLO aplica el domingo (`service.ts:1070-1085`, con el bug histórico documentado ahí: un `+1` incondicional rompía a quien planificaba tarde) — portado en `RocaSemanalService.numeroSemanaAPlanificar`.
+**Semana = bloque de siete días del programa (D-192, 2026-09-26):** días 1-7 → semana 1, 8-14 → 2 … 85-90 → 13 (seis días; nunca hay semana 14). La semana sigue al día cuando se ajusta: `SemanaPrograma.desde(fechaInicio, díaDeHoy, hoy)` ancla el día 1 en `hoy − (día − 1)`, con el día que ya da derivado `users.api`. El `+1` al planificar semanal aplica el **último día de la semana de programa** (7, 14 … 84), nunca pasa de 13 (`SemanaPrograma.semanaAPlanificar`, usado por `RocaSemanalService.numeroSemanaAPlanificar`). La ventana del Domingo Ritual (`VentanaPlanificacionSemanal`, domingo 12:00 → lunes 09:00) **no se tocó**: ver la pregunta abierta en D-192.
+
+> **Corregido 2026-09-26 (D-192, E-320).** Decía: «Semanas lunes-domingo, semana 1 flexible (corta si `fechaInicio` no cae lunes). Portado 1:1 en `SemanaPrograma` (`primerDomingoDesde`, `numeroSemanaParaFecha`). El `+1` al planificar semanal SOLO aplica el domingo (`service.ts:1070-1085`, con el bug histórico documentado ahí: un `+1` incondicional rompía a quien planificaba tarde)». Esa cuenta dejaba el final del programa en una «semana 14» que el dominio y el `CHECK` de V1 rechazan (inicios de miércoles a domingo) e ignoraba `dias_ajuste_programa`. Para quien empezó un lunes sin ajuste, las dos cuentas coinciden.
 
 ### 1.4 Escala de puntos (`rocks/service.ts:458-503`, `aplicarPremioDeRoca`)
 

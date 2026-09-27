@@ -175,8 +175,8 @@ caracterización que fija el comportamiento de hoy). **Actualizado 2026-09-26:**
 |---|---|
 | Retroceder y hábitos elegidos en el Plan | **Resuelto (D-196, E-327).** Decía: «un hábito tocado el día 30 deja de generarse si se retrocede al 25, hasta volver al 30; «Mis hábitos» lo sigue mostrando desbloqueado». Ahora lo que ya corrió (algún registro con día ≥ `dia_desbloqueo`) se sigue generando; lo elegido para más adelante espera su día. **Sigue abierto:** hábitos PERSONAL (`dia_inicio` = día de creación) y horarios de catálogo que arrancan después del día destino |
 | Los tracks de HOY no se rehacen | **Decidido (D-198): se mantiene así.** Conservan `dia_programa`, `es_opcional` (ciclos D-169) y horario del día viejo hasta mañana; lo generado conserva su foto |
-| Rocas | Semanas y fin del programa desde `fecha_inicio` sin ajuste: «día 34, semana 7», y al retroceder el final cae en la semana 14 (E-320) |
-| Adelantar saltándose un día de firma | El pacto de la fase saltada ya no se puede firmar (solo se firma la fase actual) |
+| Rocas | **Resuelto (D-192, 2026-09-26).** La semana es `ceil(día/7)` (1 a 13) y sigue al día ajustado; el fin del programa también. Decía: «Semanas y fin del programa desde `fecha_inicio` sin ajuste: «día 34, semana 7», y al retroceder el final cae en la semana 14 (E-320)» |
+| Adelantar saltándose un día de firma | **Resuelto (D-193, 2026-09-26).** El pacto saltado queda pendiente y se firma después del de la fase en curso. Decía: «El pacto de la fase saltada ya no se puede firmar (solo se firma la fase actual)» |
 | Ajustar antes del Día 1 | **Resuelto (D-195, E-326).** Decía: «se guarda el día pero no el ajuste; al arrancar vuelve a 1 sin aviso (204 y fila en la bitácora igual)». Ahora 409 «Esta persona todavía no empezó su Día 1…», sin escribir nada |
 | Fijar 90 | **Resuelto (D-194).** Decía: «no gradúa en el acto: gradúa el barrido siguiente y ya no se des-gradúa». Ahora el endpoint acepta 1..89: el 90 es un 400 |
 | Fijar 0 a alguien en curso | **Resuelto (D-194).** Decía: «válido hoy: queda día 0 un día y mañana es 1». Ahora el 0 es un 400 |
