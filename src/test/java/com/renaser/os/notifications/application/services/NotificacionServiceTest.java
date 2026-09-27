@@ -7,6 +7,7 @@ import com.renaser.os.notifications.application.ports.out.preferencia.LoadPrefer
 import com.renaser.os.notifications.application.ports.out.push.DesactivarTokenPushPort;
 import com.renaser.os.notifications.application.ports.out.push.PushPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPushPort;
+import com.renaser.os.notifications.domain.model.notificacion.EntregaPush;
 import com.renaser.os.notifications.domain.model.notificacion.Notificacion;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
@@ -329,5 +330,62 @@ class NotificacionServiceTest {
 
         assertThat(resultado).isEmpty();
         verify(pushPort, never()).enviar(anyList(), any(), any(), any());
+    }
+
+    // ─── D-184: a que dispositivos se empuja ─────────────────────────────────────────────────
+
+    private TokenPush token(UserId usuario, PlataformaPush plataforma) {
+        return TokenPush.registrar(TokenPushId.of(UUID.randomUUID()), usuario, "tok-" + plataforma, plataforma, CLOCK);
+    }
+
+    @Test
+    @DisplayName("D-184: EntregaPush.NINGUNO guarda en la bandeja y no empuja a ningun dispositivo")
+    void soloBandejaNoEmpuja() {
+        UserId usuario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.LOGRO_DESBLOQUEADO))
+                .thenReturn(Optional.empty());
+        lenient().when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(token(usuario, PlataformaPush.ANDROID)));
+
+        Optional<Notificacion> emitida = service.emitir(new EmitirNotificacionCommand(usuario,
+                TipoNotificacion.LOGRO_DESBLOQUEADO, "Habito completado", "Sumaste 10 puntos.", null, null),
+                EntregaPush.NINGUNO);
+
+        assertThat(emitida).isPresent();
+        verify(saveNotificacionPort).guardar(any());
+        verify(pushPort, never()).enviar(anyList(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("D-184: EntregaPush.SOLO_NAVEGADOR empuja al navegador y no al telefono con alarma local")
+    void soloNavegadorFiltraLosTelefonos() {
+        UserId usuario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.RECORDATORIO_HABITO))
+                .thenReturn(Optional.empty());
+        TokenPush android = token(usuario, PlataformaPush.ANDROID);
+        TokenPush web = token(usuario, PlataformaPush.WEB);
+        when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(android, web));
+        when(pushPort.enviar(anyList(), any(), any(), any())).thenReturn(List.of());
+
+        service.emitir(new EmitirNotificacionCommand(usuario, TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null,
+                null), EntregaPush.SOLO_NAVEGADOR);
+
+        verify(pushPort).enviar(eq(List.of(web)), eq("T"), eq("C"), eq(null));
+    }
+
+    @Test
+    @DisplayName("D-184: emitir() sin EntregaPush sigue empujando a todos (los llamadores de siempre)")
+    void sinEntregaExplicitaEmpujaATodos() {
+        UserId usuario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.RECORDATORIO_HABITO))
+                .thenReturn(Optional.empty());
+        TokenPush android = token(usuario, PlataformaPush.ANDROID);
+        TokenPush web = token(usuario, PlataformaPush.WEB);
+        when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(android, web));
+        when(pushPort.enviar(anyList(), any(), any(), any())).thenReturn(List.of());
+
+        service.emitir(new EmitirNotificacionCommand(usuario, TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null,
+                null));
+
+        verify(pushPort).enviar(eq(List.of(android, web)), eq("T"), eq("C"), eq(null));
     }
 }

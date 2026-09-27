@@ -3,6 +3,7 @@ package com.renaser.os.notifications.infrastructure.adapter.in.event;
 import com.renaser.os.habits.api.HabitoCompletadoEvent;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase.EmitirNotificacionCommand;
+import com.renaser.os.notifications.domain.model.notificacion.EntregaPush;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
 /** Unit puro (sin Spring): confirma que el listener traduce el evento a un
@@ -36,7 +38,9 @@ class HabitoCompletadoNotificationListenerTest {
         listener.on(event);
 
         ArgumentCaptor<EmitirNotificacionCommand> captor = ArgumentCaptor.forClass(EmitirNotificacionCommand.class);
-        verify(emitirNotificacionUseCase).emitir(captor.capture());
+        // D-184 (E-303): logro de todos los dias, solo bandeja. El codigo viejo llamaba a emitir()
+        // sin entrega, es decir con push a todos los dispositivos.
+        verify(emitirNotificacionUseCase).emitir(captor.capture(), eq(EntregaPush.NINGUNO));
         assertThat(captor.getValue().usuarioId()).isEqualTo(participante);
         assertThat(captor.getValue().tipo()).isEqualTo(TipoNotificacion.LOGRO_DESBLOQUEADO);
         assertThat(captor.getValue().cuerpo()).contains("10");

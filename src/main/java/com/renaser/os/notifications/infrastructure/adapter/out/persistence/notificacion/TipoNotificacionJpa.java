@@ -20,5 +20,7 @@ public enum TipoNotificacionJpa {
     ACOMPANAMIENTO_ALUMNO,
     GRUPO_POR_VENCER,
     /** V53. Espejo del valor homonimo del enum de Postgres. */
-    PATRON_DE_MALESTAR_REPETIDO
+    PATRON_DE_MALESTAR_REPETIDO,
+    /** V70. Espejo del valor homonimo del enum de Postgres. */
+    RECORDATORIO_EVENTO
 }

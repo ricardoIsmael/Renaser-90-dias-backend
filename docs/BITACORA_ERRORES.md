@@ -9355,3 +9355,67 @@ esperaba la excepción).
 **Cómo evitar que vuelva a pasar.** Antes de una batería larga, revisar el saldo en AI Studio (cada
 pregunta cuesta un embedding y una o más llamadas al chat). Toda llamada a la IA fuera del stream tiene
 que degradar, no romper el turno.
+
+---
+
+## E-301 · Los recordatorios de eventos se marcaban enviados y no le llegaban a nadie (ni la alarma de 04:50)
+
+**Síntoma (2026-09-26, revisión del spec `RETROALIMENTACION_2026-09-26.md`).** Ningún aprendiz recibió
+jamás un recordatorio de evento: ni el «10 min antes» de una mentoría, ni el «1 día antes», ni la alarma
+de 04:50 de la Semana de Manifestación. En la base, las filas de `recordatorios_evento` tenían
+`enviado_en` puesto; en `notificaciones` no había ninguna fila de esos avisos, y en los logs no había
+ningún error: `[calendar.DespacharRecordatoriosScheduler] N recordatorio(s) despachado(s)`.
+
+**Causa real.** `RecordatorioService.despachar()` publicaba `RecordatorioEventoDebidoEvent` y marcaba la
+fila enviada en la misma transacción, esperando que `notifications` escribiera el listener («lo construye
+OTRO agente», `MODULO_CALENDAR.md` §1.6). Ese listener nunca se escribió. Sin ningún
+`@ApplicationModuleListener` para el evento, Spring Modulith no registra ninguna publicación en
+`event_publication`: el evento se descarta en silencio y la fila queda como si se hubiera entregado.
+
+**Solución (D-182, D-183).** `notifications.RecordatorioEventoNotificationListener` crea bandeja + push
+`RECORDATORIO_EVENTO` (V70) con ruta `/eventos/{id}`, deduplicado por `recordatorioId`. `enviado_en` pasa
+a significar, por escrito, «entregado al outbox»: la publicación entra en el mismo commit y, si el
+listener falla, se reintenta sin duplicar.
+
+**Cómo evitar que vuelva a pasar.** `RecordatorioEventoNotificationListenerTest` verifica que el método
+sea `@ApplicationModuleListener` y que un recordatorio produzca exactamente una notificación, también ante
+una reentrega. Regla general: **un evento que otro módulo «va a consumir» no se da por entregado hasta
+que el consumidor existe**; si se publica un evento sin consumidor, el javadoc del evento lo dice en
+mayúsculas y el doc del módulo lo lista como pendiente, no como hecho.
+
+## E-302 · El aviso de hábito del servidor llegaba dos veces y no se apagaba con el recordatorio del hábito
+
+**Síntoma (2026-09-26, retroalimentación de usuarios).** «El recordatorio de un hábito llega dos veces»:
+la alarma local que programa la app y, minutos después, el push del servidor («Tu habito esta por
+empezar»). Apagar el recordatorio de ese hábito en la app no apagaba el push del servidor.
+
+**Causa real.** `AvisoHabitoService` (pedido del dueño del 2026-09-05) mandaba sus dos avisos, 15 min antes
+del inicio y 30 min antes del plazo, a **todos** los dispositivos y para **todo** hábito con horario,
+sin leer `preferencias_horario.recordatorio_activo` ni `minutos_recordatorio` (V1:482-483), que son justo
+lo que la app guarda al configurar la alarma local (`PlanificarDimensionModal.guardarHora`).
+
+**Solución (D-184).** `habits` pone esos dos datos en `AvisoHabitoDebidoEvent` y usa `minutos_recordatorio`
+como antelación del aviso de inicio; `notifications` decide el empujón con `EntregaDelAvisoDeHabito`:
+apagado → sin push; inicio con alarma local → solo navegador; lo demás → todos. La fila de la bandeja se
+crea igual.
+
+**Cómo evitar que vuelva a pasar.** `EntregaDelAvisoDeHabitoTest`, `AvisoHabitoNotificationListenerTest`
+y los casos D-184 de `AvisoHabitoServiceTest`/`CalculadoraAvisosHabitoTest`. Antes de agregar un push
+desde el servidor, preguntar si la app ya programa algo local para lo mismo.
+
+## E-303 · Un push de «Habito completado» por cada hábito marcado
+
+**Síntoma (2026-09-26, retroalimentación).** El teléfono sonaba con «Habito completado · Sumaste N puntos»
+cada vez que la persona marcaba un hábito, varias veces al día, avisándole de algo que acababa de hacer
+ella misma.
+
+**Causa real.** `HabitoCompletadoNotificationListener` emitía `LOGRO_DESBLOQUEADO` con push por cada
+`HabitoCompletadoEvent`. El riesgo de ruido estaba anotado como pregunta abierta desde el origen
+(`MODULO_NOTIFICATIONS.md` DN-1, §7.1) y nunca se resolvió.
+
+**Solución (D-184).** Ese logro va solo a la bandeja (`EntregaPush.NINGUNO`). La racha sin celular y la
+roca completada siguen con push.
+
+**Cómo evitar que vuelva a pasar.** `HabitoCompletadoNotificationListenerTest` verifica
+`EntregaPush.NINGUNO`. Una pregunta abierta de producto con «riesgo de ruido» se lleva a la próxima
+revisión con el dueño en vez de quedar en el doc.

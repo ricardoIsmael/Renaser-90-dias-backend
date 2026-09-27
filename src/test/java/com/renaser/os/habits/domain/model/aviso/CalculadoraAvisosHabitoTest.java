@@ -159,4 +159,46 @@ class CalculadoraAvisosHabitoTest {
 
         assertThat(avisos.get(0).minutosQueFaltan()).isEqualTo(1);
     }
+
+    // ─── D-184: la antelacion del recordatorio que el aprendiz eligio en la app ───────────────
+
+    /** 19:35 en Lima (00:35 UTC del 6): faltan 25 min para las 20:00. */
+    private static final Instant VEINTICINCO_ANTES = Instant.parse("2026-09-06T00:35:00Z");
+
+    @Test
+    @DisplayName("D-184: con recordatorio de 30 min, el aviso de inicio sale 25 min antes (el global de 15 no)")
+    void usaLaAntelacionDelRecordatorioDelAprendiz() {
+        assertThat(CALCULADORA.debidosAhora(ventanaNocturnaEnLima(), VEINTICINCO_ANTES)).isEmpty();
+
+        List<AvisoHabito> avisos = CALCULADORA.conRecordatorioDelAprendiz(true, 30)
+                .debidosAhora(ventanaNocturnaEnLima(), VEINTICINCO_ANTES);
+
+        assertThat(avisos).extracting(AvisoHabito::tipo).containsExactly(TipoAvisoHabito.INICIO);
+        assertThat(avisos.getFirst().minutosQueFaltan()).isEqualTo(25);
+    }
+
+    @Test
+    @DisplayName("D-184: recordatorio apagado o sin minutos -> queda la antelacion global")
+    void sinRecordatorioActivoQuedaLaGlobal() {
+        assertThat(CALCULADORA.conRecordatorioDelAprendiz(false, 30)).isEqualTo(CALCULADORA);
+        assertThat(CALCULADORA.conRecordatorioDelAprendiz(true, null)).isEqualTo(CALCULADORA);
+        assertThat(CALCULADORA.conRecordatorioDelAprendiz(null, null)).isEqualTo(CALCULADORA);
+    }
+
+    @Test
+    @DisplayName("D-184: 'a la hora' (0 min) se avisa con la antelacion minima del barrido, nunca con franja vacia")
+    void aLaHoraUsaLaAntelacionMinima() {
+        CalculadoraAvisosHabito propia = CALCULADORA.conRecordatorioDelAprendiz(true, 0);
+
+        assertThat(propia.antelacionInicio()).isEqualTo(CalculadoraAvisosHabito.ANTELACION_MINIMA);
+        assertThat(propia.antelacionVencimiento()).isEqualTo(Duration.ofMinutes(30));
+    }
+
+    @Test
+    @DisplayName("D-184: si el aviso de inicio esta apagado por entorno (PT0S), la preferencia no lo enciende")
+    void laPreferenciaNoEnciendeUnAvisoApagadoPorEntorno() {
+        CalculadoraAvisosHabito apagada = new CalculadoraAvisosHabito(Duration.ZERO, Duration.ofMinutes(30));
+
+        assertThat(apagada.conRecordatorioDelAprendiz(true, 30)).isEqualTo(apagada);
+    }
 }

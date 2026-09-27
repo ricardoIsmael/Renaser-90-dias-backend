@@ -31,8 +31,17 @@ import java.util.UUID;
  *                         {@code notificaciones} (C-7, V16). Es lo que hace que este flujo no
  *                         necesite una cola propia: el mismo aviso recalculado cinco minutos
  *                         despues produce la misma clave y la segunda emision se descarta sola
+ * @param recordatorioActivo  {@code preferencias_horario.recordatorio_activo} de ese habito, o
+ *                            {@code null} si el aprendiz nunca le configuro horario. Es un DATO, no
+ *                            una orden: como se entrega (con o sin push, a que dispositivos) lo
+ *                            decide `notifications` (D-184). Tambien es {@code null} en las
+ *                            publicaciones anteriores a D-184 que el outbox reentregue
+ * @param minutosRecordatorio {@code preferencias_horario.minutos_recordatorio}: con cuantos minutos
+ *                            de antelacion suena la alarma LOCAL que la app programo en el telefono
+ *                            ({@code null} = la app no programo ninguna)
  */
 public record AvisoHabitoDebidoEvent(UUID registroId, UserId participanteId, String tituloHabito, String tipoAviso,
                                       long minutosQueFaltan, int puntosEnJuego, UUID claveEvento,
+                                      Boolean recordatorioActivo, Integer minutosRecordatorio,
                                       Instant occurredAt) implements DomainEvent {
 }

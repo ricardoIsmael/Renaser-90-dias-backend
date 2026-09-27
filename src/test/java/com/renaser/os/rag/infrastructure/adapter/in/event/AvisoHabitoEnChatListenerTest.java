@@ -30,7 +30,7 @@ class AvisoHabitoEnChatListenerTest {
         UUID clave = UUID.randomUUID();
         Instant calculadoEn = Instant.parse("2026-09-23T01:59:30Z");
         var event = new AvisoHabitoDebidoEvent(UUID.randomUUID(), aprendiz, "Meditar", "POR_VENCER", 30, 10, clave,
-                calculadoEn);
+                false, null, calculadoEn);
 
         new AvisoHabitoEnChatListener(useCase).on(event);
 

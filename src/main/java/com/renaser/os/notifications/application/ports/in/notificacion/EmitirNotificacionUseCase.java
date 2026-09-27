@@ -1,5 +1,6 @@
 package com.renaser.os.notifications.application.ports.in.notificacion;
 
+import com.renaser.os.notifications.domain.model.notificacion.EntregaPush;
 import com.renaser.os.notifications.domain.model.notificacion.Notificacion;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.shared.application.SelfValidating;
@@ -28,7 +29,20 @@ public interface EmitirNotificacionUseCase {
      * cuando el mismo {@code origenEventoId} ya genero una notificacion antes — C-7: el outbox
      * de Modulith es at-least-once, una redelivery del mismo evento no debe duplicar la fila
      * ni el push (ver {@code notificaciones_origen_evento_uk}, V16). */
-    Optional<Notificacion> emitir(EmitirNotificacionCommand command);
+    default Optional<Notificacion> emitir(EmitirNotificacionCommand command) {
+        return emitir(command, EntregaPush.TODOS);
+    }
+
+    /**
+     * Igual que {@link #emitir(EmitirNotificacionCommand)}, eligiendo a que dispositivos se empuja
+     * ademas de la bandeja (D-184). La bandeja no cambia: preferencia, deduplicacion y fila son las
+     * mismas; {@code entregaPush} solo decide el empujon.
+     *
+     * <p>Va como argumento aparte y no como campo del comando porque {@code SelfValidating} valida
+     * contra el UNICO constructor del record: un segundo constructor "de compatibilidad" para los
+     * veintitantos llamadores de siempre lo habria vuelto ambiguo.
+     */
+    Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush);
 
     record EmitirNotificacionCommand(@NotNull UserId usuarioId, @NotNull TipoNotificacion tipo,
                                       @NotBlank String titulo, @NotBlank String cuerpo, String rutaApp,
