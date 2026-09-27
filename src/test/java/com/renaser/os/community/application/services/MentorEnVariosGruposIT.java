@@ -3,6 +3,8 @@ package com.renaser.os.community.application.services;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase.AsignarMentorCelulaCommand;
+import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUseCase;
+import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUseCase.QuitarMentorCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.SumarMentorAGrupoUseCase;
 import com.renaser.os.community.application.ports.in.celula.SumarMentorAGrupoUseCase.SumarMentorAGrupoCommand;
 import com.renaser.os.community.domain.model.acompanamiento.AsignacionInvalidaException;
@@ -50,6 +52,8 @@ class MentorEnVariosGruposIT {
     private SumarMentorAGrupoUseCase sumar;
     @Autowired
     private AsignarMentorCelulaUseCase trasladar;
+    @Autowired
+    private QuitarMentorCelulaUseCase quitarMentor;
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
@@ -134,6 +138,43 @@ class MentorEnVariosGruposIT {
         assertThat(mentorDe(segundo)).isEqualTo(mentor.value());
     }
 
+    @Test
+    @DisplayName("E-316: A -> B -> A deja a A vigente y a B cerrado, sin chocar contra la fila vieja de A")
+    void volverAlMentorAnteriorLoReabre() {
+        UUID grupo = nuevoGrupo("Fenix");
+        UserId a = nuevoMentorConPerfil();
+        UserId b = nuevoMentorConPerfil();
+
+        trasladar.asignar(new AsignarMentorCelulaCommand(admin, CelulaId.of(grupo), a));
+        trasladar.asignar(new AsignarMentorCelulaCommand(admin, CelulaId.of(grupo), b));
+        trasladar.asignar(new AsignarMentorCelulaCommand(admin, CelulaId.of(grupo), a));
+
+        /* Antes: la tercera llamada encontraba la fila CERRADA de A por su clave fija y respondia
+           sin hacer nada; B seguia al frente. */
+        assertThat(mentorDe(grupo)).isEqualTo(a.value());
+        assertThat(jefaturasVigentesDe(a)).isEqualTo(1);
+        assertThat(jefaturasVigentesDe(b)).isZero();
+        assertThat(jefaturasDe(a)).as("las dos llegadas de A quedan en el historial").isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("E-316: quitar y volver a poner al mismo mentor lo deja vigente; repetir no duplica")
+    void quitarYVolverAPonerLoReabreSinDuplicar() {
+        UUID grupo = nuevoGrupo("Fenix");
+        UserId mentor = nuevoMentorConPerfil();
+        var poner = new AsignarMentorCelulaCommand(admin, CelulaId.of(grupo), mentor);
+
+        trasladar.asignar(poner);
+        quitarMentor.quitar(new QuitarMentorCelulaCommand(admin, CelulaId.of(grupo)));
+        trasladar.asignar(poner);
+        trasladar.asignar(poner);
+
+        assertThat(mentorDe(grupo)).isEqualTo(mentor.value());
+        assertThat(jefaturasVigentesDe(mentor)).isEqualTo(1);
+        assertThat(jefaturasDe(mentor)).as("una cerrada y una abierta: el PUT repetido no abre otra")
+                .isEqualTo(2);
+    }
+
     // ── Semilla ─────────────────────────────────────────────────────────────
 
     private UUID nuevoGrupo(String nombre) {
@@ -168,6 +209,14 @@ class MentorEnVariosGruposIT {
         Integer n = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) FROM renaser.asignaciones_celula
                 WHERE usuario_id = ? AND funcion = 'MENTOR' AND fin IS NULL
+                """, Integer.class, mentorId.value());
+        return n == null ? 0 : n;
+    }
+
+    private int jefaturasDe(UserId mentorId) {
+        Integer n = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM renaser.asignaciones_celula
+                WHERE usuario_id = ? AND funcion = 'MENTOR'
                 """, Integer.class, mentorId.value());
         return n == null ? 0 : n;
     }

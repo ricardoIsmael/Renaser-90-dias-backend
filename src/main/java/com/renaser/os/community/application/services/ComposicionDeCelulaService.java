@@ -238,11 +238,12 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
         requireMentorElegible(command.mentorId());
 
         Instant ahora = clock.now();
-        String clave = claveDeMentor(command.mentorId(), celula.id());
-        ConjuntoAsignaciones delGrupo = ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(celula.id()));
-        if (delGrupo.yaAplicada(clave).isPresent()) {
+        if (yaLoLidera(celula, command.mentorId(), ahora)) {
+            // Reintento con el mentor ya vigente: pedido cumplido, no se abre otra jefatura.
             return detalle(command.actorId(), celula.id());
         }
+        String clave = claveDeMentor(command.mentorId(), celula.id(),
+                jefaturasPreviasEn(command.mentorId(), celula.id()));
 
         /* El saliente pierde el acceso DE VERDAD: se cierra su intervalo, y de ahi salen tanto el
            403 del seguimiento semanal como su baja del chat. Cambiar solo `celulas.mentor_id`
@@ -289,8 +290,41 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
         return "alta-manual|" + aprendizId.value() + "|" + celulaId.value();
     }
 
-    private static String claveDeMentor(UserId mentorId, CelulaId celulaId) {
-        return "mentor-manual|" + mentorId.value() + "|" + celulaId.value();
+    /**
+     * Idempotencia por ESTADO, no por clave: el pedido ya esta cumplido si el mentor es hoy el
+     * vigente del grupo y la celula lo apunta. Se exigen las dos cosas para que un puntero
+     * desincronizado se siga reparando reasignando.
+     *
+     * <p><b>Corregido 2026-09-26 (E-316).</b> Antes se preguntaba {@code yaAplicada(clave)} con la
+     * clave fija {@code mentor-manual|mentor|grupo}, y eso encontraba tambien la fila CERRADA de
+     * una jefatura anterior: devolver a un grupo al mentor que ya lo habia liderado (A -> B -> A, o
+     * quitar y volver a poner) respondia 200 sin hacer nada.
+     */
+    private boolean yaLoLidera(Celula celula, UserId mentorId, Instant ahora) {
+        boolean vigente = ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(celula.id()))
+                .mentorVigenteEn(celula.id(), ahora)
+                .filter(mentorId::equals)
+                .isPresent();
+        return vigente && mentorId.equals(celula.mentorId());
+    }
+
+    /**
+     * Mismo patron que {@code SumarMentorAGrupoService.claveDeSuma}: el par mentor-grupo mas
+     * cuantas veces ese mentor ya lidero el grupo. {@code asignaciones_celula_operacion_uk} es unico
+     * por (clave, celula, usuario, funcion), asi que con una clave fija la vuelta de un mentor
+     * chocaria contra su propia fila cerrada; con el contador cada llegada tiene la suya, y un
+     * doble clic simultaneo sigue muriendo contra el indice porque los dos calculan el mismo numero.
+     * Las filas viejas con la clave sin sufijo no chocan con ninguna nueva.
+     */
+    private static String claveDeMentor(UserId mentorId, CelulaId celulaId, int jefaturasPrevias) {
+        return "mentor-manual|" + mentorId.value() + "|" + celulaId.value() + "|" + jefaturasPrevias;
+    }
+
+    private int jefaturasPreviasEn(UserId mentorId, CelulaId celulaId) {
+        return (int) loadAsignacionesPort.porUsuario(mentorId).stream()
+                .filter(a -> a.funcion() == FuncionAcompanamiento.MENTOR)
+                .filter(a -> a.celulaId().equals(celulaId))
+                .count();
     }
 
     private void abrir(CelulaId celulaId, UserId usuarioId, FuncionAcompanamiento funcion, Instant ahora,

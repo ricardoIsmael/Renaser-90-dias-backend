@@ -445,6 +445,101 @@ class ComposicionDeCelulaServiceTest {
         verify(asignacionCelulaPort).sincronizarAcompanamiento(aprendiz, destino.id().value(), null);
     }
 
+    // ── Volver a un mentor que ya lidero el grupo (E-316) ───────────────────
+
+    private Celula grupoConMentor(UserId mentorVigente) {
+        Celula celula = Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Fenix", mentorVigente,
+                CohorteId.of(UUID.randomUUID()), null, null, CLOCK.now(), CLOCK.now());
+        lenient().when(loadCelulaPort.porId(celula.id())).thenReturn(Optional.of(celula));
+        return celula;
+    }
+
+    /** Jefatura que ya termino: abierta hace dos dias, cerrada ayer. Con la clave FIJA que usaba el
+     * codigo anterior, que es la que dejaron en la base las jefaturas reales. */
+    private AsignacionCelula jefaturaCerrada(CelulaId celulaId, UserId mentorId) {
+        AsignacionCelula fila = AsignacionCelula.abrir(AsignacionId.of(UUID.randomUUID()), celulaId, mentorId,
+                FuncionAcompanamiento.MENTOR, CLOCK.now().minusSeconds(2 * 86_400), MotivoAsignacion.ADMINISTRATIVO,
+                admin, "mentor-manual|" + mentorId.value() + "|" + celulaId.value());
+        fila.cerrar(CLOCK.now().minusSeconds(86_400), MotivoAsignacion.ADMINISTRATIVO);
+        return fila;
+    }
+
+    private AsignacionCelula jefaturaNuevaGuardada(UserId mentorId) {
+        ArgumentCaptor<AsignacionCelula> guardadas = ArgumentCaptor.forClass(AsignacionCelula.class);
+        verify(saveAsignacionPort, org.mockito.Mockito.atLeastOnce()).save(guardadas.capture());
+        return guardadas.getAllValues().stream()
+                .filter(a -> a.usuarioId().equals(mentorId) && a.vigente())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no se abrio ninguna jefatura nueva para " + mentorId));
+    }
+
+    /* Falla contra el codigo anterior: la clave fija `mentor-manual|A|grupo` encontraba la fila
+       CERRADA de la primera jefatura de A, y el comando respondia 200 con B todavia al frente. */
+    @Test
+    @DisplayName("asignar(mentor) A -> B -> A: A vuelve a quedar vigente y B se cierra")
+    void volverAlMentorAnteriorLoReabre() {
+        UserId otro = UserId.of(UUID.randomUUID());
+        usuario(otro, UserRole.MENTOR, UserStatus.ACTIVE);
+        Celula destino = grupoConMentor(otro);
+        AsignacionCelula primeraDeA = jefaturaCerrada(destino.id(), mentor);
+        AsignacionCelula deB = pertenenciaAbierta(destino.id(), otro, FuncionAcompanamiento.MENTOR,
+                "mentor-manual|" + otro.value() + "|" + destino.id().value());
+        when(loadAsignacionesPort.porCelula(destino.id())).thenReturn(List.of(primeraDeA, deB));
+        when(loadAsignacionesPort.porUsuario(mentor)).thenReturn(List.of(primeraDeA));
+        when(existePerfilMentorPort.existe(mentor)).thenReturn(true);
+        when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.asignar(new AsignarMentorCelulaCommand(admin, destino.id(), mentor));
+
+        assertThat(deB.vigente()).as("B deja el grupo").isFalse();
+        AsignacionCelula nueva = jefaturaNuevaGuardada(mentor);
+        assertThat(nueva.celulaId()).isEqualTo(destino.id());
+        assertThat(nueva.claveOperacion())
+                .as("clave con contador: no choca contra la fila cerrada de su primera jefatura")
+                .isEqualTo("mentor-manual|" + mentor.value() + "|" + destino.id().value() + "|1");
+        assertThat(destino.mentorId()).isEqualTo(mentor);
+        verify(eventos).publishEvent(new ComposicionDeCelulaCambiadaEvent(destino.id().value(), CLOCK.now()));
+    }
+
+    /* Falla contra el codigo anterior: quitar al mentor y volver a ponerlo respondia 200 con
+       `"mentor": null`. */
+    @Test
+    @DisplayName("asignar(mentor) tras quitarlo: el mismo mentor vuelve a quedar vigente")
+    void quitarYVolverAPonerAlMismoMentorLoReabre() {
+        Celula destino = grupo();
+        AsignacionCelula anterior = jefaturaCerrada(destino.id(), mentor);
+        when(loadAsignacionesPort.porCelula(destino.id())).thenReturn(List.of(anterior));
+        when(loadAsignacionesPort.porUsuario(mentor)).thenReturn(List.of(anterior));
+        when(existePerfilMentorPort.existe(mentor)).thenReturn(true);
+        when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.asignar(new AsignarMentorCelulaCommand(admin, destino.id(), mentor));
+
+        assertThat(jefaturaNuevaGuardada(mentor).celulaId()).isEqualTo(destino.id());
+        assertThat(destino.mentorId()).isEqualTo(mentor);
+        verify(eventos).publishEvent(new ComposicionDeCelulaCambiadaEvent(destino.id().value(), CLOCK.now()));
+    }
+
+    /* La idempotencia que SI hay que conservar: repetir el PUT con el mentor ya vigente (y la celula
+       apuntandolo) no cierra, no abre y no avisa. Se mira el ESTADO, no la clave: da igual con que
+       clave entro su jefatura vigente. */
+    @Test
+    @DisplayName("asignar(mentor) repetido con el mentor ya vigente: no toca nada")
+    void repetirConElMentorVigenteEsNoOp() {
+        Celula destino = grupoConMentor(mentor);
+        AsignacionCelula vigente = pertenenciaAbierta(destino.id(), mentor, FuncionAcompanamiento.MENTOR,
+                "mentor-manual|" + mentor.value() + "|" + destino.id().value() + "|0");
+        when(loadAsignacionesPort.porCelula(destino.id())).thenReturn(List.of(vigente));
+        when(existePerfilMentorPort.existe(mentor)).thenReturn(true);
+
+        service.asignar(new AsignarMentorCelulaCommand(admin, destino.id(), mentor));
+
+        assertThat(vigente.vigente()).isTrue();
+        verify(saveAsignacionPort, never()).save(any());
+        verify(saveCelulaPort, never()).save(any());
+        verify(eventos, never()).publishEvent(any());
+    }
+
     @Test
     @DisplayName("mentor: un MENTOR no administra la composicion -> 403")
     void composicionDeMentorComoMentorEsRechazada() {
