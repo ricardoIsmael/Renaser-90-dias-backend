@@ -24,6 +24,7 @@ import com.renaser.os.chat.application.services.PresenciaService;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.Participante;
+import com.renaser.os.chat.domain.model.mensaje.ConfirmacionDeLectura;
 import com.renaser.os.community.api.FotoPropiaDelGrupoFinder;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
@@ -221,9 +222,10 @@ class RevocacionDeSoportePorBajaDeRolTest {
         autorizacion = new AutorizacionDeConversacionService(conversaciones, esParticipante,
                 pertenenciaVigente, usuarios);
         mensajes = new MensajeService(conversaciones, esParticipante, pertenenciaVigente, marcarLeidoPort,
-                guardarMensaje, cargarMensajes, fanoutMensajes, usuarios, almacenamiento, CLOCK, idGenerator);
+                guardarMensaje, cargarMensajes, fanoutMensajes, usuarios, almacenamiento,
+                conversacion -> ConfirmacionDeLectura.sinDobleMarca(), CLOCK, idGenerator);
         bandeja = new ConversacionService(conversaciones, guardarConversacion, agregarParticipante,
-                esParticipante, pertenenciaVigente, marcarLeidoPort, contarNoLeidos, cargarMensajes, roster,
+                esParticipante, pertenenciaVigente, marcarLeidoPort, conversacion -> { }, contarNoLeidos, cargarMensajes, roster,
                 usuarios, sinFotosPropias(), CLOCK, idGenerator, transacciones);
         presencia = new PresenciaService(presenciaPort, fanoutPresencia, conversacionesDeUsuario, roster,
                 conversaciones, esParticipante, pertenenciaVigente, usuarios);

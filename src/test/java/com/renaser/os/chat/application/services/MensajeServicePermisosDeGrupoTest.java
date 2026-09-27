@@ -12,6 +12,7 @@ import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigentePort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
+import com.renaser.os.chat.domain.model.mensaje.ConfirmacionDeLectura;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
@@ -213,7 +214,8 @@ class MensajeServicePermisosDeGrupoTest {
         };
 
         servicio = new MensajeService(conversaciones, esParticipante, pertenencia, marcarLeido, guardar,
-                cargarMensajes, fanout, usuarios, almacenamiento, FixedClock.at(AHORA),
+                cargarMensajes, fanout, usuarios, almacenamiento, conversacion -> ConfirmacionDeLectura.sinDobleMarca(),
+                FixedClock.at(AHORA),
                 UUID::randomUUID);
     }
 

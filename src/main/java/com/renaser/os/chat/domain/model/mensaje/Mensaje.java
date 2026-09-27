@@ -135,6 +135,15 @@ public final class Mensaje {
         return esDelPrograma() ? ID_PUBLICO_DEL_PROGRAMA : emisorId.value();
     }
 
+    /**
+     * Si este mensaje lo escribió {@code persona}: es de ella y no del programa. Un mensaje del
+     * programa guardado a su nombre (la bienvenida) no es suyo, igual que en {@link #remitentePublico}:
+     * no lleva marca de enviado ni de leído (D-208).
+     */
+    public boolean escritoPor(UserId persona) {
+        return !esDelPrograma() && emisorId.equals(persona);
+    }
+
     /** SISTEMA es la voz del programa, no de una persona (E-332). */
     private static void requireEscritoPorUnaPersona(TipoMensaje tipo) {
         if (tipo == TipoMensaje.SISTEMA) {

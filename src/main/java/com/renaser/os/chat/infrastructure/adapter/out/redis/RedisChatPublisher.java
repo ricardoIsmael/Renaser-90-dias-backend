@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.renaser.os.chat.application.ports.out.lectura.PublicarLecturaFanoutPort;
 import com.renaser.os.chat.application.ports.out.mensaje.PublicarMensajeFanoutPort;
 import com.renaser.os.chat.application.ports.out.presencia.PublicarPresenciaFanoutPort;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
@@ -14,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -30,7 +32,8 @@ import java.util.List;
  * liviano), no justifica arrastrar el ObjectMapper de toda la app.
  */
 @Component
-class RedisChatPublisher implements PublicarMensajeFanoutPort, PublicarPresenciaFanoutPort {
+class RedisChatPublisher implements PublicarMensajeFanoutPort, PublicarPresenciaFanoutPort,
+        PublicarLecturaFanoutPort {
 
     private static final Logger log = LoggerFactory.getLogger(RedisChatPublisher.class);
     private static final String CANAL_PREFIJO = "chat:conversacion:";
@@ -54,6 +57,23 @@ class RedisChatPublisher implements PublicarMensajeFanoutPort, PublicarPresencia
         } catch (RuntimeException e) {
             log.warn("No se pudo publicar el mensaje {} en Redis (el mensaje ya esta guardado en Postgres)",
                     mensaje.id(), e);
+        }
+    }
+
+    /**
+     * «Todos leyeron hasta X» (D-208), por el canal de la conversación. Fire-and-forget como los
+     * mensajes: la lectura ya está guardada, y si esto no sale, el ✓✓ se ve al volver a abrir el chat.
+     */
+    @Override
+    public void publicarLectura(ConversacionId conversacionId, Instant leidoPorTodosHasta) {
+        try {
+            String payload = objectMapper.writeValueAsString(LecturaFanoutPayload.hasta(leidoPorTodosHasta));
+            redisTemplate.convertAndSend(CANAL_PREFIJO + conversacionId.value(), payload);
+        } catch (JsonProcessingException e) {
+            log.warn("No se pudo serializar la lectura de la conversacion {} para el fanout de Redis", conversacionId, e);
+        } catch (RuntimeException e) {
+            log.warn("No se pudo publicar la lectura de la conversacion {} en Redis (ya esta guardada en Postgres)",
+                    conversacionId, e);
         }
     }
 

@@ -10170,3 +10170,78 @@ son las variables cuyo nombre empieza con `mock`, porque se asume que se leen re
 **Cómo evitar que vuelva a pasar.** Un `jest.fn()` que se usa dentro de la fábrica de un `jest.mock` se nombra
 `mock…` y se lee dentro de una función; o se crea dentro de la misma fábrica, como hace `sesionVencida.test.ts`
 con `almacenamientoSeguro`.
+
+---
+
+## E-344 · El `createdAt` que devuelve enviar un mensaje no es el guardado: `2026-09-27T17:00:26.869554401Z` en la respuesta, `…26.869554Z` en la base
+
+**Síntoma.** Diseñando la doble marca de leído (D-208, 2026-09-27), antes de que llegara a pasar en un teléfono. La app
+compara el `createdAt` de cada mensaje propio con la marca «todos leyeron hasta X» que llega en vivo. X sale de la base
+(`participantes_conversacion.ultimo_leido_en`), pero el `createdAt` de un mensaje recién mandado sale de la respuesta del
+POST, que se arma con el `Instant` en memoria. En esta máquina `Instant.now()` trae nanosegundos
+(`2026-09-27T17:00:26.869554501Z`, impreso con el JDK 25) y `timestamptz` guarda microsegundos, redondeando al más
+cercano (verificado en la base local: `'…26.869554501Z'::timestamptz` da `…26.869555` y `'…26.869554401Z'` da
+`…26.869554`). En un 1 a 1, la marca de todos suele ser justamente la de quien escribió, guardada en el mismo instante que
+su mensaje: la app habría comparado `…869554401` con `…869554` y, cada vez que la base redondeara hacia abajo, habría
+dejado en ✓ un mensaje que el otro ya leyó. Más o menos la mitad de las veces.
+
+**Causa real.** `MensajeService.enviar` usaba `clock.now()` tal cual para el mensaje y para la marca del emisor. La
+respuesta de `POST .../messages` decía un instante que no es el que después devuelve `GET .../messages` para el mismo
+mensaje. Nadie lo había notado porque nada comparaba ese instante con otro de la base.
+
+**Solución.** `enviar` trunca a microsegundos (`clock.now().truncatedTo(ChronoUnit.MICROS)`): el mensaje, la marca del
+emisor y la respuesta llevan exactamente lo que queda guardado. La app compara con precisión de microsegundos
+(`lecturaDelChat.instanteNoPosterior`), no con `Date`, que redondea al milisegundo y daría leído un mensaje escrito 0,4 ms
+después de la marca. `MensajeServiceTest.enviarGuardaElInstanteEnMicrosegundos` falla contra el código viejo (salían los
+nanosegundos).
+
+**Cómo evitar que vuelva a pasar.** Todo instante que se devuelve al cliente y que el cliente va a comparar con otro que
+sale de la base tiene que tener la precisión de la base. Si se lo arma en memoria, truncarlo a `ChronoUnit.MICROS` antes
+de guardarlo y de devolverlo. Una prueba con un `FixedClock` en un instante con nanosegundos lo delata; los fixtures con
+`…T10:00:00Z` lo esconden, como el de las 10:00 UTC escondía E-91.
+
+---
+
+## E-345 · Suspender una cuenta no la saca de ningún chat: con su fila adentro, el ✓✓ de su grupo o de TODOS los soportes no llegaría nunca
+
+**Síntoma.** Diseñando la doble marca de leído (D-208, 2026-09-27), leyendo el código. En un grupo y en el soporte, «✓✓»
+quiere decir que leyeron todos los demás participantes. `participantes_conversacion` de un soporte trae al aprendiz y a
+TODO el staff; si una administradora queda `SUSPENDED`, su fila sigue ahí con la marca congelada (o `NULL`, si nunca abrió
+ese soporte) y ningún mensaje de ningún soporte habría llegado a ✓✓. Lo mismo en un grupo con un aprendiz suspendido.
+
+**Causa real.** Suspender (`StaffAdminService.updateStatus`) publica `EstadoDeCuentaCambiadoEvent` y el único que lo escucha
+es `notifications` (borra los tokens push). `chat` solo reacciona a cambios de ROL (`RolDeUsuarioCambiadoSoporteListener`)
+y a la composición del grupo. La fila de una cuenta suspendida no le daba nada a nadie hasta ahora: cada caso de uso rechaza
+a un actor no activo, así que nadie la miraba.
+
+**Solución.** La doble marca cuenta solo a los participantes con la cuenta activa (`LecturaService.conCuentaActiva`, una
+consulta en lote a `users.api` por conversación). En un soporte coincide con la regla 1 de D-136: adentro van el aprendiz y
+el staff *activo*. No se tocó la fila de nadie: sacar a una cuenta suspendida de sus chats es otra decisión (¿vuelve al
+reactivarse?) y no era de este cambio. Lo fijan `LecturaServiceTest.unaCuentaSuspendidaNoFrenaElAviso`,
+`MarcaDeLeidoEnElListadoTest.enElSoporteNoCuentaUnaCuentaSuspendida` y `LecturaEnVivoIT.soporteConUnaCuentaSuspendida`
+(Postgres real, con la administradora suspendida y sin marca).
+
+**Cómo evitar que vuelva a pasar.** `participantes_conversacion` es una proyección: además de quedar vieja con las rotaciones
+(por eso los grupos se autorizan contra la pertenencia vigente), guarda a gente que hoy no puede entrar. Cualquier regla
+nueva que dependa de «todos los participantes» tiene que decir qué hace con una cuenta suspendida, y con una fila de alguien
+que ya salió del grupo pero que la reconciliación todavía no borró.
+
+---
+
+## E-346 · `error TS2345: Argument of type '{ status?: undefined; } | … | { status: number; }' is not assignable…` con las pruebas de jest en verde
+
+**Síntoma.** Frontend, `leido-chat`, 2026-09-27. `npx jest src/features/chat` daba `Tests: 231 passed` y, a la vez,
+`npx tsc --noEmit` terminaba con `exit 2`:
+
+```
+src/features/chat/components/__tests__/dobleMarcaDeLeido.test.ts(118,40): error TS2345: Argument of type '{ status?: undefined; } | { status: null; } | { status: string; } | { status: number; }' is not assignable to parameter of type 'Partial<WireMensaje> & Record<string, unknown>'.
+```
+
+**Causa real.** Error mío en la prueba: el ayudante que arma el mensaje crudo pedía `Partial<WireMensaje>`, y la prueba le
+pasaba a propósito un `status` numérico (lo que la app tiene que tolerar). jest no lo detecta porque `jest-expo` transpila
+TypeScript con Babel, que borra los tipos sin comprobarlos: una prueba puede pasar con errores de tipos.
+
+**Solución.** El ayudante recibe `Record<string, unknown>`: es JSON crudo, antes de validar, y puede traer cualquier cosa.
+
+**Cómo evitar que vuelva a pasar.** «Tests: N passed» de jest no dice nada de los tipos. Después de escribir o tocar
+pruebas, `npx tsc --noEmit` (AGENTS.md §5) también, y mirar su código de salida, no solo que no imprima nada visible.

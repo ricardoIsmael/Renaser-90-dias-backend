@@ -1,5 +1,6 @@
 package com.renaser.os.chat.infrastructure.adapter.out.persistence.conversacion;
 
+import com.renaser.os.chat.application.ports.out.lectura.MarcasDeLecturaPort;
 import com.renaser.os.chat.application.ports.out.participante.AgregarParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.QuitarParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ContarNoLeidosPort;
@@ -23,7 +24,7 @@ import java.util.UUID;
 @Component
 class ParticipanteConversacionPersistenceAdapter
         implements AgregarParticipantePort, QuitarParticipantePort, EsParticipantePort, MarcarLeidoPort,
-        ContarNoLeidosPort, ListarUsuariosDeConversacionPort, ConversacionesDeUsuarioPort {
+        ContarNoLeidosPort, ListarUsuariosDeConversacionPort, ConversacionesDeUsuarioPort, MarcasDeLecturaPort {
 
     private final SpringDataParticipanteConversacionRepository repository;
 
@@ -48,14 +49,19 @@ class ParticipanteConversacionPersistenceAdapter
         return repository.existsByConversacionIdAndUsuarioId(conversacionId.value(), usuarioId.value());
     }
 
+    /** Solo avanza, y en un solo UPDATE: ver {@code marcarLeidoSiAvanza}. Sin fila, no hace nada, como antes. */
     @Override
     @Transactional
     public void marcarLeido(ConversacionId conversacionId, UserId usuarioId, Instant ahora) {
-        repository.findById(new ParticipanteConversacionId(conversacionId.value(), usuarioId.value()))
-                .ifPresent(entidad -> {
-                    entidad.setUltimoLeidoEn(ahora);
-                    repository.save(entidad);
-                });
+        repository.marcarLeidoSiAvanza(conversacionId.value(), usuarioId.value(), ahora);
+    }
+
+    @Override
+    public List<Participante> participantesDe(ConversacionId conversacionId) {
+        return repository.marcasDeLectura(conversacionId.value()).stream()
+                .map(fila -> Participante.rehydrate(conversacionId, UserId.of(fila.getUsuarioId()),
+                        fila.getUltimoLeidoEn(), fila.getCreadoEn()))
+                .toList();
     }
 
     @Override

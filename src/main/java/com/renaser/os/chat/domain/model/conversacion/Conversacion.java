@@ -198,6 +198,11 @@ public final class Conversacion {
         }
     }
 
+    /** Si hay doble marca de leído en esta conversación (D-208): en todas menos la comunidad. */
+    public boolean confirmaLectura() {
+        return tipo.confirmaLectura();
+    }
+
     @Override
     public String toString() {
         return "Conversacion[" + id + ", " + tipo + "]";

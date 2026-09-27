@@ -4,6 +4,7 @@ import com.renaser.os.chat.application.ports.in.conversacion.CrearConversacionDi
 import com.renaser.os.chat.application.ports.in.conversacion.ListarConversacionesUseCase.ConversacionResumen;
 import com.renaser.os.chat.application.ports.in.conversacion.MarcarLeidoUseCase.MarcarLeidoCommand;
 import com.renaser.os.chat.application.ports.in.conversacion.RenombrarConversacionGlobalUseCase.RenombrarConversacionGlobalCommand;
+import com.renaser.os.chat.application.ports.in.lectura.AnunciarLecturaUseCase;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.conversacion.SaveConversacionPort;
 import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -44,6 +46,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -75,6 +78,8 @@ class ConversacionServiceTest {
     @Mock
     private MarcarLeidoPort marcarLeidoPort;
     @Mock
+    private AnunciarLecturaUseCase anunciarLectura;
+    @Mock
     private ContarNoLeidosPort contarNoLeidosPort;
     @Mock
     private LoadMensajePort loadMensajePort;
@@ -102,8 +107,8 @@ class ConversacionServiceTest {
     @BeforeEach
     void setUp() {
         service = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
-                esParticipantePort, pertenenciaVigentePort, marcarLeidoPort, contarNoLeidosPort, loadMensajePort,
-                listarUsuariosPort, userSummaryFinder, fotosDeGrupos,
+                esParticipantePort, pertenenciaVigentePort, marcarLeidoPort, anunciarLectura, contarNoLeidosPort,
+                loadMensajePort, listarUsuariosPort, userSummaryFinder, fotosDeGrupos,
                 CLOCK, idGenerator, transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
@@ -290,6 +295,40 @@ class ConversacionServiceTest {
                 .isInstanceOf(NotAuthorizedException.class);
 
         verify(marcarLeidoPort, never()).marcarLeido(any(), any(), any());
+        verify(anunciarLectura, never()).anunciar(any());
+    }
+
+    /**
+     * D-208: quien escribió ve pasar ✓ a ✓✓ sin recargar. El aviso sale DESPUÉS de guardar la
+     * lectura, que es lo que lo hace calcular con la marca nueva. Contra el código viejo no se avisaba
+     * nada: marcar leído solo movía {@code ultimo_leido_en}.
+     */
+    @Test
+    @DisplayName("D-208: marcar leído guarda la lectura y DESPUÉS avisa en vivo hasta dónde leyeron todos")
+    void marcarLeidoAvisaLaLecturaDespuesDeGuardarla() {
+        ConversacionId conversacionId = ConversacionId.of(UUID.randomUUID());
+        Conversacion directa = Conversacion.crearDirecta(conversacionId, Conversacion.claveDirectaDe(activo, otroActivo),
+                CLOCK.now());
+        when(loadConversacionPort.porId(conversacionId)).thenReturn(Optional.of(directa));
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+
+        service.marcarLeido(new MarcarLeidoCommand(activo, conversacionId));
+
+        InOrder orden = inOrder(marcarLeidoPort, anunciarLectura);
+        orden.verify(marcarLeidoPort).marcarLeido(conversacionId, activo, CLOCK.now());
+        orden.verify(anunciarLectura).anunciar(directa);
+    }
+
+    @Test
+    @DisplayName("D-208: una cuenta suspendida no marca leído ni dispara el aviso, aunque siga en la conversación")
+    void unaCuentaSuspendidaNoMarcaNiAvisa() {
+        ConversacionId conversacionId = ConversacionId.of(UUID.randomUUID());
+
+        assertThatThrownBy(() -> service.marcarLeido(new MarcarLeidoCommand(suspendido, conversacionId)))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        verify(marcarLeidoPort, never()).marcarLeido(any(), any(), any());
+        verify(anunciarLectura, never()).anunciar(any());
     }
 
     @Test

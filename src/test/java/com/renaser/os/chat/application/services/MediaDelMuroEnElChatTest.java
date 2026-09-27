@@ -12,6 +12,7 @@ import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigentePort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
+import com.renaser.os.chat.domain.model.mensaje.ConfirmacionDeLectura;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
 import com.renaser.os.community.api.PublicacionMuroFinder;
@@ -92,7 +93,8 @@ class MediaDelMuroEnElChatTest {
     void setUp() {
         mensajeService = new MensajeService(loadConversacionPort, esParticipantePort, pertenenciaVigentePort,
                 marcarLeidoPort, saveMensajePort, loadMensajePort, publicarMensajeFanoutPort, userSummaryFinder,
-                almacenamientoPort, FixedClock.at(AHORA), UUID::randomUUID);
+                almacenamientoPort, conversacion -> ConfirmacionDeLectura.sinDobleMarca(), FixedClock.at(AHORA),
+                UUID::randomUUID);
         compartirService = new CompartirPublicacionService(mensajeService, publicacionMuroFinder, userSummaryFinder);
 
         lenient().when(userSummaryFinder.findById(actor)).thenReturn(

@@ -1,5 +1,6 @@
 package com.renaser.os.chat.application.services;
 
+import com.renaser.os.chat.application.ports.in.lectura.ConsultarLecturaUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.OrigenMedia;
 import com.renaser.os.chat.application.ports.in.mensaje.ListarMensajesUseCase;
@@ -16,6 +17,7 @@ import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
+import com.renaser.os.chat.domain.model.mensaje.ConfirmacionDeLectura;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
@@ -34,6 +36,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +63,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     private final PublicarMensajeFanoutPort publicarMensajeFanoutPort;
     private final UserSummaryFinder userSummaryFinder;
     private final AlmacenamientoPort almacenamientoPort;
+    private final ConsultarLecturaUseCase consultarLectura;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
@@ -68,7 +72,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
                            MarcarLeidoPort marcarLeidoPort, SaveMensajePort saveMensajePort,
                            LoadMensajePort loadMensajePort, PublicarMensajeFanoutPort publicarMensajeFanoutPort,
                            UserSummaryFinder userSummaryFinder, AlmacenamientoPort almacenamientoPort,
-                           Clock clock, IdGenerator idGenerator) {
+                           ConsultarLecturaUseCase consultarLectura, Clock clock, IdGenerator idGenerator) {
         this.loadConversacionPort = loadConversacionPort;
         this.esParticipantePort = esParticipantePort;
         this.pertenenciaVigentePort = pertenenciaVigentePort;
@@ -78,6 +82,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         this.publicarMensajeFanoutPort = publicarMensajeFanoutPort;
         this.userSummaryFinder = userSummaryFinder;
         this.almacenamientoPort = almacenamientoPort;
+        this.consultarLectura = consultarLectura;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
@@ -91,7 +96,11 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
             requireRespuestaEnMismaConversacion(command.respuestaAId(), command.conversacionId());
         }
 
-        Instant ahora = clock.now();
+        /* En microsegundos, que es lo que guarda `timestamptz` (E-344). `Instant.now()` trae
+           nanosegundos: la respuesta de este POST decía un `createdAt` que no era el guardado, y la
+           app, que compara ese instante con la marca de lectura (D-208), dejaba en ✓ un mensaje que
+           todos habían leído cada vez que la base redondeaba hacia abajo. */
+        Instant ahora = clock.now().truncatedTo(ChronoUnit.MICROS);
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
         exigirMediaDeEstaConversacion(command.mediaRuta(), command.origenMedia(),
                 command.conversacionId());
@@ -170,7 +179,8 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     @Override
     public PaginaMensajes listar(UserId actorId, ConversacionId conversacionId, Instant cursor, int limite) {
         requireActivo(actorId);
-        requireParticipante(requireConversacion(conversacionId), actorId);
+        Conversacion conversacion = requireConversacion(conversacionId);
+        requireParticipante(conversacion, actorId);
 
         int limiteEfectivo = limite <= 0 ? LIMITE_POR_DEFECTO : Math.min(limite, LIMITE_MAXIMO);
         List<Mensaje> pagina = loadMensajePort.pagina(conversacionId, cursor, limiteEfectivo + 1);
@@ -178,8 +188,24 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         List<Mensaje> resultado = hayMas ? pagina.subList(0, limiteEfectivo) : pagina;
         Instant siguienteCursor = hayMas ? resultado.get(resultado.size() - 1).creadoEn() : null;
 
-        List<MensajeEnriquecido> enriquecidos = enriquecer(resultado);
+        List<MensajeEnriquecido> enriquecidos = conMarcaDeEntrega(enriquecer(resultado), conversacion, actorId);
         return new PaginaMensajes(enriquecidos, siguienteCursor, hayMas);
+    }
+
+    /**
+     * ✓ o ✓✓ en los mensajes propios de quien mira (D-208). Una sola lectura de los participantes por
+     * página, y ninguna si en la página no hay nada suyo: no hay marca que poner.
+     */
+    private List<MensajeEnriquecido> conMarcaDeEntrega(List<MensajeEnriquecido> pagina, Conversacion conversacion,
+                                                       UserId quienMira) {
+        if (pagina.stream().noneMatch(enriquecido -> enriquecido.mensaje().escritoPor(quienMira))) {
+            return pagina;
+        }
+        ConfirmacionDeLectura confirmacion = consultarLectura.confirmacionDe(conversacion);
+        return pagina.stream()
+                .map(enriquecido -> enriquecido.conEstadoDeEntrega(
+                        confirmacion.estadoPara(enriquecido.mensaje(), quienMira).orElse(null)))
+                .toList();
     }
 
     /**

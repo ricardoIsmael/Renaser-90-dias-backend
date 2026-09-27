@@ -1,5 +1,6 @@
 package com.renaser.os.chat.application.ports.in.mensaje;
 
+import com.renaser.os.chat.domain.model.mensaje.EstadoDeEntrega;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
@@ -19,13 +20,28 @@ import java.time.Instant;
  * siempre (mismo criterio y mismo defecto ya cometido en el Muro, E-79). Sin este campo el
  * cliente recibe una clave de S3 que no puede abrir: era el motivo real por el que el chat no
  * podia mostrar fotos ni reproducir audios.
+ *
+ * <p>{@code estadoDeEntrega} (D-208): ✓ o ✓✓ de un mensaje PROPIO de quien mira; {@code null} en los de
+ * otras personas y en los del programa, que no llevan marca. Sale de una sola lectura de los
+ * participantes por página ({@code ConsultarLecturaUseCase}), nunca por mensaje.
  */
 public record MensajeEnriquecido(Mensaje mensaje, String nombreEmisor, String avatarEmisor,
-                                  RespuestaPreview respuestaPreview, String mediaUrl) {
+                                  RespuestaPreview respuestaPreview, String mediaUrl,
+                                  EstadoDeEntrega estadoDeEntrega) {
 
     /** Cuantos caracteres del texto original entran en el preview de "respuesta a" —
      * decision propia, no confirmada por producto (ver informe de este encargo). */
     public static final int LARGO_PREVIEW = 80;
+
+    /** Sin marca de entrega: se la pone después {@link #conEstadoDeEntrega}, cuando es de quien mira. */
+    public MensajeEnriquecido(Mensaje mensaje, String nombreEmisor, String avatarEmisor,
+                              RespuestaPreview respuestaPreview, String mediaUrl) {
+        this(mensaje, nombreEmisor, avatarEmisor, respuestaPreview, mediaUrl, null);
+    }
+
+    public MensajeEnriquecido conEstadoDeEntrega(EstadoDeEntrega estado) {
+        return new MensajeEnriquecido(mensaje, nombreEmisor, avatarEmisor, respuestaPreview, mediaUrl, estado);
+    }
 
     /** {@code eliminadoEn} espeja el tombstone del mensaje original (hoy siempre
      * {@code null}: no existe todavia un caso de uso que borre mensajes — ver

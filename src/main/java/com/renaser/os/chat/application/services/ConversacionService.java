@@ -6,6 +6,7 @@ import com.renaser.os.chat.application.ports.in.conversacion.ListarConversacione
 import com.renaser.os.chat.application.ports.in.conversacion.MarcarLeidoUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.RenombrarConversacionGlobalUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.UnirseAConversacionGlobalUseCase;
+import com.renaser.os.chat.application.ports.in.lectura.AnunciarLecturaUseCase;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.conversacion.SaveConversacionPort;
 import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
@@ -53,6 +54,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     private final EsParticipantePort esParticipantePort;
     private final PertenenciaVigentePort pertenenciaVigentePort;
     private final MarcarLeidoPort marcarLeidoPort;
+    private final AnunciarLecturaUseCase anunciarLectura;
     private final ContarNoLeidosPort contarNoLeidosPort;
     private final LoadMensajePort loadMensajePort;
     private final ListarUsuariosDeConversacionPort listarUsuariosPort;
@@ -73,6 +75,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
                                 AgregarParticipantePort agregarParticipantePort,
                                 EsParticipantePort esParticipantePort,
                                 PertenenciaVigentePort pertenenciaVigentePort, MarcarLeidoPort marcarLeidoPort,
+                                AnunciarLecturaUseCase anunciarLectura,
                                 ContarNoLeidosPort contarNoLeidosPort, LoadMensajePort loadMensajePort,
                                 ListarUsuariosDeConversacionPort listarUsuariosPort,
                                 UserSummaryFinder userSummaryFinder, FotoPropiaDelGrupoFinder fotosDeGrupos,
@@ -83,6 +86,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         this.esParticipantePort = esParticipantePort;
         this.pertenenciaVigentePort = pertenenciaVigentePort;
         this.marcarLeidoPort = marcarLeidoPort;
+        this.anunciarLectura = anunciarLectura;
         this.contarNoLeidosPort = contarNoLeidosPort;
         this.loadMensajePort = loadMensajePort;
         this.listarUsuariosPort = listarUsuariosPort;
@@ -190,12 +194,23 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         return resumen.ultimoMensaje() != null ? resumen.ultimoMensaje().creadoEn() : resumen.conversacion().creadoEn();
     }
 
+    /**
+     * Marca leída la conversación y avisa en vivo hasta dónde leyeron todos (D-208), para que quien
+     * escribió vea pasar ✓ a ✓✓.
+     *
+     * <p><b>Sin {@code @Transactional}, a propósito.</b> El aviso tiene que salir con la lectura YA
+     * guardada, y tiene que calcular la marca de todos con lo que los demás ya guardaron: si esto fuera
+     * una sola transacción, dos lecturas simultáneas calcularían cada una sin ver la otra y la última en
+     * avisar podría anunciar una marca vieja para siempre. Así, la escritura se confirma en la
+     * transacción del adaptador y recién después se lee y se avisa. Lo demás son lecturas.
+     */
     @Override
-    @Transactional
     public void marcarLeido(MarcarLeidoCommand command) {
         requireActivo(command.actorId());
-        requireParticipante(requireConversacion(command.conversacionId()), command.actorId());
+        Conversacion conversacion = requireConversacion(command.conversacionId());
+        requireParticipante(conversacion, command.actorId());
         marcarLeidoPort.marcarLeido(command.conversacionId(), command.actorId(), clock.now());
+        anunciarLectura.anunciar(conversacion);
     }
 
     @Override
