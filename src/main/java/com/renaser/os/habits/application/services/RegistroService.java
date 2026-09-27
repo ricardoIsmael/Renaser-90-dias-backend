@@ -4,6 +4,7 @@ import com.renaser.os.community.api.PublicacionMuroFinder;
 import com.renaser.os.habits.api.HabitoCompletadoEvent;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
+import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase.RegistrosDelDia;
 import com.renaser.os.habits.application.ports.in.registro.ExpirarRegistrosVencidosUseCase;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.desbloqueo.LoadDesbloqueoHabitoPort;
@@ -52,6 +53,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -131,15 +133,32 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<RegistroHabito> consultar(UserId actorId, UserId participanteId, LocalDate fecha) {
         requireSelf(actorId, participanteId);
         return loadRegistroPort.porParticipanteYFecha(participanteId, fecha);
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public RegistrosDelDia consultarEnSuZona(UserId actorId, UserId participanteId, LocalDate fecha) {
+        ZoneId zona = ZoneId.of(requireSelf(actorId, participanteId).timezone());
+        return new RegistrosDelDia(loadRegistroPort.porParticipanteYFecha(participanteId, fecha), fecha, zona);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RegistrosDelDia consultarHoy(UserId actorId, UserId participanteId) {
+        ZoneId zona = ZoneId.of(requireSelf(actorId, participanteId).timezone());
+        LocalDate hoyEnSuZona = clock.now().atZone(zona).toLocalDate();
+        return new RegistrosDelDia(loadRegistroPort.porParticipanteYFecha(participanteId, hoyEnSuZona), hoyEnSuZona,
+                zona);
+    }
+
+    @Override
     @Transactional
     public List<RegistroHabito> generar(UserId participanteId, LocalDate fecha) {
-        return generarInterno(participanteId, fecha, null);
+        return generarInterno(requireProgreso(participanteId), participanteId, fecha, null);
     }
 
     /** Ver javadoc del puerto: descarta lo que ya no se puede completar a esta hora. */
@@ -149,7 +168,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         ProgresoParticipanteHabits progreso = requireProgreso(participanteId);
         ZoneId zona = ZoneId.of(progreso.timezone());
         var ahoraEnSuZona = clock.now().atZone(zona);
-        return generarInterno(participanteId, ahoraEnSuZona.toLocalDate(), ahoraEnSuZona.toLocalTime());
+        return generarInterno(progreso, participanteId, ahoraEnSuZona.toLocalDate(), ahoraEnSuZona.toLocalTime());
     }
 
     /** Ver javadoc del puerto: jornada completa (sin corte de hora) para HOY en la zona del participante. */
@@ -159,15 +178,19 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         ProgresoParticipanteHabits progreso = requireProgreso(participanteId);
         ZoneId zona = ZoneId.of(progreso.timezone());
         LocalDate hoyEnSuZona = clock.now().atZone(zona).toLocalDate();
-        return generarInterno(participanteId, hoyEnSuZona, null);
+        return generarInterno(progreso, participanteId, hoyEnSuZona, null);
     }
 
     /**
      * {@code horaDeCorte} nulo = generar el dia completo (uso del barrido nocturno, que corre
      * cuando el dia todavia no empezo). No nulo = solo lo que sigue siendo alcanzable.
+     *
+     * <p>El progreso llega por parametro (V-5, D-180): los tres llamadores ya lo habian leido, y
+     * leerlo de nuevo aca era una consulta mas por participante en cada barrido y en cada
+     * {@code GET /habit-tracks/today} sin registros.
      */
-    private List<RegistroHabito> generarInterno(UserId participanteId, LocalDate fecha, LocalTime horaDeCorte) {
-        ProgresoParticipanteHabits progreso = requireProgreso(participanteId);
+    private List<RegistroHabito> generarInterno(ProgresoParticipanteHabits progreso, UserId participanteId,
+                                                LocalDate fecha, LocalTime horaDeCorte) {
         TipoDia tipoDia = resolverTipoDia(fecha);
         Instant ahora = clock.now();
 
@@ -218,15 +241,22 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         var preferencias = loadPreferenciaPort.porParticipanteHabitosYFecha(participanteId,
                         catalogo.stream().map(Habito::id).toList(), fecha).stream()
                         .collect(Collectors.toMap(PreferenciaHorario::habitoId, p -> p));
+        // V-5 (D-180): lo que ya existe ese dia y los horarios de todo el catalogo, en DOS consultas
+        // de lote y no en dos por habito. Con ~25 habitos eran ~50 consultas por participante, y
+        // `GET /habit-tracks/today` las repetia en cada pedido mientras el dia siguiera sin
+        // registros (la red de seguridad de TracksDelDiaProyeccionService). La decision es la
+        // misma de antes, habito por habito: solo cambia de donde sale el dato.
+        Set<HabitoId> conRegistroEseDia = habitosConRegistro(participanteId, fecha);
+        Map<HabitoId, List<HorarioHabito>> horariosPorHabito = horariosDe(catalogo);
         List<RegistroHabito> generados = new ArrayList<>();
         for (Habito habito : catalogo) {
             if (fueraDelPlanDeHoy.contains(habito.id())) {
                 continue;
             }
-            if (loadRegistroPort.porParticipanteHabitoYFecha(participanteId, habito.id(), fecha).isPresent()) {
+            if (conRegistroEseDia.contains(habito.id())) {
                 continue; // idempotente: ya existe (UNIQUE participante+habito+fecha)
             }
-            boolean aplicaHoy = loadHorarioPort.porHabito(habito.id()).stream()
+            boolean aplicaHoy = horariosPorHabito.getOrDefault(habito.id(), List.of()).stream()
                     .filter(h -> h.aplicaEnDia(progreso.diaPrograma(), tipoDia))
                     .anyMatch(h -> sigueAlcanzable(h, preferencias.get(habito.id()), horaDeCorte));
             if (!aplicaHoy) {
@@ -243,8 +273,22 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
             if (saveRegistroPort.insertarSiNoExiste(registro)) {
                 generados.add(registro);
             }
+            conRegistroEseDia.add(habito.id());
         }
         return generados;
+    }
+
+    /** Los habitos que ya tienen registro ese dia, en UNA consulta (V-5). Mutable: el bucle suma los que inserta. */
+    private Set<HabitoId> habitosConRegistro(UserId participanteId, LocalDate fecha) {
+        return loadRegistroPort.porParticipanteYFecha(participanteId, fecha).stream()
+                .map(RegistroHabito::habitoId)
+                .collect(Collectors.toCollection(HashSet::new));
+    }
+
+    /** Los horarios de todo el catalogo del participante, en UNA consulta (V-5), agrupados por habito. */
+    private Map<HabitoId, List<HorarioHabito>> horariosDe(List<Habito> catalogo) {
+        return loadHorarioPort.porHabitos(catalogo.stream().map(Habito::id).toList()).stream()
+                .collect(Collectors.groupingBy(HorarioHabito::habitoId));
     }
 
     /**
@@ -447,11 +491,12 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
                 dia.plusDays(1).atStartOfDay(zona).toInstant());
     }
 
-    private void requireSelf(UserId actorId, UserId participanteId) {
+    /** Devuelve el progreso ya leido para que el llamador no tenga que volver a pedirlo (V-5). */
+    private ProgresoParticipanteHabits requireSelf(UserId actorId, UserId participanteId) {
         if (!actorId.equals(participanteId)) {
             throw new NotAuthorizedException("Solo el propio participante puede operar sobre sus habitos");
         }
-        requireProgreso(participanteId);
+        return requireProgreso(participanteId);
     }
 
     /**

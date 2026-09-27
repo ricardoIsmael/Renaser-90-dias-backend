@@ -107,9 +107,9 @@ class GenerarTracksCicloIntoxicacionTest {
         lenient().when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
         lenient().when(saveRegistroPort.insertarSiNoExiste(any())).thenReturn(true);
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(jugoVerde, postDiario, diaSinCelular));
-        for (Habito habito : List.of(jugoVerde, postDiario, diaSinCelular)) {
-            when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of(todosLosDias(habito)));
-        }
+        // V-5 (D-180): los horarios de todo el catalogo llegan en una sola consulta de lote.
+        when(loadHorarioPort.porHabitos(any())).thenReturn(
+                List.of(todosLosDias(jugoVerde), todosLosDias(postDiario), todosLosDias(diaSinCelular)));
     }
 
     @Test

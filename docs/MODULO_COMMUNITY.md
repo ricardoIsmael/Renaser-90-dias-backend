@@ -404,3 +404,17 @@ contra `AcompanamientoFinder.integrantesVigentes`. No se unificó: hacerlo cambi
   hay que ofrecer —todos los inscritos, todos menos los de ESE grupo, un tope de grupos por
   persona— es una decisión de producto, y por eso no se tocó ese selector.
 - **`members` del detalle de grupo** — ver §10.3.
+
+---
+
+## 11. 2026-09-26 — Autores de comentarios en lote (V-6, D-180)
+
+`ComentarioMuroService.pagina` pedía el perfil del autor **por cada comentario** (`porId`): una página
+de 30 comentarios eran 30 consultas a `usuarios`. Ahora arma el conjunto de autores de la página y hace
+**una** consulta (`ConsultarPerfilUsuarioPort.porIds`, que ya existía y usaba el feed). El contrato no
+cambia: un autor que ya no existe sale con nombre y avatar `null`, como antes. Escribir y editar un
+comentario siguen con `porId`, porque devuelven uno solo.
+
+Pruebas: `ComentarioMuroServiceTest.laPaginaResuelveLosAutoresEnUnaSolaConsulta` (falla contra el
+código anterior: `porIds` nunca se llamaba) y `unAutorInexistenteSaleSinNombre`.
+

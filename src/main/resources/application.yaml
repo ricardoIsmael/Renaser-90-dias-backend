@@ -126,6 +126,15 @@ spring:
   # el controller). Detalle completo del analisis en C-18.md.
   jpa:
     open-in-view: false
+    # V-6 (D-180). Las tres @ElementCollection EAGER (acciones de la roca diaria, dias de una
+    # accion del mapa, bloques del Espejo) se cargaban con UN SELECT por fila padre: pedir las
+    # rocas del dia eran 1 + N consultas. Con esto Hibernate carga las colecciones de hasta 50
+    # padres en una sola consulta (`= any(?)`). No cambia QUE se lee, solo en cuantos viajes, y
+    # el orden de las acciones no depende de esto: el dominio las ordena por `orden` al leerlas.
+    # Espejado en src/test/resources/application.yaml, que reemplaza a este en los tests.
+    properties:
+      hibernate:
+        default_batch_fetch_size: 50
   ai:
     model:
       chat: none

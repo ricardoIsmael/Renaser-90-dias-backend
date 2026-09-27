@@ -85,7 +85,12 @@ ENV SPRING_PROFILES_ACTIVE=prod
 # deja la mitad de la RAM sin usar. Se pasa por JAVA_TOOL_OPTIONS y no por el ENTRYPOINT para que
 # el `java` siga siendo el PID 1 en forma exec: asi recibe el SIGTERM del orquestador y Spring
 # apaga ordenado, en vez de que un `sh -c` se coma la senal.
-ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0"
+#
+# 60 y no 75 desde V-8 (D-180): en la t3.small (1,9 GB, sin swap) el contenedor corre sin tope
+# propio y 75 % daba 1,43 GB de heap, con Redis, Docker y el agente de SSM compartiendo el resto.
+# El CD ahora pasa `--memory 1400m` y este mismo valor por `-e JAVA_TOOL_OPTIONS`; el de aca es el
+# default de la imagen para quien la corra a mano.
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=60.0"
 
 # `application.jar` NO es el uber-jar: es el jar liviano que dejo la extraccion, con las
 # dependencias referenciadas desde las capas de al lado por el Class-Path del manifiesto.

@@ -25,7 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
 
 @Service
 public class ComentarioMuroService implements EscribirComentarioUseCase, EditarComentarioUseCase,
@@ -101,11 +103,19 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
         List<Comentario> pagina = hayMas ? filas.subList(0, TAMANO_PAGINA) : filas;
         int total = loadComentarioPort.contar(publicacionId);
         Instant siguiente = hayMas ? pagina.get(pagina.size() - 1).creadoEn() : null;
-        return new PaginaComentarios(pagina.stream().map(this::aVista).toList(), siguiente, total);
+        // Los autores de toda la pagina en UNA consulta (V-6, D-180). Antes era una por comentario:
+        // 30 comentarios, 30 consultas a `usuarios`.
+        Map<UserId, PerfilUsuario> autores = consultarPerfilUsuarioPort.porIds(
+                pagina.stream().map(Comentario::autorId).collect(Collectors.toSet()));
+        return new PaginaComentarios(pagina.stream().map(c -> aVista(c, autores.get(c.autorId()))).toList(),
+                siguiente, total);
     }
 
     private ComentarioVista aVista(Comentario comentario) {
-        PerfilUsuario autor = consultarPerfilUsuarioPort.porId(comentario.autorId()).orElse(null);
+        return aVista(comentario, consultarPerfilUsuarioPort.porId(comentario.autorId()).orElse(null));
+    }
+
+    private static ComentarioVista aVista(Comentario comentario, PerfilUsuario autor) {
         return new ComentarioVista(comentario, autor != null ? autor.nombreCompleto() : null,
                 autor != null ? autor.avatarUrl() : null);
     }

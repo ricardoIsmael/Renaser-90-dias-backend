@@ -3,11 +3,11 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.evidence.api.RegistrosConEvidenciaFinder;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.TrackDelDiaConCatalogo;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
+import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase.RegistrosDelDia;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.guia.LoadGuiaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.domain.model.guia.GuiaHabito;
 import com.renaser.os.habits.domain.model.guia.GuiaHabitoId;
@@ -47,6 +47,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class TracksDelDiaProyeccionServiceTest {
 
+    private static final java.time.ZoneId UTC = java.time.ZoneId.of("UTC");
+
     private static final Instant AHORA = Instant.parse("2026-08-24T09:00:00Z");
 
     @Mock
@@ -61,12 +63,6 @@ class TracksDelDiaProyeccionServiceTest {
     private LoadPreferenciaHorarioPort loadPreferenciaPort;
     @Mock
     private LoadGuiaHabitoPort loadGuiaPort;
-    /** Agregado 2026-09-05: la proyeccion resuelve la ventana de entrega en la zona del aprendiz.
-     * Sin stub devuelve vacio, la zona cae a UTC y estos casos (que no miran puntos en juego)
-     * siguen valiendo lo mismo que antes. Los casos de zona real viven en
-     * {@code TracksDelDiaPuntosEnJuegoTest}. */
-    @Mock
-    private ConsultarProgresoParticipanteHabitsPort progresoPort;
     /** Agregado 2026-09-05 (D-113). Sin stub, Mockito devuelve conjunto vacio: ninguno de estos
      * casos tiene evidencia, que es lo que ya asumian antes de que el campo existiera. El
      * comportamiento del campo se prueba en {@link TracksDelDiaEvidenciaTest}. */
@@ -80,8 +76,9 @@ class TracksDelDiaProyeccionServiceTest {
     @BeforeEach
     void setUp() {
         service = new TracksDelDiaProyeccionService(consultarTracksUseCase, generarTracksUseCase, loadHabitoPort,
-                loadHorarioPort, loadPreferenciaPort, loadGuiaPort, progresoPort, registrosConEvidenciaFinder,
-                loadRenombrePort, FixedClock.at(AHORA));
+                loadHorarioPort, loadPreferenciaPort, loadGuiaPort, registrosConEvidenciaFinder,
+                loadRenombrePort, FixedClock.at(AHORA),
+                org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
     }
 
     private static Habito habito(String titulo) {
@@ -92,7 +89,8 @@ class TracksDelDiaProyeccionServiceTest {
     @Test
     void sinRegistrosNoConsultaNingunPuertoDeCatalogo() {
         UserId actor = UserId.of(UUID.randomUUID());
-        when(consultarTracksUseCase.consultar(actor, actor, LocalDate.of(2026, 8, 24))).thenReturn(List.of());
+        when(consultarTracksUseCase.consultarEnSuZona(actor, actor, LocalDate.of(2026, 8, 24)))
+                .thenReturn(new RegistrosDelDia(List.of(), LocalDate.of(2026, 8, 24), UTC));
 
         List<TrackDelDiaConCatalogo> resultado = service.consultar(actor, actor, LocalDate.of(2026, 8, 24));
 
@@ -114,7 +112,8 @@ class TracksDelDiaProyeccionServiceTest {
         RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), actor, habito.id(),
                 LocalDate.of(2026, 8, 24), 10, TipoDia.DISCIPLINA, false, AHORA);
 
-        when(consultarTracksUseCase.consultar(actor, actor, registro.fechaEjecucion())).thenReturn(List.of(registro));
+        when(consultarTracksUseCase.consultarEnSuZona(actor, actor, registro.fechaEjecucion()))
+                .thenReturn(new RegistrosDelDia(List.of(registro), registro.fechaEjecucion(), UTC));
         when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
         when(loadGuiaPort.porHabitos(any())).thenReturn(List.of());
@@ -145,7 +144,8 @@ class TracksDelDiaProyeccionServiceTest {
                 ExigenciaEvidencia.OPCIONAL, false, false, true, false, null, null, null, null, true, AHORA, AHORA);
         RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), actor, habito.id(),
                 LocalDate.of(2026, 8, 24), 10, TipoDia.DISCIPLINA, false, AHORA);
-        when(consultarTracksUseCase.consultar(actor, actor, registro.fechaEjecucion())).thenReturn(List.of(registro));
+        when(consultarTracksUseCase.consultarEnSuZona(actor, actor, registro.fechaEjecucion()))
+                .thenReturn(new RegistrosDelDia(List.of(registro), registro.fechaEjecucion(), UTC));
         when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
         when(loadGuiaPort.porHabitos(any())).thenReturn(List.of());
@@ -164,7 +164,8 @@ class TracksDelDiaProyeccionServiceTest {
         RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), actor, habito.id(),
                 LocalDate.of(2026, 8, 24), 10, TipoDia.DISCIPLINA, false, AHORA);
 
-        when(consultarTracksUseCase.consultar(actor, actor, registro.fechaEjecucion())).thenReturn(List.of(registro));
+        when(consultarTracksUseCase.consultarEnSuZona(actor, actor, registro.fechaEjecucion()))
+                .thenReturn(new RegistrosDelDia(List.of(registro), registro.fechaEjecucion(), UTC));
         when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
         when(loadGuiaPort.porHabitos(any())).thenReturn(List.of());
@@ -190,7 +191,8 @@ class TracksDelDiaProyeccionServiceTest {
         GuiaHabito guiaTardia = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habito.id(), 8, AHORA);
         guiaTardia.actualizarContenido("hacer lo nuevo", "asi de nuevo", null, null, null, null, AHORA);
 
-        when(consultarTracksUseCase.consultar(actor, actor, registro.fechaEjecucion())).thenReturn(List.of(registro));
+        when(consultarTracksUseCase.consultarEnSuZona(actor, actor, registro.fechaEjecucion()))
+                .thenReturn(new RegistrosDelDia(List.of(registro), registro.fechaEjecucion(), UTC));
         when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(horario));
         when(loadGuiaPort.porHabitos(any())).thenReturn(List.of(guiaTemprana, guiaTardia));
@@ -222,7 +224,8 @@ class TracksDelDiaProyeccionServiceTest {
         PreferenciaHorario preferencia = PreferenciaHorario.crear(actor, habito.id(), LocalTime.of(6, 30), null,
                 AHORA);
 
-        when(consultarTracksUseCase.consultar(actor, actor, registro.fechaEjecucion())).thenReturn(List.of(registro));
+        when(consultarTracksUseCase.consultarEnSuZona(actor, actor, registro.fechaEjecucion()))
+                .thenReturn(new RegistrosDelDia(List.of(registro), registro.fechaEjecucion(), UTC));
         when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(horario));
         when(loadGuiaPort.porHabitos(any())).thenReturn(List.of());

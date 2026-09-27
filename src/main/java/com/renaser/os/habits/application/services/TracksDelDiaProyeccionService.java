@@ -3,11 +3,11 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.evidence.api.RegistrosConEvidenciaFinder;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
+import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase.RegistrosDelDia;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.guia.LoadGuiaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.application.ports.out.renombre.LoadRenombreHabitoPort;
 import com.renaser.os.habits.domain.model.guia.GuiaHabito;
@@ -24,6 +24,8 @@ import com.renaser.os.habits.domain.model.renombre.RenombreHabito;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -34,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -59,60 +62,87 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     private final LoadHorarioHabitoPort loadHorarioPort;
     private final LoadPreferenciaHorarioPort loadPreferenciaPort;
     private final LoadGuiaHabitoPort loadGuiaPort;
-    /** Para resolver la ventana de entrega en la zona del participante y con ella los puntos en juego. */
-    private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     /** API publica de {@code evidence} (D-41): {@code habits} nunca consulta {@code evidencias} de frente. */
     private final RegistrosConEvidenciaFinder registrosConEvidenciaFinder;
     private final LoadRenombreHabitoPort loadRenombrePort;
     private final Clock clock;
+    /** V-5: la proyeccion entera en una transaccion de solo lectura (una conexion, sin flush). */
+    private final TransactionTemplate soloLectura;
 
     public TracksDelDiaProyeccionService(ConsultarTracksDelDiaUseCase consultarTracksUseCase,
                                           GenerarTracksDelDiaUseCase generarTracksUseCase,
                                           LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
                                           LoadPreferenciaHorarioPort loadPreferenciaPort,
                                           LoadGuiaHabitoPort loadGuiaPort,
-                                          ConsultarProgresoParticipanteHabitsPort progresoPort,
                                           RegistrosConEvidenciaFinder registrosConEvidenciaFinder,
-                                          LoadRenombreHabitoPort loadRenombrePort, Clock clock) {
+                                          LoadRenombreHabitoPort loadRenombrePort, Clock clock,
+                                          PlatformTransactionManager transactionManager) {
         this.consultarTracksUseCase = consultarTracksUseCase;
         this.generarTracksUseCase = generarTracksUseCase;
         this.loadHabitoPort = loadHabitoPort;
         this.loadHorarioPort = loadHorarioPort;
         this.loadPreferenciaPort = loadPreferenciaPort;
         this.loadGuiaPort = loadGuiaPort;
-        this.progresoPort = progresoPort;
         this.registrosConEvidenciaFinder = registrosConEvidenciaFinder;
         this.loadRenombrePort = loadRenombrePort;
         this.clock = clock;
+        this.soloLectura = new TransactionTemplate(transactionManager);
+        this.soloLectura.setReadOnly(true);
     }
 
     /**
      * "Hoy" en la zona del participante, nunca la del servidor (E-105, misma familia que E-91).
-     * Se resuelve aca y no en el controller porque es una decision de dominio: el dia de una
-     * persona empieza donde esa persona esta.
+     * Lo resuelve {@code ConsultarTracksDelDiaUseCase.consultarHoy} con el mismo progreso que
+     * autoriza: es una decision de dominio, el dia de una persona empieza donde esa persona esta.
      */
     @Override
     public List<TrackDelDiaConCatalogo> consultarHoyDe(UserId participanteId) {
-        LocalDate hoyEnSuZona = momentoDe(participanteId).hoy();
-        return consultar(participanteId, participanteId, hoyEnSuZona);
+        return consultarConRedDeSeguridad(participanteId, participanteId,
+                () -> consultarTracksUseCase.consultarHoy(participanteId, participanteId));
     }
 
     @Override
     public List<TrackDelDiaConCatalogo> consultar(UserId actorId, UserId participanteId, LocalDate fecha) {
-        List<RegistroHabito> registros = consultarTracksUseCase.consultar(actorId, participanteId, fecha);
-        if (registros.isEmpty() && actorId.equals(participanteId)) {
-            // Red de seguridad: el barrido nocturno es la via normal, pero alguien que activa
-            // su programa hoy mismo -o a quien la corrida de anoche no alcanzo- no tendria
-            // NINGUN habito hasta manana. Se generan solo los que todavia puede completar a
-            // esta hora (ver GenerarTracksDelDiaUseCase.generarDisponiblesAhora).
-            // Solo para el propio actor: un mentor mirando los habitos de su aprendiz no debe
-            // provocarle escrituras.
-            generarTracksUseCase.generarDisponiblesAhora(participanteId);
-            registros = consultarTracksUseCase.consultar(actorId, participanteId, fecha);
+        return consultarConRedDeSeguridad(actorId, participanteId,
+                () -> consultarTracksUseCase.consultarEnSuZona(actorId, participanteId, fecha));
+    }
+
+    /**
+     * V-5 (D-180). El camino normal —el dia ya tiene registros— es UNA transaccion de solo lectura
+     * con el progreso leido una sola vez: sin escrituras, sin flush ni copias de Hibernate para el
+     * dirty checking, y con una sola conexion del pool para las ocho consultas en vez de pedir y
+     * devolver una por consulta.
+     *
+     * <p>Red de seguridad: el barrido nocturno es la via normal, pero alguien que activa su
+     * programa hoy mismo -o a quien la corrida de anoche no alcanzo- no tendria NINGUN habito
+     * hasta manana. Si el dia viene vacio se generan solo los que todavia puede completar a esta
+     * hora (ver {@code GenerarTracksDelDiaUseCase.generarDisponiblesAhora}), en SU transaccion de
+     * escritura, y recien despues se vuelve a leer. Nunca se anida la escritura dentro de la
+     * lectura: seria pedir una segunda conexion teniendo ya una, y con el pool lleno eso se traba.
+     * Solo para el propio actor: un mentor mirando los habitos de su aprendiz no debe provocarle
+     * escrituras.
+     */
+    private List<TrackDelDiaConCatalogo> consultarConRedDeSeguridad(UserId actorId, UserId participanteId,
+                                                                    Supplier<RegistrosDelDia> lectura) {
+        ProyeccionDelDia primera = enSoloLectura(() -> proyectar(participanteId, lectura.get()));
+        if (!primera.tracks().isEmpty() || !actorId.equals(participanteId)) {
+            return primera.tracks();
         }
+        generarTracksUseCase.generarDisponiblesAhora(participanteId);
+        return enSoloLectura(() -> proyectar(participanteId,
+                consultarTracksUseCase.consultarEnSuZona(actorId, participanteId, primera.fecha()))).tracks();
+    }
+
+    private ProyeccionDelDia enSoloLectura(Supplier<ProyeccionDelDia> lectura) {
+        return soloLectura.execute(estado -> lectura.get());
+    }
+
+    private ProyeccionDelDia proyectar(UserId participanteId, RegistrosDelDia dia) {
+        List<RegistroHabito> registros = dia.registros();
         if (registros.isEmpty()) {
-            return List.of();
+            return new ProyeccionDelDia(dia.fecha(), List.of());
         }
+        LocalDate fecha = dia.fecha();
         Set<HabitoId> habitoIds = registros.stream().map(RegistroHabito::habitoId).collect(Collectors.toSet());
 
         Map<HabitoId, Habito> habitosPorId = loadHabitoPort.porIds(habitoIds).stream()
@@ -134,8 +164,11 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         // habitos por el titulo del catalogo aunque la persona los hubiera reemplazado.
         Map<HabitoId, RenombreHabito> renombresPorHabito = loadRenombrePort.deParticipante(participanteId).stream()
                 .collect(Collectors.toMap(RenombreHabito::habitoId, r -> r));
-        MomentoDelParticipante momento = momentoDe(participanteId);
-        return registros.stream()
+        // La zona del PARTICIPANTE, no la del servidor (regla 02, bug E-91): con el padron en
+        // America/Lima, calcular la ventana de entrega en UTC corre el plazo cinco horas y con el
+        // los puntos en juego. Llega del mismo progreso que autorizo la lectura (V-5).
+        MomentoDelParticipante momento = new MomentoDelParticipante(dia.zona(), clock.now());
+        return new ProyeccionDelDia(fecha, registros.stream()
                 .map(registro -> construirVista(registro, new CatalogoDeHabito(
                         habitosPorId.get(registro.habitoId()),
                         horariosPorHabito.getOrDefault(registro.habitoId(), List.of()),
@@ -143,21 +176,11 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
                         preferenciasPorHabito.get(registro.habitoId()),
                         renombresPorHabito.get(registro.habitoId())), momento,
                         conEvidencia.contains(registro.id().value())))
-                .toList();
+                .toList());
     }
 
-    /**
-     * La zona del PARTICIPANTE, no la del servidor (regla 02, bug E-91): con el padron en
-     * America/Lima, calcular la ventana de entrega en UTC corre el plazo cinco horas y con el
-     * los puntos en juego. Si el participante no tiene progreso (no deberia llegar aca, porque
-     * {@code consultarTracksUseCase} ya lo exige), se cae a UTC y los puntos quedan como si el
-     * habito no tuviera horario — nunca se rompe la lectura de la pantalla por esto.
-     */
-    private MomentoDelParticipante momentoDe(UserId participanteId) {
-        ZoneId zona = progresoPort.deParticipante(participanteId)
-                .map(progreso -> ZoneId.of(progreso.timezone()))
-                .orElse(ZoneId.of("UTC"));
-        return new MomentoDelParticipante(zona, clock.now());
+    /** La fecha que se leyo y su proyeccion: la fecha hace falta para releer despues de generar. */
+    private record ProyeccionDelDia(LocalDate fecha, List<TrackDelDiaConCatalogo> tracks) {
     }
 
     private static TrackDelDiaConCatalogo construirVista(RegistroHabito registro, CatalogoDeHabito catalogo,
@@ -242,10 +265,5 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
 
     /** Contra que instante y en que zona se mide la ventana de entrega de este participante. */
     private record MomentoDelParticipante(ZoneId zona, Instant ahora) {
-
-        /** La fecha de HOY para esta persona — no la del servidor (E-91, E-105). */
-        LocalDate hoy() {
-            return ahora.atZone(zona).toLocalDate();
-        }
     }
 }
