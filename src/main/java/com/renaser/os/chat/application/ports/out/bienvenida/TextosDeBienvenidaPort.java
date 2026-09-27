@@ -13,4 +13,10 @@ public interface TextosDeBienvenidaPort {
 
     /** El mensaje formal de bienvenida en el soporte. {@code {nombre}} = primer nombre del aprendiz. */
     String soporteFormal();
+
+    /**
+     * El mensaje del mentor en el chat del grupo estable (D-191). {@code {nombre}} = primer nombre del
+     * aprendiz, {@code {mentor}} = primer nombre del mentor.
+     */
+    String grupo();
 }

@@ -418,3 +418,28 @@ comentario siguen con `porId`, porque devuelven uno solo.
 Pruebas: `ComentarioMuroServiceTest.laPaginaResuelveLosAutoresEnUnaSolaConsulta` (falla contra el
 código anterior: `porIds` nunca se llamaba) y `unAutorInexistenteSaleSinNombre`.
 
+
+## 12. 2026-09-26 — Marca de bienvenida de grupo en `asignaciones_celula` (V71, D-191)
+
+**Qué cambia en el esquema.** `asignaciones_celula.bienvenida_enviada_en timestamptz` (nullable): cuándo el
+mentor le dio la bienvenida al aprendiz en el chat del grupo (OPE-01-01). NULL = pendiente. Un `CHECK`
+(`asignaciones_bienvenida_solo_aprendiz`) la limita a filas `APRENDIZ`. V71 marcó con `now()` todas las
+pertenencias de aprendiz que existían al desplegar, para que nadie que ya estaba en un grupo reciba una
+bienvenida atrasada.
+
+**Quién la toca.** Nadie por JPA: `AsignacionCelulaJpaEntity` no la mapea, así que guardar una asignación no
+la pisa. La lee y escribe `MarcaDeBienvenidaEnGrupoJdbcAdapter` (puerto `MarcaDeBienvenidaEnGrupoPort`), y
+hacia afuera se expone por `community.api.BienvenidaDeGrupo` (`BienvenidaDeGrupoService`):
+
+- `pendientes(grupo, instante)`: mentor vigente + pertenencias de aprendiz vigentes sin marca. Vacío si el
+  grupo es la recepción, no existe, está fuera de su periodo o no tiene mentor.
+- `marcarDada(asignacion, instante)`: `UPDATE … WHERE funcion = 'APRENDIZ' AND fin IS NULL AND
+  bienvenida_enviada_en IS NULL`; `true` solo si esa llamada afectó la fila. Se llama dentro de la
+  transacción de `chat` que guarda el mensaje.
+
+La marca es **por pertenencia**, no por persona: un traslado abre otra fila y el grupo nuevo le da su
+bienvenida. El mensaje lo escribe `chat` (`BienvenidaEnGrupoService`, `docs/MODULO_CHAT.md` §10).
+
+| Clase | Qué fija |
+|---|---|
+| `BienvenidaDeGrupoServiceTest` (5) | Solo las vigentes sin marca, con su mentor; recepción no; sin mentor no; grupo fuera de periodo no; marcar delega en el UPDATE condicional |
