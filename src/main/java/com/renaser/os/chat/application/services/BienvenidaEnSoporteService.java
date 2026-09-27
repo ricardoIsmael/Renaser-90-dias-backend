@@ -7,6 +7,7 @@ import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.Ori
 import com.renaser.os.chat.application.ports.out.bienvenida.DibujarBienvenidaPort;
 import com.renaser.os.chat.application.ports.out.bienvenida.MarcaDeBienvenidaPort;
 import com.renaser.os.chat.application.ports.out.bienvenida.TextosDeBienvenidaPort;
+import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.PrimerNombre;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
@@ -51,7 +52,13 @@ import java.util.Optional;
  *
  * <p><b>Un fallo se lanza para que el outbox reintente</b> (G-2). Antes se tragaba para no duplicar;
  * con la marca, reintentar ya no duplica. Lo que es configuración (sin remitente, remitente
- * suspendido) no es un fallo: no se manda y no se reintenta.
+ * suspendido, remitente que no es staff del soporte) no es un fallo: no se manda, no se marca y no
+ * se reintenta.
+ *
+ * <p><b>El remitente tiene que poder escribir en ESE soporte</b> (E-330): rol ADMIN/ALCHEMIST (el
+ * staff que {@link ConversacionSoporteService} mete en todo soporte) y participante de la
+ * conversación. Si no, {@code MensajeService} rechaza el envío con {@code NotAuthorizedException}, y
+ * como eso se lanzaba, el outbox lo reintentaba cada 5 minutos sin fin. Se mira antes de dibujar.
  *
  * <p><b>Sin almacenamiento de verdad no hay tarjeta</b> (G-5): con el adaptador de marcador (local,
  * pruebas) subir no guarda nada, y el mensaje apuntaría a una foto inexistente. Se manda solo el
@@ -74,11 +81,13 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
     private final TransactionTemplate transaccion;
     private final String remitenteEmail;
     private final TextosDeBienvenidaPort textos;
+    private final EsParticipantePort esParticipantePort;
 
     public BienvenidaEnSoporteService(DibujarBienvenidaPort dibujarPort, AlmacenamientoPort almacenamientoPort,
                                        EnviarMensajeUseCase enviarMensaje, UserSummaryFinder userSummaryFinder,
                                        MarcaDeBienvenidaPort marcaPort, TextosDeBienvenidaPort textos,
-                                       IdGenerator idGenerator, PlatformTransactionManager transactionManager,
+                                       EsParticipantePort esParticipantePort, IdGenerator idGenerator,
+                                       PlatformTransactionManager transactionManager,
                                        @Value("${renaser.bienvenida.remitente-email:}") String remitenteEmail) {
         this.dibujarPort = dibujarPort;
         this.almacenamientoPort = almacenamientoPort;
@@ -89,6 +98,21 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
         this.transaccion = new TransactionTemplate(transactionManager);
         this.remitenteEmail = remitenteEmail == null ? "" : remitenteEmail.strip();
         this.textos = textos;
+        this.esParticipantePort = esParticipantePort;
+    }
+
+    @Override
+    public void revisarRemitenteConfigurado() {
+        if (remitenteEmail.isEmpty()) {
+            return;
+        }
+        Optional<UserSummary> remitente = remitenteActivo();
+        if (remitente.isEmpty()) {
+            log.warn("[chat.bienvenida] BIENVENIDA_REMITENTE_EMAIL={} no existe o no está activo: bienvenida de soporte "
+                    + "apagada. Configura la cuenta de staff que firma (Kelin)", remitenteEmail);
+        } else if (!esStaffDelSoporte(remitente.get())) {
+            avisarRolFueraDelSoporte(remitente.get(), "todos los aprendices nuevos");
+        }
     }
 
     @Override
@@ -103,6 +127,9 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
         Optional<UserSummary> remitente = remitenteActivo();
         if (remitente.isEmpty()) {
             log.warn("[chat.bienvenida] el remitente {} no existe o no está activo: no se manda la bienvenida", remitenteEmail);
+            return;
+        }
+        if (!puedeEscribirEnElSoporte(remitente.get(), soporteId, aprendizId)) {
             return;
         }
         String nombre = userSummaryFinder.findById(aprendizId).map(u -> PrimerNombre.de(u.fullName())).orElse("");
@@ -120,6 +147,34 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
 
     private Optional<UserSummary> remitenteActivo() {
         return userSummaryFinder.findByEmail(remitenteEmail).filter(u -> u.status() == UserStatus.ACTIVE);
+    }
+
+    /**
+     * Lo mismo que {@code MensajeService} va a exigir al enviar, mirado ANTES de dibujar y sin lanzar
+     * (E-330): un remitente que no puede escribir es configuración inválida, y lanzar solo hacía que
+     * el outbox reintentara cada 5 minutos para siempre. Sin marca: la bienvenida se puede dar después.
+     */
+    private boolean puedeEscribirEnElSoporte(UserSummary remitente, ConversacionId soporteId, UserId aprendizId) {
+        if (!esStaffDelSoporte(remitente)) {
+            avisarRolFueraDelSoporte(remitente, "el aprendiz " + aprendizId + " (sin marca, se puede mandar a mano)");
+            return false;
+        }
+        if (!esParticipantePort.esParticipante(soporteId, remitente.id())) {
+            log.warn("[chat.bienvenida] BIENVENIDA_REMITENTE_EMAIL={} no participa del soporte {}: bienvenida de {} "
+                    + "apagada (sin marca, se puede mandar a mano)", remitenteEmail, soporteId, aprendizId);
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean esStaffDelSoporte(UserSummary remitente) {
+        return ConversacionSoporteService.STAFF_ADMINISTRATIVO.contains(remitente.role());
+    }
+
+    private void avisarRolFueraDelSoporte(UserSummary remitente, String afectados) {
+        log.warn("[chat.bienvenida] BIENVENIDA_REMITENTE_EMAIL={} tiene rol {}, no es ADMIN/ALCHEMIST del soporte: "
+                + "bienvenida apagada para {}. Configura la cuenta de staff que firma (Kelin)",
+                remitenteEmail, remitente.role(), afectados);
     }
 
     /**

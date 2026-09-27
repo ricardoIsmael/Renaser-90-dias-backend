@@ -5,28 +5,38 @@ import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.Env
 import com.renaser.os.chat.application.ports.out.bienvenida.DibujarBienvenidaPort;
 import com.renaser.os.chat.application.ports.out.bienvenida.MarcaDeBienvenidaPort;
 import com.renaser.os.chat.application.ports.out.bienvenida.TextosDeBienvenidaPort;
+import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.IdGenerator;
+import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -77,6 +87,22 @@ class BienvenidaEnSoporteServiceTest {
     private MarcaDeBienvenidaPort marcaPort;
     @Mock
     private PlatformTransactionManager transactionManager;
+    @Mock
+    private EsParticipantePort esParticipantePort;
+
+    private final ListAppender<ILoggingEvent> logs = new ListAppender<>();
+    private final Logger logger = (Logger) LoggerFactory.getLogger(BienvenidaEnSoporteService.class);
+
+    @BeforeEach
+    void escucharElLog() {
+        logs.start();
+        logger.addAppender(logs);
+    }
+
+    @AfterEach
+    void dejarDeEscuchar() {
+        logger.detachAppender(logs);
+    }
 
     private static final TextosDeBienvenidaPort TEXTOS =
             new TextosFijos("Esta tarjeta es para ti, {nombre}", "Hola {nombre}, tu ingreso está confirmado");
@@ -87,7 +113,7 @@ class BienvenidaEnSoporteServiceTest {
 
     private BienvenidaEnSoporteService servicio(String remitente, TextosDeBienvenidaPort textos) {
         return new BienvenidaEnSoporteService(dibujarPort, almacenamientoPort, enviarMensaje, userSummaryFinder,
-                marcaPort, textos, idGenerator, transactionManager, remitente);
+                marcaPort, textos, esParticipantePort, idGenerator, transactionManager, remitente);
     }
 
     @Test
@@ -206,9 +232,89 @@ class BienvenidaEnSoporteServiceTest {
         verify(marcaPort).marcar(eq(ANA), eq(ID_MENSAJE_1));
     }
 
+    @Test
+    @DisplayName("E-330: remitente MENTOR activo: no lanza (sin reintento infinito), no dibuja, no manda, no marca, y avisa")
+    void remitenteMentorApagaSinLanzar() {
+        prepararRemitente(UserRole.MENTOR, false);
+        // Como MensajeService: quien no participa del soporte no puede escribir en él.
+        lenient().when(enviarMensaje.enviar(any())).thenThrow(
+                new NotAuthorizedException("No eres participante de esta conversación"));
+
+        assertThatCode(() -> servicio(KELIN).darBienvenida(SOPORTE, ANA)).doesNotThrowAnyException();
+
+        verifyNoInteractions(dibujarPort, enviarMensaje);
+        verify(almacenamientoPort, never()).subir(anyString(), any(), anyString());
+        verify(marcaPort, never()).marcar(any(), any());
+        assertThat(avisos()).anySatisfy(w -> assertThat(w)
+                .contains("BIENVENIDA_REMITENTE_EMAIL=" + KELIN).contains("MENTOR")
+                .contains("no es ADMIN/ALCHEMIST del soporte").contains("bienvenida apagada"));
+    }
+
+    @Test
+    @DisplayName("E-330: remitente ALCHEMIST que no participa de ESE soporte: no lanza, no manda, no marca, y avisa")
+    void remitenteStaffQueNoParticipaApagaSinLanzar() {
+        prepararRemitente(UserRole.ALCHEMIST, false);
+        lenient().when(enviarMensaje.enviar(any())).thenThrow(
+                new NotAuthorizedException("No eres participante de esta conversación"));
+
+        assertThatCode(() -> servicio(KELIN).darBienvenida(SOPORTE, ANA)).doesNotThrowAnyException();
+
+        verifyNoInteractions(dibujarPort, enviarMensaje);
+        verify(marcaPort, never()).marcar(any(), any());
+        assertThat(avisos()).anySatisfy(w -> assertThat(w).contains("no participa del soporte " + SOPORTE));
+    }
+
+    @Test
+    @DisplayName("E-330: remitente ALCHEMIST participante del soporte manda como siempre, sin avisos")
+    void remitenteAlquimistaParticipanteManda() {
+        preparar("Ana", UserStatus.ACTIVE);
+
+        servicio(KELIN).darBienvenida(SOPORTE, ANA);
+
+        verify(esParticipantePort).esParticipante(SOPORTE, KELIN_ID);
+        verify(enviarMensaje, times(3)).enviar(any());
+        verify(marcaPort).marcar(eq(ANA), eq(ID_MENSAJE_1));
+        assertThat(avisos()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("E-330: al arrancar avisa si el remitente configurado es MENTOR")
+    void alArrancarAvisaRemitenteNoStaff() {
+        prepararRemitente(UserRole.MENTOR, false);
+
+        servicio(KELIN).revisarRemitenteConfigurado();
+
+        assertThat(avisos()).singleElement().satisfies(w -> assertThat(w)
+                .contains("MENTOR").contains("no es ADMIN/ALCHEMIST del soporte"));
+    }
+
+    @Test
+    @DisplayName("E-330: al arrancar no avisa con remitente ADMIN activo, ni consulta nada sin remitente")
+    void alArrancarSinAvisoConRemitenteValidoOVacio() {
+        prepararRemitente(UserRole.ADMIN, true);
+
+        servicio(KELIN).revisarRemitenteConfigurado();
+        servicio("").revisarRemitenteConfigurado();
+
+        assertThat(avisos()).isEmpty();
+        verify(userSummaryFinder, times(1)).findByEmail(anyString());
+    }
+
+    private List<String> avisos() {
+        return logs.list.stream().filter(e -> e.getLevel() == Level.WARN).map(ILoggingEvent::getFormattedMessage)
+                .toList();
+    }
+
+    private void prepararRemitente(UserRole rol, boolean participa) {
+        when(userSummaryFinder.findByEmail(KELIN)).thenReturn(Optional.of(
+                new UserSummary(KELIN_ID, "Kelin", KELIN, rol, UserStatus.ACTIVE)));
+        lenient().when(esParticipantePort.esParticipante(SOPORTE, KELIN_ID)).thenReturn(participa);
+    }
+
     private void preparar(String nombreAprendiz, UserStatus estadoKelin) {
         when(userSummaryFinder.findByEmail(KELIN)).thenReturn(Optional.of(
                 new UserSummary(KELIN_ID, "Kelin", KELIN, UserRole.ALCHEMIST, estadoKelin)));
+        lenient().when(esParticipantePort.esParticipante(SOPORTE, KELIN_ID)).thenReturn(true);
         when(userSummaryFinder.findById(ANA)).thenReturn(Optional.of(
                 new UserSummary(ANA, nombreAprendiz, null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(dibujarPort.dibujar(anyString())).thenReturn(TARJETA);

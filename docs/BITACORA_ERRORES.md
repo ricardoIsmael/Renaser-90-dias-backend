@@ -9934,3 +9934,38 @@ del propio worktree, que no se comparten.
 
 **Cómo evitar que vuelva a pasar.** `-Xmx600m` solo para pruebas focalizadas. Con agentes en paralelo, el log de un
 build lleva el nombre del worktree (`verify-<worktree>.log`), y el resultado se lee de los reportes de `target/` propios.
+
+## E-330 · Bienvenida de soporte con remitente `MENTOR`: `NotAuthorizedException: No eres participante de esta conversación`, reintentada cada 5 minutos sin tope
+
+**Síntoma.** En el e2e final (2026-09-26), con `BIENVENIDA_REMITENTE_EMAIL` apuntando a una cuenta ACTIVA con rol
+MENTOR, cada aprendiz nuevo dejaba:
+```
+ERROR ... SimpleAsyncUncaughtExceptionHandler : Unexpected exception occurred invoking async method: void com.renaser.os.chat.infrastructure.adapter.in.event.SoporteNacioBienvenidaListener.on(...)
+com.renaser.os.shared.domain.NotAuthorizedException: No eres participante de esta conversación
+  at MensajeService.requireParticipante(MensajeService.java:288)
+  at BienvenidaEnSoporteService.enviarTexto(BienvenidaEnSoporteService.java:171)
+```
+y el outbox de Modulith reentregaba la publicación cada 5 minutos, para siempre.
+
+**Causa real.** Los participantes de un chat de SOPORTE son el aprendiz y el staff `ADMIN`/`ALCHEMIST` activo
+(`ConversacionSoporteService.STAFF_ADMINISTRATIVO`). `BienvenidaEnSoporteService.remitenteActivo()` solo miraba que la
+cuenta existiera y estuviera ACTIVA, no el rol ni la participación: con un MENTOR seguía hasta `MensajeService`, que
+rechaza al no participante. Desde G-2 todo fallo se lanza para que el outbox reintente, así que un error de
+**configuración** (que ningún reintento arregla) se reintentaba sin fin.
+
+**Solución.** Antes de dibujar, el servicio exige lo mismo que `MensajeService`: rol `ADMIN`/`ALCHEMIST` y participante
+de ESE soporte (`EsParticipantePort`). Si no, lo trata como configuración inválida, igual que el remitente vacío o
+suspendido: `WARN` accionable (`BIENVENIDA_REMITENTE_EMAIL=… tiene rol MENTOR, no es ADMIN/ALCHEMIST del soporte:
+bienvenida apagada para el aprendiz …`), no manda, no lanza, no marca `mensajes_bienvenida`. Además
+`RemitenteDeBienvenidaAlArrancarListener` avisa al arrancar si el remitente no existe, no está activo o no es staff.
+Se eligió no lanzar (y no, por ejemplo, un reintento con tope) porque el problema no se arregla solo: reintentar solo
+ensucia el log; el aviso al arrancar y por evento hace visible la causa.
+**Límite:** como no lanza, el outbox da la publicación por completada; los aprendices que entren con la variable mal
+no reciben la bienvenida al corregirla y reiniciar: se mandan a mano (el `WARN` trae el id). Las publicaciones que ya
+estaban fallando antes del arreglo sí salen si el arreglo y la variable corregida llegan en el mismo despliegue.
+
+**Cómo evitar que vuelva a pasar.** `BienvenidaEnSoporteServiceTest` fija remitente `MENTOR` (no lanza, no manda, no
+marca, avisa), staff no participante, `ALCHEMIST` participante (manda) y el aviso al arrancar; los de `MENTOR` y no
+participante fallan contra el código viejo. `docs/MODULO_CHAT.md` §10 dice qué cuenta puede ser remitente. Regla
+general: cuando un caso de uso delega en otro que valida permisos, la precondición de configuración se mira ANTES y sin
+lanzar; lanzar queda para lo que un reintento puede arreglar.
