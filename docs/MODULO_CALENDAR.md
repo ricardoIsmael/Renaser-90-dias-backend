@@ -130,7 +130,7 @@ Rutas iguales a `/api/v1/calendar/events*` del repo viejo (misma app móvil ya p
 |---|---|---|---|
 | GET | `/api/v1/calendar/events?from=&to=&scope=` | `ListarEventosParaVisorUseCase` | rango máx. 90 días (no validado todavía, ver §6) |
 | GET | `/api/v1/calendar/events/{id}` | `ObtenerEventoUseCase` | |
-| POST | `/api/v1/calendar/events` | `CrearEventoUseCase` | ADMIN/ALCHEMIST (cualquier audiencia) o MENTOR (forzado a CELULA propia) |
+| POST | `/api/v1/calendar/events` | `CrearEventoUseCase` | solo ADMIN/ALCHEMIST, cualquier audiencia (D-186) |
 | PUT | `/api/v1/calendar/events/{id}` | `ActualizarEventoUseCase` | reenvío completo del formulario, igual que el repo viejo |
 | DELETE | `/api/v1/calendar/events/{id}` | `EliminarEventoUseCase` | borra portada (best-effort) + fila (cascada BD) |
 | PUT | `/api/v1/calendar/events/{id}/rsvp` | `ConfirmarAsistenciaUseCase` | `{occurrenceStart, status}` |
@@ -139,6 +139,16 @@ Rutas iguales a `/api/v1/calendar/events*` del repo viejo (misma app móvil ya p
 | POST | `/api/v1/calendar/events/{id}/portada/confirm` | `ConfirmarPortadaUseCase` | CL-3 |
 
 Autenticación: header `X-Actor-Id` (sin JWT todavía, per encargo). Autorización como guard clause en el servicio — `NotAuthorizedException` → 403 vía `GlobalExceptionHandler`.
+
+**Quién administra el calendario (D-186).** Crear, editar (PUT), eliminar, cancelar una ocurrencia y subir/confirmar la portada es **solo de ADMIN y ALCHEMIST** (`EventoService.requireRolCreador`). MENTOR, MENTOR_LEAD y TRAINEE reciben 403 `"No tienes permiso para administrar el calendario"`. Todos siguen **viendo** los eventos de su audiencia (`GET /events`, `GET /events/{id}`, RSVP) exactamente igual que antes. Como MENTOR todavía no tiene matriz de permisos (A-1, `UserRole.tiene` falla-abierto), el 403 lo da el servicio y no el interceptor de `@RequiresPermission(MANAGE_CALENDAR)`.
+
+> **Corregido 2026-09-26 (D-186).** La fila de `POST /events` decía «ADMIN/ALCHEMIST (cualquier audiencia) o MENTOR (forzado a CELULA propia)»: el MENTOR creaba sesiones que el servicio forzaba a la célula que lidera, y editaba/eliminaba/cancelaba solo las que él había creado (`requirePropioSiMentor`, `requireCelulaLiderada`, portado de `forceMentorCellAudience` del repo viejo). El dueño del proyecto decidió el 2026-09-26 que el mentor ya no administra eventos. Los eventos de célula que un mentor ya había creado **se quedan como están** (no se borraron ni migraron), pero él ya no puede tocarlos; los administra ADMIN/ALCHEMIST.
+
+**Dónde va el link de Meet / Drive de un evento.** En la ubicación del evento: `tipoUbicacion` + `valorUbicacion` (wire `locationType` + `locationValue`). Verificado 2026-09-26:
+
+- `tipoUbicacion` (enum Postgres `tipo_ubicacion`, obligatorio) admite exactamente `LLAMADA_INTERNA`, `WEBINAR`, `ZOOM`, `MEET`, `DIRECCION`, `ENLACE`; en el wire `INTERNAL_CALL`, `WEBINAR`, `ZOOM`, `MEET`, `ADDRESS`, `LINK` (otro valor → 400 `locationType invalido`). Un Meet va como `MEET`; un Drive u otro enlace, como `LINK` (`ENLACE`).
+- `valorUbicacion` es texto libre opcional (`valor_ubicacion text`), con tope en el dominio `Evento.MAX_UBICACION = 600` caracteres (se recorta con `trim()`; más largo → 400 `valorUbicacion supera 600 caracteres`; en blanco queda `null`). **No se valida que sea una URL.**
+- Lo devuelve `EventoResponse` (`locationType`, `locationValue`) tanto en `GET /api/v1/calendar/events/{id}` como en `GET /api/v1/calendar/events` (cada ocurrencia trae el evento completo en `event`), a cualquiera que esté en la audiencia del evento.
 
 ### 3.2 Vocabulario wire (D-36)
 
@@ -187,6 +197,7 @@ Los enums de dominio/BD están en ESPAÑOL; los DTOs REST hablan el vocabulario 
 3. **`EventRangeQuery` (rango máximo 90 días, `schema.ts`) no está validado.** El endpoint `GET /events` acepta cualquier `[from,to]` sin tope — el repo viejo lo limitaba a 90 días para no generar consultas gigantes. Fácil de agregar (una validación en el controller o el servicio) pero no se hizo por foco de tiempo; anotado para una pasada de dureza.
 4. **Catálogo de niveles/cursos para un panel admin (`GET /audience-options`)** — no construido, la app móvil v1 no lo necesita (`CreateEventPayload` en la app: "mobile v1 no expone gating por nivel/curso"). Si se construye un panel admin web, hace falta este endpoint y probablemente un método de catálogo en `academy.api` (hoy `AccesoCursoFinder` solo resuelve acceso, no lista cursos).
 5. **`MENTOR_LEAD` no tiene permisos definidos en `calendar`.** El repo viejo (service.ts) solo distingue ADMIN/ALCHEMIST (todo) y MENTOR (acotado a su célula) para crear/editar eventos — no hay ningún camino documentado para `LIDER_MENTORES`. Se lo dejó FUERA de `requireRolCreador` (recibe 403 igual que TRAINEE) en vez de inventarle un alcance. Si el negocio confirma qué puede hacer un líder de mentores en el calendario, es un cambio de una línea.
+   > **Corregido 2026-09-26 (D-186).** Desde esta fecha el MENTOR tampoco administra eventos: `requireRolCreador` acepta solo ADMIN/ALCHEMIST. Lo del repo viejo de arriba queda como historia.
 6. **`digests.ts` (avisos semanal/mensual genéricos)** — no es una regla de "un evento del calendario", es un nudge de engagement general. Fuera de alcance de este encargo (ver §1.7).
 
 ---
@@ -200,7 +211,7 @@ Los enums de dominio/BD están en ESPAÑOL; los DTOs REST hablan el vocabulario 
 - `EventoTest`: las reglas de `refineEventInput`/`audiencia_coherente`/`fin_no_contradictorio` de schema.ts, `reglasRecordatorioEfectivas()` (la semántica null/[] portada como flag).
 - `ResolverAudienciaTest`, `ProgresoNivelTest`: `canViewEvent`/`resolveLevelRank` puros.
 
-**Unitarias de `application/services`** (Mockito, sin Spring): `EventoServiceTest` (autorización por rol, célula forzada para MENTOR, borrado de portada, cancelación de ocurrencia), `ConfirmacionServiceTest` (RSVP, cancelación de recordatorios al confirmar ASISTE, validación de ocurrencia real), `RecordatorioServiceTest` (despacho publica el evento de dominio correcto, evento cancelado cancela en vez de despachar).
+**Unitarias de `application/services`** (Mockito, sin Spring): `EventoServiceTest` (autorización por rol, MENTOR rechazado al crear o editar incluso en su propia célula —D-186—, borrado de portada, cancelación de ocurrencia), `ConfirmacionServiceTest` (RSVP, cancelación de recordatorios al confirmar ASISTE, validación de ocurrencia real), `RecordatorioServiceTest` (despacho publica el evento de dominio correcto, evento cancelado cancela en vez de despachar).
 
 **Autorización negativa e integración con Testcontainers:** cerradas en la pasada del 2026-08-31 — ver §7.3 para la matriz completa y §7.4 para lo que quedó abierto.
 
@@ -249,6 +260,8 @@ Total: **76 pruebas nuevas** — 31 de autorización negativa, 37 de integració
 
 `EventoServiceAutorizacionTest` (nuevo, 28 pruebas) recorre las 8 operaciones de `EventoService` con `@ParameterizedTest`, de modo que **un caso de uso nuevo no pueda quedarse sin las pruebas de sus hermanos**: se agrega una línea a la `@MethodSource` y las tres reglas (rol sin permiso, mentor sobre evento ajeno, actor suspendido) se le aplican solas. Vive aparte de `EventoServiceTest` — que sigue cubriendo el comportamiento funcional — para que ninguna de las dos clases pase el techo de 300 líneas de CLAUDE.MD §5.4.8.
 
+> **Corregido 2026-09-26 (D-186).** Las filas de arriba nombran `requirePropioSiMentor` y «mentor ajeno»: ese guard ya no existe. Desde D-186 `EventoServiceAutorizacionTest` rechaza a MENTOR en las 6 operaciones como rol sin permiso (junto a TRAINEE y MENTOR_LEAD), y el caso «mentor sobre evento ajeno» pasó a «mentor aun sobre el evento de célula que él creó» (`mentorRechazadoAunSobreSuPropioEventoDeCelula`). También fija que ADMIN y ALCHEMIST siguen creando. Son 36 pruebas.
+
 `MENTOR_LEAD` recibe 403 en las 6 operaciones administrativas. Es el comportamiento deliberado de la pregunta abierta #5 de §6 (no se le inventó alcance), ahora **fijado por una prueba**: si el negocio define su alcance, el test falla y obliga a revisitar la decisión en vez de dejarla derivar en silencio.
 
 #### Integración — los 10 adaptadores de `adapter/out`
@@ -278,6 +291,8 @@ Total: **76 pruebas nuevas** — 31 de autorización negativa, 37 de integració
 `ConfirmarPortadaUseCase.confirmar(actor, eventoId, ruta)` acepta la `ruta` tal como la manda el cliente y no verifica que corresponda al prefijo que `SolicitarUrlPortadaUseCase` acaba de generar (`calendar/{eventoId}/portada-*`). El guard de autorización SÍ está y ahora está probado (`requireRolCreador` + `requirePropioSiMentor`), pero un MENTOR — rol deliberadamente acotado a su propia célula — puede fijar como portada de su evento cualquier objeto del bucket `renaser-files` y después leerlo por la URL prefirmada que devuelve `EventoService.coverUrlDe`.
 
 **No se corrigió**, por dos razones. Primera: no es un olvido de `calendar`. Ningún módulo de los que usan `AlmacenamientoPort` valida el prefijo de la ruta confirmada — `community`, `habits`, `onboarding`, `phasecontracts`, `rocks`, `support` y `users` siguen el mismo patrón (búsqueda de validación de prefijo en `src/main/java`: sin resultados). Segunda: arreglarlo solo acá dejaría el resto igual, y es un cambio de producción fuera del alcance de esta tarea. Se reporta para que se decida una vez, para todos los módulos a la vez.
+
+> **Corregido 2026-09-26 (D-186).** Esta sección quedó vieja por dos lados. (1) En `calendar` el agujero ya está cerrado desde el 2026-09-18: `EventoService.exigirPortadaDeEsteEvento` rechaza toda ruta que no empiece con `calendar/<eventoId>/` (pruebas `portadaDeOtroEventoSeRechaza`/`portadaDelPropioEventoPasa`). (2) El actor que describe —un MENTOR sobre sus propios eventos— ya no existe: desde D-186 el mentor no administra el calendario. Lo que dice sobre los otros módulos no se revisó en este cambio.
 
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 

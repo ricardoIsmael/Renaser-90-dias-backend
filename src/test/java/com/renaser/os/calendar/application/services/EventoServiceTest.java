@@ -129,50 +129,59 @@ class EventoServiceTest {
         assertThatThrownBy(() -> service.crear(comandoCrear(null))).isInstanceOf(NotAuthorizedException.class);
     }
 
+    /**
+     * D-186 (2026-09-26): el MENTOR ya no crea eventos, ni siquiera de la celula que lidera.
+     * Falla contra el codigo anterior, que le forzaba la audiencia a su celula y lo guardaba.
+     */
     @Test
-    void mentorFuerzaAudienciaCelulaConLaSuyaPropia() {
+    @DisplayName("D-186: un MENTOR que pide un evento de su propia celula es rechazado y no se guarda nada")
+    void mentorNoPuedeCrearEventoDeSuPropiaCelula() {
         UUID celulaLiderada = UUID.randomUUID();
         ProgresoParticipanteCalendar progresoMentor = new ProgresoParticipanteCalendar(0, ZoneId.of("America/Lima"),
                 RolUsuario.MENTOR, false, celulaLiderada);
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progresoMentor));
+        CrearEventoCommand deSuCelula = new CrearEventoCommand(actorId, "Sesion de celula", null,
+                Instant.parse("2026-09-01T19:00:00Z"), 60, ZoneId.of("America/Lima"), TipoUbicacion.MEET,
+                "https://meet.google.com/abc", TipoAudiencia.CELULA, null, null, celulaLiderada,
+                TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of());
+
+        assertThatThrownBy(() -> service.crear(deSuCelula)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveEventoPort, org.mockito.Mockito.never()).guardar(any());
+    }
+
+    @Test
+    void alquimistaPuedeCrearEventoConAudienciaTodos() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(RolUsuario.ALCHEMIST)));
         when(saveEventoPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // El comando pide TODOS y una celula distinta — el service debe ignorarlo y forzar la propia.
-        EventoVista vista = service.crear(comandoCrear(UUID.randomUUID()));
+        EventoVista vista = service.crear(comandoCrear(null));
 
-        assertThat(vista.evento().tipoAudiencia()).isEqualTo(TipoAudiencia.CELULA);
-        assertThat(vista.evento().celulaDestinoId()).isEqualTo(celulaLiderada);
+        assertThat(vista.evento().tipoAudiencia()).isEqualTo(TipoAudiencia.TODOS);
+        verify(saveEventoPort).guardar(any());
     }
 
+    /** D-186: tampoco edita un evento que el mismo creo antes del cambio (esos quedan como estan). */
     @Test
-    void mentorSinCelulaLideradaNoPuedeCrear() {
-        ProgresoParticipanteCalendar progresoMentor = new ProgresoParticipanteCalendar(0, ZoneId.of("America/Lima"),
-                RolUsuario.MENTOR, false, null);
-        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progresoMentor));
-
-        assertThatThrownBy(() -> service.crear(comandoCrear(null))).isInstanceOf(NotAuthorizedException.class);
-    }
-
-    @Test
-    void mentorNoPuedeEditarEventoQueNoCreo() {
+    void mentorNoPuedeEditarNiUnEventoQueElCreo() {
         EventoId eventoId = EventoId.of(UUID.randomUUID());
-        UserId otroCreador = UserId.of(UUID.randomUUID());
-        Evento eventoAjeno = Evento.crear(eventoId, "Sesion", null, Instant.parse("2026-09-01T19:00:00Z"), 60,
-                ZoneId.of("America/Lima"), TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS,
-                null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(), otroCreador,
+        UUID celula = UUID.randomUUID();
+        Evento eventoPropio = Evento.crear(eventoId, "Sesion", null, Instant.parse("2026-09-01T19:00:00Z"), 60,
+                ZoneId.of("America/Lima"), TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.CELULA,
+                null, null, celula, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(), actorId,
                 CLOCK);
 
         ProgresoParticipanteCalendar progresoMentor = new ProgresoParticipanteCalendar(0, ZoneId.of("America/Lima"),
-                RolUsuario.MENTOR, false, UUID.randomUUID());
+                RolUsuario.MENTOR, false, celula);
         when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progresoMentor));
-        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoAjeno));
+        lenient().when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoPropio));
 
         var command = new com.renaser.os.calendar.application.ports.in.evento.ActualizarEventoUseCase.ActualizarEventoCommand(
                 actorId, eventoId, "Otro titulo", null, Instant.parse("2026-09-01T19:00:00Z"), 60,
-                ZoneId.of("America/Lima"), TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS,
-                null, null, null, false, false, false, null, Set.of(), List.of());
+                ZoneId.of("America/Lima"), TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.CELULA,
+                null, null, celula, false, false, false, null, Set.of(), List.of());
 
         assertThatThrownBy(() -> service.actualizar(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveEventoPort, org.mockito.Mockito.never()).guardar(any());
     }
 
     @Test
@@ -198,8 +207,8 @@ class EventoServiceTest {
      *
      * <p>Antes de 2026-09-18, {@code confirmar} guardaba la ruta que mandara el cliente sin
      * mirarla. Esa misma ruta se firma para lectura y se BORRA del bucket al eliminar el evento —y
-     * hay un solo bucket fisico—, asi que un MENTOR con permiso de calendario sobre sus propios
-     * eventos podia leer o borrar la evidencia, el avatar o la firma de contrato de cualquiera.
+     * hay un solo bucket fisico—, asi que quien administrara el calendario (entonces tambien un
+     * MENTOR sobre sus propios eventos, hasta D-186) podia leer o borrar la evidencia, el avatar o la firma de contrato de cualquiera.
      *
      * <p>Las dos pruebas fallan contra el codigo anterior: la ruta ajena se guardaba sin chistar.
      */

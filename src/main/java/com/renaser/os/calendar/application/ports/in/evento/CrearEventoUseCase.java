@@ -20,11 +20,11 @@ public interface CrearEventoUseCase {
     EventoVista crear(CrearEventoCommand command);
 
     /**
-     * Un MENTOR solo puede crear sesiones CELULA de su propia celula — el service
-     * sobreescribe {@code tipoAudiencia}/{@code nivelMinimoId}/{@code cursoId}/{@code
-     * rolesDestino}/{@code celulaDestinoId} con lo que traiga el actor, igual que
-     * {@code forceMentorCellAudience} del repo viejo (service.ts). Lo que venga en el
-     * comando para esos campos se IGNORA si el actor es MENTOR.
+     * Solo ADMIN/ALCHEMIST crean eventos (D-186); la audiencia del comando se respeta tal cual.
+     *
+     * <blockquote><b>Corregido 2026-09-26 (D-186).</b> Decia que un MENTOR podia crear sesiones
+     * CELULA de su propia celula y que el service le sobreescribia la audiencia
+     * ({@code forceMentorCellAudience} del repo viejo). El MENTOR ya no crea eventos.</blockquote>
      */
     record CrearEventoCommand(UserId actorId, String titulo, String descripcion, Instant iniciaEn,
                                Integer duracionMinutos, ZoneId timezone, TipoUbicacion tipoUbicacion,

@@ -44,7 +44,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
-import java.util.UUID;
 
 @Service
 public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEventoUseCase, CrearEventoUseCase,
@@ -137,29 +136,15 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
     @Override
     @Transactional
     public EventoVista crear(CrearEventoCommand cmd) {
-        ProgresoParticipanteCalendar progreso = requireRolCreador(cmd.actorId());
-
-        TipoAudiencia tipoAudiencia = cmd.tipoAudiencia();
-        Integer nivelMinimoId = cmd.nivelMinimoId();
-        String cursoId = cmd.cursoId();
-        UUID celulaDestinoId = cmd.celulaDestinoId();
-        Set<RolUsuario> rolesDestino = cmd.rolesDestino();
-
-        if (progreso.rol() == RolUsuario.MENTOR) {
-            celulaDestinoId = requireCelulaLiderada(progreso);
-            tipoAudiencia = TipoAudiencia.CELULA;
-            nivelMinimoId = null;
-            cursoId = null;
-            rolesDestino = Set.of();
-        }
-        requireNivelExiste(tipoAudiencia, nivelMinimoId);
+        requireRolCreador(cmd.actorId());
+        requireNivelExiste(cmd.tipoAudiencia(), cmd.nivelMinimoId());
 
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
         Evento evento = Evento.crear(EventoId.of(idGenerator.newId()), cmd.titulo(), cmd.descripcion(),
                 cmd.iniciaEn(), cmd.duracionMinutos(), cmd.timezone(), cmd.tipoUbicacion(), cmd.valorUbicacion(),
-                tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, cmd.tipoEvento(), cmd.notificarAlCrear(),
-                cmd.recordarPorEmail(), cmd.recordatoriosPersonalizados(), cmd.recurrencia(), rolesDestino,
-                cmd.reglasRecordatorio(), cmd.actorId(), clock);
+                cmd.tipoAudiencia(), cmd.nivelMinimoId(), cmd.cursoId(), cmd.celulaDestinoId(), cmd.tipoEvento(),
+                cmd.notificarAlCrear(), cmd.recordarPorEmail(), cmd.recordatoriosPersonalizados(), cmd.recurrencia(),
+                cmd.rolesDestino(), cmd.reglasRecordatorio(), cmd.actorId(), clock);
         Evento guardado = saveEventoPort.guardar(evento);
         return new EventoVista(guardado, coverUrlDe(guardado));
     }
@@ -167,29 +152,15 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
     @Override
     @Transactional
     public EventoVista actualizar(ActualizarEventoCommand cmd) {
-        ProgresoParticipanteCalendar progreso = requireRolCreador(cmd.actorId());
+        requireRolCreador(cmd.actorId());
         Evento evento = requireEvento(cmd.eventoId());
-        requirePropioSiMentor(progreso, evento, cmd.actorId(), "editar");
-
-        TipoAudiencia tipoAudiencia = cmd.tipoAudiencia();
-        Integer nivelMinimoId = cmd.nivelMinimoId();
-        String cursoId = cmd.cursoId();
-        UUID celulaDestinoId = cmd.celulaDestinoId();
-        Set<RolUsuario> rolesDestino = cmd.rolesDestino();
-
-        if (progreso.rol() == RolUsuario.MENTOR) {
-            celulaDestinoId = requireCelulaLiderada(progreso);
-            tipoAudiencia = TipoAudiencia.CELULA;
-            nivelMinimoId = null;
-            cursoId = null;
-            rolesDestino = Set.of();
-        }
-        requireNivelExiste(tipoAudiencia, nivelMinimoId);
+        requireNivelExiste(cmd.tipoAudiencia(), cmd.nivelMinimoId());
 
         evento.actualizar(cmd.titulo(), cmd.descripcion(), cmd.iniciaEn(), cmd.duracionMinutos(), cmd.timezone(),
-                cmd.tipoUbicacion(), cmd.valorUbicacion(), tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId,
-                cmd.notificarAlCrear(), cmd.recordarPorEmail(), cmd.recordatoriosPersonalizados(), cmd.recurrencia(),
-                rolesDestino, cmd.reglasRecordatorio(), clock);
+                cmd.tipoUbicacion(), cmd.valorUbicacion(), cmd.tipoAudiencia(), cmd.nivelMinimoId(), cmd.cursoId(),
+                cmd.celulaDestinoId(), cmd.notificarAlCrear(), cmd.recordarPorEmail(),
+                cmd.recordatoriosPersonalizados(), cmd.recurrencia(), cmd.rolesDestino(), cmd.reglasRecordatorio(),
+                clock);
         Evento guardado = saveEventoPort.guardar(evento);
 
         // Los avisos ya generados nacieron de la version ANTERIOR — fuera del camino de
@@ -207,9 +178,8 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
     @Override
     @Transactional
     public void eliminar(UserId actorId, EventoId eventoId) {
-        ProgresoParticipanteCalendar progreso = requireRolCreador(actorId);
+        requireRolCreador(actorId);
         Evento evento = requireEvento(eventoId);
-        requirePropioSiMentor(progreso, evento, actorId, "eliminar");
 
         if (evento.portadaRuta() != null) {
             try {
@@ -224,9 +194,8 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
     @Override
     @Transactional
     public void cancelar(UserId actorId, EventoId eventoId, Instant inicioOcurrencia) {
-        ProgresoParticipanteCalendar progreso = requireRolCreador(actorId);
+        requireRolCreador(actorId);
         Evento evento = requireEvento(eventoId);
-        requirePropioSiMentor(progreso, evento, actorId, "cancelar una ocurrencia de");
 
         if (!evento.esRecurrente()) {
             throw new IllegalArgumentException(
@@ -255,9 +224,8 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
 
     @Override
     public UrlPortada solicitar(UserId actorId, EventoId eventoId, String tipoContenido) {
-        ProgresoParticipanteCalendar progreso = requireRolCreador(actorId);
-        Evento evento = requireEvento(eventoId);
-        requirePropioSiMentor(progreso, evento, actorId, "editar");
+        requireRolCreador(actorId);
+        requireEvento(eventoId); // 404 si no existe: no se firma subida para un evento inexistente
 
         String ruta = PREFIJO_RUTA + "/" + eventoId + "/portada-" + clock.now().toEpochMilli();
         URI url = almacenamientoPort.firmarSubida(ruta, tipoContenido, VALIDEZ_URL_SUBIDA);
@@ -267,9 +235,8 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
     @Override
     @Transactional
     public EventoVista confirmar(UserId actorId, EventoId eventoId, String ruta) {
-        ProgresoParticipanteCalendar progreso = requireRolCreador(actorId);
+        requireRolCreador(actorId);
         Evento evento = requireEvento(eventoId);
-        requirePropioSiMentor(progreso, evento, actorId, "editar");
 
         evento.fijarPortada(exigirPortadaDeEsteEvento(ruta, eventoId));
         Evento guardado = saveEventoPort.guardar(evento);
@@ -284,13 +251,13 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
      * <p><b>El agujero que cierra (2026-09-18).</b> {@code confirmar} guardaba la ruta que mandara
      * el cliente, sin mirarla. Esa misma ruta se usa despues en DOS lugares peligrosos: se firma
      * para lectura en {@code coverUrlDe}, y se BORRA del bucket en {@code eliminar}. Como hay un
-     * solo bucket fisico, un MENTOR con permiso de calendario sobre sus propios eventos podia leer
-     * o borrar cualquier objeto del sistema —evidencias, firmas de contrato, avatares— apuntando su
-     * portada ahi y despues eliminando el evento.
+     * solo bucket fisico, quien administrara el calendario (entonces tambien un MENTOR, sobre sus
+     * propios eventos) podia leer o borrar cualquier objeto del sistema —evidencias, firmas de
+     * contrato, avatares— apuntando su portada ahi y despues eliminando el evento.
      *
-     * <p>Se exige el evento y no solo el prefijo del modulo: la autorizacion que ya corrio arriba
-     * ({@code requirePropioSiMentor}) es sobre ESTE evento, asi que ese es exactamente el alcance
-     * que el actor tiene derecho a tocar. Coincide con lo que emite {@code solicitar}, que arma
+     * <p>Se exige el evento y no solo el prefijo del modulo: la operacion es sobre ESTE evento,
+     * asi que ese es exactamente el alcance que el actor tiene derecho a tocar. Coincide con lo
+     * que emite {@code solicitar}, que arma
      * {@code <prefijo>/<eventoId>/portada-<instante>}: nada que el sistema haya firmado queda fuera.
      *
      * <p>{@code null} sigue siendo valido: es como se quita una portada.
@@ -323,31 +290,21 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
                 .orElseThrow(() -> new NoSuchElementException("Evento no encontrado: " + eventoId));
     }
 
-    /** Crear/editar eventos es de rol administrativo (ADMIN/ALCHEMIST) o MENTOR (acotado a
-     * su propia celula) — un TRAINEE no administra el calendario. MENTOR_LEAD queda fuera
-     * hasta que se confirme su alcance (docs/MODULO_CALENDAR.md §6). */
-    private ProgresoParticipanteCalendar requireRolCreador(UserId actorId) {
+    /** Crear, editar, eliminar y cancelar eventos es SOLO de ADMIN/ALCHEMIST (D-186) — ni
+     * TRAINEE, ni MENTOR, ni MENTOR_LEAD administran el calendario. Todos siguen VIENDO los
+     * eventos de su audiencia: eso lo decide {@code AccesoEventoService}, no este guard.
+     *
+     * <blockquote><b>Corregido 2026-09-26 (D-186).</b> Decia <i>"Crear/editar eventos es de rol
+     * administrativo (ADMIN/ALCHEMIST) o MENTOR (acotado a su propia celula)"</i>: el MENTOR
+     * creaba sesiones forzadas a la celula que lidera y solo tocaba las que el habia creado
+     * ({@code requirePropioSiMentor}/{@code requireCelulaLiderada}). El dueño del proyecto
+     * decidio sacarle esa capacidad; los eventos que un mentor ya creo quedan como estan.</blockquote> */
+    private void requireRolCreador(UserId actorId) {
         ProgresoParticipanteCalendar progreso = accesoEventoService.requireProgreso(actorId);
-        boolean autorizado = progreso.rol() == RolUsuario.ADMIN || progreso.rol() == RolUsuario.ALCHEMIST
-                || progreso.rol() == RolUsuario.MENTOR;
+        boolean autorizado = progreso.rol() == RolUsuario.ADMIN || progreso.rol() == RolUsuario.ALCHEMIST;
         if (!autorizado) {
             throw new NotAuthorizedException("No tienes permiso para administrar el calendario");
         }
-        return progreso;
-    }
-
-    private void requirePropioSiMentor(ProgresoParticipanteCalendar progreso, Evento evento, UserId actorId,
-                                        String accion) {
-        if (progreso.rol() == RolUsuario.MENTOR && (evento.creadoPor() == null || !evento.creadoPor().equals(actorId))) {
-            throw new NotAuthorizedException("Solo puedes " + accion + " los eventos que creaste");
-        }
-    }
-
-    private UUID requireCelulaLiderada(ProgresoParticipanteCalendar progreso) {
-        if (progreso.celulaId() == null) {
-            throw new NotAuthorizedException("Todavia no lideras una celula — no puedes administrar sesiones");
-        }
-        return progreso.celulaId();
     }
 
     private void requireNivelExiste(TipoAudiencia tipoAudiencia, Integer nivelMinimoId) {

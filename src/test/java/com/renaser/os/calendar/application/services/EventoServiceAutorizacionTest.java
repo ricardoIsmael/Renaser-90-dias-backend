@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -47,6 +48,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -68,6 +71,7 @@ class EventoServiceAutorizacionTest {
     private static final UserId ACTOR_ID = UserId.of(UUID.randomUUID());
     private static final UserId OTRO_CREADOR = UserId.of(UUID.randomUUID());
     private static final EventoId EVENTO_ID = EventoId.of(UUID.randomUUID());
+    private static final UUID CELULA_ID = UUID.randomUUID();
     /** Identidad fija: con el id entrando por el puerto IdGenerator, crear() ya no sortea el EventoId. */
     private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000002");
 
@@ -119,7 +123,7 @@ class EventoServiceAutorizacionTest {
                 operacion("confirmarPortada", s -> s.confirmar(ACTOR_ID, EVENTO_ID, "calendar/x/portada-1")));
     }
 
-    /** Las 5 anteriores que ademas cargan el evento, y por eso pasan por {@code requirePropioSiMentor()}. */
+    /** Las 5 anteriores que ademas cargan el evento. */
     static Stream<Named<Consumer<EventoService>>> operacionesSobreUnEventoExistente() {
         return operacionesDeAdministracion().filter(op -> !"crear".equals(op.getName()));
     }
@@ -133,7 +137,7 @@ class EventoServiceAutorizacionTest {
     }
 
     static Stream<Arguments> rolesSinPermisoPorOperacion() {
-        return Stream.of(RolUsuario.TRAINEE, RolUsuario.MENTOR_LEAD)
+        return Stream.of(RolUsuario.TRAINEE, RolUsuario.MENTOR_LEAD, RolUsuario.MENTOR)
                 .flatMap(rol -> operacionesDeAdministracion().map(op -> Arguments.of(rol, op)));
     }
 
@@ -143,19 +147,38 @@ class EventoServiceAutorizacionTest {
     @MethodSource("rolesSinPermisoPorOperacion")
     @DisplayName("CLAUDE.MD §0.3: un rol sin permiso no administra el calendario -> 403")
     void rolSinPermisoRechazadoEnCadaOperacionDeAdministracion(RolUsuario rol, Consumer<EventoService> operacion) {
-        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(Optional.of(progreso(rol, false, null)));
+        // Con celula: un MENTOR que lidera una es justo el que antes de D-186 SI pasaba.
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(Optional.of(progreso(rol, false, CELULA_ID)));
 
         assertThatThrownBy(() -> operacion.accept(service)).isInstanceOf(NotAuthorizedException.class);
     }
 
+    /**
+     * D-186: el MENTOR ya no administra el calendario, ni siquiera los eventos que el mismo creo
+     * para su celula (los que ya existen se quedan, pero no los puede tocar). Falla contra el
+     * codigo anterior: {@code requirePropioSiMentor} lo dejaba pasar sobre un evento propio.
+     */
     @ParameterizedTest(name = "{0}")
     @MethodSource("operacionesSobreUnEventoExistente")
-    @DisplayName("CLAUDE.MD §0.3: un MENTOR no toca eventos que no creo -> 403")
-    void mentorRechazadoSobreEventoAjenoEnCadaOperacion(Consumer<EventoService> operacion) {
+    @DisplayName("D-186: un MENTOR no toca ni los eventos que el creo para su celula -> 403")
+    void mentorRechazadoAunSobreSuPropioEventoDeCelula(Consumer<EventoService> operacion) {
         when(progresoPort.deParticipante(ACTOR_ID))
-                .thenReturn(Optional.of(progreso(RolUsuario.MENTOR, false, UUID.randomUUID())));
+                .thenReturn(Optional.of(progreso(RolUsuario.MENTOR, false, CELULA_ID)));
+        lenient().when(loadEventoPort.byId(EVENTO_ID)).thenReturn(Optional.of(eventoDeCelulaCreadoPorElActor()));
 
         assertThatThrownBy(() -> operacion.accept(service)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveEventoPort, never()).guardar(any());
+        verify(saveEventoPort, never()).eliminar(any());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @EnumSource(value = RolUsuario.class, names = {"ADMIN", "ALCHEMIST"})
+    @DisplayName("D-186: ADMIN y ALCHEMIST siguen creando eventos")
+    void adminYAlquimistaSiguenCreando(RolUsuario rol) {
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(Optional.of(progreso(rol, false, null)));
+        when(saveEventoPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        assertThat(service.crear(comandoCrear()).evento().tipoAudiencia()).isEqualTo(TipoAudiencia.TODOS);
     }
 
     // ─── §0.3, mitad 2: actor SUSPENDIDO -> 403 ─────────────────────────────────
@@ -215,6 +238,12 @@ class EventoServiceAutorizacionTest {
         return Evento.crear(EVENTO_ID, "Sesion", null, INICIA_EN, 60, ZONA, TipoUbicacion.MEET,
                 "https://meet.google.com/abc", audiencia, null, null, null, tipo, false, false, false, null, roles,
                 List.of(), creador, CLOCK);
+    }
+
+    private static Evento eventoDeCelulaCreadoPorElActor() {
+        return Evento.crear(EVENTO_ID, "Sesion de celula", null, INICIA_EN, 60, ZONA, TipoUbicacion.MEET,
+                "https://meet.google.com/abc", TipoAudiencia.CELULA, null, null, CELULA_ID, TipoEvento.ESPONTANEO,
+                false, false, false, null, Set.of(), List.of(), ACTOR_ID, CLOCK);
     }
 
     private static CrearEventoCommand comandoCrear() {

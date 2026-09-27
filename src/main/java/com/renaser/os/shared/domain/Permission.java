@@ -107,12 +107,16 @@ public enum Permission {
      * {@code EventoService.requireRolCreador} -> "No tienes permiso para administrar el
      * calendario".
      *
-     * <p>Roles que hoy lo satisfacen: ADMIN, ALCHEMIST, MENTOR. <b>MENTOR_LEAD no</b> — es
-     * exactamente el tipo de omision que este vocabulario existe para hacer visible.
+     * <p>Roles que hoy lo satisfacen: ADMIN y ALCHEMIST (D-186). <b>MENTOR_LEAD no</b> — es
+     * exactamente el tipo de omision que este vocabulario existe para hacer visible. <b>MENTOR
+     * tampoco</b>: como MENTOR todavia no tiene matriz (A-1, falla-abierto en
+     * {@code UserRole}), el 403 lo da {@code requireRolCreador}, no el interceptor.
      *
-     * <p>Las dos restricciones extra son de relacion y se quedan en el servicio:
-     * "Todavia no lideras una celula — no puedes administrar sesiones" y "Solo puedes
-     * editar/eliminar/cancelar los eventos que creaste".
+     * <blockquote><b>Corregido 2026-09-26 (D-186).</b> Decia <i>"ADMIN, ALCHEMIST, MENTOR"</i> y
+     * listaba dos restricciones de relacion para el mentor ("Todavia no lideras una celula" y
+     * "Solo puedes editar/eliminar/cancelar los eventos que creaste"). El dueño del proyecto
+     * saco al MENTOR de la administracion del calendario; esas dos restricciones ya no
+     * existen.</blockquote>
      */
     MANAGE_CALENDAR,
 
