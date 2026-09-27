@@ -10637,3 +10637,53 @@ tablas. Agrupar el mes 3 como semanas 9 a 13 queda por confirmar con el dueño.
 **Cómo evitar que vuelva a pasar.** Una regla de calendario que vive en los dos lados se prueba con las MISMAS tablas en
 los dos (`SemanaProgramaTest` ↔ `periodoDelPrograma.test.ts`).
 
+## E-380 · Un solo toque en un Despertar o Dormir ya cumplido: «No pudimos registrar la hora / Este registro no puede completarse: COMPLETADO»
+
+**Síntoma (2026-09-27, e2e web TRN-02).** No hacía falta el doble toque: tocar la tarjeta o «VER» de un Despertar o
+Dormir ya cumplido daba ese error, aunque el registro estaba bien.
+
+**Causa real.** `TrainingScreen` revisaba si el hábito era Despertar antes de revisar si ya estaba hecho, y un 409
+`COMPLETADO` se mostraba como error.
+
+**Solución.** Frontend `2fea716` (rama `app-detalles`): el segundo toque sale solo si el primero terminó, un 409
+`COMPLETADO` cuenta como ya registrado (`cierreDeRegistro.ts`), y lo cumplido avisa «Ya está cumplido / Este hábito ya
+quedó registrado hoy.».
+
+**Cómo evitar que vuelva a pasar.** Un 409 que dice «ya está hecho» no es un error para la persona; se prueba con el
+doble toque y con el toque sobre algo cumplido.
+
+## E-381 · «¡Excelente Progreso! 🦅 / Avanzando a: …» no avanzaba, y antes salía «Lección no disponible 🔒» con la misma lección
+
+**Síntoma (e2e web TRB-04).** Al completar una lección salía «Lección no disponible 🔒 / Para acceder a esta lección
+primero debes completar la lección anterior: "<la recién completada>"», y después la persona se quedaba en esa lección.
+
+**Causa real.** La pantalla avanzaba en el mismo toque, cuando su estado todavía veía pendiente la lección recién
+completada, y la regla secuencial la frenaba.
+
+**Solución.** Frontend `c6e1132`: `progresionDeLecciones.ts` cuenta la recién completada; quien se salta una sigue frenado.
+
+**Cómo evitar que vuelva a pasar.** La regla de avance vive en una función pura con prueba, no en el estado de la pantalla.
+
+## E-382 · SIN ARREGLAR (backend) — Las pastillas de días del editor dicen «L 28 09:00» aunque desde el 28 rige 09:30
+
+**Síntoma (e2e web TRN-13, `TRN-13-3.png`).** Contradicen la línea nueva «Desde el lunes 28 de septiembre: 09:30».
+
+**Causa real.** `GET /api/v1/habit-preferences/{id}/weekdays` aplica el cambio pendiente solo cuando su fecha ya llegó
+(`PreferenciaHorarioService.consultar`), y la app no mezcla los dos datos.
+
+**Estado.** Pregunta para el dueño: si las pastillas deben mostrar la hora nueva desde la fecha del cambio (pide un
+cambio en el backend).
+
+## E-383 · SIN ARREGLAR — «Confirmar mi firma» (Pacto) y «CONFIRMAR MI DÍA 1» quedan apagados sin decir qué falta
+
+**Síntoma.** Mismo patrón que ONB-02: el botón se apaga hasta firmar (`PactoScreen.tsx:279`) o hasta elegir fecha
+(`ActivarProgramaScreen.tsx:203`), y el aviso «Firma requerida…» que ya estaba escrito nunca sale. En el Pacto al menos
+se lee «SIN FIRMAR».
+
+**Estado.** En ONB-02 se dejó el botón encendido y el aviso al tocarlo (frontend `7ad5c89`). Se pregunta al dueño si se
+hace lo mismo acá.
+
+## E-384 · Menor, sin arreglar — `textoCambioProgramado` diría «Desde el mañana: 09:30» si el servidor no manda la fecha
+
+**Síntoma.** Solo de lectura de código (`PlanScreen.tsx`). Hoy no se ve: el servidor manda la fecha siempre (D-91).
+
