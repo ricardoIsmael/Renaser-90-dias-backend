@@ -308,6 +308,8 @@ los interruptores de "Notificaciones & Alarmas" en Yo **no guardan nada**.
 
 20. **Retroceder el día:** un hábito propio o con horario que ya venía corriendo se mantiene activo (D-200, en
     curso). Responde lo que D-196 había dejado abierto.
+    > **Actualizado 2026-09-27 (D-216).** Incluye el hábito propio creado el mismo día del retroceso, que todavía no
+    > tenía registros: el e2e (TZ-15) lo encontró con candado. Crearlo ya cuenta como que venía corriendo.
 21. **Chats:** la lista se ordena por el último mensaje, como WhatsApp (hecho). Tocar el círculo del chat abre la
     información del grupo, como WhatsApp (en curso).
 22. **Bienvenida en el soporte:** sale del programa, no de la cuenta de Kelin (D-199, en curso), detrás del

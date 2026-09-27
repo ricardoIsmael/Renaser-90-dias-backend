@@ -251,34 +251,73 @@ class MisHabitosServiceTest {
     }
 
     /**
-     * La persona hizo su habito del 30 al 32 y un admin la retrocedio al 25. El habito se sigue
-     * generando ({@code RegistroService}), asi que "Mis habitos" no puede ponerle candado: las dos
-     * pantallas tienen que coincidir. Contra el codigo viejo viaja bloqueado, con 5 dias por delante.
+     * Un habito del CATALOGO que arranca tarde, como la Audioterapia (dia 11). Su {@code dia_inicio}
+     * es del programa, no de la persona: que ya corrio solo lo prueban sus registros (D-200).
+     *
+     * <p><b>Corregido 2026-09-27 (D-216).</b> Estas dos pruebas usaban el habito PERSONAL del dia 30.
+     * Desde D-216 crear un habito personal ya prueba que la persona llego a su primer dia, asi que
+     * con uno personal no se leen registros; el criterio de los registros se prueba con el catalogo.
+     */
+    private HabitoId conHabitoDelCatalogoQueArrancaElDia11(int diaDeHoy) {
+        Habito audioterapia = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "AUDIOTERAPIA SEMANAL",
+                TipoHabito.CHECKBOX, new DetallesHabito("desc", "MENTE", ExigenciaEvidencia.OPCIONAL, false, false),
+                CLOCK.now());
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(diaDeHoy)));
+        when(loadPort.catalogoActivo()).thenReturn(List.of(audioterapia));
+        when(loadPort.personalesActivosDe(actor)).thenReturn(List.of());
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), audioterapia.id(), 11, 90, TipoDia.TODOS,
+                        DISPARO, null, CLOCK.now())));
+        return audioterapia.id();
+    }
+
+    /**
+     * La persona hizo la Audioterapia del 11 al 12 y un admin la retrocedio al 9. Se sigue generando
+     * ({@code RegistroService}), asi que "Mis habitos" no puede ponerle candado: las dos pantallas
+     * tienen que coincidir. Contra el codigo anterior a D-200 viajaba bloqueada, con 2 dias por delante.
      */
     @Test
     void unHabitoQueYaCorrioNoViajaBloqueadoDespuesDeUnRetroceso() {
-        HabitoId id = conHabitoPersonalDelDia30(25);
+        HabitoId id = conHabitoDelCatalogoQueArrancaElDia11(9);
         when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(actor, List.of(id)))
-                .thenReturn(java.util.Map.of(id, 32));
+                .thenReturn(java.util.Map.of(id, 12));
+
+        var vista = service.consultar(actor).getFirst();
+
+        assertThat(vista.bloqueado()).isFalse();
+        assertThat(vista.diasParaDesbloqueo()).isZero();
+        assertThat(vista.diaDesbloqueo()).as("sigue diciendo desde que dia existe").isEqualTo(11);
+    }
+
+    /** Lo que nunca corrio desde su dia sigue esperandolo, igual que en la generacion. */
+    @Test
+    void unHabitoQueNuncaCorrioDesdeSuDiaSigueConCandado() {
+        HabitoId id = conHabitoDelCatalogoQueArrancaElDia11(9);
+        when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(actor, List.of(id)))
+                .thenReturn(java.util.Map.of(id, 10));
+
+        var vista = service.consultar(actor).getFirst();
+
+        assertThat(vista.bloqueado()).isTrue();
+        assertThat(vista.diasParaDesbloqueo()).isEqualTo(2);
+    }
+
+    /**
+     * TZ-15 (e2e del 2026-09-27, D-216): la persona creo su habito el dia 30, cuando los registros de
+     * ese dia ya estaban generados, y el mismo dia un admin la retrocedio al 25. Todavia no tiene
+     * ningun registro, pero su {@code dia_inicio} es el dia en que lo creo: llego a ese dia con el
+     * habito ya andando, asi que venia corriendo (D-200). Contra el codigo viejo viajaba con candado
+     * y "FALTAN 5 DIAS", y no se leia ningun registro que lo desmintiera.
+     */
+    @Test
+    void unHabitoPropioCreadoAntesDelRetrocesoNoViajaBloqueadoAunqueNoTengaRegistros() {
+        conHabitoPersonalDelDia30(25);
 
         var vista = service.consultar(actor).getFirst();
 
         assertThat(vista.bloqueado()).isFalse();
         assertThat(vista.diasParaDesbloqueo()).isZero();
         assertThat(vista.diaDesbloqueo()).as("sigue diciendo desde que dia existe").isEqualTo(30);
-    }
-
-    /** Lo que nunca corrio desde su dia sigue esperandolo, igual que en la generacion. */
-    @Test
-    void unHabitoQueNuncaCorrioDesdeSuDiaSigueConCandado() {
-        HabitoId id = conHabitoPersonalDelDia30(25);
-        when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(actor, List.of(id)))
-                .thenReturn(java.util.Map.of(id, 29));
-
-        var vista = service.consultar(actor).getFirst();
-
-        assertThat(vista.bloqueado()).isTrue();
-        assertThat(vista.diasParaDesbloqueo()).isEqualTo(5);
     }
 
     /** Sin habitos cuyo primer dia no llego, no se lee ningun registro. */

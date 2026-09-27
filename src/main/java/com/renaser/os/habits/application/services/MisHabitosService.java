@@ -93,9 +93,8 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
 
         // El habito existe para el aprendiz desde el `dia_inicio` MAS CHICO de sus horarios: si
         // tiene varios tramos, el primero es el que lo habilita (HorariosDelHabito.primerDia).
-        Map<HabitoId, HorariosDelHabito> horariosPorHabito = horarios.stream()
-                .collect(Collectors.groupingBy(HorarioHabito::habitoId,
-                        Collectors.collectingAndThen(Collectors.toList(), HorariosDelHabito::de)));
+        // D-216: con el habito al lado, porque el primer dia de uno PERSONAL ya esta alcanzado.
+        Map<HabitoId, HorariosDelHabito> horariosPorHabito = HorariosDelHabito.porHabito(habitos, horarios);
 
         int diaDelAprendiz = primerDiaPlanificable(requireProgreso(actor).diaPrograma());
         Map<HabitoId, Integer> yaGenerados = diasMasAltosYaGenerados(actor, diaDelAprendiz, horariosPorHabito);
@@ -115,7 +114,8 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
      * pero que YA CORRIO (se retrocedio a la persona por debajo de ese dia) no viaja bloqueado,
      * porque se sigue generando ({@code RegistroService}). "Ya corrio" se deriva del snapshot
      * {@code registros_habito.dia_programa}, en UNA consulta y solo para los habitos cuyo primer
-     * dia todavia no llego: sin candidatos no se lee nada.
+     * dia todavia no llego: sin candidatos no se lee nada. Un habito PERSONAL nunca es candidato:
+     * crearlo ya prueba que la persona llego a su primer dia (D-216, TZ-15).
      */
     private Map<HabitoId, Integer> diasMasAltosYaGenerados(UserId actor, int diaDelAprendiz,
                                                            Map<HabitoId, HorariosDelHabito> horariosPorHabito) {

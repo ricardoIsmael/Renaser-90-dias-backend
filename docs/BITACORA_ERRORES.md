@@ -10580,3 +10580,39 @@ tope (`leerOtraFallaDeS3Sube`), y el doble en memoria de `FotoDelGrupoIT` implem
 **Cómo evitar que vuelva a pasar.** Cuando dos encargos en paralelo pueden tocar un puerto de `shared`, el que
 coordina le asigna ese puerto a UNO solo, y el otro usa lo que ese agregue. Al repartir el trabajo, listar los
 puertos compartidos que cada encargo podría extender.
+
+## E-375 · Retroceder el día le pone candado a un hábito propio recién creado: `"unlockDay":30,"daysUntilUnlock":5,"locked":true`
+
+**Síntoma (e2e TZ-15, 2026-09-27, P0).** `e2e-t-ajustado` estaba en su día 30 y creó «Caminata E2E» (`POST /habits` →
+201). El mismo día un admin la pasó al 25 (`PUT /admin/trainees/{id}/program-day` → 204). Antes, «Mis hábitos»
+(`GET /api/v1/habits`) la daba `locked:false, unlockDay:30, daysUntilUnlock:0`; después,
+`{"title":"Caminata E2E",…,"unlockDay":30,"daysUntilUnlock":5,"locked":true}`. Y desde el día siguiente no se generaba:
+iba a esperar a volver al día 30. Lo demás del caso estaba bien (los tracks de hoy no se rehacen, la bitácora anota 30→25).
+
+**Causa real.** `MisHabitosService.crear` le pone al horario de un hábito PERSONAL `dia_inicio` = el día en que la persona lo
+crea. D-200 decide «ya corrió» solo con los registros (`registros_habito.dia_programa ≥ dia_inicio`), y un hábito creado
+después de que se generaran los tracks del día no tiene ninguno: su primer registro sale al día siguiente. Para D-200 «nunca
+corrió» y esperaba su día. No era un descuido: D-200 lo había dejado así a propósito, con pruebas que lo afirmaban
+(`RetrocesoConHabitoPropioIT.unHabitoPropioQueNuncaCorrioSigueEsperando`; `HorariosDelHabitoTest` con un fixture llamado
+`PERSONAL_DEL_DIA_30`). El e2e y la decisión del dueño («un hábito propio que ya venía corriendo se mantiene activo», §9.20
+de la spec del 26/09) lo leen como activo: la persona lo creó y lo tenía sin candado.
+
+**Solución (D-216).** Crear un hábito propio prueba que la persona llegó a su primer día con el hábito andando: para un
+PERSONAL, `HorariosDelHabito` da ese día por alcanzado sin leer registros (`HorariosDelHabito.de(Habito, horarios)` y
+`porHabito`). Lo usan los tres que deciden si el hábito corre hoy, así siguen coincidiendo: la generación
+(`RegistroService`), el candado (`MisHabitosService`) y el horario del día (`ConsultaPreferenciasHorarioService`, que
+también lee el acompañante). El catálogo sigue igual: su `dia_inicio` es del programa y el «ya corrió» sale de los
+registros. Solo cuenta el PRIMER día: un tramo posterior que nunca corrió sigue esperando. No hay migración ni se
+reescribe nada.
+
+**Cómo evitar que vuelva a pasar.** Pruebas que fallaban contra el código viejo: `MisHabitosServiceTest` (sin candado, sin
+registros), `RegistroServiceTest` (se genera, con el reloj a las 03:00 UTC, que en Lima es el día anterior: regla 02) y
+`ConsultaPreferenciasHorarioServiceTest` (muestra su hora). El IT se corrigió con nota visible. Las pruebas de D-200 que
+usaban un hábito personal para probar el criterio de los registros pasaron a uno del catálogo que arranca tarde (como la
+Audioterapia, día 11). **Lección:** cuando «ya pasó» se deriva de una foto (un registro), preguntarse qué casos todavía no
+tienen foto: lo creado hoy recién genera mañana.
+
+**Queda abierto (no se tocó).** El mismo agujero existe en el interruptor del Plan (D-196, `desbloqueos_habito`): un hábito
+tocado un día en que no se le generó registro (por ejemplo uno de domingo tocado un martes, o uno propio tocado el mismo día
+en que se creó) queda afuera si retroceden a la persona por debajo de ese día. «Mis hábitos» no mira esa tabla, así que ahí
+no se ve el candado. Va como pregunta en D-216.
