@@ -50,6 +50,7 @@ public class BancoDelSemaforo {
     private static final UUID COHORTE = UUID.fromString("00000000-0000-0000-0000-0000000c0001");
 
     private final Map<UUID, AcompanamientoFinder.GrupoBasico> grupos = new LinkedHashMap<>();
+    private final java.util.Set<UUID> recepciones = new java.util.HashSet<>();
     private final List<Tramo> acompanamientos = new ArrayList<>();
     private final List<Tramo> pertenencias = new ArrayList<>();
     private final Map<UserId, UserSummary> perfiles = new LinkedHashMap<>();
@@ -143,6 +144,22 @@ public class BancoDelSemaforo {
             }
             return conMentor;
         }
+
+        @Override
+        public List<GrupoConAprendices> gruposOperativos(Instant instante) {
+            List<GrupoConAprendices> operativos = new ArrayList<>();
+            for (GrupoBasico grupo : grupos.values()) {
+                UserId mentor = acompanamientos.stream()
+                        .filter(t -> t.mentor() && t.grupoId().equals(grupo.grupoId()) && t.vigenteEn(instante))
+                        .map(Tramo::usuario)
+                        .findFirst()
+                        .orElse(null);
+                operativos.add(new GrupoConAprendices(grupo.grupoId(), grupo.nombre(),
+                        recepciones.contains(grupo.grupoId()), mentor,
+                        vigentesDelGrupo(pertenencias.stream(), grupo.grupoId(), instante).stream().distinct().toList()));
+            }
+            return operativos;
+        }
     };
 
     public final SemaforoFinder semaforo = new SemaforoFinder() {
@@ -183,7 +200,10 @@ public class BancoDelSemaforo {
 
         @Override
         public List<UserSummary> aprendicesActivos() {
-            return List.of(); // las vistas del semaforo no usan el padron global
+            // Lo usa la lista de administracion (S-4): TRAINEE y ACTIVE, como el real.
+            return perfiles.values().stream()
+                    .filter(u -> u.role() == UserRole.TRAINEE && u.status() == UserStatus.ACTIVE)
+                    .toList();
         }
 
         @Override
@@ -201,6 +221,11 @@ public class BancoDelSemaforo {
 
     public SemaforoDelAprendizService servicioDeDetalle() {
         return new SemaforoDelAprendizService(acceso(medicion()), semaforo, usuarios, reloj);
+    }
+
+    public AtencionDelSemaforoService servicioDeAtencion() {
+        MedicionDeGrupos medicion = medicion();
+        return new AtencionDelSemaforoService(acceso(medicion), medicion, acompanamiento, usuarios, reloj);
     }
 
     public SemaforoPorGruposService servicioPorGrupos() {
@@ -221,6 +246,7 @@ public class BancoDelSemaforo {
     /** Deja el banco vacío: el contexto de Spring de las pruebas web se reutiliza entre pruebas. */
     public void limpiar() {
         grupos.clear();
+        recepciones.clear();
         acompanamientos.clear();
         pertenencias.clear();
         perfiles.clear();
@@ -240,6 +266,12 @@ public class BancoDelSemaforo {
 
     public void grupo(UUID grupoId, String nombre) {
         grupos.put(grupoId, new AcompanamientoFinder.GrupoBasico(grupoId, nombre, COHORTE, LIMA.getId()));
+    }
+
+    /** El grupo de bienvenida: lo atienden guías, no un mentor. */
+    public void recepcion(UUID grupoId, String nombre) {
+        grupo(grupoId, nombre);
+        recepciones.add(grupoId);
     }
 
     /** Mentor vigente del grupo desde antes de toda prueba. */

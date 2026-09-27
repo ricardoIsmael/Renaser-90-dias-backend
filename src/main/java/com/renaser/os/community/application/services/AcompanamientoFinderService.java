@@ -190,6 +190,33 @@ class AcompanamientoFinderService implements AcompanamientoFinder {
         return acompanados;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<GrupoConAprendices> gruposOperativos(Instant instante) {
+        List<GrupoConAprendices> operativos = new java.util.ArrayList<>();
+        for (Celula celula : loadCelulaPort.todas()) {
+            if (!celula.vigenteEn(diaDelPrograma(celula, instante))) {
+                continue;
+            }
+            List<AsignacionCelula> vigentes = asignacionesDe(celula.id().value()).stream()
+                    .filter(a -> a.vigenteEn(instante))
+                    .toList();
+            UserId mentor = vigentes.stream()
+                    .filter(a -> a.funcion() == FuncionAcompanamiento.MENTOR)
+                    .map(AsignacionCelula::usuarioId)
+                    .findFirst()
+                    .orElse(null);
+            List<UserId> aprendices = vigentes.stream()
+                    .filter(a -> a.funcion() == FuncionAcompanamiento.APRENDIZ)
+                    .map(AsignacionCelula::usuarioId)
+                    .distinct()
+                    .toList();
+            operativos.add(new GrupoConAprendices(celula.id().value(), celula.nombre(), celula.esRecepcion(),
+                    mentor, aprendices));
+        }
+        return operativos;
+    }
+
     private List<AsignacionCelula> asignacionesDe(UUID grupoId) {
         return loadAsignacionesPort.porCelula(CelulaId.of(grupoId));
     }

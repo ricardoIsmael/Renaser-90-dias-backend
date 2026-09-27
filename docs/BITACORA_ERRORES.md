@@ -8608,6 +8608,11 @@ sí exigen cuenta activa, con prueba de 403.
 **Cómo evitar que vuelva a pasar.** Mientras exista A-1, todo guard de servicio que no sea de TRAINEE
 comprueba también el estado de la cuenta.
 
+> **Resuelto 2026-09-26 (S-9).** `SeguimientoService.semanaDe` (mentor) y `AcompanamientoService.aprendices`
+> ahora exigen cuenta ACTIVE después del guard de relación: un mentor suspendido recibe 403. Pruebas
+> `SeguimientoServiceTest.mentorSuspendidoProhibido` y `AcompanamientoServiceTest.mentorSuspendidoNoLee`
+> (fallan con el código anterior).
+
 ## E-259 · Los subagentes heredan el aislamiento del worktree de quien los lanza
 
 **Síntoma (orquestación del semáforo, 2026-09-25).** Dos agentes lanzados para trabajar cada uno en su propio
@@ -9358,6 +9363,67 @@ que degradar, no romper el turno.
 
 ---
 
+## E-298 · La bienvenida automática se podía mandar dos veces, y el código decía que no se reintentaba
+
+**Síntoma (revisión de D-174, 2026-09-26; encontrado leyendo el código, no visto en producción).** El
+javadoc de `SoporteNacioBienvenidaListener` y `docs/MODULO_CHAT.md` §10 decían: «No es
+`@ApplicationModuleListener` a propósito: ese reintenta los eventos que fallan, y reintentar aquí mandaría
+la bienvenida dos veces […] Si falla, queda en el log y Operaciones la manda a mano».
+
+**Causa real.** Spring Modulith guarda en el outbox (`event_publication`) la publicación de **todo**
+`@TransactionalEventListener` AFTER_COMMIT, no solo de los `@ApplicationModuleListener`. Si el proceso moría
+entre la tarjeta y el texto (un deploy, un OOM), la publicación quedaba incompleta y
+`republish-outstanding-events-on-restart` la reentregaba: tarjeta repetida. Y al revés, como el servicio se
+tragaba cualquier excepción, un S3 caído dejaba la publicación completa y la bienvenida perdida.
+
+**Solución (G-2).** Marca de idempotencia en `mensajes_bienvenida` (V1, sin uso hasta hoy: PK por
+destinatario, `mensaje_id` al primer mensaje), vía `MarcaDeBienvenidaPort`. Se mira antes de dibujar; los
+dos mensajes y la marca se guardan en una sola transacción; la PK deshace una entrega cruzada; cualquier
+otro fallo se lanza para que el outbox reintente. Pruebas: `BienvenidaEnSoporteServiceTest`
+(`reentregaNoDuplica`, `dejaLaMarcaConLaTarjeta`, `carreraConOtraEntrega`, `unFalloSeReintenta`) y
+`MarcaDeBienvenidaJdbcAdapterTest` contra Postgres.
+
+**Cómo evitar que vuelva a pasar.** Todo `@TransactionalEventListener` AFTER_COMMIT de este backend está en
+el outbox y puede entregarse más de una vez: tiene que ser idempotente por construcción, se llame como se
+llame la anotación.
+
+## E-299 · La bienvenida no salía nunca si la transacción del listener se deshacía después de crear el soporte
+
+**Síntoma (riesgo R2 de D-174, 2026-09-26; encontrado leyendo el código).** Ninguno visible: el soporte
+existía y la bienvenida simplemente no llegaba.
+
+**Causa real.** `ConversacionSoporteService` crea el soporte en una transacción propia (REQUIRES_NEW, C-10)
+que commitea sola, pero publicaba `SoporteDeAprendizNacioEvent` **después**, en la transacción del
+`@ApplicationModuleListener` que lo llama. Si esa transacción se deshacía (un fallo después de publicar, o
+en su commit), el evento —y su fila del outbox— se perdían; el reintento de `UsuarioRegistradoEvent`
+encontraba el soporte ya creado y no volvía a publicar.
+
+**Solución.** El evento se publica **dentro** de la transacción propia que crea el soporte: el soporte y la
+publicación del outbox commitean juntos, y la bienvenida (AFTER_COMMIT) sale con ese commit. Prueba
+`ConversacionSoporteServiceTest.elAvisoViajaEnLaMismaTransaccionQueElSoporte` (orden getTransaction →
+publishEvent → commit; falla con el código anterior).
+
+**Cómo evitar que vuelva a pasar.** Un evento que anuncia algo creado en REQUIRES_NEW se publica dentro de
+esa misma transacción, nunca en la de afuera.
+
+## E-300 · `ChatsConAcompananteService` se tragaba cualquier excepción y el chat de dos no se reintentaba
+
+**Síntoma (revisión de D-173, 2026-09-26).** Un fallo al abrir un chat de dos dejaba en el log
+`[chat.acompanante] no se pudo abrir el chat entre … y …` y nada más: la pareja quedaba sin chat hasta el
+próximo cambio de composición del grupo.
+
+**Causa real.** `abrir()` atrapaba `RuntimeException` además de la carrera del UNIQUE; el listener terminaba
+bien y Modulith marcaba la publicación completa.
+
+**Solución (G-3).** Solo se traga `DataIntegrityViolationException` (la carrera). Se intentan todas las
+parejas y, si alguna falló por otra cosa, se lanza al final: el outbox reintenta y el reintento solo abre las
+que faltan. Prueba `ChatsConAcompananteServiceTest.unFalloDeVerdadSePropagaDespuesDeIntentarLasDemas`.
+
+**Cómo evitar que vuelva a pasar.** En un listener del outbox, un `catch (RuntimeException)` que solo loguea
+convierte un error pasajero en una pérdida permanente. Se atrapa lo que se sabe manejar; lo demás se lanza.
+
+---
+
 ## E-301 · Los recordatorios de eventos se marcaban enviados y no le llegaban a nadie (ni la alarma de 04:50)
 
 **Síntoma (2026-09-26, revisión del spec `RETROALIMENTACION_2026-09-26.md`).** Ningún aprendiz recibió
@@ -9419,3 +9485,55 @@ roca completada siguen con push.
 **Cómo evitar que vuelva a pasar.** `HabitoCompletadoNotificationListenerTest` verifica
 `EntregaPush.NINGUNO`. Una pregunta abierta de producto con «riesgo de ruido» se lleva a la próxima
 revisión con el dueño en vez de quedar en el doc.
+
+---
+
+## E-304 · Se abría un chat de dos con un aprendiz o un acompañante SUSPENDIDO
+
+**Síntoma (revisión de D-173, 2026-09-26).** Al cambiar la composición de un grupo, las parejas se armaban
+con `acompanantesVigentes` × `aprendicesVigentes`, que miran la asignación y no la cuenta.
+
+**Causa real.** Ni `community` ni el chat miraban el estado de la cuenta.
+
+**Solución (G-4).** `ChatsConAcompananteService` lee las cuentas de todo el grupo en una consulta
+(`UserSummaryFinder.findByIds`) y deja afuera a quien no está ACTIVE. Prueba
+`ChatsConAcompananteServiceTest.sinChatConSuspendidos`. Límite: al reactivarse, el chat se abre con el
+próximo cambio de composición del grupo, no en el acto.
+
+**Cómo evitar que vuelva a pasar.** Lo mismo que E-258: toda pregunta de pertenencia que termine en darle
+acceso a alguien mira también el estado de la cuenta.
+
+## E-305 · Con almacenamiento `noop`, la bienvenida mandaba una foto que no existía
+
+**Síntoma (local, 2026-09-26).** En el chat de soporte aparecía una foto rota; el log decía
+`AlmacenamientoPort.subir(chat/…/fotos/…) NO ejecutado de verdad: faltan credenciales AWS S3 (D-34).` y
+aun así el mensaje `IMAGEN` se guardaba.
+
+**Causa real.** `NoOpAlmacenamientoAdapter.subir` no guarda nada ni falla, y el servicio no tenía cómo
+saberlo. Aparte: el default de `AWS_S3_BUCKET` es el bucket de producción, así que prender
+`STORAGE_PROVEEDOR=s3` en local sin cambiarlo sube al bucket real.
+
+**Solución (G-5).** `AlmacenamientoPort.guardaObjetos()` (default `true`, `false` en el de marcador): sin
+almacenamiento real la bienvenida manda solo el texto y deja un `WARN`. El bucket no se cambió (producción
+depende del default); quedó documentado en `docs/DESPLIEGUE_Y_CI.md` §6.4 y `docs/MODULO_CHAT.md` §10.
+Prueba `BienvenidaEnSoporteServiceTest.sinAlmacenamientoRealSoloElTexto`.
+
+**Cómo evitar que vuelva a pasar.** Lo que el servidor sube y después referencia en un mensaje pregunta
+antes si el almacenamiento guarda de verdad. En local, `AWS_S3_BUCKET` propio siempre que se use `s3`.
+
+## E-306 · Aprendices en rojo de la recepción, de un grupo sin mentor o sin grupo no aparecían en ninguna vista de administración
+
+**Síntoma (retroalimentación del 2026-09-26, S-4).** Administración no veía a todos los que necesitaban
+atención: el resumen por grupos (`SemaforoPorGruposService`) solo lista grupos regulares con mentor vigente
+(`gruposConMentorVigente`), y la tabla por grupo hay que abrirla grupo por grupo.
+
+**Causa real.** Todas las vistas partían de los grupos con mentor. No era un error de cálculo: el padrón
+de esas vistas es, por contrato (§4.4), el de los grupos que tienen a quién avisar el sábado.
+
+**Solución.** Lista nueva de solo lectura `GET /api/v1/admin/semaforo/atencion` (ADMIN/ALCHEMIST activos),
+que parte del padrón de aprendices activos y le agrega sus grupos operativos
+(`AcompanamientoFinder.gruposOperativos`, nuevo: regulares y recepción, con o sin mentor). Sin tabla nueva.
+Pruebas `AtencionDelSemaforoServiceTest` y `SemaforoAdministrativoControllerTest` (403 incluidos).
+
+**Cómo evitar que vuelva a pasar.** Una vista de "a quién atender" parte de las personas, no de los grupos:
+un grupo puede no tener mentor, y una persona puede no tener grupo.

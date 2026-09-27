@@ -58,6 +58,11 @@ public class VistasDelSemaforoDePrueba {
     }
 
     @Bean
+    AtencionDelSemaforoService atencionDelSemaforoService(BancoDelSemaforo banco) {
+        return banco.servicioDeAtencion();
+    }
+
+    @Bean
     SemaforoPorGruposService semaforoPorGruposService(BancoDelSemaforo banco) {
         return banco.servicioPorGrupos();
     }

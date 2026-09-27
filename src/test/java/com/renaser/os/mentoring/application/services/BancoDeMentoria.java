@@ -103,6 +103,11 @@ class BancoDeMentoria {
         public List<GrupoAcompanado> gruposConMentorVigente(Instant instante) {
             return grupos;
         }
+
+        @Override
+        public List<GrupoConAprendices> gruposOperativos(Instant instante) {
+            return List.of();
+        }
     };
 
     final ObligacionesHistoricasFinder obligacionesFinder = (participantes, desde, hasta) -> obligaciones.stream()

@@ -10,6 +10,10 @@ import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,11 +25,16 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.lenient;
@@ -65,12 +74,43 @@ class ChatsConAcompananteServiceTest {
     @Mock
     private PlatformTransactionManager transactionManager;
 
+    private final Set<UserId> suspendidos = new HashSet<>();
+    /** Todos existen y están activos salvo los de {@link #suspendidos}. */
+    private final UserSummaryFinder cuentas = new UserSummaryFinder() {
+        @Override
+        public java.util.Optional<UserSummary> findById(UserId id) {
+            return java.util.Optional.of(cuenta(id));
+        }
+
+        @Override
+        public Map<UserId, UserSummary> findByIds(Collection<UserId> ids) {
+            Map<UserId, UserSummary> encontradas = new LinkedHashMap<>();
+            ids.forEach(id -> encontradas.put(id, cuenta(id)));
+            return encontradas;
+        }
+
+        @Override
+        public List<UserSummary> aprendicesActivos() {
+            return List.of();
+        }
+
+        @Override
+        public java.util.Optional<UserSummary> findByEmail(String email) {
+            return java.util.Optional.empty();
+        }
+
+        private UserSummary cuenta(UserId id) {
+            return new UserSummary(id, "Persona", null, UserRole.TRAINEE,
+                    suspendidos.contains(id) ? UserStatus.SUSPENDED : UserStatus.ACTIVE);
+        }
+    };
+
     private ChatsConAcompananteService service;
 
     @BeforeEach
     void preparar() {
         service = new ChatsConAcompananteService(acompanamientoPort, loadConversacionPort, saveConversacionPort,
-                agregarParticipantePort, CLOCK, idGenerator, transactionManager);
+                agregarParticipantePort, CLOCK, idGenerator, cuentas, transactionManager);
         lenient().when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
         lenient().when(saveConversacionPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(loadConversacionPort.clavesDirectasExistentes(anyCollection())).thenReturn(Set.of());
@@ -137,7 +177,38 @@ class ChatsConAcompananteServiceTest {
     }
 
     @Test
-    @DisplayName("si otro camino lo abrió primero o una pareja falla, las demás igual reciben su chat")
+    @DisplayName("G-3: un fallo que no es la carrera no se traga: se abren las demás y después se lanza para que el outbox reintente")
+    void unFalloDeVerdadSePropagaDespuesDeIntentarLasDemas() {
+        when(acompanamientoPort.acompanantesVigentes(GRUPO)).thenReturn(List.of(MENTORA));
+        when(acompanamientoPort.aprendicesVigentes(GRUPO)).thenReturn(List.of(ANA, LUIS));
+        when(saveConversacionPort.save(any()))
+                .thenThrow(new IllegalStateException("se cayó la conexión"))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        assertThatThrownBy(() -> service.abrirParaGrupo(GRUPO))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("No se pudieron abrir 1 chats")
+                .hasRootCauseMessage("se cayó la conexión");
+        verify(saveConversacionPort, times(2)).save(any());
+    }
+
+    @Test
+    @DisplayName("G-4: no se abre un chat de dos con un aprendiz SUSPENDIDO ni con un acompañante SUSPENDIDO")
+    void sinChatConSuspendidos() {
+        when(acompanamientoPort.acompanantesVigentes(GRUPO)).thenReturn(List.of(MENTORA, GUIA));
+        when(acompanamientoPort.aprendicesVigentes(GRUPO)).thenReturn(List.of(ANA, LUIS));
+        suspendidos.add(LUIS);
+        suspendidos.add(GUIA);
+
+        assertThat(service.abrirParaGrupo(GRUPO)).isEqualTo(1);
+
+        ArgumentCaptor<Conversacion> guardadas = ArgumentCaptor.forClass(Conversacion.class);
+        verify(saveConversacionPort).save(guardadas.capture());
+        assertThat(guardadas.getValue().claveDirecta()).isEqualTo(Conversacion.claveDirectaDe(ANA, MENTORA));
+    }
+
+    @Test
+    @DisplayName("si otro camino lo abrió primero, las demás igual reciben su chat y no es un error")
     void unaParejaQueFallaNoFrenaALasDemas() {
         when(acompanamientoPort.acompanantesVigentes(GRUPO)).thenReturn(List.of(MENTORA));
         when(acompanamientoPort.aprendicesVigentes(GRUPO)).thenReturn(List.of(ANA, LUIS));

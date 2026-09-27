@@ -236,6 +236,11 @@ class ResumenSemanalDelSemaforoIT {
         public Optional<GrupoBasico> grupo(UUID grupoId) {
             return Optional.empty();
         }
+
+        @Override
+        public List<GrupoConAprendices> gruposOperativos(Instant instante) {
+            return List.of(new GrupoConAprendices(GRUPO, "Grupo Fénix", false, UserId.of(MENTORA), List.of(ANA)));
+        }
     }
 
     /** Ana cerró la semana en verde; nadie más se mide. */

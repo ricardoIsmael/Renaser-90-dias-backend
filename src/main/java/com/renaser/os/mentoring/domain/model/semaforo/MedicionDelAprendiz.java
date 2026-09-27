@@ -20,12 +20,14 @@ import java.util.Objects;
  * @param porcentaje   promedio de sus días medidos, 1 decimal; null si no tiene datos
  * @param diasConDatos cuántos días entraron a ese promedio
  * @param dias         los días de su ventana, del más viejo al más nuevo; vacío si no se mide
+ * @param motivo       por qué está sin datos (S-5); null si tiene color. Calculado de los días, no se
+ *                     guarda: la regla y el color no cambian por él
  */
 public record MedicionDelAprendiz(BigDecimal porcentaje, ColorSemaforo color, int diasConDatos,
-                                  List<DiaDelSemaforo> dias) {
+                                  List<DiaDelSemaforo> dias, MotivoSinDatos motivo) {
 
     public static final MedicionDelAprendiz SIN_MEDICION =
-            new MedicionDelAprendiz(null, ColorSemaforo.SIN_DATOS, 0, List.of());
+            new MedicionDelAprendiz(null, ColorSemaforo.SIN_DATOS, 0, List.of(), MotivoSinDatos.NO_ACTIVADO);
 
     public MedicionDelAprendiz {
         Objects.requireNonNull(color, "color es obligatorio");
@@ -33,6 +35,15 @@ public record MedicionDelAprendiz(BigDecimal porcentaje, ColorSemaforo color, in
         if ((porcentaje == null) != (color == ColorSemaforo.SIN_DATOS)) {
             throw new IllegalArgumentException("Sin porcentaje es SIN_DATOS, y viceversa: " + porcentaje + "/" + color);
         }
+        if ((motivo == null) != (color != ColorSemaforo.SIN_DATOS)) {
+            throw new IllegalArgumentException("Solo SIN_DATOS lleva motivo: " + motivo + "/" + color);
+        }
+    }
+
+    /** Una medición de alguien que SÍ se mide: el motivo, si está sin datos, sale de sus días. */
+    public MedicionDelAprendiz(BigDecimal porcentaje, ColorSemaforo color, int diasConDatos, List<DiaDelSemaforo> dias) {
+        this(porcentaje, color, diasConDatos, dias,
+                color == ColorSemaforo.SIN_DATOS ? MotivoSinDatos.de(dias == null ? List.of() : dias) : null);
     }
 
     /** @param ventana la que trajo el semáforo para este aprendiz; null si no se mide */

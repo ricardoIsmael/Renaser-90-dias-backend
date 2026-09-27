@@ -79,6 +79,14 @@ public interface AcompanamientoFinder {
      */
     List<GrupoAcompanado> gruposConMentorVigente(Instant instante);
 
+    /**
+     * TODOS los grupos que están corriendo en ese instante —regulares y recepción, con o sin
+     * mentor— con sus aprendices vigentes. Lo pide la lista de administración «¿A quién atiendo
+     * hoy?» (S-4, 2026-09-26), que no puede dejar afuera a nadie activo: {@link #gruposConMentorVigente}
+     * descarta la recepción y los grupos sin mentor, y por eso no sirve para esa pregunta.
+     */
+    List<GrupoConAprendices> gruposOperativos(Instant instante);
+
     /** {@code hasta} null = el tramo sigue abierto. Semiabierto {@code [desde, hasta)}. */
     record TramoDeAcompanamiento(UUID grupoId, String grupoNombre, Instant desde, Instant hasta) {
     }
@@ -87,6 +95,15 @@ public interface AcompanamientoFinder {
     }
 
     record GrupoBasico(UUID grupoId, String nombre, UUID cohorteId, String zonaHoraria) {
+    }
+
+    /**
+     * @param recepcion  si es el grupo de bienvenida (lo atienden guías, no un mentor)
+     * @param mentorId   su mentor vigente; null si no tiene (o si es la recepción)
+     * @param aprendices los aprendices vigentes del grupo, sin repetir
+     */
+    record GrupoConAprendices(UUID grupoId, String nombre, boolean recepcion, UserId mentorId,
+                              List<UserId> aprendices) {
     }
 
     /**

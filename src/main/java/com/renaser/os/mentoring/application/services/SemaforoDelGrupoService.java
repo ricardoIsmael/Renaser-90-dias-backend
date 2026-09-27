@@ -98,9 +98,12 @@ public class SemaforoDelGrupoService implements ConsultarSemaforoDelGrupoUseCase
                 perfil == null ? null : perfil.avatarUrl(), MedicionDelAprendiz.de(ventana));
     }
 
-    /** Rojo, amarillo, sin datos, verde; por nombre; y ante homónimos, por id para que sea estable. */
+    /**
+     * Rojo, amarillo, sin datos (el más desconectado primero, S-5), verde; por nombre; y ante
+     * homónimos, por id para que sea estable.
+     */
     private static Comparator<FilaDelSemaforo> orden() {
-        return OrdenDelSemaforo.<FilaDelSemaforo>porColorYNombre(fila -> fila.medicion().color(), FilaDelSemaforo::nombre)
+        return OrdenDelSemaforo.porMedicionYNombre(FilaDelSemaforo::medicion, FilaDelSemaforo::nombre)
                 .thenComparing(FilaDelSemaforo::aprendizId);
     }
 

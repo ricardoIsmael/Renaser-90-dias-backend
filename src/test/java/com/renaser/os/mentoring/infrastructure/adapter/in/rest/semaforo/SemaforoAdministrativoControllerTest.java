@@ -45,6 +45,9 @@ class SemaforoAdministrativoControllerTest {
 
     private static final String TABLA = "/api/v1/admin/semaforo/groups/{groupId}";
     private static final String DETALLE = "/api/v1/admin/trainees/{traineeId}/semaforo";
+    private static final String ATENCION = "/api/v1/admin/semaforo/atencion";
+    private static final UUID BIENVENIDA = UUID.fromString("00000000-0000-0000-0000-00000000f003");
+    private static final UserId BETO = id("b2");
 
     private static final UUID FENIX = UUID.fromString("00000000-0000-0000-0000-00000000f001");
     private static final UserId MENTORA = id("a1");
@@ -180,5 +183,54 @@ class SemaforoAdministrativoControllerTest {
     void liderNoVeElDetalle() throws Exception {
         pedir(DETALLE, LIDER, ANA.value()).andExpect(status().isForbidden());
         assertThat(banco.detallesPedidos).isEmpty();
+    }
+
+    // ── «¿A quién atiendo hoy?» (S-4) ───────────────────────────────────────
+
+    @Test
+    @DisplayName("S-4: ADMIN ve a todo activo en rojo o amarillo, también el de la recepción, con su grupo")
+    void adminVeLaListaDeAtencion() throws Exception {
+        banco.recepcion(BIENVENIDA, "Bienvenida");
+        banco.aprendiz(BIENVENIDA, BETO);
+        banco.persona(BETO, "Beto Paz");
+        banco.vigente(BETO, ventanaPareja(DESDE_VIGENTE, false, 70));
+
+        pedir(ATENCION, ADMIN)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resumen.rojo").value(1))
+                .andExpect(jsonPath("$.resumen.amarillo").value(1))
+                .andExpect(jsonPath("$.resumen.total").value(2))
+                .andExpect(jsonPath("$.aprendices[0].nombre").value("Ana Pérez"))
+                .andExpect(jsonPath("$.aprendices[0].etiqueta").value("Con problemas"))
+                .andExpect(jsonPath("$.aprendices[0].grupos[0].mentorNombre").value("Luisa Rojas"))
+                .andExpect(jsonPath("$.aprendices[1].nombre").value("Beto Paz"))
+                .andExpect(jsonPath("$.aprendices[1].color").value("AMARILLO"))
+                .andExpect(jsonPath("$.aprendices[1].grupos[0].recepcion").value(true))
+                .andExpect(jsonPath("$.aprendices[1].grupos[0].mentorNombre").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("S-4 autorizacion negativa: MENTOR, MENTOR_LEAD, TRAINEE y ADMIN suspendido reciben 403")
+    void listaDeAtencionSoloParaAdministracionActiva() throws Exception {
+        pedir(ATENCION, MENTORA).andExpect(status().isForbidden());
+        pedir(ATENCION, LIDER).andExpect(status().isForbidden());
+        pedir(ATENCION, ANA).andExpect(status().isForbidden());
+        banco.usuario(ADMIN, "Admin", UserRole.ADMIN, UserStatus.SUSPENDED);
+        pedir(ATENCION, ADMIN).andExpect(status().isForbidden());
+        assertThat(banco.lecturasDelSemaforo).isEmpty();
+    }
+
+    @Test
+    @DisplayName("S-5: la tabla trae el motivo de «Sin datos» (aditivo) y null para quien tiene color")
+    void laTablaTraeElMotivo() throws Exception {
+        banco.aprendiz(FENIX, BETO);
+        banco.persona(BETO, "Beto Paz");
+
+        pedir(TABLA, ADMIN, FENIX)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.aprendices[0].motivo").doesNotExist())
+                .andExpect(jsonPath("$.aprendices[1].nombre").value("Beto Paz"))
+                .andExpect(jsonPath("$.aprendices[1].color").value("SIN_DATOS"))
+                .andExpect(jsonPath("$.aprendices[1].motivo").value("NO_ACTIVADO"));
     }
 }

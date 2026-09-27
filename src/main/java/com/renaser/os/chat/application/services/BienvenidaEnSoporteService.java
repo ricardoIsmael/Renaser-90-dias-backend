@@ -5,6 +5,7 @@ import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.EnviarMensajeCommand;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.OrigenMedia;
 import com.renaser.os.chat.application.ports.out.bienvenida.DibujarBienvenidaPort;
+import com.renaser.os.chat.application.ports.out.bienvenida.MarcaDeBienvenidaPort;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.PrimerNombre;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
@@ -18,7 +19,10 @@ import com.renaser.os.users.api.UserSummaryFinder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.Optional;
 
@@ -30,8 +34,21 @@ import java.util.Optional;
  * <p><b>Dos mensajes y no una foto con texto:</b> la app instalada muestra el texto de una foto
  * solo cuando la foto no carga, así que en un solo mensaje el texto no se vería.
  *
- * <p><b>Sin {@code @Transactional}:</b> dibujar y subir a S3 no deben retener una conexión de la
- * base; cada envío abre la suya dentro de {@link EnviarMensajeUseCase}.
+ * <p><b>Idempotente</b> (G-2, 2026-09-26). El evento que la dispara queda en el outbox de Modulith y
+ * se reentrega si el proceso muere a mitad de camino o si falla. La marca es
+ * {@code mensajes_bienvenida} ({@link MarcaDeBienvenidaPort}): se mira antes de dibujar, y se deja
+ * en la MISMA transacción que guarda los dos mensajes. O quedan los mensajes y la marca, o nada; si
+ * dos entregas se cruzan, la PK de la marca deshace la que perdió.
+ *
+ * <p><b>Un fallo se lanza para que el outbox reintente</b> (G-2). Antes se tragaba para no duplicar;
+ * con la marca, reintentar ya no duplica. Lo que es configuración (sin remitente, remitente
+ * suspendido) no es un fallo: no se manda y no se reintenta.
+ *
+ * <p><b>Sin almacenamiento de verdad no hay tarjeta</b> (G-5): con el adaptador de marcador (local,
+ * pruebas) subir no guarda nada, y el mensaje apuntaría a una foto inexistente. Se manda solo el
+ * texto y queda en el log.
+ *
+ * <p>Dibujar y subir a S3 van FUERA de la transacción: no deben retener una conexión de la base.
  */
 @Service
 public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase {
@@ -43,20 +60,25 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
     private final AlmacenamientoPort almacenamientoPort;
     private final EnviarMensajeUseCase enviarMensaje;
     private final UserSummaryFinder userSummaryFinder;
+    private final MarcaDeBienvenidaPort marcaPort;
     private final IdGenerator idGenerator;
+    private final TransactionTemplate transaccion;
     private final String remitenteEmail;
     private final String texto;
 
     public BienvenidaEnSoporteService(DibujarBienvenidaPort dibujarPort, AlmacenamientoPort almacenamientoPort,
                                        EnviarMensajeUseCase enviarMensaje, UserSummaryFinder userSummaryFinder,
-                                       IdGenerator idGenerator,
+                                       MarcaDeBienvenidaPort marcaPort, IdGenerator idGenerator,
+                                       PlatformTransactionManager transactionManager,
                                        @Value("${renaser.bienvenida.remitente-email:}") String remitenteEmail,
                                        @Value("${renaser.bienvenida.texto:}") String texto) {
         this.dibujarPort = dibujarPort;
         this.almacenamientoPort = almacenamientoPort;
         this.enviarMensaje = enviarMensaje;
         this.userSummaryFinder = userSummaryFinder;
+        this.marcaPort = marcaPort;
         this.idGenerator = idGenerator;
+        this.transaccion = new TransactionTemplate(transactionManager);
         this.remitenteEmail = remitenteEmail == null ? "" : remitenteEmail.strip();
         this.texto = texto == null ? "" : texto.strip();
     }
@@ -66,17 +88,25 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
         if (remitenteEmail.isEmpty()) {
             return;
         }
+        if (marcaPort.yaSeDio(aprendizId)) {
+            log.debug("[chat.bienvenida] {} ya tiene su bienvenida: reentrega sin efecto", aprendizId);
+            return;
+        }
         Optional<UserSummary> remitente = remitenteActivo();
         if (remitente.isEmpty()) {
             log.warn("[chat.bienvenida] el remitente {} no existe o no está activo: no se manda la bienvenida", remitenteEmail);
             return;
         }
+        String nombre = userSummaryFinder.findById(aprendizId).map(u -> PrimerNombre.de(u.fullName())).orElse("");
+        Optional<TarjetaSubida> tarjeta = subirTarjeta(soporteId, nombre);
         try {
-            String nombre = userSummaryFinder.findById(aprendizId).map(u -> PrimerNombre.de(u.fullName())).orElse("");
-            enviarTarjeta(remitente.get().id(), soporteId, nombre);
-            enviarTexto(remitente.get().id(), soporteId, nombre);
-        } catch (RuntimeException e) {
-            log.warn("[chat.bienvenida] no se pudo mandar la bienvenida al soporte {}", soporteId, e);
+            transaccion.executeWithoutResult(status ->
+                    enviarYMarcar(remitente.get().id(), soporteId, aprendizId, tarjeta, nombre));
+        } catch (DataIntegrityViolationException e) {
+            if (!marcaPort.yaSeDio(aprendizId)) {
+                throw e; // no era la carrera con otra entrega: que el outbox reintente
+            }
+            log.debug("[chat.bienvenida] otra entrega ya dio la bienvenida a {}; esta se deshizo", aprendizId);
         }
     }
 
@@ -84,22 +114,49 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
         return userSummaryFinder.findByEmail(remitenteEmail).filter(u -> u.status() == UserStatus.ACTIVE);
     }
 
-    /** La ruta va bajo el prefijo del propio chat: es lo único que {@code MensajeService} acepta. */
-    private void enviarTarjeta(UserId remitenteId, ConversacionId soporteId, String nombre) {
-        byte[] tarjeta = dibujarPort.dibujar(nombre);
+    /**
+     * Dibuja y sube la tarjeta. Vacío si el almacenamiento es de marcador (G-5): el objeto no
+     * existiría. La ruta va bajo el prefijo del propio chat: es lo único que {@code MensajeService} acepta.
+     */
+    private Optional<TarjetaSubida> subirTarjeta(ConversacionId soporteId, String nombre) {
+        if (!almacenamientoPort.guardaObjetos()) {
+            log.warn("[chat.bienvenida] el almacenamiento no guarda objetos (noop): se manda solo el texto al soporte {}",
+                    soporteId);
+            return Optional.empty();
+        }
+        byte[] contenido = dibujarPort.dibujar(nombre);
         String ruta = "chat/" + soporteId.value() + "/fotos/" + idGenerator.newId();
-        almacenamientoPort.subir(ruta, tarjeta, DibujarBienvenidaPort.TIPO_CONTENIDO);
-        enviarMensaje.enviar(new EnviarMensajeCommand(remitenteId, soporteId, TipoMensaje.IMAGEN, null,
-                Mensaje.BUCKET_DEFAULT, ruta, DibujarBienvenidaPort.TIPO_CONTENIDO, tarjeta.length, null, null,
-                OrigenMedia.CLIENTE));
+        almacenamientoPort.subir(ruta, contenido, DibujarBienvenidaPort.TIPO_CONTENIDO);
+        return Optional.of(new TarjetaSubida(ruta, contenido.length));
     }
 
-    private void enviarTexto(UserId remitenteId, ConversacionId soporteId, String nombre) {
+    /** Los mensajes y la marca, juntos. Sin ningún mensaje que mandar no hay marca que dejar. */
+    private void enviarYMarcar(UserId remitenteId, ConversacionId soporteId, UserId aprendizId,
+                               Optional<TarjetaSubida> tarjeta, String nombre) {
+        Mensaje primero = tarjeta.map(t -> enviarTarjeta(remitenteId, soporteId, t)).orElse(null);
+        Mensaje delTexto = enviarTexto(remitenteId, soporteId, nombre);
+        primero = primero != null ? primero : delTexto;
+        if (primero != null) {
+            marcaPort.marcar(aprendizId, primero.id());
+        }
+    }
+
+    private Mensaje enviarTarjeta(UserId remitenteId, ConversacionId soporteId, TarjetaSubida tarjeta) {
+        return enviarMensaje.enviar(new EnviarMensajeCommand(remitenteId, soporteId, TipoMensaje.IMAGEN, null,
+                Mensaje.BUCKET_DEFAULT, tarjeta.ruta(), DibujarBienvenidaPort.TIPO_CONTENIDO, tarjeta.bytes(), null,
+                null, OrigenMedia.CLIENTE));
+    }
+
+    /** @return el mensaje, o null si no hay texto configurado */
+    private Mensaje enviarTexto(UserId remitenteId, ConversacionId soporteId, String nombre) {
         if (texto.isEmpty()) {
-            return;
+            return null;
         }
         String mensaje = texto.replace(MARCA_NOMBRE, nombre.isEmpty() ? "" : nombre);
-        enviarMensaje.enviar(new EnviarMensajeCommand(remitenteId, soporteId, TipoMensaje.TEXTO, mensaje,
+        return enviarMensaje.enviar(new EnviarMensajeCommand(remitenteId, soporteId, TipoMensaje.TEXTO, mensaje,
                 null, null, null, null, null, null, OrigenMedia.CLIENTE));
+    }
+
+    private record TarjetaSubida(String ruta, int bytes) {
     }
 }

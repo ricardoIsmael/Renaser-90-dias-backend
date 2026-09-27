@@ -92,4 +92,25 @@ class VentanaEntregaTest {
         assertThat(v.vencida(v.plazoEvidencia())).isFalse();
         assertThat(v.vencida(v.plazoEvidencia().plusSeconds(1))).isTrue();
     }
+
+    /**
+     * S-8 (2026-09-26), prueba de caracterización: documenta el borde, no un arreglo. Un hábito del
+     * VIERNES con ventana 22:00 → 02:00 vence el SÁBADO a las 02:10 en Lima, pero el semáforo cierra
+     * esa semana en el barrido del sábado 00:25 (05:25 UTC). Lo que la persona cumpla a tiempo entre
+     * las 00:25 y las 02:10 ya no entra a su semana. Pregunta abierta para el dueño en
+     * docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md §7.
+     */
+    @Test
+    @DisplayName("S-8: la ventana del viernes 22:00->02:00 vence despues del cierre del semaforo del sabado 00:25")
+    void ventanaDelViernesCruzaElCierreDelSemaforo() {
+        ZoneId lima = ZoneId.of("America/Lima");
+        LocalDate viernes = LocalDate.of(2026, 9, 25);
+
+        VentanaEntrega v = VentanaEntrega.calcular(viernes, LocalTime.of(22, 0), LocalTime.of(2, 0), lima, null);
+
+        Instant cierreDelSemaforo = Instant.parse("2026-09-26T05:25:00Z"); // sabado 00:25 en Lima
+        assertThat(v.plazoEvidencia()).isEqualTo(Instant.parse("2026-09-26T07:10:00Z")); // sabado 02:10 en Lima
+        assertThat(v.plazoEvidencia()).isAfter(cierreDelSemaforo);
+        assertThat(v.vencida(cierreDelSemaforo)).isFalse();
+    }
 }
