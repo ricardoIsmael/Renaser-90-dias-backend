@@ -9560,3 +9560,40 @@ Verificado: `VozEnVivoWebSocketIT` 4/4 y el log muestra `[http] GET /api/v1/rena
 **Cómo evitar que vuelva a pasar.** Ningún `Filter`/`GenericFilterBean` como `@Component` en un paquete de módulo: se
 registra con `FilterRegistrationBean` y `new`. Un cambio que toque la cadena de filtros no se da por probado sin una IT
 que levante el servidor real (`VozEnVivoWebSocketIT` sirve) — las pruebas focalizadas con MockMvc no lo detectan.
+
+---
+
+## E-308 · «No pudimos cargar tu grupo.» en la tarjeta de Hoy de un mentor que simplemente no lidera ningún grupo
+
+**Síntoma.** e2e en emulador del 26/09 con la cuenta de prueba (rol MENTOR, sin grupo asignado): la tarjeta «MI GRUPO» de
+Hoy decía «No pudimos cargar tu grupo.», y al abrirla la pantalla decía correctamente «Todavía no lideras ningun grupo».
+
+**Causa real.** `textoDeLaTarjeta` (frontend) trataba todo `FalloCelula` distinto de `no_disponible` como error, incluido
+`sin_celula`, que no es un fallo sino un estado. Venía de antes (la tarjeta vieja tenía el mismo ternario); no lo introdujo
+la integración de S-1. De paso, la pantalla decía «ningun» sin tilde y «Cuando se te asigne una».
+
+**Solución.** Frontend 8a56c5b: `sin_celula` → «Todavía no lideras ningún grupo.», con prueba que falla contra el código
+viejo; textos corregidos en `EstadoCelula.tsx`.
+
+**Cómo evitar que vuelva a pasar.** Un `fallo` que representa un estado de negocio (sin grupo, sin asignación) se nombra
+aparte y nunca cae en el mensaje genérico de error: para un usuario de 30 a 60 años «No pudimos cargar» significa «revisa
+tu conexión».
+
+---
+
+## E-309 · Training mostraba «0/0 CUMPLIDOS» en las cinco dimensiones durante ~1 s al abrir
+
+**Síntoma.** e2e en emulador del 26/09: al abrir Training en frío, una captura a los 1,2 s mostraba el esqueleto ya
+quitado y todas las dimensiones en «0/0 CUMPLIDOS»; a los 4 s, los números reales (4/12, 0/8, 1/6, 3/5).
+
+**Causa real.** `TrainingScreen` copia los hábitos del hook a un estado local (para marcar al instante lo que el servidor
+confirma) dentro de un `useEffect`. Entre el render que apaga `loading` y el efecto que copia, se pinta un cuadro con la
+lista vacía; en un teléfono lento o en build de desarrollo ese cuadro dura cerca de un segundo. El patrón ya existía; con
+la carga más rápida de V-1 se vuelve más visible.
+
+**Solución.** Frontend 97900e4: `useLayoutEffect` en vez de `useEffect`, que copia antes de pintar. Verificado con seis
+capturas seguidas: esqueleto → datos, sin «0/0». No hay prueba automática: jest no pinta cuadros; queda como verificación
+de emulador.
+
+**Cómo evitar que vuelva a pasar.** Un estado local que espeja datos del servidor y decide lo que se muestra se sincroniza
+en `useLayoutEffect` (o se deriva sin estado); con `useEffect` siempre hay un cuadro intermedio.
