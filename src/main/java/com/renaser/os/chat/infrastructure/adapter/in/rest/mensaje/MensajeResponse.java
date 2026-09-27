@@ -47,7 +47,11 @@ public record MensajeResponse(String id, String conversationId, String senderId,
                 ReplyPreviewResponse.from(enriquecido.respuestaPreview()), m.creadoEn().toString());
     }
 
-    static String toWireTipo(TipoMensaje tipo) {
+    /**
+     * La traducción de D-36 para el tipo de un mensaje. Pública desde el 2026-09-27 (E-333): el aviso
+     * en vivo ({@code MensajeFanoutPayload}) manda el mismo valor que el REST, sacado de acá.
+     */
+    public static String toWireTipo(TipoMensaje tipo) {
         return switch (tipo) {
             case TEXTO -> "TEXT";
             case IMAGEN -> "IMAGE";

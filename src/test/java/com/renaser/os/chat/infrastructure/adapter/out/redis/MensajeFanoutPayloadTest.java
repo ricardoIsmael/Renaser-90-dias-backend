@@ -30,16 +30,18 @@ class MensajeFanoutPayloadTest {
         MensajeFanoutPayload aviso = MensajeFanoutPayload.from(delPrograma);
 
         assertThat(aviso.senderId()).isEqualTo(new UUID(0L, 0L));
-        assertThat(aviso.type()).isEqualTo("SISTEMA");
+        // E-333: el mismo valor que el REST (D-36); antes salía "SISTEMA", el nombre del dominio.
+        assertThat(aviso.type()).isEqualTo("SYSTEM");
         assertThat(aviso.event()).isEqualTo("MESSAGE");
     }
 
     @Test
-    @DisplayName("el de una persona lleva a su emisor")
+    @DisplayName("el de una persona lleva a su emisor, y el tipo como en el REST (E-333)")
     void elDeUnaPersonaLlevaASuEmisor() {
         Mensaje dePersona = Mensaje.escribir(MensajeId.of(UUID.randomUUID()), SOPORTE, ANA, TipoMensaje.TEXTO, "hola",
                 null, null, null, null, null, null, AHORA);
 
         assertThat(MensajeFanoutPayload.from(dePersona).senderId()).isEqualTo(ANA.value());
+        assertThat(MensajeFanoutPayload.from(dePersona).type()).as("E-333: TEXT, no TEXTO").isEqualTo("TEXT");
     }
 }
