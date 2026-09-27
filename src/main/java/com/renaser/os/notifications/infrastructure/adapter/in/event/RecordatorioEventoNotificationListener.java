@@ -1,0 +1,63 @@
+package com.renaser.os.notifications.infrastructure.adapter.in.event;
+
+import com.renaser.os.calendar.api.RecordatorioEventoDebidoEvent;
+import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase;
+import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase.EmitirNotificacionCommand;
+import com.renaser.os.notifications.domain.model.evento.AvisoDeEvento;
+import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
+import com.renaser.os.shared.domain.Clock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.modulith.events.ApplicationModuleListener;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.time.ZoneId;
+
+/**
+ * Entrega los recordatorios de eventos del calendario: bandeja y push, tipo
+ * {@code RECORDATORIO_EVENTO} (D-182, D-183).
+ *
+ * <p><b>Por que existe.</b> Hasta el 2026-09-26 nadie escuchaba {@link RecordatorioEventoDebidoEvent}.
+ * {@code calendar} marcaba la fila de {@code recordatorios_evento} como enviada y publicaba el
+ * evento al vacio: ningun recordatorio de evento llego nunca, incluida la alarma de 04:50 de la
+ * Semana de Manifestacion (E-301).
+ *
+ * <p><b>Sin perdidas y sin duplicados.</b> {@code @ApplicationModuleListener} hace que Modulith
+ * guarde la publicacion en el mismo commit en que {@code calendar} marca la fila enviada; si este
+ * metodo falla, la publicacion queda incompleta y se reintenta (cada 5 minutos y al arrancar). El
+ * reintento no duplica: la clave {@link AvisoDeEvento#claveDeduplicacion()} es una por fila de la
+ * cola, y {@code notificaciones_origen_evento_uk} (V16) rechaza la segunda.
+ *
+ * <p><b>Preferencias y cuentas suspendidas</b> no se deciden aca: {@code NotificacionService.emitir}
+ * no crea la fila si la persona apago {@code RECORDATORIO_EVENTO}, y no empuja al telefono de una
+ * cuenta sin acceso vigente (E-38).
+ */
+@Component
+class RecordatorioEventoNotificationListener {
+
+    private static final Logger log = LoggerFactory.getLogger(RecordatorioEventoNotificationListener.class);
+
+    private final EmitirNotificacionUseCase emitirNotificacionUseCase;
+    private final Clock clock;
+
+    RecordatorioEventoNotificationListener(EmitirNotificacionUseCase emitirNotificacionUseCase, Clock clock) {
+        this.emitirNotificacionUseCase = emitirNotificacionUseCase;
+        this.clock = clock;
+    }
+
+    @ApplicationModuleListener
+    void on(RecordatorioEventoDebidoEvent event) {
+        AvisoDeEvento aviso = new AvisoDeEvento(event.recordatorioId(), event.eventoId(), event.tituloEvento(),
+                event.inicioOcurrencia(), ZoneId.of(event.zonaHoraria()), event.esAnuncio());
+        Instant ahora = clock.now();
+        if (aviso.yaNoSirve(ahora)) {
+            log.info("[notifications.RecordatorioEventoNotificationListener] recordatorio {} descartado: "
+                    + "la ocurrencia del {} ya empezo", event.recordatorioId(), event.inicioOcurrencia());
+            return;
+        }
+        emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(event.destinatarioId(),
+                TipoNotificacion.RECORDATORIO_EVENTO, aviso.titulo(), aviso.cuerpo(ahora), aviso.rutaApp(),
+                aviso.claveDeduplicacion()));
+    }
+}

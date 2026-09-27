@@ -17,6 +17,7 @@ import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
+import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
@@ -191,6 +192,56 @@ class AvisoHabitoServiceTest {
 
         assertThat(servicioCon(Instant.parse("2026-09-05T23:00:00Z")).despacharDe(PARTICIPANTE)).isZero();
         verify(events, never()).publishEvent(any(Object.class));
+    }
+
+    // ─── D-184: el recordatorio que el aprendiz configuro para ese habito ─────────────────────
+
+    private void conPreferencia(boolean recordatorioActivo, Integer minutos) {
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), anyCollection(), any())).thenReturn(List.of(
+                PreferenciaHorario.rehydrate(PARTICIPANTE, HABITO, LocalTime.of(21, 0), LocalTime.of(22, 0),
+                        recordatorioActivo, minutos, MADRUGADA_UTC, MADRUGADA_UTC)));
+    }
+
+    @Test
+    @DisplayName("D-184: con recordatorio de 30 min, a las 20:35 de Lima (01:35 UTC) ya sale el aviso de inicio")
+    void usaLaAntelacionDelRecordatorioDelHabito() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+        conPreferencia(true, 30);
+
+        int publicados = servicioCon(Instant.parse("2026-09-06T01:35:00Z")).despacharDe(PARTICIPANTE);
+
+        assertThat(publicados).isEqualTo(1);
+        AvisoHabitoDebidoEvent evento = eventoPublicado();
+        assertThat(evento.tipoAviso()).isEqualTo(TipoAvisoHabito.INICIO.name());
+        assertThat(evento.minutosQueFaltan()).isEqualTo(25);
+        assertThat(evento.recordatorioActivo()).isTrue();
+        assertThat(evento.minutosRecordatorio()).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("D-184: recordatorio apagado -> el evento sale igual, con el dato, para que notifications no empuje")
+    void recordatorioApagadoViajaEnElEvento() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+        conPreferencia(false, null);
+
+        servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE);
+
+        AvisoHabitoDebidoEvent evento = eventoPublicado();
+        assertThat(evento.recordatorioActivo()).isFalse();
+        assertThat(evento.minutosRecordatorio()).isNull();
+    }
+
+    @Test
+    @DisplayName("D-184: sin preferencia el evento lleva null (nunca configurado), no 'apagado'")
+    void sinPreferenciaViajaNull() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+
+        servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE);
+
+        assertThat(eventoPublicado().recordatorioActivo()).isNull();
     }
 
     private AvisoHabitoDebidoEvent eventoPublicado() {

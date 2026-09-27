@@ -111,12 +111,22 @@ public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
         }
         Instant ahora = clock.now();
         VentanaEntrega ventana = ventanaDe(registro, habito, agenda, zona);
-        List<AvisoHabito> debidos = calculadora.debidosAhora(ventana, ahora);
+        PreferenciaHorario preferencia = agenda.preferencias().get(habito.id());
+        List<AvisoHabito> debidos = calculadoraPara(preferencia).debidosAhora(ventana, ahora);
         PuntosEnJuego puntos = PuntosEnJuego.de(ventana, ahora);
         for (AvisoHabito aviso : debidos) {
-            events.publishEvent(eventoDe(registro, habito, aviso, puntos));
+            events.publishEvent(eventoDe(registro, habito, aviso, puntos, preferencia));
         }
         return debidos.size();
+    }
+
+    /** D-184: el aviso de inicio con la antelacion del recordatorio que el aprendiz eligio. */
+    private CalculadoraAvisosHabito calculadoraPara(PreferenciaHorario preferencia) {
+        if (preferencia == null) {
+            return calculadora;
+        }
+        return calculadora.conRecordatorioDelAprendiz(preferencia.recordatorioActivo(),
+                preferencia.minutosRecordatorio());
     }
 
     /** {@code null} cuando el habito no tiene ninguna hora configurada: no vence y no se avisa. */
@@ -132,11 +142,18 @@ public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
                 zona, habito.horasExtraEvidencia());
     }
 
+    /**
+     * El evento se publica SIEMPRE, aunque el aprendiz haya apagado el recordatorio de ese habito:
+     * apagarlo quita el push (lo decide `notifications`, D-184), no el aviso en la bandeja ni el
+     * del chat del acompanante, que tiene su propio interruptor.
+     */
     private AvisoHabitoDebidoEvent eventoDe(RegistroHabito registro, Habito habito, AvisoHabito aviso,
-                                             PuntosEnJuego puntos) {
+                                             PuntosEnJuego puntos, PreferenciaHorario preferencia) {
         return new AvisoHabitoDebidoEvent(registro.id().value(), registro.participanteId(), habito.titulo(),
                 aviso.tipo().name(), aviso.minutosQueFaltan(), puntos.siCompletaAhora(),
-                aviso.tipo().claveIdempotencia(registro.id()), clock.now());
+                aviso.tipo().claveIdempotencia(registro.id()),
+                preferencia == null ? null : preferencia.recordatorioActivo(),
+                preferencia == null ? null : preferencia.minutosRecordatorio(), clock.now());
     }
 
     /** Una consulta por coleccion y no una por registro: este barrido recorre todo el padron. */

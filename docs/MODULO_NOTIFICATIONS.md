@@ -204,6 +204,8 @@ A diferencia de `habits`→`points` y `rocks`→`points` (síncrono, misma trans
 
 ## 7. Preguntas abiertas para el supervisor
 
+> **Resuelto en parte 2026-09-26 (D-184).** El «hábito completado» sigue creando su fila `LOGRO_DESBLOQUEADO` en la bandeja, pero **ya no manda push** (E-303: la retroalimentación confirmó el ruido). Si el negocio prefiere no crear ni la fila, sigue valiendo lo de abajo.
+
 1. **¿El mapeo de tipos de DN-1 es el correcto?** En particular, ¿debería `HabitoCompletadoEvent` generar una notificación por cada hábito completado (varias por día), o el negocio prefiere no notificar eso en absoluto (como hacía el repo viejo, que nunca lo notificaba)? Si la respuesta es "no notificar", el cambio es eliminar el llamado a `emitir()` de `HabitoCompletadoNotificationListener` (o dejarlo vacío documentando por qué), sin tocar el resto del módulo.
 2. **¿Los roles permitidos en `/api/v1/notifications`, `/notification-preferences` y `/push-tokens` son correctos?** Hoy los tres son "cualquier autoservicio autenticado" (mismo criterio que `support` para tickets de soporte) — no hay gate de rol porque ninguno de los tres endpoints tiene una versión "para otro usuario". A confirmar si corresponde alguna restricción (ej. ¿un `SUSPENDED` debería seguir viendo su propia bandeja? Se asumió que sí, mismo criterio que `support` §0.2 "a suspended account can still reach support" — no confirmado para este módulo específicamente).
 3. **DN-3 (push best-effort desde `EmitirNotificacionUseCase`):** se mantiene un solo punto de salida para bandeja y push. Web Push usa VAPID (`WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, `WEB_PUSH_VAPID_SUBJECT`); los tokens móviles siguen registrados y quedan para su adaptador nativo.
@@ -250,6 +252,62 @@ A diferencia de `habits`→`points` y `rocks`→`points` (síncrono, misma trans
 - [x] Bitácora de errores actualizada con E-163 (mapper Jackson 2 en Spring Boot 4)
 
 **Honestidad de alcance:** todo lo pedido en el encargo está construido — los 3 agregados completos (dominio/aplicación/persistencia/REST), los 4 listeners de eventos con el mecanismo de outbox probado de punta a punta contra 2 de los 4 eventos reales (más los 4 cubiertos a nivel unitario), el scheduler de retención y el adaptador Web Push VAPID. Lo que queda para producción es cargar las variables VAPID en el backend y la clave pública en el bundle web; los tokens móviles siguen listos para su adaptador nativo.
+
+## 10. Recordatorios de eventos y push de hábitos (2026-09-26, D-182 a D-184)
+
+Ítems E-1, E-2 y E-3 de `docs/specs/RETROALIMENTACION_2026-09-26.md`.
+
+### 10.1 Recordatorios de eventos (D-182, D-183, E-301)
+
+- **`RecordatorioEventoNotificationListener`** consume `calendar.api.RecordatorioEventoDebidoEvent` y
+  emite `RECORDATORIO_EVENTO` (valor nuevo del enum, **V70**; no es una tabla) con ruta
+  `/eventos/{eventoId}`. Antes nadie escuchaba ese evento y todos los recordatorios se perdían.
+- **Texto** (`domain/model/evento/AvisoDeEvento`): título = el del evento (el anuncio: «Nuevo
+  evento: …»); cuerpo «Empieza en 10 min, a las 19:30.» (hasta 60 min antes), «Es hoy a las 05:30.»,
+  «Es mañana a las 05:00.» o «Es el jueves 1 de octubre a las 19:30.». Hoy/mañana y la hora se
+  calculan en la **zona del evento**, nunca en UTC (regla 02; probado con relojes entre 00:00 y
+  05:00 UTC).
+- **Una vez, sin pérdidas:** clave `origen_evento_id = UUID.nameUUIDFromBytes("recordatorio-evento:" +
+  recordatorioId)`, una por fila de `recordatorios_evento`. Una reentrega del outbox choca contra V16
+  y no repite ni la fila ni el push. Si el listener falla, la publicación queda incompleta y se
+  reintenta (ver `MODULO_CALENDAR.md` §4 para qué significa `enviado_en`).
+- **Reintento tardío:** si la ocurrencia ya empezó cuando el listener corre, el recordatorio se
+  descarta (diría «empieza en…» de algo que ya pasó). El anuncio de evento nuevo se manda igual.
+- **Preferencias y suspendidos:** como todo lo demás, por `NotificacionService.emitir` — con
+  `RECORDATORIO_EVENTO` apagado no se crea la fila; a una cuenta sin acceso vigente no le sale el
+  push (la fila sí queda, E-38). El interruptor «Eventos y clases» de E-4 guarda este tipo.
+- **App instalada:** la única lectura de la bandeja (`avisosApi.ts`) valida `type` como string
+  abierto y filtra por `ACOMPANAMIENTO_ALUMNO`, así que el tipo nuevo no rompe nada; el toque sobre un
+  push con ruta `/eventos/...` solo abre la app (no hay pantalla de eventos hasta E-5).
+  `GET /api/v1/notification-preferences` devuelve un ítem más (`RECORDATORIO_EVENTO`).
+
+### 10.2 A qué dispositivos se empuja (D-184, E-302, E-303)
+
+`EmitirNotificacionUseCase` suma `emitir(command, EntregaPush)`; el `emitir(command)` de siempre es
+`EntregaPush.TODOS`. La bandeja no cambia en ningún caso: `EntregaPush` solo decide el empujón.
+
+| `EntregaPush` | Quién lo usa |
+|---|---|
+| `NINGUNO` | Logro por hábito completado (`HabitoCompletadoNotificationListener`, E-303); aviso de hábito con el recordatorio apagado |
+| `SOLO_NAVEGADOR` | Aviso de **inicio** de un hábito cuyo teléfono ya tiene alarma local |
+| `TODOS` | Todo lo demás, incluidos la racha sin celular y la roca completada (logros que sí merecen push) |
+
+**Regla de los avisos de hábito** (`domain/model/habito/EntregaDelAvisoDeHabito`): el teléfono hace
+sonar su alarma local; el push del servidor es el respaldo para lo que el teléfono no cubre.
+
+1. `recordatorio_activo = false` → sin push (inicio y vencimiento). Queda la fila.
+2. Inicio con recordatorio encendido y `minutos_recordatorio` elegido (es cuando la app programa la
+   alarma en el dispositivo) → push solo a tokens `WEB`: el navegador no tiene alarma local.
+3. Lo demás → push a todos: el vencimiento (la app no programa alarma para el plazo) y los hábitos
+   nunca configurados (los dos avisos automáticos son pedido del dueño del 2026-09-05).
+
+`habits` manda los dos datos en `AvisoHabitoDebidoEvent` (`recordatorioActivo`, `minutosRecordatorio`;
+`null` = sin preferencia, o publicación anterior a D-184) y alinea la antelación del aviso de inicio con
+la del recordatorio (`CalculadoraAvisosHabito.conRecordatorioDelAprendiz`, mínimo 5 min por el barrido).
+El mensaje del acompañante en el chat (`rag.AvisoHabitoEnChatListener`) no cambia: el evento se sigue
+publicando aunque el recordatorio esté apagado.
+
+---
 
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 

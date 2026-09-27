@@ -236,6 +236,23 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase, Despach
         return List.copyOf(cursoPort.filtrarConAcceso(evento.cursoId(), candidatos));
     }
 
+    /**
+     * <b>Que significa "enviado" (D-182).</b> {@code enviado_en} quiere decir "entregado al outbox",
+     * no "llego al telefono". Es correcto marcarlo en esta misma transaccion porque el evento se
+     * publica DENTRO de ella: Spring Modulith guarda la publicacion en {@code event_publication} en
+     * el mismo commit que el {@code UPDATE} de {@code enviado_en}. O se guardan las dos cosas o
+     * ninguna; no hay ventana en que la fila quede marcada y el aviso sin registrar.
+     *
+     * <p>Despues del commit, {@code notifications} crea la notificacion. Si eso falla, la
+     * publicacion queda incompleta y {@code EventPublicationMaintenanceScheduler} la reintenta
+     * cada 5 minutos (y al arrancar); el reintento no duplica porque la notificacion se deduplica
+     * por el {@code id} de esta fila.
+     *
+     * <p><b>La garantia depende de que exista un consumidor.</b> Sin ningun
+     * {@code @ApplicationModuleListener} para este evento, Modulith no guarda nada y la fila se
+     * marca igual: asi se perdieron todos los recordatorios hasta el 2026-09-26 (E-301).
+     * {@code RecordatorioEventoNotificationListenerTest} verifica que el consumidor exista.
+     */
     @Override
     @Transactional
     public int despachar(Instant ahora) {
@@ -259,7 +276,8 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase, Despach
 
             boolean esAnuncio = recordatorio.esAnuncio(evento.creadoEn());
             events.publishEvent(new RecordatorioEventoDebidoEvent(recordatorio.id(), evento.id().value(),
-                    recordatorio.usuarioId(), recordatorio.inicioOcurrencia(), evento.titulo(), esAnuncio, ahora));
+                    recordatorio.usuarioId(), recordatorio.inicioOcurrencia(), evento.titulo(), esAnuncio,
+                    evento.timezone().getId(), ahora));
             despachadosIds.add(recordatorio.id());
         }
 

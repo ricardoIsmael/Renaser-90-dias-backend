@@ -11,6 +11,7 @@ import com.renaser.os.notifications.application.ports.out.push.DesactivarTokenPu
 import com.renaser.os.notifications.application.ports.out.push.PushPort;
 import com.renaser.os.notifications.application.ports.out.push.ResultadoEnvioPush;
 import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPushPort;
+import com.renaser.os.notifications.domain.model.notificacion.EntregaPush;
 import com.renaser.os.notifications.domain.model.notificacion.Notificacion;
 import com.renaser.os.notifications.domain.model.preferencia.PreferenciaNotificacion;
 import com.renaser.os.shared.domain.Clock;
@@ -87,9 +88,18 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
      * leer, entregar es ponerselo en la pantalla del telefono con la cuenta ya revocada. El
      * estado del destinatario se consulta en {@link #intentarPush}, no aca.
      */
+    /** Se sobreescribe el {@code default} del puerto solo para que lleve {@code @Transactional}: el
+     * default de la interfaz llamaria al metodo de abajo desde adentro del objeto, sin pasar por el
+     * proxy, y la emision de los veintitantos llamadores de siempre perderia su transaccion. */
     @Override
     @Transactional
     public Optional<Notificacion> emitir(EmitirNotificacionCommand command) {
+        return emitir(command, EntregaPush.TODOS);
+    }
+
+    @Override
+    @Transactional
+    public Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush) {
         boolean habilitada = loadPreferenciasPort.habilitadaPara(command.usuarioId(), command.tipo())
                 .orElse(PreferenciaNotificacion.DEFAULT_HABILITADA);
         if (!habilitada) {
@@ -105,7 +115,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
                     command.origenEventoId(), command.tipo());
             return Optional.empty();
         }
-        pushDespuesDelCommit(command);
+        pushDespuesDelCommit(command, entregaPush);
         return guardada;
     }
 
@@ -169,15 +179,19 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
      * <p>Si no hay transacción activa —una llamada directa en una prueba— se envía en el momento.
      * Registrar la sincronización sin transacción lanza, y perder el push por eso sería peor.
      */
-    private void pushDespuesDelCommit(EmitirNotificacionCommand command) {
+    private void pushDespuesDelCommit(EmitirNotificacionCommand command, EntregaPush entregaPush) {
+        if (entregaPush == EntregaPush.NINGUNO) {
+            // D-184: solo bandeja. Ni se consultan los tokens.
+            return;
+        }
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            intentarPush(command);
+            intentarPush(command, entregaPush);
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                intentarPush(command);
+                intentarPush(command, entregaPush);
             }
         });
     }
@@ -200,9 +214,9 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
      * {@code DespachadorPush.enviar} ya devolvia lista vacia para una lista vacia, asi que cortar
      * antes no cambia el resultado.
      */
-    private void intentarPush(EmitirNotificacionCommand command) {
+    private void intentarPush(EmitirNotificacionCommand command, EntregaPush entregaPush) {
         try {
-            var tokens = loadTokenPushPort.tokensDe(command.usuarioId());
+            var tokens = entregaPush.filtrar(loadTokenPushPort.tokensDe(command.usuarioId()));
             if (tokens.isEmpty()) {
                 return;
             }

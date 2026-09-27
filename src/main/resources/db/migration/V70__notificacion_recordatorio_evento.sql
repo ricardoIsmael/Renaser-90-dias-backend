@@ -1,0 +1,39 @@
+-- Tipo de notificacion para los recordatorios de eventos del calendario (E-3 del spec
+-- docs/specs/RETROALIMENTACION_2026-09-26.md, D-183).
+--
+-- Que problema resuelve
+-- ---------------------
+-- Los recordatorios de eventos (la alarma de 04:50 de la Semana de Manifestacion, el "1 dia antes",
+-- el "10 minutos antes" de una mentoria) NUNCA llegaban a nadie: `calendar` los marcaba enviados y
+-- publicaba `RecordatorioEventoDebidoEvent`, pero ningun modulo lo escuchaba (E-301). El listener
+-- nuevo de `notifications` (RecordatorioEventoNotificationListener) los convierte en una fila de la
+-- bandeja + push, y esa fila necesita un tipo.
+--
+-- Por que no se reusa un valor existente
+-- --------------------------------------
+-- El candidato era `ANUNCIO_SISTEMA`. Se descarto porque el tipo es tambien la llave de
+-- `preferencias_notificacion` y de la deduplicacion `(usuario_id, tipo, origen_evento_id)` (V16):
+-- con `ANUNCIO_SISTEMA`, apagar los recordatorios de eventos apagaria tambien los anuncios del
+-- sistema, y el interruptor "Eventos y clases" de E-4 no tendria un tipo propio que guardar.
+-- `RECORDATORIO_HABITO`/`RECORDATORIO_ROCA` ya existen con el mismo criterio: un tipo por cosa que la
+-- persona puede querer silenciar por separado.
+--
+-- La app instalada no se rompe con un valor desconocido: la unica lectura de la bandeja en la app
+-- (`avisosApi.ts`) valida `type` como `z.string()` abierto y filtra por el tipo que le interesa, asi
+-- que una fila `RECORDATORIO_EVENTO` simplemente no se muestra ahi. Verificado el 2026-09-26.
+--
+-- Por que no se crea ninguna tabla
+-- --------------------------------
+-- La cola de recordatorios ya existe (`recordatorios_evento`), y la bandeja, las preferencias, la
+-- deduplicacion y la purga a 90 dias tambien. Un valor mas en `tipo_notificacion`, misma decision que
+-- V46 (ACOMPANAMIENTO_ALUMNO), V49 (GRUPO_POR_VENCER) y V59 (PATRON_DE_MALESTAR_REPETIDO).
+--
+-- Por que este nombre
+-- -------------------
+-- `RECORDATORIO_EVENTO` sigue la forma de sus hermanos `RECORDATORIO_HABITO`, `RECORDATORIO_ROCA` y
+-- `RECORDATORIO_RADAR`, y nombra la tabla de la que sale (`recordatorios_evento`). Cubre tambien el
+-- anuncio "hay un evento nuevo": sale de la misma cola y se silencia con el mismo interruptor.
+
+-- ALTER TYPE ... ADD VALUE no puede correr dentro de un bloque transaccional junto con sentencias
+-- que USEN el valor nuevo. Va solo, sin BEGIN/COMMIT, exactamente como en V46, V49 y V59.
+ALTER TYPE renaser.tipo_notificacion ADD VALUE IF NOT EXISTS 'RECORDATORIO_EVENTO';

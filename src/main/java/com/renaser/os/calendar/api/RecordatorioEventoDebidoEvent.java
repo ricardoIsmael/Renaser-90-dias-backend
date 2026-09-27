@@ -22,8 +22,20 @@ import java.util.UUID;
  * <p>{@code eventoId}/{@code recordatorioId} son {@code UUID}/{@code Long} planos, no los
  * value objects de {@code calendar.domain} (paquete interno sin {@code @NamedInterface}) —
  * mismo criterio documentado en {@code RocaCompletadaEvent}.
+ *
+ * <p><b>Consumidor (D-182, 2026-09-26).</b> Hasta esa fecha NADIE escuchaba este evento, y como
+ * {@code despachar()} marca la fila enviada en la misma transaccion en que lo publica, todos los
+ * recordatorios de eventos se perdian en silencio (E-301). Lo consume
+ * {@code notifications.RecordatorioEventoNotificationListener}.
+ *
+ * @param recordatorioId id de la fila de {@code recordatorios_evento}; es la clave de deduplicacion
+ *                       de la notificacion (una por fila, aunque el outbox reentregue)
+ * @param zonaHoraria    zona del evento ({@code eventos.timezone}), para que el texto diga la hora
+ *                       de pared correcta ("hoy a las 05:30") y no la hora UTC. Agregada con D-182:
+ *                       no hay publicaciones viejas de este evento en el outbox, porque sin
+ *                       consumidor Modulith no registraba ninguna
  */
 public record RecordatorioEventoDebidoEvent(Long recordatorioId, UUID eventoId, UserId destinatarioId,
                                              Instant inicioOcurrencia, String tituloEvento, boolean esAnuncio,
-                                             Instant occurredAt) implements DomainEvent {
+                                             String zonaHoraria, Instant occurredAt) implements DomainEvent {
 }

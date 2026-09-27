@@ -3,6 +3,7 @@ package com.renaser.os.notifications.infrastructure.adapter.in.event;
 import com.renaser.os.habits.api.AvisoHabitoDebidoEvent;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase.EmitirNotificacionCommand;
+import com.renaser.os.notifications.domain.model.habito.EntregaDelAvisoDeHabito;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
@@ -34,6 +35,11 @@ import org.springframework.stereotype.Component;
  * <p>El {@code switch} sobre el nombre del tipo llega como String, no como enum, a proposito:
  * {@code TipoAvisoHabito} vive en un paquete interno de `habits` y no puede cruzar su
  * {@code @NamedInterface} (mismo criterio que {@code HabitoDelDiaResumen.estado}).
+ *
+ * <p><b>Push segun el recordatorio del habito (D-184, 2026-09-26).</b> Antes se empujaba siempre, a
+ * todos los dispositivos, ignorando el recordatorio que el aprendiz configuro en la app: con la
+ * alarma local del telefono el aviso llegaba dos veces, y apagarlo no apagaba el push (E-302). Ahora
+ * decide {@link EntregaDelAvisoDeHabito}; la fila de la bandeja se crea igual que siempre.
  */
 @Component
 class AvisoHabitoNotificationListener {
@@ -51,7 +57,9 @@ class AvisoHabitoNotificationListener {
         boolean esInicio = AVISO_INICIO.equals(event.tipoAviso());
         emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(event.participanteId(),
                 TipoNotificacion.RECORDATORIO_HABITO, esInicio ? "Tu habito esta por empezar" : "Se te vence un habito",
-                cuerpoDe(event, esInicio), null, event.claveEvento()));
+                cuerpoDe(event, esInicio), null, event.claveEvento()),
+                EntregaDelAvisoDeHabito.para(event.tipoAviso(), event.recordatorioActivo(),
+                        event.minutosRecordatorio()));
     }
 
     /**

@@ -3,6 +3,7 @@ package com.renaser.os.notifications.infrastructure.adapter.in.event;
 import com.renaser.os.habits.api.HabitoCompletadoEvent;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase.EmitirNotificacionCommand;
+import com.renaser.os.notifications.domain.model.notificacion.EntregaPush;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
@@ -23,6 +24,11 @@ import org.springframework.stereotype.Component;
  * completado" en el baseline — se usa {@code LOGRO_DESBLOQUEADO} como aproximacion razonable,
  * NO confirmada por negocio. Riesgo real: esto emite una notificacion por CADA habito
  * completado (varias por dia), lo cual puede ser ruido — a revisar.
+ *
+ * <p><b>Solo bandeja, sin push (D-184, 2026-09-26).</b> Ese ruido se confirmo con la
+ * retroalimentacion de los usuarios (E-303): el telefono sonaba por cada habito que la misma
+ * persona acababa de marcar. La fila sigue en la bandeja; los logros que si merecen el push (la
+ * racha sin celular, {@code RachaCompletadaNotificationListener}; la roca completada) no cambian.
  */
 @Component
 class HabitoCompletadoNotificationListener {
@@ -38,6 +44,7 @@ class HabitoCompletadoNotificationListener {
         // C-7: registroId es la clave de deduplicacion si el outbox reentrega este evento.
         emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(event.participanteId(),
                 TipoNotificacion.LOGRO_DESBLOQUEADO, "Habito completado",
-                "Sumaste " + event.puntosOtorgados() + " puntos.", null, event.registroId()));
+                "Sumaste " + event.puntosOtorgados() + " puntos.", null, event.registroId()),
+                EntregaPush.NINGUNO);
     }
 }

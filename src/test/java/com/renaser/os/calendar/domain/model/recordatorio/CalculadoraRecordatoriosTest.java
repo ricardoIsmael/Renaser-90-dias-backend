@@ -38,6 +38,25 @@ class CalculadoraRecordatoriosTest {
         assertThat(instantes.get(0).enviarEn()).isEqualTo(OCURRENCIA.minusSeconds(86_400));
     }
 
+    /**
+     * Regla 02/03 (E-91), D-182: la alarma de 04:50 de la Semana de Manifestacion para un evento
+     * de la NOCHE de Lima, cuyo inicio ya cae en el dia UTC siguiente. El reloj esta entre 00:00 y
+     * 05:00 UTC, cuando la fecha del servidor y la de Lima difieren. Resolver "el mismo dia" en UTC
+     * mandaria la alarma un dia tarde (09:50 UTC del 29 = 04:50 del 29 en Lima, despues del evento).
+     */
+    @Test
+    void alarmaDeLas0450SeResuelveEnElDiaDeLimaAunqueElInicioCaigaEnOtroDiaUtc() {
+        Instant ocurrenciaNocturna = Instant.parse("2026-09-29T00:30:00Z"); // 19:30 del 28 en Lima
+        Instant madrugadaUtc = Instant.parse("2026-09-28T03:00:00Z");       // 22:00 del 27 en Lima
+        ReglaRecordatorio alarma = ReglaRecordatorio.horaDelDia(1, LocalTime.of(4, 50));
+
+        List<InstanteRecordatorio> instantes = CalculadoraRecordatorios.instantesPara(ocurrenciaNocturna,
+                List.of(alarma), LIMA, madrugadaUtc);
+
+        assertThat(instantes).hasSize(1);
+        assertThat(instantes.get(0).enviarEn()).isEqualTo(Instant.parse("2026-09-28T09:50:00Z"));
+    }
+
     @Test
     void horaDelDiaResuelveAlMismoDiaEnLaZonaDelEvento() {
         ReglaRecordatorio regla = ReglaRecordatorio.horaDelDia(1, LocalTime.of(6, 0));

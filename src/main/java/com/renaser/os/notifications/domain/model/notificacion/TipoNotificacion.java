@@ -31,5 +31,12 @@ public enum TipoNotificacion {
      * <b>No es un diagnostico</b> — es un patron de texto que se repitio y conviene mirar. Le llega
      * a ADMIN y ALCHEMIST, y nunca lleva una sola palabra de lo que la persona escribio.
      */
-    PATRON_DE_MALESTAR_REPETIDO
+    PATRON_DE_MALESTAR_REPETIDO,
+
+    /**
+     * V70 (D-183): un recordatorio de la cola {@code recordatorios_evento} de `calendar` — "tu evento
+     * empieza en 10 min", la alarma de 04:50 de la Semana de Manifestacion, o el anuncio de un evento
+     * nuevo. Tipo propio y no {@code ANUNCIO_SISTEMA} para que se pueda silenciar por separado.
+     */
+    RECORDATORIO_EVENTO
 }

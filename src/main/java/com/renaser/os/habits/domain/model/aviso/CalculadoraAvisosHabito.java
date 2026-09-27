@@ -41,12 +41,43 @@ import java.util.Objects;
  */
 public record CalculadoraAvisosHabito(Duration antelacionInicio, Duration antelacionVencimiento) {
 
+    /**
+     * El barrido corre cada 5 minutos: una franja mas corta que eso puede caer entera entre dos
+     * vueltas y el aviso no sale nunca. Un recordatorio de "a la hora" (0) o de 3 minutos se
+     * avisa con esta antelacion, que es lo mas cerca de la hora que el barrido garantiza.
+     */
+    public static final Duration ANTELACION_MINIMA = Duration.ofMinutes(5);
+
     public CalculadoraAvisosHabito {
         Objects.requireNonNull(antelacionInicio, "antelacionInicio es obligatoria");
         Objects.requireNonNull(antelacionVencimiento, "antelacionVencimiento es obligatoria");
         if (antelacionInicio.isNegative() || antelacionVencimiento.isNegative()) {
             throw new IllegalArgumentException("las antelaciones de aviso no pueden ser negativas");
         }
+    }
+
+    /**
+     * La calculadora para UN habito, con la antelacion que el aprendiz eligio para su recordatorio
+     * (D-184). La app guarda en {@code preferencias_horario.minutos_recordatorio} la antelacion de
+     * la alarma que programa en el telefono; el aviso de inicio del servidor se alinea con ella en
+     * vez de usar la antelacion global, asi el aviso de la bandeja (y el push al navegador, que no
+     * tiene alarma local) dice lo mismo y a la misma hora que la alarma del telefono.
+     *
+     * <p>Sin preferencia, con el recordatorio apagado o sin minutos elegidos, queda la antelacion
+     * global. Si la global de inicio es cero (el aviso apagado por entorno), la preferencia no lo
+     * vuelve a encender. El aviso de vencimiento no cambia: el telefono no tiene alarma para eso.
+     *
+     * @param recordatorioActivo  {@code recordatorio_activo} del habito, {@code null} sin preferencia
+     * @param minutosRecordatorio {@code minutos_recordatorio} del habito, {@code null} si no eligio
+     */
+    public CalculadoraAvisosHabito conRecordatorioDelAprendiz(Boolean recordatorioActivo,
+                                                              Integer minutosRecordatorio) {
+        if (!Boolean.TRUE.equals(recordatorioActivo) || minutosRecordatorio == null || antelacionInicio.isZero()) {
+            return this;
+        }
+        Duration propia = Duration.ofMinutes(Math.max(minutosRecordatorio, 0));
+        Duration efectiva = propia.compareTo(ANTELACION_MINIMA) < 0 ? ANTELACION_MINIMA : propia;
+        return new CalculadoraAvisosHabito(efectiva, antelacionVencimiento);
     }
 
     /**
