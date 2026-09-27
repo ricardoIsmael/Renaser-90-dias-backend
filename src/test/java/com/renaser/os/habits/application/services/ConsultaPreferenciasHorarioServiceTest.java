@@ -60,6 +60,8 @@ class ConsultaPreferenciasHorarioServiceTest {
     private LoadCambioHorarioPendientePort loadCambioPendientePort;
     @Mock
     private HistorialCambioHorarioPort historialPort;
+    @Mock
+    private com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort loadRegistroPort;
 
     private ConsultaPreferenciasHorarioService service;
     private UserId actor;
@@ -67,7 +69,7 @@ class ConsultaPreferenciasHorarioServiceTest {
     @BeforeEach
     void setUp() {
         service = new ConsultaPreferenciasHorarioService(progresoPort, loadHabitoPort, loadHorarioPort,
-                loadPreferenciaPort, loadCambioPendientePort, historialPort, CLOCK);
+                loadPreferenciaPort, loadCambioPendientePort, historialPort, loadRegistroPort, CLOCK);
         actor = UserId.of(UUID.randomUUID());
         lenient().when(loadHabitoPort.personalesActivosDe(any())).thenReturn(List.of());
     }
@@ -120,6 +122,49 @@ class ConsultaPreferenciasHorarioServiceTest {
         assertThat(vista.horaLimite()).isEqualTo(LocalTime.of(8, 0));
         assertThat(vista.personalizado()).isFalse();
         assertThat(vista.cambioProgramado()).isNull();
+    }
+
+    /**
+     * D-200: un habito PERSONAL creado el dia 30 (su horario arranca ahi) que la persona hizo hasta
+     * el 32; la retrocedieron al 25 y se le sigue generando. Plan (y el acompanante, que lee esto por
+     * {@code HorarioDelDiaFinder}) tiene que mostrarle su hora, la misma con la que se genera. Contra
+     * el codigo viejo salia sin hora.
+     */
+    @Test
+    void unHabitoQueYaCorrioYQuedoPorDebajoDeSuInicioMuestraSuHora() {
+        conProgreso(25, false);
+        Habito habito = habito("Correr 5km");
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 30, null, TipoDia.TODOS,
+                        LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now())));
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
+        when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
+        when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(actor, List.of(habito.id())))
+                .thenReturn(java.util.Map.of(habito.id(), 32));
+
+        var vista = service.consultar(actor).habitos().get(0);
+
+        assertThat(vista.horaDisparo()).isEqualTo(LocalTime.of(6, 0));
+        assertThat(vista.horaLimite()).isEqualTo(LocalTime.of(8, 0));
+    }
+
+    /** Lo que nunca corrio desde su inicio sigue como antes: todavia no tiene hora que mostrar. */
+    @Test
+    void unHabitoQueNuncaCorrioDesdeSuInicioSigueSinHora() {
+        conProgreso(25, false);
+        Habito habito = habito("Correr 5km");
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 30, null, TipoDia.TODOS,
+                        LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now())));
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
+        when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
+
+        var vista = service.consultar(actor).habitos().get(0);
+
+        assertThat(vista.horaDisparo()).isNull();
+        assertThat(vista.horaLimite()).isNull();
     }
 
     @Test

@@ -57,16 +57,19 @@ class AudioterapiaServiceTest {
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
     @Mock
     private AlmacenamientoPort almacenamientoPort;
+    @Mock
+    private com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort loadRegistroPort;
 
     private AudioterapiaService service;
 
     private final UserId trainee = UserId.of(UUID.randomUUID());
+    private static final HabitoId AUDIOTERAPIA = HabitoId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
         service = new AudioterapiaService(loadHabitoPort, loadHorarioPort, catalogoPort, progresoPort,
-                almacenamientoPort);
-        Habito habito = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "AUDIOTERAPIA SEMANAL",
+                almacenamientoPort, loadRegistroPort);
+        Habito habito = Habito.crearDeSistema(AUDIOTERAPIA, "AUDIOTERAPIA SEMANAL",
                 TipoHabito.JOURNALING, new DetallesHabito(null, "ESPIRITU", ExigenciaEvidencia.OPCIONAL, false, false),
                 AHORA);
         lenient().when(loadHabitoPort.porClaveSistema("AUDIO_THERAPY_WEEKLY")).thenReturn(Optional.of(habito));
@@ -89,6 +92,37 @@ class AudioterapiaServiceTest {
         EstadoAudioterapia estado = service.consultar(trainee);
 
         assertThat(estado).isInstanceOf(EsperandoContenido.class);
+    }
+
+    /**
+     * D-200: la persona venia haciendo la Audioterapia (arranca el dia 11) y la retrocedieron al 9.
+     * El track se le sigue generando, asi que tiene audio: el de su primer dia, la semana 1. Contra
+     * el codigo viejo decia "esperando contenido" y el acompanante no podia entregarla.
+     */
+    @Test
+    void siYaCorrioYLaRetrocedieronAntesDeSuInicioResuelveLaSemanaUno() {
+        progresoDia(9);
+        when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(trainee, List.of(AUDIOTERAPIA)))
+                .thenReturn(java.util.Map.of(AUDIOTERAPIA, 12));
+        when(catalogoPort.todasOrdenadas()).thenReturn(
+                List.of(new Audioterapia(1, "Semana 1", "ruta/1.mp3", "audio/mpeg", 1000, 7)));
+
+        EstadoAudioterapia estado = service.consultar(trainee);
+
+        assertThat(estado).isInstanceOfSatisfying(AudioDeLaSemana.class, audio -> {
+            assertThat(audio.semanaActual()).isEqualTo(1);
+            assertThat(audio.diaSiguienteCambio()).isEqualTo(18);
+        });
+    }
+
+    /** Lo que nunca corrio desde el dia 11 sigue esperando, igual que su generacion. */
+    @Test
+    void siNuncaCorrioDesdeSuInicioSigueEsperando() {
+        progresoDia(9);
+        when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(trainee, List.of(AUDIOTERAPIA)))
+                .thenReturn(java.util.Map.of(AUDIOTERAPIA, 10));
+
+        assertThat(service.consultar(trainee)).isInstanceOf(EsperandoContenido.class);
     }
 
     @Test
@@ -182,7 +216,7 @@ class AudioterapiaServiceTest {
             int ultimoDia = primerDia + 6;
             for (int dia : new int[]{primerDia, ultimoDia}) {
                 AudioterapiaService aislado = new AudioterapiaService(loadHabitoPort, loadHorarioPort, catalogoPort,
-                        progresoPort, almacenamientoPort);
+                        progresoPort, almacenamientoPort, loadRegistroPort);
                 lenient().when(progresoPort.deParticipante(trainee)).thenReturn(
                         Optional.of(new ProgresoParticipanteHabits(dia, "America/Lima", RolParticipante.TRAINEE,
                                 false, false)));

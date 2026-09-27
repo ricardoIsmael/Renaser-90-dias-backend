@@ -16,6 +16,7 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioResuelto;
+import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.registro.PuntosEnJuego;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
@@ -193,9 +194,13 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         // saber si le toco el correcto.
         String titulo = tituloVisible(habito, catalogo.renombre());
         var tipo = habito != null ? habito.tipo() : null;
-        GuiaResumen guia = resolverGuia(catalogo.guias(), registro.diaPrograma());
-        HorarioHabito horarioVigente = catalogo.horarios().stream()
-                .filter(h -> h.aplicaEnDia(registro.diaPrograma(), registro.tipoDia())).findFirst().orElse(null);
+        // D-200: un registro generado por debajo del inicio de su horario (el habito ya habia corrido
+        // y se retrocedio el dia) se lee como en ese primer dia: con su hora y con su guia.
+        HorariosDelHabito horarios = HorariosDelHabito.de(catalogo.horarios());
+        int diaDelHabito = horarios.diaEfectivoDeUnRegistro(registro.diaPrograma(), registro.tipoDia());
+        GuiaResumen guia = resolverGuia(catalogo.guias(), diaDelHabito);
+        HorarioHabito horarioVigente = horarios.vigentesEn(diaDelHabito, registro.tipoDia()).stream()
+                .findFirst().orElse(null);
         HorarioResuelto horario = HorarioResuelto.de(horarioVigente, catalogo.preferencia());
         // Sin habito en el catalogo no se puede afirmar que exija evidencia: `false` dice "no me
         // consta", que es lo unico cierto. Mismo criterio que `titulo` y `tipo` de aca arriba.

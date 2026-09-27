@@ -32,7 +32,9 @@ import java.util.UUID;
  * @param participanteId id del usuario (= `usuarios.id` = `participantes_programa.usuario_id`)
  * @param inscrito       si existe fila en `participantes_programa`
  * @param diaPrograma    `participantes_programa.dia_programa`, 0 si no inscrito
- * @param fechaInicio    `participantes_programa.fecha_inicio`, null si no inscrito
+ * @param fechaInicio    `participantes_programa.fecha_inicio`, null si no inscrito. <b>Antes de la
+ *                       activacion es PROVISIONAL</b> (mañana en su zona, la pone el alta) y no es
+ *                       un Dia 1: para mostrar el inicio del programa, {@link #diaUnoElegido()}
  * @param zona           `participantes_programa.timezone`, 'America/Lima' si no inscrito
  * @param fase           `participantes_programa.fase`, fase inicial si no inscrito
  * @param celulaId       `participantes_programa.celula_id`, null si no inscrito o sin celula
@@ -57,4 +59,18 @@ public record ParticipacionPrograma(
         UserRole rol,
         boolean suspendido,
         boolean activado) {
+
+    /**
+     * El Dia 1 que la persona eligio, o {@code null} si todavia no lo eligio (D-201, E-336).
+     *
+     * <p>Antes de la activacion {@link #fechaInicio} es un valor provisional: al aprobar la cuenta
+     * se guarda "mañana en su zona" ({@code ParticipacionPrograma.inscribirTraineeAprobado}) porque
+     * la columna es {@code NOT NULL}, y {@code activarPrograma} lo pisa con la fecha que la persona
+     * elige. Si la persona tarda en activar, ese valor queda en el pasado: mostrarlo como el inicio
+     * del programa es mostrar un Dia 1 que nunca existio. {@link #diaPrograma} ya se protege igual
+     * (queda en 0 mientras no esta activado).
+     */
+    public LocalDate diaUnoElegido() {
+        return activado ? fechaInicio : null;
+    }
 }

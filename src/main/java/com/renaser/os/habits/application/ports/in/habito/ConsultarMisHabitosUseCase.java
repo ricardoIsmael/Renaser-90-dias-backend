@@ -31,7 +31,9 @@ public interface ConsultarMisHabitosUseCase {
      *                           diaDesbloqueo}. 0 = ya lo tiene disponible. Se calcula en el
      *                           servidor, que es donde vive el dia de programa; el cliente no lo
      *                           deduce (mismo criterio que {@code academy}, que ya expone
-     *                           {@code diasFaltantes} asi).
+     *                           {@code diasFaltantes} asi). D-200: tambien 0 si el habito ya
+     *                           corrio desde ese dia y un retroceso dejo a la persona por debajo:
+     *                           se sigue generando, asi que no lleva candado.
      */
     record HabitoConDias(Habito habito, Set<DayOfWeek> diasSemana, int diaDesbloqueo,
                           int diasParaDesbloqueo) {

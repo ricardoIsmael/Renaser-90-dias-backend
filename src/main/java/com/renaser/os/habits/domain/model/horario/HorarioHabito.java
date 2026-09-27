@@ -63,10 +63,28 @@ public final class HorarioHabito {
                 actualizadoEn);
     }
 
+    /**
+     * La regla de siempre: el dia cae en {@code [diaInicio, diaFin]} y el tipo de dia coincide. Quien
+     * pregunta por un habito entero, y no por un horario suelto, pasa por {@link HorariosDelHabito}:
+     * ahi vive el caso del retroceso (D-200).
+     */
     public boolean aplicaEnDia(int diaPrograma, TipoDia tipoDiaDelDia) {
         boolean enRango = diaPrograma >= diaInicio && (diaFin == null || diaPrograma <= diaFin);
-        boolean tipoCoincide = tipoDia == TipoDia.TODOS || tipoDia == tipoDiaDelDia;
-        return enRango && tipoCoincide;
+        return enRango && coincideTipo(tipoDiaDelDia);
+    }
+
+    /**
+     * D-200: si este horario regiria ese dia de no ser por su inicio — el dia quedo por DEBAJO de
+     * {@code diaInicio} (un retroceso) pero dentro de su fin y con el tipo de dia que le toca. Solo
+     * lo usa {@link HorariosDelHabito}, que decide si el habito ya corrio.
+     */
+    boolean quedaPorDebajoDeSuInicio(int diaPrograma, TipoDia tipoDiaDelDia) {
+        boolean dentroDelFin = diaFin == null || diaPrograma <= diaFin;
+        return diaPrograma < diaInicio && dentroDelFin && coincideTipo(tipoDiaDelDia);
+    }
+
+    private boolean coincideTipo(TipoDia tipoDiaDelDia) {
+        return tipoDia == TipoDia.TODOS || tipoDia == tipoDiaDelDia;
     }
 
     public void actualizarHoras(LocalTime horaDisparo, LocalTime horaLimite, Instant ahora) {

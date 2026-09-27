@@ -9895,7 +9895,7 @@ invertida); más `unHabitoPostergadoNoSeActivaPorRegistrosAnterioresASuDia`, `De
 **Cómo evitar que vuelva a pasar.** Un número de día ABSOLUTO guardado en otra tabla (desbloqueos, `dia_inicio` de
 horarios, secciones de academia) se desalinea en cuanto el reloj retrocede. Antes de compararlo con el día de hoy,
 preguntarse qué pasa si hoy baja. Queda abierto el mismo caso para hábitos PERSONAL (`dia_inicio` = día de creación) y
-horarios de catálogo que arrancan después del día destino (D-196, «No cubierto»).
+horarios de catálogo que arrancan después del día destino (D-196, «No cubierto»). *Cerrado el 2026-09-27: E-335 / D-200.*
 
 ## E-328 · El barrido del reloj podía pisar un ajuste de día hecho mientras corría
 
@@ -9991,3 +9991,80 @@ aparece solo en el chat abierto. `conexionStomp.test.ts` (4) falla contra el có
 **Cómo evitar que vuelva a pasar.** Nada que dependa de un carácter NUL puede cruzar como texto el puente de React Native. Un canal
 en vivo se verifica con un mensaje de OTRA cuenta, no con uno propio. Pendiente propuesto (no aplicado): latidos del broker
 (`WebSocketConfig.java:58`, `enableSimpleBroker("/topic")` sin `setHeartbeatValue`) para detectar conexiones muertas.
+
+---
+
+## E-335 · Retroceder el día apagaba los hábitos PERSONAL y los de horario tardío que la persona ya venía haciendo
+
+**Síntoma.** El caso que D-196 dejó «No cubierto»: un hábito PERSONAL creado el día 30 (`horarios_habito.dia_inicio = 30`)
+que la persona hizo del 30 al 32 dejaba de generarse si un admin la retrocedía al 25, y «Mis hábitos» lo mostraba con
+candado («FALTAN 5 DÍAS»). Lo mismo con los del catálogo que arrancan tarde: Pastilla Renacer (8), Audioterapia (11) y los
+tres de domingo (35). Pruebas que lo muestran contra el código viejo: `RegistroServiceTest.retrocederNoApagaUnHabitoPersonalQueYaCorria`
+(`generados` vacío) y `MisHabitosServiceTest.unHabitoQueYaCorrioNoViajaBloqueadoDespuesDeUnRetroceso` (`bloqueado` true).
+
+**Causa real.** Igual que E-327, un día ABSOLUTO comparado con el día de hoy: `HorarioHabito.aplicaEnDia` exige
+`dia >= dia_inicio`, y `MisHabitosService` calculaba el candado con `dia_inicio - dia`. Al bajar el día, un hábito que ya
+había arrancado volvía a leerse como «todavía no le toca». Además, cinco lectores resolvían el horario de un track con
+`aplicaEnDia(registro.diaPrograma())` cada uno por su cuenta (proyección de hoy, avisos, Santuario, ventana al completar,
+edición de horario): generar el track no alcanzaba, habría salido sin hora, sin avisos y pagando como «sin horario» (D-97).
+
+**Solución (D-200).** `HorariosDelHabito` (dominio) decide con qué día se resuelve un hábito: si ningún horario cubre el
+día solo porque arrancan después, y el hábito ya corrió desde el inicio del primero (algún registro con
+`dia_programa >= dia_inicio`, el mismo criterio de D-196), se lo resuelve como en ese primer día. La generación, el
+horario del día (Plan y acompañante), los cinco lectores de un track, el candado de «Mis hábitos» y el audio de la
+Audioterapia pasan por ahí. El snapshot del registro sigue siendo el día real. Pruebas que fallan contra el código viejo
+(verificado desactivando la regla en `HorariosDelHabito`: fallan exactamente estas): las dos de arriba,
+`RegistroServiceTest.unHabitoDeDomingoQueYaCorrioSeGeneraElDomingoDeLima` (reloj a las 04:30 UTC del lunes, domingo en
+Lima), `TracksDelDiaProyeccionServiceTest.unRegistroGeneradoPorDebajoDelInicioDeSuHorarioSeLeeComoEnSuPrimerDia`,
+`AvisoHabitoServiceTest.unTrackGeneradoPorDebajoDelInicioDeSuHorarioAvisaIgual` (madrugada UTC),
+`ConsultaPreferenciasHorarioServiceTest.unHabitoQueYaCorrioYQuedoPorDebajoDeSuInicioMuestraSuHora`,
+`AudioterapiaServiceTest.siYaCorrioYLaRetrocedieronAntesDeSuInicioResuelveLaSemanaUno`, cuatro de `HorariosDelHabitoTest` y,
+contra Postgres real, `RetrocesoConHabitoPropioIT.unHabitoPropioQueYaCorrioSigueTrasRetroceder` (crea el hábito el día 30, lo
+genera el 30 y el 31, baja al 25: se genera con día 25 y «Mis hábitos» no le pone candado).
+
+**Cómo evitar que vuelva a pasar.** «¿Qué horario rige este hábito este día?» tiene una sola respuesta:
+`HorariosDelHabito`. Un lector nuevo no filtra `aplicaEnDia` por su cuenta. La grilla de admin «Hábitos del alumno»
+(`HabitosDeAprendizJdbcAdapter`) todavía lo hace en SQL y quedó anotada como no cubierta en D-200.
+
+## E-336 · «`fecha_inicio` guardada en UTC» en el e2e del 26/09: era la fecha provisional del alta, y la ficha de admin la mostraba como Día 1
+
+**Síntoma.** En el e2e del 26/09, una aprendiz aprobada a las 23:21 de Lima (04:21 UTC del 27) y sin activar quedó con
+`participantes_programa.fecha_inicio = 2026-09-27`. Se leyó como la fecha UTC en lugar de la de Lima. Visto al revisar el
+código (no en el e2e): en el panel, la ficha de alguien sin activar decía «Su programa todavía no empezó» y, pasada esa fecha,
+ofrecía «Cambiar día del programa», que respondía 409 «Esta persona todavía no empezó su Día 1…».
+
+**Causa real.** No es un error de zona. `ParticipacionPrograma.inscribirTraineeAprobado` guarda a propósito un valor
+PROVISIONAL, **mañana en Lima** (`hoyDelParticipante(clock).plusDays(1)`, en zona desde fb8eafd8, 2026-09-05), porque la
+columna es `NOT NULL`; `activarPrograma` lo pisa con el Día 1 elegido. A las 23:21 de Lima del 26, mañana en Lima es el 27:
+coincide con la fecha UTC solo por la hora. Las cinco filas de la base local creadas entre las 02:07 y las 04:42 UTC del 27
+tienen el 27. El DEFAULT `current_date` de la columna nunca se usa (JPA siempre manda el valor). El problema real es que ese
+valor provisional se lee como si fuera un Día 1: `users.api.ParticipacionPrograma.fechaInicio` lo devuelve sin mirar
+`activado`, y la ficha de admin lo mandaba como `startDate`, así que el panel nunca llegaba a su texto para `null`
+(«Todavía no eligió su Día 1»).
+
+**Solución.** (1) Pruebas que fijan la fecha del alta en la zona: `ParticipacionProgramaTest.alAprobarDeNocheEnLimaLaFechaProvisionalEsMananaEnLimaYNoEnElServidor`
+(04:21 UTC del 27 → 27; contra el alta anterior a fb8eafd8, con la fecha del servidor, da 28) y
+`alAprobarDeDiaLaFechaProvisionalEsMananaYNoLaFechaUtc` (17:00 UTC del 26 → 27, no 26). fb8eafd8 había corregido la zona sin
+ninguna prueba. (2) D-201: `startDate` de la ficha sale de `users.api.ParticipacionPrograma.diaUnoElegido()` (`null` sin
+activar). `TraineeAdminControllerTest.detalleDeUnAprendizSinActivarNoMandaElDiaUnoProvisional` falla contra el código viejo
+(`Expected no value at JSON path "$.startDate" but found: '2026-09-27'`).
+
+**Cómo evitar que vuelva a pasar.** Antes de diagnosticar «se guardó en UTC», probar el mismo cálculo a una hora en que la
+fecha UTC y la de Lima coinciden (entre las 05:00 y las 19:00 de Lima): si da igual, la hora del e2e era la que lo
+disimulaba. `fecha_inicio` antes de la activación no es un Día 1: para mostrar el inicio del programa, `diaUnoElegido()`.
+Siguen leyendo el valor provisional sin filtro rocas (semana 1 y `fechaInicioPrograma`, y con ellas el acompañante), la
+ventana de la racha y `/users/me`; quedaron como propuesta en D-201.
+
+## E-337 · `expected: 23:55 but was: 23:50` al escribir la prueba de D-200 con la hora de cierre de la Audioterapia
+
+**Síntoma.** `TracksDelDiaProyeccionServiceTest.unRegistroGeneradoPorDebajoDelInicioDeSuHorarioSeLeeComoEnSuPrimerDia`:
+`expected: 23:55 but was: 23:50`.
+
+**Causa real.** El fixture armaba el horario con `HorarioHabito.crear(…, LocalTime.of(23, 55), …)`, la hora que la
+Audioterapia tiene en la base. `crear` pasa la hora de cierre por `VentanaDelDia.horaLimiteAjustada`, que la acota a
+`ULTIMA_HORA_LIMITE` (23:50). La fila de la base conserva 23:55 porque `rehydrate` no ajusta. No es un defecto del código.
+
+**Solución.** El fixture usa 22:00.
+
+**Cómo evitar que vuelva a pasar.** En un fixture con `HorarioHabito.crear`, las horas de cierre después de las 23:50 salen
+acotadas. Para reproducir una fila real tal cual está en la base, usar `rehydrate`.

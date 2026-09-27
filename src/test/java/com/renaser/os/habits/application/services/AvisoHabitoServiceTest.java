@@ -194,6 +194,27 @@ class AvisoHabitoServiceTest {
         verify(events, never()).publishEvent(any(Object.class));
     }
 
+    /**
+     * D-200, con el reloj en madrugada UTC (20:50 del 5 en Lima): el track es del dia 5 (snapshot
+     * real), pero el horario del habito arranca el dia 8. Existe porque el habito ya habia corrido y
+     * a la persona la retrocedieron: se lee con el horario de su primer dia, asi que avisa como
+     * cualquier otro. Contra el codigo viejo no habia horario vigente, ni ventana, ni aviso.
+     */
+    @Test
+    @DisplayName("D-200: un track generado por debajo del inicio de su horario avisa con la hora de ese horario")
+    void unTrackGeneradoPorDebajoDelInicioDeSuHorarioAvisaIgual() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+        when(loadHorarioPort.porHabitos(anyCollection())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), HABITO, 8, null, TipoDia.TODOS,
+                        LocalTime.of(21, 0), LocalTime.of(22, 0), MADRUGADA_UTC)));
+
+        int publicados = servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE);
+
+        assertThat(publicados).isEqualTo(1);
+        assertThat(eventoPublicado().tipoAviso()).isEqualTo(TipoAvisoHabito.INICIO.name());
+    }
+
     // ─── D-184: el recordatorio que el aprendiz configuro para ese habito ─────────────────────
 
     private void conPreferencia(boolean recordatorioActivo, Integer minutos) {

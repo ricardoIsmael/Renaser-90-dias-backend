@@ -21,6 +21,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioResuelto;
+import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
 import com.renaser.os.habits.domain.model.politica.ContextoCompletar;
 import com.renaser.os.habits.domain.model.politica.DecisionPolitica;
 import com.renaser.os.habits.domain.model.politica.GestoCompletar;
@@ -60,6 +61,7 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Servicio del agregado `registro/` — el corazon del modulo. Integra
@@ -72,6 +74,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         CompletarRegistroUseCase, ExpirarRegistrosVencidosUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(RegistroService.class);
+    /** Un habito sin fila en `horarios_habito` no genera track: ningun horario lo cubre. */
+    private static final HorariosDelHabito SIN_HORARIOS = HorariosDelHabito.de(List.of());
 
     private final LoadRegistroHabitoPort loadRegistroPort;
     private final SaveRegistroHabitoPort saveRegistroPort;
@@ -196,6 +200,14 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
 
         List<Habito> catalogo = new ArrayList<>(loadHabitoPort.catalogoActivo());
         catalogo.addAll(loadHabitoPort.personalesActivosDe(participanteId));
+        // V-5 (D-180): los horarios de todo el catalogo en UNA consulta de lote, no una por habito.
+        Map<HabitoId, HorariosDelHabito> horariosPorHabito = horariosDe(catalogo);
+        List<DesbloqueoHabito> plan = loadDesbloqueoPort.deParticipante(participanteId);
+        // D-196 y D-200: un desbloqueo o un horario que arranca por encima del dia de hoy no deja
+        // el habito afuera si YA CORRIO (retroceso de dia). Es UNA consulta para los dos, y solo si
+        // hay algun candidato.
+        Map<HabitoId, Integer> yaGenerados = diasMasAltosYaGenerados(participanteId,
+                habitosQueDependenDeSiYaCorrieron(progreso.diaPrograma(), tipoDia, plan, horariosPorHabito));
 
         // D-87: los habitos que este aprendiz PAUSO no generan track. Se resuelve en UNA consulta
         // y no una por habito — el barrido nocturno recorre todo el padron.
@@ -208,7 +220,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         // PAUSADO o todavia no le toca. Un habito sin fila en `desbloqueos_habito` se sigue
         // generando como siempre. Filtrar por "esta en el plan" habria dejado a TODO el padron
         // sin habitos de un dia para el otro, porque hoy esa tabla esta vacia para todos.
-        Set<HabitoId> fueraDelPlanDeHoy = fueraDelPlanDelDia(progreso, participanteId, fecha);
+        Set<HabitoId> fueraDelPlanDeHoy = fueraDelPlanDelDia(progreso, fecha, plan, yaGenerados);
 
         // V38: los que el aprendiz apago para ESE dia. Se suman al mismo conjunto de descarte
         // porque responden la misma pregunta que la pausa y el dia de desbloqueo — "¿va hoy?" —, y
@@ -231,13 +243,12 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         var preferencias = loadPreferenciaPort.porParticipanteHabitosYFecha(participanteId,
                         catalogo.stream().map(Habito::id).toList(), fecha).stream()
                         .collect(Collectors.toMap(PreferenciaHorario::habitoId, p -> p));
-        // V-5 (D-180): lo que ya existe ese dia y los horarios de todo el catalogo, en DOS consultas
-        // de lote y no en dos por habito. Con ~25 habitos eran ~50 consultas por participante, y
+        // V-5 (D-180): lo que ya existe ese dia, como los horarios, en UNA consulta de lote y no en
+        // una por habito. Con ~25 habitos eran ~50 consultas por participante, y
         // `GET /habit-tracks/today` las repetia en cada pedido mientras el dia siguiera sin
         // registros (la red de seguridad de TracksDelDiaProyeccionService). La decision es la
         // misma de antes, habito por habito: solo cambia de donde sale el dato.
         Set<HabitoId> conRegistroEseDia = habitosConRegistro(participanteId, fecha);
-        Map<HabitoId, List<HorarioHabito>> horariosPorHabito = horariosDe(catalogo);
         List<RegistroHabito> generados = new ArrayList<>();
         for (Habito habito : catalogo) {
             if (fueraDelPlanDeHoy.contains(habito.id())) {
@@ -246,8 +257,11 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
             if (conRegistroEseDia.contains(habito.id())) {
                 continue; // idempotente: ya existe (UNIQUE participante+habito+fecha)
             }
-            boolean aplicaHoy = horariosPorHabito.getOrDefault(habito.id(), List.of()).stream()
-                    .filter(h -> h.aplicaEnDia(progreso.diaPrograma(), tipoDia))
+            // D-200: un habito que ya corrio y quedo por debajo del inicio de su horario se resuelve
+            // como en ese primer dia. El registro guarda igual el dia REAL (snapshot, abajo).
+            HorariosDelHabito horarios = horariosPorHabito.getOrDefault(habito.id(), SIN_HORARIOS);
+            int diaDelHabito = horarios.diaEfectivo(progreso.diaPrograma(), tipoDia, yaGenerados.get(habito.id()));
+            boolean aplicaHoy = horarios.vigentesEn(diaDelHabito, tipoDia).stream()
                     .anyMatch(h -> sigueAlcanzable(h, preferencias.get(habito.id()), horaDeCorte));
             if (!aplicaHoy) {
                 continue;
@@ -279,24 +293,38 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
      *
      * <p><b>D-196:</b> un desbloqueo por encima del dia de hoy ya no alcanza para dejar el habito
      * afuera: si el habito YA CORRIO (retroceso de dia, ver
-     * {@link DesbloqueoHabito#todaviaNoLeToca}), sigue. La consulta de registros se hace solo si
-     * hay algun candidato, que es la excepcion: el barrido del padron no paga una consulta mas.
+     * {@link DesbloqueoHabito#todaviaNoLeToca}), sigue.
      */
-    private Set<HabitoId> fueraDelPlanDelDia(ProgresoParticipanteHabits progreso, UserId participanteId,
-                                             LocalDate fecha) {
+    private Set<HabitoId> fueraDelPlanDelDia(ProgresoParticipanteHabits progreso, LocalDate fecha,
+                                             List<DesbloqueoHabito> plan, Map<HabitoId, Integer> yaGenerados) {
         ZoneId zona = ZoneId.of(progreso.timezone());
         int dia = progreso.diaPrograma();
-        List<DesbloqueoHabito> plan = loadDesbloqueoPort.deParticipante(participanteId);
-        List<HabitoId> porEncimaDeHoy = plan.stream()
-                .filter(d -> d.diaDesbloqueo() > dia)
-                .map(DesbloqueoHabito::habitoId)
-                .toList();
-        Map<HabitoId, Integer> yaGenerados = porEncimaDeHoy.isEmpty() ? Map.of()
-                : loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(participanteId, porEncimaDeHoy);
         return plan.stream()
                 .filter(d -> d.estaPausadoEl(fecha, zona) || d.todaviaNoLeToca(dia, yaGenerados.get(d.habitoId())))
                 .map(DesbloqueoHabito::habitoId)
                 .collect(Collectors.toCollection(HashSet::new));
+    }
+
+    /**
+     * Los habitos para los que "¿ya corrio?" cambia la decision de hoy: los del plan con un
+     * desbloqueo por encima del dia (D-196) y los que ningun horario cubre solo porque todos
+     * arrancan despues (D-200). Es la excepcion —un retroceso, o alguien antes del dia en que
+     * arranca un habito del catalogo—, y fuera de ella no se lee ningun registro.
+     */
+    private static List<HabitoId> habitosQueDependenDeSiYaCorrieron(int dia, TipoDia tipoDia,
+                                                                    List<DesbloqueoHabito> plan,
+                                                                    Map<HabitoId, HorariosDelHabito> horarios) {
+        var porDesbloqueo = plan.stream().filter(d -> d.diaDesbloqueo() > dia).map(DesbloqueoHabito::habitoId);
+        var porHorario = horarios.entrySet().stream()
+                .filter(e -> e.getValue().necesitaSaberSiYaCorrio(dia, tipoDia))
+                .map(Map.Entry::getKey);
+        return Stream.concat(porDesbloqueo, porHorario).distinct().toList();
+    }
+
+    /** El {@code dia_programa} mas alto ya generado por habito (D-196), en UNA consulta y solo si hace falta. */
+    private Map<HabitoId, Integer> diasMasAltosYaGenerados(UserId participanteId, List<HabitoId> habitos) {
+        return habitos.isEmpty() ? Map.of()
+                : loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(participanteId, habitos);
     }
 
     /** Los habitos que ya tienen registro ese dia, en UNA consulta (V-5). Mutable: el bucle suma los que inserta. */
@@ -307,9 +335,10 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     }
 
     /** Los horarios de todo el catalogo del participante, en UNA consulta (V-5), agrupados por habito. */
-    private Map<HabitoId, List<HorarioHabito>> horariosDe(List<Habito> catalogo) {
+    private Map<HabitoId, HorariosDelHabito> horariosDe(List<Habito> catalogo) {
         return loadHorarioPort.porHabitos(catalogo.stream().map(Habito::id).toList()).stream()
-                .collect(Collectors.groupingBy(HorarioHabito::habitoId));
+                .collect(Collectors.groupingBy(HorarioHabito::habitoId,
+                        Collectors.collectingAndThen(Collectors.toList(), HorariosDelHabito::de)));
     }
 
     /**
@@ -427,11 +456,14 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         return TipoDia.delDia(fecha);
     }
 
-    /** preferencia -&gt; horario del catalogo vigente para el dia de programa del registro. */
+    /**
+     * preferencia -&gt; horario del catalogo vigente para el dia de programa del registro (D-200: el
+     * de su primer dia si el registro se genero por debajo del inicio de su horario).
+     */
     private VentanaEntrega resolverVentana(RegistroHabito registro, Habito habito) {
-        HorarioHabito vigente = loadHorarioPort.porHabito(habito.id()).stream()
-                .filter(h -> h.aplicaEnDia(registro.diaPrograma(), registro.tipoDia()))
-                .findFirst().orElse(null);
+        HorariosDelHabito horarios = HorariosDelHabito.de(loadHorarioPort.porHabito(habito.id()));
+        int dia = horarios.diaEfectivoDeUnRegistro(registro.diaPrograma(), registro.tipoDia());
+        HorarioHabito vigente = horarios.vigentesEn(dia, registro.tipoDia()).stream().findFirst().orElse(null);
 
         LocalTime horaDisparo = vigente != null ? vigente.horaDisparo() : null;
         LocalTime horaLimite = vigente != null ? vigente.horaLimite() : null;

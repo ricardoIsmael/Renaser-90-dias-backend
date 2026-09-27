@@ -67,6 +67,8 @@ class MisHabitosServiceTest {
     private com.renaser.os.habits.application.ports.out.preferencia.SavePreferenciaHorarioPort savePreferenciaPort;
     @Mock
     private IdGenerator idGenerator;
+    @Mock
+    private com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort loadRegistroPort;
 
     private final UserId actor = UserId.of(UUID.randomUUID());
 
@@ -75,7 +77,7 @@ class MisHabitosServiceTest {
     @BeforeEach
     void setUp() {
         service = new MisHabitosService(loadPort, savePort, saveHorarioPort, loadHorarioPort, progresoPort,
-                savePreferenciaPort, CLOCK, idGenerator);
+                savePreferenciaPort, loadRegistroPort, CLOCK, idGenerator);
         lenient().when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
         // `consultar` necesita el dia de programa desde que calcula el desbloqueo de cada habito
         // (dia 2: el mismo escenario en el que el dueño reporto ver habitos que aun no le tocaban).
@@ -230,6 +232,62 @@ class MisHabitosServiceTest {
                         DISPARO, null, CLOCK.now())));
 
         assertThat(service.consultar(actor).getFirst().diaDesbloqueo()).isEqualTo(5);
+    }
+
+    // ---- D-200: al retroceder el dia, lo que ya corrio no vuelve a tener candado ----
+
+    /** Un habito PERSONAL creado el dia 30: nace con {@code dia_inicio = 30} ({@link MisHabitosService#crear}). */
+    private HabitoId conHabitoPersonalDelDia30(int diaDeHoy) {
+        HabitoId id = HabitoId.of(UUID.randomUUID());
+        Habito personal = Habito.crearPersonal(id, actor, "Correr 5km", TipoHabito.CHECKBOX, "CUERPO",
+                PlantillaHabitoPersonal.CORRER, "meta", CLOCK.now());
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(diaDeHoy)));
+        when(loadPort.catalogoActivo()).thenReturn(List.of());
+        when(loadPort.personalesActivosDe(actor)).thenReturn(List.of(personal));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), id, 30, null, TipoDia.TODOS,
+                        DISPARO, null, CLOCK.now())));
+        return id;
+    }
+
+    /**
+     * La persona hizo su habito del 30 al 32 y un admin la retrocedio al 25. El habito se sigue
+     * generando ({@code RegistroService}), asi que "Mis habitos" no puede ponerle candado: las dos
+     * pantallas tienen que coincidir. Contra el codigo viejo viaja bloqueado, con 5 dias por delante.
+     */
+    @Test
+    void unHabitoQueYaCorrioNoViajaBloqueadoDespuesDeUnRetroceso() {
+        HabitoId id = conHabitoPersonalDelDia30(25);
+        when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(actor, List.of(id)))
+                .thenReturn(java.util.Map.of(id, 32));
+
+        var vista = service.consultar(actor).getFirst();
+
+        assertThat(vista.bloqueado()).isFalse();
+        assertThat(vista.diasParaDesbloqueo()).isZero();
+        assertThat(vista.diaDesbloqueo()).as("sigue diciendo desde que dia existe").isEqualTo(30);
+    }
+
+    /** Lo que nunca corrio desde su dia sigue esperandolo, igual que en la generacion. */
+    @Test
+    void unHabitoQueNuncaCorrioDesdeSuDiaSigueConCandado() {
+        HabitoId id = conHabitoPersonalDelDia30(25);
+        when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(actor, List.of(id)))
+                .thenReturn(java.util.Map.of(id, 29));
+
+        var vista = service.consultar(actor).getFirst();
+
+        assertThat(vista.bloqueado()).isTrue();
+        assertThat(vista.diasParaDesbloqueo()).isEqualTo(5);
+    }
+
+    /** Sin habitos cuyo primer dia no llego, no se lee ningun registro. */
+    @Test
+    void sinHabitosPorArrancarNoSeLeenRegistros() {
+        conHabitoPersonalDelDia30(31);
+
+        assertThat(service.consultar(actor).getFirst().bloqueado()).isFalse();
+        verifyNoInteractions(loadRegistroPort);
     }
 
     // ---- crear (comportamiento preexistente) ----
@@ -420,7 +478,7 @@ class MisHabitosServiceTest {
     @Test
     void enDia0ElHabitoPersonalSeCreaIgualConElRelojEnLaMadrugadaUtc() {
         MisHabitosService servicioDeMadrugada = new MisHabitosService(loadPort, savePort, saveHorarioPort,
-                loadHorarioPort, progresoPort, savePreferenciaPort,
+                loadHorarioPort, progresoPort, savePreferenciaPort, loadRegistroPort,
                 FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator);
         when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(0)));
         when(idGenerator.newId()).thenReturn(UUID.randomUUID(), UUID.randomUUID());

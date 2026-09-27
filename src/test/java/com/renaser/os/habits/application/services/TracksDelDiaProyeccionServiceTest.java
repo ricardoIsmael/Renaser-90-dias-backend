@@ -237,4 +237,37 @@ class TracksDelDiaProyeccionServiceTest {
         assertThat(vista.horaLimite()).isEqualTo(LocalTime.of(9, 0)); // sin override, el del catalogo
         assertThat(vista.guia()).isNull();
     }
+
+    /**
+     * D-200: la Audioterapia arranca el dia 11 (horario y guia). La persona la venia haciendo, la
+     * retrocedieron al 9 y se le siguio generando: el registro del dia 9 (snapshot real) se lee como
+     * en el primer dia de su horario, con su hora y su guia. Contra el codigo viejo el track salia
+     * sin hora (ni ventana, ni puntos en juego) y sin guia.
+     */
+    @Test
+    void unRegistroGeneradoPorDebajoDelInicioDeSuHorarioSeLeeComoEnSuPrimerDia() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habito("AUDIOTERAPIA SEMANAL");
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), actor, habito.id(),
+                LocalDate.of(2026, 8, 24), 9, TipoDia.DISCIPLINA, false, AHORA);
+        HorarioHabito horario = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 11, 90,
+                TipoDia.TODOS, LocalTime.of(7, 0), LocalTime.of(22, 0), AHORA);
+        GuiaHabito guia = GuiaHabito.crear(GuiaHabitoId.of(UUID.randomUUID()), habito.id(), 11, AHORA);
+        guia.actualizarContenido("escuchar el audio de la semana", "con audifonos", null, null, null, null, AHORA);
+
+        when(consultarTracksUseCase.consultarEnSuZona(actor, actor, registro.fechaEjecucion()))
+                .thenReturn(new RegistrosDelDia(List.of(registro), registro.fechaEjecucion(), UTC));
+        when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(horario));
+        when(loadGuiaPort.porHabitos(any())).thenReturn(List.of(guia));
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
+
+        TrackDelDiaConCatalogo vista = service.consultar(actor, actor, registro.fechaEjecucion()).get(0);
+
+        assertThat(vista.horaDisparo()).isEqualTo(LocalTime.of(7, 0));
+        assertThat(vista.horaLimite()).isEqualTo(LocalTime.of(22, 0));
+        assertThat(vista.guia()).isNotNull();
+        assertThat(vista.guia().queHacer()).isEqualTo("escuchar el audio de la semana");
+        assertThat(vista.registro().diaPrograma()).as("el snapshot no se toca").isEqualTo(9);
+    }
 }

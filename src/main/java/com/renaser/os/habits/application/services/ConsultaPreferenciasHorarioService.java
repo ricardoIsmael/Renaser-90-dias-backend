@@ -8,10 +8,12 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.preferencia.HistorialCambioHorarioPort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadCambioHorarioPendientePort;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
+import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.habits.domain.model.preferencia.CuotaEdicionHorario;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
@@ -46,6 +48,7 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
 
     /** El programa arranca en el dia 1; el dia 0 es "todavia no activo". */
     private static final int PRIMER_DIA_DEL_PROGRAMA = 1;
+    private static final HorariosDelHabito SIN_HORARIOS = HorariosDelHabito.de(List.of());
 
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final LoadHabitoPort loadHabitoPort;
@@ -53,19 +56,23 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
     private final LoadPreferenciaHorarioPort loadPreferenciaPort;
     private final LoadCambioHorarioPendientePort loadCambioPendientePort;
     private final HistorialCambioHorarioPort historialPort;
+    /** D-200: si un habito que quedo por debajo del inicio de su horario ya corrio. */
+    private final LoadRegistroHabitoPort loadRegistroPort;
     private final Clock clock;
 
     public ConsultaPreferenciasHorarioService(ConsultarProgresoParticipanteHabitsPort progresoPort,
                                                LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
                                                LoadPreferenciaHorarioPort loadPreferenciaPort,
                                                LoadCambioHorarioPendientePort loadCambioPendientePort,
-                                               HistorialCambioHorarioPort historialPort, Clock clock) {
+                                               HistorialCambioHorarioPort historialPort,
+                                               LoadRegistroHabitoPort loadRegistroPort, Clock clock) {
         this.progresoPort = progresoPort;
         this.loadHabitoPort = loadHabitoPort;
         this.loadHorarioPort = loadHorarioPort;
         this.loadPreferenciaPort = loadPreferenciaPort;
         this.loadCambioPendientePort = loadCambioPendientePort;
         this.historialPort = historialPort;
+        this.loadRegistroPort = loadRegistroPort;
         this.clock = clock;
     }
 
@@ -99,20 +106,39 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
             return List.of();
         }
         Set<HabitoId> ids = habitos.stream().map(Habito::id).collect(Collectors.toSet());
-        Map<HabitoId, List<HorarioHabito>> horarios = loadHorarioPort.porHabitos(ids).stream()
-                .collect(Collectors.groupingBy(HorarioHabito::habitoId));
+        Map<HabitoId, HorariosDelHabito> horarios = loadHorarioPort.porHabitos(ids).stream()
+                .collect(Collectors.groupingBy(HorarioHabito::habitoId,
+                        Collectors.collectingAndThen(Collectors.toList(), HorariosDelHabito::de)));
         Map<HabitoId, PreferenciaHorario> preferencias = loadPreferenciaPort.porParticipanteHabitosYFecha(actorId, ids, hoy)
                 .stream().collect(Collectors.toMap(PreferenciaHorario::habitoId, p -> p));
         Map<HabitoId, CambioHorarioPendiente> programados = loadCambioPendientePort.deParticipante(actorId).stream()
                 .filter(c -> c.fechaEfectiva().isAfter(hoy))
                 .collect(Collectors.toMap(CambioHorarioPendiente::habitoId, c -> c));
         TipoDia tipoDia = TipoDia.delDia(hoy);
+        Map<HabitoId, Integer> yaGenerados = diasMasAltosYaGenerados(actorId, diaPrograma, tipoDia, horarios);
 
         return habitos.stream()
                 .map(habito -> construirVista(habito,
-                        vigenteDeCatalogo(horarios.getOrDefault(habito.id(), List.of()), diaPrograma, tipoDia),
+                        vigenteDeCatalogo(horarios.getOrDefault(habito.id(), SIN_HORARIOS), diaPrograma, tipoDia,
+                                yaGenerados.get(habito.id())),
                         preferencias.get(habito.id()), programados.get(habito.id())))
                 .toList();
+    }
+
+    /**
+     * D-200: el mismo "¿ya corrio?" con el que {@code RegistroService} decide generar un habito que
+     * quedo por debajo del inicio de su horario tras un retroceso. Sin esto, ese habito se generaba
+     * con su hora pero aca (Plan y el acompanante) aparecia sin hora. UNA consulta, y solo si algun
+     * habito la necesita.
+     */
+    private Map<HabitoId, Integer> diasMasAltosYaGenerados(UserId actorId, int diaPrograma, TipoDia tipoDia,
+                                                           Map<HabitoId, HorariosDelHabito> horarios) {
+        List<HabitoId> candidatos = horarios.entrySet().stream()
+                .filter(e -> e.getValue().necesitaSaberSiYaCorrio(diaPrograma, tipoDia))
+                .map(Map.Entry::getKey)
+                .toList();
+        return candidatos.isEmpty() ? Map.of()
+                : loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(actorId, candidatos);
     }
 
     private static HorarioDeHabito construirVista(Habito habito, HorarioHabito catalogo,
@@ -138,10 +164,15 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
      * justo cuando mas lo necesita, que es antes de empezar. Se le muestra el horario que va a
      * regir su PRIMER dia; en cuanto el programa arranca, {@code diaPrograma} ya es real y esto
      * no interviene.
+     *
+     * <p>D-200: si el habito ya corrio y un retroceso dejo el dia por debajo del inicio de su
+     * horario, rige ese horario (el mismo con el que se lo genera).
      */
-    private static HorarioHabito vigenteDeCatalogo(List<HorarioHabito> horarios, int diaPrograma, TipoDia tipoDia) {
+    private static HorarioHabito vigenteDeCatalogo(HorariosDelHabito horarios, int diaPrograma, TipoDia tipoDia,
+                                                   Integer diaMasAltoYaGenerado) {
         int diaAConsultar = Math.max(diaPrograma, PRIMER_DIA_DEL_PROGRAMA);
-        return horarios.stream().filter(h -> h.aplicaEnDia(diaAConsultar, tipoDia)).findFirst().orElse(null);
+        int dia = horarios.diaEfectivo(diaAConsultar, tipoDia, diaMasAltoYaGenerado);
+        return horarios.vigentesEn(dia, tipoDia).stream().findFirst().orElse(null);
     }
 
     /** Preferencia del participante gana si esta seteada; si no, el default del catalogo. */

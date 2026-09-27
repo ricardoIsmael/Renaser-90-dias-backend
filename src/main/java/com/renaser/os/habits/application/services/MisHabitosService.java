@@ -8,6 +8,7 @@ import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort
 import com.renaser.os.habits.application.ports.out.horario.SaveHorarioHabitoPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.preferencia.SavePreferenciaHorarioPort;
+import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
@@ -16,6 +17,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
+import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -30,7 +32,6 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Set;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -50,20 +51,23 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
     private final LoadHorarioHabitoPort loadHorarioPort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final SavePreferenciaHorarioPort savePreferenciaPort;
+    /** D-200: para saber si un habito cuyo primer dia no llego ya corrio (retroceso de dia). */
+    private final LoadRegistroHabitoPort loadRegistroPort;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
     public MisHabitosService(LoadHabitoPort loadPort, SaveHabitoPort savePort,
                               SaveHorarioHabitoPort saveHorarioPort, LoadHorarioHabitoPort loadHorarioPort,
                               ConsultarProgresoParticipanteHabitsPort progresoPort,
-                              SavePreferenciaHorarioPort savePreferenciaPort, Clock clock,
-                              IdGenerator idGenerator) {
+                              SavePreferenciaHorarioPort savePreferenciaPort, LoadRegistroHabitoPort loadRegistroPort,
+                              Clock clock, IdGenerator idGenerator) {
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.saveHorarioPort = saveHorarioPort;
         this.loadHorarioPort = loadHorarioPort;
         this.progresoPort = progresoPort;
         this.savePreferenciaPort = savePreferenciaPort;
+        this.loadRegistroPort = loadRegistroPort;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
@@ -88,19 +92,39 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
                                 Collectors.toCollection(() -> EnumSet.noneOf(DayOfWeek.class)))));
 
         // El habito existe para el aprendiz desde el `dia_inicio` MAS CHICO de sus horarios: si
-        // tiene varios tramos, el primero es el que lo habilita.
-        Map<HabitoId, Integer> desbloqueoPorHabito = horarios.stream()
-                .collect(Collectors.toMap(HorarioHabito::habitoId, HorarioHabito::diaInicio, Math::min));
+        // tiene varios tramos, el primero es el que lo habilita (HorariosDelHabito.primerDia).
+        Map<HabitoId, HorariosDelHabito> horariosPorHabito = horarios.stream()
+                .collect(Collectors.groupingBy(HorarioHabito::habitoId,
+                        Collectors.collectingAndThen(Collectors.toList(), HorariosDelHabito::de)));
 
         int diaDelAprendiz = primerDiaPlanificable(requireProgreso(actor).diaPrograma());
+        Map<HabitoId, Integer> yaGenerados = diasMasAltosYaGenerados(actor, diaDelAprendiz, horariosPorHabito);
 
         return habitos.stream()
                 .map(h -> {
-                    int desbloqueo = desbloqueoPorHabito.getOrDefault(h.id(), PRIMER_DIA);
-                    return new HabitoConDias(h, diasPorHabito.getOrDefault(h.id(), TODOS_LOS_DIAS), desbloqueo,
-                            Math.max(0, desbloqueo - diaDelAprendiz));
+                    HorariosDelHabito delHabito = horariosPorHabito.getOrDefault(h.id(), SIN_HORARIOS);
+                    return new HabitoConDias(h, diasPorHabito.getOrDefault(h.id(), TODOS_LOS_DIAS),
+                            delHabito.primerDia().orElse(PRIMER_DIA),
+                            delHabito.diasParaArrancar(diaDelAprendiz, yaGenerados.get(h.id())));
                 })
                 .toList();
+    }
+
+    /**
+     * D-200: el candado es el mismo que decide la generacion. Un habito cuyo primer dia no llego
+     * pero que YA CORRIO (se retrocedio a la persona por debajo de ese dia) no viaja bloqueado,
+     * porque se sigue generando ({@code RegistroService}). "Ya corrio" se deriva del snapshot
+     * {@code registros_habito.dia_programa}, en UNA consulta y solo para los habitos cuyo primer
+     * dia todavia no llego: sin candidatos no se lee nada.
+     */
+    private Map<HabitoId, Integer> diasMasAltosYaGenerados(UserId actor, int diaDelAprendiz,
+                                                           Map<HabitoId, HorariosDelHabito> horariosPorHabito) {
+        List<HabitoId> sinArrancar = horariosPorHabito.entrySet().stream()
+                .filter(e -> e.getValue().diasParaArrancar(diaDelAprendiz, null) > 0)
+                .map(Map.Entry::getKey)
+                .toList();
+        return sinArrancar.isEmpty() ? Map.of()
+                : loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(actor, sinArrancar);
     }
 
     /**
@@ -133,6 +157,8 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
 
     /** Un habito sin horarios no tiene dia de desbloqueo propio: se considera disponible desde el 1. */
     private static final int PRIMER_DIA = 1;
+
+    private static final HorariosDelHabito SIN_HORARIOS = HorariosDelHabito.de(List.of());
 
     /**
      * {@code ambito}/{@code participanteId} NO vienen del comando — {@link Habito#crearPersonal}

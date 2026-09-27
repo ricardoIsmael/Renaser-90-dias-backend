@@ -169,11 +169,12 @@ no cambian, la fase se recalcula al instante (D-67), `phasecontracts`, academia,
 día derivado sin caché, y el semáforo no reescribe semanas cerradas. **Arreglado:** la bitácora anotaba como «día anterior» el
 de ayer entre la medianoche local y el barrido de las :05 (E-319). **Abierto, a decidir por el dueño** (cada uno con prueba de
 caracterización que fija el comportamiento de hoy). **Actualizado 2026-09-26:** el dueño decidió seis de las filas
-(D-194 a D-198); las que dicen «Resuelto» o «Decidido» ya no están abiertas:
+(D-194 a D-198); las que dicen «Resuelto» o «Decidido» ya no están abiertas. **Actualizado 2026-09-27:** también lo que
+la fila de hábitos dejaba abierto (D-200):
 
 | Riesgo | Qué pasa hoy |
 |---|---|
-| Retroceder y hábitos elegidos en el Plan | **Resuelto (D-196, E-327).** Decía: «un hábito tocado el día 30 deja de generarse si se retrocede al 25, hasta volver al 30; «Mis hábitos» lo sigue mostrando desbloqueado». Ahora lo que ya corrió (algún registro con día ≥ `dia_desbloqueo`) se sigue generando; lo elegido para más adelante espera su día. **Sigue abierto:** hábitos PERSONAL (`dia_inicio` = día de creación) y horarios de catálogo que arrancan después del día destino |
+| Retroceder y hábitos elegidos en el Plan | **Resuelto (D-196, E-327).** Decía: «un hábito tocado el día 30 deja de generarse si se retrocede al 25, hasta volver al 30; «Mis hábitos» lo sigue mostrando desbloqueado». Ahora lo que ya corrió (algún registro con día ≥ `dia_desbloqueo`) se sigue generando; lo elegido para más adelante espera su día. **Resuelto también (D-200, E-335, 2026-09-27)** lo que esta fila dejaba abierto; decía: «**Sigue abierto:** hábitos PERSONAL (`dia_inicio` = día de creación) y horarios de catálogo que arrancan después del día destino». Ahora, si ya corrieron desde el inicio de su horario, se siguen generando como en ese primer día (hora, guía y, en la Audioterapia, el audio de la semana 1) y «Mis hábitos» no les pone candado; lo que nunca corrió sigue esperando. Queda sin cubrir la grilla de admin «Hábitos del alumno», que para esos hábitos muestra la hora de la preferencia o ninguna |
 | Los tracks de HOY no se rehacen | **Decidido (D-198): se mantiene así.** Conservan `dia_programa`, `es_opcional` (ciclos D-169) y horario del día viejo hasta mañana; lo generado conserva su foto |
 | Rocas | **Resuelto (D-192, 2026-09-26).** La semana es `ceil(día/7)` (1 a 13) y sigue al día ajustado; el fin del programa también. Decía: «Semanas y fin del programa desde `fecha_inicio` sin ajuste: «día 34, semana 7», y al retroceder el final cae en la semana 14 (E-320)» |
 | Adelantar saltándose un día de firma | **Resuelto (D-193, 2026-09-26).** El pacto saltado queda pendiente y se firma después del de la fase en curso. Decía: «El pacto de la fase saltada ya no se puede firmar (solo se firma la fase actual)» |

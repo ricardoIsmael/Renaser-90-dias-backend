@@ -240,6 +240,42 @@ class TraineeAdminControllerTest {
                 .andExpect(jsonPath("$.lastDayAdjustment").doesNotExist());
     }
 
+    /**
+     * D-201 / E-336: aprobada el 26/09 de noche y sin activar, su fila tiene la fecha PROVISIONAL del
+     * alta (27/09), que no es un Dia 1. La ficha no la manda como inicio: el panel muestra "Todavia
+     * no eligio su Dia 1" en vez de ofrecer un cambio de dia que el servidor rechaza con 409. Contra
+     * el codigo viejo {@code startDate} salia "2026-09-27".
+     */
+    @Test
+    void detalleDeUnAprendizSinActivarNoMandaElDiaUnoProvisional() throws Exception {
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        User user = User.rehydrate(traineeId, new Email(traineeId + "@renaser.com"), UserRole.TRAINEE,
+                UserStatus.ACTIVE, "Aprendiz sin activar", null, null, null, null);
+        var sinActivar = new ParticipacionPrograma(traineeId, true, 0, LocalDate.of(2026, 9, 27),
+                ZoneId.of("America/Lima"), FasePrograma.PHASE_1_REBIRTH, null, null, UserRole.TRAINEE, false,
+                false);
+        when(getTraineeDetailUseCase.obtener(any())).thenReturn(new TraineeDetail(user, sinActivar, null));
+
+        mockMvc.perform(get("/api/v1/admin/trainees/{id}", traineeId.value())
+                        .header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.inscrito").value(true))
+                .andExpect(jsonPath("$.programDay").value(0))
+                .andExpect(jsonPath("$.startDate").doesNotExist());
+    }
+
+    /** Activado, el Dia 1 elegido sale como siempre. */
+    @Test
+    void detalleDeUnAprendizActivadoMandaSuDiaUno() throws Exception {
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        when(getTraineeDetailUseCase.obtener(any())).thenReturn(detalle(traineeId, null));
+
+        mockMvc.perform(get("/api/v1/admin/trainees/{id}", traineeId.value())
+                        .header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.startDate").value("2026-09-03"));
+    }
+
     @Test
     void detalleSinPermisoDevuelve403() throws Exception {
         when(getTraineeDetailUseCase.obtener(any())).thenThrow(new NotAuthorizedException("No autorizado"));
