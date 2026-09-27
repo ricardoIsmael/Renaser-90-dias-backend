@@ -1,5 +1,6 @@
 package com.renaser.os.community.application.services;
 
+import com.renaser.os.community.api.FotosDeIntegrantesDelGrupo;
 import com.renaser.os.community.application.ports.in.celula.ConsultarCelulasUseCase.PerfilBasico;
 import com.renaser.os.community.application.ports.in.celula.ConsultarMiCelulaUseCase.MiCelula;
 import com.renaser.os.community.application.ports.in.celula.ConsultarMisCelulasUseCase;
@@ -28,6 +29,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
@@ -44,6 +46,10 @@ import java.util.Optional;
  * puntero {@code participantes_programa.celula_id}. El puntero solo se usa para una cosa: decidir
  * cuál de los grupos es el principal, y con eso ordenar la lista. Preguntarle a una columna de un
  * solo valor "¿en qué grupos está?" es lo que producía el bug.
+ *
+ * <p><b>Las fotos de la gente del grupo</b> (D-206, 2026-09-27): el mentor y cada aprendiz llevan la
+ * ruta de su tarjeta con nombre, que sirve el chat del grupo ({@link FotosDeIntegrantesDelGrupo}). Es
+ * lo que muestra la lista de integrantes de la info del chat; sin chat, la ruta va vacía.
  */
 @Service
 public class MisCelulasService implements ConsultarMisCelulasUseCase {
@@ -55,12 +61,13 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
     private final ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort;
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
+    private final FotosDeIntegrantesDelGrupo fotos;
 
     public MisCelulasService(LoadCelulaPort loadCelulaPort, LoadCohortePort loadCohortePort,
                               LoadAsignacionesPort loadAsignacionesPort,
                               ConsultarCelulaDeParticipantePort consultarCelulaDeParticipantePort,
                               ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort,
-                              UserSummaryFinder userSummaryFinder, Clock clock) {
+                              UserSummaryFinder userSummaryFinder, Clock clock, FotosDeIntegrantesDelGrupo fotos) {
         this.loadCelulaPort = loadCelulaPort;
         this.loadCohortePort = loadCohortePort;
         this.loadAsignacionesPort = loadAsignacionesPort;
@@ -68,6 +75,7 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
         this.consultarPerfilUsuarioPort = consultarPerfilUsuarioPort;
         this.userSummaryFinder = userSummaryFinder;
         this.clock = clock;
+        this.fotos = fotos;
     }
 
     @Override
@@ -88,7 +96,7 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
 
     @Override
     @Transactional(readOnly = true)
-    public List<PerfilBasico> integrantesDe(UserId actorId, CelulaId celulaId) {
+    public List<IntegranteDelGrupo> integrantesDe(UserId actorId, CelulaId celulaId) {
         requireActorActivo(actorId);
         Instant ahora = clock.now();
         ConjuntoAsignaciones delGrupo = ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(celulaId));
@@ -104,7 +112,9 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
                responde "quienes son" seria una asimetria sin motivo. */
             throw new NotAuthorizedException("No perteneces a ese grupo");
         }
-        return delGrupo.aprendicesVigentesEn(celulaId, ahora).stream().map(this::perfilBasico).toList();
+        List<UserId> aprendices = delGrupo.aprendicesVigentesEn(celulaId, ahora);
+        Map<UserId, String> rutas = fotos.rutasDeLasFotos(celulaId.value(), aprendices);
+        return aprendices.stream().map(id -> new IntegranteDelGrupo(perfilBasico(id), rutas.get(id))).toList();
     }
 
     /**
@@ -153,7 +163,13 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
         int cantidadMiembros = ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(celula.id()))
                 .aprendicesVigentesEn(celula.id(), ahora).size();
         int totalCelulas = loadCelulaPort.porCohorte(celula.cohorteId()).size();
-        return new MiCelula(celula, cohorte, mentor, cantidadMiembros, totalCelulas);
+        return new MiCelula(celula, cohorte, mentor, cantidadMiembros, totalCelulas, rutaDeLaFoto(celula, mentor));
+    }
+
+    /** La tarjeta con nombre del mentor en el chat del grupo (D-206); {@code null} sin mentor o sin chat. */
+    private String rutaDeLaFoto(Celula celula, PerfilBasico mentor) {
+        return mentor == null ? null
+                : fotos.rutasDeLasFotos(celula.id().value(), List.of(mentor.id())).get(mentor.id());
     }
 
     private Cohorte requireCohorte(Celula celula) {

@@ -494,6 +494,13 @@ renaser:
   chat:
     bienvenida:
       activa: ${BIENVENIDA_ACTIVA:false}
+    # D-206 (2026-09-27): qué foto muestra la info del chat de cada integrante de un grupo o de un
+    # soporte. TARJETA (el default, decisión del dueño): siempre su tarjeta con nombre, aunque haya
+    # subido foto en «Yo». FOTO_SUBIDA: su foto si la subió; si no, la tarjeta. Se cambia sin APK nuevo:
+    # /renaser/prod/CHAT_FOTO_DE_INTEGRANTES=FOTO_SUBIDA y reiniciar el contenedor (el log de arranque
+    # dice el modo que tomó: `[chat.fotos] foto de los integrantes…`). Un valor que no es ninguno de los
+    # dos queda en TARJETA, con un aviso en el log.
+    foto-de-integrantes: ${CHAT_FOTO_DE_INTEGRANTES:TARJETA}
   email:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}

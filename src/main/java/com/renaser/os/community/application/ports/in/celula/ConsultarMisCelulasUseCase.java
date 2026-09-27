@@ -56,5 +56,15 @@ public interface ConsultarMisCelulasUseCase {
      *                                                             integrantes de un grupo ajeno no
      *                                                             es una lista vacía, es un 403.
      */
-    List<PerfilBasico> integrantesDe(UserId actorId, CelulaId celulaId);
+    List<IntegranteDelGrupo> integrantesDe(UserId actorId, CelulaId celulaId);
+
+    /**
+     * Un integrante con la ruta de su tarjeta con nombre en el chat del grupo (D-206), la que muestra
+     * la info del chat. {@code rutaFoto} es {@code null} si el grupo todavía no tiene chat, o si el modo
+     * del chat es «su foto si la subió» y la subió: entonces se muestra su foto.
+     * <blockquote><b>Corregido 2026-09-27 (D-206).</b> {@link #integrantesDe} devolvía
+     * {@code List<PerfilBasico>}, sin la foto.</blockquote>
+     */
+    record IntegranteDelGrupo(PerfilBasico perfil, String rutaFoto) {
+    }
 }
