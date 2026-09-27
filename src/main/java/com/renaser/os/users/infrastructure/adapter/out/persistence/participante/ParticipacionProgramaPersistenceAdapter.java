@@ -3,6 +3,7 @@ package com.renaser.os.users.infrastructure.adapter.out.persistence.participante
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.out.participante.CargarParticipacionesPort;
 import com.renaser.os.users.application.ports.out.participante.DeleteParticipacionProgramaPort;
+import com.renaser.os.users.application.ports.out.participante.GuardarAvanceDelRelojPort;
 import com.renaser.os.users.application.ports.out.participante.ListarParticipantesConProgramaActivoPort;
 import com.renaser.os.users.application.ports.out.participante.LoadParticipacionProgramaPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
@@ -17,7 +18,8 @@ import java.util.Optional;
 
 @Component
 class ParticipacionProgramaPersistenceAdapter implements LoadParticipacionProgramaPort, SaveParticipacionProgramaPort,
-        DeleteParticipacionProgramaPort, ListarParticipantesConProgramaActivoPort, CargarParticipacionesPort {
+        DeleteParticipacionProgramaPort, ListarParticipantesConProgramaActivoPort, CargarParticipacionesPort,
+        GuardarAvanceDelRelojPort {
 
     private final SpringDataParticipacionProgramaRepository repository;
     private final ParticipacionProgramaPersistenceMapper mapper;
@@ -47,6 +49,11 @@ class ParticipacionProgramaPersistenceAdapter implements LoadParticipacionProgra
     public ParticipacionPrograma save(ParticipacionPrograma participacion) {
         var saved = repository.save(mapper.toEntity(participacion));
         return mapper.toDomain(saved);
+    }
+
+    @Override
+    public boolean guardarSiNoSeAjusto(ParticipacionPrograma participacion) {
+        return repository.guardarAvanceDelRelojSiNoSeAjusto(mapper.toEntity(participacion)) == 1;
     }
 
     @Override

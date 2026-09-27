@@ -320,6 +320,10 @@ solo adiciones en puntos distintos de las mismas clases.
   misma invariante [0, 90] que ya imponía `avanzarDia` (no es una regla de negocio nueva,
   es la misma cota aplicada también al piso) — a diferencia de `avanzarDia` (incrementa de
   a 1, el paso normal del reloj), permite fijar el día exacto que pide un operador humano.
+  > **Corregido 2026-09-26 (D-194, D-195).** El rango ya no es [0, 90] sino **[1, 89]** (0 y 90
+  > son 400: graduar no se hace por esta vía), y antes del Día 1 (no activado o `fecha_inicio`
+  > futura en su zona) responde **409** «Esta persona todavía no empezó su Día 1…» sin escribir
+  > la bitácora. Antes respondía 204 y el ajuste se perdía al arrancar (E-326).
   > **Corregido 2026-09-16 (D-138).** Este punto decía *"gap #7 — aprendices"*, y el listado
   > filtraba `u.rol = 'APRENDIZ'`: las cuentas de staff no aparecían nunca en la pantalla de
   > Personas. Pedido del dueño — *"también los mentores hacen el recorrido"*. `GET

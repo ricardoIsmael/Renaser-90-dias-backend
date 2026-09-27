@@ -7,7 +7,9 @@ import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public interface LoadRegistroHabitoPort {
@@ -35,6 +37,16 @@ public interface LoadRegistroHabitoPort {
                                                                         LocalDate fecha);
 
     List<RegistroHabito> porParticipanteYFecha(UserId participanteId, LocalDate fecha);
+
+    /**
+     * El {@code dia_programa} MAS ALTO con el que cada uno de estos habitos ya genero un registro
+     * para este participante (D-196). Es la prueba de que el habito ya estuvo activo: el snapshot
+     * del registro dice en que dia del programa se genero, asi que un maximo >= al
+     * {@code dia_desbloqueo} significa que la persona llego a ese dia y el habito corrio.
+     *
+     * <p>Una sola consulta agregada; los habitos sin ningun registro no aparecen en el mapa.
+     */
+    Map<HabitoId, Integer> diaProgramaMasAltoGeneradoPorHabito(UserId participanteId, Collection<HabitoId> habitos);
 
     /** Para el scheduler nocturno: todos los registros en ese estado con fecha anterior a la dada (blind expire, mismo criterio que `expirePendingTracksForTrainees`). */
     List<RegistroHabito> enEstadoConFechaAnteriorA(EstadoRegistro estado, LocalDate fecha);

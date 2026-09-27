@@ -143,6 +143,46 @@ class TraineeAdminControllerTest {
         verifyNoInteractions(setTraineeProgramDayUseCase);
     }
 
+    /** D-194: 0 y 90 ya no se fijan por esta via. Contra el codigo viejo (0..90) daban 204. */
+    @Test
+    void fijarDiaCeroONoventaDevuelve400ConMensajeClaroYNoLlegaAlCasoDeUso() throws Exception {
+        for (int dia : new int[] {0, 90}) {
+            mockMvc.perform(put("/api/v1/admin/trainees/{id}/program-day", UUID.randomUUID())
+                            .header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"programDay\":" + dia + "}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("entre 1 y 89")));
+        }
+
+        verifyNoInteractions(setTraineeProgramDayUseCase);
+    }
+
+    @Test
+    void fijarDiaAceptaLosExtremosUnoYOchentaYNueve() throws Exception {
+        for (int dia : new int[] {1, 89}) {
+            mockMvc.perform(put("/api/v1/admin/trainees/{id}/program-day", UUID.randomUUID())
+                            .header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"programDay\":" + dia + "}"))
+                    .andExpect(status().isNoContent());
+        }
+    }
+
+    /** D-195: antes del Dia 1 el dominio lanza IllegalStateException, que es un 409 con su texto. */
+    @Test
+    void fijarDiaAntesDelDiaUnoDevuelve409ConElMensajeParaElPanel() throws Exception {
+        String mensaje = "Esta persona todavía no empezó su Día 1: el día se puede ajustar desde que empieza";
+        doThrow(new IllegalStateException(mensaje)).when(setTraineeProgramDayUseCase).fijarDia(any());
+
+        mockMvc.perform(put("/api/v1/admin/trainees/{id}/program-day", UUID.randomUUID())
+                        .header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"programDay\":34}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(mensaje));
+    }
+
     @Test
     void fijarDiaSinProgramDayDevuelve400() throws Exception {
         mockMvc.perform(put("/api/v1/admin/trainees/{id}/program-day", UUID.randomUUID())

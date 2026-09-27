@@ -9805,3 +9805,84 @@ del programa con el ajuste, y qué hacer con los `numero_semana` ya guardados. N
 **Cómo evitar que vuelva a pasar.** Cualquier cuenta de semanas o de fin del programa sale de
 `ParticipacionPrograma.primeraFechaDelPrograma()`/`ultimaFechaDelPrograma()` (que ya incluyen el ajuste), nunca de
 `fecha_inicio + 89` copiado en otro módulo — es la misma lección que la columna generada de V22.
+
+## E-326 · Ajustar el día antes del Día 1 respondía 204, dejaba fila en la bitácora y el ajuste se perdía al arrancar
+
+**Síntoma.** `PUT /api/v1/admin/trainees/{id}/program-day` a alguien que todavía no empezó (no activó el programa, o su
+`fecha_inicio` es mañana) respondía **204** y escribía una fila en `ajustes_dia_programa`, pero `dias_ajuste_programa`
+quedaba en 0: al llegar el Día 1 el barrido derivaba 1 y el «día 5» desaparecía sin aviso. Fijado por la caracterización
+`caracterizacionFijarDiaAntesDelDiaUnoNoSobreviveAlArranque` (§4.1 de `docs/PROPUESTA_AJUSTE_DIAS_PROGRAMA.md`).
+
+**Causa real.** `ParticipacionPrograma.fijarDia` solo escribía el ajuste si el reloj había arrancado; si no, escribía la
+columna `dia_programa` a mano, que es justo lo que V20 había dejado de hacer. La cuenta derivada no puede representar
+«día 5» antes del día 1, y nada avisaba.
+
+**Solución (D-195).** `fijarDia` rechaza con `IllegalStateException` («Esta persona todavía no empezó su Día 1: el día se
+puede ajustar desde que empieza», 409) antes del `save` y de la bitácora. Pruebas que fallan contra el código viejo:
+`fijarDiaAntesDelDiaUnoSeRechazaSinTocarNada`, `fijarDiaSinProgramaActivadoSeRechaza`,
+`fijarDiaAntesDelDiaUnoEsConflictoYNoEscribeNadaNiEnLaBitacora`, y las dos de madrugada UTC
+(`fijarDiaEnLaMadrugadaUtcDelDiaDeInicioTodaviaEsLaVisperaEnLima`, `fijarDiaEnLaMadrugadaUtcDeSuDiaUnoTodaviaEsConflicto`).
+
+**Cómo evitar que vuelva a pasar.** Una operación sobre un valor derivado que no se puede expresar con sus fuentes
+(fechas + ajuste) se rechaza; no se escribe «a mano» la columna materializada, que la próxima derivación pisa.
+
+## E-327 · Retroceder el día apagaba hábitos del Plan que la persona ya venía haciendo
+
+**Síntoma.** Un hábito tocado en el Plan el día 30 (`desbloqueos_habito.dia_desbloqueo = 30`) dejaba de generar tracks
+si un admin retrocedía a la persona al 25, hasta volver al 30; «Mis hábitos» lo seguía mostrando desbloqueado. Fijado por
+la caracterización `RegistroServiceTest.caracterizacionRetrocederApagaUnHabitoActivadoDespuesDelDiaDestino`.
+
+**Causa real.** `RegistroService.generarInterno` descartaba todo desbloqueo con `dia_desbloqueo > diaPrograma`. El número
+es absoluto y el interruptor del Plan lo crea con el día en que se tocó (D-99), así que al bajar el día un hábito ya activo
+pasaba a leerse como «elegido para más adelante». `MisHabitosService` no lee `desbloqueos_habito` (usa
+`horarios_habito.dia_inicio`), por eso las dos pantallas no coincidían.
+
+**Solución (D-196).** `DesbloqueoHabito.todaviaNoLeToca(dia, diaMasAltoYaGenerado)`: un desbloqueo futuro deja el hábito
+afuera solo si ningún registro suyo se generó con un día ≥ `dia_desbloqueo` (snapshot `registros_habito.dia_programa`,
+leído con `LoadRegistroHabitoPort.diaProgramaMasAltoGeneradoPorHabito`, una consulta agregada que solo corre si hay
+candidatos). Prueba que falla contra el código viejo: `retrocederNoApagaUnHabitoQueYaEstabaActivo` (la caracterización
+invertida); más `unHabitoPostergadoNoSeActivaPorRegistrosAnterioresASuDia`, `DesbloqueoHabitoRetrocesoTest` y
+`DiaMasAltoGeneradoPorHabitoIT` (Postgres real).
+
+**Cómo evitar que vuelva a pasar.** Un número de día ABSOLUTO guardado en otra tabla (desbloqueos, `dia_inicio` de
+horarios, secciones de academia) se desalinea en cuanto el reloj retrocede. Antes de compararlo con el día de hoy,
+preguntarse qué pasa si hoy baja. Queda abierto el mismo caso para hábitos PERSONAL (`dia_inicio` = día de creación) y
+horarios de catálogo que arrancan después del día destino (D-196, «No cubierto»).
+
+## E-328 · El barrido del reloj podía pisar un ajuste de día hecho mientras corría
+
+**Síntoma.** Riesgo de concurrencia de §4.1: un ajuste guardado entre que el barrido del minuto :05 leía su página y
+guardaba la fila se perdía en silencio (la bitácora sí lo registraba). Reproducido contra Postgres real con
+`AjusteDeDiaContraElBarridoIT`: contra el código viejo, `[el ajuste del admin] expected: 6 but was: 0`.
+
+**Causa real.** `RelojProgramaService.sincronizarUno` guardaba con `SaveParticipacionProgramaPort.save`, que hace
+`merge` de la fila ENTERA con los valores leídos en la página, incluido `dias_ajuste_programa`. La tabla no tiene
+`@Version`, así que el último en escribir gana. La ventana es máxima a las 00:05 de Lima, cuando el barrido escribe a
+casi todo el padrón.
+
+**Solución (D-197).** `GuardarAvanceDelRelojPort.guardarSiNoSeAjusto`: `UPDATE` JPQL solo de los campos del reloj con
+`WHERE dias_ajuste_programa = <leído> AND fecha_inicio = <leída>`. Si no actualiza, se relee una vez y se vuelve a
+derivar; si cambió de nuevo, queda para la corrida siguiente. Sin migración. El `@Modifying` lleva
+`flushAutomatically`/`clearAutomatically` porque `RelojProgramaIntegrationTest` corre dentro de un `@Transactional` y sin
+eso leía la entidad vieja del contexto de persistencia.
+
+**Cómo evitar que vuelva a pasar.** Un proceso masivo que lee un lote y escribe después no guarda el agregado entero:
+escribe solo lo que calculó y condiciona el `UPDATE` a que las fuentes de ese cálculo no hayan cambiado.
+
+## E-329 · `clean verify` completo con `-DargLine=-Xmx600m`: `java.lang.OutOfMemoryError: Java heap space`; y un log de verificación pisado por otro build
+
+**Síntoma.** (1) `./mvnw clean verify -DargLine=-Xmx600m` murió en surefire (`RutasCubiertasPorElFiltroTest`) con
+`java.lang.OutOfMemoryError: Java heap space` / `SurefireBooterForkException: There was an error in the forked process`.
+(2) Repetido con más memoria terminó en `EXIT=0`, pero el archivo de log redirigido mostraba otra corrida: un Maven con
+`cwd` en `.claude/worktrees/riesgos-dia` tenía abierto como stdout el MISMO archivo del scratchpad.
+
+**Causa real.** (1) 600 MB alcanzan para pruebas focalizadas, no para la suite entera (muchos contextos de Spring
+cacheados). (2) Dos sesiones de agente con el mismo scratchpad y el mismo nombre de log (`verify2.log`): la segunda
+redirección truncó el archivo de la primera.
+
+**Solución.** Suite completa con `-DargLine=-Xmx1800m` (el `-DargLine` pisa el agente de JaCoCo: el reporte de cobertura
+se saltea, las pruebas corren igual). Los totales se tomaron de `target/surefire-reports` y `target/failsafe-reports`
+del propio worktree, que no se comparten.
+
+**Cómo evitar que vuelva a pasar.** `-Xmx600m` solo para pruebas focalizadas. Con agentes en paralelo, el log de un
+build lleva el nombre del worktree (`verify-<worktree>.log`), y el resultado se lee de los reportes de `target/` propios.

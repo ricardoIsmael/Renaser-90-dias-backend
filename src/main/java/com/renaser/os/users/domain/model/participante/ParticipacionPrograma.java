@@ -66,6 +66,12 @@ public final class ParticipacionPrograma {
     /** Maximo de dias tras firmar Terminos que el aprendiz puede esperar para elegir
      * su Dia 1 (D-66): hoy, +1, +2 o +3 — 4 opciones, nunca "sin elegir". */
     private static final int MAX_DIAS_ESPERA_ACTIVACION = 3;
+    /** Extremos de {@link #fijarDia} (D-194): ni 0 ni 90 se fijan a mano. */
+    public static final int PRIMER_DIA_AJUSTABLE = 1;
+    public static final int ULTIMO_DIA_AJUSTABLE = 89;
+    /** Mensaje del 409 de {@link #fijarDia} antes del Dia 1 (D-195); lo lee tal cual el panel. */
+    public static final String TODAVIA_NO_EMPEZO =
+            "Esta persona todavía no empezó su Día 1: el día se puede ajustar desde que empieza";
 
     private final UserId participanteId;
     private UserId mentorId;
@@ -291,7 +297,7 @@ public final class ParticipacionPrograma {
     /**
      * Ajuste operativo de un ADMIN/ALCHEMIST (panel admin de aprendices, gap #7 de
      * docs/PLAN_INTEGRACION_FRONTEND.md): "este aprendiz viajo dos semanas, devolvelo al
-     * dia 34". El limite [0, 90] es la misma invariante de siempre.
+     * dia 34".
      *
      * <p><b>Que cambio en V20:</b> ya no escribe {@link #diaPrograma} a mano — eso era
      * incoherente con el modelo derivado (la proxima sincronizacion lo hubiera pisado, y
@@ -302,20 +308,33 @@ public final class ParticipacionPrograma {
      * de un salto al dia real), la graduacion se corre sola, y el ajuste queda registrado
      * y auditable en vez de perderse dentro de un contador.
      *
+     * <p><b>Rango 1..89 (D-194, decision del dueño 2026-09-26).</b> Antes aceptaba 0..90. El 90
+     * graduaba en el barrido siguiente y ya no se deshacia (graduar no se hace por esta via), y el
+     * 0 dejaba a alguien en curso un dia entero en "dia 0". Los dos se rechazan.
+     *
+     * <p><b>Antes del Dia 1 se rechaza (D-195).</b> Sin reloj arrancado (no activado, o
+     * {@link #fechaInicio} todavia en el futuro EN SU ZONA) no hay cuenta de la que derivar un
+     * ajuste: antes se escribia el dia sin el ajuste, el endpoint respondia 204, la bitacora
+     * registraba el cambio y al llegar el Dia 1 el barrido lo devolvia a 1 sin aviso.
+     *
      * <p>Retroceder NO borra nada: los habitos, evidencias y puntajes ya ganados quedan
      * como estan (viven en otras tablas, con su propia fecha). Se retoma el conteo, no se
      * reescribe la historia.
+     *
+     * @throws IllegalArgumentException si {@code nuevoDia} no esta en 1..89 (400)
+     * @throws IllegalStateException si la persona todavia no empezo su Dia 1 (409)
      */
     public void fijarDia(int nuevoDia, Clock clock) {
-        if (nuevoDia < 0 || nuevoDia > DURACION_PROGRAMA_DIAS) {
-            throw new IllegalArgumentException(
-                    "diaPrograma debe estar entre 0 y " + DURACION_PROGRAMA_DIAS + ", recibido: " + nuevoDia);
+        if (nuevoDia < PRIMER_DIA_AJUSTABLE || nuevoDia > ULTIMO_DIA_AJUSTABLE) {
+            throw new IllegalArgumentException("El dia del programa se puede fijar entre " + PRIMER_DIA_AJUSTABLE
+                    + " y " + ULTIMO_DIA_AJUSTABLE + " (el 90 gradua y no se fija a mano), recibido: " + nuevoDia);
         }
         LocalDate hoy = hoyEnMiZona(clock);
-        if (estaActivado() && !fechaInicio.isAfter(hoy)) {
-            long transcurridos = ChronoUnit.DAYS.between(fechaInicio, hoy) + 1;
-            this.diasAjuste = (int) (transcurridos - nuevoDia);
+        if (!estaActivado() || fechaInicio.isAfter(hoy)) {
+            throw new IllegalStateException(TODAVIA_NO_EMPEZO);
         }
+        long transcurridos = ChronoUnit.DAYS.between(fechaInicio, hoy) + 1;
+        this.diasAjuste = (int) (transcurridos - nuevoDia);
         this.diaPrograma = nuevoDia;
         // D-67: la fase SIEMPRE se deriva del dia, nunca se deja "colgada" del valor
         // anterior — este ajuste manual es justo la via que dejaba una fase vieja
@@ -392,7 +411,8 @@ public final class ParticipacionPrograma {
      * <p>No toca nada mientras el reloj no arranco: nadie eligio su Dia 1
      * ({@link #estaActivado()} falso) o la fecha elegida todavia no llego. Ese caso se
      * distingue a proposito de "derivado = 0": un participante pre-activacion conserva
-     * el dia que un admin le haya fijado a mano.
+     * el dia guardado. (Decia "el dia que un admin le haya fijado a mano": desde D-195
+     * {@link #fijarDia} rechaza ese caso, asi que lo guardado es el 0 del alta.)
      */
     public boolean sincronizarDiaDelPrograma(LocalDate hoyEnZonaParticipante, Clock clock) {
         Objects.requireNonNull(hoyEnZonaParticipante, "hoyEnZonaParticipante es obligatorio");

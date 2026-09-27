@@ -7,6 +7,7 @@ import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.application.ports.in.participante.ActivateProgramUseCase.ActivateProgramCommand;
 import com.renaser.os.users.application.ports.in.participante.ConsultarActivacionProgramaUseCase.ConsultarActivacionProgramaQuery;
+import com.renaser.os.users.application.ports.out.participante.GuardarAvanceDelRelojPort;
 import com.renaser.os.users.application.ports.out.participante.ListarParticipantesConProgramaActivoPort;
 import com.renaser.os.users.application.ports.out.participante.LoadParticipacionProgramaPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
@@ -49,13 +50,15 @@ class RelojProgramaServiceTest {
     private SaveParticipacionProgramaPort saveParticipacionProgramaPort;
     @Mock
     private ListarParticipantesConProgramaActivoPort listarParticipantesConProgramaActivoPort;
+    @Mock
+    private GuardarAvanceDelRelojPort guardarAvanceDelRelojPort;
 
     private RelojProgramaService service;
 
     @BeforeEach
     void setUp() {
         service = new RelojProgramaService(new RequireActiveUserGuard(loadUserPort), loadParticipacionProgramaPort,
-                saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort, CLOCK);
+                saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort, guardarAvanceDelRelojPort, CLOCK);
     }
 
     private User usuarioActivo(UserId id) {
@@ -198,13 +201,13 @@ class RelojProgramaServiceTest {
         List<ParticipacionPrograma> unicaPagina = new ArrayList<>(
                 List.of(pendienteDeAvance, yaAvanzadaHoy));
         when(listarParticipantesConProgramaActivoPort.pagina(0, 500)).thenReturn(unicaPagina);
-        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(guardarAvanceDelRelojPort.guardarSiNoSeAjusto(any())).thenReturn(true);
 
         var resultado = service.avanzarParticipantesActivos();
 
         assertThat(resultado.evaluados()).isEqualTo(2);
         assertThat(resultado.avanzados()).isEqualTo(1);
-        verify(saveParticipacionProgramaPort, times(1)).save(any());
+        verify(guardarAvanceDelRelojPort, times(1)).guardarSiNoSeAjusto(any());
         assertThat(pendienteDeAvance.diaPrograma()).isEqualTo(6);
         assertThat(yaAvanzadaHoy.diaPrograma()).isEqualTo(10);
     }
@@ -226,9 +229,9 @@ class RelojProgramaServiceTest {
 
         when(listarParticipantesConProgramaActivoPort.pagina(0, 500))
                 .thenReturn(new ArrayList<>(List.of(rompe, sigueDespues)));
-        when(saveParticipacionProgramaPort.save(rompe))
+        when(guardarAvanceDelRelojPort.guardarSiNoSeAjusto(rompe))
                 .thenThrow(new IllegalStateException("fila corrupta en la base"));
-        when(saveParticipacionProgramaPort.save(sigueDespues)).thenAnswer(inv -> inv.getArgument(0));
+        when(guardarAvanceDelRelojPort.guardarSiNoSeAjusto(sigueDespues)).thenReturn(true);
 
         var resultado = service.avanzarParticipantesActivos();
 
@@ -263,14 +266,14 @@ class RelojProgramaServiceTest {
         var relojEnPlenoDiaUno = FixedClock.at(Instant.parse("2026-09-03T19:00:00Z"));
         var service = new RelojProgramaService(new RequireActiveUserGuard(loadUserPort),
                 loadParticipacionProgramaPort, saveParticipacionProgramaPort,
-                listarParticipantesConProgramaActivoPort, relojEnPlenoDiaUno);
+                listarParticipantesConProgramaActivoPort, guardarAvanceDelRelojPort, relojEnPlenoDiaUno);
         ParticipacionPrograma recienActivado = ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null,
                 null, 0, com.renaser.os.users.api.FasePrograma.PHASE_1_REBIRTH, inicio,
                 Instant.parse("2026-09-03T04:07:00Z"), lima, false, 0,
                 relojEnPlenoDiaUno.now(), relojEnPlenoDiaUno.now(), null, null, null, null);
         when(listarParticipantesConProgramaActivoPort.pagina(0, 500))
                 .thenReturn(new ArrayList<>(List.of(recienActivado)));
-        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(guardarAvanceDelRelojPort.guardarSiNoSeAjusto(any())).thenReturn(true);
 
         var resultado = service.avanzarParticipantesActivos();
 
@@ -302,7 +305,7 @@ class RelojProgramaServiceTest {
                 inicio.atStartOfDay(lima).toInstant(), lima, false, 0, vispera.now(), vispera.now(), null, null,
                 null, diaNoventaEnLima.minusDays(2));
         when(listarParticipantesConProgramaActivoPort.pagina(0, 500)).thenReturn(new ArrayList<>(List.of(p)));
-        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(guardarAvanceDelRelojPort.guardarSiNoSeAjusto(any())).thenReturn(true);
 
         servicioCon(vispera).avanzarParticipantesActivos();
 
@@ -320,7 +323,7 @@ class RelojProgramaServiceTest {
      * necesitan posicionado en un instante concreto, no en el de la clase. */
     private RelojProgramaService servicioCon(FixedClock reloj) {
         return new RelojProgramaService(new RequireActiveUserGuard(loadUserPort), loadParticipacionProgramaPort,
-                saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort, reloj);
+                saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort, guardarAvanceDelRelojPort, reloj);
     }
 
     /** Verifica que el barrido SI pida una segunda pagina cuando la primera viene llena
@@ -349,6 +352,58 @@ class RelojProgramaServiceTest {
 
         assertThat(resultado.evaluados()).isZero();
         assertThat(resultado.avanzados()).isZero();
+        verify(guardarAvanceDelRelojPort, never()).guardarSiNoSeAjusto(any());
+    }
+
+    /**
+     * D-197. La fila se leyo con la pagina (ajuste 0, dia 39 de ayer) y un admin la retrocedio al 34
+     * antes del guardado: el guardado condicional no escribe, se relee y se deriva con el ajuste
+     * nuevo. El barrido nunca vuelve a escribir la version leida con la pagina.
+     */
+    @Test
+    void siLaFilaSeAjustoDespuesDeLeerLaPaginaSeReleeYSeDerivaConElAjusteNuevo() {
+        var lima = java.time.ZoneId.of("America/Lima");
+        // 00:05 de Lima (05:05 UTC): la hora del barrido que choca con los ajustes (regla 03).
+        var alaMedianocheDeLima = FixedClock.at(Instant.parse("2026-09-26T05:05:00Z"));
+        var hoy = java.time.LocalDate.of(2026, 9, 26);
+        UserId id = UserId.of(UUID.randomUUID());
+        var leidaConLaPagina = ParticipacionPrograma.rehydrate(id, null, null, 39,
+                com.renaser.os.users.api.FasePrograma.paraDiaPrograma(39), hoy.minusDays(39), CLOCK.now(), lima, false, 0,
+                CLOCK.now(), CLOCK.now(), null, null, null, hoy.minusDays(1), 0);
+        var ajustadaEnElMedio = ParticipacionPrograma.rehydrate(id, null, null, 34,
+                com.renaser.os.users.api.FasePrograma.paraDiaPrograma(34), hoy.minusDays(39), CLOCK.now(), lima, false, 0,
+                CLOCK.now(), CLOCK.now(), null, null, null, hoy.minusDays(1), 6);
+        when(listarParticipantesConProgramaActivoPort.pagina(0, 500))
+                .thenReturn(new ArrayList<>(List.of(leidaConLaPagina)));
+        // Las dos instancias son "iguales" (equals por participanteId): se responde por orden.
+        when(guardarAvanceDelRelojPort.guardarSiNoSeAjusto(any())).thenReturn(false, true);
+        when(loadParticipacionProgramaPort.byParticipanteId(id)).thenReturn(Optional.of(ajustadaEnElMedio));
+
+        var resultado = servicioCon(alaMedianocheDeLima).avanzarParticipantesActivos();
+
+        assertThat(resultado.avanzados()).isEqualTo(1);
+        var guardadas = org.mockito.ArgumentCaptor.forClass(ParticipacionPrograma.class);
+        verify(guardarAvanceDelRelojPort, times(2)).guardarSiNoSeAjusto(guardadas.capture());
+        assertThat(guardadas.getAllValues().get(1)).isSameAs(ajustadaEnElMedio);
+        assertThat(ajustadaEnElMedio.diaPrograma()).isEqualTo(34);
+        assertThat(ajustadaEnElMedio.diasAjuste()).isEqualTo(6);
+        assertThat(ajustadaEnElMedio.diaProgramaAvanzadoEl()).isEqualTo(hoy);
         verify(saveParticipacionProgramaPort, never()).save(any());
+    }
+
+    /** Si vuelve a cambiar en el reintento, se deja para la corrida siguiente sin romper el barrido. */
+    @Test
+    void siVuelveACambiarEnElReintentoQuedaParaLaCorridaSiguiente() {
+        ParticipacionPrograma leida = participacionPendienteDeAvance();
+        ParticipacionPrograma fresca = participacionPendienteDeAvance();
+        when(listarParticipantesConProgramaActivoPort.pagina(0, 500)).thenReturn(new ArrayList<>(List.of(leida)));
+        when(loadParticipacionProgramaPort.byParticipanteId(leida.participanteId())).thenReturn(Optional.of(fresca));
+        when(guardarAvanceDelRelojPort.guardarSiNoSeAjusto(any())).thenReturn(false);
+
+        var resultado = service.avanzarParticipantesActivos();
+
+        assertThat(resultado.evaluados()).isEqualTo(1);
+        assertThat(resultado.avanzados()).isZero();
+        verify(guardarAvanceDelRelojPort, times(2)).guardarSiNoSeAjusto(any());
     }
 }

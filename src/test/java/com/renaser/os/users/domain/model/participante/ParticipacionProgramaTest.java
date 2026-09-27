@@ -99,22 +99,36 @@ class ParticipacionProgramaTest {
         assertThat(p.actualizadoEn()).isEqualTo(later.now());
     }
 
+    /** D-194: el 0 ya no se fija a mano (antes: {@code fijarDiaAceptaElPisoCero}). */
     @Test
-    void fijarDiaAceptaElPisoCero() {
+    void fijarDiaRechazaElCero() {
         ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
 
-        p.fijarDia(0, CLOCK);
+        assertThatThrownBy(() -> p.fijarDia(0, CLOCK)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("entre 1 y 89");
+        assertThat(p.diaPrograma()).isEqualTo(1);
+        assertThat(p.diasAjuste()).isZero();
+    }
 
-        assertThat(p.diaPrograma()).isZero();
+    /** D-194: el 90 gradua y no se fija a mano (antes: {@code fijarDiaAceptaElTopeNoventa}). */
+    @Test
+    void fijarDiaRechazaElNoventa() {
+        ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
+
+        assertThatThrownBy(() -> p.fijarDia(90, CLOCK)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("entre 1 y 89");
+        assertThat(p.diaPrograma()).isEqualTo(1);
     }
 
     @Test
-    void fijarDiaAceptaElTopeNoventa() {
+    void fijarDiaAceptaLosExtremosUnoYOchentaYNueve() {
         ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
 
-        p.fijarDia(90, CLOCK);
-
-        assertThat(p.diaPrograma()).isEqualTo(90);
+        p.fijarDia(89, CLOCK);
+        assertThat(p.diaPrograma()).isEqualTo(89);
+        p.fijarDia(1, CLOCK);
+        assertThat(p.diaPrograma()).isEqualTo(1);
+        assertThat(p.diasAjuste()).isZero();
     }
 
     @Test
@@ -568,48 +582,49 @@ class ParticipacionProgramaTest {
         assertThat(p.fechaGraduacionEsperada()).isEqualTo(inicio.plusDays(96));
     }
 
-    // --- CARACTERIZACION (riesgos del ajuste de dia, 2026-09-26): preguntas abiertas al dueño ---
+    // --- Ajuste antes del Dia 1 (D-195; antes, caracterizacion de que se perdia) ---
 
     /**
-     * CARACTERIZACION, no regla confirmada. Con el programa activado pero el Dia 1 todavia en el
-     * futuro, {@code fijarDia} escribe el dia y NO el ajuste (la cuenta derivada no puede
-     * representar "dia 5" antes del dia 1). El endpoint responde 204 y la bitacora registra el
-     * cambio, pero al llegar la fecha de inicio el barrido deriva 1 y el ajuste desaparece.
+     * D-195. Antes: con el Dia 1 en el futuro, {@code fijarDia} escribia el dia y NO el ajuste, el
+     * endpoint respondia 204 y la bitacora quedaba escrita, pero al llegar la fecha de inicio el
+     * barrido derivaba 1 y el ajuste desaparecia. Ahora se rechaza y no se toca nada.
      */
     @Test
-    void caracterizacionFijarDiaAntesDelDiaUnoNoSobreviveAlArranque() {
+    void fijarDiaAntesDelDiaUnoSeRechazaSinTocarNada() {
         ParticipacionPrograma p = traineePausado();
         p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
 
-        p.fijarDia(5, CLOCK);
-        assertThat(p.diaPrograma()).isEqualTo(5);
+        assertThatThrownBy(() -> p.fijarDia(5, CLOCK)).isInstanceOf(IllegalStateException.class)
+                .hasMessage("Esta persona todavía no empezó su Día 1: el día se puede ajustar desde que empieza");
+        assertThat(p.diaPrograma()).isZero();
         assertThat(p.diasAjuste()).isZero();
+    }
 
-        p.sincronizarDiaDelPrograma(p.fechaInicio(), relojEn(p.fechaInicio(), p));
+    @Test
+    void fijarDiaSinProgramaActivadoSeRechaza() {
+        ParticipacionPrograma p = traineePausado();
 
-        assertThat(p.diaPrograma()).isEqualTo(1);
+        assertThatThrownBy(() -> p.fijarDia(5, CLOCK)).isInstanceOf(IllegalStateException.class);
+        assertThat(p.diaPrograma()).isZero();
     }
 
     /**
-     * CARACTERIZACION. Fijar 90 no gradua en el acto: gradua la corrida siguiente del barrido
-     * (minuto :05 de cada hora), y desde ahi ya no se des-gradua. Un 90 puesto por error y
-     * corregido despues de las :05 deja al aprendiz graduado para siempre.
+     * Regla 03: el reloj en madrugada UTC. A las 04:30 UTC del dia de inicio, en Lima todavia es
+     * la vispera (23:30): la persona NO empezo. Con la fecha del servidor se hubiera aceptado.
      */
     @Test
-    void caracterizacionFijarNoventaGraduaRecienEnElBarridoYNoSeDeshace() {
+    void fijarDiaEnLaMadrugadaUtcDelDiaDeInicioTodaviaEsLaVisperaEnLima() {
         ParticipacionPrograma p = traineePausado();
         p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
-        LocalDate diaVeinte = p.fechaInicio().plusDays(19);
+        LocalDate inicio = p.fechaInicio();
+        FixedClock madrugadaUtc = FixedClock.at(inicio.atTime(4, 30).atZone(ZoneId.of("UTC")).toInstant());
 
-        p.fijarDia(90, relojEn(diaVeinte, p));
-        assertThat(p.programaCompletado()).isFalse();
+        assertThatThrownBy(() -> p.fijarDia(5, madrugadaUtc)).isInstanceOf(IllegalStateException.class);
 
-        p.sincronizarDiaDelPrograma(diaVeinte, relojEn(diaVeinte, p));
-        assertThat(p.programaCompletado()).isTrue();
-
-        p.fijarDia(20, relojEn(diaVeinte, p));
-        assertThat(p.diaPrograma()).isEqualTo(20);
-        assertThat(p.programaCompletado()).isTrue();
+        FixedClock yaEsSuDiaUno = FixedClock.at(inicio.atTime(5, 30).atZone(ZoneId.of("UTC")).toInstant());
+        p.fijarDia(1, yaEsSuDiaUno);
+        assertThat(p.diaPrograma()).isEqualTo(1);
+        assertThat(p.diasAjuste()).isZero();
     }
 
     /** E-319: el dia vigente es el derivado aunque la columna siga en el de ayer. */
