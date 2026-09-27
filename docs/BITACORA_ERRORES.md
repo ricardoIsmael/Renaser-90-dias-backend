@@ -9688,3 +9688,33 @@ un evento creado por API con la lista abierta aparece al cambiar de pestaña y v
 
 **Cómo evitar que vuelva a pasar.** Toda lista que otro rol puede cambiar (eventos, grupos, solicitudes) se relee al ganar
 el foco; «lo pedido queda pedido» (V-3) vale para no repetir la PRIMERA carga, no para no refrescar nunca.
+
+## E-316 · `PUT /api/v1/admin/cells/{id}/mentor` con un mentor que ya lideró el grupo respondía 200 y no hacía nada
+
+**Síntoma.** e2e por API del 26/09. En un grupo, `DELETE …/mentor` y luego `PUT …/mentor {"leaderUserId": <mentor anterior>}`
+→ HTTP 200 con `"mentor":null`. O rotar A → B y luego `PUT` de A → HTTP 200 con `"mentor"` todavía B. No se abría
+ninguna fila en `asignaciones_celula`, no se cerraba la de B y no salía `ComposicionDeCelulaCambiadaEvent`.
+
+**Causa real.** `ComposicionDeCelulaService.asignar(AsignarMentorCelulaCommand)` decidía la idempotencia con
+`ConjuntoAsignaciones.yaAplicada(clave)` y una clave FIJA por par, `mentor-manual|<mentor>|<celula>`. `yaAplicada` busca
+la clave en todas las filas del grupo, vigentes o no, así que encontraba la fila CERRADA de la primera jefatura de A y
+devolvía el detalle sin tocar nada. `SumarMentorAGrupoService` ya había resuelto lo mismo con un contador (`|n`).
+
+**Solución.** La idempotencia pasa a ser por ESTADO: el PUT es un no-op solo si el mentor ya es el vigente del grupo en
+`asignaciones_celula` **y** `celulas.mentor_id` lo apunta (si el puntero está desincronizado, reasignar lo repara, como
+antes). Si no, se abre una jefatura nueva con clave `mentor-manual|<mentor>|<celula>|<n>`, donde `n` es cuántas jefaturas
+de MENTOR tuvo ese mentor en ese grupo — el mismo patrón que `SumarMentorAGrupoService.claveDeSuma`. Las filas viejas sin
+sufijo no chocan con ninguna nueva; un doble clic simultáneo calcula el mismo `n` y el segundo muere contra
+`asignaciones_celula_operacion_uk`. Sin migración. Los chats de dos (D-173/D-185) se abren o reusan solos con el evento
+que ahora sí se publica (`clave_directa` UNIQUE).
+
+**Pruebas.** `ComposicionDeCelulaServiceTest`: `volverAlMentorAnteriorLoReabre` (A → B → A),
+`quitarYVolverAPonerAlMismoMentorLoReabre` y `repetirConElMentorVigenteEsNoOp`; `MentorEnVariosGruposIT`:
+`volverAlMentorAnteriorLoReabre` y `quitarYVolverAPonerLoReabreSinDuplicar` (Postgres real). Las de reapertura fallan
+contra el código anterior.
+
+**Cómo evitar que vuelva a pasar.** Una clave de idempotencia derivada solo del PAR persona-grupo sirve para una operación
+que ocurre una vez en la vida del par; si la operación se puede repetir en el tiempo (entrar, salir y volver), la clave
+lleva el contador de llegadas o la idempotencia se decide por el estado vigente. **Pendiente, no arreglado acá:**
+`claveDeAlta` (`alta-manual|<aprendiz>|<celula>`) del alta manual de aprendiz en el mismo servicio tiene la misma forma:
+mover a un aprendiz A → B → A por `PUT` de aprendiz debería quedar igual de mudo.
