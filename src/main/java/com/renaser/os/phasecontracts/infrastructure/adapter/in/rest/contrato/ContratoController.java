@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -58,10 +59,12 @@ public class ContratoController {
         return ResponseEntity.ok(UrlFirmaResponse.from(url));
     }
 
+    /** El cuerpo es opcional (D-216): ver {@link SignPhaseContractRequest}. */
     @RequiresPermission(Permission.SIGN_PHASE_CONTRACT)
     @PostMapping
-    public ResponseEntity<ContratoFaseResponse> firmar(@ActorAutenticado UserId actor) {
-        var contrato = firmarUseCase.firmar(new FirmarContratoCommand(actor));
+    public ResponseEntity<ContratoFaseResponse> firmar(@ActorAutenticado UserId actor,
+                                                       @RequestBody(required = false) SignPhaseContractRequest request) {
+        var contrato = firmarUseCase.firmar(new FirmarContratoCommand(actor, request == null ? null : request.phase()));
         return ResponseEntity.status(HttpStatus.CREATED).body(ContratoFaseResponse.deFirma(contrato));
     }
 }

@@ -143,4 +143,28 @@ class FaseProgramaTest {
         assertThat(FasePrograma.faseAFirmar(34, java.util.Set.of(FasePrograma.FASE_2_DESARROLLO))).isNull();
         assertThat(FasePrograma.faseAFirmar(16, nada)).isNull();
     }
+
+    /**
+     * D-216, caracterizacion del orden que pregunto TRN-21: en el dia 84 sin nada firmado los tres
+     * pendientes salen IV, II, III. Es lo que dice D-193 («primero la fase en curso; si no, la anterior
+     * mas vieja sin firmar»), no un descuido; si el dueño quiere otro orden, se cambia aca.
+     */
+    @Test
+    @DisplayName("D-216 pendientes: el dia 84 sin nada firmado salen IV, II, III; faseAFirmar es el primero")
+    void pendientesEnElOrdenDeD193() {
+        var nada = java.util.Set.<FasePrograma>of();
+
+        assertThat(FasePrograma.pendientes(84, nada)).containsExactly(FasePrograma.FASE_4_ASCENSION,
+                FasePrograma.FASE_2_DESARROLLO, FasePrograma.FASE_3_GUERRERO_ALQUIMISTA);
+        assertThat(FasePrograma.pendientes(40, nada)).containsExactly(FasePrograma.FASE_3_GUERRERO_ALQUIMISTA,
+                FasePrograma.FASE_2_DESARROLLO);
+        assertThat(FasePrograma.pendientes(84, java.util.Set.of(FasePrograma.FASE_4_ASCENSION)))
+                .containsExactly(FasePrograma.FASE_2_DESARROLLO, FasePrograma.FASE_3_GUERRERO_ALQUIMISTA);
+        assertThat(FasePrograma.pendientes(16, nada)).isEmpty();
+        for (int dia = 0; dia <= 90; dia++) {
+            var pendientes = FasePrograma.pendientes(dia, nada);
+            assertThat(FasePrograma.faseAFirmar(dia, nada)).as("dia %d", dia)
+                    .isEqualTo(pendientes.isEmpty() ? null : pendientes.getFirst());
+        }
+    }
 }

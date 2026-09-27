@@ -28,10 +28,28 @@ class FirmarContratoCommandTest {
                 .isInstanceOf(ConstraintViolationException.class);
     }
 
+    /**
+     * <b>Corregido 2026-09-27 (D-216, TRN-21 del e2e).</b> Esta prueba se llamaba
+     * {@code noTieneCampoFaseInyectable} y exigia que el comando tuviera SOLO {@code participanteId}
+     * («no hay campo `fase` para inyectar», §5.3.3). Desde D-193 se firman pactos atrasados y, con dos
+     * o mas pendientes, un pedido que no dice la fase no se puede repetir sin firmar OTRO pacto: dos
+     * {@code POST} seguidos firmaban el IV y el II. D-193 ya recomendaba que el cliente mande la fase.
+     * La fase no se inyecta: no elige que se firma, solo confirma el que toca, y el servicio rechaza
+     * cualquier otro ({@code ContratoServiceTest}). Lo que sigue sin existir es un campo de RUTA.
+     */
     @Test
-    @DisplayName("el comando SOLO tiene participanteId: no hay campo `fase` para inyectar (CLAUDE.MD §5.3.3)")
-    void noTieneCampoFaseInyectable() {
-        assertThat(FirmarContratoCommand.class.getRecordComponents()).hasSize(1);
-        assertThat(FirmarContratoCommand.class.getRecordComponents()[0].getName()).isEqualTo("participanteId");
+    @DisplayName("D-216: el comando lleva la fase que se cree firmar, y nada que elija la ruta de la firma")
+    void llevaLaFaseQueSeCreeFirmarYNadaQueElijaLaRuta() {
+        assertThat(FirmarContratoCommand.class.getRecordComponents())
+                .extracting(java.lang.reflect.RecordComponent::getName)
+                .containsExactly("participanteId", "fase");
+    }
+
+    @Test
+    @DisplayName("D-216: el pedido de siempre, sin fase, sigue siendo valido")
+    void sinFaseSigueSiendoValido() {
+        var command = new FirmarContratoCommand(UserId.of(UUID.randomUUID()));
+
+        assertThat(command.fase()).isNull();
     }
 }

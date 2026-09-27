@@ -10658,6 +10658,30 @@ viejo). **Lección:** un 409 «conflicto» en un pedido solo, sin concurrencia, 
 atajó la base: buscar la línea `violacion de integridad` en el log. **Pregunta abierta (D-216):** la app deja elegir de 0 a
 1440 (un día); si el servidor tiene que acotar a eso, lo decide el dueño.
 
+## E-378 · Dos `POST /phase-contracts` seguidos firman dos pactos (IV y II), el segundo sin su firma dibujada
+
+**Síntoma (e2e TRN-21, 2026-09-27).** `e2e-t-dia84`, con tres pactos pendientes: `POST /api/v1/phase-contracts` (sin
+cuerpo) → 201 `"phase":"FASE_4_ASCENSION"`, y el segundo, enseguida → 201 `"phase":"FASE_2_DESARROLLO"`. En la base
+quedaron los dos (`e2e-t-dia84@renaser.test:FASE_4_ASCENSION, e2e-t-dia84@renaser.test:FASE_2_DESARROLLO`).
+
+**Causa real.** Desde D-193 el `POST` firma «el pacto que toca» (`FasePrograma.faseAFirmar`) y el pedido no dice cuál. Firmado
+el IV, el que toca pasa a ser el II, así que repetir el pedido (un doble toque, un reintento) firma OTRO pacto, sin la firma
+dibujada que se subió para el primero. D-193 ya lo había anotado como riesgo y recomendaba que el cliente mande la fase.
+
+**Solución (D-216).** `POST /phase-contracts` acepta un cuerpo OPCIONAL `{"phase":"FASE_4_ASCENSION"}`, el mismo valor que
+devuelve `GET /pending`. Con la fase: si ya está firmado devuelve el que estaba (idempotente); si no, tiene que ser el que toca
+(409 «Ahora te toca firmar el pacto de …» si es otro). Sin cuerpo: firma solo si hay UN pendiente; con dos o más responde 409
+«Tienes 3 pactos por firmar: indica cual firmas. Ahora toca el de Fase IV · El Ascenso», sin firmar nada. El orden no cambió:
+el de D-193 (en el día 84, IV, II, III). Ningún cliente llama hoy a este endpoint (ni el APK en producción ni la app de
+`integracion-27`), así que no se rompe nadie; el cambio del pedido es aditivo y la respuesta no cambió.
+
+**Cómo evitar que vuelva a pasar.** `ContratoServiceTest.unDobleEnvioSinFaseNuncaFirmaDosPactos` (roja contra el código
+viejo: dos pactos firmados), más la idempotencia con fase, el 409 sin fase y el orden IV, II, III; `ContratoControllerTest`
+(cuerpo opcional). La prueba que prohibía el campo `fase` en el comando (§5.3.3) se corrigió con nota visible: la fase no
+elige qué se firma. **Lección:** un endpoint cuyo objetivo lo decide el servidor con estado que cambia no es idempotente; el
+pedido tiene que llevar la intención. **Efecto en el e2e:** los pasos que firman sin cuerpo con dos o más pendientes (TZ-16,
+TRN-21) ahora reciben 409 y tienen que mandar la fase.
+
 ## E-379 · `PUT /journal/today` con 1 MB de texto → 200 y se guardan los 1.048.576 caracteres
 
 **Síntoma (e2e TRN-18, 2026-09-27).** `PUT /api/v1/journal/today` con 1 MB de texto → 200

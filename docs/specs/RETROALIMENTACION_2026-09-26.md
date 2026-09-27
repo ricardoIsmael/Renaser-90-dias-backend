@@ -437,6 +437,8 @@ Estas eran las preguntas abiertas («Por decidir»). Quedan escritas como se hic
 - *Decidió:* **sí, queda como está.** A quien no firmó a tiempo también le aparece el pacto viejo pendiente, para
   firmarlo después. Confirma D-193. Queda el riesgo técnico que anotó D-193: con dos o más pactos pendientes, un doble
   envío podría firmar el siguiente sin su firma dibujada (hoy ni la app ni la web llaman a ese endpoint).
+  > **Corregido 2026-09-27 (D-216).** El e2e lo confirmó (TRN-21: dos envíos seguidos firmaron el IV y el II) y se cerró:
+  > el `POST` acepta la fase y con ella es idempotente; sin ella, con dos o más pendientes, responde 409 y la pide.
 
 **3. Bienvenida del grupo.**
 
