@@ -10026,6 +10026,35 @@ genera el 30 y el 31, baja al 25: se genera con día 25 y «Mis hábitos» no le
 `HorariosDelHabito`. Un lector nuevo no filtra `aplicaEnDia` por su cuenta. La grilla de admin «Hábitos del alumno»
 (`HabitosDeAprendizJdbcAdapter`) todavía lo hace en SQL y quedó anotada como no cubierta en D-200.
 
+## E-336 · «`fecha_inicio` guardada en UTC» en el e2e del 26/09: era la fecha provisional del alta, y la ficha de admin la mostraba como Día 1
+
+**Síntoma.** En el e2e del 26/09, una aprendiz aprobada a las 23:21 de Lima (04:21 UTC del 27) y sin activar quedó con
+`participantes_programa.fecha_inicio = 2026-09-27`. Se leyó como la fecha UTC en lugar de la de Lima. Visto al revisar el
+código (no en el e2e): en el panel, la ficha de alguien sin activar decía «Su programa todavía no empezó» y, pasada esa fecha,
+ofrecía «Cambiar día del programa», que respondía 409 «Esta persona todavía no empezó su Día 1…».
+
+**Causa real.** No es un error de zona. `ParticipacionPrograma.inscribirTraineeAprobado` guarda a propósito un valor
+PROVISIONAL, **mañana en Lima** (`hoyDelParticipante(clock).plusDays(1)`, en zona desde fb8eafd8, 2026-09-05), porque la
+columna es `NOT NULL`; `activarPrograma` lo pisa con el Día 1 elegido. A las 23:21 de Lima del 26, mañana en Lima es el 27:
+coincide con la fecha UTC solo por la hora. Las cinco filas de la base local creadas entre las 02:07 y las 04:42 UTC del 27
+tienen el 27. El DEFAULT `current_date` de la columna nunca se usa (JPA siempre manda el valor). El problema real es que ese
+valor provisional se lee como si fuera un Día 1: `users.api.ParticipacionPrograma.fechaInicio` lo devuelve sin mirar
+`activado`, y la ficha de admin lo mandaba como `startDate`, así que el panel nunca llegaba a su texto para `null`
+(«Todavía no eligió su Día 1»).
+
+**Solución.** (1) Pruebas que fijan la fecha del alta en la zona: `ParticipacionProgramaTest.alAprobarDeNocheEnLimaLaFechaProvisionalEsMananaEnLimaYNoEnElServidor`
+(04:21 UTC del 27 → 27; contra el alta anterior a fb8eafd8, con la fecha del servidor, da 28) y
+`alAprobarDeDiaLaFechaProvisionalEsMananaYNoLaFechaUtc` (17:00 UTC del 26 → 27, no 26). fb8eafd8 había corregido la zona sin
+ninguna prueba. (2) D-201: `startDate` de la ficha sale de `users.api.ParticipacionPrograma.diaUnoElegido()` (`null` sin
+activar). `TraineeAdminControllerTest.detalleDeUnAprendizSinActivarNoMandaElDiaUnoProvisional` falla contra el código viejo
+(`Expected no value at JSON path "$.startDate" but found: '2026-09-27'`).
+
+**Cómo evitar que vuelva a pasar.** Antes de diagnosticar «se guardó en UTC», probar el mismo cálculo a una hora en que la
+fecha UTC y la de Lima coinciden (entre las 05:00 y las 19:00 de Lima): si da igual, la hora del e2e era la que lo
+disimulaba. `fecha_inicio` antes de la activación no es un Día 1: para mostrar el inicio del programa, `diaUnoElegido()`.
+Siguen leyendo el valor provisional sin filtro rocas (semana 1 y `fechaInicioPrograma`, y con ellas el acompañante), la
+ventana de la racha y `/users/me`; quedaron como propuesta en D-201.
+
 ## E-337 · `expected: 23:55 but was: 23:50` al escribir la prueba de D-200 con la hora de cierre de la Audioterapia
 
 **Síntoma.** `TracksDelDiaProyeccionServiceTest.unRegistroGeneradoPorDebajoDelInicioDeSuHorarioSeLeeComoEnSuPrimerDia`:

@@ -40,6 +40,38 @@ class ParticipacionProgramaTest {
                 .isInstanceOf(NullPointerException.class);
     }
 
+    // --- inscribirTraineeAprobado: la fecha PROVISIONAL del alta (E-336) ---------
+
+    /**
+     * El caso del e2e del 26/09 (E-336): aprobada a las 23:21 de Lima, que son las 04:21 UTC del 27.
+     * La fecha que queda es MAÑANA EN LIMA (26 + 1 = 27), no la del servidor mas uno (28), que es lo
+     * que hacia el alta antes de fb8eafd8 con {@code clock.today()}. Que coincida con la fecha UTC de
+     * ese instante es casualidad de la hora: el test de abajo lo separa. Regla 03: el reloj en la
+     * madrugada UTC, donde Lima todavia es la vispera.
+     */
+    @Test
+    void alAprobarDeNocheEnLimaLaFechaProvisionalEsMananaEnLimaYNoEnElServidor() {
+        FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-09-27T04:21:00Z"));
+
+        ParticipacionPrograma p = ParticipacionPrograma.inscribirTraineeAprobado(UserId.of(UUID.randomUUID()),
+                madrugadaUtc);
+
+        assertThat(p.fechaInicio()).isEqualTo(LocalDate.of(2026, 9, 27));
+        assertThat(p.estaActivado()).as("es provisional: activarPrograma la pisa con el Dia 1 elegido").isFalse();
+        assertThat(p.diaPrograma()).isZero();
+    }
+
+    /** De dia la fecha UTC y la de Lima coinciden: sigue siendo mañana (27), no la fecha UTC (26). */
+    @Test
+    void alAprobarDeDiaLaFechaProvisionalEsMananaYNoLaFechaUtc() {
+        FixedClock mediodiaEnLima = FixedClock.at(Instant.parse("2026-09-26T17:00:00Z"));
+
+        ParticipacionPrograma p = ParticipacionPrograma.inscribirTraineeAprobado(UserId.of(UUID.randomUUID()),
+                mediodiaEnLima);
+
+        assertThat(p.fechaInicio()).isEqualTo(LocalDate.of(2026, 9, 27));
+    }
+
     @Test
     void fechaGraduacionEsperadaEsFechaInicioMasNoventaDias() {
         ParticipacionPrograma p = ParticipacionPrograma.activarSeguimientoPersonal(UserId.of(UUID.randomUUID()), CLOCK);
