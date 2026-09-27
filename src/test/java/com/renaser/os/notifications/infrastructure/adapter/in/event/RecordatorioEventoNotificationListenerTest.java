@@ -214,7 +214,7 @@ class RecordatorioEventoNotificationListenerTest {
         listener.on(conAsistencia(10L, aprendiz, true));
 
         assertThat(bandeja).isEmpty();
-        verify(pushPort, never()).enviar(anyList(), any(), any(), any());
+        verify(pushPort, never()).enviar(anyList(), any());
     }
 
     @Test
@@ -236,7 +236,7 @@ class RecordatorioEventoNotificationListenerTest {
         listener.on(conAsistencia(10L, aprendiz, true));
 
         assertThat(bandeja).hasSize(1);
-        verify(pushPort, times(1)).enviar(anyList(), any(), any(), any());
+        verify(pushPort, times(1)).enviar(anyList(), any());
     }
 
     @Test

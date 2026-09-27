@@ -9614,3 +9614,22 @@ tiene el mismo fixture y pasa solo porque no mira `esAnuncio`.
 **Cómo evitar que vuelva a pasar.** En un fixture de recordatorios, el evento se crea **antes** del `enviarEn` del
 aviso (regla 03, fixtures coherentes). Si el test habla de un recordatorio de ocurrencia, `creadoEn == enviarEn` lo
 convierte en anuncio.
+
+---
+
+## E-312 · `actual and formal argument lists differ in length` en `RecordatorioEventoNotificationListenerTest` tras integrar dos ramas que pasaban solas
+
+**Síntoma.** `./mvnw clean verify` sobre 64e27d8d: `COMPILATION ERROR` en `testCompile`, `required: java.util.List<...TokenPush>,...MensajePush`
+/ `found: java.util.List<java.lang.Object>,java.lang.Object,java.lang.Object,java.lang.Object`.
+
+**Causa real.** Choque semántico de integración, sin conflicto de texto: la rama del canal de Android (D-188) cambió
+`PushPort.enviar(tokens, titulo, cuerpo, ruta)` por `enviar(tokens, MensajePush)`, y la rama del «Voy» (D-189), sacada del
+mismo punto, agregó dos `verify(pushPort...).enviar(anyList(), any(), any(), any())` con la firma vieja. Cada rama compilaba
+sola; git las unió sin quejarse.
+
+**Solución.** Las dos verificaciones pasan a `enviar(anyList(), any())`. `RecordatorioEventoNotificationListenerTest` 12/12,
+`ExpoPushTransporteCanalTest` 39/39, `ArchitectureTest` 8/8.
+
+**Cómo evitar que vuelva a pasar.** Dos agentes en paralelo sobre el mismo módulo: después de integrar el segundo, compilar
+los tests antes de dar nada por bueno (`clean verify` o al menos `test-compile`). Un merge sin conflictos no prueba que el
+código resultante compile.
