@@ -151,3 +151,9 @@ los interruptores de "Notificaciones & Alarmas" en Yo **no guardan nada**.
 6. **Semáforo:** se mantienen los colores, umbrales (≥80 verde, ≥60 amarillo) y palabras actuales; al
    dueño le gustan. Solo cambia lo de alrededor.
 7. Pendiente de confirmar: que el ex-mentor conserve el chat con el aprendiz (G, riesgo R6).
+8. **Eventos:** solo el Alquimista y el Admin crean, editan y cancelan eventos; el mentor ya no (D-186).
+   Sus eventos de célula ya creados se quedan.
+9. **Cierre semanal del semáforo (S-8):** no se toca. La semana es de sábado a viernes y cierra como
+   ya está establecido. Un hábito del viernes cuya ventana cruza la medianoche queda solo documentado
+   como borde (test de caracterización), sin cambiar la regla. Palabras del dueño: «son reglas que ya
+   están establecidas, no confundamos eso».
