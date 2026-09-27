@@ -9991,3 +9991,7 @@ aparece solo en el chat abierto. `conexionStomp.test.ts` (4) falla contra el có
 **Cómo evitar que vuelva a pasar.** Nada que dependa de un carácter NUL puede cruzar como texto el puente de React Native. Un canal
 en vivo se verifica con un mensaje de OTRA cuenta, no con uno propio. Pendiente propuesto (no aplicado): latidos del broker
 (`WebSocketConfig.java:58`, `enableSimpleBroker("/topic")` sin `setHeartbeatValue`) para detectar conexiones muertas.
+> **Actualizado 2026-09-27 (D-202).** Los latidos ya están aplicados: `setHeartbeatValue({10000, 10000})` con el
+> `messageBrokerTaskScheduler`. Se verificó antes que no cortaran a nadie: la web no abre el socket, el APK publicado nunca
+> completa el CONNECT (este mismo error) y la app nueva late cada 10 s. `LatidosDelChatIT` fija la negociación y el cierre de
+> la conexión muda. El frontend dice todavía en sus comentarios que el backend contesta `heart-beat:0,0`: ya no es así.

@@ -71,6 +71,8 @@ Todos reciben el actor por `X-Actor-Id` (mismo patrón temporal que el resto de 
 ### 3.4 WebSocket + Redis Pub/Sub
 
 - `infrastructure/adapter/in/websocket/WebSocketConfig`: endpoint STOMP `/ws`, broker simple `/topic`, prefijo de aplicación `/app`. El cliente se suscribe a `/topic/conversaciones/{conversacionId}`.
+  **Latidos de 10 s en los dos sentidos (D-202, 2026-09-27):** el `CONNECTED` dice `heart-beat:10000,10000` y el broker cierra la
+  sesión del cliente que no escribe nada en 30 a 40 s. Ver §11.
 - `infrastructure/adapter/out/redis/RedisChatPublisher` (implementa `PublicarMensajeFanoutPort`): publica a Redis (canal `chat:conversacion:{id}`) **después** del commit de la transacción que guardó el mensaje — `MensajeService.publicarDespuesDelCommit` usa `TransactionSynchronizationManager.registerSynchronization(...).afterCommit(...)`, el mismo mecanismo que ya usa `AccountRequestService` de `users` para su compensación de Supabase. Fire-and-forget: si Redis falla, se loguea y se sigue (el mensaje ya está durable en Postgres).
 - `infrastructure/adapter/out/redis/RedisChatSubscriberConfig`: cada instancia se suscribe al patrón `chat:conversacion:*` y reenvía el payload (JSON crudo, sin re-serializar) a `/topic/conversaciones/{id}` vía `SimpMessagingTemplate` — así una instancia distinta a la que recibió el POST también entrega el mensaje en vivo (CLAUDE.MD §5.2.1).
 - **Honestidad sobre lo que esto prueba:** la arquitectura compila y el mecanismo (persistir → publicar tras commit → re-suscribir → STOMP) sigue el patrón documentado en CLAUDE.MD §5.2.1 al pie de la letra, pero **no hay verificación E2E con un cliente STOMP/WebSocket real** en este encargo (no hay herramienta de este agente para abrir un socket real contra la app corriendo) — queda pendiente para una fase de pruebas manuales o un test de integración con un cliente STOMP de prueba (`spring-websocket` trae uno).
@@ -584,3 +586,39 @@ crea el soporte, así que los dos commitean juntos (E-299).
 | `ConversacionSoporteServiceTest` (+2 y aserciones) | Avisa solo al crear de verdad: no si ya existía, no si perdió la carrera, no en el relleno; el aviso se publica dentro de la transacción que crea el soporte (R2) |
 | `PrimerNombreTest` (2) | Primera palabra con inicial en mayúscula; vacío sin nombre |
 
+## 11. Latidos del canal en vivo (2026-09-27, D-202)
+
+**Qué había.** `WebSocketConfig` hacía `enableSimpleBroker("/topic")` sin latidos: el `CONNECTED` decía
+`heart-beat:0,0`. Una conexión muerta (el teléfono que pasa de wifi a datos o se queda sin señal) seguía
+«abierta» del lado del servidor, con sus suscripciones y su «en línea», hasta que la cortara el sistema
+operativo. Lo dejó propuesto E-331.
+
+**Qué hay.** `setHeartbeatValue({10000, 10000})` con `setTaskScheduler(messageBrokerTaskScheduler)`: el
+`CONNECTED` dice `heart-beat:10000,10000`, el broker late cada 10 s y cierra la sesión STOMP del cliente que
+no escribe nada en 3 × 10 s (la revisa cada 10 s, así que en 30 a 40 s): `ERROR` con `Session closed.` y
+cierre 1002. El `SessionDisconnectEvent` apaga la presencia (§9). Un cliente que ofrece `heart-beat:0,0` no
+promete latir y no se corta.
+
+**Por qué 10 s.** Es lo que ofrecen los dos clientes que existen (`conexionStomp.ts`,
+`heart-beat:10000,10000`). La app nueva manda su latido cada 10 s y, cuando el servidor late, da la conexión
+por muerta tras 32 s de silencio (`latidosNegociados`): holgado contra los 10 s del servidor.
+
+**A quién podía cortar, verificado antes de activarlo** (frontend `origin/master` y `evidencia-foto`):
+
+| Cliente | ¿Abre el socket? | ¿Late? | Efecto de D-202 |
+|---|---|---|---|
+| Web de producción | No: `HAY_CHAT_EN_VIVO` es falso en web | — | Ninguno |
+| APK publicado | Sí, pero el CONNECT nunca llega entero (E-331, tramas sin NUL) | — | Ninguno: el broker no registra su sesión |
+| App nueva (044159f) | Sí, tramas en binario | Cada 10 s | Sigue conectada; detecta el silencio del servidor |
+
+**El programador.** Se usa el `messageBrokerTaskScheduler` que Spring ya crea para el broker, inyectado
+`@Lazy` (vive en la misma configuración que consume `WebSocketConfig`). No se declaró uno propio: los
+`@Scheduled` de toda la app buscan un `TaskScheduler` único y con dos caerían a uno local de un solo hilo.
+
+**Costo.** Cada latido del servidor pasa por `EntregaAutorizadaInterceptor`, que mira la sesión HTTP con la
+memoria de `SesionViva`: como mucho una lectura de Redis por socket cada 10 s. Si la sesión se revocó, el
+latido no sale; el cliente, al no oír nada, cierra y reconecta, y el handshake lo rechaza con 403.
+
+| Clase | Qué fija |
+|---|---|
+| `LatidosDelChatIT` (2) | Tomcat real, cliente STOMP en binario como la app: el `CONNECTED` negocia `10000,10000` (antes `0,0`); la conexión muda se cierra con `Session closed.` y 1002, la que late sigue abierta y recibe latidos, y la que ofreció `0,0` no se corta |
