@@ -113,6 +113,24 @@ public enum Permission {
     MANAGE_WELCOME,
 
     // ---------------------------------------------------------------------------------
+    // onboarding: Caja Renaser
+    // ---------------------------------------------------------------------------------
+
+    /**
+     * Llevar la Caja Renaser (D-219, 2026-09-28): ver la lista, el detalle y la descarga; aprobar, armar,
+     * enviar, reportar un problema, marcar entregada; editar el contenido de la caja y el fondo de la carta.
+     * Guard: {@code GuardiaDeCaja.exigirAdmin} (onboarding) y {@code CartaDeCajaService} (chat) -> "Solo el
+     * Admin lleva la Caja Renaser" / "La cuenta esta suspendida".
+     *
+     * <p>Roles que lo satisfacen: <b>solo ADMIN activo</b> (respuesta del dueño: «Solo el Admin»). Ni
+     * ALCHEMIST ni MENTOR_LEAD. Como MENTOR, ADMIN y ALCHEMIST todavia no tienen matriz (A-1, falla-abierto en
+     * {@code UserRole}), el 403 de un MENTOR, de un ALCHEMIST y de un ADMIN suspendido lo da el servicio; el de
+     * TRAINEE lo da el interceptor (no esta en su matriz), y el de MENTOR_LEAD el servicio mientras su
+     * cumplimiento siga en modo sombra.
+     */
+    MANAGE_RENASER_BOX,
+
+    // ---------------------------------------------------------------------------------
     // calendar
     // ---------------------------------------------------------------------------------
 

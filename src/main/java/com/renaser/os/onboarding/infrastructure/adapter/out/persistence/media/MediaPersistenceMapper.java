@@ -25,6 +25,7 @@ class MediaPersistenceMapper {
             case AUDIO -> "audio";
             case FIRMA -> "firma";
             case DOCUMENTO -> "documento";
+            case FOTO -> "foto";
         };
     }
 
@@ -33,6 +34,7 @@ class MediaPersistenceMapper {
             case "audio" -> ClaseMedia.AUDIO;
             case "firma" -> ClaseMedia.FIRMA;
             case "documento" -> ClaseMedia.DOCUMENTO;
+            case "foto" -> ClaseMedia.FOTO;
             default -> throw new IllegalStateException("clase de media desconocida en la base: " + jpa);
         };
     }

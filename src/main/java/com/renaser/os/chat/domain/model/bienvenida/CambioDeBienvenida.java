@@ -35,6 +35,12 @@ public record CambioDeBienvenida(PiezaDeBienvenida pieza, String valor, UserId c
                 Objects.requireNonNull(actor), ahora);
     }
 
+    /** Un fondo nuevo para la carta de la caja, en una ruta emitida para cartas ({@link FondoDeCarta}). */
+    public static CambioDeBienvenida fondoDeCarta(String ruta, UserId actor, Instant ahora) {
+        return new CambioDeBienvenida(PiezaDeBienvenida.CARTA_CAJA, FondoDeCarta.exigirRutaPropia(ruta),
+                Objects.requireNonNull(actor), ahora);
+    }
+
     public static CambioDeBienvenida volverAlOriginal(PiezaDeBienvenida pieza, UserId actor, Instant ahora) {
         return new CambioDeBienvenida(pieza, null, Objects.requireNonNull(actor), ahora);
     }

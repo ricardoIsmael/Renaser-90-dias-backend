@@ -182,6 +182,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/me/semaforo", "/api/v1/me/semaforo/**",
                                 "/api/v1/semaforo/**")
                         .authenticated()
+                        // «Tu Caja Renaser» (D-219): la caja propia; el id sale de la sesion.
+                        .requestMatchers("/api/v1/me/caja", "/api/v1/me/caja/**").authenticated()
                         /* `/api/v1/participants/**` no aparecia en ninguna busqueda por prefijo
                            porque su controller no declara `@RequestMapping` de clase: las rutas
                            estan escritas enteras en cada metodo. Incluye

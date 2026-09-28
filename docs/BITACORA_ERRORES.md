@@ -11583,3 +11583,34 @@ sus acciones) → sale 0 → vuelve admin 7 (sus hábitos). Prueba `alarmas/__te
 
 **Cómo evitar que vuelva a pasar.** Todo lo que programe una alarma local nueva guarda sus ids con un prefijo
 `renaser.…` y lo suma a `PREFIJOS_DE_ALARMAS`.
+
+## E-414 · Sumar una pieza a `PiezaDeBienvenida` rompe la compilación en un `switch` exhaustivo
+
+**Síntoma.** Al sumar `CARTA_CAJA` (D-219), `./mvnw test-compile`:
+`TextosDeBienvenidaYamlAdapter.java:[46,16] the switch expression does not cover all possible input values`.
+
+**Causa real.** `TextosDeBienvenidaYamlAdapter.original` es un `switch` sin `default` sobre `PiezaDeBienvenida`,
+y rechazaba la portada con su propio `case PORTADA`. Además, `PiezaDeBienvenida.esTexto()` era `this != PORTADA`
+y `CambiosDeBienvenidaJdbcAdapter` decidía la columna (`texto` o `portada_ruta`) con `== PORTADA`: esos dos no
+rompían la compilación, pero habrían guardado la ruta del fondo de la carta en `texto`.
+
+**Solución.** `case PORTADA, CARTA_CAJA -> throw …`; `esTexto()` excluye las dos piezas de imagen, y el
+adaptador JDBC pregunta `esTexto()` en vez de comparar con `PORTADA`. V82 amplía los `CHECK` de
+`cambios_bienvenida` (pieza, prefijo por pieza, texto sin ruta y ruta sin texto).
+
+**Cómo evitar que vuelva a pasar.** Para saber si una pieza es de imagen, `!pieza.esTexto()`; nunca
+`== PORTADA`. El `switch` sin `default` es a propósito: el compilador avisa, como esta vez.
+
+## E-415 · Sembrar un ALCHEMIST por SQL en una prueba: `invalid input value for enum renaser.rol_usuario`
+
+**Síntoma.** `CajaRenaserIT.seguridad`:
+`ERROR: invalid input value for enum renaser.rol_usuario: "ALCHEMIST"`.
+
+**Causa real.** El enum de Postgres está en español (`'APRENDIZ','MENTOR','LIDER_MENTORES','ADMIN','ALQUIMISTA'`,
+V1) y el de Java en inglés (`UserRole`). La semilla usó el nombre de Java. Con `ADMIN` y `MENTOR` no se nota
+porque se escriben igual.
+
+**Solución.** La semilla usa `ALQUIMISTA` (y `SUSPENDIDO`/`ACTIVO` para `estado_usuario`).
+
+**Cómo evitar que vuelva a pasar.** En SQL de pruebas, roles y estados con los valores de V1:
+`APRENDIZ`, `MENTOR`, `LIDER_MENTORES`, `ADMIN`, `ALQUIMISTA`; `ACTIVO`, `INACTIVO`, `SUSPENDIDO`.

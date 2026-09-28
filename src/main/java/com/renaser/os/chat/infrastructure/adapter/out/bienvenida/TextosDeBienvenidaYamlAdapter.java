@@ -47,7 +47,8 @@ class TextosDeBienvenidaYamlAdapter implements TextosOriginalesDeBienvenidaPort 
             case SOPORTE_CON_LA_TARJETA -> soporteConLaTarjeta;
             case SOPORTE_FORMAL -> soporteFormal;
             case GRUPO -> grupo;
-            case PORTADA -> throw new IllegalArgumentException("La portada no es un texto de bienvenida");
+            case PORTADA, CARTA_CAJA -> throw new IllegalArgumentException("La " + (pieza == PiezaDeBienvenida.PORTADA
+                    ? "portada" : "carta de la caja") + " no es un texto de bienvenida");
         };
     }
 
