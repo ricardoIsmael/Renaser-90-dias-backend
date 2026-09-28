@@ -4,6 +4,7 @@ import com.renaser.os.onboarding.domain.model.caja.DatosDelEnvio;
 import com.renaser.os.onboarding.domain.model.caja.EstadoCaja;
 import com.renaser.os.onboarding.domain.model.caja.FaltaParaEnviar;
 import com.renaser.os.onboarding.domain.model.caja.FichaDeEnvio;
+import com.renaser.os.onboarding.domain.model.caja.MotivoProblema;
 import com.renaser.os.shared.domain.UserId;
 
 import java.math.BigDecimal;
@@ -26,7 +27,13 @@ public record DetalleDeCaja(UserId aprendizId, String nombre, EstadoCaja estado,
     public record ElementoMarcado(String valor, String etiqueta, boolean marcado) {
     }
 
-    /** @param porNombre quién lo marcó; {@code null} si fue el sistema o se borró su cuenta */
-    public record PasoDelHistorial(int envio, EstadoCaja estado, Instant en, String porNombre) {
+    /**
+     * @param porNombre quién lo marcó; {@code null} si fue el sistema o se borró su cuenta
+     * @param motivo    solo en {@code CON_PROBLEMA}: por qué (D-220); {@code null} en los demás
+     * @param nota      solo en {@code CON_PROBLEMA}: lo que escribió el Admin, si escribió algo. Es interna: el
+     *                  aprendiz nunca la ve
+     */
+    public record PasoDelHistorial(int envio, EstadoCaja estado, Instant en, String porNombre, MotivoProblema motivo,
+                                   String nota) {
     }
 }

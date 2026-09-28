@@ -124,7 +124,10 @@ pedido) y la persona confirma. La app abre la página oficial de rastreo cuando 
   historial. Botones con una sola acción cada uno.
 - **Ficha del aprendiz** (Admin y mentor): el estado de la caja, un chip.
 - **Yo → «Tu Caja Renaser»** (aprendiz): pasos En evaluación → En revisión → Armando → En camino → Entregada;
-  «Ya la recibí» cuando está en camino; «¿Te la enviamos a otro lugar?» antes del envío.
+  «Ya la recibí» cuando está en camino; «¿Te la enviamos a otro lugar?» antes del envío. **Trazabilidad
+  (D-220):** una línea por envío que salió («Envío 1 · Olva OLV-7777 · Se perdió · 28 sep») con «Ver dónde va» si
+  tiene rastreo, el motivo de un problema en palabras simples y la foto de la caja que salió. Nunca el comprobante,
+  el costo ni la nota interna del Admin.
 - **Carta**: el Admin descarga la carta con el nombre, lista para imprimir, y puede cambiar el fondo.
 - Poco texto (pedido del dueño: «no debe contener mucho texto que se maree el usuario o administrador»).
 
@@ -188,6 +191,9 @@ conteos:{EN_EVALUACION,POR_REVISAR,ARMANDO,ENVIADA,ENTREGADA,CON_PROBLEMA,EN_PAU
 - `envioDatos`: del envío actual; `null` hasta que salga (y otra vez `null` después de un reenvío).
 - `historial[].estado`: `POR_REVISAR` (aprobación del Admin), `ARMANDO`, `ENVIADA`, `ENTREGADA`, `CON_PROBLEMA`,
   de todos los envíos, del más viejo al más nuevo. `porNombre`: `null` si se borró la cuenta.
+- **(ampliación D-220)** `historial[].motivo` (`PERDIDA`, `DANADA`, `DEVUELTA`, `OTRO`) y `historial[].nota`: solo
+  en `CON_PROBLEMA`; `null` en los demás pasos y si no se escribió nota. Antes el motivo y la nota se guardaban pero
+  no salían en el detalle (observación de CAJA-10).
 - `faltaParaEnviar`: se calcula siempre (la app lo usa en `ARMANDO`).
 
 **Acciones** (todas devuelven el detalle):
@@ -234,6 +240,16 @@ operativo) o un ADMIN; cualquier otro, 403.
   `null`; `POR_REVISAR` tiene fecha si el Admin la aprobó o si el barrido avisó). Qué pasos están cumplidos se
   deduce de `estado`.
 - `envioDatos` no lleva `costo`.
+- **(ampliación D-220, aditiva)** `envios`: los envíos que **salieron** (llegaron a `ENVIADA`), del primero al
+  último: `[{envio, medio, courier, codigo, rastreoUrl, resultado, en, motivo}]`. `resultado` es el último estado de
+  ese envío: `ENVIADA` (sigue en camino), `ENTREGADA` o `CON_PROBLEMA`; `en`, cuándo llegó a ese resultado;
+  `motivo`, solo si terminó con problema (`null` si no). Un envío que se quedó armando o una entrega «ya se envió
+  antes» (sin datos) no aparece: no hay nada que seguir. Lista vacía si nada salió. Sin `costo` ni `nota`.
+- **(ampliación D-220, aditiva)** `fotoArmadaUrl`: la foto de la caja que salió en el envío **en curso** (la copia
+  que guarda `ENVIADA`), URL de lectura firmada que vence a los 15 min, como la del Admin; `null` hasta que salga y
+  otra vez `null` después de un reenvío. Nunca la de un armado a medias.
+- **Lo que `/me/caja` no expone nunca:** el comprobante (ni su URL ni su ruta), el costo y la nota del problema.
+  `CajaRenaserIT` lo comprueba sobre el cuerpo crudo de la respuesta.
 - `puedeCambiarDestino`: en `EN_EVALUACION`, `POR_REVISAR`, `ARMANDO` y `CON_PROBLEMA`.
 - `PUT /api/v1/me/caja/destino` (mismo objeto `destino`; un campo vacío borra la respuesta; largos máximos: dirección
   y referencias 300, celular 30, quién recibe 120, provincia 80) y `POST /api/v1/me/caja/recibida` (solo

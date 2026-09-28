@@ -9,6 +9,7 @@ import com.renaser.os.onboarding.domain.model.caja.CajaRenaser;
 import com.renaser.os.onboarding.domain.model.caja.ContenidoDeCaja;
 import com.renaser.os.onboarding.domain.model.caja.DatosDelEnvio;
 import com.renaser.os.onboarding.domain.model.caja.FichaDeEnvio;
+import com.renaser.os.onboarding.domain.model.caja.MotivoProblema;
 import com.renaser.os.onboarding.domain.model.caja.PasoDeCaja;
 import com.renaser.os.onboarding.domain.model.caja.TipoPasoCaja;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
@@ -65,7 +66,7 @@ class LecturaDeCaja {
 
     private String urlDe(CajaRenaser caja, TipoPasoCaja foto) {
         return caja.ultimo(foto).flatMap(paso -> paso.dato(PasoDeCaja.RUTA))
-                .map(ruta -> almacenamiento.firmarLectura(ruta, VALIDEZ_URL_LECTURA).toString()).orElse(null);
+                .map(this::firmada).orElse(null);
     }
 
     /** Los pasos que mueven el estado, con el nombre de quien los marcó (una consulta para todos). */
@@ -76,6 +77,21 @@ class LecturaDeCaja {
                 .filter(Objects::nonNull).distinct().toList());
         return visibles.stream().map(p -> new PasoDelHistorial(p.envio(), p.tipo().estadoDelHistorial().orElseThrow(),
                 p.en(), p.marcadaPor() == null || !autores.containsKey(p.marcadaPor()) ? null
-                        : autores.get(p.marcadaPor()).fullName())).toList();
+                        : autores.get(p.marcadaPor()).fullName(),
+                p.dato(PasoDeCaja.MOTIVO).flatMap(MotivoProblema::leido).orElse(null),
+                p.dato(PasoDeCaja.NOTA).orElse(null))).toList();
+    }
+
+    /**
+     * La foto de la caja armada que ve el APRENDIZ (D-220): la que salió con el envío en curso (la copia de
+     * {@code ENVIADA}), nunca la de un armado a medias ni el comprobante. {@code null} hasta que salga.
+     */
+    String fotoEnviada(CajaRenaser caja) {
+        return caja.ultimo(TipoPasoCaja.ENVIADA).flatMap(paso -> paso.dato(PasoDeCaja.FOTO_RUTA))
+                .map(this::firmada).orElse(null);
+    }
+
+    private String firmada(String ruta) {
+        return almacenamiento.firmarLectura(ruta, VALIDEZ_URL_LECTURA).toString();
     }
 }

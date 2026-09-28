@@ -10,6 +10,7 @@ import com.renaser.os.onboarding.domain.model.caja.AccionDeCaja;
 import com.renaser.os.onboarding.domain.model.caja.CajaRenaser;
 import com.renaser.os.onboarding.domain.model.caja.DatosDelEnvio;
 import com.renaser.os.onboarding.domain.model.caja.DestinoAlternativo;
+import com.renaser.os.onboarding.domain.model.caja.EnvioSalido;
 import com.renaser.os.onboarding.domain.model.caja.EstadoCaja;
 import com.renaser.os.onboarding.domain.model.caja.PasoDeCaja;
 import com.renaser.os.onboarding.domain.model.caja.TipoPasoCaja;
@@ -36,14 +37,16 @@ public class MiCajaService implements MiCajaUseCase {
     private final PasosDeCajaPort pasos;
     private final FichaDeEnvioPort fichas;
     private final ApplicationEventPublisher eventos;
+    private final LecturaDeCaja lectura;
 
     MiCajaService(GuardiaDeCaja guardia, CajasDelPadron padron, PasosDeCajaPort pasos, FichaDeEnvioPort fichas,
-                  ApplicationEventPublisher eventos) {
+                  ApplicationEventPublisher eventos, LecturaDeCaja lectura) {
         this.guardia = guardia;
         this.padron = padron;
         this.pasos = pasos;
         this.fichas = fichas;
         this.eventos = eventos;
+        this.lectura = lectura;
     }
 
     @Override
@@ -77,7 +80,11 @@ public class MiCajaService implements MiCajaUseCase {
         return padron.de(actorId).orElseThrow(() -> new NoSuchElementException("Usuario no encontrado"));
     }
 
-    private static MiCaja miCaja(CajaConFicha leida) {
+    /**
+     * Lo que ve el aprendiz de su caja. Sin comprobante, sin costo y sin la nota interna de un problema: solo el
+     * motivo, que la respuesta HTTP dice en palabras en la app (D-220).
+     */
+    private MiCaja miCaja(CajaConFicha leida) {
         CajaRenaser caja = leida.caja();
         List<PasoVisible> pasosVisibles = List.of(
                 new PasoVisible(EstadoCaja.EN_EVALUACION, null),
@@ -88,7 +95,8 @@ public class MiCajaService implements MiCajaUseCase {
         DatosDelEnvio envio = caja.ultimo(TipoPasoCaja.ENVIADA).map(DatosDelEnvio::desde).orElse(null);
         return new MiCaja(caja.estado(), pasosVisibles, envio,
                 AccionDeCaja.CONFIRMAR_RECIBIDA.sePuedeDesde(caja.estado()),
-                AccionDeCaja.CAMBIAR_DESTINO.sePuedeDesde(caja.estado()), leida.ficha().destino());
+                AccionDeCaja.CAMBIAR_DESTINO.sePuedeDesde(caja.estado()), leida.ficha().destino(),
+                EnvioSalido.de(caja.pasos()), lectura.fotoEnviada(caja));
     }
 
     /** Cuándo quedó en revisión: la aprobación del Admin, o el aviso del barrido si pasó sola. */

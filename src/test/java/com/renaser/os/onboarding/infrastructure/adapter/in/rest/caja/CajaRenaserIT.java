@@ -263,8 +263,24 @@ class CajaRenaserIT {
                 + "AND media_ruta LIKE 'chat/%'", Integer.class, soporteDeAna)).as("con la foto de la caja").isEqualTo(1);
 
         String sesionDeAna = sesionDe(ana);
-        JsonNode miCaja = leer(pedir("GET", "/api/v1/me/caja", sesionDeAna, null), 200);
+        HttpResponse<String> crudaEnCamino = pedir("GET", "/api/v1/me/caja", sesionDeAna, null);
+        JsonNode miCaja = leer(crudaEnCamino, 200);
         assertThat(miCaja.path("estado").asString()).isEqualTo("ENVIADA");
+        // D-220: Ana sigue su envío y ve la foto de su caja; nunca el comprobante ni el costo.
+        assertThat(miCaja.path("fotoArmadaUrl").asString()).isEqualTo(conFotos.path("fotoArmadaUrl").asString());
+        assertThat(miCaja.path("envios")).singleElement().satisfies(e -> {
+            assertThat(e.path("envio").asInt()).isEqualTo(1);
+            assertThat(e.path("codigo").asString()).isEqualTo("OLV-1");
+            assertThat(e.path("courier").asString()).isEqualTo("Olva");
+            assertThat(e.path("rastreoUrl").asString()).isEqualTo("https://tracking.olvaexpress.pe/");
+            assertThat(e.path("resultado").asString()).isEqualTo("ENVIADA");
+            assertThat(e.path("en").isNull()).isFalse();
+            assertThat(e.has("costo")).as("el costo no es del aprendiz").isFalse();
+        });
+        String rutaDelComprobante = conFotos.path("comprobanteUrl").asString()
+                .replace("https://almacen.test/", "").replace("?lectura", "");
+        assertThat(crudaEnCamino.body()).as("ni el comprobante ni su costo, en ningún campo")
+                .doesNotContain(rutaDelComprobante).doesNotContainIgnoringCase("comprobante").doesNotContain("15.5");
         assertThat(miCaja.path("puedeConfirmar").asBoolean()).isTrue();
         assertThat(miCaja.path("puedeCambiarDestino").asBoolean()).isFalse();
         assertThat(miCaja.path("envioDatos").path("codigo").asString()).isEqualTo("OLV-1");
@@ -293,12 +309,28 @@ class CajaRenaserIT {
         JsonNode problema = leer(pedir("POST", ADMIN_CAJA + "/" + ana + "/problema", kelin,
                 Map.of("motivo", "DANADA", "nota", "Llegó mojada")), 200);
         assertThat(problema.path("estado").asString()).isEqualTo("CON_PROBLEMA");
+        assertThat(problema.path("historial")).last().satisfies(h -> {
+            assertThat(h.path("estado").asString()).isEqualTo("CON_PROBLEMA");
+            assertThat(h.path("motivo").asString()).as("el Admin ve el motivo").isEqualTo("DANADA");
+            assertThat(h.path("nota").asString()).as("y la nota").isEqualTo("Llegó mojada");
+        });
+        assertThat(problema.path("historial").get(0).path("motivo").isNull()).as("solo en el problema").isTrue();
+        HttpResponse<String> crudaConProblema = pedir("GET", "/api/v1/me/caja", sesionDeAna, null);
+        assertThat(leer(crudaConProblema, 200).path("envios")).singleElement().satisfies(e -> {
+            assertThat(e.path("resultado").asString()).isEqualTo("CON_PROBLEMA");
+            assertThat(e.path("motivo").asString()).isEqualTo("DANADA");
+        });
+        assertThat(crudaConProblema.body()).as("la nota del Admin es interna").doesNotContain("Llegó mojada")
+                .doesNotContain("\"nota\"");
         JsonNode reenvio = leer(pedir("POST", ADMIN_CAJA + "/" + ana + "/reenviar", kelin, null), 200);
         assertThat(reenvio.path("estado").asString()).isEqualTo("ARMANDO");
         assertThat(reenvio.path("envio").asInt()).isEqualTo(2);
         assertThat(reenvio.path("faltaParaEnviar")).extracting(JsonNode::asString)
                 .containsExactly("CONTENIDO", "FOTO", "COMPROBANTE");
         assertThat(reenvio.path("envioDatos").isNull()).isTrue();
+        JsonNode armandoOtraVez = leer(pedir("GET", "/api/v1/me/caja", sesionDeAna, null), 200);
+        assertThat(armandoOtraVez.path("fotoArmadaUrl").isNull()).as("la foto es la del envío en curso").isTrue();
+        assertThat(armandoOtraVez.path("envios")).as("el envío 1 sigue a la vista").hasSize(1);
 
         assertThat(etapas.flujosCompletados(UserId.of(ana))).as("el Mapa del Día 7 no se confunde con la caja")
                 .doesNotContain("mapa_dia7").contains("caja:1:ENVIADA", "caja:2:ARMANDO");

@@ -7,9 +7,11 @@ import com.renaser.os.onboarding.application.ports.in.caja.ResumenDeCaja;
 import com.renaser.os.onboarding.domain.model.caja.ContenidoDeCaja;
 import com.renaser.os.onboarding.domain.model.caja.DatosDelEnvio;
 import com.renaser.os.onboarding.domain.model.caja.DestinoAlternativo;
+import com.renaser.os.onboarding.domain.model.caja.EnvioSalido;
 import com.renaser.os.onboarding.domain.model.caja.EstadoCaja;
 import com.renaser.os.onboarding.domain.model.caja.FaltaParaEnviar;
 import com.renaser.os.onboarding.domain.model.caja.FichaDeEnvio;
+import com.renaser.os.onboarding.domain.model.caja.MotivoProblema;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -56,7 +58,8 @@ final class CajaResponses {
                     DestinoResponse.from(d.destino()),
                     d.contenido().stream().map(e -> new ElementoResponse(e.valor(), e.etiqueta(), e.marcado())).toList(),
                     d.fotoArmadaUrl(), d.comprobanteUrl(), EnvioResponse.from(d.envioDatos()),
-                    d.historial().stream().map(h -> new HistorialResponse(h.envio(), h.estado(), h.en(), h.porNombre()))
+                    d.historial().stream().map(h -> new HistorialResponse(h.envio(), h.estado(), h.en(), h.porNombre(),
+                                    h.motivo(), h.nota()))
                             .toList(),
                     d.faltaParaEnviar());
         }
@@ -76,7 +79,9 @@ final class CajaResponses {
     record ElementoResponse(String valor, String etiqueta, boolean marcado) {
     }
 
-    record HistorialResponse(int envio, EstadoCaja estado, Instant en, String porNombre) {
+    /** {@code motivo} y {@code nota}: solo en {@code CON_PROBLEMA} (D-220); {@code null} en los demás. */
+    record HistorialResponse(int envio, EstadoCaja estado, Instant en, String porNombre, MotivoProblema motivo,
+                             String nota) {
     }
 
     record EnvioResponse(String medio, String courier, String codigo, BigDecimal costo, String rastreoUrl) {
@@ -98,9 +103,13 @@ final class CajaResponses {
     record ElementoDeLista(String valor, String etiqueta) {
     }
 
-    /** Lo que ve el aprendiz: sin costo ni datos de la ficha que no puede cambiar. */
+    /**
+     * Lo que ve el aprendiz: sin costo, sin comprobante, sin la nota interna de un problema ni datos de la ficha
+     * que no puede cambiar. {@code envios} y {@code fotoArmadaUrl} son la trazabilidad (D-220, aditivos).
+     */
     record MiCajaResponse(EstadoCaja estado, List<PasoResponse> pasos, MiEnvioResponse envioDatos,
-                          boolean puedeConfirmar, boolean puedeCambiarDestino, MiDestino destino) {
+                          boolean puedeConfirmar, boolean puedeCambiarDestino, MiDestino destino,
+                          List<MiEnvioSalidoResponse> envios, String fotoArmadaUrl) {
 
         static MiCajaResponse from(MiCaja caja) {
             DatosDelEnvio envio = caja.envioDatos();
@@ -108,7 +117,19 @@ final class CajaResponses {
                     caja.pasos().stream().map(p -> new PasoResponse(p.estado(), p.en())).toList(),
                     envio == null ? null : new MiEnvioResponse(envio.medio(), envio.courier(), envio.codigo(),
                             envio.rastreoUrl().orElse(null)),
-                    caja.puedeConfirmar(), caja.puedeCambiarDestino(), MiDestino.from(caja.destino()));
+                    caja.puedeConfirmar(), caja.puedeCambiarDestino(), MiDestino.from(caja.destino()),
+                    caja.envios().stream().map(MiEnvioSalidoResponse::from).toList(), caja.fotoArmadaUrl());
+        }
+    }
+
+    /** Un envío que salió, para el aprendiz: sin costo ni nota; el motivo, solo si terminó con problema. */
+    record MiEnvioSalidoResponse(int envio, String medio, String courier, String codigo, String rastreoUrl,
+                                 EstadoCaja resultado, Instant en, MotivoProblema motivo) {
+
+        static MiEnvioSalidoResponse from(EnvioSalido salido) {
+            DatosDelEnvio datos = salido.datos();
+            return new MiEnvioSalidoResponse(salido.envio(), datos.medio(), datos.courier(), datos.codigo(),
+                    datos.rastreoUrl().orElse(null), salido.resultado(), salido.en(), salido.motivo());
         }
     }
 
