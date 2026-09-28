@@ -149,6 +149,7 @@ Actor resuelto por header `X-Actor-Id` (temporal, D-29 de `users`, sin autentica
 | Método | Ruta | Repo viejo | Devuelve |
 |---|---|---|---|
 | POST | `/api/v1/push-tokens` | `POST /push-tokens` (CHAT-07, preservado) | 200, `{id}`; `platform` admite `IOS`, `ANDROID` y `WEB` |
+| POST | `/api/v1/push-tokens/alarmas-locales` | — (nuevo, D-217) | 200, `{confirmadasEn}`; body `{token}`; 404 si el token no existe o es de otra persona; `USE_APP`, 403 sin sesión o con la cuenta suspendida. Ver §10.4 |
 
 ### 2.4 Rupturas de contrato conocidas y heredadas (documentadas, no inventadas — mismo criterio que `docs/MODULO_PHASECONTRACTS.md` §4)
 
@@ -308,7 +309,8 @@ A diferencia de `habits`→`points` y `rocks`→`points` (síncrono, misma trans
 | `EntregaPush` | Quién lo usa |
 |---|---|
 | `NINGUNO` | Logro por hábito completado (`HabitoCompletadoNotificationListener`, E-303); aviso de hábito con el recordatorio apagado |
-| `SOLO_NAVEGADOR` | Aviso de **inicio** de un hábito cuyo teléfono ya tiene alarma local |
+| `RESPALDO_DE_ALARMA_LOCAL` | Aviso de **inicio** de un hábito con recordatorio: al navegador siempre; al teléfono si no confirmó sus alarmas en las últimas 26 h (D-217, §10.4) |
+| `SOLO_NAVEGADOR` | Ninguna regla lo elige desde D-217; se conserva en el enum |
 | `TODOS` | Todo lo demás, incluidos la racha sin celular y la roca completada (logros que sí merecen push) |
 
 **Regla de los avisos de hábito** (`domain/model/habito/EntregaDelAvisoDeHabito`): el teléfono hace
@@ -316,7 +318,12 @@ sonar su alarma local; el push del servidor es el respaldo para lo que el teléf
 
 1. `recordatorio_activo = false` → sin push (inicio y vencimiento). Queda la fila.
 2. Inicio con recordatorio encendido y `minutos_recordatorio` elegido (es cuando la app programa la
-   alarma en el dispositivo) → push solo a tokens `WEB`: el navegador no tiene alarma local.
+   alarma en el dispositivo) → `RESPALDO_DE_ALARMA_LOCAL`: push a los tokens `WEB` y a los del teléfono
+   que no confirmó sus alarmas en las últimas 26 h (§10.4).
+
+   > **Corregido 2026-09-28 (D-217).** Decía «push solo a tokens `WEB`: el navegador no tiene alarma
+   > local». Confiaba en que la alarma del teléfono seguía viva; cuando se perdía (app detenida,
+   > reinstalación, teléfono nuevo) no llegaba ningún aviso (E-394).
 3. Lo demás → push a todos: el vencimiento (la app no programa alarma para el plazo) y los hábitos
    nunca configurados (los dos avisos automáticos son pedido del dueño del 2026-09-05).
 
@@ -325,6 +332,38 @@ sonar su alarma local; el push del servidor es el respaldo para lo que el teléf
 la del recordatorio (`CalculadoraAvisosHabito.conRecordatorioDelAprendiz`, mínimo 5 min por el barrido).
 El mensaje del acompañante en el chat (`rag.AvisoHabitoEnChatListener`) no cambia: el evento se sigue
 publicando aunque el recordatorio esté apagado.
+
+### 10.4 Respaldo de las alarmas locales y ruta del aviso (D-217, D-218, 2026-09-28)
+
+**Confirmación.** `tokens_push.alarmas_confirmadas_en` (`V80`). La app la pone con
+`POST /api/v1/push-tokens/alarmas-locales` después de dejar sus alarmas al día (re-armar, completar
+cambios de hora con fecha, armar lo que el servidor sabe y el teléfono no) y solo si van a sonar a tiempo
+(permiso de avisos y alarmas exactas; ver `ponerAlDiaLasAlarmas.ts` y `confirmacionDeAlarmas.ts` en la
+app). `ConfirmarAlarmasLocalesUseCase` (en `TokenPushService`) marca solo si el token es de quien llama
+(`UPDATE … WHERE token = ? AND usuario_id = ?`); si no, 404. El UPSERT de `POST /push-tokens` conserva la
+confirmación con el mismo dueño y la borra si el token cambia de dueño (`TokenPush.reasignar` también).
+
+**Entrega.** `EntregaPush.RESPALDO_DE_ALARMA_LOCAL.filtrar(tokens, ahora)`: `WEB` siempre; `ANDROID`,
+`IOS` o sin plataforma solo si `!tieneAlarmasLocalesVigentes(ahora)` (nunca confirmó, o hace 26 h o
+más: `TokenPush.VIGENCIA_CONFIRMACION_ALARMAS`). 26 h = un día más dos horas de margen para quien abre la
+app a distinta hora. El APK anterior a D-217 nunca confirma: recibe el push, como antes de D-184.
+
+| Caso | Alarma local | Push de inicio |
+|---|---|---|
+| Confirmó hace menos de 26 h | Sí | Solo navegador |
+| Nunca confirmó (APK viejo) o hace 26 h o más | La que tenga | Navegador y teléfono (puede ser doble) |
+| App detenida a la fuerza | Se borra hasta abrirla (E-394) | **Tampoco llega**: Android no entrega FCM a una app detenida. Lo cubre la guía de batería de la app |
+
+**Ruta del aviso (D-218).** `AvisoHabitoDebidoEvent` suma `habitoId` y `categoriaHabito` (al final; en
+eventos anteriores del outbox llegan `null`). `AvisoHabitoNotificationListener` pone
+`rutaApp = /habitos/{habitoId}?dimension={categoria}` (inicio y vencimiento); sin `habitoId`, `null`
+como antes. Expo la manda en `data.route` (la app abre Training en esa dimensión, esperando al Código
+Renaser y al arranque guiado); Web Push en `data.url` (el service worker solo enfoca la ventana).
+
+Pruebas: `EntregaPushTest` (reloj a las 02:00 UTC), `TokenPushTest` (borde de 26 h, cambio de dueño),
+`NotificacionServiceTest` (el teléfono sin confirmar recibe, el confirmado no), `TokenPushServiceTest`,
+`TokenPushControllerTest` (200/400/404/403 y suspendida), `TokenPushPersistenceAdapterTest`,
+`AvisoHabitoNotificationListenerTest` (rutas), `ExpoPushTransporteCanalTest` (ruta con `?`).
 
 ### 10.3 Canal de Android del push de Expo (D-188, E-9)
 
