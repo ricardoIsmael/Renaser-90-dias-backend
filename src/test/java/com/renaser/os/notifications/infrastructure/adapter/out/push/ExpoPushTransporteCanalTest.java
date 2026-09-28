@@ -50,11 +50,11 @@ class ExpoPushTransporteCanalTest {
 
     @ParameterizedTest
     @EnumSource(TipoNotificacion.class)
-    @DisplayName("con todo apagado (el default) el cuerpo es IDÉNTICO al de antes de D-188, para cada tipo")
+    @DisplayName("con todo apagado (el default) el cuerpo es el de antes de D-188, más la prioridad alta de D-217")
     void apagadoEsIdenticoAlDeAntes(TipoNotificacion tipo) {
         assertThat(cuerpo(todoApagado(), PlataformaPush.ANDROID, tipo))
                 .isEqualTo("{\"to\":\"ExponentPushToken[abc]\",\"title\":\"Titulo\",\"body\":\"Cuerpo\","
-                        + "\"sound\":\"default\",\"data\":{\"route\":\"/ruta\"}}");
+                        + "\"sound\":\"default\",\"priority\":\"high\",\"data\":{\"route\":\"/ruta\"}}");
     }
 
     @Test
@@ -115,7 +115,7 @@ class ExpoPushTransporteCanalTest {
     void elCuerpoSeConserva() {
         assertThat(cuerpo(todoEncendido(), PlataformaPush.ANDROID, TipoNotificacion.RECORDATORIO_EVENTO))
                 .isEqualTo("{\"to\":\"ExponentPushToken[abc]\",\"title\":\"Titulo\",\"body\":\"Cuerpo\","
-                        + "\"sound\":\"default\",\"channelId\":\"recordatorios-eventos\","
+                        + "\"sound\":\"default\",\"priority\":\"high\",\"channelId\":\"recordatorios-eventos\","
                         + "\"data\":{\"route\":\"/ruta\"}}");
     }
 
