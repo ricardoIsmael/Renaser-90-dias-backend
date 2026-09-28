@@ -8,6 +8,9 @@
 -- nada. Ahora la app avisa al servidor cada vez que rearma sus alarmas
 -- (POST /api/v1/push-tokens/alarmas-locales) y el servidor empuja igual a todo telefono que no
 -- confirmo en las ultimas 26 h.
+-- Limite: Android no entrega push a una app detenida a la fuerza, asi que ese caso exacto no lo cubre
+-- esto sino la guia de bateria de la app; esto cubre la alarma perdida con la app viva, la
+-- reinstalacion, el telefono nuevo y el APK viejo (E-394).
 --
 -- POR QUE UNA COLUMNA Y NO UNA TABLA. La confirmacion es de UN dispositivo, y el dispositivo ya tiene
 -- su fila: tokens_push (una por token). Una tabla aparte seria una fila 1:1 con esta.
