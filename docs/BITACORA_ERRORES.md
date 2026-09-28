@@ -11493,3 +11493,83 @@ solo se usa si sigue abierto el mismo hábito y la persona no tocó nada; con d�
 
 **Cómo evitar que vuelva a pasar.** Un estado que se carga en diferido se inicializa en el acto con lo que ya se sabe, y
 la carga tardía no pisa lo que tocó la persona. Si un control se muestra, lo que se guarda tiene que incluirlo.
+
+## E-409 · La ⓘ de Comunidad, el «⋯» de Plan y Training y la campana de Hoy no hacían nada
+
+**Síntoma.** Se veían tocables; tocarlos no hacía nada (E-404). El dueño: «quitarlos si no hacen nada».
+
+**Causa real.** `ScreenHeader` dibujaba el ícono con o sin `onPressRight`.
+
+**Solución.** Frontend `fbfb2db`: el botón se dibuja solo con ícono y acción; la cabecera conserva su alto
+(`minHeight`). Prueba `components/__tests__/cabeceraSinBotonesMuertos.test.ts`, que falla contra el código viejo.
+
+**Cómo evitar que vuelva a pasar.** La misma prueba revisa que ninguna pantalla pida un ícono sin acción.
+
+## E-410 · Cuatro hábitos a las 12:00: llegan los cuatro, suena uno (`Muting recently noisy`)
+
+**Síntoma (emulador, «Voz»).** A las 12:00 llegaron las cuatro notificaciones y solo se oyó «Agua tibia». En logcat:
+
+    E NotifAttentionHelper: Muting recently noisy 0|com.renaser.app|0|60db91d7-…|10231
+
+(y lo mismo para las otras dos). Las voces no se pisan: se pierden.
+
+**Causa real.** Cada hábito y cada acción tiene su propia alarma. Android deja sonar un aviso por segundo por
+app y calla al resto. Cuál suena lo decide el sistema.
+
+**Solución.** Frontend `c960a1d` y `a1eb8be` (`alarmas/avisosJuntos.ts`). En cada grupo que coincide, uno
+lleva el aviso («4 hábitos a las 12:00», con los nombres) y suena con el sonido elegido; con «Voz», «Tu hábito
+está por empezar.». Los demás siguen en la bandeja por un canal sin sonido (`avisos-juntos-sin-sonido`), que
+no gasta el límite. Separarlos unos segundos no se puede: el disparador diario solo tiene hora y minuto. Vale
+para acciones de objetivos y para el aviso diario de objetivos. Se reordena al abrir la app, al cambiar el
+sonido y al programar o cancelar. Probado en el emulador: con cuatro callados y el que lleva el aviso
+entregado cuarto, suena `raw/voz_habito`. Prueba `alarmas/__tests__/avisosALaMismaHora.test.ts`.
+
+**Cuidado al probarlo.** Adelantar el reloj del emulador dispara juntas las alarmas atrasadas, y el
+enfriamiento de Android calla lo que suena en los minutos siguientes. Parece el bug y no lo es: probar con
+alarmas a una hora real cercana, o esperar un rato tranquilo.
+
+**Límite conocido.** Un hábito diario y una acción de fecha a la misma hora no se juntan (tipos de disparador
+distintos): suena uno de los dos.
+
+## E-411 · Info del grupo con iniciales en vez de la tarjeta: Android pedía la foto sin sesión (403)
+
+**Síntoma.** En la info del grupo, «ME», «RE» en vez de la tarjeta con el nombre. En el backend:
+
+    [http] GET /api/v1/chat/conversations/{id}/miembros/{id}/foto 403 2ms
+
+Con curl y `X-Auth-Token` respondía 200. tcpdump en el emulador: el pedido salía sin `X-Auth-Token`.
+
+**Causa real.** `Image.android.js` (React Native 0.86) pasa las cabeceras a la prop nativa `headers` solo si
+`source` es un ARREGLO. La app pasaba el objeto `{ uri, headers }`. Afectaba también la foto del soporte y la
+foto propia de un grupo.
+
+**Solución.** Frontend `7910ea3`: `fuenteNativaDeLaFoto` devuelve un arreglo. Aprendiz y mentor ven las
+tarjetas y el backend responde 200. Prueba `chat/utils/__tests__/fotoConSesionEnAndroid.test.ts`: dibuja el
+`Image` de Android real y falla contra el código viejo.
+
+**Cómo evitar que vuelva a pasar.** Una imagen con cabeceras en React Native se pasa como `source={[{ uri,
+headers }]}`.
+
+## E-412 · Cambiar el sonido en Yo → Alarmas borraba el cambio de hora de Despertar
+
+**Síntoma.** Despertar con «12:00 desde mañana»: después de elegir «Voz», la alarma quedó «06:00 todos los
+días» (`dumpsys alarm`: `origWhen=2026-09-29 06:00`).
+
+**Causa real.** `SeccionAlarmas.cambiarSonido` reprogramaba Despertar con `despertar.hora` (la de hoy) e
+ignoraba el cambio pendiente (D-217).
+
+**Solución.** Frontend `c960a1d`: `pasarAlarmasAlSonido` pasa Despertar con los demás, sin tocar su hora.
+Probado: con «Voz» y «Cuenco» siguió a las 12:00. Prueba en `avisosALaMismaHora.test.ts`.
+
+**Cómo evitar que vuelva a pasar.** Cambiar el sonido nunca reprograma horas: solo cambia el canal.
+
+## E-413 · Al cerrar sesión quedan programadas las alarmas de la cuenta anterior
+
+**Síntoma.** Después de salir de `e2e-admin` y entrar con `e2e-ap-rot2`, seguían en `dumpsys alarm` los cinco
+hábitos de admin a las 12:00 (y a la mañana, el Despertar 16:00 de `e2e-ap-emu` con otra cuenta abierta).
+
+**Causa real.** Cerrar sesión no cancela las alarmas locales.
+
+**Solución.** Sin arreglar (fuera del pedido de hoy). Afecta a quien comparte teléfono o cambia de cuenta.
+
+**Cómo evitar que vuelva a pasar.** Al cerrar sesión, cancelar las alarmas de esa persona.
