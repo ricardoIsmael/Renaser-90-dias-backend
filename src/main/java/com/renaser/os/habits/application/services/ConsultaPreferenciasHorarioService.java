@@ -153,7 +153,7 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
         return new HorarioDeHabito(habito.id(), habito.titulo(), horaDisparo, horaLimite, preferencia != null,
                 preferencia != null && preferencia.recordatorioActivo(),
                 preferencia != null ? preferencia.minutosRecordatorio() : null,
-                cambio);
+                cambio, preferencia != null ? preferencia.antelacionesRecordatorio() : null);
     }
 
     /**

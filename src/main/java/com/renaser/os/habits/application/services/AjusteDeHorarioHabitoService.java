@@ -57,7 +57,7 @@ public class AjusteDeHorarioHabitoService implements AjustarHorarioHabitoUseCase
         ResultadoEdicionPreferencia resultado = editarPreferencia.editar(new EditarPreferenciaHorarioCommand(
                 cambio.participanteId(), habitoId, cambio.horaInicio(), cambio.horaLimite(),
                 vigente.map(HorarioDeHabito::recordatorioActivo).orElse(false),
-                vigente.map(HorarioDeHabito::minutosRecordatorio).orElse(null), cambio.fecha()));
+                vigente.map(HorarioDeHabito::minutosRecordatorio).orElse(null), cambio.fecha(), null));
         return new CambioDeHorarioAplicado(resultado.horaDisparo(), resultado.horaLimite(),
                 resultado.fechaEfectivaDiferido(), resultado.cambiosUsados(), resultado.cambiosRestantes(),
                 resultado.cambiosLimite(), CuotaEdicionHorario.PERIODO_LIBRE.equals(resultado.periodo()));
