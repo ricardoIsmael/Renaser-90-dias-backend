@@ -361,11 +361,11 @@ como antes. Expo la manda en `data.route` (la app abre Training en esa dimensió
 Renaser y al arranque guiado); Web Push en `data.url` (ver «Web» abajo).
 
 **Prioridad alta (2026-09-28).** Todo push de Expo lleva `"priority":"high"` (`ExpoPushTransporte`): sin
-ella Android lo entrega en lote y tarde con el teléfono en reposo (E-400). Llega con la app deslizada desde
+ella Android lo entrega en lote y tarde con el teléfono en reposo (E-405). Llega con la app deslizada desde
 recientes en un Android estándar; a una app **detenida a la fuerza** no le llega nada, con ninguna prioridad.
 
 **Web (D-218).** El service worker le manda `{tipo: 'renaser-abrir-aviso', ruta}` a la ventana abierta, o
-abre una nueva en la ruta; la app abre lo mismo que en el teléfono (E-402).
+abre una nueva en la ruta; la app abre lo mismo que en el teléfono (E-407).
 
 Pruebas: `EntregaPushTest` (reloj a las 02:00 UTC), `TokenPushTest` (borde de 26 h, cambio de dueño),
 `NotificacionServiceTest` (el teléfono sin confirmar recibe, el confirmado no), `TokenPushServiceTest`,

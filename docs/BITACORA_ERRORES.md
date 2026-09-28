@@ -11314,7 +11314,7 @@ acciones; `AbridorDeAvisos` las abre y espera a que se cierren el Código Renase
 **Cómo evitar que vuelva a pasar.** `abrirAviso.test.ts` prueba la espera entera (Código Renaser en el día 1-7, Pacto en el
 día 1, Mapa en el día 7, arranque en frío). Una capa nueva que tome la pantalla se anota con `useCapaObligatoria`.
 
-## E-400 · El push de Expo salía sin prioridad: `expected: "high" but was: ""`
+## E-405 · El push de Expo salía sin prioridad: `expected: "high" but was: ""`
 
 **Síntoma.** El dueño preguntó por qué WhatsApp avisa con la app cerrada y Renaser no siempre. El cuerpo que
 `ExpoPushTransporte` manda a Expo no llevaba `priority`. La prueba nueva contra el código viejo:
@@ -11329,7 +11329,7 @@ fuerza no le llega nada con ninguna prioridad: eso lo cubre la guía de batería
 **Cómo evitar que vuelva a pasar.** `ExpoPushTransportePrioridadTest` y los cuerpos completos de
 `ExpoPushTransporteCanalTest`.
 
-## E-401 · Apagar el recordatorio (o cambiarle la hora) en otro dispositivo no tocaba la alarma de este teléfono
+## E-406 · Apagar el recordatorio (o cambiarle la hora) en otro dispositivo no tocaba la alarma de este teléfono
 
 **Síntoma.** Con el recordatorio apagado desde la web o desde otro teléfono, este seguía sonando todos los días; con la
 hora cambiada en otro lado, sonaba a la vieja.
@@ -11345,7 +11345,7 @@ temprano coincide. Pruebas en `recordatoriosDiferidosYDesdeServidor.test.ts`.
 **Cómo evitar que vuelva a pasar.** Si un dato vive en el servidor y tiene una copia en el teléfono, el teléfono se
 compara con el servidor al entrar, no solo al guardar.
 
-## E-402 · En la web, tocar el push solo enfocaba la ventana
+## E-407 · En la web, tocar el push solo enfocaba la ventana
 
 **Síntoma.** El service worker (`public/renaser-push-sw.js`) enfocaba la ventana abierta y no le decía adónde ir; la app
 web tampoco leía la ruta al abrirse una ventana nueva.
@@ -11359,7 +11359,7 @@ viejo (`postMessage` nunca llamado).
 **Cómo evitar que vuelva a pasar.** Una ruta de aviso nueva se prueba en los dos canales: el teléfono (`data.route`) y la
 web (`data.url`).
 
-## E-403 · La hoja de Training mostraba «A la hora» marcado y guardaba `recordatorio_activo=false`
+## E-408 · La hoja de Training mostraba «A la hora» marcado y guardaba `recordatorio_activo=false`
 
 **Síntoma (visto dos veces, con Jugo verde, 28/09).** Training → Planificar: la hoja de un hábito sin ninguna preferencia
 abría con «A la hora» ya marcado; al guardar, `preferencias_horario.recordatorio_activo = false` (y en un caso
