@@ -11781,7 +11781,7 @@ del menú de desarrollo. No es un fallo de la app de producción.
 **Cómo evitar que vuelva a pasar.** En los scripts del emulador, tocar el campo, esperar y comprobar el foco antes de
 cada `input text`; nunca mandar texto «a ciegas».
 
-## E-424 · `Render Error: Call to function 'AudioRecorder.constructor' has been rejected. → Caused by: The current activity is no longer available` (ABIERTO, no es de la Caja)
+## E-424 · `Render Error: Call to function 'AudioRecorder.constructor' has been rejected. → Caused by: The current activity is no longer available` (RESUELTO en el frontend, 28/09)
 
 **Síntoma.** App de desarrollo en el emulador (28/09, 16:32): después de cerrar sesión y volver a entrar por
 script, la pantalla roja de React Native con ese mensaje, `code: 'ERR_MISSING_ACTIVITY'`, desde
@@ -11789,15 +11789,38 @@ script, la pantalla roja de React Native con ese mensaje, `code: 'ERR_MISSING_AC
 (`ComunidadScreen.tsx:470`). Al cerrarla la app quedó en blanco hasta forzar el cierre. Captura
 `E424-render-error-audiorecorder.png` en `~/Imágenes/e2e-2026-09-28/caja/trazabilidad/`.
 
-**Causa (lo que muestra `logcat`, sin arreglar).** El script de login manda `input keyevent 4` (atrás) para
-esconder el teclado; si el teclado ya no estaba, «atrás» en la raíz **cerró la Activity** (`Transition … type =
-CLOSE … taskId=170`, 16:32:39). El JS siguió vivo; `am start` creó otra Activity (tarea 171) y, al montar de nuevo
-`ComunidadScreen`, `useAudioRecorder` (expo-audio) intentó crear el grabador contra la Activity vieja y el módulo
-nativo rechazó: el hook no tolera ese rechazo y tira abajo el árbol entero. Puede pasarle a una persona real que
-toca «atrás» en la pantalla principal y vuelve a abrir la app mientras el proceso sigue vivo.
+**Causa real.** Dos piezas juntas:
+1. `useAudioRecorder` de expo-audio crea el grabador nativo **en el render**. En Android ese constructor pide
+   `appContext.throwingActivity` (`AudioModule.kt:552`, expo-audio 57.0.4) y, si en ese instante no hay Activity
+   registrada, lanza `MissingActivity` («The current activity is no longer available»). El error sale del render,
+   así que tumba la pantalla entera. El reproductor (`AudioPlayer`) no tiene el problema: usa `reactContext`,
+   no la Activity.
+2. «Atrás» en la pantalla principal **cierra la Activity pero no el JS**. Verificado con una sonda temporal de
+   montaje/desmontaje en el hook (28/09, 17:08): tras «atrás» y volver a abrir, el árbol de React viejo
+   (`rootTag` 1) **no se desmonta** —sigue vivo, sin Activity— y la Activity nueva arranca otro (`rootTag` 11).
+   Cualquier montaje de `ComunidadScreen` en ese hueco (en el árbol viejo, o en el nuevo antes de que su Activity
+   quede registrada) cae en el rechazo. En el recorrido de las 16:32 el «atrás» del script de login cerró la
+   Activity en medio del cambio de sesión.
+El mismo patrón estaba en `EvidenciaHabitoModal` (Training), que vive montado aunque el modal esté cerrado.
 
-**Solución.** Ninguna todavía: es de Comunidad/chat, fuera de esta tarea. Para seguir se forzó el cierre de la app.
+La carrera exacta no se volvió a reproducir en el emulador (tres intentos de «atrás» + reabrir, con y sin
+cerrar sesión): la Activity nueva suele registrarse antes de que se monte Comunidad. Lo que sí quedó probado es
+el mecanismo (el constructor rechaza sin Activity y el árbol viejo sigue montado).
 
-**Cómo evitar que vuelva a pasar.** Pendiente: que el grabador del chat se cree recién al empezar a grabar (no al
-montar la pantalla), o que el rechazo se atrape. En los scripts del emulador, no usar `keyevent 4` para esconder el
-teclado (usar `keyevent 111`, Escape, o tocar fuera).
+**Solución (frontend, rama `caja-renaser`, commit `6d91177`).** Hook nuevo `src/hooks/useGrabadorDeVoz.ts`: el
+grabador se crea con `new AudioModule.AudioRecorder(...)` **recién al tocar el micrófono** (hay un dedo en la
+pantalla, así que hay Activity), se libera al terminar cada grabación (nunca queda un objeto atado a una Activity
+vieja) y, si crearlo o prepararlo falla, devuelve `'no-disponible'`: el botón avisa «No se pudo usar el
+micrófono» y la pantalla sigue en pie. Lo usan `useEnvioMediaChat` (Comunidad) y `EvidenciaHabitoModal`
+(Training). Verificado en el emulador: «atrás» en Hoy → reabrir → Comunidad se ve; grabar 7 s, enviar y
+reproducir (copia local y, al reabrir el chat, la del S3 falso en 9000). Capturas en
+`~/Imágenes/e2e-2026-09-28/e424/`.
+
+**Cómo evitar que vuelva a pasar.** Prueba `src/features/chat/hooks/__tests__/grabadorSinActivity.test.ts`: simula
+el módulo nativo sin Activity (tanto `useAudioRecorder` como el constructor rechazan) y exige que el hook se monte
+sin crear grabador y que el fallo quede en el botón; contra el código anterior fallan las 3. Regla: **ningún
+objeto nativo que dependa de la Activity se crea en el render** (grabador, cámara, etc.); se crea en la acción
+del usuario y se atrapa su fallo. En los scripts del emulador, no usar `keyevent 4` para esconder el teclado
+(usar `keyevent 111`, Escape, o tocar fuera). Pendiente, fuera de este arreglo: los árboles de React que quedan
+montados sin Activity tras «atrás» siguen haciendo trabajo en segundo plano (pedidos, sondeos); vale revisarlo
+aparte.
