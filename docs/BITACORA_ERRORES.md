@@ -11287,8 +11287,10 @@ hábito.
 guarda el servidor.
 
 **Solución (D-217).** `armarRecordatoriosQueFaltan` al abrir la app: con recordatorio activo, minutos y hora en
-`GET /habit-preferences`, y sin alarma en el teléfono, la arma (con el cambio pendiente si lo hay). No pide permiso. El
-servidor guarda un solo número: «30 min antes y a la hora» vuelve como «30 min antes».
+`GET /habit-preferences`, y sin alarma en el teléfono, la arma (con el cambio pendiente si lo hay). No pide permiso. Desde
+V81 el servidor guarda todos los avisos (`reminderMinutesList`) y se reconstruyen todos. *Corregido 2026-09-28:* decía
+que el servidor guardaba un solo número y que «30 min antes y a la hora» volvía como «30 min antes»; el dueño pidió
+guardarlos todos.
 
 **Cómo evitar que vuelva a pasar.** Lo que vive solo en el teléfono se pierde con el teléfono: si el servidor tiene el
 dato, el teléfono se reconstruye desde él al entrar.
@@ -11311,3 +11313,71 @@ acciones; `AbridorDeAvisos` las abre y espera a que se cierren el Código Renase
 
 **Cómo evitar que vuelva a pasar.** `abrirAviso.test.ts` prueba la espera entera (Código Renaser en el día 1-7, Pacto en el
 día 1, Mapa en el día 7, arranque en frío). Una capa nueva que tome la pantalla se anota con `useCapaObligatoria`.
+
+## E-400 · El push de Expo salía sin prioridad: `expected: "high" but was: ""`
+
+**Síntoma.** El dueño preguntó por qué WhatsApp avisa con la app cerrada y Renaser no siempre. El cuerpo que
+`ExpoPushTransporte` manda a Expo no llevaba `priority`. La prueba nueva contra el código viejo:
+`expected: "high" but was: ""` (`ExpoPushTransportePrioridadTest`, `Tests run: 18, Failures: 18`).
+
+**Causa real.** Sin `priority`, Expo usa la normal, y Android entrega esos mensajes en lote y tarde con el teléfono en
+reposo (Doze).
+
+**Solución.** `"priority":"high"` en todo push de Expo. El `channelId` sigue apagado (D-188). A una app detenida a la
+fuerza no le llega nada con ninguna prioridad: eso lo cubre la guía de batería (E-394).
+
+**Cómo evitar que vuelva a pasar.** `ExpoPushTransportePrioridadTest` y los cuerpos completos de
+`ExpoPushTransporteCanalTest`.
+
+## E-401 · Apagar el recordatorio (o cambiarle la hora) en otro dispositivo no tocaba la alarma de este teléfono
+
+**Síntoma.** Con el recordatorio apagado desde la web o desde otro teléfono, este seguía sonando todos los días; con la
+hora cambiada en otro lado, sonaba a la vieja.
+
+**Causa real.** La alarma se programa solo desde la pantalla donde se guarda; nada comparaba el teléfono con lo que dice
+`GET /habit-preferences`.
+
+**Solución (D-217).** `ajustarRecordatoriosAlServidor`, al abrir la app: cancela lo apagado, arma lo que falta y
+reprograma lo que cambió de hora, de avisos o de cambio pendiente. La hora programada se anota en el teléfono para poder
+compararla. Sin el conjunto del servidor (`null`, filas anteriores a V81) se conservan los avisos del teléfono si el más
+temprano coincide. Pruebas en `recordatoriosDiferidosYDesdeServidor.test.ts`.
+
+**Cómo evitar que vuelva a pasar.** Si un dato vive en el servidor y tiene una copia en el teléfono, el teléfono se
+compara con el servidor al entrar, no solo al guardar.
+
+## E-402 · En la web, tocar el push solo enfocaba la ventana
+
+**Síntoma.** El service worker (`public/renaser-push-sw.js`) enfocaba la ventana abierta y no le decía adónde ir; la app
+web tampoco leía la ruta al abrirse una ventana nueva.
+
+**Causa real.** El `notificationclick` usaba `data.url` solo para abrir una ventana nueva, y nadie la interpretaba.
+
+**Solución (D-218).** El service worker le manda `{tipo: 'renaser-abrir-aviso', ruta}` a la ventana abierta; sin ventana
+abre una en la ruta, que la app lee y limpia. `aperturaEnLaWeb.test.ts` carga el service worker real y falla contra el
+viejo (`postMessage` nunca llamado).
+
+**Cómo evitar que vuelva a pasar.** Una ruta de aviso nueva se prueba en los dos canales: el teléfono (`data.route`) y la
+web (`data.url`).
+
+## E-403 · La hoja de Training mostraba «A la hora» marcado y guardaba `recordatorio_activo=false`
+
+**Síntoma (visto dos veces, con Jugo verde, 28/09).** Training → Planificar: la hoja de un hábito sin ninguna preferencia
+abría con «A la hora» ya marcado; al guardar, `preferencias_horario.recordatorio_activo = false` (y en un caso
+`hora_disparo = null`). La pantalla mostraba un recordatorio que no existía: «se guarda pero no suena». Las pruebas nuevas
+contra el código viejo (`planificarDimension.test.ts`): `Expected: false` · `Received: true` (marcado al abrir),
+`Expected: true` · `Received: false` (lo marcado, pisado por la lectura tardía) y `Expected length: 0` ·
+`Received length: 3` (el recordatorio ofrecido con días marcados).
+
+**Causa real.** Tres cosas en `PlanificarDimensionModal`:
+1. Al abrir un hábito, `antelaciones` no se reiniciaba: quedaba la del hábito abierto antes hasta que llegaba
+   `antelacionesDe(...).then(setAntelaciones)`.
+2. Esa lectura, al llegar tarde, pisaba lo que la persona ya había tocado, o la de un hábito anterior pisaba la del actual.
+3. Con días marcados, la hoja seguía mostrando el recordatorio, pero `guardarDias` no lo guarda (y crea la fila sin hora
+   general: el `hora_disparo = null`).
+
+**Solución.** La hoja arranca con lo que dice el servidor (todos los avisos si los conoce, V81); la lectura del teléfono
+solo se usa si sigue abierto el mismo hábito y la persona no tocó nada; con días marcados el recordatorio no se ofrece
+(«El recordatorio se elige sin días marcados.»). Frontend `a22af58`.
+
+**Cómo evitar que vuelva a pasar.** Un estado que se carga en diferido se inicializa en el acto con lo que ya se sabe, y
+la carga tardía no pisa lo que tocó la persona. Si un control se muestra, lo que se guarda tiene que incluirlo.
