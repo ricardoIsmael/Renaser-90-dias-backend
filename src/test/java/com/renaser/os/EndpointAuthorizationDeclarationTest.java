@@ -62,8 +62,10 @@ class EndpointAuthorizationDeclarationTest {
             // clasificaron como USE_APP el 2026-09-23 (E-215).
             "TestimonioController#crear",
             // habits: MisHabitosService.consultar(actor) filtra por el actor pero NO ejecuta
-            // ningun guard, asi que una cuenta suspendida sigue leyendo su catalogo. Anotarlo
-            // con un permiso afirmaria que algo lo hace cumplir, y no es cierto.
+            // ningun guard. Anotarlo con un permiso afirmaria que el servicio hace cumplir algo,
+            // y no es cierto. (Corregido 2026-09-27, D-214: decia que «una cuenta suspendida sigue
+            // leyendo su catalogo»; ya no, porque el interceptor corta la suspension tambien en
+            // los handlers sin @RequiresPermission. Lo que sigue pendiente es la matriz.)
             "MisHabitosController#listar");
 
     private static final List<Class<? extends Annotation>> ANOTACIONES_DE_RUTA = List.of(

@@ -8621,6 +8621,13 @@ comprueba también el estado de la cuenta.
 > ahora exigen cuenta ACTIVE después del guard de relación: un mentor suspendido recibe 403. Pruebas
 > `SeguimientoServiceTest.mentorSuspendidoProhibido` y `AcompanamientoServiceTest.mentorSuspendidoNoLee`
 > (fallan con el código anterior).
+>
+> **Corregido 2026-09-27 (E-366, D-214).** La prevención de arriba («mientras exista A-1, todo guard de servicio
+> que no sea de TRAINEE comprueba también el estado de la cuenta») no alcanzó: el e2e del 27 encontró seis lecturas
+> de un mentor suspendido que seguían en 200, entre ellas los hábitos y el Código Renaser de su alumno. Depender de
+> que cada servicio se acuerde es lo que falló. Desde D-214 la suspensión la corta el interceptor para todo rol, y
+> `CuentaSuspendidaEnTodoEndpointTest` falla si un endpoint, de hoy o nuevo, deja pasar a una cuenta suspendida. Los
+> guards de servicio quedan como segunda línea.
 
 ## E-259 · Los subagentes heredan el aislamiento del worktree de quien los lanza
 
@@ -10580,3 +10587,36 @@ tope (`leerOtraFallaDeS3Sube`), y el doble en memoria de `FotoDelGrupoIT` implem
 **Cómo evitar que vuelva a pasar.** Cuando dos encargos en paralelo pueden tocar un puerto de `shared`, el que
 coordina le asigna ese puerto a UNO solo, y el otro usa lo que ese agregue. Al repartir el trabajo, listar los
 puertos compartidos que cada encargo podría extender.
+
+## E-366 · Un mentor SUSPENDIDO con el token vivo seguía leyendo los hábitos de su alumno: el interceptor solo miraba la suspensión de TRAINEE (SUS-04)
+
+**Síntoma (e2e del 2026-09-27, `SUS-04*.json`).** `e2e-mentor-susp` suspendido **en la base**, con el token todavía
+vivo. Daban 200: `GET /api/v1/mentor/groups/{g}/learners/{u}/habits` (con `traineeId`, `programDay` y `habits` del
+alumno), `…/radar`, `GET /api/v1/mentor/context`, `GET /api/v1/mentor/me/evaluation?month=2026-09`,
+`GET /api/v1/chat/conversations/{id}/presence` y `GET /api/v1/ranking/groups?cohortId=…&month=…`. Daban 403
+`{"message":"La cuenta esta suspendida"}` solo alumnos, progreso y los dos semáforos (el camino de E-258/D-181). En
+SUS-05, a un ADMIN suspendido 7 respuestas le decían `Solo ADMIN/ALCHEMIST administran este panel`.
+
+**Causa real.** `PermissionEnforcementInterceptor` salía antes para MENTOR, ADMIN y ALCHEMIST (`return true; //
+falla-abierto`), dejaba pasar la suspensión de MENTOR_LEAD en modo sombra y no miraba nada en los handlers sin
+`@RequiresPermission`. El falla-abierto era para la **matriz** (A-1: qué puede hacer cada rol no está definido), pero
+se llevaba puesta también la suspensión, que no depende de la matriz. Cada servicio tenía que acordarse de mirarla: la
+prevención que dejó E-258 era justamente esa («todo guard de servicio que no sea de TRAINEE comprueba también el
+estado de la cuenta»), y seis lecturas no lo hacían.
+
+**Solución (D-214).** El interceptor deniega a una cuenta `SUSPENDED` con 403 `Cuenta suspendida` en todo handler que
+no sea `@PublicEndpoint`, **para todo rol**, también en modo sombra y también sin `@RequiresPermission`, salvo que el
+permiso la tolere (`Permission.toleraCuentaSuspendida()`: hoy solo `OPEN_SUPPORT_TICKET`, para reclamar la
+suspensión). La matriz no cambia: MENTOR/ADMIN/ALCHEMIST siguen falla-abierto para los permisos (A-1) y MENTOR_LEAD
+sigue en modo sombra para su matriz. Los guards de servicio quedan como segunda línea. No toca `habits`, `chat`,
+`mentoring` ni `community`: el cambio es un solo archivo de `users`.
+
+**Cómo evitar que vuelva a pasar.** `CuentaSuspendidaEnTodoEndpointTest` recorre todos los handlers de producción (los
+de hoy y los que se agreguen) y le pide al interceptor real qué haría con una cuenta suspendida de cada uno de los 5
+roles: falla si alguno pasa, si la lista de los que toleran la suspensión se desalinea de `toleraCuentaSuspendida()`,
+o si alguna ruta queda fuera del patrón con el que se registra el interceptor. Contra el código viejo falla con más
+de 1000 combinaciones handler×rol. `CuentaSuspendidaConSesionVivaIT` reproduce el e2e con sesión real (control con la
+cuenta activa: 200 en las seis; suspendida por `UPDATE`: 403). **Existe en producción** (`49fbc15f`, mismo
+interceptor). Lo acota que suspender por `PATCH /admin/staff/{id}/status` cierra todas las sesiones
+(`GestionSesionesService`): el agujero se abre cuando la suspensión se hace por otra vía, como el `UPDATE` del e2e — y
+la app no expone ese `PATCH`.

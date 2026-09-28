@@ -31,13 +31,30 @@ import java.util.Optional;
  * que los 219 endpoints DIJERAN que permiso exigen, pero ningun filtro ni interceptor lo
  * hacia cumplir — cualquiera con cualquier rol podia llamar cualquier endpoint.
  *
- * <p><b>Alcance.</b> TRAINEE se verifica de verdad desde 2026-09-01. MENTOR_LEAD se verifica
- * desde 2026-09-09, pero <b>en modo sombra por defecto</b> (SDD 002, decision DL-08). MENTOR,
- * ADMIN y ALCHEMIST siguen sin verificarse —ni siquiera el chequeo de cuenta suspendida— y su
- * request sigue el mismo camino de siempre, resuelto por los guards de cada servicio. Ese
- * falla-abierto esta documentado en {@code UserRole.can(Permission)} y en
- * {@code docs/ENDPOINTS_FALTANTES.md} fila A-1: definir que puede hacer cada uno de esos 3
- * roles es una regla de negocio que el dueño del proyecto todavia no dicto (CLAUDE.MD §0.6).
+ * <p><b>Cuenta suspendida: para TODO rol y en todo pedido autenticado (D-214, E-366).</b> Antes que
+ * cualquier matriz, una cuenta {@code SUSPENDED} recibe 403 en cualquier handler que no sea
+ * {@code @PublicEndpoint}, tenga o no {@code @RequiresPermission}, salvo que el permiso que declara la
+ * tolere ({@link Permission#toleraCuentaSuspendida()}: hoy solo abrir un ticket de soporte, para poder
+ * reclamar la suspension). No depende de la matriz ni del modo sombra: es la regla de
+ * {@code .claude/rules/03} («un usuario SUSPENDED recibe 403 aunque su token sea valido»), y aplicarla
+ * no exige saber que puede hacer cada rol. {@code CuentaSuspendidaEnTodoEndpointTest} recorre todos los
+ * handlers y falla si alguno, de hoy o de mañana, deja pasar a una cuenta suspendida.
+ *
+ * <blockquote><b>Corregido 2026-09-27 (D-214, E-366).</b> Este javadoc decia que MENTOR, ADMIN y
+ * ALCHEMIST «siguen sin verificarse —ni siquiera el chequeo de cuenta suspendida—», el modo sombra de
+ * MENTOR_LEAD tambien dejaba pasar la suspension, y los handlers sin {@code @RequiresPermission} pasaban
+ * sin mirar nada. Cada servicio tenia que acordarse de mirar la suspension por su cuenta: el e2e del
+ * 2026-09-27 (SUS-04) encontro seis lecturas de un mentor suspendido que respondian 200 —entre ellas
+ * los habitos y el Codigo Renaser de su alumno—, y la prueba de arriba, que los casi 280 handlers
+ * autenticados dejaban pasar a una cuenta suspendida de cualquiera de los cuatro roles de staff.</blockquote>
+ *
+ * <p><b>La matriz (que permiso tiene cada rol).</b> TRAINEE se verifica de verdad desde 2026-09-01.
+ * MENTOR_LEAD se verifica desde 2026-09-09, pero <b>en modo sombra por defecto</b> (SDD 002, decision
+ * DL-08). La matriz de MENTOR, ADMIN y ALCHEMIST sigue sin definirse: pasan cualquier permiso y lo
+ * resuelven los guards de cada servicio. Ese falla-abierto esta documentado en
+ * {@code UserRole.can(Permission)} y en {@code docs/ENDPOINTS_FALTANTES.md} fila A-1: definir que puede
+ * hacer cada uno de esos 3 roles es una regla de negocio que el dueño del proyecto todavia no dicto
+ * (CLAUDE.MD §0.6).
  *
  * <p><b>Que es el modo sombra y por que existe.</b> Hasta hoy MENTOR_LEAD pasaba por aca sin
  * que se le mirara un solo permiso. Encender el cumplimiento de golpe convierte en 403 todo
@@ -87,50 +104,59 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
         if (!(handler instanceof HandlerMethod handlerMethod) || esPublico(handlerMethod)) {
             return true;
         }
-        Permission requerido = permisoRequerido(handlerMethod);
-        if (requerido == null) {
-            // Sin @RequiresPermission ni @PublicEndpoint: los pocos handlers que
-            // EndpointAuthorizationDeclarationTest todavia lista en HANDLERS_SIN_CLASIFICAR.
-            // Este interceptor no decide por ellos — fase 4 los sigue teniendo pendientes.
-            return true;
-        }
-
-        UserSummaryFinder userSummaryFinder = userSummaryFinderProvider.getIfAvailable();
-        if (userSummaryFinder == null) {
-            return true; // contexto reducido de un @WebMvcTest de otro modulo (ver javadoc de la clase)
-        }
-
-        Optional<UserId> actorId = resolverActorId(request);
-        if (actorId.isEmpty()) {
-            // Sin sesion y sin header: se deja que el binding normal del controller (casi
-            // siempre un @RequestHeader("X-Actor-Id") obligatorio) produzca el 400 de siempre.
-            return true;
-        }
-
-        Optional<UserSummary> actor = userSummaryFinder.findById(actorId.get());
+        Optional<UserSummary> actor = actorDelPedido(request);
         if (actor.isEmpty()) {
-            // Actor inexistente: se deja que el guard/caso de uso de siempre lo resuelva (hoy,
-            // tipicamente un 404 "Usuario no encontrado"). Este interceptor no reemplaza esa capa.
             return true;
         }
-
-        UserSummary resumen = actor.get();
-        if (resumen.role() == UserRole.MENTOR_LEAD) {
-            return verificarMentorLead(request, response, resumen, requerido);
-        }
-        if (resumen.role() != UserRole.TRAINEE) {
-            return true; // ver javadoc de la clase: falla-abierto deliberado para MENTOR/ADMIN/ALCHEMIST
-        }
-
-        if (resumen.status() == UserStatus.SUSPENDED && !requerido.toleraCuentaSuspendida()) {
+        Permission requerido = permisoRequerido(handlerMethod);
+        if (suspendidaSinTolerancia(actor.get(), requerido)) {
             denegar(response, "Cuenta suspendida");
             return false;
         }
-        if (!resumen.role().can(requerido)) {
-            denegar(response, "No autorizado");
-            return false;
+        if (requerido == null) {
+            // Sin @RequiresPermission: los pocos handlers que EndpointAuthorizationDeclarationTest
+            // todavia lista en HANDLERS_SIN_CLASIFICAR. La matriz no decide por ellos (fase 4); la
+            // suspension, arriba, si.
+            return true;
         }
-        return true;
+        return verificarMatriz(request, response, actor.get(), requerido);
+    }
+
+    /**
+     * Quien hace el pedido, o vacio cuando este interceptor no tiene como saberlo y deja que el camino
+     * de siempre lo resuelva: en el contexto reducido de un {@code @WebMvcTest} de otro modulo (sin
+     * {@link UserSummaryFinder}, ver javadoc de la clase); sin sesion y sin header (el binding del
+     * controller, casi siempre un {@code @ActorAutenticado} obligatorio, produce el 400/401 de siempre);
+     * o con un actor que no existe (lo resuelve el guard o el caso de uso, tipicamente con un 404).
+     */
+    private Optional<UserSummary> actorDelPedido(HttpServletRequest request) {
+        UserSummaryFinder userSummaryFinder = userSummaryFinderProvider.getIfAvailable();
+        if (userSummaryFinder == null) {
+            return Optional.empty();
+        }
+        return resolverActorId(request).flatMap(userSummaryFinder::findById);
+    }
+
+    /**
+     * Sin permiso declarado no hay tolerancia posible: dejar pasar a una cuenta suspendida tiene que
+     * decirse, con un permiso que lo diga ({@link Permission#toleraCuentaSuspendida()}).
+     */
+    private static boolean suspendidaSinTolerancia(UserSummary actor, Permission requerido) {
+        return actor.status() == UserStatus.SUSPENDED
+                && (requerido == null || !requerido.toleraCuentaSuspendida());
+    }
+
+    /** La matriz rol -> permiso, con la suspension ya descartada. Ver el javadoc de la clase. */
+    private boolean verificarMatriz(HttpServletRequest request, HttpServletResponse response,
+                                    UserSummary actor, Permission requerido) throws IOException {
+        if (actor.role() == UserRole.MENTOR_LEAD) {
+            return verificarMentorLead(request, response, actor, requerido);
+        }
+        if (actor.role() != UserRole.TRAINEE || actor.role().can(requerido)) {
+            return true; // MENTOR/ADMIN/ALCHEMIST: la matriz sigue falla-abierto (A-1, javadoc de la clase)
+        }
+        denegar(response, "No autorizado");
+        return false;
     }
 
     /**
@@ -140,22 +166,21 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
      * su rol: es el mismo criterio del cuerpo del 403, que no nombra el permiso que falto porque
      * eso le sirve a quien esta sondeando el API. El id del actor no se loguea; con el metodo,
      * la ruta y el permiso alcanza para corregir la matriz.
+     *
+     * <p>La suspension ya no pasa por aca (D-214): se deniega antes, tambien en modo sombra, porque el
+     * modo sombra existe por si la MATRIZ del lider esta incompleta, y la suspension no depende de ella.
      */
     private boolean verificarMentorLead(HttpServletRequest request, HttpServletResponse response,
                                          UserSummary resumen, Permission requerido) throws IOException {
-        boolean suspendidoSinTolerancia =
-                resumen.status() == UserStatus.SUSPENDED && !requerido.toleraCuentaSuspendida();
-        String motivo = suspendidoSinTolerancia ? "Cuenta suspendida"
-                : (resumen.role().can(requerido) ? null : "No autorizado");
-        if (motivo == null) {
+        if (resumen.role().can(requerido)) {
             return true;
         }
         if (!cumplimientoMentorLead) {
-            log.warn("MENTOR_LEAD modo sombra: se habria denegado {} {} por {} (permiso {})",
-                    request.getMethod(), request.getRequestURI(), motivo, requerido);
+            log.warn("MENTOR_LEAD modo sombra: se habria denegado {} {} por No autorizado (permiso {})",
+                    request.getMethod(), request.getRequestURI(), requerido);
             return true;
         }
-        denegar(response, motivo);
+        denegar(response, "No autorizado");
         return false;
     }
 

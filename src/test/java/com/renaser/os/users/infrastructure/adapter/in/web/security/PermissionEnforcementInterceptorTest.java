@@ -131,7 +131,7 @@ class PermissionEnforcementInterceptorTest {
     // ─── handler sin ninguna de las dos anotaciones (deuda declarada de fase 4) ────────
 
     @Test
-    @DisplayName("un handler sin @RequiresPermission ni @PublicEndpoint pasa (no le corresponde a este interceptor decidir)")
+    @DisplayName("un handler sin @RequiresPermission ni @PublicEndpoint, sin actor, pasa (la matriz no decide por el)")
     void handlerSinAnotarPasa() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -180,14 +180,90 @@ class PermissionEnforcementInterceptorTest {
         assertThat(continua).isTrue();
     }
 
+    // ─── E-366 / D-214 (SUS-04): la suspension se mira para TODO rol ────────────────
+    //
+    // Corregido 2026-09-27. Aca habia un test «TEMPORAL: un ADMIN suspendido tambien pasa (la
+    // verificacion real es solo para TRAINEE, A-1)» que fijaba el hueco como comportamiento esperado.
+    // La matriz de MENTOR/ADMIN/ALCHEMIST sigue sin definirse (A-1), pero que una cuenta SUSPENDIDA
+    // reciba 403 no depende de la matriz: es la regla de .claude/rules/03. El e2e del 2026-09-27 mostro
+    // el costo de dejarla a cada servicio: un mentor suspendido seguia leyendo los habitos de su alumno.
+
     @Test
-    @DisplayName("TEMPORAL: un ADMIN suspendido tambien pasa (la verificacion real es solo para TRAINEE, A-1)")
-    void adminSuspendidoTambienPasaPorqueNoEsElRolVerificado() throws Exception {
-        UUID actorId = UUID.randomUUID();
-        when(userSummaryFinder.findById(UserId.of(actorId))).thenReturn(
-                Optional.of(new UserSummary(UserId.of(actorId), "Admin", null, UserRole.ADMIN, UserStatus.SUSPENDED)));
+    @DisplayName("E-366: un ADMIN suspendido recibe 403 aunque su matriz siga sin definirse")
+    void adminSuspendidoRecibe403() throws Exception {
+        UUID actorId = actorConRol(UserRole.ADMIN, UserStatus.SUSPENDED);
 
         boolean continua = ejecutarPreHandle(actorId, "exigeManageStaff");
+
+        assertThat(continua).isFalse();
+        assertThat(ultimaRespuesta.getStatus()).isEqualTo(403);
+        assertThat(ultimaRespuesta.getContentAsString()).contains("Cuenta suspendida");
+    }
+
+    @Test
+    @DisplayName("E-366: un MENTOR suspendido recibe 403 en un endpoint de cuenta activa (SUS-04)")
+    void mentorSuspendidoRecibe403() throws Exception {
+        UUID actorId = actorConRol(UserRole.MENTOR, UserStatus.SUSPENDED);
+
+        boolean continua = ejecutarPreHandle(actorId, "exigeUseApp");
+
+        assertThat(continua).isFalse();
+        assertThat(ultimaRespuesta.getStatus()).isEqualTo(403);
+    }
+
+    @Test
+    @DisplayName("E-366: un ALCHEMIST suspendido recibe 403")
+    void alquimistaSuspendidoRecibe403() throws Exception {
+        UUID actorId = actorConRol(UserRole.ALCHEMIST, UserStatus.SUSPENDED);
+
+        boolean continua = ejecutarPreHandle(actorId, "exigeUseApp");
+
+        assertThat(continua).isFalse();
+        assertThat(ultimaRespuesta.getStatus()).isEqualTo(403);
+    }
+
+    /** El modo sombra de DL-08 es para la MATRIZ del lider, que puede estar incompleta; la suspension no. */
+    @Test
+    @DisplayName("E-366: un MENTOR_LEAD suspendido recibe 403 tambien en modo sombra")
+    void mentorLeadSuspendidoRecibe403AunEnModoSombra() throws Exception {
+        UUID actorId = actorConRol(UserRole.MENTOR_LEAD, UserStatus.SUSPENDED);
+
+        boolean continua = ejecutarPreHandle(actorId, "exigeUseApp");
+
+        assertThat(continua).isFalse();
+        assertThat(ultimaRespuesta.getStatus()).isEqualTo(403);
+    }
+
+    @Test
+    @DisplayName("E-366: un MENTOR suspendido sigue pudiendo abrir un ticket de soporte (reclamar su suspension)")
+    void mentorSuspendidoPuedeAbrirTicketDeSoporte() throws Exception {
+        UUID actorId = actorConRol(UserRole.MENTOR, UserStatus.SUSPENDED);
+
+        boolean continua = ejecutarPreHandle(actorId, "exigeOpenSupportTicket");
+
+        assertThat(continua).isTrue();
+    }
+
+    /** Un handler sin anotar no dice que tolere la suspension: se le aplica igual (todo pedido autenticado). */
+    @Test
+    @DisplayName("E-366: una cuenta suspendida recibe 403 tambien en un handler sin @RequiresPermission")
+    void suspendidoRecibe403EnUnHandlerSinAnotar() throws Exception {
+        for (UserRole rol : UserRole.values()) {
+            UUID actorId = actorConRol(rol, UserStatus.SUSPENDED);
+
+            boolean continua = ejecutarPreHandle(actorId, "sinAnotar");
+
+            assertThat(continua).as("rol %s", rol).isFalse();
+            assertThat(ultimaRespuesta.getStatus()).as("rol %s", rol).isEqualTo(403);
+        }
+    }
+
+    @Test
+    @DisplayName("E-366: una cuenta ACTIVA de un rol sin matriz sigue pasando un handler sin anotar, como antes")
+    void activoPasaUnHandlerSinAnotar() throws Exception {
+        UUID actorId = actorConRol(UserRole.MENTOR, UserStatus.ACTIVE);
+
+        boolean continua = ejecutarPreHandle(actorId, "sinAnotar");
 
         assertThat(continua).isTrue();
     }
