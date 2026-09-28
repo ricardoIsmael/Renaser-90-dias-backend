@@ -177,13 +177,15 @@ class SemaforoDelMentorControllerTest {
     }
 
     @Test
-    @DisplayName("autorizacion negativa: un MENTOR SUSPENDIDO que sigue asignado recibe 403 del guard (el interceptor no mira a MENTOR, A-1)")
+    @DisplayName("autorizacion negativa: un MENTOR SUSPENDIDO que sigue asignado recibe 403 del interceptor (D-214)")
     void mentorSuspendido() throws Exception {
         banco.usuario(MENTORA, "Luisa Rojas", UserRole.MENTOR, UserStatus.SUSPENDED);
 
+        // Corregido 2026-09-27 (D-214): esperaba «La cuenta esta suspendida», el mensaje del guard del
+        // servicio. Ahora corta antes el interceptor, para todo rol; el guard queda como segunda linea.
         pedir(TABLA, MENTORA, FENIX)
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message").value("La cuenta esta suspendida"));
+                .andExpect(jsonPath("$.message").value("Cuenta suspendida"));
         pedir(DETALLE, MENTORA, FENIX, ANA.value()).andExpect(status().isForbidden());
         assertThat(banco.lecturasDelSemaforo).isEmpty();
         assertThat(banco.detallesPedidos).isEmpty();

@@ -561,10 +561,52 @@ class AccountRequestServiceTest {
         UserId actorId = id();
         when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        lenient().when(loadUserPort.byId(request.usuarioId())).thenReturn(Optional.of(pendienteDeAprobacion(request)));
 
         service.eliminar(new DeleteAccountRequestCommand(actorId, request.id()));
 
         verify(deleteAccountRequestPort).deleteById(request.id());
+    }
+
+    /**
+     * HALLAZGO-A3 (e2e del 2026-09-27): borrar una solicitud PENDIENTE dejaba huerfano al usuario
+     * INACTIVE que el alta ya habia creado, y el correo quedaba tomado para siempre ({@code check-email}
+     * -> {@code available:false}, pedir de nuevo -> 409 «Ya existe una cuenta o solicitud con este
+     * correo»). Falla contra el codigo viejo, que solo borraba la fila de la solicitud.
+     */
+    @Test
+    @DisplayName("E-368: borrar una solicitud pendiente borra tambien la cuenta que nunca se aprobo")
+    void eliminarUnaSolicitudPendienteBorraLaCuentaSinAprobar() {
+        AccountRequest request = pendiente();
+        UserId actorId = id();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        lenient().when(loadUserPort.byId(request.usuarioId())).thenReturn(Optional.of(pendienteDeAprobacion(request)));
+
+        service.eliminar(new DeleteAccountRequestCommand(actorId, request.id()));
+
+        verify(deleteAccountRequestPort).deleteById(request.id());
+        verify(deleteUserPort).deleteById(request.usuarioId());
+    }
+
+    /** Una solicitud ya aprobada es historia de una cuenta de verdad: borrar el registro no la toca. */
+    @Test
+    @DisplayName("E-368: borrar una solicitud ya aprobada NO borra la cuenta, que es de verdad")
+    void eliminarUnaSolicitudAprobadaNoBorraLaCuenta() {
+        AccountRequest request = pendiente();
+        UserId actorId = id();
+        User actor = activo(actorId, UserRole.ADMIN);
+        User aprobado = pendienteDeAprobacion(request);
+        aprobado.aprobar();
+        request.approve(actor, request.usuarioId(), CLOCK);
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(actor));
+        lenient().when(loadUserPort.byId(request.usuarioId())).thenReturn(Optional.of(aprobado));
+
+        service.eliminar(new DeleteAccountRequestCommand(actorId, request.id()));
+
+        verify(deleteAccountRequestPort).deleteById(request.id());
+        verify(deleteUserPort, never()).deleteById(any());
     }
 
     @Test

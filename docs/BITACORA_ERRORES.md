@@ -8621,6 +8621,13 @@ comprueba también el estado de la cuenta.
 > ahora exigen cuenta ACTIVE después del guard de relación: un mentor suspendido recibe 403. Pruebas
 > `SeguimientoServiceTest.mentorSuspendidoProhibido` y `AcompanamientoServiceTest.mentorSuspendidoNoLee`
 > (fallan con el código anterior).
+>
+> **Corregido 2026-09-27 (E-366, D-214).** La prevención de arriba («mientras exista A-1, todo guard de servicio
+> que no sea de TRAINEE comprueba también el estado de la cuenta») no alcanzó: el e2e del 27 encontró seis lecturas
+> de un mentor suspendido que seguían en 200, entre ellas los hábitos y el Código Renaser de su alumno. Depender de
+> que cada servicio se acuerde es lo que falló. Desde D-214 la suspensión la corta el interceptor para todo rol, y
+> `CuentaSuspendidaEnTodoEndpointTest` falla si un endpoint, de hoy o nuevo, deja pasar a una cuenta suspendida. Los
+> guards de servicio quedan como segunda línea.
 
 ## E-259 · Los subagentes heredan el aislamiento del worktree de quien los lanza
 
@@ -10739,6 +10746,143 @@ Pruebas: `LinkDelEventoTest` (14 de 21 fallan contra el código anterior: `Expec
 
 **Cómo evitar que vuelva a pasar.** Toda validación de formulario que protege a otra persona (un link que alguien más
 va a tocar) se repite en el dominio del servidor: el cliente se puede saltear con un `curl`.
+
+## E-365 · Invitar con el id de una cuenta que ya existe la pisaba entera: correo, nombre, rol y estado (SEG-08)
+
+**Síntoma (e2e del 2026-09-27, `SEG-08.respuestas.json`).** `POST /api/v1/users/invite` con el `usuarioId` de
+`e2e-mentor-susp` (MENTOR, SUSPENDIDO) y otro correo respondió `201 {"userId":"75353565-7d70-4fa6-b1d7-027ebe5525b0"}`.
+Antes: `e2e-mentor-susp@renaser.test | Mentor Suspendido E2E | MENTOR | SUSPENDIDO`; después:
+`e2e-invitado-pisado@renaser.test | Pisado Por Invitacion E2E | ADMIN | ACTIVO`. La persona entró con el correo nuevo
+y **su contraseña de siempre** (login 200, `ADMIN`/`ACTIVE`) y administró (`GET /admin/trainees` → 200); el correo
+viejo daba 401 `{"message":"Email o contrasena incorrectos"}`. Lo pueden hacer ADMIN y ALCHEMIST; al MENTOR le da 403.
+
+**Causa real.** `UserAccountService.invite` armaba un `User` "nuevo" con el id que manda el cliente y lo guardaba con
+`saveUserPort.save`, que es `saveAndFlush` de Spring Data: con el id puesto y sin `@Version`, Spring Data decide que
+la entidad no es nueva y hace `merge`, que **reemplaza** la fila con ese id. La contraseña sobrevivía porque el hash
+vive en columnas que `UserJpaEntity` no mapea. Y como no pasaba por `updateRole` ni por `updateStatus`, no salían
+`RolDeUsuarioCambiadoEvent` ni `EstadoDeCuentaCambiadoEvent`, ni se cerraba ninguna sesión.
+
+**Por qué el cliente puede mandar el id.** Es herencia de Supabase: hasta D-49 la cuenta la creaba primero Supabase
+Auth y el backend copiaba su id (`supabaseUserId`, renombrado `usuarioId` en D-53). Desde que la identidad es propia
+nadie de afuera crea identidades: `POST /admin/staff/invite` genera el suyo, y ni la app, ni el panel web, ni el
+Lambda de solicitudes llaman a `/users/invite` (buscado en los tres). Retirar el campo es un cambio de contrato: queda
+como pregunta al dueño, no se hizo.
+
+**Solución.** (1) `invite` verifica el rol del actor (`User.invite`), y recién después rechaza con **409** si ya hay
+una cuenta con ese id (`Ya existe una cuenta con ese id: invitar solo crea cuentas nuevas, no modifica las que
+existen`) o con ese correo (`Ya existe una cuenta con este correo`; antes chocaba con el `UNIQUE` y salía el 409
+genérico «La operacion entra en conflicto con datos que ya existen»). (2) El alta pasa por el puerto nuevo
+`SaveUserPort.registrarNueva`: `UserJpaEntity` implementa `Persistable` y ahí Spring Data hace `persist`, un INSERT
+que falla si el id existe. Así ni una carrera entre dos invitaciones pisa nada. `save` sigue igual para todo lo demás.
+
+**Cómo evitar que vuelva a pasar.** Un alta nunca usa `save`: usa `registrarNueva`. Pruebas que fallan contra el
+código viejo: `UserAccountServiceTest` (`inviteNoPisaUnaCuentaExistente`, `inviteRechazaUnCorreoQueYaTieneCuenta`),
+`AltaYEstadoDeCuentasIT.invitarNoPisaUnaCuentaExistente` (ADMIN y ALCHEMIST: 409 y la fila idéntica) e
+`invitarConUnCorreoTomadoEsUnConflicto`; `UserPersistenceAdapterTest.registrarNuevaNoPisaUnaCuentaExistente` prueba el
+INSERT contra Postgres. **No cubierto:** `submit` (alta pública) e `inviteStaff` siguen con `save`; generan su id con
+`IdGenerator`, así que no pueden chocar con uno existente, pero si algún día reciben un id de afuera tienen que pasar a
+`registrarNueva`. **Existe en producción** (`49fbc15f`, mismos archivos).
+
+## E-366 · Un mentor SUSPENDIDO con el token vivo seguía leyendo los hábitos de su alumno: el interceptor solo miraba la suspensión de TRAINEE (SUS-04)
+
+**Síntoma (e2e del 2026-09-27, `SUS-04*.json`).** `e2e-mentor-susp` suspendido **en la base**, con el token todavía
+vivo. Daban 200: `GET /api/v1/mentor/groups/{g}/learners/{u}/habits` (con `traineeId`, `programDay` y `habits` del
+alumno), `…/radar`, `GET /api/v1/mentor/context`, `GET /api/v1/mentor/me/evaluation?month=2026-09`,
+`GET /api/v1/chat/conversations/{id}/presence` y `GET /api/v1/ranking/groups?cohortId=…&month=…`. Daban 403
+`{"message":"La cuenta esta suspendida"}` solo alumnos, progreso y los dos semáforos (el camino de E-258/D-181). En
+SUS-05, a un ADMIN suspendido 7 respuestas le decían `Solo ADMIN/ALCHEMIST administran este panel`.
+
+**Causa real.** `PermissionEnforcementInterceptor` salía antes para MENTOR, ADMIN y ALCHEMIST (`return true; //
+falla-abierto`), dejaba pasar la suspensión de MENTOR_LEAD en modo sombra y no miraba nada en los handlers sin
+`@RequiresPermission`. El falla-abierto era para la **matriz** (A-1: qué puede hacer cada rol no está definido), pero
+se llevaba puesta también la suspensión, que no depende de la matriz. Cada servicio tenía que acordarse de mirarla: la
+prevención que dejó E-258 era justamente esa («todo guard de servicio que no sea de TRAINEE comprueba también el
+estado de la cuenta»), y seis lecturas no lo hacían.
+
+**Solución (D-214).** El interceptor deniega a una cuenta `SUSPENDED` con 403 `Cuenta suspendida` en todo handler que
+no sea `@PublicEndpoint`, **para todo rol**, también en modo sombra y también sin `@RequiresPermission`, salvo que el
+permiso la tolere (`Permission.toleraCuentaSuspendida()`: hoy solo `OPEN_SUPPORT_TICKET`, para reclamar la
+suspensión). La matriz no cambia: MENTOR/ADMIN/ALCHEMIST siguen falla-abierto para los permisos (A-1) y MENTOR_LEAD
+sigue en modo sombra para su matriz. Los guards de servicio quedan como segunda línea. No toca `habits`, `chat`,
+`mentoring` ni `community`: el cambio es un solo archivo de `users`.
+
+**Cómo evitar que vuelva a pasar.** `CuentaSuspendidaEnTodoEndpointTest` recorre todos los handlers de producción (los
+de hoy y los que se agreguen) y le pide al interceptor real qué haría con una cuenta suspendida de cada uno de los 5
+roles: falla si alguno pasa, si la lista de los que toleran la suspensión se desalinea de `toleraCuentaSuspendida()`,
+o si alguna ruta queda fuera del patrón con el que se registra el interceptor. Contra el código viejo falla con más
+de 1000 combinaciones handler×rol. `CuentaSuspendidaConSesionVivaIT` reproduce el e2e con sesión real (control con la
+cuenta activa: 200 en las seis; suspendida por `UPDATE`: 403). **Existe en producción** (`49fbc15f`, mismo
+interceptor). Lo acota que suspender por `PATCH /admin/staff/{id}/status` cierra todas las sesiones
+(`GestionSesionesService`): el agujero se abre cuando la suspensión se hace por otra vía, como el `UPDATE` del e2e — y
+la app no expone ese `PATCH`.
+
+## E-367 · Activar por estado una cuenta que nunca se aprobó la dejaba entrar sin programa (ADM-20)
+
+**Síntoma (e2e del 2026-09-27, `ADM-20.respuestas.json`).** `PATCH /api/v1/admin/staff/{id}/status`
+`{"status":"ACTIVE"}` sobre `e2e-alta-conc1` (`INACTIVO programa=0`) → **204**; quedó `ACTIVO programa=0`, el login dio
+200 y `GET /home` respondió `"inscrito":false`.
+
+**Causa real.** `User.reactivate()` ponía `ACTIVE` sin mirar de qué estado venía, y `StaffAdminService.applyStatus`
+lo llamaba para cualquier cuenta. Eso salteaba el alta, que pasa obligatoriamente por aprobar la solicitud (que además
+inscribe el programa) o por la invitación (`.claude/rules/04`). Suspender una cuenta `INACTIVE` y después reactivarla
+era el mismo atajo en dos pasos.
+
+**Solución.** `User.reactivate()` y `User.suspend()` rechazan una cuenta que nunca se aprobó con
+`IllegalStateException` → **409**: `Esta cuenta todavía no fue aprobada: se activa aprobando su solicitud de alta` y
+`Esta cuenta todavía no fue aprobada: para que no entre, rechaza su solicitud de alta`. Reactivar a una suspendida,
+suspender a una activa y repetir el mismo estado siguen igual.
+
+**Cómo evitar que vuelva a pasar.** Pruebas que fallan contra el código viejo: `UserTest` (2),
+`StaffAdminServiceTest` (2) y `AltaYEstadoDeCuentasIT.elEstadoNoReemplazaAlAlta` (409, sigue `INACTIVO` y sin fila en
+`participantes_programa`); controles en verde: reactivar a una suspendida da 204. **Existe en producción**
+(`49fbc15f`). La cuenta `e2e-alta-conc1` que quedó activa sin programa no se arregla sola (la borra la limpieza del
+e2e).
+
+## E-368 · Borrar una solicitud de alta pendiente dejaba al usuario huérfano y el correo bloqueado para siempre (HALLAZGO-A3)
+
+**Síntoma (e2e del 2026-09-27, `ADM-05.hallazgo-borrar-solicitud.json`).** `DELETE /api/v1/account-requests/{id}` →
+204, pero el usuario quedó `INACTIVO APRENDIZ` y sin solicitud: `check-email` → `{"available":false}`, volver a pedir el
+alta → 409 `{"message":"Ya existe una cuenta o solicitud con este correo"}`, login → 401 `Email o contrasena
+incorrectos`.
+
+**Causa real.** Desde el 2026-08-27 el alta crea al usuario (`INACTIVE`, con su contraseña) antes de la aprobación.
+`reject` lo borra —es la regla de «squatting de correos» de CLAUDE.MD §5.3.6—, pero `eliminar` solo borraba la fila
+de `solicitudes_cuenta`. Su javadoc decía «no afecta al `User` que ya se haya creado… borrar la solicitud no deja
+huérfano a nadie»: se escribió antes de que el alta creara al usuario, y nadie lo actualizó.
+
+**Solución.** `AccountRequestService.eliminar` borra también la cuenta si nunca se aprobó
+(`User.pendienteDeAprobacion()`), en la misma transacción. La de una solicitud ya aprobada es una cuenta de verdad y
+no se toca; la de una rechazada ya no existe.
+
+**Cómo evitar que vuelva a pasar.** Pruebas que fallan contra el código viejo:
+`AccountRequestServiceTest.eliminarUnaSolicitudPendienteBorraLaCuentaSinAprobar` y
+`AltaYEstadoDeCuentasIT.borrarUnaSolicitudPendienteLiberaElCorreo` (204, la cuenta no está y `check-email` →
+`available:true`); controles en verde: borrar una aprobada no toca la cuenta. Se corrigieron el javadoc de
+`DeleteAccountRequestUseCase` y `docs/MODULO_USERS.md` (gap #9). **Existe en producción** (`49fbc15f`). Las cuentas que
+ya quedaron huérfanas no se arreglan solas: son las `INACTIVO` sin fila en `solicitudes_cuenta`
+(`e2e-alta-conc1`/`conc3` las borra la limpieza del e2e).
+
+## E-369 · La biografía y el departamento del perfil aceptaban 1 MB de texto (SEG-16)
+
+**Síntoma (e2e del 2026-09-27, `SEG-16.bio-departamento-bitacora.json`).** `PATCH /api/v1/users/me` con `bio` y
+`department` de 1.048.576 caracteres → 204, guardados enteros (`1048576/1048576`).
+
+**Causa real.** `User.updateBio` y `User.updateDepartment` asignaban sin tope, `UpdateMyProfileRequest` no valida nada,
+las columnas son `text` y la app tampoco limita esos dos campos (`YoScreen`, sin `maxLength`). Lo mismo valía para
+`PUT /api/v1/admin/staff/{id}`, que usa los mismos métodos.
+
+**Solución.** Tope en el dominio, como el del nombre (E-200): biografía **1000**
+caracteres, departamento **120**, contados como Postgres (`char_length`: un emoji es uno). 400 con
+`La biografía no puede pasar de 1000 caracteres` / `El departamento no puede pasar de 120 caracteres`, que la app ya
+muestra tal cual en su alerta «No se pudo guardar». **Decisión técnica, a confirmar con el dueño** (1000 es el tope de
+un mensaje de bienvenida; 120, el del nombre). Lo ya guardado se carga como está (`rehydrate` no valida).
+
+**Cómo evitar que vuelva a pasar.** Pruebas que fallan contra el código viejo: `UserTest` (2),
+`UserAccountServiceTest.updateMyProfileRechazaUnaBiografiaEnorme` y `AltaYEstadoDeCuentasIT.laBiografiaYElDepartamentoTienenTope`.
+**Existe en producción** (`49fbc15f`). **Fuera de este arreglo, a propósito:** los otros textos de 1 MB de SEG-16 viven
+en módulos de otros encargos (mensaje de chat, CHT-06; bitácora nocturna, TRN-18), y quedan sin tope la bio del perfil
+de mentor (`MentorProfile.updateBio`, `users`) y lo que el e2e no llegó a correr (respuestas del onboarding, motivo de
+rechazo, resumen de la Pastilla, nombre del chat global).
 
 ## E-370 · `PATCH /api/v1/admin/audio-therapies/{week}` sin `durationDays` da 500: `NullPointerException: Cannot invoke "java.lang.Integer.intValue()" because the return value of "…UpdateAudioTherapyDurationRequest.durationDays()" is null`
 

@@ -142,13 +142,15 @@ class SemaforoPorGruposControllerTest {
     }
 
     @Test
-    @DisplayName("autorizacion negativa: un LIDER SUSPENDIDO recibe 403 aunque su token sea valido (el modo sombra no lo frena)")
+    @DisplayName("autorizacion negativa: un LIDER SUSPENDIDO recibe 403 del interceptor aunque su token sea valido (D-214)")
     void liderSuspendido() throws Exception {
         banco.usuario(LIDER, "Lider", UserRole.MENTOR_LEAD, UserStatus.SUSPENDED);
 
+        // Corregido 2026-09-27 (D-214): esperaba «La cuenta esta suspendida», del guard del servicio, porque el
+        // modo sombra de MENTOR_LEAD dejaba pasar la suspension. Ya no: el interceptor la corta en cualquier modo.
         pedir(RESUMEN, LIDER)
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message").value("La cuenta esta suspendida"));
+                .andExpect(jsonPath("$.message").value("Cuenta suspendida"));
     }
 
     @Test

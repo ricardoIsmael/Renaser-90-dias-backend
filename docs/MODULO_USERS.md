@@ -24,7 +24,7 @@ Todo módulo del sistema pregunta *"¿quién es este usuario y qué puede hacer?
 
 `UserRole` es un enum (D-13): conjunto cerrado, chico y estable, cada uno atado a una clase de perfil distinta. La matriz fina de **permisos** (`Permission` enum, `caller.can(APPROVE_ACCOUNT_REQUEST)` en vez de `if (role==ADMIN)`) sigue sin construirse — bloqueada por R-2.
 
-`UserStatus`: `ACTIVE`, `SUSPENDED`. `SUSPENDED` corta el acceso antes de llegar al caso de uso.
+`UserStatus`: `ACTIVE`, `SUSPENDED`. `SUSPENDED` corta el acceso antes de llegar al caso de uso. *(Desde D-214, 2026-09-27, eso vale para todos los roles: lo corta `PermissionEnforcementInterceptor`; antes solo para TRAINEE y el resto dependía de cada servicio. Existe además `INACTIVE`, «registrado sin aprobar», desde el 2026-08-27.)*
 
 **Al persistir: `STRING`, nunca `ORDINAL`** — con `ORDINAL` se guarda la posición, no el valor; insertar un rol en el medio corrompería en silencio todo lo ya guardado.
 
@@ -314,6 +314,12 @@ solo adiciones en puntos distintos de las mismas clases.
   usaba el reset de contraseña (se reutilizó tal como pedía el encargo, no se creó un
   segundo puerto de email). Suspender a un staff invoca `CerrarTodasLasSesionesUseCase`
   (MODULO_AUTH.md §7.4: revocación en el acto, no en 30s).
+  > **Corregido 2026-09-27 (E-367).** `PATCH /{id}/status` ya no activa ni suspende una cuenta que nunca se
+  > aprobó (`INACTIVE`): responde 409 «Esta cuenta todavía no fue aprobada: …». Antes, `ACTIVE` la dejaba entrar
+  > sin programa y sin pasar por el alta (ADM-20 del e2e). Reactivar a una suspendida sigue igual.
+  > **E-365:** `POST /api/v1/users/invite` (el otro camino de invitación, con el id que manda el cliente) ya no
+  > modifica una cuenta existente: 409 si el id o el correo ya tienen cuenta, y el alta es un INSERT
+  > (`SaveUserPort.registrarNueva`) que falla en vez de pisar.
 - **Gap #7 — personas**: `GET /api/v1/admin/trainees` (paginado), `GET /{id}` (detalle:
   `User` + `ParticipacionPrograma` vía `ConsultarResumenParticipacionPort`), `PUT
   /{id}/program-day`. Nuevo método de dominio `ParticipacionPrograma.fijarDia(int, Clock)`:
@@ -342,6 +348,11 @@ solo adiciones en puntos distintos de las mismas clases.
   de la solicitud, no afecta al `User` ya creado (la FK es de la solicitud hacia el
   usuario, nunca al revés) — **supuesto documentado, no confirmado con producto** si
   conviene restringir el borrado a estados ya decididos.
+  > **Corregido 2026-09-27 (E-368).** Decía que borrar la solicitud «no afecta al `User` ya creado». Desde el
+  > 2026-08-27 el alta crea al usuario (`INACTIVE`, con su contraseña) antes de aprobar, así que borrar una
+  > solicitud PENDIENTE lo dejaba huérfano y con el correo tomado para siempre (HALLAZGO-A3 del e2e: `check-email`
+  > → `available:false`, volver a pedir → 409). Ahora `eliminar` borra también la cuenta si nunca se aprobó, como
+  > ya hacía `reject`. La de una solicitud aprobada no se toca.
 - **Paginación**: los tres listados (`ListStaffUseCase`, `ListTraineesUseCase`,
   `ListAccountRequestsUseCase`) usan `page`/`size` primitivos en el puerto — nunca
   `org.springframework.data.Pageable` cruzando la frontera `application` (aunque

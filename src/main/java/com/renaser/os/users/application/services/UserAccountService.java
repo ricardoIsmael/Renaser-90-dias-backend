@@ -101,16 +101,43 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
         this.transactionTemplate = transactionTemplate;
     }
 
+    /**
+     * <b>Invitar solo crea: nunca modifica una cuenta que ya existe</b> (E-365, SEG-08 del e2e del
+     * 2026-09-27). Antes, el id que manda el cliente iba derecho a {@code save}, que en JPA es un
+     * {@code merge}: con el id de un MENTOR suspendido y otro correo respondia 201 y le pisaba correo,
+     * nombre, rol (MENTOR -> ADMIN) y estado (SUSPENDIDO -> ACTIVO), sin evento de cambio de rol ni de
+     * estado. La persona entraba con el correo nuevo y su contrasena de siempre, ya como ADMIN.
+     *
+     * <p>Dos capas: el chequeo de aca da el 409 con un motivo claro, y {@code registrarNueva} es un
+     * INSERT que falla si el id ya existe, asi que ni una carrera entre dos invitaciones pisa nada. El
+     * rol del actor se verifica ANTES ({@code User.invite}), para no contarle a quien no puede invitar
+     * que ids existen.
+     *
+     * <p>El id lo manda el cliente porque, hasta D-49, la cuenta la creaba primero Supabase Auth y el
+     * backend copiaba su id ({@code supabaseUserId}, renombrado {@code usuarioId} en D-53). Hoy nadie
+     * de afuera crea identidades: {@code inviteStaff} genera el suyo.
+     */
     @Override
     @Transactional
     public UserId invite(InviteUserCommand command) {
         User actor = requireActiveUserGuard.of(command.actorId());
         User invited = User.invite(UserId.of(command.usuarioId()), new Email(command.email()),
                 command.fullName(), command.role(), actor);
-        User saved = saveUserPort.save(invited);
+        rechazarSiLaCuentaYaExiste(invited);
+        User saved = saveUserPort.registrarNueva(invited);
         ensureMentorProfileIfNeeded(saved);
         events.publishEvent(new UsuarioRegistradoEvent(saved.id(), clock.now()));
         return saved.id();
+    }
+
+    private void rechazarSiLaCuentaYaExiste(User invitado) {
+        if (loadUserPort.byId(invitado.id()).isPresent()) {
+            throw new IllegalStateException(
+                    "Ya existe una cuenta con ese id: invitar solo crea cuentas nuevas, no modifica las que existen");
+        }
+        if (loadUserPort.byEmail(invitado.email()).isPresent()) {
+            throw new IllegalStateException("Ya existe una cuenta con este correo");
+        }
     }
 
     /** Panel admin de staff (gap #6) — ver javadoc de {@link InviteAndCreateUserUseCase#inviteStaff}. */
