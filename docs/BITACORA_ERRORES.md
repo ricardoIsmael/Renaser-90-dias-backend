@@ -11667,7 +11667,7 @@ sufijo de repetidos (`piedra_de_cuarzo`, `…_2`), igual que la deriva el servid
 `^[a-z0-9_]{1,40}$`, también con etiquetas largas, tildes y repetidas. Cuando un contrato tiene una regla de
 formato, la prueba del cliente la copia literal del servidor.
 
-## E-419 · El botón «Ya la recibí» de «Tu Caja Renaser» se ve cortado: «Ya la» (ABIERTO, no es de la Caja)
+## E-419 · El botón «Ya la recibí» de «Tu Caja Renaser» se ve cortado: «Ya la» (RESUELTO 2026-09-28)
 
 **Síntoma.** Emulador Pixel 6, app de desarrollo de la rama `caja-renaser`: el botón dorado de «Tu Caja Renaser»
 muestra solo `Ya la`, con el ícono de check. Se reproduce sin error de por medio: cuando la pantalla ya abierta pasa
@@ -11675,13 +11675,38 @@ a «En camino» desde otro estado (se relee al volver a Yo), el botón nuevo sal
 sale entero. La web muestra el texto entero. Capturas `CAJA-07-e-envio2-shalom.png`,
 `CAJA-08-app-recibida-estado-no-corresponde.png` y `ciclo/07-…`, `ciclo/10-…` en `~/Imágenes/e2e-2026-09-28/caja/`.
 
-**Causa (hipótesis, sin confirmar).** Es el `BotonBase` compartido de `components/Legible.tsx` (`Text` con
-`flexShrink: 1` en una fila centrada): en Android el `Text` reutiliza una medida vieja (la de otro botón o la del
-estado `cargando`, con el indicador en lugar del ícono) y corta la etiqueta. No se arregló: el componente es de toda la
-app y el alcance de esta tarea era la Caja.
+> **Corregido 2026-09-28 (tarde).** Acá decía «Causa (hipótesis, sin confirmar): el `Text` reutiliza una medida
+> vieja (la de otro botón o la del estado `cargando`)» y dejaba el arreglo pendiente. La medida NO era vieja: la caja
+> del texto medía lo justo (219 px en el Pixel 6). Lo viejo era el **padding** de la vista nativa reciclada.
 
-**Cómo evitar que vuelva a pasar.** Pendiente: reproducir con un botón aislado en el emulador y, si se confirma,
-darle al texto un ancho que no dependa del ícono (o mantener siempre el mismo hueco para ícono e indicador).
+**Reproducción exacta.** Aprendiz con «Tu Caja Renaser» abierta en «Armando»; el Admin la marca enviada; la
+aprendiz va a HOY y vuelve a YO (la pantalla se relee al enfocar). El botón nuevo sale «Ya la». `uiautomator`: el
+`TextView` «Ya la recibí» mide 219 × 58 px, lo mismo que cuando sale entero, pero dibuja el texto partido en dos
+renglones («Ya la» / «recibí») y el segundo queda fuera del alto de un renglón.
+
+**Causa real.** Un fallo de React Native 0.86 (Fabric, Android) con el reciclado de vistas de texto:
+`ReactNativeFeatureFlags.enableViewRecyclingForText()` viene en `true`, y `ReactTextView.recycleView()` resetea
+fuente, alineación, `breakStrategy`, etc., pero **no el padding**. Al montar un `Text` nuevo,
+`FabricMountingManager.cpp` (caso `Insert`) solo manda el padding si `contentInsets != EdgeInsets::ZERO`. Entonces
+un `Text` sin padding —la etiqueta de `BotonBase` en `components/Legible.tsx`— que recibe del pozo la vista de un
+`Text` CON padding (las pastillas y chips de YO o de HOY, que quedan en el pozo al cambiar de pestaña) se queda con
+ese padding: la caja mide lo justo para la etiqueta, el área útil es más angosta y el texto se parte. Por eso salía
+al volver de otra pestaña y «a veces» al abrir de cero: depende de qué vista quede en el pozo.
+
+**Solución.** `components/Legible.tsx`: todo texto de estas piezas (etiqueta de los botones, título, detalle y
+sección plegable) lleva `paddingHorizontal: 1` (`PADDING_QUE_PISA_EL_RECICLADO`). Con un padding distinto de cero,
+Fabric lo manda siempre al montar y pisa el que haya quedado; el texto mide 2 px más, no se nota. Verificado en el
+emulador con la misma secuencia: con el arreglo sale «Ya la recibí» entero; se sacó el arreglo un momento y la misma
+secuencia volvió a dar «Ya la»; con el arreglo otra vez, entero en el recorrido final (capturas `E419-a/b/c-*.png` y `14-aprendiz-envio2-en-camino-boton-entero.png` en
+`~/Imágenes/e2e-2026-09-28/caja/trazabilidad/`). Alarmas (`E419-d`) y el detalle del Admin siguen iguales.
+
+**Cómo evitar que vuelva a pasar.**
+- `src/components/__tests__/legibleTextoReciclado.test.ts`: exige padding horizontal distinto de cero en todos los
+  textos de `Legible`. Contra el `Legible.tsx` anterior falla (`Tests: 4 failed, 1 passed, 5 total`).
+- El fallo es de React Native y puede tocar a **cualquier** `Text` sin padding de la app que reciba una vista
+  reciclada con padding; `Legible` era donde se vio. Si aparece un texto cortado igual en otro lado, es esto: ponerle
+  un padding distinto de cero, o (arreglo de raíz) un parche de `patch-package` a `ReactTextView.recycleView()` que
+  haga `setPadding(0, 0, 0, 0)`, que exige recompilar la app nativa. No se hizo en este cambio (fuera de alcance).
 
 ## E-420 · Probar la Caja con fotos en local: no había bucket de pruebas en la cuenta del perfil `default`
 
@@ -11701,3 +11726,78 @@ Ninguna credencial real de AWS se tocó.
 **Cómo evitar que vuelva a pasar.** Para probar subidas en local, ese script (`~/.cache/renaser-e2e/
 levantar-backend-caja.sh` levanta el backend así). Si se quiere S3 de verdad, hay que crear el bucket de prueba en la
 cuenta 251917136576 (decisión del dueño).
+
+## E-421 · Código Renaser en el día 2: «Registrar» no hace nada y no sale ninguna llamada al servidor
+
+**Síntoma.** Aprendiz `e2e-t-dia1` en su día 2, pantalla «CÓDIGO RENASER · 14:00 · INNEGOCIABLE» (emulador Pixel 6,
+28/09): con las cuatro preguntas escritas, tocar «Registrar» no cambia nada en pantalla y el backend no recibe
+ningún `POST /api/v1/radar` (solo `GET /api/v1/radar/latest 200`). Ningún error en Metro ni en `logcat`
+(`ReactNativeJS`). Como el formulario es innegociable, no se puede salir de ahí.
+
+**Causa real.** Faltaba la quinta respuesta, el **nivel de energía** (`energia === null`). En un teléfono de alto
+normal, el `SliderRating` queda al final del `ScrollView`, debajo del pliegue, y el aviso «Falta 1 respuesta. Las
+cinco son obligatorias.» también se dibujaba dentro del scroll, después del selector: fuera de la vista.
+`CodigoRenaserModal.enviar` cortaba sin llamar (`if (!completo || energia === null) return;`), que es correcto, pero
+la persona no veía por qué.
+
+**Solución.** Frontend (rama `caja-renaser`): `src/features/radar/utils/faltantesDelRadar.ts` dice QUÉ falta en el
+orden de la pantalla («Falta: nivel de energía.» / «Faltan 2: ¿Qué siento?, nivel de energía.»); en
+`CodigoRenaserModal.tsx` el aviso (y el de error del servidor) pasa al pie, pegado a «Registrar», con
+`accessibilityRole="alert"`, y al tocar «Registrar» incompleto el scroll baja hasta lo primero que falta. Verificado
+en el emulador: «Registrar» baja al selector y avisa; con 7 marcado, `POST /api/v1/radar 200` y Hoy muestra
+«Código Renaser · 16:00 · REGISTRADO» (capturas `T3-a…e-*.png` en `~/Imágenes/e2e-2026-09-28/caja/trazabilidad/`).
+
+**Cómo evitar que vuelva a pasar.** `codigoRenaserModal.test.ts` exige que el aviso esté fuera del `ScrollView` y
+nombre lo que falta: contra el modal anterior falla (`Tests: 1 failed, 1 passed, 2 total`, `Expected substring:
+"nivel de energía"`, `Received string: ""`). Regla: en un formulario con botón fijo, la validación que bloquea el
+envío se muestra junto al botón o lleva a la persona al campo, nunca solo al final de un scroll. En los recorridos
+e2e, llenar también el selector de energía.
+
+## E-422 · Esperar a que termine un script con `pgrep -f <nombre>` se queda esperando para siempre
+
+**Síntoma.** `while pgrep -f levantar-backend-caja.sh >/dev/null; do sleep 3; done; cp …jar …` no terminó nunca:
+`Exit code 143 · Command timed out after 5m 0s`, y el jar nuevo no se copió (el backend siguió con el viejo).
+
+**Causa real.** `pgrep -f` busca en la línea de comando completa, y la del propio `bash -c "while pgrep -f
+levantar-backend-caja.sh …"` contiene ese texto: se encontraba a sí mismo.
+
+**Solución.** Copiar el jar primero y lanzar el script en primer plano (`cp …; levantar-backend-caja.sh`).
+
+**Cómo evitar que vuelva a pasar.** No esperar un proceso con `pgrep -f` y un patrón que aparece en el mismo
+comando; usar el PID (`$!` y `wait`), o un patrón que no se escriba literal (`pgrep -f '[l]evantar-backend'`).
+
+## E-423 · `adb shell input text` sin un campo con foco recarga la app de desarrollo (y una vez la cerró)
+
+**Síntoma.** Durante el e2e del 28/09 (tarde), escribir con `adb shell input text` cuando ningún campo tenía el foco
+recargó el JS de la app de desarrollo dos veces; una terminó en cierre nativo: `[runtime not ready]: TypeError:
+Cannot read property 'EventEmitter' of undefined` → `Fatal signal 6 (SIGABRT)` en `mqt_v_js`.
+
+**Causa real.** Sin foco, las teclas llegan a la Activity, y en la app de desarrollo la «r» es el atajo de «Reload»
+del menú de desarrollo. No es un fallo de la app de producción.
+
+**Solución.** Confirmar el foco antes de escribir (`adb shell dumpsys input_method | grep mServedView` →
+`ReactEditText`) y tocar el campo antes.
+
+**Cómo evitar que vuelva a pasar.** En los scripts del emulador, tocar el campo, esperar y comprobar el foco antes de
+cada `input text`; nunca mandar texto «a ciegas».
+
+## E-424 · `Render Error: Call to function 'AudioRecorder.constructor' has been rejected. → Caused by: The current activity is no longer available` (ABIERTO, no es de la Caja)
+
+**Síntoma.** App de desarrollo en el emulador (28/09, 16:32): después de cerrar sesión y volver a entrar por
+script, la pantalla roja de React Native con ese mensaje, `code: 'ERR_MISSING_ACTIVITY'`, desde
+`useEnvioMediaChat.ts:56` (`useAudioRecorder(RecordingPresets.HIGH_QUALITY)`) dentro de `ComunidadScreen`
+(`ComunidadScreen.tsx:470`). Al cerrarla la app quedó en blanco hasta forzar el cierre. Captura
+`E424-render-error-audiorecorder.png` en `~/Imágenes/e2e-2026-09-28/caja/trazabilidad/`.
+
+**Causa (lo que muestra `logcat`, sin arreglar).** El script de login manda `input keyevent 4` (atrás) para
+esconder el teclado; si el teclado ya no estaba, «atrás» en la raíz **cerró la Activity** (`Transition … type =
+CLOSE … taskId=170`, 16:32:39). El JS siguió vivo; `am start` creó otra Activity (tarea 171) y, al montar de nuevo
+`ComunidadScreen`, `useAudioRecorder` (expo-audio) intentó crear el grabador contra la Activity vieja y el módulo
+nativo rechazó: el hook no tolera ese rechazo y tira abajo el árbol entero. Puede pasarle a una persona real que
+toca «atrás» en la pantalla principal y vuelve a abrir la app mientras el proceso sigue vivo.
+
+**Solución.** Ninguna todavía: es de Comunidad/chat, fuera de esta tarea. Para seguir se forzó el cierre de la app.
+
+**Cómo evitar que vuelva a pasar.** Pendiente: que el grabador del chat se cree recién al empezar a grabar (no al
+montar la pantalla), o que el rechazo se atrape. En los scripts del emulador, no usar `keyevent 4` para esconder el
+teclado (usar `keyevent 111`, Escape, o tocar fuera).
