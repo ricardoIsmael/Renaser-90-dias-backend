@@ -167,7 +167,8 @@ API de couriers; envíos al extranjero; cobro del envío al aprendiz.
 
 Esto es lo que quedó en el servidor; donde difiere del contrato que se pasó al frontend, está marcado **(cambio)**.
 Los campos sin valor viajan como `null` (no se omiten). Errores: 400 `{message}` (dato inválido), 403 (rol o
-cuenta), 404 (no es un aprendiz / no se encontró la foto subida), 409 `{message}` (el estado no corresponde).
+cuenta), 404 (no es un aprendiz / no se encontró la foto subida), 409 `{message}` (el estado no corresponde; el
+mensaje dice el estado en palabras, «La caja ya fue entregada: …», nunca su nombre de la API — E-416).
 
 **Lista** `GET /api/v1/admin/caja?estado=&q=&page=0&size=50`
 `{items:[{aprendizId,nombre,grupo,diaPrograma,estado,envio,actualizadoEn,cumplimientoFase1}], total,
@@ -197,7 +198,7 @@ conteos:{EN_EVALUACION,POR_REVISAR,ARMANDO,ENVIADA,ENTREGADA,CON_PROBLEMA,EN_PAU
 | `POST …/armar` | `POR_REVISAR` |
 | `PUT …/contenido` `{marcados:[valor]}` | `ARMANDO` (un valor que no está en la lista → 400) |
 | `POST …/foto/upload-url`, `…/comprobante/upload-url` `{contentType?}` → `{url,ruta}` | `ARMANDO`. **(cambio)** cuerpo opcional: `image/jpeg` (por defecto) o `image/png` — el mismo que se manda en el PUT |
-| `POST …/foto/confirm`, `…/comprobante/confirm` `{ruta}` | `ARMANDO`. 404 si no se subió nada a esa ruta; 409 si el servidor no guarda objetos (en local). Se puede confirmar otra foto encima: reemplaza |
+| `POST …/foto/confirm`, `…/comprobante/confirm` `{ruta}` | `ARMANDO`. 404 si no se subió nada a esa ruta; 409 si el servidor no guarda objetos (en local); 400 si lo subido no es un JPEG ni un PNG por dentro (E-417). Se puede confirmar otra foto encima: reemplaza |
 | `POST …/enviar` `{medio,courier,codigo,costo}` | `ARMANDO`. Falta algo → **409 `{message, faltan:[…], timestamp}`**. `medio` y `codigo` obligatorios (400); `courier` y `costo` (soles, ≥ 0) opcionales |
 | `POST …/entregada` `{previa?}` | sin `previa`: `ENVIADA` o `CON_PROBLEMA` (si reapareció). `previa:true`: `NO_APLICA`, `EN_EVALUACION`, `POR_REVISAR`, `ARMANDO`, `EN_PAUSA`, `FUERA_DE_LA_APP`, sin avisos |
 | `POST …/problema` `{motivo,nota}` | `ENVIADA` o `ENTREGADA` (llegó dañada). `motivo`: `PERDIDA`, `DANADA`, `DEVUELTA`, `OTRO`; `nota` ≤ 500 |

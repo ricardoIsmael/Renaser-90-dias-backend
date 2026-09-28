@@ -20,6 +20,8 @@ public enum FotoDeCaja {
     public static final Set<String> TIPOS_DE_CONTENIDO = Set.of("image/jpeg", "image/png");
     public static final long PESO_MAXIMO_EN_BYTES = 10L * 1024 * 1024;
     private static final int LARGO_MAXIMO_DE_RUTA = 300;
+    private static final byte[] FIRMA_JPEG = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF};
+    private static final byte[] FIRMA_PNG = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
 
     private final TipoPasoCaja paso;
     private final AccionDeCaja accion;
@@ -73,6 +75,31 @@ public enum FotoDeCaja {
             throw new IllegalArgumentException("La foto tiene que ser JPG o PNG.");
         }
         return tipo;
+    }
+
+    /**
+     * Lo subido tiene que ser de verdad un JPEG o un PNG, por sus primeros bytes: el tipo que se firmó en la URL
+     * solo dice qué encabezado mandó quien subió, no qué subió (E-417: un texto con {@code image/jpeg} quedaba
+     * como foto de la caja y salía roto en el chat del aprendiz).
+     *
+     * @throws IllegalArgumentException si no empieza como JPEG ni como PNG (400)
+     */
+    public static void exigirImagen(byte[] contenido) {
+        if (!empiezaCon(contenido, FIRMA_JPEG) && !empiezaCon(contenido, FIRMA_PNG)) {
+            throw new IllegalArgumentException("La foto tiene que ser JPG o PNG.");
+        }
+    }
+
+    private static boolean empiezaCon(byte[] contenido, byte[] firma) {
+        if (contenido == null || contenido.length < firma.length) {
+            return false;
+        }
+        for (int i = 0; i < firma.length; i++) {
+            if (contenido[i] != firma[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

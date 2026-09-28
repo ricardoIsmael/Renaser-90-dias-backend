@@ -161,7 +161,7 @@ class CajaRenaserTest {
             CajaRenaser enEvaluacion = caja(situacion(dias(0)), List.of(), DIA_10);
 
             assertThatThrownBy(() -> AccionDeCaja.ARMAR.paso(enEvaluacion, KELIN, Map.of()))
-                    .isInstanceOf(IllegalStateException.class).hasMessageContaining("EN_EVALUACION");
+                    .isInstanceOf(IllegalStateException.class).hasMessageContaining("en evaluación");
             assertThatThrownBy(() -> AccionDeCaja.ENVIAR.paso(enEvaluacion, KELIN, Map.of()))
                     .isInstanceOf(IllegalStateException.class);
             assertThatThrownBy(() -> AccionDeCaja.CONFIRMAR_RECIBIDA.paso(enEvaluacion, ANA, Map.of()))

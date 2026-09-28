@@ -62,7 +62,7 @@ public enum AccionDeCaja {
     /** @throws IllegalStateException si la caja no está en uno de los estados de los que parte (409) */
     public void exigirDesde(EstadoCaja estado) {
         if (!sePuedeDesde(estado)) {
-            throw new IllegalStateException("La caja está " + estado + ": no se puede " + verbo + ".");
+            throw new IllegalStateException("La caja " + estado.enPalabras() + ": no se puede " + verbo + ".");
         }
     }
 

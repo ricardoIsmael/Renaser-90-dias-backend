@@ -116,4 +116,32 @@ class ValoresDeCajaTest {
     private static FichaDeEnvio ficha(String pais) {
         return new FichaDeEnvio(null, null, pais, null, null, null, null, null);
     }
+
+    @Test
+    @DisplayName("E-416: el 409 de una acción fuera de su estado se lee en palabras, nunca con el nombre del estado")
+    void mensajeDelEstadoEnPalabras() {
+        for (EstadoCaja estado : EstadoCaja.values()) {
+            for (AccionDeCaja accion : AccionDeCaja.values()) {
+                if (accion.sePuedeDesde(estado)) {
+                    continue;
+                }
+                assertThatThrownBy(() -> accion.exigirDesde(estado)).isInstanceOf(IllegalStateException.class)
+                        .hasMessageNotContaining(estado.name());
+            }
+        }
+        assertThatThrownBy(() -> AccionDeCaja.CONFIRMAR_RECIBIDA.exigirDesde(EstadoCaja.ENTREGADA))
+                .hasMessage("La caja ya fue entregada: no se puede confirmar que llegó.");
+    }
+
+    @Test
+    @DisplayName("E-417: la foto de la caja tiene que ser un JPEG o un PNG por dentro, no solo por el encabezado")
+    void fotoPorDentro() {
+        FotoDeCaja.exigirImagen(new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0});
+        FotoDeCaja.exigirImagen(new byte[] {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n', 0});
+        assertThatThrownBy(() -> FotoDeCaja.exigirImagen("no soy una imagen".getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage("La foto tiene que ser JPG o PNG.");
+        assertThatThrownBy(() -> FotoDeCaja.exigirImagen(new byte[] {(byte) 0xFF}))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> FotoDeCaja.exigirImagen(new byte[0])).isInstanceOf(IllegalArgumentException.class);
+    }
 }

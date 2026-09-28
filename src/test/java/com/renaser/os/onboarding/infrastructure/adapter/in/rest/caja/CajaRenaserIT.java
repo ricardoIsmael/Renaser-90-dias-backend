@@ -242,6 +242,12 @@ class CajaRenaserIT {
         armando.path("contenido").forEach(e -> todo.add(e.path("valor").asString()));
         JsonNode marcada = leer(pedir("PUT", ADMIN_CAJA + "/" + ana + "/contenido", kelin, Map.of("marcados", todo)), 200);
         assertThat(marcada.path("faltaParaEnviar")).extracting(JsonNode::asString).containsExactly("FOTO", "COMPROBANTE");
+        // E-417: lo subido se mira por dentro; un texto con Content-Type de imagen no queda como foto.
+        String ajena = leer(pedir("POST", ADMIN_CAJA + "/" + ana + "/foto/upload-url", kelin, Map.of()), 200)
+                .path("ruta").asString();
+        almacenamiento.guardar(ajena, "no soy una imagen".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertThat(pedir("POST", ADMIN_CAJA + "/" + ana + "/foto/confirm", kelin, Map.of("ruta", ajena)).statusCode())
+                .as("un archivo que no es JPG ni PNG").isEqualTo(400);
         subirYConfirmar(kelin, "foto", imagen(Color.ORANGE, 800, 800));
         JsonNode conFotos = subirYConfirmar(kelin, "comprobante", imagen(Color.WHITE, 800, 800));
         assertThat(conFotos.path("fotoArmadaUrl").asString()).contains("/caja/");

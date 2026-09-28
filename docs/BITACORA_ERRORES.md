@@ -11614,3 +11614,89 @@ porque se escriben igual.
 
 **Cómo evitar que vuelva a pasar.** En SQL de pruebas, roles y estados con los valores de V1:
 `APRENDIZ`, `MENTOR`, `LIDER_MENTORES`, `ADMIN`, `ALQUIMISTA`; `ACTIVO`, `INACTIVO`, `SUSPENDIDO`.
+
+## E-416 · El 409 de la Caja mostraba el nombre interno del estado: «La caja está ENTREGADA: no se puede confirmar que llegó.»
+
+**Síntoma.** Prueba de punta a punta de la Caja (28/09, emulador): la aprendiz toca «Ya la recibí» cuando el Admin
+ya la había marcado entregada desde otro teléfono, y el diálogo dice literal
+`La caja está ENTREGADA: no se puede confirmar que llegó.` Lo mismo en cada acción fuera de su estado
+(`La caja está NO_APLICA: …`, `La caja está EN_EVALUACION: …`), también en la pantalla del Admin.
+
+**Causa real.** `AccionDeCaja.exigirDesde` armaba el mensaje con `estado` (el nombre del enum, que es el de la API).
+La app muestra el `message` del 409 tal cual (`mensajeDeError`), y su filtro de mensajes internos solo detecta
+nombres de clase (`Clase.campo:`), no mayúsculas con guion bajo.
+
+**Solución.** `EstadoCaja` lleva cómo se dice en un mensaje (`enPalabras()`: «ya fue entregada», «está en
+evaluación», «todavía no aplica»…) y el 409 lo usa: `La caja ya fue entregada: no se puede confirmar que llegó.`
+
+**Cómo evitar que vuelva a pasar.** `ValoresDeCajaTest.mensajeDelEstadoEnPalabras` recorre todas las acciones en
+todos los estados de los que no parten y exige que el mensaje no contenga el nombre del estado. Regla general: un
+`IllegalStateException` que termina en un 409 se escribe para una persona, sin `name()` de enums.
+
+## E-417 · La foto y el comprobante de la Caja aceptaban cualquier archivo con `Content-Type: image/jpeg`
+
+**Síntoma.** Mal uso a propósito (28/09, carril API): subir por la URL firmada un texto de 18 bytes
+(`no soy una imagen`) con `Content-Type: image/jpeg` y confirmarlo → `200`, y quedaba como foto de la caja
+(la misma que se manda al chat del aprendiz al marcarla enviada).
+
+**Causa real.** El tipo firmado en la URL solo obliga el encabezado del PUT, no el contenido. El servidor ya bajaba
+el objeto para medir el peso (`FotosDeCajaService.pesoDeLaSubida`), pero no miraba qué era. El fondo de la carta sí
+se revisa (lo abre `ImageIO`); la foto y el comprobante no.
+
+**Solución.** `FotoDeCaja.exigirImagen(byte[])`: los primeros bytes tienen que ser de JPEG (`FF D8 FF`) o de PNG
+(`89 50 4E 47 0D 0A 1A 0A`); si no, 400 «La foto tiene que ser JPG o PNG.». Se llama al confirmar, sobre lo que ya
+se bajaba.
+
+**Cómo evitar que vuelva a pasar.** `ValoresDeCajaTest.fotoPorDentro` y un paso en `CajaRenaserIT` (sube un texto
+y confirma → 400) antes de la foto buena. Regla: toda subida que después se muestra o se reenvía se revisa por
+dentro al confirmarla, no por el `Content-Type`.
+
+## E-418 · Agregar un elemento al contenido de la Caja desde la app: `La clave «PIEDRA_DE_CUARZO» solo puede tener minúsculas, números y _.`
+
+**Síntoma.** Administración → Caja Renaser → «Contenido y carta» → Agregar «Piedra de cuarzo» → Guardar: el
+servidor responde 400 con ese mensaje y el elemento no se agrega. No hay forma de agregar un elemento desde la app.
+
+**Causa real.** La app (`valorParaUnaEtiqueta`, frontend) se hizo antes que el servidor y armaba la clave en
+MAYÚSCULAS (`PIEDRA_DE_CUARZO`); el servidor (`ElementoDeCaja`, `[a-z0-9_]{1,40}`) solo acepta minúsculas. Las
+pruebas de cada lado pasaban: cada una probaba su propia regla.
+
+**Solución.** Frontend `683ca47` (rama `caja-renaser`): la clave nueva sale en minúsculas y con lugar para el
+sufijo de repetidos (`piedra_de_cuarzo`, `…_2`), igual que la deriva el servidor.
+
+**Cómo evitar que vuelva a pasar.** `contenidoYDestino.test.ts` exige que toda clave generada cumpla
+`^[a-z0-9_]{1,40}$`, también con etiquetas largas, tildes y repetidas. Cuando un contrato tiene una regla de
+formato, la prueba del cliente la copia literal del servidor.
+
+## E-419 · El botón «Ya la recibí» de «Tu Caja Renaser» se ve cortado: «Ya la» (ABIERTO, no es de la Caja)
+
+**Síntoma.** Emulador Pixel 6, app de desarrollo de la rama `caja-renaser`: después de tocar «Ya la recibí» y
+recibir un error (409), y desde ahí cada vez que se abre la pantalla, el botón dorado muestra solo `Ya la`, con el
+ícono de check. La web muestra el texto entero. Capturas `CAJA-07-e-envio2-shalom.png` y
+`CAJA-08-app-recibida-estado-no-corresponde.png` en `~/Imágenes/e2e-2026-09-28/caja/`.
+
+**Causa (hipótesis, sin confirmar).** Es el `BotonBase` compartido de `components/Legible.tsx` (`Text` con
+`flexShrink: 1` en una fila centrada): mientras `cargando`, el `ActivityIndicator` ocupa el lugar del ícono y el
+texto se mide más angosto; en Android esa medida se reutiliza después. No se arregló: el componente es de toda la
+app y el alcance de esta tarea era la Caja.
+
+**Cómo evitar que vuelva a pasar.** Pendiente: reproducir con un botón aislado en el emulador y, si se confirma,
+darle al texto un ancho que no dependa del ícono (o mantener siempre el mismo hueco para ícono e indicador).
+
+## E-420 · Probar la Caja con fotos en local: no había bucket de pruebas en la cuenta del perfil `default`
+
+**Síntoma.** `aws s3api list-buckets` con el perfil `default` (cuenta 251917136576) devuelve `"Buckets": []`, y
+`head-bucket --bucket s3-renaser90dias` da `403 Forbidden`. Con `STORAGE_PROVEEDOR=noop` confirmar una foto da 409
+(«Este servidor no tiene dónde guardar fotos») y «Marcar enviada» nunca se puede probar.
+
+**Causa real.** El «bucket de prueba de la otra cuenta» todavía no existe; la cuenta `default` está vacía. El
+bucket real es de la cuenta de `prod`, que no se usa para pruebas.
+
+**Solución (solo para la prueba).** Un S3 de mentira local (`~/.cache/renaser-e2e/s3-local/s3_local.py`, puerto
+9000, sin firma) y el backend con `STORAGE_PROVEEDOR=s3 AWS_S3_BUCKET=caja_e2e
+AWS_ENDPOINT_URL_S3=http://localhost:9000` y credenciales de mentira. El bucket lleva guion bajo a propósito: así el
+SDK usa estilo *path* (`localhost:9000/caja_e2e/…`) y el emulador llega con `adb reverse tcp:9000 tcp:9000`.
+Ninguna credencial real de AWS se tocó.
+
+**Cómo evitar que vuelva a pasar.** Para probar subidas en local, ese script (`~/.cache/renaser-e2e/
+levantar-backend-caja.sh` levanta el backend así). Si se quiere S3 de verdad, hay que crear el bucket de prueba en la
+cuenta 251917136576 (decisión del dueño).

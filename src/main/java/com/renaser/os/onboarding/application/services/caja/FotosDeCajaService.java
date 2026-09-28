@@ -91,9 +91,10 @@ public class FotosDeCajaService implements FotosDeCajaUseCase {
             throw new IllegalStateException("Este servidor no tiene dónde guardar fotos, así que no se pueden "
                     + "confirmar desde acá.");
         }
-        return almacenamiento.leer(ruta, FotoDeCaja.PESO_MAXIMO_EN_BYTES)
-                .orElseThrow(() -> new NoSuchElementException("No encontramos la foto subida: vuelve a elegirla."))
-                .length;
+        byte[] subida = almacenamiento.leer(ruta, FotoDeCaja.PESO_MAXIMO_EN_BYTES)
+                .orElseThrow(() -> new NoSuchElementException("No encontramos la foto subida: vuelve a elegirla."));
+        FotoDeCaja.exigirImagen(subida);
+        return subida.length;
     }
 
     private void guardar(CajaRenaser caja, UserId actorId, FotoDeCaja foto, String ruta, long peso) {
