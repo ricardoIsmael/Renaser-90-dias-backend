@@ -240,4 +240,71 @@ class StaffAdminServiceTest {
 
         verify(saveUserPort).save(any());
     }
+
+    // ─── E-367 (ADM-20): el estado no reemplaza al alta ─────────────────────────────
+
+    private static User pendienteDeAprobacion(UserId id) {
+        return User.registrarPendienteAprobacion(id, new Email("pendiente" + id.value() + "@renaser.dev"),
+                "Pendiente");
+    }
+
+    /**
+     * ADM-20 (e2e del 2026-09-27): activar por estado una cuenta que nunca se aprobó respondía 204, y la
+     * persona entraba sin fila en {@code participantes_programa}. El alta pasa solo por aprobar la
+     * solicitud o por invitar ({@code .claude/rules/04}). Falla contra el código viejo, que guardaba.
+     */
+    @Test
+    @DisplayName("E-367: activar por estado una cuenta que nunca se aprobó es un conflicto y no guarda nada")
+    void updateStatusNoActivaUnaCuentaQueNuncaSeAprobo() {
+        UserId actorId = id();
+        UserId targetId = id();
+        User pendiente = pendienteDeAprobacion(targetId);
+        when(loadUserPort.byId(targetId)).thenReturn(Optional.of(pendiente));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+
+        assertThatThrownBy(() -> service.updateStatus(
+                new UpdateUserStatusCommand(actorId, targetId, UserStatus.ACTIVE)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("se activa aprobando su solicitud de alta");
+
+        assertThat(pendiente.status()).isEqualTo(UserStatus.INACTIVE);
+        verify(saveUserPort, never()).save(any());
+        verify(events, never()).publishEvent(any(Object.class));
+    }
+
+    /** Suspenderla y después reactivarla era el mismo atajo en dos pasos. */
+    @Test
+    @DisplayName("E-367: suspender una cuenta que nunca se aprobó también es un conflicto")
+    void updateStatusNoSuspendeUnaCuentaQueNuncaSeAprobo() {
+        UserId actorId = id();
+        UserId targetId = id();
+        User pendiente = pendienteDeAprobacion(targetId);
+        when(loadUserPort.byId(targetId)).thenReturn(Optional.of(pendiente));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+
+        assertThatThrownBy(() -> service.updateStatus(
+                new UpdateUserStatusCommand(actorId, targetId, UserStatus.SUSPENDED)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("rechaza su solicitud de alta");
+
+        assertThat(pendiente.status()).isEqualTo(UserStatus.INACTIVE);
+        verify(saveUserPort, never()).save(any());
+        verify(cerrarTodasLasSesionesUseCase, never()).cerrarTodas(any());
+    }
+
+    @Test
+    @DisplayName("E-367: reactivar a una cuenta SUSPENDIDA sigue funcionando y avisa el cambio")
+    void updateStatusReactivaUnaCuentaSuspendida() {
+        UserId actorId = id();
+        UserId targetId = id();
+        User suspendida = suspendido(targetId, UserRole.MENTOR);
+        when(loadUserPort.byId(targetId)).thenReturn(Optional.of(suspendida));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+
+        service.updateStatus(new UpdateUserStatusCommand(actorId, targetId, UserStatus.ACTIVE));
+
+        assertThat(suspendida.status()).isEqualTo(UserStatus.ACTIVE);
+        verify(saveUserPort).save(suspendida);
+        verify(events).publishEvent(any(EstadoDeCuentaCambiadoEvent.class));
+    }
 }

@@ -84,6 +84,7 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
 - **Código de éxito:** 204 No Content.
 - **Quién puede llamarlo:** el propio usuario activo (`actorId` del header = quien se actualiza a sí mismo; no hay forma de actualizar a otro por acá).
 - **Errores:** igual que `/me` (404 actor inexistente, 403 suspendido).
+  > **Agregado 2026-09-27 (E-369).** 400 si `bio` pasa de **1000** caracteres (`"La biografía no puede pasar de 1000 caracteres"`) o `department` de **120** (`"El departamento no puede pasar de 120 caracteres"`); se cuentan como Postgres (un emoji es uno) y no se guarda nada. Antes aceptaba 1 MB en cada uno (SEG-16). Mismo tope en `PUT /api/v1/admin/staff/{id}`. Topes a confirmar con el dueño.
 - **curl:**
   ```bash
   curl -X PATCH http://localhost:8080/api/v1/users/me \
@@ -108,6 +109,7 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
 - **Código de éxito:** 201 Created (`HttpStatus.CREATED` explícito).
 - **Quién puede llamarlo:** solo `actor.canManageRoles()` = ADMIN o ALCHEMIST (`User.invite` → `requireRoleManager`). El actor además debe estar activo (`RequireActiveUserGuard` corre primero).
 - **Errores:** 403 `"Solo ADMIN/ALCHEMIST cambian roles"` si el actor no es ADMIN/ALCHEMIST; 403 `"Cuenta suspendida"`; 404 actor inexistente; 400 si `usuarioId` no es un UUID válido o falta algún campo `@NotBlank`.
+  > **Agregado 2026-09-27 (E-365).** **409** `"Ya existe una cuenta con ese id: invitar solo crea cuentas nuevas, no modifica las que existen"` si `usuarioId` ya es de una cuenta, y 409 `"Ya existe una cuenta con este correo"` si el correo ya tiene cuenta. Antes, con el id de una cuenta existente, respondía 201 y la **pisaba entera** (correo, nombre, rol y estado: un MENTOR suspendido quedaba ADMIN activo, con su contraseña de siempre — SEG-08). El 403 de rol sale antes que el 409, así que quien no puede invitar no se entera de qué ids existen. `usuarioId` lo elige el cliente por herencia de Supabase (D-49/D-53); para dar de alta staff, el camino es `POST /api/v1/admin/staff/invite`, que genera el id.
 
   > **Cambio ROMPEDOR 2026-08-31.** Este campo se llamaba `supabaseUserId`. Se renombró a `usuarioId` al sacar el último rastro de Supabase Auth del backend (`docs/MODULO_AUTH.md`): la identidad es propia desde el 2026-08-26 y ese UUID no viene de ningún proveedor externo. **Un cliente que siga mandando `supabaseUserId` recibe 400.** El único endpoint afectado es este; `POST /api/v1/account-requests` ya no llevaba el campo.
 - **Efecto colateral:** si `role == MENTOR`, crea automáticamente un `MentorProfile` vacío (nivel N0, estado GREEN).

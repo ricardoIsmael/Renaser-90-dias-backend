@@ -97,6 +97,19 @@ class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, DeleteUserPo
         return mapper.toDomain(saved);
     }
 
+    /**
+     * Un {@code persist} y no un {@code merge} ({@link UserJpaEntity#isNew()}, E-365): si ya hay una
+     * fila con ese id, Postgres rechaza el INSERT y Spring Data lo traduce a
+     * {@code DataIntegrityViolationException} (409), en vez de reemplazar la cuenta que ya existia.
+     * {@code saveAndFlush} por el mismo motivo que {@link #save}: el INSERT sale ahora, no al commit.
+     */
+    @Override
+    public User registrarNueva(User user) {
+        UserJpaEntity entidad = mapper.toEntity(user);
+        entidad.setNueva(true);
+        return mapper.toDomain(repository.saveAndFlush(entidad));
+    }
+
     @Override
     public List<UserId> pendingDeletionUpTo(Instant corte) {
         return repository.findByBajaSolicitadaEnNotNullAndBajaSolicitadaEnLessThanEqual(corte).stream()

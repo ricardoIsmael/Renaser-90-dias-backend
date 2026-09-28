@@ -115,12 +115,36 @@ public final class User {
         this.role = Objects.requireNonNull(newRole, "El nuevo rol es obligatorio");
     }
 
+    /**
+     * Quita el acceso a una cuenta YA APROBADA (repetirlo no cambia nada). Una que nunca se aprobó no se
+     * suspende: suspenderla y reactivarla era la puerta de atrás de {@link #reactivate()} en dos pasos
+     * (E-367). A alguien pendiente se le rechaza la solicitud.
+     */
     public void suspend() {
+        requireAprobada("para que no entre, rechaza su solicitud de alta");
         this.status = UserStatus.SUSPENDED;
     }
 
+    /**
+     * Devuelve el acceso a una cuenta suspendida (repetirlo no cambia nada). <b>Nunca activa una cuenta
+     * que no se aprobó</b> (E-367, ADM-20 del e2e del 2026-09-27): antes ponía ACTIVE sin mirar de dónde
+     * venía, y dejaba entrar a alguien pendiente sin programa. El alta pasa solo por {@link #aprobar()}
+     * (que además inscribe el programa) o por la invitación ({@code .claude/rules/04}).
+     */
     public void reactivate() {
+        requireAprobada("se activa aprobando su solicitud de alta");
         this.status = UserStatus.ACTIVE;
+    }
+
+    /** Si la cuenta nunca se aprobó: la creó el alta y espera que alguien decida su solicitud. */
+    public boolean pendienteDeAprobacion() {
+        return status == UserStatus.INACTIVE;
+    }
+
+    private void requireAprobada(String queHacerEnCambio) {
+        if (pendienteDeAprobacion()) {
+            throw new IllegalStateException("Esta cuenta todavía no fue aprobada: " + queHacerEnCambio);
+        }
     }
 
     public void rename(String newFullName) {
@@ -158,12 +182,35 @@ public final class User {
         return url.trim();
     }
 
+    /**
+     * Topes de la biografía y del departamento (E-369, SEG-16 del e2e del 2026-09-27: {@code PATCH
+     * /users/me} guardaba 1.048.576 caracteres en cada uno). La app no pone ningún límite en esos dos
+     * campos, así que el servidor es el único que puede. <b>Decisión técnica, a confirmar con el
+     * dueño</b>: la biografía es un texto de varias líneas que se lee en la ficha (1000 es el mismo tope
+     * que un mensaje de bienvenida, {@code TextoDeBienvenida}); el departamento es una línea, como el
+     * nombre, y lleva su mismo tope.
+     */
+    static final int LARGO_MAXIMO_DE_LA_BIOGRAFIA = 1000;
+    static final int LARGO_MAXIMO_DEL_DEPARTAMENTO = 120;
+
     public void updateBio(String newBio) {
-        this.bio = newBio;
+        this.bio = requireLargoMaximo(newBio, LARGO_MAXIMO_DE_LA_BIOGRAFIA, "La biografía");
     }
 
     public void updateDepartment(String newDepartment) {
-        this.department = newDepartment;
+        this.department = requireLargoMaximo(newDepartment, LARGO_MAXIMO_DEL_DEPARTAMENTO, "El departamento");
+    }
+
+    /**
+     * Cuenta caracteres como los cuenta Postgres ({@code char_length}): un emoji es uno, no dos. El
+     * texto se guarda tal cual; {@code null} sigue siendo «sin cambios» para quien llama. Como en el
+     * nombre, {@code rehydrate} no pasa por acá: lo que ya está guardado se carga como está.
+     */
+    private static String requireLargoMaximo(String texto, int largoMaximo, String campo) {
+        if (texto != null && texto.codePointCount(0, texto.length()) > largoMaximo) {
+            throw new IllegalArgumentException(campo + " no puede pasar de " + largoMaximo + " caracteres");
+        }
+        return texto;
     }
 
     public void touchLastActive(Clock clock) {

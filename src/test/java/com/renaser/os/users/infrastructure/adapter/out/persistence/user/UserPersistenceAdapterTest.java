@@ -2,13 +2,17 @@ package com.renaser.os.users.infrastructure.adapter.out.persistence.user;
 
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
 import com.renaser.os.users.api.UserRole;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -16,6 +20,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Contra Postgres real (Testcontainers), no un mock: es lo unico que prueba de verdad
@@ -106,5 +111,48 @@ class UserPersistenceAdapterTest {
         var candidatas = adapter.pendingDeletionUpTo(corte);
 
         assertThat(candidatas).contains(conBajaVencida).doesNotContain(sinBaja);
+    }
+
+    // ─── E-365: un alta nunca pisa una cuenta que ya existe ────────────────────────
+
+    /**
+     * Sin la transaccion de la clase: el INSERT que falla aborta su transaccion en Postgres, y hace falta
+     * otra para comprobar que la fila quedo como estaba. Cada llamada al adaptador corre en la suya.
+     */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @DisplayName("E-365: registrarNueva con el id de una cuenta existente falla y la deja como estaba")
+    void registrarNuevaNoPisaUnaCuentaExistente() {
+        UserId id = UserId.of(UUID.randomUUID());
+        Email correo = new Email("existente-" + id.value() + "@renaser.com");
+        adapter.save(User.rehydrate(id, correo, UserRole.MENTOR, UserStatus.SUSPENDED, "Mentor Suspendido",
+                null, null, null, null));
+        User actor = User.rehydrate(UserId.of(UUID.randomUUID()), new Email("admin@renaser.com"), UserRole.ADMIN,
+                UserStatus.ACTIVE, "Admin", null, null, null, null);
+        try {
+            User encima = User.invite(id, new Email("pisada-" + id.value() + "@renaser.com"), "Pisada",
+                    UserRole.ADMIN, actor);
+
+            assertThatThrownBy(() -> adapter.registrarNueva(encima))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+
+            User despues = adapter.byId(id).orElseThrow();
+            assertThat(despues.email()).isEqualTo(correo);
+            assertThat(despues.role()).isEqualTo(UserRole.MENTOR);
+            assertThat(despues.status()).isEqualTo(UserStatus.SUSPENDED);
+            assertThat(despues.fullName()).isEqualTo("Mentor Suspendido");
+        } finally {
+            adapter.deleteById(id);
+        }
+    }
+
+    @Test
+    @DisplayName("E-365: registrarNueva crea la cuenta cuando el id no existe")
+    void registrarNuevaCreaUnaCuentaNueva() {
+        UserId id = UserId.of(UUID.randomUUID());
+
+        adapter.registrarNueva(User.registerTrainee(id, new Email("nueva-" + id.value() + "@renaser.com"), "Nueva"));
+
+        assertThat(adapter.byId(id).orElseThrow().fullName()).isEqualTo("Nueva");
     }
 }

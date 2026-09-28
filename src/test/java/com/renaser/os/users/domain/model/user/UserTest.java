@@ -247,4 +247,96 @@ class UserTest {
         user.changeAvatar("   ");
         assertThat(user.avatarUrl()).isNull();
     }
+
+    // ─── E-367 (ADM-20): el estado no reemplaza al alta ─────────────────────────────
+
+    private static User pendienteDeAprobacion() {
+        return User.registrarPendienteAprobacion(newId(), new Email("pendiente@renaser.com"), "Pendiente");
+    }
+
+    /**
+     * ADM-20 (e2e del 2026-09-27): {@code PATCH /admin/staff/{id}/status} con {@code ACTIVE} sobre una
+     * cuenta que nunca se aprobó respondía 204, y la persona entraba sin programa. Falla contra el código
+     * viejo, donde {@code reactivate()} ponía ACTIVE sin mirar de qué estado venía.
+     */
+    @Test
+    @DisplayName("E-367: una cuenta que nunca se aprobó no se activa por estado: se aprueba su solicitud")
+    void unaCuentaSinAprobarNoSeActivaPorEstado() {
+        User pendiente = pendienteDeAprobacion();
+
+        assertThatThrownBy(pendiente::reactivate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("todavía no fue aprobada");
+
+        assertThat(pendiente.status()).isEqualTo(UserStatus.INACTIVE);
+    }
+
+    /** Si se pudiera suspender, suspender y reactivar sería la misma puerta de atrás en dos pasos. */
+    @Test
+    @DisplayName("E-367: una cuenta que nunca se aprobó tampoco se suspende: se rechaza su solicitud")
+    void unaCuentaSinAprobarNoSeSuspende() {
+        User pendiente = pendienteDeAprobacion();
+
+        assertThatThrownBy(pendiente::suspend)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("todavía no fue aprobada");
+
+        assertThat(pendiente.status()).isEqualTo(UserStatus.INACTIVE);
+    }
+
+    @Test
+    @DisplayName("E-367: reactivar o suspender de nuevo una cuenta aprobada sigue sin cambiar nada")
+    void repetirElMismoEstadoSigueSiendoInofensivo() {
+        User user = trainee();
+
+        user.reactivate();
+        assertThat(user.status()).isEqualTo(UserStatus.ACTIVE);
+
+        user.suspend();
+        user.suspend();
+        assertThat(user.status()).isEqualTo(UserStatus.SUSPENDED);
+    }
+
+    // ─── E-369 (SEG-16): biografía y departamento con tope ──────────────────────────
+
+    /**
+     * SEG-16 (e2e del 2026-09-27): {@code PATCH /users/me} guardaba 1.048.576 caracteres en cada campo.
+     * Falla contra el código viejo, que los asignaba sin mirar.
+     */
+    @Test
+    @DisplayName("E-369: la biografía no puede pasar de 1000 caracteres")
+    void laBiografiaTieneTope() {
+        User user = trainee();
+
+        assertThatThrownBy(() -> user.updateBio("a".repeat(1001)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("La biografía no puede pasar de 1000 caracteres");
+
+        assertThat(user.bio()).isNull();
+    }
+
+    @Test
+    @DisplayName("E-369: el departamento no puede pasar de 120 caracteres")
+    void elDepartamentoTieneTope() {
+        User user = trainee();
+
+        assertThatThrownBy(() -> user.updateDepartment("a".repeat(121)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("El departamento no puede pasar de 120 caracteres");
+
+        assertThat(user.department()).isNull();
+    }
+
+    /** Se cuentan caracteres como los cuenta Postgres ({@code char_length}): un emoji es uno, no dos. */
+    @Test
+    @DisplayName("E-369: justo en el tope entra, y un emoji cuenta como un carácter")
+    void enElTopeEntraYUnEmojiEsUnCaracter() {
+        User user = trainee();
+
+        user.updateBio("🌿".repeat(1000));
+        user.updateDepartment("a".repeat(120));
+
+        assertThat(user.bio().codePointCount(0, user.bio().length())).isEqualTo(1000);
+        assertThat(user.department()).hasSize(120);
+    }
 }

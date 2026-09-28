@@ -374,9 +374,26 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
     @Override
     @Transactional
     public void eliminar(DeleteAccountRequestUseCase.DeleteAccountRequestCommand command) {
-        requireRequest(command.requestId());
+        AccountRequest request = requireRequest(command.requestId());
         requireAdminGuard.requireAdminActivo(command.actorId());
         deleteAccountRequestPort.deleteById(command.requestId());
+        borrarCuentaQueNuncaSeAprobo(request.usuarioId());
+    }
+
+    /**
+     * E-368 (HALLAZGO-A3 del e2e del 2026-09-27). Desde que el alta crea al usuario (2026-08-27, INACTIVE
+     * y con su contrasena), borrar una solicitud PENDIENTE sin borrar esa cuenta la dejaba huerfana: sin
+     * solicitud que aprobar ni rechazar, sin poder entrar, y con el correo tomado para siempre por el
+     * UNIQUE de {@code usuarios.email} (volver a pedir el alta daba 409). Es el mismo motivo por el que
+     * {@link #reject} la borra. Solo se borra la cuenta que nunca se aprobo: la de una solicitud ya
+     * aprobada es una cuenta de verdad, y borrar el registro de la solicitud no la toca. Idempotente: si
+     * la cuenta ya no esta (una solicitud rechazada), no hace nada.
+     */
+    private void borrarCuentaQueNuncaSeAprobo(UserId usuarioId) {
+        boolean nuncaSeAprobo = loadUserPort.byId(usuarioId).map(User::pendienteDeAprobacion).orElse(false);
+        if (nuncaSeAprobo) {
+            deleteUserPort.deleteById(usuarioId);
+        }
     }
 
     /** PUBLIC_ENDPOINT (gap #9) — ver javadoc de {@link CheckAccountRequestStatusUseCase}. */

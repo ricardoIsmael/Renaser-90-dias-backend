@@ -117,6 +117,8 @@ class StaffAdminService implements ListStaffUseCase, UpdateUserStatusUseCase, Up
 
     private static void applyStatus(User target, UserStatus newStatus) {
         switch (newStatus) {
+            // ACTIVE y SUSPENDED solo sobre una cuenta ya aprobada: sobre una pendiente el dominio responde
+            // 409 (E-367). Activarla por aca salteaba el alta y la dejaba entrar sin programa.
             case ACTIVE -> target.reactivate();
             case SUSPENDED -> target.suspend();
             // INACTIVE es "registrado, sin aprobar todavia" (R-3, 2026-08-27): lo pone el

@@ -41,7 +41,8 @@ class UserPersistenceMapper {
                 toJpaRole(user.role()),
                 toJpaStatus(user.status()),
                 user.lastActiveAt(),
-                user.bajaSolicitadaEn());
+                user.bajaSolicitadaEn(),
+                false); // `nueva`: solo la marca registrarNueva (E-365); para save() sigue siendo un upsert
     }
 
     /** Version no-privada de {@link #toJpaRole}, para que el adaptador traduzca filtros de busqueda. */

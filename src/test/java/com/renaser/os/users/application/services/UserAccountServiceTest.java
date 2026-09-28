@@ -96,6 +96,7 @@ class UserAccountServiceTest {
                 loadParticipacionProgramaPort, new RequireActiveUserGuard(loadUserPort), saveCredencialPort,
                 enviarEmailPort, passwordEncoder, events, CLOCK, idGenerator, transactionTemplate);
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(saveUserPort.registrarNueva(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(passwordEncoder.encode(org.mockito.ArgumentMatchers.anyString())).thenReturn("{bcrypt}hash");
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
     }
@@ -189,6 +190,22 @@ class UserAccountServiceTest {
                 .isInstanceOf(NotAuthorizedException.class);
 
         verify(saveUserPort, never()).save(any());
+        verify(saveUserPort, never()).registrarNueva(any());
+    }
+
+    /** E-365: el rol del actor se mira antes que la existencia, para no contarle a un MENTOR que ids existen. */
+    @Test
+    @DisplayName("E-365: un MENTOR que invita recibe 403 antes de saber si el id existe")
+    void inviteVerificaElRolAntesQueLaExistencia() {
+        UserId actorId = id();
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.MENTOR)));
+
+        assertThatThrownBy(() -> service.invite(new InviteUserCommand(id().value().toString(), "x@renaser.dev",
+                "X", UserRole.ADMIN, actorId)))
+                .isInstanceOf(NotAuthorizedException.class);
+
+        verify(loadUserPort, never()).byEmail(any());
+        verify(saveUserPort, never()).registrarNueva(any());
     }
 
     @Test
@@ -327,5 +344,91 @@ class UserAccountServiceTest {
         assertThatThrownBy(() -> new InviteStaffCommand("aprendiz@renaser.dev", "Aprendiz", UserRole.TRAINEE,
                 actorId))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ─── E-365 (SEG-08): invitar nunca modifica una cuenta que ya existe ─────────────
+
+    /**
+     * SEG-08 (e2e del 2026-09-27): {@code POST /users/invite} con el id de un MENTOR suspendido y otro
+     * correo respondio 201 y le piso correo, nombre, rol (MENTOR -> ADMIN) y estado (SUSPENDIDO ->
+     * ACTIVO); la persona entro con el correo nuevo y su contrasena de siempre, ya como ADMIN. Falla
+     * contra el codigo viejo, que guardaba el usuario "nuevo" encima del existente.
+     */
+    @Test
+    @DisplayName("E-365: invitar con el id de una cuenta que ya existe es un conflicto y no la toca")
+    void inviteNoPisaUnaCuentaExistente() {
+        UserId actorId = id();
+        UserId existenteId = id();
+        User mentorSuspendido = suspendido(existenteId, UserRole.MENTOR);
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        lenient().when(loadUserPort.byId(existenteId)).thenReturn(Optional.of(mentorSuspendido));
+        lenient().when(loadUserPort.byEmail(any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.invite(new InviteUserCommand(existenteId.value().toString(),
+                "pisado@renaser.dev", "Pisado Por Invitacion", UserRole.ADMIN, actorId)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Ya existe una cuenta con ese id");
+
+        verify(saveUserPort, never()).save(any());
+        verify(saveUserPort, never()).registrarNueva(any());
+        verify(events, never()).publishEvent(any());
+        assertThat(mentorSuspendido.role()).isEqualTo(UserRole.MENTOR);
+        assertThat(mentorSuspendido.status()).isEqualTo(UserStatus.SUSPENDED);
+    }
+
+    /** El alta va por el INSERT que falla si el id ya existe, nunca por el upsert de {@code save}. */
+    @Test
+    @DisplayName("E-365: invitar a alguien nuevo lo crea con registrarNueva, nunca con save")
+    void inviteCreaLaCuentaConUnAltaQueNoPisa() {
+        UserId actorId = id();
+        UserId nuevoId = id();
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        when(loadUserPort.byId(nuevoId)).thenReturn(Optional.empty());
+        when(loadUserPort.byEmail(new Email("mentora@renaser.dev"))).thenReturn(Optional.empty());
+
+        UserId creado = service.invite(new InviteUserCommand(nuevoId.value().toString(), "mentora@renaser.dev",
+                "Mentora Nueva", UserRole.ADMIN, actorId));
+
+        assertThat(creado).isEqualTo(nuevoId);
+        var alta = org.mockito.ArgumentCaptor.forClass(User.class);
+        verify(saveUserPort).registrarNueva(alta.capture());
+        assertThat(alta.getValue().role()).isEqualTo(UserRole.ADMIN);
+        verify(saveUserPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("E-365: invitar con un correo que ya tiene cuenta es un conflicto")
+    void inviteRechazaUnCorreoQueYaTieneCuenta() {
+        UserId actorId = id();
+        UserId nuevoId = id();
+        User conEseCorreo = activo(id(), UserRole.TRAINEE);
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        lenient().when(loadUserPort.byId(nuevoId)).thenReturn(Optional.empty());
+        lenient().when(loadUserPort.byEmail(conEseCorreo.email())).thenReturn(Optional.of(conEseCorreo));
+
+        assertThatThrownBy(() -> service.invite(new InviteUserCommand(nuevoId.value().toString(),
+                conEseCorreo.email().value(), "Otra Persona", UserRole.MENTOR, actorId)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Ya existe una cuenta con este correo");
+
+        verify(saveUserPort, never()).save(any());
+        verify(saveUserPort, never()).registrarNueva(any());
+    }
+
+    // ─── E-369 (SEG-16): biografía y departamento con tope ──────────────────────────
+
+    /** SEG-16 (e2e del 2026-09-27): {@code PATCH /users/me} guardaba 1 MB en cada campo. */
+    @Test
+    @DisplayName("E-369: editar el perfil con una biografia de 1 MB se rechaza y no guarda nada")
+    void updateMyProfileRechazaUnaBiografiaEnorme() {
+        UserId userId = id();
+        when(loadUserPort.byId(userId)).thenReturn(Optional.of(activo(userId, UserRole.ALCHEMIST)));
+
+        assertThatThrownBy(() -> service.updateMyProfile(
+                new UpdateMyProfileCommand(userId, "Nombre", null, "a".repeat(1_048_576), "Área")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("biografía");
+
+        verify(saveUserPort, never()).save(any());
     }
 }
