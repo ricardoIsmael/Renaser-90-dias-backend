@@ -11570,6 +11570,16 @@ hábitos de admin a las 12:00 (y a la mañana, el Despertar 16:00 de `e2e-ap-emu
 
 **Causa real.** Cerrar sesión no cancela las alarmas locales.
 
-**Solución.** Sin arreglar (fuera del pedido de hoy). Afecta a quien comparte teléfono o cambia de cuenta.
+**Solución.** Frontend (commit «Cancelar las alarmas locales al cerrar sesión…», `alarmas/alarmasDeLaCuenta.ts`).
+Al cerrar sesión, o al entrar con una cuenta distinta de la última, se cancelan todas las alarmas locales y se
+borra lo guardado de ellas (ids, horas, cambios con fecha). Se conservan las preferencias por persona. Si vuelve
+la misma cuenta: los hábitos se rearman desde el servidor (D-217); el aviso diario de objetivos y el repaso de
+los domingos, desde lo que el teléfono tenía pedido; las acciones, los eventos y el Código Renaser, con sus
+sincronizadores. Emulador (`dumpsys alarm`): admin 12 alarmas → cierra sesión 0 → entra `e2e-ap-rot2` 6 (solo
+sus acciones) → sale 0 → vuelve admin 7 (sus hábitos). Prueba `alarmas/__tests__/alarmasDeLaCuentaAlSalir.test.ts`
+(con el `AuthProvider` real; falla contra el código viejo).
 
-**Cómo evitar que vuelva a pasar.** Al cerrar sesión, cancelar las alarmas de esa persona.
+> **Corregido 2026-09-28.** Decía «Sin arreglar (fuera del pedido de hoy)». Se arregló antes de subir a producción.
+
+**Cómo evitar que vuelva a pasar.** Todo lo que programe una alarma local nueva guarda sus ids con un prefijo
+`renaser.…` y lo suma a `PREFIJOS_DE_ALARMAS`.
