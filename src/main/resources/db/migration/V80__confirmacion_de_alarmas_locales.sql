@@ -1,0 +1,29 @@
+-- V80 — Confirmacion de alarmas locales por dispositivo (D-217, 2026-09-28).
+--
+-- QUE RESUELVE. Desde D-184 el aviso de inicio de un habito con recordatorio NO se empujaba a los
+-- telefonos: se confiaba en la alarma local que la app programa en el dispositivo. Probado en el
+-- emulador el 2026-09-28: si Android detiene la app a la fuerza (cerrarla desde recientes en
+-- Xiaomi/Samsung/Huawei, ahorro de bateria), la alarma de mañana desaparece hasta que se vuelve a
+-- abrir la app («Jugo verde mañana, antes: 1 / tras detenerla a la fuerza: 0»), y ese dia no sonaba
+-- nada. Ahora la app avisa al servidor cada vez que rearma sus alarmas
+-- (POST /api/v1/push-tokens/alarmas-locales) y el servidor empuja igual a todo telefono que no
+-- confirmo en las ultimas 26 h.
+-- Limite: Android no entrega push a una app detenida a la fuerza, asi que ese caso exacto no lo cubre
+-- esto sino la guia de bateria de la app; esto cubre la alarma perdida con la app viva, la
+-- reinstalacion, el telefono nuevo y el APK viejo (E-394).
+--
+-- POR QUE UNA COLUMNA Y NO UNA TABLA. La confirmacion es de UN dispositivo, y el dispositivo ya tiene
+-- su fila: tokens_push (una por token). Una tabla aparte seria una fila 1:1 con esta.
+--
+-- POR QUE NO SE REUSA actualizado_en. Lo toca cada POST /api/v1/push-tokens, y la app lo manda en cada
+-- inicio de sesion — tambien el APK anterior a D-217, que no rearma ni confirma nada. Con
+-- actualizado_en, ese APK pareceria "confirmado" y se quedaria sin el respaldo, que es justo el caso
+-- que tiene que seguir recibiendo el push (la app no se actualiza por aire).
+--
+-- POR QUE ESTE NOMBRE. Dice lo que la app afirmo (sus alarmas) y cuando (_en, como el resto del
+-- esquema). NULL = nunca confirmo: navegador, APK viejo o token recien registrado.
+--
+-- Nullable y sin default: toda fila existente queda "nunca confirmo" y sigue recibiendo el push.
+-- Sin CHECK: la vigencia (26 h) depende del reloj, la impone el dominio (TokenPush).
+
+ALTER TABLE renaser.tokens_push ADD COLUMN alarmas_confirmadas_en timestamptz NULL;

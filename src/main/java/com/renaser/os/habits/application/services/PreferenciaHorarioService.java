@@ -19,6 +19,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
 import com.renaser.os.habits.domain.model.preferencia.AntelacionDelRecordatorio;
+import com.renaser.os.habits.domain.model.preferencia.AntelacionesDelRecordatorio;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.habits.domain.model.preferencia.CuotaEdicionHorario;
 import com.renaser.os.habits.domain.model.preferencia.HorarioPorFecha;
@@ -99,6 +100,10 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         VentanaDelDia.requireHoraDisparoDentroDelDia(command.horaDisparo());
         // PLN-09: un dato invalido es un 400 con el rango, antes de leer cuotas o escribir nada.
         AntelacionDelRecordatorio.requireDentroDelRango(command.minutosRecordatorio());
+        // D-217: con el conjunto, cada antelacion vale lo mismo que el numero suelto (400 si no).
+        if (command.antelacionesRecordatorio() != null) {
+            AntelacionesDelRecordatorio.normalizar(command.antelacionesRecordatorio());
+        }
         requirePropio(command.actorId(), habito);
         if (!habito.activo()) throw new IllegalArgumentException("El habito no esta activo");
 
@@ -187,7 +192,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         if (command.fecha() != null) {
             var preferencia = PreferenciaHorario.crear(command.actorId(), command.habitoId(),
                     command.horaDisparo(), command.horaLimite(), ahora);
-            preferencia.actualizarRecordatorio(command.recordatorioActivo(), command.minutosRecordatorio(), ahora);
+            aplicarRecordatorio(preferencia, command, ahora);
             var horario = new HorarioPorFecha(command.fecha(), preferencia);
             savePreferenciaPort.saveParaFecha(horario);
             return new HorarioGuardado(preferencia.horaDisparo(), preferencia.horaLimite());
@@ -195,7 +200,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         asegurarPreferenciaYRecordatorio(command, contexto.ventanaVigente(), ahora);
         CambioHorarioPendiente pendiente = CambioHorarioPendiente.programar(command.actorId(), command.habitoId(),
                 command.horaDisparo(), command.horaLimite(), command.recordatorioActivo(),
-                command.minutosRecordatorio(), contexto.fechaEfectivaDiferido(), ahora);
+                command.minutosEfectivos(), contexto.fechaEfectivaDiferido(), ahora);
         saveCambioPendientePort.save(pendiente);
         return new HorarioGuardado(pendiente.horaDisparo(), pendiente.horaLimite());
     }
@@ -229,8 +234,27 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
                 .porParticipanteYHabito(command.actorId(), command.habitoId())
                 .orElseGet(() -> PreferenciaHorario.crear(command.actorId(), command.habitoId(),
                         vigente.horaDisparo(), vigente.horaLimite(), ahora));
-        preferencia.actualizarRecordatorio(command.recordatorioActivo(), command.minutosRecordatorio(), ahora);
+        aplicarRecordatorio(preferencia, command, ahora);
         savePreferenciaPort.save(preferencia);
+    }
+
+    /**
+     * D-217: con el conjunto de antelaciones se guarda entero (y los minutos son su más temprana); sin
+     * él —el APK de producción, el acompañante— se guarda el número suelto, y el dominio decide si el
+     * conjunto que ya estaba sigue valiendo ({@code AntelacionesDelRecordatorio.trasMinutosSueltos}).
+     *
+     * <p>El cambio diferido ({@code cambios_horario_pendientes}) guarda solo los minutos, a propósito: el
+     * recordatorio se aplica HOY (E-159) y la promoción vuelve a escribir esos mismos minutos, que son la
+     * más temprana del conjunto, así que el conjunto se conserva sin una columna más.
+     */
+    private static void aplicarRecordatorio(PreferenciaHorario preferencia, EditarPreferenciaHorarioCommand command,
+                                            Instant ahora) {
+        if (command.antelacionesRecordatorio() != null) {
+            preferencia.actualizarRecordatorioConAntelaciones(command.recordatorioActivo(),
+                    command.antelacionesRecordatorio(), ahora);
+        } else {
+            preferencia.actualizarRecordatorio(command.recordatorioActivo(), command.minutosRecordatorio(), ahora);
+        }
     }
 
     /**

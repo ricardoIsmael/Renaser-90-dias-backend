@@ -50,11 +50,11 @@ class ExpoPushTransporteCanalTest {
 
     @ParameterizedTest
     @EnumSource(TipoNotificacion.class)
-    @DisplayName("con todo apagado (el default) el cuerpo es IDÉNTICO al de antes de D-188, para cada tipo")
+    @DisplayName("con todo apagado (el default) el cuerpo es el de antes de D-188, más la prioridad alta de D-217")
     void apagadoEsIdenticoAlDeAntes(TipoNotificacion tipo) {
         assertThat(cuerpo(todoApagado(), PlataformaPush.ANDROID, tipo))
                 .isEqualTo("{\"to\":\"ExponentPushToken[abc]\",\"title\":\"Titulo\",\"body\":\"Cuerpo\","
-                        + "\"sound\":\"default\",\"data\":{\"route\":\"/ruta\"}}");
+                        + "\"sound\":\"default\",\"priority\":\"high\",\"data\":{\"route\":\"/ruta\"}}");
     }
 
     @Test
@@ -115,7 +115,18 @@ class ExpoPushTransporteCanalTest {
     void elCuerpoSeConserva() {
         assertThat(cuerpo(todoEncendido(), PlataformaPush.ANDROID, TipoNotificacion.RECORDATORIO_EVENTO))
                 .isEqualTo("{\"to\":\"ExponentPushToken[abc]\",\"title\":\"Titulo\",\"body\":\"Cuerpo\","
-                        + "\"sound\":\"default\",\"channelId\":\"recordatorios-eventos\","
+                        + "\"sound\":\"default\",\"priority\":\"high\",\"channelId\":\"recordatorios-eventos\","
                         + "\"data\":{\"route\":\"/ruta\"}}");
+    }
+
+    @Test
+    @DisplayName("D-218: la ruta del habito, con su ?dimension=, viaja tal cual en data.route y el JSON sigue valido")
+    void rutaDelHabitoConConsulta() throws Exception {
+        String ruta = "/habitos/0f000000-0000-4000-8000-000000000001?dimension=BODY";
+        String json = todoApagado().cuerpoJson(token(PlataformaPush.ANDROID),
+                new MensajePush(TipoNotificacion.RECORDATORIO_HABITO, "Titulo", "Cuerpo", ruta));
+
+        var leido = new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+        assertThat(leido.path("data").path("route").asText()).isEqualTo(ruta);
     }
 }

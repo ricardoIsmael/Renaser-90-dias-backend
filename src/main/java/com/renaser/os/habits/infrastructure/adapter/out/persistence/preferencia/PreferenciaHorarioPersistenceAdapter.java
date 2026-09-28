@@ -5,6 +5,7 @@ import com.renaser.os.habits.application.ports.out.preferencia.SavePreferenciaHo
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.preferencia.HorarioPorFecha;
 import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
+import com.renaser.os.habits.domain.model.preferencia.AntelacionesDelRecordatorio;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
@@ -78,10 +79,10 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
                 var anterior = efectivos.get(id);
                 Integer minutos = anterior != null ? anterior.minutosRecordatorio() : null;
                 if (p.getMinutosRecordatorio() != null) minutos = p.getMinutosRecordatorio().intValue();
+                boolean activo = p.getRecordatorioActivo() != null ? p.getRecordatorioActivo()
+                        : anterior != null && anterior.recordatorioActivo();
                 efectivos.put(id, PreferenciaHorario.rehydrate(participanteId, id, p.getHoraDisparo(), p.getHoraLimite(),
-                        p.getRecordatorioActivo() != null ? p.getRecordatorioActivo()
-                                : anterior != null && anterior.recordatorioActivo(),
-                        minutos,
+                        activo, minutos, conjuntoTras(anterior, activo, minutos),
                         p.getCreadoEn(), p.getCreadoEn()));
             }
         }
@@ -107,6 +108,7 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
                     p.getHoraLimite() != null ? p.getHoraLimite() : (anterior != null ? anterior.horaLimite() : null),
                     anterior != null && anterior.recordatorioActivo(),
                     anterior != null ? anterior.minutosRecordatorio() : null,
+                    anterior != null ? anterior.antelacionesRecordatorio() : null,
                     p.getCreadoEn(), p.getActualizadoEn()));
         }
         for (var p : fechasRepository.findByParticipanteIdAndHabitoIdInAndFecha(participanteId.value(), ids, fecha)) {
@@ -116,11 +118,24 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
             if (p.getHoraDisparo() == null) {
                 continue;
             }
+            Integer minutosDelDia = p.getMinutosRecordatorio() == null ? null : p.getMinutosRecordatorio().intValue();
             efectivos.put(id, PreferenciaHorario.rehydrate(participanteId, id, p.getHoraDisparo(), p.getHoraLimite(),
-                    p.isRecordatorioActivo(), p.getMinutosRecordatorio() == null ? null : p.getMinutosRecordatorio().intValue(),
+                    p.isRecordatorioActivo(), minutosDelDia,
+                    conjuntoTras(efectivos.get(id), p.isRecordatorioActivo(), minutosDelDia),
                     p.getCreadoEn(), p.getActualizadoEn()));
         }
         return List.copyOf(efectivos.values());
+    }
+
+    /**
+     * D-217: las capas de abajo (cambio pendiente, excepción de una fecha) guardan solo los minutos. El
+     * conjunto de la preferencia general sigue valiendo si esos minutos son su más temprana; si no, se
+     * sabe solo ese número. Misma regla que el dominio ({@link AntelacionesDelRecordatorio}).
+     */
+    private static List<Integer> conjuntoTras(PreferenciaHorario anterior, boolean activo, Integer minutos) {
+        return AntelacionesDelRecordatorio.trasMinutosSueltos(
+                anterior != null ? anterior.antelacionesRecordatorio() : null,
+                anterior != null ? anterior.minutosRecordatorio() : null, activo, minutos);
     }
 
     @Override

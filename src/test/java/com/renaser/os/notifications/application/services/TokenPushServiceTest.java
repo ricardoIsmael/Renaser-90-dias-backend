@@ -1,7 +1,9 @@
 package com.renaser.os.notifications.application.services;
 
 import com.renaser.os.notifications.application.ports.in.tokenpush.RegistrarTokenPushUseCase.RegistrarTokenPushCommand;
+import com.renaser.os.notifications.application.ports.in.tokenpush.ConfirmarAlarmasLocalesUseCase.ConfirmarAlarmasLocalesCommand;
 import com.renaser.os.notifications.application.ports.out.tokenpush.BorrarTokensPushDeUsuarioPort;
+import com.renaser.os.notifications.application.ports.out.tokenpush.ConfirmarAlarmasLocalesPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.UpsertTokenPushPort;
 import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
@@ -22,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -45,6 +48,8 @@ class TokenPushServiceTest {
     @Mock
     private BorrarTokensPushDeUsuarioPort borrarTokensPushDeUsuarioPort;
     @Mock
+    private ConfirmarAlarmasLocalesPort confirmarAlarmasLocalesPort;
+    @Mock
     private UserSummaryFinder userSummaryFinder;
     @Mock
     private IdGenerator idGenerator;
@@ -53,7 +58,7 @@ class TokenPushServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TokenPushService(upsertTokenPushPort, borrarTokensPushDeUsuarioPort,
+        service = new TokenPushService(upsertTokenPushPort, borrarTokensPushDeUsuarioPort, confirmarAlarmasLocalesPort,
                 new ActorNotificacionesGuard(userSummaryFinder), CLOCK, idGenerator);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(upsertTokenPushPort.upsertPorToken(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -115,5 +120,40 @@ class TokenPushServiceTest {
         verify(borrarTokensPushDeUsuarioPort).borrarDe(suspendido);
         // La asercion que lo fija: no se le pregunta el estado a nadie antes de revocar.
         verify(userSummaryFinder, never()).findById(any());
+    }
+
+    // ─── D-217: confirmacion de alarmas locales ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("D-217: confirmar marca el token de la persona con la hora del servidor")
+    void confirmarMarcaElTokenPropio() {
+        UserId usuario = UserId.of(UUID.randomUUID());
+        when(confirmarAlarmasLocalesPort.confirmar(usuario, "expo-tok-1", CLOCK.now())).thenReturn(1);
+
+        Instant confirmadas = service.confirmar(new ConfirmarAlarmasLocalesCommand(usuario, "expo-tok-1"));
+
+        assertThat(confirmadas).isEqualTo(CLOCK.now());
+    }
+
+    @Test
+    @DisplayName("D-217: un token que no es de la persona (o no existe) -> 404, sin marcar nada")
+    void confirmarTokenAjenoEs404() {
+        UserId usuario = UserId.of(UUID.randomUUID());
+        when(confirmarAlarmasLocalesPort.confirmar(usuario, "ajeno", CLOCK.now())).thenReturn(0);
+
+        assertThatThrownBy(() -> service.confirmar(new ConfirmarAlarmasLocalesCommand(usuario, "ajeno")))
+                .isInstanceOf(NoSuchElementException.class);
+    }
+
+    @Test
+    @DisplayName("D-217: una cuenta SUSPENDIDA no confirma alarmas")
+    void suspendidoNoConfirma() {
+        UserId usuario = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(usuario)).thenReturn(Optional.of(
+                new UserSummary(usuario, "Test", null, UserRole.TRAINEE, UserStatus.SUSPENDED)));
+
+        assertThatThrownBy(() -> service.confirmar(new ConfirmarAlarmasLocalesCommand(usuario, "expo-tok-1")))
+                .isInstanceOf(NotAuthorizedException.class);
+        verify(confirmarAlarmasLocalesPort, never()).confirmar(any(), any(), any());
     }
 }

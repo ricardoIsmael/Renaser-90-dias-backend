@@ -11195,6 +11195,125 @@ tablas. Agrupar el mes 3 como semanas 9 a 13 queda por confirmar con el dueño.
 **Cómo evitar que vuelva a pasar.** Una regla de calendario que vive en los dos lados se prueba con las MISMAS tablas en
 los dos (`SemanaProgramaTest` ↔ `periodoDelPrograma.test.ts`).
 
+## E-394 · La alarma de mañana desaparece al detener la app, y el servidor no respalda: «Jugo verde mañana, antes: 1 / tras detenerla a la fuerza: 0»
+
+**Síntoma (emulador, 28/09, `dumpsys alarm`).** Recordatorio de Jugo verde a las 10:00 «a la hora»: sonó y quedó
+`origWhen=2026-09-29 10:00 window=0`. Tras detener la app a la fuerza (lo que hacen Xiaomi, Samsung o Huawei al cerrarla
+desde recientes o para ahorrar batería), la alarma de mañana: **0**, hasta volver a abrir la app. En el servidor, la
+prueba nueva contra la regla vieja (`SOLO_NAVEGADOR`):
+`Wanted but not invoked: pushPort.enviar([TokenPush[...], TokenPush[...]], MensajePush[tipo=RECORDATORIO_HABITO, titulo=T, cuerpo=C, rutaApp=null]); ... However, there was exactly 1 interaction with this mock`
+(solo salió al token WEB; `NotificacionServiceTest`, `Tests run: 18, Failures: 1`).
+
+**Causa real.** Dos cosas juntas. Android borra las alarmas de una app detenida a la fuerza, y `RearmadorDeAlarmas` recién
+las vuelve a armar al abrirla. Y desde D-184 el aviso de inicio de un hábito con recordatorio iba solo al navegador,
+porque el servidor confiaba en la alarma del teléfono: cuando esta se perdía, silencio.
+
+**Solución (D-217).** El teléfono confirma sus alarmas al servidor (`POST /api/v1/push-tokens/alarmas-locales`,
+`tokens_push.alarmas_confirmadas_en`, V80) después de dejarlas al día; sin confirmación en 26 h (o nunca, el APK viejo)
+el push de inicio también va al teléfono (`EntregaPush.RESPALDO_DE_ALARMA_LOCAL`). Guía de batería en Yo → Alarmas.
+**Límite:** Android tampoco entrega push (FCM) a una app detenida a la fuerza; en ese caso exacto solo sirve que el
+teléfono no la detenga (la guía). El respaldo cubre la alarma perdida con la app viva, la reinstalación, el teléfono
+nuevo y el APK viejo. No se probó el push en el emulador.
+
+**De paso (mismo cambio, error de la prueba).** `TokenPushPersistenceAdapterTest` falló con
+`expected: 2026-08-24T10:00:00Z but was: null`: una lectura JPA antes del UPDATE por JDBC, dentro de la misma
+`@Transactional` de la prueba, dejaba la entidad vieja en la caché de primer nivel. El código estaba bien; la prueba ya no
+lee por JPA antes del UPDATE (el estado inicial sale de lo que devuelve el UPSERT). Si un adaptador escribe con `JdbcTemplate`, su prueba no relee por JPA en la misma
+transacción sin `flush`/`clear`.
+
+**Cómo evitar que vuelva a pasar.** Una regla que deja de mandar un aviso porque «el otro lado ya lo cubre» necesita saber
+que el otro lado sigue vivo; si no lo puede saber, no corta: respalda. Lo vigilan `EntregaPushTest` (con el reloj a las
+02:00 UTC) y `confirmacionYPuestaAlDia.test.ts` en la app.
+
+## E-395 · La app no podía saber si las alarmas eran exactas: `window=+40m59s`
+
+**Síntoma.** Sin el permiso «Alarmas y recordatorios» (Android 14+ no lo concede solo) la alarma sale inexacta:
+`dumpsys alarm` mostró `window=+40m59s` (E-314), hasta ~40 min tarde. La app mostraba un aviso fijo en Yo → Alarmas porque
+no podía leer el permiso (`permisoDeAlarmaExacta.ts`: «No se puede saber si está concedido sin un módulo nativo nuevo»), y
+no lo pedía en ningún guardado.
+
+**Causa real.** `expo-notifications` consulta `canScheduleExactAlarms()` por dentro para elegir la clase de alarma, pero no
+lo expone; React Native tampoco.
+
+**Solución (D-217).** Módulo nativo local `modules/renaser-alarmas` (Kotlin, sin dependencias npm):
+`puedeProgramarAlarmasExactas()` y `abrirAjusteDeAlarmasExactas()` (con `package:`, directo en Renaser). Se pide una vez al
+guardar el primer recordatorio si está negado; Yo → Alarmas muestra el estado real y lo relee al volver de los ajustes. Con
+alarmas inexactas el teléfono no confirma (E-394): mejor el push a tiempo. Compilado con Gradle
+(`:renaser-alarmas:compileReleaseKotlin`); no probado en un teléfono.
+
+**Cómo evitar que vuelva a pasar.** El módulo se carga con `requireOptionalNativeModule`: un JS nuevo sobre un APK sin el
+módulo queda en `desconocido` y se comporta como antes, sin caerse (la app no se actualiza por aire).
+
+## E-396 · Las acciones de objetivos agendadas para después de mañana no tenían alarma
+
+**Síntoma (diagnóstico del 28/09).** Solo se armaban alarmas `DATE` de hoy y mañana, al abrir la app
+(`SincronizadorDeAcciones` leía `/rocks/today` y `/rocks/tomorrow`). Una acción del jueves agendada el lunes no tenía alarma
+hasta que la app se abriera el miércoles.
+
+**Causa real.** No había ningún endpoint que devolviera lo agendado más allá de mañana, aunque desde E-208 se puede agendar
+hasta el domingo.
+
+**Solución (D-217).** `GET /api/v1/rocks/upcoming` → `{desde, hasta, rocas}`, de hoy al último día agendable
+(`FechasPlanificables`), y la app arma todas las acciones con hora de ese rango; con `desde`/`hasta` también quita la alarma
+de una acción borrada de cualquiera de esos días. Contra un backend anterior cae a hoy y mañana.
+
+**Cómo evitar que vuelva a pasar.** Si se amplía una ventana de planificación, revisar quién arma las alarmas de lo que se
+planifica. `RocasAgendadasServiceTest` (martes con el reloj a las 03:00 UTC, domingo con el lunes) y
+`recordatoriosDeAcciones.test.ts` (acción del 01/10 con el reloj en la madrugada UTC).
+
+## E-397 · Cambiar la hora de un hábito lo hacía sonar HOY a la hora nueva, que el servidor todavía no aplica
+
+**Síntoma.** A las 06:00, pasar un hábito de las 07:00 a las 10:00 (el servidor lo difiere a mañana, D-91): hoy no sonaba a
+las 07:00 y sí a las 10:00. La prueba nueva, con lo que programaba el código viejo:
+`Expected: ["fecha 2026-09-28 07:00", "fecha 2026-09-29 10:00"]` · `Received: ["diaria 10:00"]`.
+
+**Causa real.** `programar` mueve la alarma DIARIA en el acto, y una diaria no sabe «desde mañana». `cambioDeHora.ts` lo
+decía a propósito («la alarma se mueve igual en el acto»).
+
+**Solución (D-217).** `programarConCambioDiferido`: hoy, una alarma de fecha a la hora de hoy; desde la fecha, la diaria
+nueva, o una alarma de fecha para el primer día si la diaria sonaría antes, que `completarCambiosDiferidos` convierte en
+diaria al abrir la app. La usan Training, Plan, Yo → Alarmas y el rearmado desde el servidor.
+
+**Cómo evitar que vuelva a pasar.** `recordatoriosDiferidosYDesdeServidor.test.ts`, con relojes en la madrugada UTC que en
+Lima son la noche anterior (regla 02).
+
+## E-398 · Teléfono nuevo o app reinstalada: el servidor dice «recordatorio activo» y el teléfono no tiene alarma
+
+**Síntoma.** `preferencias_horario`: `recordatorio_activo = true`, `minutos_recordatorio = 0` para Jugo verde; en el
+teléfono recién instalado, `dumpsys alarm | grep com.renaser.app`: nada. No sonaba hasta volver a guardar la hora de cada
+hábito.
+
+**Causa real.** Las antelaciones y los ids de las alarmas viven solo en AsyncStorage; nada volvía a armarlas desde lo que
+guarda el servidor.
+
+**Solución (D-217).** `armarRecordatoriosQueFaltan` al abrir la app: con recordatorio activo, minutos y hora en
+`GET /habit-preferences`, y sin alarma en el teléfono, la arma (con el cambio pendiente si lo hay). No pide permiso. Desde
+V81 el servidor guarda todos los avisos (`reminderMinutesList`) y se reconstruyen todos. *Corregido 2026-09-28:* decía
+que el servidor guardaba un solo número y que «30 min antes y a la hora» volvía como «30 min antes»; el dueño pidió
+guardarlos todos.
+
+**Cómo evitar que vuelva a pasar.** Lo que vive solo en el teléfono se pierde con el teléfono: si el servidor tiene el
+dato, el teléfono se reconstruye desde él al entrar.
+
+## E-399 · Tocar el recordatorio de un hábito solo abría la app: `Received: null`
+
+**Síntoma.** La alarma local no llevaba `data` y el push del servidor iba con `rutaApp = null`: el toque abría la app en la
+pestaña que estuviera. Las pruebas nuevas contra el código viejo:
+`destinoDeRuta('/habitos/h-1?dimension=BODY')` → `Expected: {"dimension": "CUERPO", "habitoId": "h-1", "tipo": "habito"}` ·
+`Received: null`; y en el servidor
+`expected: "/habitos/0f000000-0000-4000-8000-000000000001?dimension=BODY" but was: null`
+(`AvisoHabitoNotificationListenerTest`, `Tests run: 8, Failures: 4`).
+
+**Causa real.** Nadie había definido una ruta para el aviso de un hábito; solo los eventos (E-5) y el mentor tenían la suya.
+Además, `AbridorDeEventos` navegaba apenas existía la pestaña, aunque el Código Renaser tapara la app.
+
+**Solución (D-218).** Ruta `/habitos/{id}?dimension={categoría}` en los dos lados y `/objetivos/{fecha}?eje=` en las
+acciones; `AbridorDeAvisos` las abre y espera a que se cierren el Código Renaser, la tarjeta del arranque guiado o el Pacto
+(`capasObligatorias.ts`). Las alarmas viejas reciben la ruta al abrir la app.
+
+**Cómo evitar que vuelva a pasar.** `abrirAviso.test.ts` prueba la espera entera (Código Renaser en el día 1-7, Pacto en el
+día 1, Mapa en el día 7, arranque en frío). Una capa nueva que tome la pantalla se anota con `useCapaObligatoria`.
+
 ## E-400 · El menú «⋯» de Yo no abre nada
 
 **Síntoma (emulador, 28/09).** En Yo, tocar «⋯» (arriba a la derecha) no hace nada: ni un error ni un cambio de
@@ -11306,3 +11425,71 @@ el nombre o la ⓘ de la cabecera del chat del grupo (aprendiz, mentor y los dos
 grande de Comunidad no hace nada.
 
 **Cómo evitar que vuelva a pasar.** Lo de E-400: sin acción no se dibuja el ícono.
+
+## E-405 · El push de Expo salía sin prioridad: `expected: "high" but was: ""`
+
+**Síntoma.** El dueño preguntó por qué WhatsApp avisa con la app cerrada y Renaser no siempre. El cuerpo que
+`ExpoPushTransporte` manda a Expo no llevaba `priority`. La prueba nueva contra el código viejo:
+`expected: "high" but was: ""` (`ExpoPushTransportePrioridadTest`, `Tests run: 18, Failures: 18`).
+
+**Causa real.** Sin `priority`, Expo usa la normal, y Android entrega esos mensajes en lote y tarde con el teléfono en
+reposo (Doze).
+
+**Solución.** `"priority":"high"` en todo push de Expo. El `channelId` sigue apagado (D-188). A una app detenida a la
+fuerza no le llega nada con ninguna prioridad: eso lo cubre la guía de batería (E-394).
+
+**Cómo evitar que vuelva a pasar.** `ExpoPushTransportePrioridadTest` y los cuerpos completos de
+`ExpoPushTransporteCanalTest`.
+
+## E-406 · Apagar el recordatorio (o cambiarle la hora) en otro dispositivo no tocaba la alarma de este teléfono
+
+**Síntoma.** Con el recordatorio apagado desde la web o desde otro teléfono, este seguía sonando todos los días; con la
+hora cambiada en otro lado, sonaba a la vieja.
+
+**Causa real.** La alarma se programa solo desde la pantalla donde se guarda; nada comparaba el teléfono con lo que dice
+`GET /habit-preferences`.
+
+**Solución (D-217).** `ajustarRecordatoriosAlServidor`, al abrir la app: cancela lo apagado, arma lo que falta y
+reprograma lo que cambió de hora, de avisos o de cambio pendiente. La hora programada se anota en el teléfono para poder
+compararla. Sin el conjunto del servidor (`null`, filas anteriores a V81) se conservan los avisos del teléfono si el más
+temprano coincide. Pruebas en `recordatoriosDiferidosYDesdeServidor.test.ts`.
+
+**Cómo evitar que vuelva a pasar.** Si un dato vive en el servidor y tiene una copia en el teléfono, el teléfono se
+compara con el servidor al entrar, no solo al guardar.
+
+## E-407 · En la web, tocar el push solo enfocaba la ventana
+
+**Síntoma.** El service worker (`public/renaser-push-sw.js`) enfocaba la ventana abierta y no le decía adónde ir; la app
+web tampoco leía la ruta al abrirse una ventana nueva.
+
+**Causa real.** El `notificationclick` usaba `data.url` solo para abrir una ventana nueva, y nadie la interpretaba.
+
+**Solución (D-218).** El service worker le manda `{tipo: 'renaser-abrir-aviso', ruta}` a la ventana abierta; sin ventana
+abre una en la ruta, que la app lee y limpia. `aperturaEnLaWeb.test.ts` carga el service worker real y falla contra el
+viejo (`postMessage` nunca llamado).
+
+**Cómo evitar que vuelva a pasar.** Una ruta de aviso nueva se prueba en los dos canales: el teléfono (`data.route`) y la
+web (`data.url`).
+
+## E-408 · La hoja de Training mostraba «A la hora» marcado y guardaba `recordatorio_activo=false`
+
+**Síntoma (visto dos veces, con Jugo verde, 28/09).** Training → Planificar: la hoja de un hábito sin ninguna preferencia
+abría con «A la hora» ya marcado; al guardar, `preferencias_horario.recordatorio_activo = false` (y en un caso
+`hora_disparo = null`). La pantalla mostraba un recordatorio que no existía: «se guarda pero no suena». Las pruebas nuevas
+contra el código viejo (`planificarDimension.test.ts`): `Expected: false` · `Received: true` (marcado al abrir),
+`Expected: true` · `Received: false` (lo marcado, pisado por la lectura tardía) y `Expected length: 0` ·
+`Received length: 3` (el recordatorio ofrecido con días marcados).
+
+**Causa real.** Tres cosas en `PlanificarDimensionModal`:
+1. Al abrir un hábito, `antelaciones` no se reiniciaba: quedaba la del hábito abierto antes hasta que llegaba
+   `antelacionesDe(...).then(setAntelaciones)`.
+2. Esa lectura, al llegar tarde, pisaba lo que la persona ya había tocado, o la de un hábito anterior pisaba la del actual.
+3. Con días marcados, la hoja seguía mostrando el recordatorio, pero `guardarDias` no lo guarda (y crea la fila sin hora
+   general: el `hora_disparo = null`).
+
+**Solución.** La hoja arranca con lo que dice el servidor (todos los avisos si los conoce, V81); la lectura del teléfono
+solo se usa si sigue abierto el mismo hábito y la persona no tocó nada; con días marcados el recordatorio no se ofrece
+(«El recordatorio se elige sin días marcados.»). Frontend `a22af58`.
+
+**Cómo evitar que vuelva a pasar.** Un estado que se carga en diferido se inicializa en el acto con lo que ya se sabe, y
+la carga tardía no pisa lo que tocó la persona. Si un control se muestra, lo que se guarda tiene que incluirlo.

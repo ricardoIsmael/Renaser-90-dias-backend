@@ -60,7 +60,7 @@ class HabitPreferenceControllerTest {
                     """))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.deferredEffectiveDate").value("2026-09-09"));
         verify(editar).editar(new EditarPreferenciaHorarioCommand(actor, habito, LocalTime.of(9, 0),
-                null, false, null, fecha));
+                null, false, null, fecha, null));
     }
 
     @Test
@@ -74,7 +74,41 @@ class HabitPreferenceControllerTest {
                     """))
                 .andExpect(status().isOk());
         verify(editar).editar(new EditarPreferenciaHorarioCommand(actor, habito, LocalTime.of(9, 0),
-                null, false, null, null));
+                null, false, null, null, null));
+    }
+
+    /** D-217: el conjunto de antelaciones llega al caso de uso; sin él, el pedido del APK viejo sigue igual. */
+    @Test
+    void enviaTodasLasAntelacionesAlCasoDeUso() throws Exception {
+        actor(UserStatus.ACTIVE);
+        when(editar.editar(any())).thenReturn(new ResultadoEdicionPreferencia(habito, LocalTime.of(10, 0),
+                null, true, fecha, 0, 3, 3, "FREE"));
+        mvc.perform(patch("/api/v1/habit-preferences/{id}", habito.value()).header("X-Actor-Id", actor.toString())
+                .contentType("application/json").content("""
+                    {"triggerTime":"10:00:00","limitTime":null,"reminderEnabled":true,
+                     "reminderMinutesBefore":30,"reminderMinutesList":[30,0]}
+                    """))
+                .andExpect(status().isOk());
+        verify(editar).editar(new EditarPreferenciaHorarioCommand(actor, habito, LocalTime.of(10, 0),
+                null, true, 30, null, List.of(30, 0)));
+    }
+
+    @Test
+    void elGetDevuelveTodasLasAntelacionesYNullSiNoSeConocen() throws Exception {
+        actor(UserStatus.ACTIVE);
+        var conConjunto = new ConsultarPreferenciasHorarioUseCase.HorarioDeHabito(habito, "Jugo verde",
+                LocalTime.of(10, 0), null, true, true, 30, null, List.of(30, 0));
+        var vieja = new ConsultarPreferenciasHorarioUseCase.HorarioDeHabito(HabitoId.of(UUID.randomUUID()), "Agua",
+                LocalTime.of(7, 0), null, true, true, 10, null);
+        when(consultar.consultar(actor, fecha)).thenReturn(new ConsultarPreferenciasHorarioUseCase.ResumenPreferenciasHorario(
+                List.of(conConjunto, vieja), new ConsultarPreferenciasHorarioUseCase.CuotaEdicion(0, 3, 3, "FREE")));
+        mvc.perform(get("/api/v1/habit-preferences").param("date", fecha.toString()).header("X-Actor-Id", actor.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.habits[0].reminderMinutesBefore").value(30))
+                .andExpect(jsonPath("$.habits[0].reminderMinutesList[0]").value(30))
+                .andExpect(jsonPath("$.habits[0].reminderMinutesList[1]").value(0))
+                .andExpect(jsonPath("$.habits[1].reminderMinutesBefore").value(10))
+                .andExpect(jsonPath("$.habits[1].reminderMinutesList").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test

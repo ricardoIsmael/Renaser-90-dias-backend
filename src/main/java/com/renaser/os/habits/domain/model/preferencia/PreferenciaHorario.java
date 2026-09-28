@@ -11,6 +11,7 @@ import lombok.experimental.Accessors;
 
 import java.time.Instant;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -34,6 +35,12 @@ public final class PreferenciaHorario {
     private LocalTime horaLimite;
     private boolean recordatorioActivo;
     private Integer minutosRecordatorio;
+    /**
+     * Todas las antelaciones elegidas, de la más temprana a la más tardía; {@code null} = no se conocen
+     * (fila anterior a V81, o recordatorio apagado). {@link #minutosRecordatorio} es siempre su primera
+     * (D-217, {@link AntelacionesDelRecordatorio}).
+     */
+    private List<Integer> antelacionesRecordatorio;
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
@@ -43,15 +50,25 @@ public final class PreferenciaHorario {
         Objects.requireNonNull(habitoId, "habitoId es obligatorio");
         LocalTime disparo = VentanaDelDia.requireHoraDisparoDentroDelDia(horaDisparo);
         return new PreferenciaHorario(participanteId, habitoId, disparo,
-                VentanaDelDia.horaLimiteAjustada(disparo, horaLimite), true, null, ahora, ahora);
+                VentanaDelDia.horaLimiteAjustada(disparo, horaLimite), true, null, null, ahora, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */
     public static PreferenciaHorario rehydrate(UserId participanteId, HabitoId habitoId, LocalTime horaDisparo,
                                                 LocalTime horaLimite, boolean recordatorioActivo,
                                                 Integer minutosRecordatorio, Instant creadoEn, Instant actualizadoEn) {
+        return rehydrate(participanteId, habitoId, horaDisparo, horaLimite, recordatorioActivo, minutosRecordatorio,
+                null, creadoEn, actualizadoEn);
+    }
+
+    /** Solo para el adaptador de persistencia, con el conjunto de antelaciones (V81). */
+    public static PreferenciaHorario rehydrate(UserId participanteId, HabitoId habitoId, LocalTime horaDisparo,
+                                                LocalTime horaLimite, boolean recordatorioActivo,
+                                                Integer minutosRecordatorio, List<Integer> antelacionesRecordatorio,
+                                                Instant creadoEn, Instant actualizadoEn) {
         return new PreferenciaHorario(participanteId, habitoId, horaDisparo, horaLimite, recordatorioActivo,
-                minutosRecordatorio, creadoEn, actualizadoEn);
+                minutosRecordatorio, antelacionesRecordatorio == null ? null : List.copyOf(antelacionesRecordatorio),
+                creadoEn, actualizadoEn);
     }
 
     public void aplicarAhora(LocalTime horaDisparo, LocalTime horaLimite, Instant ahora) {
@@ -65,7 +82,22 @@ public final class PreferenciaHorario {
      * medio escribir ({@link AntelacionDelRecordatorio}).
      */
     public void actualizarRecordatorio(boolean activo, Integer minutosAntes, Instant ahora) {
-        this.minutosRecordatorio = AntelacionDelRecordatorio.requireDentroDelRango(minutosAntes);
+        Integer minutos = AntelacionDelRecordatorio.requireDentroDelRango(minutosAntes);
+        this.antelacionesRecordatorio = AntelacionesDelRecordatorio.trasMinutosSueltos(antelacionesRecordatorio,
+                minutosRecordatorio, activo, minutos);
+        this.minutosRecordatorio = minutos;
+        this.recordatorioActivo = activo;
+        this.actualizadoEn = ahora;
+    }
+
+    /**
+     * Con TODAS las antelaciones (D-217): {@link #minutosRecordatorio} pasa a ser la más temprana, que es
+     * lo que el APK de producción sigue leyendo. Apagado, o sin ninguna, el conjunto queda {@code null}.
+     */
+    public void actualizarRecordatorioConAntelaciones(boolean activo, List<Integer> antelaciones, Instant ahora) {
+        List<Integer> normalizadas = AntelacionesDelRecordatorio.normalizar(antelaciones);
+        this.minutosRecordatorio = normalizadas.isEmpty() ? null : normalizadas.getFirst();
+        this.antelacionesRecordatorio = activo && !normalizadas.isEmpty() ? normalizadas : null;
         this.recordatorioActivo = activo;
         this.actualizadoEn = ahora;
     }

@@ -21,6 +21,13 @@ public interface LoadRocaDiariaPort {
 
     List<RocaDiaria> deParticipanteYFecha(UserId participanteId, LocalDate fecha);
 
+    /**
+     * Las rocas de la persona entre dos fechas (ambas inclusive), en una sola consulta, ordenadas por
+     * fecha y posicion. Para {@code GET /rocks/upcoming} (D-217): la app arma las alarmas de todas las
+     * acciones con hora hasta el domingo.
+     */
+    List<RocaDiaria> deParticipanteEntreFechas(UserId participanteId, LocalDate desde, LocalDate hasta);
+
     int contarDeParticipanteYFecha(UserId participanteId, LocalDate fecha);
 
     /** Histórico completo, para {@code users.api.RocaLogrosFinder#totalRocksCompleted}. */

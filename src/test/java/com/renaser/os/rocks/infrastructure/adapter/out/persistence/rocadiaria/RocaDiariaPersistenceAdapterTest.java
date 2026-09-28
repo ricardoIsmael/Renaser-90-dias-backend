@@ -104,4 +104,25 @@ class RocaDiariaPersistenceAdapterTest {
         assertThat(recuperada.get().completada()).isTrue();
         assertThat(recuperada.get().puntosOtorgados()).isEqualTo(10);
     }
+
+    /** D-217: {@code GET /rocks/upcoming} lee todos los dias del rango en una consulta, inclusive y en orden. */
+    @Test
+    void deParticipanteEntreFechasTraeElRangoInclusivoYOrdenado() {
+        LocalDate lunes = LocalDate.of(2026, 9, 21);
+        adapter.saveAll(List.of(
+                RocaDiaria.planificar(unId(), participanteId, lunes.plusDays(6), 1, "domingo", null, 5, false,
+                        EjeObjetivo.CUERPO, null, LocalTime.of(9, 0), null, List.of(), CLOCK),
+                RocaDiaria.planificar(unId(), participanteId, lunes.plusDays(1), 2, "martes 2", null, 5, false,
+                        EjeObjetivo.CUERPO, null, null, null, List.of(), CLOCK),
+                RocaDiaria.planificar(unId(), participanteId, lunes.plusDays(1), 1, "martes 1", null, 5, false,
+                        EjeObjetivo.CUERPO, null, null, null, List.of(), CLOCK),
+                RocaDiaria.planificar(unId(), participanteId, lunes, 1, "lunes (fuera)", null, 5, false,
+                        EjeObjetivo.CUERPO, null, null, null, List.of(), CLOCK),
+                RocaDiaria.planificar(unId(), participanteId, lunes.plusDays(7), 1, "lunes que viene (fuera)", null,
+                        5, false, EjeObjetivo.CUERPO, null, null, null, List.of(), CLOCK)));
+
+        assertThat(adapter.deParticipanteEntreFechas(participanteId, lunes.plusDays(1), lunes.plusDays(6)))
+                .extracting(RocaDiaria::titulo)
+                .containsExactly("martes 1", "martes 2", "domingo");
+    }
 }

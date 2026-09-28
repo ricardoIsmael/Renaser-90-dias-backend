@@ -68,7 +68,7 @@ public class HabitPreferenceController {
                                            @RequestBody @Valid UpdateHabitPreferenceRequest request) {
         var resultado = editarUseCase.editar(new EditarPreferenciaHorarioCommand(actor,
                 HabitoId.of(habitId), request.triggerTime(), request.limitTime(), request.reminderEnabled(),
-                request.reminderMinutesBefore(), request.date()));
+                request.reminderMinutesBefore(), request.date(), request.reminderMinutesList()));
         return HabitPreferenceResponse.from(resultado);
     }
 

@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** La regla de D-184, caso por caso. */
+/** La regla de D-184, caso por caso, con el respaldo de D-217. */
 class EntregaDelAvisoDeHabitoTest {
 
     @Test
@@ -17,10 +17,10 @@ class EntregaDelAvisoDeHabitoTest {
     }
 
     @Test
-    @DisplayName("inicio con alarma local en el telefono -> push solo al navegador")
-    void inicioConAlarmaLocalSoloNavegador() {
-        assertThat(EntregaDelAvisoDeHabito.para("INICIO", true, 30)).isEqualTo(EntregaPush.SOLO_NAVEGADOR);
-        assertThat(EntregaDelAvisoDeHabito.para("INICIO", true, 0)).isEqualTo(EntregaPush.SOLO_NAVEGADOR);
+    @DisplayName("D-217: inicio con alarma local en el telefono -> respaldo (navegador + telefonos sin confirmar)")
+    void inicioConAlarmaLocalEsRespaldo() {
+        assertThat(EntregaDelAvisoDeHabito.para("INICIO", true, 30)).isEqualTo(EntregaPush.RESPALDO_DE_ALARMA_LOCAL);
+        assertThat(EntregaDelAvisoDeHabito.para("INICIO", true, 0)).isEqualTo(EntregaPush.RESPALDO_DE_ALARMA_LOCAL);
     }
 
     @Test

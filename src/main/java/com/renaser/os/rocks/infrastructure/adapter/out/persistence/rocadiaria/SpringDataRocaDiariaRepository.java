@@ -54,6 +54,10 @@ interface SpringDataRocaDiariaRepository extends JpaRepository<RocaDiariaJpaEnti
 
     List<RocaDiariaJpaEntity> findByParticipanteIdAndFecha(UUID participanteId, LocalDate fecha);
 
+    List<RocaDiariaJpaEntity> findByParticipanteIdAndFechaBetweenOrderByFechaAscPosicionAsc(UUID participanteId,
+                                                                                           LocalDate desde,
+                                                                                           LocalDate hasta);
+
     int countByParticipanteIdAndFecha(UUID participanteId, LocalDate fecha);
 
     int countByParticipanteIdAndCompletadaTrue(UUID participanteId);
