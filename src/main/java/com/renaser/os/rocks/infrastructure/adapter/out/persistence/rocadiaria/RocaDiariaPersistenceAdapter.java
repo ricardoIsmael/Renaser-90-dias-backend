@@ -39,6 +39,14 @@ class RocaDiariaPersistenceAdapter implements LoadRocaDiariaPort, SaveRocaDiaria
     }
 
     @Override
+    public List<RocaDiaria> deParticipanteEntreFechas(UserId participanteId, LocalDate desde, LocalDate hasta) {
+        return repository.findByParticipanteIdAndFechaBetweenOrderByFechaAscPosicionAsc(participanteId.value(),
+                        desde, hasta).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<RocaDiaria> deParticipanteYFecha(UserId participanteId, LocalDate fecha) {
         return repository.findByParticipanteIdAndFecha(participanteId.value(), fecha).stream()
                 .map(mapper::toDomain)
