@@ -8,6 +8,8 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.experimental.Accessors;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.EnumSet;
@@ -33,6 +35,8 @@ public final class Evento {
     private static final int MAX_TITULO = 30;
     private static final int MAX_DESCRIPCION = 300;
     private static final int MAX_UBICACION = 600;
+    /** SEG-13 (E-364): el unico mensaje del rechazo, para que el cliente sepa exactamente que corregir. */
+    static final String LINK_NO_WEB = "El link tiene que empezar con https:// o http://";
     /** MAX_REGLAS_POR_EVENTO del repo viejo (reminders.ts) — regla de negocio confirmada; el CHECK de
      * la tabla ({@code orden BETWEEN 1 AND 10}) solo da margen de crecimiento futuro, no reemplaza esta regla. */
     public static final int MAX_REGLAS_RECORDATORIO = 5;
@@ -200,6 +204,7 @@ public final class Evento {
                 if (blank) {
                     throw new IllegalArgumentException("La URL es obligatoria para este tipo de ubicacion");
                 }
+                requireLinkWeb(valor);
             }
             case DIRECCION -> {
                 if (blank) {
@@ -211,6 +216,30 @@ public final class Evento {
                     throw new IllegalArgumentException("valorUbicacion debe ser nulo para " + tipo);
                 }
             }
+        }
+    }
+
+    /**
+     * SEG-13 (E-364, 2026-09-27): el link de un Meet, un Zoom o un Drive se abre al tocar «Unirme», en la app
+     * y en la web, asi que solo se acepta una direccion web con servidor: {@code https} o {@code http}.
+     * Antes no se miraba nada y el servidor guardo {@code javascript:alert(1)}; tambien quedan afuera
+     * {@code data:}, {@code intent:}, {@code file:} y un texto sin esquema. La app ya exigia {@code https}
+     * en su formulario, pero la regla tiene que estar donde no se la puede saltear.
+     *
+     * <p>Los eventos que ya tienen un link asi se siguen leyendo ({@link #rehydrate} no valida); al editarlos
+     * hay que corregirlo.
+     */
+    private static void requireLinkWeb(String valor) {
+        URI link;
+        try {
+            link = new URI(valor.trim());
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException(LINK_NO_WEB);
+        }
+        String esquema = link.getScheme();
+        boolean web = "https".equalsIgnoreCase(esquema) || "http".equalsIgnoreCase(esquema);
+        if (!web || link.getHost() == null || link.getHost().isBlank()) {
+            throw new IllegalArgumentException(LINK_NO_WEB);
         }
     }
 

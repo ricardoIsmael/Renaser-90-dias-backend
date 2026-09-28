@@ -78,7 +78,8 @@ class EventoServiceTest {
 
     @BeforeEach
     void setUp() {
-        accesoEventoService = new AccesoEventoService(progresoPort, nivelPort, cursoIdNoOp(), (u, t) -> false);
+        accesoEventoService = new AccesoEventoService(progresoPort, nivelPort, cursoIdNoOp(), (u, t) -> false,
+                (celula, usuario) -> false);
         service = new EventoService(loadEventoPort, saveEventoPort, loadExcepcionPort, saveExcepcionPort,
                 loadConfirmacionPort, saveRecordatorioPort, nivelPort, almacenamientoPort, accesoEventoService, CLOCK,
                 idGenerator);

@@ -28,6 +28,13 @@ import java.util.UUID;
  * sumo una — UNIQUE); {@code null} para el resto de roles y para quien aun no tiene celula.
  * Mismo criterio que {@code findViewerCellId} (repository.ts, repo viejo).
  *
+ * <blockquote><b>Corregido 2026-09-27 (E-363).</b> Lo del MENTOR dejo de ser cierto cuando el adaptador
+ * paso a {@code users.api.ParticipacionProgramaFinder} (D-41): {@code celulaId} es SIEMPRE
+ * {@code participantes_programa.celula_id}, que un mentor no tiene, y {@code celulas.mentor_id} ya no es
+ * UNIQUE (D-141). Por eso el mentor del grupo recibia 403 al abrir el evento de su grupo. La pertenencia a
+ * un grupo sale ahora de {@code ConsultarPertenenciaAGrupoPort} (asignaciones vigentes); este campo queda
+ * como el grupo principal del aprendiz.</blockquote>
+ *
  * <p>{@code zona} cae a {@code 'America/Lima'} (el mismo default de la columna
  * {@code participantes_programa.timezone} en el baseline) cuando no hay fila de programa.
  * Ningun caso de uso de este modulo la consume todavia — el fallback existe para que el

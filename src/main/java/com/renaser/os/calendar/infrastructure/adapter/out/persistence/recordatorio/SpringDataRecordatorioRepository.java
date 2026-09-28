@@ -30,15 +30,25 @@ interface SpringDataRecordatorioRepository extends JpaRepository<RecordatorioEve
             + "AND r.motivoCancelacion IS NULL ORDER BY r.enviarEn ASC")
     List<RecordatorioEventoJpaEntity> vencidosPendientes(@Param("hasta") Instant hasta, Pageable pageable);
 
-    @Modifying(clearAutomatically = true)
+    /**
+     * <b>{@code flushAutomatically} no es decorativo (E-360, 2026-09-27).</b> {@code clearAutomatically} vacia
+     * el contexto de persistencia despues del UPDATE, y vaciarlo CANCELA lo que la transaccion tenia pendiente
+     * de escribir. El despacho publica {@code RecordatorioEventoDebidoEvent} en la misma transaccion, y Spring
+     * Modulith guarda cada publicacion con un {@code persist} que recien se escribe al hacer flush: sin este
+     * flush previo, marcar los recordatorios como enviados se llevaba todas las publicaciones del outbox sin
+     * escribirlas. Los avisos salian igual (el listener se registra en memoria), pero ninguno quedaba en
+     * {@code event_publication}: el que fallaba no se reintentaba nunca. Lo mismo vale para las otras tres
+     * consultas de esta interfaz.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE RecordatorioEventoJpaEntity r SET r.enviadoEn = :enviadoEn WHERE r.id IN :ids")
     void marcarEnviados(@Param("ids") List<Long> ids, @Param("enviadoEn") Instant enviadoEn);
 
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE RecordatorioEventoJpaEntity r SET r.motivoCancelacion = :motivo WHERE r.id IN :ids")
     int cancelarPorIds(@Param("ids") List<Long> ids, @Param("motivo") String motivo);
 
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE RecordatorioEventoJpaEntity r SET r.motivoCancelacion = :motivo "
             + "WHERE r.eventoId = :eventoId AND r.inicioOcurrencia = :inicioOcurrencia "
             + "AND r.enviadoEn IS NULL AND r.motivoCancelacion IS NULL")
@@ -47,7 +57,7 @@ interface SpringDataRecordatorioRepository extends JpaRepository<RecordatorioEve
 
     /** borrarPendientes() del repo viejo: solo lo que aun no salio, no esta cancelado, y su
      * `enviarEn` sigue en el futuro — lo que estaba a punto de despacharse se respeta. */
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM RecordatorioEventoJpaEntity r WHERE r.eventoId = :eventoId AND r.enviadoEn IS NULL "
             + "AND r.motivoCancelacion IS NULL AND r.enviarEn > :ahora")
     int borrarPendientesFuturos(@Param("eventoId") UUID eventoId, @Param("ahora") Instant ahora);

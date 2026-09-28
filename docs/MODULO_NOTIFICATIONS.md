@@ -267,10 +267,24 @@ A diferencia de `habits`→`points` y `rocks`→`points` (síncrono, misma trans
   «Es mañana a las 05:00.» o «Es el jueves 1 de octubre a las 19:30.». Hoy/mañana y la hora se
   calculan en la **zona del evento**, nunca en UTC (regla 02; probado con relojes entre 00:00 y
   05:00 UTC).
+
+  > **Corregido 2026-09-27 (E-361).** El anuncio decía la hora en que se CREÓ el evento («Es el sábado 26 de
+  > setiembre a las 20:02» de una clase del domingo a las 19:00): `calendar` mandaba la clave de la cola como
+  > inicio. Ahora manda el inicio real (o el de la próxima ocurrencia de una serie); este texto no cambió.
 - **Una vez, sin pérdidas:** clave `origen_evento_id = UUID.nameUUIDFromBytes("recordatorio-evento:" +
   recordatorioId)`, una por fila de `recordatorios_evento`. Una reentrega del outbox choca contra V16
   y no repite ni la fila ni el push. Si el listener falla, la publicación queda incompleta y se
   reintenta (ver `MODULO_CALENDAR.md` §4 para qué significa `enviado_en`).
+
+  > **Corregido 2026-09-27 (E-360).** «Sin pérdidas» no era cierto hasta hoy, por dos lados. (1) El despacho
+  > marcaba las filas después de publicar, con un UPDATE que vacía el contexto de persistencia y se llevaba las
+  > publicaciones del outbox sin escribirlas: un aviso que fallaba no tenía nada que reintentar. (2) Este
+  > listener, como todos, corría en un hilo nuevo por aviso y sin tope, y cada uno pedía dos conexiones (la suya
+  > y la transacción propia del INSERT): 29 avisos juntos agotaron el pool de 20 y se perdieron 17. Ahora los
+  > listeners corren en el ejecutor de eventos (`renaser.eventos.concurrencia` hilos, 4 por defecto;
+  > `shared.infrastructure.async.EjecucionAsincronaConfig`) y la publicación se guarda de verdad.
+  > `AvisosDeEventoEnMasaIT`: mil avisos del mismo minuto con el pool de producción llegan todos, la API sigue
+  > consiguiendo conexión, y los que fallan se reintentan y llegan una vez.
 - **Reintento tardío:** si la ocurrencia ya empezó cuando el listener corre, el recordatorio se
   descarta (diría «empieza en…» de algo que ya pasó). El anuncio de evento nuevo se manda igual.
 - **«Voy» y alarma local (D-189):** si el evento trae `asistenciaConfirmada` y la persona tiene

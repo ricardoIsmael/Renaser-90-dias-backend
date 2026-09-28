@@ -48,3 +48,7 @@ Supabase quedó descartado (2026-08-31). El esquema del producto lo define **nue
   `ZoneId`↔`text`). MapStruct solo para mapeo plano campo-a-campo, y **solo** hacia la base — nunca
   hacia la respuesta HTTP (un campo nuevo del dominio se filtraría solo al cliente).
 - JPA para CRUD de dominio; `JdbcClient` para queries de reporting/ranking sensibles a latencia.
+- `@Modifying(clearAutomatically = true)` va SIEMPRE con `flushAutomatically = true`. Vaciar el contexto de
+  persistencia cancela los `persist` pendientes de la transacción de quien llama, incluidas las publicaciones
+  del outbox de Spring Modulith: marcar los recordatorios como enviados después de publicar dejó
+  `event_publication` vacía y ningún aviso fallido se reintentaba (E-360).

@@ -19,6 +19,12 @@ import java.util.UUID;
  * criterio que {@code esAnuncio()} del repo viejo (reminderService.ts): un recordatorio de
  * verdad siempre nace con {@code sendAt} en el futuro respecto a la creacion del evento.
  *
+ * <p><b>Corregido 2026-09-27 (E-361).</b> En un anuncio, {@code inicioOcurrencia} viajaba con la clave de
+ * la cola, que es la hora de CREACION del evento, y el aviso decia «Es el sabado 26 de setiembre a las
+ * 20:02» de una clase del domingo a las 19:00. Desde esta fecha lleva el inicio real: el del evento, o el de
+ * su proxima ocurrencia si es una serie ({@code DespachoDeRecordatoriosService}). La clave de la cola no
+ * cambia; la deduplicacion sigue siendo por {@code recordatorioId}.
+ *
  * <p>{@code eventoId}/{@code recordatorioId} son {@code UUID}/{@code Long} planos, no los
  * value objects de {@code calendar.domain} (paquete interno sin {@code @NamedInterface}) —
  * mismo criterio documentado en {@code RocaCompletadaEvent}.
@@ -27,6 +33,11 @@ import java.util.UUID;
  * {@code despachar()} marca la fila enviada en la misma transaccion en que lo publica, todos los
  * recordatorios de eventos se perdian en silencio (E-301). Lo consume
  * {@code notifications.RecordatorioEventoNotificationListener}.
+ *
+ * <p><b>Corregido 2026-09-27 (E-360).</b> Aun con consumidor, ninguna publicacion de este evento llego a
+ * {@code event_publication}: el despacho marcaba las filas enviadas despues de publicar, con un UPDATE que
+ * vacia el contexto de persistencia y cancelaba los {@code persist} pendientes del outbox. El aviso que
+ * fallaba al entregarse no tenia nada que reintentar.
  *
  * @param recordatorioId id de la fila de {@code recordatorios_evento}; es la clave de deduplicacion
  *                       de la notificacion (una por fila, aunque el outbox reentregue)

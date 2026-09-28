@@ -66,7 +66,7 @@ class ConfirmacionServiceTest {
                     public Set<UserId> filtrarConAcceso(String cursoId, Set<UserId> candidatos) {
                         return Set.of();
                     }
-                }, (u, t) -> false);
+                }, (u, t) -> false, (celula, usuario) -> false);
         service = new ConfirmacionService(loadEventoPort, saveConfirmacionPort, accesoEventoService, CLOCK);
     }
 

@@ -95,6 +95,9 @@ Deduplicación con `origenEventoId` determinista (`UUID.nameUUIDFromBytes`), igu
 
 **Fuera de alcance (pedido del dueño):** el link de la mentoría de Darren (punto 8 del Excel) — queda para
 después; `ElegibilidadEventoNoOpAdapter` no se toca.
+*Corregido 2026-09-27 (E-362, D-213): ese NoOp respondía «no elegible» a todo aprendiz y dejaba la Mentoría
+inusable; lo reemplazó `ElegibilidadSegunAudienciaAdapter` (decide la audiencia del evento). Conectar la
+mentoría al semáforo sigue siendo una opción pendiente del dueño, no algo hecho.*
 
 ---
 

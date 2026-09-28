@@ -22,6 +22,8 @@ spring:
   # @Async concurrentes se despachan a la vez (hoy solo onboarding, la validacion V90). Sin
   # espejarlo, un test que dispare varias validaciones a la vez veria un comportamiento de
   # throttling distinto al de produccion.
+  # Corregido 2026-09-27 (E-360): hasta esta fecha no acotaba nada (Spring Boot no armaba su
+  # ejecutor por el broker STOMP); ahora acota el ejecutor de IA de EjecucionAsincronaConfig.
   task:
     execution:
       simple:
@@ -75,6 +77,9 @@ spring:
 # con @Value tiene que estar TAMBIEN aca o el contexto no levanta. Va al final, fuera del
 # bloque `spring:`, para no partirlo por accidente.
 renaser:
+  # E-360: espeja el default de main (application.yaml): cuantos listeners de eventos corren a la vez.
+  eventos:
+    concurrencia: 4
   web:
     cors:
       origenes: http://localhost:8081

@@ -10581,6 +10581,165 @@ tope (`leerOtraFallaDeS3Sube`), y el doble en memoria de `FotoDelGrupoIT` implem
 coordina le asigna ese puerto a UNO solo, y el otro usa lo que ese agregue. Al repartir el trabajo, listar los
 puertos compartidos que cada encargo podría extender.
 
+## E-360 · Avisos en masa: `RenaserHikari - Connection is not available, request timed out after 5000ms (total=20, active=20, idle=0, waiting=27)` y los avisos que fallaban no se reintentaban (HALLAZGO-A1)
+
+**Síntoma (prueba de punta a punta del 2026-09-27, `backend.log` líneas 2072 a 3057).** A las 13:25
+`GenerarRecordatoriosScheduler` encoló 58 recordatorios; a las 13:26:00 `DespacharRecordatoriosScheduler` despachó
+29 a la vez (el anuncio «Nuevo evento: Clase desde la app» a 29 cuentas). A las 13:26:05, 17 veces:
+
+```
+ERROR [askExecutor-435] .a.i.SimpleAsyncUncaughtExceptionHandler : Unexpected exception occurred invoking async method: void com.renaser.os.notifications.infrastructure.adapter.in.event.RecordatorioEventoNotificationListener.on(com.renaser.os.calendar.api.RecordatorioEventoDebidoEvent)
+org.springframework.transaction.CannotCreateTransactionException: Could not open JPA EntityManager for transaction
+Caused by: java.sql.SQLTransientConnectionException: RenaserHikari - Connection is not available, request timed out after 5000ms (total=20, active=20, idle=0, waiting=27)
+INFO r$CompletionRegisteringMethodInterceptor : Invocation of listener ... failed with message Could not open JPA EntityManager for transaction. Leaving event publication uncompleted.
+```
+
+Llegaron 12 de 29 avisos. Los 29 quedaron con `enviado_en` y los 17 perdidos no se reintentaron nunca: a las 14:4x
+`event_publication` no tenía ninguna publicación de `RecordatorioEventoDebidoEvent` y esas 17 personas seguían sin
+aviso. Mientras tanto, la API esperaba conexión con ellos. Reproducido con mil avisos en `AvisosDeEventoEnMasaIT`
+contra el código anterior: el propio despacho se quedó sin conexión (`AvisosDeEventoEnMasaIT.unAvisoQueFalloSeReintentaYLlega:127->despacharTodo:163 » CannotCreateTransaction Could not open JPA EntityManager for transaction`)
+y hasta el cerrojo de los schedulers fallaba (`HikariPool-1 - Connection is not available, request timed out after 5000ms (total=20, active=20, idle=0, waiting=0)`).
+
+**Causa real — son tres, y hacían falta las tres.**
+
+1. **`@Async` no tenía tope.** Los 36 `@ApplicationModuleListener` son `@Async`. Se creía que corrían en el
+   ejecutor de Spring Boot, acotado por `spring.task.execution.simple.concurrency-limit` (`ASYNC_IA_CONCURRENCY_LIMIT`,
+   C-1). Spring Boot solo arma ese ejecutor si no hay ningún otro `Executor` en el contexto
+   (`TaskExecutorConfigurations.OnExecutorCondition`: `@ConditionalOnMissingBean(Executor.class)`, salvo
+   `spring.task.execution.mode=force`), y el broker STOMP del chat declara cuatro (`clientInboundChannelExecutor`,
+   `clientOutboundChannelExecutor`, `brokerChannelExecutor`, `messageBrokerTaskScheduler`). Sin ejecutor por defecto,
+   `@Async` caía en `new SimpleAsyncTaskExecutor()`: un hilo de plataforma nuevo por aviso. Se ve en el nombre del
+   hilo: `SimpleAsyncTaskExecutor-431` (el log lo recorta a `askExecutor-431`), no `task-N`. La configuración de
+   C-1 nunca se aplicó.
+2. **Cada aviso pedía dos conexiones a la vez:** la de la transacción del listener (`REQUIRES_NEW` de
+   `@ApplicationModuleListener`) y la de `NotificacionService.guardarIdempotente` (`transaccionPropia`, otra
+   `REQUIRES_NEW`). Con tantos hilos como conexiones, cada uno tiene una y espera la segunda: nadie avanza hasta
+   los 5 s de Hikari.
+3. **El outbox no guardaba nada** — por eso no hubo reintento. `despachar()` publicaba cada evento (Spring Modulith
+   lo guarda con un `persist`, que se escribe recién en el flush) y DESPUÉS marcaba las filas con
+   `SpringDataRecordatorioRepository.marcarEnviados`, un `@Modifying(clearAutomatically = true)`. Vaciar el contexto
+   de persistencia cancela lo pendiente de escribir: las publicaciones. Los listeners se disparaban igual (se
+   registran en memoria), pero `event_publication` quedaba vacía y un aviso que fallaba no tenía nada que
+   reintentar. Encontrado con la misma IT: con `logging.level.org.springframework.modulith.events=DEBUG` salían
+   1000 `Registering publication of com.renaser.os.calendar.api.RecordatorioEventoDebidoEvent for ...` y la tabla,
+   consultada cada 50 ms durante la ráfaga, nunca tuvo una fila. Publicando lo mismo sin el UPDATE, la fila sí
+   aparecía (`status=PUBLISHED` y después `COMPLETED`). O sea que la garantía de D-182 («Modulith guarda la
+   publicación en el mismo commit que el UPDATE de `enviado_en`») nunca se cumplió para los recordatorios.
+
+**Solución (D-213).** (1) `shared.infrastructure.async.EjecucionAsincronaConfig` declara los ejecutores y es el
+`AsyncConfigurer`: el de por defecto (`ejecutorDeEventos`, todos los listeners) tiene `renaser.eventos.concurrencia`
+hilos fijos (`EVENTOS_CONCURRENCIA`, 4) y una cola, así que quien publica no espera y a lo sumo 2 × 4 = 8 de las 20
+conexiones son de avisos; la validación V90 va a `ejecutorDeIa` (hilos virtuales con el tope de
+`ASYNC_IA_CONCURRENCY_LIMIT`, lo que C-1 quería) para no dejar a los avisos detrás de la IA. (2) El despacho pasó a
+`calendar.DespachoDeRecordatoriosService`: lotes de 200, cada uno en su transacción (regla 02 §4), la pasada sigue
+hasta vaciar la cola (antes, 500 por minuto: con mil avisos a la misma hora la mitad salía un minuto tarde), y cada
+evento se lee una vez por lote en vez de una por fila. (3) Cada lote marca ANTES de publicar, y las cuatro
+consultas de `SpringDataRecordatorioRepository` pasaron a `flushAutomatically = true`: el flush escribe las
+publicaciones antes de vaciar. No se subió el pool. `AvisosDeEventoEnMasaIT` (pool de producción: 20 conexiones,
+5 s): mil avisos del mismo minuto llegan todos, uno por persona; una sonda que pide conexión cada 50 ms nunca
+espera más de 2,5 s; el outbox guarda las mil publicaciones; y 50 avisos que fallan por una falla real de la base
+quedan incompletos y el reintento del outbox los entrega, una sola vez.
+
+**Cómo evitar que vuelva a pasar.**
+- Todo `@Async` corre en un ejecutor declarado en `EjecucionAsincronaConfig`. No suponer que `spring.task.execution.*`
+  aplica: en este proceso Spring Boot no arma su ejecutor. Si una tarea nueva no es trabajo de base corto (IA, HTTP
+  largo), va con su propio ejecutor y su `@Async("...")`, como la V90.
+- `@Modifying(clearAutomatically = true)` sin `flushAutomatically = true` descarta los `persist` pendientes de la
+  transacción de quien llama, incluidas las publicaciones del outbox. Quedan así, sin revisar si esas transacciones
+  publican eventos antes, `habits.SpringDataDesbloqueoHabitoRepository` (2), `points.SpringDataRankingAprendizRepository`,
+  `points.SpringDataPuntajeParticipanteRepository` y los cuatro repositorios hijos de `calendar.evento` (estos no
+  publican). Reportado, no tocado en este cambio.
+- Una prueba de outbox tiene que afirmar que la publicación EXISTE (con `completion-mode=UPDATE` en la prueba), no
+  solo que no quedó ninguna incompleta: `ResumenSemanalDelSemaforoIT` y la versión anterior de esta IT pasaban
+  con la tabla vacía.
+
+## E-361 · El anuncio de un evento nuevo decía la hora en que se creó: «Es el sábado 26 de setiembre a las 20:02»
+
+**Síntoma (prueba de punta a punta del 2026-09-27).** Aviso «Nuevo evento: Clase desde la app» / «Es el sábado 26
+de setiembre a las 20:02. Toca para ver el detalle.», cuando la clase era el domingo 27 a las 19:00 (Lima).
+`HALLAZGO-A1.consultas.txt`: `inicia_lima 2026-09-27 19:00:00`, `creado_lima 2026-09-26 20:02:31.469977`.
+
+**Causa real.** La fila del anuncio tiene clave fija (`enviar_en = inicio_ocurrencia = creado_en` del evento), para
+que dos pasadas del generador no lo dupliquen. `despachar()` mandaba esa `inicio_ocurrencia` en
+`RecordatorioEventoDebidoEvent`, y `AvisoDeEvento` la leía como el inicio del evento. La zona estaba bien (Lima): el
+instante era el equivocado.
+
+**Solución.** `DespachoDeRecordatoriosService` manda en un anuncio el inicio real: el del evento o, en una serie que
+ya empezó, el de la próxima ocurrencia (con su excepción, si la movieron). La clave de la cola y la deduplicación no
+cambian. Prueba: `DespachoDeRecordatoriosServiceTest.elAnuncioLlevaElInicioDelEvento`, con el reloj a las 03:00 UTC
+(el día anterior en Lima, regla 03); contra el código anterior, `expected: 2026-09-28T00:00:00Z but was: 2026-09-27T01:02:31Z`.
+
+**Cómo evitar que vuelva a pasar.** Un campo de un evento entre módulos dice una sola cosa. Si una clave técnica
+(de deduplicación, de cola) viaja en un campo con nombre de negocio, el consumidor la va a leer como negocio.
+
+## E-362 · Las Mentorías del Alquimista no le llegaban a ningún aprendiz: `403 {"message":"No tienes acceso a este evento"}` (HALLAZGO-A2)
+
+**Síntoma (prueba de punta a punta del 2026-09-27, `EVT-12.mentoria-elegibilidad.json`).** «Mentoría en vivo
+(prueba)», `MENTORIA_ALQUIMISTA` para todos: no aparece en la lista de ningún aprendiz, el detalle da
+`403 {"message":"No tienes acceso a este evento"}` y genera 0 recordatorios. Mentor y alquimista sí la ven.
+
+**Causa real.** `ReglasPorTipoEvento` marca `MENTORIA_ALQUIMISTA` como "requiere elegibilidad" y el único adaptador
+del puerto, `ElegibilidadEventoNoOpAdapter`, respondía siempre `false` para un aprendiz: el 80 % semanal del repo viejo
+nunca se portó (dependía de `habits`/`rocks`) y el dueño dejó el link de la mentoría de Darren fuera del semáforo
+(D-168). Era un NoOp deliberado que dejaba la función inusable.
+
+**Solución (D-213).** `ElegibilidadSegunAudienciaAdapter` reemplaza al NoOp: no agrega ningún criterio, decide la
+audiencia que el evento declara (como en cualquier otro tipo). Si el dueño confirma un criterio extra, se implementa
+en otro adaptador del mismo puerto. Pruebas: `ElegibilidadSegunAudienciaAdapterTest` y
+`EventosDeGrupoYMentoriaIT.laMentoriaLeLlegaAlAprendiz` (contra el código anterior: `NotAuthorizedException: No tienes acceso a este evento`).
+
+**Cómo evitar que vuelva a pasar.** Un NoOp que niega todo no es "no inventar datos": es una función apagada sin que
+nadie lo sepa. Cuando falta una regla, se deja pasar lo que sí está decidido (acá, la audiencia) y la regla que falta
+va a la lista de preguntas del dueño.
+
+## E-363 · Eventos de grupo: el mentor recibía el aviso pero `403 No tienes acceso a este evento`, y los integrantes adicionales tampoco entraban
+
+**Síntoma (prueba de punta a punta del 2026-09-27, `EVT-12.resultado.txt`).** `e2e-mentor2`, mentor de «Grupo ajeno
+E2E», recibe el recordatorio del evento de su grupo, pero el detalle y el «Voy» le dan 403 «No tienes acceso a este
+evento». Un integrante adicional del grupo (D-139/D-141) tampoco tiene acceso, y el mentor de «Grupo Plan E2E» no ve en
+su lista el evento de su grupo, que su alumna sí ve.
+
+**Causa real.** El acceso comparaba el grupo del evento con UN valor, `ProgresoParticipanteCalendar.celulaId`. Desde
+que el adaptador pasó a `users.api.ParticipacionProgramaFinder` (D-41), ese valor es siempre
+`participantes_programa.celula_id`: el grupo principal de un aprendiz, y nada para un mentor (no hace el programa).
+El javadoc del puerto seguía diciendo que para un MENTOR era «la célula cuyo `celulas.mentor_id` es este usuario (a lo
+sumo una — UNIQUE)», y eso tampoco es cierto desde D-141. Los avisos, en cambio, sí incluían al mentor
+(`CelulaFinder.mentorDe`): de ahí «recibe el aviso pero no lo puede abrir».
+
+**Solución.** La pertenencia a un grupo sale de las asignaciones vigentes (`asignaciones_celula`) a través de
+`community.api.AcompanamientoFinder.esIntegranteVigente`, la misma pregunta con que el chat del grupo decide quién
+entra: `ConsultarPertenenciaAGrupoPort`, usada por `AccesoEventoService` solo cuando el puntero no alcanza (ADMIN y
+ALCHEMIST no consultan nada). Los avisos del grupo suman a los aprendices y acompañantes con asignación vigente y
+cuenta activa. El puntero se conserva: nadie que veía un evento o recibía un aviso deja de hacerlo. Pruebas:
+`AccesoAEventosDeGrupoTest`, `ConsultarMiembrosCelulaCalendarPersistenceAdapterTest` (3 nuevas) y
+`EventosDeGrupoYMentoriaIT.elMentorYLosAdicionalesAbrenElEventoDelGrupo` (contra el código anterior: `NotAuthorizedException: No tienes acceso a este evento` al mentor).
+
+**Cómo evitar que vuelva a pasar.** Después de D-139/D-141, «el grupo de alguien» no es un valor: es un conjunto, y su
+fuente es `asignaciones_celula`. Todo lugar que compare contra `participantes_programa.celula_id` o `celulas.mentor_id`
+para decidir un permiso está leyendo solo el principal.
+
+## E-364 · El servidor aceptaba un evento con link `javascript:alert(1)` (SEG-13)
+
+**Síntoma (prueba de punta a punta del 2026-09-27, `SEG-13.respuestas.json`).** Como alquimista,
+`POST /api/v1/calendar/events` con `locationType: LINK` y `locationValue: "javascript:alert(1)"` →
+`201 {"id":"b522695d-c82f-4089-9303-5943f62efb50","title":"Evento link js E2E",...}`. También aceptó
+`http://example.com/sala-e2e` y un inicio en el pasado.
+
+**Causa real.** `Evento.requireUbicacionCoherente` solo exigía que el valor no estuviera en blanco para ZOOM, MEET y
+LINK. `docs/MODULO_CALENDAR.md` §3.1 lo decía: «No se valida que sea una URL». La app y la web exigen `https://` en
+su formulario, pero la regla estaba solo del lado del cliente.
+
+**Solución.** `Evento.requireLinkWeb`: para ZOOM, MEET y LINK el valor tiene que ser una dirección con esquema
+`https` o `http` y con servidor; si no, 400 «El link tiene que empezar con https:// o http://». Quedan afuera
+`javascript:`, `data:`, `intent:`, `file:`, `ftp:` y un texto sin esquema. `http` se sigue aceptando (lo pidió el
+encargo); si debe exigirse `https` es otra decisión. El inicio en el pasado NO se tocó: es regla de negocio y queda
+como pregunta (D-213). Los eventos ya guardados con un link así se siguen leyendo; al editarlos hay que corregirlo.
+Pruebas: `LinkDelEventoTest` (14 de 21 fallan contra el código anterior: `Expecting code to raise a throwable.`) y
+`EventosDeGrupoYMentoriaIT.unLinkJavascriptSeRechaza`.
+
+**Cómo evitar que vuelva a pasar.** Toda validación de formulario que protege a otra persona (un link que alguien más
+va a tocar) se repite en el dominio del servidor: el cliente se puede saltear con un `curl`.
+
 ## E-370 · `PATCH /api/v1/admin/audio-therapies/{week}` sin `durationDays` da 500: `NullPointerException: Cannot invoke "java.lang.Integer.intValue()" because the return value of "…UpdateAudioTherapyDurationRequest.durationDays()" is null`
 
 **Síntoma.** SEG-02 del e2e del 2026-09-27: un `PATCH` con cuerpo `{}` (o `durationDays: null`) respondía 500, y

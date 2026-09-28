@@ -18,6 +18,15 @@ import org.springframework.scheduling.annotation.EnableAsync;
  * Gemini sin ningún tope. No hace falta un {@code @Bean Executor} acá porque
  * {@code concurrency-limit} ya acota el bean por defecto que este {@code @EnableAsync} usa —
  * declarar un executor propio duplicaría esa configuración sin necesidad.
+ *
+ * <blockquote><b>Corregido 2026-09-27 (E-360).</b> Lo de arriba nunca fue cierto en este proceso: Spring
+ * Boot solo arma su ejecutor (el que lee {@code concurrency-limit}) si no hay OTRO {@code Executor} en el
+ * contexto, y el broker STOMP del chat declara cuatro. {@code @Async} caía en un
+ * {@code SimpleAsyncTaskExecutor} sin tope y con hilos de plataforma, para esta validación y para todos los
+ * listeners de eventos. Ahora los ejecutores se declaran en
+ * {@code shared.infrastructure.async.EjecucionAsincronaConfig}: esta validación corre en el de IA (hilos
+ * virtuales, tope de {@code ASYNC_IA_CONCURRENCY_LIMIT}) y el resto de los {@code @Async}, en el de
+ * eventos.</blockquote>
  */
 @Configuration
 @EnableAsync

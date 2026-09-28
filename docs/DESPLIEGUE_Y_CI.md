@@ -823,7 +823,9 @@ columna `motivo` puede quedar: el código anterior no la lee y su DEFAULT cubre 
 a la imagen nueva las filas no vuelven solas: se reinsertan con lo anotado.
 
 **Opcionales — solo si hay que apartarse del default:** `DB_POOL_MAX_SIZE`, `DB_POOL_MIN_IDLE`,
-`DB_POOL_CONNECTION_TIMEOUT_MS`, `ASYNC_IA_CONCURRENCY_LIMIT`, `RENASIA_LIMITE_DIARIO`,
+`DB_POOL_CONNECTION_TIMEOUT_MS`, `ASYNC_IA_CONCURRENCY_LIMIT`, `EVENTOS_CONCURRENCIA` (E-360: cuántos
+listeners de eventos corren a la vez, default 4; cada uno puede tener dos conexiones, así que el doble
+tiene que dejar margen dentro de `DB_POOL_MAX_SIZE`), `RENASIA_LIMITE_DIARIO`,
 `ACCOUNT_DELETION_GRACE_DAYS`, `ONBOARDING_V90_HABILITADO`, `HABITS_AVISO_ANTELACION_INICIO`,
 `HABITS_AVISO_ANTELACION_VENCIMIENTO` (estos dos últimos son **provisorios**, a la espera de que el
 dueño confirme los números), `AWS_PARAMETER_STORE_ENABLED`.
