@@ -11669,14 +11669,15 @@ formato, la prueba del cliente la copia literal del servidor.
 
 ## E-419 · El botón «Ya la recibí» de «Tu Caja Renaser» se ve cortado: «Ya la» (ABIERTO, no es de la Caja)
 
-**Síntoma.** Emulador Pixel 6, app de desarrollo de la rama `caja-renaser`: después de tocar «Ya la recibí» y
-recibir un error (409), y desde ahí cada vez que se abre la pantalla, el botón dorado muestra solo `Ya la`, con el
-ícono de check. La web muestra el texto entero. Capturas `CAJA-07-e-envio2-shalom.png` y
-`CAJA-08-app-recibida-estado-no-corresponde.png` en `~/Imágenes/e2e-2026-09-28/caja/`.
+**Síntoma.** Emulador Pixel 6, app de desarrollo de la rama `caja-renaser`: el botón dorado de «Tu Caja Renaser»
+muestra solo `Ya la`, con el ícono de check. Se reproduce sin error de por medio: cuando la pantalla ya abierta pasa
+a «En camino» desde otro estado (se relee al volver a Yo), el botón nuevo sale cortado; al abrirla de cero, a veces
+sale entero. La web muestra el texto entero. Capturas `CAJA-07-e-envio2-shalom.png`,
+`CAJA-08-app-recibida-estado-no-corresponde.png` y `ciclo/07-…`, `ciclo/10-…` en `~/Imágenes/e2e-2026-09-28/caja/`.
 
 **Causa (hipótesis, sin confirmar).** Es el `BotonBase` compartido de `components/Legible.tsx` (`Text` con
-`flexShrink: 1` en una fila centrada): mientras `cargando`, el `ActivityIndicator` ocupa el lugar del ícono y el
-texto se mide más angosto; en Android esa medida se reutiliza después. No se arregló: el componente es de toda la
+`flexShrink: 1` en una fila centrada): en Android el `Text` reutiliza una medida vieja (la de otro botón o la del
+estado `cargando`, con el indicador en lugar del ícono) y corta la etiqueta. No se arregló: el componente es de toda la
 app y el alcance de esta tarea era la Caja.
 
 **Cómo evitar que vuelva a pasar.** Pendiente: reproducir con un botón aislado en el emulador y, si se confirma,
