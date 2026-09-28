@@ -11194,3 +11194,115 @@ tablas. Agrupar el mes 3 como semanas 9 a 13 queda por confirmar con el dueño.
 
 **Cómo evitar que vuelva a pasar.** Una regla de calendario que vive en los dos lados se prueba con las MISMAS tablas en
 los dos (`SemanaProgramaTest` ↔ `periodoDelPrograma.test.ts`).
+
+## E-400 · El menú «⋯» de Yo no abre nada
+
+**Síntoma (emulador, 28/09).** En Yo, tocar «⋯» (arriba a la derecha) no hace nada: ni un error ni un cambio de
+pantalla. Se había pensado en E-274 (un `Modal` trabado tras recargar Metro), pero pasa también con la app recién
+abierta.
+
+**Causa real.** El botón nunca tuvo acción. `ScreenHeader` (`src/components/ui.tsx`) dibuja el ícono dentro de un
+`Pressable` cuyo `onPress` es la prop opcional `onPressRight`, y `YoScreen` no la pasaba. Viene así del diseño original
+(27/08). Lo mismo pasa hoy con el «⋯» de Plan y el de Training, la ⓘ de Comunidad y la campana de Hoy (salvo el líder,
+que tiene su bandeja por otra tarjeta): ver E-404.
+
+**Solución.** Frontend `797a28d`: el «⋯» de Yo abre el Centro de Perfil y Ajustes (`hub`), lo mismo que la tarjeta del
+usuario, donde están Notificaciones y Alarmas. Prueba `src/screens/__tests__/menuDeYoAbreAjustes.test.ts` (falla con
+el código anterior).
+
+**Cómo evitar que vuelva a pasar.** Un ícono tocable sin acción es un botón roto. Al usar `ScreenHeader`, pasar
+`onPressRight` o no dibujar el ícono.
+
+## E-401 · La foto del grupo no se guarda: «No se pudo conectar con el servidor» (`Unsupported FormDataPart implementation`)
+
+**Síntoma (emulador, 28/09, D-212).** Administración → Grupos → un grupo → «Cambiar foto del grupo» → elegir → «Guardar
+foto»: sale «No se pudo cambiar la foto / No se pudo conectar con el servidor. Revisa que el backend esté corriendo.», y
+el backend no registra ningún `PUT /api/v1/admin/cells/{id}/photo`. Pasa igual con el ADMIN, el Alquimista y el mentor
+desde la info del chat del grupo. El control sí aparece para los tres. El error real, escondido por el `catch` de
+`apiFetch`:
+
+    Error: Unsupported FormDataPart implementation
+        at convertFormDataAsync (expo/src/winter/fetch/convertFormData.ts)
+
+**Causa real.** Desde Expo 57 el `fetch` global de la app es el de Expo: `expo/src/winter/runtime.native.ts` hace
+`install('fetch', () => require('./fetch').fetch)` salvo `EXPO_PUBLIC_USE_RN_FETCH`. Ese `fetch` arma el multipart con
+`convertFormDataAsync`, que acepta texto, un `Blob` o algo con `bytes()`, pero no la parte propia de React Native
+`{ uri, name, type }` que armaba `fotoDelGrupoApi.parteNativaDeLaFoto`. Tira un error antes de enviar nada, y
+`apiFetch` lo convierte en «No se pudo conectar». Es la única subida multipart de la app. Las demás (chat, Muro,
+evidencias) hacen un `PUT` de bytes a S3 y no pasan por acá. Afecta a producción igual que al entorno local.
+
+**Solución.** Frontend `9e09f3b`: la parte trae además `bytes()`, que lee el archivo con el mismo `fetch` (el de Expo
+lee `file://`). La `uri` queda para el `fetch` de React Native. Probado en el emulador: `PUT … /photo 200`, la pantalla
+pasa a «Tiene foto propia desde el 28 de septiembre» y aparece «Volver a la foto de Renaser» (`DELETE … 204`). La
+prueba nueva de `fotoDelGrupoApi.test.ts` pasa la parte por el `convertFormDataAsync` de Expo y falla con el error
+literal contra el código anterior.
+
+**Cómo evitar que vuelva a pasar.** Un `FormData` con archivo se prueba contra el serializador que de verdad usa la app
+(`expo/src/winter/fetch/convertFormData`), no contra un `apiFetch` simulado que acepta cualquier cosa.
+
+## E-402 · «Mandar audios falla»: la nota de voz propia dice «Audio no disponible» apenas se envía
+
+**Síntoma (emulador, 28/09).** Chat del grupo → grabar → enviar: el mensaje se crea (`POST …/messages 201`), pero la
+burbuja de quien lo mandó dice «▶ Audio no disponible» y queda así. Con una foto pasa lo mismo: «📷 Imagen adjunta» en vez
+de la foto.
+
+**Causa real.** Hay dos cosas distintas.
+1. **Solo en local:** con `STORAGE_PROVEEDOR=noop` el backend firma la subida como `about:blank#pendiente-s3/…`
+   (`NoOpAlmacenamientoAdapter`, D-34) y la app corta en el paso 1 con «Todavía no se pueden mandar archivos / El
+   almacenamiento del servidor no está configurado». Esto no pasa en producción.
+2. **Real, también en producción:** la respuesta de `POST …/messages` es `MensajeResponse.from(Mensaje)`, que manda
+   `mediaUrl: null` (el servidor firma la lectura solo en el listado, como `senderName` y `status`). La app agregaba esa
+   respuesta tal cual (`agregarMensajeEnviado`), y el aviso en vivo del propio mensaje se descarta como eco, así que
+   nada la reemplazaba hasta salir y volver a entrar al chat. Los demás sí lo reciben bien: releen con `GET`.
+
+Verificado, pasos 2 y 3 con un S3 de prueba local (parche temporal del cliente, ya quitado): el `PUT` llega con
+`Content-Type: audio/m4a` y 60.631 bytes idénticos a la grabación (AAC 44,1 kHz mono, 4,99 s), y el `POST` responde
+201.
+
+**Solución.** Frontend `0308aed`: el mensaje recién enviado usa la copia local (la grabación o la foto elegida) si la
+respuesta no trae `mediaUrl` (`conLaCopiaLocal` en `useEnvioMediaChat`). Probado en el emulador: la burbuja nueva
+muestra ▶ 0:05 y suena (`AudioTrack` de `com.renaser.app`, `state:started`). Prueba
+`chat/hooks/__tests__/envioMediaConCopiaLocal.test.ts`: corre el hook entero y falla dos de tres casos contra el código
+anterior. Alternativa que no se tocó: que el `POST` devuelva la URL firmada. Eso arreglaría también a los APK ya
+instalados, pero cambia el contrato del backend.
+
+**Cómo evitar que vuelva a pasar.** Una respuesta de escritura no es lo mismo que una de lectura: antes de pintar la
+respuesta del `POST`, revisar qué campos manda el servidor solo en el listado.
+
+## E-403 · La build de desarrollo suena con el sonido del teléfono: `Custom sound 'voz_habito_despertar.mp3' not found in native app`
+
+**Síntoma (emulador, 28/09).** Yo → Alarmas → ▶ de «Voz»: suena el aviso de siempre del teléfono. En logcat:
+
+    E ReactNativeJS: expo-notifications: Custom sound 'voz_habito_despertar.mp3' not found in native app.
+
+Y el canal quedó creado con el sonido por defecto: `mSound=content://settings/system/notification_sound`.
+
+**Causa real.** Solo del entorno local. `android/` está en `.gitignore` y se generó el 23/09 con `expo prebuild`, antes
+de que existieran los sonidos (26 y 27/09). `npx expo run:android` reutiliza esa carpeta si existe, así que el APK de
+desarrollo tenía `res/raw` sin ningún sonido (solo `firebase_common_keep.xml`). Además, Android no deja cambiar el
+sonido de un canal ya creado: aunque se recompile, el canal sigue con el sonido por defecto hasta borrarlo. Las builds
+de EAS regeneran `android/`, así que el APK de producción trae los 29 sonidos (el diagnóstico de la mañana contó los
+del APK).
+
+**Solución.** `CI=1 npx expo prebuild --platform android --no-install` (sin `--clean`: no tocó `package.json` ni
+`app.json`), recompilar con `expo run:android --no-bundler`, y `adb shell pm clear com.renaser.app` para borrar los
+canales viejos. Después, los 9 ▶ suenan cada uno con su `raw/…` (ver la tabla del informe del 28/09).
+
+**Cómo evitar que vuelva a pasar.** Después de agregar un sonido al plugin de `expo-notifications`, correr
+`expo prebuild` antes de `expo run:android`, y verificar con
+`unzip -l app-debug.apk | grep res/raw`.
+
+## E-404 · Botones de cabecera que no hacen nada: «⋯» de Plan y Training, ⓘ de Comunidad, campana de Hoy
+
+**Síntoma (emulador, 28/09).** Tocarlos no hace nada, en cualquier cuenta. La campana de Hoy tampoco: la bandeja del
+líder se abre desde su tarjeta, no desde la campana.
+
+**Causa real.** La misma de E-400: `ScreenHeader` sin `onPressRight` en `PlanScreen`, `TrainingScreen`,
+`ComunidadScreen` y `HoyScreen`, desde el diseño original.
+
+**Solución.** Ninguna todavía: qué debe abrir cada uno es una decisión del dueño. Es muy probable que la ⓘ de Comunidad
+sea lo que el dueño tocó al reportar «la info del grupo no se visualiza»: la info del grupo sí se ve tocando la foto,
+el nombre o la ⓘ de la cabecera del chat del grupo (aprendiz, mentor y los dos grupos del mentor, probados), pero la ⓘ
+grande de Comunidad no hace nada.
+
+**Cómo evitar que vuelva a pasar.** Lo de E-400: sin acción no se dibuja el ícono.
