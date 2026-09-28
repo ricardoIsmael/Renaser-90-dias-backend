@@ -518,6 +518,13 @@ renaser:
   # Corregido 2026-09-27 (D-210): ese archivo (y bienvenida/fondo.png) son ahora los ORIGINALES. ADMIN y
   # ALQUIMISTA cambian los textos y la portada de la tarjeta desde la app; lo guardado queda en la
   # tabla cambios_bienvenida (V73) y reemplaza al original hasta volver a él. Sigue sin haber entorno.
+  # D-219 (2026-09-28): la Caja Renaser. El barrido horario avisa «tu caja está en revisión» a quien pasa
+  # solo el requisito de la Fase 1. APAGADO por defecto: el padrón de hoy ya pasó el Día 8 y muchos
+  # recibieron la caja antes de la app; prendido de entrada, la primera corrida le diría «en revisión» a
+  # quien ya la tiene. Primero el Admin marca «Ya se envió antes» a esos; después
+  # /renaser/prod/CAJA_AVISAR_POR_REVISAR=true y reiniciar. Los avisos de 3 y 5 días no dependen de esto.
+  caja:
+    avisar-por-revisar: ${CAJA_AVISAR_POR_REVISAR:false}
   chat:
     bienvenida:
       activa: ${BIENVENIDA_ACTIVA:false}

@@ -217,7 +217,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
      */
     private void intentarPush(EmitirNotificacionCommand command, EntregaPush entregaPush) {
         try {
-            var tokens = entregaPush.filtrar(loadTokenPushPort.tokensDe(command.usuarioId()));
+            var tokens = entregaPush.filtrar(loadTokenPushPort.tokensDe(command.usuarioId()), clock.now());
             if (tokens.isEmpty()) {
                 return;
             }

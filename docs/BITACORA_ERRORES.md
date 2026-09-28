@@ -11194,3 +11194,610 @@ tablas. Agrupar el mes 3 como semanas 9 a 13 queda por confirmar con el dueño.
 
 **Cómo evitar que vuelva a pasar.** Una regla de calendario que vive en los dos lados se prueba con las MISMAS tablas en
 los dos (`SemanaProgramaTest` ↔ `periodoDelPrograma.test.ts`).
+
+## E-394 · La alarma de mañana desaparece al detener la app, y el servidor no respalda: «Jugo verde mañana, antes: 1 / tras detenerla a la fuerza: 0»
+
+**Síntoma (emulador, 28/09, `dumpsys alarm`).** Recordatorio de Jugo verde a las 10:00 «a la hora»: sonó y quedó
+`origWhen=2026-09-29 10:00 window=0`. Tras detener la app a la fuerza (lo que hacen Xiaomi, Samsung o Huawei al cerrarla
+desde recientes o para ahorrar batería), la alarma de mañana: **0**, hasta volver a abrir la app. En el servidor, la
+prueba nueva contra la regla vieja (`SOLO_NAVEGADOR`):
+`Wanted but not invoked: pushPort.enviar([TokenPush[...], TokenPush[...]], MensajePush[tipo=RECORDATORIO_HABITO, titulo=T, cuerpo=C, rutaApp=null]); ... However, there was exactly 1 interaction with this mock`
+(solo salió al token WEB; `NotificacionServiceTest`, `Tests run: 18, Failures: 1`).
+
+**Causa real.** Dos cosas juntas. Android borra las alarmas de una app detenida a la fuerza, y `RearmadorDeAlarmas` recién
+las vuelve a armar al abrirla. Y desde D-184 el aviso de inicio de un hábito con recordatorio iba solo al navegador,
+porque el servidor confiaba en la alarma del teléfono: cuando esta se perdía, silencio.
+
+**Solución (D-217).** El teléfono confirma sus alarmas al servidor (`POST /api/v1/push-tokens/alarmas-locales`,
+`tokens_push.alarmas_confirmadas_en`, V80) después de dejarlas al día; sin confirmación en 26 h (o nunca, el APK viejo)
+el push de inicio también va al teléfono (`EntregaPush.RESPALDO_DE_ALARMA_LOCAL`). Guía de batería en Yo → Alarmas.
+**Límite:** Android tampoco entrega push (FCM) a una app detenida a la fuerza; en ese caso exacto solo sirve que el
+teléfono no la detenga (la guía). El respaldo cubre la alarma perdida con la app viva, la reinstalación, el teléfono
+nuevo y el APK viejo. No se probó el push en el emulador.
+
+**De paso (mismo cambio, error de la prueba).** `TokenPushPersistenceAdapterTest` falló con
+`expected: 2026-08-24T10:00:00Z but was: null`: una lectura JPA antes del UPDATE por JDBC, dentro de la misma
+`@Transactional` de la prueba, dejaba la entidad vieja en la caché de primer nivel. El código estaba bien; la prueba ya no
+lee por JPA antes del UPDATE (el estado inicial sale de lo que devuelve el UPSERT). Si un adaptador escribe con `JdbcTemplate`, su prueba no relee por JPA en la misma
+transacción sin `flush`/`clear`.
+
+**Cómo evitar que vuelva a pasar.** Una regla que deja de mandar un aviso porque «el otro lado ya lo cubre» necesita saber
+que el otro lado sigue vivo; si no lo puede saber, no corta: respalda. Lo vigilan `EntregaPushTest` (con el reloj a las
+02:00 UTC) y `confirmacionYPuestaAlDia.test.ts` en la app.
+
+## E-395 · La app no podía saber si las alarmas eran exactas: `window=+40m59s`
+
+**Síntoma.** Sin el permiso «Alarmas y recordatorios» (Android 14+ no lo concede solo) la alarma sale inexacta:
+`dumpsys alarm` mostró `window=+40m59s` (E-314), hasta ~40 min tarde. La app mostraba un aviso fijo en Yo → Alarmas porque
+no podía leer el permiso (`permisoDeAlarmaExacta.ts`: «No se puede saber si está concedido sin un módulo nativo nuevo»), y
+no lo pedía en ningún guardado.
+
+**Causa real.** `expo-notifications` consulta `canScheduleExactAlarms()` por dentro para elegir la clase de alarma, pero no
+lo expone; React Native tampoco.
+
+**Solución (D-217).** Módulo nativo local `modules/renaser-alarmas` (Kotlin, sin dependencias npm):
+`puedeProgramarAlarmasExactas()` y `abrirAjusteDeAlarmasExactas()` (con `package:`, directo en Renaser). Se pide una vez al
+guardar el primer recordatorio si está negado; Yo → Alarmas muestra el estado real y lo relee al volver de los ajustes. Con
+alarmas inexactas el teléfono no confirma (E-394): mejor el push a tiempo. Compilado con Gradle
+(`:renaser-alarmas:compileReleaseKotlin`); no probado en un teléfono.
+
+**Cómo evitar que vuelva a pasar.** El módulo se carga con `requireOptionalNativeModule`: un JS nuevo sobre un APK sin el
+módulo queda en `desconocido` y se comporta como antes, sin caerse (la app no se actualiza por aire).
+
+## E-396 · Las acciones de objetivos agendadas para después de mañana no tenían alarma
+
+**Síntoma (diagnóstico del 28/09).** Solo se armaban alarmas `DATE` de hoy y mañana, al abrir la app
+(`SincronizadorDeAcciones` leía `/rocks/today` y `/rocks/tomorrow`). Una acción del jueves agendada el lunes no tenía alarma
+hasta que la app se abriera el miércoles.
+
+**Causa real.** No había ningún endpoint que devolviera lo agendado más allá de mañana, aunque desde E-208 se puede agendar
+hasta el domingo.
+
+**Solución (D-217).** `GET /api/v1/rocks/upcoming` → `{desde, hasta, rocas}`, de hoy al último día agendable
+(`FechasPlanificables`), y la app arma todas las acciones con hora de ese rango; con `desde`/`hasta` también quita la alarma
+de una acción borrada de cualquiera de esos días. Contra un backend anterior cae a hoy y mañana.
+
+**Cómo evitar que vuelva a pasar.** Si se amplía una ventana de planificación, revisar quién arma las alarmas de lo que se
+planifica. `RocasAgendadasServiceTest` (martes con el reloj a las 03:00 UTC, domingo con el lunes) y
+`recordatoriosDeAcciones.test.ts` (acción del 01/10 con el reloj en la madrugada UTC).
+
+## E-397 · Cambiar la hora de un hábito lo hacía sonar HOY a la hora nueva, que el servidor todavía no aplica
+
+**Síntoma.** A las 06:00, pasar un hábito de las 07:00 a las 10:00 (el servidor lo difiere a mañana, D-91): hoy no sonaba a
+las 07:00 y sí a las 10:00. La prueba nueva, con lo que programaba el código viejo:
+`Expected: ["fecha 2026-09-28 07:00", "fecha 2026-09-29 10:00"]` · `Received: ["diaria 10:00"]`.
+
+**Causa real.** `programar` mueve la alarma DIARIA en el acto, y una diaria no sabe «desde mañana». `cambioDeHora.ts` lo
+decía a propósito («la alarma se mueve igual en el acto»).
+
+**Solución (D-217).** `programarConCambioDiferido`: hoy, una alarma de fecha a la hora de hoy; desde la fecha, la diaria
+nueva, o una alarma de fecha para el primer día si la diaria sonaría antes, que `completarCambiosDiferidos` convierte en
+diaria al abrir la app. La usan Training, Plan, Yo → Alarmas y el rearmado desde el servidor.
+
+**Cómo evitar que vuelva a pasar.** `recordatoriosDiferidosYDesdeServidor.test.ts`, con relojes en la madrugada UTC que en
+Lima son la noche anterior (regla 02).
+
+## E-398 · Teléfono nuevo o app reinstalada: el servidor dice «recordatorio activo» y el teléfono no tiene alarma
+
+**Síntoma.** `preferencias_horario`: `recordatorio_activo = true`, `minutos_recordatorio = 0` para Jugo verde; en el
+teléfono recién instalado, `dumpsys alarm | grep com.renaser.app`: nada. No sonaba hasta volver a guardar la hora de cada
+hábito.
+
+**Causa real.** Las antelaciones y los ids de las alarmas viven solo en AsyncStorage; nada volvía a armarlas desde lo que
+guarda el servidor.
+
+**Solución (D-217).** `armarRecordatoriosQueFaltan` al abrir la app: con recordatorio activo, minutos y hora en
+`GET /habit-preferences`, y sin alarma en el teléfono, la arma (con el cambio pendiente si lo hay). No pide permiso. Desde
+V81 el servidor guarda todos los avisos (`reminderMinutesList`) y se reconstruyen todos. *Corregido 2026-09-28:* decía
+que el servidor guardaba un solo número y que «30 min antes y a la hora» volvía como «30 min antes»; el dueño pidió
+guardarlos todos.
+
+**Cómo evitar que vuelva a pasar.** Lo que vive solo en el teléfono se pierde con el teléfono: si el servidor tiene el
+dato, el teléfono se reconstruye desde él al entrar.
+
+## E-399 · Tocar el recordatorio de un hábito solo abría la app: `Received: null`
+
+**Síntoma.** La alarma local no llevaba `data` y el push del servidor iba con `rutaApp = null`: el toque abría la app en la
+pestaña que estuviera. Las pruebas nuevas contra el código viejo:
+`destinoDeRuta('/habitos/h-1?dimension=BODY')` → `Expected: {"dimension": "CUERPO", "habitoId": "h-1", "tipo": "habito"}` ·
+`Received: null`; y en el servidor
+`expected: "/habitos/0f000000-0000-4000-8000-000000000001?dimension=BODY" but was: null`
+(`AvisoHabitoNotificationListenerTest`, `Tests run: 8, Failures: 4`).
+
+**Causa real.** Nadie había definido una ruta para el aviso de un hábito; solo los eventos (E-5) y el mentor tenían la suya.
+Además, `AbridorDeEventos` navegaba apenas existía la pestaña, aunque el Código Renaser tapara la app.
+
+**Solución (D-218).** Ruta `/habitos/{id}?dimension={categoría}` en los dos lados y `/objetivos/{fecha}?eje=` en las
+acciones; `AbridorDeAvisos` las abre y espera a que se cierren el Código Renaser, la tarjeta del arranque guiado o el Pacto
+(`capasObligatorias.ts`). Las alarmas viejas reciben la ruta al abrir la app.
+
+**Cómo evitar que vuelva a pasar.** `abrirAviso.test.ts` prueba la espera entera (Código Renaser en el día 1-7, Pacto en el
+día 1, Mapa en el día 7, arranque en frío). Una capa nueva que tome la pantalla se anota con `useCapaObligatoria`.
+
+## E-400 · El menú «⋯» de Yo no abre nada
+
+**Síntoma (emulador, 28/09).** En Yo, tocar «⋯» (arriba a la derecha) no hace nada: ni un error ni un cambio de
+pantalla. Se había pensado en E-274 (un `Modal` trabado tras recargar Metro), pero pasa también con la app recién
+abierta.
+
+**Causa real.** El botón nunca tuvo acción. `ScreenHeader` (`src/components/ui.tsx`) dibuja el ícono dentro de un
+`Pressable` cuyo `onPress` es la prop opcional `onPressRight`, y `YoScreen` no la pasaba. Viene así del diseño original
+(27/08). Lo mismo pasa hoy con el «⋯» de Plan y el de Training, la ⓘ de Comunidad y la campana de Hoy (salvo el líder,
+que tiene su bandeja por otra tarjeta): ver E-404.
+
+**Solución.** Frontend `797a28d`: el «⋯» de Yo abre el Centro de Perfil y Ajustes (`hub`), lo mismo que la tarjeta del
+usuario, donde están Notificaciones y Alarmas. Prueba `src/screens/__tests__/menuDeYoAbreAjustes.test.ts` (falla con
+el código anterior).
+
+**Cómo evitar que vuelva a pasar.** Un ícono tocable sin acción es un botón roto. Al usar `ScreenHeader`, pasar
+`onPressRight` o no dibujar el ícono.
+
+## E-401 · La foto del grupo no se guarda: «No se pudo conectar con el servidor» (`Unsupported FormDataPart implementation`)
+
+**Síntoma (emulador, 28/09, D-212).** Administración → Grupos → un grupo → «Cambiar foto del grupo» → elegir → «Guardar
+foto»: sale «No se pudo cambiar la foto / No se pudo conectar con el servidor. Revisa que el backend esté corriendo.», y
+el backend no registra ningún `PUT /api/v1/admin/cells/{id}/photo`. Pasa igual con el ADMIN, el Alquimista y el mentor
+desde la info del chat del grupo. El control sí aparece para los tres. El error real, escondido por el `catch` de
+`apiFetch`:
+
+    Error: Unsupported FormDataPart implementation
+        at convertFormDataAsync (expo/src/winter/fetch/convertFormData.ts)
+
+**Causa real.** Desde Expo 57 el `fetch` global de la app es el de Expo: `expo/src/winter/runtime.native.ts` hace
+`install('fetch', () => require('./fetch').fetch)` salvo `EXPO_PUBLIC_USE_RN_FETCH`. Ese `fetch` arma el multipart con
+`convertFormDataAsync`, que acepta texto, un `Blob` o algo con `bytes()`, pero no la parte propia de React Native
+`{ uri, name, type }` que armaba `fotoDelGrupoApi.parteNativaDeLaFoto`. Tira un error antes de enviar nada, y
+`apiFetch` lo convierte en «No se pudo conectar». Es la única subida multipart de la app. Las demás (chat, Muro,
+evidencias) hacen un `PUT` de bytes a S3 y no pasan por acá. Afecta a producción igual que al entorno local.
+
+**Solución.** Frontend `9e09f3b`: la parte trae además `bytes()`, que lee el archivo con el mismo `fetch` (el de Expo
+lee `file://`). La `uri` queda para el `fetch` de React Native. Probado en el emulador: `PUT … /photo 200`, la pantalla
+pasa a «Tiene foto propia desde el 28 de septiembre» y aparece «Volver a la foto de Renaser» (`DELETE … 204`). La
+prueba nueva de `fotoDelGrupoApi.test.ts` pasa la parte por el `convertFormDataAsync` de Expo y falla con el error
+literal contra el código anterior.
+
+**Cómo evitar que vuelva a pasar.** Un `FormData` con archivo se prueba contra el serializador que de verdad usa la app
+(`expo/src/winter/fetch/convertFormData`), no contra un `apiFetch` simulado que acepta cualquier cosa.
+
+## E-402 · «Mandar audios falla»: la nota de voz propia dice «Audio no disponible» apenas se envía
+
+**Síntoma (emulador, 28/09).** Chat del grupo → grabar → enviar: el mensaje se crea (`POST …/messages 201`), pero la
+burbuja de quien lo mandó dice «▶ Audio no disponible» y queda así. Con una foto pasa lo mismo: «📷 Imagen adjunta» en vez
+de la foto.
+
+**Causa real.** Hay dos cosas distintas.
+1. **Solo en local:** con `STORAGE_PROVEEDOR=noop` el backend firma la subida como `about:blank#pendiente-s3/…`
+   (`NoOpAlmacenamientoAdapter`, D-34) y la app corta en el paso 1 con «Todavía no se pueden mandar archivos / El
+   almacenamiento del servidor no está configurado». Esto no pasa en producción.
+2. **Real, también en producción:** la respuesta de `POST …/messages` es `MensajeResponse.from(Mensaje)`, que manda
+   `mediaUrl: null` (el servidor firma la lectura solo en el listado, como `senderName` y `status`). La app agregaba esa
+   respuesta tal cual (`agregarMensajeEnviado`), y el aviso en vivo del propio mensaje se descarta como eco, así que
+   nada la reemplazaba hasta salir y volver a entrar al chat. Los demás sí lo reciben bien: releen con `GET`.
+
+Verificado, pasos 2 y 3 con un S3 de prueba local (parche temporal del cliente, ya quitado): el `PUT` llega con
+`Content-Type: audio/m4a` y 60.631 bytes idénticos a la grabación (AAC 44,1 kHz mono, 4,99 s), y el `POST` responde
+201.
+
+**Solución.** Frontend `0308aed`: el mensaje recién enviado usa la copia local (la grabación o la foto elegida) si la
+respuesta no trae `mediaUrl` (`conLaCopiaLocal` en `useEnvioMediaChat`). Probado en el emulador: la burbuja nueva
+muestra ▶ 0:05 y suena (`AudioTrack` de `com.renaser.app`, `state:started`). Prueba
+`chat/hooks/__tests__/envioMediaConCopiaLocal.test.ts`: corre el hook entero y falla dos de tres casos contra el código
+anterior. Alternativa que no se tocó: que el `POST` devuelva la URL firmada. Eso arreglaría también a los APK ya
+instalados, pero cambia el contrato del backend.
+
+**Cómo evitar que vuelva a pasar.** Una respuesta de escritura no es lo mismo que una de lectura: antes de pintar la
+respuesta del `POST`, revisar qué campos manda el servidor solo en el listado.
+
+## E-403 · La build de desarrollo suena con el sonido del teléfono: `Custom sound 'voz_habito_despertar.mp3' not found in native app`
+
+**Síntoma (emulador, 28/09).** Yo → Alarmas → ▶ de «Voz»: suena el aviso de siempre del teléfono. En logcat:
+
+    E ReactNativeJS: expo-notifications: Custom sound 'voz_habito_despertar.mp3' not found in native app.
+
+Y el canal quedó creado con el sonido por defecto: `mSound=content://settings/system/notification_sound`.
+
+**Causa real.** Solo del entorno local. `android/` está en `.gitignore` y se generó el 23/09 con `expo prebuild`, antes
+de que existieran los sonidos (26 y 27/09). `npx expo run:android` reutiliza esa carpeta si existe, así que el APK de
+desarrollo tenía `res/raw` sin ningún sonido (solo `firebase_common_keep.xml`). Además, Android no deja cambiar el
+sonido de un canal ya creado: aunque se recompile, el canal sigue con el sonido por defecto hasta borrarlo. Las builds
+de EAS regeneran `android/`, así que el APK de producción trae los 29 sonidos (el diagnóstico de la mañana contó los
+del APK).
+
+**Solución.** `CI=1 npx expo prebuild --platform android --no-install` (sin `--clean`: no tocó `package.json` ni
+`app.json`), recompilar con `expo run:android --no-bundler`, y `adb shell pm clear com.renaser.app` para borrar los
+canales viejos. Después, los 9 ▶ suenan cada uno con su `raw/…` (ver la tabla del informe del 28/09).
+
+**Cómo evitar que vuelva a pasar.** Después de agregar un sonido al plugin de `expo-notifications`, correr
+`expo prebuild` antes de `expo run:android`, y verificar con
+`unzip -l app-debug.apk | grep res/raw`.
+
+## E-404 · Botones de cabecera que no hacen nada: «⋯» de Plan y Training, ⓘ de Comunidad, campana de Hoy
+
+**Síntoma (emulador, 28/09).** Tocarlos no hace nada, en cualquier cuenta. La campana de Hoy tampoco: la bandeja del
+líder se abre desde su tarjeta, no desde la campana.
+
+**Causa real.** La misma de E-400: `ScreenHeader` sin `onPressRight` en `PlanScreen`, `TrainingScreen`,
+`ComunidadScreen` y `HoyScreen`, desde el diseño original.
+
+**Solución.** Ninguna todavía: qué debe abrir cada uno es una decisión del dueño. Es muy probable que la ⓘ de Comunidad
+sea lo que el dueño tocó al reportar «la info del grupo no se visualiza»: la info del grupo sí se ve tocando la foto,
+el nombre o la ⓘ de la cabecera del chat del grupo (aprendiz, mentor y los dos grupos del mentor, probados), pero la ⓘ
+grande de Comunidad no hace nada.
+
+**Cómo evitar que vuelva a pasar.** Lo de E-400: sin acción no se dibuja el ícono.
+
+## E-405 · El push de Expo salía sin prioridad: `expected: "high" but was: ""`
+
+**Síntoma.** El dueño preguntó por qué WhatsApp avisa con la app cerrada y Renaser no siempre. El cuerpo que
+`ExpoPushTransporte` manda a Expo no llevaba `priority`. La prueba nueva contra el código viejo:
+`expected: "high" but was: ""` (`ExpoPushTransportePrioridadTest`, `Tests run: 18, Failures: 18`).
+
+**Causa real.** Sin `priority`, Expo usa la normal, y Android entrega esos mensajes en lote y tarde con el teléfono en
+reposo (Doze).
+
+**Solución.** `"priority":"high"` en todo push de Expo. El `channelId` sigue apagado (D-188). A una app detenida a la
+fuerza no le llega nada con ninguna prioridad: eso lo cubre la guía de batería (E-394).
+
+**Cómo evitar que vuelva a pasar.** `ExpoPushTransportePrioridadTest` y los cuerpos completos de
+`ExpoPushTransporteCanalTest`.
+
+## E-406 · Apagar el recordatorio (o cambiarle la hora) en otro dispositivo no tocaba la alarma de este teléfono
+
+**Síntoma.** Con el recordatorio apagado desde la web o desde otro teléfono, este seguía sonando todos los días; con la
+hora cambiada en otro lado, sonaba a la vieja.
+
+**Causa real.** La alarma se programa solo desde la pantalla donde se guarda; nada comparaba el teléfono con lo que dice
+`GET /habit-preferences`.
+
+**Solución (D-217).** `ajustarRecordatoriosAlServidor`, al abrir la app: cancela lo apagado, arma lo que falta y
+reprograma lo que cambió de hora, de avisos o de cambio pendiente. La hora programada se anota en el teléfono para poder
+compararla. Sin el conjunto del servidor (`null`, filas anteriores a V81) se conservan los avisos del teléfono si el más
+temprano coincide. Pruebas en `recordatoriosDiferidosYDesdeServidor.test.ts`.
+
+**Cómo evitar que vuelva a pasar.** Si un dato vive en el servidor y tiene una copia en el teléfono, el teléfono se
+compara con el servidor al entrar, no solo al guardar.
+
+## E-407 · En la web, tocar el push solo enfocaba la ventana
+
+**Síntoma.** El service worker (`public/renaser-push-sw.js`) enfocaba la ventana abierta y no le decía adónde ir; la app
+web tampoco leía la ruta al abrirse una ventana nueva.
+
+**Causa real.** El `notificationclick` usaba `data.url` solo para abrir una ventana nueva, y nadie la interpretaba.
+
+**Solución (D-218).** El service worker le manda `{tipo: 'renaser-abrir-aviso', ruta}` a la ventana abierta; sin ventana
+abre una en la ruta, que la app lee y limpia. `aperturaEnLaWeb.test.ts` carga el service worker real y falla contra el
+viejo (`postMessage` nunca llamado).
+
+**Cómo evitar que vuelva a pasar.** Una ruta de aviso nueva se prueba en los dos canales: el teléfono (`data.route`) y la
+web (`data.url`).
+
+## E-408 · La hoja de Training mostraba «A la hora» marcado y guardaba `recordatorio_activo=false`
+
+**Síntoma (visto dos veces, con Jugo verde, 28/09).** Training → Planificar: la hoja de un hábito sin ninguna preferencia
+abría con «A la hora» ya marcado; al guardar, `preferencias_horario.recordatorio_activo = false` (y en un caso
+`hora_disparo = null`). La pantalla mostraba un recordatorio que no existía: «se guarda pero no suena». Las pruebas nuevas
+contra el código viejo (`planificarDimension.test.ts`): `Expected: false` · `Received: true` (marcado al abrir),
+`Expected: true` · `Received: false` (lo marcado, pisado por la lectura tardía) y `Expected length: 0` ·
+`Received length: 3` (el recordatorio ofrecido con días marcados).
+
+**Causa real.** Tres cosas en `PlanificarDimensionModal`:
+1. Al abrir un hábito, `antelaciones` no se reiniciaba: quedaba la del hábito abierto antes hasta que llegaba
+   `antelacionesDe(...).then(setAntelaciones)`.
+2. Esa lectura, al llegar tarde, pisaba lo que la persona ya había tocado, o la de un hábito anterior pisaba la del actual.
+3. Con días marcados, la hoja seguía mostrando el recordatorio, pero `guardarDias` no lo guarda (y crea la fila sin hora
+   general: el `hora_disparo = null`).
+
+**Solución.** La hoja arranca con lo que dice el servidor (todos los avisos si los conoce, V81); la lectura del teléfono
+solo se usa si sigue abierto el mismo hábito y la persona no tocó nada; con días marcados el recordatorio no se ofrece
+(«El recordatorio se elige sin días marcados.»). Frontend `a22af58`.
+
+**Cómo evitar que vuelva a pasar.** Un estado que se carga en diferido se inicializa en el acto con lo que ya se sabe, y
+la carga tardía no pisa lo que tocó la persona. Si un control se muestra, lo que se guarda tiene que incluirlo.
+
+## E-409 · La ⓘ de Comunidad, el «⋯» de Plan y Training y la campana de Hoy no hacían nada
+
+**Síntoma.** Se veían tocables; tocarlos no hacía nada (E-404). El dueño: «quitarlos si no hacen nada».
+
+**Causa real.** `ScreenHeader` dibujaba el ícono con o sin `onPressRight`.
+
+**Solución.** Frontend `fbfb2db`: el botón se dibuja solo con ícono y acción; la cabecera conserva su alto
+(`minHeight`). Prueba `components/__tests__/cabeceraSinBotonesMuertos.test.ts`, que falla contra el código viejo.
+
+**Cómo evitar que vuelva a pasar.** La misma prueba revisa que ninguna pantalla pida un ícono sin acción.
+
+## E-410 · Cuatro hábitos a las 12:00: llegan los cuatro, suena uno (`Muting recently noisy`)
+
+**Síntoma (emulador, «Voz»).** A las 12:00 llegaron las cuatro notificaciones y solo se oyó «Agua tibia». En logcat:
+
+    E NotifAttentionHelper: Muting recently noisy 0|com.renaser.app|0|60db91d7-…|10231
+
+(y lo mismo para las otras dos). Las voces no se pisan: se pierden.
+
+**Causa real.** Cada hábito y cada acción tiene su propia alarma. Android deja sonar un aviso por segundo por
+app y calla al resto. Cuál suena lo decide el sistema.
+
+**Solución.** Frontend `c960a1d` y `a1eb8be` (`alarmas/avisosJuntos.ts`). En cada grupo que coincide, uno
+lleva el aviso («4 hábitos a las 12:00», con los nombres) y suena con el sonido elegido; con «Voz», «Tu hábito
+está por empezar.». Los demás siguen en la bandeja por un canal sin sonido (`avisos-juntos-sin-sonido`), que
+no gasta el límite. Separarlos unos segundos no se puede: el disparador diario solo tiene hora y minuto. Vale
+para acciones de objetivos y para el aviso diario de objetivos. Se reordena al abrir la app, al cambiar el
+sonido y al programar o cancelar. Probado en el emulador: con cuatro callados y el que lleva el aviso
+entregado cuarto, suena `raw/voz_habito`. Prueba `alarmas/__tests__/avisosALaMismaHora.test.ts`.
+
+**Cuidado al probarlo.** Adelantar el reloj del emulador dispara juntas las alarmas atrasadas, y el
+enfriamiento de Android calla lo que suena en los minutos siguientes. Parece el bug y no lo es: probar con
+alarmas a una hora real cercana, o esperar un rato tranquilo.
+
+**Límite conocido.** Un hábito diario y una acción de fecha a la misma hora no se juntan (tipos de disparador
+distintos): suena uno de los dos.
+
+## E-411 · Info del grupo con iniciales en vez de la tarjeta: Android pedía la foto sin sesión (403)
+
+**Síntoma.** En la info del grupo, «ME», «RE» en vez de la tarjeta con el nombre. En el backend:
+
+    [http] GET /api/v1/chat/conversations/{id}/miembros/{id}/foto 403 2ms
+
+Con curl y `X-Auth-Token` respondía 200. tcpdump en el emulador: el pedido salía sin `X-Auth-Token`.
+
+**Causa real.** `Image.android.js` (React Native 0.86) pasa las cabeceras a la prop nativa `headers` solo si
+`source` es un ARREGLO. La app pasaba el objeto `{ uri, headers }`. Afectaba también la foto del soporte y la
+foto propia de un grupo.
+
+**Solución.** Frontend `7910ea3`: `fuenteNativaDeLaFoto` devuelve un arreglo. Aprendiz y mentor ven las
+tarjetas y el backend responde 200. Prueba `chat/utils/__tests__/fotoConSesionEnAndroid.test.ts`: dibuja el
+`Image` de Android real y falla contra el código viejo.
+
+**Cómo evitar que vuelva a pasar.** Una imagen con cabeceras en React Native se pasa como `source={[{ uri,
+headers }]}`.
+
+## E-412 · Cambiar el sonido en Yo → Alarmas borraba el cambio de hora de Despertar
+
+**Síntoma.** Despertar con «12:00 desde mañana»: después de elegir «Voz», la alarma quedó «06:00 todos los
+días» (`dumpsys alarm`: `origWhen=2026-09-29 06:00`).
+
+**Causa real.** `SeccionAlarmas.cambiarSonido` reprogramaba Despertar con `despertar.hora` (la de hoy) e
+ignoraba el cambio pendiente (D-217).
+
+**Solución.** Frontend `c960a1d`: `pasarAlarmasAlSonido` pasa Despertar con los demás, sin tocar su hora.
+Probado: con «Voz» y «Cuenco» siguió a las 12:00. Prueba en `avisosALaMismaHora.test.ts`.
+
+**Cómo evitar que vuelva a pasar.** Cambiar el sonido nunca reprograma horas: solo cambia el canal.
+
+## E-413 · Al cerrar sesión quedan programadas las alarmas de la cuenta anterior
+
+**Síntoma.** Después de salir de `e2e-admin` y entrar con `e2e-ap-rot2`, seguían en `dumpsys alarm` los cinco
+hábitos de admin a las 12:00 (y a la mañana, el Despertar 16:00 de `e2e-ap-emu` con otra cuenta abierta).
+
+**Causa real.** Cerrar sesión no cancela las alarmas locales.
+
+**Solución.** Frontend (commit «Cancelar las alarmas locales al cerrar sesión…», `alarmas/alarmasDeLaCuenta.ts`).
+Al cerrar sesión, o al entrar con una cuenta distinta de la última, se cancelan todas las alarmas locales y se
+borra lo guardado de ellas (ids, horas, cambios con fecha). Se conservan las preferencias por persona. Si vuelve
+la misma cuenta: los hábitos se rearman desde el servidor (D-217); el aviso diario de objetivos y el repaso de
+los domingos, desde lo que el teléfono tenía pedido; las acciones, los eventos y el Código Renaser, con sus
+sincronizadores. Emulador (`dumpsys alarm`): admin 12 alarmas → cierra sesión 0 → entra `e2e-ap-rot2` 6 (solo
+sus acciones) → sale 0 → vuelve admin 7 (sus hábitos). Prueba `alarmas/__tests__/alarmasDeLaCuentaAlSalir.test.ts`
+(con el `AuthProvider` real; falla contra el código viejo).
+
+> **Corregido 2026-09-28.** Decía «Sin arreglar (fuera del pedido de hoy)». Se arregló antes de subir a producción.
+
+**Cómo evitar que vuelva a pasar.** Todo lo que programe una alarma local nueva guarda sus ids con un prefijo
+`renaser.…` y lo suma a `PREFIJOS_DE_ALARMAS`.
+
+## E-414 · Sumar una pieza a `PiezaDeBienvenida` rompe la compilación en un `switch` exhaustivo
+
+**Síntoma.** Al sumar `CARTA_CAJA` (D-219), `./mvnw test-compile`:
+`TextosDeBienvenidaYamlAdapter.java:[46,16] the switch expression does not cover all possible input values`.
+
+**Causa real.** `TextosDeBienvenidaYamlAdapter.original` es un `switch` sin `default` sobre `PiezaDeBienvenida`,
+y rechazaba la portada con su propio `case PORTADA`. Además, `PiezaDeBienvenida.esTexto()` era `this != PORTADA`
+y `CambiosDeBienvenidaJdbcAdapter` decidía la columna (`texto` o `portada_ruta`) con `== PORTADA`: esos dos no
+rompían la compilación, pero habrían guardado la ruta del fondo de la carta en `texto`.
+
+**Solución.** `case PORTADA, CARTA_CAJA -> throw …`; `esTexto()` excluye las dos piezas de imagen, y el
+adaptador JDBC pregunta `esTexto()` en vez de comparar con `PORTADA`. V82 amplía los `CHECK` de
+`cambios_bienvenida` (pieza, prefijo por pieza, texto sin ruta y ruta sin texto).
+
+**Cómo evitar que vuelva a pasar.** Para saber si una pieza es de imagen, `!pieza.esTexto()`; nunca
+`== PORTADA`. El `switch` sin `default` es a propósito: el compilador avisa, como esta vez.
+
+## E-415 · Sembrar un ALCHEMIST por SQL en una prueba: `invalid input value for enum renaser.rol_usuario`
+
+**Síntoma.** `CajaRenaserIT.seguridad`:
+`ERROR: invalid input value for enum renaser.rol_usuario: "ALCHEMIST"`.
+
+**Causa real.** El enum de Postgres está en español (`'APRENDIZ','MENTOR','LIDER_MENTORES','ADMIN','ALQUIMISTA'`,
+V1) y el de Java en inglés (`UserRole`). La semilla usó el nombre de Java. Con `ADMIN` y `MENTOR` no se nota
+porque se escriben igual.
+
+**Solución.** La semilla usa `ALQUIMISTA` (y `SUSPENDIDO`/`ACTIVO` para `estado_usuario`).
+
+**Cómo evitar que vuelva a pasar.** En SQL de pruebas, roles y estados con los valores de V1:
+`APRENDIZ`, `MENTOR`, `LIDER_MENTORES`, `ADMIN`, `ALQUIMISTA`; `ACTIVO`, `INACTIVO`, `SUSPENDIDO`.
+
+## E-416 · El 409 de la Caja mostraba el nombre interno del estado: «La caja está ENTREGADA: no se puede confirmar que llegó.»
+
+**Síntoma.** Prueba de punta a punta de la Caja (28/09, emulador): la aprendiz toca «Ya la recibí» cuando el Admin
+ya la había marcado entregada desde otro teléfono, y el diálogo dice literal
+`La caja está ENTREGADA: no se puede confirmar que llegó.` Lo mismo en cada acción fuera de su estado
+(`La caja está NO_APLICA: …`, `La caja está EN_EVALUACION: …`), también en la pantalla del Admin.
+
+**Causa real.** `AccionDeCaja.exigirDesde` armaba el mensaje con `estado` (el nombre del enum, que es el de la API).
+La app muestra el `message` del 409 tal cual (`mensajeDeError`), y su filtro de mensajes internos solo detecta
+nombres de clase (`Clase.campo:`), no mayúsculas con guion bajo.
+
+**Solución.** `EstadoCaja` lleva cómo se dice en un mensaje (`enPalabras()`: «ya fue entregada», «está en
+evaluación», «todavía no aplica»…) y el 409 lo usa: `La caja ya fue entregada: no se puede confirmar que llegó.`
+
+**Cómo evitar que vuelva a pasar.** `ValoresDeCajaTest.mensajeDelEstadoEnPalabras` recorre todas las acciones en
+todos los estados de los que no parten y exige que el mensaje no contenga el nombre del estado. Regla general: un
+`IllegalStateException` que termina en un 409 se escribe para una persona, sin `name()` de enums.
+
+## E-417 · La foto y el comprobante de la Caja aceptaban cualquier archivo con `Content-Type: image/jpeg`
+
+**Síntoma.** Mal uso a propósito (28/09, carril API): subir por la URL firmada un texto de 18 bytes
+(`no soy una imagen`) con `Content-Type: image/jpeg` y confirmarlo → `200`, y quedaba como foto de la caja
+(la misma que se manda al chat del aprendiz al marcarla enviada).
+
+**Causa real.** El tipo firmado en la URL solo obliga el encabezado del PUT, no el contenido. El servidor ya bajaba
+el objeto para medir el peso (`FotosDeCajaService.pesoDeLaSubida`), pero no miraba qué era. El fondo de la carta sí
+se revisa (lo abre `ImageIO`); la foto y el comprobante no.
+
+**Solución.** `FotoDeCaja.exigirImagen(byte[])`: los primeros bytes tienen que ser de JPEG (`FF D8 FF`) o de PNG
+(`89 50 4E 47 0D 0A 1A 0A`); si no, 400 «La foto tiene que ser JPG o PNG.». Se llama al confirmar, sobre lo que ya
+se bajaba.
+
+**Cómo evitar que vuelva a pasar.** `ValoresDeCajaTest.fotoPorDentro` y un paso en `CajaRenaserIT` (sube un texto
+y confirma → 400) antes de la foto buena. Regla: toda subida que después se muestra o se reenvía se revisa por
+dentro al confirmarla, no por el `Content-Type`.
+
+## E-418 · Agregar un elemento al contenido de la Caja desde la app: `La clave «PIEDRA_DE_CUARZO» solo puede tener minúsculas, números y _.`
+
+**Síntoma.** Administración → Caja Renaser → «Contenido y carta» → Agregar «Piedra de cuarzo» → Guardar: el
+servidor responde 400 con ese mensaje y el elemento no se agrega. No hay forma de agregar un elemento desde la app.
+
+**Causa real.** La app (`valorParaUnaEtiqueta`, frontend) se hizo antes que el servidor y armaba la clave en
+MAYÚSCULAS (`PIEDRA_DE_CUARZO`); el servidor (`ElementoDeCaja`, `[a-z0-9_]{1,40}`) solo acepta minúsculas. Las
+pruebas de cada lado pasaban: cada una probaba su propia regla.
+
+**Solución.** Frontend `683ca47` (rama `caja-renaser`): la clave nueva sale en minúsculas y con lugar para el
+sufijo de repetidos (`piedra_de_cuarzo`, `…_2`), igual que la deriva el servidor.
+
+**Cómo evitar que vuelva a pasar.** `contenidoYDestino.test.ts` exige que toda clave generada cumpla
+`^[a-z0-9_]{1,40}$`, también con etiquetas largas, tildes y repetidas. Cuando un contrato tiene una regla de
+formato, la prueba del cliente la copia literal del servidor.
+
+## E-419 · El botón «Ya la recibí» de «Tu Caja Renaser» se ve cortado: «Ya la» (RESUELTO 2026-09-28)
+
+**Síntoma.** Emulador Pixel 6, app de desarrollo de la rama `caja-renaser`: el botón dorado de «Tu Caja Renaser»
+muestra solo `Ya la`, con el ícono de check. Se reproduce sin error de por medio: cuando la pantalla ya abierta pasa
+a «En camino» desde otro estado (se relee al volver a Yo), el botón nuevo sale cortado; al abrirla de cero, a veces
+sale entero. La web muestra el texto entero. Capturas `CAJA-07-e-envio2-shalom.png`,
+`CAJA-08-app-recibida-estado-no-corresponde.png` y `ciclo/07-…`, `ciclo/10-…` en `~/Imágenes/e2e-2026-09-28/caja/`.
+
+> **Corregido 2026-09-28 (tarde).** Acá decía «Causa (hipótesis, sin confirmar): el `Text` reutiliza una medida
+> vieja (la de otro botón o la del estado `cargando`)» y dejaba el arreglo pendiente. La medida NO era vieja: la caja
+> del texto medía lo justo (219 px en el Pixel 6). Lo viejo era el **padding** de la vista nativa reciclada.
+
+**Reproducción exacta.** Aprendiz con «Tu Caja Renaser» abierta en «Armando»; el Admin la marca enviada; la
+aprendiz va a HOY y vuelve a YO (la pantalla se relee al enfocar). El botón nuevo sale «Ya la». `uiautomator`: el
+`TextView` «Ya la recibí» mide 219 × 58 px, lo mismo que cuando sale entero, pero dibuja el texto partido en dos
+renglones («Ya la» / «recibí») y el segundo queda fuera del alto de un renglón.
+
+**Causa real.** Un fallo de React Native 0.86 (Fabric, Android) con el reciclado de vistas de texto:
+`ReactNativeFeatureFlags.enableViewRecyclingForText()` viene en `true`, y `ReactTextView.recycleView()` resetea
+fuente, alineación, `breakStrategy`, etc., pero **no el padding**. Al montar un `Text` nuevo,
+`FabricMountingManager.cpp` (caso `Insert`) solo manda el padding si `contentInsets != EdgeInsets::ZERO`. Entonces
+un `Text` sin padding —la etiqueta de `BotonBase` en `components/Legible.tsx`— que recibe del pozo la vista de un
+`Text` CON padding (las pastillas y chips de YO o de HOY, que quedan en el pozo al cambiar de pestaña) se queda con
+ese padding: la caja mide lo justo para la etiqueta, el área útil es más angosta y el texto se parte. Por eso salía
+al volver de otra pestaña y «a veces» al abrir de cero: depende de qué vista quede en el pozo.
+
+**Solución.** `components/Legible.tsx`: todo texto de estas piezas (etiqueta de los botones, título, detalle y
+sección plegable) lleva `paddingHorizontal: 1` (`PADDING_QUE_PISA_EL_RECICLADO`). Con un padding distinto de cero,
+Fabric lo manda siempre al montar y pisa el que haya quedado; el texto mide 2 px más, no se nota. Verificado en el
+emulador con la misma secuencia: con el arreglo sale «Ya la recibí» entero; se sacó el arreglo un momento y la misma
+secuencia volvió a dar «Ya la»; con el arreglo otra vez, entero en el recorrido final (capturas `E419-a/b/c-*.png` y `14-aprendiz-envio2-en-camino-boton-entero.png` en
+`~/Imágenes/e2e-2026-09-28/caja/trazabilidad/`). Alarmas (`E419-d`) y el detalle del Admin siguen iguales.
+
+**Cómo evitar que vuelva a pasar.**
+- `src/components/__tests__/legibleTextoReciclado.test.ts`: exige padding horizontal distinto de cero en todos los
+  textos de `Legible`. Contra el `Legible.tsx` anterior falla (`Tests: 4 failed, 1 passed, 5 total`).
+- El fallo es de React Native y puede tocar a **cualquier** `Text` sin padding de la app que reciba una vista
+  reciclada con padding; `Legible` era donde se vio. Si aparece un texto cortado igual en otro lado, es esto: ponerle
+  un padding distinto de cero, o (arreglo de raíz) un parche de `patch-package` a `ReactTextView.recycleView()` que
+  haga `setPadding(0, 0, 0, 0)`, que exige recompilar la app nativa. No se hizo en este cambio (fuera de alcance).
+
+## E-420 · Probar la Caja con fotos en local: no había bucket de pruebas en la cuenta del perfil `default`
+
+**Síntoma.** `aws s3api list-buckets` con el perfil `default` (cuenta 251917136576) devuelve `"Buckets": []`, y
+`head-bucket --bucket s3-renaser90dias` da `403 Forbidden`. Con `STORAGE_PROVEEDOR=noop` confirmar una foto da 409
+(«Este servidor no tiene dónde guardar fotos») y «Marcar enviada» nunca se puede probar.
+
+**Causa real.** El «bucket de prueba de la otra cuenta» todavía no existe; la cuenta `default` está vacía. El
+bucket real es de la cuenta de `prod`, que no se usa para pruebas.
+
+**Solución (solo para la prueba).** Un S3 de mentira local (`~/.cache/renaser-e2e/s3-local/s3_local.py`, puerto
+9000, sin firma) y el backend con `STORAGE_PROVEEDOR=s3 AWS_S3_BUCKET=caja_e2e
+AWS_ENDPOINT_URL_S3=http://localhost:9000` y credenciales de mentira. El bucket lleva guion bajo a propósito: así el
+SDK usa estilo *path* (`localhost:9000/caja_e2e/…`) y el emulador llega con `adb reverse tcp:9000 tcp:9000`.
+Ninguna credencial real de AWS se tocó.
+
+**Cómo evitar que vuelva a pasar.** Para probar subidas en local, ese script (`~/.cache/renaser-e2e/
+levantar-backend-caja.sh` levanta el backend así). Si se quiere S3 de verdad, hay que crear el bucket de prueba en la
+cuenta 251917136576 (decisión del dueño).
+
+## E-421 · Código Renaser en el día 2: «Registrar» no hace nada y no sale ninguna llamada al servidor
+
+**Síntoma.** Aprendiz `e2e-t-dia1` en su día 2, pantalla «CÓDIGO RENASER · 14:00 · INNEGOCIABLE» (emulador Pixel 6,
+28/09): con las cuatro preguntas escritas, tocar «Registrar» no cambia nada en pantalla y el backend no recibe
+ningún `POST /api/v1/radar` (solo `GET /api/v1/radar/latest 200`). Ningún error en Metro ni en `logcat`
+(`ReactNativeJS`). Como el formulario es innegociable, no se puede salir de ahí.
+
+**Causa real.** Faltaba la quinta respuesta, el **nivel de energía** (`energia === null`). En un teléfono de alto
+normal, el `SliderRating` queda al final del `ScrollView`, debajo del pliegue, y el aviso «Falta 1 respuesta. Las
+cinco son obligatorias.» también se dibujaba dentro del scroll, después del selector: fuera de la vista.
+`CodigoRenaserModal.enviar` cortaba sin llamar (`if (!completo || energia === null) return;`), que es correcto, pero
+la persona no veía por qué.
+
+**Solución.** Frontend (rama `caja-renaser`): `src/features/radar/utils/faltantesDelRadar.ts` dice QUÉ falta en el
+orden de la pantalla («Falta: nivel de energía.» / «Faltan 2: ¿Qué siento?, nivel de energía.»); en
+`CodigoRenaserModal.tsx` el aviso (y el de error del servidor) pasa al pie, pegado a «Registrar», con
+`accessibilityRole="alert"`, y al tocar «Registrar» incompleto el scroll baja hasta lo primero que falta. Verificado
+en el emulador: «Registrar» baja al selector y avisa; con 7 marcado, `POST /api/v1/radar 200` y Hoy muestra
+«Código Renaser · 16:00 · REGISTRADO» (capturas `T3-a…e-*.png` en `~/Imágenes/e2e-2026-09-28/caja/trazabilidad/`).
+
+**Cómo evitar que vuelva a pasar.** `codigoRenaserModal.test.ts` exige que el aviso esté fuera del `ScrollView` y
+nombre lo que falta: contra el modal anterior falla (`Tests: 1 failed, 1 passed, 2 total`, `Expected substring:
+"nivel de energía"`, `Received string: ""`). Regla: en un formulario con botón fijo, la validación que bloquea el
+envío se muestra junto al botón o lleva a la persona al campo, nunca solo al final de un scroll. En los recorridos
+e2e, llenar también el selector de energía.
+
+## E-422 · Esperar a que termine un script con `pgrep -f <nombre>` se queda esperando para siempre
+
+**Síntoma.** `while pgrep -f levantar-backend-caja.sh >/dev/null; do sleep 3; done; cp …jar …` no terminó nunca:
+`Exit code 143 · Command timed out after 5m 0s`, y el jar nuevo no se copió (el backend siguió con el viejo).
+
+**Causa real.** `pgrep -f` busca en la línea de comando completa, y la del propio `bash -c "while pgrep -f
+levantar-backend-caja.sh …"` contiene ese texto: se encontraba a sí mismo.
+
+**Solución.** Copiar el jar primero y lanzar el script en primer plano (`cp …; levantar-backend-caja.sh`).
+
+**Cómo evitar que vuelva a pasar.** No esperar un proceso con `pgrep -f` y un patrón que aparece en el mismo
+comando; usar el PID (`$!` y `wait`), o un patrón que no se escriba literal (`pgrep -f '[l]evantar-backend'`).
+
+## E-423 · `adb shell input text` sin un campo con foco recarga la app de desarrollo (y una vez la cerró)
+
+**Síntoma.** Durante el e2e del 28/09 (tarde), escribir con `adb shell input text` cuando ningún campo tenía el foco
+recargó el JS de la app de desarrollo dos veces; una terminó en cierre nativo: `[runtime not ready]: TypeError:
+Cannot read property 'EventEmitter' of undefined` → `Fatal signal 6 (SIGABRT)` en `mqt_v_js`.
+
+**Causa real.** Sin foco, las teclas llegan a la Activity, y en la app de desarrollo la «r» es el atajo de «Reload»
+del menú de desarrollo. No es un fallo de la app de producción.
+
+**Solución.** Confirmar el foco antes de escribir (`adb shell dumpsys input_method | grep mServedView` →
+`ReactEditText`) y tocar el campo antes.
+
+**Cómo evitar que vuelva a pasar.** En los scripts del emulador, tocar el campo, esperar y comprobar el foco antes de
+cada `input text`; nunca mandar texto «a ciegas».
+
+## E-424 · `Render Error: Call to function 'AudioRecorder.constructor' has been rejected. → Caused by: The current activity is no longer available` (ABIERTO, no es de la Caja)
+
+**Síntoma.** App de desarrollo en el emulador (28/09, 16:32): después de cerrar sesión y volver a entrar por
+script, la pantalla roja de React Native con ese mensaje, `code: 'ERR_MISSING_ACTIVITY'`, desde
+`useEnvioMediaChat.ts:56` (`useAudioRecorder(RecordingPresets.HIGH_QUALITY)`) dentro de `ComunidadScreen`
+(`ComunidadScreen.tsx:470`). Al cerrarla la app quedó en blanco hasta forzar el cierre. Captura
+`E424-render-error-audiorecorder.png` en `~/Imágenes/e2e-2026-09-28/caja/trazabilidad/`.
+
+**Causa (lo que muestra `logcat`, sin arreglar).** El script de login manda `input keyevent 4` (atrás) para
+esconder el teclado; si el teclado ya no estaba, «atrás» en la raíz **cerró la Activity** (`Transition … type =
+CLOSE … taskId=170`, 16:32:39). El JS siguió vivo; `am start` creó otra Activity (tarea 171) y, al montar de nuevo
+`ComunidadScreen`, `useAudioRecorder` (expo-audio) intentó crear el grabador contra la Activity vieja y el módulo
+nativo rechazó: el hook no tolera ese rechazo y tira abajo el árbol entero. Puede pasarle a una persona real que
+toca «atrás» en la pantalla principal y vuelve a abrir la app mientras el proceso sigue vivo.
+
+**Solución.** Ninguna todavía: es de Comunidad/chat, fuera de esta tarea. Para seguir se forzó el cierre de la app.
+
+**Cómo evitar que vuelva a pasar.** Pendiente: que el grabador del chat se cree recién al empezar a grabar (no al
+montar la pantalla), o que el rechazo se atrape. En los scripts del emulador, no usar `keyevent 4` para esconder el
+teclado (usar `keyevent 111`, Escape, o tocar fuera).

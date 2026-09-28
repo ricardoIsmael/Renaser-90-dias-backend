@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 
 /**
  * Hueco #12 — el aprendiz edita el horario personal de un habito. Traduccion simplificada
@@ -25,12 +26,30 @@ public interface EditarPreferenciaHorarioUseCase {
      */
     ResultadoEdicionPreferencia editar(EditarPreferenciaHorarioCommand command);
 
+    /**
+     * {@code antelacionesRecordatorio} (D-217, 2026-09-28): TODAS las antelaciones elegidas, o
+     * {@code null} si quien llama solo conoce el número suelto ({@code minutosRecordatorio}), como el APK
+     * de producción. Con el conjunto, {@code minutosRecordatorio} se ignora: manda la más temprana.
+     */
     record EditarPreferenciaHorarioCommand(@NotNull UserId actorId, @NotNull HabitoId habitoId,
                                             @NotNull LocalTime horaDisparo, LocalTime horaLimite,
-                                            boolean recordatorioActivo, Integer minutosRecordatorio, LocalDate fecha) {
+                                            boolean recordatorioActivo, Integer minutosRecordatorio, LocalDate fecha,
+                                            List<Integer> antelacionesRecordatorio) {
         public EditarPreferenciaHorarioCommand {
             SelfValidating.validateConstructorArgs(EditarPreferenciaHorarioCommand.class, actorId, habitoId,
-                    horaDisparo, horaLimite, recordatorioActivo, minutosRecordatorio, fecha);
+                    horaDisparo, horaLimite, recordatorioActivo, minutosRecordatorio, fecha, antelacionesRecordatorio);
+        }
+
+        /**
+         * Los minutos que se guardan en {@code minutos_recordatorio}: con el conjunto (D-217), su más
+         * temprana; sin él (el APK de producción, el acompañante), los que llegaron sueltos.
+         */
+        public Integer minutosEfectivos() {
+            if (antelacionesRecordatorio == null) {
+                return minutosRecordatorio;
+            }
+            return antelacionesRecordatorio.stream().filter(java.util.Objects::nonNull)
+                    .max(Integer::compare).orElse(null);
         }
     }
 

@@ -392,4 +392,41 @@ class NotificacionServiceTest {
         verify(pushPort).enviar(eq(List.of(android, web)),
                 eq(new MensajePush(TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null)));
     }
+
+    @Test
+    @DisplayName("D-217: aviso de inicio con recordatorio -> el Android que nunca confirmo sus alarmas tambien recibe el push")
+    void inicioConRecordatorioLlegaAlTelefonoQueNuncaConfirmo() {
+        UserId usuario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.RECORDATORIO_HABITO))
+                .thenReturn(Optional.empty());
+        TokenPush android = token(usuario, PlataformaPush.ANDROID);
+        TokenPush web = token(usuario, PlataformaPush.WEB);
+        when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(android, web));
+        when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
+
+        service.emitir(new EmitirNotificacionCommand(usuario, TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null,
+                null), com.renaser.os.notifications.domain.model.habito.EntregaDelAvisoDeHabito.para("INICIO", true, 0));
+
+        verify(pushPort).enviar(eq(List.of(android, web)),
+                eq(new MensajePush(TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null)));
+    }
+
+    @Test
+    @DisplayName("D-217: el Android que confirmo sus alarmas hace 1 h no recibe el aviso de inicio; el navegador si")
+    void inicioConRecordatorioNoLlegaAlTelefonoConfirmado() {
+        UserId usuario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.RECORDATORIO_HABITO))
+                .thenReturn(Optional.empty());
+        TokenPush android = token(usuario, PlataformaPush.ANDROID);
+        android.confirmarAlarmasLocales(com.renaser.os.shared.domain.FixedClock.at(CLOCK.now().minusSeconds(3600)));
+        TokenPush web = token(usuario, PlataformaPush.WEB);
+        when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(android, web));
+        when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
+
+        service.emitir(new EmitirNotificacionCommand(usuario, TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null,
+                null), com.renaser.os.notifications.domain.model.habito.EntregaDelAvisoDeHabito.para("INICIO", true, 0));
+
+        verify(pushPort).enviar(eq(List.of(web)),
+                eq(new MensajePush(TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null)));
+    }
 }

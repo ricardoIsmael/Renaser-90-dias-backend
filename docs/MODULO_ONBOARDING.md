@@ -390,3 +390,17 @@ concurrencia E-37. Los tres puntos a seguir (documentación de `master-goal` des
 verificación de propiedad de `bucket`/`path` en `MediaService.registrar`, y `@Data.toString()`
 como superficie latente de PII en dos `JpaEntity`) son de severidad baja/media y no bloquean nada
 hoy, pero valen una línea en el próximo cambio que toque este módulo.
+
+## Caja Renaser (D-219, 2026-09-28)
+
+El flujo `caja_renaser` vive en este módulo sobre el mismo motor de formularios: estados derivados + pasos en
+`etapas_onboarding_completadas` (`flujo = 'caja:<envío>:<PASO>'`, columnas `marcada_por` y `detalle`, V82),
+contenido editable como opciones de `caja_contenido`, destino alternativo como cinco preguntas opcionales, y
+fotos en `medias_onboarding` (clase `FOTO`). Código en `domain/model/caja/`, `application/services/caja/`,
+`infrastructure/adapter/in/rest/caja/`, `infrastructure/adapter/out/persistence/caja/` y el barrido
+`BarrerCajasScheduler`. Contrato y supuestos: `docs/specs/CAJA_RENASER.md` §11. Registro: D-219 en
+`docs/MODULOS_A_AVANZAR.md` §8.
+
+**Cambio en `POST /api/v1/onboarding/answers`:** desde D-219 rechaza con 403 las preguntas del flujo
+`caja_renaser` (antes aceptaba cualquier pregunta del propio actor, y un aprendiz podía marcarse el checklist
+de su caja).

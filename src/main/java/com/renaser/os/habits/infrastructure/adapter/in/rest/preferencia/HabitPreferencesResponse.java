@@ -29,16 +29,20 @@ public record HabitPreferencesResponse(List<HabitPreferenceItemResponse> habits,
     /**
      * {@code triggerTime}/{@code limitTime}: lo que rige en la fecha consultada. {@code customized}: si el horario sale de
      * una preferencia propia o del catalogo. {@code pendingChange}: {@code null} si no hay nada programado.
+     * {@code reminderMinutesList} (D-217, aditivo): todas las antelaciones, de la más temprana a la más
+     * tardía; {@code null} = no se conocen (fila anterior a V81). {@code reminderMinutesBefore} sigue
+     * siendo la más temprana, para el APK de producción.
      */
     public record HabitPreferenceItemResponse(UUID habitId, String title, LocalTime triggerTime, LocalTime limitTime,
                                                boolean customized, boolean reminderEnabled,
                                                Integer reminderMinutesBefore,
-                                               PendingScheduleChangeResponse pendingChange) {
+                                               PendingScheduleChangeResponse pendingChange,
+                                               List<Integer> reminderMinutesList) {
 
         static HabitPreferenceItemResponse from(HorarioDeHabito h) {
             return new HabitPreferenceItemResponse(h.habitoId().value(), h.titulo(), h.horaDisparo(), h.horaLimite(),
                     h.personalizado(), h.recordatorioActivo(), h.minutosRecordatorio(),
-                    PendingScheduleChangeResponse.from(h.cambioProgramado()));
+                    PendingScheduleChangeResponse.from(h.cambioProgramado()), h.antelacionesRecordatorio());
         }
     }
 

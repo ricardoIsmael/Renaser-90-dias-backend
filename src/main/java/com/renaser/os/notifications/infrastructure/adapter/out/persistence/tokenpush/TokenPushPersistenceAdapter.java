@@ -2,6 +2,7 @@ package com.renaser.os.notifications.infrastructure.adapter.out.persistence.toke
 
 import com.renaser.os.notifications.application.ports.out.push.DesactivarTokenPushPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.BorrarTokensPushDeUsuarioPort;
+import com.renaser.os.notifications.application.ports.out.tokenpush.ConfirmarAlarmasLocalesPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPushPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.UpsertTokenPushPort;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
@@ -11,12 +12,13 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
 
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 @Component
 class TokenPushPersistenceAdapter implements UpsertTokenPushPort, LoadTokenPushPort, DesactivarTokenPushPort,
-        BorrarTokensPushDeUsuarioPort {
+        BorrarTokensPushDeUsuarioPort, ConfirmarAlarmasLocalesPort {
 
     /**
      * C-10 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): el UPSERT
@@ -44,8 +46,19 @@ class TokenPushPersistenceAdapter implements UpsertTokenPushPort, LoadTokenPushP
             ON CONFLICT (token) DO UPDATE SET
                 usuario_id     = EXCLUDED.usuario_id,
                 plataforma     = EXCLUDED.plataforma,
-                actualizado_en = EXCLUDED.actualizado_en
-            RETURNING id, usuario_id, token, plataforma, creado_en, actualizado_en
+                actualizado_en = EXCLUDED.actualizado_en,
+                alarmas_confirmadas_en = CASE WHEN tokens_push.usuario_id = EXCLUDED.usuario_id
+                                              THEN tokens_push.alarmas_confirmadas_en ELSE NULL END
+            RETURNING id, usuario_id, token, plataforma, creado_en, actualizado_en, alarmas_confirmadas_en
+            """;
+
+    /**
+     * D-217: la confirmacion de alarmas locales es de ESTE token y de ESTE dueno. Con el
+     * {@code usuario_id} en el WHERE, un token ajeno (o que ya cambio de dueno) no se marca: 0 filas.
+     */
+    private static final String CONFIRMAR_SQL = """
+            UPDATE renaser.tokens_push SET alarmas_confirmadas_en = ?
+            WHERE token = ? AND usuario_id = ?
             """;
 
     private final RowMapper<TokenPushJpaEntity> rowMapper = (rs, rowNum) -> {
@@ -57,6 +70,8 @@ class TokenPushPersistenceAdapter implements UpsertTokenPushPort, LoadTokenPushP
         entidad.setPlataforma(plataforma == null ? null : PlataformaPushJpa.valueOf(plataforma));
         entidad.setCreadoEn(rs.getTimestamp("creado_en").toInstant());
         entidad.setActualizadoEn(rs.getTimestamp("actualizado_en").toInstant());
+        Timestamp confirmadas = rs.getTimestamp("alarmas_confirmadas_en");
+        entidad.setAlarmasConfirmadasEn(confirmadas == null ? null : confirmadas.toInstant());
         return entidad;
     };
 
@@ -98,5 +113,10 @@ class TokenPushPersistenceAdapter implements UpsertTokenPushPort, LoadTokenPushP
     @Override
     public int borrarDe(UserId usuarioId) {
         return repository.deleteByUsuarioId(usuarioId.value());
+    }
+
+    @Override
+    public int confirmar(UserId usuarioId, String token, Instant confirmadasEn) {
+        return jdbcTemplate.update(CONFIRMAR_SQL, Timestamp.from(confirmadasEn), token, usuarioId.value());
     }
 }

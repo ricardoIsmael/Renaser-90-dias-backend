@@ -53,7 +53,7 @@ class CambiosDeBienvenidaJdbcAdapter implements CambiosDeBienvenidaPort {
 
     @Override
     public void registrar(CambioDeBienvenida cambio) {
-        boolean esPortada = cambio.pieza() == PiezaDeBienvenida.PORTADA;
+        boolean esPortada = !cambio.pieza().esTexto();
         jdbcClient.sql(REGISTRAR)
                 .param("pieza", cambio.pieza().name())
                 .param("texto", esPortada ? null : cambio.valor(), Types.VARCHAR)
@@ -78,7 +78,7 @@ class CambiosDeBienvenidaJdbcAdapter implements CambiosDeBienvenidaPort {
     /** Rehidrata sin volver a validar: lo que la base ya aceptó se sigue leyendo aunque cambien las reglas. */
     private static CambioDeBienvenida cambio(ResultSet rs) throws SQLException {
         PiezaDeBienvenida pieza = PiezaDeBienvenida.valueOf(rs.getString("pieza"));
-        String valor = pieza == PiezaDeBienvenida.PORTADA ? rs.getString("portada_ruta") : rs.getString("texto");
+        String valor = pieza.esTexto() ? rs.getString("texto") : rs.getString("portada_ruta");
         UUID por = rs.getObject("cambiado_por", UUID.class);
         return new CambioDeBienvenida(pieza, valor, por == null ? null : UserId.of(por),
                 rs.getTimestamp("cambiado_en").toInstant());

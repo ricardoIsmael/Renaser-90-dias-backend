@@ -23,7 +23,14 @@ public enum PiezaDeBienvenida {
     GRUPO(List.of(TextoDeBienvenida.NOMBRE, TextoDeBienvenida.MENTOR)),
 
     /** La imagen de fondo de la tarjeta (sin marcadores: el nombre lo escribe el servidor encima). */
-    PORTADA(List.of());
+    PORTADA(List.of()),
+
+    /**
+     * El fondo de la carta con el nombre que va dentro de la Caja Renaser (D-219, V82). No es de la
+     * bienvenida, pero es la misma idea —una imagen de Operaciones con el nombre encima, que el Admin cambia
+     * desde la app— y comparte su bitácora en vez de abrir otra tabla (regla del dueño para la caja).
+     */
+    CARTA_CAJA(List.of());
 
     private final List<String> marcadores;
 
@@ -40,7 +47,7 @@ public enum PiezaDeBienvenida {
     }
 
     public boolean esTexto() {
-        return this != PORTADA;
+        return this != PORTADA && this != CARTA_CAJA;
     }
 
     /** Las tres piezas de texto, en el orden en que salen (soporte: tarjeta, formal; después, el grupo). */

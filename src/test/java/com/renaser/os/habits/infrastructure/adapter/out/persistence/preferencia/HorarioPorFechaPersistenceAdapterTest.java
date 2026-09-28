@@ -81,16 +81,16 @@ class HorarioPorFechaPersistenceAdapterTest {
     void editarUnDiaRecargarYEditarOtroConservaAmbosYElHorarioBase() {
         save.save(preferencia(actor, 7));
         editar.editar(new EditarPreferenciaHorarioCommand(actor, habito, LocalTime.of(9, 0), null,
-                false, null, hoy.plusDays(1)));
+                false, null, hoy.plusDays(1), null));
         em.flush(); em.clear();
         assertThat(hora(actor, hoy)).isEqualTo(LocalTime.of(7, 0));
         assertThat(hora(actor, hoy.plusDays(1))).isEqualTo(LocalTime.of(9, 0));
         assertThat(hora(actor, hoy.plusDays(2))).isEqualTo(LocalTime.of(7, 0));
         assertThat(hora(otro, hoy.plusDays(1))).isEqualTo(LocalTime.of(6, 0));
         editar.editar(new EditarPreferenciaHorarioCommand(actor, habito, LocalTime.of(10, 0), null,
-                false, null, hoy.plusDays(2)));
+                false, null, hoy.plusDays(2), null));
         editar.editar(new EditarPreferenciaHorarioCommand(actor, habito, LocalTime.of(8, 0), null,
-                false, null, hoy.plusDays(1)));
+                false, null, hoy.plusDays(1), null));
         em.flush(); em.clear();
         assertThat(hora(actor, hoy.plusDays(1))).isEqualTo(LocalTime.of(8, 0));
         assertThat(hora(actor, hoy.plusDays(2))).isEqualTo(LocalTime.of(10, 0));
@@ -235,5 +235,31 @@ class HorarioPorFechaPersistenceAdapterTest {
         horarioDelDia(DayOfWeek.MONDAY, LocalTime.of(5, 0));
 
         assertThat(load.habitosApagadosEnDiaSemana(actor, DayOfWeek.MONDAY)).isEmpty();
+    }
+
+    /** D-217 (V81): el conjunto de antelaciones va y vuelve de la base; una fila sin él se lee null. */
+    @Test
+    void lasAntelacionesDelRecordatorioVanYVuelvenDeLaBase() {
+        PreferenciaHorario conConjunto = preferencia(actor, 10);
+        conConjunto.actualizarRecordatorioConAntelaciones(true, java.util.List.of(0, 30), clock.now());
+        save.save(conConjunto);
+        PreferenciaHorario sinConjunto = preferencia(otro, 7);
+        sinConjunto.actualizarRecordatorio(true, 10, clock.now());
+        save.save(sinConjunto);
+        em.flush();
+        em.clear();
+
+        var leida = load.porParticipanteYHabito(actor, habito).orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(leida.antelacionesRecordatorio()).containsExactly(30, 0);
+        org.assertj.core.api.Assertions.assertThat(leida.minutosRecordatorio()).isEqualTo(30);
+        var vista = consultar.consultar(actor, hoy).habitos().stream().filter(h -> h.habitoId().equals(habito))
+                .findFirst().orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(vista.antelacionesRecordatorio()).containsExactly(30, 0);
+
+        em.createNativeQuery("UPDATE renaser.preferencias_horario SET antelaciones_recordatorio = NULL "
+                + "WHERE participante_id = :p").setParameter("p", otro.value()).executeUpdate();
+        em.clear();
+        org.assertj.core.api.Assertions.assertThat(load.porParticipanteYHabito(otro, habito).orElseThrow()
+                .antelacionesRecordatorio()).isNull();
     }
 }

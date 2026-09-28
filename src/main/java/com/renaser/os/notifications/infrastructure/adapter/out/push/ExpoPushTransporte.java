@@ -141,13 +141,25 @@ class ExpoPushTransporte implements TransportePush {
                 : new String[] {"Authorization", "Bearer " + accessToken};
     }
 
-    /** Paquete y no privado para poder probar el cuerpo sin salir a la red. */
+    /**
+     * Paquete y no privado para poder probar el cuerpo sin salir a la red.
+     *
+     * <p><b>{@code priority: "high"} en todo push (2026-09-28, D-217).</b> Sin el campo, Expo manda
+     * {@code default}, que en Android es un mensaje FCM de prioridad NORMAL: con el teléfono en reposo
+     * (Doze) se entrega en lote, a destiempo — justo cuando el push es el respaldo de una alarma que se
+     * perdió. Con {@code high} llega con la app cerrada (deslizada desde recientes en un Android estándar)
+     * y en reposo, como los avisos de WhatsApp. En iOS Expo lo traduce a {@code apns-priority: 10}. Lo
+     * que no cambia: a una app DETENIDA A LA FUERZA Android no le entrega nada, con ninguna prioridad.
+     * Va para todo tipo: todos los push de Renaser son avisos que la persona tiene que ver, no
+     * sincronizaciones en segundo plano (el mal uso de {@code high} que Android penaliza).
+     */
     String cuerpoJson(TokenPush token, MensajePush mensaje) {
         StringBuilder json = new StringBuilder(256);
         json.append("{\"to\":").append(comillas(token.token()))
                 .append(",\"title\":").append(comillas(mensaje.titulo()))
                 .append(",\"body\":").append(comillas(mensaje.cuerpo()))
-                .append(",\"sound\":\"default\"");
+                .append(",\"sound\":\"default\"")
+                .append(",\"priority\":\"high\"");
         canalDe(token, mensaje).ifPresent(canal -> json.append(",\"channelId\":").append(comillas(canal)));
         String rutaApp = mensaje.rutaApp();
         if (rutaApp != null && !rutaApp.isBlank()) {

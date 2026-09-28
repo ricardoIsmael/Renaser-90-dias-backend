@@ -38,9 +38,22 @@ public interface ConsultarPreferenciasHorarioUseCase {
      * si la persona tenia recordatorio: el movil los mandaba en `false`/`null` en cada guardado
      * porque no tenia nada mejor, y con eso apagaba el recordatorio cada vez que se tocaba la hora.
      */
+    /**
+     * {@code antelacionesRecordatorio} (D-217, 2026-09-28): todas las antelaciones elegidas, de la más
+     * temprana a la más tardía; {@code null} si no se conocen (fila anterior a V81): la app lo toma como
+     * «desconocido» y no pisa lo que el teléfono tiene.
+     */
     record HorarioDeHabito(HabitoId habitoId, String titulo, LocalTime horaDisparo, LocalTime horaLimite,
                             boolean personalizado, boolean recordatorioActivo, Integer minutosRecordatorio,
-                            CambioProgramado cambioProgramado) {
+                            CambioProgramado cambioProgramado, List<Integer> antelacionesRecordatorio) {
+
+        /** Sin el conjunto: la forma de antes de D-217. */
+        public HorarioDeHabito(HabitoId habitoId, String titulo, LocalTime horaDisparo, LocalTime horaLimite,
+                               boolean personalizado, boolean recordatorioActivo, Integer minutosRecordatorio,
+                               CambioProgramado cambioProgramado) {
+            this(habitoId, titulo, horaDisparo, horaLimite, personalizado, recordatorioActivo, minutosRecordatorio,
+                    cambioProgramado, null);
+        }
     }
 
     record CambioProgramado(LocalTime horaDisparo, LocalTime horaLimite, LocalDate fechaEfectiva) {

@@ -67,6 +67,7 @@ class AvisoHabitoServiceTest {
 
     private static final UserId PARTICIPANTE = UserId.of(UUID.randomUUID());
     private static final HabitoId HABITO = HabitoId.of(UUID.randomUUID());
+    private static final String CATEGORIA_DEL_HABITO = "MENTE";
     private static final RegistroHabitoId REGISTRO = RegistroHabitoId.of(UUID.randomUUID());
 
     @Mock
@@ -101,7 +102,7 @@ class AvisoHabitoServiceTest {
         when(loadRegistroPort.porParticipanteYFecha(PARTICIPANTE, DIA_EN_LIMA)).thenReturn(List.of(registro));
         when(loadRegistroPort.porParticipanteYFecha(PARTICIPANTE, DIA_EN_EL_SERVIDOR)).thenReturn(List.of());
         when(loadHabitoPort.porIds(anyCollection())).thenReturn(List.of(Habito.crearDeSistema(HABITO,
-                "Meditacion nocturna", TipoHabito.CHECKBOX, "MENTE", ExigenciaEvidencia.OPCIONAL, MADRUGADA_UTC)));
+                "Meditacion nocturna", TipoHabito.CHECKBOX, CATEGORIA_DEL_HABITO, ExigenciaEvidencia.OPCIONAL, MADRUGADA_UTC)));
         when(loadHorarioPort.porHabitos(anyCollection())).thenReturn(List.of(
                 HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), HABITO, 1, null, TipoDia.TODOS,
                         LocalTime.of(21, 0), LocalTime.of(22, 0), MADRUGADA_UTC)));
@@ -136,6 +137,9 @@ class AvisoHabitoServiceTest {
         assertThat(evento.puntosEnJuego()).isEqualTo(10);
         assertThat(evento.participanteId()).isEqualTo(PARTICIPANTE);
         assertThat(evento.registroId()).isEqualTo(REGISTRO.value());
+        // D-218: el habito y su categoria viajan para que el toque abra Training en esa dimension.
+        assertThat(evento.habitoId()).isEqualTo(HABITO.value());
+        assertThat(evento.categoriaHabito()).isEqualTo(CATEGORIA_DEL_HABITO);
     }
 
     @Test

@@ -8,6 +8,9 @@ import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 /**
  * Convierte los dos avisos automaticos de habito de `habits` en una fila real de la bandeja
  * (pedido del dueno, 2026-09-05). Reparto de siempre: `habits` decide QUE avisar y CUANDO,
@@ -57,9 +60,26 @@ class AvisoHabitoNotificationListener {
         boolean esInicio = AVISO_INICIO.equals(event.tipoAviso());
         emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(event.participanteId(),
                 TipoNotificacion.RECORDATORIO_HABITO, esInicio ? "Tu habito esta por empezar" : "Se te vence un habito",
-                cuerpoDe(event, esInicio), null, event.claveEvento()),
+                cuerpoDe(event, esInicio), rutaDe(event), event.claveEvento()),
                 EntregaDelAvisoDeHabito.para(event.tipoAviso(), event.recordatorioActivo(),
                         event.minutosRecordatorio()));
+    }
+
+    /**
+     * D-218: tocar el aviso abre Training en la dimension de ese habito. La ruta es
+     * {@code /habitos/{habitoId}?dimension={categoria}} (la categoria del catalogo, BODY/MIND/...);
+     * la app la traduce a su dimension. Sin {@code habitoId} (evento anterior a D-218 reentregado por el
+     * outbox) no hay ruta, como antes: el toque solo abre la app.
+     */
+    static String rutaDe(AvisoHabitoDebidoEvent event) {
+        if (event.habitoId() == null) {
+            return null;
+        }
+        String ruta = "/habitos/" + event.habitoId();
+        String categoria = event.categoriaHabito();
+        return categoria == null || categoria.isBlank()
+                ? ruta
+                : ruta + "?dimension=" + URLEncoder.encode(categoria, StandardCharsets.UTF_8);
     }
 
     /**

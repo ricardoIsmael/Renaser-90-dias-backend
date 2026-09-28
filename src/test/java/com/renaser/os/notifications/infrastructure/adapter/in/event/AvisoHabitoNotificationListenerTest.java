@@ -31,9 +31,22 @@ class AvisoHabitoNotificationListenerTest {
     @Mock
     private EmitirNotificacionUseCase emitirNotificacionUseCase;
 
+    private static final UUID HABITO = UUID.fromString("0f000000-0000-4000-8000-000000000001");
+
     private static AvisoHabitoDebidoEvent aviso(String tipo, Boolean activo, Integer minutos) {
+        return avisoDe(tipo, activo, minutos, HABITO, "BODY");
+    }
+
+    private static AvisoHabitoDebidoEvent avisoDe(String tipo, Boolean activo, Integer minutos, UUID habitoId,
+                                                  String categoria) {
         return new AvisoHabitoDebidoEvent(UUID.randomUUID(), UserId.of(UUID.randomUUID()), "Meditar", tipo, 10, 10,
-                UUID.randomUUID(), activo, minutos, Instant.parse("2026-09-06T01:50:00Z"));
+                UUID.randomUUID(), activo, minutos, Instant.parse("2026-09-06T01:50:00Z"), habitoId, categoria);
+    }
+
+    private EmitirNotificacionCommand comandoEmitido() {
+        ArgumentCaptor<EmitirNotificacionCommand> captor = ArgumentCaptor.forClass(EmitirNotificacionCommand.class);
+        verify(emitirNotificacionUseCase).emitir(captor.capture(), org.mockito.ArgumentMatchers.any());
+        return captor.getValue();
     }
 
     @Test
@@ -47,11 +60,12 @@ class AvisoHabitoNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("inicio con alarma local en el telefono -> push solo al navegador")
+    @DisplayName("D-217: inicio con alarma local -> respaldo: navegador y telefonos sin alarmas confirmadas")
     void inicioConAlarmaLocal() {
         new AvisoHabitoNotificationListener(emitirNotificacionUseCase).on(aviso("INICIO", true, 30));
 
-        verify(emitirNotificacionUseCase).emitir(org.mockito.ArgumentMatchers.any(), eq(EntregaPush.SOLO_NAVEGADOR));
+        verify(emitirNotificacionUseCase).emitir(org.mockito.ArgumentMatchers.any(),
+                eq(EntregaPush.RESPALDO_DE_ALARMA_LOCAL));
     }
 
     @Test
@@ -60,5 +74,43 @@ class AvisoHabitoNotificationListenerTest {
         new AvisoHabitoNotificationListener(emitirNotificacionUseCase).on(aviso("POR_VENCER", true, 30));
 
         verify(emitirNotificacionUseCase).emitir(org.mockito.ArgumentMatchers.any(), eq(EntregaPush.TODOS));
+    }
+
+    @Test
+    @DisplayName("D-218: el aviso de inicio lleva la ruta del habito con su dimension")
+    void inicioLlevaLaRutaDelHabito() {
+        new AvisoHabitoNotificationListener(emitirNotificacionUseCase).on(aviso("INICIO", true, 0));
+
+        assertThat(comandoEmitido().rutaApp()).isEqualTo("/habitos/" + HABITO + "?dimension=BODY");
+    }
+
+    @Test
+    @DisplayName("D-218: el de vencimiento tambien abre el habito")
+    void vencimientoLlevaLaRuta() {
+        new AvisoHabitoNotificationListener(emitirNotificacionUseCase).on(aviso("POR_VENCER", null, null));
+
+        assertThat(comandoEmitido().rutaApp()).isEqualTo("/habitos/" + HABITO + "?dimension=BODY");
+    }
+
+    @Test
+    @DisplayName("D-218: sin categoria, solo el habito; evento viejo del outbox sin habito -> sin ruta, como antes")
+    void rutaSinCategoriaYEventoViejo() {
+        new AvisoHabitoNotificationListener(emitirNotificacionUseCase).on(avisoDe("INICIO", null, null, HABITO, null));
+        assertThat(comandoEmitido().rutaApp()).isEqualTo("/habitos/" + HABITO);
+    }
+
+    @Test
+    @DisplayName("D-218: un evento anterior a D-218 (sin habitoId) no inventa ruta")
+    void eventoViejoSinRuta() {
+        new AvisoHabitoNotificationListener(emitirNotificacionUseCase).on(avisoDe("INICIO", null, null, null, null));
+        assertThat(comandoEmitido().rutaApp()).isNull();
+    }
+
+    @Test
+    @DisplayName("D-218: una categoria con caracteres raros va codificada en la ruta")
+    void categoriaCodificada() {
+        new AvisoHabitoNotificationListener(emitirNotificacionUseCase)
+                .on(avisoDe("INICIO", null, null, HABITO, "VIDA Y NEGOCIO"));
+        assertThat(comandoEmitido().rutaApp()).isEqualTo("/habitos/" + HABITO + "?dimension=VIDA+Y+NEGOCIO");
     }
 }
