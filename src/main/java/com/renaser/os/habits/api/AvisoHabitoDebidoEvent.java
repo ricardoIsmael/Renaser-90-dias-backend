@@ -39,9 +39,16 @@ import java.util.UUID;
  * @param minutosRecordatorio {@code preferencias_horario.minutos_recordatorio}: con cuantos minutos
  *                            de antelacion suena la alarma LOCAL que la app programo en el telefono
  *                            ({@code null} = la app no programo ninguna)
+ * @param habitoId            el habito (no el registro del dia): con esto la app abre Training en ese
+ *                            habito al tocar el aviso (D-218). {@code null} en publicaciones anteriores a
+ *                            D-218 que el outbox reentregue
+ * @param categoriaHabito     la categoria del catalogo del habito ({@code BODY}, {@code MIND},
+ *                            {@code CONSCIENCE}, {@code SPIRIT}…), que es la dimension que la app abre.
+ *                            Tambien {@code null} en publicaciones viejas
  */
 public record AvisoHabitoDebidoEvent(UUID registroId, UserId participanteId, String tituloHabito, String tipoAviso,
                                       long minutosQueFaltan, int puntosEnJuego, UUID claveEvento,
                                       Boolean recordatorioActivo, Integer minutosRecordatorio,
-                                      Instant occurredAt) implements DomainEvent {
+                                      Instant occurredAt, UUID habitoId, String categoriaHabito)
+        implements DomainEvent {
 }

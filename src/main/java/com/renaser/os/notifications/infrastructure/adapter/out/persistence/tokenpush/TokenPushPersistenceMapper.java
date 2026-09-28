@@ -11,12 +11,13 @@ class TokenPushPersistenceMapper {
 
     TokenPush toDomain(TokenPushJpaEntity e) {
         return TokenPush.rehydrate(TokenPushId.of(e.getId()), UserId.of(e.getUsuarioId()), e.getToken(),
-                toDomainPlataforma(e.getPlataforma()), e.getCreadoEn(), e.getActualizadoEn());
+                toDomainPlataforma(e.getPlataforma()), e.getCreadoEn(), e.getActualizadoEn(),
+                e.getAlarmasConfirmadasEn());
     }
 
     TokenPushJpaEntity toEntity(TokenPush t) {
         return new TokenPushJpaEntity(t.id().value(), t.usuarioId().value(), t.token(),
-                toJpaPlataforma(t.plataforma()), t.creadoEn(), t.actualizadoEn());
+                toJpaPlataforma(t.plataforma()), t.creadoEn(), t.actualizadoEn(), t.alarmasConfirmadasEn());
     }
 
     PlataformaPushJpa toJpaPlataforma(PlataformaPush plataforma) {

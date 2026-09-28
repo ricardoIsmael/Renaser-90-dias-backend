@@ -157,7 +157,8 @@ public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
                 aviso.tipo().name(), aviso.minutosQueFaltan(), puntos.siCompletaAhora(),
                 aviso.tipo().claveIdempotencia(registro.id()),
                 preferencia == null ? null : preferencia.recordatorioActivo(),
-                preferencia == null ? null : preferencia.minutosRecordatorio(), clock.now());
+                preferencia == null ? null : preferencia.minutosRecordatorio(), clock.now(),
+                habito.id().value(), habito.categoriaClave());
     }
 
     /** Una consulta por coleccion y no una por registro: este barrido recorre todo el padron. */

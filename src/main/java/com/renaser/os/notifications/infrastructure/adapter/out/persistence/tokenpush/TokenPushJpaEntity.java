@@ -37,4 +37,7 @@ public class TokenPushJpaEntity {
     private Instant creadoEn;
 
     private Instant actualizadoEn;
+
+    /** V80 (D-217): ultima confirmacion de alarmas locales de este dispositivo; null = nunca. */
+    private Instant alarmasConfirmadasEn;
 }

@@ -1,5 +1,7 @@
 package com.renaser.os.notifications.infrastructure.adapter.in.rest.tokenpush;
 
+import com.renaser.os.notifications.application.ports.in.tokenpush.ConfirmarAlarmasLocalesUseCase;
+import com.renaser.os.notifications.application.ports.in.tokenpush.ConfirmarAlarmasLocalesUseCase.ConfirmarAlarmasLocalesCommand;
 import com.renaser.os.notifications.application.ports.in.tokenpush.RegistrarTokenPushUseCase;
 import com.renaser.os.notifications.application.ports.in.tokenpush.RegistrarTokenPushUseCase.RegistrarTokenPushCommand;
 import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
@@ -23,9 +25,12 @@ import java.util.Locale;
 public class TokenPushController {
 
     private final RegistrarTokenPushUseCase registrarTokenPushUseCase;
+    private final ConfirmarAlarmasLocalesUseCase confirmarAlarmasLocalesUseCase;
 
-    public TokenPushController(RegistrarTokenPushUseCase registrarTokenPushUseCase) {
+    public TokenPushController(RegistrarTokenPushUseCase registrarTokenPushUseCase,
+                               ConfirmarAlarmasLocalesUseCase confirmarAlarmasLocalesUseCase) {
         this.registrarTokenPushUseCase = registrarTokenPushUseCase;
+        this.confirmarAlarmasLocalesUseCase = confirmarAlarmasLocalesUseCase;
     }
 
     @RequiresPermission(Permission.USE_APP)
@@ -37,5 +42,17 @@ public class TokenPushController {
         var tokenPush = registrarTokenPushUseCase.registrar(
                 new RegistrarTokenPushCommand(actor, request.token(), plataforma));
         return TokenPushResponse.from(tokenPush);
+    }
+
+    /**
+     * D-217: la app avisa que este telefono acaba de rearmar sus alarmas locales. 404 si el token no
+     * esta registrado a nombre de quien llama.
+     */
+    @RequiresPermission(Permission.USE_APP)
+    @PostMapping("/alarmas-locales")
+    public ConfirmacionAlarmasResponse confirmarAlarmasLocales(@ActorAutenticado UserId actor,
+                                                               @RequestBody @Valid ConfirmarAlarmasRequest request) {
+        return new ConfirmacionAlarmasResponse(confirmarAlarmasLocalesUseCase.confirmar(
+                new ConfirmarAlarmasLocalesCommand(actor, request.token())));
     }
 }

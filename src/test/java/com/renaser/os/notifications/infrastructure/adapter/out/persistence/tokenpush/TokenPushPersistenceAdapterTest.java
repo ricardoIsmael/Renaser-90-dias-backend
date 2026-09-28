@@ -117,4 +117,35 @@ class TokenPushPersistenceAdapterTest {
         assertThat(adapter.borrarDe(UserId.of(usuarioId))).isEqualTo(1);
         assertThat(adapter.borrarDe(UserId.of(usuarioId))).isZero();
     }
+
+    // ─── D-217: confirmacion de alarmas locales (V80) ──────────────────────────────────────
+
+    @Test
+    void confirmarMarcaSoloElTokenPropioYSeLeeDeVuelta() {
+        TokenPush registrado = adapter.upsertPorToken(TokenPush.registrar(nuevoId(), UserId.of(usuarioId),
+                "expo-tok-alarmas", PlataformaPush.ANDROID, CLOCK));
+        assertThat(registrado.alarmasConfirmadasEn()).isNull();
+
+        assertThat(adapter.confirmar(UserId.of(otroUsuarioId), "expo-tok-alarmas", CLOCK.now())).isZero();
+        assertThat(adapter.confirmar(UserId.of(usuarioId), "no-existe", CLOCK.now())).isZero();
+
+        assertThat(adapter.confirmar(UserId.of(usuarioId), "expo-tok-alarmas", CLOCK.now())).isEqualTo(1);
+        assertThat(adapter.tokensDe(UserId.of(usuarioId))).singleElement()
+                .satisfies(t -> assertThat(t.alarmasConfirmadasEn()).isEqualTo(CLOCK.now()));
+    }
+
+    @Test
+    void reRegistrarElMismoTokenConservaLaConfirmacionYCambiarDeDuenoLaBorra() {
+        adapter.upsertPorToken(TokenPush.registrar(nuevoId(), UserId.of(usuarioId), "expo-tok-reuso",
+                PlataformaPush.ANDROID, CLOCK));
+        adapter.confirmar(UserId.of(usuarioId), "expo-tok-reuso", CLOCK.now());
+
+        TokenPush mismoDueno = adapter.upsertPorToken(TokenPush.registrar(nuevoId(), UserId.of(usuarioId),
+                "expo-tok-reuso", PlataformaPush.ANDROID, FixedClock.at(CLOCK.now().plusSeconds(60))));
+        assertThat(mismoDueno.alarmasConfirmadasEn()).isEqualTo(CLOCK.now());
+
+        TokenPush otroDueno = adapter.upsertPorToken(TokenPush.registrar(nuevoId(), UserId.of(otroUsuarioId),
+                "expo-tok-reuso", PlataformaPush.ANDROID, FixedClock.at(CLOCK.now().plusSeconds(120))));
+        assertThat(otroDueno.alarmasConfirmadasEn()).isNull();
+    }
 }

@@ -118,4 +118,15 @@ class ExpoPushTransporteCanalTest {
                         + "\"sound\":\"default\",\"channelId\":\"recordatorios-eventos\","
                         + "\"data\":{\"route\":\"/ruta\"}}");
     }
+
+    @Test
+    @DisplayName("D-218: la ruta del habito, con su ?dimension=, viaja tal cual en data.route y el JSON sigue valido")
+    void rutaDelHabitoConConsulta() throws Exception {
+        String ruta = "/habitos/0f000000-0000-4000-8000-000000000001?dimension=BODY";
+        String json = todoApagado().cuerpoJson(token(PlataformaPush.ANDROID),
+                new MensajePush(TipoNotificacion.RECORDATORIO_HABITO, "Titulo", "Cuerpo", ruta));
+
+        var leido = new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+        assertThat(leido.path("data").path("route").asText()).isEqualTo(ruta);
+    }
 }

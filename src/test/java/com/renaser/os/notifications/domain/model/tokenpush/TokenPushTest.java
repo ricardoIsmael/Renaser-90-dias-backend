@@ -58,4 +58,36 @@ class TokenPushTest {
         assertThat(t.token()).isEqualTo("token-compartido");
         assertThat(t.actualizadoEn()).isEqualTo(masTarde.now());
     }
+
+    // ─── D-217 ───────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void sinConfirmarNoTieneAlarmasVigentes() {
+        TokenPush t = TokenPush.registrar(nuevoId(), usuario(), "tok", PlataformaPush.ANDROID, CLOCK);
+
+        assertThat(t.alarmasConfirmadasEn()).isNull();
+        assertThat(t.tieneAlarmasLocalesVigentes(CLOCK.now())).isFalse();
+    }
+
+    @Test
+    void laConfirmacionValeHastaJustoAntesDe26Horas() {
+        TokenPush t = TokenPush.registrar(nuevoId(), usuario(), "tok", PlataformaPush.ANDROID, CLOCK);
+        t.confirmarAlarmasLocales(CLOCK);
+
+        assertThat(t.tieneAlarmasLocalesVigentes(CLOCK.now().plusSeconds(26 * 3600 - 1))).isTrue();
+        assertThat(t.tieneAlarmasLocalesVigentes(CLOCK.now().plusSeconds(26 * 3600))).isFalse();
+    }
+
+    @Test
+    void reasignarAOtroDuenoBorraLaConfirmacionYAlMismoNo() {
+        UserId dueno = usuario();
+        TokenPush t = TokenPush.registrar(nuevoId(), dueno, "tok", PlataformaPush.ANDROID, CLOCK);
+        t.confirmarAlarmasLocales(CLOCK);
+
+        t.reasignar(dueno, PlataformaPush.ANDROID, CLOCK);
+        assertThat(t.alarmasConfirmadasEn()).isEqualTo(CLOCK.now());
+
+        t.reasignar(usuario(), PlataformaPush.ANDROID, CLOCK);
+        assertThat(t.alarmasConfirmadasEn()).isNull();
+    }
 }
