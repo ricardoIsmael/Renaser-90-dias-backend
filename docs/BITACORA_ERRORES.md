@@ -11938,3 +11938,37 @@ del día en que se corre (el mismo tipo de fixture que la regla 03-pruebas llama
 `jest.useFakeTimers().setSystemTime(...)`. Mientras tanto, si falla solo ese archivo después de las 12:00, no es
 del cambio que se está probando.
 
+
+## E-435 · «como administrador no me sale el cambio … los anteriores no tienen sus grupos que se generan automáticamente»: aprendices antiguos sin chat de soporte ni chat de dos (RESUELTO, 29/09)
+
+**Síntoma.** Reporte del dueño en producción, textual: «tengo más aprendices y como administrador no me sale el
+cambio; parece que fue para todos lo nuevo, pero los anteriores no tienen sus grupos que se generan
+automáticamente». En la lista de chats del administrador aparecen los soportes «<nombre> – Formación Renaser» de
+los aprendices aprobados después de D-136, pero no los de antes; y los aprendices con mentor desde antes de D-173
+no tienen su chat de dos con él.
+
+**Causa real.** Los dos chats nacen **solo de eventos**: el soporte de `UsuarioRegistradoEvent` (al aprobar la
+cuenta, `UsuarioRegistradoSoporteListener`) y el chat de dos de `ComposicionDeCelulaCambiadaEvent`
+(`ComposicionCelulaAcompananteListener`). Quien ya estaba cuando se desplegó cada función no recibe ninguno de los
+dos eventos nunca más. Para el soporte existía un relleno, pero como endpoint de administración
+(`POST /api/v1/admin/chat/support-conversations/backfill`, CH-10) sin botón en el panel; para el chat de dos no
+existía relleno (límite anotado en `MODULO_CHAT.md` §9). Otros caminos que tampoco los crean: una cuenta
+suspendida cuando se abrieron los chats de su grupo (G-4) y que después se reactiva, y un grupo que entra en su
+período sin que nadie lo toque (no se publica ningún evento). El administrador solo ve los soportes en los que es
+participante, así que un soporte que no existe no aparece. En la base local (29/09, solo conteos, sin leer
+mensajes): 64 de 65 aprendices activos tenían soporte (el que falta es un TRAINEE sin fila en
+`participantes_programa`, sembrado por el e2e) y 7 de 20 parejas aprendiz–mentor vigentes no tenían chat de dos
+(ahí la causa fue otra: el e2e insertó la asignación de mentor por SQL, sin evento).
+
+**Solución (D-224).** `CompletarChatsDeAprendicesUseCase` reusa `ConversacionSoporteService` (relleno sin actor
+y sin bienvenida) y `ChatsConAcompananteService.abrirParaGrupo` en cada grupo operativo;
+`CompletarChatsDeAprendicesScheduler` lo corre a los 3 min de arrancar y cada hora con `@SchedulerLock`, y
+`EstadoDeCuentaCambiadoChatsListener` lo corre para una cuenta al reactivarse. Idempotente (UNIQUE de
+`clave_directa`), sin mensajes, sin tablas nuevas.
+
+**Cómo evitar que vuelva a pasar.** Una regla del tipo «todo X tiene su Y» que solo se cumple en el evento de
+alta deja afuera a todos los que ya estaban y a todo camino de alta que no publique ese evento: **si el estado
+deseado es derivable, un barrido idempotente lo mantiene** (regla 02 §2), y el evento queda solo para que sea
+inmediato. Un relleno que depende de que alguien se acuerde de llamar un endpoint sin botón no es un relleno.
+Fijado por `ChatsDeAprendicesAntiguosIT`, que siembra por SQL (sin eventos) a un aprendiz como los de antes y
+exige que el barrido le deje su soporte, su chat de dos y el soporte visible en la lista del administrador.

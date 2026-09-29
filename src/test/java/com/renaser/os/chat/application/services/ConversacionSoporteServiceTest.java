@@ -536,6 +536,69 @@ class ConversacionSoporteServiceTest {
         assertThat(resultado).isEqualTo(new ResultadoRelleno(2, 1, 0, 1));
     }
 
+    // ── 6. D-224: el relleno lo dispara el sistema, y el de una sola persona ───────────────
+
+    @Test
+    @DisplayName("D-224: el relleno del sistema no pide actor, crea las que faltan y no avisa a nadie")
+    void elRellenoDelSistemaNoPideActorNiAvisa() {
+        when(userSummaryFinder.aprendicesActivos()).thenReturn(List.of(
+                new UserSummary(ANA, "Ana Perez", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        when(participacionProgramaFinder.participantesInscritosActivos()).thenReturn(List.of(ANA));
+        when(loadConversacionPort.deSoporte()).thenReturn(List.of());
+        when(participacionProgramaFinder.usuariosActivosConRol(any())).thenReturn(List.of(ADMINA));
+
+        ResultadoRelleno resultado = service.rellenarPendientes();
+
+        assertThat(resultado).isEqualTo(new ResultadoRelleno(1, 1, 0, 0));
+        assertThat(participantesAgregados()).containsExactlyInAnyOrder(ANA, ADMINA);
+        verify(userSummaryFinder, never()).findById(any());
+        verify(eventos, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    @DisplayName("D-224: el soporte de UNA persona se crea con el staff y sin bienvenida")
+    void elSoporteDeUnaPersonaSeCreaSinBienvenida() {
+        inscrito(ANA, UserRole.TRAINEE);
+        perfil(ANA, "Ana Perez", UserRole.TRAINEE, UserStatus.ACTIVE);
+        when(loadConversacionPort.porClaveDirecta(Conversacion.claveSoporteDe(ANA))).thenReturn(Optional.empty());
+        when(participacionProgramaFinder.usuariosActivosConRol(any())).thenReturn(List.of(ADMINA, ALQUIMISTA));
+
+        assertThat(service.rellenarDe(ANA)).isTrue();
+
+        assertThat(participantesAgregados()).containsExactlyInAnyOrder(ANA, ADMINA, ALQUIMISTA);
+        verify(eventos, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    @DisplayName("D-224: el soporte de una persona no se duplica si ya lo tiene")
+    void elSoporteDeUnaPersonaNoSeDuplica() {
+        inscrito(ANA, UserRole.TRAINEE);
+        perfil(ANA, "Ana Perez", UserRole.TRAINEE, UserStatus.ACTIVE);
+        when(loadConversacionPort.porClaveDirecta(Conversacion.claveSoporteDe(ANA))).thenReturn(Optional.of(soporteDe(ANA)));
+
+        assertThat(service.rellenarDe(ANA)).isFalse();
+
+        verify(saveConversacionPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("D-224: sin programa, con la cuenta INACTIVE o sin ser aprendiz, no hay soporte")
+    void elSoporteDeUnaPersonaSoloParaAprendicesActivosEnElPrograma() {
+        when(participacionProgramaFinder.deParticipante(ANA))
+                .thenReturn(Optional.of(participacion(ANA, UserRole.TRAINEE, false, false)));
+        perfil(ANA, "Ana Perez", UserRole.TRAINEE, UserStatus.ACTIVE);
+        inscrito(BRUNO, UserRole.TRAINEE);
+        perfil(BRUNO, "Bruno Diaz", UserRole.TRAINEE, UserStatus.INACTIVE);
+        inscrito(MENTOR, UserRole.MENTOR);
+        perfil(MENTOR, "Mentor", UserRole.MENTOR, UserStatus.ACTIVE);
+
+        assertThat(service.rellenarDe(ANA)).isFalse();
+        assertThat(service.rellenarDe(BRUNO)).isFalse();
+        assertThat(service.rellenarDe(MENTOR)).isFalse();
+
+        verify(saveConversacionPort, never()).save(any());
+    }
+
     // ── Ayudantes ───────────────────────────────────────────────────────────────────────────
 
     private List<UserId> participantesAgregados() {

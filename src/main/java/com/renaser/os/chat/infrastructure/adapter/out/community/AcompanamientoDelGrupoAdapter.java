@@ -30,4 +30,19 @@ class AcompanamientoDelGrupoAdapter implements AcompanamientoDelGrupoPort {
     public List<UserId> acompanantesVigentes(UUID celulaId) {
         return acompanamientoFinder.acompanantesVigentes(celulaId, clock.now());
     }
+
+    @Override
+    public List<UUID> gruposOperativos() {
+        return acompanamientoFinder.gruposOperativos(clock.now()).stream()
+                .map(AcompanamientoFinder.GrupoConAprendices::grupoId)
+                .toList();
+    }
+
+    @Override
+    public List<UUID> gruposOperativosDe(UserId aprendizId) {
+        return acompanamientoFinder.gruposOperativos(clock.now()).stream()
+                .filter(grupo -> grupo.aprendices().contains(aprendizId))
+                .map(AcompanamientoFinder.GrupoConAprendices::grupoId)
+                .toList();
+    }
 }
