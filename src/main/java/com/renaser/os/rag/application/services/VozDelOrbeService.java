@@ -2,6 +2,7 @@ package com.renaser.os.rag.application.services;
 
 import com.renaser.os.rag.application.ports.in.voz.VozDelOrbeUseCase;
 import com.renaser.os.rag.application.ports.out.ia.SintetizarVozPort;
+import com.renaser.os.rag.domain.model.conversacion.TextoParaLeerEnVozAlta;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -66,15 +67,16 @@ public class VozDelOrbeService implements VozDelOrbeUseCase {
     @Override
     public Optional<UUID> preparar(UserId actorId, String texto) {
         requireActivo(actorId);
-        String valido = textoValido(texto);
+        // D-227: el acompanante usa emojis en el chat; la voz no los lee.
+        String aLeer = TextoParaLeerEnVozAlta.sinEmojis(textoValido(texto));
         barrerVencidos();
-        if (!sintetizarVozPort.disponible() || audios.size() >= MAXIMO_EN_MEMORIA) {
+        if (aLeer.isEmpty() || !sintetizarVozPort.disponible() || audios.size() >= MAXIMO_EN_MEMORIA) {
             return Optional.empty();
         }
         UUID id = UUID.randomUUID();
         AudioEnCurso audio = new AudioEnCurso();
         audios.put(id, new Entrada(actorId, audio, clock.now().plus(VIGENCIA)));
-        generador.execute(() -> generar(valido, audio));
+        generador.execute(() -> generar(aLeer, audio));
         return Optional.of(id);
     }
 

@@ -52,6 +52,21 @@ class VozDelOrbeServiceTest {
     }
 
     @Test
+    @DisplayName("D-227: los emojis del acompanante no se mandan a la voz")
+    void losEmojisNoSeLeen() {
+        service.preparar(actor, "¡Bien hecho! 💪 Tu jugo verde ya quedo ✅").orElseThrow();
+
+        assertThat(voz.textos).containsExactly("¡Bien hecho! Tu jugo verde ya quedo");
+    }
+
+    @Test
+    @DisplayName("D-227: un texto que era solo emojis no tiene nada que decir: vacio y sin generar")
+    void soloEmojisEsVacio() {
+        assertThat(service.preparar(actor, "💪✨")).isEmpty();
+        assertThat(voz.textos).isEmpty();
+    }
+
+    @Test
     @DisplayName("sin proveedor de voz es vacio y ni se intenta generar")
     void sinProveedorEsVacio() {
         voz.disponible = false;
