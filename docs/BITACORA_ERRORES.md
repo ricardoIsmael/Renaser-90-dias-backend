@@ -11972,6 +11972,7 @@ deseado es derivable, un barrido idempotente lo mantiene** (regla 02 §2), y el 
 inmediato. Un relleno que depende de que alguien se acuerde de llamar un endpoint sin botón no es un relleno.
 Fijado por `ChatsDeAprendicesAntiguosIT`, que siembra por SQL (sin eventos) a un aprendiz como los de antes y
 exige que el barrido le deje su soporte, su chat de dos y el soporte visible en la lista del administrador.
+
 ## E-436 · `IllegalArgument Invalid UUID string: ` al volver a stubbear un mock con `when(mock.metodo(anyString()))` (backend, 29/09)
 
 **Síntoma.** `TarjetasDelSemaforoServiceTest.sinSoporte:256->lambda$dobles$4:119 » IllegalArgument Invalid UUID
