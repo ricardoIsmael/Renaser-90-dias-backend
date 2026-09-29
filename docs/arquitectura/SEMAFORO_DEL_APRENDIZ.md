@@ -99,6 +99,26 @@ después; `ElegibilidadEventoNoOpAdapter` no se toca.
 inusable; lo reemplazó `ElegibilidadSegunAudienciaAdapter` (decide la audiencia del evento). Conectar la
 mentoría al semáforo sigue siendo una opción pendiente del dueño, no algo hecho.*
 
+### 1.3 Tarjeta diaria en el chat de soporte (D-223, 2026-09-29)
+
+Pedido del dueño: todos los días, a las **23:50 hora local de cada aprendiz** (`participantes_programa.timezone`),
+el PROGRAMA manda en su chat de soporte («<nombre> – Formación Renaser») la tarjeta del color de su día y la
+línea «Hoy llevas 85 % de tus hábitos.». Es **del día**, no de la semana: no cambia nada del cierre del sábado
+ni del vigente.
+
+| Regla | Qué significa |
+|---|---|
+| **% y color** | El del día con la regla de §1, calculado en vivo a las 23:50 (`points.api.SemaforoDelDiaFinder`, que usa `CumplimientoDelDia` y `CalendarioDeMedicion`, los mismos objetos del barrido): hábitos + objetivos, redondeado a entero, y verde ≥ 80, amarillo ≥ 60, rojo por debajo. El color se pinta sobre el entero, así que el número del texto y la tarjeta nunca se contradicen (un 79,6 real es «80 %» y verde). Lo completado después de las 23:50 lo toma el barrido para el semáforo; la tarjeta ya salió. |
+| **Quién** | Solo `APRENDIZ` con la cuenta `ACTIVA`, con chat de soporte y con el día `MEDIDO`: no hay tarjeta el día sin nada programado, antes del Día 1, después del 90, en pausa o con la cuenta suspendida ese día (D-209). El staff con programa propio no recibe tarjeta. |
+| **Cuándo** | Un barrido cada 5 minutos; manda a quien está entre las 23:50 y las 23:59 de su zona. En Lima eso son dos corridas (23:50 y 23:55): la segunda es el reintento. **Pasada la medianoche, la de ese día ya no sale** (diría «Hoy llevas…» de un día que terminó). |
+| **Una sola vez** | Sin tablas nuevas: cada mensaje tiene un id calculado de aprendiz + fecha (`UUID.nameUUIDFromBytes`) y se inserta con `ON CONFLICT (id) DO NOTHING`. El mensaje es su propia marca. |
+| **Imagen** | Tres JPEG en `src/main/resources/semaforo/tarjetas/` (diseño de Operaciones). El servidor sube cada uno UNA vez a `semaforo/tarjetas/<color>-v1.jpg` si no está, y todos los mensajes apuntan ahí. Con `STORAGE_PROVEEDOR=noop` o si S3 falla, sale solo el texto. |
+| **Aviso** | Push solo al aprendiz, y solo por el texto (la imagen no avisa). El Admin y el Alquimista del soporte no reciben un push por cada aprendiz cada noche (`MensajeDeChatGuardadoEvent.soloPara`). |
+| **Interruptor** | `SEMAFORO_TARJETA_DIARIA_ACTIVA` (`renaser.semaforo.tarjeta-diaria.activa`), prendido por defecto en `application.yaml`; apagado en las pruebas. |
+
+Detalle de implementación: `chat.TarjetasDelSemaforoService` (el barrido), `chat.TarjetaEnSoporte` (una persona),
+`chat.TarjetasDelSemaforoPublicadas` (la imagen) y `chat.HoraDeLaTarjeta` (la ventana, en la zona de cada uno).
+
 ---
 
 ## 2. Cómo se calcula (sin procedimiento almacenado — D-168)
@@ -207,6 +227,10 @@ interface SemaforoFinder {
     Map<UserId, VentanaDelSemaforo> vigenteDe(Collection<UserId> participantes);                     // sin clave = no se mide
     Map<UserId, VentanaDelSemaforo> semanaDe(Collection<UserId> participantes, LocalDate semanaHasta); // semanaHasta = viernes
     DetalleDelSemaforo detalleDe(UserId participante, int semanas);                                   // semanas: 1..13
+}
+
+interface SemaforoDelDiaFinder {   // D-223: un día calculado EN VIVO, con la misma regla (la tarjeta de las 23:50)
+    Map<UserId, DiaDelSemaforo> delDia(Collection<UserId> participantes, LocalDate fecha);   // sin clave = sin programa
 }
 
 record SemanaDelSemaforoCerradaEvent(UUID claveDeduplicacion, UUID participanteId, LocalDate desde, LocalDate hasta,

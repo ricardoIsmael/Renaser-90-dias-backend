@@ -11938,3 +11938,18 @@ del día en que se corre (el mismo tipo de fixture que la regla 03-pruebas llama
 `jest.useFakeTimers().setSystemTime(...)`. Mientras tanto, si falla solo ese archivo después de las 12:00, no es
 del cambio que se está probando.
 
+
+## E-436 · `IllegalArgument Invalid UUID string: ` al volver a stubbear un mock con `when(mock.metodo(anyString()))` (backend, 29/09)
+
+**Síntoma.** `TarjetasDelSemaforoServiceTest.sinSoporte:256->lambda$dobles$4:119 » IllegalArgument Invalid UUID
+string: ` en una prueba que solo quería que `conversaciones.porClaveDirecta(anyString())` devolviera vacío.
+
+**Causa real.** El `@BeforeEach` ya había dejado una respuesta (`thenAnswer`) que parte la clave y la convierte a
+UUID. Escribir `when(conversaciones.porClaveDirecta(anyString())).thenReturn(...)` después **llama al método del
+mock** para registrar el stub nuevo, con el valor que devuelve `anyString()` (la cadena vacía): se ejecuta la
+respuesta vieja con `""` y revienta antes de llegar al `thenReturn`.
+
+**Solución.** `doReturn(Optional.empty()).when(conversaciones).porClaveDirecta(anyString())`: no invoca el mock.
+
+**Cómo evitar que vuelva a pasar.** Para pisar un stub con `thenAnswer` que no tolera argumentos vacíos, usar la
+forma `doReturn(...).when(mock).metodo(...)`. Queda comentado en la prueba.

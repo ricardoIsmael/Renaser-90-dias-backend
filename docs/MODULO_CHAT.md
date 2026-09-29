@@ -1155,3 +1155,35 @@ defecto, tope 200; `total` es el de la búsqueda entera. Nunca correo ni teléfo
 | `ParticipantesDeConversacionServiceTest` (9) | Orden y roles de grupo/soporte/comunidad/1 a 1, ex integrante y staff degradado fuera, búsqueda sin tildes, paginación y topes, tarjeta, 403/404 sin consultar a nadie |
 | `ParticipantesDelChatControllerTest` (3) | Contrato HTTP, valores por defecto, 403 y 404 |
 | `ParticipantesDelChatIT` (8) | Postgres + Tomcat + sesión real: aprendiz, mentor y Admin ven el mismo grupo; ex alumno y Admin sin asignación, 403; soporte ajeno, 403; staff degradado; comunidad con búsqueda y páginas; suspendida, 403 |
+
+## 18. La tarjeta diaria del semáforo en el soporte (2026-09-29, D-223)
+
+Las reglas de negocio (quién, cuándo, qué % y qué color) están en `docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md`
+§1.3. Acá, lo que toca al chat:
+
+- **Dos mensajes del programa por noche** (imagen y texto, en ese orden, un milisegundo aparte), como la
+  bienvenida: el APK publicado no muestra el texto de una foto. Salen por el nuevo
+  `EnviarMensajeDelProgramaUseCase.enviarUnaVez`, que recibe los ids ya calculados y los guarda con
+  `GuardarMensajeUnicoPort` (`INSERT ... ON CONFLICT (id) DO NOTHING`, `MensajeUnicoJdbcAdapter`): una pieza que
+  ya existe no se guarda, no se empuja en vivo y no avisa. No se usó `SaveMensajePort.save` porque con un id
+  conocido JPA hace `merge` y pisaría el mensaje.
+- **Aviso de cada pieza** (`AvisoDeLaPieza`): `A_TODOS` (lo de siempre), `SOLO_A_QUIEN_SE_REFIERE` o `SIN_AVISO`.
+  El texto de la tarjeta avisa solo al aprendiz; la imagen no avisa. Viaja en
+  `MensajeDeChatGuardadoEvent.soloPara` (nuevo, nullable: un evento viejo del outbox llega con `null` = todos) y
+  `MensajeDeChatNotificationListener` salta a quien no es esa persona. Quién ve el chat sigue saliendo de
+  `AvisosDeMensajesFinder`: `soloPara` solo achica esa lista, nunca la agranda.
+- **La imagen no vive bajo `chat/<soporte>/`**: es `semaforo/tarjetas/<color>-v1.jpg`, una por color para todo el
+  padrón, subida por el servidor la primera vez que la necesita si no está (`TarjetasDelSemaforoPublicadas`).
+  `firmarLectura` no exige prefijo y la purga de cuentas no la toca (`ClavesDeCuenta` no reconoce `semaforo/`).
+  En la galería de fotos del soporte aparece como una foto más del chat.
+- En el APK publicado antes de D-199 la imagen de un mensaje del programa se ve como «Mensaje del sistema»
+  (§10); la línea del porcentaje se lee bien.
+
+| Clase | Qué fija |
+|---|---|
+| `HoraDeLaTarjetaTest` (4) | 04:50 UTC = 23:50 del día anterior en Lima; ventana 23:50–23:59; cada zona su hora |
+| `TarjetaDelSemaforoTest` (4) | Texto literal, ids calculados (iguales entre corridas, distintos por pieza/día/persona), rutas |
+| `TarjetasDelSemaforoServiceTest` (8) | Pide el día de Lima y nunca el del servidor; quién no recibe; noop solo texto; cada color se sube una vez; S3 caído; texto ya enviado; uno que falla no frena; sin soporte |
+| `MensajeDelProgramaServiceTest` (+3) | Piezas en orden, sin duplicar, aviso por pieza |
+| `MensajeDeChatSoloParaTest` (2) | `soloPara` deja el push solo a esa persona |
+| `TarjetaDelSemaforoIT` (1) | Postgres + Redis + outbox: una sola tarjeta con el % del día de Lima, segunda corrida sin nada, noop solo texto, suspendido sin tarjeta, push solo a la aprendiz |

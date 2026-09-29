@@ -295,6 +295,13 @@ renaser:
       mentoring-resumir-semana-semaforo:
         lock-at-most-for: PT20M
         lock-at-least-for: PT30S
+      # D-223: tarjeta diaria del semaforo en el soporte (cada 5 min; solo actua con quien esta en su
+      # 23:50-23:59 local). Sin lock, dos instancias recorren el padron a la vez; el mensaje no se duplica
+      # (id calculado + ON CONFLICT DO NOTHING), el trabajo si. Por debajo de los 5 min a proposito: si el
+      # proceso muere con el lock tomado, la corrida de las 23:55 no se pierde.
+      chat-tarjetas-del-semaforo:
+        lock-at-most-for: PT4M
+        lock-at-least-for: PT10S
   habits:
     # Cuanto antes se avisa cada cosa (2026-09-05). NO son constantes en el codigo porque el
     # dueno todavia no confirmo los numeros y este repo tiene una regla explicita contra
@@ -535,6 +542,14 @@ renaser:
     # dice el modo que tomó: `[chat.fotos] foto de los integrantes…`). Un valor que no es ninguno de los
     # dos queda en TARJETA, con un aviso en el log.
     foto-de-integrantes: ${CHAT_FOTO_DE_INTEGRANTES:TARJETA}
+  # D-223 (2026-09-29): la tarjeta diaria del semáforo en el chat de soporte (a las 23:50 de cada aprendiz,
+  # imagen del color de su día + «Hoy llevas N % de tus hábitos.»). PRENDIDA por defecto: la pidió el dueño
+  # con las imágenes de Operaciones y el texto ya decididos. En el código el default es false, así las
+  # pruebas (cuyo application.yaml reemplaza a este) no mandan nada solas. Apagarla en producción:
+  # /renaser/prod/SEMAFORO_TARJETA_DIARIA_ACTIVA=false y reiniciar. Prenderla no manda tarjetas atrasadas.
+  semaforo:
+    tarjeta-diaria:
+      activa: ${SEMAFORO_TARJETA_DIARIA_ACTIVA:true}
   email:
     proveedor: ${EMAIL_PROVEEDOR:noop}
     remitente: ${EMAIL_REMITENTE:Renaser <no-reply@TODO-dominio-no-definido.renaser.dev>}

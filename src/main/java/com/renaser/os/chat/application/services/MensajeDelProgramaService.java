@@ -2,6 +2,7 @@ package com.renaser.os.chat.application.services;
 
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelProgramaUseCase;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
+import com.renaser.os.chat.application.ports.out.mensaje.GuardarMensajeUnicoPort;
 import com.renaser.os.chat.application.ports.out.mensaje.PublicarMensajeFanoutPort;
 import com.renaser.os.chat.application.ports.out.mensaje.SaveMensajePort;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
@@ -18,7 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.Instant;
 import java.util.NoSuchElementException;
+import java.util.UUID;
 
 /**
  * El programa escribe en un chat (D-199/D-204). Aparte de {@code MensajeService} a propósito: ese
@@ -35,12 +38,16 @@ public class MensajeDelProgramaService implements EnviarMensajeDelProgramaUseCas
     private final IdGenerator idGenerator;
     /** D-221: el aviso push de un mensaje del programa, igual que el de una persona ({@code MensajeService}). */
     private final ApplicationEventPublisher eventos;
+    /** D-223: las piezas con id calculado ({@link #enviarUnaVez}). */
+    private final GuardarMensajeUnicoPort guardarUnicoPort;
 
     public MensajeDelProgramaService(LoadConversacionPort loadConversacionPort, SaveMensajePort saveMensajePort,
                                      PublicarMensajeFanoutPort publicarMensajeFanoutPort, Clock clock,
-                                     IdGenerator idGenerator, ApplicationEventPublisher eventos) {
+                                     IdGenerator idGenerator, ApplicationEventPublisher eventos,
+                                     GuardarMensajeUnicoPort guardarUnicoPort) {
         this.loadConversacionPort = loadConversacionPort;
         this.saveMensajePort = saveMensajePort;
+        this.guardarUnicoPort = guardarUnicoPort;
         this.publicarMensajeFanoutPort = publicarMensajeFanoutPort;
         this.clock = clock;
         this.idGenerator = idGenerator;
@@ -60,6 +67,42 @@ public class MensajeDelProgramaService implements EnviarMensajeDelProgramaUseCas
         // Dentro de la transacción: va al outbox junto con el mensaje (ver MensajeService.avisarQueSeGuardo).
         eventos.publishEvent(new MensajeDeChatGuardadoEvent(guardado.id().value(), conversacionId.value()));
         return guardado;
+    }
+
+    /**
+     * Cada pieza lleva un milisegundo más que la anterior: el chat ordena por {@code creado_en}, y la imagen
+     * tiene que quedar antes que su texto aunque el reloj devuelva el mismo instante (D-223).
+     */
+    @Override
+    @Transactional
+    public int enviarUnaVez(EntregaDelPrograma entrega) {
+        ConversacionId conversacionId = entrega.conversacionId();
+        if (loadConversacionPort.porId(conversacionId).isEmpty()) {
+            throw new NoSuchElementException("Conversacion no encontrada: " + conversacionId);
+        }
+        Instant ahora = clock.now();
+        int enviadas = 0;
+        for (int i = 0; i < entrega.piezas().size(); i++) {
+            PiezaDelPrograma pieza = entrega.piezas().get(i);
+            Mensaje mensaje = Mensaje.delPrograma(pieza.id(), conversacionId, entrega.sobreQuien(), pieza.contenido(),
+                    ahora.plusMillis(i));
+            if (guardarUnicoPort.guardarSiNoExiste(mensaje)) {
+                publicarDespuesDelCommit(mensaje);
+                avisar(mensaje, pieza.aviso(), entrega.sobreQuien());
+                enviadas++;
+            }
+        }
+        return enviadas;
+    }
+
+    /** Dentro de la transacción, como {@link #enviarDelPrograma}: va al outbox junto con el mensaje. */
+    private void avisar(Mensaje mensaje, AvisoDeLaPieza aviso, UserId sobreQuien) {
+        if (aviso == AvisoDeLaPieza.SIN_AVISO) {
+            return;
+        }
+        UUID soloPara = aviso == AvisoDeLaPieza.SOLO_A_QUIEN_SE_REFIERE ? sobreQuien.value() : null;
+        eventos.publishEvent(new MensajeDeChatGuardadoEvent(mensaje.id().value(), mensaje.conversacionId().value(),
+                soloPara));
     }
 
     /**

@@ -53,7 +53,10 @@ class MensajeDeChatNotificationListener {
             return;
         }
         for (Destinatario destinatario : aviso.get().destinatarios()) {
-            avisarA(aviso.get(), destinatario, event);
+            // D-223: la tarjeta diaria del semáforo avisa solo al aprendiz, no al staff del soporte.
+            if (event.alcanzaA(destinatario.usuarioId().value())) {
+                avisarA(aviso.get(), destinatario, event);
+            }
         }
     }
 
