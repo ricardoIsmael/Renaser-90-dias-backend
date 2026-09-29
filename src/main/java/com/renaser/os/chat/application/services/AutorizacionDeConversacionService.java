@@ -3,7 +3,6 @@ package com.renaser.os.chat.application.services;
 import com.renaser.os.chat.application.ports.in.conversacion.AutorizarAccesoAConversacionUseCase;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
-import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigentePort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
@@ -30,16 +29,16 @@ public class AutorizacionDeConversacionService implements AutorizarAccesoAConver
 
     private final LoadConversacionPort loadConversacionPort;
     private final EsParticipantePort esParticipantePort;
-    private final PertenenciaVigentePort pertenenciaVigentePort;
+    private final AccesoAChatsDeGrupo accesoAChatsDeGrupo;
     private final UserSummaryFinder userSummaryFinder;
 
     public AutorizacionDeConversacionService(LoadConversacionPort loadConversacionPort,
                                       EsParticipantePort esParticipantePort,
-                                      PertenenciaVigentePort pertenenciaVigentePort,
+                                      AccesoAChatsDeGrupo accesoAChatsDeGrupo,
                                       UserSummaryFinder userSummaryFinder) {
         this.loadConversacionPort = loadConversacionPort;
         this.esParticipantePort = esParticipantePort;
-        this.pertenenciaVigentePort = pertenenciaVigentePort;
+        this.accesoAChatsDeGrupo = accesoAChatsDeGrupo;
         this.userSummaryFinder = userSummaryFinder;
     }
 
@@ -59,7 +58,7 @@ public class AutorizacionDeConversacionService implements AutorizarAccesoAConver
                al chat de gente que ya no acompana. La pertenencia vigente, en cambio, exige que
                el grupo siga operativo y que la asignacion siga viva, y por eso revoca en el acto
                sin depender de que ningun barrido haya corrido. */
-            return pertenenciaVigentePort.perteneceAlGrupo(conversacion.celulaId(), usuarioId);
+            return accesoAChatsDeGrupo.puedeVer(conversacion.celulaId(), usuarioId);
         }
         if (!esParticipantePort.esParticipante(conversacion.id(), usuarioId)) {
             return false;

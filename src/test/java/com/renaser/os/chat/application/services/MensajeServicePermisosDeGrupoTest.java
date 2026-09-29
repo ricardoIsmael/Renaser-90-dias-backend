@@ -83,6 +83,11 @@ class MensajeServicePermisosDeGrupoTest {
 
         LoadConversacionPort conversaciones = new LoadConversacionPort() {
             @Override
+            public java.util.List<com.renaser.os.chat.domain.model.conversacion.Conversacion> porCelulaIds(
+                    java.util.Collection<java.util.UUID> celulaIds) {
+                return java.util.List.of();
+            }
+            @Override
             public Optional<Conversacion> porId(ConversacionId id) {
                 if (id.equals(CONVERSACION_GRUPO)) {
                     return Optional.of(Conversacion.crearCelula(CONVERSACION_GRUPO, CELULA, AHORA));
@@ -218,7 +223,7 @@ class MensajeServicePermisosDeGrupoTest {
             }
         };
 
-        servicio = new MensajeService(conversaciones, esParticipante, pertenencia, marcarLeido, guardar,
+        servicio = new MensajeService(conversaciones, esParticipante, new AccesoAChatsDeGrupo(pertenencia, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), usuarios), marcarLeido, guardar,
                 cargarMensajes, fanout, usuarios, almacenamiento, conversacion -> ConfirmacionDeLectura.sinDobleMarca(),
                 FixedClock.at(AHORA),
                 UUID::randomUUID, evento -> { });

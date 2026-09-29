@@ -6,7 +6,6 @@ import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPo
 import com.renaser.os.chat.application.ports.out.participante.ConversacionesDeUsuarioPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ListarUsuariosDeConversacionPort;
-import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigentePort;
 import com.renaser.os.chat.application.ports.out.presencia.PresenciaPort;
 import com.renaser.os.chat.application.ports.out.presencia.PublicarPresenciaFanoutPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
@@ -62,7 +61,7 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
     private final ListarUsuariosDeConversacionPort listarUsuariosDeConversacionPort;
     private final LoadConversacionPort loadConversacionPort;
     private final EsParticipantePort esParticipantePort;
-    private final PertenenciaVigentePort pertenenciaVigentePort;
+    private final AccesoAChatsDeGrupo accesoAChatsDeGrupo;
     private final UserSummaryFinder userSummaryFinder;
 
     public PresenciaService(PresenciaPort presenciaPort,
@@ -71,7 +70,7 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
                             ListarUsuariosDeConversacionPort listarUsuariosDeConversacionPort,
                             LoadConversacionPort loadConversacionPort,
                             EsParticipantePort esParticipantePort,
-                            PertenenciaVigentePort pertenenciaVigentePort,
+                            AccesoAChatsDeGrupo accesoAChatsDeGrupo,
                             UserSummaryFinder userSummaryFinder) {
         this.presenciaPort = presenciaPort;
         this.publicarPresenciaFanoutPort = publicarPresenciaFanoutPort;
@@ -79,7 +78,7 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
         this.listarUsuariosDeConversacionPort = listarUsuariosDeConversacionPort;
         this.loadConversacionPort = loadConversacionPort;
         this.esParticipantePort = esParticipantePort;
-        this.pertenenciaVigentePort = pertenenciaVigentePort;
+        this.accesoAChatsDeGrupo = accesoAChatsDeGrupo;
         this.userSummaryFinder = userSummaryFinder;
     }
 
@@ -177,7 +176,7 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
      */
     private boolean autorizado(Conversacion conversacion, UserId usuarioId) {
         if (conversacion.tipo() == TipoConversacion.CELULA) {
-            return pertenenciaVigentePort.perteneceAlGrupo(conversacion.celulaId(), usuarioId);
+            return accesoAChatsDeGrupo.puedeVer(conversacion.celulaId(), usuarioId);
         }
         if (!esParticipantePort.esParticipante(conversacion.id(), usuarioId)) {
             return false;

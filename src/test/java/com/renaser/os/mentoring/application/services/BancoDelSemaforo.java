@@ -91,6 +91,10 @@ public class BancoDelSemaforo {
     };
 
     public final AcompanamientoFinder acompanamiento = new AcompanamientoFinder() {
+            @Override
+            public boolean grupoOperativo(java.util.UUID grupoId, java.time.Instant instante) {
+                return false;
+            }
         @Override
         public List<TramoDeAcompanamiento> tramosDeMentor(UserId mentorId, Instant desde, Instant hasta) {
             return List.of(); // las vistas del semaforo no miran tramos historicos

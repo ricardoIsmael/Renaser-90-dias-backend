@@ -99,7 +99,7 @@ class MarcaDeLeidoEnElListadoTest {
 
     @BeforeEach
     void setUp() {
-        servicio = new MensajeService(loadConversacionPort, esParticipantePort, pertenenciaVigentePort,
+        servicio = new MensajeService(loadConversacionPort, esParticipantePort, new AccesoAChatsDeGrupo(pertenenciaVigentePort, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), userSummaryFinder),
                 marcarLeidoPort, saveMensajePort, loadMensajePort, publicarMensajeFanoutPort, userSummaryFinder,
                 almacenamientoPort, new LecturaService(marcasDeLecturaPort, publicarLecturaFanoutPort, userSummaryFinder),
                 FixedClock.at(AHORA), UUID::randomUUID, evento -> { });

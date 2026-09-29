@@ -152,10 +152,13 @@ class ParticipantesDelChatIT {
     }
 
     @Test
-    @DisplayName("grupo, autorización negativa: 403 a quien no pertenece (otro aprendiz, un ADMIN sin grupo), al ex integrante y sin sesión")
+    @DisplayName("grupo, autorización negativa: 403 a quien no pertenece (otro aprendiz), al ex integrante y sin sesión; el ADMIN sin grupo los ve (D-225)")
     void unGrupoNoLoVeQuienNoPertenece() throws Exception {
         assertThat(pedir(ruta(chatDelGrupo, ""), sesionDe(luis)).statusCode()).as("otro aprendiz").isEqualTo(403);
-        assertThat(pedir(ruta(chatDelGrupo, ""), sesionDe(ajeno)).statusCode()).as("ADMIN sin asignación").isEqualTo(403);
+        /* Corregido 2026-09-29 (D-225): acá se esperaba 403 para un ADMIN sin asignación. Ahora el Admin ve
+           todos los grupos en curso (y a sus integrantes) sin volverse uno: ver AdminVeTodosLosGruposIT. */
+        assertThat(nombres(obtener(ruta(chatDelGrupo, ""), sesionDe(ajeno)))).as("ADMIN sin asignación (D-225)")
+                .containsExactly("Ricardo Palomino", "Kelin Rojas", "Ana Pérez", "Beto Díaz");
         assertThat(pedir(ruta(chatDelGrupo, ""), sesionDe(exAlumno)).statusCode())
                 .as("su fila de participante sigue, su pertenencia no").isEqualTo(403);
         assertThat(pedir(ruta(chatDelGrupo, ""), null).statusCode()).as("sin sesión").isEqualTo(403);

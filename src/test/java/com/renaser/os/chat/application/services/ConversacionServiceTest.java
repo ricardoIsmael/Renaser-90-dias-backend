@@ -97,6 +97,10 @@ class ConversacionServiceTest {
     @Mock
     private PlatformTransactionManager transactionManager;
 
+    /** D-225: los grupos en curso, que el Admin ve sin estar asignado. */
+    @Mock
+    private com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort gruposEnCursoPort;
+
     private ConversacionService service;
 
     private final UserId activo = UserId.of(UUID.randomUUID());
@@ -107,7 +111,7 @@ class ConversacionServiceTest {
     @BeforeEach
     void setUp() {
         service = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
-                esParticipantePort, pertenenciaVigentePort, marcarLeidoPort, anunciarLectura, contarNoLeidosPort,
+                esParticipantePort, new AccesoAChatsDeGrupo(pertenenciaVigentePort, gruposEnCursoPort, userSummaryFinder), marcarLeidoPort, anunciarLectura, contarNoLeidosPort,
                 loadMensajePort, listarUsuariosPort, userSummaryFinder, fotosDeGrupos,
                 new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder), CLOCK, idGenerator, transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
@@ -277,6 +281,58 @@ class ConversacionServiceTest {
         service.listar(activo);
 
         verify(fotosDeGrupos, never()).cambiadasEn(any());
+    }
+
+    @Test
+    @DisplayName("D-225: al Admin la lista le suma los chats de todos los grupos en curso, sin repetir los suyos y sin no leídos")
+    void elAdminVeEnSuListaTodosLosGruposEnCurso() {
+        UUID suyo = UUID.randomUUID();
+        UUID ajeno = UUID.randomUUID();
+        Conversacion grupoSuyo = Conversacion.crearCelula(ConversacionId.of(UUID.randomUUID()), suyo, CLOCK.now());
+        Conversacion grupoAjeno = Conversacion.crearCelula(ConversacionId.of(UUID.randomUUID()), ajeno, CLOCK.now());
+        Conversacion comunidad = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
+        when(loadConversacionPort.misConversaciones(admin)).thenReturn(List.of(comunidad, grupoSuyo));
+        when(gruposEnCursoPort.gruposEnCurso()).thenReturn(List.of(suyo, ajeno));
+        when(loadConversacionPort.porCelulaIds(List.of(suyo, ajeno))).thenReturn(List.of(grupoSuyo, grupoAjeno));
+        when(loadMensajePort.ultimosPorConversacion(any())).thenReturn(Map.of());
+        when(contarNoLeidosPort.contarNoLeidos(eq(admin), any())).thenReturn(Map.of(grupoSuyo.id(), 3L));
+
+        List<ConversacionResumen> resumenes = service.listar(admin);
+
+        assertThat(resumenes).extracting(r -> r.conversacion().id())
+                .containsExactlyInAnyOrder(comunidad.id(), grupoSuyo.id(), grupoAjeno.id());
+        assertThat(resumenes).filteredOn(r -> r.conversacion().id().equals(grupoAjeno.id()))
+                .singleElement().extracting(ConversacionResumen::noLeidos).isEqualTo(0L);
+    }
+
+    @Test
+    @DisplayName("D-225: a un mentor la lista NO le suma grupos ajenos")
+    void aUnMentorNoSeLeSumanGruposAjenos() {
+        UserId mentor = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(mentor)).thenReturn(
+                Optional.of(new UserSummary(mentor, "Luisa", null, UserRole.MENTOR, UserStatus.ACTIVE)));
+        when(loadConversacionPort.misConversaciones(mentor)).thenReturn(List.of());
+        when(loadMensajePort.ultimosPorConversacion(any())).thenReturn(Map.of());
+        when(contarNoLeidosPort.contarNoLeidos(eq(mentor), any())).thenReturn(Map.of());
+
+        assertThat(service.listar(mentor)).isEmpty();
+        verify(gruposEnCursoPort, never()).gruposEnCurso();
+        verify(loadConversacionPort, never()).porCelulaIds(any());
+    }
+
+    @Test
+    @DisplayName("D-225: el Admin puede marcar leído un grupo ajeno en curso (no deja fila: el adaptador no hace nada)")
+    void elAdminMarcaLeidoUnGrupoAjeno() {
+        UUID ajeno = UUID.randomUUID();
+        ConversacionId conversacionId = ConversacionId.of(UUID.randomUUID());
+        when(loadConversacionPort.porId(conversacionId))
+                .thenReturn(Optional.of(Conversacion.crearCelula(conversacionId, ajeno, CLOCK.now())));
+        when(pertenenciaVigentePort.perteneceAlGrupo(ajeno, admin)).thenReturn(false);
+        when(gruposEnCursoPort.estaEnCurso(ajeno)).thenReturn(true);
+
+        service.marcarLeido(new MarcarLeidoCommand(admin, conversacionId));
+
+        verify(marcarLeidoPort).marcarLeido(conversacionId, admin, CLOCK.now());
     }
 
     @Test

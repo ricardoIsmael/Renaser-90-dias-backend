@@ -47,6 +47,10 @@ class BancoDeMentoria {
     final Set<UserId> suspendidos = new HashSet<>();
 
     final AcompanamientoFinder acompanamiento = new AcompanamientoFinder() {
+            @Override
+            public boolean grupoOperativo(java.util.UUID grupoId, java.time.Instant instante) {
+                return false;
+            }
         @Override
         public List<TramoDeAcompanamiento> tramosDeMentor(UserId mentorId, Instant desde, Instant hasta) {
             return grupos.stream().filter(g -> g.mentorId().equals(mentorId))

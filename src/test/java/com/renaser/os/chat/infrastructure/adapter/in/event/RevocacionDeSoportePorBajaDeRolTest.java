@@ -219,17 +219,20 @@ class RevocacionDeSoportePorBajaDeRolTest {
                 quitarParticipante, esParticipante, usuarios, participaciones, CLOCK, idGenerator, transacciones,
                 evento -> { });
         listener = new RolDeUsuarioCambiadoSoporteListener(soporte, soporte);
+        var accesoAGrupos = new com.renaser.os.chat.application.services.AccesoAChatsDeGrupo(pertenenciaVigente,
+                org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class),
+                usuarios);
         autorizacion = new AutorizacionDeConversacionService(conversaciones, esParticipante,
-                pertenenciaVigente, usuarios);
-        mensajes = new MensajeService(conversaciones, esParticipante, pertenenciaVigente, marcarLeidoPort,
+                accesoAGrupos, usuarios);
+        mensajes = new MensajeService(conversaciones, esParticipante, accesoAGrupos, marcarLeidoPort,
                 guardarMensaje, cargarMensajes, fanoutMensajes, usuarios, almacenamiento,
                 conversacion -> ConfirmacionDeLectura.sinDobleMarca(), CLOCK, idGenerator, evento -> { });
         bandeja = new ConversacionService(conversaciones, guardarConversacion, agregarParticipante,
-                esParticipante, pertenenciaVigente, marcarLeidoPort, conversacion -> { }, contarNoLeidos, cargarMensajes, roster,
+                esParticipante, accesoAGrupos, marcarLeidoPort, conversacion -> { }, contarNoLeidos, cargarMensajes, roster,
                 usuarios, sinFotosPropias(),
                 new com.renaser.os.chat.application.services.NombresDeLosChatsService(grupos -> java.util.Map.of(), usuarios), CLOCK, idGenerator, transacciones);
         presencia = new PresenciaService(presenciaPort, fanoutPresencia, conversacionesDeUsuario, roster,
-                conversaciones, esParticipante, pertenenciaVigente, usuarios);
+                conversaciones, esParticipante, accesoAGrupos, usuarios);
     }
 
     /**
