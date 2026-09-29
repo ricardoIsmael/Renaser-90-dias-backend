@@ -11859,3 +11859,34 @@ prueba de nombres empieza en `now()`, después de cerrar la de la mentora.
 
 **Cómo evitar que vuelva a pasar.** Al sembrar historia de mentores, usar rangos que no se pisen; el error de la
 base lo dice claro si se lee el `ERROR:` del reporte de failsafe y no solo la primera línea.
+
+## E-427 · El micrófono sigue grabando («microphone in use») después de salir de un chat en medio de una grabación (ABIERTO, 29/09)
+
+**Síntoma.** E2E de D-221 en el emulador (app de desarrollo, rama `grupos-y-avisos-chat` del frontend): con un
+chat de soporte abierto se tocó por error el micrófono («Grabando... 0:04») y enseguida la flecha de volver. La
+conversación se cerró sin enviar nada (verificado en `mensajes`), pero el punto verde de privacidad siguió
+encendido y `adb shell cmd appops get com.renaser.app RECORD_AUDIO` decía `RECORD_AUDIO: allow; … (running)`.
+Se apagó recién al cerrar sesión.
+
+**Causa probable (no confirmada).** El grabador que crea `useGrabadorDeVoz` al tocar el micrófono (E-424) no se
+detiene ni se libera cuando la pantalla del chat se cierra en medio de la grabación. No es de D-221 (no se tocó el
+grabador), pero no se verificó contra `origin/master`.
+
+**Pendiente.** Detener y liberar el grabador al desmontar / al cerrar la conversación, con una prueba que monte,
+empiece a grabar y desmonte. Reportado al dueño; no se arregló en este cambio (fuera de alcance).
+
+## E-428 · `Default FirebaseApp failed to initialize because no default options were found` en la app de desarrollo: no hay push remoto en el emulador (entorno, 29/09)
+
+**Síntoma.** Al probar D-221 en el emulador, la app de desarrollo no registró ningún token (`tokens_push` sin
+filas nuevas) y el logcat decía `W FirebaseApp: Default FirebaseApp failed to initialize because no default
+options were found. This usually means that com.google.gms:google-services was not applied to your gradle project.`
+
+**Causa real.** El proyecto no tiene `google-services.json` en el repo (ni `android.googleServicesFile` en
+`app.json`): la app de desarrollo armada con `expo run:android` no tiene FCM, y sin FCM
+`getExpoPushTokenAsync` no puede dar un token. El APK de EAS sí lo tiene (credenciales en Expo).
+
+**Cómo se probó igual.** Filas en `notificaciones` (quién, título, cuerpo, ruta), la llave de Redis del chat
+abierto, y un token falso con forma de Expo para ver que el backend sí sale a `exp.host` (respuesta: «El
+proveedor rechazo el token», y lo desactiva). El canal `mensajes-chat` con su sonido se vio con `dumpsys
+notification`. **No se pudo ver** el aviso en la bandeja del teléfono, el reemplazo por `tag`, el sonido del push
+ni el «pop» dentro de la app: eso queda para el APK de EAS en un teléfono real.
