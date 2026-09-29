@@ -436,4 +436,18 @@ class PromptSistemaRenasiaTest {
                 .contains("proponer_resumen_audioterapia");
         assertThat(render).doesNotContain("D-171");
     }
+
+    /**
+     * D-230 (2026-09-29): el dueño, probando, encontro que le decian que Despertar tiene que ser de
+     * mañana. Ningun habito tiene franja por su nombre: quien trabaja de noche lo pone a las 22:00.
+     */
+    @Test
+    @DisplayName("D-230: ningun habito es de mañana, tarde o noche por su nombre")
+    void cualquierHabitoACualquierHora() {
+        String render = renderizar("");
+
+        assertThat(render).contains("Cualquier habito va a la hora que la persona elija")
+                .contains("tambien Despertar, Dormir y los rituales")
+                .contains("nunca le digas que un habito tiene que ser de mañana, de tarde o");
+    }
 }

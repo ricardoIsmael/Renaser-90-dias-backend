@@ -12098,3 +12098,31 @@ count(distinct habito_id) from renaser.registros_habito r where r.participante_i
 current_date) hoy from renaser.usuarios u left join renaser.participantes_programa p on p.usuario_id = u.id where
 u.rol = 'LIDER_MENTORES';`. Si sale sin activar, el arreglo propuesto es que `activate-tracking` active la fila
 existente y que `canStartProgram` sea `esStaff && (!participa || !activado)`; no se hizo sin confirmar la causa.
+
+## E-451 · Un hábito movido de noche quedaba con la hora límite del catálogo de la MAÑANA: ventana 22:00–12:00 que cruzaba la medianoche (backend, RESUELTO, 29/09)
+
+**Síntoma.** Pedido del dueño, probando (29/09): al poner la hora de un hábito, «que no se limite a eso… no que
+despertar sea sí o sí en la mañana… hay gente que trabaja en la noche… no debes bloquearlo». Al buscar las
+restricciones de franja no apareció ninguna validación de «mañana», pero sí esto: con el catálogo local
+(`horarios_habito`), Pastilla Renacer va de 07:00 a 12:00. Movida a las 22:00 desde la app (que no manda límite
+propio), `HorarioResuelto.de` devolvía `horaDisparo = 22:00`, `horaLimite = 12:00`, y
+`VentanaEntrega.calcular` ponía el ancla en las **12:00 del día siguiente** (`2026-09-30T17:00:00Z` para el 29 en
+Lima). La prueba nueva contra el código viejo: `HabitoACualquierHoraTest.unLimiteDelCatalogoNoArrastraLaVentanaAlDiaSiguiente`
+→ `expected: 23:50` / actual `12:00`.
+
+**Causa real.** El respaldo POR CAMPO de `HorarioResuelto` (la preferencia gana campo por campo, el catálogo
+completa lo que falta) es correcto mientras los dos campos vengan del mismo horario. Cuando la persona mueve solo
+el disparo más allá del límite del catálogo, el límite heredado queda antes del disparo. D-122 ya acomodaba ese
+caso (límite ≤ disparo → 23:50), pero solo para el límite que llegaba en el pedido, no para el heredado.
+Efectos: el ancla y el aviso «por vencer» caían al día siguiente, la app mostraba 22:00–12:00, y
+`RegistroService.sigueAlcanzable` dejaba de generar el hábito del día pasado el mediodía («su límite ya pasó»).
+
+**Solución.** `VentanaDelDia.limiteQueSigueAlDisparo(disparo, límite)`: si el límite resuelto no es posterior al
+disparo, se acomoda a `ULTIMA_HORA_LIMITE` (23:50), la misma regla de D-122. Se aplica en `HorarioResuelto.de`
+(registro, puntos, avisos, tracks del día), en `ConsultaPreferenciasHorarioService` (lo que lee la app) y en
+`PreferenciaHorarioService` (ventana vigente de hoy y vista por día de la semana). Un límite del catálogo que sigue
+siendo posterior al disparo no se toca (el 23:59 de DÍA SIN CELULAR queda 23:59). D-230.
+
+**Cómo evitar que vuelva a pasar.** Cuando dos horas de una ventana pueden venir de fuentes distintas, la
+coherencia se valida sobre el RESULTADO, no sobre cada fuente. Lo fija `HabitoACualquierHoraTest` (con relojes en
+UTC que caen el día anterior en Lima, regla 02) y `VentanaDelDiaTest.unLimiteHeredadoAntesDelDisparoSeAcomodaYUnoPosteriorNoSeToca`.
