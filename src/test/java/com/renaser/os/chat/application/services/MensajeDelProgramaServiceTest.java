@@ -16,7 +16,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.renaser.os.chat.api.MensajeDeChatGuardadoEvent;
+import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelProgramaUseCase.AvisoDeLaPieza;
+import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelProgramaUseCase.EntregaDelPrograma;
+import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelProgramaUseCase.PiezaDelPrograma;
+import com.renaser.os.chat.domain.model.mensaje.MensajeId;
+
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,10 +59,12 @@ class MensajeDelProgramaServiceTest {
 
     /** D-221: lo que se publicó para el aviso push. */
     private final java.util.List<Object> publicados = new java.util.ArrayList<>();
+    /** D-223: la tabla de mensajes vista por el INSERT que ignora el choque de ids. */
+    private final Map<MensajeId, Mensaje> guardadosUnaVez = new LinkedHashMap<>();
 
     private MensajeDelProgramaService servicio() {
         return new MensajeDelProgramaService(loadConversacionPort, saveMensajePort, fanout, FixedClock.at(AHORA),
-                () -> ID, publicados::add);
+                () -> ID, publicados::add, m -> guardadosUnaVez.putIfAbsent(m.id(), m) == null);
     }
 
     @Test
@@ -93,5 +104,61 @@ class MensajeDelProgramaServiceTest {
                 .isInstanceOf(NoSuchElementException.class);
         verify(saveMensajePort, never()).save(any());
         verify(fanout, never()).publicar(any());
+    }
+
+    // ── D-223: piezas con id calculado ──────────────────────────────────────
+
+    private static final MensajeId IMAGEN = MensajeId.of(UUID.randomUUID());
+    private static final MensajeId TEXTO = MensajeId.of(UUID.randomUUID());
+
+    private static EntregaDelPrograma tarjeta() {
+        return new EntregaDelPrograma(SOPORTE, ANA, List.of(
+                new PiezaDelPrograma(IMAGEN, ContenidoDelPrograma.imagen("semaforo/tarjetas/verde-v1.jpg", "image/jpeg", 1000),
+                        AvisoDeLaPieza.SIN_AVISO),
+                new PiezaDelPrograma(TEXTO, ContenidoDelPrograma.texto("Hoy llevas 85 % de tus hábitos."),
+                        AvisoDeLaPieza.SOLO_A_QUIEN_SE_REFIERE)));
+    }
+
+    @Test
+    @DisplayName("D-223: manda las piezas en orden (la imagen un milisegundo antes); la imagen sin aviso y el texto solo para la aprendiz")
+    void mandaLasPiezasEnOrdenYConSuAviso() {
+        when(loadConversacionPort.porId(SOPORTE)).thenReturn(Optional.of(Conversacion.crearGlobal(SOPORTE, AHORA)));
+
+        assertThat(servicio().enviarUnaVez(tarjeta())).isEqualTo(2);
+
+        assertThat(guardadosUnaVez.get(IMAGEN).creadoEn()).isEqualTo(AHORA);
+        assertThat(guardadosUnaVez.get(TEXTO).creadoEn()).isEqualTo(AHORA.plusMillis(1));
+        assertThat(guardadosUnaVez.values()).allMatch(m -> m.tipo() == TipoMensaje.SISTEMA && m.emisorId().equals(ANA));
+        assertThat(publicados).containsExactly(new MensajeDeChatGuardadoEvent(TEXTO.value(), SOPORTE.value(), ANA.value()));
+        verify(fanout, org.mockito.Mockito.times(2)).publicar(any());
+        verify(saveMensajePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("D-223: la segunda vez no guarda, no empuja ni avisa nada; si faltaba una pieza, manda solo esa")
+    void laSegundaVezNoDuplica() {
+        when(loadConversacionPort.porId(SOPORTE)).thenReturn(Optional.of(Conversacion.crearGlobal(SOPORTE, AHORA)));
+        servicio().enviarUnaVez(tarjeta());
+        publicados.clear();
+        org.mockito.Mockito.clearInvocations(fanout);
+
+        assertThat(servicio().enviarUnaVez(tarjeta())).isZero();
+        assertThat(publicados).isEmpty();
+        verify(fanout, never()).publicar(any());
+
+        guardadosUnaVez.remove(TEXTO);
+        assertThat(servicio().enviarUnaVez(tarjeta())).isEqualTo(1);
+        assertThat(publicados).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("D-223: A_TODOS avisa como siempre (sin destinatario único)")
+    void aTodosAvisaComoSiempre() {
+        when(loadConversacionPort.porId(SOPORTE)).thenReturn(Optional.of(Conversacion.crearGlobal(SOPORTE, AHORA)));
+
+        servicio().enviarUnaVez(new EntregaDelPrograma(SOPORTE, ANA,
+                List.of(new PiezaDelPrograma(TEXTO, ContenidoDelPrograma.texto("hola"), AvisoDeLaPieza.A_TODOS))));
+
+        assertThat(publicados).containsExactly(new MensajeDeChatGuardadoEvent(TEXTO.value(), SOPORTE.value()));
     }
 }

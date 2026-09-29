@@ -714,6 +714,7 @@ arrancado **después** de cargarlo (E-244).
 |---|---|---|---|
 | `BIENVENIDA_ACTIVA` | `false` | Las bienvenidas automáticas del soporte y del grupo, firmadas por el programa (D-199, D-204) | Se prende cuando el dueño apruebe los textos de `bienvenida/mensajes.yaml` |
 | `CHAT_FOTO_DE_INTEGRANTES` | `TARJETA` | Qué foto muestra la info de un grupo de cada integrante (D-206): `TARJETA`, siempre su tarjeta con nombre; `FOTO_SUBIDA`, su foto si la subió y si no la tarjeta | No hace falta cargarlo para el modo por defecto. Cambiarlo no pide APK. El log de arranque dice el modo que tomó: `[chat.fotos] foto de los integrantes…` |
+| `SEMAFORO_TARJETA_DIARIA_ACTIVA` | `true` | La tarjeta diaria del semáforo en el chat de soporte, a las 23:50 de cada aprendiz (D-223) | No hace falta cargarlo para tenerla prendida. Para apagarla: `false` y reiniciar. Con `STORAGE_PROVEEDOR=noop` sale solo el texto. El APK publicado antes de D-199 muestra la imagen de un mensaje del programa como «Mensaje del sistema»; el texto sí se lee. En el log, cada noche: `[chat.semaforo] enSuHora=… enviadas=… fallidas=…` (solo cuando hubo alguien en su hora) y, la primera vez de cada color, `[chat.semaforo] tarjeta … subida al almacenamiento` |
 
 #### Checklist para encender el semáforo (S-7, 2026-09-26)
 
