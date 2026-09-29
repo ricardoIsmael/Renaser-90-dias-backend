@@ -71,10 +71,10 @@ class ConversacionResponseTest {
         Conversacion grupo = Conversacion.crearCelula(ID, UUID.randomUUID(), AHORA);
         Instant cambiada = Instant.parse("2026-09-27T15:00:00.123Z");
 
-        assertThat(ConversacionResponse.from(grupo, cambiada).photoPath())
+        assertThat(ConversacionResponse.from(grupo, cambiada, null).photoPath())
                 .isEqualTo("/api/v1/chat/conversations/" + ID + "/foto?v=" + cambiada.toEpochMilli());
-        assertThat(ConversacionResponse.from(grupo, null).photoPath()).as("usa la foto de Renaser").isNull();
-        assertThat(ConversacionResponse.from(Conversacion.crearGlobal(ID, AHORA), cambiada).photoPath())
+        assertThat(ConversacionResponse.from(grupo, null, null).photoPath()).as("usa la foto de Renaser").isNull();
+        assertThat(ConversacionResponse.from(Conversacion.crearGlobal(ID, AHORA), cambiada, null).photoPath())
                 .as("la comunidad nunca").isNull();
     }
 }

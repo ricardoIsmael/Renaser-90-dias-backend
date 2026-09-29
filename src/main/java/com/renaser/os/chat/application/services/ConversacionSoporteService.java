@@ -12,7 +12,7 @@ import com.renaser.os.chat.application.ports.out.participante.QuitarParticipante
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.Participante;
-import com.renaser.os.chat.domain.model.conversacion.PrimerNombre;
+import com.renaser.os.chat.domain.model.conversacion.NombreDelChat;
 import com.renaser.os.chat.domain.model.conversacion.SoporteDeAprendizNacioEvent;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.shared.domain.Clock;
@@ -70,8 +70,6 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
      * (Hasta el 2026-09-27 {@code BienvenidaEnSoporteService} exigia lo mismo al remitente de la
      * bienvenida, E-330; desde D-199 la bienvenida la firma el programa y ya no hay remitente.) */
     static final Set<UserRole> STAFF_ADMINISTRATIVO = Set.of(UserRole.ADMIN, UserRole.ALCHEMIST);
-
-    private static final String SUFIJO_SOPORTE = "Formación Renaser";
 
     private final LoadConversacionPort loadConversacionPort;
     private final SaveConversacionPort saveConversacionPort;
@@ -192,22 +190,17 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
     }
 
     /**
-     * El titulo con el que la conversacion se lee en la bandeja. Lleva el nombre del aprendiz
-     * porque quien mas la ve es el staff, y sin nombre tendria 25 filas identicas — el mismo
-     * problema que ya arreglo el listado de mensajes directos.
+     * El titulo con el que la conversacion NACE (formato de OPE-01-01 con el primer nombre, D-173).
      *
-     * <p>Es una FOTO del momento en que se creo: si despues la persona se cambia el nombre, el
-     * titulo no se entera. No se deriva en cada lectura porque una conversacion de grupo se
-     * nombra por su columna `nombre`, igual que la GLOBAL. Queda documentado como limitacion
-     * conocida en docs/MODULO_CHAT.md, no como olvido.
-     *
-     * <p>Formato del procedimiento de Operaciones ("NOMBRE – FORMACIÓN RENASER", OPE-01-01) con
-     * el PRIMER nombre solo (D-173): "María José Ñahui" se lee "María – Formación Renaser". Las
-     * que ya existian conservan su "Soporte - Nombre Completo"; el formato aplica a las nuevas.
+     * <p><b>Corregido 2026-09-29 (D-221).</b> Decía que era una FOTO del momento de la creación, que no
+     * se derivaba en cada lectura y que las que ya existían conservaban su «Soporte - Nombre Completo».
+     * El dueño definió el esquema para todos los chats: el nombre que se MUESTRA ahora se deriva al leer
+     * ({@code NombresDeLosChats}, con {@link NombreDelChat#deSoporte}) para todos los soportes, viejos y
+     * nuevos. La columna se sigue llenando porque el dominio la exige para un SOPORTE
+     * ({@code Conversacion.crearSoporte}), y queda de respaldo si el aprendiz ya no existe.
      */
     static String nombreDeSoporte(String nombreCompleto) {
-        String primerNombre = PrimerNombre.de(nombreCompleto);
-        return primerNombre.isEmpty() ? SUFIJO_SOPORTE : primerNombre + " – " + SUFIJO_SOPORTE;
+        return NombreDelChat.deSoporte(nombreCompleto);
     }
 
     /**

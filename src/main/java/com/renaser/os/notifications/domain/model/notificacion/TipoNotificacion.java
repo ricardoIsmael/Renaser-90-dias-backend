@@ -38,5 +38,15 @@ public enum TipoNotificacion {
      * empieza en 10 min", la alarma de 04:50 de la Semana de Manifestacion, o el anuncio de un evento
      * nuevo. Tipo propio y no {@code ANUNCIO_SISTEMA} para que se pueda silenciar por separado.
      */
-    RECORDATORIO_EVENTO
+    RECORDATORIO_EVENTO;
+
+    /**
+     * Si el aviso se ve en la campana de la app (D-221). Los mensajes de chat no: el chat tiene sus
+     * propios no leídos, como WhatsApp, y la comunidad llenaría la campana con cada mensaje. Su fila se
+     * guarda igual (deduplica el push ante un reintento) y se purga antes
+     * ({@code Notificacion.RETENCION_MENSAJES_CHAT_DIAS}).
+     */
+    public boolean seVeEnLaCampana() {
+        return this != MENSAJE_CHAT;
+    }
 }

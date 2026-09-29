@@ -14,6 +14,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -171,5 +172,47 @@ class NotificacionPersistenceAdapterTest {
         assertThat(purgadas).isEqualTo(1);
         assertThat(adapter.existeDe(vieja.id(), UserId.of(usuarioId))).isFalse();
         assertThat(adapter.existeDe(reciente.id(), UserId.of(usuarioId))).isTrue();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("D-221: un mensaje de chat no aparece en la campana ni suma al badge")
+    void elChatNoVaALaCampana() {
+        adapter.guardar(Notificacion.emitir(UserId.of(usuarioId), TipoNotificacion.MENSAJE_CHAT, "Chat", "Ana: hola",
+                "/chat/x", CLOCK));
+        Notificacion aviso = adapter.guardar(Notificacion.emitir(UserId.of(usuarioId), TipoNotificacion.HITO_PROGRAMA,
+                "Hito", "c", null, CLOCK));
+
+        var desde = CLOCK.now().minusSeconds(90L * 24 * 3600);
+        assertThat(adapter.bandeja(UserId.of(usuarioId), desde, 100)).extracting(Notificacion::id)
+                .containsExactly(aviso.id());
+        assertThat(adapter.contarNoLeidas(UserId.of(usuarioId), desde)).isEqualTo(1);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("D-221: la purga corta borra solo los mensajes de chat viejos")
+    void purgaDeTipo() {
+        FixedClock hace10Dias = FixedClock.at(CLOCK.now().minusSeconds(10L * 24 * 3600));
+        Notificacion chatViejo = adapter.guardar(Notificacion.emitir(UserId.of(usuarioId), TipoNotificacion.MENSAJE_CHAT,
+                "Chat", "c", null, hace10Dias));
+        Notificacion otroViejo = adapter.guardar(Notificacion.emitir(UserId.of(usuarioId), TipoNotificacion.HITO_PROGRAMA,
+                "Hito", "c", null, hace10Dias));
+        Notificacion chatNuevo = adapter.guardar(Notificacion.emitir(UserId.of(usuarioId), TipoNotificacion.MENSAJE_CHAT,
+                "Chat", "c", null, CLOCK));
+
+        adapter.purgarDeTipoAnterioresA(TipoNotificacion.MENSAJE_CHAT,
+                CLOCK.now().minusSeconds(Notificacion.RETENCION_MENSAJES_CHAT_DIAS * 24L * 3600));
+
+        List<Long> quedan = jdbcTemplate.queryForList("SELECT id FROM renaser.notificaciones WHERE usuario_id = ?",
+                Long.class, usuarioId);
+        assertThat(quedan).contains(otroViejo.id(), chatNuevo.id()).doesNotContain(chatViejo.id());
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("la constante del adaptador es el único tipo que no se ve en la campana")
+    void constanteDeLaCampanaAlDia() {
+        for (TipoNotificacion tipo : TipoNotificacion.values()) {
+            assertThat(tipo.seVeEnLaCampana()).as(tipo.name())
+                    .isEqualTo(!tipo.name().equals(NotificacionPersistenceAdapter.FUERA_DE_LA_CAMPANA.name()));
+        }
     }
 }

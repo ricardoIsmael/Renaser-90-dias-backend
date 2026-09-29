@@ -269,6 +269,11 @@ equivocar la palabra no lo nota ningún compilador — lo nota el teléfono de a
 > dueño pidió ese formato con el **primer nombre** solo, para no romper con nombres compuestos. Aplica a
 > los soportes **nuevos**: los que ya existían conservan `"Soporte - Nombre Completo"` a pedido del dueño
 > (no hay migración que los renombre). Sin nombre legible, el título es `"Formación Renaser"` (antes `"Soporte"`).
+>
+> **Corregido 2026-09-29 (D-221).** CH-12 dice que el nombre es una foto del momento de creación y que los
+> soportes viejos conservan `"Soporte - Nombre Completo"`. El dueño definió el esquema de nombres para todos
+> los chats: el nombre que se MUESTRA ahora se deriva al leer (`NombresDeLosChatsService`) del nombre actual
+> del aprendiz, para todos los soportes. La columna se sigue llenando y queda de respaldo. Ver §16.
 
 ### 8.5 Anti-N+1 (D-43)
 
@@ -1099,3 +1104,27 @@ número (`LARGO_MAXIMO_DEL_MENSAJE`).
 |---|---|
 | `MensajeTest` (+2) | 6.000 entra y 6.001 es 400 con su texto (también el epígrafe de una foto); se cuentan caracteres y no bytes. Fallan contra el código anterior |
 
+
+---
+
+## 16. Nombres de los chats y aviso de mensaje nuevo (2026-09-29, D-221)
+
+**Nombres** (derivados al leer, salvo la comunidad): comunidad «Formación Renaser Global» (columna, V83);
+grupo «<primer nombre del mentor vigente> y sus aprendices» o, sin mentor, el nombre del grupo
+(`community.api.MentorVigenteFinder`); soporte «<primer nombre> – Formación Renaser»; 1 a 1, `null` (la app lo
+nombra con el otro). Regla en `NombreDelChat`; lote en `NombresDeLosChatsService` (una consulta a `community`,
+una a `users`). Los grupos siguen naciendo solo cuando el Admin crea la célula (`CelulaCreadaChatListener`).
+
+**Aviso:** `MensajeService` y `MensajeDelProgramaService` publican `chat.api.MensajeDeChatGuardadoEvent`
+(outbox). `notifications` lo escucha y pregunta a `chat.api.AvisosDeMensajesFinder`
+(`AvisosDeMensajesService`) destinatarios, nombre del chat por destinatario y no leídos. Quién: participantes
+con la regla de acceso del tipo, menos el autor, menos quien tiene el chat abierto (`ConversacionesAbiertasDeSockets`
+anota en Redis `chat:abierta:<conversación>:<usuario>`, 3 min renovados cada 45 s, al SUBSCRIBE autorizado; se
+borra al UNSUBSCRIBE o al cerrarse el socket). La app nueva se desuscribe en segundo plano.
+
+| Clase | Qué fija |
+|---|---|
+| `NombreDelChatTest` (4) | Los tres nombres y sus respaldos |
+| `AvisosDeMensajesServiceTest` (6) | Autor fuera; grupo con pertenencia vigente; soporte con staff de hoy; chat abierto fuera; mensaje del programa a todos; 1 a 1 |
+| `ConversacionesAbiertasDeSocketsTest` (3) | Suscribir abre, desuscribir cierra, dos teléfonos, socket caído |
+| `MensajeDeChatAvisoIT` (6) | Postgres + Redis + outbox: quién recibe fila y push (suspendida con fila sin push, preferencia apagada sin nada, ex mentor y ajenos sin nada), título con conteo, chat abierto sin aviso, nombre que cambia al rotar el mentor, soporte viejo renombrado, purga sin transacción (E-425) y V83 |

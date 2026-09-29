@@ -221,7 +221,7 @@ class MensajeServicePermisosDeGrupoTest {
         servicio = new MensajeService(conversaciones, esParticipante, pertenencia, marcarLeido, guardar,
                 cargarMensajes, fanout, usuarios, almacenamiento, conversacion -> ConfirmacionDeLectura.sinDobleMarca(),
                 FixedClock.at(AHORA),
-                UUID::randomUUID);
+                UUID::randomUUID, evento -> { });
     }
 
     private EnviarMensajeCommand mensajeDe(UserId autor, ConversacionId conversacion) {

@@ -112,7 +112,24 @@ class MensajeServiceTest {
     private MensajeService servicioCon(Clock reloj) {
         return new MensajeService(loadConversacionPort, esParticipantePort, pertenenciaVigentePort,
                 marcarLeidoPort, saveMensajePort, loadMensajePort, publicarMensajeFanoutPort, userSummaryFinder,
-                almacenamientoPort, conversacion -> ConfirmacionDeLectura.sinDobleMarca(), reloj, idGenerator);
+                almacenamientoPort, conversacion -> ConfirmacionDeLectura.sinDobleMarca(), reloj, idGenerator, publicados::add);
+    }
+
+    /** D-221: lo que se publicó para el aviso push. */
+    private final java.util.List<Object> publicados = new java.util.ArrayList<>();
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("D-221: guardar un mensaje publica el aviso de mensaje nuevo; uno rechazado, no")
+    void enviarPublicaElAviso() {
+        when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
+
+        Mensaje guardado = service.enviar(comandoDeTexto(activo));
+
+        assertThat(publicados).containsExactly(new com.renaser.os.chat.api.MensajeDeChatGuardadoEvent(
+                guardado.id().value(), conversacionId.value()));
+        publicados.clear();
+        assertThatThrownBy(() -> service.enviar(comandoDeTexto(suspendido))).isInstanceOf(NotAuthorizedException.class);
+        assertThat(publicados).isEmpty();
     }
 
     private EnviarMensajeCommand comandoDeTexto(UserId actorId) {

@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -73,6 +74,19 @@ class ParticipanteConversacionPersistenceAdapter
         Map<ConversacionId, Long> resultado = new LinkedHashMap<>();
         for (var fila : repository.contarNoLeidos(usuarioId.value(), ids)) {
             resultado.put(ConversacionId.of(fila.getConversacionId()), fila.getConteo());
+        }
+        return resultado;
+    }
+
+    @Override
+    public Map<UserId, Long> noLeidosPorParticipante(ConversacionId conversacionId, Collection<UserId> usuarios) {
+        if (usuarios == null || usuarios.isEmpty()) {
+            return Map.of();
+        }
+        Map<UserId, Long> resultado = new LinkedHashMap<>();
+        for (var fila : repository.noLeidosPorParticipante(conversacionId.value(),
+                usuarios.stream().map(UserId::value).distinct().toList())) {
+            resultado.put(UserId.of(fila.getUsuarioId()), fila.getConteo());
         }
         return resultado;
     }

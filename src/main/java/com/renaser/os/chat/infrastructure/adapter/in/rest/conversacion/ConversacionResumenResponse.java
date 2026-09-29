@@ -15,7 +15,7 @@ public record ConversacionResumenResponse(ConversacionResponse conversation, Men
 
     public static ConversacionResumenResponse from(ConversacionResumen resumen) {
         return new ConversacionResumenResponse(
-                ConversacionResponse.from(resumen.conversacion(), resumen.fotoDelGrupoCambiadaEn()),
+                ConversacionResponse.from(resumen.conversacion(), resumen.fotoDelGrupoCambiadaEn(), resumen.nombre()),
                 resumen.ultimoMensaje() != null ? MensajeResponse.from(resumen.ultimoMensaje()) : null,
                 resumen.noLeidos(),
                 resumen.otroParticipante() != null ? resumen.otroParticipante().value().toString() : null,

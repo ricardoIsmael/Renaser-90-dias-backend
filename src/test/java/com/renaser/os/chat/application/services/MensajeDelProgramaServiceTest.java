@@ -48,9 +48,24 @@ class MensajeDelProgramaServiceTest {
     @Mock
     private PublicarMensajeFanoutPort fanout;
 
+    /** D-221: lo que se publicó para el aviso push. */
+    private final java.util.List<Object> publicados = new java.util.ArrayList<>();
+
     private MensajeDelProgramaService servicio() {
         return new MensajeDelProgramaService(loadConversacionPort, saveMensajePort, fanout, FixedClock.at(AHORA),
-                () -> ID);
+                () -> ID, publicados::add);
+    }
+
+    @Test
+    @DisplayName("D-221: un mensaje del programa también publica el aviso de mensaje nuevo; sin conversación, no")
+    void publicaElAviso() {
+        when(loadConversacionPort.porId(SOPORTE)).thenReturn(Optional.of(Conversacion.crearGlobal(SOPORTE, AHORA)));
+        when(saveMensajePort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        servicio().enviarDelPrograma(SOPORTE, ANA, ContenidoDelPrograma.texto("Te damos la bienvenida"));
+
+        assertThat(publicados).containsExactly(
+                new com.renaser.os.chat.api.MensajeDeChatGuardadoEvent(ID, SOPORTE.value()));
     }
 
     @Test

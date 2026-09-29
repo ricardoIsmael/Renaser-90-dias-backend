@@ -1,6 +1,7 @@
 package com.renaser.os.community.application.services;
 
 import com.renaser.os.community.api.AcompanamientoFinder;
+import com.renaser.os.community.api.MentorVigenteFinder;
 import com.renaser.os.community.application.ports.out.acompanamiento.LoadAsignacionesPort;
 import com.renaser.os.community.application.ports.out.acompanamiento.LoadPoliticaMentoriaPort;
 import com.renaser.os.community.application.ports.out.celula.LoadCelulaPort;
@@ -15,6 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,7 +31,7 @@ import java.util.UUID;
  * no escribe nada, y tenerla aparte deja a la vista qué expone {@code community}.
  */
 @Service
-class AcompanamientoFinderService implements AcompanamientoFinder {
+class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigenteFinder {
 
     private final LoadAsignacionesPort loadAsignacionesPort;
     private final LoadCelulaPort loadCelulaPort;
@@ -215,6 +219,31 @@ class AcompanamientoFinderService implements AcompanamientoFinder {
                     mentor, aprendices));
         }
         return operativos;
+    }
+
+    /**
+     * D-221: el nombre del chat de cada grupo sale de su mentor vigente. No filtra por grupo operativo:
+     * un grupo cerrado conserva el nombre con su mentor mientras la asignación siga abierta, y el acceso
+     * a ese chat ya lo corta la pertenencia vigente, no el nombre.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<GrupoConSuMentor> deLosGrupos(Collection<UUID> grupoIds, Instant instante) {
+        List<GrupoConSuMentor> resultado = new ArrayList<>();
+        for (UUID grupoId : new LinkedHashSet<>(grupoIds)) {
+            loadCelulaPort.porId(CelulaId.of(grupoId)).ifPresent(celula -> resultado.add(
+                    new GrupoConSuMentor(grupoId, celula.nombre(), mentorVigenteDe(grupoId, instante))));
+        }
+        return resultado;
+    }
+
+    private UserId mentorVigenteDe(UUID grupoId, Instant instante) {
+        return asignacionesDe(grupoId).stream()
+                .filter(a -> a.funcion() == FuncionAcompanamiento.MENTOR)
+                .filter(a -> a.vigenteEn(instante))
+                .map(AsignacionCelula::usuarioId)
+                .findFirst()
+                .orElse(null);
     }
 
     private List<AsignacionCelula> asignacionesDe(UUID grupoId) {

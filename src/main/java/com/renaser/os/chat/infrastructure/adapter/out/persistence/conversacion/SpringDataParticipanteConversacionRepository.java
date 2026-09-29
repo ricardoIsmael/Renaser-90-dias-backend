@@ -93,4 +93,22 @@ interface SpringDataParticipanteConversacionRepository
             """, nativeQuery = true)
     List<ConteoNoLeidoProjection> contarNoLeidos(@Param("usuarioId") UUID usuarioId,
                                                   @Param("conversacionIds") List<UUID> conversacionIds);
+
+    /** D-221: lo mismo que {@link #contarNoLeidos}, pero para varias personas en UNA conversación. */
+    @Query(value = """
+            SELECT pc.usuario_id AS usuarioId, COUNT(m.id) AS conteo
+            FROM renaser.participantes_conversacion pc
+            JOIN renaser.mensajes m ON m.conversacion_id = pc.conversacion_id
+                AND (pc.ultimo_leido_en IS NULL OR m.creado_en > pc.ultimo_leido_en)
+            WHERE pc.conversacion_id = :conversacionId AND pc.usuario_id IN (:usuarios)
+            GROUP BY pc.usuario_id
+            """, nativeQuery = true)
+    List<ConteoPorUsuarioProjection> noLeidosPorParticipante(@Param("conversacionId") UUID conversacionId,
+                                                             @Param("usuarios") List<UUID> usuarios);
+
+    interface ConteoPorUsuarioProjection {
+        UUID getUsuarioId();
+
+        Long getConteo();
+    }
 }

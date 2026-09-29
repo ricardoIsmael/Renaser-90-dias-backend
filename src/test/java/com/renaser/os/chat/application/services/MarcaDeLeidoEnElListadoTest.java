@@ -102,7 +102,7 @@ class MarcaDeLeidoEnElListadoTest {
         servicio = new MensajeService(loadConversacionPort, esParticipantePort, pertenenciaVigentePort,
                 marcarLeidoPort, saveMensajePort, loadMensajePort, publicarMensajeFanoutPort, userSummaryFinder,
                 almacenamientoPort, new LecturaService(marcasDeLecturaPort, publicarLecturaFanoutPort, userSummaryFinder),
-                FixedClock.at(AHORA), UUID::randomUUID);
+                FixedClock.at(AHORA), UUID::randomUUID, evento -> { });
         cuenta(ana, "Ana Pérez", UserRole.TRAINEE, UserStatus.ACTIVE);
         cuenta(luis, "Luis Soto", UserRole.TRAINEE, UserStatus.ACTIVE);
         cuenta(marta, "Marta Díaz", UserRole.TRAINEE, UserStatus.ACTIVE);

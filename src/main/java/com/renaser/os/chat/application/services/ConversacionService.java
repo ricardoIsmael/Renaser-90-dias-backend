@@ -61,6 +61,8 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     private final UserSummaryFinder userSummaryFinder;
     /** D-212: cuándo cambió la foto propia de cada grupo, para la ruta de su foto en la lista. */
     private final FotoPropiaDelGrupoFinder fotosDeGrupos;
+    /** D-221: el nombre que se muestra de cada chat, derivado al leer. */
+    private final NombresDeLosChatsService nombresDeLosChats;
     private final Clock clock;
     private final IdGenerator idGenerator;
     /**
@@ -79,7 +81,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
                                 ContarNoLeidosPort contarNoLeidosPort, LoadMensajePort loadMensajePort,
                                 ListarUsuariosDeConversacionPort listarUsuariosPort,
                                 UserSummaryFinder userSummaryFinder, FotoPropiaDelGrupoFinder fotosDeGrupos,
-                                Clock clock, IdGenerator idGenerator, PlatformTransactionManager transactionManager) {
+                                NombresDeLosChatsService nombresDeLosChats, Clock clock, IdGenerator idGenerator, PlatformTransactionManager transactionManager) {
         this.loadConversacionPort = loadConversacionPort;
         this.saveConversacionPort = saveConversacionPort;
         this.agregarParticipantePort = agregarParticipantePort;
@@ -92,6 +94,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         this.listarUsuariosPort = listarUsuariosPort;
         this.userSummaryFinder = userSummaryFinder;
         this.fotosDeGrupos = fotosDeGrupos;
+        this.nombresDeLosChats = nombresDeLosChats;
         this.clock = clock;
         this.idGenerator = idGenerator;
         this.transaccionPropia = new TransactionTemplate(transactionManager);
@@ -163,6 +166,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
            culpa de otra conversacion. Una bandeja de mensajes directos tiene que nombrarse sola. */
         Map<UserId, UserSummary> perfiles = userSummaryFinder.findByIds(otros.values().stream().distinct().toList());
         Map<UUID, Instant> fotosPropias = fotosPropiasDeLosGrupos(conversaciones);
+        Map<ConversacionId, String> nombres = nombresDeLosChats.nombresDe(conversaciones);
         return conversaciones.stream()
                 .map(c -> {
                     UserId otro = c.tipo() == TipoConversacion.DIRECTA ? otros.get(c.id()) : null;
@@ -170,7 +174,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
                     return new ConversacionResumen(c, ultimos.get(c.id()), noLeidos.getOrDefault(c.id(), 0L),
                             otro, perfil != null ? perfil.fullName() : null,
                             perfil != null ? perfil.avatarUrl() : null,
-                            c.celulaId() != null ? fotosPropias.get(c.celulaId()) : null);
+                            c.celulaId() != null ? fotosPropias.get(c.celulaId()) : null, nombres.get(c.id()));
                 })
                 .sorted(Comparator.comparing(ConversacionService::actividadDe).reversed())
                 .toList();

@@ -30,7 +30,7 @@ class ExpoPushTransportePrioridadTest {
     private static String cuerpo(boolean canales, PlataformaPush plataforma, TipoNotificacion tipo) {
         TokenPush token = TokenPush.rehydrate(TokenPushId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
                 "ExponentPushToken[abc]", plataforma, AHORA, AHORA);
-        return new ExpoPushTransporte("", true, canales, canales)
+        return new ExpoPushTransporte("", true, canales, canales, canales)
                 .cuerpoJson(token, new MensajePush(tipo, "Titulo", "Cuerpo", "/ruta"));
     }
 

@@ -7,6 +7,7 @@ import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -14,6 +15,12 @@ import java.util.List;
 
 @Component
 class NotificacionPersistenceAdapter implements LoadNotificacionPort, SaveNotificacionPort {
+
+    /**
+     * El único tipo que no se ve en la campana ({@link TipoNotificacion#seVeEnLaCampana}, D-221). Una
+     * prueba recorre el enum y falla si aparece otro, para que esta constante no se quede corta.
+     */
+    static final TipoNotificacionJpa FUERA_DE_LA_CAMPANA = TipoNotificacionJpa.MENSAJE_CHAT;
 
     private final SpringDataNotificacionRepository repository;
     private final NotificacionPersistenceMapper mapper;
@@ -27,8 +34,8 @@ class NotificacionPersistenceAdapter implements LoadNotificacionPort, SaveNotifi
     @Override
     public List<Notificacion> bandeja(UserId usuarioId, Instant desde, int limite) {
         return repository
-                .findByUsuarioIdAndCreadoEnGreaterThanEqualOrderByCreadoEnDesc(usuarioId.value(), desde,
-                        PageRequest.of(0, limite))
+                .findByUsuarioIdAndTipoNotAndCreadoEnGreaterThanEqualOrderByCreadoEnDesc(usuarioId.value(),
+                        FUERA_DE_LA_CAMPANA, desde, PageRequest.of(0, limite))
                 .stream()
                 .map(mapper::toDomain)
                 .toList();
@@ -41,7 +48,8 @@ class NotificacionPersistenceAdapter implements LoadNotificacionPort, SaveNotifi
 
     @Override
     public long contarNoLeidas(UserId usuarioId, Instant desde) {
-        return repository.countByUsuarioIdAndLeidaEnIsNullAndCreadoEnGreaterThanEqual(usuarioId.value(), desde);
+        return repository.countByUsuarioIdAndTipoNotAndLeidaEnIsNullAndCreadoEnGreaterThanEqual(usuarioId.value(),
+                FUERA_DE_LA_CAMPANA, desde);
     }
 
     @Override
@@ -71,8 +79,21 @@ class NotificacionPersistenceAdapter implements LoadNotificacionPort, SaveNotifi
         return repository.marcarTodasLeidas(usuarioId.value(), ahora);
     }
 
+    /**
+     * <b>Con su transacción (E-425, 2026-09-29).</b> Sin ella, llamada desde el cron (que no abre
+     * ninguna), el DELETE falla con «No active transaction for update or delete query»: la purga de 90
+     * días no borraba nada (no se notó porque todavía no hay filas tan viejas). Las pruebas del adaptador corren con {@code @Transactional} de clase y
+     * lo tapaban; lo encontró {@code MensajeDeChatAvisoIT}, que llama al cron sin transacción.
+     */
     @Override
+    @Transactional
     public int purgarAnterioresA(Instant limite) {
         return repository.deleteByCreadoEnBefore(limite);
+    }
+
+    @Override
+    @Transactional
+    public int purgarDeTipoAnterioresA(TipoNotificacion tipo, Instant limite) {
+        return repository.deleteByTipoAndCreadoEnBefore(TipoNotificacionJpa.valueOf(tipo.name()), limite);
     }
 }

@@ -92,10 +92,7 @@ public class WebPushAdapter implements TransportePush {
             }
             Subscription subscription = new Subscription(suscripcion.endpoint(),
                     new Subscription.Keys(suscripcion.keys().p256dh(), suscripcion.keys().auth()));
-            String payload = objectMapper.writeValueAsString(Map.of(
-                    "title", mensaje.titulo(),
-                    "body", mensaje.cuerpo(),
-                    "data", Map.of("url", destino(mensaje.rutaApp()))));
+            String payload = objectMapper.writeValueAsString(cuerpoDe(mensaje));
             HttpResponse response = servicio().send(new Notification(subscription, payload));
             int status = response.getStatusLine().getStatusCode();
             EntityUtils.consumeQuietly(response.getEntity());
@@ -203,4 +200,18 @@ public class WebPushAdapter implements TransportePush {
     private static String destino(String rutaApp) {
         return rutaApp == null || rutaApp.isBlank() ? "/" : rutaApp;
     }
+    /**
+     * Lo que recibe el service worker. D-221: {@code tag} solo en los avisos que se reemplazan (los de un
+     * mismo chat): el navegador muestra uno por chat en vez de apilarlos. Sin etiqueta, el mismo cuerpo
+     * de antes.
+     */
+    Map<String, Object> cuerpoDe(MensajePush mensaje) {
+        Map<String, Object> cuerpo = new java.util.LinkedHashMap<>();
+        cuerpo.put("title", mensaje.titulo());
+        cuerpo.put("body", mensaje.cuerpo());
+        cuerpo.put("data", Map.of("url", destino(mensaje.rutaApp())));
+        mensaje.etiqueta().ifPresent(etiqueta -> cuerpo.put("tag", etiqueta));
+        return cuerpo;
+    }
+
 }

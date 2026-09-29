@@ -28,6 +28,8 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
+import com.renaser.os.chat.api.MensajeDeChatGuardadoEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -66,13 +68,16 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     private final ConsultarLecturaUseCase consultarLectura;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    /** D-221: el aviso de mensaje nuevo sale por el outbox de Modulith (se publica dentro de la transacción). */
+    private final ApplicationEventPublisher eventos;
 
     public MensajeService(LoadConversacionPort loadConversacionPort, EsParticipantePort esParticipantePort,
                            PertenenciaVigentePort pertenenciaVigentePort,
                            MarcarLeidoPort marcarLeidoPort, SaveMensajePort saveMensajePort,
                            LoadMensajePort loadMensajePort, PublicarMensajeFanoutPort publicarMensajeFanoutPort,
                            UserSummaryFinder userSummaryFinder, AlmacenamientoPort almacenamientoPort,
-                           ConsultarLecturaUseCase consultarLectura, Clock clock, IdGenerator idGenerator) {
+                           ConsultarLecturaUseCase consultarLectura, Clock clock, IdGenerator idGenerator,
+                           ApplicationEventPublisher eventos) {
         this.loadConversacionPort = loadConversacionPort;
         this.esParticipantePort = esParticipantePort;
         this.pertenenciaVigentePort = pertenenciaVigentePort;
@@ -85,6 +90,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         this.consultarLectura = consultarLectura;
         this.clock = clock;
         this.idGenerator = idGenerator;
+        this.eventos = eventos;
     }
 
     @Override
@@ -112,7 +118,18 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         // El emisor "ya leyo" hasta el mensaje que acaba de escribir.
         marcarLeidoPort.marcarLeido(command.conversacionId(), command.actorId(), ahora);
         publicarDespuesDelCommit(guardado);
+        avisarQueSeGuardo(guardado);
         return guardado;
+    }
+
+    /**
+     * D-221: el aviso push a los demás. Dentro de la transacción A PROPÓSITO, al revés que el empuje de
+     * Redis de abajo: {@code ApplicationEventPublisher} con Spring Modulith guarda la publicación en el
+     * outbox junto con el mensaje, y el listener de {@code notifications} corre después del commit y en
+     * su propio hilo. Si el mensaje se deshace, el aviso también; si el push falla, se reintenta.
+     */
+    private void avisarQueSeGuardo(Mensaje mensaje) {
+        eventos.publishEvent(new MensajeDeChatGuardadoEvent(mensaje.id().value(), mensaje.conversacionId().value()));
     }
 
     /**

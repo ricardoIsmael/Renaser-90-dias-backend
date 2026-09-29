@@ -117,7 +117,7 @@ class ConversacionTest {
         assertThat(renombrada.nombre()).isEqualTo("Comunidad Renaser");
         assertThat(renombrada.id()).isEqualTo(global.id());
         // "cambiar" devuelve una instancia nueva, nunca muta la original (CLAUDE.MD sec. 5.4.7).
-        assertThat(global.nombre()).isEqualTo("Global");
+        assertThat(global.nombre()).isEqualTo("Formación Renaser Global"); // D-221
     }
 
     @Test

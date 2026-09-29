@@ -46,19 +46,39 @@ import java.util.Optional;
  * {@code renaser.notifications.expo-push.canal-de-acompanamiento=true}, cuando se decida.
  *
  * <p><b>Con las dos propiedades apagadas (el default) el mensaje es idéntico al de antes de D-188.</b>
+ *
+ * <h2>Mensajes de chat (D-221): encendido por defecto</h2>
+ *
+ * <p>{@code MENSAJE_CHAT} sale por {@code mensajes-chat}, el canal con el sonido propio de mensajería
+ * ({@code mensaje_burbuja.wav}). Lo crea el APK nuevo antes de pedir el token. <b>El APK de producción
+ * no lo tiene</b>, y acá se toma la otra lectura de la contradicción de arriba, a propósito: el
+ * {@code BaseNotificationBuilder} de {@code expo-notifications} 57.0.17 (el de los dos APK) busca el
+ * canal pedido y, si no existe, registra «Channel 'mensajes-chat' doesn't exists. Fallback to
+ * 'expo_notifications_fallback_notification_channel'» y lo muestra por ese canal de respaldo, con el
+ * sonido por defecto del teléfono. Es un tipo nuevo —nadie lo recibía antes—, así que no se le quita
+ * nada a quien ya lo tenía. Si en un teléfono real no se mostrara, se apaga con
+ * {@code renaser.notifications.expo-push.canal-de-mensajes=false} ({@code EXPO_PUSH_CANAL_DE_MENSAJES})
+ * y el aviso vuelve al canal por defecto, sin sonido propio.
  */
 final class CanalAndroidExpo {
 
     static final String ACOMPANAMIENTO = "avisos-acompanamiento";
     static final String HABITOS = "recordatorios-habitos";
     static final String EVENTOS = "recordatorios-eventos";
+    static final String MENSAJES = "mensajes-chat";
 
     private final boolean canalDeAcompanamiento;
     private final boolean canalesDeRecordatorios;
+    private final boolean canalDeMensajes;
 
     CanalAndroidExpo(boolean canalDeAcompanamiento, boolean canalesDeRecordatorios) {
+        this(canalDeAcompanamiento, canalesDeRecordatorios, true);
+    }
+
+    CanalAndroidExpo(boolean canalDeAcompanamiento, boolean canalesDeRecordatorios, boolean canalDeMensajes) {
         this.canalDeAcompanamiento = canalDeAcompanamiento;
         this.canalesDeRecordatorios = canalesDeRecordatorios;
+        this.canalDeMensajes = canalDeMensajes;
     }
 
     /** Vacío = sin {@code channelId}: el teléfono usa su canal por defecto. */
@@ -70,6 +90,7 @@ final class CanalAndroidExpo {
             case ACOMPANAMIENTO_ALUMNO -> siEstaEncendido(canalDeAcompanamiento, ACOMPANAMIENTO);
             case RECORDATORIO_HABITO -> siEstaEncendido(canalesDeRecordatorios, HABITOS);
             case RECORDATORIO_EVENTO -> siEstaEncendido(canalesDeRecordatorios, EVENTOS);
+            case MENSAJE_CHAT -> siEstaEncendido(canalDeMensajes, MENSAJES);
             default -> Optional.empty();
         };
     }
