@@ -63,7 +63,7 @@ public final class Conversacion {
 
     public static Conversacion crearGlobal(ConversacionId id, Instant ahora) {
         Objects.requireNonNull(id, "id es obligatorio");
-        return new Conversacion(id, TipoConversacion.GLOBAL, null, null, "Global", ahora);
+        return new Conversacion(id, TipoConversacion.GLOBAL, null, null, NombreDelChat.DE_LA_COMUNIDAD, ahora);
     }
 
     /**

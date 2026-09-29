@@ -11,6 +11,8 @@ import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.chat.api.MensajeDeChatGuardadoEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -31,15 +33,18 @@ public class MensajeDelProgramaService implements EnviarMensajeDelProgramaUseCas
     private final PublicarMensajeFanoutPort publicarMensajeFanoutPort;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    /** D-221: el aviso push de un mensaje del programa, igual que el de una persona ({@code MensajeService}). */
+    private final ApplicationEventPublisher eventos;
 
     public MensajeDelProgramaService(LoadConversacionPort loadConversacionPort, SaveMensajePort saveMensajePort,
                                      PublicarMensajeFanoutPort publicarMensajeFanoutPort, Clock clock,
-                                     IdGenerator idGenerator) {
+                                     IdGenerator idGenerator, ApplicationEventPublisher eventos) {
         this.loadConversacionPort = loadConversacionPort;
         this.saveMensajePort = saveMensajePort;
         this.publicarMensajeFanoutPort = publicarMensajeFanoutPort;
         this.clock = clock;
         this.idGenerator = idGenerator;
+        this.eventos = eventos;
     }
 
     @Override
@@ -52,6 +57,8 @@ public class MensajeDelProgramaService implements EnviarMensajeDelProgramaUseCas
                 contenido, clock.now());
         Mensaje guardado = saveMensajePort.save(mensaje);
         publicarDespuesDelCommit(guardado);
+        // Dentro de la transacción: va al outbox junto con el mensaje (ver MensajeService.avisarQueSeGuardo).
+        eventos.publishEvent(new MensajeDeChatGuardadoEvent(guardado.id().value(), conversacionId.value()));
         return guardado;
     }
 

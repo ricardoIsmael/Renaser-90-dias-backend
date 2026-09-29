@@ -66,10 +66,12 @@ class ExpoPushTransporte implements TransportePush {
                         @Value("${renaser.notifications.expo-push.canal-de-acompanamiento:false}")
                         boolean canalDeAcompanamiento,
                         @Value("${renaser.notifications.expo-push.canales-de-recordatorios:false}")
-                        boolean canalesDeRecordatorios) {
+                        boolean canalesDeRecordatorios,
+                        @Value("${renaser.notifications.expo-push.canal-de-mensajes:true}")
+                        boolean canalDeMensajes) {
         this.accessToken = accessToken == null ? "" : accessToken.trim();
         this.habilitado = habilitado;
-        this.canales = new CanalAndroidExpo(canalDeAcompanamiento, canalesDeRecordatorios);
+        this.canales = new CanalAndroidExpo(canalDeAcompanamiento, canalesDeRecordatorios, canalDeMensajes);
         this.http = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
     }
 
@@ -161,6 +163,9 @@ class ExpoPushTransporte implements TransportePush {
                 .append(",\"sound\":\"default\"")
                 .append(",\"priority\":\"high\"");
         canalDe(token, mensaje).ifPresent(canal -> json.append(",\"channelId\":").append(comillas(canal)));
+        // D-221: los avisos de un mismo chat se reemplazan (Android, `tag`) y se agrupan (iOS, `threadId`).
+        mensaje.etiqueta().ifPresent(etiqueta -> json.append(",\"tag\":").append(comillas(etiqueta))
+                .append(",\"threadId\":").append(comillas(etiqueta)));
         String rutaApp = mensaje.rutaApp();
         if (rutaApp != null && !rutaApp.isBlank()) {
             json.append(",\"data\":{\"route\":").append(comillas(rutaApp)).append("}");

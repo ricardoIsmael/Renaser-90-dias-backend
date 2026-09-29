@@ -426,6 +426,17 @@ Pruebas: `ExpoPushTransporteCanalTest` (cuerpo JSON por tipo, plataforma y propi
 
 ---
 
+## 11. Aviso de mensaje de chat (2026-09-29, D-221)
+
+`MensajeDeChatNotificationListener` emite `MENSAJE_CHAT` por cada mensaje nuevo (destinatarios y nombres los
+resuelve `chat.api.AvisosDeMensajesFinder`; texto en `RedaccionDelMensajeDeChat`). Pasa por `emitir`: preferencia,
+deduplicación por `origenEventoId` = id del mensaje, push después del commit y sin push a una cuenta suspendida.
+Push: `channelId: mensajes-chat` en Android (`canal-de-mensajes`, **encendido por defecto**; ver el javadoc de
+`CanalAndroidExpo` sobre el APK viejo), y `tag`/`threadId` = `chat-<conversación>` (`EtiquetaDelAviso`) para que el
+aviso nuevo reemplace al anterior del mismo chat; en web, `tag` en el payload. **No se ve en la campana**
+(`TipoNotificacion.seVeEnLaCampana`) y se purga a los 7 días (`RETENCION_MENSAJES_CHAT_DIAS`). La purga nocturna
+ahora tiene transacción (E-425).
+
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 
 Auditoría de solo lectura del código real bajo `src/main/java/com/renaser/os/notifications/`, contra las reglas de CLAUDE.md §5.1/§5.1.2/§5.4. No se ejecutó `./mvnw` (fuera de alcance del encargo). Alcance: 63 archivos `.java`, 1776 líneas totales.

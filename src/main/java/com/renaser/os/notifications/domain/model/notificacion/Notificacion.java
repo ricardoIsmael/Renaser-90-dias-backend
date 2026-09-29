@@ -32,6 +32,13 @@ public final class Notificacion {
     public static final int RETENCION_DIAS = 90;
     public static final int LIMITE_BANDEJA = 100;
 
+    /**
+     * D-221: las filas de {@code MENSAJE_CHAT} solo sirven para no repetir un push si el outbox reentrega
+     * el evento, cosa que pasa en minutos, no en meses. Con la comunidad cada mensaje deja una fila por
+     * persona: guardarlas 90 días no le sirve a nadie.
+     */
+    public static final int RETENCION_MENSAJES_CHAT_DIAS = 7;
+
     private final Long id;
     private final UserId usuarioId;
     private final TipoNotificacion tipo;

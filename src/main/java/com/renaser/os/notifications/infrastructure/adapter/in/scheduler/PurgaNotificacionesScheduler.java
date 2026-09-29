@@ -2,6 +2,7 @@ package com.renaser.os.notifications.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.notifications.application.ports.out.notificacion.SaveNotificacionPort;
 import com.renaser.os.notifications.domain.model.notificacion.Notificacion;
+import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.shared.domain.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,5 +37,10 @@ public class PurgaNotificacionesScheduler {
         int purgadas = saveNotificacionPort.purgarAnterioresA(limite);
         log.info("[notifications.PurgaNotificacionesScheduler] purgadas {} notificacion(es) anteriores a {}",
                 purgadas, limite);
+        // D-221: los avisos de chat solo sirven para no repetir un push; se van antes.
+        var limiteChat = clock.now().minus(Notificacion.RETENCION_MENSAJES_CHAT_DIAS, ChronoUnit.DAYS);
+        int deChat = saveNotificacionPort.purgarDeTipoAnterioresA(TipoNotificacion.MENSAJE_CHAT, limiteChat);
+        log.info("[notifications.PurgaNotificacionesScheduler] purgados {} aviso(s) de chat anteriores a {}",
+                deChat, limiteChat);
     }
 }

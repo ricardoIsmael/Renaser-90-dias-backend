@@ -26,9 +26,12 @@ public interface ListarConversacionesUseCase {
      * tiene nada que ver. Una bandeja de DMs tiene que poder nombrarse sola.
      * @param fotoDelGrupoCambiadaEn en un grupo con foto propia, cuándo se eligió (D-212); va en la ruta de
      *                               su foto para que el teléfono baje la nueva. {@code null} en lo demás.
+     * @param nombre                 el nombre que se muestra (D-221, {@code NombresDeLosChatsService}):
+     *                               «Formación Renaser Global», «Luisa y sus aprendices», «María – Formación
+     *                               Renaser». {@code null} en un 1 a 1, que se llama como la otra persona.
      */
     record ConversacionResumen(Conversacion conversacion, Mensaje ultimoMensaje, long noLeidos,
                                 UserId otroParticipante, String otroParticipanteNombre,
-                                String otroParticipanteAvatar, Instant fotoDelGrupoCambiadaEn) {
+                                String otroParticipanteAvatar, Instant fotoDelGrupoCambiadaEn, String nombre) {
     }
 }

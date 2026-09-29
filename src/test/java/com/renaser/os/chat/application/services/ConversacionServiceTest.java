@@ -109,7 +109,7 @@ class ConversacionServiceTest {
         service = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
                 esParticipantePort, pertenenciaVigentePort, marcarLeidoPort, anunciarLectura, contarNoLeidosPort,
                 loadMensajePort, listarUsuariosPort, userSummaryFinder, fotosDeGrupos,
-                CLOCK, idGenerator, transactionManager);
+                new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder), CLOCK, idGenerator, transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
                 Optional.of(new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE)));

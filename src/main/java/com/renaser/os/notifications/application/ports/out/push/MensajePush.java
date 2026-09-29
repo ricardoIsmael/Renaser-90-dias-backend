@@ -1,6 +1,9 @@
 package com.renaser.os.notifications.application.ports.out.push;
 
+import com.renaser.os.notifications.domain.model.notificacion.EtiquetaDelAviso;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
+
+import java.util.Optional;
 
 /**
  * Lo que sale en un push, sin el destino.
@@ -15,4 +18,9 @@ import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
  * @param rutaApp destino lógico dentro de la app al tocarlo. Puede ser {@code null}.
  */
 public record MensajePush(TipoNotificacion tipo, String titulo, String cuerpo, String rutaApp) {
+
+    /** D-221: con qué avisos anteriores se reemplaza (los de un mismo chat); vacío = ninguno. */
+    public Optional<String> etiqueta() {
+        return EtiquetaDelAviso.de(tipo, rutaApp);
+    }
 }

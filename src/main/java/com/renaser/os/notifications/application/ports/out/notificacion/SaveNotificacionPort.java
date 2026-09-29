@@ -1,6 +1,7 @@
 package com.renaser.os.notifications.application.ports.out.notificacion;
 
 import com.renaser.os.notifications.domain.model.notificacion.Notificacion;
+import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
@@ -20,4 +21,7 @@ public interface SaveNotificacionPort {
 
     /** Retencion (CLAUDE.MD, `docs/PLAN_DE_MODULOS.md` §5): purga filas mas viejas que {@code limite}. */
     int purgarAnterioresA(Instant limite);
+
+    /** D-221: la purga más corta de un tipo ({@code MENSAJE_CHAT}). */
+    int purgarDeTipoAnterioresA(TipoNotificacion tipo, Instant limite);
 }

@@ -11824,3 +11824,38 @@ del usuario y se atrapa su fallo. En los scripts del emulador, no usar `keyevent
 (usar `keyevent 111`, Escape, o tocar fuera). Pendiente, fuera de este arreglo: los árboles de React que quedan
 montados sin Activity tras «atrás» siguen haciendo trabajo en segundo plano (pedidos, sondeos); vale revisarlo
 aparte.
+
+## E-425 · `org.springframework.dao.InvalidDataAccessApiUsageException: No active transaction for update or delete query` en la purga nocturna de notificaciones (RESUELTO, 29/09)
+
+**Síntoma.** Al probar D-221, `MensajeDeChatAvisoIT.purgaDeLosAvisosDeChat` llamó a
+`PurgaNotificacionesScheduler.purgarAntiguas()` sin transacción (igual que el cron) y falló con
+`InvalidDataAccessApiUsageException: No active transaction for update or delete query`
+(`Caused by: jakarta.persistence.TransactionRequiredException`).
+
+**Causa real.** `SpringDataNotificacionRepository.deleteByCreadoEnBefore` es un `@Modifying @Query` y ni el
+adaptador ni el cron abren transacción. Las pruebas del adaptador (`NotificacionPersistenceAdapterTest`) tienen
+`@Transactional` de clase y lo tapaban. En producción la purga de 90 días falla cada noche a las 04:30 UTC; no
+se notó porque todavía no hay filas tan viejas (no revisé los logs de producción).
+
+**Solución.** `@Transactional` en `NotificacionPersistenceAdapter.purgarAnterioresA` y en la nueva
+`purgarDeTipoAnterioresA` (D-221). Fuera del alcance pedido: se arregló porque la purga de los avisos de chat
+(7 días) depende del mismo camino, y se avisa acá.
+
+**Cómo evitar que vuelva a pasar.** La prueba que lo encontró queda: llama al cron sin transacción, como en
+producción. Regla: un `@Modifying` que se llama desde un scheduler se prueba en una prueba SIN `@Transactional`
+de clase.
+
+## E-426 · `ERROR: conflicting key value violates exclusion constraint` al sembrar dos mentores en el mismo grupo (prueba, 29/09)
+
+**Síntoma.** Las 6 pruebas de `MensajeDeChatAvisoIT` fallaban en el `@BeforeEach` con `DataIntegrityViolation
+… INSERT INTO renaser.asignaciones_celula … ERROR: conflicting key value violates exclusion constraint`.
+
+**Causa real.** La semilla asignaba dos MENTOR abiertos al mismo grupo (el vigente y el «ex mentor») y V45 tiene
+`asignaciones_un_mentor_por_celula` (EXCLUDE sobre `celula_id` + rango): un grupo tiene un solo mentor a la vez,
+incluso en una prueba. Y el relevo tiene que empezar después del `fin` del anterior (rango `[)`).
+
+**Solución.** El ex mentor se siembra con una asignación cerrada en el pasado (`asignarEntre`), y el relevo de la
+prueba de nombres empieza en `now()`, después de cerrar la de la mentora.
+
+**Cómo evitar que vuelva a pasar.** Al sembrar historia de mentores, usar rangos que no se pisen; el error de la
+base lo dice claro si se lee el `ERROR:` del reporte de failsafe y no solo la primera línea.

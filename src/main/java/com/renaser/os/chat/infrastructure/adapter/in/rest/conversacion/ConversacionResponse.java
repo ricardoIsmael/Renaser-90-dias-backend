@@ -19,15 +19,21 @@ import java.time.Instant;
 public record ConversacionResponse(String id, String type, String celulaId, String nombre, String createdAt,
                                    String photoPath) {
 
-    /** Sin saber la foto propia de un grupo (la respuesta de abrir un 1 a 1). */
+    /** Sin saber la foto propia de un grupo ni su nombre derivado (la respuesta de abrir un 1 a 1). */
     public static ConversacionResponse from(Conversacion c) {
-        return from(c, null);
+        return from(c, null, c.nombre());
     }
 
-    /** @param fotoDelGrupoCambiadaEn si es un grupo con foto propia, cuándo cambió (D-212); si no, {@code null} */
-    public static ConversacionResponse from(Conversacion c, Instant fotoDelGrupoCambiadaEn) {
+    /**
+     * @param fotoDelGrupoCambiadaEn si es un grupo con foto propia, cuándo cambió (D-212); si no, {@code null}
+     * @param nombre                 el que se muestra (D-221): en un grupo y en un soporte se deriva al leer
+     *                               y NO es la columna {@code nombre}; en un 1 a 1, {@code null}. Un
+     *                               {@code nombre} lleno en un grupo es nuevo: los APK publicados siguen
+     *                               nombrándolo con el grupo de {@code /me/cells}, la app nueva usa este.
+     */
+    public static ConversacionResponse from(Conversacion c, Instant fotoDelGrupoCambiadaEn, String nombre) {
         return new ConversacionResponse(c.id().toString(), toWireTipo(c.tipo()),
-                c.celulaId() != null ? c.celulaId().toString() : null, c.nombre(), c.creadoEn().toString(),
+                c.celulaId() != null ? c.celulaId().toString() : null, nombre, c.creadoEn().toString(),
                 rutaDeLaFoto(c, fotoDelGrupoCambiadaEn));
     }
 

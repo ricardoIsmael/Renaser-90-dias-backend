@@ -33,7 +33,7 @@ class ExpoPushTransporteCanalTest {
     }
 
     private static ExpoPushTransporte transporte(boolean acompanamiento, boolean recordatorios) {
-        return new ExpoPushTransporte("", true, acompanamiento, recordatorios);
+        return new ExpoPushTransporte("", true, acompanamiento, recordatorios, false);
     }
 
     private static ExpoPushTransporte todoEncendido() {

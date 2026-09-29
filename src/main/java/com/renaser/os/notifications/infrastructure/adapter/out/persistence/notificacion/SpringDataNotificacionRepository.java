@@ -12,16 +12,18 @@ import java.util.UUID;
 
 interface SpringDataNotificacionRepository extends JpaRepository<NotificacionJpaEntity, Long> {
 
-    List<NotificacionJpaEntity> findByUsuarioIdAndCreadoEnGreaterThanEqualOrderByCreadoEnDesc(UUID usuarioId,
-                                                                                                Instant desde,
-                                                                                                Pageable pageable);
+    /** La campana: sin el tipo que no se ve en ella ({@code TipoNotificacion.seVeEnLaCampana}, D-221). */
+    List<NotificacionJpaEntity> findByUsuarioIdAndTipoNotAndCreadoEnGreaterThanEqualOrderByCreadoEnDesc(
+            UUID usuarioId, TipoNotificacionJpa fueraDeLaCampana, Instant desde, Pageable pageable);
 
     boolean existsByIdAndUsuarioId(Long id, UUID usuarioId);
 
     /** La tripleta del indice unico `notificaciones_origen_evento_uk` (C-7/V16). */
     boolean existsByUsuarioIdAndTipoAndOrigenEventoId(UUID usuarioId, TipoNotificacionJpa tipo, UUID origenEventoId);
 
-    long countByUsuarioIdAndLeidaEnIsNullAndCreadoEnGreaterThanEqual(UUID usuarioId, Instant desde);
+    long countByUsuarioIdAndTipoNotAndLeidaEnIsNullAndCreadoEnGreaterThanEqual(UUID usuarioId,
+                                                                               TipoNotificacionJpa fueraDeLaCampana,
+                                                                               Instant desde);
 
     /** UPDATE atomico: solo mueve leidaEn si sigue null y es del usuario — ver
      * {@code SaveNotificacionPort.marcarLeida} para el porque (nunca "cargar y comparar"). */
@@ -38,4 +40,8 @@ interface SpringDataNotificacionRepository extends JpaRepository<NotificacionJpa
     @Modifying
     @Query("delete from NotificacionJpaEntity n where n.creadoEn < :limite")
     int deleteByCreadoEnBefore(@Param("limite") Instant limite);
+
+    @Modifying
+    @Query("delete from NotificacionJpaEntity n where n.tipo = :tipo and n.creadoEn < :limite")
+    int deleteByTipoAndCreadoEnBefore(@Param("tipo") TipoNotificacionJpa tipo, @Param("limite") Instant limite);
 }
