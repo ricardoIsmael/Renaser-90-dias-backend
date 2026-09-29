@@ -13,6 +13,7 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
+import com.renaser.os.habits.domain.model.horario.VentanaDelDia;
 import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.habits.domain.model.preferencia.CuotaEdicionHorario;
@@ -150,7 +151,8 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
         CambioProgramado cambio = programado == null ? null
                 : new CambioProgramado(programado.horaDisparo(), programado.horaLimite(),
                         programado.fechaEfectiva());
-        return new HorarioDeHabito(habito.id(), habito.titulo(), horaDisparo, horaLimite, preferencia != null,
+        return new HorarioDeHabito(habito.id(), habito.titulo(), horaDisparo,
+                VentanaDelDia.limiteQueSigueAlDisparo(horaDisparo, horaLimite), preferencia != null,
                 preferencia != null && preferencia.recordatorioActivo(),
                 preferencia != null ? preferencia.minutosRecordatorio() : null,
                 cambio, preferencia != null ? preferencia.antelacionesRecordatorio() : null);

@@ -276,7 +276,8 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
                 catalogo != null ? catalogo.horaDisparo() : null);
         LocalTime horaLimite = primeraNoNula(preferencia.map(PreferenciaHorario::horaLimite).orElse(null),
                 catalogo != null ? catalogo.horaLimite() : null);
-        return new VentanaVigenteHoy(horaDisparo, horaLimite, preferencia.isPresent());
+        return new VentanaVigenteHoy(horaDisparo, VentanaDelDia.limiteQueSigueAlDisparo(horaDisparo, horaLimite),
+                preferencia.isPresent());
     }
 
     /** D-200: si el registro de hoy se genero por debajo del inicio de su horario, rige ese horario. */
@@ -500,14 +501,17 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         for (DayOfWeek dia : DayOfWeek.values()) {
             var propio = propios.get(dia);
             if (propio == null) {
-                dias.add(new DiaDeLaSemana(dia, disparoGeneral, limiteGeneral, false, true));
+                dias.add(new DiaDeLaSemana(dia, disparoGeneral,
+                        VentanaDelDia.limiteQueSigueAlDisparo(disparoGeneral, limiteGeneral), false, true));
             } else {
                 // Respaldo por CAMPO, igual que en el adaptador: una fila que solo fija la hora de
                 // disparo conserva la hora limite general. Y una que solo APAGA no trae hora, asi
                 // que muestra la general — el dia esta apagado, no sin horario.
-                dias.add(new DiaDeLaSemana(dia,
-                        propio.preferencia().horaDisparo() != null ? propio.preferencia().horaDisparo() : disparoGeneral,
-                        propio.preferencia().horaLimite() != null ? propio.preferencia().horaLimite() : limiteGeneral,
+                LocalTime disparo = propio.preferencia().horaDisparo() != null
+                        ? propio.preferencia().horaDisparo() : disparoGeneral;
+                LocalTime limite = propio.preferencia().horaLimite() != null
+                        ? propio.preferencia().horaLimite() : limiteGeneral;
+                dias.add(new DiaDeLaSemana(dia, disparo, VentanaDelDia.limiteQueSigueAlDisparo(disparo, limite),
                         true, propio.activo()));
             }
         }

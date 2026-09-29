@@ -78,4 +78,17 @@ class VentanaDelDiaTest {
         assertThat(java.time.Duration.between(VentanaDelDia.ULTIMA_HORA_DE_DISPARO, cierre).toMinutes())
                 .isEqualTo(10);
     }
+
+    /** D-230: el limite heredado del catalogo solo se acomoda si quedo antes del disparo elegido. */
+    @Test
+    void unLimiteHeredadoAntesDelDisparoSeAcomodaYUnoPosteriorNoSeToca() {
+        assertThat(VentanaDelDia.limiteQueSigueAlDisparo(LocalTime.of(22, 0), LocalTime.of(12, 0)))
+                .isEqualTo(LocalTime.of(23, 50));
+        assertThat(VentanaDelDia.limiteQueSigueAlDisparo(LocalTime.of(22, 0), LocalTime.of(22, 0)))
+                .isEqualTo(LocalTime.of(23, 50));
+        assertThat(VentanaDelDia.limiteQueSigueAlDisparo(LocalTime.of(7, 0), LocalTime.of(23, 59)))
+                .isEqualTo(LocalTime.of(23, 59));
+        assertThat(VentanaDelDia.limiteQueSigueAlDisparo(null, LocalTime.of(12, 0))).isEqualTo(LocalTime.of(12, 0));
+        assertThat(VentanaDelDia.limiteQueSigueAlDisparo(LocalTime.of(22, 0), null)).isNull();
+    }
 }

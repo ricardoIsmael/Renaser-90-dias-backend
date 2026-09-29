@@ -77,6 +77,30 @@ public final class VentanaDelDia {
     }
 
     /**
+     * La hora limite que rige cuando el disparo y el limite vienen de lugares DISTINTOS: el disparo
+     * que eligio la persona y el limite que quedo del catalogo (D-230, 2026-09-29).
+     *
+     * <p><b>El caso.</b> El catalogo trae "Pastilla Renacer" de 07:00 a 12:00. Quien trabaja de
+     * noche la mueve a las 22:00 y no toca el limite (la app no lo muestra), asi que la preferencia
+     * guarda {@code horaLimite = null} y el respaldo por campo de {@link HorarioResuelto} le pegaba
+     * las 12:00 del catalogo: una ventana de 22:00 a 12:00 que cruzaba la medianoche, justo lo que
+     * D-122 prohibe. {@code VentanaEntrega} ponia el ancla en las 12:00 del DIA SIGUIENTE, el aviso
+     * de cierre caia al otro dia, y {@code RegistroService.sigueAlcanzable} dejaba de generar el
+     * habito de hoy pasado el mediodia (su limite "ya habia pasado").
+     *
+     * <p>Se resuelve con la misma regla de D-122 para un limite que queda antes del disparo: se
+     * acomoda a {@link #ULTIMA_HORA_LIMITE}. Solo actua en ese caso; un limite del catalogo que
+     * sigue siendo posterior al disparo se respeta tal cual (incluido un 23:59 del catalogo, que
+     * {@link #horaLimiteAjustada} recortaria y aca no hay por que tocar).
+     */
+    public static LocalTime limiteQueSigueAlDisparo(LocalTime horaDisparo, LocalTime horaLimite) {
+        if (horaDisparo != null && horaLimite != null && !horaLimite.isAfter(horaDisparo)) {
+            return ULTIMA_HORA_LIMITE;
+        }
+        return horaLimite;
+    }
+
+    /**
      * Guarda DEFENSIVA para los value objects que reciben una {@code PreferenciaHorario} ya
      * armada (incluida una rehidratada de la base, que no pasa por el ajuste). Lo que se escribe
      * hoy va normalizado por {@link #horaLimiteAjustada}, asi que desde el camino de escritura
