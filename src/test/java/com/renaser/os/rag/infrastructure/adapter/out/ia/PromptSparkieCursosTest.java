@@ -43,7 +43,7 @@ class PromptSparkieCursosTest {
         String render = renderizar("(vacio)", "(sin curso)");
 
         assertThat(render).contains("Eres Sparkie");
-        assertThat(render).doesNotContain("Eres Renasia");
+        assertThat(render).doesNotContain("Eres SER");
         assertThat(render).contains("Sobre que esta hablando la persona ahora");
         // Lo que no es de cursos (habitos, plan, la app) lo deriva al acompanante en vez de absorberlo.
         assertThat(render).contains("acompanante del programa");

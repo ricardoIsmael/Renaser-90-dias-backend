@@ -1510,6 +1510,35 @@ le preguntan quién es, es el acompañante del programa.
   riesgo y crisis. `PromptSistemaRenasiaTest.orientaConElEstiloDeDarrenSinSerlo` fija la sección y
   que ni el prompt ni la voz digan «soy Darren».
 
+### D-229 — SER crea un hábito propio, y se presenta como SER (2026-09-29)
+
+Pedido del dueño (29-09): la persona le pide a SER un hábito nuevo; SER le pregunta la categoría si
+no la dijo, y lo deja listo para confirmar.
+
+- **Herramienta** `proponer_crear_habito_personal` (`PropuestaDeCrearHabitoPersonal`, solo con
+  `confirmacion-con-botones`): `nombre` (obligatorio), `categoria` (Cuerpo, Mente, Emociones o
+  Espíritu), `hora` (HH:mm), `dias` ("lunes, miercoles") y `meta`, opcionales. La categoría se
+  declara opcional al modelo a propósito para que no la invente: sin ella la herramienta no propone
+  y le pide preguntarla. Sin hora, 06:00 (la de Training); sin días, todos.
+- **Guardas al proponer:** plan del aprendiz (sin programa o suspendido, no), hábito con el mismo
+  nombre (sin mayúsculas, tildes ni espacios de más) → «ya lo tiene», misma tarjeta pendiente →
+  D-176, hora ≤ 23:40 (`habits.api.HabitosPersonalesPort.ULTIMA_HORA_DE_DISPARO`), largos del alta.
+- **Al confirmar** (`CrearHabitoPersonalConfirmable`): relee los argumentos, vuelve a mirar el
+  duplicado y crea con `CrearHabitoPersonalUseCase` vía `habits.api.HabitosPersonalesPort`
+  (CHECKBOX, OTRO, sin icono ni hora límite: igual que Training). Nada de `@Transactional` en `rag`
+  (C-1); la transacción es la del caso de uso de `habits`.
+- **Tarjeta:** «Nuevo hábito: Leer · Mente · 21:00 · todos los días». La app recarga Training y Hoy
+  al confirmar cualquier propuesta.
+- **Nombre:** el prompt dice «Eres SER, el acompañante del programa de Renaser» (antes «Eres Renasia,
+  la asistente conversacional de Renaser OS»). `PromptSistemaRenasiaTest.ningunPromptDiceRenasia`
+  falla si «Renasia» vuelve a algo que lee el modelo; en la app, `nombreSer.test.ts`.
+
+Conversación de ejemplo: «quiero agregar un hábito de leer 20 minutos en la noche» → SER: «¡Buena
+idea! ✨ ¿Lo pones en Cuerpo, Mente, Emociones o Espíritu? ¿Y a qué hora?» → «mente, a las 9 pm» →
+`proponer_crear_habito_personal(nombre="Leer 20 minutos", categoria="Mente", hora="21:00")` → «Te
+dejé la propuesta abajo para que la confirmes 🙌» → la persona toca Confirmar → «Hábito 'Leer 20
+minutos' creado en Mente, a las 21:00, todos los días. Ya lo ves en Training.»
+
 ### Contrato SSE de `POST /api/v1/renasia/mensajes` (actualizado 2026-09-26, D-171 y D-178)
 
 Formas de `data:` (fuente de verdad: `EventoRenasiaSseMapper`):

@@ -75,13 +75,44 @@ class PromptSistemaRenasiaTest {
     void esElAcompananteYNoElTutorDeCursos() {
         String render = renderizar("(vacio)");
 
-        assertThat(render).contains("Eres Renasia");
+        // D-229: decia "Eres Renasia". En la app se llama SER desde el 2026-09-07 y el dueño pidio
+        // que el modelo tambien se presente asi; "Renasia" queda solo en nombres internos.
+        assertThat(render).contains("Eres SER");
         assertThat(render).doesNotContain("Eres Sparkie");
         assertThat(render).doesNotContain("{ambito}");
         assertThat(render).doesNotContain("Sobre que esta hablando la persona ahora");
         // Deriva las dudas de contenido de un curso al otro agente en vez de absorberlas.
         assertThat(render).contains("Sparkie");
         assertThat(render).contains("Recursos Exclusivos");
+    }
+
+    /**
+     * D-229: el acompanante se llama SER. Falla si "Renasia" vuelve a aparecer en algo que lee el
+     * modelo: el prompt de sistema renderizado y los demas prompts del acompanante sin sus
+     * comentarios de plantilla ({@code {! ... !}}, que no viajan). Los nombres internos
+     * ({@code ConversacionRenasia}, {@code renasia-sistema.st}) no cuentan: no los lee nadie.
+     */
+    @Test
+    @DisplayName("D-229: ningun prompt del acompanante le dice Renasia al modelo")
+    void ningunPromptDiceRenasia() throws Exception {
+        assertThat(renderizar("(vacio)")).doesNotContainIgnoringCase("renasia");
+        for (String recurso : List.of("prompts/modo-voz.st", "prompts/modo-en-vivo.st",
+                "prompts/memoria-acompanante.st", "prompts/compactar-memoria.txt")) {
+            String texto = new ClassPathResource(recurso).getContentAsString(java.nio.charset.StandardCharsets.UTF_8)
+                    .replaceAll("(?s)\\{!.*?!}", "");
+            assertThat(texto).as(recurso).doesNotContainIgnoringCase("renasia");
+        }
+    }
+
+    /** D-229: la herramienta nueva esta explicada y la dimension se pregunta, no se adivina. */
+    @Test
+    @DisplayName("D-229: explica proponer_crear_habito_personal y que pregunte la dimension")
+    void explicaCrearHabitoPersonal() {
+        String render = renderizar("(vacio)");
+
+        assertThat(render).contains("proponer_crear_habito_personal")
+                .contains("Si no dijo en que dimension va, preguntaselo")
+                .contains("Cuerpo, Mente, Emociones o");
     }
 
     @Test
