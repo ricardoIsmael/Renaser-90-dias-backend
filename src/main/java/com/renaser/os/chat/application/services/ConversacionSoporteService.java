@@ -272,8 +272,15 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
                 .orElse(false);
     }
 
+    /** {@inheritDoc} El cuerpo es {@link #rellenarPendientes}; aca solo se exige el actor. */
+    @Override
+    public ResultadoRelleno rellenar(UserId actorId) {
+        requireActivoAdmin(actorId);
+        return rellenarPendientes();
+    }
+
     /**
-     * {@inheritDoc}
+     * {@inheritDoc} Lo llaman el panel ({@link #rellenar}) y el barrido de D-224.
      *
      * <p>Sin N+1 (D-43): el padron, los inscritos, los soportes que ya hay y el staff se piden UNA
      * vez cada uno —cuatro consultas para todo el barrido, no cuatro por aprendiz—. Lo unico que se
@@ -284,8 +291,7 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
      * falla se cuenta y no detiene al resto.
      */
     @Override
-    public ResultadoRelleno rellenar(UserId actorId) {
-        requireActivoAdmin(actorId);
+    public ResultadoRelleno rellenarPendientes() {
         List<UserSummary> padron = userSummaryFinder.aprendicesActivos();
         Set<UserId> inscritos = Set.copyOf(participacionProgramaFinder.participantesInscritosActivos());
         Set<String> yaTienen = clavesDeSoporteExistentes();
@@ -311,6 +317,28 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
         log.info("[chat.soporte] relleno: {} aprendices, {} creadas, {} ya existian, {} fallidas",
                 padron.size(), creadas, existentes, fallidas);
         return new ResultadoRelleno(padron.size(), creadas, existentes, fallidas);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Mismos criterios que el barrido ({@code aprendicesActivos} + {@code participantesInscritosActivos}):
+     * rol aprendiz, fila en el programa y cuenta ACTIVA — no solo "no suspendida", porque una cuenta
+     * INACTIVE tampoco entra al barrido. Sin aviso, como el relleno.
+     */
+    @Override
+    public boolean rellenarDe(UserId aprendizId) {
+        boolean enElPrograma = participacionProgramaFinder.deParticipante(aprendizId)
+                .filter(p -> p.rol() == UserRole.TRAINEE && p.inscrito() && !p.suspendido())
+                .isPresent();
+        Optional<UserSummary> cuenta = userSummaryFinder.findById(aprendizId)
+                .filter(usuario -> usuario.status() == UserStatus.ACTIVE);
+        if (!enElPrograma || cuenta.isEmpty()
+                || loadConversacionPort.porClaveDirecta(Conversacion.claveSoporteDe(aprendizId)).isPresent()) {
+            return false;
+        }
+        return crearSoporte(aprendizId, nombreDeSoporte(cuenta.get().fullName()),
+                participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO), false).isPresent();
     }
 
     private Set<String> clavesDeSoporteExistentes() {

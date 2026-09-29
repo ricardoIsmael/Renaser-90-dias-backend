@@ -18,4 +18,10 @@ public interface AcompanamientoDelGrupoPort {
 
     /** Mentor y guías vigentes. Vacío si el grupo no está operativo. */
     List<UserId> acompanantesVigentes(UUID celulaId);
+
+    /** Los grupos que están corriendo ahora (regulares y recepción), para el barrido de D-224. */
+    List<UUID> gruposOperativos();
+
+    /** Los grupos que están corriendo ahora con {@code aprendizId} como aprendiz vigente (D-224). */
+    List<UUID> gruposOperativosDe(UserId aprendizId);
 }

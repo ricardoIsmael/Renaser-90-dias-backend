@@ -77,6 +77,11 @@ spring:
 # con @Value tiene que estar TAMBIEN aca o el contexto no levanta. Va al final, fuera del
 # bloque `spring:`, para no partirlo por accidente.
 renaser:
+  # D-224: el barrido que completa los chats de los aprendices NO corre solo en la suite: dispararia
+  # en medio de otra prueba y le crearia chats a sus datos. Las pruebas lo llaman directo.
+  scheduling:
+    chats-de-aprendices:
+      activo: false
   # E-360: espeja el default de main (application.yaml): cuantos listeners de eventos corren a la vez.
   eventos:
     concurrencia: 4

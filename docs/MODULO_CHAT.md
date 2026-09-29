@@ -256,7 +256,7 @@ equivocar la palabra no lo nota ningún compilador — lo nota el teléfono de a
 
 | # | Decisión |
 |---|---|
-| CH-10 | **El relleno es un endpoint, no un barrido al arrancar.** Una corrida masiva en el arranque crea N conversaciones en todo entorno que levante —incluido el de un desarrollador— y cuando alguien lo nota ya pasó. `POST /api/v1/admin/chat/support-conversations/backfill` lo dispara una persona, y la respuesta dice `traineesReviewed / created / alreadyExisted / failed`. Idempotente. |
+| CH-10 | **El relleno lo hace un barrido: a los 3 min de arrancar y cada hora (D-224).** El endpoint `POST /api/v1/admin/chat/support-conversations/backfill` sigue (respuesta `traineesReviewed / created / alreadyExisted / failed`), pero ya no es el único camino: `CompletarChatsDeAprendicesScheduler` corre el mismo relleno sin actor (`rellenarPendientes`) y además abre los chats de dos que falten (§9). Idempotente y sin mensajes. **Corregido 2026-09-29 (D-224).** Decía: «El relleno es un endpoint, no un barrido al arrancar. Una corrida masiva en el arranque crea N conversaciones en todo entorno que levante —incluido el de un desarrollador— y cuando alguien lo nota ya pasó.» El endpoint nunca tuvo botón y el 29-09 el dueño reportó a los aprendices anteriores sin sus chats. Lo que el barrido crea es exactamente lo que la regla de §8 exige para cada aprendiz inscrito y activo —el mismo criterio que el alta—, así que en un entorno de desarrollo produce lo mismo que habría producido aprobar a esas personas hoy, sin avisar a nadie. |
 | CH-11 | **Nada reconcilia participantes, nunca** — con **una excepción acotada, CH-16**. Es la consecuencia directa de la regla 4: si el staff se puede ir, una sincronización *"dejalo como debería estar"* le desharía la salida en el próximo evento. Por eso el relleno **no toca** una conversación que ya existe aunque le falte alguien del staff, y `incorporar` solo **suma**. Es la diferencia con `ParticipantesCelulaService`, que sí reconcilia — ahí la composición la manda `community`, acá la manda la persona. |
 | CH-12 | **El `nombre` es una foto del momento de creación** (`"<primer nombre> – Formación Renaser"` desde D-173; ver la nota al pie de la tabla). Lleva el nombre porque quien más ve estas conversaciones es el staff, y sin nombre tendría 25 filas idénticas — el mismo problema que ya arregló el listado de mensajes directos. **Limitación conocida:** si la persona se cambia el nombre después, el título no se entera. Derivarlo en cada lectura obligaría a resolver el aprendiz de cada soporte al listar; no se hizo porque nadie lo pidió, y queda escrito acá en vez de quedar como olvido. |
 | CH-13 | **Salir es solo de un SOPORTE.** Irse de una CÉLULA, de un DM o de la GLOBAL son tres preguntas distintas que nadie contestó; el caso de uso rechaza cualquier otro tipo en vez de inventarles un significado. Salir borra la fila de participación y **nunca** los mensajes. |
@@ -472,11 +472,15 @@ minutos, `EventPublicationMaintenanceScheduler`): el reintento solo abre las que
 > quedaba completa: el chat que faltaba no se volvía a intentar nunca (E-300).
 
 **Límites conocidos.**
-- Solo corre cuando un grupo cambia. Los aprendices que **ya** tenían mentor antes de este cambio no
-  reciben su chat hasta el próximo cambio de su grupo. No hay relleno; si se necesita, es un endpoint
-  aparte como el de §8.
-- Lo mismo para una cuenta que se reactiva: su chat de dos se abre con el próximo cambio de su grupo,
-  no al reactivarla.
+- ~~Solo corre cuando un grupo cambia.~~ Desde D-224 también lo abre el barrido horario (§9.1), así que
+  quien ya tenía mentor antes de este cambio, o un grupo que entra en su período sin que nadie lo toque,
+  recibe su chat en menos de una hora.
+- ~~Lo mismo para una cuenta que se reactiva.~~ Desde D-224 se abre al reactivarla
+  (`EstadoDeCuentaCambiadoChatsListener`).
+> **Corregido 2026-09-29 (D-224).** Estas dos líneas decían: «Solo corre cuando un grupo cambia. Los
+> aprendices que **ya** tenían mentor antes de este cambio no reciben su chat hasta el próximo cambio de
+> su grupo. No hay relleno; si se necesita, es un endpoint aparte como el de §8.» y «Lo mismo para una
+> cuenta que se reactiva: su chat de dos se abre con el próximo cambio de su grupo, no al reactivarla.»
 - Un chat de dos vacío aparece en la lista de ambos apenas se crea.
 
 | Clase | Qué fija |
@@ -484,6 +488,44 @@ minutos, `EventPublicationMaintenanceScheduler`): el reintento solo abre las que
 | `ChatsConAcompananteServiceTest` (8) | Un chat por pareja con solo esos dos; uno por guía en recepción; no repite los existentes y consulta una sola vez; sin acompañante no hace nada; nadie habla solo; la carrera no es error y no frena a las demás; un fallo de verdad se lanza después de intentar las demás (G-3); sin chat con suspendidos (G-4) |
 | `AcompanamientoServiceTest` (+2) | `acompanantesVigentes`: mentor y guías sí; soporte, aprendices y exmentor no; grupo cerrado, vacío |
 | `ChatPersistenceAdapterTest` (+1) | `clavesDirectasExistentes` contra Postgres real |
+
+### 9.1 Los chats que le faltan a un aprendiz se completan solos (2026-09-29, D-224)
+
+**El reporte.** El dueño, el 29-09: «tengo más aprendices y como administrador no me sale el cambio;
+parece que fue para todos lo nuevo, pero los anteriores no tienen sus grupos que se generan
+automáticamente». El soporte (§8) nace al aprobar y el chat de dos (§9) al cambiar un grupo: quien ya
+estaba antes de esas funciones —o entró por un camino que no las dispara— se quedaba sin ellos, y como
+el administrador solo ve los soportes en los que es participante, no los veía en su lista.
+
+**Qué hace.** `CompletarChatsDeAprendicesUseCase` (`CompletarChatsDeAprendicesService`) reusa los dos
+caminos que ya existían, sin SQL propio y sin tablas nuevas:
+
+- `RellenarConversacionesDeSoporteUseCase.rellenarPendientes()` — el relleno de §8 sin actor: aprendiz
+  ACTIVE con fila en `participantes_programa`, con todo el staff ADMIN/ALCHEMIST activo, **sin**
+  `SoporteDeAprendizNacioEvent` (sin bienvenida retroactiva);
+- `AbrirChatsConAcompananteUseCase.abrirParaGrupo(g)` para cada grupo operativo
+  (`AcompanamientoDelGrupoPort.gruposOperativos()` → `community.api.AcompanamientoFinder.gruposOperativos`),
+  con las mismas reglas de §9 (mentor y guías vigentes, solo cuentas activas, sin staff).
+
+**Cuándo corre.** `CompletarChatsDeAprendicesScheduler`: a los 3 minutos de arrancar (al desplegar, los
+de antes quedan cubiertos sin que nadie llame a nada) y después cada hora, con `@SchedulerLock`
+(`chat-completar-chats-de-aprendices`, C-5 fila 14). Periódico y no una sola vez porque hay huecos que se
+siguen abriendo solos: un grupo que entra en su período no publica ningún evento. Y al **reactivarse**
+una cuenta (`EstadoDeCuentaCambiadoEvent` de sin acceso a ACTIVE), `EstadoDeCuentaCambiadoChatsListener`
+completa en el momento su soporte y los chats de sus grupos. En las pruebas el barrido está apagado
+(`renaser.scheduling.chats-de-aprendices.activo=false`): dispararía en medio de otra prueba.
+
+**Qué NO hace.** No manda mensajes. No toca una conversación que ya existe (CH-11): no repone staff que
+se fue. No crea soporte a un TRAINEE activo **sin** fila en el programa (hoy solo lo
+produce `POST /api/v1/users/invite` con rol aprendiz; la invitación de staff rechaza ese rol): D-136 dice que el soporte
+nace al entrar al programa, y esa persona no entró; queda como pregunta abierta al dueño.
+
+| Clase | Qué fija |
+|---|---|
+| `ChatsDeAprendicesAntiguosIT` (5) | Aprendiz de antes (semilla SQL, sin eventos) → soporte con él y el staff + chat de dos con su mentor, sin mensajes, y el admin lo ve en `ListarConversacionesUseCase`; dos corridas no duplican; suspendido, INACTIVO, sin programa y staff no; grupo vencido no abre chat de dos y la recepción sí; reactivación |
+| `CompletarChatsDeAprendicesServiceTest` (3) | Delegación, un grupo que falla no frena a los demás, una persona |
+| `ConversacionSoporteServiceTest` (+4) | `rellenarPendientes` sin actor ni aviso; `rellenarDe` crea sin aviso, no duplica, solo aprendiz inscrito y ACTIVE |
+| `EstadoDeCuentaCambiadoChatsListenerTest` (2) | Solo la reactivación dispara |
 
 ## 10. La bienvenida automática en el chat de soporte y en el del grupo (2026-09-26, D-174, D-191; 2026-09-27, D-199, D-204)
 

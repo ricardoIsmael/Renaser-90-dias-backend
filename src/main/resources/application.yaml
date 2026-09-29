@@ -295,6 +295,12 @@ renaser:
       mentoring-resumir-semana-semaforo:
         lock-at-most-for: PT20M
         lock-at-least-for: PT30S
+      # D-224: completa los chats de los aprendices (soporte y chat de dos) a los 3 min de
+      # arrancar y despues cada hora. Sin lock no duplicaria nada (UNIQUE de clave_directa), pero
+      # recorreria el padron dos veces.
+      chat-completar-chats-de-aprendices:
+        lock-at-most-for: PT20M
+        lock-at-least-for: PT30S
   habits:
     # Cuanto antes se avisa cada cosa (2026-09-05). NO son constantes en el codigo porque el
     # dueno todavia no confirmo los numeros y este repo tiene una regla explicita contra
