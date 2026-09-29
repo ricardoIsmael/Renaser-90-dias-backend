@@ -1110,7 +1110,7 @@ de unidad en el catálogo sería la misma regla en dos lugares (lección de V22)
 | `domain/model/medicion/MedicionDiaria` | Valor + origen. Redondea a 2 decimales (HALF_UP) y rechaza lo que la columna no guarda (negativo, > 99 999,99). |
 | `domain/model/medicion/UnidadMedicion`, `OrigenMedicion` | `KILOMETROS`; `MANUAL`. |
 | `PoliticaHabito.unidadDeMedicion()` (default vacío) y `ContextoCompletar.medicion()` | El contrato de las políticas aprende que un hábito puede medir, y el contexto trae lo que escribió la persona. |
-| `application/politica/PoliticaKilometros` | `DAILY_KM`: sin km, 0 o > 100 km → 400 con el motivo. El tope de 100 km/día es **supuesto**. |
+| `application/politica/PoliticaKilometros` | `DAILY_KM`: sin km, 0 o > 100 km → 400 con el motivo. El tope de 100 km/día lo **confirmó el dueño** (29/09). |
 | `RegistroService.completar` | Un número en un hábito sin unidad → 400; si no, lo guarda con el registro al completar (mismos puntos, ventana y evento). |
 | `CompletarRegistroRequest.valorMedido` → `CompletarRegistroCommand.medicion` | Aditivo. |
 | `MedicionesDelDia` + `TracksDelDiaProyeccionService` | `GET /habit-tracks/today` trae `medicion {unidad, valorDelDia, total}` en el track de km (una consulta, solo si el día tiene un hábito medible). |
@@ -1159,10 +1159,23 @@ número se propone y la persona lo confirma; **fuera de C-1**: nunca dentro de l
 Pendiente de decidir en la fase 2: actualizar el número de un registro ya completado (hoy la medición se escribe
 solo al completar).
 
-**Supuestos (a confirmar con el dueño):** tope de 100 km/día; el horario del hábito sigue siendo el de V9
-(disparo 07:00, sin límite): quien lo registra de noche lo cumple pero cobra 0 puntos por tarde, como cualquier
-hábito — se ajusta desde el panel de horarios; el agente (`marcar_habito_completado`) no puede cerrarlo porque no
-tiene el número (recibe el 400 con el motivo). **Compatibilidad:** el APK publicado no tiene el campo de km: al
+**Confirmado por el dueño (29/09):** tope de 100 km/día; sale prendido para todos al desplegar (V84); y el
+hábito paga el **puntaje completo en cualquier momento del día local, hasta las 23:59**. Esto último lo hace `V86`
+con datos: su fila de `horarios_habito` pasa de 07:00 sin límite (V9) a **07:00 – 23:59**. Con el ancla a las 23:59
+la entrega es A_TIEMPO todo el día, la extensión se recorta a 0 contra la medianoche y el minuto final cae en la
+gracia sin descuento; el cobro, los «puntos en juego» de la agenda y el aviso «por vencer» leen la misma fila, así
+que dicen lo mismo. 23:59 pasa por encima del tope de `VentanaDelDia` (23:50, D-122) a propósito: con 23:50 el
+registro de las 23:59 pagaría 6. Si un admin edita este horario desde el panel, el dominio lo vuelve a acotar a
+23:50; y una preferencia del aprendiz con hora límite propia le gana al catálogo, como en todo hábito. El resto de
+los hábitos no cambia. Prueba: `KilometrosPuntosTodoElDiaIT` (22:30 y 23:59 de Lima con el reloj en el día
+siguiente en UTC → 10 puntos).
+
+> **Corregido 2026-09-29.** Este párrafo decía: «**Supuestos (a confirmar con el dueño):** tope de 100 km/día; el
+> horario del hábito sigue siendo el de V9 (disparo 07:00, sin límite): quien lo registra de noche lo cumple pero
+> cobra 0 puntos por tarde, como cualquier hábito — se ajusta desde el panel de horarios». El dueño confirmó el tope
+> y pidió lo contrario para el horario.
+
+El agente (`marcar_habito_completado`) no puede cerrarlo porque no tiene el número (recibe el 400 con el motivo). **Compatibilidad:** el APK publicado no tiene el campo de km: al
 registrar este hábito recibe el 400 «…Si no ves dónde, actualiza la app.» Como es opcional, no afecta su
 porcentaje. Si se prefiere no mostrarlo hasta el APK nuevo, se apaga desde el panel (`habitos.activo`).
 

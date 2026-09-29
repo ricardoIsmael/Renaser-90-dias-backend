@@ -20,9 +20,12 @@ import java.util.Optional;
  * completar este hábito por el gesto genérico sin km es un 400 que dice qué falta. Eso incluye al
  * agente de {@code rag} ({@code marcar_habito_completado}), que no tiene el número.
  *
- * <p><b>Supuesto a confirmar con el dueño:</b> el tope de {@link #TOPE_KM_POR_DIA} km por día. Nadie
- * lo definió; está para que un error de tipeo (330 en vez de 3,30) no ponga a alguien primero en el
- * ranking para todo el programa. Un ultramaratón existe, pero no es el caso de este programa.
+ * <p><b>Tope de {@link #TOPE_KM_POR_DIA} km por día, confirmado por el dueño (2026-09-29).</b> Está
+ * para que un error de tipeo (330 en vez de 3,30) no ponga a alguien primero en el ranking para todo
+ * el programa.
+ *
+ * <p>Que pague el puntaje completo a cualquier hora del día local (también confirmado el 29/09) NO
+ * vive acá: es el horario del hábito, 07:00 – 23:59, que le pone {@code V86}.
  *
  * <p>Selecciona por clave y no por tipo (su tipo, CHECKBOX, lo comparten otros quince): la clave
  * {@link #CLAVE_SISTEMA} se la puso {@code V84}. No decide puntos, ventana ni evento: eso sigue en
@@ -34,7 +37,7 @@ public class PoliticaKilometros implements PoliticaHabito {
     /** La clave que V84 le puso al hábito {@code ea87fdec…}; la usa también el ranking de km. */
     public static final String CLAVE_SISTEMA = "DAILY_KM";
 
-    /** Supuesto (ver javadoc de la clase): más que esto en un día se toma como error de tipeo. */
+    /** Confirmado por el dueño (ver javadoc de la clase): más que esto en un día es un error de tipeo. */
     public static final BigDecimal TOPE_KM_POR_DIA = new BigDecimal("100");
 
     @Override
