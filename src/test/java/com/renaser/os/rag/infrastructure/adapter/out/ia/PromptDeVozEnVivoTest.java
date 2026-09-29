@@ -28,7 +28,7 @@ class PromptDeVozEnVivoTest {
     void armaLosTresBloques() {
         String texto = prompt.para(new SituacionDelAprendiz(17, 1), null);
 
-        assertThat(texto).contains("Eres Renasia")
+        assertThat(texto).contains("Eres SER")
                 .contains("Hoy es su dia 17 de 90")
                 .contains("Esta respuesta se va a escuchar")
                 .contains("conversando por voz, en tiempo real")
