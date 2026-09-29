@@ -11893,3 +11893,18 @@ completa del worktree (caché de transformación fría) dio 5 archivos rojos por
 **Cómo evitar que vuelva a pasar.** Rutas primero, bandera al final; y verificar en la salida el número de suites, no solo que
 no falle.
 
+## E-431 · `avisosALaMismaHora.test.ts` falla solo después del mediodía: `Expected: "recordatorios-habitos-relajar-cuenco" Received: "recordatorios-habitos"` (frontend, 29/09)
+
+**Síntoma.** `cambiar el sonido en Yo → Alarmas no toca horas (E-412) › Despertar con «12:00 desde mañana» sigue
+así después de elegir «Voz» y «Cuenco»` pasó a las 11:5x y falló a las 12:03 del mismo día, en el mismo árbol y
+sin tocar `src/features/alarmas`.
+
+**Causa real (sin corregir; fuera de alcance).** El test fija `ahora = new Date(2026, 8, 28, 11, 40)` al programar,
+pero `pasarAlarmasAlSonido` lee el reloj real: pasadas las 12:00 de la máquina, el «12:00 desde mañana» ya cayó
+en el pasado del reloj real y la alarma no se reprograma con el canal nuevo. Es un test que depende de la hora
+del día en que se corre (el mismo tipo de fixture que la regla 03-pruebas llama «tapa el bug»).
+
+**Cómo evitar que vuelva a pasar.** Pendiente: pasar `ahora` a `pasarAlarmasAlSonido` o congelar el reloj con
+`jest.useFakeTimers().setSystemTime(...)`. Mientras tanto, si falla solo ese archivo después de las 12:00, no es
+del cambio que se está probando.
+
