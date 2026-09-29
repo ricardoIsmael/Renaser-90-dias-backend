@@ -37,9 +37,12 @@ public interface ConsultarRankingAgregadoUseCase {
      *                              pese al nombre del tipo, hoy ordena a TODOS los aprendices activos por
      *                              coherencia individual, no esta scoped a una celula (ver D-P7/Q-1)
      * @param general               snapshot {@link com.renaser.os.points.domain.model.ranking.TipoRanking#GENERAL}
+     * @param kilometros            snapshot {@link com.renaser.os.points.domain.model.ranking.TipoRanking#KILOMETROS}
+     *                              (D-226): km acumulados del programa; {@code puntaje} son km con dos decimales
      */
     record RankingAgregado(LocalDate fecha, CelulaResumen celula, List<EntradaRanking> liga,
-                            List<EntradaRanking> coherenciaIndividual, List<EntradaRanking> general) {
+                            List<EntradaRanking> coherenciaIndividual, List<EntradaRanking> general,
+                            List<EntradaRanking> kilometros) {
 
         /** Proyeccion publica de la celula del actor, tal como la expone {@code community.api.CelulaFinder}. */
         public record CelulaResumen(UUID celulaId, String cellName, String cohortName, String mentorName,

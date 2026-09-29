@@ -1087,3 +1087,86 @@ cambiar lo que verifican; el de E-105 del lado de la proyección ahora verifica 
 hilos) y la carga repetida del usuario en el interceptor de permisos + el servicio (2–3 lecturas por
 pedido): queda anotada, no se tocó.
 
+
+## 25. KILÓMETROS DIARIOS: el número del día y el total acumulado (D-226) — 2026-09-29
+
+Pedido del dueño: hábito «Kilómetros diarios» para todos, **opcional** (si lo completa suma al promedio, si no,
+no resta), que se registra como los rituales —cámara y después la pantalla partida— pero pidiendo
+**«¿Cuántos km recorriste hoy?»** y mostrando el total recorrido; se cumple con cualquier km > 0. Con los km
+acumulados desde el Día 1 hay un ranking nuevo en `points` (ver `MODULO_POINTS.md` §10).
+
+**Sin tablas nuevas.** El hábito ya existía apagado desde V9 (`ea87fdec…`). `V84` le pone
+`clave_sistema = 'DAILY_KM'`, lo prende (`activo`, global) y agrega a `registros_habito` dos columnas genéricas:
+`valor_medido numeric(7,2)` y `origen_medicion` (texto con CHECK, hoy solo `MANUAL`), con CHECKs de fila (no
+negativo, los dos o ninguno, solo en COMPLETADO). **La unidad no se guarda en `habitos`**: la declara la política
+del hábito (`PoliticaHabito.unidadDeMedicion()`), el mismo lugar donde viven las demás reglas propias; una columna
+de unidad en el catálogo sería la misma regla en dos lugares (lección de V22). Por lo mismo no se agregó
+`meta_diaria`: el dueño definió «cualquier km > 0» y nadie la leería.
+
+**Piezas:**
+
+| Pieza | Qué hace |
+|---|---|
+| `domain/model/medicion/MedicionDiaria` | Valor + origen. Redondea a 2 decimales (HALF_UP) y rechaza lo que la columna no guarda (negativo, > 99 999,99). |
+| `domain/model/medicion/UnidadMedicion`, `OrigenMedicion` | `KILOMETROS`; `MANUAL`. |
+| `PoliticaHabito.unidadDeMedicion()` (default vacío) y `ContextoCompletar.medicion()` | El contrato de las políticas aprende que un hábito puede medir, y el contexto trae lo que escribió la persona. |
+| `application/politica/PoliticaKilometros` | `DAILY_KM`: sin km, 0 o > 100 km → 400 con el motivo. El tope de 100 km/día es **supuesto**. |
+| `RegistroService.completar` | Un número en un hábito sin unidad → 400; si no, lo guarda con el registro al completar (mismos puntos, ventana y evento). |
+| `CompletarRegistroRequest.valorMedido` → `CompletarRegistroCommand.medicion` | Aditivo. |
+| `MedicionesDelDia` + `TracksDelDiaProyeccionService` | `GET /habit-tracks/today` trae `medicion {unidad, valorDelDia, total}` en el track de km (una consulta, solo si el día tiene un hábito medible). |
+| `SumarMedicionesPort` / `SumarMedicionesJdbcAdapter` | Suma en lote por participante hasta una fecha (JdbcClient, tablas propias). |
+| `KilometrosAcumuladosService` | Implementa `points.api.MedicionAcumuladaFinder` (DIP, como `PorcentajeHabitosService`). |
+| `RegistrarMedicionDiariaUseCase` / `MedicionDiariaService` | Puerta de la **fase 2** por (participante, clave, fecha): delega en `CompletarRegistroUseCase`. Hoy sin llamador HTTP. |
+
+```mermaid
+flowchart LR
+    subgraph App
+        A[Registro con foto<br/>¿Cuántos km recorriste hoy?]
+    end
+    subgraph habits
+        B[HabitTrackController<br/>POST /habit-tracks/id/complete<br/>valorMedido]
+        C[RegistroService.completar]
+        D[PoliticaKilometros<br/>DAILY_KM: > 0 y ≤ 100]
+        E[(registros_habito<br/>valor_medido · origen_medicion)]
+        F[KilometrosAcumuladosService]
+        G[MedicionesDelDia<br/>GET /habit-tracks/today → medicion.total]
+        H[RegistrarMedicionDiariaUseCase<br/>fase 2: Health Connect / HealthKit]
+    end
+    subgraph points
+        I[points.api.MedicionAcumuladaFinder]
+        J[RankingService.generar KILOMETROS]
+        K[(ranking_aprendices<br/>tipo KILOMETROS)]
+        L[GET /api/v1/ranking → kilometros]
+        M[SnapshotRankingScheduler 05:05 UTC]
+    end
+    A -->|captura: upload-url → PUT S3 → evidence| B
+    A --> B --> C --> D
+    C -->|save| E
+    H --> C
+    G --> E
+    M --> J --> I
+    F -. implementa .-> I
+    F --> E
+    J --> K --> L --> A
+```
+
+**Cómo entra la fase 2 (pasos o lectura automática).** Health Connect (Android) y HealthKit (iOS) no tienen API de
+servidor: los lee el teléfono. La app mandaría el dato a un endpoint nuevo de este módulo que llama a
+`RegistrarMedicionDiariaUseCase` con un `OrigenMedicion` nuevo (p. ej. `HEALTH_CONNECT`, agregado también al CHECK
+de V84 en una migración). Para pasos haría falta además una `UnidadMedicion.PASOS`, un hábito con su clave y su
+política (tope propio). La lectura automática de la captura (IA/OCR) sería un puerto de salida detrás del cual el
+número se propone y la persona lo confirma; **fuera de C-1**: nunca dentro de la transacción de `completar`.
+Pendiente de decidir en la fase 2: actualizar el número de un registro ya completado (hoy la medición se escribe
+solo al completar).
+
+**Supuestos (a confirmar con el dueño):** tope de 100 km/día; el horario del hábito sigue siendo el de V9
+(disparo 07:00, sin límite): quien lo registra de noche lo cumple pero cobra 0 puntos por tarde, como cualquier
+hábito — se ajusta desde el panel de horarios; el agente (`marcar_habito_completado`) no puede cerrarlo porque no
+tiene el número (recibe el 400 con el motivo). **Compatibilidad:** el APK publicado no tiene el campo de km: al
+registrar este hábito recibe el 400 «…Si no ves dónde, actualiza la app.» Como es opcional, no afecta su
+porcentaje. Si se prefiere no mostrarlo hasta el APK nuevo, se apaga desde el panel (`habitos.activo`).
+
+Pruebas: `MedicionDiariaTest`, `PoliticaKilometrosTest`, `RegistroServiceKilometrosTest`, `MedicionDiariaServiceTest`,
+`MedicionesDelDiaTest` y `KilometrosDiariosIT` (Tomcat real + Postgres: completar con km, sin km/negativo/0/250 →
+400, número en otro hábito → 400, otro aprendiz → 403, agenda con el total, ranking desde el Día 1, opcional no resta,
+el barrido genera el track opcional).

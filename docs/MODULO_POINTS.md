@@ -242,6 +242,29 @@ UTC—), el listener (`EstadoDeCuentaSemaforoListenerTest`), endpoint contra el 
 los cuatro módulos reales (`SemaforoDeExtremoAExtremoIT`) y con la suspensión por el caso de uso real de `users` y
 el outbox (`SuspensionEnElSemaforoIT`).
 
+## 10. Ranking por kilómetros acumulados (D-226, 2026-09-29)
+
+Pedido del dueño: una tercera tabla en el ranking de Comunidad, **«Kilómetros»**, con los km acumulados de cada
+aprendiz activo **desde su Día 1** (hábito KILÓMETROS DIARIOS de `habits`, ver `MODULO_HABITS.md` §25), entre todos
+los aprendices activos como las otras dos.
+
+- `TipoRanking.KILOMETROS` ↔ valor `KILOMETROS` del enum `tipo_ranking` (`V85`); `RankingPersistenceMapper` lo mapea
+  (switch exhaustivo). `puntaje` guarda km con dos decimales (`numeric(10,2)`).
+- `RankingService.generar(KILOMETROS, fecha)`: candidatos = los mismos aprendices activos; km de
+  `points.api.MedicionAcumuladaFinder.kilometrosAcumulados(ids, fecha)` en **una** consulta de lote (D-43),
+  implementado por `habits` (`KilometrosAcumuladosService`, DIP igual que `PorcentajeHabitosFinder`). Quien nunca
+  registró km entra con 0, al fondo (mismo criterio que CELL y GENERAL); la app no lo muestra en esa pestaña.
+- La suma se **deriva** de los registros con fecha ≤ corte (regla 02 §2): un corte que no corre se recupera solo.
+- `TipoRanking.CON_CORTE_DIARIO` = {LEAGUE, CELL, GENERAL, KILOMETROS}: una sola lista para el corte de las 05:05 UTC
+  (`SnapshotRankingScheduler`) y la regeneración del panel (`RegeneracionRankingService`); antes eran dos copias.
+- `GET /api/v1/ranking` suma `kilometros` a `RankingAgregadoResponse` (aditivo: el APK publicado lo ignora);
+  `GET /api/v1/ranking/KILOMETROS` también responde.
+- Como las otras tablas, se actualiza con el corte diario: los km de hoy aparecen en la tabla de mañana (o al
+  regenerar desde el panel).
+
+Pruebas: `RankingServiceTest.kilometrosOrdenaPorKmAcumulados`, `elCorteDiarioIncluyeKilometros`,
+`RankingAgregadoServiceTest`, `RegeneracionRankingServiceTest` (ahora cuatro tipos) y `KilometrosDiariosIT`.
+
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 
 Alcance: `src/main/java/com/renaser/os/points/**` contra CLAUDE.MD §5.1, §5.1.2, §5.3.4/§5.3.5, §5.4.1–§5.4.10. Solo lectura — no se corrió `./mvnw`, no se modificó ningún `.java`. Método: lectura completa de los 62 archivos de producción del módulo + grep dirigido.

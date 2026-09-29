@@ -2,6 +2,8 @@ package com.renaser.os.habits.infrastructure.adapter.out.persistence.registro;
 
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
+import com.renaser.os.habits.domain.model.medicion.MedicionDiaria;
+import com.renaser.os.habits.domain.model.medicion.OrigenMedicion;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
@@ -16,7 +18,8 @@ class RegistroHabitoPersistenceMapper {
                 HabitoId.of(e.getHabitoId()), e.getFechaEjecucion(), e.getDiaPrograma(), toDomainTipoDia(e.getTipoDia()),
                 e.isEsOpcional(), toDomainEstado(e.getEstado()), e.getPuntosOtorgados(), e.getRespuestaTexto(),
                 e.getCalificacionProductividad() != null ? e.getCalificacionProductividad().intValue() : null,
-                e.getEntradaDiarioId(), e.getCompletadoEn(), e.getCreadoEn(), e.getActualizadoEn());
+                e.getEntradaDiarioId(), e.getCompletadoEn(), e.getCreadoEn(), e.getActualizadoEn(),
+                toDomainMedicion(e));
     }
 
     RegistroHabitoJpaEntity toEntity(RegistroHabito r) {
@@ -24,7 +27,30 @@ class RegistroHabitoPersistenceMapper {
                 r.fechaEjecucion(), (short) r.diaPrograma(), toJpaTipoDia(r.tipoDia()), r.esOpcional(),
                 toJpaEstado(r.estado()), (short) r.puntosOtorgados(), r.respuestaTexto(),
                 r.calificacionProductividad() != null ? r.calificacionProductividad().shortValue() : null,
-                r.entradaDiarioId(), r.completadoEn(), r.creadoEn(), r.actualizadoEn());
+                r.entradaDiarioId(), r.completadoEn(), r.creadoEn(), r.actualizadoEn(),
+                r.medicion() != null ? r.medicion().valor() : null,
+                r.medicion() != null ? toJpaOrigen(r.medicion().origen()) : null);
+    }
+
+    /** La base garantiza que valor y origen van juntos (CHECK de V84): basta mirar el valor. */
+    private MedicionDiaria toDomainMedicion(RegistroHabitoJpaEntity e) {
+        if (e.getValorMedido() == null) {
+            return null;
+        }
+        return new MedicionDiaria(e.getValorMedido(), toDomainOrigen(e.getOrigenMedicion()));
+    }
+
+    private String toJpaOrigen(OrigenMedicion origen) {
+        return switch (origen) {
+            case MANUAL -> "MANUAL";
+        };
+    }
+
+    private OrigenMedicion toDomainOrigen(String origen) {
+        return switch (origen) {
+            case "MANUAL" -> OrigenMedicion.MANUAL;
+            default -> throw new IllegalStateException("origen_medicion desconocido: " + origen);
+        };
     }
 
     private EstadoRegistroJpa toJpaEstado(EstadoRegistro estado) {

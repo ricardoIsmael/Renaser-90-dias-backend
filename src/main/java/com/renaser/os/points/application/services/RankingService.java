@@ -1,5 +1,6 @@
 package com.renaser.os.points.application.services;
 
+import com.renaser.os.points.api.MedicionAcumuladaFinder;
 import com.renaser.os.points.api.PorcentajeCursosFinder;
 import com.renaser.os.points.api.PorcentajeHabitosFinder;
 import com.renaser.os.points.application.ports.in.ranking.ConsultarRankingUseCase;
@@ -36,19 +37,23 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
     private final PorcentajeHabitosFinder porcentajeHabitosFinder;
     private final PorcentajeRocasFinder porcentajeRocasFinder;
     private final PorcentajeCursosFinder porcentajeCursosFinder;
+    /** D-226: los km acumulados del programa, en lote, desde {@code habits}. */
+    private final MedicionAcumuladaFinder medicionAcumuladaFinder;
     private final UserSummaryFinder userSummaryFinder;
 
     public RankingService(LoadRankingCandidatosPort loadRankingCandidatosPort,
                            SaveRankingSnapshotPort saveRankingSnapshotPort, LoadRankingPort loadRankingPort,
                            PorcentajeHabitosFinder porcentajeHabitosFinder,
                            PorcentajeRocasFinder porcentajeRocasFinder,
-                           PorcentajeCursosFinder porcentajeCursosFinder, UserSummaryFinder userSummaryFinder) {
+                           PorcentajeCursosFinder porcentajeCursosFinder,
+                           MedicionAcumuladaFinder medicionAcumuladaFinder, UserSummaryFinder userSummaryFinder) {
         this.loadRankingCandidatosPort = loadRankingCandidatosPort;
         this.saveRankingSnapshotPort = saveRankingSnapshotPort;
         this.loadRankingPort = loadRankingPort;
         this.porcentajeHabitosFinder = porcentajeHabitosFinder;
         this.porcentajeRocasFinder = porcentajeRocasFinder;
         this.porcentajeCursosFinder = porcentajeCursosFinder;
+        this.medicionAcumuladaFinder = medicionAcumuladaFinder;
         this.userSummaryFinder = userSummaryFinder;
     }
 
@@ -66,6 +71,9 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
         Map<UserId, BigDecimal> puntajesCalculados = switch (tipo) {
             case GENERAL -> puntajesGeneralesDe(candidatos, fecha);
             case CELL -> porcentajeRocasFinder.porcentajePorParticipante(idsDe(candidatos), fecha);
+            // D-226: km acumulados desde el Dia 1 hasta el dia del corte, entre los mismos candidatos
+            // (todos los aprendices activos). Una consulta en lote.
+            case KILOMETROS -> medicionAcumuladaFinder.kilometrosAcumulados(idsDe(candidatos), fecha);
             default -> Map.of();
         };
         List<PosicionRanking> posiciones = ordenarYNumerar(tipo, fecha, candidatos, puntajesCalculados);
@@ -157,6 +165,9 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
             // Mismo criterio que CELL (D-131): sin un solo modulo con dato va al fondo con cero, no
             // adelante con el 100 que rellenaba `SIN_DATO`.
             case GENERAL -> puntajesCalculados.getOrDefault(candidato.participanteId(), BigDecimal.ZERO);
+            // D-226: quien nunca registro km va al fondo con cero, como en CELL y GENERAL. El desempate
+            // de `ordenarYNumerar` (por id) deja estable el orden entre los que tienen cero.
+            case KILOMETROS -> puntajesCalculados.getOrDefault(candidato.participanteId(), BigDecimal.ZERO);
             case COHORT -> throw new UnsupportedOperationException(unsupportedMessage(tipo));
         };
     }

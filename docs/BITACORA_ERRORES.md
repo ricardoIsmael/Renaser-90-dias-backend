@@ -12004,3 +12004,20 @@ parámetro JDBC llega tipado como `varchar` y el enum no lo acepta sin cast (igu
 **Cómo evitar que vuelva a pasar.** Toda columna enum del esquema (`rol_usuario`, `estado_usuario`,
 `tipo_conversacion`, `funcion_acompanamiento`…) que se siembre con un parámetro lleva su `CAST(? AS renaser.<tipo>)`;
 un literal no lo necesita. Al copiar el helper `usuario(...)` de otro IT y volver parámetro un literal, agregar el cast.
+
+## E-438 · `expected: 200 but was: 400` al completar KILÓMETROS DIARIOS con `{"valorMedido": 4.126}` (backend, 29/09)
+
+**Síntoma.** `KilometrosDiariosIT.completarConKm:140 expected: 200 but was: 400`: el pedido con tres decimales se
+rechazaba antes de llegar al caso de uso.
+
+**Causa real.** El DTO `CompletarRegistroRequest.valorMedido` tenía `@Digits(integer = 5, fraction = 2)`, copiado
+de la forma de la columna `numeric(7,2)`. Pero la regla de dominio (`MedicionDiaria`) es **redondear** a dos
+decimales, no rechazar: la persona escribe «4,126» y se guarda 4,13. Dos capas decidían distinto sobre el mismo dato
+y ganaba la de afuera.
+
+**Solución.** El DTO solo exige `@DecimalMin("0")`; el redondeo y el máximo representable los decide
+`MedicionDiaria` (un solo lugar), y si el valor tiene sentido para el hábito, `PoliticaKilometros`.
+
+**Cómo evitar que vuelva a pasar.** En un DTO de entrada no se copia la precisión de la columna cuando el dominio
+normaliza el valor: la validación de transporte se limita a lo que el dominio no puede tolerar (tipo, signo). Lo
+fija la prueba `KilometrosDiariosIT.completarConKm`, que manda tres decimales a propósito.

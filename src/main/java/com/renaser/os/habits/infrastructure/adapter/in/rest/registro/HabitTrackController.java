@@ -70,9 +70,9 @@ public class HabitTrackController {
     @PostMapping("/{id}/complete")
     public RegistroHabitoResponse completar(@ActorAutenticado UserId actor, @PathVariable String id,
                                              @RequestBody @Valid CompletarRegistroRequest request) {
-        var registro = completarRegistroUseCase.completar(new CompletarRegistroCommand(actor,
+        var registro = completarRegistroUseCase.completar(CompletarRegistroCommand.conValorManual(actor,
                 RegistroHabitoId.of(java.util.UUID.fromString(id)), request.respuestaTexto(),
-                request.calificacionProductividad()));
+                request.calificacionProductividad(), request.valorMedido()));
         return RegistroHabitoResponse.from(registro);
     }
 

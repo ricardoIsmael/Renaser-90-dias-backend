@@ -2,6 +2,7 @@ package com.renaser.os.habits.domain.model.registro;
 
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
+import com.renaser.os.habits.domain.model.medicion.MedicionDiaria;
 import com.renaser.os.shared.domain.UserId;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -46,6 +47,11 @@ public final class RegistroHabito {
     private Instant completadoEn;
     private final Instant creadoEn;
     private Instant actualizadoEn;
+    /**
+     * El número del día de un hábito medible (D-226: los km de {@code DAILY_KM}); {@code null} en
+     * todos los demás, y en este mientras no se complete. Se escribe solo al completar.
+     */
+    private MedicionDiaria medicion;
 
     /**
      * Generado por el scheduler nocturno (o al activar el programa) — siempre PENDIENTE, 0 puntos.
@@ -67,19 +73,31 @@ public final class RegistroHabito {
             throw new IllegalArgumentException("diaPrograma fuera de rango 0..90: " + diaPrograma);
         }
         return new RegistroHabito(id, participanteId, habitoId, fechaEjecucion, diaPrograma,
-                tipoDia, esOpcional, EstadoRegistro.PENDIENTE, 0, null, null, null, null, ahora, ahora);
+                tipoDia, esOpcional, EstadoRegistro.PENDIENTE, 0, null, null, null, null, ahora, ahora, null);
     }
 
-    /** Solo para el adaptador de persistencia. */
+    /** Solo para el adaptador de persistencia (y las pruebas): un registro sin medición. */
     public static RegistroHabito rehydrate(RegistroHabitoId id, UserId participanteId, HabitoId habitoId,
                                             LocalDate fechaEjecucion, int diaPrograma, TipoDia tipoDia,
                                             boolean esOpcional, EstadoRegistro estado, int puntosOtorgados,
                                             String respuestaTexto, Integer calificacionProductividad,
                                             java.util.UUID entradaDiarioId, Instant completadoEn, Instant creadoEn,
                                             Instant actualizadoEn) {
+        return rehydrate(id, participanteId, habitoId, fechaEjecucion, diaPrograma, tipoDia, esOpcional, estado,
+                puntosOtorgados, respuestaTexto, calificacionProductividad, entradaDiarioId, completadoEn, creadoEn,
+                actualizadoEn, null);
+    }
+
+    /** Solo para el adaptador de persistencia: con la medición del día (D-226), o {@code null}. */
+    public static RegistroHabito rehydrate(RegistroHabitoId id, UserId participanteId, HabitoId habitoId,
+                                            LocalDate fechaEjecucion, int diaPrograma, TipoDia tipoDia,
+                                            boolean esOpcional, EstadoRegistro estado, int puntosOtorgados,
+                                            String respuestaTexto, Integer calificacionProductividad,
+                                            java.util.UUID entradaDiarioId, Instant completadoEn, Instant creadoEn,
+                                            Instant actualizadoEn, MedicionDiaria medicion) {
         return new RegistroHabito(id, participanteId, habitoId, fechaEjecucion, diaPrograma, tipoDia, esOpcional,
                 estado, puntosOtorgados, respuestaTexto, calificacionProductividad, entradaDiarioId, completadoEn,
-                creadoEn, actualizadoEn);
+                creadoEn, actualizadoEn, medicion);
     }
 
     /** PENDIENTE -> EN_CURSO. Solo BLOQUEO (Santuario) y la racha sin celular lo usan. */
@@ -100,6 +118,17 @@ public final class RegistroHabito {
      */
     public void completar(int puntos, String respuestaTexto, Integer calificacionProductividad,
                            java.util.UUID entradaDiarioId, Instant ahora) {
+        completar(puntos, respuestaTexto, calificacionProductividad, entradaDiarioId, null, ahora);
+    }
+
+    /**
+     * Igual que el de arriba, y además guarda el número del día (D-226). La medición se escribe en el
+     * mismo gesto que completa, nunca antes ni despues: la base lo exige (CHECK
+     * {@code registros_habito_medicion_solo_completado}, V84). Si la medición TIENE SENTIDO para el
+     * hábito (mayor que cero, tope) no lo decide el registro sino la política del hábito.
+     */
+    public void completar(int puntos, String respuestaTexto, Integer calificacionProductividad,
+                           java.util.UUID entradaDiarioId, MedicionDiaria medicion, Instant ahora) {
         /* Aca habia un `requireNoTerminal()`. Se quita porque EXPIRADO es terminal segun
            `esTerminal()` --y lo sigue siendo para el resto del sistema, que usa esa pregunta para
            "esto ya no se toca"-- pero SI se puede completar desde que registrar tarde dejo de
@@ -118,6 +147,7 @@ public final class RegistroHabito {
         this.respuestaTexto = respuestaTexto;
         this.calificacionProductividad = calificacionProductividad;
         this.entradaDiarioId = entradaDiarioId;
+        this.medicion = medicion;
         this.completadoEn = ahora;
         this.actualizadoEn = ahora;
     }

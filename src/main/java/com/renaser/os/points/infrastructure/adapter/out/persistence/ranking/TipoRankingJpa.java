@@ -4,5 +4,7 @@ public enum TipoRankingJpa {
     GENERAL,
     COHORTE,
     CELULA,
-    LIGA
+    LIGA,
+    /** V85. */
+    KILOMETROS
 }

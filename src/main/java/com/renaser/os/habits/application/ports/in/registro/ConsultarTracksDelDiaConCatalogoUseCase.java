@@ -1,10 +1,12 @@
 package com.renaser.os.habits.application.ports.in.registro;
 
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
+import com.renaser.os.habits.domain.model.medicion.UnidadMedicion;
 import com.renaser.os.habits.domain.model.registro.PuntosEnJuego;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.shared.domain.UserId;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -88,7 +90,23 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
     record TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
                                    GuiaResumen guia, LocalTime horaDisparo, LocalTime horaLimite,
                                    PuntosEnJuego puntosEnJuego, boolean tieneEvidencia,
-                                   boolean exigeEvidencia, String claveSistema, String tituloDelPrograma) {
+                                   boolean exigeEvidencia, String claveSistema, String tituloDelPrograma,
+                                   MedicionDelTrack medicion) {
+
+        /** Sin medicion (todo habito que no mide un numero, D-226). */
+        public TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
+                                      GuiaResumen guia, LocalTime horaDisparo, LocalTime horaLimite,
+                                      PuntosEnJuego puntosEnJuego, boolean tieneEvidencia, boolean exigeEvidencia,
+                                      String claveSistema, String tituloDelPrograma) {
+            this(registro, tituloHabito, tipoHabito, guia, horaDisparo, horaLimite, puntosEnJuego, tieneEvidencia,
+                    exigeEvidencia, claveSistema, tituloDelPrograma, null);
+        }
+
+        /** La misma vista con la medicion del habito (D-226). */
+        public TrackDelDiaConCatalogo conMedicion(MedicionDelTrack medicionDelTrack) {
+            return new TrackDelDiaConCatalogo(registro, tituloHabito, tipoHabito, guia, horaDisparo, horaLimite,
+                    puntosEnJuego, tieneEvidencia, exigeEvidencia, claveSistema, tituloDelPrograma, medicionDelTrack);
+        }
 
         /** Sin renombre: {@code tituloHabito} ya es el del programa. */
         public TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
@@ -109,5 +127,14 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
     }
 
     record GuiaResumen(String mantraTitulo, String mantraIntro, String queHacer, String comoHacerlo) {
+    }
+
+    /**
+     * D-226: lo que la app necesita para pedir y mostrar el numero de un habito medible — la unidad,
+     * lo registrado ESE dia ({@code null} mientras no se complete) y el total acumulado del programa
+     * hasta ese dia inclusive (con lo de ese dia si ya se registro). Solo existe en los habitos cuya
+     * politica declara unidad; en los demas el track no lo trae.
+     */
+    record MedicionDelTrack(UnidadMedicion unidad, BigDecimal valorDelDia, BigDecimal total) {
     }
 }

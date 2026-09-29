@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -56,4 +57,10 @@ public class RegistroHabitoJpaEntity {
     private Instant creadoEn;
 
     private Instant actualizadoEn;
+
+    /** D-226 (V84): el numero del dia de un habito medible. Va junto con {@link #origenMedicion} o ninguno. */
+    private BigDecimal valorMedido;
+
+    /** D-226 (V84): texto con CHECK en la base ('MANUAL'), no enum de Postgres. */
+    private String origenMedicion;
 }

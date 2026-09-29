@@ -131,6 +131,7 @@ Completa un hábito directo (`CHECKBOX`/`JOURNALING`/`CALIFICACION`). **NO sirve
 |---|---|---|
 | `respuestaTexto` | `String` | opcional, `@Size(max = 4000)` |
 | `calificacionProductividad` | `Integer` | opcional, sin rango validado en el DTO |
+| `valorMedido` | `BigDecimal` | **D-226.** Solo en KILÓMETROS DIARIOS (`DAILY_KM`), y ahí obligatorio: km del día, número JSON con punto, `>= 0`; se guarda redondeado a 2 decimales. Tiene que ser `> 0` y `<= 100`. En un hábito que no mide nada es un 400 |
 
   Sin campo `puntos`: **el otorgamiento SIEMPRE lo calcula el servidor** (comentario explícito del DTO).
 
@@ -147,6 +148,13 @@ Completa un hábito directo (`CHECKBOX`/`JOURNALING`/`CALIFICACION`). **NO sirve
     `EXPIRADO` en el mismo request, no es un simple rechazo).
   - `409` `"Este registro no puede completarse: <estado>"` — ya estaba en un estado terminal
     (`COMPLETADO`/`FALLIDO`/`EXPIRADO`).
+  - `400` `"Escribe cuántos km recorriste hoy para registrar este hábito. Si no ves dónde, actualiza la app."` —
+    KILÓMETROS DIARIOS sin `valorMedido` (D-226); `"Los km recorridos tienen que ser más que cero."` y
+    `"Revisa el número: más de 100 km en un día no se puede registrar."` para 0 y más del tope.
+  - `400` `"Este hábito no registra un número: complétalo sin valorMedido"` — `valorMedido` en cualquier otro hábito.
+- **Response (D-226):** `RegistroHabitoResponse` suma `valorMedido` (null salvo en KILÓMETROS DIARIOS). En
+  `GET /habit-tracks/today`, el track de KILÓMETROS DIARIOS trae `medicion: {unidad: "KILOMETROS", valorDelDia,
+  total}` (total acumulado del programa hasta hoy); los demás tracks, `medicion: null`.
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/habit-tracks/<REGISTRO_ID>/complete \

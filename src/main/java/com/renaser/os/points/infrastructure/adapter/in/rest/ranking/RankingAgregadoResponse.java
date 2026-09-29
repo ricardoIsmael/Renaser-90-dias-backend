@@ -10,17 +10,22 @@ import java.util.List;
  * {@code GET /api/v1/ranking}. {@code celula} es {@code null} si el actor todavia no tiene
  * una celula asignada — estado normal del proceso, no un error (mismo criterio que
  * {@code community.MiCelulaResponse}).
+ *
+ * <p>{@code kilometros} (D-226, aditivo: el APK publicado lo ignora) — km acumulados del programa;
+ * {@code puntaje} son km con dos decimales, no puntos.
  */
 public record RankingAgregadoResponse(LocalDate fecha, CelulaResumenResponse celula,
                                        List<EntradaRankingResponse> liga,
                                        List<EntradaRankingResponse> coherenciaIndividual,
-                                       List<EntradaRankingResponse> general) {
+                                       List<EntradaRankingResponse> general,
+                                       List<EntradaRankingResponse> kilometros) {
 
     public static RankingAgregadoResponse from(RankingAgregado agregado) {
         return new RankingAgregadoResponse(agregado.fecha(), CelulaResumenResponse.from(agregado.celula()),
                 agregado.liga().stream().map(EntradaRankingResponse::from).toList(),
                 agregado.coherenciaIndividual().stream().map(EntradaRankingResponse::from).toList(),
-                agregado.general().stream().map(EntradaRankingResponse::from).toList());
+                agregado.general().stream().map(EntradaRankingResponse::from).toList(),
+                agregado.kilometros().stream().map(EntradaRankingResponse::from).toList());
     }
 
     public record CelulaResumenResponse(String cellId, String cellName, String cohortName, String mentorName,
