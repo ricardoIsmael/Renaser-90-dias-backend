@@ -12021,3 +12021,80 @@ y ganaba la de afuera.
 **Cómo evitar que vuelva a pasar.** En un DTO de entrada no se copia la precisión de la columna cuando el dominio
 normaliza el valor: la validación de transporte se limita a lo que el dominio no puede tolerar (tipo, signo). Lo
 fija la prueba `KilometrosDiariosIT.completarConKm`, que manda tres decimales a propósito.
+
+## E-438 · «Del lado de administrador no sale marcado, sale tipo en blanco»: el post diario queda PENDIENTE si se publica antes de que exista el registro del día (backend, RESUELTO, 29/09)
+
+**Síntoma.** Reporte del dueño en producción (29/09): el hábito «Post diario en comunidad» se ve completado para
+el aprendiz y, en la ficha del administrador, sin marcar. Reproducido en la base local con un caso ya existente:
+`e2e-ap-ajeno1` publicó en el Muro el 27/09 a las 18:33 UTC, su registro del día se creó a las 18:41 UTC y
+quedó `PENDIENTE` para siempre (consulta: registros de `COMMUNITY_POST` contra `publicaciones_muro` del mismo día
+local).
+
+**Causa real.** `PostDiarioComunidadHabitoService.alPublicarEnElMuro` solo cierra un registro que YA existe; si
+no lo encuentra devuelve sin hacer nada («no le toca ese día»). Los registros del día nacen en el barrido de las
+05:02 UTC o, si el barrido no alcanzó a la persona, recién cuando la app pide `GET /habit-tracks/today`. Quien
+publica antes —cuenta activada ese día, backend caído a la medianoche, zona al oeste de Lima (el barrido cae el
+día anterior), o un miembro del staff que lleva su programa y abre primero el Muro— se queda sin cierre: el
+oyente no encuentra nada y el registro que se genera después ya no tiene quien lo cierre. La ficha del
+administrador y la del mentor leen el mismo registro, así que lo muestran en blanco.
+
+> Lo que este arreglo NO explica: si el aprendiz vio su hábito completado y el administrador no, los dos
+> leían registros distintos o días distintos. La otra mitad del reporte es E-439 (la ficha abría el detalle del
+> lunes). No se pudo leer la base de producción para confirmar cuál de los dos le pasó al dueño.
+
+**Solución.** Si el registro del día no existe y el día de la publicación es HOY en la zona del participante,
+el oyente genera su jornada (`GenerarTracksDelDiaUseCase.generarDiaCompletoEnSuZona`, idempotente con
+`insertarSiNoExiste`) y vuelve a buscar el registro con cerrojo antes de cerrarlo. Una reentrega tardía del
+outbox (día pasado) no fabrica la jornada de ese día. Pruebas: `PostDiarioComunidadHabitoServiceTest`
+(`sinRegistroHoyLoGeneraYLoCierra`, con el reloj a las 02:30 UTC —día anterior en Lima—, y
+`sinRegistroDeUnDiaPasadoNoGeneraNada`) y `PostDiarioSinRegistroPrevioIT` (Postgres real, aprendiz y ADMIN con
+programa): las tres fallan contra el código anterior.
+
+**Cómo evitar que vuelva a pasar.** Un efecto que dispara un evento («al publicar, cerrar el hábito») no puede
+suponer que el estado que va a modificar ya fue generado por un cron: si el registro es derivable, el oyente lo
+deriva antes de usarlo (regla 02 §2). Revisar lo mismo en todo oyente que busca un `registros_habito` del día.
+
+## E-439 · La ficha del aprendiz (administración y mentor) abría el «Detalle del día» en el lunes, no en hoy (frontend, RESUELTO, 29/09)
+
+**Síntoma.** Mismo reporte que E-438: el aprendiz ve el post diario cumplido y el administrador lo ve sin
+marcar. En `FichaAprendizScreen` (y en `AlumnoScreen` del mentor) el detalle de la semana arrancaba en
+`dias.filter(con hábitos)[0]`, el LUNES; en el teléfono la rejilla semanal está plegada, así que lo único a la
+vista era el detalle de un día que no es hoy, sin decir «lunes» en ningún lugar llamativo.
+
+**Causa real.** La regla del día inicial era «el primero con contenido», pensada para que el detalle nunca
+quedara vacío, no para mostrar lo que acaba de pasar.
+
+**Solución.** `mentor/utils/diaInicialDelDetalle.ts`: el día más reciente con hábitos (hoy en la semana en
+curso, porque los registros nacen el mismo día; el domingo en una semana pasada). Lo usan las dos fichas.
+`diaInicialDelDetalle.test.ts` falla contra la regla vieja (2 de 4).
+
+**Cómo evitar que vuelva a pasar.** Una vista de seguimiento abre en lo más reciente. Si abre en otra cosa, lo
+dice en el título.
+
+## E-440 · «Un rol que es LÍDER DE MENTORES no le salen todos los hábitos, solo los obligatorios» (ABIERTO, sin reproducir, 29/09)
+
+**Síntoma.** Reporte del dueño en producción (29/09), textual en el título.
+
+**Lo que se descartó.** No hay ningún filtro de hábitos por rol, ni en el backend (`MisHabitosService`,
+`RegistroService.generarInterno`, `fueraDelPlanDelDia`: nada mira el rol; el barrido nocturno incluye al staff,
+`QUERY_INSCRITOS_ACTIVOS` solo filtra `estado='ACTIVO'`) ni en el frontend (Training, Plan y Hoy no miran el rol
+para los hábitos; `esLiderDeMentores` solo prende la bandeja de tickets y el semáforo por grupos). Tampoco hay una
+decisión D-nn que lo pida; `specs/002-lider-de-mentores/clarifications.md` del repo frontend (DL-01) dice lo contrario: el líder
+«hace lo mismo que un aprendiz» y puede llevar el programa completo. No es una regla deliberada.
+
+**Lo único propio del staff que se encontró (reproducido en local con `e2e-lider`).** Un miembro del staff con fila
+en `participantes_programa` pero sin `programa_activado_en` —aprendiz aprobado que no eligió su Día 1 y después
+fue ascendido— queda en el día 0 para siempre: no pasa por el onboarding (`programRequired` es solo de TRAINEE,
+`AcompanamientoService`), no ve la invitación de Hoy (`canStartProgram = esStaff && !participa`) y
+`POST /mentor/activate-tracking` le responde «Ya activaste tu seguimiento personal…». Sin registros, Plan dice
+«Todavía no elegiste tu Día 1» y Training muestra solo el inventario sin poder operar. Explica «no le salen todos»,
+no «solo los obligatorios». Otra posibilidad de datos: hábitos pausados en `desbloqueos_habito` (solo los no
+desactivables, los que Plan rotula «OBLIGATORIO», no se pueden pausar).
+
+**Para cerrarlo.** Correr en producción (solo lectura) y decidir según el resultado:
+`select u.email, u.rol, p.dia_programa, p.programa_activado_en, p.fecha_inicio, (select count(*) from
+renaser.desbloqueos_habito d where d.participante_id = u.id and d.pausado_en is not null) pausados, (select
+count(distinct habito_id) from renaser.registros_habito r where r.participante_id = u.id and r.fecha_ejecucion =
+current_date) hoy from renaser.usuarios u left join renaser.participantes_programa p on p.usuario_id = u.id where
+u.rol = 'LIDER_MENTORES';`. Si sale sin activar, el arreglo propuesto es que `activate-tracking` active la fila
+existente y que `canStartProgram` sea `esStaff && (!participa || !activado)`; no se hizo sin confirmar la causa.

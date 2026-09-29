@@ -3,6 +3,7 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.habits.application.politica.PoliticaPostDiarioComunidad;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
+import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
@@ -55,10 +56,16 @@ class PostDiarioComunidadHabitoServiceTest {
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
     @Mock
     private CompletarRegistroUseCase completarRegistroUseCase;
+    @Mock
+    private GenerarTracksDelDiaUseCase generarTracksUseCase;
 
     private PostDiarioComunidadHabitoService service() {
+        return service(CLOCK);
+    }
+
+    private PostDiarioComunidadHabitoService service(FixedClock reloj) {
         return new PostDiarioComunidadHabitoService(loadHabitoPort, loadRegistroPort, progresoPort,
-                completarRegistroUseCase);
+                completarRegistroUseCase, generarTracksUseCase, reloj);
     }
 
     private static UserId participante() {
@@ -228,6 +235,56 @@ class PostDiarioComunidadHabitoServiceTest {
 
         service().alPublicarEnElMuro(autor, Instant.parse("2026-08-24T15:00:00Z"));
 
+        verify(completarRegistroUseCase, never()).completar(any());
+    }
+
+    /**
+     * E-438. Publicar antes de que exista el registro del dia (cuenta activada hoy, barrido de la
+     * medianoche que no corrio o que no la alcanzo) dejaba el habito PENDIENTE para siempre: el
+     * oyente no encontraba que cerrar y el registro que se generaba despues nadie lo cerraba. La
+     * ficha del administrador lo mostraba en blanco con el post publicado. Contra el codigo
+     * anterior falla: nunca generaba ni completaba.
+     *
+     * <p>Reloj a las 02:30 UTC del 25, que en Lima son las 21:30 del 24 (regla 02): "hoy" es el 24
+     * en SU zona aunque el servidor ya este en el 25.
+     */
+    @Test
+    @DisplayName("sin registro HOY: se genera su jornada y se cierra el habito con la publicacion")
+    void sinRegistroHoyLoGeneraYLoCierra() {
+        UserId autor = participante();
+        Habito habito = habitoPostDiario();
+        LocalDate hoyEnLima = LocalDate.of(2026, 8, 24);
+        RegistroHabito generadoAhora = registroDe(autor, habito.id(), hoyEnLima);
+        mockParticipanteEnLima(autor);
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+                .thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), hoyEnLima))
+                .thenReturn(Optional.empty(), Optional.of(generadoAhora));
+
+        service(FixedClock.at(Instant.parse("2026-08-25T02:30:00Z")))
+                .alPublicarEnElMuro(autor, Instant.parse("2026-08-25T02:00:00Z"));
+
+        verify(generarTracksUseCase).generarDiaCompletoEnSuZona(autor);
+        verify(completarRegistroUseCase).completar(
+                new CompletarRegistroCommand(autor, generadoAhora.id(), null, null, GestoCompletar.GENERICO));
+        verify(loadRegistroPort, never()).porParticipanteHabitoYFecha(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("una reentrega tardia de un dia PASADO sin registro no fabrica la jornada de ese dia")
+    void sinRegistroDeUnDiaPasadoNoGeneraNada() {
+        UserId autor = participante();
+        Habito habito = habitoPostDiario();
+        mockParticipanteEnLima(autor);
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+                .thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), LocalDate.of(2026, 8, 23)))
+                .thenReturn(Optional.empty());
+
+        // Publico el 23 en Lima; el evento llega el 24 (reinicio con outbox pendiente).
+        service().alPublicarEnElMuro(autor, Instant.parse("2026-08-23T15:00:00Z"));
+
+        verify(generarTracksUseCase, never()).generarDiaCompletoEnSuZona(any());
         verify(completarRegistroUseCase, never()).completar(any());
     }
 
