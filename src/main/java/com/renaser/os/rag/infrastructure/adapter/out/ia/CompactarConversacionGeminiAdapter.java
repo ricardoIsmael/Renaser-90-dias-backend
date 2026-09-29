@@ -64,11 +64,23 @@ class CompactarConversacionGeminiAdapter implements CompactarConversacionPort {
         for (MensajeRenasia mensaje : entrada.mensajes()) {
             String contenido = mensaje.contenido();
             texto.append(mensaje.rol() == RolMensaje.USUARIO ? "Persona: " : "Acompanante: ")
-                    .append(contenido.length() <= LARGO_MAXIMO_POR_MENSAJE ? contenido
-                            : contenido.substring(0, LARGO_MAXIMO_POR_MENSAJE))
+                    .append(recortado(contenido))
                     .append('\n');
         }
         return texto.toString();
+    }
+
+    /**
+     * D-227: con el acompanante escribiendo emojis, cortar justo en la mitad de uno (un par
+     * sustituto) deja un caracter invalido, y el JSON del pedido a Gemini no se puede armar.
+     */
+    static String recortado(String contenido) {
+        if (contenido.length() <= LARGO_MAXIMO_POR_MENSAJE) {
+            return contenido;
+        }
+        int corte = Character.isHighSurrogate(contenido.charAt(LARGO_MAXIMO_POR_MENSAJE - 1))
+                ? LARGO_MAXIMO_POR_MENSAJE - 1 : LARGO_MAXIMO_POR_MENSAJE;
+        return contenido.substring(0, corte);
     }
 
     /**

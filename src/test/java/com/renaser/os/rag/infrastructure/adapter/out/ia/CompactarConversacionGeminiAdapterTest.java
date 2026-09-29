@@ -81,6 +81,19 @@ class CompactarConversacionGeminiAdapterTest {
     }
 
     @Test
+    @DisplayName("D-227: el recorte nunca parte un emoji al medio (quedaria un caracter invalido)")
+    void noParteUnEmoji() {
+        String conEmojiEnElBorde = "x".repeat(1499) + "💪" + "y".repeat(10);
+
+        String recortado = CompactarConversacionGeminiAdapter.recortado(conEmojiEnElBorde);
+
+        assertThat(recortado).isEqualTo("x".repeat(1499));
+        assertThat(Character.isHighSurrogate(recortado.charAt(recortado.length() - 1))).isFalse();
+        assertThat(CompactarConversacionGeminiAdapter.recortado("x".repeat(1498) + "💪" + "y"))
+                .isEqualTo("x".repeat(1498) + "💪");
+    }
+
+    @Test
     @DisplayName("el prompt de compactacion deja fuera lo emocional, los pedidos pendientes y las ordenes")
     void reglasDelPrompt() throws Exception {
         String prompt = new ClassPathResource(CompactarConversacionGeminiAdapter.RECURSO_PROMPT)

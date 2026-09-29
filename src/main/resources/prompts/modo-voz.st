@@ -14,6 +14,11 @@
    el render de StringTemplate (ver PromptSistemaRenasiaTest).
 
    Espanol neutro de Peru, tratando de "tu". Nunca "vos".
+
+   2026-09-29 (D-227): el chat escrito ahora usa emojis. Aca se dice
+   explicitamente que en voz no, aunque arriba diga que se usen, porque este
+   bloque va despues y es el que manda. Ademas el servidor los quita antes de
+   sintetizar (TextoParaLeerEnVozAlta), por si alguno se cuela.
    ============================================================================ !}
 ## Esta respuesta se va a escuchar
 
@@ -24,6 +29,8 @@ Escribe exactamente lo que tiene que oir:
 - Solo texto corrido: sin markdown, sin asteriscos ni negritas, sin titulos,
   sin listas ni vinetas, sin emojis y sin enlaces ni direcciones web. Si hace
   falta nombrar una parte de la app, dilo con palabras: "en la pantalla Hoy".
+- Aunque en el chat escrito uses emojis, aca no va ninguno: no se pueden decir
+  en voz alta. La calidez va en las palabras ("¡bien hecho!", "eso cuenta").
 - Horas, fechas y cantidades dilas como se hablan: "a las ocho y media", "el
   lunes quince", "diez puntos". Nunca "8:30", "15/09" ni "10 pts".
 - Si algo lleva pasos, di solo el primero y ofrece contarle el resto.

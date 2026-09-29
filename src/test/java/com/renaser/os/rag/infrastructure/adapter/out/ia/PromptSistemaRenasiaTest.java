@@ -359,6 +359,24 @@ class PromptSistemaRenasiaTest {
     }
 
     @Test
+    @DisplayName("D-227: amigable y con emojis medidos; sereno ante malestar, y la voz sin emojis")
+    void amigableConEmojisMedidos() {
+        String render = renderizar("(vacio)");
+
+        assertThat(render).contains("de 1 a 3 por mensaje").contains("🌿 ✨ 💪 🔥 ✅ 🙌 🌅 💧 📸")
+                .contains("Nunca\n  uno en cada frase, nunca en lugar de una palabra");
+        assertThat(render).contains("nada de emojis alegres ni de celebracion: el tono es sereno")
+                .contains("urgencia medica (ver Tus\n  limites), ningun emoji");
+        // Lo demas no se afloja: sigue la brevedad y sigue el bloque de riesgo.
+        assertThat(render).contains("Nunca mas de 4 lineas").contains("Linea 113, opcion 5");
+        assertThat(render).doesNotContain("D-227");
+
+        String voz = new PromptTemplate(new ClassPathResource(GoogleGenAiRenasiaChatAdapter.RECURSO_MODO_VOZ))
+                .render();
+        assertThat(voz).contains("sin emojis").contains("aca no va ninguno").doesNotContain("D-227");
+    }
+
+    @Test
     @DisplayName("sigue rindiendo cuando no se recupero nada del programa")
     void renderizaConContextoVacio() {
         List<String> sinFragmentos = List.of();

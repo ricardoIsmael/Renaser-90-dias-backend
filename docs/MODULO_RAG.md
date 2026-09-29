@@ -422,6 +422,8 @@ la app por un contrato `*.api` nuevo, sin reimplementar reglas.
 un día perdido, una pregunta a la vez, sin voseo) y reglas nuevas: horas, puntos y fechas siempre de
 una herramienta; nada se da por hecho hasta que la herramienta lo confirma; a terceros solo el
 — **corregido 2026-09-23:** decía "a terceros solo el ticket al mentor como propuesta"; ahora nunca escribe a terceros y sugiere el chat privado con el mentor. Crisis (D-143), riesgo y atribución de fuentes no se tocaron.
+Desde **D-227** (2026-09-29) el tono es además "amigable", con 1 a 3 emojis por mensaje y ninguno
+alegre ante malestar, salud o crisis.
 
 **Lo que escribe la persona es suyo:** bitácora, radar y resúmenes. Las descripciones le
 prohíben al modelo inventarlo o "mejorarlo". Ese contenido viaja al modelo y queda en
@@ -480,7 +482,8 @@ El valor recorre `PreguntarRenasiaRequest.canalConversacion()` → `PreguntarRen
 `ChatIAPort.Consulta.canal` y no se persiste. Con `VOZ`, `GoogleGenAiRenasiaChatAdapter` agrega al
 final del prompt de sistema el bloque `prompts/modo-voz.st`, que pide:
 - una a tres frases;
-- sin markdown, listas, emojis ni enlaces;
+- sin markdown, listas, emojis ni enlaces (desde D-227 lo dice dos veces, porque el chat escrito sí
+  usa emojis; y el servidor los quita antes de sintetizar, ver D-227);
 - horas y cantidades dichas como se hablan;
 - a lo sumo una pregunta corta al final.
 
@@ -1399,6 +1402,50 @@ Pruebas: `HabitosDeHoyEnElPromptTest` (`hechosPrimero`, `ningunoOTodos`, `renomb
 (`segundaTarjetaBloqueada`, `cambiarLaPendienteSiPropone`), `PropuestaDePausarHabitoTest`
 (`pausadoSinFinPideFecha`, `pausadoSinFinSinFechaOrientaAlModelo`, `pausadoHastaLaMismaFecha`),
 `PromptSistemaRenasiaTest.reglasDeLaBateriaFlashLite`.
+
+### D-227 — SER más amigable y con emojis medidos (2026-09-29)
+
+Pedido del dueño (29-09): que SER, el acompañante de los 90 días (en la app se llama así; el
+prompt lo sigue llamando Renasia), sea más **amigable** y use **emojis**.
+
+**Prompt (`renasia-sistema.st`, "Que se espera de ti"):** el punto del tono pasa a "cercano, cálido
+y amigable" con ejemplos con emoji (`"¡bien hecho! 💪"`, `"eso cuenta ✨"`), y se suman dos puntos:
+1. **Emojis con moderación:** de 1 a 3 por mensaje, al empezar una idea o para celebrar y animar
+   (🌿 ✨ 💪 🔥 ✅ 🙌 🌅 💧 📸); nunca uno en cada frase, nunca en lugar de una palabra ("tu agua",
+   no "tu 💧"); un mensaje sin emoji también está bien.
+2. **Sereno ante el malestar:** si la persona cuenta malestar, tristeza, ansiedad, un tema de salud
+   o una crisis, nada de emojis alegres ni de celebración (como mucho un 🌿); ante señales de riesgo
+   o una urgencia médica, ninguno.
+
+No cambió nada más: la brevedad ("Nunca mas de 4 lineas"), herramientas, confirmaciones,
+privacidad, fuentes, riesgo y crisis quedan igual. El texto fijo del patrón de malestar
+(`MensajeDeApoyo`) no se tocó.
+
+**Voz:** el orbe comparte el prompt (chat con `canal=VOZ` y la voz en vivo, `PromptDeVozEnVivo`).
+`modo-voz.st` ya decía "sin emojis"; ahora agrega que aunque en el chat escrito los use, en voz no va
+ninguno (ese bloque va al final y manda). Y como una instrucción al modelo no es garantía,
+`VozDelOrbeService` pasa el texto por `TextoParaLeerEnVozAlta.sinEmojis` antes de sintetizar
+(pictogramas y piezas de emoji compuesto; nunca dígitos, "#" ni "*"); un texto que era solo emojis
+no genera audio. **Límite:** la voz en vivo (Gemini Live) genera el audio en el modelo, sin texto
+intermedio: ahí solo vale la regla del prompt. Y si el orbe no tiene voz del servidor, la app usa la
+del teléfono con el texto tal cual (eso es de la app).
+
+**Textos fijos del servidor en nombre de SER:** `MENSAJE_ERROR_MODELO` ("No pude responder en este
+momento 🙏 …") y `MENSAJE_LIMITE_DIARIO` ("… Vuelve mañana 🌅"). **No** se tocaron, a propósito:
+el resumen de las tarjetas de propuesta ni su resultado al confirmar (la app ya les pone ícono y
+encabezado, y la tarjeta del orbe recorta la primera frase: un ✅ quedaría duplicado junto al
+ícono), los textos de "Propuesta:" y "Foto para registrar" del historial, los errores del
+proveedor que hablan de "el asistente" en tercera persona, las bienvenidas del programa y la
+tarjeta del semáforo.
+
+**Riesgo nuevo cubierto:** `CompactarConversacionGeminiAdapter` recortaba cada mensaje a 1500
+caracteres con `substring`; con emojis en las respuestas, un corte en la mitad de un par sustituto
+dejaba un carácter inválido en el pedido a Gemini. Ahora no parte un emoji.
+
+Pruebas: `PromptSistemaRenasiaTest.amigableConEmojisMedidos`, `TextoParaLeerEnVozAltaTest`,
+`VozDelOrbeServiceTest.losEmojisNoSeLeen` / `soloEmojisEsVacio`,
+`CompactarConversacionGeminiAdapterTest.noParteUnEmoji`. Ninguna prueba compara salidas de un
+modelo real.
 
 ## 4. Estructura del módulo
 

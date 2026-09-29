@@ -117,9 +117,12 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     private static final int TOP_K = 5;
     /** D-100: cuantos turnos previos viajan al modelo. 10 mensajes = 5 idas y vueltas. */
     private static final int TURNOS_DE_MEMORIA = 10;
-    /** Texto apto para mostrar cuando el modelo falla; el detalle real va al log. */
+    /**
+     * Texto apto para mostrar cuando el modelo falla; el detalle real va al log. D-227: con un emoji,
+     * como habla el acompanante (la voz no lo lee: {@code TextoParaLeerEnVozAlta}).
+     */
     public static final String MENSAJE_ERROR_MODELO =
-            "No pude responder en este momento. Intenta de nuevo en unos segundos.";
+            "No pude responder en este momento 🙏 Intenta de nuevo en unos segundos.";
     /**
      * Cuando el que no puede es el PROVEEDOR (cuota agotada, saturado): decirle "en unos segundos"
      * seria mentir y lo haria insistir contra una cuota que no vuelve. Auditoria NFR 2026-09-06.
@@ -127,9 +130,9 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     /**
      * Lo que ve la persona cuando se le acaban los mensajes del dia (la app lo muestra tal cual y
      * no ofrece reintentar). Antes decia "Se alcanzo el limite diario de mensajes a Renasia", y
-     * ademas nunca llegaba: el 429 no se podia escribir en el stream (E-248).
+     * ademas nunca llegaba: el 429 no se podia escribir en el stream (E-248). D-227: con un emoji.
      */
-    public static final String MENSAJE_LIMITE_DIARIO = "Ya usaste todos tus mensajes de hoy. Vuelve mañana.";
+    public static final String MENSAJE_LIMITE_DIARIO = "Ya usaste todos tus mensajes de hoy. Vuelve mañana 🌅";
 
     public static final String MENSAJE_PROVEEDOR_SATURADO =
             "El asistente esta saturado en este momento. Intenta de nuevo en unos minutos.";
