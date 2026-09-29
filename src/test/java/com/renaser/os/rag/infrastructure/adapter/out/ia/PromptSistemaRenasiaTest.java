@@ -376,6 +376,34 @@ class PromptSistemaRenasiaTest {
         assertThat(voz).contains("sin emojis").contains("aca no va ninguno").doesNotContain("D-227");
     }
 
+    /**
+     * D-228: orienta con el estilo de Darren (sacado de las lecciones, ver
+     * {@code docs/rag/ESTILO_DARREN.md}) sin hacerse pasar por el. La seccion queda fijada, y
+     * ningun texto que el modelo lee puede ponerle en la boca "soy Darren".
+     */
+    @Test
+    @DisplayName("D-228: orienta con el estilo de Darren sin decir nunca que es Darren")
+    void orientaConElEstiloDeDarrenSinSerlo() {
+        String render = renderizar("(vacio)");
+        String voz = new PromptTemplate(new ClassPathResource(GoogleGenAiRenasiaChatAdapter.RECURSO_MODO_VOZ))
+                .render();
+
+        assertThat(render).contains("## Como orientas")
+                .contains("nunca dices que eres Darren ni escribes como si fuera el")
+                .contains("si te preguntan\nquien eres, eres el acompanante del programa")
+                .contains("Confronta con carino").contains("sin burla, insultos ni etiquetas")
+                .contains("el macaco (la parte que se\n  queja")
+                .contains("Ante malestar, tristeza, salud o riesgo, nada de confrontar ni de macaco");
+        assertThat(voz).contains("Siempre como el acompanante, nunca como Darren");
+        for (String texto : List.of(render, voz)) {
+            assertThat(texto.toLowerCase()).doesNotContain("soy darren").doesNotContain("d-228");
+        }
+        // Lo que ya estaba no se afloja: brevedad, emojis de D-227 y bloque de riesgo.
+        assertThat(render).contains("Nunca mas de 4 lineas").contains("de 1 a 3 por mensaje")
+                .contains("Ante senales de riesgo o una urgencia medica").contains("Linea 113, opcion 5");
+        assertThat(render.indexOf("## Como orientas")).isLessThan(render.indexOf("## Cuanto escribes"));
+    }
+
     @Test
     @DisplayName("sigue rindiendo cuando no se recupero nada del programa")
     void renderizaConContextoVacio() {

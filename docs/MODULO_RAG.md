@@ -424,6 +424,8 @@ una herramienta; nada se da por hecho hasta que la herramienta lo confirma; a te
 — **corregido 2026-09-23:** decía "a terceros solo el ticket al mentor como propuesta"; ahora nunca escribe a terceros y sugiere el chat privado con el mentor. Crisis (D-143), riesgo y atribución de fuentes no se tocaron.
 Desde **D-227** (2026-09-29) el tono es además "amigable", con 1 a 3 emojis por mensaje y ninguno
 alegre ante malestar, salud o crisis.
+Desde **D-228** (2026-09-29) orienta con el estilo de Darren (sección «Como orientas»), sin decir
+nunca que es Darren.
 
 **Lo que escribe la persona es suyo:** bitácora, radar y resúmenes. Las descripciones le
 prohíben al modelo inventarlo o "mejorarlo". Ese contenido viaja al modelo y queda en
@@ -1489,6 +1491,24 @@ rag/
 ---
 
 ## 4.bis Hallazgos de la verificación técnica (contra los JARs reales, no documentación)
+
+### D-228 — SER orienta con el estilo de Darren, sin ser Darren (2026-09-29)
+
+Decisión del dueño (29-09): SER orienta «hablando como Darren» (el Alquimista, fundador y guía del
+programa), tomando su estilo, su forma de hablar y sus ideas, **sin decir nunca que es Darren**; si
+le preguntan quién es, es el acompañante del programa.
+
+- **Guía con base real:** `docs/rag/ESTILO_DARREN.md`, sacada de las 124 lecciones transcritas
+  (conteos de términos y frases, 14 citas textuales verificadas con su lección). Sin sesiones
+  individuales, mentorías, atenciones ni fichas.
+- **Prompt:** sección «Como orientas» en `renasia-sistema.st` (12 líneas, antes de «Cuanto
+  escribes»): directo y cálido; confronta con cariño y devuelve la decisión, sin burla, insultos
+  ni etiquetas; como mucho una imagen suya (macaco, de víctima a creador, renacer, honrar la
+  verdad); invita a observarse; ante malestar, salud o riesgo, serenidad y Tus límites.
+- **Voz:** `modo-voz.st` repite la guía resumida, sin emojis. La voz en vivo usa el mismo prompt.
+- **No cambió:** brevedad, emojis (D-227), herramientas, confirmaciones, privacidad, fuentes,
+  riesgo y crisis. `PromptSistemaRenasiaTest.orientaConElEstiloDeDarrenSinSerlo` fija la sección y
+  que ni el prompt ni la voz digan «soy Darren».
 
 ### Contrato SSE de `POST /api/v1/renasia/mensajes` (actualizado 2026-09-26, D-171 y D-178)
 
