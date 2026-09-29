@@ -6,10 +6,11 @@ import com.renaser.os.points.application.ports.out.ranking.SaveRankingSnapshotPo
 import com.renaser.os.points.domain.model.ranking.PosicionRanking;
 import com.renaser.os.points.domain.model.ranking.TipoRanking;
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.users.api.UserRole;
-import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -18,11 +19,14 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.UUID;
 
 @Component
 class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankingSnapshotPort, LoadRankingPort {
+
+    private static final Logger log = LoggerFactory.getLogger(RankingPersistenceAdapter.class);
 
     /**
      * Nombre logico del cache Caffeine (D-63, motor definido en
@@ -46,13 +50,17 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
     private final JdbcTemplate jdbcTemplate;
 
     private final UserSummaryFinder userSummaryFinder;
+    /** E-450: el padron del ranking se cruza con quienes tienen fila en el programa. */
+    private final ParticipacionProgramaFinder participacionProgramaFinder;
 
     RankingPersistenceAdapter(SpringDataRankingAprendizRepository repository, RankingPersistenceMapper mapper,
-                               JdbcTemplate jdbcTemplate, UserSummaryFinder userSummaryFinder) {
+                               JdbcTemplate jdbcTemplate, UserSummaryFinder userSummaryFinder,
+                               ParticipacionProgramaFinder participacionProgramaFinder) {
         this.repository = repository;
         this.mapper = mapper;
         this.jdbcTemplate = jdbcTemplate;
         this.userSummaryFinder = userSummaryFinder;
+        this.participacionProgramaFinder = participacionProgramaFinder;
     }
 
     /**
@@ -73,10 +81,17 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
      * <p>Dos consultas en total, no una por aprendiz: el padron sale EN LOTE de {@code users}
      * —dueño del rol y del estado, que por eso no se filtran aca— y los puntajes de una sola
      * consulta.
+     *
+     * <blockquote><b>Corregido el 2026-09-29 (E-450).</b> El padron era {@code aprendicesActivos()} a
+     * secas: rol APRENDIZ y cuenta ACTIVA. Pero {@code ranking_aprendices.participante_id} referencia a
+     * {@code participantes_programa}, y una cuenta con rol aprendiz puede no tener esa fila (una
+     * invitacion con rol aprendiz, E-367). Bastaba UNA para que el INSERT del corte violara la FK y
+     * los cuatro rankings de TODOS quedaran sin corte. Ahora compite solo quien esta en el programa;
+     * el resto se excluye con un WARN que dice cuantos y por que.</blockquote>
      */
     @Override
     public List<CandidatoRanking> aprendicesActivosConPuntaje() {
-        List<UserSummary> padron = userSummaryFinder.aprendicesActivos();
+        List<UserSummary> padron = enElPrograma(userSummaryFinder.aprendicesActivos());
         if (padron.isEmpty()) {
             return List.of();
         }
@@ -89,6 +104,24 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
         return padron.stream()
                 .map(aprendiz -> aCandidato(puntajes.get(aprendiz.id()), aprendiz))
                 .toList();
+    }
+
+    /**
+     * Una consulta mas, en lote (D-43): los inscritos activos salen de {@code users.api}, no de un
+     * SQL propio contra {@code participantes_programa} (D-41).
+     */
+    private List<UserSummary> enElPrograma(List<UserSummary> aprendices) {
+        if (aprendices.isEmpty()) {
+            return aprendices;
+        }
+        Set<UserId> inscritos = Set.copyOf(participacionProgramaFinder.participantesInscritosActivos());
+        List<UserSummary> enElPrograma = aprendices.stream().filter(a -> inscritos.contains(a.id())).toList();
+        int excluidos = aprendices.size() - enElPrograma.size();
+        if (excluidos > 0) {
+            log.warn("[points.ranking] {} aprendiz(es) activo(s) excluido(s) del ranking: no tienen fila en "
+                    + "participantes_programa (cuenta con rol aprendiz sin programa, E-367/E-450)", excluidos);
+        }
+        return enElPrograma;
     }
 
     /** {@code puntaje} nulo = todavia no sumo nada: entra con cero, no se lo deja afuera (D-130). */

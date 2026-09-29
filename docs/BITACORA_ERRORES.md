@@ -12098,3 +12098,39 @@ count(distinct habito_id) from renaser.registros_habito r where r.participante_i
 current_date) hoy from renaser.usuarios u left join renaser.participantes_programa p on p.usuario_id = u.id where
 u.rol = 'LIDER_MENTORES';`. Si sale sin activar, el arreglo propuesto es que `activate-tracking` active la fila
 existente y que `canStartProgram` sea `esStaff && (!participa || !activado)`; no se hizo sin confirmar la causa.
+
+## E-450 · `insert or update on table "ranking_aprendices" violates foreign key constraint "ranking_aprendices_participante_id_fkey"` en el corte del ranking, los cuatro tipos (backend, RESUELTO, 29/09)
+
+**Síntoma.** `POST /api/v1/admin/ranking/snapshots?date=…` devolvía los cuatro tipos (LEAGUE, CELL, GENERAL,
+KILOMETROS) en `fallados`, y el corte diario `SnapshotRankingScheduler` (05:05 UTC) fallaba igual, con:
+
+```
+ERROR: insert or update on table "ranking_aprendices" violates foreign key constraint "ranking_aprendices_participante_id_fkey"
+  Detail: Key (participante_id)=(…) is not present in table "participantes_programa".
+```
+
+En la base local del dueño el último corte guardado era del **2026-09-15**: el ranking venía mostrando una tabla
+vieja. Afecta producción (pre-existente, no lo introdujo ningún cambio reciente).
+
+**Causa real.** `RankingPersistenceAdapter.aprendicesActivosConPuntaje()` armaba el padrón con
+`UserSummaryFinder.aprendicesActivos()` a secas: rol APRENDIZ y cuenta ACTIVA. Pero
+`ranking_aprendices.participante_id` referencia a `participantes_programa`, y una cuenta con rol aprendiz puede no
+tener esa fila (la invitación con rol aprendiz de E-367). `reemplazar()` guarda el corte entero en un
+`saveAllAndFlush`, así que **una sola** cuenta así hacía fallar el INSERT de todos, en los cuatro tipos.
+
+**Solución.** El padrón del ranking se cruza con `ParticipacionProgramaFinder.participantesInscritosActivos()`
+(`users.api`, una consulta en lote, sin SQL a tabla ajena — D-41/D-43): compite solo quien tiene fila en el
+programa. Los que se excluyen se cuentan en un `WARN` `[points.ranking] N aprendiz(es) activo(s) excluido(s) del
+ranking: no tienen fila en participantes_programa …`. Es el mismo criterio que ya usaba el relleno de chats de
+soporte (`ConversacionSoporteService.rellenarPendientes`).
+
+**Cómo evitar que vuelva a pasar.** `RankingConAprendizSinProgramaIT` (Postgres real) siembra un aprendiz activo sin
+programa más dos normales, regenera los cuatro cortes y exige que no falle ninguno — falla contra el código viejo con
+el mensaje de arriba. `RankingPersistenceAdapterTest.unAprendizSinFilaEnElProgramaNoCompite` lo fija en el
+adaptador. Regla general: **un barrido que escribe filas con FK a `participantes_programa` saca su padrón de
+`participantesInscritosActivos()` (o de un finder que lea esa tabla), nunca solo de rol + estado del usuario.**
+Revisados con ese criterio: el cierre del semáforo (`CierreDelSemaforoService`, padrón de programas activados),
+tracks/avisos de hábitos, informes semanales y traslados ya salen de `participantes_programa`; la vista de atención
+del semáforo usa `aprendicesActivos()` pero solo lee. Para producción:
+`~/.cache/renaser-e2e/scripts/contar-aprendices-sin-programa.sql` (solo lectura, solo conteos). En la base local
+daba 1.

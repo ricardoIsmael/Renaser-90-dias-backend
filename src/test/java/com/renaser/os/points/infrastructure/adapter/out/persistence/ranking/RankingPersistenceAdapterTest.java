@@ -123,6 +123,22 @@ class RankingPersistenceAdapterTest {
                 .doesNotContain(UserId.of(suspendido), UserId.of(mentor));
     }
 
+    /**
+     * E-450: rol aprendiz y cuenta activa, pero sin fila en el programa (invitacion con rol aprendiz,
+     * E-367). Si entrara, el INSERT del corte violaria {@code ranking_aprendices_participante_id_fkey}
+     * y ningun ranking tendria corte.
+     */
+    @Test
+    void unAprendizSinFilaEnElProgramaNoCompite() {
+        UUID sinPrograma = crearUsuarioSinParticipante("APRENDIZ", "ACTIVO");
+
+        List<CandidatoRanking> candidatos = adapterCandidatos.aprendicesActivosConPuntaje();
+
+        assertThat(candidatos).extracting(CandidatoRanking::participanteId)
+                .contains(UserId.of(aprendizActivoId))
+                .doesNotContain(UserId.of(sinPrograma));
+    }
+
     @Test
     void reemplazarEsIdempotente_noDuplicaAlCorrerDosVeces() {
         List<PosicionRanking> posiciones = List.of(
