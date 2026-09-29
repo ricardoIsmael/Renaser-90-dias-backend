@@ -66,6 +66,8 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     /** API publica de {@code evidence} (D-41): {@code habits} nunca consulta {@code evidencias} de frente. */
     private final RegistrosConEvidenciaFinder registrosConEvidenciaFinder;
     private final LoadRenombreHabitoPort loadRenombrePort;
+    /** D-226: la unidad y el total acumulado de los habitos medibles del dia (km). */
+    private final MedicionesDelDia medicionesDelDia;
     private final Clock clock;
     /** V-5: la proyeccion entera en una transaccion de solo lectura (una conexion, sin flush). */
     private final TransactionTemplate soloLectura;
@@ -76,7 +78,8 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
                                           LoadPreferenciaHorarioPort loadPreferenciaPort,
                                           LoadGuiaHabitoPort loadGuiaPort,
                                           RegistrosConEvidenciaFinder registrosConEvidenciaFinder,
-                                          LoadRenombreHabitoPort loadRenombrePort, Clock clock,
+                                          LoadRenombreHabitoPort loadRenombrePort,
+                                          MedicionesDelDia medicionesDelDia, Clock clock,
                                           PlatformTransactionManager transactionManager) {
         this.consultarTracksUseCase = consultarTracksUseCase;
         this.generarTracksUseCase = generarTracksUseCase;
@@ -86,6 +89,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         this.loadGuiaPort = loadGuiaPort;
         this.registrosConEvidenciaFinder = registrosConEvidenciaFinder;
         this.loadRenombrePort = loadRenombrePort;
+        this.medicionesDelDia = medicionesDelDia;
         this.clock = clock;
         this.soloLectura = new TransactionTemplate(transactionManager);
         this.soloLectura.setReadOnly(true);
@@ -169,6 +173,8 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         // America/Lima, calcular la ventana de entrega en UTC corre el plazo cinco horas y con el
         // los puntos en juego. Llega del mismo progreso que autorizo la lectura (V-5).
         MomentoDelParticipante momento = new MomentoDelParticipante(dia.zona(), clock.now());
+        // D-226: solo consulta si el dia tiene un habito medible (hoy, los km).
+        var mediciones = medicionesDelDia.de(participanteId, registros, habitosPorId, fecha);
         return new ProyeccionDelDia(fecha, registros.stream()
                 .map(registro -> construirVista(registro, new CatalogoDeHabito(
                         habitosPorId.get(registro.habitoId()),
@@ -176,7 +182,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
                         guiasPorHabito.getOrDefault(registro.habitoId(), List.of()),
                         preferenciasPorHabito.get(registro.habitoId()),
                         renombresPorHabito.get(registro.habitoId())), momento,
-                        conEvidencia.contains(registro.id().value())))
+                        conEvidencia.contains(registro.id().value())).conMedicion(mediciones.get(registro)))
                 .toList());
     }
 

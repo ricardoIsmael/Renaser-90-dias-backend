@@ -87,6 +87,7 @@ class TracksDelDiaEvidenciaTest {
                 // Sin renombres: estas pruebas no miran el titulo (D-133). Mockito devuelve lista vacia.
                 org.mockito.Mockito.mock(
                         com.renaser.os.habits.application.ports.out.renombre.LoadRenombreHabitoPort.class),
+                new MedicionesDelDia(java.util.List.of(), (p, c, h) -> java.util.Map.of()),
                 FixedClock.at(AHORA),
                 org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
     }

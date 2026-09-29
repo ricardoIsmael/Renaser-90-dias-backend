@@ -35,10 +35,11 @@ public class RankingAgregadoService implements ConsultarRankingAgregadoUseCase {
         List<EntradaRanking> coherenciaIndividual = consultarRankingUseCase.consultar(actorId, TipoRanking.CELL,
                 fecha);
         List<EntradaRanking> general = consultarRankingUseCase.consultar(actorId, TipoRanking.GENERAL, fecha);
+        List<EntradaRanking> kilometros = consultarRankingUseCase.consultar(actorId, TipoRanking.KILOMETROS, fecha);
         RankingAgregado.CelulaResumen celula = celulaFinder.celulaDeParticipante(actorId)
                 .map(RankingAgregadoService::aCelulaResumen)
                 .orElse(null);
-        return new RankingAgregado(fecha, celula, liga, coherenciaIndividual, general);
+        return new RankingAgregado(fecha, celula, liga, coherenciaIndividual, general, kilometros);
     }
 
     private static RankingAgregado.CelulaResumen aCelulaResumen(CelulaParticipanteResumen resumen) {

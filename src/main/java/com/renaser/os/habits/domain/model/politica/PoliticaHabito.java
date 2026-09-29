@@ -1,6 +1,9 @@
 package com.renaser.os.habits.domain.model.politica;
 
 import com.renaser.os.habits.domain.model.habito.Habito;
+import com.renaser.os.habits.domain.model.medicion.UnidadMedicion;
+
+import java.util.Optional;
 
 /**
  * Regla propia de un habito del catalogo, resuelta por su {@code claveSistema}.
@@ -51,4 +54,17 @@ public interface PoliticaHabito {
      * como valores ya resueltos.
      */
     DecisionPolitica puedeCompletarseDirecto(Habito habito, ContextoCompletar contexto);
+
+    /**
+     * Si este habito registra un numero por dia, y en que unidad (D-226: los km de
+     * {@code DAILY_KM}). Vacio en todos los demas, que es el caso por defecto.
+     *
+     * <p>Es lo que decide, en un solo lugar: si {@code POST /habit-tracks/&#123;id&#125;/complete} acepta un
+     * {@code valorMedido} para este habito (sin unidad, lo rechaza: un numero suelto en un habito que
+     * no mide nada no lo leeria nadie), y si la agenda del dia le muestra al aprendiz su total
+     * acumulado. La unidad NO vive en la tabla {@code habitos}: seria la misma regla en dos lugares.
+     */
+    default Optional<UnidadMedicion> unidadDeMedicion() {
+        return Optional.empty();
+    }
 }

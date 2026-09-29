@@ -1,8 +1,10 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.registro;
 
+import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.MedicionDelTrack;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.TrackDelDiaConCatalogo;
 import com.renaser.os.habits.domain.model.registro.PuntosEnJuego;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -37,6 +39,11 @@ import java.util.UUID;
  * de un habito de hoy cae fuera de la pagina y el chip vuelve a decir "SUBIR" sobre un archivo que
  * ya esta guardado. Con este campo la respuesta es exacta y no depende de cuantas filas entren en
  * una pagina. Ver {@code evidence.api.RegistrosConEvidenciaFinder}.
+ *
+ * <p><b>Agregado 2026-09-29 (D-226):</b> {@code medicion} — solo en los habitos que registran un numero
+ * (hoy KILÓMETROS DIARIOS), {@code null} en los demas. Trae la unidad ({@code "KILOMETROS"}), lo
+ * registrado ese dia ({@code valorDelDia}, {@code null} si todavia no) y el {@code total} acumulado del
+ * programa hasta ese dia. Aditivo: un cliente que no lo lee no cambia.
  */
 public record RegistroHabitoConCatalogoResponse(String id, UUID habitoId, LocalDate fechaEjecucion, int diaPrograma,
                                                   String tipoDia, boolean esOpcional, String estado,
@@ -45,7 +52,7 @@ public record RegistroHabitoConCatalogoResponse(String id, UUID habitoId, LocalD
                                                   String tituloHabito, String tipoHabito, GuiaResumenResponse guia,
                                                   LocalTime horaDisparo, LocalTime horaLimite, Integer puntosEnJuego,
                                                   Integer puntosMaximos, Instant plazoEvidencia,
-                                                  boolean tieneEvidencia) {
+                                                  boolean tieneEvidencia, MedicionResponse medicion) {
 
     public static RegistroHabitoConCatalogoResponse from(TrackDelDiaConCatalogo vista) {
         var r = vista.registro();
@@ -57,6 +64,17 @@ public record RegistroHabitoConCatalogoResponse(String id, UUID habitoId, LocalD
                 vista.guia() != null ? GuiaResumenResponse.from(vista.guia()) : null, vista.horaDisparo(),
                 vista.horaLimite(), enJuego != null ? enJuego.siCompletaAhora() : null,
                 enJuego != null ? enJuego.maximo() : null, enJuego != null ? enJuego.plazo() : null,
-                vista.tieneEvidencia());
+                vista.tieneEvidencia(), MedicionResponse.from(vista.medicion()));
+    }
+
+    /** D-226. {@code unidad} es el nombre del enum: hoy solo {@code KILOMETROS}. */
+    public record MedicionResponse(String unidad, BigDecimal valorDelDia, BigDecimal total) {
+
+        static MedicionResponse from(MedicionDelTrack medicion) {
+            if (medicion == null) {
+                return null;
+            }
+            return new MedicionResponse(medicion.unidad().name(), medicion.valorDelDia(), medicion.total());
+        }
     }
 }

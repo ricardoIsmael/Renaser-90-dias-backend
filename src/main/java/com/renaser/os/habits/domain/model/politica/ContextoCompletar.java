@@ -1,6 +1,9 @@
 package com.renaser.os.habits.domain.model.politica;
 
+import com.renaser.os.habits.domain.model.medicion.MedicionDiaria;
+
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -30,14 +33,21 @@ import java.util.function.BooleanSupplier;
  * <p><b>Memoizado</b>: dos preguntas dentro de la misma decision no pueden dar respuestas
  * distintas ni cobrar dos consultas. Por eso NO es un record — un componente de record
  * expone el {@code BooleanSupplier} crudo y se perderia la memoizacion.
+ *
+ * <p><b>La medicion del dia (D-226).</b> Lleva tambien el numero que la persona escribio al completar
+ * (los km de {@code DAILY_KM}), si escribio alguno. Es otro hecho que el catalogo no sabe y que una
+ * politica mira para decidir ({@code PoliticaKilometros}: mayor que cero y con tope). No es perezoso
+ * porque no cuesta nada: ya llego en el pedido.
  */
 public final class ContextoCompletar {
 
     private final BooleanSupplier consulta;
+    private final MedicionDiaria medicion;
     private Boolean respuesta;
 
-    private ContextoCompletar(BooleanSupplier consulta) {
+    private ContextoCompletar(BooleanSupplier consulta, MedicionDiaria medicion) {
         this.consulta = consulta;
+        this.medicion = medicion;
     }
 
     /**
@@ -47,8 +57,18 @@ public final class ContextoCompletar {
      *                              02-tiempo-zonas-y-schedulers)
      */
     public static ContextoCompletar de(BooleanSupplier publicoEnElMuroEseDia) {
+        return de(publicoEnElMuroEseDia, null);
+    }
+
+    /** @param medicion lo que la persona escribio al completar, o {@code null} si no escribio nada */
+    public static ContextoCompletar de(BooleanSupplier publicoEnElMuroEseDia, MedicionDiaria medicion) {
         Objects.requireNonNull(publicoEnElMuroEseDia, "publicoEnElMuroEseDia es obligatorio");
-        return new ContextoCompletar(publicoEnElMuroEseDia);
+        return new ContextoCompletar(publicoEnElMuroEseDia, medicion);
+    }
+
+    /** Solo la medicion, para las pruebas de una politica que no mira el Muro. */
+    public static ContextoCompletar conMedicion(MedicionDiaria medicion) {
+        return new ContextoCompletar(sinHechosExternos().consulta, medicion);
     }
 
     /**
@@ -61,7 +81,12 @@ public final class ContextoCompletar {
         return new ContextoCompletar(() -> {
             throw new IllegalStateException(
                     "Esta politica necesita saber si el participante publico en el Muro, y el contexto no lo trae");
-        });
+        }, null);
+    }
+
+    /** El numero del dia que la persona escribio al completar; vacio si no escribio ninguno. */
+    public Optional<MedicionDiaria> medicion() {
+        return Optional.ofNullable(medicion);
     }
 
     public boolean publicoEnElMuroEseDia() {

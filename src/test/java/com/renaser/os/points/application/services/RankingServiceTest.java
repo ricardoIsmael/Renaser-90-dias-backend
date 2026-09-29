@@ -14,6 +14,7 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.points.api.MedicionAcumuladaFinder;
 import com.renaser.os.points.api.PorcentajeCursosFinder;
 import com.renaser.os.points.api.PorcentajeHabitosFinder;
 import com.renaser.os.points.api.PorcentajeRocasFinder;
@@ -39,6 +40,7 @@ import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -61,6 +63,8 @@ class RankingServiceTest {
     @Mock
     private PorcentajeCursosFinder porcentajeCursosFinder;
     @Mock
+    private MedicionAcumuladaFinder medicionAcumuladaFinder;
+    @Mock
     private UserSummaryFinder userSummaryFinder;
 
     private RankingService service;
@@ -68,7 +72,8 @@ class RankingServiceTest {
     @BeforeEach
     void setUp() {
         service = new RankingService(loadRankingCandidatosPort, saveRankingSnapshotPort, loadRankingPort,
-                porcentajeHabitosFinder, porcentajeRocasFinder, porcentajeCursosFinder, userSummaryFinder);
+                porcentajeHabitosFinder, porcentajeRocasFinder, porcentajeCursosFinder, medicionAcumuladaFinder,
+                userSummaryFinder);
         // Actor activo por defecto: los tests de consultar() no son sobre autorizacion.
         lenient().when(userSummaryFinder.findById(any())).thenAnswer(inv ->
                 Optional.of(new UserSummary(inv.getArgument(0), "Actor", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
@@ -149,6 +154,42 @@ class RankingServiceTest {
         verify(saveRankingSnapshotPort).reemplazar(eq(TipoRanking.CELL), eq(FECHA), captor.capture());
         assertThat(captor.getValue().get(0).participanteId()).isEqualTo(conDato);
         assertThat(captor.getValue().get(1).participanteId()).isEqualTo(sinDato);
+    }
+
+    /**
+     * D-226: KILOMETROS ordena por los km acumulados que da {@code habits} en UNA consulta de lote, y
+     * quien nunca registro km va al fondo con cero (no queda afuera: la tabla es de todos los activos).
+     */
+    @Test
+    @DisplayName("KILOMETROS ordena por km acumulados, en lote, y deja al fondo con 0 a quien no registró")
+    void kilometrosOrdenaPorKmAcumulados() {
+        UserId corre = id();
+        UserId camina = id();
+        UserId nada = id();
+        when(loadRankingCandidatosPort.aprendicesActivosConPuntaje()).thenReturn(List.of(
+                new CandidatoRanking(nada, "Nada", 900, BigDecimal.valueOf(100)),
+                new CandidatoRanking(camina, "Camina", 0, BigDecimal.ZERO),
+                new CandidatoRanking(corre, "Corre", 0, BigDecimal.ZERO)));
+        when(medicionAcumuladaFinder.kilometrosAcumulados(anyCollection(), eq(FECHA)))
+                .thenReturn(Map.of(corre, new BigDecimal("42.20"), camina, new BigDecimal("7.50")));
+
+        service.generar(TipoRanking.KILOMETROS, FECHA);
+
+        ArgumentCaptor<List<PosicionRanking>> captor = ArgumentCaptor.forClass(List.class);
+        verify(saveRankingSnapshotPort).reemplazar(eq(TipoRanking.KILOMETROS), eq(FECHA), captor.capture());
+        assertThat(captor.getValue()).extracting(PosicionRanking::participanteId).containsExactly(corre, camina, nada);
+        assertThat(captor.getValue()).extracting(PosicionRanking::puntaje)
+                .usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(new BigDecimal("42.20"), new BigDecimal("7.50"), BigDecimal.ZERO);
+        verify(medicionAcumuladaFinder, times(1)).kilometrosAcumulados(anyCollection(), eq(FECHA));
+        verifyNoInteractions(porcentajeHabitosFinder, porcentajeRocasFinder, porcentajeCursosFinder);
+    }
+
+    @Test
+    @DisplayName("el corte diario genera los cuatro rankings, KILOMETROS incluido")
+    void elCorteDiarioIncluyeKilometros() {
+        assertThat(TipoRanking.CON_CORTE_DIARIO)
+                .containsExactly(TipoRanking.LEAGUE, TipoRanking.CELL, TipoRanking.GENERAL, TipoRanking.KILOMETROS);
     }
 
     @Test

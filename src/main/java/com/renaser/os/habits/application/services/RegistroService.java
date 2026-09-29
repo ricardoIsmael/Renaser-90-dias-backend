@@ -22,6 +22,7 @@ import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioResuelto;
 import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
+import com.renaser.os.habits.domain.model.medicion.MedicionDiaria;
 import com.renaser.os.habits.domain.model.politica.ContextoCompletar;
 import com.renaser.os.habits.domain.model.politica.DecisionPolitica;
 import com.renaser.os.habits.domain.model.politica.GestoCompletar;
@@ -360,13 +361,14 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         RegistroHabito registro = requireRegistro(command.registroId());
         requireSelf(command.actorId(), registro.participanteId());
         Habito habito = requireHabito(registro.habitoId());
+        requireMedicionAdmitida(habito, command.medicion());
         // La politica gobierna el GESTO GENERICO y solo ese — es literalmente la pregunta que
         // `puedeCompletarseDirecto` dice contestar. Un habito con gesto propio (hoy solo la Clase
         // Diaria) llega hasta aca a proposito, para no duplicar el calculo de puntos ni el de la
         // ventana; preguntarle a la politica por esa invocacion seria hacerle una pregunta que no
         // le corresponde, y le cerraria al habito su unico camino valido (E-120).
         if (command.gesto() == GestoCompletar.GENERICO) {
-            requirePoliticaPermiteCompletarDirecto(habito, contextoDe(registro));
+            requirePoliticaPermiteCompletarDirecto(habito, contextoDe(registro, command.medicion()));
         }
 
         Instant ahora = clock.now();
@@ -402,7 +404,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
             };
         }
 
-        registro.completar(puntos, command.respuestaTexto(), command.calificacionProductividad(), null, ahora);
+        registro.completar(puntos, command.respuestaTexto(), command.calificacionProductividad(), null,
+                command.medicion(), ahora);
         RegistroHabito guardado = saveRegistroPort.save(registro);
 
         if (puntos > 0) {
@@ -522,8 +525,20 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
      * (ver {@link ContextoCompletar}). Sin esa pereza, cada completacion del dia pagaria una
      * consulta al Muro que casi nadie usa.
      */
-    private ContextoCompletar contextoDe(RegistroHabito registro) {
-        return ContextoCompletar.de(() -> publicoEnElMuroEseDia(registro));
+    private ContextoCompletar contextoDe(RegistroHabito registro, MedicionDiaria medicion) {
+        return ContextoCompletar.de(() -> publicoEnElMuroEseDia(registro), medicion);
+    }
+
+    /**
+     * D-226: un numero solo entra en un habito que mide algo (su politica declara unidad). En los
+     * demas se rechaza en vez de guardarlo: nadie lo leeria, y el dia que ese habito empiece a medir
+     * encontraria numeros viejos de origen desconocido. Vale para todos los gestos, no solo el
+     * generico: es una regla sobre el dato, no sobre el camino.
+     */
+    private void requireMedicionAdmitida(Habito habito, MedicionDiaria medicion) {
+        if (medicion != null && politicas.para(habito).unidadDeMedicion().isEmpty()) {
+            throw new IllegalArgumentException("Este hábito no registra un número: complétalo sin valorMedido");
+        }
     }
 
     /**

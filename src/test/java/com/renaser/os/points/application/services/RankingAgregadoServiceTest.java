@@ -52,11 +52,13 @@ class RankingAgregadoServiceTest {
     }
 
     @Test
-    @DisplayName("agregado compone LEAGUE, CELL y GENERAL para la misma fecha, nunca COHORT")
-    void agregadoComponeLosTresTiposExistentes() {
+    @DisplayName("agregado compone LEAGUE, CELL, GENERAL y KILOMETROS para la misma fecha, nunca COHORT")
+    void agregadoComponeLosTiposExistentes() {
         List<EntradaRanking> liga = List.of(entrada("Liga"));
         List<EntradaRanking> coherencia = List.of(entrada("Coherencia"));
         List<EntradaRanking> general = List.of(entrada("General"));
+        List<EntradaRanking> kilometros = List.of(entrada("Kilometros"));
+        when(consultarRankingUseCase.consultar(actor, TipoRanking.KILOMETROS, FECHA)).thenReturn(kilometros);
         when(consultarRankingUseCase.consultar(actor, TipoRanking.LEAGUE, FECHA)).thenReturn(liga);
         when(consultarRankingUseCase.consultar(actor, TipoRanking.CELL, FECHA)).thenReturn(coherencia);
         when(consultarRankingUseCase.consultar(actor, TipoRanking.GENERAL, FECHA)).thenReturn(general);
@@ -68,6 +70,7 @@ class RankingAgregadoServiceTest {
         assertThat(resultado.liga()).isEqualTo(liga);
         assertThat(resultado.coherenciaIndividual()).isEqualTo(coherencia);
         assertThat(resultado.general()).isEqualTo(general);
+        assertThat(resultado.kilometros()).isEqualTo(kilometros);
         verify(consultarRankingUseCase).consultar(actor, TipoRanking.LEAGUE, FECHA);
         verify(consultarRankingUseCase).consultar(actor, TipoRanking.CELL, FECHA);
         verify(consultarRankingUseCase).consultar(actor, TipoRanking.GENERAL, FECHA);

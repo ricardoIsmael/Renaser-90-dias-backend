@@ -28,8 +28,8 @@ public class RegeneracionRankingService implements RegenerarSnapshotsRankingUseC
 
     private static final Logger log = LoggerFactory.getLogger(RegeneracionRankingService.class);
 
-    /** Los mismos de {@code SnapshotRankingScheduler}. COHORT sigue afuera: le falta el dato de cohorte. */
-    static final List<TipoRanking> TIPOS = List.of(TipoRanking.LEAGUE, TipoRanking.CELL, TipoRanking.GENERAL);
+    /** Los mismos de {@code SnapshotRankingScheduler}, de la misma constante (D-226). */
+    static final List<TipoRanking> TIPOS = TipoRanking.CON_CORTE_DIARIO;
 
     private final GenerarSnapshotRankingUseCase generarSnapshotRankingUseCase;
     private final VerificarActorAdministrativoPort verificarActorAdministrativoPort;

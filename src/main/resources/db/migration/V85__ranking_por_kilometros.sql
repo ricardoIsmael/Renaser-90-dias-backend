@@ -1,0 +1,29 @@
+-- Ranking por kilómetros acumulados (D-226, pedido del dueño del 2026-09-29).
+--
+-- Que problema resuelve
+-- ---------------------
+-- El dueño pidió una tabla más en el ranking de Comunidad: los km acumulados de cada aprendiz activo
+-- desde el Día 1 (hábito DAILY_KM, V84). El corte diario del ranking vive en `ranking_aprendices`,
+-- cuyo `tipo` es el enum `tipo_ranking` {GENERAL, COHORTE, CELULA, LIGA}. Un tipo nuevo necesita su
+-- valor.
+--
+-- Por que un valor mas del enum y no una tabla ni una columna
+-- ----------------------------------------------------------
+-- La tabla ya tiene todo lo que el ranking de km necesita: fecha del corte, participante, posición y
+-- `puntaje numeric(10,2)` (que guarda los km con sus dos decimales). Es un corte más, igual que los
+-- otros tres; la consulta, la limpieza y la caché de lectura se reusan tal cual.
+--
+-- Por que este nombre
+-- -------------------
+-- `KILOMETROS`, en español como los demás valores del enum (COHORTE, CELULA, LIGA). Su espejo en el
+-- dominio es `TipoRanking.KILOMETROS`; el mapeo está en `RankingPersistenceMapper`, un `switch`
+-- exhaustivo: sin mapear, no compila.
+--
+-- Lo que NO hace
+-- --------------
+-- No escribe ningún corte: el primero lo genera el barrido de las 05:05 UTC (o la regeneración del
+-- panel). No toca filas existentes.
+
+-- ALTER TYPE ... ADD VALUE no puede correr dentro de un bloque transaccional junto con sentencias
+-- que USEN el valor nuevo. Va solo, sin BEGIN/COMMIT, exactamente como en V46, V49, V59 y V60.
+ALTER TYPE renaser.tipo_ranking ADD VALUE IF NOT EXISTS 'KILOMETROS';

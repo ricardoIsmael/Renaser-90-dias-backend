@@ -119,7 +119,7 @@ class TracksDeHoyConsultasTest {
                 List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()),
                 transactionManager);
         proyeccion = new TracksDelDiaProyeccionService(registros, registros, loadHabitoPort, loadHorarioPort,
-                loadPreferenciaPort, loadGuiaPort, registrosConEvidenciaFinder, loadRenombrePort, reloj,
+                loadPreferenciaPort, loadGuiaPort, registrosConEvidenciaFinder, loadRenombrePort, new MedicionesDelDia(java.util.List.of(), (p, c, h) -> java.util.Map.of()), reloj,
                 transactionManager);
         when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
         when(saveRegistroPort.insertarSiNoExiste(any())).thenReturn(true);
