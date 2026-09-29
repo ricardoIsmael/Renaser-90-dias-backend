@@ -11859,3 +11859,37 @@ prueba de nombres empieza en `now()`, después de cerrar la de la mentora.
 
 **Cómo evitar que vuelva a pasar.** Al sembrar historia de mentores, usar rangos que no se pisen; el error de la
 base lo dice claro si se lee el `ERROR:` del reporte de failsafe y no solo la primera línea.
+
+## E-429 · `DataIntegrityViolation … INSERT INTO renaser.usuarios … rol` al sembrar un ALQUIMISTA en una prueba (29/09)
+
+**Síntoma.** Las 8 pruebas de `ParticipantesDelChatIT` fallaban en el `@BeforeEach` con
+`ParticipantesDelChatIT.seed:80->usuario:274 » DataIntegrityViolation PreparedStatementCallback; SQL [INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)`.
+
+**Causa real.** Se sembró `usuario("ALCHEMIST", …)`: el enum de Java se llama `UserRole.ALCHEMIST`, pero el de la
+base (`rol_usuario`, V1) se llama `ALQUIMISTA` (y `APRENDIZ`, `LIDER_MENTORES` en vez de `TRAINEE`,
+`MENTOR_LEAD`). La traducción vive en el mapper de persistencia de `users`.
+
+**Solución.** `usuario("ALQUIMISTA", …)`.
+
+**Cómo evitar que vuelva a pasar.** En un IT que inserta con SQL, los roles son los de la base
+(`APRENDIZ`, `MENTOR`, `LIDER_MENTORES`, `ADMIN`, `ALQUIMISTA`), no los de `UserRole`. Se lee del `CREATE TYPE
+rol_usuario` de `V1__baseline_renaser.sql`.
+
+## E-430 · `No tests found, exiting with code 1` y `Pattern: … 0 matches` corriendo jest en un worktree (29/09)
+
+**Síntoma.** `npx jest --testPathIgnorePatterns='/node_modules/|/e2e/' src/features/chat …` corrió los 186 archivos
+menos los pedidos; y `npx jest <archivos> ` sin la bandera dio `No tests found … testPathIgnorePatterns:
+/node_modules/, /e2e/, /.claude/ - 0 matches`.
+
+**Causa real.** Es la misma de la bitácora del 25/09 (`jest.config.js` ignora `/.claude/`, que es donde viven los
+worktrees) con un detalle nuevo: `--testPathIgnorePatterns` acepta varios valores, así que **se traga las rutas que
+se escriben después**. Las rutas van ANTES de la bandera.
+
+**Solución.** `npx jest <rutas…> --testPathIgnorePatterns='/node_modules/|/e2e/'`. Además, la primera corrida
+completa del worktree (caché de transformación fría) dio 5 archivos rojos por tiempo agotado (Caja,
+`planificarDimension`, ~30 s cada uno) que pasaron en verde en la siguiente sin tocar nada: un rojo por
+`Can't access .root on unmounted test renderer` tras 30 s es tiempo, no lógica; se repite antes de investigar.
+
+**Cómo evitar que vuelva a pasar.** Rutas primero, bandera al final; y verificar en la salida el número de suites, no solo que
+no falle.
+

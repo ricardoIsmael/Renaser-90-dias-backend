@@ -8,6 +8,7 @@ import com.renaser.os.chat.application.ports.out.bienvenida.TarjetaConNombrePort
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
+import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.community.api.FotoPropiaDelGrupoFinder;
 import com.renaser.os.community.api.FotoPropiaDelGrupoFinder.FotoPropia;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -303,6 +304,18 @@ class FotosDelChatServiceTest {
                 new UserSummary(RICARDO, "Ricardo", "https://fotos/ricardo.jpg", UserRole.MENTOR, UserStatus.ACTIVE)));
         assertThat(conModo(" foto_subida ").tarjetasDelGrupo(GRUPO_FENIX, List.of(RICARDO)).orElseThrow().conTarjeta())
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("conTarjetaEn: solo un grupo o un soporte tienen tarjetas; la comunidad y el 1 a 1 no, y sin nadie no consulta")
+    void tarjetasPorTipoDeConversacion() {
+        var integrantes = List.of(ANA, KELIN);
+
+        assertThat(servicio.conTarjetaEn(TipoConversacion.CELULA, integrantes)).containsExactlyInAnyOrder(ANA, KELIN);
+        assertThat(servicio.conTarjetaEn(TipoConversacion.SOPORTE, integrantes)).containsExactlyInAnyOrder(ANA, KELIN);
+        assertThat(servicio.conTarjetaEn(TipoConversacion.GLOBAL, integrantes)).isEmpty();
+        assertThat(servicio.conTarjetaEn(TipoConversacion.DIRECTA, integrantes)).isEmpty();
+        assertThat(servicio.conTarjetaEn(TipoConversacion.CELULA, List.of())).isEmpty();
     }
 
     @Test

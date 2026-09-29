@@ -64,6 +64,14 @@ public interface VerFotosDelChatUseCase {
     Optional<TarjetasDelGrupo> tarjetasDelGrupo(UUID grupoId, Collection<UserId> integrantes);
 
     /**
+     * Lo mismo que {@link #tarjetasDelGrupo} pero por TIPO de conversación, para la lista de integrantes de
+     * cualquier chat: solo un grupo o un soporte tienen tarjetas (vacío en la comunidad y en un 1 a 1) y, en
+     * ellos, las lleva quien manda el modo del servidor.
+     */
+    java.util.Set<UserId> conTarjetaEn(com.renaser.os.chat.domain.model.conversacion.TipoConversacion tipo,
+                                       Collection<UserId> integrantes);
+
+    /**
      * @param jpeg   la tarjeta; es compartida entre pedidos, así que nadie la modifica
      * @param huella cambia si y solo si cambia la imagen (el ETag)
      */
