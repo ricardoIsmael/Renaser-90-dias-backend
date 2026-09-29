@@ -12005,7 +12005,7 @@ parámetro JDBC llega tipado como `varchar` y el enum no lo acepta sin cast (igu
 `tipo_conversacion`, `funcion_acompanamiento`…) que se siembre con un parámetro lleva su `CAST(? AS renaser.<tipo>)`;
 un literal no lo necesita. Al copiar el helper `usuario(...)` de otro IT y volver parámetro un literal, agregar el cast.
 
-## E-438 · `expected: 200 but was: 400` al completar KILÓMETROS DIARIOS con `{"valorMedido": 4.126}` (backend, 29/09)
+## E-441 · `expected: 200 but was: 400` al completar KILÓMETROS DIARIOS con `{"valorMedido": 4.126}` (backend, 29/09)
 
 **Síntoma.** `KilometrosDiariosIT.completarConKm:140 expected: 200 but was: 400`: el pedido con tres decimales se
 rechazaba antes de llegar al caso de uso.
