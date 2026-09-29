@@ -16,6 +16,9 @@ import com.renaser.os.shared.domain.UserId;
  * <p>La regla, en una linea: para una conversacion de <b>grupo</b> manda la pertenencia vigente
  * —el grupo tiene que estar operativo y la asignacion viva—, no la proyeccion. Para todo lo demas
  * (directa, soporte, global) la proyeccion <i>es</i> la fuente de verdad y alcanza.
+ *
+ * <p><b>D-225 (2026-09-29).</b> Un grupo tambien lo ve, sin pertenecer a el, un ADMIN activo mientras
+ * el grupo siga en curso. Esa rama vive en {@code AccesoAChatsDeGrupo}, que usan las cuatro copias.
  */
 public interface AutorizarAccesoAConversacionUseCase {
 

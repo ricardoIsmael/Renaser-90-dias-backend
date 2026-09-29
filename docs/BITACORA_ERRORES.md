@@ -11987,3 +11987,20 @@ respuesta vieja con `""` y revienta antes de llegar al `thenReturn`.
 
 **Cómo evitar que vuelva a pasar.** Para pisar un stub con `thenAnswer` que no tolera argumentos vacíos, usar la
 forma `doReturn(...).when(mock).metodo(...)`. Queda comentado en la prueba.
+
+## E-437 · `column "estado" is of type renaser.estado_usuario but expression is of type character varying` al sembrar un usuario suspendido en un IT (backend, 29/09)
+
+**Síntoma.** Las 6 pruebas de `AdminVeTodosLosGruposIT` (D-225) caían en el `@BeforeEach` con
+`BadSqlGrammarException ... ERROR: column "estado" is of type renaser.estado_usuario but expression is of type
+character varying`.
+
+**Causa real.** Para sembrar un ADMIN suspendido se pasó el estado como parámetro (`?`) en el `INSERT INTO
+renaser.usuarios`. Los IT de referencia escriben `'ACTIVO'` como literal, que Postgres convierte solo al enum; un
+parámetro JDBC llega tipado como `varchar` y el enum no lo acepta sin cast (igual que `rol`, que ya llevaba
+`CAST(? AS renaser.rol_usuario)`).
+
+**Solución.** `CAST(? AS renaser.estado_usuario)`.
+
+**Cómo evitar que vuelva a pasar.** Toda columna enum del esquema (`rol_usuario`, `estado_usuario`,
+`tipo_conversacion`, `funcion_acompanamiento`…) que se siembre con un parámetro lleva su `CAST(? AS renaser.<tipo>)`;
+un literal no lo necesita. Al copiar el helper `usuario(...)` de otro IT y volver parámetro un literal, agregar el cast.

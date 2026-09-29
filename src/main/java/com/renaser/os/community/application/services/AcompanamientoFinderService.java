@@ -125,6 +125,12 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
                 .anyMatch(a -> a.vigenteEn(instante));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean grupoOperativo(UUID grupoId, Instant instante) {
+        return grupoOperativoEn(grupoId, instante);
+    }
+
     /**
      * Si el grupo esta DENTRO de su periodo ese instante. Sin periodo, siempre — asi quedaron
      * todas las celulas anteriores a V48 y no se les pone fecha de muerte.

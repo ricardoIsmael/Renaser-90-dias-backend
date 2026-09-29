@@ -13,7 +13,6 @@ import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
 import com.renaser.os.chat.application.ports.out.participante.AgregarParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ContarNoLeidosPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
-import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigentePort;
 import com.renaser.os.chat.application.ports.out.participante.ListarUsuariosDeConversacionPort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
@@ -38,6 +37,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -52,7 +52,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     private final SaveConversacionPort saveConversacionPort;
     private final AgregarParticipantePort agregarParticipantePort;
     private final EsParticipantePort esParticipantePort;
-    private final PertenenciaVigentePort pertenenciaVigentePort;
+    private final AccesoAChatsDeGrupo accesoAChatsDeGrupo;
     private final MarcarLeidoPort marcarLeidoPort;
     private final AnunciarLecturaUseCase anunciarLectura;
     private final ContarNoLeidosPort contarNoLeidosPort;
@@ -76,7 +76,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     public ConversacionService(LoadConversacionPort loadConversacionPort, SaveConversacionPort saveConversacionPort,
                                 AgregarParticipantePort agregarParticipantePort,
                                 EsParticipantePort esParticipantePort,
-                                PertenenciaVigentePort pertenenciaVigentePort, MarcarLeidoPort marcarLeidoPort,
+                                AccesoAChatsDeGrupo accesoAChatsDeGrupo, MarcarLeidoPort marcarLeidoPort,
                                 AnunciarLecturaUseCase anunciarLectura,
                                 ContarNoLeidosPort contarNoLeidosPort, LoadMensajePort loadMensajePort,
                                 ListarUsuariosDeConversacionPort listarUsuariosPort,
@@ -86,7 +86,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         this.saveConversacionPort = saveConversacionPort;
         this.agregarParticipantePort = agregarParticipantePort;
         this.esParticipantePort = esParticipantePort;
-        this.pertenenciaVigentePort = pertenenciaVigentePort;
+        this.accesoAChatsDeGrupo = accesoAChatsDeGrupo;
         this.marcarLeidoPort = marcarLeidoPort;
         this.anunciarLectura = anunciarLectura;
         this.contarNoLeidosPort = contarNoLeidosPort;
@@ -153,7 +153,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     @Override
     public List<ConversacionResumen> listar(UserId actorId) {
         requireActivo(actorId);
-        List<Conversacion> conversaciones = loadConversacionPort.misConversaciones(actorId);
+        List<Conversacion> conversaciones = conMisGruposPorRol(loadConversacionPort.misConversaciones(actorId), actorId);
         List<ConversacionId> ids = conversaciones.stream().map(Conversacion::id).toList();
         Map<ConversacionId, Mensaje> ultimos = loadMensajePort.ultimosPorConversacion(ids);
         Map<ConversacionId, Long> noLeidos = contarNoLeidosPort.contarNoLeidos(actorId, ids);
@@ -178,6 +178,22 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
                 })
                 .sorted(Comparator.comparing(ConversacionService::actividadDe).reversed())
                 .toList();
+    }
+
+    /**
+     * D-225: al Admin se le suman los chats de TODOS los grupos en curso, aunque no sea participante de
+     * ellos. Sin fila en la proyección su contador de no leídos de esos grupos es 0: los ve, pero no le
+     * reclaman atención como los suyos. A cualquier otro rol no se le suma nada.
+     */
+    private List<Conversacion> conMisGruposPorRol(List<Conversacion> mias, UserId actorId) {
+        List<UUID> grupos = accesoAChatsDeGrupo.gruposQueVePorSuRol(actorId);
+        if (grupos.isEmpty()) {
+            return mias;
+        }
+        Map<ConversacionId, Conversacion> todas = new LinkedHashMap<>();
+        mias.forEach(c -> todas.put(c.id(), c));
+        loadConversacionPort.porCelulaIds(grupos).forEach(c -> todas.putIfAbsent(c.id(), c));
+        return List.copyOf(todas.values());
     }
 
     /**
@@ -270,7 +286,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
      */
     private void requireParticipante(Conversacion conversacion, UserId usuarioId) {
         if (conversacion.tipo() == TipoConversacion.CELULA) {
-            if (!pertenenciaVigentePort.perteneceAlGrupo(conversacion.celulaId(), usuarioId)) {
+            if (!accesoAChatsDeGrupo.puedeVer(conversacion.celulaId(), usuarioId)) {
                 throw new NotAuthorizedException("Tu asignacion cambio: ya no perteneces a ese grupo");
             }
             return;

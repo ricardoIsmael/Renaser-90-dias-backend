@@ -1196,7 +1196,10 @@ defecto, tope 200; `total` es el de la búsqueda entera. Nunca correo ni teléfo
 |---|---|
 | `ParticipantesDeConversacionServiceTest` (9) | Orden y roles de grupo/soporte/comunidad/1 a 1, ex integrante y staff degradado fuera, búsqueda sin tildes, paginación y topes, tarjeta, 403/404 sin consultar a nadie |
 | `ParticipantesDelChatControllerTest` (3) | Contrato HTTP, valores por defecto, 403 y 404 |
-| `ParticipantesDelChatIT` (8) | Postgres + Tomcat + sesión real: aprendiz, mentor y Admin ven el mismo grupo; ex alumno y Admin sin asignación, 403; soporte ajeno, 403; staff degradado; comunidad con búsqueda y páginas; suspendida, 403 |
+| `ParticipantesDelChatIT` (8) | Postgres + Tomcat + sesión real: aprendiz, mentor y Admin ven el mismo grupo; ex alumno, 403; Admin sin asignación, los ve (D-225, §19); soporte ajeno, 403; staff degradado; comunidad con búsqueda y páginas; suspendida, 403 |
+
+> **Corregido 2026-09-29 (D-225).** La tabla de pruebas decía «ex alumno y Admin sin asignación, 403». Desde D-225 un
+> ADMIN activo ve todo grupo en curso aunque no esté asignado, y con él a sus integrantes (§19); el ex alumno sigue en 403.
 
 ## 18. La tarjeta diaria del semáforo en el soporte (2026-09-29, D-223)
 
@@ -1229,3 +1232,43 @@ Las reglas de negocio (quién, cuándo, qué % y qué color) están en `docs/arq
 | `MensajeDelProgramaServiceTest` (+3) | Piezas en orden, sin duplicar, aviso por pieza |
 | `MensajeDeChatSoloParaTest` (2) | `soloPara` deja el push solo a esa persona |
 | `TarjetaDelSemaforoIT` (1) | Postgres + Redis + outbox: una sola tarjeta con el % del día de Lima, segunda corrida sin nada, noop solo texto, suspendido sin tarjeta, push solo a la aprendiz |
+
+## 19. El Admin ve todos los chats de grupo (2026-09-29, D-225)
+
+Pedido del dueño: como Admin, ver en su lista de chats **todos** los grupos con su mentor («Luisa y sus aprendices»),
+con su info e integrantes, y poder leerlos y escribir como en los suyos.
+
+**La regla nueva de un grupo (CELULA)**, en un solo lugar, `AccesoAChatsDeGrupo`, que usan las cuatro copias de la
+autorización (`AutorizacionDeConversacionService`, `MensajeService`, `ConversacionService`, `PresenciaService`):
+
+1. pertenecer HOY al grupo (pertenencia vigente, sin cambios); **o**
+2. tener un rol de `ROLES_QUE_VEN_TODOS_LOS_GRUPOS` (hoy solo `ADMIN`), con la cuenta `ACTIVA`, y que el grupo
+   esté **en curso** (`GruposEnCursoPort` → `community.api.AcompanamientoFinder.grupoOperativo`, la misma condición
+   de periodo que exige la pertenencia). Un grupo vencido o cerrado queda oculto también para el Admin.
+
+Como el WebSocket (suscripción y `AutorizacionViva`), las fotos y los integrantes preguntan a
+`AutorizarAccesoAConversacionUseCase`, el Admin también recibe los mensajes en vivo del grupo que tiene abierto.
+
+**El Admin no se vuelve integrante.** No se le agrega fila en `participantes_conversacion`, así que:
+
+- **no figura** en la lista de integrantes (sale de la pertenencia vigente, §17);
+- **no recibe push** de los mensajes de esos grupos (`AvisosDeMensajesService`: proyección ∩ pertenencia vigente);
+  recibirlo de todos los grupos sería una inundación;
+- **no leídos: 0** en esos grupos (el conteo se apoya en su fila): los ve en la lista, pero no le reclaman atención
+  como los suyos; al abrir uno ve todo lo escrito. Marcar leído no deja rastro (el UPDATE no encuentra fila) y no
+  mueve la ✓✓ de nadie (§14);
+- su presencia no se anuncia en esos grupos (se anuncia a sus conversaciones de la proyección).
+
+**La lista** (`GET /api/v1/chat/conversations`): a un Admin activo se le suman los chats de todos los grupos en
+curso (`LoadConversacionPort.porCelulaIds`, una consulta), sin repetir los suyos; con su nombre de D-221. La app no
+filtra nada por su lado: los grupos ya caen en la sección de grupos de formación (junto a la comunidad y el soporte).
+
+**Lo que no cambia:** MENTOR/MENTOR_LEAD solo ven sus grupos vigentes; APRENDIZ, el suyo; ALQUIMISTA, como antes
+(los grupos donde está asignado) hasta que el dueño decida —sumarlo es agregar `UserRole.ALCHEMIST` al conjunto—;
+una cuenta suspendida, 403.
+
+| Clase | Qué fija |
+|---|---|
+| `AccesoAChatsDeGrupoTest` (10) | Admin ve grupo ajeno en curso; no el vencido; suspendido no; mentor, líder, aprendiz y alquimista ajenos no; la pertenencia alcanza sin mirar el rol; usuario inexistente, no |
+| `ConversacionServiceTest` (+3) | La lista del Admin suma los grupos en curso sin repetir y con 0 no leídos; la del mentor no; el Admin marca leído un grupo ajeno |
+| `AdminVeTodosLosGruposIT` (6) | Postgres + Tomcat + sesión real: lista con «Ricardo y sus aprendices» y sin el vencido; lee, escribe, marca leído y ve integrantes sin figurar ni quedar como participante; sin push para el Admin; mentor ajeno, aprendiz ajeno, alquimista y admin suspendido, 403; sesión viva que pasa a suspendida, 403 |

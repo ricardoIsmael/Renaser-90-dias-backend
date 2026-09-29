@@ -1,5 +1,6 @@
 package com.renaser.os.chat.infrastructure.adapter.in.websocket;
 
+import com.renaser.os.chat.application.services.AccesoAChatsDeGrupo;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigentePort;
@@ -125,7 +126,7 @@ class SuscripcionRevocacionTest {
 
     private void armarCanales(Clock reloj) {
         AutorizacionDeConversacionService regla =
-                new AutorizacionDeConversacionService(conversaciones, proyeccion, pertenenciaVigente, usuarios);
+                new AutorizacionDeConversacionService(conversaciones, proyeccion, new AccesoAChatsDeGrupo(pertenenciaVigente, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), usuarios), usuarios);
         sesionViva = new SesionViva(sesiones, reloj);
         autorizacionViva = new AutorizacionViva(regla, reloj);
         interceptor = new SubscripcionAutorizadaInterceptor(regla, usuarios, sesionViva, autorizacionViva);

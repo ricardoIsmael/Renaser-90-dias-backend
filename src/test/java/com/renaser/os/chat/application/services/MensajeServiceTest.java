@@ -110,7 +110,7 @@ class MensajeServiceTest {
 
     /** La lectura no se prueba acá (ver {@code MarcaDeLeidoEnElListadoTest}): la comunidad no la tiene. */
     private MensajeService servicioCon(Clock reloj) {
-        return new MensajeService(loadConversacionPort, esParticipantePort, pertenenciaVigentePort,
+        return new MensajeService(loadConversacionPort, esParticipantePort, new AccesoAChatsDeGrupo(pertenenciaVigentePort, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), userSummaryFinder),
                 marcarLeidoPort, saveMensajePort, loadMensajePort, publicarMensajeFanoutPort, userSummaryFinder,
                 almacenamientoPort, conversacion -> ConfirmacionDeLectura.sinDobleMarca(), reloj, idGenerator, publicados::add);
     }

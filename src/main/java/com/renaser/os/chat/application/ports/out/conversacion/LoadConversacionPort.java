@@ -25,6 +25,12 @@ public interface LoadConversacionPort {
 
     Optional<Conversacion> porCelulaId(UUID celulaId);
 
+    /**
+     * Las conversaciones de estos grupos, EN UNA consulta. La usa la lista de chats del Admin (D-225),
+     * que ve todos los grupos en curso sin ser participante de ellos. Un grupo sin chat no figura.
+     */
+    List<Conversacion> porCelulaIds(Collection<UUID> celulaIds);
+
     Optional<Conversacion> global();
 
     /**

@@ -115,6 +115,11 @@ class PresenciaServiceTest {
 
         LoadConversacionPort conversaciones = new LoadConversacionPort() {
             @Override
+            public java.util.List<com.renaser.os.chat.domain.model.conversacion.Conversacion> porCelulaIds(
+                    java.util.Collection<java.util.UUID> celulaIds) {
+                return java.util.List.of();
+            }
+            @Override
             public Optional<Conversacion> porId(ConversacionId id) {
                 if (id.equals(GRUPO)) {
                     return Optional.of(Conversacion.crearCelula(GRUPO, CELULA, AHORA));
@@ -196,7 +201,7 @@ class PresenciaServiceTest {
         };
 
         servicio = new PresenciaService(presencia, fanout, conversacionesDe, roster, conversaciones,
-                esParticipante, pertenencia, usuarios);
+                esParticipante, new AccesoAChatsDeGrupo(pertenencia, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), usuarios), usuarios);
     }
 
     private void siRedisCaidoFallar() {

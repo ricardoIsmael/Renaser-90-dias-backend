@@ -12,7 +12,6 @@ import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
 import com.renaser.os.chat.application.ports.out.mensaje.PublicarMensajeFanoutPort;
 import com.renaser.os.chat.application.ports.out.mensaje.SaveMensajePort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
-import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigentePort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
@@ -58,7 +57,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
 
     private final LoadConversacionPort loadConversacionPort;
     private final EsParticipantePort esParticipantePort;
-    private final PertenenciaVigentePort pertenenciaVigentePort;
+    private final AccesoAChatsDeGrupo accesoAChatsDeGrupo;
     private final MarcarLeidoPort marcarLeidoPort;
     private final SaveMensajePort saveMensajePort;
     private final LoadMensajePort loadMensajePort;
@@ -72,7 +71,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     private final ApplicationEventPublisher eventos;
 
     public MensajeService(LoadConversacionPort loadConversacionPort, EsParticipantePort esParticipantePort,
-                           PertenenciaVigentePort pertenenciaVigentePort,
+                           AccesoAChatsDeGrupo accesoAChatsDeGrupo,
                            MarcarLeidoPort marcarLeidoPort, SaveMensajePort saveMensajePort,
                            LoadMensajePort loadMensajePort, PublicarMensajeFanoutPort publicarMensajeFanoutPort,
                            UserSummaryFinder userSummaryFinder, AlmacenamientoPort almacenamientoPort,
@@ -80,7 +79,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
                            ApplicationEventPublisher eventos) {
         this.loadConversacionPort = loadConversacionPort;
         this.esParticipantePort = esParticipantePort;
-        this.pertenenciaVigentePort = pertenenciaVigentePort;
+        this.accesoAChatsDeGrupo = accesoAChatsDeGrupo;
         this.marcarLeidoPort = marcarLeidoPort;
         this.saveMensajePort = saveMensajePort;
         this.loadMensajePort = loadMensajePort;
@@ -334,7 +333,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
      */
     private void requireParticipante(Conversacion conversacion, UserId usuarioId) {
         if (conversacion.tipo() == TipoConversacion.CELULA) {
-            if (!pertenenciaVigentePort.perteneceAlGrupo(conversacion.celulaId(), usuarioId)) {
+            if (!accesoAChatsDeGrupo.puedeVer(conversacion.celulaId(), usuarioId)) {
                 throw new NotAuthorizedException("Tu asignacion cambio: ya no perteneces a ese grupo");
             }
             return;

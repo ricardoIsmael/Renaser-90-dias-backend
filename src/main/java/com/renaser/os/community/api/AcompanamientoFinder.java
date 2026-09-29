@@ -70,6 +70,14 @@ public interface AcompanamientoFinder {
      */
     boolean acompanaVigente(UserId actorId, UUID grupoId, Instant instante);
 
+    /**
+     * Si el grupo está corriendo en ese instante: dentro de su periodo, en el día de su cohorte. Es la
+     * misma condición que exigen {@link #esIntegranteVigente} y {@link #integrantesVigentes}, sin
+     * preguntar por nadie. La pide el chat (D-225) para que el Admin vea el chat de un grupo en el que
+     * no está asignado solo mientras ese grupo siga en curso, igual que sus integrantes.
+     */
+    boolean grupoOperativo(UUID grupoId, Instant instante);
+
     /** Nombre y cohorte de un grupo, sin exponer el agregado. */
     java.util.Optional<GrupoBasico> grupo(UUID grupoId);
 

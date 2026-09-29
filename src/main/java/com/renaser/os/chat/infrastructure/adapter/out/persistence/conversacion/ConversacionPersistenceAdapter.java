@@ -50,6 +50,12 @@ class ConversacionPersistenceAdapter implements LoadConversacionPort, SaveConver
     }
 
     @Override
+    public List<Conversacion> porCelulaIds(Collection<UUID> celulaIds) {
+        return celulaIds.isEmpty() ? List.of()
+                : repository.findByCelulaIdIn(celulaIds).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
     public Optional<Conversacion> global() {
         return repository.findFirstByTipo(TipoConversacionJpa.GLOBAL).map(mapper::toDomain);
     }

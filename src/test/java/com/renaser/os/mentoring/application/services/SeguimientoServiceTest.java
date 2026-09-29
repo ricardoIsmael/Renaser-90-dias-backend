@@ -77,6 +77,10 @@ class SeguimientoServiceTest {
     void preparar() {
         AcompanamientoFinder acompanamiento = new AcompanamientoFinder() {
             @Override
+            public boolean grupoOperativo(java.util.UUID grupoId, java.time.Instant instante) {
+                return false;
+            }
+            @Override
             public List<TramoDeAcompanamiento> tramosDeMentor(UserId mentorId, Instant desde, Instant hasta) {
                 return mentorId.equals(MENTOR) ? tramosDelMentor : List.of();
             }

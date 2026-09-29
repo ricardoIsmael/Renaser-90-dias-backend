@@ -192,6 +192,11 @@ class ResumenSemanalDelSemaforoIT {
     static final class GrupoFenixConAna implements AcompanamientoFinder {
 
         @Override
+        public boolean grupoOperativo(UUID grupoId, Instant instante) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public List<GrupoAcompanado> gruposConMentorVigente(Instant instante) {
             return List.of(new GrupoAcompanado(GRUPO, "Grupo Fénix", UserId.of(MENTORA), UUID.randomUUID(),
                     "America/Lima", 3));

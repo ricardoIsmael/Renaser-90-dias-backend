@@ -62,6 +62,11 @@ class ParticipantesCelulaServiceTest {
 
         LoadConversacionPort conversaciones = new LoadConversacionPort() {
             @Override
+            public java.util.List<com.renaser.os.chat.domain.model.conversacion.Conversacion> porCelulaIds(
+                    java.util.Collection<java.util.UUID> celulaIds) {
+                return java.util.List.of();
+            }
+            @Override
             public Optional<Conversacion> porId(ConversacionId id) {
                 return Optional.empty();
             }
