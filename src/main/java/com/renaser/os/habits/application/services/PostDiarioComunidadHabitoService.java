@@ -4,12 +4,14 @@ import com.renaser.os.habits.application.politica.PoliticaPostDiarioComunidad;
 import com.renaser.os.habits.application.ports.in.registro.CerrarPostDiarioComunidadUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
+import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,6 +66,18 @@ import java.util.Optional;
  * tardia: si por lo que fuera el evento apuntara a un dia sin publicacion, la politica lo frena
  * en vez de regalar el habito. El habito no gana ningun atajo por venir de un evento.
  *
+ * <p><b>Si el registro de ese dia todavia no existe, se genera</b> (E-438, 2026-09-29). Los
+ * registros del dia nacen en el barrido de las 05:02 UTC o, si ese barrido no alcanzo a la
+ * persona, recien cuando la app pide {@code GET /habit-tracks/today}. Quien publicaba ANTES de que
+ * existiera su registro —cuenta activada ese mismo dia, backend caido a la medianoche, zona al
+ * oeste de Lima donde el barrido cae el dia anterior— se quedaba con el habito PENDIENTE para
+ * siempre: este oyente no encontraba nada que cerrar, y el registro que se generaba despues ya no
+ * tenia quien lo cerrara. Lo veia asi la ficha del administrador y la del mentor, con el post
+ * publicado. Se genera SOLO si el dia de la publicacion es HOY en su zona: una reentrega tardia
+ * del outbox no puede fabricar la jornada entera de un dia pasado. Generar es idempotente
+ * ({@code insertarSiNoExiste}), asi que competir con el {@code GET /today} del mismo telefono no
+ * duplica nada.
+ *
  * <p><b>Sin {@code @Transactional} propio</b>: quien lo invoca es un {@code @ApplicationModuleListener},
  * que ya corre en su propia transaccion (y con ella el {@code @Transactional} de
  * {@code RegistroService.completar}). Agregar otro aca no sumaria garantia y si escondería quien
@@ -78,14 +92,19 @@ public class PostDiarioComunidadHabitoService implements CerrarPostDiarioComunid
     private final LoadRegistroHabitoPort loadRegistroPort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final CompletarRegistroUseCase completarRegistroUseCase;
+    private final GenerarTracksDelDiaUseCase generarTracksUseCase;
+    private final Clock clock;
 
     public PostDiarioComunidadHabitoService(LoadHabitoPort loadHabitoPort, LoadRegistroHabitoPort loadRegistroPort,
                                              ConsultarProgresoParticipanteHabitsPort progresoPort,
-                                             CompletarRegistroUseCase completarRegistroUseCase) {
+                                             CompletarRegistroUseCase completarRegistroUseCase,
+                                             GenerarTracksDelDiaUseCase generarTracksUseCase, Clock clock) {
         this.loadHabitoPort = loadHabitoPort;
         this.loadRegistroPort = loadRegistroPort;
         this.progresoPort = progresoPort;
         this.completarRegistroUseCase = completarRegistroUseCase;
+        this.generarTracksUseCase = generarTracksUseCase;
+        this.clock = clock;
     }
 
     @Override
@@ -102,12 +121,9 @@ public class PostDiarioComunidadHabitoService implements CerrarPostDiarioComunid
             return;
         }
 
-        LocalDate diaDeLaPublicacion = publicadoEn.atZone(ZoneId.of(progreso.get().timezone())).toLocalDate();
-        // CON cerrojo, y esta es la PRIMERA lectura de esta fila en la transaccion del oyente:
-        // la guarda de abajo tiene que decidir sobre el estado que el cerrojo protege, no sobre
-        // uno leido antes. Ver el javadoc de la clase.
-        Optional<RegistroHabito> registro = loadRegistroPort
-                .porParticipanteHabitoYFechaParaEscritura(autorId, habito.get().id(), diaDeLaPublicacion);
+        ZoneId zona = ZoneId.of(progreso.get().timezone());
+        LocalDate diaDeLaPublicacion = publicadoEn.atZone(zona).toLocalDate();
+        Optional<RegistroHabito> registro = registroDelDia(autorId, habito.get(), diaDeLaPublicacion, zona);
         if (registro.isEmpty()) {
             return; // no le toca ese dia, o lo pauso (D-87)
         }
@@ -119,5 +135,20 @@ public class PostDiarioComunidadHabitoService implements CerrarPostDiarioComunid
                 new CompletarRegistroCommand(autorId, registro.get().id(), null, null));
         log.info("[habits] post diario en comunidad cerrado por publicacion del {} de {}", diaDeLaPublicacion,
                 autorId);
+    }
+
+    /**
+     * El registro de ese dia, CON cerrojo, generando la jornada si todavia no existia (ver el
+     * javadoc de la clase). Las dos lecturas son con cerrojo y ninguna va sin el: la guarda de
+     * estado terminal tiene que decidir sobre la fila que el cerrojo protege.
+     */
+    private Optional<RegistroHabito> registroDelDia(UserId autorId, Habito habito, LocalDate dia, ZoneId zona) {
+        Optional<RegistroHabito> registro =
+                loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autorId, habito.id(), dia);
+        if (registro.isPresent() || !dia.equals(clock.now().atZone(zona).toLocalDate())) {
+            return registro;
+        }
+        generarTracksUseCase.generarDiaCompletoEnSuZona(autorId);
+        return loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autorId, habito.id(), dia);
     }
 }
