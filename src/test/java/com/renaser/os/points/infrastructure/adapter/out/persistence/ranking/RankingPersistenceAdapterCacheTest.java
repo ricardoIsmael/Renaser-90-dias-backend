@@ -8,6 +8,7 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -154,7 +155,8 @@ class RankingPersistenceAdapterCacheTest {
         @Bean
         RankingPersistenceAdapter rankingPersistenceAdapter(SpringDataRankingAprendizRepository repository,
                 RankingPersistenceMapper mapper, JdbcTemplate jdbcTemplate, UserSummaryFinder userSummaryFinder) {
-            return new RankingPersistenceAdapter(repository, mapper, jdbcTemplate, userSummaryFinder);
+            return new RankingPersistenceAdapter(repository, mapper, jdbcTemplate, userSummaryFinder,
+                    mock(ParticipacionProgramaFinder.class));
         }
     }
 }
