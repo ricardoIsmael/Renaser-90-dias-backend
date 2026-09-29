@@ -11890,3 +11890,51 @@ abierto, y un token falso con forma de Expo para ver que el backend sí sale a `
 proveedor rechazo el token», y lo desactiva). El canal `mensajes-chat` con su sonido se vio con `dumpsys
 notification`. **No se pudo ver** el aviso en la bandeja del teléfono, el reemplazo por `tag`, el sonido del push
 ni el «pop» dentro de la app: eso queda para el APK de EAS en un teléfono real.
+## E-429 · `DataIntegrityViolation … INSERT INTO renaser.usuarios … rol` al sembrar un ALQUIMISTA en una prueba (29/09)
+
+**Síntoma.** Las 8 pruebas de `ParticipantesDelChatIT` fallaban en el `@BeforeEach` con
+`ParticipantesDelChatIT.seed:80->usuario:274 » DataIntegrityViolation PreparedStatementCallback; SQL [INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)`.
+
+**Causa real.** Se sembró `usuario("ALCHEMIST", …)`: el enum de Java se llama `UserRole.ALCHEMIST`, pero el de la
+base (`rol_usuario`, V1) se llama `ALQUIMISTA` (y `APRENDIZ`, `LIDER_MENTORES` en vez de `TRAINEE`,
+`MENTOR_LEAD`). La traducción vive en el mapper de persistencia de `users`.
+
+**Solución.** `usuario("ALQUIMISTA", …)`.
+
+**Cómo evitar que vuelva a pasar.** En un IT que inserta con SQL, los roles son los de la base
+(`APRENDIZ`, `MENTOR`, `LIDER_MENTORES`, `ADMIN`, `ALQUIMISTA`), no los de `UserRole`. Se lee del `CREATE TYPE
+rol_usuario` de `V1__baseline_renaser.sql`.
+
+## E-430 · `No tests found, exiting with code 1` y `Pattern: … 0 matches` corriendo jest en un worktree (29/09)
+
+**Síntoma.** `npx jest --testPathIgnorePatterns='/node_modules/|/e2e/' src/features/chat …` corrió los 186 archivos
+menos los pedidos; y `npx jest <archivos> ` sin la bandera dio `No tests found … testPathIgnorePatterns:
+/node_modules/, /e2e/, /.claude/ - 0 matches`.
+
+**Causa real.** Es la misma de la bitácora del 25/09 (`jest.config.js` ignora `/.claude/`, que es donde viven los
+worktrees) con un detalle nuevo: `--testPathIgnorePatterns` acepta varios valores, así que **se traga las rutas que
+se escriben después**. Las rutas van ANTES de la bandera.
+
+**Solución.** `npx jest <rutas…> --testPathIgnorePatterns='/node_modules/|/e2e/'`. Además, la primera corrida
+completa del worktree (caché de transformación fría) dio 5 archivos rojos por tiempo agotado (Caja,
+`planificarDimension`, ~30 s cada uno) que pasaron en verde en la siguiente sin tocar nada: un rojo por
+`Can't access .root on unmounted test renderer` tras 30 s es tiempo, no lógica; se repite antes de investigar.
+
+**Cómo evitar que vuelva a pasar.** Rutas primero, bandera al final; y verificar en la salida el número de suites, no solo que
+no falle.
+
+## E-431 · `avisosALaMismaHora.test.ts` falla solo después del mediodía: `Expected: "recordatorios-habitos-relajar-cuenco" Received: "recordatorios-habitos"` (frontend, 29/09)
+
+**Síntoma.** `cambiar el sonido en Yo → Alarmas no toca horas (E-412) › Despertar con «12:00 desde mañana» sigue
+así después de elegir «Voz» y «Cuenco»` pasó a las 11:5x y falló a las 12:03 del mismo día, en el mismo árbol y
+sin tocar `src/features/alarmas`.
+
+**Causa real (sin corregir; fuera de alcance).** El test fija `ahora = new Date(2026, 8, 28, 11, 40)` al programar,
+pero `pasarAlarmasAlSonido` lee el reloj real: pasadas las 12:00 de la máquina, el «12:00 desde mañana» ya cayó
+en el pasado del reloj real y la alarma no se reprograma con el canal nuevo. Es un test que depende de la hora
+del día en que se corre (el mismo tipo de fixture que la regla 03-pruebas llama «tapa el bug»).
+
+**Cómo evitar que vuelva a pasar.** Pendiente: pasar `ahora` a `pasarAlarmasAlSonido` o congelar el reloj con
+`jest.useFakeTimers().setSystemTime(...)`. Mientras tanto, si falla solo ese archivo después de las 12:00, no es
+del cambio que se está probando.
+

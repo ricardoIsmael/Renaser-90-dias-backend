@@ -856,6 +856,10 @@ conversación y no la de un integrante. El soporte no tiene lista de integrantes
 de un grupo muestran solo el nombre, así que la lista de la info del grupo es el único lugar donde el modo
 se ve.
 
+> **Corregido 2026-09-29 (D-222).** Esto decía que el soporte no tenía lista de integrantes y que la de la
+> info del grupo era el único lugar donde se veía el modo. Desde D-222 la info de la comunidad, del grupo y
+> del soporte lleva la lista (§17): en el grupo y el soporte cada uno con su tarjeta según el modo.
+
 | Clase | Qué fija |
 |---|---|
 | `FotosDelChatServiceTest` (+10; 17 en total) | Grupo: la aprendiz ve la tarjeta del mentor; soporte: la del staff; 403 a quien no puede ver el grupo, antes de mirar al integrante; suspendida 403 en las dos fotos; la comunidad y un 1 a 1, 404; alguien de afuera, 404 sin dibujar; modo `TARJETA`: todos, sin consultar a nadie; `FOTO_SUBIDA`: solo quien no subió (una URL en blanco no es foto); un modo mal escrito queda en `TARJETA`; grupo sin chat, vacío; `application.yaml` trae `TARJETA` por defecto |
@@ -1128,3 +1132,26 @@ borra al UNSUBSCRIBE o al cerrarse el socket). La app nueva se desuscribe en seg
 | `AvisosDeMensajesServiceTest` (6) | Autor fuera; grupo con pertenencia vigente; soporte con staff de hoy; chat abierto fuera; mensaje del programa a todos; 1 a 1 |
 | `ConversacionesAbiertasDeSocketsTest` (3) | Suscribir abre, desuscribir cierra, dos teléfonos, socket caído |
 | `MensajeDeChatAvisoIT` (6) | Postgres + Redis + outbox: quién recibe fila y push (suspendida con fila sin push, preferencia apagada sin nada, ex mentor y ajenos sin nada), título con conteo, chat abierto sin aviso, nombre que cambia al rotar el mentor, soporte viejo renombrado, purga sin transacción (E-425) y V83 |
+
+## 17. Los integrantes de cualquier chat (2026-09-29, D-222)
+
+`GET /api/v1/chat/conversations/{id}/participants?q=&page=&size=` → `{participants:[{userId, nombre, rol,
+esUnoMismo, fotoPath, avatarUrl}], total, page, size}`. Lo ve quien puede ver la conversación
+(`AutorizarAccesoAConversacionUseCase`); 403 a quien no (y a una cuenta suspendida), 404 si no existe.
+
+| Tipo | Integrantes (solo cuentas activas) | Orden |
+|---|---|---|
+| Comunidad (GLOBAL) | sus participantes | por nombre |
+| Grupo (CELULA) | pertenencia vigente HOY (mentor, aprendices, staff SOPORTE asignado) | mentor, staff, aprendices |
+| Soporte | el aprendiz + ADMIN/ALCHEMIST de ahora | aprendiz, staff |
+| 1 a 1 (DIRECTA) | las dos personas | por nombre |
+
+`rol`: `APRENDIZ`, `MENTOR`, `ADMIN`, `ALQUIMISTA`. `fotoPath` (tarjeta, D-206) solo en grupo y soporte y
+según el modo `CHAT_FOTO_DE_INTEGRANTES`; en los demás, `avatarUrl`. `q` sin mayúsculas ni tildes; `size` 50 por
+defecto, tope 200; `total` es el de la búsqueda entera. Nunca correo ni teléfono.
+
+| Clase | Qué fija |
+|---|---|
+| `ParticipantesDeConversacionServiceTest` (9) | Orden y roles de grupo/soporte/comunidad/1 a 1, ex integrante y staff degradado fuera, búsqueda sin tildes, paginación y topes, tarjeta, 403/404 sin consultar a nadie |
+| `ParticipantesDelChatControllerTest` (3) | Contrato HTTP, valores por defecto, 403 y 404 |
+| `ParticipantesDelChatIT` (8) | Postgres + Tomcat + sesión real: aprendiz, mentor y Admin ven el mismo grupo; ex alumno y Admin sin asignación, 403; soporte ajeno, 403; staff degradado; comunidad con búsqueda y páginas; suspendida, 403 |

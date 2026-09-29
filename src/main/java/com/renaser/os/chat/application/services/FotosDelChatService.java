@@ -124,6 +124,14 @@ public class FotosDelChatService implements VerFotosDelChatUseCase {
                 .map(chat -> new TarjetasDelGrupo(chat.id(), quienesLlevanTarjeta(integrantes)));
     }
 
+    @Override
+    public Set<UserId> conTarjetaEn(TipoConversacion tipo, Collection<UserId> integrantes) {
+        if (!CON_TARJETAS_DE_INTEGRANTES.contains(tipo) || integrantes.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(quienesLlevanTarjeta(integrantes));
+    }
+
     /** Con {@code TARJETA}, todos y sin consultar a nadie; con {@code FOTO_SUBIDA}, una consulta en lote. */
     private List<UserId> quienesLlevanTarjeta(Collection<UserId> integrantes) {
         if (modo == FotoDeIntegrantes.TARJETA) {
