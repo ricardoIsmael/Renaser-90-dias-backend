@@ -2,7 +2,9 @@
 #
 # QUE HACE: construir y publicar la imagen (etiquetada con el SHA del commit y con `latest`), y
 # despues reemplazar el contenedor `backend` de la instancia EC2 por esa imagen, esperando a que
-# `/actuator/health` responda UP antes de dar el despliegue por bueno.
+# `/actuator/health` responda UP antes de dar el despliegue por bueno. Si la instancia tiene memoria
+# para dos JVM, lo hace SIN CORTE (nginx delante y dos contenedores un rato); si no, con el corte de
+# ~50 s de siempre. Lo decide `scripts/despliegue/desplegar-backend.sh` (E-465, D-235).
 #
 # COMO DESPLIEGA: por AWS Systems Manager (`ssm send-command` + `AWS-RunShellScript`). No hay ECS,
 # ni CodeDeploy, ni balanceador: es una sola instancia EC2 corriendo dos contenedores de Docker
@@ -207,6 +209,11 @@ jobs:
             echo "configurado=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # Solo para leer `scripts/despliegue/desplegar-backend.sh`, que es lo que corre en la instancia.
+      - name: Descargar el codigo
+        if: steps.destino.outputs.configurado == 'true'
+        uses: actions/checkout@v7
+
       - name: Autenticarse en AWS por OIDC
         if: steps.destino.outputs.configurado == 'true'
         uses: aws-actions/configure-aws-credentials@v6
@@ -236,113 +243,29 @@ jobs:
           # fria no se confunda con un despliegue roto. Se puede subir con una variable de
           # repositorio sin tocar este archivo.
           ESPERA: ${{ vars.DESPLIEGUE_ESPERA_SEGUNDOS || '240' }}
+          # `auto` (default): sin corte si la memoria alcanza para dos JVM. `reemplazo` fuerza el
+          # modo con corte: hace falta cuando una migracion rompe al codigo que esta corriendo
+          # (borrar o renombrar una columna que la version vieja usa), porque en el modo sin corte
+          # la version vieja sigue atendiendo ~50 s contra el esquema ya migrado. Ver E-465.
+          MODO: ${{ vars.DESPLIEGUE_MODO || 'auto' }}
         run: |
           set -euo pipefail
 
-          # El cuerpo va en un heredoc con el delimitador ENTRE COMILLAS: asi bash no expande
-          # nada aca y los `$` de adentro son los de la instancia, no los del runner.
-          cat > cuerpo.sh <<'FIN_DEL_CUERPO'
-          set -euo pipefail
-
-          CONTENEDOR=backend
-          RED=renaser
-          PUERTO=8080
-
-          echo "== 1/5 Autenticando contra ECR =="
-          aws ecr get-login-password --region "$REGION" \
-            | docker login --username AWS --password-stdin "$REGISTRO"
-
-          # Se baja ANTES de tocar el contenedor que esta andando: si la imagen no existe o el
-          # registro no responde, se corta aca y produccion no se entera.
-          echo "== 2/5 Bajando $IMAGEN =="
-          docker pull "$IMAGEN"
-
-          ANTERIOR=$(docker inspect --format '{{.Config.Image}}' "$CONTENEDOR" 2>/dev/null || echo ninguna)
-          # V-8 (D-180): tope de memoria del contenedor y porcentaje de heap. Van tambien en la vuelta
-          # atras porque la imagen anterior trae horneado MaxRAMPercentage=75: con el tope de 1400m
-          # eso dejaria 1 GB de heap y casi nada para metaspace, hilos y buffers.
-          MEMORIA=1400m
-          JVM_OPCIONES="-XX:MaxRAMPercentage=60.0"
-          VOLVER="docker rm -f $CONTENEDOR; docker run -d --name $CONTENEDOR --network $RED -p $PUERTO:$PUERTO --restart unless-stopped --memory $MEMORIA -e JAVA_TOOL_OPTIONS=$JVM_OPCIONES -e SPRING_PROFILES_ACTIVE=prod -e AWS_REGION=$REGION $ANTERIOR"
-          echo "== Imagen que estaba corriendo: $ANTERIOR =="
-
-          # Aca empiezan los segundos de caida (~45 s: lo que tarda la aplicacion en responder).
-          #
-          # NO se intente arreglar esto con azul/verde sin agrandar la instancia antes. Se probo el
-          # 2026-09-07 y salio muy mal (E-155): el plan exige los DOS contenedores corriendo a la
-          # vez unos 45 s, y esta t3.small tiene 1.909 MB de RAM con un solo backend usando ~1.150.
-          # Al levantar el segundo se agoto la memoria, murio el agente de SSM y produccion quedo
-          # caida SIETE HORAS, sin canal para mandar el arreglo. La configuracion de nginx que se
-          # probo era correcta; lo que no daba era la maquina.
-          #
-          # Para hacerlo bien hace falta primero una instancia mas grande (t3.medium, 4 GB).
-          echo "== 3/5 Reemplazando el contenedor =="
-          docker rm -f "$CONTENEDOR" >/dev/null 2>&1 || true
-          docker run -d \
-            --name "$CONTENEDOR" \
-            --network "$RED" \
-            -p "$PUERTO:$PUERTO" \
-            --restart unless-stopped \
-            --memory "$MEMORIA" \
-            -e JAVA_TOOL_OPTIONS="$JVM_OPCIONES" \
-            -e SPRING_PROFILES_ACTIVE=prod \
-            -e AWS_REGION="$REGION" \
-            "$IMAGEN"
-
-          echo "== 4/5 Esperando a que /actuator/health diga UP (tope ${ESPERA}s) =="
-          DESDE=$(date +%s)
-          while true; do
-            CUERPO=$(curl -fsS --max-time 3 "http://localhost:$PUERTO/actuator/health" 2>/dev/null || true)
-            case "$CUERPO" in
-              *'"status":"UP"'*)
-                echo "== Sano tras $(( $(date +%s) - DESDE ))s: $CUERPO =="
-                break
-                ;;
-            esac
-            # Si el contenedor ya se murio, no tiene sentido seguir esperando el tope entero:
-            # se corta al toque y se dejan los ultimos registros a la vista.
-            if [ -z "$(docker ps -q --filter "name=^/${CONTENEDOR}$" --filter status=running)" ]; then
-              echo "ERROR: el contenedor $CONTENEDOR dejo de correr durante el arranque."
-              docker logs --tail 120 "$CONTENEDOR" 2>&1 || true
-              echo "PARA VOLVER A LA VERSION ANTERIOR: $VOLVER"
-              exit 1
-            fi
-            if [ $(( $(date +%s) - DESDE )) -ge "$ESPERA" ]; then
-              echo "ERROR: la aplicacion no respondio UP en ${ESPERA}s."
-              docker logs --tail 120 "$CONTENEDOR" 2>&1 || true
-              echo "PARA VOLVER A LA VERSION ANTERIOR: $VOLVER"
-              exit 1
-            fi
-            sleep 3
-          done
-
-          # NO se vuelve solo a la version anterior. Es deliberado: la aplicacion corre Flyway al
-          # arrancar y las migraciones no se deshacen, asi que si el arranque fallo DESPUES de
-          # migrar, devolver el binario viejo lo deja contra un esquema mas nuevo — peor que el
-          # problema original. Se falla ruidosamente y se deja el comando exacto a mano arriba.
-
-          echo "== 5/5 Limpieza y estado final =="
-          # Borra solo imagenes colgadas (sin etiqueta). La anterior queda con su etiqueta de SHA,
-          # que es justo la que hace falta si hay que volver atras.
-          docker image prune -f >/dev/null 2>&1 || true
-          docker ps --format '{{.Names}}  {{.Image}}  {{.Status}}'
-          LIBRE_KB=$(df -Pk / | awk 'NR==2 {print $4}')
-          echo "Disco libre en /: $(( LIBRE_KB / 1024 )) MB"
-          # El disco raiz son 8 GB y cada version de la imagen ocupa ~440 MB. Las etiquetadas no
-          # se borran solas (a proposito), asi que se avisa antes de que el disco sea el problema.
-          if [ "$LIBRE_KB" -lt 3145728 ]; then
-            echo "AVISO: quedan menos de 3 GB libres. Borrar imagenes viejas de renaser-backend."
-          fi
-          FIN_DEL_CUERPO
+          # El cuerpo es `scripts/despliegue/desplegar-backend.sh`, un archivo propio y no un heredoc
+          # aca adentro, para poder probarlo en local con Docker (ver su cabecera y E-465). Decide
+          # solo entre el modo SIN CORTE (proxy + dos contenedores) y el REEMPLAZO de siempre,
+          # mirando la memoria disponible de la instancia: en la t3.small de hoy hace lo mismo que
+          # antes, porque ahi dos JVM no entran (E-155).
 
           # Los valores se inyectan como asignaciones al principio del script, no interpolados
-          # adentro del heredoc: asi el cuerpo queda literal y auditable de un vistazo.
+          # adentro del cuerpo: asi el cuerpo queda literal y auditable de un vistazo.
           {
             printf "IMAGEN='%s'\n"   "$IMAGEN"
             printf "REGISTRO='%s'\n" "$REGISTRO"
             printf "REGION='%s'\n"   "$REGION"
             printf "ESPERA='%s'\n"   "$ESPERA"
-            cat cuerpo.sh
+            printf "MODO='%s'\n"     "$MODO"
+            cat scripts/despliegue/desplegar-backend.sh
           } > desplegar.sh
 
           jq -Rs '{commands: [.]}' desplegar.sh > parametros.json
@@ -431,6 +354,6 @@ jobs:
             echo "| Instancia | \`$INSTANCIA\` |"
             echo "| Comando SSM | \`${CID:-no llego a enviarse}\` |"
             echo ""
-            echo "Durante el reemplazo del contenedor la API deja de responder unos segundos."
-            echo "Ver \`docs/DESPLIEGUE_Y_CI.md\` §5.3."
+            echo "Si la salida dice \`Modo: reemplazo\`, la API dejo de responder unos 50 s; con"
+            echo "\`Modo: sin-corte\`, no. Ver \`docs/DESPLIEGUE_Y_CI.md\` §5.3 y E-465."
           } >> "$GITHUB_STEP_SUMMARY"
