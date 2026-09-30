@@ -12392,3 +12392,29 @@ SER + confirmar; 4 lecciones indexadas localmente, 35 embeddings):
   regla cambia; no se borra.
 - Pendiente, no arreglado aquí: el modelo todavía se escapa a veces con el género («volverte creadora»), aunque
   el prompt lo prohíbe. Si se repite en la batería, pensar una revisión del texto antes de enviarlo.
+
+## E-456 · «solo el sábado» seguía saliendo como «todos los sábados», y «dejas de ser reactiva» al citar el material (backend + prompt, RESUELTO, 30/09)
+
+**Síntoma.** Probando la rama de E-454/E-455 en el emulador del dueño: a «mejor no, entonces apagala solo el
+sabado» SER respondió, pero con la tarjeta «Apagar 'ESCRITURA LIBRE NOCTURNA' los sábado, todas las semanas,
+hasta que lo vuelva a activar». Y en una respuesta con material del programa dijo «dejas de ser reactiva» (el
+dueño es hombre).
+
+**Causa real.** La regla «Un dia o todas las semanas» estaba solo en el prompt, y el modelo (flash-lite) a veces
+la ignora: elige `proponer_horario_por_dia_de_semana`, que nada frenaba. El trato neutro del prompt hablaba de
+cómo dirigirse a la persona, y el modelo copió el género del material al parafrasearlo.
+
+**Solución.**
+- `UnDiaOCadaSemana` lee el último mensaje de la persona al acompañante (lo guarda `ConversacionRenasiaService`
+  antes de llamar al modelo; solo si es de los últimos 2 minutos). Si nombra el día en singular y sin
+  «los / todos los / cada» ni «todas las semanas», `proponer_horario_por_dia_de_semana` (apagar o fijar) no
+  propone: devuelve «La persona pidio un solo sabado… Usa proponer_apagar_dia con la fecha <próximo sábado>. Si
+  no queda claro…, preguntaselo.» Un «sí» que no nombra el día no se bloquea.
+- Prompt: la regla con los ejemplos «el sabado» / «cada sabado» y «si no queda claro, preguntale»; y el trato
+  neutro también al contar el material («dejar de reaccionar», no «dejas de ser reactiva»).
+- Pruebas: `UnDiaOCadaSemanaTest` (frases, y el mensaje viejo fuera de la ventana no decide),
+  `PropuestaDeHorarioPorDiaDeSemanaTest.unSoloDiaNoEsSemanal` (sin la guarda se proponía), `PromptSistemaRenasiaTest`.
+
+**Cómo evitar que vuelva a pasar.** Una regla del prompt que decide algo que dura (un cambio de todas las
+semanas) no alcanza con flash-lite: si se puede decidir leyendo lo que escribió la persona, se decide en la
+herramienta y el prompt queda como explicación.

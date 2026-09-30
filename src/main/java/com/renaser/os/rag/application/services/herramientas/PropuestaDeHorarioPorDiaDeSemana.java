@@ -54,10 +54,13 @@ public class PropuestaDeHorarioPorDiaDeSemana implements HerramientaAgente {
 
     private final ConsultarHorariosPort horariosPort;
     private final ProponerAccionUseCase proponerAccion;
+    private final UnDiaOCadaSemana unDiaOCadaSemana;
 
-    public PropuestaDeHorarioPorDiaDeSemana(ConsultarHorariosPort horariosPort, ProponerAccionUseCase proponerAccion) {
+    public PropuestaDeHorarioPorDiaDeSemana(ConsultarHorariosPort horariosPort, ProponerAccionUseCase proponerAccion,
+                                            UnDiaOCadaSemana unDiaOCadaSemana) {
         this.horariosPort = horariosPort;
         this.proponerAccion = proponerAccion;
+        this.unDiaOCadaSemana = unDiaOCadaSemana;
     }
 
     @Override
@@ -73,6 +76,7 @@ public class PropuestaDeHorarioPorDiaDeSemana implements HerramientaAgente {
             // La proxima vez que cae ese dia, estrictamente despues de hoy: la fecha efectiva con que
             // habits mide el cupo. Al confirmar, habits la vuelve a calcular con su reloj.
             LocalDate proxima = hoy.with(TemporalAdjusters.next(pedido.diaSemana()));
+            requireQueSeRepita(actorId, pedido, proxima);
             HorariosDelDia dia = HorariosParaProponer.de(horariosPort, actorId, proxima);
             HorarioDeHabito habito = HorariosParaProponer.habito(dia, pedido.habitoId());
             String resumen = resumenValidado(pedido, habito, dia) + HorariosParaProponer.siEstaPausado(habito);
@@ -80,6 +84,23 @@ public class PropuestaDeHorarioPorDiaDeSemana implements HerramientaAgente {
         } catch (PropuestaImposibleException imposible) {
             return ResultadoHerramienta.fallo(imposible.getMessage());
         }
+    }
+
+    /**
+     * E-456: "solo el sabado" es un dia. Si lo ultimo que escribio nombra ese dia en singular, no se
+     * propone un cambio que se repite todas las semanas: se devuelve el camino de un solo dia.
+     */
+    private void requireQueSeRepita(UserId actorId, HorarioSemanalPedido pedido, LocalDate proxima) {
+        if (pedido.accion() == Accion.QUITAR || !unDiaOCadaSemana.pidioUnSoloDia(actorId, pedido.diaSemana())) {
+            return;
+        }
+        String dia = ArgumentosDeHorario.nombre(pedido.diaSemana());
+        String herramienta = pedido.accion() == Accion.APAGAR ? PropuestaDeApagarDia.NOMBRE
+                : PropuestaDeCambioDeHorario.NOMBRE;
+        throw new PropuestaImposibleException("La persona pidio un solo " + dia + ", no todos los " + dia
+                + ": no se propone un cambio de todas las semanas. Usa " + herramienta + " con la fecha "
+                + proxima + " (el proximo " + dia + "). Si no queda claro si es solo ese dia o todas las semanas, "
+                + "preguntaselo.");
     }
 
     /** Lo que ve la persona junto a los botones, despues de descartar lo que habits rechazaria. */

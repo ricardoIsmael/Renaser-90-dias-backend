@@ -507,9 +507,10 @@ class PromptSistemaRenasiaTest {
         String render = renderizar("");
 
         assertThat(render).contains("**Un dia o todas las semanas.**")
+                .contains("\"Solo el sabado\", \"el sabado\", \"este sabado\"")
                 .contains("es UN dia: apagalo con proponer_apagar_dia")
-                .contains("sabados\" o \"los sabados\", que se repite cada semana, usa\n  proponer_horario_por_dia_de_semana")
-                .contains("Si no queda claro, es un solo dia.");
+                .contains("\"los sabados\", \"todos los sabados\" o \"cada sabado\"")
+                .contains("Si no queda claro, preguntale\n  si es solo ese dia o todas las semanas.");
     }
 
     /** E-454: el dueño vio "abrumada"; las instrucciones hablan de "la persona" en femenino. */
@@ -517,6 +518,9 @@ class PromptSistemaRenasiaTest {
     @DisplayName("E-454: el trato neutro aclara que el femenino de las instrucciones es solo gramatica")
     void tratoNeutroAunqueLasInstruccionesDigan_laPersona() {
         assertThat(renderizar("")).contains("persona\" o \"ella\" es solo gramatica: no le hables en femenino ni en masculino.");
+        // E-456: "dejas de ser reactiva" al parafrasear el material, con un dueño hombre.
+        assertThat(renderizar("")).contains("Tambien al contarle lo que dice el material del programa: di \"dejar de\n  reaccionar\" y no \"dejas de ser reactiva\"")
+                .contains("si el material habla en masculino o femenino, pasalo a neutro.");
     }
 
     @Test
