@@ -174,10 +174,10 @@ class HerramientasAgenteServiceTest {
                 InvocacionHerramienta.sinArgumentos(CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA)));
 
         assertThat(texto).contains(REGISTRO.toString()).contains("Meditacion").contains("estado=PENDIENTE")
-                .contains("puntos_en_juego=10 de 10").contains("vence_en=9 h 0 min")
+                .contains("puntos_en_juego=10 de 10").contains("sus_puntos_terminan_en=9 h 0 min")
                 // El total viaja en la misma respuesta para que el modelo no encadene una
                 // segunda herramienta (un viaje mas a Gemini) para sumar lo que ya tiene.
-                .contains("Total en juego: 10 puntos en 1 habito(s)");
+                .contains("Total en juego: 10 puntos en 1 habito(s) que todavia dan puntos.");
     }
 
     @Test
@@ -257,8 +257,13 @@ class HerramientasAgenteServiceTest {
                 .doesNotContain("IllegalStateException");
     }
 
+    /**
+     * Corregido 2026-09-30 (E-455). Decia "un habito vencido se marca ya_vencio y no cuenta como
+     * pendiente". Un habito no vence: pasa la hora de sus puntos y se puede hacer igual (paga 0), asi
+     * que sigue entre los que le faltan. Lo que no cambia: no suma al total en juego.
+     */
     @Test
-    @DisplayName("bateria 2026-09-25: un habito vencido se marca ya_vencio y no cuenta como pendiente ni en juego")
+    @DisplayName("E-455: pasada su hora, un habito ya no da puntos, pero sigue entre los que faltan y nunca 'vencio'")
     void vencidoNoCuenta() {
         var agenda = mock(ConsultarAgendaHabitosPort.class);
         when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(new HabitoDelDia(UUID.randomUUID(), "Ritual", "PENDIENTE",
@@ -270,8 +275,11 @@ class HerramientasAgenteServiceTest {
         String contenido = ((ResultadoHerramienta.Exito) servicio.ejecutar(APRENDIZ,
                 InvocacionHerramienta.sinArgumentos(CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA))).contenido();
 
-        assertThat(contenido).contains("ya_vencio=si").doesNotContain("vence_en")
-                .contains("Total en juego: 0 puntos en 0 habito(s)").contains("1 ya vencieron hoy");
+        assertThat(contenido).contains("ya_no_da_puntos (paso su hora; igual puede hacerlo)")
+                .contains("Le faltan 1 de 1 habitos de hoy").contains("1 ya no dan puntos porque paso su hora, "
+                        + "pero igual puede hacerlos")
+                .contains("Total en juego: 0 puntos en 0 habito(s)")
+                .doesNotContainIgnoringCase("vencio").doesNotContainIgnoringCase("vencieron");
     }
 
     /** Bateria 2026-09-25, ronda 2: "marca la ducha fria como hecha" respondio "no la veo" y mando a subir evidencia. */

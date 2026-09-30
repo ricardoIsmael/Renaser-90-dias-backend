@@ -4,6 +4,8 @@ import com.renaser.os.rag.application.ports.in.conversacion.ConsultarSituacionDe
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
+import com.renaser.os.rag.application.ports.out.participante.ConsultarTratoDeLaPersonaPort;
+import com.renaser.os.rag.application.ports.out.participante.ConsultarTratoDeLaPersonaPort.TratoDeLaPersona;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.application.ports.out.participante.HabitosDeHoy;
 import com.renaser.os.rag.application.ports.out.participante.HabitosDeHoy.EstadoDeHoy;
@@ -40,19 +42,33 @@ public class SituacionDelTurnoService implements ConsultarSituacionDelTurnoUseCa
     private final ConsultarAgendaHabitosPort agendaPort;
     private final GestionarPlanDeHabitosPort planPort;
     private final Clock clock;
+    private final ConsultarTratoDeLaPersonaPort tratoPort;
 
     public SituacionDelTurnoService(ConsultarSituacionDelAprendizPort situacionPort,
                                     ConsultarAgendaHabitosPort agendaPort, GestionarPlanDeHabitosPort planPort,
-                                    Clock clock) {
+                                    Clock clock, ConsultarTratoDeLaPersonaPort tratoPort) {
         this.situacionPort = situacionPort;
         this.agendaPort = agendaPort;
         this.planPort = planPort;
         this.clock = clock;
+        this.tratoPort = tratoPort;
     }
 
     @Override
     public Optional<SituacionDelAprendiz> de(UserId participanteId) {
-        return situacionPort.de(participanteId).map(situacion -> conHabitosSiSePuede(situacion, participanteId));
+        return situacionPort.de(participanteId)
+                .map(situacion -> conHabitosSiSePuede(situacion, participanteId))
+                .map(situacion -> situacion.conTrato(tratoDe(participanteId)));
+    }
+
+    /** E-457: sin dato, o si no se puede leer, neutro. Nunca se adivina el genero. */
+    private TratoDeLaPersona tratoDe(UserId participanteId) {
+        try {
+            return tratoPort.de(participanteId);
+        } catch (RuntimeException falla) {
+            log.warn("[rag] la situacion del turno sale con trato neutro ({})", falla.getClass().getSimpleName());
+            return TratoDeLaPersona.NEUTRO;
+        }
     }
 
     private SituacionDelAprendiz conHabitosSiSePuede(SituacionDelAprendiz situacion, UserId participanteId) {

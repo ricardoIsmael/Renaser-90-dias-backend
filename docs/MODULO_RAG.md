@@ -858,6 +858,8 @@ reacomoda); la privacidad (no lee el chat privado ni da datos de otros); la cris
 **Los graves, y cómo se arreglaron:**
 
 - El turno se caía si el modelo escribía mal el nombre de una herramienta (#14, #20): E-247.
+  > **Corregido 2026-09-30 (E-454).** E-247 no quedó resuelto en el chat: el manager tolerante no llegaba
+  > al `ToolCallingAdvisor` del `ChatClient`, que es quien ejecuta las herramientas. Ahora sí.
 - Con un hábito pausado no sabía cambiar la pausa, proponía reactivar (lo contrario de lo pedido) o
   apagar un día que no cambiaba nada (#16, #25, #28, #99, #100): guardas en `proponer_apagar_dia` y la
   descripción de `proponer_pausar_habito`, más una regla en el prompt.

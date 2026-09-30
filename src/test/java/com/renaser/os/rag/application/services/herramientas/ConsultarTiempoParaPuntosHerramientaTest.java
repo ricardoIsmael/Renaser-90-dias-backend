@@ -91,12 +91,12 @@ class ConsultarTiempoParaPuntosHerramientaTest {
         assertThat(lineas).containsExactly(
                 "Hora actual del aprendiz: 20:30.",
                 "id=" + leer.registroId() + " | Leer | paga_ahora=10 | paga 10 hasta las 21:02 (faltan 32 min), "
-                        + "despues 9 y va bajando hasta 6 | vence a las 21:10 (faltan 40 min)",
+                        + "despues 9 y va bajando hasta 6 | sus puntos se acaban a las 21:10 (faltan 40 min)",
                 "id=" + meditar.registroId() + " | Meditar | paga_ahora=10 | paga 10 hasta las 00:02 del dia "
-                        + "siguiente (faltan 3 h 32 min), despues 9 y va bajando hasta 6 | vence a las 00:10 del "
+                        + "siguiente (faltan 3 h 32 min), despues 9 y va bajando hasta 6 | sus puntos se acaban a las 00:10 del "
                         + "dia siguiente (faltan 3 h 40 min)",
-                "id=" + agua.registroId() + " | Agua | paga_ahora=10 | no vence: no tiene horario",
-                "Primero en vencer: Leer, a las 21:10 (faltan 40 min).");
+                "id=" + agua.registroId() + " | Agua | paga_ahora=10 | sus puntos no se acaban: no tiene horario",
+                "El primero en dejar de dar puntos: Leer, a las 21:10 (faltan 40 min).");
     }
 
     @Test
@@ -108,7 +108,7 @@ class ConsultarTiempoParaPuntosHerramientaTest {
         List<String> lineas = lineasA(Instant.parse("2026-09-24T02:05:00Z"), Map.of(), leer);
 
         assertThat(lineas.get(1)).isEqualTo("id=" + leer.registroId() + " | Leer | paga_ahora=8 | paga 8 hasta "
-                + "las 21:06 (faltan 1 min), despues 7 y va bajando hasta 6 | vence a las 21:10 (faltan 5 min)");
+                + "las 21:06 (faltan 1 min), despues 7 y va bajando hasta 6 | sus puntos se acaban a las 21:10 (faltan 5 min)");
     }
 
     @Test
@@ -119,7 +119,7 @@ class ConsultarTiempoParaPuntosHerramientaTest {
         List<String> lineas = lineasA(Instant.parse("2026-09-24T02:09:30Z"), Map.of(), leer);
 
         assertThat(lineas.get(1)).isEqualTo("id=" + leer.registroId()
-                + " | Leer | paga_ahora=6 | vence a las 21:10 (faltan menos de 1 min)");
+                + " | Leer | paga_ahora=6 | sus puntos se acaban a las 21:10 (faltan menos de 1 min)");
     }
 
     @Test
@@ -133,24 +133,24 @@ class ConsultarTiempoParaPuntosHerramientaTest {
 
         assertThat(lineas).containsExactly(
                 "Hora actual del aprendiz: 20:30.",
-                "id=" + leer.registroId() + " | Leer | paga_ahora=10 | a las 21:05 pagaria 8 (pierde 2) | vence a "
-                        + "las 21:10 (faltan 40 min)",
+                "id=" + leer.registroId() + " | Leer | paga_ahora=10 | a las 21:05 pagaria 8 (pierde 2) | sus puntos se "
+                        + "acaban a las 21:10 (faltan 40 min)",
                 "id=" + meditar.registroId() + " | Meditar | paga_ahora=10 | a las 21:05 pagaria 10 (no pierde "
-                        + "nada) | vence a las 00:10 del dia siguiente (faltan 3 h 40 min)",
+                        + "nada) | sus puntos se acaban a las 00:10 del dia siguiente (faltan 3 h 40 min)",
                 "id=" + agua.registroId() + " | Agua | paga_ahora=10 | a las 21:05 pagaria 10 (no pierde nada) | "
-                        + "no vence: no tiene horario",
-                "Primero en vencer: Leer, a las 21:10 (faltan 40 min).");
+                        + "sus puntos no se acaban: no tiene horario",
+                "El primero en dejar de dar puntos: Leer, a las 21:10 (faltan 40 min).");
     }
 
     @Test
-    @DisplayName("con una hora posterior al plazo: ya estaria vencido y pierde todo lo que paga ahora")
+    @DisplayName("con una hora posterior al plazo: ya no daria puntos (pierde todo lo que paga ahora), pero se puede hacer")
     void conHoraPasadoElPlazo() {
         HabitoDelDia leer = conPlazo("Leer", PLAZO_LEER, 10);
 
         List<String> lineas = lineasA(NOCHE_EN_LIMA, Map.of("hora", "21:30"), leer);
 
         assertThat(lineas.get(1)).isEqualTo("id=" + leer.registroId() + " | Leer | paga_ahora=10 | a las 21:30 ya "
-                + "estaria vencido: pierde los 10 | vence a las 21:10 (faltan 40 min)");
+                + "no daria puntos (pierde los 10), aunque igual puede hacerlo | sus puntos se acaban a las 21:10 (faltan 40 min)");
     }
 
     @Test
@@ -161,7 +161,7 @@ class ConsultarTiempoParaPuntosHerramientaTest {
         // Son las 20:30 en Lima: las 9:00 de hoy ya pasaron (en UTC todavia no seria "ayer").
         List<String> lineas = lineasA(NOCHE_EN_LIMA, Map.of("hora", "9:00"), leer);
 
-        assertThat(lineas.get(1)).contains("a las 09:00 del dia siguiente ya estaria vencido: pierde los 10");
+        assertThat(lineas.get(1)).contains("a las 09:00 del dia siguiente ya no daria puntos (pierde los 10), aunque igual puede hacerlo");
     }
 
     @ParameterizedTest

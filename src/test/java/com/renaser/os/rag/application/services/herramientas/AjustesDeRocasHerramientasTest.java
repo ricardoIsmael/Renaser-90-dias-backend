@@ -2,6 +2,7 @@ package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
+import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.out.rocas.AgregarAccionAlPlanPort;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.PlanDeManana;
@@ -58,8 +59,9 @@ class AjustesDeRocasHerramientasTest {
     private final EditarObjetivoSemanalPort editar = mock(EditarObjetivoSemanalPort.class);
     private final ProponerAccionUseCase proponer = mock(ProponerAccionUseCase.class);
 
+    private final GestionarPlanDeHabitosPort planDeHabitos = mock(GestionarPlanDeHabitosPort.class);
     private final ProponerAgregarAccionHerramienta agregarAccion =
-            new ProponerAgregarAccionHerramienta(rocas, planificar, proponer);
+            new ProponerAgregarAccionHerramienta(rocas, planificar, proponer, planDeHabitos);
     private final AgregarAccionConfirmable agregarConfirmable = new AgregarAccionConfirmable(agregar, planificar);
     private final ProponerEditarObjetivoSemanalHerramienta editarObjetivo =
             new ProponerEditarObjetivoSemanalHerramienta(rocas, planificar, editar, proponer);
@@ -89,6 +91,51 @@ class AjustesDeRocasHerramientasTest {
                 "2026-09-24", "eje", "CUERPO", "titulo", "Estirar 10 minutos", "inicio", "07:00", "fin", "07:10"), resumen);
         assertThat(((ResultadoHerramienta.Exito) resultado).contenido()).startsWith("Propuesta creada: " + resumen)
                 .contains("TODAVIA NO esta guardado");
+    }
+
+    /**
+     * E-455: "manana quiero hacer caminar 40 minutos a las 7 de la noche", con el habito "Caminar 40
+     * minutos" en su plan, termino en una accion nueva. Nombrar un habito del plan no es una accion: se
+     * devuelve el camino del cambio de hora para esa fecha, y no se propone nada.
+     */
+    @Test
+    @DisplayName("E-455: una accion que nombra un habito del plan no se propone: se manda a cambiarle la hora")
+    void unHabitoNoEsUnaAccion() {
+        when(planDeHabitos.planDe(APRENDIZ)).thenReturn(new GestionarPlanDeHabitosPort.PlanDelAprendiz(HOY, List.of(
+                new GestionarPlanDeHabitosPort.HabitoDelPlan(UUID.randomUUID(), "CAMINAR", false, false, null),
+                new GestionarPlanDeHabitosPort.HabitoDelPlan(UUID.randomUUID(), "Leer", false, false, null)),
+                List.of()));
+
+        ResultadoHerramienta resultado = agregarAccion.ejecutar(APRENDIZ, invocacion(
+                ProponerAgregarAccionHerramienta.NOMBRE, "eje", "CUERPO", "titulo", "Caminar 40 minutos",
+                "inicio", "19:00"));
+
+        assertThat(resultado).isEqualTo(ResultadoHerramienta.fallo("'CAMINAR' es un habito de su plan, no una accion: "
+                + "no se agrega. Para hacerlo a otra hora ese dia, llama a consultar_horarios con esa fecha y deja "
+                + "proponer_cambio_de_horario con el habito_id, la hora nueva y la fecha 2026-09-24. Solo si pidio "
+                + "claramente una accion aparte, vuelve a llamar con accion_aparte='si'."));
+        verifyNoInteractions(proponer);
+    }
+
+    /**
+     * "Leer el informe" nombra el habito "Leer", pero puede ser de verdad otra cosa: con
+     * accion_aparte='si' (la persona lo pidio claramente) se propone como siempre. Y lo que no nombra
+     * ningun habito no se toca.
+     */
+    @Test
+    @DisplayName("E-455: con accion_aparte='si', o sin ningun habito nombrado, se propone como siempre")
+    void accionAparteSePropone() {
+        when(planDeHabitos.planDe(APRENDIZ)).thenReturn(new GestionarPlanDeHabitosPort.PlanDelAprendiz(HOY, List.of(
+                new GestionarPlanDeHabitosPort.HabitoDelPlan(UUID.randomUUID(), "Leer", false, false, null)),
+                List.of()));
+
+        assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE, "eje",
+                "TRABAJO", "titulo", "Leer el informe"))).isInstanceOf(ResultadoHerramienta.Fallo.class);
+        assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE, "eje",
+                "TRABAJO", "titulo", "Leer el informe", "accion_aparte", "si")))
+                .isNotInstanceOf(ResultadoHerramienta.Fallo.class);
+        assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE, "eje",
+                "TRABAJO", "titulo", "Llamar al banco"))).isNotInstanceOf(ResultadoHerramienta.Fallo.class);
     }
 
     @Test

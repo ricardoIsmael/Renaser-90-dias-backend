@@ -30,6 +30,10 @@ import java.util.stream.Collectors;
  * programa)": sin el del programa, a "se me paso la hora del jugo verde" el modelo no lo podia unir
  * con lo que la persona llama "Batido de papaya" y le contesto que todavia podia registrarlo. Del
  * renombre solo viaja el titulo, nunca el motivo (puede tener datos de salud).
+ *
+ * <p><b>Un habito no vence (E-455).</b> Lo que pasa es la hora de sus puntos: se puede hacer igual y
+ * paga 0. Decia "vencido (se le paso la hora)" y el acompanante contesto "ya vencieron" de dos habitos
+ * que seguian pendientes.
  */
 final class HabitosDeHoyEnElPrompt {
 
@@ -99,7 +103,7 @@ final class HabitosDeHoyEnElPrompt {
             case PENDIENTE -> "pendiente";
             case EN_CURSO -> "en curso";
             case HECHO -> "hecho";
-            case VENCIDO -> "vencido (se le paso la hora)";
+            case VENCIDO -> "ya no da puntos (paso su hora; igual puede hacerlo)";
             case FALLIDO -> "no cumplido";
         };
     }

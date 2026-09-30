@@ -42,7 +42,7 @@ public class ConsultarTiempoParaPuntosHerramienta implements HerramientaAgente {
     private static final DefinicionHerramienta DEFINICION = new DefinicionHerramienta(NOMBRE,
             "Calcula, para cada habito de hoy que todavia puede entregar, cuantos puntos paga si lo entrega "
                     + "ahora, hasta que hora mantiene ese puntaje y cuantos minutos le quedan, cuanto pagaria "
-                    + "despues, a que hora vence y cual se le vence primero. Usala cuando pregunte si llega a "
+                    + "despues, a que hora se le acaban los puntos y a cual primero. Usala cuando pregunte si llega a "
                     + "tiempo, cuanto tiempo le queda, que le conviene hacer primero o cuanto pierde si lo hace "
                     + "mas tarde (\"¿cuanto pierdo si lo hago a las 9?\"). Las horas y los minutos ya vienen "
                     + "calculados en su hora local: repitelos, no hagas cuentas de horas por tu cuenta.",
@@ -114,7 +114,7 @@ public class ConsultarTiempoParaPuntosHerramienta implements HerramientaAgente {
     private static Function<PlazoDePuntos, String> desdeAhora(MomentoDelAprendiz momento) {
         return plazo -> {
             if (plazo.vence() == null) {
-                return encabezadoDe(plazo) + " | no vence: no tiene horario";
+                return encabezadoDe(plazo) + " | sus puntos no se acaban: no tiene horario";
             }
             return encabezadoDe(plazo) + escalaDesdeAhora(plazo, momento) + venceEn(plazo, momento);
         };
@@ -137,13 +137,13 @@ public class ConsultarTiempoParaPuntosHerramienta implements HerramientaAgente {
     private static Function<PlazoDePuntos, String> aLaHora(MomentoDelAprendiz momento, LocalTime hora) {
         Instant instante = momento.proxima(hora);
         return plazo -> encabezadoDe(plazo) + " | a las " + momento.horaDe(instante) + resultadoA(plazo, instante)
-                + (plazo.vence() == null ? " | no vence: no tiene horario" : venceEn(plazo, momento));
+                + (plazo.vence() == null ? " | sus puntos no se acaban: no tiene horario" : venceEn(plazo, momento));
     }
 
     private static String resultadoA(PlazoDePuntos plazo, Instant instante) {
         int despues = plazo.puntosEn(instante);
         if (despues == 0) {
-            return " ya estaria vencido: pierde los " + plazo.puntosAhora();
+            return " ya no daria puntos (pierde los " + plazo.puntosAhora() + "), aunque igual puede hacerlo";
         }
         int pierde = Math.max(0, plazo.puntosAhora() - despues);
         return " pagaria " + despues + (pierde > 0 ? " (pierde " + pierde + ")" : " (no pierde nada)");
@@ -155,13 +155,13 @@ public class ConsultarTiempoParaPuntosHerramienta implements HerramientaAgente {
     }
 
     private static String venceEn(PlazoDePuntos plazo, MomentoDelAprendiz momento) {
-        return " | vence a las " + momento.horaDe(plazo.vence()) + " (faltan " + momento.faltaPara(plazo.vence()) + ")";
+        return " | sus puntos se acaban a las " + momento.horaDe(plazo.vence()) + " (faltan " + momento.faltaPara(plazo.vence()) + ")";
     }
 
     private static String primeroEnVencer(List<PlazoDePuntos> plazos, MomentoDelAprendiz momento) {
         return plazos.stream().filter(plazo -> plazo.vence() != null).findFirst()
-                .map(plazo -> "Primero en vencer: " + plazo.habito().titulo() + ", a las "
+                .map(plazo -> "El primero en dejar de dar puntos: " + plazo.habito().titulo() + ", a las "
                         + momento.horaDe(plazo.vence()) + " (faltan " + momento.faltaPara(plazo.vence()) + ").")
-                .orElse("Ninguno vence hoy: no tienen horario.");
+                .orElse("Ninguno deja de dar puntos hoy: no tienen horario.");
     }
 }

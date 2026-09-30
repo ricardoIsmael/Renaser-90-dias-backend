@@ -41,12 +41,14 @@ class HabitosDeHoyEnElPromptTest {
 
         assertThat(texto).isEqualTo("""
                 Hoy es sábado 26/09/2026, su dia 12 de 90, en la fase 2 de 4.
+                Trato: neutro (sin dato). Nada con genero sobre la persona, tampoco al parafrasear el material: \
+                "dejar de reaccionar", no "reactiva" ni "reactivo".
                 Sus habitos de hoy, al empezar este turno:
                 Ya hechos hoy (no le propongas hacerlos, saltarlos ni registrarlos otra vez): JUGO VERDE, \
                 ULTIMA COMIDA.
                 Los demas de hoy:
                 - MEDITAR: pendiente, pide foto
-                - CAMINAR: vencido (se le paso la hora)
+                - CAMINAR: ya no da puntos (paso su hora; igual puede hacerlo)
                 Pausados (existen, pero hoy no se le piden): DUCHA FRIA (hasta el domingo 27/09), \
                 YOGA (sin fecha de fin).""");
     }
@@ -149,5 +151,26 @@ class HabitosDeHoyEnElPromptTest {
         String voz = new PromptDeVozEnVivo().para(new SituacionDelAprendiz(12, 2, SABADO, DE_LA_BATERIA), null);
 
         assertThat(voz).contains("Ya hechos hoy (no le propongas hacerlos, saltarlos ni registrarlos otra vez): JUGO VERDE").contains("DUCHA FRIA (hasta el domingo 27/09)");
+    }
+
+    /**
+     * E-457: con el prompt solo, flash-lite le escribio "dejas de ser reactiva ... como creadora" a un
+     * hombre. El trato sale de su ficha (pregunta sex) y va en la situacion; sin dato, neutro.
+     */
+    @Test
+    @DisplayName("E-457: la situacion dice el trato: masculino, femenino, o neutro sin dato")
+    void tratoEnLaSituacion() {
+        SituacionDelAprendiz base = new SituacionDelAprendiz(12, 2, SABADO);
+
+        assertThat(GoogleGenAiRenasiaChatAdapter.formatearSituacion(base.conTrato(
+                com.renaser.os.rag.application.ports.out.participante.ConsultarTratoDeLaPersonaPort.TratoDeLaPersona
+                        .MASCULINO)))
+                .contains("Trato: masculino. Todo lo que le escribes concuerda en masculino (\"cansado\", "
+                        + "\"creador\"), tambien lo que parafraseas del material.");
+        assertThat(GoogleGenAiRenasiaChatAdapter.formatearSituacion(base.conTrato(
+                com.renaser.os.rag.application.ports.out.participante.ConsultarTratoDeLaPersonaPort.TratoDeLaPersona
+                        .FEMENINO)))
+                .contains("Trato: femenino.");
+        assertThat(GoogleGenAiRenasiaChatAdapter.formatearSituacion(base)).contains("Trato: neutro (sin dato).");
     }
 }

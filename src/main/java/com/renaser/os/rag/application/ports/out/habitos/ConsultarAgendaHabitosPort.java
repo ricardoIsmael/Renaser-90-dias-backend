@@ -3,6 +3,7 @@ package com.renaser.os.rag.application.ports.out.habitos;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
@@ -64,10 +65,14 @@ public interface ConsultarAgendaHabitosPort {
      * @param tituloDelPrograma el titulo del catalogo cuando la persona renombro el habito (D-133),
      *                       {@code null} si no lo renombro (E-290). Para que el modelo una "jugo
      *                       verde" con "Batido de papaya". Nunca trae el motivo del renombre
+     * @param horaInicio     la hora de hoy a la que le toca (su preferencia si la tiene), {@code null}
+     *                       sin horario (E-455): "lo que falta" se ordena por el horario de la persona
+     * @param dimension      Cuerpo, Mente, Emociones o Espiritu, como la ve la persona; {@code null} si
+     *                       no se sabe (E-455): "te faltan 27: Cuerpo 13, Mente 8..."
      */
     record HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego, Integer puntosMaximos,
                          Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos, String claveSistema,
-                         String tituloDelPrograma) {
+                         String tituloDelPrograma, LocalTime horaInicio, String dimension) {
 
         /** La Clase diaria se cierra con su resumen, nunca por el camino generico ni con una foto. */
         public static final String CLAVE_CLASE_DIARIA = "DAILY_CLASS";
@@ -78,6 +83,14 @@ public interface ConsultarAgendaHabitosPort {
 
         public HabitoDelDia {
             tramos = tramos == null ? List.of() : List.copyOf(tramos);
+        }
+
+        /** Sin hora ni dimension (lo que habia antes de E-455). */
+        public HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
+                            Integer puntosMaximos, Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos,
+                            String claveSistema, String tituloDelPrograma) {
+            this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, tramos,
+                    claveSistema, tituloDelPrograma, null, null);
         }
 
         /** Sin renombre: el titulo es el del programa. */

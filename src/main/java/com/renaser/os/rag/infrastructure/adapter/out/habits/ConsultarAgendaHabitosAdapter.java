@@ -3,6 +3,7 @@ package com.renaser.os.rag.infrastructure.adapter.out.habits;
 import com.renaser.os.habits.api.AgendaDelDiaFinder;
 import com.renaser.os.habits.api.HabitoEnJuegoResumen;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
+import com.renaser.os.rag.domain.model.habitopersonal.DimensionDelHabito;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
@@ -48,7 +49,8 @@ class ConsultarAgendaHabitosAdapter implements ConsultarAgendaHabitosPort {
         return new HabitoDelDia(resumen.registroId(), resumen.titulo(), resumen.estado(), resumen.puntosEnJuego(),
                 resumen.puntosMaximos(), resumen.plazo(), resumen.exigeEvidencia(),
                 resumen.tramos().stream().map(ConsultarAgendaHabitosAdapter::aTramo).toList(), resumen.claveSistema(),
-                resumen.tituloDelPrograma());
+                resumen.tituloDelPrograma(), resumen.horaInicio(),
+                DimensionDelHabito.deClave(resumen.categoriaClave()).map(DimensionDelHabito::etiqueta).orElse(null));
     }
 
     private static TramoPuntos aTramo(HabitoEnJuegoResumen.TramoPuntos tramo) {

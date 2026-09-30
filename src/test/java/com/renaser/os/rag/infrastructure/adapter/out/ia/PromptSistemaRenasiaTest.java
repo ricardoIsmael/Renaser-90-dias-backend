@@ -83,7 +83,9 @@ class PromptSistemaRenasiaTest {
         assertThat(render).doesNotContain("Sobre que esta hablando la persona ahora");
         // Deriva las dudas de contenido de un curso al otro agente en vez de absorberlas.
         assertThat(render).contains("Sparkie");
-        assertThat(render).contains("Recursos Exclusivos");
+        // E-454: en la app la seccion de cursos se llama Classroom (ComunidadScreen), ya no
+        // "Recursos Exclusivos"; el modelo nombraba una seccion que la persona no encuentra.
+        assertThat(render).contains("Classroom (en Comunidad)").doesNotContain("Recursos Exclusivos");
     }
 
     /**
@@ -333,8 +335,9 @@ class PromptSistemaRenasiaTest {
         assertThat(render).contains("La fecha de hoy, con su año").contains("nunca de lo que recuerdes");
         // Hablo del horario de un habito pausado sin decir que estaba pausado.
         assertThat(render).contains("el horario").contains("nuevo se vera cuando lo reactive");
-        // "No estas sola" a un hombre: lo dictaba el propio bloque de crisis.
-        assertThat(render).contains("No sabes si la persona es hombre o mujer").contains("pasar por esto a solas")
+        // "No estas sola" a un hombre: lo dictaba el propio bloque de crisis. (E-457: ahora la regla neutra
+        // aplica cuando la linea "Trato:" no dice el genero.)
+        assertThat(render).contains("Si no sabes si la persona es hombre o mujer").contains("pasar por esto a solas")
                 .doesNotContain("no esta sola");
         // Mostro los UUID de sus habitos.
         assertThat(render).contains("Nunca muestres identificadores internos");
@@ -421,7 +424,7 @@ class PromptSistemaRenasiaTest {
 
         assertThat(render).contains("## Como orientas")
                 .contains("nunca dices que eres Darren ni escribes como si fuera el")
-                .contains("si te preguntan\nquien eres, eres el acompanante del programa")
+                .contains("si te preguntan\nquien eres, eres SER, el acompanante del programa")
                 .contains("Confronta con carino").contains("sin burla, insultos ni etiquetas")
                 .contains("el macaco (la parte que se\n  queja")
                 .contains("Ante malestar, tristeza, salud o riesgo, nada de confrontar ni de macaco");
@@ -440,10 +443,33 @@ class PromptSistemaRenasiaTest {
     void renderizaConContextoVacio() {
         List<String> sinFragmentos = List.of();
 
-        String render = renderizar(sinFragmentos.isEmpty()
-                ? "(no se recupero contexto de la base de conocimiento para esta pregunta)" : "");
+        String render = renderizar(GoogleGenAiRenasiaChatAdapter.formatearContexto(sinFragmentos));
 
-        assertThat(render).contains("no se recupero contexto");
+        assertThat(render).contains("no se recupero contexto")
+                // E-455: con la base vacia abrio con "En el material del programa..." y algo generico.
+                .contains("NO hay material del programa sobre esto. No digas \"en el material del programa\"")
+                .contains("dilo en una linea (\"No encontre eso en el material del programa\nque tengo\")")
+                .contains("no afirmes que el programa dice o ensena algo sobre eso")
+                .contains("sin\ndecir que el programa ensena o dice eso.");
+    }
+
+    /** E-455 (2026-09-30): lo que vio el dueño en "que me falta", caminar a las 7 y "a que hora me conviene". */
+    @Test
+    @DisplayName("E-455: un habito no vence; lo que falta va contado y en orden; habito con hora no es accion; huecos con motivo")
+    void reglasDelTreintaDeSetiembre() {
+        String render = renderizar("");
+
+        assertThat(render).contains("**Un habito no vence.**")
+                .contains("Nunca digas que\n  un habito \"vencio\" o \"se vencio\"")
+                .doesNotContain("\"Vencido\" es que se le paso la hora")
+                .contains("cuantos le faltan y por dimension (\"Te faltan 27: Cuerpo 13,")
+                .contains("nombra solo los 2 o 3 primeros de la lista")
+                .contains("es cambiarle la hora a ESE\n  habito solo ese dia")
+                .contains("No es una accion nueva del\n  plan (proponer_agregar_accion)")
+                .contains("llama a buscar_huecos_para_habitos sin 'ocupado'")
+                .contains("\"a las 19:00 tienes un hueco libre despues del\n  trabajo\"")
+                .contains("no inventes\n  ocupaciones ni costumbres")
+                .contains("es tuyo: no lo mandes a Sparkie.");
     }
     /**
      * D-171, decision del dueno: un habito que exige evidencia se registra con la camara, directo y en
@@ -472,6 +498,35 @@ class PromptSistemaRenasiaTest {
      * D-230 (2026-09-29): el dueño, probando, encontro que le decian que Despertar tiene que ser de
      * mañana. Ningun habito tiene franja por su nombre: quien trabaja de noche lo pone a las 22:00.
      */
+    /**
+     * E-454 (bateria #14, 2026-09-30): "mejor no, entonces apagala solo el sabado" terminaba en la
+     * herramienta de todos los sabados. Un dia concreto va con proponer_apagar_dia.
+     */
+    @Test
+    @DisplayName("E-454: 'solo el sabado' es un dia (proponer_apagar_dia), no todas las semanas")
+    void unDiaOTodasLasSemanas() {
+        String render = renderizar("");
+
+        assertThat(render).contains("**Un dia o todas las semanas.**")
+                .contains("\"Solo el sabado\", \"el sabado\", \"este sabado\"")
+                .contains("es UN dia: apagalo con proponer_apagar_dia")
+                .contains("\"los sabados\", \"todos los sabados\" o \"cada sabado\"")
+                .contains("Si no queda claro, preguntale\n  si es solo ese dia o todas las semanas.");
+    }
+
+    /** E-454: el dueño vio "abrumada"; las instrucciones hablan de "la persona" en femenino. */
+    @Test
+    @DisplayName("E-454: el trato neutro aclara que el femenino de las instrucciones es solo gramatica")
+    void tratoNeutroAunqueLasInstruccionesDigan_laPersona() {
+        assertThat(renderizar("")).contains("persona\" o \"ella\" es solo gramatica: no le hables en femenino ni en masculino.");
+        // E-456: "dejas de ser reactiva" al parafrasear el material, con un dueño hombre.
+        // E-457: la linea "Trato:" de la situacion manda sobre el genero.
+        assertThat(renderizar("")).contains("**El genero con que le escribes lo dice la linea \"Trato:\"**")
+                .contains("concuerda TODO en ese genero, tambien lo que cuentas del material.");
+        assertThat(renderizar("")).contains("Tambien al contarle lo que dice el material del programa: di \"dejar de\n  reaccionar\" y no \"dejas de ser reactiva\"")
+                .contains("si el material habla en masculino o femenino, pasalo a neutro.");
+    }
+
     @Test
     @DisplayName("D-230: ningun habito es de mañana, tarde o noche por su nombre")
     void cualquierHabitoACualquierHora() {

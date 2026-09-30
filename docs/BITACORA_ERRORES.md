@@ -8409,6 +8409,12 @@ modelo vuelve a llamar con el nombre bien escrito.
 cualquier `IllegalStateException` de Spring AI en el streaming, mirar primero el nombre de la
 herramienta que pidió el modelo en el `WARN` anterior.
 
+> **Corregido 2026-09-30 (E-454).** Esta entrada daba el caso por resuelto. No lo estaba: el manager con
+> el resolver lo recibía solo el `GoogleGenAiChatModel`, y en Spring AI 2.0 las herramientas del chat las
+> ejecuta el `ToolCallingAdvisor` que `ChatClient.create(chatModel)` registra con un
+> `DefaultToolCallingManager` propio, sin resolver. `ResolverDeHerramientasDesconocidasTest` probaba el
+> resolver suelto, no el camino del chat. Ver E-454.
+
 ## E-248 · Al llegar al tope diario de mensajes, la app no recibía el aviso: el 429 no se podía escribir en el stream
 
 **Síntoma.** Misma batería, al pasar el mensaje 25 del día. En el log, literal:
@@ -12257,3 +12263,178 @@ falla al leer como S3 sin `ListBucket` y la tarjeta igual sale con imagen; falla
 `ListBucket` un objeto ausente da 403. Para algo que el servidor mismo publica, subirlo sin preguntar. Si algún
 día hace falta saber si existe, dar `s3:ListBucket` al rol o tratar el 403 de un objeto propio como ausente, con
 prueba del caso.
+
+## E-454 · SER no respondía «mejor no, entonces apagala solo el sabado»: `No ToolCallback found for tool name: proponer_horario_por_dia_semana` (backend, RESUELTO, 30/09)
+
+**Síntoma.** Con IA real (`gemini-3.5-flash-lite`), después de «pausa escritura libre nocturna hasta el
+domingo» (queda la propuesta de pausa), «mejor no, entonces apagala solo el sabado» mostraba en la app
+«No pude responder en este momento 🙏 Intenta de nuevo en unos segundos.» y en `mensajes_renasia` quedaba la
+pregunta sin respuesta. Siempre con ese caso (batería #14 del 29/09 y del 30/09). Reproducido en un backend
+propio en :8086 con la cuenta e2e-aprendiz. En el log, literal:
+
+```
+WARN o.s.a.m.tool.DefaultToolCallingManager   : LLM may have adapted the tool name 'proponer_horario_por_dia_semana', especially if the name was truncated due to length limits. ...
+WARN c.r.o.r.a.s.ConversacionRenasiaService   : Fallo el streaming de respuesta del asistente
+java.lang.IllegalStateException: No ToolCallback found for tool name: proponer_horario_por_dia_semana
+	at org.springframework.ai.model.tool.DefaultToolCallingManager.executeToolCall(DefaultToolCallingManager.java:206)
+	at org.springframework.ai.model.tool.DefaultToolCallingManager.executeToolCalls(DefaultToolCallingManager.java:135)
+	at org.springframework.ai.chat.client.advisor.ToolCallingAdvisor.lambda$handleToolCallRecursion$4(ToolCallingAdvisor.java:310)
+```
+
+**Causa real.** Es el mismo nombre mal escrito de E-247 (el modelo le come el «de» a
+`proponer_horario_por_dia_de_semana`), y el arreglo de E-247 nunca estuvo en el camino del chat. El
+`ToolCallingManager` tolerante (`ResolverDeHerramientasDesconocidas`) se le daba al `GoogleGenAiChatModel`,
+pero `GoogleGenAiRenasiaChatAdapter` arma su cliente con `ChatClient.create(chatModel)`, y en Spring AI 2.0
+eso auto-registra un `ToolCallingAdvisor` con un `DefaultToolCallingManager` NUEVO, sin resolver
+(`DefaultChatClientBuilder`, verificado en el bytecode y en las fuentes de `spring-ai-client-chat:2.0.0`). El
+advisor es quien ejecuta las herramientas, así que un nombre inexistente seguía lanzando y tumbando el
+turno. La pendiente de pausa no tenía nada que ver: el vencimiento de propuestas se deriva al leer
+(`PropuestaAccion.estaVencidaEn`, en todas las lecturas), y otras preguntas con pendiente respondían porque
+el modelo no escribía mal ningún nombre.
+
+Además, con el turno ya a salvo, el modelo a veces proponía apagarlo **todos** los sábados
+(`proponer_horario_por_dia_de_semana`) en vez de solo el sábado 03/10: el prompt no distinguía un día
+concreto de un día de la semana que se repite.
+
+**Solución.**
+- `GoogleGenAiClientesConfig` expone el manager tolerante como bean (`toolCallingManagerTolerante`), y lo
+  usan el modelo y el adaptador: `ChatClient.builder(chatModel, …, ToolCallingAdvisor.builder()
+  .toolCallingManager(herramientasTolerantes))`. Ahora el modelo recibe «No existe… Quisiste decir
+  'proponer_horario_por_dia_de_semana'» y sigue.
+- `renasia-sistema.st`: nuevo punto «Un dia o todas las semanas» («solo el sabado» es un día:
+  `proponer_apagar_dia`; solo «todos los sabados» / «los sabados» es la herramienta semanal). En el mismo
+  cambio, tres detalles que vio el dueño hoy: la sección de cursos se llama Classroom (en Comunidad), no
+  «Recursos Exclusivos»; si preguntan quién es, dice «SER»; y el trato neutro aclara que el femenino de
+  «la persona» en las instrucciones es solo gramática («abrumada»).
+- Prueba `GoogleGenAiRenasiaChatAdapterTest.herramientaMalEscritaNoTumbaElTurno`: el modelo simulado pide
+  `proponer_horario_por_dia_semana`, recibe la sugerencia y responde; con `ChatClient.create(chatModel)` de
+  vuelta falla con la misma `IllegalStateException` del log. Más `PromptSistemaRenasiaTest` (el punto nuevo,
+  Classroom, «eres SER», el trato neutro).
+
+**Verificado con IA real** (backend :8086, e2e): las dos frases seguidas → la segunda responde y deja
+«Apagar 'ESCRITURA LIBRE NOCTURNA' solo el sábado 2026-10-03: ese dia no se le va a pedir.» (herramientas:
+`consultar_horarios`, `proponer_apagar_dia`). La pendiente de pausa queda como estaba: se cancela con su botón
+o vence sola.
+
+**Cómo evitar que vuelva a pasar.**
+- Un arreglo sobre herramientas del chat se prueba por el `GoogleGenAiRenasiaChatAdapter` (el
+  `ChatClient` real con un `ChatModel` simulado que pide la herramienta), no sobre la pieza suelta:
+  E-247 tenía prueba del resolver y el resolver no estaba conectado.
+- En Spring AI 2.0 las herramientas las ejecuta el `ToolCallingAdvisor` del `ChatClient`, no el
+  `ChatModel`. Configurar el `ToolCallingManager` del modelo no alcanza; cualquier `ChatClient` nuevo con
+  herramientas se arma con `ToolCallingAdvisor.builder().toolCallingManager(...)`.
+- Para ver qué herramientas llama el modelo en un backend local:
+  `LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_AI_MODEL_TOOL=DEBUG` («Executing tool call: …»).
+
+## E-455 · SER decía que los hábitos «ya vencieron», proponía una acción en vez de cambiar la hora de un hábito, y hablaba «desde el material del programa» sin material (backend + prompt, RESUELTO, 30/09)
+
+**Síntomas** (el dueño, probando con IA real el 30/09; reproducidos en :8086 con cuentas e2e):
+1. «¿qué hábitos me faltan hoy?» → «el agua tibia y el ritual de la mañana ya vencieron pero igual puedes
+   hacerlos», con los dos registros en `PENDIENTE`. Tampoco decía cuántos faltaban ni en qué dimensión.
+2. «mañana quiero hacer caminar 40 minutos a las 7 de la noche», con el hábito «Caminar 40 minutos» en su
+   plan → propuesta de `proponer_agregar_accion` (una roca nueva) en vez de cambiarle la hora al hábito.
+3. «¿qué me enseña el programa sobre la intoxicación y la desintoxicación?» con `base_conocimiento` vacía →
+   «En el material del programa…» y algo genérico, y lo mandó a Sparkie.
+4. Se presentó como «el acompañante del programa» y usó «abrumada» sin saber el género (ver E-454).
+
+**Causa real.**
+1. Lo decían nuestras herramientas, no el modelo: `consultar_habitos_del_dia` escribía `ya_vencio=si` y
+   «N ya vencieron hoy: no los cuentes como pendientes», y la situación del turno decía «vencido (se le paso la
+   hora)». En `habits` un registro pasado de hora (o EXPIRADO) **se puede completar** y paga 0
+   (`EstadoRegistro.completable`). Además la herramienta no traía la dimensión ni la hora del hábito, así que
+   el modelo no podía agrupar ni priorizar.
+2. Nada impedía usar `proponer_agregar_accion` con el nombre de un hábito, y el prompt no decía que «hábito +
+   hora + día» es un cambio de hora.
+3. El texto de contexto vacío solo decía «no se recupero contexto», y la regla de fuentes no prohibía
+   explícitamente hablar «desde el programa» sin fragmentos. La sección de Sparkie no aclaraba que lo que
+   enseña el programa de 90 días (fases, intoxicación, ciclo alquímico) es de SER.
+
+**Solución.**
+- `habits.api.HabitoEnJuegoResumen` suma `horaInicio` (la resuelta, con preferencia) y `categoriaClave`
+  (`AgendaDelDiaFinderService`, una consulta para todo el día); en `rag`, `HabitoDelDia` suma `horaInicio` y
+  `dimension` (etiqueta de `DimensionDelHabito`).
+- `LoQueLeFaltaHoy` arma el texto de `consultar_habitos_del_dia`: «Le faltan N de M… Por dimension: Cuerpo 13,
+  Mente 8…», la lista en orden (primero los que dan puntos, cada grupo por hora), `ya_no_da_puntos (paso su
+  hora; igual puede hacerlo)` y nunca «vencio». Mismo criterio en la situación del turno
+  (`HabitosDeHoyEnElPrompt`), en `proponer_registrar_con_foto` y en `consultar_tiempo_para_puntos` («sus puntos
+  se acaban a las…»).
+- `proponer_agregar_accion` no propone una acción que nombra un hábito del plan (título de 4+ letras, como
+  palabras): devuelve el camino de `proponer_cambio_de_horario` con la fecha. Si la persona pidió de verdad una
+  acción aparte, el modelo reintenta con `accion_aparte='si'`.
+- Prompt: «Un habito no vence», «que le falta» corto (total, dimensión, 2 o 3 primeros), hábito con hora para
+  un día = cambio de hora, «a qué hora me conviene» con `buscar_huecos_para_habitos` y un motivo de su agenda
+  guardada (sin inventar ocupaciones), sin material no se dice «en el material del programa», y lo del
+  programa no se manda a Sparkie. `formatearContexto` vacío lo dice con todas las letras.
+- Decisión del dueño registrada como D-231.
+
+**Pruebas que fallan contra el código viejo:** `LoQueLeFaltaHoyTest` (conteo por dimensión, orden, sin
+«vencio»), `HerramientasAgenteServiceTest.vencidoNoCuenta` (reescrita: antes fijaba el comportamiento viejo),
+`AgendaDelDiaFinderServiceTest.traeHoraYDimension`, `AjustesDeRocasHerramientasTest.unHabitoNoEsUnaAccion` y
+`accionAparteSePropone`, `PromptSistemaRenasiaTest.reglasDelTreintaDeSetiembre` y `renderizaConContextoVacio`.
+
+**Verificado con IA real** (:8086, e2e-libre10, con «Caminar» creado y la agenda L-V 09–18 guardada por
+SER + confirmar; 4 lecciones indexadas localmente, 35 embeddings):
+- «que habitos me faltan hoy?» → «Te faltan 16 hábitos: Cuerpo 7, Espíritu 5, Mente 3, Emociones 1. Tienes
+  pendientes el Día sin celular, Pastilla Renacer y Audioterapia semanal ✨…»
+- «manana quiero hacer caminar 40 minutos a las 7 de la noche» → tarjeta «Cambiar 'Caminar' solo el jueves
+  2026-10-01, de 18:00 a 19:00…» (`consultar_horarios`, `proponer_cambio_de_horario`).
+- «a que hora me conviene hacer escritura libre nocturna?» → «Te conviene hacerla a las 21:30… ya con la tarde
+  libre después del trabajo» (`buscar_huecos_para_habitos`).
+- Intoxicación, día 4: cita Fase I Clase 2 (fuentes: solo esa lección); la de Fase IV la ve el día 87 y no el
+  día 4 (el filtro por lecciones desbloqueadas funciona). Día 0 (sin lecciones visibles): «No encontré eso en el
+  material del programa que tengo registrado hoy…», sin afirmar nada del programa.
+
+**Cómo evitar que vuelva a pasar.**
+- Lo que el modelo dice de un hábito sale casi textual de nuestras herramientas: una palabra de dominio
+  equivocada en un `ResultadoHerramienta` («vencio») termina en la boca de SER. Antes de nombrar un estado para
+  el modelo, mirar qué permite `habits` (acá: EXPIRADO es completable).
+- Una prueba que fija un texto viejo («no los cuentes como pendientes») se reescribe con su porqué cuando la
+  regla cambia; no se borra.
+- Pendiente, no arreglado aquí: el modelo todavía se escapa a veces con el género («volverte creadora»), aunque
+  el prompt lo prohíbe. Si se repite en la batería, pensar una revisión del texto antes de enviarlo.
+
+## E-456 · «solo el sábado» seguía saliendo como «todos los sábados», y «dejas de ser reactiva» al citar el material (backend + prompt, RESUELTO, 30/09)
+
+**Síntoma.** Probando la rama de E-454/E-455 en el emulador del dueño: a «mejor no, entonces apagala solo el
+sabado» SER respondió, pero con la tarjeta «Apagar 'ESCRITURA LIBRE NOCTURNA' los sábado, todas las semanas,
+hasta que lo vuelva a activar». Y en una respuesta con material del programa dijo «dejas de ser reactiva» (el
+dueño es hombre).
+
+**Causa real.** La regla «Un dia o todas las semanas» estaba solo en el prompt, y el modelo (flash-lite) a veces
+la ignora: elige `proponer_horario_por_dia_de_semana`, que nada frenaba. El trato neutro del prompt hablaba de
+cómo dirigirse a la persona, y el modelo copió el género del material al parafrasearlo.
+
+**Solución.**
+- `UnDiaOCadaSemana` lee el último mensaje de la persona al acompañante (lo guarda `ConversacionRenasiaService`
+  antes de llamar al modelo; solo si es de los últimos 2 minutos). Si nombra el día en singular y sin
+  «los / todos los / cada» ni «todas las semanas», `proponer_horario_por_dia_de_semana` (apagar o fijar) no
+  propone: devuelve «La persona pidio un solo sabado… Usa proponer_apagar_dia con la fecha <próximo sábado>. Si
+  no queda claro…, preguntaselo.» Un «sí» que no nombra el día no se bloquea.
+- Prompt: la regla con los ejemplos «el sabado» / «cada sabado» y «si no queda claro, preguntale»; y el trato
+  neutro también al contar el material («dejar de reaccionar», no «dejas de ser reactiva»).
+- Pruebas: `UnDiaOCadaSemanaTest` (frases, y el mensaje viejo fuera de la ventana no decide),
+  `PropuestaDeHorarioPorDiaDeSemanaTest.unSoloDiaNoEsSemanal` (sin la guarda se proponía), `PromptSistemaRenasiaTest`.
+
+**Cómo evitar que vuelva a pasar.** Una regla del prompt que decide algo que dura (un cambio de todas las
+semanas) no alcanza con flash-lite: si se puede decidir leyendo lo que escribió la persona, se decide en la
+herramienta y el prompt queda como explicación.
+
+## E-457 · «dejas de ser reactiva y decides cómo responder como creadora» a un hombre, aunque el prompt pedía trato neutro (backend + prompt, RESUELTO, 30/09)
+
+**Síntoma.** En el emulador del dueño (hombre), con la rama de E-456, una respuesta que parafraseaba el material
+del programa dijo «dejas de ser reactiva y decides cómo responder como creadora».
+
+**Causa real.** SER no sabía el género de la persona y el trato neutro era solo una instrucción del prompt;
+flash-lite la pierde al parafrasear un material que habla en femenino o masculino. El dato existía: la pregunta
+`sex` de la ficha inicial (SELECCION_UNICA, opciones «Masculino» y «Femenino» en `opciones_pregunta`).
+
+**Solución.** `onboarding.api.TratoDeLaPersonaFinder` (implementado por `TratoDeLaPersonaService` con
+`LeerRespuestasPorClavePort`, sin SQL ajeno) devuelve MASCULINO, FEMENINO o NEUTRO (sin dato u otro valor).
+`rag` lo lee por su puerto `ConsultarTratoDeLaPersonaPort`; `SituacionDelTurnoService` lo agrega a la situación
+(neutro si falla la lectura) y el prompt recibe «Trato: masculino. Todo lo que le escribes concuerda en
+masculino…, tambien lo que parafraseas del material.» (o femenino, o neutro). La regla del prompt manda
+concordar con esa línea. Pruebas: `TratoDeLaPersonaServiceTest`, `SituacionDelTurnoServiceTest.tratoDeLaFicha`,
+`HabitosDeHoyEnElPromptTest.tratoEnLaSituacion`, `PromptSistemaRenasiaTest`.
+
+**Cómo evitar que vuelva a pasar.** Lo que el modelo tiene que concordar en cada frase (género, fecha, día) va
+como dato en la situación del turno, no como una prohibición: una regla negativa se pierde al parafrasear.

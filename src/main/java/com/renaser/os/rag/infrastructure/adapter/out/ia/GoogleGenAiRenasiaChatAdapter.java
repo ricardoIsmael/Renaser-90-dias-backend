@@ -4,17 +4,21 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
+import com.renaser.os.rag.application.ports.out.participante.ConsultarTratoDeLaPersonaPort;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
+import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ClassPathResource;
@@ -91,14 +95,26 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
      * be found}. Es el mismo criterio que ya siguen `RedisChatPublisher`, `PgVectorNativoAdapter`
      * y `EventoRenasiaSseMapper`.
      */
-    GoogleGenAiRenasiaChatAdapter(ChatModel chatModel, EjecutarHerramientaAgenteUseCase herramientasUseCase) {
-        this.chatClient = ChatClient.create(chatModel);
+    GoogleGenAiRenasiaChatAdapter(ChatModel chatModel, EjecutarHerramientaAgenteUseCase herramientasUseCase,
+                                  ToolCallingManager herramientasTolerantes) {
+        this.chatClient = chatClientCon(chatModel, herramientasTolerantes);
         this.herramientasUseCase = herramientasUseCase;
         this.json = new ObjectMapper();
         this.promptAcompanante = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_ACOMPANANTE));
         this.promptTutorCursos = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_TUTOR_CURSOS));
         this.modoVoz = new PromptTemplate(new ClassPathResource(RECURSO_MODO_VOZ)).render();
         this.seccionDeMemoria = new PromptTemplate(new ClassPathResource(RECURSO_MEMORIA));
+    }
+
+    /**
+     * E-454: {@code ChatClient.create(chatModel)} ejecuta las herramientas con un
+     * {@code ToolCallingAdvisor} propio y un {@code DefaultToolCallingManager} sin nuestro resolver,
+     * asi que un nombre mal escrito por el modelo tumbaba el turno aunque el modelo tuviera el
+     * manager tolerante (E-247). El advisor tiene que llevar ESE manager.
+     */
+    private static ChatClient chatClientCon(ChatModel chatModel, ToolCallingManager herramientasTolerantes) {
+        return ChatClient.builder(chatModel, ObservationRegistry.NOOP, null, null,
+                ToolCallingAdvisor.builder().toolCallingManager(herramientasTolerantes)).build();
     }
 
     /**
@@ -255,16 +271,42 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
         }
         String fecha = situacion.hoy() == null ? "" : situacion.hoy().format(FECHA_DE_HOY) + ", ";
         return "Hoy es " + fecha + "su dia " + situacion.diaPrograma() + " de 90, en la fase " + situacion.fase()
-                + " de 4.\n" + HabitosDeHoyEnElPrompt.texto(situacion.habitos());
+                + " de 4.\n" + tratoDe(situacion.trato()) + "\n" + HabitosDeHoyEnElPrompt.texto(situacion.habitos());
+    }
+
+    /**
+     * E-457: el genero con que se le escribe, ya decidido (pregunta {@code sex} de la ficha inicial).
+     * Con el prompt solo, flash-lite le escribio "dejas de ser reactiva" a un hombre al parafrasear el
+     * material. Sin dato, neutro.
+     */
+    static String tratoDe(ConsultarTratoDeLaPersonaPort.TratoDeLaPersona trato) {
+        return switch (trato == null ? ConsultarTratoDeLaPersonaPort.TratoDeLaPersona.NEUTRO : trato) {
+            case MASCULINO -> "Trato: masculino. Todo lo que le escribes concuerda en masculino (\"cansado\", "
+                    + "\"creador\"), tambien lo que parafraseas del material.";
+            case FEMENINO -> "Trato: femenino. Todo lo que le escribes concuerda en femenino (\"cansada\", "
+                    + "\"creadora\"), tambien lo que parafraseas del material.";
+            case NEUTRO -> "Trato: neutro (sin dato). Nada con genero sobre la persona, tampoco al parafrasear el "
+                    + "material: \"dejar de reaccionar\", no \"reactiva\" ni \"reactivo\".";
+        };
     }
 
     /** "viernes 25/09/2026": con el año, para que el modelo arme bien "el 2 de octubre" (bateria, #41). */
     private static final java.time.format.DateTimeFormatter FECHA_DE_HOY =
             java.time.format.DateTimeFormatter.ofPattern("EEEE dd/MM/yyyy", java.util.Locale.forLanguageTag("es"));
 
+    /**
+     * E-455: con la base vacia para una pregunta, el acompanante igual abrio con "En el material del
+     * programa..." y respondio algo generico. El texto lo dice ahora con todas las letras.
+     */
+    static final String SIN_MATERIAL = "(no se recupero contexto de la base de conocimiento para esta pregunta: "
+            + "NO hay material del programa sobre esto. No digas \"en el material del programa\" ni cites lecciones; "
+            + "si te preguntan lo que ensena el programa, di en una linea que no lo encontraste en el material "
+            + "que tienes, y no afirmes que el programa dice o ensena algo sobre eso. Si sigues, es orientacion "
+            + "general y lo dices asi.)";
+
     static String formatearContexto(List<String> contexto) {
         if (contexto.isEmpty()) {
-            return "(no se recupero contexto de la base de conocimiento para esta pregunta)";
+            return SIN_MATERIAL;
         }
         StringBuilder resultado = new StringBuilder();
         for (String fragmento : contexto) {

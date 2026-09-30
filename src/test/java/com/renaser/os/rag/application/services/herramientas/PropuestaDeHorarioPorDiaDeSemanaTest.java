@@ -40,8 +40,28 @@ class PropuestaDeHorarioPorDiaDeSemanaTest {
 
     private final ConsultarHorariosPort horarios = mock(ConsultarHorariosPort.class);
     private final ProponerAccionUseCase proponer = mock(ProponerAccionUseCase.class);
+    private final UnDiaOCadaSemana unDiaOCadaSemana = mock(UnDiaOCadaSemana.class);
     private final PropuestaDeHorarioPorDiaDeSemana herramienta = new PropuestaDeHorarioPorDiaDeSemana(horarios,
-            proponer);
+            proponer, unDiaOCadaSemana);
+
+    /**
+     * E-456: a "mejor no, entonces apagala solo el sabado" el modelo propuso apagarlo todos los sabados.
+     * Si la persona nombro un solo dia, no se propone lo semanal: se manda a apagar ese dia.
+     */
+    @Test
+    @DisplayName("E-456: si pidio un solo dia, apagar semanal no se propone y manda a proponer_apagar_dia")
+    void unSoloDiaNoEsSemanal() {
+        hoyYProximoLunes(new CuotaCambios(1, 2, 3, false), false);
+        when(unDiaOCadaSemana.pidioUnSoloDia(APRENDIZ, java.time.DayOfWeek.MONDAY)).thenReturn(true);
+
+        var resultado = herramienta.ejecutar(APRENDIZ, pedido("dia_semana", "lunes", "accion", "apagar"));
+
+        assertThat(resultado).isEqualTo(com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta.fallo(
+                "La persona pidio un solo lunes, no todos los lunes: no se propone un cambio de todas las semanas. "
+                        + "Usa proponer_apagar_dia con la fecha 2026-09-14 (el proximo lunes). Si no queda claro si "
+                        + "es solo ese dia o todas las semanas, preguntaselo."));
+        org.mockito.Mockito.verifyNoInteractions(proponer);
+    }
 
     private static HorariosDelDia dia(LocalDate fecha, int diaPrograma, CuotaCambios cuota, boolean obligatorio) {
         return new HorariosDelDia(fecha, diaPrograma, List.of(new HorarioDeHabito(MEDITAR, "Meditar",

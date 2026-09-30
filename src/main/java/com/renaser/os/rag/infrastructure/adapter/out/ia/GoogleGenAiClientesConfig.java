@@ -118,6 +118,26 @@ class GoogleGenAiClientesConfig {
     }
 
     /**
+     * El {@link ToolCallingManager} que tolera un nombre de herramienta mal escrito (E-247), como bean
+     * para que lo usen el modelo Y el {@code ChatClient} del chat.
+     *
+     * <p><b>E-454 (2026-09-30).</b> Hasta hoy solo lo recibia el modelo, y en Spring AI 2.0 las
+     * herramientas del chat NO las ejecuta el modelo: {@code ChatClient.create(chatModel)} registra
+     * solo un {@code ToolCallingAdvisor} con un {@code DefaultToolCallingManager} nuevo, sin este
+     * resolver. El arreglo de E-247 nunca actuaba: "mejor no, entonces apagala solo el sabado" seguia
+     * tumbando el turno con {@code No ToolCallback found for tool name: proponer_horario_por_dia_semana}.
+     * {@code GoogleGenAiRenasiaChatAdapter} arma su {@code ChatClient} con este mismo bean.
+     */
+    @Bean
+    ToolCallingManager toolCallingManagerTolerante(ObservationRegistry observationRegistry,
+            ObjectProvider<EjecutarHerramientaAgenteUseCase> herramientas) {
+        return ToolCallingManager.builder()
+                .observationRegistry(observationRegistry)
+                .toolCallbackResolver(new ResolverDeHerramientasDesconocidas(herramientas))
+                .build();
+    }
+
+    /**
      * El {@link ToolCallingManager} es propio y no el de la autoconfiguracion (E-247): con el de
      * siempre, un nombre de herramienta mal escrito por el modelo lanza
      * {@code No ToolCallback found for tool name} y tumba el turno entero. Con
@@ -125,11 +145,7 @@ class GoogleGenAiClientesConfig {
      */
     @Bean
     GoogleGenAiChatModel googleGenAiChatModel(Client googleGenAiClient, ObservationRegistry observationRegistry,
-            GoogleGenAiChatOptions opciones, ObjectProvider<EjecutarHerramientaAgenteUseCase> herramientas) {
-        ToolCallingManager tolerante = ToolCallingManager.builder()
-                .observationRegistry(observationRegistry)
-                .toolCallbackResolver(new ResolverDeHerramientasDesconocidas(herramientas))
-                .build();
+            GoogleGenAiChatOptions opciones, ToolCallingManager tolerante) {
         return GoogleGenAiChatModel.builder()
                 .genAiClient(googleGenAiClient)
                 .options(opciones)

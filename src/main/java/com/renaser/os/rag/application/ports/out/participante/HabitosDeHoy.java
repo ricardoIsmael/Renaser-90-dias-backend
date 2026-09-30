@@ -54,6 +54,9 @@ public record HabitosDeHoy(List<HabitoDeHoy> deHoy, List<HabitoPausado> pausados
      * El estado en palabras de la persona, no el de {@code registros_habito}: {@code VENCIDO} junta
      * un registro EXPIRADO y uno PENDIENTE al que ya se le paso el plazo, que para ella son lo mismo
      * (se le paso la hora). Lo decide {@code SituacionDelTurnoService}, no el modelo.
+     *
+     * <p>E-455: {@code VENCIDO} quiere decir "ya no da puntos", no que el habito vencio: se puede
+     * completar igual (paga 0). Al modelo se le dice asi, nunca "vencido".
      */
     public enum EstadoDeHoy {
         PENDIENTE, EN_CURSO, HECHO, VENCIDO, FALLIDO

@@ -16,7 +16,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
+import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.model.tool.ToolCallingManager;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.mockito.ArgumentCaptor;
@@ -30,6 +39,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -59,12 +70,56 @@ class GoogleGenAiRenasiaChatAdapterTest {
         when(chatModel.getOptions()).thenReturn(ChatOptions.builder().build());
         when(chatModel.stream(any(Prompt.class))).thenReturn(
                 Flux.error(new ClientException(429, "RESOURCE_EXHAUSTED", "Quota exceeded")));
-        GoogleGenAiRenasiaChatAdapter adaptador = new GoogleGenAiRenasiaChatAdapter(chatModel, herramientas);
+        GoogleGenAiRenasiaChatAdapter adaptador = new GoogleGenAiRenasiaChatAdapter(chatModel, herramientas, ToolCallingManager.builder().build());
         Consulta consulta = new Consulta(AgenteConversacional.COMPANION, UserId.of(UUID.randomUUID()),
                 "hola", List.of(), null, List.of(), List.of(), null, CanalConversacion.TEXTO);
 
         assertThatThrownBy(() -> adaptador.responder(consulta).blockLast())
                 .isInstanceOf(ProveedorIaNoDisponibleException.class);
+    }
+
+    /**
+     * E-454 (bateria #14, 2026-09-30): "mejor no, entonces apagala solo el sabado" hacia que el modelo
+     * pidiera {@code proponer_horario_por_dia_semana} (sin el "de"). El manager tolerante de E-247
+     * estaba solo en el modelo, y el {@code ChatClient} ejecuta las herramientas con su propio
+     * advisor: el turno moria con {@code No ToolCallback found for tool name}. Con el codigo viejo
+     * este test termina en esa {@code IllegalStateException}.
+     */
+    @Test
+    @DisplayName("E-454: un nombre de herramienta mal escrito no tumba el turno: el modelo recibe la sugerencia y responde")
+    void herramientaMalEscritaNoTumbaElTurno() {
+        DefinicionHerramienta correcta = DefinicionHerramienta.sinParametros("proponer_horario_por_dia_de_semana", "d");
+        when(herramientas.disponibles(AgenteConversacional.COMPANION)).thenReturn(List.of(correcta));
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        AssistantMessage pideMalEscrita = AssistantMessage.builder().content("").toolCalls(List.of(
+                new AssistantMessage.ToolCall("1", "function", "proponer_horario_por_dia_semana", "{}"))).build();
+        when(chatModel.stream(any(Prompt.class))).thenReturn(
+                Flux.just(new ChatResponse(List.of(new Generation(pideMalEscrita)))),
+                Flux.just(new ChatResponse(List.of(new Generation(new AssistantMessage("Te dejo la propuesta."))))));
+        GoogleGenAiRenasiaChatAdapter adaptador = new GoogleGenAiRenasiaChatAdapter(chatModel, herramientas,
+                managerTolerante());
+
+        List<EventoRenasia> eventos = adaptador.responder(new Consulta(AgenteConversacional.COMPANION,
+                UserId.of(UUID.randomUUID()), "apagala solo el sabado", List.of(), null, List.of(),
+                List.of(correcta), null, CanalConversacion.TEXTO)).collectList().block();
+
+        assertThat(eventos).contains(new EventoRenasia.Texto("Te dejo la propuesta."));
+        assertThat(eventos.getLast()).isInstanceOf(EventoRenasia.Fin.class);
+        ArgumentCaptor<Prompt> pedidos = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel, times(2)).stream(pedidos.capture());
+        assertThat(pedidos.getAllValues().get(1).getInstructions())
+                .filteredOn(ToolResponseMessage.class::isInstance)
+                .map(mensaje -> ((ToolResponseMessage) mensaje).getResponses().getFirst().responseData())
+                .singleElement().asString().contains("Quisiste decir 'proponer_horario_por_dia_de_semana'");
+    }
+
+    /** El mismo que arma GoogleGenAiClientesConfig#toolCallingManagerTolerante. */
+    private ToolCallingManager managerTolerante() {
+        @SuppressWarnings("unchecked")
+        ObjectProvider<EjecutarHerramientaAgenteUseCase> proveedor = mock(ObjectProvider.class);
+        when(proveedor.getIfAvailable()).thenReturn(herramientas);
+        return ToolCallingManager.builder()
+                .toolCallbackResolver(new ResolverDeHerramientasDesconocidas(proveedor)).build();
     }
 
     @Test
@@ -185,7 +240,7 @@ class GoogleGenAiRenasiaChatAdapterTest {
                                       CanalConversacion canal, MemoriaDeRenasia memoria) {
         when(chatModel.getOptions()).thenReturn(ChatOptions.builder().build());
         when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.empty());
-        GoogleGenAiRenasiaChatAdapter adaptador = new GoogleGenAiRenasiaChatAdapter(chatModel, herramientas);
+        GoogleGenAiRenasiaChatAdapter adaptador = new GoogleGenAiRenasiaChatAdapter(chatModel, herramientas, ToolCallingManager.builder().build());
 
         adaptador.responder(new Consulta(agente, UserId.of(UUID.randomUUID()),
                 "hola", List.of(), null, List.of(), List.of(), situacion, canal, memoria)).blockLast();
