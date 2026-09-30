@@ -29,6 +29,12 @@ public interface ConversarEnVivoUseCase {
         /** PCM de 16 bits, mono, 16 kHz. */
         void recibirAudio(byte[] pcm16kHz);
 
+        /**
+         * La persona toco el orbe para decir "ya termine de hablar": el modelo contesta sin esperar
+         * el silencio que usa la deteccion de voz (1,5 s, D-171). La conversacion sigue abierta.
+         */
+        void terminoDeHablar();
+
         /** La persona cerro el orbe o se corto la conexion. Idempotente. */
         void terminar();
     }

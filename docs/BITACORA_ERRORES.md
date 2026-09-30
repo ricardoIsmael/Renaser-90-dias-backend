@@ -12438,3 +12438,61 @@ concordar con esa línea. Pruebas: `TratoDeLaPersonaServiceTest`, `SituacionDelT
 
 **Cómo evitar que vuelva a pasar.** Lo que el modelo tiene que concordar en cada frase (género, fecha, día) va
 como dato en la situación del turno, no como una prohibición: una regla negativa se pierde al parafrasear.
+
+## E-458 · «Noto latencia al hablar y recibir su respuesta… la respuesta se entrecorta» en la voz en vivo (backend + prompt + app, RESUELTO en código, falta APK, 30/09)
+
+**Síntoma.** El dueño, con el APK 1.5.0 build 87 contra producción: *«noto latencia al hablar y recibir su
+respuesta, se demora mucho… la respuesta se entrecorta… que siga fluido como Gemini con streaming, y luego que
+mande el mensaje de confirmación del hábito»*. En los logs de producción (19:02–19:06 UTC) había una conexión
+nueva al socket `GET /api/v1/renasia/voz/en-vivo` cada 15–25 s y herramientas en serie
+(`consultar_habitos_del_dia` → `consultar_horarios` → `proponer_cambio_de_horario`).
+
+**Causa real (medida con un backend local, la key de pruebas y audio de Piper; ms).**
+
+1. **Una sesión por pregunta.** En la app, tocar el orbe con la conversación abierta la CERRABA, y el rótulo
+   decía «Te escucho… toca de nuevo para terminar». Cada pregunta pagaba abrir la sesión con Gemini
+   (1585–2367 ms en local; ~3,8 s documentados en producción) con el micrófono todavía apagado, y el modelo
+   arrancaba sin lo hablado antes. Eso son las conexiones cada 15–25 s del log.
+2. **Esperar el silencio.** Con la detección de voz de D-171 (1500 ms de silencio, `END_SENSITIVITY_LOW`), del
+   fin del habla a la primera voz pasaban **2381–4144 ms** sin herramientas.
+3. **Herramientas en silencio.** Cada herramienta tarda 18–325 ms en correr (log nuevo), pero el modelo tarda
+   **~1,5 s** en volver a hablar después de cada una. Con una: 3401–8032 ms hasta la primera voz; con tres en
+   serie, varios segundos de silencio.
+4. **Cortes al reproducir (probables; no se pudo observar en un teléfono).** El audio llega más rápido que el
+   tiempo real (14 s de voz en 3,2–7,5 s; simulando el parlante sin colchón, 0 huecos en todas las corridas),
+   así que la red y el backend no lo explican. Lo que sí hay en el teléfono: el parlante nativo de
+   `expo-two-way-audio` 0.1.2 encola en un `LinkedList` que escriben dos hilos a la vez, con un `isPlaying` sin
+   candado (un pedazo puede perderse o quedar trabado), con el búfer mínimo del `AudioTrack`, y sin forma de
+   vaciarlo; además cada pedazo de transcripción volvía a dibujar Hoy entera, y la tarjeta de la propuesta
+   aparecía a mitad de la respuesta (la herramienta corre antes de que el modelo termine de hablar).
+
+**Solución.**
+
+- **Backend.** Evento nuevo de la app, `{"tipo":"finDeHabla"}` («ya terminé»): el backend le manda a Gemini
+  1,7 s de silencio de golpe y el detector cierra el turno enseguida. `audioStreamEnd`, que es lo que sugiere la
+  documentación, **no sirve** con `gemini-3.8-live`: sin más audio el modelo esperó ~20 s sin contestar (medido).
+  El prompt (`modo-en-vivo.st`) pide una frase corta en voz alta antes de usar una herramienta («Déjame revisar
+  tus hábitos»), sin adelantar datos. `TurnoDeVoz` distingue el `turnComplete` intermedio por «pidió una
+  herramienta y no habló después», no por «no dijo nada en todo el turno» (con la frase de aviso, el turno se
+  cerraba con la frase sola). Logs nuevos, solo números: `sesion abierta (preparar X ms, proveedor Y ms)`,
+  `herramienta … (N ms)`, `primera voz a N ms de lo oido`.
+- **App.** UNA conversación abierta: tocar es «ya terminé» (escuchando), «cállate» (hablando) o nada
+  (pensando); se cierra manteniendo presionado, al pasar la app a segundo plano o tras 45 s sin que nadie hable.
+  El micrófono se prende al tocar y lo dicho mientras conecta se guarda y se manda al quedar lista. La
+  transcripción se muestra de a tandas de 150 ms. Las tarjetas esperan a que termine la respuesta y el orbe se
+  calle (máximo 20 s; al cerrar salen todas). Parche nativo (`scripts/arreglar-parlante-two-way-audio.js`): cola
+  segura entre hilos, arranque bajo candado, búfer de 200 ms y `clearPlayback()` para callarlo al instante.
+
+**Medido después (mismo banco).** Conexión: una sola vez por conversación. Fin del habla → primera voz, tocando
+«ya terminé»: **1394–1705 ms** sin herramienta (antes 2381–4144) y **1572–1907 ms** con herramienta (antes
+3401–8032; lo primero que suena es la frase de aviso, los datos llegan ~2,5–3,5 s después). Sin tocar, el
+detector sigue esperando su silencio (2322 ms): eso es D-171 y no se tocó. Detalle en D-232.
+
+**Qué queda sin verificar.** Los cortes de reproducción y el parche nativo solo se pueden probar en un teléfono,
+con un APK nuevo (el Kotlin parchado compila: `:speechmatics-expo-two-way-audio:compileReleaseKotlin`). La
+interrupción hablando sigue apagada (semidúplex, E-238): se calla tocando.
+
+**Cómo evitar que vuelva a pasar.** Antes de culpar al modelo por la latencia, medir por etapa con el log nuevo
+(conexión, herramienta, primera voz). Un toque que cierra una sesión cara no puede estar al alcance del gesto
+más común. Y una propiedad de la documentación de una API en vivo (`audioStreamEnd`) se verifica contra el
+modelo real antes de apoyarse en ella: `MensajesGeminiLiveTest.finDeAudio` fija que se usa silencio.

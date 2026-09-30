@@ -94,7 +94,7 @@ class VozEnVivoWebSocketIT {
     }
 
     @Test
-    @DisplayName("con sesion: listo, audio en los dos sentidos (tambien un frame de mas de 8 KB), fin y cierre 1013")
+    @DisplayName("con sesion: listo, audio en los dos sentidos (tambien un frame de mas de 8 KB), finDeHabla, fin y cierre 1013")
     void conversacionPorElSocket() throws Exception {
         String token = sesionDe(sesiones, actor);
         ConversacionGrabada conversacion = new ConversacionGrabada();
@@ -118,6 +118,12 @@ class VozEnVivoWebSocketIT {
 
         salida.get().audio(new byte[]{1, 2});
         assertThat(cliente.recibido.poll(5, TimeUnit.SECONDS)).isEqualTo("binario 2");
+
+        // E-458: «ya terminé» no cierra; la conversacion sigue recibiendo audio.
+        socket.sendText("{\"tipo\":\"finDeHabla\"}", true).get(5, TimeUnit.SECONDS);
+        assertThat(conversacion.recibido.poll(5, TimeUnit.SECONDS)).isEqualTo("finDeHabla");
+        socket.sendBinary(ByteBuffer.wrap(new byte[3_200]), true).get(5, TimeUnit.SECONDS);
+        assertThat(conversacion.recibido.poll(5, TimeUnit.SECONDS)).isEqualTo("audio 3200");
 
         socket.sendText("{\"tipo\":\"fin\"}", true).get(5, TimeUnit.SECONDS);
         assertThat(conversacion.recibido.poll(5, TimeUnit.SECONDS)).isEqualTo("terminar");
@@ -188,6 +194,11 @@ class VozEnVivoWebSocketIT {
         @Override
         public void recibirAudio(byte[] pcm16kHz) {
             recibido.add("audio " + pcm16kHz.length);
+        }
+
+        @Override
+        public void terminoDeHablar() {
+            recibido.add("finDeHabla");
         }
 
         @Override

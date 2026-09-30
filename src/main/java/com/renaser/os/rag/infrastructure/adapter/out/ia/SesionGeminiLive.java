@@ -39,6 +39,11 @@ final class SesionGeminiLive implements SesionEnVivo {
     }
 
     @Override
+    public void finDeAudio() {
+        enviar(MensajesGeminiLive.finDeAudio());
+    }
+
+    @Override
     public void responderHerramienta(String id, String nombre, ResultadoHerramienta resultado) {
         enviar(MensajesGeminiLive.respuestaDeHerramienta(id, nombre, resultado));
     }

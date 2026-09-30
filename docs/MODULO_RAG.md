@@ -721,6 +721,16 @@ Piezas: `ConversarEnVivoUseCase`, `ConversacionEnVivoService`, `SesionDeVozEnViv
 > `modo-en-vivo.st` suma «Deja que la persona termine»: una pausa no es el final, nunca contestar a
 > mitad de una idea, y una respuesta larga de la persona es bienvenida (la suya sigue corta).
 
+> **Corregido 2026-09-30 (E-458, D-232).** Arriba dice «Se corta tocando el orbe»: ya no. La app deja
+> **una** conversación abierta entre preguntas (antes cada toque la cerraba y cada pregunta pagaba
+> 2–4 s de conexión). Tocar mientras escucha manda `finDeHabla` y `SesionDeVozEnVivo.terminoDeHablar`
+> le da a Gemini 1,7 s de silencio de golpe (`MensajesGeminiLive.finDeAudio`): contesta en ~1,5 s en vez
+> de ~2,5 s. Tocar mientras habla lo calla (la app vacía su parlante) y sigue escuchando; mantener
+> presionado la cierra. `modo-en-vivo.st` suma «Avisa antes de consultar» (una frase corta antes de una
+> herramienta), y `TurnoDeVoz.esperandoRespuesta` pasó a «pidió una herramienta y no habló después».
+> Logs nuevos, solo números: apertura (nuestro vs. proveedor), duración de cada herramienta y espera
+> hasta la primera voz.
+
 
 ### D-163 — Las propuestas del acompañante se confirman sobre el orbe, como en un asistente de voz (2026-09-24)
 

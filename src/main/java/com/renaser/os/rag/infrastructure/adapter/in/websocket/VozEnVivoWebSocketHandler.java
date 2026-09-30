@@ -100,8 +100,13 @@ class VozEnVivoWebSocketHandler extends AbstractWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         String texto = partidos(session).juntarTexto(message.getPayload(), message.isLast());
-        if (texto != null && EventoDeVozEnVivoJson.esFin(texto)) {
-            conversacion(session).terminar();
+        if (texto == null) {
+            return;
+        }
+        switch (EventoDeVozEnVivoJson.pedido(texto)) {
+            case FIN -> conversacion(session).terminar();
+            case FIN_DE_HABLA -> conversacion(session).terminoDeHablar();
+            case OTRO -> { }
         }
     }
 
@@ -181,6 +186,11 @@ class VozEnVivoWebSocketHandler extends AbstractWebSocketHandler {
         @Override
         public void recibirAudio(byte[] pcm16kHz) {
             // sin conversacion
+        }
+
+        @Override
+        public void terminoDeHablar() {
+            // nadie escucha
         }
 
         @Override
