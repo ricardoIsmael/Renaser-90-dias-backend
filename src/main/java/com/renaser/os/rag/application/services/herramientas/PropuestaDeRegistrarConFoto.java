@@ -95,8 +95,8 @@ public class PropuestaDeRegistrarConFoto implements HerramientaAgente {
         String motivo = switch (habito.estado()) {
             case "PENDIENTE", "EN_CURSO" -> null;
             case "COMPLETADO" -> titulo + " ya esta registrado hoy: no hace falta otra foto.";
-            case "EXPIRADO" -> titulo + " ya vencio hoy: registrarlo ahora no suma puntos. Si igual lo hizo, "
-                    + "puede subir la foto desde Hoy.";
+            case "EXPIRADO" -> titulo + " ya no da puntos hoy (paso su hora): registrarlo ahora no suma puntos. "
+                    + "Si igual lo hizo, puede subir la foto desde Hoy.";
             default -> titulo + " ya se cerro y no se puede registrar.";
         };
         if (motivo == null && HabitoDelDia.CLAVE_CLASE_DIARIA.equals(habito.claveSistema())) {

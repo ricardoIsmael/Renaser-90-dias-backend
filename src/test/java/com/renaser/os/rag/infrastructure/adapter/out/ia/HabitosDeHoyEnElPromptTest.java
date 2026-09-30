@@ -46,7 +46,7 @@ class HabitosDeHoyEnElPromptTest {
                 ULTIMA COMIDA.
                 Los demas de hoy:
                 - MEDITAR: pendiente, pide foto
-                - CAMINAR: vencido (se le paso la hora)
+                - CAMINAR: ya no da puntos (paso su hora; igual puede hacerlo)
                 Pausados (existen, pero hoy no se le piden): DUCHA FRIA (hasta el domingo 27/09), \
                 YOGA (sin fecha de fin).""");
     }

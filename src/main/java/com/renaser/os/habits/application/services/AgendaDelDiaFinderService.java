@@ -7,7 +7,10 @@ import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseC
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.TrackDelDiaConCatalogo;
+import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
+import com.renaser.os.habits.domain.model.habito.Habito;
+import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.registro.PuntosEnJuego;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.habits.domain.model.registro.ResultadoOtorgamiento;
@@ -20,7 +23,9 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Implementa la cara publica de `habits` hacia otros modulos (hoy, las herramientas del agente
@@ -38,20 +43,36 @@ public class AgendaDelDiaFinderService implements AgendaDelDiaFinder {
     private final ConsultarTracksDelDiaConCatalogoUseCase consultarTracksUseCase;
     private final CompletarRegistroUseCase completarRegistroUseCase;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
+    private final LoadHabitoPort loadHabitoPort;
 
     public AgendaDelDiaFinderService(ConsultarTracksDelDiaConCatalogoUseCase consultarTracksUseCase,
                                       CompletarRegistroUseCase completarRegistroUseCase,
-                                      ConsultarProgresoParticipanteHabitsPort progresoPort) {
+                                      ConsultarProgresoParticipanteHabitsPort progresoPort,
+                                      LoadHabitoPort loadHabitoPort) {
         this.consultarTracksUseCase = consultarTracksUseCase;
         this.completarRegistroUseCase = completarRegistroUseCase;
         this.progresoPort = progresoPort;
+        this.loadHabitoPort = loadHabitoPort;
     }
 
     @Override
     public List<HabitoEnJuegoResumen> deHoyDe(UserId participanteId) {
-        return consultarTracksUseCase.consultarHoyDe(participanteId).stream()
-                .map(AgendaDelDiaFinderService::resumirDe)
+        List<TrackDelDiaConCatalogo> tracks = consultarTracksUseCase.consultarHoyDe(participanteId);
+        Map<HabitoId, String> dimensiones = dimensionesDe(tracks);
+        return tracks.stream()
+                .map(vista -> resumirDe(vista, dimensiones.get(vista.registro().habitoId())))
                 .toList();
+    }
+
+    /** E-455: la dimension de cada habito del dia, en UNA consulta para todo el dia. */
+    private Map<HabitoId, String> dimensionesDe(List<TrackDelDiaConCatalogo> tracks) {
+        if (tracks.isEmpty()) {
+            return Map.of();
+        }
+        return loadHabitoPort.porIds(tracks.stream().map(vista -> vista.registro().habitoId()).collect(Collectors.toSet()))
+                .stream()
+                .filter(habito -> habito.categoriaClave() != null)
+                .collect(Collectors.toMap(Habito::id, Habito::categoriaClave, (una, otra) -> una));
     }
 
     @Override
@@ -68,12 +89,13 @@ public class AgendaDelDiaFinderService implements AgendaDelDiaFinder {
                 .orElse(ZoneId.of("UTC"));
     }
 
-    private static HabitoEnJuegoResumen resumirDe(TrackDelDiaConCatalogo vista) {
+    private static HabitoEnJuegoResumen resumirDe(TrackDelDiaConCatalogo vista, String categoriaClave) {
         PuntosEnJuego enJuego = vista.puntosEnJuego();
         return new HabitoEnJuegoResumen(vista.registro().id().value(), vista.tituloHabito(),
                 vista.registro().estado().name(), enJuego != null ? enJuego.siCompletaAhora() : null,
                 enJuego != null ? enJuego.maximo() : null, enJuego != null ? enJuego.plazo() : null,
-                vista.exigeEvidencia(), tramosDe(enJuego), vista.claveSistema(), vista.tituloDelPrograma());
+                vista.exigeEvidencia(), tramosDe(enJuego), vista.claveSistema(), vista.tituloDelPrograma(),
+                vista.horaDisparo(), categoriaClave);
     }
 
     /**

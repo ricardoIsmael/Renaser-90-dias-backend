@@ -442,10 +442,33 @@ class PromptSistemaRenasiaTest {
     void renderizaConContextoVacio() {
         List<String> sinFragmentos = List.of();
 
-        String render = renderizar(sinFragmentos.isEmpty()
-                ? "(no se recupero contexto de la base de conocimiento para esta pregunta)" : "");
+        String render = renderizar(GoogleGenAiRenasiaChatAdapter.formatearContexto(sinFragmentos));
 
-        assertThat(render).contains("no se recupero contexto");
+        assertThat(render).contains("no se recupero contexto")
+                // E-455: con la base vacia abrio con "En el material del programa..." y algo generico.
+                .contains("NO hay material del programa sobre esto. No digas \"en el material del programa\"")
+                .contains("dilo en una linea (\"No encontre eso en el material del programa\nque tengo\")")
+                .contains("no afirmes que el programa dice o ensena algo sobre eso")
+                .contains("sin\ndecir que el programa ensena o dice eso.");
+    }
+
+    /** E-455 (2026-09-30): lo que vio el dueño en "que me falta", caminar a las 7 y "a que hora me conviene". */
+    @Test
+    @DisplayName("E-455: un habito no vence; lo que falta va contado y en orden; habito con hora no es accion; huecos con motivo")
+    void reglasDelTreintaDeSetiembre() {
+        String render = renderizar("");
+
+        assertThat(render).contains("**Un habito no vence.**")
+                .contains("Nunca digas que\n  un habito \"vencio\" o \"se vencio\"")
+                .doesNotContain("\"Vencido\" es que se le paso la hora")
+                .contains("cuantos le faltan y por dimension (\"Te faltan 27: Cuerpo 13,")
+                .contains("nombra solo los 2 o 3 primeros de la lista")
+                .contains("es cambiarle la hora a ESE\n  habito solo ese dia")
+                .contains("No es una accion nueva del\n  plan (proponer_agregar_accion)")
+                .contains("llama a buscar_huecos_para_habitos sin 'ocupado'")
+                .contains("\"a las 19:00 tienes un hueco libre despues del\n  trabajo\"")
+                .contains("no inventes\n  ocupaciones ni costumbres")
+                .contains("es tuyo: no lo mandes a Sparkie.");
     }
     /**
      * D-171, decision del dueno: un habito que exige evidencia se registra con la camara, directo y en

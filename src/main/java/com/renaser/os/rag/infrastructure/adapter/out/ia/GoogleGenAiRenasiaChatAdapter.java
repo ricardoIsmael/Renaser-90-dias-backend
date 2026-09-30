@@ -277,9 +277,19 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
     private static final java.time.format.DateTimeFormatter FECHA_DE_HOY =
             java.time.format.DateTimeFormatter.ofPattern("EEEE dd/MM/yyyy", java.util.Locale.forLanguageTag("es"));
 
+    /**
+     * E-455: con la base vacia para una pregunta, el acompanante igual abrio con "En el material del
+     * programa..." y respondio algo generico. El texto lo dice ahora con todas las letras.
+     */
+    static final String SIN_MATERIAL = "(no se recupero contexto de la base de conocimiento para esta pregunta: "
+            + "NO hay material del programa sobre esto. No digas \"en el material del programa\" ni cites lecciones; "
+            + "si te preguntan lo que ensena el programa, di en una linea que no lo encontraste en el material "
+            + "que tienes, y no afirmes que el programa dice o ensena algo sobre eso. Si sigues, es orientacion "
+            + "general y lo dices asi.)";
+
     static String formatearContexto(List<String> contexto) {
         if (contexto.isEmpty()) {
-            return "(no se recupero contexto de la base de conocimiento para esta pregunta)";
+            return SIN_MATERIAL;
         }
         StringBuilder resultado = new StringBuilder();
         for (String fragmento : contexto) {

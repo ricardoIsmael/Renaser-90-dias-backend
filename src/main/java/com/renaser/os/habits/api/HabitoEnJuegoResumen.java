@@ -1,6 +1,7 @@
 package com.renaser.os.habits.api;
 
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -37,13 +38,29 @@ import java.util.UUID;
  *                       programa (2026-09-26, E-290). Sin el, el acompanante no podia unir "jugo
  *                       verde" con "Batido de papaya". Del renombre solo sale el titulo: el motivo
  *                       puede tener datos de salud y no sale de {@code habits}
+ * @param horaInicio     la hora de hoy a la que le toca, ya resuelta con su preferencia si la tiene
+ *                       (la misma {@code horaDisparo} que ve la app), o {@code null} si no tiene
+ *                       horario (2026-09-30, E-455). Para ordenar "lo que falta" por el horario que
+ *                       la persona registro, y no por el orden interno de la proyeccion
+ * @param categoriaClave la dimension del habito, clave de {@code categorias_habito} (CUERPO, MENTE,
+ *                       CONSCIENCIA, ESPIRITU), o {@code null} si el habito ya no existe (E-455).
+ *                       Para decir "te faltan 27: Cuerpo 13, Mente 8..."
  */
 public record HabitoEnJuegoResumen(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
                                     Integer puntosMaximos, Instant plazo, boolean exigeEvidencia,
-                                    List<TramoPuntos> tramos, String claveSistema, String tituloDelPrograma) {
+                                    List<TramoPuntos> tramos, String claveSistema, String tituloDelPrograma,
+                                    LocalTime horaInicio, String categoriaClave) {
 
     public HabitoEnJuegoResumen {
         tramos = tramos == null ? List.of() : List.copyOf(tramos);
+    }
+
+    /** Sin hora ni dimension (lo que habia antes de E-455). */
+    public HabitoEnJuegoResumen(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
+                                Integer puntosMaximos, Instant plazo, boolean exigeEvidencia,
+                                List<TramoPuntos> tramos, String claveSistema, String tituloDelPrograma) {
+        this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, tramos, claveSistema,
+                tituloDelPrograma, null, null);
     }
 
     /** Un habito sin renombre. */

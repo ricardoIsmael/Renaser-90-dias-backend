@@ -57,6 +57,11 @@ public enum DimensionDelHabito {
                 .findFirst();
     }
 
+    /** E-455: la dimension de una clave de {@code categorias_habito}; vacio si no es ninguna de las cuatro. */
+    public static Optional<DimensionDelHabito> deClave(String claveCategoria) {
+        return Arrays.stream(values()).filter(dimension -> dimension.claveCategoria.equals(claveCategoria)).findFirst();
+    }
+
     static String sinTildes(String texto) {
         return Normalizer.normalize(texto, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
     }

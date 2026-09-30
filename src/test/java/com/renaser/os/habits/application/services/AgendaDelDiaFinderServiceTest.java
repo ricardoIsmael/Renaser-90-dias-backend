@@ -5,6 +5,9 @@ import com.renaser.os.habits.api.HabitoEnJuegoResumen.TramoPuntos;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.TrackDelDiaConCatalogo;
+import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
+import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
+import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
@@ -48,8 +51,9 @@ class AgendaDelDiaFinderServiceTest {
     private final ConsultarTracksDelDiaConCatalogoUseCase tracks = mock(ConsultarTracksDelDiaConCatalogoUseCase.class);
     private final ConsultarProgresoParticipanteHabitsPort progreso =
             mock(ConsultarProgresoParticipanteHabitsPort.class);
+    private final LoadHabitoPort habitos = mock(LoadHabitoPort.class);
     private final AgendaDelDiaFinderService service = new AgendaDelDiaFinderService(tracks,
-            mock(CompletarRegistroUseCase.class), progreso);
+            mock(CompletarRegistroUseCase.class), progreso, habitos);
 
     /** 20:00 -> 22:00 en Lima, extension por defecto: la gracia va de 23:50 a 00:00 del dia siguiente. */
     private static VentanaEntrega ventanaNocturna() {
@@ -141,5 +145,27 @@ class AgendaDelDiaFinderServiceTest {
 
         assertThat(resumen.titulo()).isEqualTo("Batido de papaya");
         assertThat(resumen.tituloDelPrograma()).isEqualTo("JUGO VERDE");
+    }
+
+    /**
+     * E-455: "que me falta hoy" se contesta por dimension y por el horario que la persona registro.
+     * Sin la hora (la resuelta, con su preferencia) ni la dimension, el acompanante no podia hacer
+     * ninguna de las dos cosas.
+     */
+    @Test
+    @DisplayName("E-455: cada habito de hoy sale con su hora resuelta y su dimension, en una sola consulta")
+    void traeHoraYDimension() {
+        HabitoId caminarId = HabitoId.of(UUID.randomUUID());
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), APRENDIZ,
+                caminarId, FECHA, 5, TipoDia.DISCIPLINA, false, Instant.parse("2026-09-23T15:00:00Z"));
+        when(tracks.consultarHoyDe(APRENDIZ)).thenReturn(List.of(new TrackDelDiaConCatalogo(registro, "Caminar",
+                TipoHabito.CHECKBOX, null, LocalTime.of(19, 0), LocalTime.of(21, 0), null, false, false)));
+        when(habitos.porIds(java.util.Set.of(caminarId))).thenReturn(List.of(Habito.crearDeSistema(caminarId,
+                "Caminar", TipoHabito.CHECKBOX, "CUERPO", ExigenciaEvidencia.OPCIONAL, Instant.EPOCH)));
+
+        HabitoEnJuegoResumen resumen = service.deHoyDe(APRENDIZ).get(0);
+
+        assertThat(resumen.horaInicio()).isEqualTo(LocalTime.of(19, 0));
+        assertThat(resumen.categoriaClave()).isEqualTo("CUERPO");
     }
 }

@@ -12325,3 +12325,70 @@ o vence sola.
   herramientas se arma con `ToolCallingAdvisor.builder().toolCallingManager(...)`.
 - Para ver qué herramientas llama el modelo en un backend local:
   `LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_AI_MODEL_TOOL=DEBUG` («Executing tool call: …»).
+
+## E-455 · SER decía que los hábitos «ya vencieron», proponía una acción en vez de cambiar la hora de un hábito, y hablaba «desde el material del programa» sin material (backend + prompt, RESUELTO, 30/09)
+
+**Síntomas** (el dueño, probando con IA real el 30/09; reproducidos en :8086 con cuentas e2e):
+1. «¿qué hábitos me faltan hoy?» → «el agua tibia y el ritual de la mañana ya vencieron pero igual puedes
+   hacerlos», con los dos registros en `PENDIENTE`. Tampoco decía cuántos faltaban ni en qué dimensión.
+2. «mañana quiero hacer caminar 40 minutos a las 7 de la noche», con el hábito «Caminar 40 minutos» en su
+   plan → propuesta de `proponer_agregar_accion` (una roca nueva) en vez de cambiarle la hora al hábito.
+3. «¿qué me enseña el programa sobre la intoxicación y la desintoxicación?» con `base_conocimiento` vacía →
+   «En el material del programa…» y algo genérico, y lo mandó a Sparkie.
+4. Se presentó como «el acompañante del programa» y usó «abrumada» sin saber el género (ver E-454).
+
+**Causa real.**
+1. Lo decían nuestras herramientas, no el modelo: `consultar_habitos_del_dia` escribía `ya_vencio=si` y
+   «N ya vencieron hoy: no los cuentes como pendientes», y la situación del turno decía «vencido (se le paso la
+   hora)». En `habits` un registro pasado de hora (o EXPIRADO) **se puede completar** y paga 0
+   (`EstadoRegistro.completable`). Además la herramienta no traía la dimensión ni la hora del hábito, así que
+   el modelo no podía agrupar ni priorizar.
+2. Nada impedía usar `proponer_agregar_accion` con el nombre de un hábito, y el prompt no decía que «hábito +
+   hora + día» es un cambio de hora.
+3. El texto de contexto vacío solo decía «no se recupero contexto», y la regla de fuentes no prohibía
+   explícitamente hablar «desde el programa» sin fragmentos. La sección de Sparkie no aclaraba que lo que
+   enseña el programa de 90 días (fases, intoxicación, ciclo alquímico) es de SER.
+
+**Solución.**
+- `habits.api.HabitoEnJuegoResumen` suma `horaInicio` (la resuelta, con preferencia) y `categoriaClave`
+  (`AgendaDelDiaFinderService`, una consulta para todo el día); en `rag`, `HabitoDelDia` suma `horaInicio` y
+  `dimension` (etiqueta de `DimensionDelHabito`).
+- `LoQueLeFaltaHoy` arma el texto de `consultar_habitos_del_dia`: «Le faltan N de M… Por dimension: Cuerpo 13,
+  Mente 8…», la lista en orden (primero los que dan puntos, cada grupo por hora), `ya_no_da_puntos (paso su
+  hora; igual puede hacerlo)` y nunca «vencio». Mismo criterio en la situación del turno
+  (`HabitosDeHoyEnElPrompt`), en `proponer_registrar_con_foto` y en `consultar_tiempo_para_puntos` («sus puntos
+  se acaban a las…»).
+- `proponer_agregar_accion` no propone una acción que nombra un hábito del plan (título de 4+ letras, como
+  palabras): devuelve el camino de `proponer_cambio_de_horario` con la fecha. Si la persona pidió de verdad una
+  acción aparte, el modelo reintenta con `accion_aparte='si'`.
+- Prompt: «Un habito no vence», «que le falta» corto (total, dimensión, 2 o 3 primeros), hábito con hora para
+  un día = cambio de hora, «a qué hora me conviene» con `buscar_huecos_para_habitos` y un motivo de su agenda
+  guardada (sin inventar ocupaciones), sin material no se dice «en el material del programa», y lo del
+  programa no se manda a Sparkie. `formatearContexto` vacío lo dice con todas las letras.
+- Decisión del dueño registrada como D-231.
+
+**Pruebas que fallan contra el código viejo:** `LoQueLeFaltaHoyTest` (conteo por dimensión, orden, sin
+«vencio»), `HerramientasAgenteServiceTest.vencidoNoCuenta` (reescrita: antes fijaba el comportamiento viejo),
+`AgendaDelDiaFinderServiceTest.traeHoraYDimension`, `AjustesDeRocasHerramientasTest.unHabitoNoEsUnaAccion` y
+`accionAparteSePropone`, `PromptSistemaRenasiaTest.reglasDelTreintaDeSetiembre` y `renderizaConContextoVacio`.
+
+**Verificado con IA real** (:8086, e2e-libre10, con «Caminar» creado y la agenda L-V 09–18 guardada por
+SER + confirmar; 4 lecciones indexadas localmente, 35 embeddings):
+- «que habitos me faltan hoy?» → «Te faltan 16 hábitos: Cuerpo 7, Espíritu 5, Mente 3, Emociones 1. Tienes
+  pendientes el Día sin celular, Pastilla Renacer y Audioterapia semanal ✨…»
+- «manana quiero hacer caminar 40 minutos a las 7 de la noche» → tarjeta «Cambiar 'Caminar' solo el jueves
+  2026-10-01, de 18:00 a 19:00…» (`consultar_horarios`, `proponer_cambio_de_horario`).
+- «a que hora me conviene hacer escritura libre nocturna?» → «Te conviene hacerla a las 21:30… ya con la tarde
+  libre después del trabajo» (`buscar_huecos_para_habitos`).
+- Intoxicación, día 4: cita Fase I Clase 2 (fuentes: solo esa lección); la de Fase IV la ve el día 87 y no el
+  día 4 (el filtro por lecciones desbloqueadas funciona). Día 0 (sin lecciones visibles): «No encontré eso en el
+  material del programa que tengo registrado hoy…», sin afirmar nada del programa.
+
+**Cómo evitar que vuelva a pasar.**
+- Lo que el modelo dice de un hábito sale casi textual de nuestras herramientas: una palabra de dominio
+  equivocada en un `ResultadoHerramienta` («vencio») termina en la boca de SER. Antes de nombrar un estado para
+  el modelo, mirar qué permite `habits` (acá: EXPIRADO es completable).
+- Una prueba que fija un texto viejo («no los cuentes como pendientes») se reescribe con su porqué cuando la
+  regla cambia; no se borra.
+- Pendiente, no arreglado aquí: el modelo todavía se escapa a veces con el género («volverte creadora»), aunque
+  el prompt lo prohíbe. Si se repite en la batería, pensar una revisión del texto antes de enviarlo.

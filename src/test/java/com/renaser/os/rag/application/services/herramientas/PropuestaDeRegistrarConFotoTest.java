@@ -102,13 +102,14 @@ class PropuestaDeRegistrarConFotoTest {
     }
 
     @Test
-    @DisplayName("ya completado, vencido o fallido: no pide la foto y dice por que")
+    @DisplayName("ya completado, sin puntos (EXPIRADO) o fallido: no pide la foto y dice por que, sin decir que vencio")
     void estadosTerminales() {
         when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(habito("COMPLETADO", true, null)));
         assertThat(fallo(pedirFoto(JUGO.toString()))).contains("ya esta registrado hoy");
 
         when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(habito("EXPIRADO", true, null)));
-        assertThat(fallo(pedirFoto(JUGO.toString()))).contains("ya vencio");
+        assertThat(fallo(pedirFoto(JUGO.toString()))).contains("ya no da puntos hoy (paso su hora)")
+                .doesNotContain("vencio");
 
         when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(habito("FALLIDO", true, null)));
         assertThat(fallo(pedirFoto(JUGO.toString()))).contains("ya se cerro");
