@@ -53,8 +53,14 @@ public interface ConsultarSituacionDelAprendizPort {
      * @param habitos     como estaba su dia de habitos al empezar el turno (D-176). {@code null} =
      *                    no se sabe (no se consulto o fallo): el prompt lo dice y el modelo vuelve a
      *                    las herramientas
+     * @param trato       como tratarla (E-457): masculino, femenino o neutro. {@code null} = neutro
      */
-    record SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy, HabitosDeHoy habitos) {
+    record SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy, HabitosDeHoy habitos,
+                                ConsultarTratoDeLaPersonaPort.TratoDeLaPersona trato) {
+
+        public SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy, HabitosDeHoy habitos) {
+            this(diaPrograma, fase, hoy, habitos, null);
+        }
 
         public SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy) {
             this(diaPrograma, fase, hoy, null);
@@ -65,7 +71,11 @@ public interface ConsultarSituacionDelAprendizPort {
         }
 
         public SituacionDelAprendiz conHabitos(HabitosDeHoy habitosDeHoy) {
-            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitosDeHoy);
+            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitosDeHoy, trato);
+        }
+
+        public SituacionDelAprendiz conTrato(ConsultarTratoDeLaPersonaPort.TratoDeLaPersona tratoDeLaPersona) {
+            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitos, tratoDeLaPersona);
         }
     }
 }

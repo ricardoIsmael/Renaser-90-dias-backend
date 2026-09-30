@@ -12418,3 +12418,23 @@ cómo dirigirse a la persona, y el modelo copió el género del material al para
 **Cómo evitar que vuelva a pasar.** Una regla del prompt que decide algo que dura (un cambio de todas las
 semanas) no alcanza con flash-lite: si se puede decidir leyendo lo que escribió la persona, se decide en la
 herramienta y el prompt queda como explicación.
+
+## E-457 · «dejas de ser reactiva y decides cómo responder como creadora» a un hombre, aunque el prompt pedía trato neutro (backend + prompt, RESUELTO, 30/09)
+
+**Síntoma.** En el emulador del dueño (hombre), con la rama de E-456, una respuesta que parafraseaba el material
+del programa dijo «dejas de ser reactiva y decides cómo responder como creadora».
+
+**Causa real.** SER no sabía el género de la persona y el trato neutro era solo una instrucción del prompt;
+flash-lite la pierde al parafrasear un material que habla en femenino o masculino. El dato existía: la pregunta
+`sex` de la ficha inicial (SELECCION_UNICA, opciones «Masculino» y «Femenino» en `opciones_pregunta`).
+
+**Solución.** `onboarding.api.TratoDeLaPersonaFinder` (implementado por `TratoDeLaPersonaService` con
+`LeerRespuestasPorClavePort`, sin SQL ajeno) devuelve MASCULINO, FEMENINO o NEUTRO (sin dato u otro valor).
+`rag` lo lee por su puerto `ConsultarTratoDeLaPersonaPort`; `SituacionDelTurnoService` lo agrega a la situación
+(neutro si falla la lectura) y el prompt recibe «Trato: masculino. Todo lo que le escribes concuerda en
+masculino…, tambien lo que parafraseas del material.» (o femenino, o neutro). La regla del prompt manda
+concordar con esa línea. Pruebas: `TratoDeLaPersonaServiceTest`, `SituacionDelTurnoServiceTest.tratoDeLaFicha`,
+`HabitosDeHoyEnElPromptTest.tratoEnLaSituacion`, `PromptSistemaRenasiaTest`.
+
+**Cómo evitar que vuelva a pasar.** Lo que el modelo tiene que concordar en cada frase (género, fecha, día) va
+como dato en la situación del turno, no como una prohibición: una regla negativa se pierde al parafrasear.

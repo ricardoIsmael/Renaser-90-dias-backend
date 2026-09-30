@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
+import com.renaser.os.rag.application.ports.out.participante.ConsultarTratoDeLaPersonaPort;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
@@ -270,7 +271,23 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
         }
         String fecha = situacion.hoy() == null ? "" : situacion.hoy().format(FECHA_DE_HOY) + ", ";
         return "Hoy es " + fecha + "su dia " + situacion.diaPrograma() + " de 90, en la fase " + situacion.fase()
-                + " de 4.\n" + HabitosDeHoyEnElPrompt.texto(situacion.habitos());
+                + " de 4.\n" + tratoDe(situacion.trato()) + "\n" + HabitosDeHoyEnElPrompt.texto(situacion.habitos());
+    }
+
+    /**
+     * E-457: el genero con que se le escribe, ya decidido (pregunta {@code sex} de la ficha inicial).
+     * Con el prompt solo, flash-lite le escribio "dejas de ser reactiva" a un hombre al parafrasear el
+     * material. Sin dato, neutro.
+     */
+    static String tratoDe(ConsultarTratoDeLaPersonaPort.TratoDeLaPersona trato) {
+        return switch (trato == null ? ConsultarTratoDeLaPersonaPort.TratoDeLaPersona.NEUTRO : trato) {
+            case MASCULINO -> "Trato: masculino. Todo lo que le escribes concuerda en masculino (\"cansado\", "
+                    + "\"creador\"), tambien lo que parafraseas del material.";
+            case FEMENINO -> "Trato: femenino. Todo lo que le escribes concuerda en femenino (\"cansada\", "
+                    + "\"creadora\"), tambien lo que parafraseas del material.";
+            case NEUTRO -> "Trato: neutro (sin dato). Nada con genero sobre la persona, tampoco al parafrasear el "
+                    + "material: \"dejar de reaccionar\", no \"reactiva\" ni \"reactivo\".";
+        };
     }
 
     /** "viernes 25/09/2026": con el año, para que el modelo arme bien "el 2 de octubre" (bateria, #41). */

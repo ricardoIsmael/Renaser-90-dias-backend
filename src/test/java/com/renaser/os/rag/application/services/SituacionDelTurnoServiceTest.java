@@ -4,6 +4,7 @@ import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPo
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
+import com.renaser.os.rag.application.ports.out.participante.ConsultarTratoDeLaPersonaPort;
 import com.renaser.os.rag.application.ports.out.participante.HabitosDeHoy;
 import com.renaser.os.rag.application.ports.out.participante.HabitosDeHoy.EstadoDeHoy;
 import com.renaser.os.rag.application.ports.out.participante.HabitosDeHoy.HabitoDeHoy;
@@ -46,8 +47,24 @@ class SituacionDelTurnoServiceTest {
     private final ConsultarSituacionDelAprendizPort situacionPort = mock(ConsultarSituacionDelAprendizPort.class);
     private final ConsultarAgendaHabitosPort agendaPort = mock(ConsultarAgendaHabitosPort.class);
     private final GestionarPlanDeHabitosPort planPort = mock(GestionarPlanDeHabitosPort.class);
+    private final ConsultarTratoDeLaPersonaPort tratoPort = mock(ConsultarTratoDeLaPersonaPort.class);
     private final SituacionDelTurnoService service =
-            new SituacionDelTurnoService(situacionPort, agendaPort, planPort, FixedClock.at(TRES_AM_UTC));
+            new SituacionDelTurnoService(situacionPort, agendaPort, planPort, FixedClock.at(TRES_AM_UTC), tratoPort);
+
+    /** E-457: el trato de su ficha viaja en la situacion; si no se puede leer, neutro y el turno sigue. */
+    @Test
+    @DisplayName("E-457: la situacion lleva el trato de la ficha, y neutro si falla la lectura")
+    void tratoDeLaFicha() {
+        when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
+        when(tratoPort.de(APRENDIZ)).thenReturn(ConsultarTratoDeLaPersonaPort.TratoDeLaPersona.MASCULINO);
+
+        assertThat(service.de(APRENDIZ).orElseThrow().trato())
+                .isEqualTo(ConsultarTratoDeLaPersonaPort.TratoDeLaPersona.MASCULINO);
+
+        when(tratoPort.de(APRENDIZ)).thenThrow(new IllegalStateException("caida"));
+        assertThat(service.de(APRENDIZ).orElseThrow().trato())
+                .isEqualTo(ConsultarTratoDeLaPersonaPort.TratoDeLaPersona.NEUTRO);
+    }
 
     private static HabitoDelDia habito(String titulo, String estado, Instant plazo, boolean evidencia, String clave) {
         return new HabitoDelDia(UUID.randomUUID(), titulo, estado, null, null, plazo, evidencia, List.of(), clave);

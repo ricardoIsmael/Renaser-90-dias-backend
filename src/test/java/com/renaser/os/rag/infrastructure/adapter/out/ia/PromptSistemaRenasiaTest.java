@@ -335,8 +335,9 @@ class PromptSistemaRenasiaTest {
         assertThat(render).contains("La fecha de hoy, con su año").contains("nunca de lo que recuerdes");
         // Hablo del horario de un habito pausado sin decir que estaba pausado.
         assertThat(render).contains("el horario").contains("nuevo se vera cuando lo reactive");
-        // "No estas sola" a un hombre: lo dictaba el propio bloque de crisis.
-        assertThat(render).contains("No sabes si la persona es hombre o mujer").contains("pasar por esto a solas")
+        // "No estas sola" a un hombre: lo dictaba el propio bloque de crisis. (E-457: ahora la regla neutra
+        // aplica cuando la linea "Trato:" no dice el genero.)
+        assertThat(render).contains("Si no sabes si la persona es hombre o mujer").contains("pasar por esto a solas")
                 .doesNotContain("no esta sola");
         // Mostro los UUID de sus habitos.
         assertThat(render).contains("Nunca muestres identificadores internos");
@@ -519,6 +520,9 @@ class PromptSistemaRenasiaTest {
     void tratoNeutroAunqueLasInstruccionesDigan_laPersona() {
         assertThat(renderizar("")).contains("persona\" o \"ella\" es solo gramatica: no le hables en femenino ni en masculino.");
         // E-456: "dejas de ser reactiva" al parafrasear el material, con un dueño hombre.
+        // E-457: la linea "Trato:" de la situacion manda sobre el genero.
+        assertThat(renderizar("")).contains("**El genero con que le escribes lo dice la linea \"Trato:\"**")
+                .contains("concuerda TODO en ese genero, tambien lo que cuentas del material.");
         assertThat(renderizar("")).contains("Tambien al contarle lo que dice el material del programa: di \"dejar de\n  reaccionar\" y no \"dejas de ser reactiva\"")
                 .contains("si el material habla en masculino o femenino, pasalo a neutro.");
     }
