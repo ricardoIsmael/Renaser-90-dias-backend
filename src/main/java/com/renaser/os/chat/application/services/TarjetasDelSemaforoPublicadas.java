@@ -17,10 +17,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * (D-223). Todos los mensajes de un color apuntan a la misma ruta ({@link ColorDeTarjeta#rutaEnAlmacenamiento}):
  * tres objetos para todo el padrón y todas las noches, en vez de uno por mensaje.
  *
- * <p><b>Subir solo si no está.</b> La primera vez que el proceso necesita un color, mira si el objeto ya
- * existe ({@link AlmacenamientoPort#leer}); si no, lo sube. Lo recuerda hasta el próximo reinicio, así que
- * S3 se consulta a lo sumo tres veces por despliegue. Leer no puede borrar ni pisar nada: si otra instancia
- * lo subió antes, se usa ese.
+ * <p><b>Subir una vez por proceso, sin mirar antes.</b> La primera vez que el proceso necesita un color, lo
+ * sube (pisa el objeto con los mismos bytes: la ruta es fija y el contenido viene de los recursos) y lo
+ * recuerda hasta el próximo reinicio: a lo sumo tres subidas de ~100 KB por despliegue.
+ *
+ * <p>> <b>Corregido 2026-09-30 (E-453).</b> Antes miraba primero si el objeto ya existía con
+ * {@link AlmacenamientoPort#leer}. En producción el rol del servidor no tiene {@code s3:ListBucket}, y sin
+ * ese permiso S3 responde a un objeto inexistente con 403 (AccessDenied), no con 404: la lectura fallaba, la
+ * tarjeta nunca se subía y la noche del 29/09 salió solo el texto en los 11 soportes.
  *
  * <p><b>Sin almacenamiento de verdad no hay imagen</b> (G-5, como la bienvenida): con {@code noop} subir no
  * guarda nada y el mensaje apuntaría a una foto inexistente, así que sale solo el texto. Si S3 falla, lo
@@ -34,8 +38,6 @@ import java.util.concurrent.ConcurrentHashMap;
 class TarjetasDelSemaforoPublicadas {
 
     private static final Logger log = LoggerFactory.getLogger(TarjetasDelSemaforoPublicadas.class);
-    /** Cada tarjeta pesa ~100 KB; el tope solo evita bajar algo absurdo si alguien pisó el objeto. */
-    private static final long PESO_MAXIMO = 5L * 1024 * 1024;
 
     private final AlmacenamientoPort almacenamiento;
     private final ImagenDeLaTarjetaPort imagenes;
@@ -68,10 +70,6 @@ class TarjetasDelSemaforoPublicadas {
 
     private ContenidoDelPrograma publicar(ColorDeTarjeta color) {
         String ruta = color.rutaEnAlmacenamiento();
-        byte[] existente = almacenamiento.leer(ruta, PESO_MAXIMO).orElse(null);
-        if (existente != null) {
-            return ContenidoDelPrograma.imagen(ruta, ImagenDeLaTarjetaPort.TIPO_CONTENIDO, existente.length);
-        }
         byte[] imagen = imagenes.imagen(color);
         almacenamiento.subir(ruta, imagen, ImagenDeLaTarjetaPort.TIPO_CONTENIDO);
         log.info("[chat.semaforo] tarjeta {} subida al almacenamiento en {} ({} bytes)", color, ruta, imagen.length);

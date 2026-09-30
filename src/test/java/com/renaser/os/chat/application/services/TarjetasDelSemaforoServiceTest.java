@@ -203,25 +203,38 @@ class TarjetasDelSemaforoServiceTest {
     }
 
     @Test
-    @DisplayName("cada color se sube UNA vez y todos apuntan a la misma ruta; si ya estaba, no se sube")
+    @DisplayName("cada color se sube UNA vez por proceso y todos apuntan a la misma ruta")
     void subeUnaSolaVez() {
         almacenamiento.guarda = true;
-        almacenamiento.objetos.put("semaforo/tarjetas/verde-v1.jpg", new byte[]{1, 2, 3});
         persona(UserRole.TRAINEE, UserStatus.ACTIVE, medido(30, ColorSemaforo.ROJO));
         persona(UserRole.TRAINEE, UserStatus.ACTIVE, medido(50, ColorSemaforo.ROJO));
         persona(UserRole.TRAINEE, UserStatus.ACTIVE, medido(90, ColorSemaforo.VERDE));
 
         servicio(LAS_2350_DEL_28_EN_LIMA).enviarLasQueTocan();
 
-        assertThat(almacenamiento.subidas).containsExactly("semaforo/tarjetas/rojo-v1.jpg");
+        assertThat(almacenamiento.subidas)
+                .containsExactlyInAnyOrder("semaforo/tarjetas/rojo-v1.jpg", "semaforo/tarjetas/verde-v1.jpg");
         assertThat(entregas).hasSize(3).allSatisfy(e -> assertThat(e.piezas()).hasSize(2));
+    }
+
+    @Test
+    @DisplayName("E-453: sin s3:ListBucket, leer un objeto que no existe da 403; igual se sube y sale la imagen")
+    void sinPermisoDeListarIgualSaleLaImagen() {
+        almacenamiento.guarda = true;
+        almacenamiento.fallaAlLeer = true;
+        persona(UserRole.TRAINEE, UserStatus.ACTIVE, medido(30, ColorSemaforo.ROJO));
+
+        servicio(LAS_2350_DEL_28_EN_LIMA).enviarLasQueTocan();
+
+        assertThat(almacenamiento.subidas).containsExactly("semaforo/tarjetas/rojo-v1.jpg");
+        assertThat(entregas).singleElement().satisfies(e -> assertThat(e.piezas()).hasSize(2));
     }
 
     @Test
     @DisplayName("si S3 falla sale igual el texto; si el texto ya salió, no se mira nada más")
     void s3FallaOYaEstaba() {
         almacenamiento.guarda = true;
-        almacenamiento.fallaAlLeer = true;
+        almacenamiento.fallaAlSubir = true;
         UserId ana = persona(UserRole.TRAINEE, UserStatus.ACTIVE, medido(85, ColorSemaforo.VERDE));
         UserId beto = persona(UserRole.TRAINEE, UserStatus.ACTIVE, medido(85, ColorSemaforo.VERDE));
         MensajeId textoDeBeto = new TarjetaDelSemaforo(beto, DIA_28, ColorDeTarjeta.VERDE, 85).idDelTexto();
@@ -264,6 +277,7 @@ class TarjetasDelSemaforoServiceTest {
     static final class AlmacenamientoEnMemoria implements AlmacenamientoPort {
         boolean guarda;
         boolean fallaAlLeer;
+        boolean fallaAlSubir;
         final Map<String, byte[]> objetos = new HashMap<>();
         final List<String> subidas = new ArrayList<>();
 
@@ -284,6 +298,9 @@ class TarjetasDelSemaforoServiceTest {
 
         @Override
         public void subir(String ruta, byte[] contenido, String tipoContenido) {
+            if (fallaAlSubir) {
+                throw new IllegalStateException("S3 no responde");
+            }
             subidas.add(ruta);
             objetos.put(ruta, contenido);
         }
