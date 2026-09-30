@@ -11,10 +11,16 @@ import com.renaser.os.habits.application.ports.in.eleccion.ElegirDiaSemanalUseCa
 import com.renaser.os.habits.application.ports.in.eleccion.ElegirDiaSemanalUseCase.ElegirDiaSemanalCommand;
 import com.renaser.os.habits.application.ports.in.habito.ConsultarMisHabitosUseCase;
 import com.renaser.os.habits.application.ports.in.habito.ConsultarMisHabitosUseCase.HabitoConDias;
+import com.renaser.os.habits.application.ports.in.renombre.QuitarRenombreHabitoUseCase;
+import com.renaser.os.habits.application.ports.in.renombre.QuitarRenombreHabitoUseCase.QuitarRenombreHabitoCommand;
+import com.renaser.os.habits.application.ports.in.renombre.RenombrarHabitoUseCase;
+import com.renaser.os.habits.application.ports.in.renombre.RenombrarHabitoUseCase.RenombrarHabitoCommand;
 import com.renaser.os.habits.application.ports.out.desbloqueo.LoadDesbloqueoHabitoPort;
 import com.renaser.os.habits.application.ports.out.eleccion.LoadEleccionDiaSemanalPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
+import com.renaser.os.habits.application.ports.out.renombre.LoadRenombreHabitoPort;
+import com.renaser.os.habits.domain.model.renombre.RenombreHabito;
 import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
 import com.renaser.os.habits.domain.model.eleccion.EleccionDiaSemanal;
 import com.renaser.os.habits.domain.model.habito.Habito;
@@ -26,13 +32,16 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -61,6 +70,9 @@ public class PlanDeHabitosService implements PlanDeHabitosPort {
     private final LoadDesbloqueoHabitoPort loadDesbloqueoPort;
     private final LoadEleccionDiaSemanalPort loadEleccionPort;
     private final Clock clock;
+    private final RenombrarHabitoUseCase renombrarUseCase;
+    private final QuitarRenombreHabitoUseCase quitarRenombreUseCase;
+    private final LoadRenombreHabitoPort loadRenombrePort;
 
     public PlanDeHabitosService(ConsultarMisHabitosUseCase misHabitosUseCase,
                                 ElegirHabitoUseCase elegirHabitoUseCase,
@@ -68,7 +80,10 @@ public class PlanDeHabitosService implements PlanDeHabitosPort {
                                 ElegirDiaSemanalUseCase elegirDiaUseCase,
                                 ConsultarProgresoParticipanteHabitsPort progresoPort,
                                 LoadDesbloqueoHabitoPort loadDesbloqueoPort,
-                                LoadEleccionDiaSemanalPort loadEleccionPort, Clock clock) {
+                                LoadEleccionDiaSemanalPort loadEleccionPort, Clock clock,
+                                RenombrarHabitoUseCase renombrarUseCase,
+                                QuitarRenombreHabitoUseCase quitarRenombreUseCase,
+                                LoadRenombreHabitoPort loadRenombrePort) {
         this.misHabitosUseCase = misHabitosUseCase;
         this.elegirHabitoUseCase = elegirHabitoUseCase;
         this.cambiarEstadoUseCase = cambiarEstadoUseCase;
@@ -77,6 +92,9 @@ public class PlanDeHabitosService implements PlanDeHabitosPort {
         this.loadDesbloqueoPort = loadDesbloqueoPort;
         this.loadEleccionPort = loadEleccionPort;
         this.clock = clock;
+        this.renombrarUseCase = renombrarUseCase;
+        this.quitarRenombreUseCase = quitarRenombreUseCase;
+        this.loadRenombrePort = loadRenombrePort;
     }
 
     @Override
@@ -117,6 +135,44 @@ public class PlanDeHabitosService implements PlanDeHabitosPort {
     @Override
     public void elegirDiaSemanal(UserId actorId, UUID habitoId, LocalDate fecha) {
         elegirDiaUseCase.elegir(new ElegirDiaSemanalCommand(actorId, HabitoId.of(habitoId), fecha));
+    }
+
+    /**
+     * Los mismos habitos que {@link #planDe}, con su nombre para la persona y su descripcion (D-236).
+     * Renombrable se decide con {@link RenombreHabitoService#CLAVES_RENOMBRABLES}, la misma lista que
+     * hace cumplir el caso de uso: no se le ofrece a la persona un boton que va a fallar.
+     */
+    @Override
+    public List<FichaDeHabito> fichasDe(UserId participanteId) {
+        requireProgreso(participanteId);
+        Map<HabitoId, String> nombresPropios = loadRenombrePort.deParticipante(participanteId).stream()
+                .collect(Collectors.toMap(RenombreHabito::habitoId, RenombreHabito::tituloPersonal,
+                        (primero, repetido) -> primero));
+        return misHabitosUseCase.consultar(participanteId).stream()
+                .map(HabitoConDias::habito)
+                .filter(distintoPorId())
+                .map(habito -> new FichaDeHabito(habito.id().value(), habito.titulo(),
+                        nombresPropios.get(habito.id()), habito.descripcion(),
+                        habito.claveSistema() != null
+                                && RenombreHabitoService.CLAVES_RENOMBRABLES.contains(habito.claveSistema())))
+                .toList();
+    }
+
+    @Override
+    public void renombrar(UserId actorId, UUID habitoId, String tituloPersonal, String motivo) {
+        renombrarUseCase.renombrar(
+                new RenombrarHabitoCommand(actorId, HabitoId.of(habitoId), tituloPersonal, motivo));
+    }
+
+    @Override
+    public void quitarRenombre(UserId actorId, UUID habitoId) {
+        quitarRenombreUseCase.quitar(new QuitarRenombreHabitoCommand(actorId, HabitoId.of(habitoId)));
+    }
+
+    /** El mismo criterio que {@link #planDe}: si un habito viene dos veces, cuenta el primero. */
+    private static Predicate<Habito> distintoPorId() {
+        Set<HabitoId> vistos = new HashSet<>();
+        return habito -> vistos.add(habito.id());
     }
 
     /** Sin fila en {@code desbloqueos_habito} no hay pausa: la tabla arranca vacia para todos (D-99). */

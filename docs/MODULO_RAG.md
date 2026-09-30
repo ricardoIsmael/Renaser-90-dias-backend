@@ -1653,6 +1653,84 @@ Después:
   detrás de tu meta a 90 días. En lugar de bajar la mitad, te sugiero ajustar las acciones de tu
   semana.» (no cambió nada)
 
+### D-236 — SER explica cómo se hace un hábito y propone cambiarle el nombre (2026-09-30)
+
+Pedido del dueño (30-09): «Si una persona le pide "dame cómo hacer el ritual", ¿también le puede
+ayudar? ¿Y cambiar el nombre del hábito?».
+
+- **Lo que había:** la `descripcion` del hábito existe en `habits` (`Habito`, `DetallesHabito`) pero
+  ninguna herramienta de SER la recibía; renombrar existía solo en la app (`PUT/DELETE
+  /api/v1/habits/{habitId}/rename`, D-133). **La descripción del catálogo casi nunca dice cómo se
+  hace:** en la base local, los tres rituales dicen «Foto/video del ritual», el jugo verde «Foto del
+  vaso con Jugo Verde». Los pasos, si están, están en el material indexado que SER ya recibe en cada
+  turno (búsqueda por la pregunta, `ConversacionRenasiaService.materialDelPrograma`).
+- **`habits.api.PlanDeHabitosPort`** gana `fichasDe` (por hábito visible: título del programa,
+  nombre propio si lo renombró, descripción y si es renombrable según
+  `RenombreHabitoService.CLAVES_RENOMBRABLES`), `renombrar` y `quitarRenombre` (delegan en
+  `RenombrarHabitoUseCase` / `QuitarRenombreHabitoUseCase`, los del endpoint). Del renombre solo sale
+  el título: el motivo no sale de `habits` (mismo criterio que E-290).
+- **Herramienta `consultar_como_se_hace_habito`** (`ConsultarComoSeHaceHabitoHerramienta`, solo
+  lectura, sin flag): parámetro opcional `habito` como lo nombró la persona. Empareja contra los
+  **dos** nombres (el suyo y el del programa; nunca solo el del catálogo, E-290), sin tildes ni
+  mayúsculas y por prefijo de palabra: «ritual de mañana» encuentra «RITUAL TIERRA - AGUA - FUEGO
+  (mañana)» y «RITUAL DE MAÑANA (domingo)» (`HabitoNombradoPorLaPersona`). Devuelve `habito_id`,
+  nombres, descripción y `se_puede_renombrar`, más una línea que le dice al modelo que la descripción
+  no son pasos y que, si el material no los trae, lo diga sin inventar. Si no tiene ese hábito, lo
+  dice y nombra los suyos.
+- **Herramienta `proponer_renombrar_habito`** (`PropuestaDeRenombrarHabito`, solo con
+  `confirmacion-con-botones`): `habito_id`, `accion` (`renombrar` | `volver_al_original`),
+  `nuevo_nombre`, `motivo`. **Las reglas son las del endpoint, ninguna nueva:** solo JUGO VERDE y AGUA
+  TIBIA CON LIMÓN (D-127), nombre ≤ 60 y motivo ≤ 200, los dos obligatorios. El motivo lo exige el
+  caso de uso (la app lo pide en su modal): sin él la herramienta no propone y le pide al modelo
+  preguntarlo. **Y tiene que haberlo escrito la persona (E-466):** `MotivoDeRenombre` rechaza un
+  motivo cuyas palabras no estén en lo que escribió en la última hora, o que solo repita el pedido
+  («quiero que se llame X»). No propone si ya se llama así, si «volver» no tiene renombre, o si
+  el hábito no es renombrable (dice cuáles sí). Tarjeta: «Cambiar el nombre de 'JUGO VERDE' a
+  'Batido de papaya'» / «Volver a llamar 'Batido de papaya' por su nombre del programa, 'JUGO VERDE'».
+- **Al confirmar** (`RenombrarHabitoConfirmable`): revalida los largos y llama al caso de uso vía
+  `habits.api`; los rechazos vuelven como texto. Nada de `@Transactional` en `rag` (C-1).
+- **Prompt:** dos viñetas en «Cuando usas herramientas» (cómo se hace → herramienta + material, sin
+  inventar pasos, ingredientes ni tiempos; renombrar → propuesta, con el motivo de la persona).
+- **App: no hace falta APK.** La tarjeta de propuesta es genérica (`TarjetaPropuesta`, evento
+  `{tipo:"propuesta", id, resumen, venceEn}` sin tipo de acción) y al confirmar cualquier propuesta la
+  app ya recarga Hoy y Training. Hoy muestra el nombre propio (proyección de tracks, D-133).
+
+Pruebas: `ConsultarComoSeHaceHabitoHerramientaTest`, `PropuestaDeRenombrarHabitoTest`,
+`RenombrarHabitoConfirmableTest`, `GestionarPlanDeHabitosAdapterTest.fichasYRenombre`,
+`PlanDeHabitosServiceTest` (fichas, suspendido, delegación), `PromptSistemaRenasiaTest.comoSeHaceYRenombrar`
+`MotivoDeRenombreTest` y `RenombrarHabitoPorPropuestaIT` (Postgres real: proponer no escribe, confirmar escribe en
+`renombres_habito`, volver lo borra, Despertar no genera tarjeta).
+
+**Prueba con IA real (30-09, backend propio en :8089, Gemini con la key de pruebas, cuenta
+`e2e-aprendiz` en su día 30; la base local tiene 35 fragmentos indexados).** La primera vuelta mostró
+E-466 (motivo inventado); con la guarda, respuestas literales del último build:
+
+- «dame cómo hacer el ritual de mañana» → «En el material del programa no tengo los pasos detallados
+  de ese ritual, solo se indica que se hace con los elementos de tierra, agua y fuego para multiplicar
+  tu energía y superar el miedo. ¿Quieres que veamos cómo vas con tus hábitos de hoy? ✨»
+  (`consultar_como_se_hace_habito`)
+- «cómo hago mi jugo verde» → «En el material del programa puedes prepararlo con espinaca, pepino,
+  apio, manzana verde, limón y, si consideras, penca de tuna para incrementar la flora intestinal.
+  Tómalo después del agua tibia con limón. 🌿» (los ingredientes están literales en un fragmento
+  indexado)
+- «quiero que mi hábito caminar se llame paseo con mi perro» → «No encuentro un hábito con ese
+  nombre, pero tienes KILÓMETROS DIARIOS. ¿Te refieres a ese?» (la cuenta no tiene «Caminar»; con
+  «sí, ese»: «Ese hábito del programa no se puede renombrar. 🌿 …»)
+- «quiero que mi jugo verde se llame batido de papaya» → «¿Por qué quieres cambiarle el nombre a
+  batido de papaya?» → «porque el jugo verde me da acidez y ahora tomo batido de papaya» → «Te dejé la
+  propuesta abajo para que la confirmes. ✨» + tarjeta «Cambiar el nombre de 'JUGO VERDE' a 'batido de
+  papaya'»; confirmada por la API: «Listo: ahora se llama 'batido de papaya'.», fila en
+  `renombres_habito` con ese motivo literal.
+- «vuelve a ponerle el nombre original» → «Te dejé la propuesta abajo para que la confirmes. ✨» +
+  tarjeta «Volver a llamar 'batido de papaya' por su nombre del programa, 'JUGO VERDE'»; confirmada:
+  «Listo: volvio a su nombre del programa.», fila borrada.
+
+**Queda a la vista:** (1) la descripción de los hábitos del catálogo dice qué evidencia mandar, no cómo
+se hace; si el dueño quiere que SER explique un ritual con pasos, hay que cargarlos en la descripción
+(panel admin) o indexar el material que los tenga. (2) Solo se renombran las dos bebidas (regla de
+D-127, no se tocó): «Caminar», «Kilómetros diarios» o un hábito propio no. Si el dueño quiere ampliarlo,
+es una decisión de negocio que cambia también la app (`renombreDeHabito.ts` la espeja).
+
 ### Contrato SSE de `POST /api/v1/renasia/mensajes` (actualizado 2026-09-26, D-171 y D-178)
 
 Formas de `data:` (fuente de verdad: `EventoRenasiaSseMapper`):

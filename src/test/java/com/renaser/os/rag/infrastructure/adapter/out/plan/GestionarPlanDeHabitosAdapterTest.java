@@ -1,6 +1,7 @@
 package com.renaser.os.rag.infrastructure.adapter.out.plan;
 
 import com.renaser.os.habits.api.PlanDeHabitosPort;
+import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoDelPlan;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoSemanal;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.PlanDelAprendiz;
@@ -63,5 +64,21 @@ class GestionarPlanDeHabitosAdapterTest {
         verify(habits).pausar(APRENDIZ, DUCHA, hasta);
         verify(habits).reactivar(APRENDIZ, DUCHA);
         verify(habits).elegirDiaSemanal(APRENDIZ, CORRER, HOY);
+    }
+
+    @Test
+    @DisplayName("D-236: las fichas copian los dos nombres y la descripcion; el renombre pasa tal cual a habits")
+    void fichasYRenombre() {
+        when(habits.fichasDe(APRENDIZ)).thenReturn(List.of(new PlanDeHabitosPort.FichaDeHabito(DUCHA, "JUGO VERDE",
+                "Batido", "Foto del vaso", true)));
+
+        assertThat(adaptador.fichasDe(APRENDIZ)).containsExactly(
+                new GestionarPlanDeHabitosPort.FichaDeHabito(DUCHA, "JUGO VERDE", "Batido", "Foto del vaso", true));
+
+        adaptador.renombrar(APRENDIZ, DUCHA, "Batido", "gastritis");
+        adaptador.quitarRenombre(APRENDIZ, DUCHA);
+
+        verify(habits).renombrar(APRENDIZ, DUCHA, "Batido", "gastritis");
+        verify(habits).quitarRenombre(APRENDIZ, DUCHA);
     }
 }

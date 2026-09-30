@@ -575,4 +575,25 @@ class PromptSistemaRenasiaTest {
         // La seccion va antes de Tus limites, que sigue intacta.
         assertThat(render.indexOf("## Su Mapa de Renacimiento")).isLessThan(render.indexOf("## Tus limites"));
     }
+
+    /**
+     * D-236: ante "como hago X" llama la herramienta y explica con el material, sin inventar pasos;
+     * y el renombre va por propuesta, con el motivo de la persona. Contra el prompt anterior falla:
+     * no nombraba ninguna de las dos herramientas.
+     */
+    @Test
+    @DisplayName("D-236: como se hace un habito sale del material sin inventar; renombrar va por propuesta")
+    void comoSeHaceYRenombrar() {
+        String render = renderizar("(vacio)");
+
+        assertThat(render).contains("**Si pregunta como se hace un habito o un ritual**")
+                .contains("consultar_como_se_hace_habito con el habito como lo nombro")
+                .contains("no la\n  conviertas en pasos")
+                .contains("nunca inventes pasos,\n  ingredientes ni tiempos")
+                .contains("proponer_renombrar_habito")
+                .contains("\"quiero que se llame X\" no es un motivo")
+                .contains("nunca\n  lo inventes ni lo deduzcas del nombre nuevo")
+                .doesNotContain("D-236");
+        assertThat(render.indexOf("**Si pregunta como se hace un habito")).isLessThan(render.indexOf("## Tus limites"));
+    }
 }
