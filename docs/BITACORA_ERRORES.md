@@ -12561,3 +12561,22 @@ unidad, línea base y meta agregada/quitada), `RocaMaestraServiceTest.definirRec
 `RocaMaestraControllerTest.cambiarUnaRocaFijaEs409ConCodigo`, y en la app el test del modal que verifica que lo
 fijo no es editable y que se manda lo guardado. Un cliente que prellene campos «fijos» con otro valor que el del
 servidor rompe el avance: mandar siempre lo que devolvió `GET /rocks/master`.
+
+## E-463 · Enviar un sticker en el APK fallaba con «NativeRequest.start … no protocol: assets_stickers_renaser_muybien» (app, RESUELTO, 30/09)
+
+**Síntoma (literal, APK preview 88, chat 1 a 1):** alerta «No se pudo enviar» con
+`fetch failed: Call to function 'NativeRequest.start' has been rejected. → Caused by: The 2nd argument cannot be cast to type class java.net.URL (received class java.lang.String) → Caused by: java.net.MalformedURLException: no protocol: assets_stickers_renaser_muybien`.
+En producción se veía `POST /chat/conversations/{id}/media/upload-url 200` y ningún `POST …/messages` después.
+
+**Causa:** en un APK de release las imágenes van embebidas como recursos de Android. Para imágenes,
+`expo-asset` marca el asset como ya descargado con `localUri` = nombre del recurso (le sirve a `<Image>`),
+así que `Asset.downloadAsync()` no hace nada y el sticker se pasaba a `fetch(uri).arrayBuffer()` con un
+nombre sin esquema. En desarrollo (Metro sirve por HTTP) y en web funciona, por eso las pruebas en el
+emulador de desarrollo no lo mostraron.
+
+**Solución (app `c58eee2`):** `chat/utils/archivoDelSticker.ts`: si lo que queda no tiene esquema, se pide
+al módulo nativo `ExpoAsset.downloadAsync`, que sí copia un recurso de `res/drawable` a la caché y devuelve
+`file://`. Test `archivoDelSticker.test.ts` (falla contra el código anterior).
+
+**Para que no vuelva:** todo archivo empaquetado con `require()` que se vaya a **leer** (subir, compartir,
+hashear) y no solo mostrar, pasa por un `file://` real; probarlo en un APK de release, no solo en desarrollo.
