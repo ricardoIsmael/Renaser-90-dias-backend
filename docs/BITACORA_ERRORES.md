@@ -12231,3 +12231,29 @@ llevar el arreglo: basta con que el build haga `npm install`/`npm ci` (corre el 
   `[anon:scudo:*]` es un delegado de mounting liberado, no un problema de nuestros componentes:
   desensamblar el offset (`objdump -d -C --start-address=...`) antes de bisectar el JS.
 - Bucle de medición reutilizable: `~/.cache/renaser-e2e/resultados/sigsegv-2909/bucle.sh <paquete> <corridas> <etiqueta> [espera_s]`.
+
+## E-453 · La tarjeta del semáforo salió sin imagen: `is not authorized to perform: s3:ListBucket on resource: "arn:aws:s3:::renaser90dias-prod"` (producción, 29/09 23:50)
+
+**Síntoma.** La primera noche (29/09, 23:50 de Lima) los 11 soportes recibieron solo «Hoy llevas N % de tus
+hábitos.», sin la tarjeta. En el log de producción, una línea por aprendiz:
+
+    WARN … TarjetasDelSemaforoPublicadas : [chat.semaforo] la tarjeta ROJO no se pudo llevar al almacenamiento
+    (User: arn:aws:sts::302277511407:assumed-role/renaser-backend-ec2/i-0ea00f555c5fe8028 is not authorized to
+    perform: s3:ListBucket on resource: "arn:aws:s3:::renaser90dias-prod" because no identity-based policy allows …
+
+y al final `[chat.semaforo] enSuHora=11 enviadas=11 fallidas=0` (el texto sí salió: la degradación funcionó).
+
+**Causa real.** `TarjetasDelSemaforoPublicadas` miraba primero si la tarjeta ya estaba en S3 con
+`AlmacenamientoPort.leer`. El rol del servidor en producción no tiene `s3:ListBucket`, y sin ese permiso S3
+contesta a un objeto que NO existe con 403 (AccessDenied) en vez de 404 (NoSuchKey). El adaptador solo traduce
+`NoSuchKeyException` a «no está», así que el 403 subió como falla, la tarjeta nunca se subió y cada mensaje salió
+sin imagen. Las pruebas no lo vieron: el doble del almacenamiento devolvía «no está» para lo que no tenía.
+
+**Solución.** No mirar antes: la primera vez que el proceso necesita un color lo sube (misma ruta fija, mismos
+bytes de los recursos) y lo recuerda hasta el reinicio. Prueba `sinPermisoDeListarIgualSaleLaImagen`: el doble
+falla al leer como S3 sin `ListBucket` y la tarjeta igual sale con imagen; falla contra el código viejo.
+
+**Cómo evitar que vuelva a pasar.** En producción, «¿existe este objeto?» no se puede preguntar con `leer`: sin
+`ListBucket` un objeto ausente da 403. Para algo que el servidor mismo publica, subirlo sin preguntar. Si algún
+día hace falta saber si existe, dar `s3:ListBucket` al rol o tratar el 403 de un objeto propio como ausente, con
+prueba del caso.
