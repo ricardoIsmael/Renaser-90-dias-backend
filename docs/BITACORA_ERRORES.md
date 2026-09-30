@@ -12162,3 +12162,72 @@ siendo posterior al disparo no se toca (el 23:59 de DÍA SIN CELULAR queda 23:59
 **Cómo evitar que vuelva a pasar.** Cuando dos horas de una ventana pueden venir de fuentes distintas, la
 coherencia se valida sobre el RESULTADO, no sobre cada fuente. Lo fija `HabitoACualquierHoraTest` (con relojes en
 UTC que caen el día anterior en Lima, regla 02) y `VentanaDelDiaTest.unLimiteHeredadoAntesDelDisparoSeAcomodaYUnoPosteriorNoSeToca`.
+
+## E-452 · La app se cerraba sola al arrancar en frío en Android (SIGSEGV en `MountingCoordinator::pullTransaction`)
+
+
+**Síntoma** (2026-09-29, app de desarrollo `com.renaser.app`, emulador Pixel_6 API 36 x86_64,
+Expo 57 / RN 0.86.3 / react-native-screens 4.26.2). La app se cierra sola entre 6 y 23 s después
+de abrirla, en la carga inicial o cerca del login, nunca navegando. 3 de 8 corridas en el e2e
+(K07); **4 de 20** en un bucle controlado de arranques en frío. Log literal:
+
+```
+F libc    : Fatal signal 11 (SIGSEGV), code 2 (SEGV_ACCERR), fault addr 0x74ab374687e8 in tid 31668 (mqt_v_js), pid 31628 (com.renaser.app)
+F DEBUG   : Cause: trying to execute non-executable memory.
+F DEBUG   :       #00 pc 00000000000247e8  [anon:scudo:primary]
+F DEBUG   :       #01 pc 00000000010f0159  ...base.apk!libreactnative.so (facebook::react::MountingCoordinator::pullTransaction(bool) const+713)
+F DEBUG   :       #02 pc 0000000000c2c41f  ...base.apk!libreactnative.so (facebook::react::FabricUIManagerBinding::schedulerDidFinishTransaction(...)+95)
+F DEBUG   :       #03 ... Scheduler::uiManagerDidFinishTransaction  #05 ShadowTree::mount  #07 ShadowTree::commit  #16 UIManager::completeSurface
+```
+
+Las cuatro caídas del bucle tienen la misma firma (`#00` en `[anon:scudo:primary]` o
+`scudo:secondary`, `#01` en `pullTransaction+713`).
+
+**Causa real.** No era nuestro código JS ni ninguna animación: es un bug de
+**react-native-screens 4.26.x** (nativo, Android).
+1. `objdump` sobre el `libreactnative.so` del APK instalado: `pullTransaction+713` es
+   `call *%rcx` con `rcx = vtable[0]` del delegado, o sea la llamada virtual
+   `mountingOverrideDelegate->shouldOverridePullTransaction()`. El salto cae en el heap: el
+   delegado ya estaba liberado (use-after-free) aunque su `weak_ptr` se dejó bloquear.
+2. Los delegados posibles son el `RNSScreenRemovalListener` de screens y el de Animated de RN.
+   El de screens tiene una carrera: `ScreensModule.initialize()` registra un
+   `LifecycleEventListener` y llama a `setupFabric()`; como la actividad ya está en resume, RN
+   despacha `onHostResume()` → `setupFabric()` en el hilo de UI a la vez. Los dos hilos entran a
+   `NativeProxy::nativeAddMutationsListener`, los dos ven `screenRemovalListener_` nulo y
+   asignan el `shared_ptr` sin candado. libc++ mueve puntero y bloque de control como dos
+   palabras separadas: queda el objeto de un hilo con el bloque de control del otro, el objeto
+   se libera y el `weak_ptr` registrado en el `MountingCoordinator` sigue "vivo" para siempre.
+   El siguiente commit de Fabric salta a memoria reciclada.
+3. Es exactamente el issue upstream software-mansion/react-native-screens#4654, arreglado en el
+   PR #4413 (backport #4637), publicado en **4.28.0**. Expo 57 fija `~4.26.0`.
+
+**Solución.** Rama `investigar-sigsegv` del frontend, commit `f7126ef`
+(`Evitar que la app se cierre sola al arrancar en frío en Android`):
+- `scripts/arreglar-screens-removal-listener.js`, encadenado en `postinstall` (mismo patrón que
+  `arreglar-two-way-audio.js`): porta #4413 a 4.26.x. El listener pasa a ser un singleton de
+  proceso (static local, inicialización thread-safe), el callback se instala con candado y captura
+  la referencia global de Java por valor (nunca `this`), e `invalidateNative()` lo desarma con un
+  token. Idempotente; no toca nada si screens no es 4.26.x.
+- `src/__tests__/screensRemovalListener.test.ts`: 4 pruebas. La última exige que el
+  `react-native-screens` instalado tenga el arreglo; **falla contra el código viejo** (verificado
+  restaurando el `NativeProxy.cpp` original).
+
+**Verificación.** Build de desarrollo con el arreglo (mismo JS, Metro 8081): **0 de 30** arranques
+en frío con cierre (antes 4 de 20; la probabilidad de 0/30 por azar con tasa 20 % es 0,12 %).
+Al reinstalar el APK de desarrollo original para dejar el emulador como estaba, **el primer
+arranque volvió a caer** con la misma firma.
+
+**Release.** No se midió: el dueño pidió no armar APK. Es una carrera nativa entre dos hilos
+Java/C++ que no depende del modo de JS, así que **también puede pasar en release** (upstream la
+reporta en producción de otras apps, con frecuencia menor, ~1 en 1000 arranques; en debug el
+bundle viene de Metro y los tiempos favorecen el choque). El APK que se distribuya tiene que
+llevar el arreglo: basta con que el build haga `npm install`/`npm ci` (corre el `postinstall`).
+
+**Cómo evitar que vuelva.**
+- La prueba de jest rompe si alguien reinstala screens 4.26 sin el `postinstall`.
+- Cuando Expo acepte screens >= 4.28.0, subir la versión y **borrar el script** (el propio
+  script avisa por consola si encuentra otra versión).
+- Lección general: un SIGSEGV en `MountingCoordinator::pullTransaction` con `#00` en
+  `[anon:scudo:*]` es un delegado de mounting liberado, no un problema de nuestros componentes:
+  desensamblar el offset (`objdump -d -C --start-address=...`) antes de bisectar el JS.
+- Bucle de medición reutilizable: `~/.cache/renaser-e2e/resultados/sigsegv-2909/bucle.sh <paquete> <corridas> <etiqueta> [espera_s]`.
