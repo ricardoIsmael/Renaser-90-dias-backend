@@ -82,6 +82,12 @@ public interface ConversacionEnVivoPort {
 
         void enviarAudio(byte[] pcm16kHz);
 
+        /**
+         * Lo que la persona dijo hasta aca ya esta completo: el modelo cierra lo que oyo y responde
+         * sin esperar el silencio de la deteccion de voz. Se puede seguir mandando audio despues.
+         */
+        void finDeAudio();
+
         void responderHerramienta(String id, String nombre, ResultadoHerramienta resultado);
 
         void cerrar();

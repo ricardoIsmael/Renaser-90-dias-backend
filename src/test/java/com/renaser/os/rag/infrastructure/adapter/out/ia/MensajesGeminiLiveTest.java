@@ -70,6 +70,19 @@ class MensajesGeminiLiveTest {
     }
 
     @Test
+    @DisplayName("E-458: fin de habla es audio en silencio mas largo que el que espera la deteccion de voz, no audioStreamEnd")
+    void finDeAudio() throws Exception {
+        JsonNode entrada = arbol(MensajesGeminiLive.finDeAudio()).path("realtimeInput");
+        byte[] pcm = Base64.getDecoder().decode(entrada.at("/audio/data").asText());
+
+        assertThat(entrada.has("audioStreamEnd")).isFalse();
+        assertThat(entrada.at("/audio/mimeType").asText()).isEqualTo("audio/pcm;rate=16000");
+        // 32 bytes por milisegundo (PCM de 16 bits a 16 kHz), todo ceros.
+        assertThat(pcm.length / 32).isGreaterThan(MensajesGeminiLive.SILENCIO_FIN_DE_TURNO_MS);
+        assertThat(pcm).containsOnly(0);
+    }
+
+    @Test
     @DisplayName("respuesta de herramienta: el mismo id y nombre, con ok y resultado")
     void respuestaDeHerramienta() throws Exception {
         JsonNode respuesta = arbol(MensajesGeminiLive.respuestaDeHerramienta("id-1", "consultar_habitos_del_dia",

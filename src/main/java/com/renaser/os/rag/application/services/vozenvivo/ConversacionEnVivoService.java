@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.time.Instant;
 
 /**
  * La conversacion por voz en tiempo real con el acompanante (D-162, Gemini Live por detras).
@@ -108,8 +109,15 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
     private ConversacionEnVivo abrir(UserId actorId, SalidaDeVozEnVivo salida, Duration restante) {
         SesionDeVozEnVivo sesion = new SesionDeVozEnVivo(actorId, salida, colaboradores);
         try {
+            Instant desde = colaboradores.clock().now();
             colaboradores.turnos().asegurarConversacion(actorId);
-            SesionEnVivo abierta = conversacionPort.abrir(apertura(actorId), sesion);
+            ConversacionEnVivoPort.Apertura apertura = apertura(actorId);
+            Instant preparada = colaboradores.clock().now();
+            SesionEnVivo abierta = conversacionPort.abrir(apertura, sesion);
+            // E-458: lo que tarda abrir, separado en lo nuestro y lo de Gemini. Solo numeros.
+            log.info("[rag] voz en vivo: sesion abierta (preparar {} ms, proveedor {} ms)",
+                    Duration.between(desde, preparada).toMillis(),
+                    Duration.between(preparada, colaboradores.clock().now()).toMillis());
             sesion.arrancar(abierta, restante);
             return sesion;
         } catch (ConversacionEnVivoNoDisponibleException e) {
@@ -141,6 +149,11 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
         @Override
         public void recibirAudio(byte[] pcm16kHz) {
             // no hay con quien hablar
+        }
+
+        @Override
+        public void terminoDeHablar() {
+            // nadie escucha
         }
 
         @Override

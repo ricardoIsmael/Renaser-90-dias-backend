@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -97,6 +98,14 @@ final class SesionDeVozEnVivo implements ConversacionEnVivo, ConversacionEnVivoP
     }
 
     @Override
+    public void terminoDeHablar() {
+        SesionEnVivo abierta = sesion;
+        if (!cerrada.get() && abierta != null) {
+            abierta.finDeAudio();
+        }
+    }
+
+    @Override
     public void terminar() {
         cerrar(null, MotivoDeCierre.NORMAL);
     }
@@ -105,9 +114,16 @@ final class SesionDeVozEnVivo implements ConversacionEnVivo, ConversacionEnVivoP
 
     @Override
     public void audio(byte[] pcm16kHz) {
-        if (!cerrada.get()) {
-            salida.audio(pcm16kHz);
+        if (cerrada.get()) {
+            return;
         }
+        salida.audio(pcm16kHz);
+        Optional<Duration> espera;
+        synchronized (this) {
+            espera = turno.sonar(c.clock().now());
+        }
+        // Solo un numero (E-458): cuanto espero la persona desde que se le oyo hasta la primera voz.
+        espera.ifPresent(d -> log.info("[rag] voz en vivo: primera voz a {} ms de lo oido", d.toMillis()));
     }
 
     @Override
@@ -226,11 +242,14 @@ final class SesionDeVozEnVivo implements ConversacionEnVivo, ConversacionEnVivoP
 
     private ResultadoHerramienta ejecutar(InvocacionHerramienta invocacion) {
         try {
+            Instant antes = c.clock().now();
             ResultadoHerramienta resultado = c.herramientas().ejecutar(actorId, invocacion);
-            // Solo el nombre y si salio bien (E-240): con esto se sabe si una cifra que dijo el orbe
-            // vino de una herramienta o se la invento. Nunca los argumentos ni el resultado.
-            log.info("[rag] voz en vivo: herramienta {} -> {}", invocacion.nombre(),
-                    resultado instanceof ResultadoHerramienta.Exito ? "ok" : "fallo");
+            // Solo el nombre, si salio bien y cuanto tardo (E-240, E-458): con esto se sabe si una
+            // cifra que dijo el orbe vino de una herramienta o se la invento. Nunca los argumentos ni
+            // el resultado.
+            log.info("[rag] voz en vivo: herramienta {} -> {} ({} ms)", invocacion.nombre(),
+                    resultado instanceof ResultadoHerramienta.Exito ? "ok" : "fallo",
+                    Duration.between(antes, c.clock().now()).toMillis());
             return resultado;
         } catch (RuntimeException e) {
             log.warn("Fallo la herramienta {} en la voz en vivo ({})", invocacion.nombre(),

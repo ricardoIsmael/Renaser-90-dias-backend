@@ -102,6 +102,24 @@ final class MensajesGeminiLive {
         return escribir(raiz);
     }
 
+    /**
+     * Silencio de mas que el que pide la deteccion de voz para dar el turno por terminado. Se manda
+     * de golpe cuando la persona toca el orbe al terminar de hablar (E-458): el detector mide el
+     * silencio por la duracion del audio, no por el reloj, asi que contesta enseguida en vez de
+     * esperar 1,5 s de silencio real.
+     *
+     * <p>No se usa {@code audioStreamEnd}, que es lo que sugiere la documentacion: medido con
+     * {@code gemini-3.8-live} el 2026-09-30, con {@code audioStreamEnd} y sin mas audio el modelo
+     * espero ~20 s sin contestar; con esta rafaga contesto en 1,4 s en vez de 2,4 s.
+     */
+    static final int SILENCIO_DE_CIERRE_MS = SILENCIO_FIN_DE_TURNO_MS + 200;
+    /** Ceros de PCM de 16 bits a 16 kHz: 32 bytes por milisegundo. */
+    private static final byte[] SILENCIO_DE_CIERRE = new byte[SILENCIO_DE_CIERRE_MS * 32];
+
+    static String finDeAudio() {
+        return audio(SILENCIO_DE_CIERRE);
+    }
+
     /** Mismo objeto que recibe el chat ({@code HerramientaToolCallback}): {@code ok} y {@code resultado}. */
     static String respuestaDeHerramienta(String id, String nombre, ResultadoHerramienta resultado) {
         ObjectNode respuesta = JSON.createObjectNode();

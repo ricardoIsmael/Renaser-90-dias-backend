@@ -65,13 +65,26 @@ final class EventoDeVozEnVivoJson {
         }
     }
 
-    /** {@code true} solo para {@code {"tipo":"fin"}}. Lo demas (o un JSON roto) se ignora. */
-    static boolean esFin(String texto) {
+    /** Lo que la app puede pedir por texto. */
+    enum PedidoDeLaApp {
+        /** {@code {"tipo":"fin"}}: cerro el orbe. */
+        FIN,
+        /** {@code {"tipo":"finDeHabla"}}: toco el orbe al terminar de hablar (E-458). */
+        FIN_DE_HABLA,
+        /** Cualquier otra cosa, o un JSON roto: se ignora. */
+        OTRO
+    }
+
+    static PedidoDeLaApp pedido(String texto) {
         try {
             JsonNode nodo = JSON.readTree(texto);
-            return nodo != null && "fin".equals(nodo.path("tipo").asText(null));
+            String tipo = nodo == null ? null : nodo.path("tipo").asText(null);
+            if ("fin".equals(tipo)) {
+                return PedidoDeLaApp.FIN;
+            }
+            return "finDeHabla".equals(tipo) ? PedidoDeLaApp.FIN_DE_HABLA : PedidoDeLaApp.OTRO;
         } catch (JsonProcessingException e) {
-            return false;
+            return PedidoDeLaApp.OTRO;
         }
     }
 }

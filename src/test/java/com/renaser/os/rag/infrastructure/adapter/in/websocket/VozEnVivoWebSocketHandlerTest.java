@@ -127,6 +127,17 @@ class VozEnVivoWebSocketHandlerTest {
     }
 
     @Test
+    @DisplayName("E-458: {\"tipo\":\"finDeHabla\"} avisa que la persona termino de hablar, sin cerrar")
+    void finDeHablaNoCierra() throws Exception {
+        abrir();
+
+        handler.handleMessage(session, new TextMessage("{\"tipo\":\"finDeHabla\"}"));
+
+        verify(conversacion).terminoDeHablar();
+        verify(conversacion, never()).terminar();
+    }
+
+    @Test
     @DisplayName("si se corta la conexion, la conversacion termina")
     void cierreTermina() throws Exception {
         abrir();

@@ -168,6 +168,7 @@ mejora que justifica el cambio.
 | backend → app | `cuotaAgotada` | — | se acabó la cuota del día (10 min; 30 mientras se prueba, corregido 2026-09-24; **20** desde el 2026-09-25, corregido 2026-09-26); la app vuelve al flujo anterior |
 | backend → app | `error` | `valor` | texto apto para mostrar; después se cierra |
 | app → backend | `fin` | — | la persona cerró el orbe |
+| app → backend | `finDeHabla` | — | la persona tocó el orbe al terminar de hablar: el modelo contesta sin esperar el silencio (agregado 2026-09-30, E-458). La conversación sigue abierta |
 
 Se guarda en `mensajes_renasia` (agente COMPANION) cada turno completo: lo que dijo la persona
 (`oido`) y lo que respondió (`dicho`).
@@ -185,6 +186,17 @@ Se guarda en `mensajes_renasia` (agente COMPANION) cada turno completo: lo que d
   separado por un salto de párrafo y no se dice en voz alta).
 - **`turnoCompleto` llega una vez por respuesta**, aunque en el medio el modelo haya usado una
   herramienta (Gemini manda dos; el backend filtra el intermedio).
+
+**Agregado 2026-09-30 (E-458, D-232):**
+
+- **Una conversación, no una por pregunta.** La app deja el socket abierto entre preguntas; tocar el
+  orbe ya no lo cierra (manda `finDeHabla` o calla el audio). Se cierra con `fin` al mantener
+  presionado, al pasar a segundo plano o tras 45 s sin que nadie hable.
+- **`finDeHabla` es silencio, no `audioStreamEnd`.** El backend le manda a Gemini 1,7 s de ceros de
+  golpe (más que los 1500 ms que espera el detector). Con `audioStreamEnd` y sin más audio,
+  `gemini-3.8-live` esperó ~20 s sin contestar (medido el 2026-09-30).
+- **Audio antes de `listo`.** La app graba desde el toque y manda lo guardado apenas llega `listo`
+  (hasta 15 s); el backend lo recibe como cualquier audio.
 
 ## 5.quater Estado al 2026-09-24 (tarde)
 

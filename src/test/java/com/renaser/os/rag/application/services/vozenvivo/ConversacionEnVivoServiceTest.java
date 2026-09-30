@@ -252,6 +252,39 @@ class ConversacionEnVivoServiceTest {
     }
 
     @Test
+    @DisplayName("E-458: si avisa con una frase antes de la herramienta, el turnComplete tras el pedido tampoco cierra el turno")
+    void avisoAntesDeLaHerramienta() {
+        InvocacionHerramienta pedido = new InvocacionHerramienta("consultar_habitos_del_dia", Map.of());
+        when(herramientas.ejecutar(actor, pedido)).thenReturn(ResultadoHerramienta.exito("[]"));
+        service.iniciar(actor, salida);
+
+        proveedor.oyente.oido("Que habitos tengo?");
+        proveedor.oyente.dicho("Dejame revisar.");
+        proveedor.oyente.pedidoDeHerramienta("llamada-1", pedido);
+        proveedor.oyente.turnoCompleto();
+        proveedor.oyente.dicho(" Te faltan tres.");
+        proveedor.oyente.turnoCompleto();
+
+        assertThat(salida.eventos).filteredOn(EventoDeVozEnVivo.TurnoCompleto.class::isInstance).hasSize(1);
+        assertThat(guardados(2)).extracting(MensajeRenasia::contenido)
+                .containsExactly("Que habitos tengo?", "Dejame revisar. Te faltan tres.");
+    }
+
+    @Test
+    @DisplayName("E-458: terminoDeHablar le pide al modelo que conteste ya, sin cerrar; ya cerrada, no manda nada")
+    void terminoDeHablar() {
+        ConversacionEnVivo conversacion = service.iniciar(actor, salida);
+
+        conversacion.terminoDeHablar();
+        assertThat(proveedor.sesion.finesDeAudio).isEqualTo(1);
+        assertThat(proveedor.sesion.cerrada).isFalse();
+
+        conversacion.terminar();
+        conversacion.terminoDeHablar();
+        assertThat(proveedor.sesion.finesDeAudio).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("D-171: pedir la foto de un habito manda el evento evidencia y deja el texto de respaldo en el turno")
     void evidenciaComoEnElChat() {
         UUID registro = UUID.randomUUID();
@@ -534,6 +567,12 @@ class ConversacionEnVivoServiceTest {
         final List<byte[]> audios = new ArrayList<>();
         final List<String> respuestas = new ArrayList<>();
         boolean cerrada;
+        int finesDeAudio;
+
+        @Override
+        public void finDeAudio() {
+            finesDeAudio++;
+        }
 
         @Override
         public void enviarAudio(byte[] pcm16kHz) {
