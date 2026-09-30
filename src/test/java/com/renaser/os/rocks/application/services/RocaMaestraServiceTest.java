@@ -10,6 +10,7 @@ import com.renaser.os.rocks.application.ports.out.rocamaestra.LoadRocaMaestraPor
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.MetaCuantitativa;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
+import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraFijaException;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraId;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
@@ -130,7 +131,7 @@ class RocaMaestraServiceTest {
     }
 
     // ---------------------------------------------------------------------------------------
-    // definir(): crear o corregir el objetivo de 90 dias
+    // definir(): crear el objetivo de 90 dias; despues queda fijo y solo se registra el avance (D-234)
     // ---------------------------------------------------------------------------------------
 
     @Test
@@ -168,22 +169,64 @@ class RocaMaestraServiceTest {
         assertThat(guardada.meta().porcentaje()).isEqualTo(65);
     }
 
-    @Test
-    @DisplayName("si el eje ya tenia objetivo, se corrige el mismo: no se crea un segundo")
-    void definirCorrigeElExistente() {
-        UserId id = traineeActivo();
+    private RocaMaestraId yaDefinida(UserId id, BigDecimal avance) {
         RocaMaestraId yaExistente = RocaMaestraId.of(UUID.randomUUID());
         when(loadRocaMaestraPort.deParticipanteYEje(id, EjeObjetivo.TRABAJO)).thenReturn(Optional.of(
-                RocaMaestra.definir(yaExistente, id, EjeObjetivo.TRABAJO, "El objetivo viejo",
-                        MetaCuantitativa.nueva(new BigDecimal("10000"), "USD"), AYER)));
+                RocaMaestra.rehydrate(yaExistente, id, EjeObjetivo.TRABAJO,
+                        "Facturar 30.000 USD en contratos high-ticket",
+                        new MetaCuantitativa(new BigDecimal("30000.00"), avance, "USD", null), AYER, AYER)));
+        return yaExistente;
+    }
+
+    @Test
+    @DisplayName("D-234: la misma definicion otra vez (reintento del Mapa) se acepta y deja la roca igual")
+    void definirLoMismoEsIdempotente() {
+        UserId id = traineeActivo();
+        RocaMaestraId yaExistente = yaDefinida(id, new BigDecimal("19500.00"));
 
         RocaMaestra guardada = service.definir(comando(id));
 
-        assertThat(guardada.id()).as("misma roca, corregida").isEqualTo(yaExistente);
+        assertThat(guardada.id()).as("misma roca, no una segunda").isEqualTo(yaExistente);
+        assertThat(guardada.actualizadoEn()).as("nada cambio").isEqualTo(AYER);
+        verify(idGenerator, never()).newId();
+    }
+
+    @Test
+    @DisplayName("D-234: si solo cambia el avance, se registra el progreso sobre la misma roca")
+    void definirConOtroAvanceRegistraElProgreso() {
+        UserId id = traineeActivo();
+        RocaMaestraId yaExistente = yaDefinida(id, new BigDecimal("10000.00"));
+
+        RocaMaestra guardada = service.definir(comando(id));
+
+        assertThat(guardada.id()).isEqualTo(yaExistente);
         assertThat(guardada.creadoEn()).as("la fecha de creacion no se mueve").isEqualTo(AYER);
         assertThat(guardada.actualizadoEn()).isEqualTo(AHORA);
-        assertThat(guardada.objetivo()).isEqualTo("Facturar 30.000 USD en contratos high-ticket");
+        assertThat(guardada.meta().avance()).isEqualByComparingTo("19500");
         verify(idGenerator, never()).newId();
+    }
+
+    @Test
+    @DisplayName("D-234: cambiar objetivo, meta, unidad o linea base de una roca ya definida se rechaza sin guardar")
+    void definirRechazaCambiarLoFijo() {
+        UserId id = traineeActivo();
+        yaDefinida(id, new BigDecimal("19500.00"));
+        String objetivo = "Facturar 30.000 USD en contratos high-ticket";
+        BigDecimal avance = new BigDecimal("19500");
+        List<DefinirRocaMaestraCommand> cambios = List.of(
+                new DefinirRocaMaestraCommand(id, EjeObjetivo.TRABAJO, "Otro objetivo", new BigDecimal("30000"),
+                        avance, "USD", null),
+                new DefinirRocaMaestraCommand(id, EjeObjetivo.TRABAJO, objetivo, new BigDecimal("20000"),
+                        avance, "USD", null),
+                new DefinirRocaMaestraCommand(id, EjeObjetivo.TRABAJO, objetivo, new BigDecimal("30000"),
+                        avance, "PEN", null),
+                new DefinirRocaMaestraCommand(id, EjeObjetivo.TRABAJO, objetivo, new BigDecimal("30000"),
+                        avance, "USD", new BigDecimal("5000")));
+
+        for (DefinirRocaMaestraCommand cambio : cambios) {
+            assertThatThrownBy(() -> service.definir(cambio)).isInstanceOf(RocaMaestraFijaException.class);
+        }
+        verify(guardarRocaMaestraPort, never()).guardar(any());
     }
 
     @Test

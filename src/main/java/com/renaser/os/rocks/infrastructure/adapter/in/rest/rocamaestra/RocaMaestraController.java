@@ -4,11 +4,16 @@ import com.renaser.os.rocks.application.ports.in.rocamaestra.ConsultarRocasMaest
 import com.renaser.os.rocks.application.ports.in.rocamaestra.DefinirRocaMaestraUseCase;
 import com.renaser.os.rocks.application.ports.in.rocamaestra.DefinirRocaMaestraUseCase.DefinirRocaMaestraCommand;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
+import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraFijaException;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -16,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
 import java.util.List;
 
 @RestController
@@ -40,7 +46,14 @@ public class RocaMaestraController {
     }
 
     /**
-     * Define el objetivo de 90 dias de ese eje, o corrige el que ya estaba.
+     * Define el objetivo de 90 dias de ese eje, o registra su avance si ya estaba definido.
+     *
+     * <p>Una vez definido, el objetivo, la meta, la unidad y la linea base quedan fijos (D-234):
+     * cambiarlos responde 409 {@code ROCA_MAESTRA_FIJA}. Mandar lo mismo, o lo mismo con otro
+     * avance, responde 200.
+     *
+     * > <b>Corregido 2026-09-30 (D-234).</b> Decia: "Define el objetivo de 90 dias de ese eje, o
+     * > corrige el que ya estaba". Ya no se corrige.
      *
      * <p>{@code PUT} y no {@code POST} porque es idempotente por diseno: por eje hay una sola
      * Roca Maestra ({@code UNIQUE (participante_id, eje)}), asi que mandar dos veces lo mismo
@@ -53,5 +66,12 @@ public class RocaMaestraController {
                                         @Valid @RequestBody DefinirRocaMaestraRequest request) {
         return RocaMaestraResponse.from(definirUseCase.definir(new DefinirRocaMaestraCommand(
                 actor, eje, request.objetivo(), request.meta(), request.avance(), request.unidad(), request.lineaBase())));
+    }
+
+    /** El 409 con su codigo, para que la app lo distinga sin adivinar por el texto (D-234). */
+    @ExceptionHandler(RocaMaestraFijaException.class)
+    public ResponseEntity<RocaMaestraFijaResponse> rocaFija(RocaMaestraFijaException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON)
+                .body(new RocaMaestraFijaResponse(RocaMaestraFijaException.CODIGO, e.getMessage(), Instant.now()));
     }
 }

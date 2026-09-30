@@ -1611,6 +1611,12 @@ contestaba con generalidades.
   hito, preguntar qué pasó y proponer ajustar las acciones de la semana o usar el protocolo de
   retorno; solo si insiste con un motivo real, conversarlo con su mentor, sin inventar otro camino.
 
+  > **Corregido 2026-09-30 (D-234).** La última frase («solo si insiste con un motivo real,
+  > conversarlo con su mentor») ya no vale: el dueño decidió que los objetivos de 90 días del Mapa
+  > (las Rocas Maestras) no se cambian, y `PUT /rocks/master/{eje}` responde 409 `ROCA_MAESTRA_FIJA`.
+  > El prompt ahora dice que no se cambian, con calidez, recuerda el porqué y el próximo hito, y
+  > ofrece ajustar el objetivo de la semana, las acciones del día o el protocolo de retorno.
+
 Pruebas: `LecturaDelMapaServiceTest`, `ProximoHitoTest`, `PropuestasConObjetivoDelMapaTest`, `ConsultarMiMapaHerramientaTest`,
 `MiMapaConRelojDeLimaTest`, `MapaEnElPromptTest`, `SituacionDelTurnoServiceTest.resumenDelMapa`,
 `PromptSistemaRenasiaTest.usaSuMapaDeRenacimiento` y `ConsultarMapaDeRenacimientoIT` (Postgres real,

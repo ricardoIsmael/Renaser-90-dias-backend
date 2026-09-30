@@ -2,6 +2,7 @@ package com.renaser.os.rocks.domain.model.rocamaestra;
 
 import com.renaser.os.shared.domain.UserId;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
 
@@ -27,9 +28,19 @@ import java.util.Objects;
  * {@code onboarding} necesita sembrarlas, el camino es un puerto en {@code rocks.api}, no un
  * INSERT desde otro modulo.
  *
- * <p>Sigue siendo un {@code record}: es un agregado chico y se reemplaza entero al editarse
- * ({@link #redefinir}), en vez de mutar campos. {@code CLAUDE.md} §5.4.7 permite las dos
+ * <p>Sigue siendo un {@code record}: es un agregado chico y se reemplaza entero al cambiar
+ * ({@link #registrarAvance}), en vez de mutar campos. {@code CLAUDE.md} §5.4.7 permite las dos
  * formas; la inmutable es preferible cuando el agregado es asi de chico.
+ *
+ * <p><b>Una vez definida, queda fija (D-234, decision del dueno del 2026-09-30).</b> El objetivo,
+ * la meta, la unidad y el punto de partida nacen del Mapa de Renacimiento y no se cambian; lo que
+ * se ajusta son los objetivos semanales y las acciones diarias. Lo unico que se mueve es el
+ * avance, que no es cambiar la meta sino registrar cuanto se lleva.
+ *
+ * > <b>Corregido 2026-09-30 (D-234).</b> Este javadoc decia que el aprendiz <i>"edita su objetivo
+ * > durante el programa"</i> y el agregado tenia un {@code redefinir} libre que reemplazaba todo.
+ * > Esa era la regla de D-119; el dueno la cambio. Se conserva lo de arriba porque sigue siendo
+ * > cierto por que la escritura vive en {@code rocks} y no en {@code onboarding}.
  */
 public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo eje, String objetivo,
                            MetaCuantitativa meta, Instant creadoEn, Instant actualizadoEn) {
@@ -63,11 +74,56 @@ public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo e
     }
 
     /**
-     * Misma roca, otro contenido. Conserva identidad y fecha de creacion — es la misma meta del
-     * mismo eje, corregida, no una nueva.
+     * Recibe de nuevo la definicion del eje y decide que hacer con ella (D-234).
+     *
+     * <ul>
+     *   <li>Mismo objetivo, meta, unidad y punto de partida, mismo avance: se devuelve esta misma
+     *       roca, sin tocar. Es imprescindible que sea idempotente: la activacion del Mapa
+     *       reintenta el {@code PUT} de los tres ejes si algo fallo a mitad.
+     *   <li>Lo fijo igual y otro avance: {@link #registrarAvance}.
+     *   <li>Cualquier cambio en lo fijo: {@link RocaMaestraFijaException}.
+     * </ul>
+     *
+     * <p>Los numeros se comparan por valor ({@code compareTo}), no con {@code equals}: la base
+     * devuelve {@code 30000.00} y el cliente manda {@code 30000}, y eso es la misma meta.
      */
-    public RocaMaestra redefinir(String nuevoObjetivo, MetaCuantitativa nuevaMeta, Instant ahora) {
-        return new RocaMaestra(id, participanteId, eje, nuevoObjetivo, nuevaMeta, creadoEn, ahora);
+    public RocaMaestra recibirDefinicion(String objetivoPedido, MetaCuantitativa metaPedida, Instant ahora) {
+        if (!mismaDefinicion(objetivoPedido, metaPedida)) {
+            throw new RocaMaestraFijaException();
+        }
+        if (metaPedida == null || metaPedida.avance().compareTo(meta.avance()) == 0) {
+            return this;
+        }
+        return registrarAvance(metaPedida.avance(), ahora);
+    }
+
+    /**
+     * Anota cuanto lleva hoy la persona. No cambia la meta: conserva objetivo, unidad y punto de
+     * partida, y la identidad y fecha de creacion de la roca.
+     */
+    public RocaMaestra registrarAvance(BigDecimal nuevoAvance, Instant ahora) {
+        if (!tieneMeta()) {
+            throw new IllegalStateException("Un objetivo sin meta medible no tiene avance que registrar");
+        }
+        return new RocaMaestra(id, participanteId, eje, objetivo, meta.conAvance(nuevoAvance), creadoEn, ahora);
+    }
+
+    private boolean mismaDefinicion(String objetivoPedido, MetaCuantitativa metaPedida) {
+        return objetivoPedido != null && objetivo.equals(objetivoPedido.trim()) && mismaMedida(metaPedida);
+    }
+
+    /** Misma meta, unidad y punto de partida; el avance no cuenta, es lo que si se mueve. */
+    private boolean mismaMedida(MetaCuantitativa metaPedida) {
+        if (meta == null || metaPedida == null) {
+            return meta == metaPedida;
+        }
+        return meta.objetivo().compareTo(metaPedida.objetivo()) == 0
+                && meta.unidad().equals(metaPedida.unidad())
+                && mismoNumero(meta.lineaBase(), metaPedida.lineaBase());
+    }
+
+    private static boolean mismoNumero(BigDecimal a, BigDecimal b) {
+        return a == null || b == null ? a == b : a.compareTo(b) == 0;
     }
 
     /** {@code false} = objetivo puramente cualitativo, sin barra de avance que dibujar. */

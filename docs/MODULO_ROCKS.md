@@ -112,7 +112,7 @@ rocks/
 | Puerto in | Agregado | Nota |
 |---|---|---|
 | `ConsultarRocasMaestrasUseCase` | rocamaestra | lectura |
-| `DefinirRocaMaestraUseCase` | rocamaestra | **2026-09-07 (RK-9)**, upsert por eje. Corrige la nota vieja de "solo lectura" |
+| `DefinirRocaMaestraUseCase` | rocamaestra | **2026-09-07 (RK-9)**, upsert por eje. Corrige la nota vieja de "solo lectura". **Desde 2026-09-30 (D-234) la roca queda fija una vez definida**: la misma definición se acepta (idempotente), otro avance se registra (`RocaMaestra.registrarAvance`), y cambiar objetivo, meta, unidad o línea base es 409 `ROCA_MAESTRA_FIJA` |
 | `ConsultarRocasMensualesUseCase` / `DefinirRocaMensualUseCase` | rocamensual | **2026-09-07 (RK-10)**, el nivel que faltaba |
 | `ConsultarObjetivoDelMesUseCase` | rocamensual | **2026-09-22 (RK-11)**, el tramo del mes, calculado |
 | `CrearPlanSemanalUseCase` | rocasemanal | **2026-09-22 (RK-12)**: de 3 ejes obligatorios a 1 |
@@ -134,7 +134,7 @@ rocks/
 | Método | Ruta | Caso de uso | Repo viejo |
 |---|---|---|---|
 | GET | `/api/v1/rocks/master` | `ConsultarRocasMaestrasUseCase` | nuevo (antes embebido en W-01) |
-| PUT | `/api/v1/rocks/master/{eje}` | `DefinirRocaMaestraUseCase` | **nuevo 2026-09-07 (RK-9)** — define o corrige el objetivo de 90 días |
+| PUT | `/api/v1/rocks/master/{eje}` | `DefinirRocaMaestraUseCase` | **nuevo 2026-09-07 (RK-9)** — define el objetivo de 90 días y después solo registra su avance; cambiarlo es 409 `ROCA_MAESTRA_FIJA` (D-234). *Corregido 2026-09-30: decía «define o corrige el objetivo de 90 días»; el dueño decidió que la Roca Maestra no se cambia.* |
 | GET | `/api/v1/rocks/monthly` | `ConsultarRocasMensualesUseCase` | **nuevo 2026-09-07 (RK-10)** |
 | GET | `/api/v1/rocks/monthly/plan` | `ConsultarObjetivoDelMesUseCase` | **nuevo 2026-09-22 (RK-11)** |
 | PUT | `/api/v1/rocks/monthly/{eje}/{numeroMes}` | `DefinirRocaMensualUseCase` | **nuevo 2026-09-07 (RK-10)** |

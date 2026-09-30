@@ -6,6 +6,7 @@ import com.renaser.os.rocks.application.ports.in.rocamaestra.DefinirRocaMaestraU
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.MetaCuantitativa;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
+import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraFijaException;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraId;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.SecurityConfig;
@@ -38,15 +39,18 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Contrato HTTP de {@code PUT /api/v1/rocks/master/{eje}}, el endpoint con el que el aprendiz
- * define o corrige su objetivo de 90 dias.
+ * define su objetivo de 90 dias y despues registra su avance (una vez definido queda fijo, D-234).
  *
  * <p><b>Por que con la cadena de seguridad ENCENDIDA y con sesion real.</b> {@code /api/v1/rocks/**}
  * exige {@code authenticated()} desde 2026-09-06, y lo que mas importa verificar de este endpoint
@@ -188,5 +192,27 @@ class RocaMaestraControllerTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(definirUseCase);
+    }
+
+    /**
+     * D-234: cambiar una Roca Maestra ya definida es 409 con codigo propio y el mensaje para la
+     * persona tal cual. Con el handler global solo, saldria 409 pero sin {@code codigo}: la app no
+     * podria distinguirlo de cualquier otro conflicto sin leer el texto.
+     */
+    @Test
+    @DisplayName("D-234: cambiar el objetivo ya definido es 409 ROCA_MAESTRA_FIJA con el mensaje para la persona")
+    void cambiarUnaRocaFijaEs409ConCodigo() throws Exception {
+        doThrow(new RocaMaestraFijaException()).when(definirUseCase).definir(any());
+
+        mockMvc.perform(put(RUTA_TRABAJO)
+                        .session(sesion)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"objetivo\":\"Otro objetivo\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.codigo").value("ROCA_MAESTRA_FIJA"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString(
+                        "quedó fijo en tu Mapa de Renacimiento")))
+                .andExpect(jsonPath("$.timestamp").exists());
     }
 }

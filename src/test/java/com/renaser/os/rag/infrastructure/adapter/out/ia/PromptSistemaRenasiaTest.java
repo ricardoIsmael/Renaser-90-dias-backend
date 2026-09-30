@@ -540,7 +540,8 @@ class PromptSistemaRenasiaTest {
     /**
      * D-233: el Mapa de Renacimiento. Para sus objetivos, el porque de un habito y el desanimo se usa
      * consultar_mi_mapa, con el protocolo de retorno en sus palabras; sin Mapa no se arman metas, y nunca se
-     * inventan numeros ni hitos.
+     * inventan numeros ni hitos. D-234: los objetivos de 90 dias del Mapa no se cambian; se ofrece ajustar la
+     * semana, las acciones del dia o el protocolo de retorno.
      */
     @Test
     @DisplayName("D-233: usa su Mapa para objetivos, porque y desanimo, sin inventar metas ni hitos")
@@ -561,9 +562,14 @@ class PromptSistemaRenasiaTest {
                         + "sugiere como conectarlo; si\n  insiste, proponlo igual.")
                 .contains("Sin Mapa: dilo en una linea e invitala a completarlo; no le armes metas. Si\n  pide "
                         + "proponer algo, proponlo igual.")
-                .contains("se un poco estricto, porque bajarla a la primera es no lograrla.")
-                .contains("Tu no cambias el Mapa ni sus objetivos de 90 dias, y ninguna herramienta lo\n  hace.")
-                .contains("Solo si insiste con un motivo real, dile que lo\n  converse con su mentor.")
+                .contains("los objetivos de 90 dias de su Mapa NO se cambian, ni por ti, ni\n  por una "
+                        + "herramienta, ni por su mentor. Diselo con calidez")
+                .contains("recuerdale su porque y su proximo hito")
+                .contains("ofrecele lo\n  que si se ajusta: su objetivo de la semana, sus acciones del dia, o su\n  "
+                        + "protocolo de retorno")
+                // D-234: ya no se deriva al mentor para cambiar la meta; la meta no se cambia.
+                .doesNotContain("converse con su mentor")
+                .doesNotContain("D-234")
                 .contains("Nunca inventes metas, numeros ni hitos")
                 .doesNotContain("D-233");
         // La seccion va antes de Tus limites, que sigue intacta.

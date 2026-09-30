@@ -12535,3 +12535,29 @@ y un solo login reutilizando el token.
 
 **Cómo evitar que vuelva a pasar.** Nunca `pkill -f` con un patrón que aparece en el mismo comando; en los scripts
 de prueba, loguearse una vez y reutilizar el token (y no reintentar el login en bucle).
+
+## E-462 · El objetivo de 90 días (Roca Maestra) se podía cambiar libremente desde Objetivos del Plan, contra la regla del dueño (regla de negocio, RESUELTO, 30/09)
+
+**Síntoma.** En Plan → Objetivos, el botón de editar abría un modal con la frase del objetivo, la meta, la unidad y
+el punto de partida editables, y «¡Objetivo actualizado! 🎯 — Tu objetivo de 90 días quedó guardado.» confirmaba
+cualquier cambio. El dueño decidió (2026-09-30) que la Roca Maestra, que nace del Mapa de Renacimiento del día 7,
+**no se cambia**; solo se ajustan los objetivos semanales y las acciones diarias.
+
+**Causa real.** `PUT /api/v1/rocks/master/{eje}` era un upsert libre: `RocaMaestraService.definir` →
+`RocaMaestra.redefinir(nuevoObjetivo, nuevaMeta, ahora)` reemplazaba todo sin condición (regla de D-119, «el
+aprendiz edita su objetivo durante el programa»). Trampa escondida para la corrección: el modal **prellenaba la
+línea base con el avance** cuando la roca era vieja y no la tenía, así que con una regla «fija» ingenua hasta
+registrar el avance de una roca pre-V43 habría rebotado como «cambio».
+
+**Solución (D-234).** `RocaMaestra.recibirDefinicion`: misma definición → la misma roca (idempotente, la
+activación del Mapa reintenta el PUT); solo otro avance → `registrarAvance`; cualquier otro cambio →
+`RocaMaestraFijaException` → 409 `{"codigo":"ROCA_MAESTRA_FIJA","message":"Tu objetivo de 90 días quedó fijo en tu
+Mapa de Renacimiento y no se cambia. Lo que sí puedes ajustar son tus objetivos semanales y tus acciones diarias."}`.
+Los números se comparan con `compareTo` (`30000.00` de la base = `30000` del cliente). La app muestra lo fijo de
+solo lectura y manda lo guardado tal cual (línea base `null` sigue `null`), cambiando solo el avance.
+
+**Cómo evitar que vuelva a pasar.** `RocaMaestraTest` (idempotente, solo avance, rechazo por objetivo, meta,
+unidad, línea base y meta agregada/quitada), `RocaMaestraServiceTest.definirRechazaCambiarLoFijo` (no guarda),
+`RocaMaestraControllerTest.cambiarUnaRocaFijaEs409ConCodigo`, y en la app el test del modal que verifica que lo
+fijo no es editable y que se manda lo guardado. Un cliente que prellene campos «fijos» con otro valor que el del
+servidor rompe el avance: mandar siempre lo que devolvió `GET /rocks/master`.

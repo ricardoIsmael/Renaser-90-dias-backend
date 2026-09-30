@@ -11,7 +11,14 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 
 /**
- * Define el objetivo de 90 dias del aprendiz en un eje, o corrige el que ya tenia.
+ * Define el objetivo de 90 dias del aprendiz en un eje, o registra su avance si ya lo tenia.
+ *
+ * <p><b>Una vez definido, el objetivo queda fijo (D-234).</b> Mandar la misma definicion se
+ * acepta; mandarla con otro {@code avance} registra el progreso; cambiar el objetivo, la meta, la
+ * unidad o la linea base lanza {@code RocaMaestraFijaException} (409 {@code ROCA_MAESTRA_FIJA}).
+ *
+ * > <b>Corregido 2026-09-30 (D-234).</b> Decia: "Define el objetivo [...] o corrige el que ya
+ * > tenia". Ya no se corrige: lo decidio el dueno.
  *
  * <p><b>Es una sola operacion y no un "crear" mas un "editar"</b> porque la tabla ya impone
  * {@code UNIQUE (participante_id, eje)}: por eje hay exactamente una Roca Maestra o ninguna.

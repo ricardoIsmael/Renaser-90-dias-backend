@@ -46,9 +46,14 @@ public class RocaMaestraService implements ConsultarRocasMaestrasUseCase, Defini
     }
 
     /**
-     * Define el objetivo del eje o corrige el que ya estaba. Es la misma operacion porque por
-     * eje hay una sola Roca Maestra ({@code UNIQUE (participante_id, eje)}): si existe se
-     * redefine conservando identidad y fecha de creacion, si no se crea.
+     * Define el objetivo del eje la primera vez; despues solo registra el avance (D-234). Por eje
+     * hay una sola Roca Maestra ({@code UNIQUE (participante_id, eje)}): si no existe se crea, y si
+     * existe decide {@link RocaMaestra#recibirDefinicion} — la misma definicion se acepta
+     * (idempotente), otro avance se registra, y cualquier cambio del objetivo, la meta, la unidad
+     * o el punto de partida se rechaza con {@code RocaMaestraFijaException} (409).
+     *
+     * > <b>Corregido 2026-09-30 (D-234).</b> Decia: "Define el objetivo del eje o corrige el que
+     * > ya estaba [...] si existe se redefine". El dueno decidio que la Roca Maestra no se cambia.
      */
     @Override
     public RocaMaestra definir(DefinirRocaMaestraCommand command) {
@@ -59,7 +64,7 @@ public class RocaMaestraService implements ConsultarRocasMaestrasUseCase, Defini
 
         return guardarRocaMaestraPort.guardar(
                 loadRocaMaestraPort.deParticipanteYEje(command.actorId(), command.eje())
-                        .map(existente -> existente.redefinir(command.objetivo(), meta, clock.now()))
+                        .map(existente -> existente.recibirDefinicion(command.objetivo(), meta, clock.now()))
                         .orElseGet(() -> RocaMaestra.definir(RocaMaestraId.of(idGenerator.newId()),
                                 command.actorId(), command.eje(), command.objetivo(), meta, clock.now())));
     }
