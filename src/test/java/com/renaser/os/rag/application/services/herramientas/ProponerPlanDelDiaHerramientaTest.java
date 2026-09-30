@@ -38,6 +38,11 @@ import static org.mockito.Mockito.when;
  */
 class ProponerPlanDelDiaHerramientaTest {
 
+    /** D-233: el Mapa no es lo que se prueba aca; si no se lee, la propuesta sale como antes. */
+    private static final MapaParaProponer SIN_MAPA =
+            new MapaParaProponer(id -> { throw new IllegalStateException("el Mapa no se lee en esta prueba"); },
+                    id -> java.util.Optional.empty());
+
     private static final UserId APRENDIZ = UserId.of(UUID.randomUUID());
     /** Miercoles 2026-09-23 en la zona de la persona; manana es jueves. */
     private static final LocalDate HOY = LocalDate.of(2026, 9, 23);
@@ -49,7 +54,7 @@ class ProponerPlanDelDiaHerramientaTest {
     private final PlanificarRocasPort planificar = mock(PlanificarRocasPort.class);
     private final ProponerAccionUseCase proponer = mock(ProponerAccionUseCase.class);
     private final ProponerPlanDelDiaHerramienta herramienta =
-            new ProponerPlanDelDiaHerramienta(rocas, planificar, proponer);
+            new ProponerPlanDelDiaHerramienta(rocas, planificar, proponer, SIN_MAPA);
 
     @BeforeEach
     void ejes() {

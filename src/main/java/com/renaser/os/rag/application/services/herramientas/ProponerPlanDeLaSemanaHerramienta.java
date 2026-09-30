@@ -60,10 +60,13 @@ public class ProponerPlanDeLaSemanaHerramienta implements HerramientaAgente {
 
     private final PlanificarRocasPort planificarPort;
     private final ProponerAccionUseCase proponerAccion;
+    private final MapaParaProponer mapa;
 
-    public ProponerPlanDeLaSemanaHerramienta(PlanificarRocasPort planificarPort, ProponerAccionUseCase proponerAccion) {
+    public ProponerPlanDeLaSemanaHerramienta(PlanificarRocasPort planificarPort, ProponerAccionUseCase proponerAccion,
+                                             MapaParaProponer mapa) {
         this.planificarPort = planificarPort;
         this.proponerAccion = proponerAccion;
+        this.mapa = mapa;
     }
 
     @Override
@@ -80,7 +83,8 @@ public class ProponerPlanDeLaSemanaHerramienta implements HerramientaAgente {
         } catch (PlanMalFormadoException malFormado) {
             return ResultadoHerramienta.fallo(malFormado.getMessage());
         }
-        String resumen = TextoDePlanDeRocas.resumenDeLaSemana(objetivos);
+        MapaParaProponer.Vinculo vinculo = mapa.para(actorId, objetivos.stream().map(ObjetivoSemanal::eje).toList());
+        String resumen = TextoDePlanDeRocas.resumenDeLaSemana(objetivos) + vinculo.enElResumen();
         InvocacionHerramienta normalizada = new InvocacionHerramienta(NOMBRE,
                 Map.of(ARGUMENTO_PLAN, PlanDeRocasNormalizado.deLaSemana(objetivos)));
         PropuestaCreada creada;
@@ -93,6 +97,7 @@ public class ProponerPlanDeLaSemanaHerramienta implements HerramientaAgente {
         if (AvisoDePropuesta.yaEstaba(creada)) {
             return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
-        return ResultadoHerramienta.exito("Propuesta creada: " + resumen + TextoDePlanDeRocas.NO_ESTA_HECHO);
+        return ResultadoHerramienta.exito("Propuesta creada: " + resumen + TextoDePlanDeRocas.NO_ESTA_HECHO
+                + vinculo.paraElModelo());
     }
 }

@@ -2,6 +2,7 @@ package com.renaser.os.rag.application.services;
 
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
+import com.renaser.os.rag.application.ports.out.mapa.ConsultarMapaDeRenacimientoPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarTratoDeLaPersonaPort;
@@ -12,6 +13,8 @@ import com.renaser.os.rag.application.ports.out.participante.HabitosDeHoy.Habito
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoDelPlan;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.PlanDelAprendiz;
+import com.renaser.os.rag.domain.model.mapa.MapaDeLaPersona;
+import com.renaser.os.rag.domain.model.mapa.ProximoHito;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
@@ -48,8 +51,27 @@ class SituacionDelTurnoServiceTest {
     private final ConsultarAgendaHabitosPort agendaPort = mock(ConsultarAgendaHabitosPort.class);
     private final GestionarPlanDeHabitosPort planPort = mock(GestionarPlanDeHabitosPort.class);
     private final ConsultarTratoDeLaPersonaPort tratoPort = mock(ConsultarTratoDeLaPersonaPort.class);
-    private final SituacionDelTurnoService service =
-            new SituacionDelTurnoService(situacionPort, agendaPort, planPort, FixedClock.at(TRES_AM_UTC), tratoPort);
+    private final ConsultarMapaDeRenacimientoPort mapaPort = mock(ConsultarMapaDeRenacimientoPort.class);
+    private final SituacionDelTurnoService service = new SituacionDelTurnoService(situacionPort, agendaPort, planPort,
+            FixedClock.at(TRES_AM_UTC), tratoPort, mapaPort);
+
+    /** D-233: la prioridad y el proximo hito del Mapa viajan en la situacion; si falla, sin Mapa y el turno sigue. */
+    @Test
+    @DisplayName("D-233: la situacion lleva la prioridad y el proximo hito del Mapa, y nada si falla la lectura")
+    void resumenDelMapa() {
+        when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
+        when(mapaPort.de(APRENDIZ)).thenReturn(new MapaDeLaPersona(true, true, "salud", List.of(),
+                List.of(new MapaDeLaPersona.Hito("salud", 30, "89 kg")), null, List.of(), List.of()));
+
+        var mapa = service.de(APRENDIZ).orElseThrow().mapa();
+
+        assertThat(mapa.prioridad()).isEqualTo("salud");
+        assertThat(mapa.proximo()).isEqualTo(new ProximoHito(30, 18));
+        assertThat(mapa.hito().texto()).isEqualTo("89 kg");
+
+        when(mapaPort.de(APRENDIZ)).thenThrow(new IllegalStateException("caida"));
+        assertThat(service.de(APRENDIZ).orElseThrow().mapa()).isNull();
+    }
 
     /** E-457: el trato de su ficha viaja en la situacion; si no se puede leer, neutro y el turno sigue. */
     @Test

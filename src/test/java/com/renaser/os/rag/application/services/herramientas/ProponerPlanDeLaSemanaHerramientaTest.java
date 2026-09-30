@@ -27,12 +27,17 @@ import static org.mockito.Mockito.when;
 /** {@code proponer_plan_de_la_semana} (R2): valida la forma y deja una propuesta; nunca escribe. */
 class ProponerPlanDeLaSemanaHerramientaTest {
 
+    /** D-233: el Mapa no es lo que se prueba aca; si no se lee, la propuesta sale como antes. */
+    private static final MapaParaProponer SIN_MAPA =
+            new MapaParaProponer(id -> { throw new IllegalStateException("el Mapa no se lee en esta prueba"); },
+                    id -> java.util.Optional.empty());
+
     private static final UserId APRENDIZ = UserId.of(UUID.randomUUID());
 
     private final PlanificarRocasPort planificar = mock(PlanificarRocasPort.class);
     private final ProponerAccionUseCase proponer = mock(ProponerAccionUseCase.class);
     private final ProponerPlanDeLaSemanaHerramienta herramienta =
-            new ProponerPlanDeLaSemanaHerramienta(planificar, proponer);
+            new ProponerPlanDeLaSemanaHerramienta(planificar, proponer, SIN_MAPA);
 
     @BeforeEach
     void ejes() {

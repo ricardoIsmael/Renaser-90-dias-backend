@@ -1551,6 +1551,102 @@ idea! ✨ ¿Lo pones en Cuerpo, Mente, Emociones o Espíritu? ¿Y a qué hora?»
 dejé la propuesta abajo para que la confirmes 🙌» → la persona toca Confirmar → «Hábito 'Leer 20
 minutos' creado en Mente, a las 21:00, todos los días. Ya lo ves en Training.»
 
+### D-233 — SER conoce el Mapa de Renacimiento de cada persona (2026-09-30)
+
+Pedido del dueño (30-09): que SER sepa, por persona, cuáles son SUS objetivos del Mapa de
+Renacimiento (día 7, flujo `mapa_dia7`, V41) y su lógica, para ayudarla. Hasta hoy SER no sabía
+nada del Mapa: ni el prompt ni ninguna herramienta lo nombraban, y a «¿para qué me sirve caminar?»
+contestaba con generalidades.
+
+- **Lectura** — `onboarding.api.MapaDeRenacimientoFinder` (`LecturaDelMapaService`): el Mapa
+  completo, crudo como lo guarda el motor de onboarding. Una consulta por clave
+  (`LeerRespuestasPorClavePort`) para prioridad, los tres objetivos, los nueve hitos y el retorno;
+  más `acciones_mapa`, `protocolos_reemplazo_mapa` y la marca de `etapas_onboarding_completadas`.
+  Quien no contestó nada sale `sinMapa()`: es el estado normal de todo el que no llegó al día 7 (o
+  que lo hizo antes del 14-09, cuando el Mapa vivía solo en el teléfono). `rag` lo lee por
+  `ConsultarMapaDeRenacimientoPort` → `ConsultarMapaDeRenacimientoAdapter` (D-41), con su propio
+  tipo `MapaDeLaPersona`. `MedicionDelMapaFinder` (lo que usa `rocks`) no se tocó.
+- **Herramienta** `consultar_mi_mapa` (R0, sin parámetros, `ConsultarMiMapaHerramienta` +
+  `TextoDelMapa`): prioridad; por objetivo la meta redactada, «Hoy X → día 90: Y» con unidad,
+  moneda o periodo (relaciones: «5 de 10 → 8 de 10» y lo que va a hacer distinto), evidencia y
+  porqué; los hitos 30/60/90 con el **próximo** marcado («[PRÓXIMO: faltan 7 días, el martes
+  29/09/2026]», «es hoy», «ya pasó»); las acciones que eligió; el protocolo de retorno y los
+  reemplazos. Cierra con «No agregues metas, números ni hitos que no estén acá». Si falta un
+  campo, no aparece; si el Mapa está a medias, lo dice. Sin Mapa: antes del día 7 dice que se arma
+  ese día; después, que no lo tiene y que la invite a completarlo.
+- **Próximo hito** (`rag.domain.model.mapa.ProximoHito`): el primero de 30/60/90 que no pasó (el
+  mismo día cuenta como hoy); nada antes del día 1 ni después del 90. El día es el que da
+  `ConsultarSituacionDelAprendizPort`, que `users` **deriva de las fechas en su zona** (regla 02),
+  así que el «día N» del prompt y el de la herramienta no pueden diferir; la fecha del hito sale de
+  «hoy en su zona». `MiMapaConRelojDeLimaTest` lo fija con el reloj a las 03:30 UTC (el día
+  anterior en Lima).
+- **Una línea en la situación de cada turno** (`ResumenDelMapa` + `MapaEnElPrompt`, entre el trato
+  y los hábitos): «Mapa de Renacimiento: prioridad Salud; próximo hito día 30 (en 7 días), salud:
+  "89 kg". Sus metas, su porqué y su protocolo de retorno no están acá: llama consultar_mi_mapa.» El texto del hito lo
+  escribió la persona y va al prompt de sistema: se aplana a una línea y se acota a 90 caracteres.
+  Sin Mapa, una línea corta; si no se pudo leer, nada (el turno no se rompe). La voz en vivo la
+  recibe sola porque arma su prompt con `formatearSituacion` (no se tocó `vozenvivo`).
+- **Prompt** — sección «Su Mapa de Renacimiento», antes de «Tus límites»: objetivos → su meta, cómo
+  está hoy y a dónde va (los de la semana o el mes siguen en `consultar_rocas`); «para qué hago X»
+  → el objetivo al que empuja y su porqué; desánimo o duda de seguir → su porqué, el próximo hito y
+  su protocolo de retorno con sus palabras como paso de hoy; sin Mapa → una línea e invitación;
+  nunca inventa metas, números ni hitos.
+
+- **Los objetivos cuelgan del Mapa** (aclaración del dueño del 30-09): antes de proponer una roca
+  semanal o acciones del día, SER mira el Mapa, y las cuatro herramientas que proponen objetivos
+  (`proponer_agregar_accion`, `proponer_plan_del_dia`, `proponer_plan_de_la_semana`,
+  `proponer_editar_objetivo_semanal`) lo agregan solas al resumen de la tarjeta con `MapaParaProponer`:
+  «Para tu objetivo de salud: Bajar de 92 a 85 kg al dia 90. Proximo hito, dia 60: 87 kg.» El eje
+  se traduce CUERPO → salud, TRABAJO → negocio y dinero, RELACIONES → relaciones
+  (`MapaDeLaPersona.areaDelEje`, la misma correspondencia que `rocks.ObjetivoDelMesService`). Sin
+  meta redactada sale «de 3000 soles a 6000 soles». Nunca bloquea: si el Mapa no se lee, la tarjeta
+  sale como antes; sin Mapa, el modelo recibe «invitala a completar su Mapa»; si el eje no tiene
+  objetivo, «diselo en una linea y sugiere como conectarlo»; si lo pedido no apunta al objetivo, lo
+  dice y, si insiste, la propuesta queda igual. Los **hábitos** no pasan por acá: no se cuelgan de un
+  objetivo (al explicar para qué sirve uno puede nombrarlo, nada más).
+- **Cambiar el Mapa, con fricción:** ninguna herramienta de SER escribe el Mapa ni las Rocas
+  Maestras (`rag` no usa `DefinirRocaMaestraUseCase`, los endpoints de `mapa-renacimiento` ni de
+  `onboarding/answers`, y `rocks.api` no expone escritura de maestras), así que no hubo que quitar
+  nada. El prompt manda ser «un poco estricto»: ante «bajar la meta», recordar el porqué y el próximo
+  hito, preguntar qué pasó y proponer ajustar las acciones de la semana o usar el protocolo de
+  retorno; solo si insiste con un motivo real, conversarlo con su mentor, sin inventar otro camino.
+
+Pruebas: `LecturaDelMapaServiceTest`, `ProximoHitoTest`, `PropuestasConObjetivoDelMapaTest`, `ConsultarMiMapaHerramientaTest`,
+`MiMapaConRelojDeLimaTest`, `MapaEnElPromptTest`, `SituacionDelTurnoServiceTest.resumenDelMapa`,
+`PromptSistemaRenasiaTest.usaSuMapaDeRenacimiento` y `ConsultarMapaDeRenacimientoIT` (Postgres real,
+claves y slots de la V41).
+
+**Prueba con IA real (30-09, backend propio en :8088, cuenta `e2e-aprendiz` en su día 30 con un Mapa
+de prueba cargado por la API).** La primera vuelta mostró dos fallas del modelo que se corrigieron en
+el prompt: mezclaba los hitos del día 30 con las metas («en dinero buscas 4.000 soles», la meta era
+6.000) y, con la línea de la situación, contestaba «para qué camino» y el desánimo sin llamar la
+herramienta («tienes tu protocolo de retorno» sin decir cuál). Se agregó que la línea NO trae metas,
+porqué ni retorno, que un hito es un paso y no la meta, y que el retorno se dice, no se nombra.
+Después:
+
+- «cuales son mis objetivos?» → «Tus objetivos a 90 días son bajar a 85 kg en salud, vender 6.000
+  soles al mes en negocio y llegar a 8 en tu relación de pareja.» (`consultar_mi_mapa`)
+- «para que me sirve caminar 40 minutos?» → «Caminar 40 minutos te empuja directo hacia tu meta de
+  85 kg en salud, y lo haces por tu porqué: tener energía para jugar con tus hijos y bajar la
+  presión.»
+- «voy mal esta semana, no se si seguir» → «Recuerda tu porqué: tener energía para jugar con tus
+  hijos y bajar la presión. Tu protocolo de retorno para volver hoy mismo es caminar 10 minutos y
+  tomar dos vasos de agua antes del desayuno.» (`consultar_mi_mapa`)
+- «cual es mi proximo hito?» → «Tu próximo hito es justo hoy en el día 30: llegar a 89 kg en salud,
+  4.000 soles mensuales en negocio y 6 de 10 en relaciones.» (`consultar_mi_mapa`)
+- «quiero agregar correr 5 km el sabado» → `proponer_agregar_accion`, tarjeta: «Agregar al plan del
+  sabado 2026-10-03, en Cuerpo: correr 5 km (sin hora). … Para tu objetivo de salud: Bajar de 92 a
+  85 kg al dia 90. Proximo hito, dia 30: 89 kg.»
+- «pon como objetivo de esta semana llamar a 10 clientes» → `consultar_rocas` +
+  `proponer_plan_de_la_semana`, tarjeta: «… Trabajo: Llamar a 10 clientes. … Para tu objetivo de
+  negocio y dinero: Vender 6000 soles al mes al dia 90. Proximo hito, dia 30: 4000 soles al mes.»
+- «quiero bajar mi meta de peso, es muy dificil» → «recuerda tu porqué y tu próximo hito de hoy:
+  llegar a los 89 kg. En lugar de bajar la meta, te sugiero enfocar la energía de hoy en tu
+  protocolo de retorno o ajustar las acciones de tu semana.» (no cambió nada)
+- «cambia mi objetivo de negocio a la mitad» → «recuerda tu hito de hoy de 4000 soles y el porqué
+  detrás de tu meta a 90 días. En lugar de bajar la mitad, te sugiero ajustar las acciones de tu
+  semana.» (no cambió nada)
+
 ### Contrato SSE de `POST /api/v1/renasia/mensajes` (actualizado 2026-09-26, D-171 y D-178)
 
 Formas de `data:` (fuente de verdad: `EventoRenasiaSseMapper`):

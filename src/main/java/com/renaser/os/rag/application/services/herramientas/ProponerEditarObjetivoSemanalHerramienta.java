@@ -76,15 +76,17 @@ public class ProponerEditarObjetivoSemanalHerramienta implements HerramientaAgen
     private final PlanificarRocasPort planificarPort;
     private final EditarObjetivoSemanalPort editarPort;
     private final ProponerAccionUseCase proponerAccion;
+    private final MapaParaProponer mapa;
 
     public ProponerEditarObjetivoSemanalHerramienta(ConsultarRocasDelAprendizPort rocasPort,
                                                     PlanificarRocasPort planificarPort,
                                                     EditarObjetivoSemanalPort editarPort,
-                                                    ProponerAccionUseCase proponerAccion) {
+                                                    ProponerAccionUseCase proponerAccion, MapaParaProponer mapa) {
         this.rocasPort = rocasPort;
         this.planificarPort = planificarPort;
         this.editarPort = editarPort;
         this.proponerAccion = proponerAccion;
+        this.mapa = mapa;
     }
 
     @Override
@@ -135,7 +137,9 @@ public class ProponerEditarObjetivoSemanalHerramienta implements HerramientaAgen
     }
 
     private ResultadoHerramienta proponer(UserId actorId, int numeroSemana, EdicionPedida pedida) {
-        String resumen = TextoDeAjustesDeRocas.resumenDeEdicion(numeroSemana, pedida.eje(), pedida.cambio());
+        MapaParaProponer.Vinculo vinculo = mapa.para(actorId, List.of(pedida.eje()));
+        String resumen = TextoDeAjustesDeRocas.resumenDeEdicion(numeroSemana, pedida.eje(), pedida.cambio())
+                + vinculo.enElResumen();
         InvocacionHerramienta normalizada = new InvocacionHerramienta(NOMBRE,
                 ArgumentosDeAjusteDeRocas.edicionNormalizada(numeroSemana, pedida.eje(), pedida.cambio()));
         PropuestaCreada creada;
@@ -148,6 +152,7 @@ public class ProponerEditarObjetivoSemanalHerramienta implements HerramientaAgen
         if (AvisoDePropuesta.yaEstaba(creada)) {
             return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
-        return ResultadoHerramienta.exito("Propuesta creada: " + resumen + TextoDePlanDeRocas.NO_ESTA_HECHO);
+        return ResultadoHerramienta.exito("Propuesta creada: " + resumen + TextoDePlanDeRocas.NO_ESTA_HECHO
+                + vinculo.paraElModelo());
     }
 }

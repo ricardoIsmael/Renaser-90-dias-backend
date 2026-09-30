@@ -2,6 +2,7 @@ package com.renaser.os.rag.application.services;
 
 import com.renaser.os.rag.application.ports.in.conversacion.ConsultarSituacionDelTurnoUseCase;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
+import com.renaser.os.rag.application.ports.out.mapa.ConsultarMapaDeRenacimientoPort;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarTratoDeLaPersonaPort;
@@ -13,6 +14,7 @@ import com.renaser.os.rag.application.ports.out.participante.HabitosDeHoy.Habito
 import com.renaser.os.rag.application.ports.out.participante.HabitosDeHoy.HabitoPausado;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoDelPlan;
+import com.renaser.os.rag.domain.model.mapa.ResumenDelMapa;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
@@ -43,22 +45,39 @@ public class SituacionDelTurnoService implements ConsultarSituacionDelTurnoUseCa
     private final GestionarPlanDeHabitosPort planPort;
     private final Clock clock;
     private final ConsultarTratoDeLaPersonaPort tratoPort;
+    private final ConsultarMapaDeRenacimientoPort mapaPort;
 
     public SituacionDelTurnoService(ConsultarSituacionDelAprendizPort situacionPort,
                                     ConsultarAgendaHabitosPort agendaPort, GestionarPlanDeHabitosPort planPort,
-                                    Clock clock, ConsultarTratoDeLaPersonaPort tratoPort) {
+                                    Clock clock, ConsultarTratoDeLaPersonaPort tratoPort,
+                                    ConsultarMapaDeRenacimientoPort mapaPort) {
         this.situacionPort = situacionPort;
         this.agendaPort = agendaPort;
         this.planPort = planPort;
         this.clock = clock;
         this.tratoPort = tratoPort;
+        this.mapaPort = mapaPort;
     }
 
     @Override
     public Optional<SituacionDelAprendiz> de(UserId participanteId) {
         return situacionPort.de(participanteId)
                 .map(situacion -> conHabitosSiSePuede(situacion, participanteId))
-                .map(situacion -> situacion.conTrato(tratoDe(participanteId)));
+                .map(situacion -> situacion.conTrato(tratoDe(participanteId)))
+                .map(situacion -> situacion.conMapa(mapaDe(participanteId, situacion.diaPrograma())));
+    }
+
+    /**
+     * D-233: la prioridad y el proximo hito de su Mapa, una linea. Si no se puede leer, {@code null}: el
+     * prompt no dice nada del Mapa y el modelo, si lo necesita, llama a consultar_mi_mapa.
+     */
+    private ResumenDelMapa mapaDe(UserId participanteId, int diaPrograma) {
+        try {
+            return ResumenDelMapa.de(mapaPort.de(participanteId), diaPrograma);
+        } catch (RuntimeException falla) {
+            log.warn("[rag] la situacion del turno sale sin el Mapa ({})", falla.getClass().getSimpleName());
+            return null;
+        }
     }
 
     /** E-457: sin dato, o si no se puede leer, neutro. Nunca se adivina el genero. */
