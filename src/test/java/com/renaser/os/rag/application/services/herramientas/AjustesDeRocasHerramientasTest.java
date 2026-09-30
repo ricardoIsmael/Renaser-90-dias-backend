@@ -48,6 +48,11 @@ import static org.mockito.Mockito.when;
  */
 class AjustesDeRocasHerramientasTest {
 
+    /** D-233: el Mapa no es lo que se prueba aca; si no se lee, la propuesta sale como antes. */
+    private static final MapaParaProponer SIN_MAPA =
+            new MapaParaProponer(id -> { throw new IllegalStateException("el Mapa no se lee en esta prueba"); },
+                    id -> java.util.Optional.empty());
+
     private static final UserId APRENDIZ = UserId.of(UUID.randomUUID());
     private static final LocalDate HOY = LocalDate.of(2026, 9, 23);
     private static final LocalDate MANANA = HOY.plusDays(1);
@@ -61,10 +66,10 @@ class AjustesDeRocasHerramientasTest {
 
     private final GestionarPlanDeHabitosPort planDeHabitos = mock(GestionarPlanDeHabitosPort.class);
     private final ProponerAgregarAccionHerramienta agregarAccion =
-            new ProponerAgregarAccionHerramienta(rocas, planificar, proponer, planDeHabitos);
+            new ProponerAgregarAccionHerramienta(rocas, planificar, proponer, planDeHabitos, SIN_MAPA);
     private final AgregarAccionConfirmable agregarConfirmable = new AgregarAccionConfirmable(agregar, planificar);
     private final ProponerEditarObjetivoSemanalHerramienta editarObjetivo =
-            new ProponerEditarObjetivoSemanalHerramienta(rocas, planificar, editar, proponer);
+            new ProponerEditarObjetivoSemanalHerramienta(rocas, planificar, editar, proponer, SIN_MAPA);
     private final EditarObjetivoSemanalConfirmable editarConfirmable = new EditarObjetivoSemanalConfirmable(editar,
             planificar);
 

@@ -67,12 +67,14 @@ public class ProponerPlanDelDiaHerramienta implements HerramientaAgente {
     private final ConsultarRocasDelAprendizPort rocasPort;
     private final PlanificarRocasPort planificarPort;
     private final ProponerAccionUseCase proponerAccion;
+    private final MapaParaProponer mapa;
 
     public ProponerPlanDelDiaHerramienta(ConsultarRocasDelAprendizPort rocasPort, PlanificarRocasPort planificarPort,
-                                         ProponerAccionUseCase proponerAccion) {
+                                         ProponerAccionUseCase proponerAccion, MapaParaProponer mapa) {
         this.rocasPort = rocasPort;
         this.planificarPort = planificarPort;
         this.proponerAccion = proponerAccion;
+        this.mapa = mapa;
     }
 
     @Override
@@ -124,7 +126,10 @@ public class ProponerPlanDelDiaHerramienta implements HerramientaAgente {
         return fecha.isAfter(manana.fecha()) ? " Si ese dia ya tiene acciones, se reemplazan." : "";
     }
 
-    private ResultadoHerramienta proponer(UserId actorId, PlanDelDia plan, String resumen) {
+    private ResultadoHerramienta proponer(UserId actorId, PlanDelDia plan, String resumenDelPlan) {
+        MapaParaProponer.Vinculo vinculo = mapa.para(actorId,
+                plan.acciones().stream().map(PlanificarRocasPort.AccionDelPlan::eje).toList());
+        String resumen = resumenDelPlan + vinculo.enElResumen();
         InvocacionHerramienta normalizada = new InvocacionHerramienta(NOMBRE,
                 Map.of(ARGUMENTO_PLAN, PlanDeRocasNormalizado.delDia(plan)));
         PropuestaCreada creada;
@@ -137,6 +142,7 @@ public class ProponerPlanDelDiaHerramienta implements HerramientaAgente {
         if (AvisoDePropuesta.yaEstaba(creada)) {
             return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
-        return ResultadoHerramienta.exito("Propuesta creada: " + resumen + TextoDePlanDeRocas.NO_ESTA_HECHO);
+        return ResultadoHerramienta.exito("Propuesta creada: " + resumen + TextoDePlanDeRocas.NO_ESTA_HECHO
+                + vinculo.paraElModelo());
     }
 }

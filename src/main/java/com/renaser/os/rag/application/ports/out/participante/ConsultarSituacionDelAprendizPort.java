@@ -1,5 +1,6 @@
 package com.renaser.os.rag.application.ports.out.participante;
 
+import com.renaser.os.rag.domain.model.mapa.ResumenDelMapa;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
@@ -54,9 +55,16 @@ public interface ConsultarSituacionDelAprendizPort {
      *                    no se sabe (no se consulto o fallo): el prompt lo dice y el modelo vuelve a
      *                    las herramientas
      * @param trato       como tratarla (E-457): masculino, femenino o neutro. {@code null} = neutro
+     * @param mapa        la prioridad y el proximo hito de su Mapa de Renacimiento (D-233). {@code null} =
+     *                    no se consulto o fallo: el prompt no dice nada y el modelo usa consultar_mi_mapa
      */
     record SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy, HabitosDeHoy habitos,
-                                ConsultarTratoDeLaPersonaPort.TratoDeLaPersona trato) {
+                                ConsultarTratoDeLaPersonaPort.TratoDeLaPersona trato, ResumenDelMapa mapa) {
+
+        public SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy, HabitosDeHoy habitos,
+                                    ConsultarTratoDeLaPersonaPort.TratoDeLaPersona trato) {
+            this(diaPrograma, fase, hoy, habitos, trato, null);
+        }
 
         public SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy, HabitosDeHoy habitos) {
             this(diaPrograma, fase, hoy, habitos, null);
@@ -71,11 +79,15 @@ public interface ConsultarSituacionDelAprendizPort {
         }
 
         public SituacionDelAprendiz conHabitos(HabitosDeHoy habitosDeHoy) {
-            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitosDeHoy, trato);
+            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitosDeHoy, trato, mapa);
         }
 
         public SituacionDelAprendiz conTrato(ConsultarTratoDeLaPersonaPort.TratoDeLaPersona tratoDeLaPersona) {
-            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitos, tratoDeLaPersona);
+            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitos, tratoDeLaPersona, mapa);
+        }
+
+        public SituacionDelAprendiz conMapa(ResumenDelMapa resumenDelMapa) {
+            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitos, trato, resumenDelMapa);
         }
     }
 }

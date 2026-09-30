@@ -536,4 +536,37 @@ class PromptSistemaRenasiaTest {
                 .contains("tambien Despertar, Dormir y los rituales")
                 .contains("nunca le digas que un habito tiene que ser de mañana, de tarde o");
     }
+
+    /**
+     * D-233: el Mapa de Renacimiento. Para sus objetivos, el porque de un habito y el desanimo se usa
+     * consultar_mi_mapa, con el protocolo de retorno en sus palabras; sin Mapa no se arman metas, y nunca se
+     * inventan numeros ni hitos.
+     */
+    @Test
+    @DisplayName("D-233: usa su Mapa para objetivos, porque y desanimo, sin inventar metas ni hitos")
+    void usaSuMapaDeRenacimiento() {
+        String render = renderizar("(vacio)");
+
+        assertThat(render).contains("## Su Mapa de Renacimiento")
+                .contains("Antes de\nhablar de ellos, llama consultar_mi_mapa.")
+                .contains("Un hito (dia 30, 60) es un paso, no la meta")
+                .contains("para que hace un habito o una accion: llama consultar_mi_mapa y\n  conectalo con el "
+                        + "objetivo")
+                .contains("duda de seguir con el programa: llama\n  consultar_mi_mapa (aunque tambien mires otra herramienta)")
+                .contains("su protocolo de retorno: di cual es, con sus propias palabras, no solo que\n  lo tiene.")
+                .contains("Antes de proponer un objetivo de la semana o acciones del dia, mira su Mapa")
+                .contains("Esa regla es para los objetivos (rocas y acciones del dia), no para los\n  habitos: un "
+                        + "habito no se cuelga de un objetivo ni se frena por su Mapa.")
+                .contains("Si lo que pide no se relaciona con\n  ningun objetivo de su Mapa, diselo en una linea y "
+                        + "sugiere como conectarlo; si\n  insiste, proponlo igual.")
+                .contains("Sin Mapa: dilo en una linea e invitala a completarlo; no le armes metas. Si\n  pide "
+                        + "proponer algo, proponlo igual.")
+                .contains("se un poco estricto, porque bajarla a la primera es no lograrla.")
+                .contains("Tu no cambias el Mapa ni sus objetivos de 90 dias, y ninguna herramienta lo\n  hace.")
+                .contains("Solo si insiste con un motivo real, dile que lo\n  converse con su mentor.")
+                .contains("Nunca inventes metas, numeros ni hitos")
+                .doesNotContain("D-233");
+        // La seccion va antes de Tus limites, que sigue intacta.
+        assertThat(render.indexOf("## Su Mapa de Renacimiento")).isLessThan(render.indexOf("## Tus limites"));
+    }
 }

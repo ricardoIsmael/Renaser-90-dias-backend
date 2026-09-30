@@ -263,6 +263,9 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
      * <p>D-176: debajo del dia van sus habitos de hoy con su estado y los pausados
      * ({@link HabitosDeHoyEnElPrompt}), por la misma razon. Tambien los usa la voz en vivo, que
      * arma su prompt con este mismo metodo.
+     *
+     * <p>D-233: entre el trato y los habitos, a lo sumo una linea del Mapa de Renacimiento
+     * ({@link MapaEnElPrompt}).
      */
     static String formatearSituacion(SituacionDelAprendiz situacion) {
         if (situacion == null) {
@@ -271,7 +274,9 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
         }
         String fecha = situacion.hoy() == null ? "" : situacion.hoy().format(FECHA_DE_HOY) + ", ";
         return "Hoy es " + fecha + "su dia " + situacion.diaPrograma() + " de 90, en la fase " + situacion.fase()
-                + " de 4.\n" + tratoDe(situacion.trato()) + "\n" + HabitosDeHoyEnElPrompt.texto(situacion.habitos());
+                + " de 4.\n" + tratoDe(situacion.trato()) + "\n"
+                + MapaEnElPrompt.linea(situacion.mapa(), situacion.diaPrograma())
+                + HabitosDeHoyEnElPrompt.texto(situacion.habitos());
     }
 
     /**

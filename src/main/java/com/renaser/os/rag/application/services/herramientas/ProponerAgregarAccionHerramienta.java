@@ -89,14 +89,16 @@ public class ProponerAgregarAccionHerramienta implements HerramientaAgente {
     private final PlanificarRocasPort planificarPort;
     private final ProponerAccionUseCase proponerAccion;
     private final GestionarPlanDeHabitosPort planDeHabitosPort;
+    private final MapaParaProponer mapa;
 
     public ProponerAgregarAccionHerramienta(ConsultarRocasDelAprendizPort rocasPort, PlanificarRocasPort planificarPort,
                                             ProponerAccionUseCase proponerAccion,
-                                            GestionarPlanDeHabitosPort planDeHabitosPort) {
+                                            GestionarPlanDeHabitosPort planDeHabitosPort, MapaParaProponer mapa) {
         this.rocasPort = rocasPort;
         this.planificarPort = planificarPort;
         this.proponerAccion = proponerAccion;
         this.planDeHabitosPort = planDeHabitosPort;
+        this.mapa = mapa;
     }
 
     @Override
@@ -162,7 +164,8 @@ public class ProponerAgregarAccionHerramienta implements HerramientaAgente {
     }
 
     private ResultadoHerramienta proponer(UserId actorId, LocalDate fecha, AccionPedida pedida) {
-        String resumen = TextoDeAjustesDeRocas.resumenDeAccion(fecha, pedida.accion());
+        MapaParaProponer.Vinculo vinculo = mapa.para(actorId, List.of(pedida.accion().eje()));
+        String resumen = TextoDeAjustesDeRocas.resumenDeAccion(fecha, pedida.accion()) + vinculo.enElResumen();
         InvocacionHerramienta normalizada = new InvocacionHerramienta(NOMBRE,
                 ArgumentosDeAjusteDeRocas.accionNormalizada(fecha, pedida.accion()));
         PropuestaCreada creada;
@@ -175,6 +178,7 @@ public class ProponerAgregarAccionHerramienta implements HerramientaAgente {
         if (AvisoDePropuesta.yaEstaba(creada)) {
             return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
-        return ResultadoHerramienta.exito("Propuesta creada: " + resumen + TextoDePlanDeRocas.NO_ESTA_HECHO);
+        return ResultadoHerramienta.exito("Propuesta creada: " + resumen + TextoDePlanDeRocas.NO_ESTA_HECHO
+                + vinculo.paraElModelo());
     }
 }

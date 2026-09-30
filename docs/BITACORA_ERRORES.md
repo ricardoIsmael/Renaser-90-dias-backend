@@ -12438,3 +12438,43 @@ concordar con esa línea. Pruebas: `TratoDeLaPersonaServiceTest`, `SituacionDelT
 
 **Cómo evitar que vuelva a pasar.** Lo que el modelo tiene que concordar en cada frase (género, fecha, día) va
 como dato en la situación del turno, no como una prohibición: una regla negativa se pierde al parafrasear.
+
+## E-460 · «en dinero buscas llegar a 4.000 soles» (la meta era 6.000) y «tienes tu protocolo de retorno» sin decir cuál (prompt, RESUELTO, 30/09)
+
+**Síntoma.** Primera prueba con IA real de D-233 (Mapa de Renacimiento), cuenta en su día 30: a «cuales son mis
+objetivos?» SER contestó «En salud vas por los 89 kg para hoy…, en dinero buscas llegar a 4.000 soles mensuales y en
+relaciones a un 6 de 10» (eran los hitos del día 30, no las metas del día 90). A «para que me sirve caminar 40
+minutos?» y «voy mal esta semana, no se si seguir» contestó sin llamar `consultar_mi_mapa`, sin el porqué y con
+«tu protocolo de retorno está ahí para cuando lo necesites», sin decir cuál era.
+
+**Causa real.** Dos: el modelo trataba el próximo hito como «la meta» (la línea de la situación y la herramienta
+nombraban los dos sin distinguirlos), y la línea de la situación con la prioridad y el hito le alcanzaba para
+sentirse informado y no llamar la herramienta.
+
+**Solución.** Prompt: la línea «NO trae metas, porqué ni retorno: antes de hablar de ellos, llama
+consultar_mi_mapa»; «un hito (día 30, 60) es un paso, no la meta: no los mezcles»; el retorno «di cuál es, con sus
+propias palabras, no solo que lo tiene»; los casos de «para qué hago X» y desánimo nombran la herramienta. La línea
+de la situación dice «Sus metas, su porqué y su protocolo de retorno no están acá: llama consultar_mi_mapa», y la
+herramienta titula los hitos «pasos hacia la meta del día 90». Segunda vuelta: las cuatro respuestas correctas
+(`docs/MODULO_RAG.md` D-233). Pruebas: `PromptSistemaRenasiaTest.usaSuMapaDeRenacimiento`, `MapaEnElPromptTest`.
+
+**Cómo evitar que vuelva a pasar.** Cuando el prompt lleva un resumen de algo que también da una herramienta, el
+resumen dice explícitamente qué NO trae; si no, el modelo lo usa como si fuera todo.
+
+## E-461 · `pkill -f 'backend-ser-mapa.jar'` terminó con «exit code 144» y mató al propio `./mvnw clean verify`; después el login respondió «429 -> Too Many Requests: Demasiados intentos. Espera unos minutos.» (entorno, RESUELTO, 30/09)
+
+**Síntoma.** Dos veces un comando de agente que empezaba con `pkill -f <patrón>` terminó con exit 144 sin correr lo
+que seguía (un `clean verify`). Más tarde, tras varios reinicios del backend de prueba en :8088, todo turno de chat
+volvía vacío: el login del `e2e-aprendiz` daba 429 durante más de diez minutos.
+
+**Causa real.** `pkill -f` compara contra la línea de comando completa, y la del propio shell que lo ejecuta
+contiene el patrón: se mata a sí mismo. El 429 es el límite de 10 intentos por hora por correo y origen
+(`AutenticacionService`, clave Redis `reset-password:rl:login:origen-email:::/64|<correo>`): los reinicios
+invalidaron la sesión y cada reintento sumó; esperar con reintentos cada 50 s mantenía el contador arriba.
+
+**Solución.** Matar por PID (`ss -ltnp | grep :8088` y `kill <pid>`), no con `pkill -f` en el mismo comando. Para
+el 429 en la base local de pruebas: `docker exec renaser-redis redis-cli DEL 'reset-password:rl:login:origen-email:::/64|e2e-aprendiz@renaser.test'`
+y un solo login reutilizando el token.
+
+**Cómo evitar que vuelva a pasar.** Nunca `pkill -f` con un patrón que aparece en el mismo comando; en los scripts
+de prueba, loguearse una vez y reutilizar el token (y no reintentar el login en bucle).
