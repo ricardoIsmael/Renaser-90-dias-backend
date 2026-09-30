@@ -6,6 +6,7 @@ import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -44,6 +45,24 @@ class GestionarPlanDeHabitosAdapter implements GestionarPlanDeHabitosPort {
     @Override
     public void elegirDiaSemanal(UserId actorId, UUID habitoId, LocalDate fecha) {
         planDeHabitos.elegirDiaSemanal(actorId, habitoId, fecha);
+    }
+
+    @Override
+    public List<FichaDeHabito> fichasDe(UserId participanteId) {
+        return planDeHabitos.fichasDe(participanteId).stream()
+                .map(ficha -> new FichaDeHabito(ficha.habitoId(), ficha.titulo(), ficha.tituloPersonal(),
+                        ficha.descripcion(), ficha.renombrable()))
+                .toList();
+    }
+
+    @Override
+    public void renombrar(UserId actorId, UUID habitoId, String tituloPersonal, String motivo) {
+        planDeHabitos.renombrar(actorId, habitoId, tituloPersonal, motivo);
+    }
+
+    @Override
+    public void quitarRenombre(UserId actorId, UUID habitoId) {
+        planDeHabitos.quitarRenombre(actorId, habitoId);
     }
 
     private static HabitoDelPlan aHabitoDelPlan(PlanDeHabitosPort.HabitoDelPlan habito) {

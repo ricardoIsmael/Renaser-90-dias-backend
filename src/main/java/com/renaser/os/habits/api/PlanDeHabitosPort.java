@@ -53,6 +53,30 @@ public interface PlanDeHabitosPort {
     void elegirDiaSemanal(UserId actorId, UUID habitoId, LocalDate fecha);
 
     /**
+     * La ficha de cada habito que ve (los mismos que {@link #planDe}): como se llama para la
+     * persona, como se llama en el programa, su descripcion y si se le puede cambiar el nombre
+     * (2026-09-30, D-236). Para que el acompanante explique como se hace un habito y proponga un
+     * renombre sin emparejar por el titulo del catalogo (E-290). Del renombre sale solo el titulo:
+     * el motivo puede tener datos de salud y no sale de {@code habits}.
+     *
+     * @throws java.util.NoSuchElementException si no tiene participacion en el programa
+     * @throws com.renaser.os.shared.domain.NotAuthorizedException si la cuenta esta suspendida
+     */
+    List<FichaDeHabito> fichasDe(UserId participanteId);
+
+    /**
+     * Le pone un nombre propio a un habito, igual que {@code PUT /api/v1/habits/{habitId}/rename}:
+     * delega en {@code RenombrarHabitoUseCase}, con sus guardas (solo los habitos reemplazables,
+     * 60 caracteres el nombre y 200 el motivo, los dos obligatorios; D-127, D-133).
+     *
+     * @throws IllegalArgumentException si el habito no se puede renombrar o el nombre/motivo no sirven
+     */
+    void renombrar(UserId actorId, UUID habitoId, String tituloPersonal, String motivo);
+
+    /** Vuelve al nombre del programa, igual que {@code DELETE /api/v1/habits/{habitId}/rename}. */
+    void quitarRenombre(UserId actorId, UUID habitoId);
+
+    /**
      * @param hoy       el dia de hoy en la zona del participante
      * @param habitos   TODOS los habitos que ve (catalogo activo y personales suyos), en el orden en
      *                  que los pinta Plan, con los obligatorios marcados. Antes eran solo los que
@@ -78,5 +102,16 @@ public interface PlanDeHabitosPort {
      *                      en el Dia 0
      */
     record HabitoSemanal(UUID habitoId, String titulo, LocalDate diaElegido, List<LocalDate> diasElegibles) {
+    }
+
+    /**
+     * @param titulo         el titulo del programa (el del catalogo, o el que la persona le puso
+     *                       a un habito propio al crearlo)
+     * @param tituloPersonal el nombre que la persona le puso con el renombre (D-133), o {@code null}
+     * @param descripcion    la descripcion del habito tal cual esta en el catalogo, o {@code null}
+     * @param renombrable    si {@link #renombrar} lo acepta (hoy solo JUGO VERDE y AGUA TIBIA CON LIMON)
+     */
+    record FichaDeHabito(UUID habitoId, String titulo, String tituloPersonal, String descripcion,
+                         boolean renombrable) {
     }
 }

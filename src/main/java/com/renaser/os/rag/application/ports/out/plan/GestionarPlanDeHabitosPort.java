@@ -38,6 +38,20 @@ public interface GestionarPlanDeHabitosPort {
     void elegirDiaSemanal(UserId actorId, UUID habitoId, LocalDate fecha);
 
     /**
+     * Como se llama cada habito para la persona y para el programa, su descripcion y si se puede
+     * renombrar ({@code consultar_como_se_hace_habito} y {@code proponer_renombrar_habito}, D-236).
+     *
+     * @throws RuntimeException si no hay participacion o la cuenta esta suspendida
+     */
+    List<FichaDeHabito> fichasDe(UserId participanteId);
+
+    /** El mismo caso de uso que {@code PUT /api/v1/habits/{habitId}/rename}, con sus guardas. */
+    void renombrar(UserId actorId, UUID habitoId, String tituloPersonal, String motivo);
+
+    /** El mismo caso de uso que {@code DELETE /api/v1/habits/{habitId}/rename}. */
+    void quitarRenombre(UserId actorId, UUID habitoId);
+
+    /**
      * @param hoy     el dia de hoy en la zona del participante, resuelto por {@code habits}
      * @param habitos TODOS los habitos que ve, con los obligatorios marcados: cualquiera que no sea
      *                obligatorio se puede pausar, igual que en Plan (D-165, E-245)
@@ -72,5 +86,24 @@ public interface GestionarPlanDeHabitosPort {
      * @param diasElegibles los dias de esta semana que todavia se pueden elegir
      */
     record HabitoSemanal(UUID habitoId, String titulo, LocalDate diaElegido, List<LocalDate> diasElegibles) {
+    }
+
+    /**
+     * @param tituloDelPrograma el titulo del programa (catalogo, o el que eligio al crear un habito propio)
+     * @param tituloPersonal    el nombre que le puso con el renombre, o {@code null} si no lo renombro
+     * @param descripcion       la del catalogo, o {@code null}; a veces solo dice que evidencia se manda
+     * @param renombrable       si el renombre lo acepta (hoy, solo las dos bebidas)
+     */
+    record FichaDeHabito(UUID habitoId, String tituloDelPrograma, String tituloPersonal, String descripcion,
+                         boolean renombrable) {
+
+        /** Como lo ve la persona en la app: su nombre propio si le puso uno. */
+        public String tituloVisible() {
+            return tituloPersonal != null ? tituloPersonal : tituloDelPrograma;
+        }
+
+        public boolean renombrado() {
+            return tituloPersonal != null;
+        }
     }
 }

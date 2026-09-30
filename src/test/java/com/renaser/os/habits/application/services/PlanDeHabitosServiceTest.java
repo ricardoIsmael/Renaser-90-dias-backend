@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.api.PlanDeHabitosPort.FichaDeHabito;
 import com.renaser.os.habits.api.PlanDeHabitosPort.HabitoDelPlan;
 import com.renaser.os.habits.api.PlanDeHabitosPort.HabitoSemanal;
 import com.renaser.os.habits.api.PlanDeHabitosPort.PlanDeHabitos;
@@ -11,7 +12,13 @@ import com.renaser.os.habits.application.ports.in.eleccion.ElegirDiaSemanalUseCa
 import com.renaser.os.habits.application.ports.in.eleccion.ElegirDiaSemanalUseCase.ElegirDiaSemanalCommand;
 import com.renaser.os.habits.application.ports.in.habito.ConsultarMisHabitosUseCase;
 import com.renaser.os.habits.application.ports.in.habito.ConsultarMisHabitosUseCase.HabitoConDias;
+import com.renaser.os.habits.application.ports.in.renombre.QuitarRenombreHabitoUseCase;
+import com.renaser.os.habits.application.ports.in.renombre.QuitarRenombreHabitoUseCase.QuitarRenombreHabitoCommand;
+import com.renaser.os.habits.application.ports.in.renombre.RenombrarHabitoUseCase;
+import com.renaser.os.habits.application.ports.in.renombre.RenombrarHabitoUseCase.RenombrarHabitoCommand;
 import com.renaser.os.habits.application.ports.out.desbloqueo.LoadDesbloqueoHabitoPort;
+import com.renaser.os.habits.application.ports.out.renombre.LoadRenombreHabitoPort;
+import com.renaser.os.habits.domain.model.renombre.RenombreHabito;
 import com.renaser.os.habits.application.ports.out.eleccion.LoadEleccionDiaSemanalPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
@@ -84,6 +91,12 @@ class PlanDeHabitosServiceTest {
     private LoadDesbloqueoHabitoPort loadDesbloqueoPort;
     @Mock
     private LoadEleccionDiaSemanalPort loadEleccionPort;
+    @Mock
+    private RenombrarHabitoUseCase renombrarUseCase;
+    @Mock
+    private QuitarRenombreHabitoUseCase quitarRenombreUseCase;
+    @Mock
+    private LoadRenombreHabitoPort loadRenombrePort;
 
     private PlanDeHabitosService servicio;
     private UserId aprendiz;
@@ -91,7 +104,7 @@ class PlanDeHabitosServiceTest {
     @BeforeEach
     void setUp() {
         servicio = new PlanDeHabitosService(misHabitosUseCase, elegirHabitoUseCase, cambiarEstadoUseCase, elegirDiaUseCase, progresoPort,
-                loadDesbloqueoPort, loadEleccionPort, CLOCK);
+                loadDesbloqueoPort, loadEleccionPort, CLOCK, renombrarUseCase, quitarRenombreUseCase, loadRenombrePort);
         aprendiz = UserId.of(UUID.randomUUID());
         lenient().when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(progreso(DIA_DE_HOY, false)));
     }
@@ -193,6 +206,51 @@ class PlanDeHabitosServiceTest {
                 .thenThrow(new IllegalStateException("Este habito es obligatorio y no se puede pausar"));
 
         assertThatThrownBy(() -> servicio.pausar(aprendiz, habitoId, null)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("D-236: la ficha trae el nombre propio, la descripcion y si se puede renombrar, emparejado por id")
+    void fichasConRenombreYDescripcion() {
+        Habito jugo = deCatalogo("JUGO VERDE", "GREEN_JUICE", "Foto del vaso con Jugo Verde");
+        Habito ritual = deCatalogo("RITUAL TIERRA - AGUA - FUEGO (mañana)", "RITUAL_MORNING", "Foto/video del ritual");
+        when(misHabitosUseCase.consultar(aprendiz)).thenReturn(List.of(conDias(jugo), conDias(ritual), conDias(jugo)));
+        when(loadRenombrePort.deParticipante(aprendiz)).thenReturn(List.of(RenombreHabito.rehydrate(aprendiz,
+                jugo.id(), "Batido de papaya", "gastritis", CLOCK.now(), CLOCK.now())));
+
+        List<FichaDeHabito> fichas = servicio.fichasDe(aprendiz);
+
+        assertThat(fichas).containsExactly(
+                new FichaDeHabito(jugo.id().value(), "JUGO VERDE", "Batido de papaya", "Foto del vaso con Jugo Verde",
+                        true),
+                new FichaDeHabito(ritual.id().value(), "RITUAL TIERRA - AGUA - FUEGO (mañana)", null,
+                        "Foto/video del ritual", false));
+    }
+
+    @Test
+    @DisplayName("D-236: una cuenta suspendida no lee fichas")
+    void fichasDeSuspendido() {
+        when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(progreso(DIA_DE_HOY, true)));
+
+        assertThatThrownBy(() -> servicio.fichasDe(aprendiz)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("D-236: renombrar y volver al nombre del programa delegan en los casos de uso del endpoint")
+    void renombreDelegaEnLosCasosDeUso() {
+        UUID habitoId = UUID.randomUUID();
+
+        servicio.renombrar(aprendiz, habitoId, "Batido de papaya", "gastritis");
+        servicio.quitarRenombre(aprendiz, habitoId);
+
+        verify(renombrarUseCase).renombrar(new RenombrarHabitoCommand(aprendiz, HabitoId.of(habitoId),
+                "Batido de papaya", "gastritis"));
+        verify(quitarRenombreUseCase).quitar(new QuitarRenombreHabitoCommand(aprendiz, HabitoId.of(habitoId)));
+    }
+
+    private static Habito deCatalogo(String titulo, String clave, String descripcion) {
+        return Habito.rehydrate(HabitoId.of(UUID.randomUUID()), AmbitoHabito.SISTEMA, null, titulo, descripcion,
+                TipoHabito.CHECKBOX, "CUERPO", null, clave, ExigenciaEvidencia.OBLIGATORIA, false, false, true,
+                false, null, null, null, null, true, CLOCK.now(), CLOCK.now());
     }
 
     private static ProgresoParticipanteHabits progreso(int dia, boolean suspendido) {

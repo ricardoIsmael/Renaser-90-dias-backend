@@ -12580,3 +12580,31 @@ al módulo nativo `ExpoAsset.downloadAsync`, que sí copia un recurso de `res/dr
 
 **Para que no vuelva:** todo archivo empaquetado con `require()` que se vaya a **leer** (subir, compartir,
 hashear) y no solo mostrar, pasa por un `file://` real; probarlo en un APK de release, no solo en desarrollo.
+
+## E-466 · SER proponía renombrar un hábito con un motivo que la persona no dijo (rag, RESUELTO, 30/09)
+
+**Síntoma (prueba con IA real de D-236, backend local, cuenta `e2e-aprendiz`):** a «quiero que mi jugo
+verde se llame batido de papaya», SER dejó la tarjeta «Cambiar el nombre de 'JUGO VERDE' a 'batido de
+papaya'» sin preguntar por qué, y en la propuesta guardada quedó
+`"motivo": "Prefiero llamarlo batido de papaya"`. Con la descripción de la herramienta reforzada
+(«si no dijo por qué, NO llames esta herramienta»), volvió a proponer, ahora con
+`"motivo": "porque el apio me cae mal"`: el ejemplo que traía esa misma descripción.
+
+**Causa:** el renombre de `habits` exige un motivo (D-133) y el modelo, con el parámetro a la vista,
+lo rellena antes que preguntar. Ninguna instrucción del prompt ni de la herramienta lo frena de forma
+confiable, y un ejemplo concreto en la descripción se convierte en el valor.
+
+**Solución:** la guarda pasó al servidor. `rag.domain.model.renombre.MotivoDeRenombre.loDijoLaPersona`:
+cada palabra con contenido del motivo tiene que estar en lo que la persona escribió en la última hora
+(`LoadMensajeRenasiaPort.escritosPorElUsuarioDesde`; el mensaje del turno ya está guardado antes de
+llamar al modelo), y al menos una no puede ser del nombre nuevo ni de pedir el cambio («quiero que se
+llame X» no es un motivo). Si no, `proponer_renombrar_habito` no deja tarjeta y le pide al modelo
+preguntarlo. Se quitó el ejemplo de la descripción. Después, con IA real: «¿Por qué quieres cambiarle
+el nombre a batido de papaya?» → «porque el jugo verde me da acidez…» → tarjeta con ese motivo literal.
+Tests `MotivoDeRenombreTest` y `PropuestaDeRenombrarHabitoTest.motivoInventado` (falla sin la guarda).
+
+**Para que no vuelva:** un dato que TIENE que venir de la persona (un motivo, una respuesta a una
+pregunta) no se confía a una instrucción: se verifica en el servidor contra lo que escribió. Y en la
+descripción de una herramienta no se ponen ejemplos de valores que el modelo no debe inventar.
+**Límite conocido:** en la voz en vivo el turno se guarda al terminar, así que un motivo dicho en la
+misma frase del pedido se rechaza una vez; en el turno siguiente ya está guardado y pasa.
