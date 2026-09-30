@@ -408,7 +408,7 @@ producción corría `:latest` y para saber qué había adentro había que compar
 | Pieza | Valor |
 |---|---|
 | Instancia | `i-0ea00f555c5fe8028` — t3.small, Amazon Linux 2023, IP fija `52.0.210.237` |
-| Contenedores | `redis` (`redis:7-alpine`, sin puertos publicados) y `backend` (la imagen de ECR, `-p 8080:8080`), los dos en la red de Docker `renaser` |
+| Contenedores | `redis` (`redis:7-alpine`, sin puertos publicados) y `backend` (la imagen de ECR, `-p 8080:8080`), los dos en la red de Docker `renaser`. Con el modo sin corte (E-465) se suma `proxy` (nginx) en el 8080 y `backend` deja de publicar puerto |
 | Rol de la instancia | `renaser-backend-ec2` — lee `/renaser/prod/*`, firma URLs de su bucket, baja de ECR, y trae `AmazonSSMManagedInstanceCore` |
 | Delante | CloudFront `E3O4M4W7JW3TJQ` (`djbooeq09skac.cloudfront.net`), hablando **HTTP** al origen |
 | Lo que **no** hay | ECS, CodeDeploy, balanceador, autoscaling |
@@ -426,13 +426,15 @@ Además es el mismo mecanismo que ya se venía usando a mano — por ejemplo
 1. Se autentica por OIDC (el mismo rol que publica en ECR, con la política nueva).
 2. Arma el script que va a correr en la instancia y lo manda con
    `ssm send-command --document-name AWS-RunShellScript`.
-3. Dentro de la instancia: `docker login` contra ECR → `docker pull` de **la etiqueta del commit**
-   → `docker rm -f backend` → `docker run` con la red `renaser`, `-p 8080:8080`,
-   `--restart unless-stopped`, `--memory 1400m`, `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=60.0`,
+3. Dentro de la instancia corre `scripts/despliegue/desplegar-backend.sh` (desde E-465; antes era un
+   heredoc dentro de `cd.yml`): `docker login` contra ECR → `docker pull` de **la etiqueta del commit**
+   → elige el modo mirando la memoria (ver «Las tres cosas», punto 1) → levanta el backend con la red
+   `renaser`, `--memory 1400m`, `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=60.0`,
    `SPRING_PROFILES_ACTIVE=prod` y `AWS_REGION=us-east-1` (los dos de memoria desde V-8, ver §7).
-4. Consulta `http://localhost:8080/actuator/health` cada 3 s hasta que diga `"status":"UP"`, con un
-   tope de 240 s (`DESPLIEGUE_ESPERA_SEGUNDOS`). **Medido: la aplicación tarda 43 s en responder
-   `UP`**, así que el tope tiene más de 5× de margen para una migración larga o una RDS fría.
+4. Consulta `/actuator/health` del contenedor nuevo (por su IP en la red `renaser`) cada 3 s hasta que
+   diga `"status":"UP"`, con un tope de 240 s (`DESPLIEGUE_ESPERA_SEGUNDOS`). **Medido el 2026-09-30:
+   la aplicación tarda 50,7 s en arrancar** (`Started RenaserOsApplication in 50.729 seconds`; antes se
+   había medido 43 s), así que el tope tiene más de 4× de margen para una migración larga o una RDS fría.
 5. El runner espera el `Status` de la invocación y **falla el workflow si no es `Success`**.
 
 **Se despliega la etiqueta del SHA, nunca `latest`.** `latest` no permite saber qué versión está
@@ -440,14 +442,41 @@ corriendo ni a cuál volver. Con la etiqueta del commit, `docker ps` responde la
 
 #### Las tres cosas que hay que tener presentes
 
-**1. Hay unos segundos de caída en cada despliegue, y es inevitable hoy.** Entre el `docker rm -f`
-y el momento en que la aplicación responde `UP` pasan ~45 s en los que la API no contesta: unos
-pocos segundos de conexión rechazada, y el resto con el proceso arrancando. CloudFront no tiene a
-dónde mandar el tráfico mientras tanto, así que el aprendiz ve errores. **No se disimula porque no
-se puede arreglar sin cambiar la topología:** hacerlo sin caída pide dos instancias detrás de un
-balanceador (o dos contenedores en puertos distintos y un proxy que cambie de destino), y eso es
-una decisión de infraestructura y de costo que nadie tomó. Mientras siga habiendo una sola
-instancia, conviene desplegar en horario de poco uso.
+**1. Sin corte solo si la instancia tiene memoria para dos backends; hoy no la tiene (E-465, D-235).**
+El script tiene dos modos y elige solo:
+
+- **Sin corte** si `MemAvailable` ≥ tope del contenedor + 512 MB (1.912 MB). Un nginx (`proxy`) queda en
+  el 8080 del host, que es lo que mira CloudFront. El backend nuevo arranca como `backend-nuevo` **sin
+  puerto publicado** mientras el viejo atiende; con UP se intercambian los nombres (el nuevo pasa a
+  llamarse `backend`), nginx lo resuelve por el DNS de Docker en ≤5 s, se esperan 20 s y el viejo se apaga
+  ordenado (`docker stop -t 45`). Si el nuevo no arranca se borra, y el viejo nunca dejó de atender. La
+  primera vez además pone el proxy delante: lo ensaya en `127.0.0.1:8081` y el único corte es ~1 s.
+- **Reemplazo**, lo de antes: `docker rm -f backend` + `docker run`, **~52 s sin servicio** (medido el
+  2026-09-30, E-465), durante los que CloudFront devuelve `504 Gateway Timeout`. Se usa si la memoria no
+  alcanza, o si la variable de repositorio `DESPLIEGUE_MODO` vale `reemplazo`.
+
+**En la t3.small actual (1.909 MB, 531 MB disponibles con el backend andando) el script siempre elige
+reemplazo**: dos JVM no entran, y forzarlo es repetir E-155 (siete horas caído). El corte desaparece al
+pasar la instancia a `t3.medium` (4 GB, +~US$15/mes, D-235), sin tocar código. Mientras tanto, conviene
+desplegar en horario de poco uso.
+
+Con el modo sin corte hay que tener presente:
+
+- **Migraciones compatibles hacia atrás.** La versión vieja sigue atendiendo ~50 s contra el esquema que
+  el nuevo ya migró. Una migración que borre o renombre algo que la versión anterior usa va con
+  `DESPLIEGUE_MODO=reemplazo` (y después se vuelve a `auto`), o se parte en expandir y contraer.
+- **Lo conectado al viejo se corta al apagarlo** (voz en vivo en curso, streaming largo del chat). El chat
+  por WebSocket reconecta contra el nuevo; el broker STOMP es en memoria, uno por instancia.
+- nginx es transparente: no toca `X-Forwarded-For` ni las cabeceras de CloudFront y conserva `Host`
+  (la IP del cliente sigue saliendo igual que antes, ver `DireccionIpDelCliente`). Soporta WebSocket y no
+  hace buffer. Su configuración la reescribe el script en `/opt/renaser/proxy/renaser.conf`.
+- Los schedulers aguantan dos instancias unos segundos: 20 de 22 llevan ShedLock sobre JDBC y los otros
+  dos pueden correr en todas (`SchedulerLockConfig`).
+
+> **Corregido 2026-09-30 (E-465).** Este punto decía «Hay unos segundos de caída en cada despliegue, y
+> es inevitable hoy … ~45 s … No se disimula porque no se puede arreglar sin cambiar la topología». La
+> topología ahora cambia sola (proxy + dos contenedores) cuando hay memoria; lo que sigue siendo cierto es
+> que en la t3.small no la hay, así que el corte sigue ahí hasta agrandarla. Y son ~52 s, no ~45.
 
 **2. No se vuelve solo a la versión anterior, y es a propósito.** Si la aplicación no levanta, el
 workflow falla y deja escrito en la salida el comando exacto para restaurar la imagen anterior —
@@ -484,7 +513,7 @@ La comparación que estaba acá sigue siendo válida como registro de la decisi�
 
 | Opción | Qué hay que crear | A favor | En contra |
 |---|---|---|---|
-| **EC2 + Docker** *(elegida)* | Instancia, Docker, Elastic IP | Lo más barato y lo más simple de entender | Despliegue y ciclo de vida a mano; una sola instancia = caída en cada despliegue |
+| **EC2 + Docker** *(elegida)* | Instancia, Docker, Elastic IP | Lo más barato y lo más simple de entender | Despliegue y ciclo de vida a mano; una sola instancia = caída en cada despliegue, salvo con memoria para dos backends (E-465) |
 | **ECS Fargate** | Cluster, task definition, service, ALB, target group, security groups, rol de tarea | Control fino, escalado horizontal, despliegue sin caída, es lo que espera §5.2.1 de `CLAUDE.md` (varias instancias) | La más infraestructura para levantar |
 | **App Runner** | Un servicio apuntando a la imagen de ECR | Lo más rápido de poner en pie; HTTPS y escalado incluidos | Menos control de red; el escalado a cero castiga el arranque de una JVM |
 
