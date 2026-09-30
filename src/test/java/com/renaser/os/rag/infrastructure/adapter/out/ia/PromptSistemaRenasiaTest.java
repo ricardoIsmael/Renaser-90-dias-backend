@@ -83,7 +83,9 @@ class PromptSistemaRenasiaTest {
         assertThat(render).doesNotContain("Sobre que esta hablando la persona ahora");
         // Deriva las dudas de contenido de un curso al otro agente en vez de absorberlas.
         assertThat(render).contains("Sparkie");
-        assertThat(render).contains("Recursos Exclusivos");
+        // E-454: en la app la seccion de cursos se llama Classroom (ComunidadScreen), ya no
+        // "Recursos Exclusivos"; el modelo nombraba una seccion que la persona no encuentra.
+        assertThat(render).contains("Classroom (en Comunidad)").doesNotContain("Recursos Exclusivos");
     }
 
     /**
@@ -421,7 +423,7 @@ class PromptSistemaRenasiaTest {
 
         assertThat(render).contains("## Como orientas")
                 .contains("nunca dices que eres Darren ni escribes como si fuera el")
-                .contains("si te preguntan\nquien eres, eres el acompanante del programa")
+                .contains("si te preguntan\nquien eres, eres SER, el acompanante del programa")
                 .contains("Confronta con carino").contains("sin burla, insultos ni etiquetas")
                 .contains("el macaco (la parte que se\n  queja")
                 .contains("Ante malestar, tristeza, salud o riesgo, nada de confrontar ni de macaco");
@@ -472,6 +474,28 @@ class PromptSistemaRenasiaTest {
      * D-230 (2026-09-29): el dueño, probando, encontro que le decian que Despertar tiene que ser de
      * mañana. Ningun habito tiene franja por su nombre: quien trabaja de noche lo pone a las 22:00.
      */
+    /**
+     * E-454 (bateria #14, 2026-09-30): "mejor no, entonces apagala solo el sabado" terminaba en la
+     * herramienta de todos los sabados. Un dia concreto va con proponer_apagar_dia.
+     */
+    @Test
+    @DisplayName("E-454: 'solo el sabado' es un dia (proponer_apagar_dia), no todas las semanas")
+    void unDiaOTodasLasSemanas() {
+        String render = renderizar("");
+
+        assertThat(render).contains("**Un dia o todas las semanas.**")
+                .contains("es UN dia: apagalo con proponer_apagar_dia")
+                .contains("sabados\" o \"los sabados\", que se repite cada semana, usa\n  proponer_horario_por_dia_de_semana")
+                .contains("Si no queda claro, es un solo dia.");
+    }
+
+    /** E-454: el dueño vio "abrumada"; las instrucciones hablan de "la persona" en femenino. */
+    @Test
+    @DisplayName("E-454: el trato neutro aclara que el femenino de las instrucciones es solo gramatica")
+    void tratoNeutroAunqueLasInstruccionesDigan_laPersona() {
+        assertThat(renderizar("")).contains("persona\" o \"ella\" es solo gramatica: no le hables en femenino ni en masculino.");
+    }
+
     @Test
     @DisplayName("D-230: ningun habito es de mañana, tarde o noche por su nombre")
     void cualquierHabitoACualquierHora() {

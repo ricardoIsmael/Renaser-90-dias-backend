@@ -8409,6 +8409,12 @@ modelo vuelve a llamar con el nombre bien escrito.
 cualquier `IllegalStateException` de Spring AI en el streaming, mirar primero el nombre de la
 herramienta que pidió el modelo en el `WARN` anterior.
 
+> **Corregido 2026-09-30 (E-454).** Esta entrada daba el caso por resuelto. No lo estaba: el manager con
+> el resolver lo recibía solo el `GoogleGenAiChatModel`, y en Spring AI 2.0 las herramientas del chat las
+> ejecuta el `ToolCallingAdvisor` que `ChatClient.create(chatModel)` registra con un
+> `DefaultToolCallingManager` propio, sin resolver. `ResolverDeHerramientasDesconocidasTest` probaba el
+> resolver suelto, no el camino del chat. Ver E-454.
+
 ## E-248 · Al llegar al tope diario de mensajes, la app no recibía el aviso: el 429 no se podía escribir en el stream
 
 **Síntoma.** Misma batería, al pasar el mensaje 25 del día. En el log, literal:
@@ -12257,3 +12263,65 @@ falla al leer como S3 sin `ListBucket` y la tarjeta igual sale con imagen; falla
 `ListBucket` un objeto ausente da 403. Para algo que el servidor mismo publica, subirlo sin preguntar. Si algún
 día hace falta saber si existe, dar `s3:ListBucket` al rol o tratar el 403 de un objeto propio como ausente, con
 prueba del caso.
+
+## E-454 · SER no respondía «mejor no, entonces apagala solo el sabado»: `No ToolCallback found for tool name: proponer_horario_por_dia_semana` (backend, RESUELTO, 30/09)
+
+**Síntoma.** Con IA real (`gemini-3.5-flash-lite`), después de «pausa escritura libre nocturna hasta el
+domingo» (queda la propuesta de pausa), «mejor no, entonces apagala solo el sabado» mostraba en la app
+«No pude responder en este momento 🙏 Intenta de nuevo en unos segundos.» y en `mensajes_renasia` quedaba la
+pregunta sin respuesta. Siempre con ese caso (batería #14 del 29/09 y del 30/09). Reproducido en un backend
+propio en :8086 con la cuenta e2e-aprendiz. En el log, literal:
+
+```
+WARN o.s.a.m.tool.DefaultToolCallingManager   : LLM may have adapted the tool name 'proponer_horario_por_dia_semana', especially if the name was truncated due to length limits. ...
+WARN c.r.o.r.a.s.ConversacionRenasiaService   : Fallo el streaming de respuesta del asistente
+java.lang.IllegalStateException: No ToolCallback found for tool name: proponer_horario_por_dia_semana
+	at org.springframework.ai.model.tool.DefaultToolCallingManager.executeToolCall(DefaultToolCallingManager.java:206)
+	at org.springframework.ai.model.tool.DefaultToolCallingManager.executeToolCalls(DefaultToolCallingManager.java:135)
+	at org.springframework.ai.chat.client.advisor.ToolCallingAdvisor.lambda$handleToolCallRecursion$4(ToolCallingAdvisor.java:310)
+```
+
+**Causa real.** Es el mismo nombre mal escrito de E-247 (el modelo le come el «de» a
+`proponer_horario_por_dia_de_semana`), y el arreglo de E-247 nunca estuvo en el camino del chat. El
+`ToolCallingManager` tolerante (`ResolverDeHerramientasDesconocidas`) se le daba al `GoogleGenAiChatModel`,
+pero `GoogleGenAiRenasiaChatAdapter` arma su cliente con `ChatClient.create(chatModel)`, y en Spring AI 2.0
+eso auto-registra un `ToolCallingAdvisor` con un `DefaultToolCallingManager` NUEVO, sin resolver
+(`DefaultChatClientBuilder`, verificado en el bytecode y en las fuentes de `spring-ai-client-chat:2.0.0`). El
+advisor es quien ejecuta las herramientas, así que un nombre inexistente seguía lanzando y tumbando el
+turno. La pendiente de pausa no tenía nada que ver: el vencimiento de propuestas se deriva al leer
+(`PropuestaAccion.estaVencidaEn`, en todas las lecturas), y otras preguntas con pendiente respondían porque
+el modelo no escribía mal ningún nombre.
+
+Además, con el turno ya a salvo, el modelo a veces proponía apagarlo **todos** los sábados
+(`proponer_horario_por_dia_de_semana`) en vez de solo el sábado 03/10: el prompt no distinguía un día
+concreto de un día de la semana que se repite.
+
+**Solución.**
+- `GoogleGenAiClientesConfig` expone el manager tolerante como bean (`toolCallingManagerTolerante`), y lo
+  usan el modelo y el adaptador: `ChatClient.builder(chatModel, …, ToolCallingAdvisor.builder()
+  .toolCallingManager(herramientasTolerantes))`. Ahora el modelo recibe «No existe… Quisiste decir
+  'proponer_horario_por_dia_de_semana'» y sigue.
+- `renasia-sistema.st`: nuevo punto «Un dia o todas las semanas» («solo el sabado» es un día:
+  `proponer_apagar_dia`; solo «todos los sabados» / «los sabados» es la herramienta semanal). En el mismo
+  cambio, tres detalles que vio el dueño hoy: la sección de cursos se llama Classroom (en Comunidad), no
+  «Recursos Exclusivos»; si preguntan quién es, dice «SER»; y el trato neutro aclara que el femenino de
+  «la persona» en las instrucciones es solo gramática («abrumada»).
+- Prueba `GoogleGenAiRenasiaChatAdapterTest.herramientaMalEscritaNoTumbaElTurno`: el modelo simulado pide
+  `proponer_horario_por_dia_semana`, recibe la sugerencia y responde; con `ChatClient.create(chatModel)` de
+  vuelta falla con la misma `IllegalStateException` del log. Más `PromptSistemaRenasiaTest` (el punto nuevo,
+  Classroom, «eres SER», el trato neutro).
+
+**Verificado con IA real** (backend :8086, e2e): las dos frases seguidas → la segunda responde y deja
+«Apagar 'ESCRITURA LIBRE NOCTURNA' solo el sábado 2026-10-03: ese dia no se le va a pedir.» (herramientas:
+`consultar_horarios`, `proponer_apagar_dia`). La pendiente de pausa queda como estaba: se cancela con su botón
+o vence sola.
+
+**Cómo evitar que vuelva a pasar.**
+- Un arreglo sobre herramientas del chat se prueba por el `GoogleGenAiRenasiaChatAdapter` (el
+  `ChatClient` real con un `ChatModel` simulado que pide la herramienta), no sobre la pieza suelta:
+  E-247 tenía prueba del resolver y el resolver no estaba conectado.
+- En Spring AI 2.0 las herramientas las ejecuta el `ToolCallingAdvisor` del `ChatClient`, no el
+  `ChatModel`. Configurar el `ToolCallingManager` del modelo no alcanza; cualquier `ChatClient` nuevo con
+  herramientas se arma con `ToolCallingAdvisor.builder().toolCallingManager(...)`.
+- Para ver qué herramientas llama el modelo en un backend local:
+  `LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_AI_MODEL_TOOL=DEBUG` («Executing tool call: …»).

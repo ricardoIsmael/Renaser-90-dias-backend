@@ -9,12 +9,15 @@ import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
+import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ClassPathResource;
@@ -91,14 +94,26 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
      * be found}. Es el mismo criterio que ya siguen `RedisChatPublisher`, `PgVectorNativoAdapter`
      * y `EventoRenasiaSseMapper`.
      */
-    GoogleGenAiRenasiaChatAdapter(ChatModel chatModel, EjecutarHerramientaAgenteUseCase herramientasUseCase) {
-        this.chatClient = ChatClient.create(chatModel);
+    GoogleGenAiRenasiaChatAdapter(ChatModel chatModel, EjecutarHerramientaAgenteUseCase herramientasUseCase,
+                                  ToolCallingManager herramientasTolerantes) {
+        this.chatClient = chatClientCon(chatModel, herramientasTolerantes);
         this.herramientasUseCase = herramientasUseCase;
         this.json = new ObjectMapper();
         this.promptAcompanante = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_ACOMPANANTE));
         this.promptTutorCursos = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_TUTOR_CURSOS));
         this.modoVoz = new PromptTemplate(new ClassPathResource(RECURSO_MODO_VOZ)).render();
         this.seccionDeMemoria = new PromptTemplate(new ClassPathResource(RECURSO_MEMORIA));
+    }
+
+    /**
+     * E-454: {@code ChatClient.create(chatModel)} ejecuta las herramientas con un
+     * {@code ToolCallingAdvisor} propio y un {@code DefaultToolCallingManager} sin nuestro resolver,
+     * asi que un nombre mal escrito por el modelo tumbaba el turno aunque el modelo tuviera el
+     * manager tolerante (E-247). El advisor tiene que llevar ESE manager.
+     */
+    private static ChatClient chatClientCon(ChatModel chatModel, ToolCallingManager herramientasTolerantes) {
+        return ChatClient.builder(chatModel, ObservationRegistry.NOOP, null, null,
+                ToolCallingAdvisor.builder().toolCallingManager(herramientasTolerantes)).build();
     }
 
     /**

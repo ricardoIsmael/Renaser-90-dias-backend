@@ -4,6 +4,7 @@ import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAg
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,11 +45,14 @@ class GoogleGenAiRenasiaChatAdapterContextTest {
                 // "google"). Que la prueba lo tenga que encender es exactamente el motivo por el
                 // que el defecto fue invisible — las pruebas corren con el proveedor en `noop`.
                 .withPropertyValues("renaser.ia.proveedor=google")
-                // Lo unico que el contexto real le ofrece: el modelo y el ejecutor de herramientas.
+                // Lo unico que el contexto real le ofrece: el modelo, el ejecutor de herramientas y el manager.
                 // Deliberadamente NO se registra un ObjectMapper — si el adaptador lo pidiera, esta
                 // prueba fallaria igual que la app.
                 .withBean(ChatModel.class, () -> mock(ChatModel.class))
                 .withBean(EjecutarHerramientaAgenteUseCase.class, () -> mock(EjecutarHerramientaAgenteUseCase.class))
+                // E-454: y el ToolCallingManager tolerante de GoogleGenAiClientesConfig, que su ChatClient
+                // usa para ejecutar las herramientas.
+                .withBean(ToolCallingManager.class, () -> mock(ToolCallingManager.class))
                 .withBean(GoogleGenAiRenasiaChatAdapter.class)
                 .run(contexto -> assertThat(contexto)
                         .hasNotFailed()
