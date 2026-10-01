@@ -23,6 +23,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -107,11 +108,9 @@ public class RankingDeGruposService implements ConsultarRankingDeGruposUseCase {
             return calculoCumplimiento.evaluar(List.of(), Map.of());
         }
 
-        LocalDate desde = inicio.atZone(zona).toLocalDate();
         // El dia del corte todavia esta corriendo: la ultima fecha exigible es la anterior.
-        LocalDate hasta = fin.atZone(zona).toLocalDate().minusDays(1);
-        List<ObligacionHabito> obligaciones = obligacionesFinder.porParticipantesEntre(
-                ventanas.keySet().stream().map(UserId::of).toList(), desde, hasta);
+        List<ObligacionHabito> obligaciones = obligacionesYaVencidas(ventanas.keySet(),
+                inicio.atZone(zona).toLocalDate(), fin.atZone(zona).toLocalDate().minusDays(1));
         Map<UUID, EntregaDeEvidencia> entregas =
                 entregasFinder.porRegistros(obligaciones.stream().map(ObligacionHabito::registroId).toList());
 
@@ -122,6 +121,19 @@ public class RankingDeGruposService implements ConsultarRankingDeGruposUseCase {
                         entregas.get(o.registroId()) == null ? null : entregas.get(o.registroId()).primeraEntregaEn(),
                         entregas.get(o.registroId()) != null && entregas.get(o.registroId()).verificada()))
                 .toList(), ventanas);
+    }
+
+    /**
+     * Las obligaciones de fechas que ya vencieron. El dia 1 del mes en curso el rango queda vacio
+     * ({@code 1 → ultimo del mes anterior}): la respuesta correcta es "nada vencio todavia", no
+     * pedirle al finder un rango al reves, que su contrato rechaza con razon (E-469).
+     */
+    private List<ObligacionHabito> obligacionesYaVencidas(Collection<UUID> alumnos, LocalDate desde,
+                                                          LocalDate hasta) {
+        if (hasta.isBefore(desde)) {
+            return List.of();
+        }
+        return obligacionesFinder.porParticipantesEntre(alumnos.stream().map(UserId::of).toList(), desde, hasta);
     }
 
     /**

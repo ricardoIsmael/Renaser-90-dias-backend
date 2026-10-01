@@ -39,8 +39,12 @@ class RankingDeGruposServiceTest {
     }
 
     private RankingDeGruposService servicio() {
+        return servicio(AHORA);
+    }
+
+    private RankingDeGruposService servicio(Instant ahora) {
         return new RankingDeGruposService(banco.acompanamiento, banco.obligacionesFinder, banco.entregasFinder,
-                banco.calculo, FixedClock.at(AHORA));
+                banco.calculo, FixedClock.at(ahora));
     }
 
     private UserId alumnoDe(UUID grupo, String nombre) {
@@ -157,5 +161,55 @@ class RankingDeGruposServiceTest {
         RankingDeGrupos ranking = servicio().ranking(ACTOR, COHORTE, SETIEMBRE);
 
         assertThat(ranking.toString()).doesNotContain("Ana Perez", alumno.value().toString());
+    }
+
+    // --- E-469: el día 1 del mes en curso todavía no hay ninguna fecha exigible ---
+
+    private static final YearMonth OCTUBRE = YearMonth.of(2026, 10);
+
+    @Test
+    @DisplayName("E-469: el dia 1 del mes en curso responde sin muestra, no 'El rango va al reves'")
+    void dia1DelMesEnCursoSinMuestra() {
+        banco.grupo(GRUPO_A, "Grupo A", UserId.of(UUID.randomUUID()), COHORTE, 3);
+        UserId alumno = alumnoDe(GRUPO_A, "a1");
+        cumplimiento(alumno, 2, 4);                                       // setiembre: no entra
+        banco.obligacion(alumno, LocalDate.of(2026, 10, 1), false, true); // hoy: todavia no vence
+
+        // 10:00 en Lima del 1 de octubre.
+        RankingDeGrupos ranking = servicio(Instant.parse("2026-10-01T15:00:00Z")).ranking(ACTOR, COHORTE, OCTUBRE);
+
+        assertThat(ranking.grupos()).hasSize(1);
+        assertThat(fila(ranking, GRUPO_A).porcentaje()).isNull();
+        assertThat(fila(ranking, GRUPO_A).esperadas()).isZero();
+        assertThat(fila(ranking, GRUPO_A).entregadas()).isZero();
+        assertThat(fila(ranking, GRUPO_A).estado()).isEqualTo("SIN_MUESTRA");
+    }
+
+    @Test
+    @DisplayName("E-469: el primer minuto del dia 1 en Lima (05:00 UTC) tampoco falla")
+    void primerInstanteDelDia1EnLima() {
+        banco.grupo(GRUPO_A, "Grupo A", UserId.of(UUID.randomUUID()), COHORTE, 3);
+        alumnoDe(GRUPO_A, "a1");
+
+        RankingDeGrupos ranking = servicio(Instant.parse("2026-10-01T05:00:01Z")).ranking(ACTOR, COHORTE, OCTUBRE);
+
+        assertThat(fila(ranking, GRUPO_A).estado()).isEqualTo("SIN_MUESTRA");
+    }
+
+    @Test
+    @DisplayName("E-469: a las 03:00 UTC del 1 en Lima sigue siendo 30: octubre aun no empezo y setiembre cuenta hasta el 29")
+    void dia1EnUtcPeroTodaviaUltimoDelMesEnLima() {
+        banco.grupo(GRUPO_A, "Grupo A", UserId.of(UUID.randomUUID()), COHORTE, 3);
+        UserId alumno = alumnoDe(GRUPO_A, "a1");
+        cumplimiento(alumno, 2, 4);                                        // 2..5 de setiembre
+        banco.obligacion(alumno, LocalDate.of(2026, 9, 30), false, true); // hoy en Lima: no vence aun
+        Instant ahora = Instant.parse("2026-10-01T03:00:00Z");            // 22:00 del 30-sep en Lima
+
+        RankingDeGrupos octubre = servicio(ahora).ranking(ACTOR, COHORTE, OCTUBRE);
+        RankingDeGrupos setiembre = servicio(ahora).ranking(ACTOR, COHORTE, SETIEMBRE);
+
+        assertThat(octubre.grupos()).isEmpty();
+        assertThat(fila(setiembre, GRUPO_A).esperadas()).isEqualTo(4);
+        assertThat(fila(setiembre, GRUPO_A).entregadas()).isEqualTo(2);
     }
 }

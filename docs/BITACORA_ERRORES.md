@@ -12708,3 +12708,41 @@ pregunta) no se confía a una instrucción: se verifica en el servidor contra lo
 descripción de una herramienta no se ponen ejemplos de valores que el modelo no debe inventar.
 **Límite conocido:** en la voz en vivo el turno se guarda al terminar, así que un motivo dicho en la
 misma frase del pedido se rechaza una vez; en el turno siguiente ya está guardado y pasa.
+
+## E-469 · El día 1 de cada mes `GET /api/v1/ranking/groups?month=<mes actual>` responde «400 -> Bad Request: El rango va al reves: 2026-10-01 → 2026-09-30» y `CuentaSuspendidaConSesionVivaIT` falla (ranking, RESUELTO, 01/10)
+
+> Este número también lo usa la rama `observabilidad` (D-237) para la misma entrada como ABIERTO. Es el
+> mismo error a propósito: al integrar, esta versión (RESUELTO) reemplaza a la abierta, no se suman.
+
+**Síntoma.** El 2026-10-01, `CuentaSuspendidaConSesionVivaIT.unMentorSuspendidoNoLeeNadaDeSuAlumna` falló en
+el control con la cuenta activa: «ranking de grupos tiene que responder 200 … but was: 400». El log:
+`400 -> Bad Request: El rango va al reves: 2026-10-01 → 2026-09-30`. Bloqueaba el CD de producción (corre la
+suite completa antes de desplegar), y en producción un mentor que abriera el ranking el día 1 recibía un 400.
+
+**Causa (confirmada).** `mentoring.RankingDeGruposService.evaluarGrupo` arma el rango de obligaciones «del 1
+del mes hasta el día anterior al corte» (`hasta = fin.toLocalDate().minusDays(1)`, porque el día del corte
+todavía corre). En el mes en curso el corte es `ahora`; el día 1 en Lima eso da `desde = 1`, `hasta = último
+del mes anterior`, y `habits.ObligacionesHistoricasFinderService.porParticipantesEntre` rechaza el rango al
+revés con `IllegalArgumentException` → 400. La guarda que ya había (`!fin.isAfter(inicio)`) solo cubre el mes
+que todavía no empezó, no el día 1. Los tests no lo vieron por dos motivos: el reloj fijo estaba el 30-sep,
+y el fake del finder en `BancoDeMentoria` aceptaba un rango al revés (devolvía vacío) en vez de cumplir el
+contrato del servicio real. La IT solo lo ve el día 1 porque usa `YearMonth.now(LIMA)`.
+
+**Solución.** El ranking trata el rango vacío como «nada venció todavía»: `obligacionesYaVencidas` no llama
+al finder si `hasta < desde` y devuelve lista vacía, así que cada grupo sale `SIN_MUESTRA`, 0/0, 200. La
+validación del finder de `habits` **no** se tocó: un rango al revés sigue siendo un error de quien llama.
+El fake de `BancoDeMentoria` ahora lanza la misma excepción que el real. Tests nuevos en
+`RankingDeGruposServiceTest`: día 1 a las 10:00 y a las 00:00:01 de Lima (los dos fallaban contra el código
+viejo con el mensaje literal de arriba) y 03:00 UTC del 1-oct, que en Lima sigue siendo 30-sep (octubre vacío,
+setiembre cuenta hasta el 29).
+
+**Otros lugares revisados** con el mismo patrón («inicio de período hasta ayer»): `AvisosService`
+(hasta = hoy), `SeguimientoService.armarSemana` (lunes→domingo) y `.calcular` (hasta = hoy),
+`RachaMostrada` (guarda `desde.isAfter(hoy)`), `ConsultarHabitosVencidosAdapter` y
+`ConsultarDesvioDeLaSemanaHerramienta` (guardan el rango vacío), semáforo y `DashboardRocasService`
+(ventanas móviles de 7 días que terminan ayer, nunca vacías). Ninguno tiene el problema.
+
+**Cómo evitar que vuelva a pasar.** (1) Un fake de un puerto `api` cumple el mismo contrato que la
+implementación real, validaciones incluidas: un fake más permisivo esconde exactamente este tipo de bug.
+(2) Todo período «desde el inicio de X hasta ayer» se prueba con el reloj en el primer día de X (día 1,
+lunes), y en una hora UTC que en Lima siga siendo el día anterior (regla 02).

@@ -114,10 +114,23 @@ class BancoDeMentoria {
         }
     };
 
-    final ObligacionesHistoricasFinder obligacionesFinder = (participantes, desde, hasta) -> obligaciones.stream()
-            .filter(o -> participantes.contains(o.participanteId()))
-            .filter(o -> !o.fecha().isBefore(desde) && !o.fecha().isAfter(hasta))
-            .toList();
+    /**
+     * Cumple el MISMO contrato que {@code ObligacionesHistoricasFinderService}, rango al revés
+     * incluido: un fake más permisivo que el real fue lo que escondió E-469 (el ranking del día 1
+     * del mes pedía {@code 2026-10-01 → 2026-09-30} y acá no fallaba).
+     */
+    final ObligacionesHistoricasFinder obligacionesFinder = (participantes, desde, hasta) -> {
+        if (participantes.isEmpty()) {
+            return List.of();
+        }
+        if (hasta.isBefore(desde)) {
+            throw new IllegalArgumentException("El rango va al reves: " + desde + " → " + hasta);
+        }
+        return obligaciones.stream()
+                .filter(o -> participantes.contains(o.participanteId()))
+                .filter(o -> !o.fecha().isBefore(desde) && !o.fecha().isAfter(hasta))
+                .toList();
+    };
 
     final EntregasPorRegistroFinder entregasFinder = ids -> {
         Map<UUID, EntregaDeEvidencia> encontradas = new LinkedHashMap<>();
