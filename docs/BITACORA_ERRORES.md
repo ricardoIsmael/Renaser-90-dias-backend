@@ -12781,3 +12781,83 @@ setiembre cuenta hasta el 29).
 implementación real, validaciones incluidas: un fake más permisivo esconde exactamente este tipo de bug.
 (2) Todo período «desde el inicio de X hasta ayer» se prueba con el reloj en el primer día de X (día 1,
 lunes), y en una hora UTC que en Lima siga siendo el día anterior (regla 02).
+
+## E-470 · La lista de chats muestra el grupo de un período ya terminado, y al abrirlo responde «403 Tu asignacion cambio: ya no perteneces a ese grupo» (chat, ABIERTO, 01/10)
+
+**Síntoma.** En la prueba de carga (D-238), sobre una réplica de producción del 01/10, un aprendiz real ve en
+`GET /api/v1/chat/conversations` dos chats de grupo. Uno de ellos («Guia Celia y sus aprendices», período
+2026-09-15 → 2026-09-30) responde **403** en `GET .../messages`, `GET .../presence` y `POST .../read`, con el
+mensaje literal `Tu asignacion cambio: ya no perteneces a ese grupo`. Su asignación en `asignaciones_celula`
+sigue abierta (`fin` nulo, función APRENDIZ). Fueron 66 + 66 + 66 + 25 respuestas 403 en la corrida de carga.
+
+**Causa (confirmada leyendo el código).** El listado y la autorización usan fuentes distintas, a propósito:
+`ConversacionService.listar` arma la lista con la proyección `participantes_conversacion` («para listar
+rápido»), y `MensajeService`/`ConversacionService`/`PresenciaService.requireParticipante` revalidan un grupo
+contra la **pertenencia vigente** (`AccesoAChatsDeGrupo.puedeVer` → `PertenenciaVigenteAdapter`), que exige que
+el grupo siga operativo. Cuando el período del grupo termina, la proyección no se entera y el chat se sigue
+listando, pero ya no se puede abrir.
+
+**Solución propuesta (no aplicada: fuera del alcance de D-238).** Que `listar` filtre las conversaciones de
+tipo CELULA con la misma `AccesoAChatsDeGrupo.puedeVer` (en lote, para no hacer N consultas), o que el cierre
+de período retire la fila de la proyección. Falta que el dueño decida qué tiene que ver un aprendiz de un grupo
+cerrado: ¿el chat desaparece, o queda en solo lectura como historia?
+
+**Cómo evitar que vuelva a pasar.** Toda lista que se arma con una proyección y cuyo detalle se autoriza con
+otra fuente necesita un test que cierre la fuente de verdad (fin de período, rotación) y compruebe que lo que
+se lista se puede abrir.
+
+## E-471 · `GET /chat/conversations` lee y ordena TODOS los mensajes de las conversaciones del usuario para quedarse con el último (chat, ABIERTO, 01/10)
+
+**Síntoma.** En la prueba de carga (D-238), `pg_stat_statements` mostró que
+`SELECT DISTINCT ON (conversacion_id) * FROM renaser.mensajes WHERE conversacion_id IN ($1,$2,$3) ORDER BY
+conversacion_id, creado_en DESC` pasó de **0,6 ms** de media a **6,3 ms** (máximo 152 ms) a medida que la
+prueba agregó mensajes (de 48 a 3.559). `EXPLAIN ANALYZE` con tres conversaciones: `Seq Scan on mensajes
+(rows=3379)` → `Sort … Memory: 545kB` → `Unique`, **6,98 ms**. Con una sola conversación el planificador sí usa
+`Index Scan Backward using mensajes_conversacion_idx` + `Limit` (0,04 ms).
+
+**Causa.** `SpringDataMensajeRepository` (último mensaje por conversación, «en una sola consulta») usa
+`DISTINCT ON` con una lista `IN`: Postgres tiene que leer todos los mensajes de esas conversaciones y
+ordenarlos para quedarse con uno por grupo. El costo crece en proporción a la historia del chat: un grupo de 20
+personas en 90 días puede juntar decenas de miles de mensajes, y esta consulta corre cada vez que alguien abre
+la pestaña de chat.
+
+**Solución propuesta (no aplicada).** Una consulta que use el índice `(conversacion_id, creado_en)` que ya
+existe, una búsqueda por conversación dentro de la misma consulta:
+`SELECT m.* FROM unnest(:ids) AS c(id) CROSS JOIN LATERAL (SELECT * FROM renaser.mensajes WHERE
+conversacion_id = c.id ORDER BY creado_en DESC LIMIT 1) m` (0,03 ms medido con la conversación más grande).
+Con un test que siembre miles de mensajes y verifique el resultado; el tiempo se mira con `EXPLAIN`.
+
+**Relacionada, a vigilar:** el conteo de no leídos al mandar un mensaje
+(`SpringDataParticipanteConversacionRepository`, `COUNT(m.id) … m.creado_en > pc.ultimo_leido_en`) pasó de 0,9
+a 8,1 ms de media con el mismo volumen: crece con los mensajes no leídos de cada integrante.
+
+## E-472 · El backend arranca con el health en DOWN y el log repite `Mail health check failed … AuthenticationFailedException: failed to connect, no password specified?` (entorno, RESUELTO, 01/10)
+
+**Síntoma.** Al levantar el backend de la réplica de carga (D-238) con `SMTP_HOST=` (vacío) en el archivo de
+variables, `/actuator/health` nunca dio UP y el log repetía
+`o.s.b.mail.health.MailHealthIndicator : Mail health check failed` /
+`jakarta.mail.AuthenticationFailedException: failed to connect, no password specified?`.
+
+**Causa.** Una variable de entorno **definida y vacía** no es lo mismo que no definirla: `spring.mail.host`
+existe (con valor vacío), Spring Boot crea el `JavaMailSender` y su indicador de salud intenta conectarse.
+
+**Solución.** No definir `SMTP_HOST` cuando no hay SMTP, y en un entorno sin correo apagar el indicador con
+`MANAGEMENT_HEALTH_MAIL_ENABLED=false` (producción hace lo mismo con `management.health.mail.enabled` en
+Parameter Store).
+
+**Cómo evitar que vuelva a pasar.** Anotado en `pruebas-de-carga/README.md`: para apagar algo, se **omite**
+la variable, no se la deja vacía.
+
+## E-473 · Con el pool de Hikari agotado la API responde 500 genérico en vez de 503 (web, ABIERTO, 01/10)
+
+**Síntoma.** En la prueba de estrés (D-238), desde ~450 usuarios a la vez, miles de respuestas **500** con
+`RenaserHikari - Connection is not available, request timed out after 5245ms (total=20, active=20, idle=0,
+waiting=341)` en el log (`org.hibernate.orm.jdbc.error`).
+
+**Causa.** Es saturación real (el procesador de la EC2 al 90–97 %, las 20 conexiones retenidas por pedidos que
+esperan CPU): el error es esperable. Lo que está mal es la forma: la excepción de "no hay conexión disponible"
+(`SQLTransientConnectionException` / `CannotCreateTransactionException`) cae en el manejador genérico y sale como
+500, que para la app y para las alertas significa "bug", no "ocupado".
+
+**Solución propuesta (no aplicada).** Mapear esas excepciones en `GlobalExceptionHandler` a **503** con
+`Retry-After` corto, para que la app pueda reintentar y Grafana distinga saturación de error de código.
