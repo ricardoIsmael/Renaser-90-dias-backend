@@ -140,6 +140,17 @@ class SeguimientoServiceTest {
             public List<GrupoConAprendices> gruposOperativos(Instant instante) {
                 return List.of();
             }
+
+            @Override
+            public List<GrupoAcompanado> gruposRegularesEnCurso(Instant instante) {
+                return List.of();
+            }
+
+            @Override
+            public List<GrupoAcompanado> gruposRegularesEnCursoEntre(java.time.LocalDate desde,
+                                                                     java.time.LocalDate hasta) {
+                return List.of();
+            }
         };
 
         ObligacionesHistoricasFinder obligacionesFinder = (participantes, desde, hasta) -> obligaciones.stream()

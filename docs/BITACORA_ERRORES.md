@@ -12982,3 +12982,103 @@ quería el cambio esa misma noche) o un `hora_limite` no posterior al inicio; qu
 caso de uso de destino aplica sobre los argumentos, leyendo el valor por el `api` del módulo dueño (nunca una
 constante copiada). Y un log de «fallo» sin motivo no sirve para diagnosticar: el motivo va recortado y sin datos
 personales.
+
+## E-476 · El traslado automático del día 8 y la rotación elegían grupos cerrados o todavía programados (community, RESUELTO, 01/10)
+
+**Síntoma.** Revisión de código del 01/10 (sin reporte de un usuario: el traslado está apagado en producción,
+ver abajo). `TrasladoService.candidatos` tomaba **todos** los grupos REGULAR de la cohorte y
+`PlanificadorDeTraslado.elegirGrupo` se quedaba con el más vacío. Con un grupo de setiembre ya cerrado (vacío
+porque sus aprendices pasaron al de octubre) y uno de octubre en curso, el aprendiz que cumplía el día 8 iba
+al **cerrado**: no lo ve en la app y al abrir su chat recibe `403 Tu asignacion cambio: ya no perteneces a ese
+grupo`. Lo mismo con uno programado para el mes siguiente. `RotacionService.rotar` tenía el mismo filtro.
+
+**Causa.** El traslado nació antes de que los grupos tuvieran periodo (V48); al agregarlo, el filtro de
+vigencia se puso en el acceso (`AcompanamientoFinderService.grupoOperativoEn`) pero no en quien elige grupo.
+
+**Solución (D-240).** La regla «en curso hoy, en el día de la cohorte» vive en una sola clase,
+`community.application.services.VigenciaDeGrupos`, que usan el acceso, las listas, el traslado y la rotación.
+El traslado solo considera grupos en curso; si no hay **ninguno**, el destino es `SIN_GRUPO_EN_CURSO`: el
+aprendiz se queda en la bienvenida y sale `FaltaArmarGrupoEvent` → bandeja + push de tipo `ARMADO_DE_GRUPOS`
+(V87) a ADMIN, ALQUIMISTA y LÍDER DE MENTORES, uno por cohorte y día local. «Hay grupos en curso pero llenos»
+sigue siendo `ESPERANDO_GRUPO` (solo log, como antes). La rotación planifica solo los grupos en curso, pero el
+mentor de un grupo cerrado o programado con la jefatura abierta no cuenta como libre (chocaría con el índice
+único). Pruebas: `TrasladoServiceTest` (4 nuevas, una con el reloj a las 03:00 UTC = día anterior en Lima),
+`PlanificadorDeTrasladoTest.sinGrupoEnCursoNoEsSinCupo`, `RotacionServiceTest.unGrupoCerradoNoRota`,
+`GruposEnCursoIT.trasladoSoloAGruposEnCurso` (Postgres real, incluido el aviso que llega al líder).
+
+**Ojo, sigue abierto.** `TrasladarAprendicesScheduler` está **apagado desde el 2026-09-11**
+(`renaser.scheduling.traslado-aprendices.enabled`, `matchIfMissing = false`, sin valor en ningún entorno): hoy
+nadie pasa solo de la bienvenida al grupo. El dueño dijo el 01/10 que «el traslado del día 8 sigue vigente»;
+encenderlo cambia producción y queda para que lo confirme.
+
+**Cómo evitar que vuelva a pasar.** Quien elige, lista o autoriza grupos usa `VigenciaDeGrupos`; no se escribe
+otra vez `vencidoEn`/`vigenteEn` con un día calculado a mano.
+
+## E-477 · Un grupo programado aparecía en «Mi grupo», «Mis grupos» y el contexto del mentor, y al abrirlo daba «403 No acompanas ese grupo» (community, RESUELTO, 01/10)
+
+**Síntoma.** Con un grupo creado por el Admin para empezar dentro de unos días: el aprendiz lo veía en Tribu
+(`GET /me/cell`, `GET /me/cells`) y el mentor en su contexto (`GET /me/accompaniment`), pero al abrirlo el
+padrón respondía `403 No acompanas ese grupo` y el chat `403 Tu asignacion cambio: ya no perteneces a ese
+grupo`. Además un mentor podía abrir por id (`GET /admin/cells/{id}`, rama MENTOR) un grupo cerrado o
+programado que no veía en ninguna lista, porque solo se miraba `celulas.mentor_id`, y
+`GET /me/cells/{id}/members` respondía con el padrón de un grupo cerrado.
+
+**Causa.** Dos reglas: las listas ocultaban solo los **cerrados** (`vencidoEn`) con el día de Lima fijo, y el
+acceso exigía **en curso** (`vigenteEn`) con la zona de la cohorte.
+
+**Solución (D-240, decisión del dueño: «un grupo se muestra recién desde su primer día»).** `CelulaService`
+(`miCelula`, `obtener` y `listarPorCohorte` para MENTOR, el `estado` de las respuestas), `MisCelulasService`
+(`misCelulas`, `integrantesDe`) y `AcompanamientoService.contexto` usan `VigenciaDeGrupos.enCurso`, con la zona
+de la política de la cohorte. Un MENTOR solo abre `/admin/cells/{id}` si tiene la jefatura vigente y el grupo
+está en curso; Admin y Alquimista siguen viendo todos en `/admin/cells`. Pruebas: `CelulaServiceTest` (5),
+`AcompanamientoServiceTest` (2, una a las 03:00 UTC) y `GruposEnCursoIT` (programado y cerrado, Postgres real).
+
+**Cómo evitar que vuelva a pasar.** Lo mismo que E-470: toda lista que tiene un «abrir» se prueba contra el
+mismo caso que da 403.
+
+## E-478 · El ranking de grupos de un mes pasado mostraba los grupos de hoy, y el semáforo del Líder no mostraba grupos sin mentor ni los de una semana pasada (mentoring, RESUELTO, 01/10)
+
+**Síntoma.** `GET /api/v1/ranking/groups?cohortId=…&month=2026-09` pedido en octubre listaba los grupos con
+mentor vigente **hoy** (los de octubre, sin muestra de setiembre) y no los que cerraron setiembre.
+`GET /api/v1/semaforo/groups` no mostraba un grupo en curso **sin mentor** (sus aprendices no sumaban en
+ningún lado) y, con `semanaHasta`, armaba la semana pasada con los grupos y el padrón de hoy.
+
+**Causa.** Los dos usaban `AcompanamientoFinder.gruposConMentorVigente(ahora)` para cualquier periodo.
+
+**Solución (D-240).** Dos lecturas nuevas en `community.api.AcompanamientoFinder`:
+`gruposRegularesEnCurso(instante)` (con o sin mentor) y `gruposRegularesEnCursoEntre(desde, hasta)` (los que
+estuvieron en curso algún día del rango, con el último mentor cuyo tramo lo tocó). El ranking toma los del mes
+pedido que tuvieron mentor (en el mes en curso, hasta hoy; se mantiene E-469). El semáforo trae los grupos en
+curso con o sin mentor (`sinMentor: true`, campo nuevo) y, para una semana pasada, los grupos de esa semana con
+el padrón al cierre de la semana: quien cambió de grupo cuenta en uno solo. Al Líder le llega además un aviso
+`ARMADO_DE_GRUPOS` por cada grupo en curso sin mentor, uno por grupo y día local, desde las 07:00
+(`AvisarGruposSinMentorScheduler`, cada hora). Pruebas: `RankingDeGruposServiceTest` (3),
+`SemaforoPorGruposServiceTest` (3), `AvisosDeGruposSinMentorServiceTest` (4),
+`FaltaArmarGrupoNotificationListenerTest` (2), `AcompanamientoServiceTest` (2 de las lecturas nuevas).
+
+**Cómo evitar que vuelva a pasar.** Una vista con parámetro de periodo (mes, semana) no puede leer «lo vigente
+ahora»: el test pide un periodo pasado con grupos distintos de los de hoy.
+
+## E-479 · Dos fuentes para «quién es el mentor del grupo»: `celulas.mentor_id` y la asignación de MENTOR (community, RESUELTO en lectura, 01/10)
+
+**Síntoma.** Riesgo detectado en revisión: Tribu (`/me/cells`, `/me/cell`) y el detalle de `/admin/cells`
+nombraban al mentor por `celulas.mentor_id`, mientras el acceso, el chat y el semáforo usan la asignación
+vigente en `asignaciones_celula`. Si las dos se separan, la pantalla nombra a alguien que no acompaña al grupo
+(o a nadie, a quien sí lo hace).
+
+**Diagnóstico de los caminos que escriben.** En el código actual **ningún** caso de uso las desincroniza:
+`ComposicionDeCelulaService.asignar/quitar`, `SumarMentorAGrupoService.sumar`, `RotacionService` y
+`cerrarMentorEnOtrosGrupos` escriben las dos en la misma transacción. Sí lo hace un camino manual:
+`docs/spec/LIMPIAR_DATOS_PRUEBA_MENTORIA.sql` (`UPDATE celulas SET mentor_id = NULL ...`, sin cerrar la
+asignación), y cualquier `UPDATE` a mano o dato anterior a V45.
+
+**Solución (D-240).** Las lecturas de `CelulaService` (`miCelula`, detalle, listas de `/admin/cells` y el
+dashboard, `obtener`/`listarPorCohorte` del MENTOR) y `MisCelulasService` (Tribu) toman el mentor de la
+asignación vigente. Sin migración. Quedan leyendo la columna, a la vista: `CelulaFinder.mentorDe` (calendario),
+`celulaDeParticipante` (ranking de `points`) y los selectores de mentor del panel (`mentores`,
+`mentoresDisponibles`). Prueba: `GruposEnCursoIT.elMentorSaleDeLaAsignacion` (vacía la columna como el script y
+la Tribu sigue nombrando al mentor) y `CelulaServiceTest` (2).
+
+**Cómo evitar que vuelva a pasar.** La columna es proyección (V45). Una lectura nueva de «el mentor del grupo»
+usa `ConjuntoAsignaciones.mentorVigenteEn`. La SQL para alinear la columna con las asignaciones queda propuesta
+en D-240, sin aplicar.

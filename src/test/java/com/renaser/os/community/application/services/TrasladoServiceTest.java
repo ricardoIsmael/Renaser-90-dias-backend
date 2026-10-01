@@ -203,4 +203,99 @@ class TrasladoServiceTest {
 
         assertThat(servicio().procesarLote(10)).isEqualTo(1);
     }
+
+    // ── D-240 / E-476: solo grupos EN CURSO hoy, en el dia de la cohorte ──────
+
+    /** 2026-10-01 03:00 UTC = 30 de setiembre 22:00 en Lima: el dia UTC ya es el siguiente (E-91). */
+    private static final Instant MEDIANOCHE_UTC = Instant.parse("2026-10-01T03:00:00Z");
+    private static final CelulaId DE_SETIEMBRE = CelulaId.of(UUID.fromString("00000000-0000-0000-0000-000000000009"));
+    private static final CelulaId DE_OCTUBRE = CelulaId.of(UUID.fromString("00000000-0000-0000-0000-000000000010"));
+
+    private TrasladoService servicioA(Instant ahora) {
+        return new TrasladoService(banco.cargaCelulas, banco.cargaAsignaciones, banco.guardaAsignacion,
+                banco.cargaPolitica, banco.buscaParticipacion, banco.punteroDeUsers, banco.publicador,
+                FixedClock.at(ahora), banco.idGenerator);
+    }
+
+    /** Solo dos grupos regulares: uno de setiembre y otro de octubre. GRUPO_A (sin periodo) sale. */
+    private void gruposDeSetiembreYOctubre() {
+        banco.celulas.remove(GRUPO_A.value());
+        banco.grupoConPeriodo(DE_SETIEMBRE, COHORTE, null, java.time.LocalDate.of(2026, 9, 1),
+                java.time.LocalDate.of(2026, 9, 30), AHORA);
+        banco.grupoConPeriodo(DE_OCTUBRE, COHORTE, null, java.time.LocalDate.of(2026, 10, 1),
+                java.time.LocalDate.of(2026, 10, 31), AHORA);
+    }
+
+    @Test
+    @DisplayName("E-476: el 1 de octubre en Lima va al grupo de octubre, no al de setiembre que ya cerro")
+    void noTrasladaAUnGrupoCerrado() {
+        gruposDeSetiembreYOctubre();
+        anaEnRecepcion(8);
+        // El de setiembre esta vacio y el de octubre no: el viejo criterio (el mas vacio de TODOS
+        // los regulares) elegia el cerrado.
+        banco.asignar(DE_OCTUBRE, UserId.of(UUID.randomUUID()), FuncionAcompanamiento.APRENDIZ,
+                AHORA.minusSeconds(100), null);
+
+        ResultadoTraslado resultado = servicioA(Instant.parse("2026-10-01T15:00:00Z")).ubicar(ANA);
+
+        assertThat(resultado.destino()).isEqualTo("GRUPO_ESTABLE");
+        assertThat(resultado.grupoId()).isEqualTo(DE_OCTUBRE.value());
+    }
+
+    @Test
+    @DisplayName("E-476: a las 03:00 UTC del 1 de octubre en Lima sigue siendo 30: va al de setiembre, no al programado")
+    void elDiaEsElDeLaCohorteNoElUtc() {
+        gruposDeSetiembreYOctubre();
+        anaEnRecepcion(8);
+        // Con el dia UTC (1 de octubre) el de setiembre estaria cerrado y el de octubre en curso.
+        banco.asignar(DE_SETIEMBRE, UserId.of(UUID.randomUUID()), FuncionAcompanamiento.APRENDIZ,
+                AHORA.minusSeconds(100), null);
+
+        ResultadoTraslado resultado = servicioA(MEDIANOCHE_UTC).ubicar(ANA);
+
+        assertThat(resultado.grupoId()).isEqualTo(DE_SETIEMBRE.value());
+    }
+
+    @Test
+    @DisplayName("E-476: sin ningun grupo en curso se queda en la recepcion y se avisa al staff")
+    void sinGrupoEnCursoSeQuedaYAvisa() {
+        banco.celulas.remove(GRUPO_A.value());
+        banco.grupoConPeriodo(DE_SETIEMBRE, COHORTE, null, java.time.LocalDate.of(2026, 8, 1),
+                java.time.LocalDate.of(2026, 8, 31), AHORA);
+        banco.grupoConPeriodo(DE_OCTUBRE, COHORTE, null, java.time.LocalDate.of(2026, 10, 1),
+                java.time.LocalDate.of(2026, 10, 31), AHORA);
+        anaEnRecepcion(8);
+
+        ResultadoTraslado resultado = servicioA(AHORA).ubicar(ANA);
+
+        assertThat(resultado.destino()).isEqualTo("SIN_GRUPO_EN_CURSO");
+        assertThat(resultado.grupoId()).isNull();
+        assertThat(banco.asignaciones.stream().filter(a -> a.usuarioId().equals(ANA) && a.vigente()))
+                .singleElement().extracting(a -> a.celulaId()).isEqualTo(RECEPCION);
+        assertThat(banco.eventos).singleElement()
+                .isInstanceOfSatisfying(com.renaser.os.community.api.FaltaArmarGrupoEvent.class, aviso -> {
+                    assertThat(aviso.motivo())
+                            .isEqualTo(com.renaser.os.community.api.FaltaArmarGrupoEvent.Motivo.SIN_GRUPO_EN_CURSO);
+                    assertThat(aviso.cohorteId()).isEqualTo(COHORTE.value());
+                    assertThat(aviso.rutaApp()).isEqualTo("/admin/cells");
+                });
+    }
+
+    @Test
+    @DisplayName("dos aprendices esperando el mismo dia local comparten la clave: un aviso, no dos")
+    void elAvisoSeDeduplicaPorCohorteYDia() {
+        banco.celulas.remove(GRUPO_A.value());
+        anaEnRecepcion(8);
+        UserId beto = UserId.of(UUID.randomUUID());
+        banco.aprendiz(beto, 9, true, RECEPCION.value());
+        banco.asignar(RECEPCION, beto, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(200_000), null);
+
+        servicioA(MEDIANOCHE_UTC).ubicar(ANA);
+        servicioA(MEDIANOCHE_UTC).ubicar(beto);
+
+        assertThat(banco.eventos).hasSize(2)
+                .extracting(e -> ((com.renaser.os.community.api.FaltaArmarGrupoEvent) e).claveDeduplicacion())
+                .containsOnly(com.renaser.os.community.domain.model.celula.AvisoDeArmadoDeGrupos
+                        .claveSinGrupoEnCurso(COHORTE.value(), java.time.LocalDate.of(2026, 9, 30)));
+    }
 }

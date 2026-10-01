@@ -45,6 +45,8 @@ class BancoDeMentoria {
     final Map<UserId, String> nombres = new LinkedHashMap<>();
     /** Cuentas suspendidas: el resto de los perfiles sale ACTIVE. */
     final Set<UserId> suspendidos = new HashSet<>();
+    /** Periodo de cada grupo (D-240); un grupo sin entrada no tiene periodo: siempre en curso. */
+    final Map<UUID, LocalDate[]> periodos = new LinkedHashMap<>();
 
     final AcompanamientoFinder acompanamiento = new AcompanamientoFinder() {
             @Override
@@ -53,7 +55,7 @@ class BancoDeMentoria {
             }
         @Override
         public List<TramoDeAcompanamiento> tramosDeMentor(UserId mentorId, Instant desde, Instant hasta) {
-            return grupos.stream().filter(g -> g.mentorId().equals(mentorId))
+            return grupos.stream().filter(g -> mentorId.equals(g.mentorId()))
                     .map(g -> new TramoDeAcompanamiento(g.grupoId(), g.nombre(), desde, hasta)).toList();
         }
 
@@ -93,7 +95,7 @@ class BancoDeMentoria {
 
         @Override
         public boolean acompanaVigente(UserId actorId, UUID grupoId, Instant instante) {
-            return grupos.stream().anyMatch(g -> g.grupoId().equals(grupoId) && g.mentorId().equals(actorId));
+            return grupos.stream().anyMatch(g -> g.grupoId().equals(grupoId) && actorId.equals(g.mentorId()));
         }
 
         @Override
@@ -105,12 +107,28 @@ class BancoDeMentoria {
 
         @Override
         public List<GrupoAcompanado> gruposConMentorVigente(Instant instante) {
-            return grupos;
+            // Como el real: solo los que estan en curso ese dia (un grupo sin periodo, siempre).
+            return gruposRegularesEnCurso(instante);
         }
 
         @Override
         public List<GrupoConAprendices> gruposOperativos(Instant instante) {
             return List.of();
+        }
+
+        @Override
+        public List<GrupoAcompanado> gruposRegularesEnCurso(Instant instante) {
+            LocalDate hoy = instante.atZone(LIMA).toLocalDate();
+            return gruposRegularesEnCursoEntre(hoy, hoy);
+        }
+
+        /** Mismo contrato que el real: los que se cruzan con [desde, hasta]. El mentor es el del grupo. */
+        @Override
+        public List<GrupoAcompanado> gruposRegularesEnCursoEntre(LocalDate desde, LocalDate hasta) {
+            return grupos.stream().filter(g -> {
+                LocalDate[] periodo = periodos.get(g.grupoId());
+                return periodo == null || (!hasta.isBefore(periodo[0]) && !desde.isAfter(periodo[1]));
+            }).toList();
         }
     };
 
@@ -180,6 +198,10 @@ class BancoDeMentoria {
         var g = new AcompanamientoFinder.GrupoAcompanado(id, nombre, mentor, cohorte, "America/Lima", umbral);
         grupos.add(g);
         return g;
+    }
+
+    void periodo(UUID grupoId, LocalDate inicio, LocalDate fin) {
+        periodos.put(grupoId, new LocalDate[] {inicio, fin});
     }
 
     void alumno(UUID grupoId, UserId alumno, String nombre, Instant desde, Instant hasta) {

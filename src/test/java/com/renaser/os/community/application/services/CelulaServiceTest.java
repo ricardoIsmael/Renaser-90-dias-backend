@@ -644,4 +644,103 @@ class CelulaServiceTest {
 
         assertThat(service.miCelula(trainee)).isPresent();
     }
+
+    // ── D-240: lo que se lista = lo que se abre = en curso hoy; el mentor sale de la asignacion ──
+
+    private CelulaService servicioA(Instant ahora) {
+        return new CelulaService(loadCelulaPort, saveCelulaPort, eliminarCelulaPort, loadCohortePort,
+                consultarMiembrosCelulaPort, consultarCelulaDeParticipantePort, consultarPerfilUsuarioPort,
+                userSummaryFinder, participacionProgramaFinder, perfilMentorFinder, loadAsignacionesPort,
+                loadPoliticaMentoriaPort, events, FixedClock.at(ahora), idGenerator);
+    }
+
+    private static Celula grupoConPeriodo(String nombre, UserId mentorDeLaColumna, LocalDate inicio, LocalDate fin) {
+        return Celula.rehydrate(CelulaId.of(UUID.randomUUID()), nombre, mentorDeLaColumna,
+                CohorteId.of(UUID.randomUUID()), null, null, CLOCK.now(), CLOCK.now(), null, null,
+                new PeriodoGrupo(inicio, fin));
+    }
+
+    private static com.renaser.os.community.domain.model.acompanamiento.AsignacionCelula jefatura(Celula grupo,
+                                                                                                 UserId quien) {
+        return com.renaser.os.community.domain.model.acompanamiento.AsignacionCelula.abrir(
+                com.renaser.os.community.domain.model.acompanamiento.AsignacionId.of(UUID.randomUUID()), grupo.id(),
+                quien, com.renaser.os.community.domain.model.acompanamiento.FuncionAcompanamiento.MENTOR,
+                Instant.parse("2026-08-01T00:00:00Z"),
+                com.renaser.os.community.domain.model.acompanamiento.MotivoAsignacion.ADMINISTRATIVO, null,
+                "prueba:" + UUID.randomUUID());
+    }
+
+    @Test
+    @DisplayName("E-477: miCelula() no muestra un grupo PROGRAMADO: se ve recien desde su primer dia")
+    void miCelulaProgramadaNoSeVe() {
+        Celula deSetiembre = grupoConPeriodo("Fenix", null, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(trainee)).thenReturn(Optional.of(deSetiembre.id()));
+        when(loadCelulaPort.porId(deSetiembre.id())).thenReturn(Optional.of(deSetiembre));
+
+        assertThat(service.miCelula(trainee)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("E-477: a las 03:00 UTC del 1/9 en Lima sigue siendo 31/8: el grupo de setiembre todavia no se ve")
+    void miCelulaUsaElDiaDeLaCohorte() {
+        Celula deSetiembre = grupoConPeriodo("Fenix", null, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(trainee)).thenReturn(Optional.of(deSetiembre.id()));
+        when(loadCelulaPort.porId(deSetiembre.id())).thenReturn(Optional.of(deSetiembre));
+
+        assertThat(servicioA(Instant.parse("2026-09-01T03:00:00Z")).miCelula(trainee)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("E-479: el mentor de miCelula() es el de la asignacion vigente, no celulas.mentor_id")
+    void miCelulaNombraAlMentorDeLaAsignacion() {
+        UserId otro = UserId.of(UUID.randomUUID());
+        Celula grupo = grupoConPeriodo("Fenix", mentor, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(trainee)).thenReturn(Optional.of(grupo.id()));
+        when(loadCelulaPort.porId(grupo.id())).thenReturn(Optional.of(grupo));
+        when(loadCohortePort.porId(grupo.cohorteId())).thenReturn(Optional.of(cohorteExistente(grupo.cohorteId())));
+        when(loadAsignacionesPort.porCelula(grupo.id())).thenReturn(java.util.List.of(jefatura(grupo, otro)));
+        lenient().when(consultarPerfilUsuarioPort.porId(otro)).thenReturn(Optional.of(
+                new ConsultarPerfilUsuarioPort.PerfilUsuario(otro, "Mentor de verdad", null)));
+
+        assertThat(service.miCelula(trainee)).get().extracting(mc -> mc.mentor().id()).isEqualTo(otro);
+    }
+
+    @Test
+    @DisplayName("E-477: GET /admin/cells/{id} como MENTOR: un grupo cerrado es 403 aunque la columna lo nombre")
+    void obtenerGrupoCerradoComoMentorEsRechazado() {
+        Celula cerrado = grupoConPeriodo("Fenix", mentor, LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 31));
+        when(loadCelulaPort.porId(cerrado.id())).thenReturn(Optional.of(cerrado));
+        lenient().when(loadAsignacionesPort.porCelula(cerrado.id())).thenReturn(java.util.List.of(jefatura(cerrado, mentor)));
+
+        assertThatThrownBy(() -> service.obtener(mentor, cerrado.id())).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("E-479: GET /admin/cells/{id} como MENTOR entra por su asignacion vigente aunque la columna este vacia")
+    void obtenerComoMentorMiraLaAsignacion() {
+        Celula grupo = grupoConPeriodo("Fenix", null, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+        when(loadCelulaPort.porId(grupo.id())).thenReturn(Optional.of(grupo));
+        when(loadAsignacionesPort.porCelula(grupo.id())).thenReturn(java.util.List.of(jefatura(grupo, mentor)));
+        lenient().when(consultarPerfilUsuarioPort.porId(mentor)).thenReturn(Optional.of(
+                new ConsultarPerfilUsuarioPort.PerfilUsuario(mentor, "Mentor", null)));
+
+        assertThat(service.obtener(mentor, grupo.id()).mentor().id()).isEqualTo(mentor);
+    }
+
+    @Test
+    @DisplayName("E-477: listarPorCohorte como MENTOR no trae el grupo programado que ya tiene asignado")
+    void listarComoMentorSoloEnCurso() {
+        Celula enCurso = grupoConPeriodo("Aurora", null, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+        Celula programado = Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Boreal", null, enCurso.cohorteId(),
+                null, null, CLOCK.now(), CLOCK.now(), null, null,
+                new PeriodoGrupo(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)));
+        var enAurora = jefatura(enCurso, mentor);
+        var enBoreal = jefatura(programado, mentor);
+        when(loadAsignacionesPort.porUsuario(mentor)).thenReturn(java.util.List.of(enAurora, enBoreal));
+        when(loadCelulaPort.porId(enCurso.id())).thenReturn(Optional.of(enCurso));
+        when(loadCelulaPort.porId(programado.id())).thenReturn(Optional.of(programado));
+
+        assertThat(service.listarPorCohorte(mentor, enCurso.cohorteId()))
+                .extracting(r -> r.celula().nombre()).containsExactly("Aurora");
+    }
 }

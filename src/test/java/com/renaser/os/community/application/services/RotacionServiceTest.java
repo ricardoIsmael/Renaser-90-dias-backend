@@ -264,4 +264,28 @@ class RotacionServiceTest {
         }
         return ultima;
     }
+
+    @Test
+    @DisplayName("D-240: un grupo cerrado no rota (antes recibia al mentor del otro en el intercambio)")
+    void unGrupoCerradoNoRota() {
+        Instant octubreEnLima = Instant.parse("2026-10-01T15:00:00Z");
+        banco.cohorte(COHORTE, PoliticaMentoria.rehydrate(COHORTE, 10, CadenciaRotacion.MENSUAL, "America/Lima",
+                4, 3, null, 1));
+        banco.grupoConPeriodo(GRUPO_A, COHORTE, MENTOR_A, java.time.LocalDate.of(2026, 9, 1),
+                java.time.LocalDate.of(2026, 9, 30), octubreEnLima);
+        banco.grupoConPeriodo(GRUPO_B, COHORTE, MENTOR_B, java.time.LocalDate.of(2026, 10, 1),
+                java.time.LocalDate.of(2026, 10, 31), octubreEnLima);
+        banco.mentorConPerfil(MENTOR_A);
+        banco.mentorConPerfil(MENTOR_B);
+        banco.asignar(GRUPO_A, MENTOR_A, FuncionAcompanamiento.MENTOR, octubreEnLima.minusSeconds(2_592_000), null);
+        banco.asignar(GRUPO_B, MENTOR_B, FuncionAcompanamiento.MENTOR, octubreEnLima.minusSeconds(2_592_000), null);
+
+        servicio(FixedClock.at(octubreEnLima)).rotar(COHORTE, "rot:octubre");
+
+        assertThat(banco.operaciones).noneMatch(op -> op.startsWith("abrir:MENTOR:" + GRUPO_A.value()));
+        assertThat(banco.operaciones).noneMatch(op -> op.startsWith("cerrar:MENTOR:" + GRUPO_A.value()));
+        // Y el mentor del cerrado no cuenta como libre: su jefatura sigue abierta.
+        assertThat(banco.operaciones).noneMatch(op -> op.equals(
+                "abrir:MENTOR:" + GRUPO_B.value() + ":" + MENTOR_A.value()));
+    }
 }

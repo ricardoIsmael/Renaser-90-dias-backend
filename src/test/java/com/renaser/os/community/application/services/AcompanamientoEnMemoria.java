@@ -250,6 +250,16 @@ class AcompanamientoEnMemoria {
         return celula;
     }
 
+    /** Un grupo con periodo [inicio, fin], los dos dias incluidos (D-240). */
+    Celula grupoConPeriodo(CelulaId id, CohorteId cohorteId, UserId mentorId, LocalDate inicio, LocalDate fin,
+                           Instant ahora) {
+        Celula celula = Celula.rehydrate(id, "Grupo " + id.value().toString().substring(30), mentorId, cohorteId,
+                null, null, ahora, ahora, TipoCelula.REGULAR, null,
+                new com.renaser.os.community.domain.model.celula.PeriodoGrupo(inicio, fin));
+        celulas.put(id.value(), celula);
+        return celula;
+    }
+
     void mentorConPerfil(UserId id) {
         conPerfilMentor.add(id);
         participaciones.put(id, new ParticipacionPrograma(id, false, 0, null, ZoneId.of("America/Lima"),
@@ -279,7 +289,11 @@ class AcompanamientoEnMemoria {
      */
     final List<java.util.UUID> composicionesAvisadas = new ArrayList<>();
 
+    /** Todos los eventos publicados, en orden (D-240: el aviso de que falta armar un grupo). */
+    final List<Object> eventos = new ArrayList<>();
+
     final org.springframework.context.ApplicationEventPublisher publicador = evento -> {
+        eventos.add(evento);
         if (evento instanceof com.renaser.os.community.api.ComposicionDeCelulaCambiadaEvent cambio) {
             composicionesAvisadas.add(cambio.celulaId());
         }

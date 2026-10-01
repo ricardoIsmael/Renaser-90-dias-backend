@@ -56,6 +56,7 @@ public class AcompanamientoService
     private final ParticipacionProgramaFinder participacionProgramaFinder;
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
+    private final VigenciaDeGrupos vigencia;
 
     public AcompanamientoService(LoadAsignacionesPort loadAsignacionesPort, LoadCelulaPort loadCelulaPort,
                                   LoadPoliticaMentoriaPort loadPoliticaMentoriaPort,
@@ -69,6 +70,7 @@ public class AcompanamientoService
         this.participacionProgramaFinder = participacionProgramaFinder;
         this.userSummaryFinder = userSummaryFinder;
         this.clock = clock;
+        this.vigencia = new VigenciaDeGrupos(loadPoliticaMentoriaPort);
     }
 
     @Override
@@ -93,11 +95,15 @@ public class AcompanamientoService
             if (grupo.isEmpty()) {
                 continue;
             }
-            /* Un grupo con el periodo cerrado tampoco aparece en el contexto del mentor. La fila
-               de asignacion puede seguir VIVA —cerrar el periodo del grupo no cierra las
-               asignaciones—, asi que sin esto un grupo terminado se seguiria mostrando como "el
-               que acompano ahora". Mismo criterio que `CelulaService.miCelula` para el alumno. */
-            if (grupo.get().vencidoEn(hoyDelPrograma())) {
+            /* Solo grupos EN CURSO, la misma regla que el acceso (D-240). La fila de asignacion
+               puede seguir VIVA —cerrar el periodo del grupo no cierra las asignaciones—, asi que
+               sin esto un grupo terminado se seguiria mostrando como "el que acompano ahora".
+
+               > **Corregido 2026-10-01 (E-477).** Aca se ocultaban solo los CERRADOS, con el dia
+               > de Lima fijo. Un grupo PROGRAMADO se listaba y al abrir su padron respondia 403
+               > («No acompanas ese grupo»), porque el acceso exige en curso con la zona de la
+               > cohorte. Lo que se lista y lo que se puede abrir ahora salen de la misma regla. */
+            if (!vigencia.enCurso(grupo.get(), ahora)) {
                 continue;
             }
             // Una consulta por grupo, no una por miembro: el resto se resuelve en memoria.
@@ -171,9 +177,8 @@ public class AcompanamientoService
      * {@code AcompanamientoFinderService.grupoOperativoEn}.
      *
      * <p>Delegar y no copiar la condicion tambien resuelve la zona horaria: el finder resuelve el dia
-     * del grupo con la zona de la politica de SU cohorte, mientras que el {@link #hoyDelPrograma()}
-     * de esta clase usa {@code PoliticaMentoria.ZONA_POR_DEFECTO}. Una cohorte con otra zona haria
-     * que las dos difieran en un dia justo en el borde del periodo, que es donde importa.
+     * del grupo con la zona de la politica de SU cohorte. Desde D-240 el contexto de esta clase usa
+     * la misma regla ({@link VigenciaDeGrupos}), asi que lo listado y lo que se abre no difieren.
      */
     private void requireAcompanaVigente(UserId actorId, CelulaId grupoId, Instant ahora) {
         if (!acompanamientoFinder.acompanaVigente(actorId, grupoId.value(), ahora)) {
@@ -240,11 +245,6 @@ public class AcompanamientoService
      */
     private static boolean esDeAcompanamiento(AsignacionCelula asignacion) {
         return !asignacion.funcion().consumeCupo();
-    }
-
-    /** Ver el javadoc gemelo en {@code CelulaService}: la zona del programa, no la del servidor. */
-    private java.time.LocalDate hoyDelPrograma() {
-        return clock.now().atZone(java.time.ZoneId.of(PoliticaMentoria.ZONA_POR_DEFECTO)).toLocalDate();
     }
 
     private AsignacionResumen resumir(AsignacionCelula mia, Celula grupo, ConjuntoAsignaciones composicion,

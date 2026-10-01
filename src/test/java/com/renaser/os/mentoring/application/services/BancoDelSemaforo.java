@@ -51,6 +51,8 @@ public class BancoDelSemaforo {
 
     private final Map<UUID, AcompanamientoFinder.GrupoBasico> grupos = new LinkedHashMap<>();
     private final java.util.Set<UUID> recepciones = new java.util.HashSet<>();
+    /** Periodo de cada grupo (D-240); sin entrada = sin periodo, siempre en curso. */
+    private final Map<UUID, LocalDate[]> periodos = new LinkedHashMap<>();
     private final List<Tramo> acompanamientos = new ArrayList<>();
     private final List<Tramo> pertenencias = new ArrayList<>();
     private final Map<UserId, UserSummary> perfiles = new LinkedHashMap<>();
@@ -147,6 +149,45 @@ public class BancoDelSemaforo {
                                 t.usuario(), grupo.cohorteId(), grupo.zonaHoraria(), 3)));
             }
             return conMentor;
+        }
+
+        /** Como el real: regulares en curso ese dia (en Lima), con mentor o sin el. */
+        @Override
+        public List<GrupoAcompanado> gruposRegularesEnCurso(Instant instante) {
+            LocalDate hoy = instante.atZone(LIMA).toLocalDate();
+            List<GrupoAcompanado> enCurso = new ArrayList<>();
+            for (GrupoBasico grupo : grupos.values()) {
+                if (recepciones.contains(grupo.grupoId()) || !seCruza(grupo.grupoId(), hoy, hoy)) {
+                    continue;
+                }
+                UserId mentor = acompanamientos.stream()
+                        .filter(t -> t.mentor() && t.grupoId().equals(grupo.grupoId()) && t.vigenteEn(instante))
+                        .map(Tramo::usuario).findFirst().orElse(null);
+                enCurso.add(new GrupoAcompanado(grupo.grupoId(), grupo.nombre(), mentor, grupo.cohorteId(),
+                        grupo.zonaHoraria(), 3));
+            }
+            return enCurso;
+        }
+
+        /** Como el real: los que se cruzan con esos dias, con el ultimo mentor cuyo tramo los toco. */
+        @Override
+        public List<GrupoAcompanado> gruposRegularesEnCursoEntre(LocalDate desde, LocalDate hasta) {
+            Instant inicio = desde.atStartOfDay(LIMA).toInstant();
+            Instant fin = hasta.plusDays(1).atStartOfDay(LIMA).toInstant();
+            List<GrupoAcompanado> delPeriodo = new ArrayList<>();
+            for (GrupoBasico grupo : grupos.values()) {
+                if (recepciones.contains(grupo.grupoId()) || !seCruza(grupo.grupoId(), desde, hasta)) {
+                    continue;
+                }
+                UserId mentor = acompanamientos.stream()
+                        .filter(t -> t.mentor() && t.grupoId().equals(grupo.grupoId()))
+                        .filter(t -> t.desde().isBefore(fin) && (t.hasta() == null || t.hasta().isAfter(inicio)))
+                        .max(java.util.Comparator.comparing(Tramo::desde))
+                        .map(Tramo::usuario).orElse(null);
+                delPeriodo.add(new GrupoAcompanado(grupo.grupoId(), grupo.nombre(), mentor, grupo.cohorteId(),
+                        grupo.zonaHoraria(), 3));
+            }
+            return delPeriodo;
         }
 
         @Override
@@ -251,6 +292,7 @@ public class BancoDelSemaforo {
     public void limpiar() {
         grupos.clear();
         recepciones.clear();
+        periodos.clear();
         acompanamientos.clear();
         pertenencias.clear();
         perfiles.clear();
@@ -295,6 +337,26 @@ public class BancoDelSemaforo {
 
     public void aprendiz(UUID grupoId, UserId aprendiz) {
         pertenencias.add(new Tramo(grupoId, aprendiz, false, DESDE_SIEMPRE, null));
+    }
+
+    /** Fue aprendiz del grupo hasta {@code hasta} (lo movieron a otro). */
+    public void exaprendiz(UUID grupoId, UserId aprendiz, Instant hasta) {
+        pertenencias.add(new Tramo(grupoId, aprendiz, false, DESDE_SIEMPRE, hasta));
+    }
+
+    /** Aprendiz del grupo desde {@code desde} (llegó de otro). */
+    public void aprendizDesde(UUID grupoId, UserId aprendiz, Instant desde) {
+        pertenencias.add(new Tramo(grupoId, aprendiz, false, desde, null));
+    }
+
+    /** El periodo del grupo, los dos días incluidos (D-240). */
+    public void periodo(UUID grupoId, LocalDate inicio, LocalDate fin) {
+        periodos.put(grupoId, new LocalDate[] {inicio, fin});
+    }
+
+    private boolean seCruza(UUID grupoId, LocalDate desde, LocalDate hasta) {
+        LocalDate[] periodo = periodos.get(grupoId);
+        return periodo == null || (!hasta.isBefore(periodo[0]) && !desde.isAfter(periodo[1]));
     }
 
     /** Un aprendiz activo con nombre. */

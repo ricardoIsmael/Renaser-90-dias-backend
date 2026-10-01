@@ -21,6 +21,7 @@ import com.renaser.os.community.application.ports.out.participante.ConsultarCelu
 import com.renaser.os.community.application.ports.out.participante.ConsultarMiembrosCelulaPort;
 import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort;
 import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort.PerfilUsuario;
+import com.renaser.os.community.domain.model.acompanamiento.FuncionAcompanamiento;
 import com.renaser.os.community.domain.model.acompanamiento.PoliticaMentoria;
 import com.renaser.os.community.domain.model.celula.Celula;
 import com.renaser.os.community.domain.model.acompanamiento.ConjuntoAsignaciones;
@@ -83,6 +84,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    private final VigenciaDeGrupos vigencia;
 
     public CelulaService(LoadCelulaPort loadCelulaPort, SaveCelulaPort saveCelulaPort,
                           EliminarCelulaPort eliminarCelulaPort, LoadCohortePort loadCohortePort,
@@ -108,6 +110,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         this.events = events;
         this.clock = clock;
         this.idGenerator = idGenerator;
+        this.vigencia = new VigenciaDeGrupos(loadPoliticaMentoriaPort);
     }
 
     @Override
@@ -163,8 +166,10 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         UserSummary actor = requireActorActivo(actorId);
         List<Celula> celulas;
         if (actor.role() == UserRole.MENTOR) {
-            // Todos los que lidera en esa cohorte: desde D-141 pueden ser varios (E-371).
-            celulas = loadCelulaPort.porMentor(actorId).stream()
+            // Todos los que lidera en esa cohorte: desde D-141 pueden ser varios (E-371). Desde
+            // D-240 salen de su asignacion de MENTOR vigente y solo los EN CURSO: un mentor no ve
+            // por esta via un grupo cerrado ni uno programado (E-477).
+            celulas = gruposQueLideraEnCurso(actorId).stream()
                     .filter(c -> c.cohorteId().equals(cohorteId))
                     .toList();
         } else {
@@ -179,7 +184,10 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         UserSummary actor = requireActorActivo(actorId);
         Celula celula = requireCelula(celulaId);
         if (actor.role() == UserRole.MENTOR) {
-            if (celula.mentorId() == null || !celula.mentorId().equals(actorId)) {
+            /* > **Corregido 2026-10-01 (D-240, E-477/E-479).** Miraba `celulas.mentor_id`, y con eso
+               > un mentor abria un grupo cerrado o programado que no ve en ninguna lista. Ahora pide
+               > lo mismo que el acceso: ser el MENTOR vigente y que el grupo este en curso. */
+            if (!lideraEnCurso(actorId, celula)) {
                 throw new NotAuthorizedException("No lideras esta celula");
             }
         } else {
@@ -193,7 +201,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
      * controller ya no encadena "muto y despues consulto", que caia en dos transacciones
      * distintas y podia responder un estado ya cambiado por otro. */
     private CelulaDetalle aDetalle(Celula celula) {
-        PerfilBasico mentor = celula.mentorId() != null ? perfilBasico(celula.mentorId()) : null;
+        PerfilBasico mentor = perfilDelMentor(celula);
         /* Los miembros salen del HISTORIAL de asignaciones, igual que el conteo de la linea de
            abajo, y no del puntero `participantes_programa.celula_id`.
 
@@ -208,7 +216,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         List<PerfilBasico> miembros = ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(celula.id()))
                 .aprendicesVigentesEn(celula.id(), clock.now()).stream()
                 .map(this::perfilBasico).toList();
-        return new CelulaDetalle(celula, mentor, miembros, celula.estadoEn(hoyDelPrograma()),
+        return new CelulaDetalle(celula, mentor, miembros, celula.estadoEn(vigencia.hoyDe(celula, clock.now())),
                 aprendicesVigentes(celula), cupoMaximo(celula));
     }
 
@@ -223,17 +231,19 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         /* Un grupo cuyo periodo ya cerro deja de verse desde la app del alumno. Decision del
            dueno del proyecto (2026-09-11): el administrador arma el grupo del mes siguiente y
            mientras tanto el alumno no tiene grupo, en vez de quedarse mirando uno terminado.
+           Y uno programado se ve recien desde su primer dia (D-240, 2026-10-01): antes se
+           mostraba y al abrir su chat daba 403 (E-477).
 
            La fila de `asignaciones_celula` puede seguir VIVA: cerrar el periodo del grupo no
            cierra las asignaciones. Por eso el filtro va por el periodo del GRUPO y no por la
            vigencia de la asignacion, que responde otra pregunta.
 
            Solo el admin lo sigue viendo, por `/api/v1/admin/cells`, que no pasa por aca. */
-        if (celula.vencidoEn(hoyDelPrograma())) {
+        if (!vigencia.enCurso(celula, clock.now())) {
             return Optional.empty();
         }
         Cohorte cohorte = requireCohorte(celula.cohorteId());
-        PerfilBasico mentor = celula.mentorId() != null ? perfilBasico(celula.mentorId()) : null;
+        PerfilBasico mentor = perfilDelMentor(celula);
         int cantidadMiembros = consultarMiembrosCelulaPort.contarMiembros(celulaId);
         int totalCelulas = loadCelulaPort.porCohorte(celula.cohorteId()).size();
         // Sin la foto del mentor (D-206): este es el `/me/cell` viejo y no se le cambia lo que calcula.
@@ -260,7 +270,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
 
     private CelulaConCohorte aCelulaConCohorte(Celula celula) {
         int cantidad = consultarMiembrosCelulaPort.contarMiembros(celula.id());
-        PerfilBasico mentor = celula.mentorId() != null ? perfilBasico(celula.mentorId()) : null;
+        PerfilBasico mentor = perfilDelMentor(celula);
         Cohorte cohorte = requireCohorte(celula.cohorteId());
         return new CelulaConCohorte(celula, cantidad, mentor, cohorte);
     }
@@ -441,8 +451,8 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
 
     private CelulaResumen aResumen(Celula celula) {
         int cantidad = consultarMiembrosCelulaPort.contarMiembros(celula.id());
-        PerfilBasico mentor = celula.mentorId() != null ? perfilBasico(celula.mentorId()) : null;
-        return new CelulaResumen(celula, cantidad, mentor, celula.estadoEn(hoyDelPrograma()),
+        PerfilBasico mentor = perfilDelMentor(celula);
+        return new CelulaResumen(celula, cantidad, mentor, celula.estadoEn(vigencia.hoyDe(celula, clock.now())),
                 aprendicesVigentes(celula), cupoMaximo(celula));
     }
 
@@ -478,15 +488,37 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     }
 
     /**
-     * Que dia es hoy para decidir si un grupo cerro.
-     *
-     * <p>Un grupo es del programa, no de una persona: no hay "la zona del participante" a la que
-     * acudir para esta pregunta, y usar la del servidor haria que un despliegue en otra region
-     * moviera la fecha de cierre de todos los grupos a la vez. Se fija la del programa, la misma
-     * que {@code PoliticaMentoria.ZONA_POR_DEFECTO}.
+     * Quien es el mentor del grupo: el de la asignacion de MENTOR vigente, no {@code celulas.mentor_id}
+     * (D-240, E-479). La asignacion es la fuente de verdad que ya usan el acceso, el chat y el
+     * semaforo; la columna es su proyeccion y, si alguna vez se desfasa (un UPDATE a mano, un script
+     * de limpieza), la pantalla no tiene que nombrar a alguien que no acompana al grupo.
      */
-    private java.time.LocalDate hoyDelPrograma() {
-        return clock.now().atZone(java.time.ZoneId.of(PoliticaMentoria.ZONA_POR_DEFECTO)).toLocalDate();
+    private Optional<UserId> mentorVigenteDe(CelulaId celulaId) {
+        return ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(celulaId))
+                .mentorVigenteEn(celulaId, clock.now());
+    }
+
+    private PerfilBasico perfilDelMentor(Celula celula) {
+        return mentorVigenteDe(celula.id()).map(this::perfilBasico).orElse(null);
+    }
+
+    private boolean lideraEnCurso(UserId mentorId, Celula celula) {
+        return vigencia.enCurso(celula, clock.now())
+                && mentorVigenteDe(celula.id()).filter(mentorId::equals).isPresent();
+    }
+
+    /** Los grupos donde el mentor tiene la jefatura abierta y que estan en curso hoy, por nombre. */
+    private List<Celula> gruposQueLideraEnCurso(UserId mentorId) {
+        return loadAsignacionesPort.porUsuario(mentorId).stream()
+                .filter(a -> a.funcion() == FuncionAcompanamiento.MENTOR)
+                .filter(a -> a.vigenteEn(clock.now()))
+                .map(a -> a.celulaId())
+                .distinct()
+                .map(loadCelulaPort::porId)
+                .flatMap(Optional::stream)
+                .filter(celula -> vigencia.enCurso(celula, clock.now()))
+                .sorted(Comparator.comparing(Celula::nombre, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
     }
 
     private Celula requireCelula(CelulaId id) {

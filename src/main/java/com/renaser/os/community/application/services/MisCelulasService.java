@@ -5,13 +5,13 @@ import com.renaser.os.community.application.ports.in.celula.ConsultarCelulasUseC
 import com.renaser.os.community.application.ports.in.celula.ConsultarMiCelulaUseCase.MiCelula;
 import com.renaser.os.community.application.ports.in.celula.ConsultarMisCelulasUseCase;
 import com.renaser.os.community.application.ports.out.acompanamiento.LoadAsignacionesPort;
+import com.renaser.os.community.application.ports.out.acompanamiento.LoadPoliticaMentoriaPort;
 import com.renaser.os.community.application.ports.out.celula.LoadCelulaPort;
 import com.renaser.os.community.application.ports.out.cohorte.LoadCohortePort;
 import com.renaser.os.community.application.ports.out.participante.ConsultarCelulaDeParticipantePort;
 import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort;
 import com.renaser.os.community.domain.model.acompanamiento.ConjuntoAsignaciones;
 import com.renaser.os.community.domain.model.acompanamiento.FuncionAcompanamiento;
-import com.renaser.os.community.domain.model.acompanamiento.PoliticaMentoria;
 import com.renaser.os.community.domain.model.celula.Celula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.Cohorte;
@@ -25,8 +25,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -62,12 +60,14 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
     private final FotosDeIntegrantesDelGrupo fotos;
+    private final VigenciaDeGrupos vigencia;
 
     public MisCelulasService(LoadCelulaPort loadCelulaPort, LoadCohortePort loadCohortePort,
                               LoadAsignacionesPort loadAsignacionesPort,
                               ConsultarCelulaDeParticipantePort consultarCelulaDeParticipantePort,
                               ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort,
-                              UserSummaryFinder userSummaryFinder, Clock clock, FotosDeIntegrantesDelGrupo fotos) {
+                              UserSummaryFinder userSummaryFinder, Clock clock, FotosDeIntegrantesDelGrupo fotos,
+                              LoadPoliticaMentoriaPort loadPoliticaMentoriaPort) {
         this.loadCelulaPort = loadCelulaPort;
         this.loadCohortePort = loadCohortePort;
         this.loadAsignacionesPort = loadAsignacionesPort;
@@ -76,6 +76,7 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
         this.userSummaryFinder = userSummaryFinder;
         this.clock = clock;
         this.fotos = fotos;
+        this.vigencia = new VigenciaDeGrupos(loadPoliticaMentoriaPort);
     }
 
     @Override
@@ -88,7 +89,8 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
         return gruposVigentesDe(actorId, ahora).stream()
                 .map(loadCelulaPort::porId)
                 .flatMap(Optional::stream)
-                .filter(celula -> !celula.vencidoEn(hoyDelPrograma()))
+                // En curso, no "no vencido": un grupo programado tampoco se lista (D-240, E-477).
+                .filter(celula -> vigencia.enCurso(celula, ahora))
                 .sorted(ordenConElPrincipalPrimero(principal))
                 .map(celula -> aMiCelula(celula, ahora))
                 .toList();
@@ -100,8 +102,11 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
         requireActorActivo(actorId);
         Instant ahora = clock.now();
         ConjuntoAsignaciones delGrupo = ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(celulaId));
-        boolean estaAdentro = delGrupo.aprendicesVigentesEn(celulaId, ahora).contains(actorId)
-                || delGrupo.mentorVigenteEn(celulaId, ahora).filter(actorId::equals).isPresent();
+        /* Lo que se abre es lo que se lista (D-240): un grupo cerrado o programado no aparece en
+           `/me/cells`, y su padron tampoco se lee por id aunque la asignacion siga abierta. */
+        boolean enCurso = loadCelulaPort.porId(celulaId).map(c -> vigencia.enCurso(c, ahora)).orElse(false);
+        boolean estaAdentro = enCurso && (delGrupo.aprendicesVigentesEn(celulaId, ahora).contains(actorId)
+                || delGrupo.mentorVigenteEn(celulaId, ahora).filter(actorId::equals).isPresent());
         if (!estaAdentro) {
             /* No se responde lista vacia: una lista vacia es indistinguible de "el grupo no tiene a
                nadie", y con eso cualquiera podria barrer ids de grupo para inferir cuales existen y
@@ -159,9 +164,11 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
      */
     private MiCelula aMiCelula(Celula celula, Instant ahora) {
         Cohorte cohorte = requireCohorte(celula);
-        PerfilBasico mentor = celula.mentorId() != null ? perfilBasico(celula.mentorId()) : null;
-        int cantidadMiembros = ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(celula.id()))
-                .aprendicesVigentesEn(celula.id(), ahora).size();
+        ConjuntoAsignaciones delGrupo = ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(celula.id()));
+        // El mentor sale de la asignacion vigente, no de `celulas.mentor_id` (D-240, E-479): es la
+        // que ya deciden el acceso, el chat y el semaforo.
+        PerfilBasico mentor = delGrupo.mentorVigenteEn(celula.id(), ahora).map(this::perfilBasico).orElse(null);
+        int cantidadMiembros = delGrupo.aprendicesVigentesEn(celula.id(), ahora).size();
         int totalCelulas = loadCelulaPort.porCohorte(celula.cohorteId()).size();
         return new MiCelula(celula, cohorte, mentor, cantidadMiembros, totalCelulas, rutaDeLaFoto(celula, mentor));
     }
@@ -193,8 +200,4 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
         }
     }
 
-    /** Regla 02: el dia se mira en la zona del programa, nunca con la fecha del servidor. */
-    private LocalDate hoyDelPrograma() {
-        return clock.now().atZone(ZoneId.of(PoliticaMentoria.ZONA_POR_DEFECTO)).toLocalDate();
-    }
 }

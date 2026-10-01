@@ -427,13 +427,20 @@ ALCHEMIST **y** cuenta activa (el permiso no alcanza: MENTOR/ADMIN/ALCHEMIST pas
   "grupos": [
     { "grupoId": "…", "grupoNombre": "Grupo Fénix", "mentorNombre": "Luisa Ramírez",
       "resumen": { "verde": 5, "amarillo": 2, "rojo": 1, "sinDatos": 0, "total": 8 },
-      "promedio": 76.4, "color": "AMARILLO", "etiqueta": "Requiere atención" }
+      "promedio": 76.4, "color": "AMARILLO", "etiqueta": "Requiere atención", "sinMentor": false }
   ]
 }
 ```
 
-Grupos regulares con mentor vigente (`gruposConMentorVigente`, sin recepción). Un aprendiz de la recepción, de un grupo sin mentor o
-sin grupo no suma acá: lo muestra la lista de administración de §4.6. `promedio` = promedio de los %
+Grupos regulares **en curso, con o sin mentor** (`gruposRegularesEnCurso`, sin recepción); `sinMentor: true` marca al
+que no tiene (con `mentorNombre: null`), y al Líder le llega además un aviso `ARMADO_DE_GRUPOS` por cada uno, uno por
+grupo y día, desde las 07:00 locales. Con `semanaHasta`, los grupos que corrieron **esa** semana
+(`gruposRegularesEnCursoEntre`) y el padrón al cierre de la semana: quien cambió de grupo cuenta en uno solo. Un
+aprendiz de la recepción o sin grupo no suma acá: lo muestra la lista de administración de §4.6.
+
+> **Corregido 2026-10-01 (D-240, E-478).** Decía «Grupos regulares con mentor vigente (`gruposConMentorVigente`)» y
+> que un aprendiz de un grupo sin mentor no sumaba: el dueño pidió que esos grupos se vean y se avisen. Y la semana
+> pasada se armaba con los grupos de hoy. `promedio` = promedio de los %
 de sus aprendices con datos, 1 decimal, o `null`. `color` y `etiqueta` son los del promedio, con **los mismos
 umbrales que una persona** (decisión del dueño, 2026-09-25): los calcula el servidor
 (`ColorSemaforo.delPorcentaje`, que delega en `ReglaDelSemaforo`) y la app los pinta sin aplicar umbrales. Sin

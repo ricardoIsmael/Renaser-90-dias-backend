@@ -68,10 +68,7 @@ public class RankingDeGruposService implements ConsultarRankingDeGruposUseCase {
 
         // Solo grupos regulares con mentor: la recepción queda fuera del ranking (P-08), porque
         // es transitoria y comparar su cumplimiento con el de un grupo estable no dice nada.
-        List<AcompanamientoFinder.GrupoAcompanado> grupos =
-                acompanamientoFinder.gruposConMentorVigente(ahora).stream()
-                        .filter(g -> g.cohorteId().equals(cohorteId))
-                        .toList();
+        List<AcompanamientoFinder.GrupoAcompanado> grupos = gruposDelMes(cohorteId, mes, ahora);
         if (grupos.isEmpty()) {
             return new RankingDeGrupos(cohorteId, mes.toString(), null, null, List.of());
         }
@@ -96,6 +93,40 @@ public class RankingDeGruposService implements ConsultarRankingDeGruposUseCase {
         }
 
         return new RankingDeGrupos(cohorteId, mes.toString(), zona.getId(), version, ordenar(calculados));
+    }
+
+    /**
+     * Los grupos que estuvieron EN CURSO en ese mes y tuvieron mentor en él (D-240, E-478).
+     *
+     * <p>> **Corregido 2026-10-01.** Eran los grupos con mentor vigente HOY para cualquier mes: el
+     * ranking de septiembre pedido en octubre mostraba los grupos de octubre (sin muestra de
+     * septiembre) y no los que de verdad cerraron septiembre. El dueño quiere ver el ranking final del
+     * mes anterior.
+     *
+     * <p>En el mes en curso el corte es HOY, no el fin de mes: un grupo programado para el día 20 no
+     * corrió todavía y no entra. Hoy se mira en la zona de la cohorte (la del primer grupo: los grupos
+     * de una cohorte comparten política).
+     */
+    private List<AcompanamientoFinder.GrupoAcompanado> gruposDelMes(UUID cohorteId, YearMonth mes, Instant ahora) {
+        List<AcompanamientoFinder.GrupoAcompanado> delMes = conMentorDeLaCohorte(
+                acompanamientoFinder.gruposRegularesEnCursoEntre(mes.atDay(1), mes.atEndOfMonth()), cohorteId);
+        if (delMes.isEmpty()) {
+            return delMes;
+        }
+        LocalDate hoy = ahora.atZone(ZoneId.of(delMes.getFirst().zonaHoraria())).toLocalDate();
+        boolean mesEnCurso = YearMonth.from(hoy).equals(mes);
+        if (!mesEnCurso || hoy.equals(mes.atEndOfMonth())) {
+            return delMes;
+        }
+        return conMentorDeLaCohorte(acompanamientoFinder.gruposRegularesEnCursoEntre(mes.atDay(1), hoy), cohorteId);
+    }
+
+    private static List<AcompanamientoFinder.GrupoAcompanado> conMentorDeLaCohorte(
+            List<AcompanamientoFinder.GrupoAcompanado> grupos, UUID cohorteId) {
+        return grupos.stream()
+                .filter(g -> g.cohorteId().equals(cohorteId))
+                .filter(g -> g.mentorId() != null)
+                .toList();
     }
 
     private EvaluacionCumplimiento evaluarGrupo(UUID grupoId, Instant inicio, Instant fin, ZoneId zona) {

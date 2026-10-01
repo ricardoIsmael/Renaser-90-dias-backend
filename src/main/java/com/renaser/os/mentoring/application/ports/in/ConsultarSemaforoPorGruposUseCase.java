@@ -33,12 +33,17 @@ public interface ConsultarSemaforoPorGruposUseCase {
 
     /**
      * @param totales la suma de los conteos de {@code grupos}
-     * @param grupos  los grupos regulares con mentor vigente (sin recepción), por nombre
+     * @param grupos  los grupos regulares en curso en el periodo, con o sin mentor (sin recepción),
+     *                por nombre (D-240)
      */
     record ResumenPorGrupos(PeriodoDelSemaforo periodo, ConteoPorColor totales, List<GrupoDelResumen> grupos) {
     }
 
-    /** @param mentorNombre null si {@code users} no lo conoce */
-    record GrupoDelResumen(UUID grupoId, String grupoNombre, String mentorNombre, ResumenDelGrupo resumen) {
+    /**
+     * @param mentorNombre null si el grupo no tiene mentor o si {@code users} no lo conoce
+     * @param sinMentor    el grupo no tuvo mentor en el periodo (D-240)
+     */
+    record GrupoDelResumen(UUID grupoId, String grupoNombre, String mentorNombre, ResumenDelGrupo resumen,
+                           boolean sinMentor) {
     }
 }

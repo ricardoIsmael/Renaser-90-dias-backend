@@ -62,9 +62,10 @@ public class SemaforoPorGruposService implements ConsultarSemaforoPorGruposUseCa
     public ResumenPorGrupos resumenDe(ConsultaResumenPorGrupos consulta) {
         acceso.requireLiderazgoActivo(consulta.actorId());
         Instant ahora = clock.now();
-        // Grupos regulares con mentor vigente: la recepcion queda fuera, igual que en el ranking.
-        List<GrupoAcompanado> grupos = acompanamientoFinder.gruposConMentorVigente(ahora);
-        Map<UUID, List<UserId>> aprendicesPorGrupo = medicion.aprendicesPorGrupo(grupos, ahora);
+        List<GrupoAcompanado> grupos = gruposDe(consulta.semanaHasta(), ahora);
+        Map<UUID, List<UserId>> aprendicesPorGrupo =
+                medicion.aprendicesPorGrupo(grupos,
+                        instanteDelPadron(consulta.semanaHasta(), ahora, zonaDeReferencia(grupos)));
         Map<UserId, VentanaDelSemaforo> ventanas =
                 medicion.ventanasDe(todos(aprendicesPorGrupo), consulta.semanaHasta());
 
@@ -73,6 +74,36 @@ public class SemaforoPorGruposService implements ConsultarSemaforoPorGruposUseCa
                 ahora.atZone(zonaDeReferencia(grupos)).toLocalDate(), consulta.semanaHasta());
         return new ResumenPorGrupos(PeriodoDelSemaforo.de(ventanas.values(), esperado), totales(resumenes),
                 resumenes);
+    }
+
+    /**
+     * Los grupos regulares EN CURSO del periodo, con mentor o sin él (D-240, E-478). La recepción
+     * queda fuera, igual que en el ranking.
+     *
+     * <p>> **Corregido 2026-10-01.** Eran {@code gruposConMentorVigente(ahora)} para cualquier semana:
+     * un grupo sin mentor no se veía nunca, y la semana pasada se armaba con los grupos de HOY (uno
+     * cerrado el domingo desaparecía de su propia semana; uno que empezó hoy aparecía en una semana en
+     * la que no existía).
+     */
+    private List<GrupoAcompanado> gruposDe(LocalDate semanaHasta, Instant ahora) {
+        if (semanaHasta == null) {
+            return acompanamientoFinder.gruposRegularesEnCurso(ahora);
+        }
+        return acompanamientoFinder.gruposRegularesEnCursoEntre(semanaHasta.minusDays(6), semanaHasta);
+    }
+
+    /**
+     * A qué instante se pregunta quién estaba en cada grupo: ahora para la semana en curso, y el
+     * último instante de la semana para una pasada. Un solo instante y no «alguna vez en la semana»:
+     * quien pasó de un grupo a otro a mitad de semana cuenta en el grupo donde la terminó y no en los
+     * dos. El que está en dos grupos A LA VEZ sí cuenta en los dos (D-139, §4.4).
+     */
+    private static Instant instanteDelPadron(LocalDate semanaHasta, Instant ahora, ZoneId zona) {
+        if (semanaHasta == null) {
+            return ahora;
+        }
+        Instant cierre = semanaHasta.plusDays(1).atStartOfDay(zona).toInstant().minusMillis(1);
+        return ahora.isBefore(cierre) ? ahora : cierre;
     }
 
     /** Sin repetidos: un aprendiz puede estar en dos grupos (D-139) y se lo pide una sola vez. */
@@ -84,12 +115,13 @@ public class SemaforoPorGruposService implements ConsultarSemaforoPorGruposUseCa
 
     private List<GrupoDelResumen> resumir(List<GrupoAcompanado> grupos, Map<UUID, List<UserId>> aprendicesPorGrupo,
                                           Map<UserId, VentanaDelSemaforo> ventanas) {
-        Map<UserId, UserSummary> mentores =
-                userSummaryFinder.findByIds(grupos.stream().map(GrupoAcompanado::mentorId).distinct().toList());
+        Map<UserId, UserSummary> mentores = userSummaryFinder.findByIds(grupos.stream()
+                .map(GrupoAcompanado::mentorId).filter(java.util.Objects::nonNull).distinct().toList());
         return grupos.stream()
                 .map(grupo -> new GrupoDelResumen(grupo.grupoId(), grupo.nombre(),
-                        nombreDe(mentores.get(grupo.mentorId())),
-                        ResumenDelGrupo.de(medicionesDe(aprendicesPorGrupo.get(grupo.grupoId()), ventanas))))
+                        grupo.mentorId() == null ? null : nombreDe(mentores.get(grupo.mentorId())),
+                        ResumenDelGrupo.de(medicionesDe(aprendicesPorGrupo.get(grupo.grupoId()), ventanas)),
+                        grupo.mentorId() == null))
                 .sorted(Comparator.comparing(GrupoDelResumen::grupoNombre, OrdenDelSemaforo.alfabetico())
                         .thenComparing(GrupoDelResumen::grupoId))
                 .toList();

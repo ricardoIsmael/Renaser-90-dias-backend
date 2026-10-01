@@ -22,5 +22,7 @@ public enum TipoNotificacionJpa {
     /** V53. Espejo del valor homonimo del enum de Postgres. */
     PATRON_DE_MALESTAR_REPETIDO,
     /** V70. Espejo del valor homonimo del enum de Postgres. */
-    RECORDATORIO_EVENTO
+    RECORDATORIO_EVENTO,
+    /** V87. Espejo del valor homonimo del enum de Postgres. */
+    ARMADO_DE_GRUPOS
 }

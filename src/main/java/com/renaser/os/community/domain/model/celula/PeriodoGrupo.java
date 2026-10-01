@@ -65,6 +65,11 @@ public record PeriodoGrupo(LocalDate inicio, LocalDate fin) {
         return !dia.isBefore(inicio) && !dia.isAfter(fin);
     }
 
+    /** Si comparte al menos un día con {@code [desde, hasta]}, los dos extremos incluidos. */
+    public boolean seCruzaCon(LocalDate desde, LocalDate hasta) {
+        return !hasta.isBefore(inicio) && !desde.isAfter(fin);
+    }
+
     /** Si el grupo ya cerró: el día es POSTERIOR al último. El propio último día no está vencido. */
     public boolean vencidoEn(LocalDate dia) {
         return dia.isAfter(fin);
