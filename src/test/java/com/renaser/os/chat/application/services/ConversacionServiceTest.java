@@ -261,6 +261,8 @@ class ConversacionServiceTest {
         when(loadMensajePort.ultimosPorConversacion(any())).thenReturn(Map.of());
         when(contarNoLeidosPort.contarNoLeidos(eq(activo), any())).thenReturn(Map.of());
         when(fotosDeGrupos.cambiadasEn(List.of(conFoto, sinFoto))).thenReturn(Map.of(conFoto, cambiada));
+        // E-470: la lista solo trae los grupos a los que pertenece hoy; estos dos son suyos.
+        when(pertenenciaVigentePort.perteneceAlGrupo(any(), eq(activo))).thenReturn(true);
 
         Map<ConversacionId, Instant> fotos = new java.util.HashMap<>();
         service.listar(activo).forEach(r -> fotos.put(r.conversacion().id(), r.fotoDelGrupoCambiadaEn()));
@@ -269,6 +271,37 @@ class ConversacionServiceTest {
         assertThat(fotos.get(aurora.id())).as("usa la foto de Renaser").isNull();
         assertThat(fotos.get(comunidad.id())).isNull();
         verify(fotosDeGrupos, times(1)).cambiadasEn(any());
+    }
+
+    /**
+     * E-470: el chat del grupo de un período que ya terminó NO aparece en la lista. Antes se listaba
+     * desde la proyección {@code participantes_conversacion} y al abrirlo respondía 403 «Tu asignacion
+     * cambio: ya no perteneces a ese grupo». Ahora la lista aplica la MISMA regla que ese 403. El
+     * grupo actual, el 1 a 1 y la comunidad siguen apareciendo, y los no leídos del grupo cerrado ni se
+     * piden (el contador de la app suma los de la lista).
+     */
+    @Test
+    @DisplayName("E-470: la lista no trae el chat de un grupo al que ya no pertenece; el actual, el 1 a 1 y la comunidad sí")
+    void laListaNoTraeElGrupoDeUnPeriodoTerminado() {
+        UUID anterior = UUID.randomUUID();
+        UUID actual = UUID.randomUUID();
+        Conversacion grupoAnterior = Conversacion.crearCelula(ConversacionId.of(UUID.randomUUID()), anterior, CLOCK.now());
+        Conversacion grupoActual = Conversacion.crearCelula(ConversacionId.of(UUID.randomUUID()), actual, CLOCK.now());
+        Conversacion directa = Conversacion.crearDirecta(ConversacionId.of(UUID.randomUUID()), "clave", CLOCK.now());
+        Conversacion comunidad = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
+        when(loadConversacionPort.misConversaciones(activo))
+                .thenReturn(List.of(grupoAnterior, grupoActual, directa, comunidad));
+        when(pertenenciaVigentePort.perteneceAlGrupo(anterior, activo)).thenReturn(false);
+        when(pertenenciaVigentePort.perteneceAlGrupo(actual, activo)).thenReturn(true);
+        when(loadMensajePort.ultimosPorConversacion(any())).thenReturn(Map.of());
+        when(contarNoLeidosPort.contarNoLeidos(eq(activo), any())).thenReturn(Map.of(grupoActual.id(), 2L));
+
+        List<ConversacionResumen> resumenes = service.listar(activo);
+
+        assertThat(resumenes).extracting(r -> r.conversacion().id())
+                .containsExactlyInAnyOrder(grupoActual.id(), directa.id(), comunidad.id());
+        verify(contarNoLeidosPort).contarNoLeidos(activo, List.of(grupoActual.id(), directa.id(), comunidad.id()));
+        verify(loadMensajePort).ultimosPorConversacion(List.of(grupoActual.id(), directa.id(), comunidad.id()));
     }
 
     @Test

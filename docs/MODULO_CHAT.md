@@ -57,7 +57,7 @@ Los tres tests unitarios existentes (`AccountRequestServiceTest`, `UserAccountSe
 | Método | Ruta | Notas |
 |---|---|---|
 | POST | `/api/v1/chat/conversations/direct` | `{otherUserId}` → busca-o-crea, 201 |
-| GET | `/api/v1/chat/conversations` | mis conversaciones, con `unreadCount` y `lastMessage` |
+| GET | `/api/v1/chat/conversations` | mis conversaciones, con `unreadCount` y `lastMessage`. Solo las que se pueden abrir: un chat de grupo pasa por la misma regla de pertenencia vigente que da el 403 al abrirlo (`AccesoAChatsDeGrupo`), así que el grupo de un período ya terminado no se lista (E-470, D-239). El último mensaje sale de una búsqueda `LATERAL … LIMIT 1` por conversación sobre `mensajes_conversacion_idx` (E-471) |
 | POST | `/api/v1/chat/conversations/{id}/read` | marca leído hasta ahora |
 | POST | `/api/v1/chat/conversations/{conversationId}/messages` | enviar, 201 |
 | POST | `/api/v1/chat/conversations/{conversationId}/messages/share-wall-post` | `{postId}` → comparte una publicación del Muro, 201 con el mismo `MensajeResponse` que enviar |

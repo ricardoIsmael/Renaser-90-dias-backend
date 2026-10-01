@@ -12782,7 +12782,7 @@ implementación real, validaciones incluidas: un fake más permisivo esconde exa
 (2) Todo período «desde el inicio de X hasta ayer» se prueba con el reloj en el primer día de X (día 1,
 lunes), y en una hora UTC que en Lima siga siendo el día anterior (regla 02).
 
-## E-470 · La lista de chats muestra el grupo de un período ya terminado, y al abrirlo responde «403 Tu asignacion cambio: ya no perteneces a ese grupo» (chat, ABIERTO, 01/10)
+## E-470 · La lista de chats muestra el grupo de un período ya terminado, y al abrirlo responde «403 Tu asignacion cambio: ya no perteneces a ese grupo» (chat, RESUELTO, 01/10)
 
 **Síntoma.** En la prueba de carga (D-238), sobre una réplica de producción del 01/10, un aprendiz real ve en
 `GET /api/v1/chat/conversations` dos chats de grupo. Uno de ellos («Guia Celia y sus aprendices», período
@@ -12802,11 +12802,23 @@ tipo CELULA con la misma `AccesoAChatsDeGrupo.puedeVer` (en lote, para no hacer 
 de período retire la fila de la proyección. Falta que el dueño decida qué tiene que ver un aprendiz de un grupo
 cerrado: ¿el chat desaparece, o queda en solo lectura como historia?
 
+**Solución (01/10, decisión del dueño D-239: «que no aparezca»).** `ConversacionService.listar` filtra cada
+chat de grupo con la MISMA regla que da el 403: `AccesoAChatsDeGrupo.vistaDe(usuario)` resuelve el rol y los
+grupos en curso una vez y `VistaDeGrupos.puedeVer(celula)` es `puedeVer` con eso ya resuelto (un test exige
+que den lo mismo). Como el último mensaje y los no leídos se piden solo para lo listado, el contador de la app
+(que suma los `unreadCount` de la lista) tampoco cuenta el grupo cerrado. No se borra nada: los mensajes y la
+fila de la proyección quedan en la base, y abrirlo sigue dando el mismo 403. Los avisos de mensajes y la
+presencia ya usaban la pertenencia vigente; no había otro listado. El front no necesita cambios. Costo: una
+consulta de pertenencia por cada chat de grupo de la proyección (1–2 para un aprendiz). Pruebas:
+`ConversacionServiceTest.laListaNoTraeElGrupoDeUnPeriodoTerminado` (falla contra el código viejo),
+`AccesoAChatsDeGrupoTest.laVistaEnLoteEsLaMismaRegla` y `ChatDeGrupoTerminadoIT` (Postgres real: grupo
+terminado oculto, 1 a 1 y grupo en curso visibles, no leídos sin los del grupo cerrado, mensajes intactos).
+
 **Cómo evitar que vuelva a pasar.** Toda lista que se arma con una proyección y cuyo detalle se autoriza con
 otra fuente necesita un test que cierre la fuente de verdad (fin de período, rotación) y compruebe que lo que
-se lista se puede abrir.
+se lista se puede abrir. Hecho para el chat en `ChatDeGrupoTerminadoIT`.
 
-## E-471 · `GET /chat/conversations` lee y ordena TODOS los mensajes de las conversaciones del usuario para quedarse con el último (chat, ABIERTO, 01/10)
+## E-471 · `GET /chat/conversations` lee y ordena TODOS los mensajes de las conversaciones del usuario para quedarse con el último (chat, RESUELTO, 01/10)
 
 **Síntoma.** En la prueba de carga (D-238), `pg_stat_statements` mostró que
 `SELECT DISTINCT ON (conversacion_id) * FROM renaser.mensajes WHERE conversacion_id IN ($1,$2,$3) ORDER BY
@@ -12827,7 +12839,21 @@ existe, una búsqueda por conversación dentro de la misma consulta:
 conversacion_id = c.id ORDER BY creado_en DESC LIMIT 1) m` (0,03 ms medido con la conversación más grande).
 Con un test que siembre miles de mensajes y verifique el resultado; el tiempo se mira con `EXPLAIN`.
 
-**Relacionada, a vigilar:** el conteo de no leídos al mandar un mensaje
+**Solución (01/10).** `SpringDataMensajeRepository.ULTIMOS_POR_CONVERSACION` es ahora
+`SELECT m.* FROM renaser.conversaciones c CROSS JOIN LATERAL (SELECT * FROM renaser.mensajes WHERE
+conversacion_id = c.id ORDER BY creado_en DESC LIMIT 1) m WHERE c.id IN (:conversacionIds)`: la variante del
+informe, con la lista de ids sobre `conversaciones` en vez de `unnest(:ids)` porque Hibernate expande un
+parámetro colección como `(?, ?, …)`, que dentro de `unnest` no es un arreglo. Usa el índice que ya existía;
+sin migración. Mismo resultado: sin filtrar borrados ni ocultos, sin fila para una conversación vacía o un id
+inexistente (la FK `mensajes.conversacion_id` garantiza que todo mensaje tiene su conversación), y el orden de
+la lista no cambia porque sigue saliendo de `creado_en` del último mensaje. `UltimoMensajePorConversacionIT`
+(Postgres real) compara contra la consulta vieja literal con 5.000 mensajes en una conversación y exige que el
+plan de la consulta del repositorio use `mensajes_conversacion_idx` sin `Seq Scan on mensajes`.
+
+**Cómo evitar que vuelva a pasar.** Para "el último de cada grupo" sobre una tabla que crece, `LATERAL …
+LIMIT 1` con el índice, no `DISTINCT ON … IN (…)`; y la prueba mira el plan (`EXPLAIN`), no solo el resultado.
+
+**Relacionada, a vigilar (sigue abierta, no se tocó):** el conteo de no leídos al mandar un mensaje
 (`SpringDataParticipanteConversacionRepository`, `COUNT(m.id) … m.creado_en > pc.ultimo_leido_en`) pasó de 0,9
 a 8,1 ms de media con el mismo volumen: crece con los mensajes no leídos de cada integrante.
 
@@ -12848,7 +12874,7 @@ Parameter Store).
 **Cómo evitar que vuelva a pasar.** Anotado en `pruebas-de-carga/README.md`: para apagar algo, se **omite**
 la variable, no se la deja vacía.
 
-## E-473 · Con el pool de Hikari agotado la API responde 500 genérico en vez de 503 (web, ABIERTO, 01/10)
+## E-473 · Con el pool de Hikari agotado la API responde 500 genérico en vez de 503 (web, RESUELTO, 01/10)
 
 **Síntoma.** En la prueba de estrés (D-238), desde ~450 usuarios a la vez, miles de respuestas **500** con
 `RenaserHikari - Connection is not available, request timed out after 5245ms (total=20, active=20, idle=0,
@@ -12861,3 +12887,20 @@ esperan CPU): el error es esperable. Lo que está mal es la forma: la excepción
 
 **Solución propuesta (no aplicada).** Mapear esas excepciones en `GlobalExceptionHandler` a **503** con
 `Retry-After` corto, para que la app pueda reintentar y Grafana distinga saturación de error de código.
+
+**Solución (01/10).** Nuevo `shared.web.ServidorOcupadoHandler` (aparte: `GlobalExceptionHandler` ya pasaba
+el techo de 300 líneas). Atiende `CannotCreateTransactionException`, `DataAccessResourceFailureException`
+(incluye `CannotGetJdbcConnectionException` de `JdbcClient`), `TransientDataAccessResourceException`,
+`org.hibernate.JDBCException` y `SQLTransientConnectionException`; si en la cadena de causas está la
+`SQLTransientConnectionException` de Hikari responde **503**, `Retry-After: 5` y
+`{"message":"El servidor está ocupado en este momento. Intenta de nuevo en unos segundos.","timestamp":…}`;
+si no, relanza la misma excepción y queda el 500 de siempre. El detalle del pool va solo al log
+(`503 -> pool de base agotado`). Va con `@Order` DESPUÉS de `GlobalExceptionHandler` (que pasa a
+`LOWEST_PRECEDENCE - 1`): Spring prueba los advices en orden y cada uno mira también las causas, así que lo
+que aquel ya mapeaba por causa sigue igual. En la app, `mensajeDeError` (`apiClient.ts`) muestra ese
+`message` tal cual (no lo descarta `pareceInterno`); la app no reintenta sola. Prueba:
+`ServidorOcupadoHandlerTest` (despacho real de MVC, los tres caminos, más «otra falla no se vuelve 503» y
+«el 409 por causa no cambia»); falla contra el código viejo.
+
+**Cómo evitar que vuelva a pasar.** Toda dependencia que puede saturarse (pool, proveedor de IA, correo)
+sale como 503 con `Retry-After`, nunca como 500: el 500 queda para bugs, que es lo que las alertas buscan.

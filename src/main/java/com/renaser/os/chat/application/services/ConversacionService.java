@@ -153,7 +153,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     @Override
     public List<ConversacionResumen> listar(UserId actorId) {
         requireActivo(actorId);
-        List<Conversacion> conversaciones = conMisGruposPorRol(loadConversacionPort.misConversaciones(actorId), actorId);
+        List<Conversacion> conversaciones = lasQuePuedeAbrir(actorId);
         List<ConversacionId> ids = conversaciones.stream().map(Conversacion::id).toList();
         Map<ConversacionId, Mensaje> ultimos = loadMensajePort.ultimosPorConversacion(ids);
         Map<ConversacionId, Long> noLeidos = contarNoLeidosPort.contarNoLeidos(actorId, ids);
@@ -181,19 +181,29 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     }
 
     /**
-     * D-225: al Admin se le suman los chats de TODOS los grupos en curso, aunque no sea participante de
-     * ellos. Sin fila en la proyección su contador de no leídos de esos grupos es 0: los ve, pero no le
-     * reclaman atención como los suyos. A cualquier otro rol no se le suma nada.
+     * Las conversaciones de la lista: las suyas (la proyección {@code participantes_conversacion}) más,
+     * para el Admin, los chats de TODOS los grupos en curso (D-225), y de esas solo las que se pueden
+     * abrir.
+     *
+     * <p><b>E-470.</b> La proyección sirve para listar rápido, pero no se entera de que el período de un
+     * grupo terminó: el chat del grupo anterior se seguía listando y al abrirlo respondía 403 «Tu
+     * asignacion cambio: ya no perteneces a ese grupo». Ahora cada chat de grupo pasa por la MISMA
+     * regla que da ese 403 ({@link AccesoAChatsDeGrupo}), así que lo que se lista se puede abrir. No
+     * se borra nada: los mensajes quedan en la base. Los DIRECTA, GLOBAL y SOPORTE no cambian.
+     *
+     * <p>El Admin no tiene fila en la proyección de los grupos ajenos, así que su contador de no
+     * leídos de esos grupos es 0: los ve, pero no le reclaman atención como los suyos.
      */
-    private List<Conversacion> conMisGruposPorRol(List<Conversacion> mias, UserId actorId) {
-        List<UUID> grupos = accesoAChatsDeGrupo.gruposQueVePorSuRol(actorId);
-        if (grupos.isEmpty()) {
-            return mias;
-        }
+    private List<Conversacion> lasQuePuedeAbrir(UserId actorId) {
+        AccesoAChatsDeGrupo.VistaDeGrupos vista = accesoAChatsDeGrupo.vistaDe(actorId);
         Map<ConversacionId, Conversacion> todas = new LinkedHashMap<>();
-        mias.forEach(c -> todas.put(c.id(), c));
-        loadConversacionPort.porCelulaIds(grupos).forEach(c -> todas.putIfAbsent(c.id(), c));
-        return List.copyOf(todas.values());
+        loadConversacionPort.misConversaciones(actorId).forEach(c -> todas.put(c.id(), c));
+        if (!vista.gruposPorSuRol().isEmpty()) {
+            loadConversacionPort.porCelulaIds(vista.gruposPorSuRol()).forEach(c -> todas.putIfAbsent(c.id(), c));
+        }
+        return todas.values().stream()
+                .filter(c -> c.tipo() != TipoConversacion.CELULA || vista.puedeVer(c.celulaId()))
+                .toList();
     }
 
     /**

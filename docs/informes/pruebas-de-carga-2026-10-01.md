@@ -211,6 +211,12 @@ encima del 60 %, `hikaricp_connections_pending` mayor que 0, o p95 de la API por
      un aprendiz real (su grupo "Guía Celia…" cerró el 30-sep).
    - **E-472** — (entorno) arrancar con `SMTP_HOST=` vacío deja el health en DOWN.
 
+   > **Actualizado 2026-10-01 (D-239, rama `arreglos-carga`).** E-470, E-471 y E-473 quedaron
+   > **resueltos** después de este informe: el grupo terminado ya no se lista (decisión del dueño), el
+   > último mensaje sale con `LATERAL … LIMIT 1` sobre el índice, y el pool agotado responde 503 con
+   > `Retry-After: 5`. El detalle está en cada entrada de `docs/BITACORA_ERRORES.md`. No se volvió a
+   > correr la carga para medir el efecto.
+
 ## 7. Límites de esta medición (lo que no se probó)
 
 - **Pocos datos**: la base pesa 59 MB (el 54 % es la base de conocimiento de la IA) y hay 12

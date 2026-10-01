@@ -60,6 +60,16 @@ public class AccesoAChatsDeGrupo {
     }
 
     /**
+     * E-470: la misma regla que {@link #puedeVer}, para preguntar por muchos grupos de un mismo
+     * usuario. El rol y los grupos en curso se resuelven UNA vez; la pertenencia, solo por los grupos
+     * que el rol no cubre. La usa la lista de chats para no mostrar un grupo que al abrirlo
+     * respondería 403 (el de un período que ya terminó): lo que se lista se puede abrir.
+     */
+    public VistaDeGrupos vistaDe(UserId usuarioId) {
+        return new VistaDeGrupos(usuarioId, gruposQueVePorSuRol(usuarioId));
+    }
+
+    /**
      * Los grupos que el usuario ve por su rol, además de los suyos: todos los que están en curso para
      * un Admin activo; ninguno para cualquier otro.
      */
@@ -73,5 +83,30 @@ public class AccesoAChatsDeGrupo {
                 .filter(usuario -> usuario.status() == UserStatus.ACTIVE)
                 .map(usuario -> ROLES_QUE_VEN_TODOS_LOS_GRUPOS.contains(usuario.role()))
                 .orElse(false);
+    }
+
+    /** Lo que un usuario ve de los grupos ahora mismo. Vive lo que dura un pedido: no se guarda. */
+    public final class VistaDeGrupos {
+
+        private final UserId usuarioId;
+        private final List<UUID> porSuRol;
+        private final Set<UUID> porSuRolIndice;
+
+        private VistaDeGrupos(UserId usuarioId, List<UUID> porSuRol) {
+            this.usuarioId = usuarioId;
+            this.porSuRol = List.copyOf(porSuRol);
+            this.porSuRolIndice = Set.copyOf(porSuRol);
+        }
+
+        /** Los grupos que ve por su rol además de los suyos (ver {@link #gruposQueVePorSuRol}). */
+        public List<UUID> gruposPorSuRol() {
+            return porSuRol;
+        }
+
+        /** {@link #puedeVer} con el rol ya resuelto. Un grupo nulo no se ve: falla cerrado. */
+        public boolean puedeVer(UUID celulaId) {
+            return celulaId != null
+                    && (porSuRolIndice.contains(celulaId) || pertenenciaVigentePort.perteneceAlGrupo(celulaId, usuarioId));
+        }
     }
 }

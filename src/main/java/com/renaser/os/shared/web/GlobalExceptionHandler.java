@@ -15,6 +15,8 @@ import com.renaser.os.shared.domain.TokenVerificacionEmailInvalidoException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -34,7 +36,9 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
+/** Antes que {@link ServidorOcupadoHandler} (E-473): ver allá por qué importa el orden. */
 @RestControllerAdvice
+@Order(Ordered.LOWEST_PRECEDENCE - 1)
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);

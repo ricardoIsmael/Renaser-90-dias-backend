@@ -121,4 +121,24 @@ class AccesoAChatsDeGrupoTest {
 
         assertThat(acceso.gruposQueVePorSuRol(usuario)).containsExactly(GRUPO, OTRO_GRUPO);
     }
+
+    @ParameterizedTest(name = "{0}")
+    @EnumSource(value = UserRole.class, names = {"ADMIN", "MENTOR", "TRAINEE"})
+    @DisplayName("E-470: la vista en lote da lo mismo que puedeVer, grupo por grupo (suyo, ajeno en curso, vencido, nulo)")
+    void laVistaEnLoteEsLaMismaRegla(UserRole rol) {
+        UUID suyo = UUID.randomUUID();
+        UUID vencido = UUID.randomUUID();
+        esUn(rol, UserStatus.ACTIVE);
+        lenient().when(pertenencia.perteneceAlGrupo(suyo, usuario)).thenReturn(true);
+        lenient().when(gruposEnCurso.estaEnCurso(suyo)).thenReturn(true);
+        lenient().when(gruposEnCurso.estaEnCurso(vencido)).thenReturn(false);
+        lenient().when(gruposEnCurso.gruposEnCurso()).thenReturn(List.of(GRUPO, suyo));
+
+        AccesoAChatsDeGrupo.VistaDeGrupos vista = acceso.vistaDe(usuario);
+
+        for (UUID grupo : List.of(GRUPO, suyo, vencido)) {
+            assertThat(vista.puedeVer(grupo)).as(rol + " / " + grupo).isEqualTo(acceso.puedeVer(grupo, usuario));
+        }
+        assertThat(vista.puedeVer(null)).as("un grupo nulo no se ve").isFalse();
+    }
 }
