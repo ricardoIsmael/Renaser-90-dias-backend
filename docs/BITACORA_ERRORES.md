@@ -13028,3 +13028,24 @@ antes del commit; no llegó a ninguna rama.
 **Cómo evitar que vuelva a pasar.** Ya es ejecutable (`RutasCubiertasPorElFiltroTest`). Al abrir un prefijo de rutas
 nuevo, agregarlo a `SecurityConfig` en el mismo cambio, y correr `clean verify` entero: las pruebas del módulo solas
 no lo detectan.
+
+## E-482 · La web de Expo no arranca desde un worktree de `.claude/worktrees/`: `Unable to resolve module ./index.ts` (app, entorno, RESUELTO, 01/10)
+
+**Síntoma (capturas de D-241, `npx expo start --web` en `Renaser-90-dias-frontend-/.claude/worktrees/lider-mentores`).** La
+página queda en blanco; la consola del navegador dice `Refused to execute script from 'http://localhost:19006/index.ts.bundle?…'`
+y el bundle responde 404 con:
+
+```
+{"type":"UnableToResolveError","originModulePath":"/home/ricardo/Documentos/Renaser/Renaser-90-dias-frontend-/.claude/worktrees/lider-mentores/.","targetModuleName":"./index.ts","message":"Unable to resolve module ./index.ts …
+```
+
+**Causa.** `metro.config.js` bloquea `/\/\.claude\/.*/` (2026-09-30: vigilar las copias de los agentes agotaba los
+watchers). Ese patrón también calza con la ruta del propio proyecto cuando Metro corre DESDE un worktree que vive bajo
+`.claude/`: Metro bloquea todo el proyecto, empezando por `index.ts`.
+
+**Solución (sin tocar el repo).** Correr Metro desde una copia fuera de `.claude`: `cp -a --reflink=auto <worktree>
+~/.cache/renaser-e2e/front-lider` (en btrfs tarda 3 s y no ocupa disco) y `npx expo start --web` ahí.
+
+**Cómo evitar que vuelva a pasar.** Si se quiere arreglar en el repo: que el patrón excluya solo los worktrees que NO son
+el proyecto (por ejemplo, anclarlo a `__dirname + '/.claude/'`). Se deja anotado y no se cambió en D-241 porque
+`metro.config.js` lo usa todo el equipo y el cambio no era de este pedido.
