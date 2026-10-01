@@ -26,6 +26,12 @@ public final class PlanificadorDeTraslado {
         GRUPO_ESTABLE,
         /** Le tocaba grupo pero no hay cupo. Conserva lo que tiene y soporte se entera (P-04). */
         ESPERANDO_GRUPO,
+        /**
+         * Le tocaba grupo y la cohorte no tiene NINGUNO en curso (D-240). Se queda en la recepción y
+         * se avisa al administrador y al líder de mentores: los grupos los crea el administrador a
+         * mano, y trasladar a un grupo cerrado o programado lo dejaba en un grupo que no ve.
+         */
+        SIN_GRUPO_EN_CURSO,
         /** La cohorte no tiene recepción designada: es un fallo de configuración, no del aprendiz. */
         SIN_RECEPCION_CONFIGURADA,
         /** Nada que hacer. */
@@ -60,6 +66,11 @@ public final class PlanificadorDeTraslado {
                                     String motivo) {
     }
 
+    /**
+     * @param gruposRegulares los grupos regulares de la cohorte que están EN CURSO hoy. Filtrarlos
+     *                        es trabajo de quien llama (la vigencia necesita la zona de la cohorte);
+     *                        acá una lista vacía significa «no hay ningún grupo en curso».
+     */
     public static DecisionTraslado decidir(SituacionAprendiz situacion, PoliticaMentoria politica,
                                             CelulaId celulaRecepcion, List<GrupoCandidato> gruposRegulares) {
         if (!situacion.programaActivado()) {
@@ -86,6 +97,10 @@ public final class PlanificadorDeTraslado {
                     "Dia " + situacion.diaDePrograma() + ": corresponde recepcion");
         }
 
+        if (gruposRegulares.isEmpty()) {
+            return new DecisionTraslado(DestinoTraslado.SIN_GRUPO_EN_CURSO, null, true,
+                    "No hay ningun grupo en curso en la cohorte: sigue en la recepcion");
+        }
         return elegirGrupo(gruposRegulares)
                 .map(destino -> new DecisionTraslado(DestinoTraslado.GRUPO_ESTABLE, destino.id(), false,
                         "Dia " + situacion.diaDePrograma() + ": corresponde grupo estable"))

@@ -154,6 +154,15 @@ public final class Celula {
     }
 
     /**
+     * Si el grupo estuvo en curso al menos un dia entre {@code desde} y {@code hasta}, los dos
+     * incluidos. Es la pregunta de un periodo pasado (el ranking de un mes, el semaforo de una
+     * semana): un grupo que cerro el dia 15 SI estuvo en curso ese mes. Sin periodo, siempre.
+     */
+    public boolean enCursoAlgunDiaEntre(LocalDate desde, LocalDate hasta) {
+        return periodo == null || periodo.seCruzaCon(desde, hasta);
+    }
+
+    /**
      * Los cuatro estados en una sola respuesta, para que la pantalla no tenga que combinar tres
      * booleanos y equivocarse en la unica combinacion que importa: sin periodo NO es vigente por
      * casualidad, lo es porque no caduca.

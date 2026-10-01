@@ -579,4 +579,67 @@ class AcompanamientoServiceTest {
         assertThat(amanecer.mentorId()).isEqualTo(MENTOR);
         assertThat(amanecer.aprendices()).containsExactlyInAnyOrder(ANA, LUIS);
     }
+
+    // ── D-240 ────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("E-477: el contexto del mentor no lista un grupo PROGRAMADO (antes lo listaba y el padron daba 403)")
+    void contextoNoListaUnGrupoProgramado() {
+        grupoConPeriodo(MI_GRUPO, "Grupo de Octubre", LocalDate.of(2026, 9, 10), LocalDate.of(2026, 10, 9));
+        asignar(MI_GRUPO, MENTOR, FuncionAcompanamiento.MENTOR, AHORA.minusSeconds(86_400), null);
+
+        assertThat(servicio().contexto(MENTOR).asignaciones()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("E-477: el contexto mira el dia de la cohorte: 03:00 UTC del 10/9 todavia es 9/9 en Lima")
+    void contextoUsaElDiaDeLaCohorte() {
+        grupoConPeriodo(MI_GRUPO, "Grupo de Octubre", LocalDate.of(2026, 9, 10), LocalDate.of(2026, 10, 9));
+        asignar(MI_GRUPO, MENTOR, FuncionAcompanamiento.MENTOR, AHORA.minusSeconds(86_400), null);
+
+        assertThat(servicio(FixedClock.at(Instant.parse("2026-09-10T03:00:00Z"))).contexto(MENTOR).asignaciones())
+                .isEmpty();
+        assertThat(servicio(FixedClock.at(Instant.parse("2026-09-10T06:00:00Z"))).contexto(MENTOR).asignaciones())
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("E-478: grupos regulares en curso trae al que no tiene mentor, sin la recepcion ni los cerrados")
+    void gruposRegularesEnCursoConYSinMentor() {
+        escenarioBase();
+        CelulaId sinMentor = CelulaId.of(UUID.randomUUID());
+        CelulaId cerrado = CelulaId.of(UUID.randomUUID());
+        CelulaId recepcion = CelulaId.of(UUID.randomUUID());
+        grupo(sinMentor, "Grupo Sin Mentor");
+        grupoConPeriodo(cerrado, "Grupo Viejo", LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 31));
+        celulas.put(recepcion.value(), Celula.rehydrate(recepcion, "Bienvenida", null, COHORTE, null, null, AHORA,
+                AHORA, com.renaser.os.community.domain.model.acompanamiento.TipoCelula.RECEPCION, null));
+
+        var enCurso = finder().gruposRegularesEnCurso(AHORA);
+
+        assertThat(enCurso).extracting(g -> g.nombre())
+                .containsExactlyInAnyOrder("Grupo Amanecer", "Grupo Ajeno", "Grupo Sin Mentor");
+        assertThat(enCurso.stream().filter(g -> g.nombre().equals("Grupo Sin Mentor")).findFirst().orElseThrow()
+                .mentorId()).isNull();
+    }
+
+    @Test
+    @DisplayName("E-478: los grupos de un mes pasado son los que corrieron ese mes, con el mentor de entonces")
+    void gruposDeUnMesPasado() {
+        CelulaId deAgosto = CelulaId.of(UUID.randomUUID());
+        CelulaId deSetiembre = CelulaId.of(UUID.randomUUID());
+        grupoConPeriodo(deAgosto, "Agosto", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+        grupoConPeriodo(deSetiembre, "Setiembre", LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
+        // El mentor de agosto dejo el grupo el 2 de setiembre; hoy (9/9) no tiene ninguno.
+        asignar(deAgosto, EXMENTOR, FuncionAcompanamiento.MENTOR, Instant.parse("2026-07-20T00:00:00Z"),
+                Instant.parse("2026-09-02T12:00:00Z"));
+        asignar(deSetiembre, MENTOR, FuncionAcompanamiento.MENTOR, Instant.parse("2026-08-30T00:00:00Z"), null);
+
+        var deAgostoPedido = finder().gruposRegularesEnCursoEntre(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+
+        assertThat(deAgostoPedido).singleElement().satisfies(g -> {
+            assertThat(g.grupoId()).isEqualTo(deAgosto.value());
+            assertThat(g.mentorId()).isEqualTo(EXMENTOR);
+        });
+    }
 }

@@ -22,6 +22,10 @@ import java.util.UUID;
  * silencio lo que ya ve la app (contracts.md).
  *
  * <p>Devuelve nombre de grupo, posición, porcentaje y muestra. Nunca datos de los miembros.
+ *
+ * <p><b>{@code month} (D-240).</b> Cualquier mes, {@code YYYY-MM}. Entran los grupos regulares que
+ * estuvieron en curso algún día de ESE mes y tuvieron mentor en él; un mes pasado es su ranking final, y
+ * el mes en curso se corta en hoy. Un mes futuro responde sin grupos. Mismos permisos para cualquier mes.
  */
 @RestController
 @RequestMapping("/api/v1/ranking/groups")

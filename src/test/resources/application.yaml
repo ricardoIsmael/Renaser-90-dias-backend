@@ -86,6 +86,9 @@ renaser:
   scheduling:
     chats-de-aprendices:
       activo: false
+    # D-240: el aviso horario de grupos sin mentor tampoco corre solo en la suite; se prueba directo.
+    grupos-sin-mentor:
+      activo: false
   # E-360: espeja el default de main (application.yaml): cuantos listeners de eventos corren a la vez.
   eventos:
     concurrencia: 4

@@ -1,0 +1,34 @@
+-- Tipo de notificacion para avisar al staff que falta armar un grupo (D-240, E-476 y E-478).
+--
+-- Que problema resuelve
+-- ---------------------
+-- Dos situaciones que hasta el 2026-10-01 pasaban en silencio:
+--   1. El traslado del dia 8 encontraba que la cohorte no tenia NINGUN grupo en curso. Antes elegia
+--      igual un grupo cerrado o programado (E-476); ahora el aprendiz se queda en la bienvenida y hay
+--      que avisarle al administrador y al lider de mentores que falta crear el grupo.
+--   2. Un grupo en curso sin mentor desaparecia del semaforo del lider (E-478). Ahora se muestra
+--      marcado «sin mentor» y ademas se le avisa al lider, una vez por grupo y por dia.
+-- Los dos los publica `community` (`FaltaArmarGrupoEvent`) y los entrega
+-- `notifications.FaltaArmarGrupoNotificationListener` a la bandeja + push; esa fila necesita un tipo.
+--
+-- Por que no se reusa un valor existente
+-- --------------------------------------
+-- El candidato era `GRUPO_POR_VENCER` (V49), tambien un aviso de grupos al staff. Se descarto porque
+-- el tipo es la llave de `preferencias_notificacion` y de la deduplicacion
+-- `(usuario_id, tipo, origen_evento_id)` (V16): con el mismo tipo, silenciar «tu grupo esta por
+-- cerrar» silenciaria «hay gente esperando grupo», que es mas urgente. Y no lo recibe la misma gente:
+-- GRUPO_POR_VENCER va solo a ADMIN/ALCHEMIST; este tambien al lider de mentores.
+-- Un tipo para los DOS casos (y no uno por caso) porque son la misma accion pendiente —armar un
+-- grupo: crearlo o ponerle mentor— y para el mismo publico; el motivo va en el titulo y el texto.
+--
+-- La app instalada no se rompe con un valor desconocido: valida `type` como texto abierto (ver V70).
+-- La campana del servidor (D-221) lista todos los tipos salvo MENSAJE_CHAT; si una pantalla filtra
+-- por los tipos que conoce, la fila no aparece ahi, pero el push sale igual.
+--
+-- Por que este nombre
+-- -------------------
+-- `ARMADO_DE_GRUPOS` nombra la tarea que el aviso pide, que es lo que el staff querria silenciar o no,
+-- en vez de una de las dos causas.
+
+-- ALTER TYPE ... ADD VALUE va solo, sin BEGIN/COMMIT, igual que V46, V49, V59 y V70.
+ALTER TYPE renaser.tipo_notificacion ADD VALUE IF NOT EXISTS 'ARMADO_DE_GRUPOS';

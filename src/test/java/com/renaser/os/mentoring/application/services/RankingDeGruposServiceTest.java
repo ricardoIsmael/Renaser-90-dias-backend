@@ -212,4 +212,51 @@ class RankingDeGruposServiceTest {
         assertThat(fila(setiembre, GRUPO_A).esperadas()).isEqualTo(4);
         assertThat(fila(setiembre, GRUPO_A).entregadas()).isEqualTo(2);
     }
+
+    // ── D-240 / E-478: el ranking de un mes pasado es el de los grupos de ese mes ──
+
+    private static final Instant CINCO_DE_OCTUBRE = Instant.parse("2026-10-05T15:00:00Z");
+
+    @Test
+    @DisplayName("E-478: el ranking de setiembre pedido en octubre muestra los grupos de setiembre, no los de hoy")
+    void rankingDeUnMesPasado() {
+        UserId mentorDeSetiembre = UserId.of(UUID.randomUUID());
+        banco.grupo(GRUPO_A, "Grupo A", mentorDeSetiembre, COHORTE, 3);
+        banco.grupo(GRUPO_B, "Grupo B", UserId.of(UUID.randomUUID()), COHORTE, 3);
+        banco.grupo(GRUPO_C, "Grupo de Octubre", UserId.of(UUID.randomUUID()), COHORTE, 3);
+        banco.periodo(GRUPO_A, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
+        banco.periodo(GRUPO_B, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
+        banco.periodo(GRUPO_C, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31));
+        cumplimiento(alumnoDe(GRUPO_A, "a1"), 4, 4);
+        cumplimiento(alumnoDe(GRUPO_B, "b1"), 1, 4);
+
+        RankingDeGrupos ranking = servicio(CINCO_DE_OCTUBRE).ranking(ACTOR, COHORTE, SETIEMBRE);
+
+        assertThat(ranking.grupos()).extracting(FilaDeGrupo::grupoId).containsExactly(GRUPO_A, GRUPO_B);
+        assertThat(fila(ranking, GRUPO_A).porcentaje()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("E-478: en el mes en curso no entra un grupo programado para mas adelante en el mes")
+    void mesEnCursoSinLosProgramados() {
+        banco.grupo(GRUPO_A, "Grupo A", UserId.of(UUID.randomUUID()), COHORTE, 3);
+        banco.grupo(GRUPO_B, "Grupo del 20", UserId.of(UUID.randomUUID()), COHORTE, 3);
+        banco.periodo(GRUPO_A, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31));
+        banco.periodo(GRUPO_B, LocalDate.of(2026, 10, 20), LocalDate.of(2026, 11, 19));
+
+        RankingDeGrupos ranking = servicio(CINCO_DE_OCTUBRE).ranking(ACTOR, COHORTE, YearMonth.of(2026, 10));
+
+        assertThat(ranking.grupos()).extracting(FilaDeGrupo::grupoId).containsExactly(GRUPO_A);
+    }
+
+    @Test
+    @DisplayName("E-478: un grupo sin mentor en ese mes no entra al ranking (el ranking es de grupos con mentor)")
+    void sinMentorNoEntraAlRanking() {
+        banco.grupo(GRUPO_A, "Grupo A", UserId.of(UUID.randomUUID()), COHORTE, 3);
+        banco.grupo(GRUPO_B, "Sin mentor", null, COHORTE, 3);
+
+        RankingDeGrupos ranking = servicio(CINCO_DE_OCTUBRE).ranking(ACTOR, COHORTE, SETIEMBRE);
+
+        assertThat(ranking.grupos()).extracting(FilaDeGrupo::grupoId).containsExactly(GRUPO_A);
+    }
 }

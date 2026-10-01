@@ -88,6 +88,23 @@ public interface AcompanamientoFinder {
     List<GrupoAcompanado> gruposConMentorVigente(Instant instante);
 
     /**
+     * Los grupos regulares EN CURSO en ese instante (en el día de su cohorte), tengan mentor o no:
+     * {@code mentorId} es null en los que no tienen. La recepción queda fuera. Lo pide el semáforo
+     * por grupos del líder de la semana en curso (D-240): un grupo sin mentor tiene que verse ahí,
+     * no desaparecer como en {@link #gruposConMentorVigente}.
+     */
+    List<GrupoAcompanado> gruposRegularesEnCurso(Instant instante);
+
+    /**
+     * Los grupos regulares que estuvieron en curso al menos un día entre {@code desde} y
+     * {@code hasta} (los dos incluidos, días locales de la cohorte de cada grupo), con el mentor de
+     * ESE periodo: el último cuyo tramo tocó esos días, o null si no tuvo ninguno. Es lo que piden el
+     * ranking de un mes pasado y el semáforo de una semana pasada (D-240): los grupos de entonces,
+     * no los de hoy. La recepción queda fuera.
+     */
+    List<GrupoAcompanado> gruposRegularesEnCursoEntre(java.time.LocalDate desde, java.time.LocalDate hasta);
+
+    /**
      * TODOS los grupos que están corriendo en ese instante —regulares y recepción, con o sin
      * mentor— con sus aprendices vigentes. Lo pide la lista de administración «¿A quién atiendo
      * hoy?» (S-4, 2026-09-26), que no puede dejar afuera a nadie activo: {@link #gruposConMentorVigente}
@@ -115,6 +132,9 @@ public interface AcompanamientoFinder {
     }
 
     /**
+     * @param mentorId               su mentor; nunca null en {@link #gruposConMentorVigente}, puede
+     *                               serlo en {@link #gruposRegularesEnCurso} y
+     *                               {@link #gruposRegularesEnCursoEntre} (grupo sin mentor)
      * @param diasSinActividadAlerta umbral de la política de su cohorte (P-06). Viaja acá para
      *                               que quien barre no tenga que volver a preguntar por cohorte.
      */

@@ -229,4 +229,63 @@ class SemaforoPorGruposServiceTest {
         assertThatThrownBy(() -> new ConsultaResumenPorGrupos(LIDER, LocalDate.of(2026, 9, 19)))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // ── D-240 / E-478: grupos sin mentor y semanas pasadas con sus propios grupos ──
+
+    private static final UUID BRISA = UUID.fromString("00000000-0000-0000-0000-00000000f004");
+
+    @Test
+    @DisplayName("E-478: un grupo en curso SIN mentor aparece, marcado, y sus aprendices cuentan")
+    void grupoSinMentorAparece() {
+        banco.grupo(BRISA, "Grupo Brisa");
+        aprendiz(BRISA, id("b6"), "Sin Mentor", 85);
+
+        ResumenPorGrupos resumen = resumenDelLider();
+
+        GrupoDelResumen brisa = grupo(resumen, BRISA);
+        assertThat(brisa.sinMentor()).isTrue();
+        assertThat(brisa.mentorNombre()).isNull();
+        assertThat(brisa.resumen().conteo()).isEqualTo(new ConteoPorColor(1, 0, 0, 0));
+        assertThat(grupo(resumen, FENIX).sinMentor()).isFalse();
+        assertThat(resumen.totales().total()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("E-478: la semana pasada trae los grupos de ESA semana: el que cerro despues si, el que empezo despues no")
+    void semanaPasadaConSusGrupos() {
+        banco.periodo(FENIX, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 20));
+        banco.grupo(BRISA, "Grupo Brisa");
+        banco.periodo(BRISA, LocalDate.of(2026, 9, 21), LocalDate.of(2026, 10, 20));
+        banco.mentor(BRISA, id("a5"));
+
+        ResumenPorGrupos semanaPasada = servicio.resumenDe(new ConsultaResumenPorGrupos(LIDER, SEMANA_CERRADA));
+        ResumenPorGrupos estaSemana = resumenDelLider();
+
+        assertThat(semanaPasada.grupos()).extracting(GrupoDelResumen::grupoNombre)
+                .containsExactly("Grupo Aurora", "Grupo Fénix");
+        assertThat(estaSemana.grupos()).extracting(GrupoDelResumen::grupoNombre)
+                .containsExactly("Grupo Aurora", "Grupo Brisa");
+    }
+
+    @Test
+    @DisplayName("E-478: quien cambio de grupo despues de la semana cuenta en el grupo donde la termino, una sola vez")
+    void semanaPasadaConElPadronDeEntonces() {
+        // Luis estaba en Fénix toda la semana del 12 al 18; el 22 lo pasaron a Aurora.
+        java.time.Instant cambio = java.time.Instant.parse("2026-09-22T15:00:00Z");
+        banco.limpiar();
+        banco.usuario(LIDER, "Lider", UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
+        banco.grupo(FENIX, "Grupo Fénix");
+        banco.mentor(FENIX, LUISA);
+        banco.grupo(AURORA, "Grupo Aurora");
+        banco.mentor(AURORA, RAUL);
+        banco.persona(LUIS, "Luis Díaz");
+        banco.exaprendiz(FENIX, LUIS, cambio);
+        banco.aprendizDesde(AURORA, LUIS, cambio);
+
+        ResumenPorGrupos semanaPasada = servicio.resumenDe(new ConsultaResumenPorGrupos(LIDER, SEMANA_CERRADA));
+
+        assertThat(grupo(semanaPasada, FENIX).resumen().conteo().total()).isEqualTo(1);
+        assertThat(grupo(semanaPasada, AURORA).resumen().conteo().total()).isZero();
+        assertThat(semanaPasada.totales().total()).isEqualTo(1);
+    }
 }

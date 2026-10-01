@@ -16,8 +16,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -36,12 +39,14 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
     private final LoadAsignacionesPort loadAsignacionesPort;
     private final LoadCelulaPort loadCelulaPort;
     private final LoadPoliticaMentoriaPort loadPoliticaMentoriaPort;
+    private final VigenciaDeGrupos vigencia;
 
     AcompanamientoFinderService(LoadAsignacionesPort loadAsignacionesPort, LoadCelulaPort loadCelulaPort,
                                  LoadPoliticaMentoriaPort loadPoliticaMentoriaPort) {
         this.loadAsignacionesPort = loadAsignacionesPort;
         this.loadCelulaPort = loadCelulaPort;
         this.loadPoliticaMentoriaPort = loadPoliticaMentoriaPort;
+        this.vigencia = new VigenciaDeGrupos(loadPoliticaMentoriaPort);
     }
 
     @Override
@@ -149,20 +154,8 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
      */
     private boolean grupoOperativoEn(UUID grupoId, Instant instante) {
         return loadCelulaPort.porId(CelulaId.of(grupoId))
-                .map(celula -> celula.vigenteEn(diaDelPrograma(celula, instante)))
+                .map(celula -> vigencia.enCurso(celula, instante))
                 .orElse(false);
-    }
-
-    /**
-     * El dia del GRUPO, en la zona de la politica de su cohorte. No es la del servidor ni la del
-     * telefono: si la decidiera el cliente, dos aprendices en husos distintos verian cerrar el
-     * mismo grupo en dias distintos (plan.md §3).
-     */
-    private java.time.LocalDate diaDelPrograma(Celula celula, Instant instante) {
-        String zona = loadPoliticaMentoriaPort.porCohorte(celula.cohorteId())
-                .orElseGet(() -> PoliticaMentoria.porDefecto(celula.cohorteId()))
-                .zonaHoraria();
-        return instante.atZone(java.time.ZoneId.of(zona)).toLocalDate();
     }
 
     @Override
@@ -184,7 +177,7 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
                 continue;
             }
             // Un grupo fuera de su periodo no genera avisos de inactividad: no esta corriendo.
-            if (!celula.vigenteEn(diaDelPrograma(celula, instante))) {
+            if (!vigencia.enCurso(celula, instante)) {
                 continue;
             }
             PoliticaMentoria politica = loadPoliticaMentoriaPort.porCohorte(celula.cohorteId())
@@ -202,10 +195,57 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
 
     @Override
     @Transactional(readOnly = true)
+    public List<GrupoAcompanado> gruposRegularesEnCurso(Instant instante) {
+        List<GrupoAcompanado> enCurso = new ArrayList<>();
+        for (Celula celula : loadCelulaPort.todas()) {
+            if (!celula.esRecepcion() && vigencia.enCurso(celula, instante)) {
+                enCurso.add(aGrupoAcompanado(celula, mentorVigenteDe(celula.id().value(), instante)));
+            }
+        }
+        return enCurso;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<GrupoAcompanado> gruposRegularesEnCursoEntre(LocalDate desde, LocalDate hasta) {
+        List<GrupoAcompanado> delPeriodo = new ArrayList<>();
+        for (Celula celula : loadCelulaPort.todas()) {
+            if (!celula.esRecepcion() && celula.enCursoAlgunDiaEntre(desde, hasta)) {
+                delPeriodo.add(aGrupoAcompanado(celula, mentorDelPeriodo(celula, desde, hasta)));
+            }
+        }
+        return delPeriodo;
+    }
+
+    /**
+     * El mentor que acompaño al grupo en esos dias: de los tramos de MENTOR que tocan la ventana, el
+     * que empezo ultimo. Si hubo relevo a mitad del mes, el ranking nombra a quien lo cerro.
+     */
+    private UserId mentorDelPeriodo(Celula celula, LocalDate desde, LocalDate hasta) {
+        ZoneId zona = vigencia.zonaDe(celula.cohorteId());
+        PeriodoAsignacion ventana = PeriodoAsignacion.cerrado(desde.atStartOfDay(zona).toInstant(),
+                hasta.plusDays(1).atStartOfDay(zona).toInstant());
+        return asignacionesDe(celula.id().value()).stream()
+                .filter(a -> a.funcion() == FuncionAcompanamiento.MENTOR)
+                .filter(a -> a.periodo().solapaCon(ventana))
+                .max(Comparator.comparing(a -> a.periodo().inicio()))
+                .map(AsignacionCelula::usuarioId)
+                .orElse(null);
+    }
+
+    private GrupoAcompanado aGrupoAcompanado(Celula celula, UserId mentorId) {
+        PoliticaMentoria politica = loadPoliticaMentoriaPort.porCohorte(celula.cohorteId())
+                .orElseGet(() -> PoliticaMentoria.porDefecto(celula.cohorteId()));
+        return new GrupoAcompanado(celula.id().value(), celula.nombre(), mentorId, celula.cohorteId().value(),
+                politica.zonaHoraria(), politica.diasSinActividadAlerta());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<GrupoConAprendices> gruposOperativos(Instant instante) {
         List<GrupoConAprendices> operativos = new java.util.ArrayList<>();
         for (Celula celula : loadCelulaPort.todas()) {
-            if (!celula.vigenteEn(diaDelPrograma(celula, instante))) {
+            if (!vigencia.enCurso(celula, instante)) {
                 continue;
             }
             List<AsignacionCelula> vigentes = asignacionesDe(celula.id().value()).stream()

@@ -246,6 +246,16 @@ class ResumenSemanalDelSemaforoIT {
         public List<GrupoConAprendices> gruposOperativos(Instant instante) {
             return List.of(new GrupoConAprendices(GRUPO, "Grupo Fénix", false, UserId.of(MENTORA), List.of(ANA)));
         }
+
+        @Override
+        public List<GrupoAcompanado> gruposRegularesEnCurso(Instant instante) {
+            return gruposConMentorVigente(instante);
+        }
+
+        @Override
+        public List<GrupoAcompanado> gruposRegularesEnCursoEntre(java.time.LocalDate desde, java.time.LocalDate hasta) {
+            return gruposConMentorVigente(Instant.now());
+        }
     }
 
     /** Ana cerró la semana en verde; nadie más se mide. */

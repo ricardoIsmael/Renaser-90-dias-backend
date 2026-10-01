@@ -75,6 +75,7 @@ public class RotacionService implements RotarMentoresUseCase {
     private final ApplicationEventPublisher eventos;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    private final VigenciaDeGrupos vigencia;
 
     public RotacionService(LoadCelulaPort loadCelulaPort, SaveCelulaPort saveCelulaPort,
                             LoadCohortePort loadCohortePort, LoadAsignacionesPort loadAsignacionesPort,
@@ -96,6 +97,7 @@ public class RotacionService implements RotarMentoresUseCase {
         this.eventos = eventos;
         this.clock = clock;
         this.idGenerator = idGenerator;
+        this.vigencia = new VigenciaDeGrupos(loadPoliticaMentoriaPort);
     }
 
     /**
@@ -126,8 +128,14 @@ public class RotacionService implements RotarMentoresUseCase {
     public ResultadoRotacion rotar(CohorteId cohorteId, String claveOperacion) {
         Instant ahora = clock.now();
 
-        List<Celula> gruposRegulares = loadCelulaPort.porCohorte(cohorteId).stream()
+        List<Celula> todosLosRegulares = loadCelulaPort.porCohorte(cohorteId).stream()
                 .filter(c -> c.tipo() == TipoCelula.REGULAR)
+                .toList();
+        /* Rotan solo los grupos EN CURSO hoy (D-240, misma regla que el acceso). Uno cerrado ya no
+           tiene a quien acompanar y uno programado todavia no empezo: darles mentor por rotacion
+           seria repartir mentores a grupos que nadie ve. */
+        List<Celula> gruposRegulares = todosLosRegulares.stream()
+                .filter(c -> vigencia.enCurso(c, ahora))
                 .toList();
 
         Map<CelulaId, ConjuntoAsignaciones> composiciones = new LinkedHashMap<>();
@@ -141,7 +149,7 @@ public class RotacionService implements RotarMentoresUseCase {
         PlanDeRotacion plan = PlanificadorDeRotacion.planificar(
                 gruposRegulares.stream().map(Celula::id).toList(),
                 mentorPorGrupo,
-                mentoresLibres(mentorPorGrupo.values()),
+                mentoresLibres(mentoresConJefaturaVigente(todosLosRegulares, ahora)),
                 claveOperacion);
 
         return aplicar(cohorteId, plan, gruposRegulares, composiciones, ahora);
@@ -217,6 +225,19 @@ public class RotacionService implements RotarMentoresUseCase {
         for (UserId aprendiz : composicion.aprendicesVigentesEn(grupoId, ahora)) {
             asignacionCelulaPort.sincronizarAcompanamiento(aprendiz, grupoId.value(), mentorEntrante);
         }
+    }
+
+    /**
+     * Los mentores con jefatura abierta en CUALQUIER grupo regular de la cohorte, en curso o no. Un
+     * mentor de un grupo programado no esta libre: su intervalo abierto choca con el indice unico si
+     * la rotacion le abre otro.
+     */
+    private List<UserId> mentoresConJefaturaVigente(List<Celula> grupos, Instant ahora) {
+        return grupos.stream()
+                .map(grupo -> ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(grupo.id()))
+                        .mentorVigenteEn(grupo.id(), ahora))
+                .flatMap(java.util.Optional::stream)
+                .toList();
     }
 
     /** Mentores activos, con perfil de mentor y sin grupo regular vigente. */

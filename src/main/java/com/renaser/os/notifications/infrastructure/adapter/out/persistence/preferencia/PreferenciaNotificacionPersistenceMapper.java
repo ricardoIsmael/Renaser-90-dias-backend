@@ -40,6 +40,7 @@ class PreferenciaNotificacionPersistenceMapper {
             case GRUPO_POR_VENCER -> TipoNotificacionJpa.GRUPO_POR_VENCER;
             case PATRON_DE_MALESTAR_REPETIDO -> TipoNotificacionJpa.PATRON_DE_MALESTAR_REPETIDO;
             case RECORDATORIO_EVENTO -> TipoNotificacionJpa.RECORDATORIO_EVENTO;
+            case ARMADO_DE_GRUPOS -> TipoNotificacionJpa.ARMADO_DE_GRUPOS;
         };
     }
 
@@ -62,6 +63,7 @@ class PreferenciaNotificacionPersistenceMapper {
             case GRUPO_POR_VENCER -> TipoNotificacion.GRUPO_POR_VENCER;
             case PATRON_DE_MALESTAR_REPETIDO -> TipoNotificacion.PATRON_DE_MALESTAR_REPETIDO;
             case RECORDATORIO_EVENTO -> TipoNotificacion.RECORDATORIO_EVENTO;
+            case ARMADO_DE_GRUPOS -> TipoNotificacion.ARMADO_DE_GRUPOS;
         };
     }
 }

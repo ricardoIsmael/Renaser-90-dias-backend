@@ -107,4 +107,19 @@ class PeriodoGrupoTest {
         assertThat(unDia.contiene(LocalDate.of(2026, 9, 5))).isTrue();
         assertThat(unDia.duracionEnDias()).isEqualTo(1);
     }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("D-240: se cruza con un rango si comparten al menos un dia, extremos incluidos")
+    void seCruzaConUnRango() {
+        PeriodoGrupo setiembre = new PeriodoGrupo(java.time.LocalDate.of(2026, 9, 1), java.time.LocalDate.of(2026, 9, 30));
+
+        org.assertj.core.api.Assertions.assertThat(setiembre.seCruzaCon(
+                java.time.LocalDate.of(2026, 9, 30), java.time.LocalDate.of(2026, 10, 6))).isTrue();
+        org.assertj.core.api.Assertions.assertThat(setiembre.seCruzaCon(
+                java.time.LocalDate.of(2026, 8, 26), java.time.LocalDate.of(2026, 9, 1))).isTrue();
+        org.assertj.core.api.Assertions.assertThat(setiembre.seCruzaCon(
+                java.time.LocalDate.of(2026, 10, 1), java.time.LocalDate.of(2026, 10, 31))).isFalse();
+        org.assertj.core.api.Assertions.assertThat(setiembre.seCruzaCon(
+                java.time.LocalDate.of(2026, 8, 1), java.time.LocalDate.of(2026, 8, 31))).isFalse();
+    }
 }

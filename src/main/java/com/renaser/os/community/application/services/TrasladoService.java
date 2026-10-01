@@ -1,6 +1,7 @@
 package com.renaser.os.community.application.services;
 
 import com.renaser.os.community.api.ComposicionDeCelulaCambiadaEvent;
+import com.renaser.os.community.api.FaltaArmarGrupoEvent;
 import com.renaser.os.community.application.ports.in.acompanamiento.TrasladarAprendicesUseCase;
 import com.renaser.os.community.application.ports.out.acompanamiento.LoadAsignacionesPort;
 import com.renaser.os.community.application.ports.out.acompanamiento.LoadPoliticaMentoriaPort;
@@ -18,6 +19,7 @@ import com.renaser.os.community.domain.model.acompanamiento.PlanificadorDeTrasla
 import com.renaser.os.community.domain.model.acompanamiento.PlanificadorDeTraslado.SituacionAprendiz;
 import com.renaser.os.community.domain.model.acompanamiento.PoliticaMentoria;
 import com.renaser.os.community.domain.model.acompanamiento.TipoCelula;
+import com.renaser.os.community.domain.model.celula.AvisoDeArmadoDeGrupos;
 import com.renaser.os.community.domain.model.celula.Celula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
@@ -59,6 +61,7 @@ public class TrasladoService implements TrasladarAprendicesUseCase {
     private final ApplicationEventPublisher eventos;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    private final VigenciaDeGrupos vigencia;
 
     public TrasladoService(LoadCelulaPort loadCelulaPort, LoadAsignacionesPort loadAsignacionesPort,
                             SaveAsignacionPort saveAsignacionPort,
@@ -75,6 +78,7 @@ public class TrasladoService implements TrasladarAprendicesUseCase {
         this.eventos = eventos;
         this.clock = clock;
         this.idGenerator = idGenerator;
+        this.vigencia = new VigenciaDeGrupos(loadPoliticaMentoriaPort);
     }
 
     /**
@@ -138,6 +142,10 @@ public class TrasladoService implements TrasladarAprendicesUseCase {
                         aprendizId, cohorte.get());
                 yield new ResultadoTraslado(aprendizId, decision.destino().name(), null, decision.motivo());
             }
+            case SIN_GRUPO_EN_CURSO -> {
+                avisarQueNoHayGrupoEnCurso(cohorte.get(), politica, ahora);
+                yield new ResultadoTraslado(aprendizId, decision.destino().name(), null, decision.motivo());
+            }
             case SIN_RECEPCION_CONFIGURADA -> {
                 log.warn("[community.TrasladoService] la cohorte {} no tiene recepcion designada", cohorte.get());
                 yield new ResultadoTraslado(aprendizId, decision.destino().name(), null, decision.motivo());
@@ -194,12 +202,32 @@ public class TrasladoService implements TrasladarAprendicesUseCase {
     }
 
     /**
+     * Se queda en la recepción y el staff se entera (D-240). El aviso sale DENTRO de la transacción
+     * del aprendiz: el outbox de Modulith lo entrega después del commit. La clave es por cohorte y
+     * día local, así que el barrido horario y los demás aprendices del lote no lo repiten.
+     */
+    private void avisarQueNoHayGrupoEnCurso(CohorteId cohorteId, PoliticaMentoria politica, Instant ahora) {
+        log.warn("[community.TrasladoService] la cohorte {} no tiene ningun grupo en curso: "
+                + "quien termino la bienvenida sigue en ella", cohorteId);
+        eventos.publishEvent(new FaltaArmarGrupoEvent(
+                AvisoDeArmadoDeGrupos.claveSinGrupoEnCurso(cohorteId.value(), politica.fechaLocalDe(ahora)),
+                FaltaArmarGrupoEvent.Motivo.SIN_GRUPO_EN_CURSO, cohorteId.value(), null,
+                "No hay ningun grupo en curso", AvisoDeArmadoDeGrupos.cuerpoSinGrupoEnCurso(), ahora));
+    }
+
+    /**
      * Ocupación real leída del historial, no del contador de la célula: el cupo se mide en
      * aprendices vigentes, y mentor, guía y soporte no ocupan lugar.
+     *
+     * <p><b>Solo grupos EN CURSO hoy</b> (D-240, E-476), con la misma regla que el acceso
+     * ({@link VigenciaDeGrupos}). Antes entraban todos los regulares de la cohorte: el traslado podía
+     * mandar a alguien a un grupo cerrado —que no ve ni puede abrir— o a uno programado para el mes
+     * siguiente, y quedaba sin grupo visible.
      */
     private List<GrupoCandidato> candidatos(CohorteId cohorteId, PoliticaMentoria politica, Instant ahora) {
         return loadCelulaPort.porCohorte(cohorteId).stream()
                 .filter(c -> c.tipo() == TipoCelula.REGULAR)
+                .filter(c -> vigencia.enCurso(c, ahora))
                 .map(c -> new GrupoCandidato(c.id(),
                         ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(c.id()))
                                 .aprendicesVigentesEn(c.id(), ahora).size(),

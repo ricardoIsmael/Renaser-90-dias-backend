@@ -38,7 +38,14 @@ public enum TipoNotificacion {
      * empieza en 10 min", la alarma de 04:50 de la Semana de Manifestacion, o el anuncio de un evento
      * nuevo. Tipo propio y no {@code ANUNCIO_SISTEMA} para que se pueda silenciar por separado.
      */
-    RECORDATORIO_EVENTO;
+    RECORDATORIO_EVENTO,
+
+    /**
+     * V87 (D-240): falta armar algo para que la gente tenga grupo — no hay ningún grupo en curso al
+     * que trasladar a quien terminó la bienvenida (al administrador y al líder), o un grupo en curso
+     * no tiene mentor (al líder).
+     */
+    ARMADO_DE_GRUPOS;
 
     /**
      * Si el aviso se ve en la campana de la app (D-221). Los mensajes de chat no: el chat tiene sus

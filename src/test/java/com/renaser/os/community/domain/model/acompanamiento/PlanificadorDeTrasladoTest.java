@@ -111,6 +111,17 @@ class PlanificadorDeTrasladoTest {
     }
 
     @Test
+    @DisplayName("D-240: ningun grupo en curso: SIN_GRUPO_EN_CURSO, sigue en recepcion (no se confunde con 'sin cupo')")
+    void sinGrupoEnCursoNoEsSinCupo() {
+        var decision = PlanificadorDeTraslado.decidir(
+                new SituacionAprendiz(8, true, RECEPCION, TipoCelula.RECEPCION), POLITICA, RECEPCION, List.of());
+
+        assertThat(decision.destino()).isEqualTo(DestinoTraslado.SIN_GRUPO_EN_CURSO);
+        assertThat(decision.grupoDestino()).isNull();
+        assertThat(decision.conservaAccesoActual()).isTrue();
+    }
+
+    @Test
     @DisplayName("todos llenos: ESPERANDO_GRUPO y sigue en recepcion, nunca sin chat (P-04)")
     void todosLlenosEsperaSinPerderChat() {
         var decision = PlanificadorDeTraslado.decidir(
