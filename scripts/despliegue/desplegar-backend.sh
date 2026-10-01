@@ -349,9 +349,9 @@ lanzar_alloy() {
     return 0
   fi
   local url usuario token
-  url=$(parametro GRAFANA_CLOUD_PROM_URL)
-  usuario=$(parametro GRAFANA_CLOUD_PROM_USER)
-  token=$(parametro GRAFANA_CLOUD_TOKEN)
+  url=$(parametro grafana-cloud-prom-url)
+  usuario=$(parametro grafana-cloud-prom-user)
+  token=$(parametro grafana-cloud-token)
   if [ -z "$url" ] || [ -z "$usuario" ] || [ -z "$token" ]; then
     echo "Observabilidad: faltan credenciales de Grafana Cloud en ${PREFIJO_PARAMETROS}, no se lanza Alloy."
     return 0

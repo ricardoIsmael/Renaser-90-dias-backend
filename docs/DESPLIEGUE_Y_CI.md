@@ -610,8 +610,8 @@ Cómo se activa (pasos del dueño, cuando exista la cuenta):
    (`https://prometheus-prod-…grafana.net/api/prom/push`) y el **Instance ID** (número, es el
    usuario). Crear un *Access Policy token* con alcance `metrics:write`.
 2. Crearlos en Parameter Store (región `us-east-1`), como los demás secretos:
-   `/renaser/prod/GRAFANA_CLOUD_PROM_URL` (String), `/renaser/prod/GRAFANA_CLOUD_PROM_USER`
-   (String), `/renaser/prod/GRAFANA_CLOUD_TOKEN` (**SecureString**). El rol de la instancia ya lee
+   `/renaser/prod/grafana-cloud-prom-url` (String), `/renaser/prod/grafana-cloud-prom-user`
+   (String), `/renaser/prod/grafana-cloud-token` (**SecureString**). El rol de la instancia ya lee
    `/renaser/prod/*` (§6.3). La aplicación también los va a importar como propiedades sueltas: no
    los usa y no molestan.
 3. El próximo despliegue los encuentra: el CD manda la config de Alloy dentro del script
