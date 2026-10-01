@@ -226,7 +226,7 @@ class RevocacionDeSoportePorBajaDeRolTest {
                 accesoAGrupos, usuarios);
         mensajes = new MensajeService(conversaciones, esParticipante, accesoAGrupos, marcarLeidoPort,
                 guardarMensaje, cargarMensajes, fanoutMensajes, usuarios, almacenamiento,
-                conversacion -> ConfirmacionDeLectura.sinDobleMarca(), CLOCK, idGenerator, evento -> { });
+                conversacion -> ConfirmacionDeLectura.sinDobleMarca(), CLOCK, idGenerator, evento -> { }, new com.renaser.os.chat.application.services.MetricasDelChatEnMemoria());
         bandeja = new ConversacionService(conversaciones, guardarConversacion, agregarParticipante,
                 esParticipante, accesoAGrupos, marcarLeidoPort, conversacion -> { }, contarNoLeidos, cargarMensajes, roster,
                 usuarios, sinFotosPropias(),

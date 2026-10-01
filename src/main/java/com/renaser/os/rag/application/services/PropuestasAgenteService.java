@@ -4,6 +4,8 @@ import com.renaser.os.rag.application.ports.in.propuesta.ConsultarPropuestasDelT
 import com.renaser.os.rag.application.ports.in.propuesta.ConsultarPropuestasDelTurnoUseCase.PedidoDeEvidencia;
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
 import com.renaser.os.rag.application.ports.in.propuesta.ResolverPropuestaUseCase;
+import com.renaser.os.rag.application.ports.out.metricas.RegistrarMetricaDelAcompanantePort;
+import com.renaser.os.rag.application.ports.out.metricas.RegistrarMetricaDelAcompanantePort.ResolucionDePropuesta;
 import com.renaser.os.rag.application.ports.out.propuesta.LoadPropuestaAccionPort;
 import com.renaser.os.rag.application.ports.out.propuesta.PropuestaModificadaEnParaleloException;
 import com.renaser.os.rag.application.ports.out.propuesta.SavePropuestaAccionPort;
@@ -68,13 +70,17 @@ public class PropuestasAgenteService
     private final Duration vigencia;
     /** D-171: las tarjetas de camara del turno, que no se guardan en la base. */
     private final PedidosDeEvidenciaDelTurno evidenciasDelTurno;
+    /** D-237: propuestas creadas y como terminaron, por herramienta. */
+    private final RegistrarMetricaDelAcompanantePort metricas;
 
     public PropuestasAgenteService(LoadPropuestaAccionPort loadPort, SavePropuestaAccionPort savePort,
                                    List<AccionConfirmable> acciones, UserSummaryFinder userSummaryFinder,
                                    Clock clock, IdGenerator idGenerator,
                                    @Value("${renaser.ia.acompanante.propuesta-vigencia:PT10M}") Duration vigencia,
-                                   PedidosDeEvidenciaDelTurno evidenciasDelTurno) {
+                                   PedidosDeEvidenciaDelTurno evidenciasDelTurno,
+                                   RegistrarMetricaDelAcompanantePort metricas) {
         this.evidenciasDelTurno = evidenciasDelTurno;
+        this.metricas = metricas;
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.acciones = List.copyOf(acciones);
@@ -92,7 +98,13 @@ public class PropuestasAgenteService
         return pendienteIgual(propuesta, ahora)
                 .map(existente -> new PropuestaCreada(existente.id().value(), existente.resumen(),
                         existente.venceEn(), true))
-                .orElseGet(() -> aCreada(savePort.save(propuesta)));
+                .orElseGet(() -> crear(propuesta));
+    }
+
+    private PropuestaCreada crear(PropuestaAccion propuesta) {
+        PropuestaCreada creada = aCreada(savePort.save(propuesta));
+        metricas.propuestaCreada(propuesta.invocacion().nombre());
+        return creada;
     }
 
     /**
@@ -163,6 +175,7 @@ public class PropuestasAgenteService
         propuesta.cancelar(clock.now());
         try {
             savePort.save(propuesta);
+            medirResolucion(propuesta, ResolucionDePropuesta.CANCELADA);
         } catch (PropuestaModificadaEnParaleloException e) {
             // Otro toque la resolvio primero. Si fue otra cancelacion, da igual; si fue una
             // confirmacion, la relectura lo dice con el mismo mensaje que un cancelar tardio.
@@ -180,6 +193,8 @@ public class PropuestasAgenteService
         }
         ResultadoHerramienta resultado = ejecutar(reclamada, accion);
         registrar(reclamada, resultado);
+        medirResolucion(reclamada, resultado instanceof ResultadoHerramienta.Exito
+                ? ResolucionDePropuesta.CONFIRMADA : ResolucionDePropuesta.FALLIDA);
         return resultado;
     }
 
@@ -208,7 +223,12 @@ public class PropuestasAgenteService
         } catch (PropuestaModificadaEnParaleloException e) {
             return resultadoDelQueGano(propuesta);
         }
+        medirResolucion(propuesta, ResolucionDePropuesta.FALLIDA);
         return ResultadoHerramienta.fallo(motivo);
+    }
+
+    private void medirResolucion(PropuestaAccion propuesta, ResolucionDePropuesta resolucion) {
+        metricas.propuestaResuelta(propuesta.invocacion().nombre(), resolucion);
     }
 
     /**

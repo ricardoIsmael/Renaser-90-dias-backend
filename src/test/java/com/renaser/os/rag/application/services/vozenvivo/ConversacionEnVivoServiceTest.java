@@ -1,5 +1,7 @@
 package com.renaser.os.rag.application.services.vozenvivo;
 
+import com.renaser.os.rag.application.services.MetricasDelAcompananteEnMemoria;
+
 import com.renaser.os.rag.application.ports.in.memoria.CompactarMemoriaUseCase;
 import com.renaser.os.rag.application.ports.in.memoria.ConsultarMemoriaUseCase;
 import com.renaser.os.rag.domain.model.memoria.MemoriaDeRenasia;
@@ -66,6 +68,8 @@ import static org.mockito.Mockito.when;
  */
 class ConversacionEnVivoServiceTest {
 
+    /** D-237: lo que el servicio conto para los paneles de Grafana. */
+    private final MetricasDelAcompananteEnMemoria metricas = new MetricasDelAcompananteEnMemoria();
     private static final Instant TRES_AM_UTC = Instant.parse("2026-09-24T03:00:00Z");
     private static final LocalDate DIA_EN_LIMA = LocalDate.parse("2026-09-23");
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
@@ -101,11 +105,11 @@ class ConversacionEnVivoServiceTest {
                 DefinicionHerramienta.sinParametros("consultar_habitos_del_dia", "Los habitos de hoy.")));
         when(propuestas.pendientesCreadasDesde(any(), any())).thenReturn(List.of());
         TiempoDeVozEnVivo tiempo = new TiempoDeVozEnVivo(cuotaPort, id -> LIMA,
-                new CuotaDeVozEnVivo(Duration.ofMinutes(10), Duration.ofMinutes(15)), reloj);
+                new CuotaDeVozEnVivo(Duration.ofMinutes(10), Duration.ofMinutes(15)), reloj, metricas);
         TurnosDeVozEnVivo turnos = new TurnosDeVozEnVivo(loadConversacion, saveConversacion, mensajes, malestar,
                 compactar, reloj, UUID::randomUUID);
         service = new ConversacionEnVivoService(usuarios, proveedor, situacion, memoria, herramientas, propuestas,
-                turnos, tiempo, temporizador, reloj);
+                turnos, tiempo, temporizador, reloj, metricas);
     }
 
     private void conCuenta(UserRole rol, UserStatus estado) {
@@ -124,6 +128,7 @@ class ConversacionEnVivoServiceTest {
         assertThat(proveedor.apertura.herramientas()).extracting(DefinicionHerramienta::nombre)
                 .containsExactly("consultar_habitos_del_dia");
         verify(saveConversacion).save(any());
+        assertThat(metricas.registradas).containsExactly("voz ABIERTA");
     }
 
     @Test
@@ -166,6 +171,7 @@ class ConversacionEnVivoServiceTest {
         assertThat(salida.eventos).containsExactly(new EventoDeVozEnVivo.CuotaAgotada());
         assertThat(salida.motivo).isEqualTo(MotivoDeCierre.CUOTA_AGOTADA);
         assertThat(proveedor.apertura).isNull();
+        assertThat(metricas.registradas).containsExactly("voz CUOTA_AGOTADA");
     }
 
     @Test
@@ -179,6 +185,8 @@ class ConversacionEnVivoServiceTest {
 
         // 7 s en el cobro periodico + 1,5 s al cerrar, que se redondea para arriba.
         assertThat(cuotaPort.usado).containsExactly(Map.entry(DIA_EN_LIMA, Duration.ofSeconds(9)));
+        // D-237: el total de voz en vivo suma exactamente lo cobrado.
+        assertThat(metricas.hablado).isEqualTo(Duration.ofSeconds(9));
         assertThat(temporizador.cancelada).isTrue();
         assertThat(proveedor.sesion.cerrada).isTrue();
         assertThat(salida.motivo).isEqualTo(MotivoDeCierre.NORMAL);
@@ -422,6 +430,7 @@ class ConversacionEnVivoServiceTest {
         assertThat(salida.eventos).containsExactly(new EventoDeVozEnVivo.Error(ConversacionEnVivoService.MENSAJE_NO_AUTORIZADO));
         assertThat(salida.motivo).isEqualTo(MotivoDeCierre.ERROR);
         assertThat(proveedor.apertura).isNull();
+        assertThat(metricas.registradas).containsExactly("voz NO_AUTORIZADA");
     }
 
     @Test
@@ -443,6 +452,7 @@ class ConversacionEnVivoServiceTest {
         assertThat(salida.eventos).containsExactly(new EventoDeVozEnVivo.Error(ConversacionEnVivoService.MENSAJE_NO_DISPONIBLE));
         assertThat(salida.motivo).isEqualTo(MotivoDeCierre.NO_DISPONIBLE);
         assertThat(proveedor.apertura).isNull();
+        assertThat(metricas.registradas).containsExactly("voz NO_DISPONIBLE");
     }
 
     @Test
@@ -461,11 +471,11 @@ class ConversacionEnVivoServiceTest {
     @DisplayName("al llegar a los 15 minutos de sesion se corta aunque quede cuota")
     void duracionMaxima() {
         TiempoDeVozEnVivo tiempo = new TiempoDeVozEnVivo(cuotaPort, id -> LIMA,
-                new CuotaDeVozEnVivo(Duration.ofMinutes(60), Duration.ofMinutes(15)), reloj);
+                new CuotaDeVozEnVivo(Duration.ofMinutes(60), Duration.ofMinutes(15)), reloj, metricas);
         service = new ConversacionEnVivoService(usuarios, proveedor, situacion, memoria, herramientas, propuestas,
                 new TurnosDeVozEnVivo(loadConversacion, saveConversacion, mensajes, malestar, compactar, reloj,
                         UUID::randomUUID),
-                tiempo, temporizador, reloj);
+                tiempo, temporizador, reloj, metricas);
         service.iniciar(actor, salida);
 
         reloj.avanzar(Duration.ofMinutes(15));

@@ -57,6 +57,55 @@ services:
     ports:
       - "5055:5055"
 
+  # Observabilidad LOCAL (D-237): Prometheus + Grafana con los paneles de infra/observabilidad.
+  # Detras del perfil para que `docker compose up` siga levantando solo db y redis:
+  #   docker compose --profile observabilidad up -d
+  # Grafana en http://localhost:3000 (admin/admin, solo local); Prometheus en http://localhost:9090.
+  # Scrapean al backend que corre en el HOST, en su puerto de administracion 8091 (actuator.yaml).
+  # En produccion no va esto: va Grafana Alloy hacia Grafana Cloud (infra/observabilidad/alloy).
+  prometheus:
+    profiles: ["observabilidad"]
+    image: prom/prometheus:v3.15.0
+    container_name: renaser-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+      # Para probar en local la config de Alloy de produccion: que mande aca en vez de a Grafana Cloud.
+      - --web.enable-remote-write-receiver
+    # En Linux `host.docker.internal` no existe salvo que se declare: host-gateway es la IP del host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/observabilidad/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - renaser_prometheus_data:/prometheus
+
+  grafana:
+    profiles: ["observabilidad"]
+    image: grafana/grafana:13.2.3
+    container_name: renaser-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_DEFAULT_THEME: light
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/renaser-general.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./infra/observabilidad/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observabilidad/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - renaser_grafana_data:/var/lib/grafana
+
 volumes:
   renaser_db_data:
   renaser_redis_data:
+  renaser_prometheus_data:
+  renaser_grafana_data:

@@ -37,3 +37,8 @@ spring:
     # busca el `${DB_URL:...}` de application.yaml. Por eso los parametros se nombran igual que
     # las variables del .env y no en formato `spring.datasource.url`.
     import: aws-parameterstore:/renaser/prod/
+
+# D-237: la etiqueta `entorno` de todas las metricas (actuator.yaml la arma con
+# `${RENASER_ENTORNO:local}`). Va como propiedad suelta y no pisando `management.metrics.tags`
+# para no depender del orden entre este archivo y el actuator.yaml importado por el base.
+RENASER_ENTORNO: prod

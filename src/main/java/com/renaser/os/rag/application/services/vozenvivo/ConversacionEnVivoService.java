@@ -8,6 +8,8 @@ import com.renaser.os.rag.application.ports.out.ia.ConversacionEnVivoPort;
 import com.renaser.os.rag.application.ports.out.ia.ConversacionEnVivoPort.ConversacionEnVivoNoDisponibleException;
 import com.renaser.os.rag.application.ports.out.ia.ConversacionEnVivoPort.SesionEnVivo;
 import com.renaser.os.rag.application.ports.in.conversacion.ConsultarSituacionDelTurnoUseCase;
+import com.renaser.os.rag.application.ports.out.metricas.RegistrarMetricaDelAcompanantePort;
+import com.renaser.os.rag.application.ports.out.metricas.RegistrarMetricaDelAcompanantePort.AperturaDeVoz;
 import com.renaser.os.rag.application.ports.out.tiempo.ProgramarTareaPeriodicaPort;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.EventoDeVozEnVivo;
@@ -55,13 +57,17 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
     /** D-167: la misma memoria que el chat escrito; se lee una vez, al abrir la sesion. */
     private final ConsultarMemoriaUseCase memoriaUseCase;
     private final SesionDeVozEnVivo.Colaboradores colaboradores;
+    /** D-237: cuantas sesiones se abren y por que no se abren las demas. */
+    private final RegistrarMetricaDelAcompanantePort metricas;
 
     public ConversacionEnVivoService(UserSummaryFinder userSummaryFinder, ConversacionEnVivoPort conversacionPort,
                                      ConsultarSituacionDelTurnoUseCase situacionDelTurno,
                                      ConsultarMemoriaUseCase memoriaUseCase,
                                      EjecutarHerramientaAgenteUseCase herramientas,
                                      ConsultarPropuestasDelTurnoUseCase propuestas, TurnosDeVozEnVivo turnos,
-                                     TiempoDeVozEnVivo tiempo, ProgramarTareaPeriodicaPort programador, Clock clock) {
+                                     TiempoDeVozEnVivo tiempo, ProgramarTareaPeriodicaPort programador, Clock clock,
+                                     RegistrarMetricaDelAcompanantePort metricas) {
+        this.metricas = metricas;
         this.userSummaryFinder = userSummaryFinder;
         this.conversacionPort = conversacionPort;
         this.situacionDelTurno = situacionDelTurno;
@@ -119,6 +125,7 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
                     Duration.between(desde, preparada).toMillis(),
                     Duration.between(preparada, colaboradores.clock().now()).toMillis());
             sesion.arrancar(abierta, restante);
+            metricas.aperturaDeVozEnVivo(AperturaDeVoz.ABIERTA);
             return sesion;
         } catch (ConversacionEnVivoNoDisponibleException e) {
             log.warn("No se pudo abrir la voz en vivo: {}", e.getMessage());
@@ -135,11 +142,20 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
                 memoriaUseCase.paraConversar(actorId).orElse(null));
     }
 
-    private static ConversacionEnVivo rechazar(SalidaDeVozEnVivo salida, EventoDeVozEnVivo aviso,
-                                               MotivoDeCierre motivo) {
+    private ConversacionEnVivo rechazar(SalidaDeVozEnVivo salida, EventoDeVozEnVivo aviso, MotivoDeCierre motivo) {
+        metricas.aperturaDeVozEnVivo(aperturaRechazada(motivo));
         salida.evento(aviso);
         salida.cerrar(motivo);
         return SinConversacion.INSTANCIA;
+    }
+
+    /** Al abrir, {@code ERROR} solo sale de la cuenta que no puede (ver {@link #iniciar}). */
+    private static AperturaDeVoz aperturaRechazada(MotivoDeCierre motivo) {
+        return switch (motivo) {
+            case CUOTA_AGOTADA -> AperturaDeVoz.CUOTA_AGOTADA;
+            case ERROR -> AperturaDeVoz.NO_AUTORIZADA;
+            case NORMAL, NO_DISPONIBLE -> AperturaDeVoz.NO_DISPONIBLE;
+        };
     }
 
     /** Lo que recibe el transporte cuando no se abrio nada: ignora todo. */

@@ -507,6 +507,13 @@ cierre esa regla, el health check empieza a recibir 401, **y todos los despliegu
 aunque la aplicación esté perfecta**. Al agregar `anyRequest().authenticated()` hay que dejar
 `/actuator/health` explícitamente permitido en el mismo cambio.
 
+> **Ampliado 2026-10-01 (D-237).** Desde que todo actuator vive en el puerto de administración
+> (§5.4), `/actuator/health` del 8080 ya no es el endpoint de actuator: es un *forward* interno
+> (`SaludEnElPuertoPublicoConfig`) a `/salud`, el grupo de health `publico` que Boot publica en el
+> puerto de la aplicación. Al agregar `anyRequest().authenticated()` hay que permitir **las dos**
+> rutas (`/actuator/health` y `/salud`), y también el despacho `FORWARD`. `PuertoDeAdministracionIT`
+> falla si `/actuator/health` deja de responder `{"status":"UP"}` en el 8080.
+
 #### Por qué EC2 y no ECS Fargate o App Runner
 
 La comparación que estaba acá sigue siendo válida como registro de la decisión:
@@ -523,6 +530,108 @@ anticipa (Redis Pub/Sub para el chat y para invalidar la caché de rol entre ins
 ECS es el camino natural, y la imagen ya está lista para eso: es multi-arquitectura, corre como
 usuario sin privilegios, y toma su configuración de Parameter Store (§6) en vez de variables
 cableadas.
+
+### 5.4 Observabilidad: Prometheus y Grafana (D-237, 2026-10-01)
+
+**Qué hay.** El backend publica sus métricas en formato Prometheus (`micrometer-registry-prometheus`)
+en `/actuator/prometheus`, **solo en el puerto de administración 8091** (`management.server.port`,
+configurable con `MANAGEMENT_SERVER_PORT`). Todas las series llevan `application="renaser-backend"`
+y `entorno` (`local`, o `prod` desde `application-prod.yaml`). Además de lo que trae Spring Boot
+(HTTP con cubetas para el p95, JVM, Hikari, CPU, GC), hay métricas propias **sin datos personales**
+(ninguna etiqueta lleva una persona; solo enums y nombres de herramienta):
+
+| Serie | Etiquetas | Qué mide |
+|---|---|---|
+| `renaser_acompanante_mensajes_total` | `agente`, `resultado` (`ok`, `error`, `proveedor_no_disponible`, `cancelado`, `limite_diario`) | Mensajes al chat de SER / tutor |
+| `renaser_acompanante_turnos_seconds_*` | `agente`, `resultado` | Latencia del turno con la IA, de la pregunta al fin del stream |
+| `renaser_acompanante_propuestas_creadas_total` | `herramienta` | Propuestas con botón ofrecidas |
+| `renaser_acompanante_propuestas_resueltas_total` | `herramienta`, `resolucion` (`confirmada`, `fallida`, `cancelada`) | Cómo terminaron |
+| `renaser_voz_en_vivo_aperturas_total` | `resultado` (`abierta`, `cuota_agotada`, `no_disponible`, `no_autorizada`) | Intentos de abrir la voz en vivo |
+| `renaser_voz_en_vivo_hablado_seconds_total` | — | Segundos cobrados de la cuota de voz |
+| `renaser_chat_media_subidas_solicitadas_total` / `renaser_chat_media_enviada_total` | `tipo` (`imagen`, `audio`, `video`) | URLs firmadas / mensajes con archivo subido |
+
+Se registran por puertos `out` (`RegistrarMetricaDelAcompanantePort` en `rag`,
+`RegistrarMetricaDelChatPort` en `chat`) con adaptadores Micrometer; nada de Micrometer en
+`application/` ni en `domain/`. Un contador nace con el primer evento: hasta entonces su panel
+dice «No data» (los de totales usan `or vector(0)`).
+
+**Por qué un puerto aparte, y por qué no se publica.** `SecurityConfig` solo cubre `/api/v1/**`
+(auditoría OUT-2): nada protege a actuator salvo su exposición. Si `/actuator/prometheus` estuviera
+en el 8080, CloudFront → nginx lo dejaría leer desde internet (nombres de endpoints, tráfico, uso).
+En el 8091 no llega nadie de afuera: `desplegar-backend.sh` publica en el host **solo** el 8080 del
+proxy (el backend no publica ningún puerto en el modo sin corte), y el nginx hace `proxy_pass` al
+8080 del contenedor. El 8091 lo alcanza únicamente otro contenedor de la red Docker `renaser`.
+Ni siquiera en el 8091 están `env`, `heapdump`, `loggers` ni ningún otro: `access.default: none` y
+exposición `health,prometheus` (`src/main/resources/actuator.yaml`, que importan main y test).
+`PuertoDeAdministracionIT` lo prueba contra Tomcat real: en el puerto público `/actuator/prometheus`,
+`/actuator/env`, `/actuator/heapdump`, `/actuator/loggers` dan 404, y `/actuator/health` sigue en 200.
+
+**Cómo se comporta Boot 4.1 con el puerto aparte** (verificado): *todos* los endpoints de actuator,
+health incluido, se mudan al 8091, y en el 8080 `/actuator/**` deja de existir. Como el CD, el
+despliegue sin corte y los scripts locales miran `:8080/actuator/health`, se publica el grupo de
+health `publico` en el 8080 con `additional-path: server:/salud` (Boot solo acepta **un** segmento
+ahí; `/actuator/health` lo rechaza) y `SaludEnElPuertoPublicoConfig` reenvía `/actuator/health` →
+`/salud`. Mismo cuerpo `{"status":"UP"}`, 503 si está DOWN. Por eso **no hubo que tocar** el
+health check del script ni del CD.
+
+**Dos backends locales a la vez** (p. ej. el de siempre en 8080 y uno de e2e en 8090) chocan en el
+8091: al segundo hay que darle `MANAGEMENT_SERVER_PORT=8092`. Las pruebas con `RANDOM_PORT` no
+tienen el problema (Boot sortea también el de administración).
+
+#### Verlo en local
+
+```bash
+docker compose --profile observabilidad up -d      # agrega prometheus y grafana a db y redis
+# el backend corre en el host como siempre (IDE o java -jar): app en 8080, métricas en 8091
+```
+
+- **Grafana:** http://localhost:3000, usuario `admin`, contraseña `admin` (solo local). Carpeta
+  *Renaser*: «Backend general» (req/min, p95, 5xx por endpoint, heap, Hikari, CPU, GC) y
+  «Acompañante, voz y chat» (SER, voz en vivo, propuestas, media). El datasource y los paneles se
+  cargan solos (`infra/observabilidad/grafana/provisioning`); los paneles son JSON versionados en
+  `infra/observabilidad/grafana/dashboards` — un cambio hecho en la interfaz no vuelve al repo
+  hasta exportarlo y pegarlo en el archivo.
+- **Prometheus:** http://localhost:9090 (Status → Targets: `renaser-backend` tiene que estar UP).
+  Scrapea `host.docker.internal:8091`; en Linux ese nombre existe solo por
+  `extra_hosts: host-gateway` del compose.
+- `docker compose up` **sin** perfil sigue levantando solo `db` y `redis`.
+
+#### Producción: Grafana Cloud con Grafana Alloy (preparado, NO activo)
+
+No hay Prometheus ni Grafana en la EC2 (no caben con dos JVM en 4 GB, y habría que respaldarlos).
+Va **Grafana Alloy** —un agente— que scrapea `backend:8091` cada 30 s por la red Docker y manda
+las series a Grafana Cloud por `remote_write`. Config: `infra/observabilidad/alloy/config.alloy`
+(descarta las familias que ningún panel usa para no gastar series del plan gratis: 10.000 activas;
+hoy el backend local expone ~700).
+
+Cómo se activa (pasos del dueño, cuando exista la cuenta):
+
+1. Grafana Cloud → el stack → *Prometheus* → *Details*: copiar la **URL de remote write**
+   (`https://prometheus-prod-…grafana.net/api/prom/push`) y el **Instance ID** (número, es el
+   usuario). Crear un *Access Policy token* con alcance `metrics:write`.
+2. Crearlos en Parameter Store (región `us-east-1`), como los demás secretos:
+   `/renaser/prod/GRAFANA_CLOUD_PROM_URL` (String), `/renaser/prod/GRAFANA_CLOUD_PROM_USER`
+   (String), `/renaser/prod/GRAFANA_CLOUD_TOKEN` (**SecureString**). El rol de la instancia ya lee
+   `/renaser/prod/*` (§6.3). La aplicación también los va a importar como propiedades sueltas: no
+   los usa y no molestan.
+3. El próximo despliegue los encuentra: el CD manda la config de Alloy dentro del script
+   (`CONFIG_ALLOY_B64`), y `desplegar-backend.sh` → `lanzar_alloy` escribe
+   `/opt/renaser/alloy/{config.alloy, alloy.env}` (dir 700, env 600: el token no queda en la
+   línea de comandos ni en el log de SSM) y levanta el contenedor `alloy`
+   (`docker.io/grafana/alloy:v1.20.1`, `--memory 192m`, red `renaser`, `unless-stopped`, **sin
+   puertos publicados**). Cada despliegue lo relanza con la config del commit.
+4. En Grafana Cloud: *Dashboards → Import* de los dos JSON de `infra/observabilidad/grafana/dashboards`
+   y elegir el datasource `grafanacloud-…-prom` en la variable *Datos*.
+
+Mientras falte cualquiera de las tres credenciales, `lanzar_alloy` imprime «faltan credenciales
+de Grafana Cloud… no se lanza Alloy» y no hace nada. Un fallo al lanzarlo **nunca** hace fallar el
+despliegue. Para apagarlo: `docker rm -f alloy` en la instancia y borrar uno de los parámetros (si
+no, el próximo despliegue lo vuelve a levantar).
+
+**Memoria.** Probado en local con la config de producción: Alloy usa **~45 MB** con ~680 series
+(tope 192 MB). El modo sin corte necesita `MemAvailable` ≥ 1.400 + 512 MB; con ~2,4 GB disponibles
+en la t3.medium y Alloy andando quedan ~2,2 GB: sigue alcanzando, pero el margen baja. El segundo
+Tomcat del puerto de administración suma unos pocos MB por JVM.
 
 ---
 

@@ -4,7 +4,11 @@ spring:
   # el sintoma es un 401 del proveedor que parece de credencial invalida y en realidad es
   # de credencial vacia. `optional:` deja arrancar sin el archivo, que es el caso de CI.
   config:
-    import: optional:file:.env[.properties]
+    # actuator.yaml (D-237): actuator y metricas en un archivo propio, para que el application.yaml
+    # de test (que reemplaza a este) importe exactamente la misma configuracion.
+    import:
+      - optional:file:.env[.properties]
+      - classpath:actuator.yaml
   application:
     name: renaser-backend
   # AWS Systems Manager Parameter Store: APAGADO por defecto, encendido solo en el perfil
@@ -650,30 +654,5 @@ logging:
 server:
   forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:framework}
 
-# Actuator: lo que hoy ya pasa, pero dicho a proposito en vez de heredado.
-#
-# Ninguna de estas cuatro claves existia, y las cuatro coinciden con el default de Boot 4.1.1
-# —o sea que escribirlas NO cambia el comportamiento—. Se escriben por lo que evitan: al declarar
-# `SecurityConfig` una cadena propia acotada a `/api/v1/**`, Spring Boot retira
-# `ManagementWebSecurityAutoConfiguration`, que es la que normalmente deja `/actuator/health`
-# publico y exige autenticacion para TODO el resto de actuator. Ese respaldo ya no esta.
-#
-# Con el respaldo retirado, lo unico que mantiene cerrados `/actuator/env`, `/configprops`,
-# `/heapdump` y `/loggers` es el default de exposicion. Y ese default lo puede ensanchar una sola
-# entrada en Parameter Store —`application-prod.yaml` importa `/renaser/prod/` con binding
-# relajado— sin tocar el repo ni pasar por revision. `/heapdump` entrega memoria cruda, que con
-# `spring.session.timeout: 30d` incluye ids de sesion vivos.
-#
-# Escrito aca, ensanchar la superficie de administracion vuelve a exigir un cambio versionado.
-# (Auditoria de seguridad 2026-09-18, OUT-2.)
-management:
-  endpoints:
-    access:
-      default: none
-    web:
-      exposure:
-        include: health
-  endpoint:
-    health:
-      access: read-only
-      show-details: never
+# Actuator y metricas: en actuator.yaml (D-237), importado arriba. Ahi esta tambien el razonamiento
+# de la auditoria OUT-2 que vivia aca, y por que todo actuator paso al puerto de administracion 8091.

@@ -1,0 +1,23 @@
+# Prometheus LOCAL (D-237): `docker compose --profile observabilidad up -d`.
+# En produccion no hay Prometheus propio: Grafana Alloy scrapea y manda a Grafana Cloud
+# (../alloy/config.alloy). Este archivo es solo para ver los paneles en la laptop.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # El backend corre en el HOST (java -jar / IDE), no en Docker: se llega por host.docker.internal,
+  # que en Linux existe solo porque docker-compose.yml declara `extra_hosts: host-gateway`.
+  # 8091 es el puerto de administracion (actuator.yaml): el 8080 NO sirve /actuator/prometheus.
+  # Para scrapear otro backend local (p. ej. el de e2e con MANAGEMENT_SERVER_PORT=8092), agregar
+  # el target aca y `curl -X POST localhost:9090/-/reload`.
+  - job_name: renaser-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8091"]
+        labels:
+          instancia: laptop
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

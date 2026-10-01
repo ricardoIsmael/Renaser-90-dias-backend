@@ -1,0 +1,50 @@
+// Grafana Alloy en la EC2 de produccion (D-237). PREPARADO, NO ACTIVO: `desplegar-backend.sh`
+// lanza el contenedor `alloy` solo si encuentra en Parameter Store las tres credenciales de
+// Grafana Cloud (GRAFANA_CLOUD_PROM_URL, GRAFANA_CLOUD_PROM_USER, GRAFANA_CLOUD_TOKEN). Sin ellas no
+// hace nada. Ver docs/DESPLIEGUE_Y_CI.md §5.4.
+//
+// Que hace: cada 30 s le pide /actuator/prometheus al backend por el PUERTO DE ADMINISTRACION
+// (8091), que no esta publicado en el host ni lo enruta nginx: Alloy lo alcanza solo porque corre
+// en la misma red Docker (`renaser`) y resuelve el nombre `backend` por el DNS de Docker. En el
+// despliegue sin corte (D-235) el nombre pasa al contenedor nuevo y Alloy lo sigue solo.
+// Despues manda las series a Grafana Cloud (remote_write) y no guarda nada en disco mas alla de
+// su WAL.
+
+prometheus.scrape "renaser_backend" {
+  targets = [{
+    // Se puede cambiar para probarlo fuera de la EC2 (p. ej. host.docker.internal:8091).
+    __address__ = coalesce(sys.env("RENASER_METRICAS_DESTINO"), "backend:8091"),
+    instancia   = coalesce(sys.env("RENASER_INSTANCIA"), "ec2-prod"),
+  }]
+  job_name        = "renaser-backend"
+  metrics_path    = "/actuator/prometheus"
+  scrape_interval = "30s"
+  scrape_timeout  = "10s"
+  forward_to      = [prometheus.relabel.solo_lo_que_se_mira.receiver]
+}
+
+// Grafana Cloud gratis cobra por SERIE activa (10.000). Se descartan las familias que ningun panel
+// usa y que mas series abren: los niveles de log por logger, las de Tomcat por sesion y las
+// cubetas de los tiempos de Spring Data / Modulith (una serie por metodo de repositorio).
+prometheus.relabel "solo_lo_que_se_mira" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "logback_events_total|tomcat_sessions_.*|spring_data_repository_invocations_seconds_bucket|executor_.*|application_ready_time_seconds|application_started_time_seconds|disk_.*"
+    action        = "drop"
+  }
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    // https://prometheus-prod-XX-prod-us-east-X.grafana.net/api/prom/push (Grafana Cloud ->
+    // Stack -> Prometheus -> Details). El usuario es el numero de "Instance ID"; el token, un
+    // Access Policy token con alcance `metrics:write`.
+    url = sys.env("GRAFANA_CLOUD_PROM_URL")
+
+    basic_auth {
+      username = sys.env("GRAFANA_CLOUD_PROM_USER")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
+    }
+  }
+}

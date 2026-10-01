@@ -55,7 +55,9 @@ public class TiempoDeRespuestaFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return request.getRequestURI().startsWith("/actuator");
+        String uri = request.getRequestURI();
+        // D-237: `/salud` es el mismo health, publicado por Boot en el puerto de la aplicacion.
+        return uri.startsWith("/actuator") || uri.equals(SaludEnElPuertoPublicoConfig.RUTA_SALUD);
     }
 
     @Override

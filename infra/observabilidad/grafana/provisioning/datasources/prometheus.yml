@@ -1,0 +1,12 @@
+# Grafana LOCAL (D-237): el Prometheus del mismo docker compose. En Grafana Cloud el datasource ya
+# existe (grafanacloud-<stack>-prom) y los paneles lo eligen con la variable `datasource`.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus-local
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 15s
