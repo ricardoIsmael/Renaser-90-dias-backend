@@ -12904,3 +12904,30 @@ que aquel ya mapeaba por causa sigue igual. En la app, `mensajeDeError` (`apiCli
 
 **Cómo evitar que vuelva a pasar.** Toda dependencia que puede saturarse (pool, proveedor de IA, correo)
 sale como 503 con `Retry-After`, nunca como 500: el 500 queda para bugs, que es lo que las alertas buscan.
+
+## E-474 · En el chat, la imagen de la tarjeta del semáforo aparece ~1 s después de su burbuja (app, RESUELTO, 01/10)
+
+**Síntoma (dueño, 01/10).** Al abrir el chat de soporte se ve primero la burbuja de «Formación Renaser» con el
+hueco vacío y, cerca de un segundo después, aparece la tarjeta del semáforo. Pasa cada vez que se abre el chat,
+no solo la primera.
+
+**Causa.** En la app (`BurbujaDeMensaje.tsx`) las fotos del chat usaban el `Image` de `react-native` con
+`source={{ uri: mensaje.mediaUrl }}`. `mediaUrl` es una URL **firmada** de S3 que el backend vuelve a firmar en
+cada `GET .../messages`: la URL cambia en cada lectura, así que la caché de imágenes (que usa la URL como
+clave) nunca acertaba y la JPG (~104 KB, bucket en us-east-1) se bajaba de nuevo cada vez. Los stickers ya
+usaban `expo-image`, pero también con la URL firmada como clave.
+
+**Solución (app, rama `imagenes-chat`).** Fotos, stickers y el visor a pantalla completa pasan a `expo-image`
+con `cachePolicy="memory-disk"` y **`cacheKey = mediaPath`** (la ruta del objeto, que no cambia), fondo del
+tamaño final y `transition` de 150 ms (`chat/utils/fuenteDeImagenDelChat.ts`). Además las tres tarjetas v1 van
+empaquetadas en la app (`assets/semaforo/<color>-v1.jpg`, byte a byte las de
+`src/main/resources/semaforo/tarjetas/`, que `TarjetasDelSemaforoEnRecursos` sube sin transformar) y se usan
+solo si `mediaPath` es **exactamente** `ColorDeTarjeta.rutaEnAlmacenamiento()` (`semaforo/tarjetas/<color>-v1.jpg`):
+la tarjeta sale sin red incluso la primera vez. Pruebas en `piezasDelChat.test.ts` (clave = ruta con dos firmas
+distintas, sticker, tarjeta empaquetada por color, versión desconocida cae a la red); fallan contra el código
+viejo. Requiere APK nuevo (JS y assets; no hay actualización por aire).
+
+**Cómo evitar que vuelva a pasar.** Una URL firmada nunca es clave de caché: la clave es la ruta del objeto.
+**Si se cambia `ColorDeTarjeta.VERSION` (diseño nuevo de tarjetas)**, copiar las JPG nuevas a la app y
+actualizar las rutas de `fuenteDeImagenDelChat.ts`; si se olvida no se rompe nada (la ruta nueva no coincide y
+la tarjeta sale de la red con caché), solo se pierde el «instantáneo la primera vez».
