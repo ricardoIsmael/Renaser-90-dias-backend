@@ -40,6 +40,9 @@ public class TicketMentorJpaEntity {
 
     private Instant respondidoEn;
 
+    /** V88. NULL = no se sabe (filas anteriores a V88). */
+    private UUID respondidoPor;
+
     private boolean guardadoEnBiblioteca;
 
     private Instant creadoEn;

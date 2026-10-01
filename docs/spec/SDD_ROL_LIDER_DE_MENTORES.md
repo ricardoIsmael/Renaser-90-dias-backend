@@ -1,6 +1,13 @@
 # SDD del rol Líder de Mentores
 
-Fecha: 2026-09-09. Estado: planificación; implementación pendiente.
+Fecha: 2026-09-09. Estado: **implementado en parte desde el 2026-10-01 (D-241)**: padrón, ficha, atribución
+`respondido_por` (V88), observaciones (V89) y reporte del mes, en el módulo `leadership`.
+
+> **Corregido 2026-10-01 (D-241).** Esta línea decía «Estado: planificación; implementación pendiente.».
+> Lo que sigue sin hacer está en D-241 (`docs/MODULOS_A_AVANZAR.md` §8): pantalla para mover el semáforo
+> operativo, entrada desde Comunidad, y el Líder como acompañante de la recepción (decisión pendiente).
+> Dos datos de abajo cambiaron con la implementación: `TicketMentorRespondidoEvent` SÍ tiene consumidor
+> fuera de `support` (`notifications`, E-219) y por eso no se amplió; y la primera migración libre fue V87.
 
 El paquete canónico para backend y frontend está en el repositorio hermano:
 
