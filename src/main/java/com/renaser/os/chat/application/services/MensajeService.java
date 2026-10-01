@@ -11,6 +11,7 @@ import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPo
 import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
 import com.renaser.os.chat.application.ports.out.mensaje.PublicarMensajeFanoutPort;
 import com.renaser.os.chat.application.ports.out.mensaje.SaveMensajePort;
+import com.renaser.os.chat.application.ports.out.metricas.RegistrarMetricaDelChatPort;
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
@@ -19,6 +20,7 @@ import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.chat.domain.model.mensaje.ConfirmacionDeLectura;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
+import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
@@ -69,6 +71,8 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     private final IdGenerator idGenerator;
     /** D-221: el aviso de mensaje nuevo sale por el outbox de Modulith (se publica dentro de la transacción). */
     private final ApplicationEventPublisher eventos;
+    /** D-237: cuanta media se sube al chat, por tipo. */
+    private final RegistrarMetricaDelChatPort metricas;
 
     public MensajeService(LoadConversacionPort loadConversacionPort, EsParticipantePort esParticipantePort,
                            AccesoAChatsDeGrupo accesoAChatsDeGrupo,
@@ -76,7 +80,8 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
                            LoadMensajePort loadMensajePort, PublicarMensajeFanoutPort publicarMensajeFanoutPort,
                            UserSummaryFinder userSummaryFinder, AlmacenamientoPort almacenamientoPort,
                            ConsultarLecturaUseCase consultarLectura, Clock clock, IdGenerator idGenerator,
-                           ApplicationEventPublisher eventos) {
+                           ApplicationEventPublisher eventos, RegistrarMetricaDelChatPort metricas) {
+        this.metricas = metricas;
         this.loadConversacionPort = loadConversacionPort;
         this.esParticipantePort = esParticipantePort;
         this.accesoAChatsDeGrupo = accesoAChatsDeGrupo;
@@ -118,6 +123,9 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         marcarLeidoPort.marcarLeido(command.conversacionId(), command.actorId(), ahora);
         publicarDespuesDelCommit(guardado);
         avisarQueSeGuardo(guardado);
+        if (guardado.mediaRuta() != null && command.origenMedia() != OrigenMedia.MURO_COMPARTIDO) {
+            metricas.mediaEnviada(guardado.tipo());
+        }
         return guardado;
     }
 
@@ -165,6 +173,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         requireParticipante(requireConversacion(command.conversacionId()), command.actorId());
         String ruta = rutaDeMedia(command.conversacionId(), command.tipoContenido());
         URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
+        metricas.subidaDeMediaSolicitada(tipoDeLaSubida(command.tipoContenido()));
         return new UrlSubidaMediaChat(url, Mensaje.BUCKET_DEFAULT, ruta);
     }
 
@@ -177,6 +186,14 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
      * <p>El tipo se rechaza aca porque el objeto se sube antes de que exista el mensaje: firmar
      * una subida que {@code Mensaje} despues va a rechazar deja el archivo huerfano en el bucket.
      */
+    /** Ya validado por {@link #rutaDeMedia}: empieza con image/, audio/ o video/. */
+    private static TipoMensaje tipoDeLaSubida(String tipoContenido) {
+        if (tipoContenido.startsWith("image/")) {
+            return TipoMensaje.IMAGEN;
+        }
+        return tipoContenido.startsWith("audio/") ? TipoMensaje.AUDIO : TipoMensaje.VIDEO;
+    }
+
     private static String rutaDeMedia(ConversacionId conversacionId, String tipoContenido) {
         String carpeta;
         if (tipoContenido.startsWith("image/")) {

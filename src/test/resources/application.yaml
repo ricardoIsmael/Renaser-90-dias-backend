@@ -1,4 +1,8 @@
 spring:
+  # D-237: la MISMA configuracion de actuator y metricas que main (no una copia), para que
+  # `PuertoDeAdministracionIT` pruebe lo que corre en produccion.
+  config:
+    import: classpath:actuator.yaml
   # C-14 (docs/informes/auditoria-seguridad-concurrencia-2026-09-01.html): espeja el bloque
   # de main -- sin esto, TODA la suite corria con hilos de plataforma (el default de Tomcat/
   # el pool de @Async) mientras produccion corre con hilos virtuales, asi que las pruebas no

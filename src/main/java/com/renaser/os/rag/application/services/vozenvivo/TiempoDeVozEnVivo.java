@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.vozenvivo;
 
 import com.renaser.os.rag.application.ports.out.cuota.ControlCuotaVozEnVivoPort;
+import com.renaser.os.rag.application.ports.out.metricas.RegistrarMetricaDelAcompanantePort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarZonaDelParticipantePort;
 import com.renaser.os.rag.domain.model.conversacion.CuotaDeVozEnVivo;
 import com.renaser.os.shared.domain.Clock;
@@ -24,9 +25,12 @@ public class TiempoDeVozEnVivo {
     private final ConsultarZonaDelParticipantePort zonaPort;
     private final CuotaDeVozEnVivo cuota;
     private final Clock clock;
+    /** D-237: los minutos de voz en vivo, en total (sin persona). */
+    private final RegistrarMetricaDelAcompanantePort metricas;
 
     public TiempoDeVozEnVivo(ControlCuotaVozEnVivoPort cuotaPort, ConsultarZonaDelParticipantePort zonaPort,
-                             CuotaDeVozEnVivo cuota, Clock clock) {
+                             CuotaDeVozEnVivo cuota, Clock clock, RegistrarMetricaDelAcompanantePort metricas) {
+        this.metricas = metricas;
         this.cuotaPort = cuotaPort;
         this.zonaPort = zonaPort;
         this.cuota = cuota;
@@ -42,7 +46,9 @@ public class TiempoDeVozEnVivo {
         if (tramo.isZero() || tramo.isNegative()) {
             return restanteHoy(actorId);
         }
-        return cuota.restante(cuotaPort.sumar(actorId, hoyDe(actorId), tramo));
+        Duration restante = cuota.restante(cuotaPort.sumar(actorId, hoyDe(actorId), tramo));
+        metricas.tiempoDeVozEnVivo(tramo);
+        return restante;
     }
 
     public CuotaDeVozEnVivo cuota() {

@@ -1,0 +1,13 @@
+# Los paneles versionados en infra/observabilidad/grafana/dashboards. Se cargan solos al arrancar
+# y se releen cada 30 s: editar el JSON y recargar la pagina. Un cambio hecho en la interfaz de
+# Grafana NO vuelve al repo: exportar el JSON (Share -> Export) y pegarlo en el archivo.
+apiVersion: 1
+providers:
+  - name: renaser
+    folder: Renaser
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

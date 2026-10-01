@@ -83,6 +83,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @ExtendWith(MockitoExtension.class)
 class ConversacionRenasiaServiceTest {
 
+    /** D-237: lo que el servicio conto para los paneles de Grafana. */
+    private final MetricasDelAcompananteEnMemoria metricas = new MetricasDelAcompananteEnMemoria();
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-25T10:00:00Z"));
     /** Id fijo que devuelve el IdGenerator mockeado, mismo espiritu que el FixedClock de arriba. */
     private static final UUID ID_GENERADO = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -131,7 +133,7 @@ class ConversacionRenasiaServiceTest {
                 loadConversacionRenasiaPort, saveConversacionRenasiaPort, loadMensajeRenasiaPort,
                 saveMensajeRenasiaPort, vectorStorePort, consultarLeccionesVisiblesPort, chatIAPort,
                 herramientasUseCase, situacionPort, revisarPatronDeMalestarUseCase, propuestasDelTurno,
-                memoriaUseCase, compactarMemoriaUseCase, CLOCK, idGenerator);
+                memoriaUseCase, compactarMemoriaUseCase, CLOCK, idGenerator, metricas);
         // Por defecto el turno no propone nada: el caso de todos los dias.
         lenient().when(propuestasDelTurno.pendientesCreadasDesde(any(), any())).thenReturn(List.of());
         // Por defecto nadie viene repitiendo nada: la conversacion normal no se ve afectada.
@@ -196,6 +198,8 @@ class ConversacionRenasiaServiceTest {
         assertThatThrownBy(() -> service.preguntar(pregunta(activo))).isInstanceOf(RateLimitExceededException.class);
 
         verify(saveMensajeRenasiaPort, never()).save(any());
+        // D-237: el limite se cuenta, y como limite, no como turno.
+        assertThat(metricas.registradas).containsExactly("limite " + pregunta(activo).agente());
     }
 
     /**
@@ -240,6 +244,7 @@ class ConversacionRenasiaServiceTest {
         verify(controlCuotaRenasiaPort).liberar(activo);
         // Solo se guardo la pregunta del usuario: nunca una respuesta vacia del asistente.
         verify(saveMensajeRenasiaPort, times(1)).save(any());
+        assertThat(metricas.registradas).containsExactly("turno " + pregunta(activo).agente() + " ERROR");
     }
 
     /**
@@ -263,6 +268,8 @@ class ConversacionRenasiaServiceTest {
         assertThat(eventos.get(1)).isInstanceOf(EventoRenasia.Fin.class);
         verify(controlCuotaRenasiaPort).liberar(activo);
         verify(saveMensajeRenasiaPort, times(1)).save(any());
+        assertThat(metricas.registradas)
+                .containsExactly("turno " + pregunta(activo).agente() + " PROVEEDOR_NO_DISPONIBLE");
     }
 
     /**
@@ -458,6 +465,7 @@ class ConversacionRenasiaServiceTest {
         service.preguntar(pregunta(activo)).collectList().block();
 
         verify(controlCuotaRenasiaPort, never()).liberar(any());
+        assertThat(metricas.registradas).containsExactly("turno " + pregunta(activo).agente() + " OK");
     }
 
     @Test

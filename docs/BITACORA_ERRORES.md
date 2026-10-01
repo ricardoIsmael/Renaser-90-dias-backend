@@ -12709,6 +12709,41 @@ descripción de una herramienta no se ponen ejemplos de valores que el modelo no
 **Límite conocido:** en la voz en vivo el turno se guarda al terminar, así que un motivo dicho en la
 misma frase del pedido se rechaza una vez; en el turno siguiente ya está guardado y pasa.
 
+## E-467 · En `PuertoDeAdministracionIT`, `/actuator/prometheus` del puerto de administración daba «expected: 200 but was: 404», y el log decía «Exposing 1 endpoint beneath base path '/actuator'» (pruebas, RESUELTO, 01/10)
+
+**Síntoma.** Con `micrometer-registry-prometheus` en el pom y `exposure.include: health,prometheus`
+(D-237), el backend levantado con `java -jar` servía `:8091/actuator/prometheus` en 200, pero la prueba
+de integración con `@SpringBootTest(webEnvironment = RANDOM_PORT)` recibía 404 en el mismo endpoint;
+health respondía en los dos puertos.
+
+**Causa real.** `spring-boot-starter-actuator-test` trae `spring-boot-micrometer-metrics-test`, que en
+TODA prueba `@SpringBootTest` apaga los exportadores de métricas salvo que se pidan. Sin exportador de
+Prometheus no hay bean del endpoint `prometheus`, y Boot expone solo `health`. No era la configuración.
+
+**Solución.** `@AutoConfigureMetrics` (`org.springframework.boot.micrometer.metrics.test.autoconfigure`)
+en la prueba que necesita ver el endpoint real.
+
+**Cómo evitar que vuelva a pasar.** Una prueba que mire `/actuator/prometheus` o cualquier exportador
+lleva `@AutoConfigureMetrics`; si el 404 aparece solo en pruebas, mirar la línea «Exposing N endpoint»
+del log antes de tocar la configuración.
+
+## E-468 · El script para levantar el backend local terminó con «Exit code 144» antes de esperar el UP (entorno, RESUELTO, 01/10)
+
+**Síntoma.** `~/.cache/renaser-e2e/levantar-backend-observabilidad.sh`, recién escrito con un heredoc en el
+mismo comando que lo ejecutaba, cortó con exit 144; el backend igual quedó arrancando.
+
+**Causa real.** La misma de E-461: el script empezaba con `pgrep -f 'backend-observabilidad.jar'`, y la
+línea de comando del shell del agente (que contenía el heredoc) también tenía ese texto: el `kill` del
+script mató al shell que lo había lanzado.
+
+**Solución.** El patrón quedó anclado al binario de Java, como en los otros scripts de
+`~/.cache/renaser-e2e/`: `pgrep -f '^/home/ricardo/.sdkman/candidates/java/25.0.4-tem/bin/java .*backend-observabilidad[.]jar'`
+(el `[.]` además evita que el patrón se encuentre a sí mismo).
+
+**Cómo evitar que vuelva a pasar.** Todo `pgrep -f`/`pkill -f` en un script de prueba se ancla al
+ejecutable (`^…/bin/java`), nunca a un nombre suelto; y nunca se crea el script y se lo corre en el mismo
+comando si el script mata procesos por patrón.
+
 ## E-469 · El día 1 de cada mes `GET /api/v1/ranking/groups?month=<mes actual>` responde «400 -> Bad Request: El rango va al reves: 2026-10-01 → 2026-09-30» y `CuentaSuspendidaConSesionVivaIT` falla (ranking, RESUELTO, 01/10)
 
 > Este número también lo usa la rama `observabilidad` (D-237) para la misma entrada como ABIERTO. Es el

@@ -265,6 +265,10 @@ jobs:
             printf "REGION='%s'\n"   "$REGION"
             printf "ESPERA='%s'\n"   "$ESPERA"
             printf "MODO='%s'\n"     "$MODO"
+            # D-237: la config de Grafana Alloy viaja dentro del script (base64: sin comillas ni
+            # `$` que el shell remoto pueda interpretar). El script solo la usa si ademas hay
+            # credenciales de Grafana Cloud en Parameter Store; si no, no hace nada.
+            printf "CONFIG_ALLOY_B64='%s'\n" "$(base64 -w0 infra/observabilidad/alloy/config.alloy)"
             cat scripts/despliegue/desplegar-backend.sh
           } > desplegar.sh
 

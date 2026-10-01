@@ -56,6 +56,17 @@ class TiempoDeRespuestaFilterTest {
     }
 
     @Test
+    @DisplayName("D-237: /salud (el mismo health en el puerto de la aplicacion) tampoco se mide")
+    void saludQuedaAfuera() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/salud");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filtro.doFilter(request, response, (req, res) -> res.getWriter().write("UP"));
+
+        assertThat(response.getHeader("Server-Timing")).isNull();
+    }
+
+    @Test
     @DisplayName("la ruta del log es el patron del controller, sin ids ni query string")
     void laRutaEsElPatronDelController() {
         MockHttpServletRequest request = new MockHttpServletRequest("GET",

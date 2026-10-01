@@ -112,11 +112,13 @@ class MensajeServiceTest {
     private MensajeService servicioCon(Clock reloj) {
         return new MensajeService(loadConversacionPort, esParticipantePort, new AccesoAChatsDeGrupo(pertenenciaVigentePort, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), userSummaryFinder),
                 marcarLeidoPort, saveMensajePort, loadMensajePort, publicarMensajeFanoutPort, userSummaryFinder,
-                almacenamientoPort, conversacion -> ConfirmacionDeLectura.sinDobleMarca(), reloj, idGenerator, publicados::add);
+                almacenamientoPort, conversacion -> ConfirmacionDeLectura.sinDobleMarca(), reloj, idGenerator, publicados::add, metricas);
     }
 
     /** D-221: lo que se publicó para el aviso push. */
     private final java.util.List<Object> publicados = new java.util.ArrayList<>();
+    /** D-237: lo que el servicio conto para los paneles de Grafana. */
+    private final MetricasDelChatEnMemoria metricas = new MetricasDelChatEnMemoria();
 
     @Test
     @org.junit.jupiter.api.DisplayName("D-221: guardar un mensaje publica el aviso de mensaje nuevo; uno rechazado, no")
@@ -265,6 +267,7 @@ class MensajeServiceTest {
 
         assertThat(enviado.mediaRuta()).isEqualTo(propia);
         verify(saveMensajePort).save(any());
+        assertThat(metricas.mediaEnviada).containsExactly(enviado.tipo());
     }
 
     /**
@@ -281,6 +284,8 @@ class MensajeServiceTest {
 
         assertThat(enviado.mediaRuta()).isEqualTo(portada);
         verify(saveMensajePort).save(any());
+        // D-237: compartir del Muro no es una subida; no se cuenta como media enviada.
+        assertThat(metricas.mediaEnviada).isEmpty();
     }
 
     /**
@@ -337,6 +342,7 @@ class MensajeServiceTest {
         assertThat(url.bucket()).isEqualTo(Mensaje.BUCKET_DEFAULT);
         assertThat(url.ruta()).startsWith("chat/" + conversacionId.value() + "/fotos/");
         assertThat(url.url()).isEqualTo(URI.create("https://s3/foto"));
+        assertThat(metricas.subidasSolicitadas).containsExactly(com.renaser.os.chat.domain.model.mensaje.TipoMensaje.IMAGEN);
     }
 
     @Test
@@ -347,6 +353,7 @@ class MensajeServiceTest {
         var url = service.solicitarUrl(comandoDeSubida(activo, "audio/m4a"));
 
         assertThat(url.ruta()).startsWith("chat/" + conversacionId.value() + "/audios/");
+        assertThat(metricas.subidasSolicitadas).containsExactly(com.renaser.os.chat.domain.model.mensaje.TipoMensaje.AUDIO);
     }
 
     @Test
@@ -371,6 +378,7 @@ class MensajeServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(almacenamientoPort, never()).firmarSubida(any(), any(), any());
+        assertThat(metricas.subidasSolicitadas).isEmpty();
     }
 
     @Test

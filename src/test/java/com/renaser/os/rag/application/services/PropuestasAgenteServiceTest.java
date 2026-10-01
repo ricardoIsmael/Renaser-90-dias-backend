@@ -47,6 +47,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class PropuestasAgenteServiceTest {
 
+    /** D-237: lo que el servicio conto para los paneles de Grafana. */
+    private final MetricasDelAcompananteEnMemoria metricas = new MetricasDelAcompananteEnMemoria();
     private static final String HERRAMIENTA = "marcar_habito_completado";
     private static final Duration VIGENCIA = Duration.ofMinutes(10);
     /** 02:00 UTC = dia anterior en Lima (regla 02): la propuesta no depende del dia local. */
@@ -82,7 +84,7 @@ class PropuestasAgenteServiceTest {
                 .conActor(suspendido, UserRole.TRAINEE, UserStatus.SUSPENDED);
         service = new PropuestasAgenteService(repositorio, repositorio, List.of(accion), usuarios, reloj,
                 UUID::randomUUID, VIGENCIA,
-                new com.renaser.os.rag.application.services.herramientas.PedidosDeEvidenciaDelTurno(reloj));
+                new com.renaser.os.rag.application.services.herramientas.PedidosDeEvidenciaDelTurno(reloj), metricas);
     }
 
     private PropuestaCreada proponer(UserId actor) {
@@ -107,6 +109,8 @@ class PropuestasAgenteServiceTest {
         assertThat(segunda.venceEn()).isEqualTo(primera.venceEn());
         assertThat(primera.yaEstabaPendiente()).isFalse();
         assertThat(repositorio.cantidad()).isEqualTo(1);
+        // D-237: la reusada no se cuenta como creada.
+        assertThat(metricas.registradas).containsExactly("creada " + HERRAMIENTA);
     }
 
     @Test
@@ -157,6 +161,8 @@ class PropuestasAgenteServiceTest {
 
         assertThat(segundo).isEqualTo(ResultadoHerramienta.exito("Listo, marque Meditar."));
         assertThat(ejecuciones).hasValue(1);
+        // D-237: el segundo toque no vuelve a contar la confirmacion.
+        assertThat(metricas.registradas).containsExactly("creada " + HERRAMIENTA, "CONFIRMADA " + HERRAMIENTA);
     }
 
     @Test
@@ -200,6 +206,7 @@ class PropuestasAgenteServiceTest {
         assertThat(service.confirmar(dueno, creada.id())).isEqualTo(ResultadoHerramienta.fallo("Ese habito ya vencio."));
         assertThat(repositorio.estadoDe(creada.id())).isEqualTo(EstadoPropuesta.FALLIDA);
         assertThat(ejecuciones).hasValue(1);
+        assertThat(metricas.registradas).containsExactly("creada " + HERRAMIENTA, "FALLIDA " + HERRAMIENTA);
     }
 
     @Test

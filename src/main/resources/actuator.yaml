@@ -1,0 +1,76 @@
+# Actuator y metricas (D-237). Lo importan application.yaml de main Y el de test, para que la
+# prueba `PuertoDeAdministracionIT` verifique ESTA configuracion y no una copia (el application.yaml
+# de test reemplaza al de main entero, ver su cabecera).
+#
+# > Movido 2026-10-01 (D-237). Este bloque vivia al final de application.yaml y solo exponia
+# > `health` en el puerto de la aplicacion. El razonamiento de la auditoria OUT-2 sigue valiendo y
+# > se conserva abajo tal cual; lo nuevo es el PUERTO DE ADMINISTRACION.
+#
+# ---- Lo que decia (auditoria de seguridad 2026-09-18, OUT-2) ----
+# Ninguna de estas claves existia, y coincidian con el default de Boot 4.1.1. Se escriben por lo que
+# evitan: al declarar `SecurityConfig` una cadena propia acotada a `/api/v1/**`, Spring Boot retira
+# `ManagementWebSecurityAutoConfiguration`, que es la que normalmente deja `/actuator/health`
+# publico y exige autenticacion para TODO el resto de actuator. Ese respaldo ya no esta.
+#
+# Con el respaldo retirado, lo unico que mantiene cerrados `/actuator/env`, `/configprops`,
+# `/heapdump` y `/loggers` es el default de exposicion. Y ese default lo puede ensanchar una sola
+# entrada en Parameter Store —`application-prod.yaml` importa `/renaser/prod/` con binding
+# relajado— sin tocar el repo ni pasar por revision. `/heapdump` entrega memoria cruda, que con
+# `spring.session.timeout: 30d` incluye ids de sesion vivos.
+#
+# Escrito aca, ensanchar la superficie de administracion vuelve a exigir un cambio versionado.
+#
+# ---- Lo nuevo (D-237): Prometheus en un puerto aparte ----
+# `/actuator/prometheus` no tiene datos personales, pero si nombres de endpoints, tiempos y uso:
+# no puede quedar alcanzable desde internet, y SecurityConfig no lo cubre. Por eso TODO actuator
+# se muda a `management.server.port` (8091), un segundo Tomcat que:
+#   - en produccion NO se publica en el host (`desplegar-backend.sh` solo publica el 8080 del
+#     proxy) ni lo enruta nginx (su `proxy_pass` va al 8080 del contenedor). Solo lo alcanza otro
+#     contenedor de la red Docker `renaser`: Grafana Alloy (infra/observabilidad/alloy).
+#   - en local lo scrapea el Prometheus de `docker compose --profile observabilidad`.
+#
+# Comportamiento de Boot 4.1 verificado: con `management.server.port` distinto, TODOS los
+# endpoints de actuator se van a ese puerto, incluido health, y en el 8080 `/actuator/**` deja de
+# existir. Pero el CD, el despliegue sin corte (D-235) y los scripts locales piden
+# `/actuator/health` al 8080. Boot ofrece publicar un grupo de health en el puerto de la
+# aplicacion con `additional-path`, pero solo con UN segmento (`AdditionalHealthEndpointPath`
+# rechaza `/actuator/health`). Asi que el grupo `publico` se publica en `server:/salud`, y
+# `SaludEnElPuertoPublicoConfig` reenvia (forward interno) `/actuator/health` del 8080 a `/salud`.
+# Resultado: en el 8080 responden `/actuator/health` y `/salud` (mismo `{"status":"UP"}`, 503 si
+# esta DOWN), y NADA mas de actuator; en el 8091, `health` y `prometheus`.
+#
+# Dos backends locales a la vez (p. ej. uno en 8080 y el de e2e en 8090) chocan en el 8091: al
+# segundo hay que darle otro con MANAGEMENT_SERVER_PORT=8092. En las pruebas con RANDOM_PORT Boot
+# lo cambia solo por uno al azar.
+management:
+  server:
+    port: ${MANAGEMENT_SERVER_PORT:8091}
+  endpoints:
+    access:
+      default: none
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      access: read-only
+      show-details: never
+      group:
+        publico:
+          include: "*"
+          show-details: never
+          additional-path: "server:/salud"
+    prometheus:
+      access: read-only
+  metrics:
+    # Etiquetas en TODAS las series. `entorno` lo pisa application-prod.yaml con `prod`.
+    tags:
+      application: renaser-backend
+      entorno: ${RENASER_ENTORNO:local}
+    distribution:
+      # Para el p95 de los paneles (histogram_quantile). Cubetas fijas y pocas en vez de
+      # `percentiles-histogram` (~70 cubetas por serie): cada combinacion uri x metodo x estado
+      # multiplica las cubetas, y Grafana Cloud gratis cobra por serie activa.
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s,10s
+        renaser.acompanante.turnos: 500ms,1s,2s,5s,10s,20s,45s

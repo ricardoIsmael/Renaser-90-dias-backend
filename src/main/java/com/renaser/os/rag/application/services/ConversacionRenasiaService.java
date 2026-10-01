@@ -18,6 +18,8 @@ import com.renaser.os.rag.application.ports.out.conversacion.LoadMensajeRenasiaP
 import com.renaser.os.rag.application.ports.out.conversacion.SaveConversacionRenasiaPort;
 import com.renaser.os.rag.application.ports.out.conversacion.SaveMensajeRenasiaPort;
 import com.renaser.os.rag.application.ports.out.cuota.ControlCuotaRenasiaPort;
+import com.renaser.os.rag.application.ports.out.metricas.RegistrarMetricaDelAcompanantePort;
+import com.renaser.os.rag.application.ports.out.metricas.RegistrarMetricaDelAcompanantePort.ResultadoDelTurno;
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.application.ports.in.conversacion.ConsultarSituacionDelTurnoUseCase;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
@@ -46,6 +48,7 @@ import org.springframework.stereotype.Service;
 import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
 import reactor.core.publisher.Flux;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -187,6 +190,8 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     private final CompactarMemoriaUseCase compactarMemoriaUseCase;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    /** D-237: cuantos turnos, como terminaron y cuanto tardaron. Sin datos de la persona. */
+    private final RegistrarMetricaDelAcompanantePort metricas;
 
     public ConversacionRenasiaService(UserSummaryFinder userSummaryFinder,
                                        ControlCuotaRenasiaPort controlCuotaRenasiaPort,
@@ -201,7 +206,8 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                                        ConsultarPropuestasDelTurnoUseCase propuestasDelTurno,
                                        ConsultarMemoriaUseCase memoriaUseCase,
                                        CompactarMemoriaUseCase compactarMemoriaUseCase,
-                                       Clock clock, IdGenerator idGenerator) {
+                                       Clock clock, IdGenerator idGenerator,
+                                       RegistrarMetricaDelAcompanantePort metricas) {
         this.userSummaryFinder = userSummaryFinder;
         this.controlCuotaRenasiaPort = controlCuotaRenasiaPort;
         this.loadConversacionRenasiaPort = loadConversacionRenasiaPort;
@@ -219,12 +225,13 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         this.compactarMemoriaUseCase = compactarMemoriaUseCase;
         this.clock = clock;
         this.idGenerator = idGenerator;
+        this.metricas = metricas;
     }
 
     @Override
     public Flux<EventoRenasia> preguntar(PreguntarRenasiaCommand command) {
         requireActivo(command.actorId());
-        requireCuotaDisponible(command.actorId());
+        requireCuotaDisponible(command);
         // Antes de cualquier otra cosa del turno: toda propuesta de este turno nace despues.
         Instant inicioDelTurno = clock.now();
 
@@ -244,6 +251,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
             fragmentos = materialDelPrograma(command);
         } catch (RuntimeException e) {
             controlCuotaRenasiaPort.liberar(command.actorId());
+            medirTurno(command, ResultadoDelTurno.ERROR, inicioDelTurno);
             throw e;
         }
         List<String> contexto = fragmentos.stream().map(FragmentoRelevante::contenido).toList();
@@ -260,11 +268,16 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         return conApoyoAntesDelFin(conPropuestasAntesDelFin(delModelo, command.actorId(), inicioDelTurno), apoyo)
                 .doOnNext(evento -> acumularTexto(evento, respuestaCompleta))
                 .concatMap(evento -> agregarFuentesAntesDeFin(evento, fragmentos))
-                .doOnComplete(() -> persistirRespuestaAsistente(command, respuestaCompleta.toString(), fragmentos))
+                .doOnComplete(() -> {
+                    persistirRespuestaAsistente(command, respuestaCompleta.toString(), fragmentos);
+                    medirTurno(command, ResultadoDelTurno.OK, inicioDelTurno);
+                })
                 .doOnError(error -> {
                     logFalloDeStreaming(error);
                     controlCuotaRenasiaPort.liberar(command.actorId());
+                    medirTurno(command, resultadoDelFallo(error), inicioDelTurno);
                 })
+                .doOnCancel(() -> medirTurno(command, ResultadoDelTurno.CANCELADO, inicioDelTurno))
                 // D-100: el fallo del modelo deja de ser invisible. Antes el controller lo convertia
                 // en un `fin` pelado y el aprendiz veia su pregunta sin ninguna respuesta ni motivo.
                 // Se emite un `error` apto para mostrar y despues el `fin` que el contrato SSE exige.
@@ -538,8 +551,9 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                 .orElseGet(() -> saveConversacionRenasiaPort.save(ConversacionRenasia.iniciar(actorId, clock.now())));
     }
 
-    private void requireCuotaDisponible(UserId actorId) {
-        if (!controlCuotaRenasiaPort.intentarConsumir(actorId)) {
+    private void requireCuotaDisponible(PreguntarRenasiaCommand command) {
+        if (!controlCuotaRenasiaPort.intentarConsumir(command.actorId())) {
+            metricas.turnoRechazadoPorLimite(command.agente());
             throw new RateLimitExceededException(MENSAJE_LIMITE_DIARIO);
         }
     }
@@ -578,6 +592,16 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      * el texto del evento de error. Se distingue "el proveedor no puede ahora" del resto para que
      * el mensaje no invite a reintentar enseguida algo que no va a funcionar.
      */
+    /** D-237: desde el inicio del turno hasta el final del stream (incluye herramientas y propuestas). */
+    private void medirTurno(PreguntarRenasiaCommand command, ResultadoDelTurno resultado, Instant inicioDelTurno) {
+        metricas.turnoDelChat(command.agente(), resultado, Duration.between(inicioDelTurno, clock.now()));
+    }
+
+    private static ResultadoDelTurno resultadoDelFallo(Throwable error) {
+        return error instanceof ProveedorIaNoDisponibleException
+                ? ResultadoDelTurno.PROVEEDOR_NO_DISPONIBLE : ResultadoDelTurno.ERROR;
+    }
+
     private static String mensajeParaLaPersona(Throwable error) {
         return error instanceof ProveedorIaNoDisponibleException ? MENSAJE_PROVEEDOR_SATURADO : MENSAJE_ERROR_MODELO;
     }

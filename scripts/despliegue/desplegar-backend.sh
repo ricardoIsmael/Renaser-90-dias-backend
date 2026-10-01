@@ -23,6 +23,11 @@
 # Variables de entrada: IMAGEN (obligatoria), REGISTRO y REGION (para ECR; sin REGISTRO no hay
 # login ni pull, util para probarlo en local), ESPERA (segundos de tope para el UP), MODO
 # (auto | reemplazo). El resto tiene default de produccion y solo se cambia para probarlo.
+#
+# OBSERVABILIDAD (D-237), PREPARADO Y APAGADO: si el CD pasa CONFIG_ALLOY_B64 (el contenido de
+# infra/observabilidad/alloy/config.alloy) y en Parameter Store existen las tres credenciales de
+# Grafana Cloud, al final se (re)lanza el contenedor `alloy`. Si falta cualquiera, no hace nada. Un
+# fallo de Alloy NUNCA hace fallar el despliegue: las metricas no valen un corte.
 set -euo pipefail
 
 : "${IMAGEN:?falta IMAGEN}"
@@ -30,6 +35,7 @@ REGISTRO=${REGISTRO:-}
 REGION=${REGION:-us-east-1}
 ESPERA=${ESPERA:-240}
 MODO=${MODO:-auto}
+CONFIG_ALLOY_B64=${CONFIG_ALLOY_B64:-}
 
 CONTENEDOR=${CONTENEDOR:-backend}
 NUEVO="${CONTENEDOR}-nuevo"
@@ -49,6 +55,13 @@ JVM_OPCIONES=${JVM_OPCIONES:--XX:MaxRAMPercentage=60.0}
 # Lo que tiene que quedar disponible, ADEMAS del tope del contenedor nuevo, para levantarlo con
 # el viejo andando: sistema, dockerd, redis, nginx y el agente de SSM.
 MARGEN_MB=${MARGEN_MB:-512}
+# D-237: Grafana Alloy. Tope de memoria: con un solo target y ~1.500 series usa 60-90 MB; el tope
+# deja margen sin comerse la memoria que el modo sin corte necesita para la segunda JVM.
+ALLOY=${ALLOY:-alloy}
+IMAGEN_ALLOY=${IMAGEN_ALLOY:-docker.io/grafana/alloy:v1.20.1}
+MEMORIA_ALLOY=${MEMORIA_ALLOY:-192m}
+DIR_ALLOY=${DIR_ALLOY:-/opt/renaser/alloy}
+PREFIJO_PARAMETROS=${PREFIJO_PARAMETROS:-/renaser/prod/}
 # Tras el cambio: nginx guarda la IP resuelta 5 s; se deja terminar lo que el viejo ya tenia.
 DRENAJE=${DRENAJE:-20}
 # `docker stop -t`: el apagado gradual de Spring espera hasta 30 s lo que este en curso.
@@ -320,6 +333,51 @@ desplegar_sin_corte() {
   fi
 }
 
+# Un parametro de Parameter Store, descifrado. Vacio si no existe o si no hay permiso: el que llama
+# decide. Lo lee el rol de la instancia, el mismo que usa la aplicacion para /renaser/prod/.
+parametro() {
+  aws ssm get-parameter --region "$REGION" --with-decryption --name "${PREFIJO_PARAMETROS}$1" \
+    --query Parameter.Value --output text 2>/dev/null || true
+}
+
+# D-237. Lanza (o relanza con la config nueva) el contenedor de Grafana Alloy que scrapea el puerto
+# de administracion del backend (8091, sin publicar) y manda a Grafana Cloud. Las credenciales van
+# en un archivo 600 de root, no en la linea de comandos (que queda en `ps` y en el log de SSM).
+lanzar_alloy() {
+  if [ -z "$CONFIG_ALLOY_B64" ]; then
+    echo "Observabilidad: sin config de Alloy, no se lanza."
+    return 0
+  fi
+  local url usuario token
+  url=$(parametro grafana-cloud-prom-url)
+  usuario=$(parametro grafana-cloud-prom-user)
+  token=$(parametro grafana-cloud-token)
+  if [ -z "$url" ] || [ -z "$usuario" ] || [ -z "$token" ]; then
+    echo "Observabilidad: faltan credenciales de Grafana Cloud en ${PREFIJO_PARAMETROS}, no se lanza Alloy."
+    return 0
+  fi
+  mkdir -p "$DIR_ALLOY"
+  chmod 700 "$DIR_ALLOY"
+  echo "$CONFIG_ALLOY_B64" | base64 -d > "$DIR_ALLOY/config.alloy"
+  ( umask 077
+    printf 'GRAFANA_CLOUD_PROM_URL=%s\nGRAFANA_CLOUD_PROM_USER=%s\nGRAFANA_CLOUD_TOKEN=%s\n' \
+      "$url" "$usuario" "$token" > "$DIR_ALLOY/alloy.env" )
+  # Se baja ANTES de borrar el que esta: si Docker Hub no responde, el Alloy viejo sigue mandando.
+  docker pull -q "$IMAGEN_ALLOY" >/dev/null || return 1
+  docker rm -f "$ALLOY" >/dev/null 2>&1 || true
+  docker run -d \
+    --name "$ALLOY" \
+    --network "$RED" \
+    --restart unless-stopped \
+    --memory "$MEMORIA_ALLOY" \
+    --log-opt max-size=10m --log-opt max-file=2 \
+    --env-file "$DIR_ALLOY/alloy.env" \
+    -v "$DIR_ALLOY/config.alloy:/etc/alloy/config.alloy:ro" \
+    -v alloy_datos:/var/lib/alloy/data \
+    "$IMAGEN_ALLOY" run --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy >/dev/null || return 1
+  log "Observabilidad: Alloy lanzado (tope $MEMORIA_ALLOY), manda a Grafana Cloud"
+}
+
 # ------------------------------------------------------------------------------------------------
 
 if [ -n "$REGISTRO" ]; then
@@ -346,6 +404,8 @@ if [ "$ELEGIDO" = sin-corte ]; then
 else
   desplegar_con_reemplazo
 fi
+
+lanzar_alloy || echo "AVISO: no se pudo lanzar Alloy (observabilidad). El despliegue igual quedo bien."
 
 log "5/5 Limpieza y estado final"
 # Borra solo imagenes colgadas (sin etiqueta). La anterior queda con su etiqueta de SHA.
