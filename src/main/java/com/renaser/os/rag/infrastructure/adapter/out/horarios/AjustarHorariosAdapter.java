@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.UUID;
 
 /**
@@ -53,5 +54,10 @@ class AjustarHorariosAdapter implements AjustarHorariosPort {
     @Override
     public void quitarDiaDeLaSemana(UserId participanteId, UUID habitoId, DayOfWeek diaSemana) {
         ajustarHorario.quitarDiaDeLaSemana(participanteId, habitoId, diaSemana);
+    }
+
+    @Override
+    public LocalTime ultimaHoraDeInicio() {
+        return AjustarHorarioHabitoUseCase.ULTIMA_HORA_DE_INICIO;
     }
 }

@@ -44,6 +44,28 @@ class PropuestaDeHorarioPorDiaDeSemanaTest {
     private final PropuestaDeHorarioPorDiaDeSemana herramienta = new PropuestaDeHorarioPorDiaDeSemana(horarios,
             proponer, unDiaOCadaSemana);
 
+    {
+        when(horarios.ultimaHoraDeInicio()).thenReturn(LocalTime.of(23, 40));
+    }
+
+    @Test
+    @DisplayName("E-475: fijar a las 23:59 no se propone y el modelo recibe el limite 23:40; 23:40 si")
+    void horaPasadaDelLimite() {
+        hoyYProximoLunes(new CuotaCambios(0, 3, 3, true), false);
+
+        ResultadoHerramienta tarde = herramienta.ejecutar(APRENDIZ, pedido("dia_semana", "lunes", "accion", "fijar",
+                "hora_inicio", "23:59"));
+
+        assertThat(tarde).isInstanceOf(ResultadoHerramienta.Fallo.class);
+        assertThat(((ResultadoHerramienta.Fallo) tarde).motivo()).contains("lo mas tarde que se puede programar un "
+                + "habito es 23:40").contains("NO dejes otra propuesta por tu cuenta");
+        verify(proponer, never()).proponer(any(), any(), any());
+
+        herramienta.ejecutar(APRENDIZ, pedido("dia_semana", "lunes", "accion", "fijar", "hora_inicio", "23:40"));
+
+        verify(proponer).proponer(eq(APRENDIZ), any(), any());
+    }
+
     /**
      * E-456: a "mejor no, entonces apagala solo el sabado" el modelo propuso apagarlo todos los sabados.
      * Si la persona nombro un solo dia, no se propone lo semanal: se manda a apagar ese dia.

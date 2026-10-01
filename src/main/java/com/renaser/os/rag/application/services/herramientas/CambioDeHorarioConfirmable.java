@@ -51,7 +51,7 @@ public class CambioDeHorarioConfirmable implements AccionConfirmable {
                     cambio.horaInicio(), cambio.horaLimite(), cambio.fecha()));
             return ResultadoHerramienta.exito(textoDe(cambiado, cambio.fecha() != null));
         } catch (RuntimeException rechazo) {
-            return RECHAZO.traducir(herramienta(), rechazo);
+            return RECHAZO.traducir(herramienta(), rechazo, cambio.horaInicio(), ajustarHorarios::ultimaHoraDeInicio);
         }
     }
 

@@ -12931,3 +12931,54 @@ viejo. Requiere APK nuevo (JS y assets; no hay actualización por aire).
 **Si se cambia `ColorDeTarjeta.VERSION` (diseño nuevo de tarjetas)**, copiar las JPG nuevas a la app y
 actualizar las rutas de `fuenteDeImagenDelChat.ts`; si se olvida no se rompe nada (la ruta nueva no coincide y
 la tarjeta sale de la red con caché), solo se pierde el «instantáneo la primera vez».
+
+## E-475 · SER propone un cambio de horario a las 23:59 y la tarjeta no se puede aceptar: `horaDisparo no puede pasar de 23:40, recibida: 23:59` (rag, RESUELTO, 01/10)
+
+**Síntoma (producción, 2026-10-01 20:20 UTC, voz en vivo).** El dueño toca «Confirmar» en la tarjeta y ve un
+error. Log literal:
+
+```
+[rag] voz en vivo: herramienta proponer_cambio_de_horario -> ok (89 ms)
+[rag] voz en vivo: herramienta proponer_cambio_de_horario -> fallo (55 ms)
+[rag] proponer_cambio_de_horario rechazada por habits al confirmar: java.lang.IllegalArgumentException: horaDisparo no puede pasar de 23:40, recibida: 23:59
+[http] POST /api/v1/renasia/propuestas/{id}/confirmar 200 93ms
+```
+
+**Causa.** El tope de D-122 (`VentanaDelDia.ULTIMA_HORA_DE_DISPARO`, 23:40) solo lo miraba `habits` al
+escribir. `proponer_crear_habito_personal` ya lo validaba al proponer (D-229, vía
+`HabitosPersonalesPort.ULTIMA_HORA_DE_DISPARO`), pero `proponer_cambio_de_horario` y
+`proponer_horario_por_dia_de_semana` (acción `fijar`) no: dejaban una tarjeta que `habits` iba a rechazar. Al
+confirmar, `RechazoDeHorario` traducía el `IllegalArgumentException` a «No se pudo: ese dia ya no se puede
+reacomodar (solo dias futuros), o la hora de inicio es demasiado tarde…»: legible, sin la excepción, pero con dos
+causas y sin decir la hora límite (`POST …/confirmar` responde 200 con `estado: FALLIDA` y ese `mensaje`, que la
+app muestra tal cual en `TarjetaPropuesta` vía `textoDeCierre`). Las demás herramientas con hora (plan del
+día/semana, agregar acción) escriben acciones de `rocks`, no `horaDisparo` de `habits`: no aplica.
+
+**El segundo `-> fallo (55 ms)`.** Fue un `Fallo` devuelto por la herramienta (una excepción habría dejado su
+propio warn: `[rag] la herramienta … fallo sin traducir el error` o `Fallo la herramienta … en la voz en vivo`), y el log no guardaba el motivo, así que **no se puede saber cuál
+fue**. No es el tope de 23:40 (el código viejo no lo miraba al proponer). Por el tiempo (lecturas de horario y
+luego corte) lo más probable es una propuesta para hoy («Solo se pueden reacomodar dias futuros»: la persona
+quería el cambio esa misma noche) o un `hora_limite` no posterior al inicio; queda sin confirmar.
+
+**Solución.**
+- `habits.api.AjustarHorarioHabitoUseCase.ULTIMA_HORA_DE_INICIO` = `VentanaDelDia.ULTIMA_HORA_DE_DISPARO` (el
+  mismo valor, no una copia), y `rag` lo lee por `ConsultarHorariosPort.ultimaHoraDeInicio()` /
+  `AjustarHorariosPort.ultimaHoraDeInicio()`.
+- `ArgumentosDeHorario.requireInicioDentroDelDia`: las dos herramientas de horario (y la de hábito personal, que
+  ahora usa el mismo texto) no crean la propuesta y le dicen al modelo «lo mas tarde que se puede programar un
+  habito es 23:40… preguntale si lo quiere a las 23:40 (la hora valida mas cercana) o a otra hora antes. Proponlo
+  solo cuando acepte una hora». Línea equivalente en `renasia-sistema.st` (la voz usa el mismo prompt).
+- Al confirmar una tarjeta vieja: si `habits` rechaza con `IllegalArgumentException` y la hora pasa del tope, la
+  persona lee «No se pudo: lo mas tarde que se puede programar un habito es 23:40. Pidele a tu acompanante el
+  cambio con esa hora o una anterior.».
+- La voz en vivo registra el motivo de un fallo: `-> fallo (55 ms): <primera oración>`, con lo que va entre
+  comillas tapado (nombres de hábitos) y cortado a 140 caracteres (`MotivoDeFalloParaElLog`).
+- Pruebas que fallan contra el código viejo: `PropuestaDeCambioDeHorarioTest.horaPasadaDelLimite` (23:59 no
+  crea, 23:40 sí), `PropuestaDeHorarioPorDiaDeSemanaTest.horaPasadaDelLimite`,
+  `ConfirmablesDeHorarioTest.horaPasadaDelLimiteAlConfirmar`, `MotivoDeFalloParaElLogTest`. Solo backend: no
+  requiere APK.
+
+**Cómo evitar que vuelva a pasar.** Toda herramienta que PROPONE una escritura valida antes las reglas que el
+caso de uso de destino aplica sobre los argumentos, leyendo el valor por el `api` del módulo dueño (nunca una
+constante copiada). Y un log de «fallo» sin motivo no sirve para diagnosticar: el motivo va recortado y sin datos
+personales.

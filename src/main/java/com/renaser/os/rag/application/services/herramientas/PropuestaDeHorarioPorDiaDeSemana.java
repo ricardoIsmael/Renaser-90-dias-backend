@@ -72,6 +72,7 @@ public class PropuestaDeHorarioPorDiaDeSemana implements HerramientaAgente {
     public ResultadoHerramienta ejecutar(UserId actorId, InvocacionHerramienta invocacion) {
         try {
             HorarioSemanalPedido pedido = HorarioSemanalPedido.de(invocacion);
+            ArgumentosDeHorario.requireInicioDentroDelDia(pedido.horaInicio(), horariosPort.ultimaHoraDeInicio());
             LocalDate hoy = HorariosParaProponer.de(horariosPort, actorId, null).fecha();
             // La proxima vez que cae ese dia, estrictamente despues de hoy: la fecha efectiva con que
             // habits mide el cupo. Al confirmar, habits la vuelve a calcular con su reloj.

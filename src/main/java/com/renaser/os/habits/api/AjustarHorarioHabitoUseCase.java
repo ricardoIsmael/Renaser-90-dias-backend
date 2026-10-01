@@ -1,5 +1,6 @@
 package com.renaser.os.habits.api;
 
+import com.renaser.os.habits.domain.model.horario.VentanaDelDia;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.DayOfWeek;
@@ -25,6 +26,14 @@ import java.util.UUID;
  * como las excepciones estandar que documenta cada metodo, las mismas que la app ve como 4xx.
  */
 public interface AjustarHorarioHabitoUseCase {
+
+    /**
+     * La hora mas tarde a la que puede arrancar un habito (D-122). Se expone para que quien PROPONE
+     * un cambio no ofrezca una hora que {@link #cambiarHorario} o {@link #fijarDiaDeLaSemana} van a
+     * rechazar (E-475: el acompanante propuso 23:59 y la tarjeta no se podia aceptar). La regla sigue
+     * viviendo en {@code VentanaDelDia}; esto es el mismo valor, no una copia.
+     */
+    LocalTime ULTIMA_HORA_DE_INICIO = VentanaDelDia.ULTIMA_HORA_DE_DISPARO;
 
     /**
      * Cambia la hora de un habito: con {@code fecha}, solo ese dia futuro; sin ella, el horario

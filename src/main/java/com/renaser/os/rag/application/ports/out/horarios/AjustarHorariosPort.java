@@ -36,6 +36,12 @@ public interface AjustarHorariosPort {
     void quitarDiaDeLaSemana(UserId participanteId, UUID habitoId, DayOfWeek diaSemana);
 
     /**
+     * La hora mas tarde a la que puede arrancar un habito (D-122). Solo para elegir el texto de un
+     * rechazo al confirmar (E-475): quien decide sigue siendo {@code habits}.
+     */
+    LocalTime ultimaHoraDeInicio();
+
+    /**
      * @param horaLimite {@code null} = sin hora limite propia
      * @param fecha      {@code null} = cambio general desde manana
      */

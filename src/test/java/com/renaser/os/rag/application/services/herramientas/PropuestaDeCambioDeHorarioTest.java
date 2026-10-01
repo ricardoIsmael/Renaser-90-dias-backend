@@ -20,6 +20,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -41,6 +42,11 @@ class PropuestaDeCambioDeHorarioTest {
     private final ConsultarHorariosPort horarios = mock(ConsultarHorariosPort.class);
     private final ProponerAccionUseCase proponer = mock(ProponerAccionUseCase.class);
     private final PropuestaDeCambioDeHorario herramienta = new PropuestaDeCambioDeHorario(horarios, proponer);
+
+    {
+        // El tope de habits (D-122), tal como lo entrega el puerto.
+        when(horarios.ultimaHoraDeInicio()).thenReturn(LocalTime.of(23, 40));
+    }
 
     private static HorariosDelDia dia(LocalDate fecha, int diaPrograma, CuotaCambios cuota) {
         return new HorariosDelDia(fecha, diaPrograma, List.of(new HorarioDeHabito(MEDITAR, "Meditar",
@@ -91,6 +97,34 @@ class PropuestaDeCambioDeHorarioTest {
                         Map.of("habito_id", MEDITAR.toString(), "hora_inicio", "06:30", "fecha", "2026-09-12")),
                 "Cambiar 'Meditar' solo el sábado 2026-09-12, de 06:00-07:00 a 06:30 (sin hora limite propia) (los "
                         + "demas dias no cambian). No tiene tope de cambios.");
+    }
+
+    /**
+     * E-475 (voz en vivo, 2026-10-01): se propuso 23:59 y habits rechazo la tarjeta recien al
+     * confirmar ("horaDisparo no puede pasar de 23:40"). La propuesta no se crea y el modelo recibe el
+     * limite real, con la indicacion de no elegir otra hora por su cuenta.
+     */
+    @Test
+    @DisplayName("E-475: 23:59 no se propone y el modelo recibe el limite 23:40; 23:40 si se propone")
+    void horaPasadaDelLimite() {
+        hoyEsDia12();
+        when(horarios.deFecha(APRENDIZ, MANANA)).thenReturn(dia(MANANA, 13, new CuotaCambios(0, 3, 3, true)));
+
+        ResultadoHerramienta tarde = herramienta.ejecutar(APRENDIZ, pedido("habito_id", MEDITAR.toString(),
+                "hora_inicio", "23:59"));
+
+        assertThat(tarde).isEqualTo(ResultadoHerramienta.fallo("No se puede proponer 23:59: lo mas tarde que se "
+                + "puede programar un habito es 23:40. NO dejes otra propuesta por tu cuenta: dile a la persona que "
+                + "el limite es 23:40 y preguntale si lo quiere a las 23:40 (la hora valida mas cercana) o a otra "
+                + "hora antes. Proponlo solo cuando acepte una hora."));
+        verify(proponer, never()).proponer(any(), any(), any());
+
+        ResultadoHerramienta justo = herramienta.ejecutar(APRENDIZ, pedido("habito_id", MEDITAR.toString(),
+                "hora_inicio", "23:40"));
+
+        assertThat(justo).isInstanceOf(ResultadoHerramienta.Exito.class);
+        verify(proponer).proponer(eq(APRENDIZ), eq(new InvocacionHerramienta(PropuestaDeCambioDeHorario.NOMBRE,
+                Map.of("habito_id", MEDITAR.toString(), "hora_inicio", "23:40"))), any());
     }
 
     @Test

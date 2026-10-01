@@ -74,10 +74,7 @@ final class ArgumentosDeHabitoPersonal {
             return null;
         }
         LocalTime hora = ArgumentosDeHorario.hora(texto, HORA);
-        if (hora.isAfter(ultimaHora)) {
-            throw new PropuestaImposibleException("Un habito puede arrancar como mas tarde a las "
-                    + ArgumentosDeHorario.texto(ultimaHora) + ". Dile eso y pidele otra hora.");
-        }
+        ArgumentosDeHorario.requireInicioDentroDelDia(hora, ultimaHora);
         return hora;
     }
 

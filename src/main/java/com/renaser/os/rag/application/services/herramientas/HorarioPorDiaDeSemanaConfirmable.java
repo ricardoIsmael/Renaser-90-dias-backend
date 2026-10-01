@@ -49,7 +49,7 @@ public class HorarioPorDiaDeSemanaConfirmable implements AccionConfirmable {
         } catch (RuntimeException rechazo) {
             RechazoDeHorario traduccion = pedido.accion() == HorarioSemanalPedido.Accion.FIJAR ? RECHAZO_AL_FIJAR
                     : RECHAZO_AL_APAGAR;
-            return traduccion.traducir(herramienta(), rechazo);
+            return traduccion.traducir(herramienta(), rechazo, pedido.horaInicio(), ajustarHorarios::ultimaHoraDeInicio);
         }
     }
 

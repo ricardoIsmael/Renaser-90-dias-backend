@@ -244,18 +244,23 @@ final class SesionDeVozEnVivo implements ConversacionEnVivo, ConversacionEnVivoP
         try {
             Instant antes = c.clock().now();
             ResultadoHerramienta resultado = c.herramientas().ejecutar(actorId, invocacion);
-            // Solo el nombre, si salio bien y cuanto tardo (E-240, E-458): con esto se sabe si una
-            // cifra que dijo el orbe vino de una herramienta o se la invento. Nunca los argumentos ni
-            // el resultado.
-            log.info("[rag] voz en vivo: herramienta {} -> {} ({} ms)", invocacion.nombre(),
+            // El nombre, si salio bien y cuanto tardo (E-240, E-458): con esto se sabe si una cifra que
+            // dijo el orbe vino de una herramienta o se la invento. Nunca los argumentos ni el resultado;
+            // de un fallo, el motivo recortado y sin nombres entre comillas (E-475).
+            log.info("[rag] voz en vivo: herramienta {} -> {} ({} ms){}", invocacion.nombre(),
                     resultado instanceof ResultadoHerramienta.Exito ? "ok" : "fallo",
-                    Duration.between(antes, c.clock().now()).toMillis());
+                    Duration.between(antes, c.clock().now()).toMillis(), conMotivo(resultado));
             return resultado;
         } catch (RuntimeException e) {
             log.warn("Fallo la herramienta {} en la voz en vivo ({})", invocacion.nombre(),
                     e.getClass().getSimpleName());
             return ResultadoHerramienta.fallo(HERRAMIENTA_FALLO);
         }
+    }
+
+    private static String conMotivo(ResultadoHerramienta resultado) {
+        String motivo = MotivoDeFalloParaElLog.de(resultado);
+        return motivo.isEmpty() ? "" : ": " + motivo;
     }
 
     /**

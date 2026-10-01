@@ -60,6 +60,33 @@ final class ArgumentosDeHorario {
         }
     }
 
+    /**
+     * E-475: el acompanante propuso 23:59 y {@code habits} rechazo la tarjeta recien al confirmar,
+     * porque ningun habito puede arrancar despues de {@code ultimaHora} (D-122). Se mira ANTES de
+     * proponer, con el valor que da {@code habits}, y el motivo le dice al modelo el limite real y que
+     * no elija otra hora por su cuenta.
+     *
+     * @param ultimaHora la hora mas tarde a la que puede arrancar un habito (regla de {@code habits})
+     */
+    static void requireInicioDentroDelDia(LocalTime inicio, LocalTime ultimaHora) {
+        if (inicio != null && inicio.isAfter(ultimaHora)) {
+            String limite = texto(ultimaHora);
+            throw new PropuestaImposibleException("No se puede proponer " + texto(inicio) + ": lo mas tarde que se "
+                    + "puede programar un habito es " + limite + ". NO dejes otra propuesta por tu cuenta: dile a la "
+                    + "persona que el limite es " + limite + " y preguntale si lo quiere a las " + limite
+                    + " (la hora valida mas cercana) o a otra hora antes. Proponlo solo cuando acepte una hora.");
+        }
+    }
+
+    /**
+     * El texto para la PERSONA cuando {@code habits} rechaza al confirmar una hora pasada del limite
+     * (una tarjeta creada antes de E-475): el limite real, no una excepcion.
+     */
+    static String rechazoPorHoraTardia(LocalTime ultimaHora) {
+        return "No se pudo: lo mas tarde que se puede programar un habito es " + texto(ultimaHora)
+                + ". Pidele a tu acompanante el cambio con esa hora o una anterior.";
+    }
+
     /** {@code false} si no vino: es el caso "sin hora limite" o "sin fecha", no un error. */
     static boolean presente(String texto) {
         return texto != null && !texto.isBlank();

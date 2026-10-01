@@ -5,7 +5,9 @@ import com.renaser.os.shared.domain.NotAuthorizedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalTime;
 import java.util.NoSuchElementException;
+import java.util.function.Supplier;
 
 /**
  * Traduce el rechazo de {@code habits} al confirmar un cambio de horario (fase 4, 2026-09-23) a un
@@ -21,6 +23,25 @@ import java.util.NoSuchElementException;
 record RechazoDeHorario(String siEstadoInvalido, String siArgumentoInvalido) {
 
     private static final Logger log = LoggerFactory.getLogger(RechazoDeHorario.class);
+
+    /**
+     * Como {@link #traducir}, pero si el rechazo es de argumento y la hora de inicio pasa del limite
+     * de {@code habits}, dice ESE motivo con el limite real (E-475). Antes la persona leia "ese dia ya
+     * no se puede reacomodar, o la hora es demasiado tarde": dos causas y ninguna hora.
+     *
+     * @param ultimaHora se pide solo en ese caso; la regla sigue siendo de {@code habits}
+     */
+    ResultadoHerramienta traducir(String herramienta, RuntimeException rechazo, LocalTime inicio,
+                                  Supplier<LocalTime> ultimaHora) {
+        if (rechazo instanceof IllegalArgumentException && inicio != null) {
+            LocalTime limite = ultimaHora.get();
+            if (inicio.isAfter(limite)) {
+                log.info("[rag] {} rechazada por habits al confirmar: hora de inicio pasada del limite", herramienta);
+                return ResultadoHerramienta.fallo(ArgumentosDeHorario.rechazoPorHoraTardia(limite));
+            }
+        }
+        return traducir(herramienta, rechazo);
+    }
 
     ResultadoHerramienta traducir(String herramienta, RuntimeException rechazo) {
         log.info("[rag] {} rechazada por habits al confirmar: {}", herramienta, rechazo.toString());

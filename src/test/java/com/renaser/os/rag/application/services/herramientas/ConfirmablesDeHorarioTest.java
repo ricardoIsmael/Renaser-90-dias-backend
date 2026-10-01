@@ -76,6 +76,46 @@ class ConfirmablesDeHorarioTest {
         assertThat(motivo).contains("no le quedan cambios").doesNotContain("reacomodaste 3");
     }
 
+    /**
+     * E-475: una tarjeta de 23:59 creada antes del arreglo. habits la rechaza con
+     * "horaDisparo no puede pasar de 23:40, recibida: 23:59"; la persona lee el limite en castellano,
+     * nunca el texto de la excepcion ni el "ese dia ya no se puede reacomodar" que no era la causa.
+     */
+    @Test
+    @DisplayName("E-475: al confirmar 23:59, la persona lee el limite 23:40, no la excepcion de habits")
+    void horaPasadaDelLimiteAlConfirmar() {
+        when(ajustar.ultimaHoraDeInicio()).thenReturn(LocalTime.of(23, 40));
+        when(ajustar.cambiarHorario(any(), any())).thenThrow(
+                new IllegalArgumentException("horaDisparo no puede pasar de 23:40, recibida: 23:59"));
+        doThrow(new IllegalArgumentException("horaDisparo no puede pasar de 23:40, recibida: 23:59"))
+                .when(ajustar).fijarDiaDeLaSemana(any(), any());
+        String esperado = "No se pudo: lo mas tarde que se puede programar un habito es 23:40. Pidele a tu "
+                + "acompanante el cambio con esa hora o una anterior.";
+
+        ResultadoHerramienta cambio = new CambioDeHorarioConfirmable(ajustar).aplicar(APRENDIZ,
+                new InvocacionHerramienta(PropuestaDeCambioDeHorario.NOMBRE,
+                        Map.of("habito_id", MEDITAR.toString(), "hora_inicio", "23:59")));
+        ResultadoHerramienta diaDeSemana = new HorarioPorDiaDeSemanaConfirmable(ajustar).aplicar(APRENDIZ,
+                new InvocacionHerramienta(PropuestaDeHorarioPorDiaDeSemana.NOMBRE, Map.of("habito_id",
+                        MEDITAR.toString(), "dia_semana", "MONDAY", "accion", "fijar", "hora_inicio", "23:59")));
+
+        assertThat(cambio).isEqualTo(ResultadoHerramienta.fallo(esperado));
+        assertThat(diaDeSemana).isEqualTo(ResultadoHerramienta.fallo(esperado));
+    }
+
+    @Test
+    @DisplayName("una fecha pasada al confirmar sigue diciendo que ese dia ya no se reacomoda")
+    void fechaPasadaAlConfirmar() {
+        when(ajustar.ultimaHoraDeInicio()).thenReturn(LocalTime.of(23, 40));
+        when(ajustar.cambiarHorario(any(), any())).thenThrow(new IllegalArgumentException("fecha no futura"));
+
+        String motivo = motivo(new CambioDeHorarioConfirmable(ajustar).aplicar(APRENDIZ, new InvocacionHerramienta(
+                PropuestaDeCambioDeHorario.NOMBRE, Map.of("habito_id", MEDITAR.toString(), "hora_inicio", "06:30",
+                        "fecha", VIERNES.toString()))));
+
+        assertThat(motivo).contains("ese dia ya no se puede reacomodar").doesNotContain("fecha no futura");
+    }
+
     @Test
     @DisplayName("una invocacion guardada rota no llega a habits")
     void invocacionRota() {

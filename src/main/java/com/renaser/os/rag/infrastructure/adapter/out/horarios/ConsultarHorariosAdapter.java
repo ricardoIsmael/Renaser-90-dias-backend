@@ -1,11 +1,13 @@
 package com.renaser.os.rag.infrastructure.adapter.out.horarios;
 
+import com.renaser.os.habits.api.AjustarHorarioHabitoUseCase;
 import com.renaser.os.habits.api.HorarioDelDiaFinder;
 import com.renaser.os.rag.application.ports.out.horarios.ConsultarHorariosPort;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 /**
  * Implementa {@link ConsultarHorariosPort} delegando en el contrato publico de {@code habits}
@@ -28,6 +30,11 @@ class ConsultarHorariosAdapter implements ConsultarHorariosPort {
         return new HorariosDelDia(dia.fecha(), dia.diaPrograma(),
                 dia.habitos().stream().map(ConsultarHorariosAdapter::aHorarioDeHabito).toList(),
                 aCuota(dia.cuota()));
+    }
+
+    @Override
+    public LocalTime ultimaHoraDeInicio() {
+        return AjustarHorarioHabitoUseCase.ULTIMA_HORA_DE_INICIO;
     }
 
     private static HorarioDeHabito aHorarioDeHabito(HorarioDelDiaFinder.HorarioResuelto horario) {

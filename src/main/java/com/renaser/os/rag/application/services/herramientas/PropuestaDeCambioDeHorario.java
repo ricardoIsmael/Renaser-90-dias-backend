@@ -73,6 +73,7 @@ public class PropuestaDeCambioDeHorario implements HerramientaAgente {
     public ResultadoHerramienta ejecutar(UserId actorId, InvocacionHerramienta invocacion) {
         try {
             CambioPedido leido = CambioPedido.de(invocacion);
+            ArgumentosDeHorario.requireInicioDentroDelDia(leido.horaInicio(), horariosPort.ultimaHoraDeInicio());
             HorariosDelDia hoy = HorariosParaProponer.de(horariosPort, actorId, null);
             CambioPedido cambio = leido.dentroDelPrograma(hoy);
             LocalDate rigeDesde = rigeDesde(cambio, hoy.fecha());

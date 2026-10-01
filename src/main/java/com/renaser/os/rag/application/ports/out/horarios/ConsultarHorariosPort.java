@@ -25,6 +25,12 @@ public interface ConsultarHorariosPort {
      */
     HorariosDelDia deFecha(UserId participanteId, LocalDate fecha);
 
+    /**
+     * La hora mas tarde a la que puede arrancar un habito; la regla es de {@code habits} (D-122).
+     * Las herramientas que PROPONEN una hora la miran antes de dejar la tarjeta (E-475).
+     */
+    LocalTime ultimaHoraDeInicio();
+
     /** @param diaPrograma el dia del programa que cae en {@code fecha}; puede quedar fuera de [0, 90]. */
     record HorariosDelDia(LocalDate fecha, int diaPrograma, List<HorarioDeHabito> habitos, CuotaCambios cuota) {
     }
