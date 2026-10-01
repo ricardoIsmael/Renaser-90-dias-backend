@@ -184,6 +184,10 @@ public class SecurityConfig {
                         .authenticated()
                         // «Tu Caja Renaser» (D-219): la caja propia; el id sale de la sesion.
                         .requestMatchers("/api/v1/me/caja", "/api/v1/me/caja/**").authenticated()
+                        /* Gestion del cuerpo de mentores por el Lider de Mentores (D-241). Lo atrapo
+                           RutasCubiertasPorElFiltroTest (E-481): sin esta linea las cuatro rutas
+                           quedaban sin sesion y el actor salia del header X-Actor-Id. */
+                        .requestMatchers("/api/v1/leadership/**").authenticated()
                         /* `/api/v1/participants/**` no aparecia en ninguna busqueda por prefijo
                            porque su controller no declara `@RequestMapping` de clase: las rutas
                            estan escritas enteras en cada metodo. Incluye

@@ -114,6 +114,8 @@ class TicketMentorServiceTest {
 
         assertThat(respondido.estado()).isEqualTo(EstadoTicketMentor.RESPONDIDO);
         assertThat(respondido.respuestaMentor()).isEqualTo("Reduci las notificaciones");
+        // D-241: queda QUIEN respondio, para que un cambio de grupo posterior no le reatribuya el trabajo.
+        assertThat(respondido.respondidoPor()).isEqualTo(mentor);
         assertThat(events.eventosPublicados()).hasSize(2).last().isInstanceOf(TicketMentorRespondidoEvent.class);
     }
 

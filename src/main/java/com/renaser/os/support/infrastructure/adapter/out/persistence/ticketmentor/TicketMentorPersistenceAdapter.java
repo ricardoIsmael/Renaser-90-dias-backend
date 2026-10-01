@@ -2,6 +2,9 @@ package com.renaser.os.support.infrastructure.adapter.out.persistence.ticketment
 
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.support.application.ports.out.ticketmentor.BuscarBibliotecaPort;
+import com.renaser.os.support.api.AtencionDeTicketsFinder.TicketPendiente;
+import com.renaser.os.support.api.AtencionDeTicketsFinder.TicketRespondido;
+import com.renaser.os.support.application.ports.out.ticketmentor.ConsultarAtencionDeTicketsPort;
 import com.renaser.os.support.application.ports.out.ticketmentor.LoadTicketMentorPort;
 import com.renaser.os.support.application.ports.out.ticketmentor.SaveTicketMentorPort;
 import com.renaser.os.support.domain.model.ticketmentor.TicketMentor;
@@ -11,11 +14,14 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 import java.util.Optional;
 
 @Component
-class TicketMentorPersistenceAdapter implements LoadTicketMentorPort, SaveTicketMentorPort, BuscarBibliotecaPort {
+class TicketMentorPersistenceAdapter implements LoadTicketMentorPort, SaveTicketMentorPort, BuscarBibliotecaPort,
+        ConsultarAtencionDeTicketsPort {
 
     private final SpringDataTicketMentorRepository repository;
     private final TicketMentorPersistenceMapper mapper;
@@ -65,5 +71,31 @@ class TicketMentorPersistenceAdapter implements LoadTicketMentorPort, SaveTicket
         return repository.buscarEnBiblioteca(query, limite).stream()
                 .map(row -> new EntradaBiblioteca(row.getDescripcionBloqueo(), row.getRespuestaMentor()))
                 .toList();
+    }
+
+    @Override
+    public List<TicketPendiente> pendientesDe(Collection<UserId> participantes) {
+        return repository.findByEstadoAndParticipanteIdIn(EstadoTicketMentorJpa.ABIERTO, valores(participantes)).stream()
+                .map(e -> new TicketPendiente(e.getId(), UserId.of(e.getParticipanteId()), e.getCreadoEn()))
+                .toList();
+    }
+
+    @Override
+    public List<TicketRespondido> respondidosPor(Collection<UserId> respondedores, Instant desde, Instant hasta) {
+        return repository.findByRespondidoPorInAndRespondidoEnGreaterThanEqualAndRespondidoEnLessThan(
+                        valores(respondedores), desde, hasta).stream()
+                .map(e -> new TicketRespondido(e.getId(), UserId.of(e.getRespondidoPor()), e.getCreadoEn(),
+                        e.getRespondidoEn()))
+                .toList();
+    }
+
+    @Override
+    public int respondidosSinAtribucion(Instant desde, Instant hasta) {
+        return Math.toIntExact(repository.countByEstadoAndRespondidoPorIsNullAndRespondidoEnGreaterThanEqualAndRespondidoEnLessThan(
+                EstadoTicketMentorJpa.RESPONDIDO, desde, hasta));
+    }
+
+    private static List<UUID> valores(Collection<UserId> ids) {
+        return ids.stream().map(UserId::value).distinct().toList();
     }
 }

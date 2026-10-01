@@ -12982,3 +12982,49 @@ quería el cambio esa misma noche) o un `hora_limite` no posterior al inicio; qu
 caso de uso de destino aplica sobre los argumentos, leyendo el valor por el `api` del módulo dueño (nunca una
 constante copiada). Y un log de «fallo» sin motivo no sirve para diagnosticar: el motivo va recortado y sin datos
 personales.
+
+## E-480 · El reporte del mes no contaba una observación registrada en el mismo instante del corte: `expected: 1 but was: 0` (leadership, RESUELTO, 01/10)
+
+**Síntoma (prueba nueva, antes de commitear D-241).**
+
+```
+[ERROR] com.renaser.os.leadership.application.services.ReporteDeMentoresServiceTest.observacionesDelMes -- Time elapsed: 0.016 s <<< FAILURE!
+expected: 1
+ but was: 0
+```
+
+**Causa.** `MesDelReporte` tenía un solo fin, `corte` = ahora en el mes en curso, y las consultas del mes iban
+`[desde, corte)`. Una observación guardada con `creado_en` = ahora (el reloj fijo de la prueba; en la vida real, la que
+se registra en el mismo milisegundo que se pide el reporte) queda en el borde abierto y no se cuenta. El mismo borde
+afectaba a los tickets respondidos del mes.
+
+**Solución.** `MesDelReporte` separa lo que se CONSULTA de lo que se MUESTRA: `hasta` = primer instante del mes
+siguiente (las consultas van `[desde, hasta)`; en el mes en curso no hay datos después de ahora) y `corte` = «datos
+al», el fin del mes o ahora. `AtencionDeConsultas` y `ReporteDeMentoresService` consultan con `hasta`.
+`MesDelReporteTest` fija los dos.
+
+**Cómo evitar que vuelva a pasar.** Un intervalo semiabierto cortado en «ahora» deja afuera lo de ahora. El fin de una
+consulta por período es el fin del período; «ahora» es solo lo que se le dice a la persona.
+
+## E-481 · Las cuatro rutas nuevas de `/api/v1/leadership/**` quedaban sin sesión: `RutasCubiertasPorElFiltroTest` (leadership, RESUELTO, 01/10)
+
+**Síntoma (`./mvnw clean verify` de D-241).**
+
+```
+[ERROR]   RutasCubiertasPorElFiltroTest.ningunaRutaQuedaFueraDelFiltro:106 [Estas rutas no las alcanza ningun matcher .authenticated() de SecurityConfig y tampoco declaran @PublicEndpoint. Como la cadena termina en anyRequest().permitAll(), quedan accesibles SIN sesion, y ahi la identidad sale del header X-Actor-Id que manda el cliente. O se agregan a SecurityConfig, o se marcan @PublicEndpoint con su justificacion.]
+Expecting empty but was: ["/api/v1/leadership/mentors",
+    "/api/v1/leadership/mentors/{mentorId}",
+    "/api/v1/leadership/mentors/{mentorId}/observations",
+    "/api/v1/leadership/report"]
+```
+
+**Causa.** Un prefijo de rutas nuevo (`/api/v1/leadership`) y `SecurityConfig` enumera prefijos y termina en
+`anyRequest().permitAll()`. Las pruebas de controller (`@WebMvcTest` con `addFilters = false`) no lo ven: pasan con
+el header `X-Actor-Id`.
+
+**Solución.** `.requestMatchers("/api/v1/leadership/**").authenticated()` en `SecurityConfig`. La prueba lo atrapó
+antes del commit; no llegó a ninguna rama.
+
+**Cómo evitar que vuelva a pasar.** Ya es ejecutable (`RutasCubiertasPorElFiltroTest`). Al abrir un prefijo de rutas
+nuevo, agregarlo a `SecurityConfig` en el mismo cambio, y correr `clean verify` entero: las pruebas del módulo solas
+no lo detectan.

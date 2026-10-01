@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,4 +33,16 @@ interface SpringDataTicketMentorRepository extends JpaRepository<TicketMentorJpa
             limit :limite
             """)
     List<BibliotecaFtsRow> buscarEnBiblioteca(@Param("q") String query, @Param("limite") int limite);
+
+    /** Para la atencion de los mentores (D-241): los abiertos de esos aprendices. */
+    List<TicketMentorJpaEntity> findByEstadoAndParticipanteIdIn(EstadoTicketMentorJpa estado,
+                                                                 Collection<UUID> participantes);
+
+    /** Lo que esos usuarios respondieron en {@code [desde, hasta)} (V87). */
+    List<TicketMentorJpaEntity> findByRespondidoPorInAndRespondidoEnGreaterThanEqualAndRespondidoEnLessThan(
+            Collection<UUID> respondedores, Instant desde, Instant hasta);
+
+    /** Respondidos en {@code [desde, hasta)} sin registro de quien: anteriores a V87. */
+    long countByEstadoAndRespondidoPorIsNullAndRespondidoEnGreaterThanEqualAndRespondidoEnLessThan(
+            EstadoTicketMentorJpa estado, Instant desde, Instant hasta);
 }

@@ -25,6 +25,12 @@ public final class TicketMentor {
     private EstadoTicketMentor estado;
     private String respuestaMentor;
     private Instant respondidoEn;
+    /**
+     * Quien respondio (V87, D-241). {@code null} en los tickets abiertos y en los respondidos antes de
+     * V87: «no se sabe», nunca «nadie». No se deduce del mentor de HOY del aprendiz, que miente sobre
+     * el pasado en cuanto el aprendiz cambia de grupo.
+     */
+    private UserId respondidoPor;
     private boolean guardadoEnBiblioteca;
     private final Instant creadoEn;
 
@@ -42,22 +48,23 @@ public final class TicketMentor {
                 requireNotBlank(descripcionBloqueo, "La descripcion del bloqueo es obligatoria"),
                 requireNotBlank(solucionesIntentadas, "Las soluciones intentadas son obligatorias"),
                 requireNotBlank(impactoMetaSmart, "El impacto en la meta SMART es obligatorio"),
-                EstadoTicketMentor.ABIERTO, null, null, false, clock.now());
+                EstadoTicketMentor.ABIERTO, null, null, null, false, clock.now());
     }
 
     /** Solo para el adaptador de persistencia: reconstruye un ticket ya existente. */
     public static TicketMentor rehydrate(TicketMentorId id, UserId participanteId, String descripcionBloqueo,
                                           String solucionesIntentadas, String impactoMetaSmart,
                                           EstadoTicketMentor estado, String respuestaMentor, Instant respondidoEn,
-                                          boolean guardadoEnBiblioteca, Instant creadoEn) {
+                                          UserId respondidoPor, boolean guardadoEnBiblioteca, Instant creadoEn) {
         return new TicketMentor(id, participanteId, descripcionBloqueo, solucionesIntentadas, impactoMetaSmart,
-                estado, respuestaMentor, respondidoEn, guardadoEnBiblioteca, creadoEn);
+                estado, respuestaMentor, respondidoEn, respondidoPor, guardadoEnBiblioteca, creadoEn);
     }
 
-    /** ABIERTO -> RESPONDIDO. Nunca se reabre. */
-    public void responder(String respuesta, Clock clock) {
+    /** ABIERTO -> RESPONDIDO. Nunca se reabre. Queda registrado QUIEN respondio (D-241). */
+    public void responder(String respuesta, UserId respondidoPor, Clock clock) {
         requireAbierto();
         this.respuestaMentor = requireNotBlank(respuesta, "La respuesta no puede ser vacia");
+        this.respondidoPor = Objects.requireNonNull(respondidoPor, "respondidoPor es obligatorio");
         this.estado = EstadoTicketMentor.RESPONDIDO;
         this.respondidoEn = clock.now();
     }

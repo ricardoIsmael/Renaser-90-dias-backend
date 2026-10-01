@@ -17,6 +17,8 @@ class TicketMentorTest {
     private static final TicketMentorId ID = TicketMentorId.of(
             UUID.fromString("11111111-1111-1111-1111-111111111111"));
 
+    private static final UserId MENTOR = UserId.of(UUID.fromString("00000000-0000-0000-0000-0000000000a1"));
+
     private static UserId nuevoParticipante() {
         return UserId.of(UUID.randomUUID());
     }
@@ -57,7 +59,7 @@ class TicketMentorTest {
     void responderTransicionaARespondido() {
         TicketMentor ticket = ticketAbierto();
 
-        ticket.responder("Reduci las notificaciones a solo llamadas", CLOCK);
+        ticket.responder("Reduci las notificaciones a solo llamadas", MENTOR, CLOCK);
 
         assertThat(ticket.estado()).isEqualTo(EstadoTicketMentor.RESPONDIDO);
         assertThat(ticket.respuestaMentor()).isEqualTo("Reduci las notificaciones a solo llamadas");
@@ -69,16 +71,16 @@ class TicketMentorTest {
     void responderConRespuestaVaciaFalla() {
         TicketMentor ticket = ticketAbierto();
 
-        assertThatThrownBy(() -> ticket.responder("   ", CLOCK)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> ticket.responder("   ", MENTOR, CLOCK)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     @DisplayName("un ticket ya respondido no se puede volver a responder (nunca se reabre)")
     void noSePuedeResponderDosVeces() {
         TicketMentor ticket = ticketAbierto();
-        ticket.responder("Primera respuesta", CLOCK);
+        ticket.responder("Primera respuesta", MENTOR, CLOCK);
 
-        assertThatThrownBy(() -> ticket.responder("Segunda respuesta", CLOCK))
+        assertThatThrownBy(() -> ticket.responder("Segunda respuesta", MENTOR, CLOCK))
                 .isInstanceOf(IllegalStateException.class);
         assertThat(ticket.respuestaMentor()).isEqualTo("Primera respuesta");
     }
@@ -96,7 +98,7 @@ class TicketMentorTest {
     @DisplayName("guardarEnBiblioteca() sobre un ticket respondido marca el flag")
     void guardarEnBibliotecaSobreRespondidoFunciona() {
         TicketMentor ticket = ticketAbierto();
-        ticket.responder("Una buena respuesta", CLOCK);
+        ticket.responder("Una buena respuesta", MENTOR, CLOCK);
 
         ticket.guardarEnBiblioteca();
 
@@ -110,10 +112,30 @@ class TicketMentorTest {
         UserId participante = nuevoParticipante();
 
         TicketMentor ticket = TicketMentor.rehydrate(id, participante, "bloqueo", "soluciones", "impacto",
-                EstadoTicketMentor.RESPONDIDO, "respuesta", CLOCK.now(), true, CLOCK.now());
+                EstadoTicketMentor.RESPONDIDO, "respuesta", CLOCK.now(), MENTOR, true, CLOCK.now());
 
         assertThat(ticket.id()).isEqualTo(id);
         assertThat(ticket.estado()).isEqualTo(EstadoTicketMentor.RESPONDIDO);
         assertThat(ticket.guardadoEnBiblioteca()).isTrue();
+        assertThat(ticket.respondidoPor()).isEqualTo(MENTOR);
+    }
+
+    @Test
+    @DisplayName("responder() registra QUIEN respondio (D-241): el dato no se deduce del mentor de hoy")
+    void responderRegistraQuienRespondio() {
+        TicketMentor ticket = TicketMentor.abrir(ID, nuevoParticipante(), "b", "s", "i", CLOCK);
+
+        ticket.responder("Respuesta", MENTOR, CLOCK);
+
+        assertThat(ticket.respondidoPor()).isEqualTo(MENTOR);
+    }
+
+    @Test
+    @DisplayName("responder() sin quien responde falla: no se guarda una respuesta anonima")
+    void responderSinRespondedorFalla() {
+        TicketMentor ticket = TicketMentor.abrir(ID, nuevoParticipante(), "b", "s", "i", CLOCK);
+
+        assertThatThrownBy(() -> ticket.responder("Respuesta", null, CLOCK)).isInstanceOf(NullPointerException.class);
+        assertThat(ticket.estado()).isEqualTo(EstadoTicketMentor.ABIERTO);
     }
 }

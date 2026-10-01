@@ -79,7 +79,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
         requireRol(command.actorId(), UserRole.MENTOR, "Solo el mentor asignado puede responder un ticket");
         TicketMentor ticket = requireTicket(command.ticketId());
         requireMentorAsignado(command.actorId(), ticket);
-        ticket.responder(command.respuesta(), clock);
+        ticket.responder(command.respuesta(), command.actorId(), clock);
         TicketMentor saved = saveTicketMentorPort.save(ticket);
         events.publishEvent(new TicketMentorRespondidoEvent(saved.id().value(), saved.participanteId(), clock.now()));
         return saved;

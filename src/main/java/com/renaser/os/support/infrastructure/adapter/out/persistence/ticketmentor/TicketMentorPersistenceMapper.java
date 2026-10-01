@@ -19,6 +19,7 @@ class TicketMentorPersistenceMapper {
                 toDomainEstado(e.getEstado()),
                 e.getRespuestaMentor(),
                 e.getRespondidoEn(),
+                e.getRespondidoPor() == null ? null : UserId.of(e.getRespondidoPor()),
                 e.isGuardadoEnBiblioteca(),
                 e.getCreadoEn());
     }
@@ -33,6 +34,7 @@ class TicketMentorPersistenceMapper {
                 toJpaEstado(t.estado()),
                 t.respuestaMentor(),
                 t.respondidoEn(),
+                t.respondidoPor() == null ? null : t.respondidoPor().value(),
                 t.guardadoEnBiblioteca(),
                 t.creadoEn());
     }
