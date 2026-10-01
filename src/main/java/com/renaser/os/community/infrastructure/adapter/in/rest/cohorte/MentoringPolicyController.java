@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -52,6 +53,18 @@ public class MentoringPolicyController {
         return MentoringPolicyResponse.from(configurarMentoria.reconfigurar(new ReconfigurarPolitica(
                 actorId, CohorteId.of(cohortId), cuerpo.capacity(), cuerpo.rotation(), cuerpo.timezone(),
                 cuerpo.transferDay(), cuerpo.inactivityDays(), cuerpo.expectedVersion())));
+    }
+
+    /**
+     * Quiénes atienden hoy la recepción (D-242). Mismo permiso que el PUT: lo lee quien lo puede
+     * cambiar. {@code receptionCellId} omitido = el grupo que la cohorte ya tiene designado.
+     */
+    @RequiresPermission(Permission.MANAGE_COHORTS)
+    @GetMapping("/reception/guides")
+    public ReceptionGuidesListResponse consultarGuias(@ActorAutenticado UserId actorId, @PathVariable UUID cohortId,
+                                                      @RequestParam(required = false) UUID receptionCellId) {
+        return ReceptionGuidesListResponse.from(
+                configurarMentoria.consultarGuias(actorId, CohorteId.of(cohortId), receptionCellId));
     }
 
     /** Reemplazo atómico: la lista que llega es la que queda. */

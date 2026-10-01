@@ -106,35 +106,13 @@ public class ConfiguracionMentoriaService implements ConfigurarMentoriaUseCase {
         requireAdmin(comando.actorId());
         PoliticaMentoria politica = politicaDe(comando.cohorteId());
 
-        CelulaId recepcion = comando.celulaRecepcionId() != null
-                ? CelulaId.of(comando.celulaRecepcionId())
-                : politica.celulaRecepcionId();
-        if (recepcion == null) {
-            throw new IllegalArgumentException(
-                    "La cohorte no tiene celula de recepcion designada: indica cual antes de asignar guias");
-        }
-        Celula celula = loadCelulaPort.porId(recepcion)
-                .orElseThrow(() -> new NoSuchElementException("Celula de recepcion no encontrada: " + recepcion));
-        if (!celula.cohorteId().equals(comando.cohorteId())) {
-            throw new IllegalArgumentException("Esa celula no pertenece a la cohorte indicada");
-        }
-        // Designar guias es designar LA RECEPCION, no un grupo cualquiera de la cohorte. Sin esto,
-        // una asignacion GUIA sobre un grupo regular concede la lectura de su chat, porque
-        // AcompanamientoFinder.esIntegranteVigente no filtra por funcion. Se admite la celula que
-        // la politica YA tiene designada aunque sea REGULAR: hay cohortes anteriores a V45 cuya
-        // recepcion quedo sin tipar, y bloquearlas dejaria sin forma de administrar sus guias.
-        if (!celula.esRecepcion() && !recepcion.equals(politica.celulaRecepcionId())) {
-            throw new IllegalArgumentException("Esa celula no es de recepcion");
-        }
+        CelulaId recepcion = recepcionValidada(politica, comando.cohorteId(), comando.celulaRecepcionId());
 
         // TODA la lista primero. Si una referencia falla, no se escribio nada todavia.
         Set<UserId> deseados = resolverTodos(comando.referencias());
 
         Instant ahora = clock.now();
-        List<AsignacionCelula> vigentes = loadAsignacionesPort.porCelula(recepcion).stream()
-                .filter(a -> a.funcion() == FuncionAcompanamiento.GUIA)
-                .filter(a -> a.vigenteEn(ahora))
-                .toList();
+        List<AsignacionCelula> vigentes = guiasVigentesEn(recepcion, ahora);
 
         for (AsignacionCelula sobrante : vigentes) {
             if (!deseados.contains(sobrante.usuarioId())) {
@@ -161,6 +139,64 @@ public class ConfiguracionMentoriaService implements ConfigurarMentoriaUseCase {
 
         return new GuiasConfigurados(comando.cohorteId().value(), recepcion.value(),
                 deseados.stream().map(UserId::value).toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public GuiasVigentes consultarGuias(UserId actorId, CohorteId cohorteId, UUID celulaRecepcionId) {
+        requireAdmin(actorId);
+        PoliticaMentoria politica = politicaDe(cohorteId);
+        if (celulaRecepcionId == null && politica.celulaRecepcionId() == null) {
+            // Sin recepción designada no es un error: es lo que la pantalla tiene que mostrar.
+            return new GuiasVigentes(cohorteId.value(), null, List.of());
+        }
+        CelulaId recepcion = recepcionValidada(politica, cohorteId, celulaRecepcionId);
+        List<GuiaVigente> guias = guiasVigentesEn(recepcion, clock.now()).stream()
+                .map(a -> guiaVigente(a.usuarioId()))
+                .toList();
+        return new GuiasVigentes(cohorteId.value(), recepcion.value(), guias);
+    }
+
+    private List<AsignacionCelula> guiasVigentesEn(CelulaId recepcion, Instant ahora) {
+        return loadAsignacionesPort.porCelula(recepcion).stream()
+                .filter(a -> a.funcion() == FuncionAcompanamiento.GUIA)
+                .filter(a -> a.vigenteEn(ahora))
+                .toList();
+    }
+
+    private GuiaVigente guiaVigente(UserId usuarioId) {
+        return userSummaryFinder.findById(usuarioId)
+                .map(u -> new GuiaVigente(usuarioId.value(), u.fullName(), u.role().name(), u.status().name()))
+                .orElseGet(() -> new GuiaVigente(usuarioId.value(), null, null, null));
+    }
+
+    /**
+     * El grupo de recepción sobre el que se lee o se escribe, ya validado: existe, es de esta
+     * cohorte y es de recepción (o es el que la política ya tenía, ver el comentario de adentro).
+     * Lo comparten la lectura y el reemplazo para que nunca acepten grupos distintos.
+     */
+    private CelulaId recepcionValidada(PoliticaMentoria politica, CohorteId cohorteId, UUID celulaRecepcionId) {
+        CelulaId recepcion = celulaRecepcionId != null
+                ? CelulaId.of(celulaRecepcionId)
+                : politica.celulaRecepcionId();
+        if (recepcion == null) {
+            throw new IllegalArgumentException(
+                    "La cohorte no tiene celula de recepcion designada: indica cual antes de asignar guias");
+        }
+        Celula celula = loadCelulaPort.porId(recepcion)
+                .orElseThrow(() -> new NoSuchElementException("Celula de recepcion no encontrada: " + recepcion));
+        if (!celula.cohorteId().equals(cohorteId)) {
+            throw new IllegalArgumentException("Esa celula no pertenece a la cohorte indicada");
+        }
+        // Designar guias es designar LA RECEPCION, no un grupo cualquiera de la cohorte. Sin esto,
+        // una asignacion GUIA sobre un grupo regular concede la lectura de su chat, porque
+        // AcompanamientoFinder.esIntegranteVigente no filtra por funcion. Se admite la celula que
+        // la politica YA tiene designada aunque sea REGULAR: hay cohortes anteriores a V45 cuya
+        // recepcion quedo sin tipar, y bloquearlas dejaria sin forma de administrar sus guias.
+        if (!celula.esRecepcion() && !recepcion.equals(politica.celulaRecepcionId())) {
+            throw new IllegalArgumentException("Esa celula no es de recepcion");
+        }
+        return recepcion;
     }
 
     /**

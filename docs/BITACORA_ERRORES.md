@@ -13148,3 +13148,29 @@ watchers). Ese patrón también calza con la ruta del propio proyecto cuando Met
 **Cómo evitar que vuelva a pasar.** Si se quiere arreglar en el repo: que el patrón excluya solo los worktrees que NO son
 el proyecto (por ejemplo, anclarlo a `__dirname + '/.claude/'`). Se deja anotado y no se cambió en D-241 porque
 `metro.config.js` lo usa todo el equipo y el cambio no era de este pedido.
+
+---
+
+## E-486 · Sumar una pantalla a `AdminScreen` rompe `pilaDeAdministracion.test.ts`: `AsyncStorage is null` (app, pruebas, RESUELTO, 01/10)
+
+**Síntoma (D-242, al agregar `GuiasRecepcionScreen` a la pila de Administración).** `npx jest src/features/admin`:
+
+```
+FAIL src/features/admin/screens/__tests__/pilaDeAdministracion.test.ts
+  ● Test suite failed to run
+    [@RNC/AsyncStorage]: NativeModule: AsyncStorage is null.
+      at Object.require (src/theme/preferenciaDeTema.ts:1:1)
+      at Object.require (src/theme/ThemeContext.tsx:4:1)
+      ...
+      at Object.require (src/features/admin/screens/GuiasRecepcionScreen.tsx:5:1)
+      at Object.require (src/features/admin/screens/AdminScreen.tsx:14:1)
+```
+
+**Causa.** La prueba solo ejercita `pilaInicial` y, para no cargar React Native, hace `jest.mock('../<Pantalla>', () => ({}))`
+de **cada** pantalla que importa `AdminScreen.tsx`. Una pantalla nueva sin su `jest.mock` arrastra `ThemeContext` →
+`AsyncStorage`, que en Jest no tiene módulo nativo.
+
+**Solución.** Agregar `jest.mock('../GuiasRecepcionScreen', () => ({}));` a la lista de la prueba.
+
+**Cómo evitar que vuelva a pasar.** Toda pantalla nueva que entre en `AdminScreen.tsx` suma su línea en esa lista. El
+mensaje no nombra la prueba ni la pantalla: buscar en la traza la línea `AdminScreen.tsx:<n>` y ver qué importa ahí.
