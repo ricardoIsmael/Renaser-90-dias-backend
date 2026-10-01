@@ -23,6 +23,15 @@ public interface ConfigurarMentoriaUseCase {
     GuiasConfigurados reemplazarGuias(ReemplazarGuias comando);
 
     /**
+     * Quiénes son HOY los guías de la recepción (D-242). Hasta esto, la designación solo se podía
+     * escribir: no había forma de leerla sin ir a la base, y por eso no existía pantalla.
+     *
+     * @param celulaRecepcionId de qué grupo de recepción. {@code null} = el que la política ya
+     *                          tiene designado; si tampoco hay, la respuesta va sin grupo y sin guías.
+     */
+    GuiasVigentes consultarGuias(UserId actorId, CohorteId cohorteId, UUID celulaRecepcionId);
+
+    /**
      * @param versionEsperada la que el administrador tenía en pantalla. Si no coincide, otro la
      *                        editó mientras tanto y su cambio no se pisa en silencio.
      */
@@ -50,5 +59,16 @@ public interface ConfigurarMentoriaUseCase {
 
     /** @param guias los que quedaron designados, tras el reemplazo. */
     record GuiasConfigurados(UUID cohorteId, UUID celulaRecepcionId, List<UUID> guias) {
+    }
+
+    /** @param celulaRecepcionId {@code null} solo cuando la cohorte no tiene recepción designada. */
+    record GuiasVigentes(UUID cohorteId, UUID celulaRecepcionId, List<GuiaVigente> guias) {
+    }
+
+    /**
+     * Un guía con lo justo para reconocerlo en una lista. {@code rol} y {@code estado} van como
+     * texto del enum; {@code null} los tres si la cuenta ya no existe (la designación sí).
+     */
+    record GuiaVigente(UUID usuarioId, String nombre, String rol, String estado) {
     }
 }

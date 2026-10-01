@@ -1,6 +1,8 @@
 package com.renaser.os.community.application.services;
 
+import com.renaser.os.community.application.ports.in.acompanamiento.ConfigurarMentoriaUseCase.GuiaVigente;
 import com.renaser.os.community.application.ports.in.acompanamiento.ConfigurarMentoriaUseCase.GuiasConfigurados;
+import com.renaser.os.community.application.ports.in.acompanamiento.ConfigurarMentoriaUseCase.GuiasVigentes;
 import com.renaser.os.community.application.ports.in.acompanamiento.ConfigurarMentoriaUseCase.PoliticaConfigurada;
 import com.renaser.os.community.application.ports.in.acompanamiento.ConfigurarMentoriaUseCase.ReconfigurarPolitica;
 import com.renaser.os.community.application.ports.in.acompanamiento.ConfigurarMentoriaUseCase.ReemplazarGuias;
@@ -348,6 +350,54 @@ class ConfiguracionMentoriaServiceTest {
                 .hasMessageContaining("no esta activa")
                 .hasMessageContaining("carla@renaser.test")
                 .hasMessageNotContaining("Carla Suspendida");
+    }
+
+    // ── leer los guías (D-242) ──────────────────────────────────────────────
+
+    @Test
+    @DisplayName("leer los guias devuelve los vigentes con nombre, rol y estado; no los ya retirados")
+    void consultarGuiasVigentes() {
+        servicio().reemplazarGuias(new ReemplazarGuias(ADMIN, COHORTE, null,
+                List.of(new ReferenciaDeUsuario(GUIA_A.value(), null),
+                        new ReferenciaDeUsuario(LIDER_MENTORES.value(), null))));
+        servicioEn(AHORA.plusSeconds(60)).reemplazarGuias(new ReemplazarGuias(ADMIN, COHORTE, null,
+                List.of(new ReferenciaDeUsuario(LIDER_MENTORES.value(), null))));
+
+        GuiasVigentes leidos = servicioEn(AHORA.plusSeconds(120)).consultarGuias(ADMIN, COHORTE, null);
+
+        assertThat(leidos.celulaRecepcionId()).isEqualTo(RECEPCION.value());
+        assertThat(leidos.guias()).containsExactly(
+                new GuiaVigente(LIDER_MENTORES.value(), "Lia Lider", "MENTOR_LEAD", "ACTIVE"));
+    }
+
+    @Test
+    @DisplayName("una cohorte sin recepcion designada se lee sin grupo y sin guias, no como error")
+    void consultarSinRecepcion() {
+        CohorteId nueva = CohorteId.of(UUID.randomUUID());
+
+        GuiasVigentes leidos = servicio().consultarGuias(ADMIN, nueva, null);
+
+        assertThat(leidos.celulaRecepcionId()).isNull();
+        assertThat(leidos.guias()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("leer los guias de un grupo REGULAR se rechaza igual que escribirlos")
+    void consultarGrupoRegularRechazado() {
+        assertThatThrownBy(() -> servicio().consultarGuias(ADMIN, COHORTE, GRUPO_REGULAR.value()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("no es de recepcion");
+    }
+
+    @Test
+    @DisplayName("MENTOR, MENTOR_LEAD y un ADMIN suspendido no leen los guias")
+    void consultarGuiasSoloAdmin() {
+        assertThatThrownBy(() -> servicio().consultarGuias(MENTOR, COHORTE, null))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> servicio().consultarGuias(LIDER_MENTORES, COHORTE, null))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> servicio().consultarGuias(ADMIN_SUSPENDIDO, COHORTE, null))
+                .isInstanceOf(NotAuthorizedException.class);
     }
 
     // ── autorizacion ────────────────────────────────────────────────────────
