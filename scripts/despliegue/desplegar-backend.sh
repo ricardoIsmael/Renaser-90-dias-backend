@@ -24,6 +24,11 @@
 # login ni pull, util para probarlo en local), ESPERA (segundos de tope para el UP), MODO
 # (auto | reemplazo). El resto tiene default de produccion y solo se cambia para probarlo.
 #
+# MEMORIA JUSTA (E-498): si la primera medicion no alcanza, se hace `sync`, se vuelve a medir y, si
+# todavia falta, se PARA Alloy (no es critico) mientras conviven las dos JVM; se relanza al final. La
+# condicion (tope + margen) no se baja. Ademas, en cada despliegue se borran las imagenes viejas del
+# backend: quedan la que esta en uso y las CONSERVAR_ANTERIORES (2) mas nuevas, mas IMAGEN.
+#
 # OBSERVABILIDAD (D-237), PREPARADO Y APAGADO: si el CD pasa CONFIG_ALLOY_B64 (el contenido de
 # infra/observabilidad/alloy/config.alloy) y en Parameter Store existen las tres credenciales de
 # Grafana Cloud, al final se (re)lanza el contenedor `alloy`. Si falta cualquiera, no hace nada. Un
@@ -62,6 +67,9 @@ IMAGEN_ALLOY=${IMAGEN_ALLOY:-docker.io/grafana/alloy:v1.20.1}
 MEMORIA_ALLOY=${MEMORIA_ALLOY:-192m}
 DIR_ALLOY=${DIR_ALLOY:-/opt/renaser/alloy}
 PREFIJO_PARAMETROS=${PREFIJO_PARAMETROS:-/renaser/prod/}
+# E-498: imagenes del backend que se conservan ademas de la que esta en uso (decision del dueno,
+# 2026-10-02: la version en uso y las dos anteriores, nada mas).
+CONSERVAR_ANTERIORES=${CONSERVAR_ANTERIORES:-2}
 # Tras el cambio: nginx guarda la IP resuelta 5 s; se deja terminar lo que el viejo ya tenia.
 DRENAJE=${DRENAJE:-20}
 # `docker stop -t`: el apagado gradual de Spring espera hasta 30 s lo que este en curso.
@@ -239,19 +247,87 @@ limpiar_restos() {
   fi
 }
 
-elegir_modo() {
-  if [ "$MODO" = reemplazo ]; then echo reemplazo; return; fi
-  if ! corriendo "$CONTENEDOR"; then echo reemplazo; return; fi
-  local hay necesita
-  hay=$(memoria_disponible_mb)
-  necesita=$(( $(en_mb "$MEMORIA") + MARGEN_MB ))
-  if [ "$hay" -lt "$necesita" ]; then
-    echo "AVISO: ${hay} MB disponibles y hacen falta ${necesita} para dos JVM a la vez (E-155). Va con corte." >&2
-    echo reemplazo
-    return
+disco_libre_mb() { df -Pk / | awk 'NR==2 {print int($4 / 1024)}'; }
+
+# El repositorio de IMAGEN, sin etiqueta ni digest ("host:5000/repo:tag" -> "host:5000/repo").
+repo_de() {
+  local s=${1%@*}
+  case "${s##*/}" in
+    *:*) echo "${s%:*}" ;;
+    *)   echo "$s" ;;
+  esac
+}
+
+# E-498. Borra las imagenes del backend que no sirven: conserva las que usa CUALQUIER contenedor
+# (en marcha o parado, incluidos restos backend-nuevo/backend-viejo), IMAGEN si ya esta, y las
+# CONSERVAR_ANTERIORES mas nuevas del resto (por fecha de creacion), con todas sus etiquetas. Nunca
+# usa `rmi -f` ni toca otros repositorios, volumenes ni contenedores; un fallo no corta el despliegue.
+limpiar_imagenes_viejas() {
+  local repo en_uso objetivo id creada etiqueta conservadas=0 borradas=0 antes despues
+  repo=$(repo_de "$IMAGEN")
+  antes=$(disco_libre_mb)
+  en_uso=$(docker ps -aq | xargs -r docker inspect -f '{{.Image}}' 2>/dev/null | sort -u || true)
+  objetivo=$(docker image inspect -f '{{.Id}}' "$IMAGEN" 2>/dev/null || true)
+  # Una linea por imagen (no por etiqueta): "<creada> <id>", la mas nueva primero.
+  for id in $(docker images --no-trunc -q "$repo" | sort -u); do
+    creada=$(docker image inspect -f '{{.Created}}' "$id" 2>/dev/null || echo 0)
+    echo "$creada $id"
+  done | sort -r > "${TMPDIR:-/tmp}/imagenes-backend.$$"
+  while read -r creada id; do
+    if printf '%s\n' "$en_uso" "$objetivo" | grep -qx "$id"; then continue; fi
+    if [ "$conservadas" -lt "$CONSERVAR_ANTERIORES" ]; then conservadas=$(( conservadas + 1 )); continue; fi
+    for etiqueta in $(docker image inspect -f '{{range .RepoTags}}{{.}} {{end}}' "$id" 2>/dev/null); do
+      docker rmi "$etiqueta" >/dev/null 2>&1 && borradas=$(( borradas + 1 ))
+    done
+  done < "${TMPDIR:-/tmp}/imagenes-backend.$$"
+  rm -f "${TMPDIR:-/tmp}/imagenes-backend.$$"
+  # Solo capas colgadas (sin etiqueta); `-a` borraria tambien redis, nginx o Alloy si estan parados.
+  docker image prune -f >/dev/null 2>&1 || true
+  despues=$(disco_libre_mb)
+  echo "Limpieza de imagenes de $repo: $borradas etiquetas borradas; quedan la(s) en uso y $conservadas anterior(es). Disco libre en /: antes ${antes} MB, despues ${despues} MB."
+}
+
+# Para Alloy si hace falta su memoria para el modo sin corte; queda anotado para relanzarlo.
+ALLOY_PARADO=no
+reanudar_alloy() {
+  if [ "$ALLOY_PARADO" = si ] && ! corriendo "$ALLOY"; then
+    docker start "$ALLOY" >/dev/null 2>&1 && echo "Observabilidad: Alloy vuelve a correr."
   fi
-  echo "Memoria: ${hay} MB disponibles, hacen falta ${necesita}. Va sin corte." >&2
-  echo sin-corte
+  ALLOY_PARADO=no
+}
+trap reanudar_alloy EXIT
+
+# Deja en ELEGIDO "sin-corte" o "reemplazo". No corre en un $( ): tiene que poder parar Alloy y
+# dejarlo anotado. LA CONDICION NO SE BAJA (E-155): lo que hace, cuando falta poco, es liberar
+# memoria que no es de produccion y volver a medir.
+elegir_modo() {
+  ELEGIDO=reemplazo
+  if [ "$MODO" = reemplazo ]; then echo "Modo forzado: MODO=reemplazo."; return; fi
+  if ! corriendo "$CONTENEDOR"; then echo "No hay $CONTENEDOR corriendo: reemplazo."; return; fi
+  local hay necesita primera
+  necesita=$(( $(en_mb "$MEMORIA") + MARGEN_MB ))
+  hay=$(memoria_disponible_mb)
+  primera=$hay
+  if [ "$hay" -lt "$necesita" ]; then
+    # Paginas sucias a disco: lo que vale es lo que se pueda volver a medir.
+    sync
+    hay=$(memoria_disponible_mb)
+  fi
+  # Solo si lo que falta entra en el tope de Alloy: si no, pararlo no cambia la decision.
+  if [ "$hay" -lt "$necesita" ] && [ $(( necesita - hay )) -le "$(en_mb "$MEMORIA_ALLOY")" ] \
+      && corriendo "$ALLOY"; then
+    echo "Memoria: faltan $(( necesita - hay )) MB; se para $ALLOY (no es critico) mientras conviven las dos JVM."
+    docker stop -t 10 "$ALLOY" >/dev/null 2>&1 && ALLOY_PARADO=si
+    sleep 2
+    hay=$(memoria_disponible_mb)
+  fi
+  if [ "$hay" -ge "$necesita" ]; then ELEGIDO=sin-corte; fi
+  echo "Memoria: disponible ${hay} MB (primera medicion ${primera}), necesario ${necesita} MB (tope $(en_mb "$MEMORIA") + margen ${MARGEN_MB}), Alloy parado: ${ALLOY_PARADO}. Decision: ${ELEGIDO}."
+  if [ "$ELEGIDO" = reemplazo ]; then
+    echo "AVISO: no hay memoria para dos JVM a la vez (E-155). Va con corte."
+    # En reemplazo nunca conviven dos JVM: Alloy no tiene por que quedar parado.
+    reanudar_alloy
+  fi
 }
 
 desplegar_con_reemplazo() {
@@ -380,6 +456,11 @@ lanzar_alloy() {
 
 # ------------------------------------------------------------------------------------------------
 
+# E-498. Antes del pull: libera disco para la imagen nueva. Las imagenes no ocupan memoria (medido:
+# borrar 85 etiquetas no movio MemAvailable), asi que esto no cambia la decision del modo.
+log "Limpieza de imagenes viejas del backend"
+limpiar_imagenes_viejas || echo "AVISO: la limpieza de imagenes fallo; se sigue con el despliegue."
+
 if [ -n "$REGISTRO" ]; then
   log "1/5 Autenticando contra ECR"
   aws ecr get-login-password --region "$REGION" \
@@ -395,7 +476,7 @@ ANTERIOR=$(docker inspect --format '{{.Config.Image}}' "$CONTENEDOR" 2>/dev/null
 VOLVER=$(comando_para_volver)
 log "Imagen que estaba corriendo: $ANTERIOR"
 
-ELEGIDO=$(elegir_modo)
+elegir_modo
 log "3/5 Modo: $ELEGIDO"
 # NO se vuelve solo a la version anterior si el arranque falla (Flyway ya pudo haber migrado).
 # En el modo sin corte eso casi no importa: si el nuevo no arranca, el viejo nunca dejo de atender.
@@ -406,14 +487,18 @@ else
 fi
 
 lanzar_alloy || echo "AVISO: no se pudo lanzar Alloy (observabilidad). El despliegue igual quedo bien."
+# Si Alloy se paro para el cambio y lanzar_alloy no lo recreo (sin config o sin credenciales).
+reanudar_alloy
 
 log "5/5 Limpieza y estado final"
-# Borra solo imagenes colgadas (sin etiqueta). La anterior queda con su etiqueta de SHA.
-docker image prune -f >/dev/null 2>&1 || true
+# Ahora la imagen en uso es la nueva: quedan ella y las dos anteriores (la que corria hasta recien
+# y una mas), que son las que sirven para volver atras.
+limpiar_imagenes_viejas || true
 docker ps --format '{{.Names}}  {{.Image}}  {{.Status}}'
 LIBRE_KB=$(df -Pk / | awk 'NR==2 {print $4}')
 echo "Disco libre en /: $(( LIBRE_KB / 1024 )) MB"
-# El disco raiz son 8 GB y cada version de la imagen ocupa ~440 MB.
+# El disco raiz son 8 GB y cada version de la imagen ocupa ~450 MB; con tres versiones del backend
+# quedan ~3,8 GB libres (medido 2026-10-02). Menos de 3 GB ya no son imagenes del backend.
 if [ "$LIBRE_KB" -lt 3145728 ]; then
-  echo "AVISO: quedan menos de 3 GB libres. Borrar imagenes viejas de renaser-backend."
+  echo "AVISO: quedan menos de 3 GB libres y las imagenes viejas del backend ya se borraron. Revisar \`docker system df\`."
 fi

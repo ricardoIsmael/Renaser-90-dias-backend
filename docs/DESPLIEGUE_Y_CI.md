@@ -460,6 +460,18 @@ reemplazo**: dos JVM no entran, y forzarlo es repetir E-155 (siete horas caído)
 pasar la instancia a `t3.medium` (4 GB, +~US$15/mes, D-235), sin tocar código. Mientras tanto, conviene
 desplegar en horario de poco uso.
 
+> **Actualizado 2026-10-02 (E-498).** La instancia ya es `t3.medium` (3.835 MB) desde el 30-09, y el
+> párrafo de arriba quedó como historia. Con el backend, redis, nginx y Alloy andando quedan
+> **~2.060–2.280 MB disponibles**, apenas por encima de los 1.912 que pide la condición: el 02-10 a las
+> 12:23 faltaron 20 MB (1.892) y ese despliegue tuvo ~55 s de corte. Desde E-498, si la primera medición
+> no alcanza, el script hace `sync`, vuelve a medir y, **si lo que falta cabe en el tope de Alloy
+> (192 MB)**, para el contenedor `alloy` mientras conviven las dos JVM y lo relanza al final (también si
+> el despliegue falla, con un `trap`). La condición (tope 1.400 + margen 512) **no se bajó**: el pico
+> medido del backend en producción es 985–1.013 MB a los 2–4 min de arrancar (`memory.peak` del cgroup),
+> pero el tope de 1.400 es lo único que lo acota de verdad y E-155 costó siete horas. La salida del CD deja
+> una línea con los números: `Memoria: disponible … MB (primera medicion …), necesario 1912 MB (tope 1400 +
+> margen 512), Alloy parado: si|no. Decision: sin-corte|reemplazo.`
+
 Con el modo sin corte hay que tener presente:
 
 - **Migraciones compatibles hacia atrás.** La versión vieja sigue atendiendo ~50 s contra el esquema que
@@ -485,17 +497,23 @@ que si el arranque falló *después* de migrar, devolver el binario viejo lo dej
 más nuevo, que es peor que el problema original. Automatizar el retroceso exige antes decidir qué
 hacer con el esquema, y eso no está decidido.
 
-**3. El disco son 8 GB y cada versión de la imagen ocupa ~440 MB.** El script borra las imágenes
-colgadas (`docker image prune -f`), pero **no** las etiquetadas — justamente porque la anterior es
-la que sirve para volver atrás. Con ~5,2 GB libres eso da lugar para unas diez versiones antes de
-que el disco sea el problema, así que el script avisa en la salida cuando quedan menos de 3 GB.
-Limpiar a mano:
+**3. El disco son 8 GB y cada versión de la imagen ocupa ~450 MB. En el servidor quedan la versión
+del backend en uso y las dos anteriores, nada más (decisión del dueño, 2026-10-02, E-498).** El script
+lo aplica solo en cada despliegue, dos veces: antes del `docker pull` (libera disco para la imagen nueva)
+y en el paso 5 (cuando la nueva ya es la que está en uso). Conserva las imágenes de `renaser-backend` que
+use **cualquier** contenedor (en marcha o parado), la que se va a desplegar y las dos más nuevas del
+resto por fecha de creación; borra las demás etiquetas con `docker rmi` sin `-f` y después solo las capas
+colgadas (`docker image prune -f`, sin `-a`). No toca otros repositorios (redis, nginx, Alloy, ni
+`postgres:16-alpine` / `httpd:alpine`, que están en la instancia sin uso pero no son del backend),
+volúmenes ni contenedores. Deja en la salida `Limpieza de imagenes de …: N etiquetas borradas …
+Disco libre en /: antes … MB, despues … MB.` Con tres versiones quedan ~3,8 GB libres; el aviso de
+menos de 3 GB ahora quiere decir que el disco lo ocupa otra cosa (`docker system df`).
 
-```bash
-aws ssm send-command --profile renaser --region us-east-1 \
-  --instance-ids i-0ea00f555c5fe8028 --document-name AWS-RunShellScript \
-  --parameters 'commands=["docker images renaser-backend --format {{.ID}} | tail -n +3 | xargs -r docker rmi"]'
-```
+> **Corregido 2026-10-02 (E-498).** Este punto decía que el script **no** borraba las imágenes
+> etiquetadas y que había que limpiarlas a mano (con un `tail -n +3` sobre `docker images`). Nadie lo
+> hizo: el 02-10 había 85 etiquetas de `renaser-backend` acumuladas y solo 1,8 GB libres. Las borró a mano
+> el coordinador por SSM (quedaron `d55f84d8`, `cde92c44` y `153820e9`; 3,8 GB libres) y desde entonces
+> lo hace el script.
 
 #### El health check depende de que `/actuator/health` siga siendo público
 

@@ -13398,3 +13398,33 @@ El `verify` local de la misma rama había pasado (5901 + 256); en el CI falló 1
 **Solución:** el helper `conversacion` reusa la `GLOBAL` existente y solo la crea si no hay ninguna.
 
 **Para que no vuelva:** en un IT, nada que el esquema declare único globalmente (la comunidad, configuraciones de una sola fila) se siembra sin mirar antes si ya existe. Un `verify` local en verde no garantiza el orden del CI.
+
+## E-498 · El despliegue de `d55f84d8` eligió el modo con corte por 20 MB: «AVISO: 1892 MB disponibles y hacen falta 1912 para dos JVM a la vez (E-155). Va con corte.» (infraestructura, RESUELTO en el script, 02/10)
+
+**Síntoma (literal, salida del CD, 2026-10-02 12:23 Lima):**
+```
+== 3/5 Modo: reemplazo ==
+Disco libre en /: 1773 MB
+AVISO: 1892 MB disponibles y hacen falta 1912 para dos JVM a la vez (E-155). Va con corte.
+```
+La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → total 3835, used 1436, available 2165; `docker stats`: backend 985 MiB / 1.367 GiB, alloy 48/192 MiB, proxy 3,5/64, redis 7 MiB. Disco libre en `/`: **1.773 MB**.
+
+**Causa real.** Dos cosas distintas que se vieron juntas:
+
+1. **Memoria justa, no faltante.** En la t3.medium, con backend + redis + nginx + Alloy andando, `MemAvailable` vale **2.062–2.280 MB** (los seis despliegues sin corte del 30-09 al 01-10, leídos del historial de SSM: 2.280, 2.062, 2.129, 2.223, 2.107, 2.144) contra los **1.912** que pide la condición de D-235 (tope 1.400 + margen 512). La holgura es de 150–370 MB y fluctúa con la caché; ese día tocó 1.892. Alloy (D-237, 01-10) se sumó a la instancia con ~48 MB después de fijarse la condición.
+2. **Disco lleno de imágenes viejas.** El script solo borraba capas colgadas; las etiquetadas quedaban «para volver atrás» y nadie las limpió a mano (lo pedía §5.3 punto 3). Había **85 etiquetas** de `renaser-backend` (~2,9 GB reclamables según `docker system df`, 77 imágenes). **No afectaba la memoria:** el coordinador las borró a mano (ver abajo) y `MemAvailable` pasó de 2.178 a 2.156 MB, es decir, nada (ruido).
+
+**Lo que se midió antes de decidir el margen.** `memory.peak` del cgroup del backend nuevo: **1.013 MB** a los 4 min del arranque (985 MiB a los 2 min); es el pico desde que nació, arranque incluido. Sin ningún `oom`/`killed process` en `journalctl -k` desde el paso a t3.medium. `Dirty` en `/proc/meminfo`: 2,3 MB (o sea, `sync` casi no libera nada). Conclusión: el margen es conservador en ~390 MB (pico 1.013 contra tope 1.400), pero el tope es lo único que acota de verdad a la JVM bajo carga y E-155 costó siete horas, así que **no se bajó**.
+
+**Solución (`scripts/despliegue/desplegar-backend.sh`):**
+
+- **Memoria:** si la primera medición no alcanza, `sync` y otra medición; si todavía falta y **lo que falta cabe en el tope de Alloy (192 MB)**, se para `alloy` (`docker stop -t 10`) y se vuelve a medir. Alloy se relanza al final (lo recrea `lanzar_alloy`; si no hay config o credenciales, `docker start`) y también si el despliegue falla a mitad (`trap … EXIT`). Si falta más que eso, va el reemplazo sin tocar Alloy. Con los números de ese día (1.892 + ~48 de Alloy ≥ 1.912) habría ido sin corte. Se descartó bajar `MARGEN_MB` (sin evidencia suficiente; una sola medición de pico) y `echo 3 > drop_caches` (`MemAvailable` ya cuenta la caché que se puede soltar; no gana nada y enfría el disco).
+- **Línea clara en la salida:** `Memoria: disponible … MB (primera medicion …), necesario 1912 MB (tope 1400 + margen 512), Alloy parado: si|no. Decision: sin-corte|reemplazo.` (antes iba a stderr y sin la decisión en la misma línea).
+- **Imágenes (decisión del dueño, 2026-10-02): en el servidor queda la versión del backend en uso y las dos anteriores, nada más.** `limpiar_imagenes_viejas` corre antes del `docker pull` y otra vez en el paso 5. Conserva las imágenes que use cualquier contenedor (en marcha o parado), IMAGEN y las dos más nuevas del resto por fecha de creación; `docker rmi` por etiqueta, **sin `-f`**; luego `docker image prune -f` (solo colgadas, sin `-a`). No toca otros repositorios, volúmenes ni contenedores. Deja `Limpieza de imagenes de …: N etiquetas borradas … Disco libre en /: antes … MB, despues … MB.`
+- **Limpieza manual del mismo día (coordinador, por SSM, 12:28):** se borraron 85 etiquetas viejas de `renaser-backend` (incluida `:latest` del 06-09) y quedaron `d55f84d8` (en uso), `cde92c44` y `153820e9`; disco libre de 1,8 GB a **3,8 GB**; contenedores intactos. Quedan en la instancia `postgres:16-alpine` y `httpd:alpine`, sin uso: no se borraron porque no son del backend, y la limpieza del script tampoco los toca.
+
+**Cómo se probó (local, Docker 29, `sh` como en SSM, igual que E-465):** backend falso en Python que tarda 8 s en dar UP, sondeo cada 0,2 s contra el puerto publicado. Sin corte con proxy: **0 fallidas** (104/104). Memoria justa con un «Alloy» falso que ocupa 700 MB y el margen ajustado para que falten ~450 MB: lo para, va **sin corte con 0 fallidas** (163/163) y Alloy vuelve a correr. Imagen rota con Alloy parado: el viejo sigue atendiendo (0 fallidas), salida 1, y el `trap` relanza Alloy. Margen imposible: no para Alloy, va con reemplazo. Limpieza: con seis imágenes (una con dos etiquetas) borró 4 etiquetas y dejó la desplegada y las dos más nuevas; en cada despliegue siguiente quedaron exactamente en uso + 2 (la que corría hasta recién siempre entre ellas), y nunca se tocó una imagen en uso. `bash -n` limpio; `actionlint` no está instalado en la laptop (no se tocó `cd.yml`). Sin `mvnw verify`: el cambio es solo script y documentación.
+
+**Qué queda sin verificar:** no corrió en la instancia real (se verá en el próximo despliegue: buscar la línea `Memoria:` y la de `Limpieza de imagenes`).
+
+**Para que no vuelva:** la condición de memoria sigue siendo la de E-155 y no se negocia; si la holgura sigue rozando, el siguiente paso con datos es medir `memory.peak` del contenedor nuevo durante un despliegue sin corte y recién ahí discutir el margen, o agrandar la instancia. Toda pieza nueva que se sume a la instancia (como Alloy) se resta de esa holgura: mirarla antes de agregarla.
