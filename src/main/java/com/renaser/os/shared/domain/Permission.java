@@ -112,6 +112,18 @@ public enum Permission {
      */
     MANAGE_WELCOME,
 
+    /**
+     * Ver la lista paginada de TODOS los chats de soporte, con búsqueda por el nombre o el correo del
+     * aprendiz (D-249, sección «Soporte» de Tribu). Guard: {@code SoportesPaginadosService} -> "Solo
+     * Administración y Alquimista ven todos los chats de soporte" / "La cuenta esta suspendida".
+     *
+     * <p>Roles que lo satisfacen: ADMIN y ALCHEMIST activos (los que están en todos los soportes, D-136). Como
+     * MENTOR, ADMIN y ALCHEMIST todavía no tienen matriz (A-1), el 403 de un MENTOR y el de una cuenta
+     * suspendida los da el servicio; el de TRAINEE, el interceptor; el de MENTOR_LEAD, el servicio mientras su
+     * cumplimiento siga en modo sombra.
+     */
+    VIEW_ALL_SUPPORT_CHATS,
+
     // ---------------------------------------------------------------------------------
     // onboarding: Caja Renaser
     // ---------------------------------------------------------------------------------

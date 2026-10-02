@@ -48,4 +48,10 @@ public interface LoadConversacionPort {
 
     /** Todas las conversaciones donde {@code usuarioId} es participante. */
     List<Conversacion> misConversaciones(UserId usuarioId);
+
+    /**
+     * Estas conversaciones, EN UNA consulta y sin orden garantizado (D-249: la página de soportes ya
+     * trae su orden y solo necesita los agregados). Un id inexistente no figura.
+     */
+    List<Conversacion> porIds(Collection<ConversacionId> ids);
 }

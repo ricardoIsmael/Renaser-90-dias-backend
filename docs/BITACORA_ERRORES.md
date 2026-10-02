@@ -13428,3 +13428,14 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 **Qué queda sin verificar:** no corrió en la instancia real (se verá en el próximo despliegue: buscar la línea `Memoria:` y la de `Limpieza de imagenes`).
 
 **Para que no vuelva:** la condición de memoria sigue siendo la de E-155 y no se negocia; si la holgura sigue rozando, el siguiente paso con datos es medir `memory.peak` del contenedor nuevo durante un despliegue sin corte y recién ahí discutir el margen, o agrandar la instancia. Toda pieza nueva que se sume a la instancia (como Alloy) se resta de esa holgura: mirarla antes de agregarla.
+
+## E-501 · «Exit code 144» al apagar el entorno e2e: `pkill -f "<patrón>"` mató al propio shell que lo corría (entorno, RESUELTO, 02/10)
+
+**Síntoma (literal, herramienta Bash del agente):** `Exit code 144`, sin más salida; los comandos que seguían en la misma línea (`npx expo start …`, `DROP DATABASE …`) no corrieron. Pasó dos veces en D-249: con `pkill -f "expo start --port 809[9]"` y con `pkill -f "proxy_lento.py"`.
+
+**Causa:** `pkill -f` compara contra la línea de comandos COMPLETA de cada proceso, y la del `bash -c` que corre el comando contiene el patrón literal. El truco del corchete (`809[9]`) protege solo si el texto del patrón no aparece tal cual en otra parte del mismo comando; acá aparecía (en `npx expo start --port 8099` y en el nombre del script), así que `pkill` se mató a sí mismo con SIGTERM (128 + 15 = 143/144).
+
+**Solución:** apagar por PID: `ps -eo pid,args | grep -E 'patr[o]n'`, mirar la lista y `kill <pid>`; es además lo que pide la regla de apagar «lo tuyo por PID».
+
+**Para que no vuelva:** no mezclar `pkill -f` con otros comandos que repitan el patrón en la misma invocación; preferir siempre `kill` con los PID anotados al levantar cada proceso (los scripts `levantar-*.sh` imprimen `PID`).
+

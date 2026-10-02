@@ -66,6 +66,15 @@ class ConversacionPersistenceAdapter implements LoadConversacionPort, SaveConver
     }
 
     @Override
+    public List<Conversacion> porIds(Collection<ConversacionId> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return repository.findByIdIn(ids.stream().map(ConversacionId::value).distinct().toList()).stream()
+                .map(mapper::toDomain).toList();
+    }
+
+    @Override
     public List<Conversacion> misConversaciones(UserId usuarioId) {
         List<UUID> ids = participanteRepository.conversacionIdsDeUsuario(usuarioId.value());
         if (ids.isEmpty()) {

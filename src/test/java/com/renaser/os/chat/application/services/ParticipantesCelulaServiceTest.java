@@ -99,6 +99,11 @@ class ParticipantesCelulaServiceTest {
             }
 
             @Override
+            public List<Conversacion> porIds(java.util.Collection<ConversacionId> ids) {
+                return List.of();
+            }
+
+            @Override
             public List<Conversacion> misConversaciones(UserId usuarioId) {
                 return List.of();
             }
