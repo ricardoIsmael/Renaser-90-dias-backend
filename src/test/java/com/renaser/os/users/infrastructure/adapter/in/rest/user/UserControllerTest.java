@@ -5,22 +5,17 @@ import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
-import com.renaser.os.users.application.ports.in.user.CancelAccountDeletionUseCase;
 import com.renaser.os.users.application.ports.in.user.ConfirmarAvatarUseCase;
 import com.renaser.os.users.application.ports.in.user.ConfirmarAvatarUseCase.ConfirmarAvatarCommand;
-import com.renaser.os.users.application.ports.in.user.GetAccountDeletionStatusUseCase;
 import com.renaser.os.users.application.ports.in.user.GetMyFullProfileUseCase;
 import com.renaser.os.users.application.ports.in.user.GetMyFullProfileUseCase.MyProfile;
 import com.renaser.os.users.application.ports.in.user.GetMyFullProfileUseCase.TraineeProfileSummary;
 import com.renaser.os.users.application.ports.in.user.InviteAndCreateUserUseCase;
-import com.renaser.os.users.application.ports.in.user.RequestAccountDeletionUseCase;
-import com.renaser.os.users.application.ports.in.user.RequestAccountDeletionUseCase.RequestAccountDeletionCommand;
 import com.renaser.os.users.application.ports.in.user.SolicitarUrlAvatarUseCase;
 import com.renaser.os.users.application.ports.in.user.SolicitarUrlAvatarUseCase.SolicitarUrlAvatarCommand;
 import com.renaser.os.users.application.ports.in.user.SolicitarUrlAvatarUseCase.UrlAvatar;
 import com.renaser.os.users.application.ports.in.user.UpdateMyProfileUseCase;
 import com.renaser.os.users.application.ports.in.user.UpdateUserRoleUseCase;
-import com.renaser.os.users.domain.model.user.EstadoBajaCuenta;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
 import org.junit.jupiter.api.Test;
@@ -65,12 +60,6 @@ class UserControllerTest {
     private SolicitarUrlAvatarUseCase solicitarUrlAvatarUseCase;
     @MockitoBean
     private ConfirmarAvatarUseCase confirmarAvatarUseCase;
-    @MockitoBean
-    private RequestAccountDeletionUseCase requestAccountDeletionUseCase;
-    @MockitoBean
-    private CancelAccountDeletionUseCase cancelAccountDeletionUseCase;
-    @MockitoBean
-    private GetAccountDeletionStatusUseCase getAccountDeletionStatusUseCase;
 
     private static User activo(UserId id) {
         return User.rehydrate(id, new Email("test" + id.value() + "@renaser.dev"), UserRole.TRAINEE,
@@ -142,68 +131,5 @@ class UserControllerTest {
 
         org.mockito.Mockito.verify(confirmarAvatarUseCase).confirmar(
                 new ConfirmarAvatarCommand(actorId, "renaser-files", "avatares/" + actorId));
-    }
-
-    // ─── gap #5: baja de cuenta ─────────────────────────────────────────────
-
-    @Test
-    void estadoBajaCuentaDevuelveSinSolicitud() throws Exception {
-        UserId actorId = UserId.of(UUID.randomUUID());
-        when(getAccountDeletionStatusUseCase.status(actorId)).thenReturn(EstadoBajaCuenta.sinSolicitud(14));
-
-        mockMvc.perform(get("/api/v1/users/me/account-deletion").header("X-Actor-Id", actorId.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.bajaPendiente").value(false))
-                .andExpect(jsonPath("$.diasDeGracia").value(14));
-    }
-
-    @Test
-    void solicitarBajaCuentaConConfirmacionCorrectaDevuelveElEstado() throws Exception {
-        UserId actorId = UserId.of(UUID.randomUUID());
-        when(requestAccountDeletionUseCase.request(new RequestAccountDeletionCommand(actorId, "ELIMINAR")))
-                .thenReturn(EstadoBajaCuenta.de(CLOCK.now(), CLOCK.now(), 14));
-
-        mockMvc.perform(post("/api/v1/users/me/account-deletion")
-                        .header("X-Actor-Id", actorId.toString())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmacion\":\"ELIMINAR\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.bajaPendiente").value(true))
-                .andExpect(jsonPath("$.diasRestantes").value(14));
-    }
-
-    @Test
-    void solicitarBajaCuentaConConfirmacionIncorrectaDevuelve400() throws Exception {
-        UserId actorId = UserId.of(UUID.randomUUID());
-        when(requestAccountDeletionUseCase.request(any()))
-                .thenThrow(new IllegalArgumentException("CONFIRMATION_REQUIRED"));
-
-        mockMvc.perform(post("/api/v1/users/me/account-deletion")
-                        .header("X-Actor-Id", actorId.toString())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmacion\":\"borrar\"}"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void solicitarBajaCuentaComoSuspendidoDevuelve403() throws Exception {
-        UserId actorId = UserId.of(UUID.randomUUID());
-        when(requestAccountDeletionUseCase.request(any())).thenThrow(new NotAuthorizedException("Cuenta suspendida"));
-
-        mockMvc.perform(post("/api/v1/users/me/account-deletion")
-                        .header("X-Actor-Id", actorId.toString())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmacion\":\"ELIMINAR\"}"))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
-    void cancelarBajaCuentaDevuelveElEstadoSinSolicitud() throws Exception {
-        UserId actorId = UserId.of(UUID.randomUUID());
-        when(cancelAccountDeletionUseCase.cancel(actorId)).thenReturn(EstadoBajaCuenta.sinSolicitud(14));
-
-        mockMvc.perform(delete("/api/v1/users/me/account-deletion").header("X-Actor-Id", actorId.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.bajaPendiente").value(false));
     }
 }

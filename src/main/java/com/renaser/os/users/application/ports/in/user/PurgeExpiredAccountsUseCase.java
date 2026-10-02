@@ -1,10 +1,9 @@
 package com.renaser.os.users.application.ports.in.user;
 
 /**
- * El cron diario que purga (hard delete) las cuentas cuyo plazo de gracia vencio. No es un
- * detalle de infraestructura: es la mitad que hace real el cumplimiento GDPR/Google
- * Play/Apple - sin esta purga, {@link RequestAccountDeletionUseCase} solo marcaria una
- * fecha sin que nada pase nunca.
+ * El barrido que borra para siempre las cuentas cerradas cuya gracia vencio (D-243: corre cada hora,
+ * paginado, una cuenta a la vez). No es un detalle de infraestructura: es la mitad que hace real el
+ * borrado que exigen Google Play y Apple — sin esta purga, cerrar la cuenta solo marcaria una fecha.
  */
 public interface PurgeExpiredAccountsUseCase {
 

@@ -176,7 +176,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                    COALESCE(pp.timezone, 'America/Lima') AS timezone,
                    pp.programa_activado_en,
                    COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa,
-                   u.rol
+                   u.rol, u.baja_solicitada_en
             """ + FILTRO_PADRON + """
             ORDER BY u.creado_en DESC, u.id
             LIMIT ?3 OFFSET ?4
@@ -339,7 +339,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
         return new ResumenTraineeAdmin(id, fullName, email,
                 suspendido ? UserStatus.SUSPENDED : UserStatus.ACTIVE,
                 diaPrograma, FasePrograma.paraDiaPrograma(diaPrograma), celulaId, mentorId,
-                mapearRol(String.valueOf(fila[11])));
+                mapearRol(String.valueOf(fila[11])), aInstante(fila[12]), null);
     }
 
     /**
@@ -412,6 +412,23 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             return sqlDate.toLocalDate();
         }
         return LocalDate.parse(String.valueOf(valor));
+    }
+
+    /** {@code timestamptz} nativo: segun la ruta de pgjdbc llega como Instant, OffsetDateTime o Timestamp. */
+    private static java.time.Instant aInstante(Object valor) {
+        if (valor == null) {
+            return null;
+        }
+        if (valor instanceof java.time.Instant instante) {
+            return instante;
+        }
+        if (valor instanceof java.time.OffsetDateTime conZona) {
+            return conZona.toInstant();
+        }
+        if (valor instanceof java.sql.Timestamp timestamp) {
+            return timestamp.toInstant();
+        }
+        return java.time.OffsetDateTime.parse(String.valueOf(valor)).toInstant();
     }
 
     private static UUID aUuid(Object valor) {

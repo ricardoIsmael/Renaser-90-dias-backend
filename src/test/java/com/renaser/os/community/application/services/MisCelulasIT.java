@@ -6,6 +6,7 @@ import com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelul
 import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase.AsignarMentorCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.ConsultarMiCelulaUseCase;
+import com.renaser.os.community.application.ports.in.celula.ConsultarMiCelulaUseCase.MiCelula;
 import com.renaser.os.community.application.ports.in.celula.ConsultarMisCelulasUseCase;
 import com.renaser.os.community.application.ports.in.celula.SumarAprendizAGrupoUseCase;
 import com.renaser.os.community.application.ports.in.celula.SumarAprendizAGrupoUseCase.SumarAprendizAGrupoCommand;
@@ -192,6 +193,29 @@ class MisCelulasIT {
                 .containsExactly(CelulaId.of(grupo));
         assertThat(misCelulas.integrantesDe(mentor, CelulaId.of(grupo)))
                 .extracting(i -> i.perfil().id()).containsExactly(aprendiz);
+    }
+
+    @Test
+    @DisplayName("D-243: quien cerró su cuenta para eliminarla no aparece ni cuenta en el grupo; un suspendido a secas sí")
+    void laCuentaCerradaNoApareceNiCuenta() {
+        UUID grupo = nuevoGrupo("Con una baja");
+        UserId aprendiz = nuevoAprendizInscrito("Protagonista");
+        UserId cerrada = nuevoAprendizInscrito("Se fue");
+        UserId suspendida = nuevoAprendizInscrito("Suspendida");
+        for (UserId id : List.of(aprendiz, cerrada, suspendida)) {
+            trasladar.asignar(new AsignarAprendizCelulaCommand(admin, CelulaId.of(grupo), id));
+        }
+        jdbcTemplate.update("UPDATE renaser.usuarios SET estado = 'SUSPENDIDO', baja_solicitada_en = now() WHERE id = ?",
+                cerrada.value());
+        jdbcTemplate.update("UPDATE renaser.usuarios SET estado = 'SUSPENDIDO' WHERE id = ?", suspendida.value());
+
+        assertThat(misCelulas.integrantesDe(aprendiz, CelulaId.of(grupo))).extracting(i -> i.perfil().id())
+                .containsExactlyInAnyOrder(aprendiz, suspendida);
+        assertThat(misCelulas.misCelulas(aprendiz)).singleElement()
+                .extracting(MiCelula::cantidadMiembros).isEqualTo(2);
+        assertThat(miCelula.misCompaneros(aprendiz)).extracting(p -> p.id())
+                .containsExactlyInAnyOrder(aprendiz, suspendida);
+        assertThat(miCelula.miCelula(aprendiz)).get().extracting(MiCelula::cantidadMiembros).isEqualTo(2);
     }
 
     // ── Semilla ─────────────────────────────────────────────────────────────

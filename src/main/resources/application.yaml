@@ -611,7 +611,7 @@ renaser:
       habilitado: ${ONBOARDING_V90_HABILITADO:false}
   users:
     account-deletion:
-      grace-period-days: ${ACCOUNT_DELETION_GRACE_DAYS:14}
+      grace-period-days: ${ACCOUNT_DELETION_GRACE_DAYS:30}
 
 # ---------------------------------------------------------------------------------------------
 # Auditoria NFR 2026-09-06 (2a pasada). El backend vive DETRAS de CloudFront, asi que

@@ -143,10 +143,12 @@ class UserTest {
         assertThat(user.department()).isEqualTo("Operaciones");
     }
 
-    // ─── baja de cuenta autogestionada (gap #5) ────────────────────────────
+    // ─── eliminar la cuenta (D-243): cierre inmediato y recuperacion por un Admin ──────────────
+
+    private static final FixedClock CIERRE = FixedClock.at(Instant.parse("2026-10-02T15:00:00Z"));
 
     @Test
-    @DisplayName("un usuario nuevo no tiene baja pendiente")
+    @DisplayName("un usuario nuevo no tiene la cuenta cerrada")
     void newUserHasNoBajaPendiente() {
         User user = trainee();
 
@@ -155,50 +157,69 @@ class UserTest {
     }
 
     @Test
-    @DisplayName("solicitarBaja marca el instante y bajaPendiente pasa a true")
-    void solicitarBajaMarcaElInstante() {
+    @DisplayName("cerrar la cuenta la deja sin acceso en el acto y marca el instante")
+    void cerrarParaEliminarCortaElAccesoYMarcaElInstante() {
         User user = trainee();
-        FixedClock clock = FixedClock.at(Instant.parse("2026-08-26T10:00:00Z"));
 
-        user.solicitarBaja(clock);
+        user.cerrarParaEliminar(CIERRE);
 
         assertThat(user.bajaPendiente()).isTrue();
-        assertThat(user.bajaSolicitadaEn()).isEqualTo(clock.now());
+        assertThat(user.bajaSolicitadaEn()).isEqualTo(CIERRE.now());
+        assertThat(user.status()).isEqualTo(UserStatus.SUSPENDED);
+        assertThat(user.hasAccess()).isFalse();
     }
 
     @Test
-    @DisplayName("solicitarBaja es idempotente: repetirla NO reinicia el contador")
-    void solicitarBajaEsIdempotente() {
+    @DisplayName("cerrar dos veces NO reinicia el plazo")
+    void cerrarParaEliminarEsIdempotente() {
         User user = trainee();
-        FixedClock primero = FixedClock.at(Instant.parse("2026-08-26T10:00:00Z"));
-        FixedClock segundo = FixedClock.at(Instant.parse("2026-08-27T10:00:00Z"));
+        user.cerrarParaEliminar(CIERRE);
 
-        user.solicitarBaja(primero);
-        user.solicitarBaja(segundo);
+        user.cerrarParaEliminar(FixedClock.at(Instant.parse("2026-10-20T15:00:00Z")));
 
-        assertThat(user.bajaSolicitadaEn()).isEqualTo(primero.now());
+        assertThat(user.bajaSolicitadaEn()).isEqualTo(CIERRE.now());
     }
 
     @Test
-    @DisplayName("cancelarBaja deshace la solicitud sin dejar rastro")
-    void cancelarBajaDeshaceLaSolicitud() {
-        User user = trainee();
-        user.solicitarBaja(FixedClock.at(Instant.parse("2026-08-26T10:00:00Z")));
+    @DisplayName("una cuenta pendiente de aprobacion se cierra sin volverse SUSPENDED")
+    void cerrarUnaPendienteDeAprobacionConservaSuEstado() {
+        User user = User.registrarPendienteAprobacion(UserId.of(UUID.randomUUID()), new Email("p@renaser.com"), "Pendiente");
 
-        user.cancelarBaja();
+        user.cerrarParaEliminar(CIERRE);
+
+        assertThat(user.bajaPendiente()).isTrue();
+        assertThat(user.status()).isEqualTo(UserStatus.INACTIVE);
+    }
+
+    @Test
+    @DisplayName("recuperar devuelve el acceso y borra la fecha de cierre")
+    void recuperarDevuelveElAcceso() {
+        User user = trainee();
+        user.cerrarParaEliminar(CIERRE);
+
+        user.recuperarDeEliminacion();
 
         assertThat(user.bajaPendiente()).isFalse();
-        assertThat(user.bajaSolicitadaEn()).isNull();
+        assertThat(user.status()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(user.hasAccess()).isTrue();
     }
 
     @Test
-    @DisplayName("bajaSolicitadaEn NO corta hasAccess(): la gracia deja arrepentirse")
-    void bajaSolicitadaNoCortaElAcceso() {
+    @DisplayName("recuperar una cuenta que no esta cerrada es un conflicto")
+    void recuperarSinCierreFalla() {
         User user = trainee();
 
-        user.solicitarBaja(FixedClock.at(Instant.parse("2026-08-26T10:00:00Z")));
+        assertThatThrownBy(user::recuperarDeEliminacion).isInstanceOf(IllegalStateException.class);
+    }
 
-        assertThat(user.hasAccess()).isTrue();
+    @Test
+    @DisplayName("reactivar una cuenta cerrada se rechaza: dejaria una cuenta activa con borrado programado")
+    void reactivarUnaCuentaCerradaSeRechaza() {
+        User user = trainee();
+        user.cerrarParaEliminar(CIERRE);
+
+        assertThatThrownBy(user::reactivate).isInstanceOf(IllegalStateException.class);
+        assertThat(user.bajaPendiente()).isTrue();
     }
 
     // ─── E-57: el avatar guarda una URL PERMANENTE, jamas una prefirmada ─────

@@ -91,15 +91,6 @@ class AccountRequestPersistenceAdapter implements LoadAccountRequestPort, SaveAc
         return true;
     }
 
-    /** Sin {@code existsById} previo, a diferencia de {@link #deleteById}: la consulta derivada
-     * de Spring Data ya es idempotente -- si no hay fila para ese usuario, no borra nada y no
-     * lanza (el {@code EmptyResultDataAccessException} lo tira {@code deleteById(id)}, que es
-     * otro metodo). */
-    @Override
-    public void borrarPorUsuario(UserId usuarioId) {
-        repository.deleteByUsuarioId(usuarioId.value());
-    }
-
     @Override
     public AccountRequest save(AccountRequest accountRequest) {
         var saved = repository.save(mapper.toEntity(accountRequest));

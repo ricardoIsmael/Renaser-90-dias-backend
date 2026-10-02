@@ -1,5 +1,7 @@
 package com.renaser.os.users.application.services;
 
+import com.renaser.os.users.domain.model.user.PlazoDeGracia;
+
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -81,6 +83,9 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     private final IdGenerator idGenerator;
     private final Clock clock;
 
+    /** Para decirle al panel cuando se borra una cuenta cerrada (D-243). */
+    private final PlazoDeGracia plazoDeGracia;
+
     public ParticipacionProgramaService(RequireActiveUserGuard requireActiveUserGuard,
                                          LoadParticipacionProgramaPort loadParticipacionProgramaPort,
                                          SaveParticipacionProgramaPort saveParticipacionProgramaPort,
@@ -90,7 +95,8 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
                                          RequireAdminGuard requireAdminGuard,
                                          SaveAjusteDiaProgramaPort saveAjusteDiaProgramaPort,
                                          LoadUltimoAjusteDiaProgramaPort loadUltimoAjusteDiaProgramaPort,
-                                         IdGenerator idGenerator, Clock clock) {
+                                         IdGenerator idGenerator, Clock clock, PlazoDeGracia plazoDeGracia) {
+        this.plazoDeGracia = plazoDeGracia;
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.loadParticipacionProgramaPort = loadParticipacionProgramaPort;
         this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
@@ -234,7 +240,9 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     public PaginaTrainees listar(ListTraineesCommand command) {
         requireAdminGuard.requireAdminActivo(command.actorId());
         var contenido = consultarResumenParticipacionPort.listarAprendices(command.page() * command.size(),
-                command.size(), command.busqueda(), command.soloSinGrupo());
+                        command.size(), command.busqueda(), command.soloSinGrupo()).stream()
+                .map(resumen -> resumen.conBorradoProgramado(plazoDeGracia))
+                .toList();
         // El total se cuenta CON los mismos filtros: si contara el padron entero, la pantalla
         // diria "1 de 340" y el paginador ofreceria paginas que no existen.
         long total = consultarResumenParticipacionPort.contarAprendices(command.busqueda(), command.soloSinGrupo());
@@ -253,7 +261,8 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
         var participacion = consultarResumenParticipacionPort.resumenDe(command.traineeId())
                 .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + command.traineeId()));
         return new TraineeDetail(trainee, participacion,
-                loadUltimoAjusteDiaProgramaPort.ultimoDe(command.traineeId()).orElse(null));
+                loadUltimoAjusteDiaProgramaPort.ultimoDe(command.traineeId()).orElse(null),
+                plazoDeGracia.seBorraEl(trainee.bajaSolicitadaEn()));
     }
 
     /** Mismo orden que {@link #obtener}: recurso primero, gate de admin despues (E-42). */

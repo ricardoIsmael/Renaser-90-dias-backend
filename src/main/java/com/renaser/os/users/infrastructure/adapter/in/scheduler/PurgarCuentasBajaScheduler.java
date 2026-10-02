@@ -8,13 +8,16 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Cron diario de baja de cuenta (gap #5): purga (hard delete) las cuentas cuyo plazo de
- * gracia vencio. {@code @EnableScheduling} ya esta declarado globalmente por `points`
- * (D-P4, `PointsSchedulingConfig`) — no hace falta repetirlo aca (mismo criterio que
- * `notifications.PurgaNotificacionesScheduler`/`rocks.VerdugoIgnoradoScheduler`).
+ * Barrido que borra para siempre las cuentas cerradas cuya gracia (30 dias) vencio (D-243).
+ * {@code @EnableScheduling} ya esta declarado globalmente por `points` (D-P4).
  *
- * <p>Horario elegido (04:15 UTC) para no coincidir con `notifications.PurgaNotificacionesScheduler`
- * (04:30) ni con ningun otro cron nocturno ya declarado en el modulo `users`.
+ * <p><b>Cada hora</b> (minuto 30, libre entre los barridos horarios) y no una vez al dia: la gracia se
+ * cuenta en instantes desde el cierre, asi que la cuenta se borra dentro de la hora en que vence, y
+ * una corrida perdida la recupera la siguiente sin acumular nada (regla 02, derivar y no incrementar).
+ *
+ * <blockquote><b>Corregido 2026-10-02 (D-243).</b> Corria una vez al dia a las 04:15 UTC con una gracia
+ * de 14 dias en la que la persona conservaba el acceso. El dueño decidio 30 dias con la cuenta
+ * cerrada desde el primer momento.</blockquote>
  */
 @Component
 public class PurgarCuentasBajaScheduler {
@@ -27,15 +30,16 @@ public class PurgarCuentasBajaScheduler {
         this.purgeExpiredAccountsUseCase = purgeExpiredAccountsUseCase;
     }
 
-    @Scheduled(cron = "0 15 4 * * *", zone = "UTC")
-    /* Sin cerrojo, dos instancias corren el mismo barrido a la vez. `C-5` lo exige
-       para todo @Scheduled que mute estado compartido, y este quedo afuera. */
+    @Scheduled(cron = "${renaser.scheduling.cuentas-cerradas.cron:0 30 * * * *}", zone = "UTC")
+    /* Sin cerrojo, dos instancias borrarian la misma cuenta a la vez (C-5). */
     @SchedulerLock(name = "users-purgar-cuentas-baja",
             lockAtMostFor = "${renaser.scheduling.shedlock.users-purgar-cuentas-baja.lock-at-most-for:PT15M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.users-purgar-cuentas-baja.lock-at-least-for:PT30S}")
     public void purgarVencidas() {
         var resultado = purgeExpiredAccountsUseCase.purgeExpired();
-        log.info("[users.PurgarCuentasBajaScheduler] purgadas {} cuenta(s), {} fallida(s)",
-                resultado.purgadas(), resultado.fallidas());
+        if (resultado.purgadas() > 0 || resultado.fallidas() > 0) {
+            log.info("[users.PurgarCuentasBajaScheduler] borradas {} cuenta(s), {} fallida(s)",
+                    resultado.purgadas(), resultado.fallidas());
+        }
     }
 }

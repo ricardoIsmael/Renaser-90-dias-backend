@@ -63,6 +63,19 @@ public interface ListTraineesUseCase {
      *            mover los parametros que ya usaba el adaptador.
      */
     record ResumenTraineeAdmin(UserId id, String fullName, String email, UserStatus status, int diaPrograma,
-                                FasePrograma fase, UUID celulaId, UserId mentorId, UserRole rol) {
+                                FasePrograma fase, UUID celulaId, UserId mentorId, UserRole rol,
+                                java.time.Instant cerradaEn, java.time.Instant seBorraEl) {
+
+        /** Sin cierre (firma anterior a D-243). */
+        public ResumenTraineeAdmin(UserId id, String fullName, String email, UserStatus status, int diaPrograma,
+                                   FasePrograma fase, UUID celulaId, UserId mentorId, UserRole rol) {
+            this(id, fullName, email, status, diaPrograma, fase, celulaId, mentorId, rol, null, null);
+        }
+
+        /** La fecha en que se borra, si la persona cerro su cuenta (D-243). */
+        public ResumenTraineeAdmin conBorradoProgramado(com.renaser.os.users.domain.model.user.PlazoDeGracia plazo) {
+            return new ResumenTraineeAdmin(id, fullName, email, status, diaPrograma, fase, celulaId, mentorId, rol,
+                    cerradaEn, plazo.seBorraEl(cerradaEn));
+        }
     }
 }

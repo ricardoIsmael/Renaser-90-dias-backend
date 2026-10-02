@@ -17,6 +17,7 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
@@ -45,12 +46,15 @@ public class TestimonioService implements CrearTestimonioUseCase, PromoverPublic
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    /** D-243: la vitrina no muestra testimonios de cuentas cerradas esperando su borrado. */
+    private final SinCuentasCerradas sinCerradas;
 
     public TestimonioService(LoadTestimonioPort loadTestimonioPort, SaveTestimonioPort saveTestimonioPort,
                               LoadPublicacionPort loadPublicacionPort,
                               ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort,
                               AlmacenamientoPort almacenamientoPort, UserSummaryFinder userSummaryFinder,
-                              Clock clock, IdGenerator idGenerator) {
+                              Clock clock, IdGenerator idGenerator, CuentasCerradasFinder cuentasCerradas) {
+        this.sinCerradas = new SinCuentasCerradas(cuentasCerradas);
         this.loadTestimonioPort = loadTestimonioPort;
         this.saveTestimonioPort = saveTestimonioPort;
         this.loadPublicacionPort = loadPublicacionPort;
@@ -115,7 +119,10 @@ public class TestimonioService implements CrearTestimonioUseCase, PromoverPublic
 
     @Override
     public List<TestimonioVista> listarDestacados() {
-        return loadTestimonioPort.listarDestacados(LIMITE_LISTADO).stream().map(this::aVista).toList();
+        // Sin los que hablan de una cuenta cerrada (D-243). La vitrina puede quedar con menos de
+        // LIMITE_LISTADO: es un tope, no una cantidad prometida, y en 30 días esas filas se borran.
+        return sinCerradas.de(loadTestimonioPort.listarDestacados(LIMITE_LISTADO), Testimonio::personaDeLaQueHabla)
+                .stream().map(this::aVista).toList();
     }
 
     private TestimonioVista aVista(Testimonio testimonio) {

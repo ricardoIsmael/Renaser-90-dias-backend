@@ -49,6 +49,8 @@ class ComentarioMuroServiceTest {
     private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
+    private com.renaser.os.users.api.CuentasCerradasFinder cuentasCerradas;
+    @Mock
     private LoadPublicacionPort loadPublicacionPort;
     @Mock
     private LoadComentarioPort loadComentarioPort;
@@ -72,7 +74,7 @@ class ComentarioMuroServiceTest {
     @BeforeEach
     void setUp() {
         service = new ComentarioMuroService(loadPublicacionPort, loadComentarioPort, saveComentarioPort,
-                consultarPerfilUsuarioPort, userSummaryFinder, CLOCK, idGenerator);
+                consultarPerfilUsuarioPort, userSummaryFinder, CLOCK, idGenerator, cuentasCerradas);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(consultarPerfilUsuarioPort.porId(any())).thenReturn(Optional.empty());
         lenient().when(userSummaryFinder.findById(admin))
@@ -143,7 +145,7 @@ class ComentarioMuroServiceTest {
         Publicacion publicacion = publicacionVisible();
         Comentario comentario = comentarioDe(autor, publicacion.id());
         when(loadComentarioPort.porId(comentario.id())).thenReturn(Optional.of(comentario));
-        when(loadComentarioPort.contar(publicacion.id())).thenReturn(0);
+        when(loadComentarioPort.contarPorAutor(publicacion.id())).thenReturn(java.util.Map.of());
         when(saveComentarioPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var resultado = service.ocultar(new OcultarComentarioCommand(admin, comentario.id()));
@@ -221,7 +223,7 @@ class ComentarioMuroServiceTest {
         List<Comentario> filas = List.of(comentarioDe(autor, publicacion.id()), comentarioDe(otro, publicacion.id()),
                 comentarioDe(autor, publicacion.id()));
         when(loadComentarioPort.pagina(publicacion.id(), null, 30)).thenReturn(filas);
-        when(loadComentarioPort.contar(publicacion.id())).thenReturn(3);
+        when(loadComentarioPort.contarPorAutor(publicacion.id())).thenReturn(java.util.Map.of(autor, 2, otro, 1));
         when(consultarPerfilUsuarioPort.porIds(java.util.Set.of(autor, otro))).thenReturn(java.util.Map.of(
                 autor, new ConsultarPerfilUsuarioPort.PerfilUsuario(autor, "Autor", "https://cdn/a.jpg"),
                 otro, new ConsultarPerfilUsuarioPort.PerfilUsuario(otro, "Otro", null)));
@@ -248,5 +250,25 @@ class ComentarioMuroServiceTest {
 
         assertThat(pagina.comentarios().get(0).autorNombre()).isNull();
         assertThat(pagina.comentarios().get(0).autorAvatarUrl()).isNull();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("D-243: los comentarios de una cuenta cerrada no se muestran ni cuentan en el total")
+    void laPaginaYElTotalSinCuentasCerradas() {
+        Publicacion publicacion = publicacionVisible();
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        when(loadComentarioPort.pagina(publicacion.id(), null, 30)).thenReturn(List.of(
+                comentarioDe(autor, publicacion.id()), comentarioDe(otro, publicacion.id())));
+        when(loadComentarioPort.contarPorAutor(publicacion.id())).thenReturn(java.util.Map.of(autor, 4, otro, 2));
+        when(cuentasCerradas.cerradasEntre(any())).thenAnswer(inv -> {
+            java.util.Collection<UserId> ids = inv.getArgument(0);
+            return ids.stream().filter(otro::equals).collect(java.util.stream.Collectors.toSet());
+        });
+        when(consultarPerfilUsuarioPort.porIds(any())).thenReturn(java.util.Map.of());
+
+        var pagina = service.pagina(publicacion.id(), null);
+
+        assertThat(pagina.comentarios()).extracting(c -> c.comentario().autorId()).containsExactly(autor);
+        assertThat(pagina.total()).isEqualTo(4);
     }
 }

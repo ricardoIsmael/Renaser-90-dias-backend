@@ -5,6 +5,7 @@ import com.renaser.os.community.application.ports.out.publicacion.SaveComentario
 import com.renaser.os.community.domain.model.publicacion.Comentario;
 import com.renaser.os.community.domain.model.publicacion.ComentarioId;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
+import com.renaser.os.shared.domain.UserId;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
@@ -42,8 +43,12 @@ class ComentarioPersistenceAdapter implements LoadComentarioPort, SaveComentario
     }
 
     @Override
-    public int contar(PublicacionId publicacionId) {
-        return (int) repository.countByPublicacionIdAndOcultoFalse(publicacionId.value());
+    public Map<UserId, Integer> contarPorAutor(PublicacionId publicacionId) {
+        Map<UserId, Integer> porAutor = new HashMap<>();
+        for (Object[] fila : repository.contarPorAutor(publicacionId.value())) {
+            porAutor.put(UserId.of((UUID) fila[0]), ((Number) fila[1]).intValue());
+        }
+        return porAutor;
     }
 
     @Override

@@ -18,7 +18,7 @@ class AjusteDiaProgramaPersistenceMapper {
                 e.getDiasAjusteAnterior(),
                 e.getDiasAjusteNuevo(),
                 e.getMotivo(),
-                UserId.of(e.getAjustadoPor()),
+                e.getAjustadoPor() == null ? null : UserId.of(e.getAjustadoPor()),  // NULL desde V90: el autor fue borrado
                 e.getAjustadoEn());
     }
 

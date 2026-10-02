@@ -73,7 +73,7 @@ class ParticipacionProgramaServiceTest {
                 loadParticipacionProgramaPort, saveParticipacionProgramaPort, deleteParticipacionProgramaPort,
                 consultarResumenParticipacionPort, loadMentorProfilePort, loadUserPort,
                 new RequireAdminGuard(loadUserPort), saveAjusteDiaProgramaPort, loadUltimoAjusteDiaProgramaPort,
-                UUID::randomUUID, CLOCK);
+                UUID::randomUUID, CLOCK, new com.renaser.os.users.domain.model.user.PlazoDeGracia(30));
     }
 
     private User usuario(UserId id, UserRole role, UserStatus status) {
@@ -486,7 +486,7 @@ class ParticipacionProgramaServiceTest {
                 loadParticipacionProgramaPort, saveParticipacionProgramaPort, deleteParticipacionProgramaPort,
                 consultarResumenParticipacionPort, loadMentorProfilePort, loadUserPort,
                 new RequireAdminGuard(loadUserPort), saveAjusteDiaProgramaPort, loadUltimoAjusteDiaProgramaPort,
-                UUID::randomUUID, reloj);
+                UUID::randomUUID, reloj, new com.renaser.os.users.domain.model.user.PlazoDeGracia(30));
     }
 
     /** Un ajuste rechazado no puede dejar rastro en la bitacora. */

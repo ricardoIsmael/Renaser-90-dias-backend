@@ -230,7 +230,7 @@ class RevocacionDeSoportePorBajaDeRolTest {
         bandeja = new ConversacionService(conversaciones, guardarConversacion, agregarParticipante,
                 esParticipante, accesoAGrupos, marcarLeidoPort, conversacion -> { }, contarNoLeidos, cargarMensajes, roster,
                 usuarios, sinFotosPropias(),
-                new com.renaser.os.chat.application.services.NombresDeLosChatsService(grupos -> java.util.Map.of(), usuarios), CLOCK, idGenerator, transacciones);
+                new com.renaser.os.chat.application.services.NombresDeLosChatsService(grupos -> java.util.Map.of(), usuarios), CLOCK, idGenerator, transacciones, ids -> java.util.Set.of());
         presencia = new PresenciaService(presenciaPort, fanoutPresencia, conversacionesDeUsuario, roster,
                 conversaciones, esParticipante, accesoAGrupos, usuarios);
     }

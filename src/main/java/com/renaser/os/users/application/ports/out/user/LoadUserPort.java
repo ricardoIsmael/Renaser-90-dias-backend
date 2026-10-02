@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** Lo que la aplicacion necesita para LEER usuarios. No sabe de JPA ni de SQL. */
 public interface LoadUserPort {
@@ -21,10 +22,15 @@ public interface LoadUserPort {
     /** Lectura EN LOTE, para no disparar una consulta por id (N+1). */
     List<User> byIds(Collection<UserId> ids);
 
-    /** Candidatas a purga: `baja_solicitada_en` no nulo y <= corte. Usado solo por el cron
-     * de bajas de cuenta (AccountDeletionService.purgeExpired) - devuelve ids, no `User`
-     * completos, porque el unico uso que se les da es borrarlos. */
-    List<UserId> pendingDeletionUpTo(Instant corte);
+    /**
+     * Una tanda de hasta {@code limite} cuentas cerradas cuya gracia vencio ({@code baja_solicitada_en
+     * <= corte}), en orden de id y despues de {@code despuesDe} ({@code null} = desde el principio).
+     * Solo ids: el unico uso que se les da es borrarlas (D-243, barrido paginado de la regla 02).
+     */
+    List<UserId> cerradasVencidas(Instant corte, UserId despuesDe, int limite);
+
+    /** De estos ids, los de cuentas cerradas para eliminar (D-243). Una consulta. */
+    Set<UserId> cerradasEntre(Collection<UserId> ids);
 
     /**
      * Panel admin de staff (gap #6): pagina de usuarios cuyo rol esta en {@code roles},

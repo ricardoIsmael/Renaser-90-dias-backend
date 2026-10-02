@@ -76,6 +76,11 @@ public class SmtpEnviarEmailAdapter implements EnviarEmailPort {
     }
 
     @Override
+    public void enviarCodigoEliminarCuenta(String destinatarioEmail, String codigo) {
+        enviar(destinatarioEmail, PlantillasEmail.codigoEliminarCuenta(codigo));
+    }
+
+    @Override
     public void enviarInvitacionStaff(String destinatarioEmail, String temporaryPassword) {
         enviar(destinatarioEmail, PlantillasEmail.invitacionStaff(temporaryPassword));
     }

@@ -31,11 +31,17 @@ public interface GetTraineeDetailUseCase {
      * segunda llamada.
      */
     record TraineeDetail(User user, com.renaser.os.users.api.ParticipacionPrograma participacion,
-                          AjusteDiaPrograma ultimoAjuste) {
+                          AjusteDiaPrograma ultimoAjuste, java.time.Instant seBorraEl) {
 
         /** Firma historica (sin ultimo ajuste). */
         public TraineeDetail(User user, com.renaser.os.users.api.ParticipacionPrograma participacion) {
-            this(user, participacion, null);
+            this(user, participacion, null, null);
+        }
+
+        /** Sin cierre de cuenta (firma anterior a D-243). */
+        public TraineeDetail(User user, com.renaser.os.users.api.ParticipacionPrograma participacion,
+                             AjusteDiaPrograma ultimoAjuste) {
+            this(user, participacion, ultimoAjuste, null);
         }
     }
 }

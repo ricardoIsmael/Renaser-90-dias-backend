@@ -99,18 +99,22 @@ class UserPersistenceAdapterTest {
     }
 
     @Test
-    void pendingDeletionUpToSoloTraeLasQueTienenBajaSolicitadaDentroDelCorte() {
+    void cerradasVencidasYCerradasEntreSoloTraenLasCuentasCerradas() {
         UserId conBajaVencida = UserId.of(UUID.randomUUID());
         UserId sinBaja = UserId.of(UUID.randomUUID());
         Instant corte = Instant.parse("2026-08-20T00:00:00Z");
         User usuarioConBaja = User.registerTrainee(conBajaVencida, new Email("vencida@renaser.com"), "Vencida");
-        usuarioConBaja.solicitarBaja(com.renaser.os.shared.domain.FixedClock.at(Instant.parse("2026-08-01T00:00:00Z")));
+        usuarioConBaja.cerrarParaEliminar(com.renaser.os.shared.domain.FixedClock.at(Instant.parse("2026-08-01T00:00:00Z")));
         adapter.save(usuarioConBaja);
         adapter.save(User.registerTrainee(sinBaja, new Email("sinbaja@renaser.com"), "Sin Baja"));
 
-        var candidatas = adapter.pendingDeletionUpTo(corte);
+        var candidatas = adapter.cerradasVencidas(corte, null, 100);
 
         assertThat(candidatas).contains(conBajaVencida).doesNotContain(sinBaja);
+        // D-243: el finder que usan los demas modulos para ocultar las cuentas cerradas.
+        assertThat(adapter.cerradasEntre(java.util.List.of(conBajaVencida, sinBaja))).containsExactly(conBajaVencida);
+        // Paginado por id: despues de la ultima no queda nada.
+        assertThat(adapter.cerradasVencidas(corte, conBajaVencida, 100)).doesNotContain(conBajaVencida);
     }
 
     // ─── E-365: un alta nunca pisa una cuenta que ya existe ────────────────────────

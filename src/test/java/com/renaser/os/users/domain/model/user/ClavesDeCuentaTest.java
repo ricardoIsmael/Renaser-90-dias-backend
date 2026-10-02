@@ -72,13 +72,20 @@ class ClavesDeCuentaTest {
             assertThat(claves.contiene("muro/fotos/" + OTRO + "/abc")).isFalse();
         }
 
+        /**
+         * D-243: las claves del chat ahora pasan este filtro de FORMA (el dueño pidio borrar tambien las
+         * fotos y audios del chat). La exclusividad la decide el modulo chat, que solo las declara para
+         * los mensajes que borra y despues dice cuales siguen en mensajes que quedan. Antes de D-243 este
+         * test afirmaba lo contrario.
+         */
         @Test
-        @DisplayName("el chat no lleva id de usuario: no hay forma de saber de quien es, no se toca")
-        void chatNuncaEsExclusivo() {
+        @DisplayName("el chat: entra si es chat/<uuid de conversacion>/..., y nada mas")
+        void chatConConversacionValida() {
+            String conversacion = java.util.UUID.randomUUID().toString();
+            assertThat(claves.contiene("chat/" + conversacion + "/fotos/abc")).isTrue();
             assertThat(claves.contiene("chat/una-conversacion/fotos/abc")).isFalse();
-            // Ni siquiera si el id del purgado aparece en algun segmento: la clave del chat la
-            // puede referenciar cualquier participante de esa conversacion.
-            assertThat(claves.contiene("chat/" + PURGADO + "/fotos/abc")).isFalse();
+            assertThat(claves.contiene("chat/" + conversacion)).isFalse();
+            assertThat(claves.contiene("chat/" + conversacion.toUpperCase() + "/fotos/abc")).isTrue();
         }
 
         @Test

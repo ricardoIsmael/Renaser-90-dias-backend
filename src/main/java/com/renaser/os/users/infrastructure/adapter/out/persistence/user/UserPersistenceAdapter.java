@@ -1,5 +1,9 @@
 package com.renaser.os.users.infrastructure.adapter.out.persistence.user;
 
+import org.springframework.data.domain.Limit;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -111,9 +115,18 @@ class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, DeleteUserPo
     }
 
     @Override
-    public List<UserId> pendingDeletionUpTo(Instant corte) {
-        return repository.findByBajaSolicitadaEnNotNullAndBajaSolicitadaEnLessThanEqual(corte).stream()
-                .map(e -> UserId.of(e.getId())).toList();
+    public List<UserId> cerradasVencidas(Instant corte, UserId despuesDe, int limite) {
+        UUID desde = despuesDe == null ? new UUID(0L, 0L) : despuesDe.value();
+        return repository.cerradasVencidas(corte, desde, Limit.of(limite)).stream().map(UserId::of).toList();
+    }
+
+    @Override
+    public Set<UserId> cerradasEntre(Collection<UserId> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Set.of();
+        }
+        List<UUID> valores = ids.stream().map(UserId::value).distinct().toList();
+        return repository.cerradasEntre(valores).stream().map(UserId::of).collect(Collectors.toUnmodifiableSet());
     }
 
     /** Hard delete real: las ~30 FK contra `usuarios` en el baseline son ON DELETE CASCADE
