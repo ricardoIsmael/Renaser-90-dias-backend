@@ -125,6 +125,10 @@ public class SecurityConfig {
                         // El solicitante consulta su propia solicitud antes de tener cuenta: la
                         // credencial es la posesion del UUID, que no es adivinable.
                         .requestMatchers(HttpMethod.GET, "/api/v1/account-requests/*/status").permitAll()
+                        // Pagina web para eliminar la cuenta sin la app (D-243, Google Play): la
+                        // credencial es el codigo que llega al correo. Solo esos dos POST.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/account-deletion/request-code",
+                                "/api/v1/account-deletion/confirm").permitAll()
                         // Listar, aprobar, rechazar y borrar son operaciones de ADMIN.
                         //
                         // Sin esta linea caian en el `permitAll()` de arriba y

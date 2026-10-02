@@ -53,4 +53,7 @@ public interface EnviarEmailPort {
      * lo recibe ya tiene cuenta y esta cambiando su contrasena, no verificando una casilla.
      */
     void enviarCodigoResetContrasena(String destinatarioEmail, String codigo);
+
+    /** Codigo de 6 digitos para confirmar que se quiere eliminar la cuenta (D-243). */
+    void enviarCodigoEliminarCuenta(String destinatarioEmail, String codigo);
 }

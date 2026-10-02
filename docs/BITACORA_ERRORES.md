@@ -13174,3 +13174,80 @@ de **cada** pantalla que importa `AdminScreen.tsx`. Una pantalla nueva sin su `j
 
 **Cómo evitar que vuelva a pasar.** Toda pantalla nueva que entre en `AdminScreen.tsx` suma su línea en esa lista. El
 mensaje no nombra la prueba ni la pantalla: buscar en la traza la línea `AdminScreen.tsx:<n>` y ver qué importa ahí.
+
+## E-487 · Un `doThrow` para UNA cuenta hacía fallar a todas en el barrido de prueba: `expected: 2 but was: 1` (users, pruebas, RESUELTO, 02/10)
+
+**Síntoma (D-243, `BarridoDeCuentasCerradasServiceTest.unaQueFallaNoFrena`).**
+
+```
+org.opentest4j.AssertionFailedError:
+expected: 2
+ but was: 1
+	at ...BarridoDeCuentasCerradasServiceTest.unaQueFallaNoFrena(BarridoDeCuentasCerradasServiceTest.java:89)
+```
+
+**Causa real.** `MockitoExtension` usa stubs ESTRICTOS. El test stubbeaba
+`doThrow(...).when(borrado).borrar(cuenta2, …)`; cuando el barrido llamaba `borrar(cuenta1, …)` —mismo
+método, otros argumentos— Mockito lanzaba `PotentialStubbingProblem`. El barrido, que atrapa toda
+`RuntimeException` por cuenta (es su trabajo), la contaba como cuenta fallida. El código estaba bien;
+el doble de prueba fallaba en cuentas que no debía.
+
+**Solución.** `lenient().doThrow(...)` en ese stub, con un comentario que explica por qué.
+
+**Cómo evitar que vuelva a pasar.** Cuando el código bajo prueba atrapa `RuntimeException` (barridos con
+`try/catch` por elemento), un stub estricto de un método que se llama con varios argumentos produce
+fallas que parecen del código. En esos tests: `lenient()` en el stub que lanza.
+
+## E-488 · El instante de cierre de la cuenta no coincidía con el guardado: `expected: …14.153682Z but was: …14.153681Z` (users, pruebas, RESUELTO, 02/10)
+
+**Síntoma (D-243, `EliminacionDeCuentaIT.cerrarYBorrarAlVencerLaGracia`).** Primero
+`expected: 2026-11-01T15:21:46.028211Z but was: 2026-11-01T15:21:46.028211172Z`, y después de truncar a
+microsegundos, `expected: 2026-11-01T15:33:14.153682Z but was: 2026-11-01T15:33:14.153681Z`.
+
+**Causa real.** El reloj del proceso da nanosegundos; `timestamptz` guarda microsegundos y Postgres
+**redondea** (no trunca). La fecha que devuelve el endpoint sale del objeto en memoria y la que se lee
+después sale de la base: pueden diferir en menos de un microsegundo. No afecta a nadie (se muestra en
+días), pero una igualdad exacta entre «lo devuelto» y «lo guardado» no se cumple.
+
+**Solución.** Comparar con `isCloseTo(…, within(1, MILLIS))`.
+
+**Cómo evitar que vuelva a pasar.** Nunca comparar por igualdad un `Instant` de `clock.now()` contra el
+mismo valor leído de Postgres; tampoco truncar (Postgres redondea). Usar una tolerancia, o un
+`FixedClock` con microsegundos en cero.
+
+## E-489 · Jest no encuentra ninguna prueba dentro de un worktree de `.claude/worktrees/`: `No tests found, exiting with code 1` (app, entorno, RESUELTO, 02/10)
+
+**Síntoma (D-243, frontend, rama `eliminar-cuenta`).**
+
+```
+No tests found, exiting with code 1
+...
+testPathIgnorePatterns: /node_modules/, /e2e/, /.claude/ - 0 matches
+```
+
+**Causa real.** `jest.config.js` ignora `'/.claude/'` en `testPathIgnorePatterns`, y ese patrón calza con
+la ruta del propio proyecto cuando el checkout vive en `.claude/worktrees/<rama>/`. Es el mismo problema
+de fondo que E-482 con Metro.
+
+**Solución (sin tocar el repo).** `npx jest --testPathIgnorePatterns '/node_modules/' '/e2e/'`.
+
+**Cómo evitar que vuelva a pasar.** Anclar el patrón al proyecto: `'<rootDir>/.claude/'`, como ya hace
+`modulePathIgnorePatterns`. Queda propuesto, no aplicado (no era parte de este cambio).
+
+## E-490 · La regla de letra legible de Administración rompió con las pantallas nuevas: `t.body sin fontSize propio de 16 o más` (app, pruebas, RESUELTO, 02/10)
+
+**Síntoma (D-243, frontend).** `letraLegibleEnMentoriaYAdministracion.test.ts`:
+
+```
+features/admin/screens/EliminarCuentaAdminScreen.tsx:96 — t.body sin fontSize propio de 16 o más
+features/admin/screens/PersonasAdminScreen.tsx:182 — fontSize 14 (mínimo 16)
+```
+
+**Causa real.** La regla A-1 de la app exige, en mentoría y administración, un `fontSize` de 16 o más
+escrito en línea en cada texto; las dos pantallas nuevas usaban el token sin tamaño propio y una
+etiqueta de 14.
+
+**Solución.** `fontSize: 17` en línea en el texto y la etiqueta subida a 16.
+
+**Cómo evitar que vuelva a pasar.** Toda pantalla nueva de Administración o mentoría: tamaño en línea
+≥ 16 en cada `Text`. La prueba ya lo vigila; leer su mensaje, que da archivo y línea.

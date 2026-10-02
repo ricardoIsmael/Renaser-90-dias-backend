@@ -65,6 +65,18 @@ final class PlantillasEmail {
                         codigo, "El código vence en unos minutos y sirve una sola vez."));
     }
 
+    /**
+     * Eliminar la cuenta (D-243): desde la app (cuenta sin contraseña) o desde la pagina web. El
+     * aviso de "si no fuiste tu" pesa mas que en el reset: sin el codigo nadie puede cerrar la cuenta.
+     */
+    static MensajeEmail codigoEliminarCuenta(String codigo) {
+        return new MensajeEmail("Tu código para eliminar tu cuenta de Renaser",
+                conDato("Eliminar tu cuenta",
+                        "Escribe este código para confirmar que quieres eliminar tu cuenta. "
+                                + "Si no fuiste tú, ignora este correo: sin el código nadie puede eliminarla.",
+                        codigo, "El código vence en unos minutos y sirve una sola vez."));
+    }
+
     static MensajeEmail invitacionStaff(String contrasenaTemporal) {
         return new MensajeEmail("Tu acceso a Renaser",
                 conDato("Te dimos acceso a Renaser",

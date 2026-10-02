@@ -286,7 +286,7 @@ mismo patrón que `RolUsuarioJpa`/`UserPersistenceMapper`.
 | D-36 | `users.api.FasePrograma` usa vocabulario inglés (`PHASE_1_REBIRTH`...) igual que la app y el backend viejo; la columna Postgres `fase_programa` sigue en español — traducción explícita en el mapper, nunca en el dominio | 2026-08-24 |
 | D-52 | Hueco #1 no era "falta `TraineeProfile`": era falta de 3 columnas sin mapear en `ParticipacionPrograma` (`tipo_meta`/`nombre_reto_personal`/`programa_completado_en`) + 2 endpoints. `GetMyFullProfileUseCase` compone `User`+`ParticipacionPrograma` en la capa de aplicación (nunca en el controller) para no tocar `GetMyProfileUseCase`, que ya usa el flujo de login | 2026-08-26 |
 | ~~D-53~~ | ~~Avatar genérico (gap #4): la confirmación resuelve y persiste una URL de LECTURA firmada (7 días) en vez de guardar solo la ruta~~ ❌ **Era un defecto, no una limitación — revertido 2026-08-31 por D-55 (`docs/MODULOS_A_AVANZAR.md`), ver E-57.** Una URL prefirmada vence: a los 7 días del último cambio de foto el avatar quedaba roto para siempre en todas las pantallas. Ahora el objeto es de lectura pública y la columna guarda su URL permanente | 2026-08-26, superado 2026-08-31 |
-| D-54 | Baja de cuenta (gap #5): 14 días de gracia CONFIRMADOS (comentario de `usuarios.baja_solicitada_en` en el baseline + `DIAS_DE_GRACIA` del backend viejo coinciden), configurable vía `renaser.users.account-deletion.grace-period-days`. Acceso se conserva durante la gracia a propósito (permite cancelar). Purga = un solo `DeleteUserPort.deleteById` — las FK del baseline hacen el resto (CASCADE/SET NULL) | 2026-08-26 |
+| D-54 | **Corregido 2026-10-02 (D-243):** ahora 30 días con la cuenta cerrada desde el primer momento; ver `docs/ELIMINACION_DE_CUENTAS.md`. Decía: Baja de cuenta (gap #5): 14 días de gracia CONFIRMADOS (comentario de `usuarios.baja_solicitada_en` en el baseline + `DIAS_DE_GRACIA` del backend viejo coinciden), configurable vía `renaser.users.account-deletion.grace-period-days`. Acceso se conserva durante la gracia a propósito (permite cancelar). Purga = un solo `DeleteUserPort.deleteById` — las FK del baseline hacen el resto (CASCADE/SET NULL) | 2026-08-26 |
 
 ## 9. Paneles admin — staff, aprendices, solicitudes de cuenta (gaps #6/#7/#9)
 
@@ -480,6 +480,16 @@ exige la política de S3 del recuadro de arriba y se verifica en el despliegue, 
 
 ### Gap #5 — baja de cuenta autogestionada
 
+> **Corregido 2026-10-02 (D-243, `docs/ELIMINACION_DE_CUENTAS.md`).** Todo lo de esta sección
+> describe la baja vieja y quedó reemplazado por decisión del dueño: la cuenta se **cierra al instante**
+> (sin acceso, oculta para los demás) y se borra a los **30 días** (no 14), solo un Admin la recupera
+> (la persona ya no cancela sola), el barrido corre **cada hora** (no a las 04:15) y cada módulo borra
+> lo suyo (`users.api.BorradoDeDatosDeCuenta`) en vez de apoyarse en las FK y en el SQL suelto de
+> `RutasDeAlmacenamientoDeCuentaJdbcAdapter` (borrado). `AccountDeletionService`,
+> `{"confirmacion":"ELIMINAR"}` y el `DELETE /me/account-deletion` ya no existen. Lo que figuraba abajo
+> como «no implementado a propósito» (borrado inmediato por Admin y baja pública por correo) ahora sí
+> existe. Se deja el texto original para que se vea qué decía.
+
 Portado 1:1 de `features/account-deletion` del backend viejo (Next.js) — código real
 consultado, no reconstruido de memoria:
 
@@ -532,7 +542,7 @@ consultado, no reconstruido de memoria:
 | # | Pregunta | Estado |
 |---|---|---|
 | R-8 | ¿Se quiere replicar el enmascaramiento "ALCHEMIST con `traineeProfile` → `role: TRAINEE`" del backend viejo en `POST /api/v1/users/me`? | ⬜ Abierto — no implementado a propósito, ver gap #1 arriba |
-| R-9 | ¿Hace falta baja de cuenta SIN gracia para el panel admin, y/o baja pública sin sesión por enlace de correo (exigida por Google Play para quien desinstaló la app)? | ⬜ Abierto — fuera del alcance literal de este encargo (autogestión) |
+| R-9 | ¿Hace falta baja de cuenta SIN gracia para el panel admin, y/o baja pública sin sesión por enlace de correo (exigida por Google Play para quien desinstaló la app)? | ✅ Resuelto 2026-10-02 (D-243): sí a las dos, por decisión del dueño. Ver `docs/ELIMINACION_DE_CUENTAS.md` |
 
 ## 11. Vista vertical del panel: los hábitos de UN aprendiz (2026-08-31)
 

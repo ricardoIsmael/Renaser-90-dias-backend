@@ -51,7 +51,10 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | PATCH | `/api/v1/users/me/trainee-profile` |
 | POST | `/api/v1/users/me/avatar/upload-url` |
 | PATCH | `/api/v1/users/me/avatar` |
-| GET · POST · DELETE | `/api/v1/users/me/account-deletion` |
+| GET · POST | `/api/v1/users/me/account-deletion` (D-243; antes también DELETE, que ya no existe) |
+| POST | `/api/v1/users/me/account-deletion/code` |
+| POST | `/api/v1/account-deletion/request-code` · `/api/v1/account-deletion/confirm` (públicos, página web) |
+| POST | `/api/v1/admin/users/{id}/account-deletion` · `…/recover` (ADMIN/ALQUIMISTA) |
 
 > Ojo: el perfil propio es **`POST /users/me`**, no `GET`.
 
@@ -323,7 +326,7 @@ Esto es lo más barato del backlog. Hay dominio, puertos y persistencia construi
 | ~~Tarjetas de bienvenida~~ | **Ya existe** (D-174, D-185, D-191): el servidor manda la tarjeta y los textos de bienvenida, y `mensajes_bienvenida` se usa como marca para no repetirla (`docs/MODULO_CHAT.md` §10). *Corregido 2026-09-27: decía «Activaría `mensajes_bienvenida`».* |
 | Audioterapia + sincronización con Drive | Activaría `audioterapias`; el puerto de catálogo existe sin adaptador |
 | Paneles admin de `staff` y `trainees` | Listar/editar personal y aprendices |
-| Baja de cuenta (GDPR) | Requisito de Google Play / Apple |
+| ~~Baja de cuenta (GDPR)~~ | **Ya existe** (D-243, `docs/ELIMINACION_DE_CUENTAS.md`). *Corregido 2026-10-02.* |
 
 ---
 

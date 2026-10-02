@@ -4,15 +4,11 @@ import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.RequiresPermission;
-import com.renaser.os.users.application.ports.in.user.CancelAccountDeletionUseCase;
 import com.renaser.os.users.application.ports.in.user.ConfirmarAvatarUseCase;
 import com.renaser.os.users.application.ports.in.user.ConfirmarAvatarUseCase.ConfirmarAvatarCommand;
-import com.renaser.os.users.application.ports.in.user.GetAccountDeletionStatusUseCase;
 import com.renaser.os.users.application.ports.in.user.GetMyFullProfileUseCase;
 import com.renaser.os.users.application.ports.in.user.InviteAndCreateUserUseCase;
 import com.renaser.os.users.application.ports.in.user.InviteAndCreateUserUseCase.InviteUserCommand;
-import com.renaser.os.users.application.ports.in.user.RequestAccountDeletionUseCase;
-import com.renaser.os.users.application.ports.in.user.RequestAccountDeletionUseCase.RequestAccountDeletionCommand;
 import com.renaser.os.users.application.ports.in.user.SolicitarUrlAvatarUseCase;
 import com.renaser.os.users.application.ports.in.user.SolicitarUrlAvatarUseCase.SolicitarUrlAvatarCommand;
 import com.renaser.os.users.application.ports.in.user.UpdateMyProfileUseCase;
@@ -22,7 +18,6 @@ import com.renaser.os.users.application.ports.in.user.UpdateUserRoleUseCase.Upda
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -45,27 +40,18 @@ public class UserController {
     private final UpdateUserRoleUseCase updateUserRoleUseCase;
     private final SolicitarUrlAvatarUseCase solicitarUrlAvatarUseCase;
     private final ConfirmarAvatarUseCase confirmarAvatarUseCase;
-    private final RequestAccountDeletionUseCase requestAccountDeletionUseCase;
-    private final CancelAccountDeletionUseCase cancelAccountDeletionUseCase;
-    private final GetAccountDeletionStatusUseCase getAccountDeletionStatusUseCase;
 
     public UserController(GetMyFullProfileUseCase getMyFullProfileUseCase,
                            UpdateMyProfileUseCase updateMyProfileUseCase,
                            InviteAndCreateUserUseCase inviteUseCase, UpdateUserRoleUseCase updateUserRoleUseCase,
                            SolicitarUrlAvatarUseCase solicitarUrlAvatarUseCase,
-                           ConfirmarAvatarUseCase confirmarAvatarUseCase,
-                           RequestAccountDeletionUseCase requestAccountDeletionUseCase,
-                           CancelAccountDeletionUseCase cancelAccountDeletionUseCase,
-                           GetAccountDeletionStatusUseCase getAccountDeletionStatusUseCase) {
+                           ConfirmarAvatarUseCase confirmarAvatarUseCase) {
         this.getMyFullProfileUseCase = getMyFullProfileUseCase;
         this.updateMyProfileUseCase = updateMyProfileUseCase;
         this.inviteUseCase = inviteUseCase;
         this.updateUserRoleUseCase = updateUserRoleUseCase;
         this.solicitarUrlAvatarUseCase = solicitarUrlAvatarUseCase;
         this.confirmarAvatarUseCase = confirmarAvatarUseCase;
-        this.requestAccountDeletionUseCase = requestAccountDeletionUseCase;
-        this.cancelAccountDeletionUseCase = cancelAccountDeletionUseCase;
-        this.getAccountDeletionStatusUseCase = getAccountDeletionStatusUseCase;
     }
 
     @RequiresPermission(value = Permission.USE_APP, scope = "self")
@@ -119,29 +105,5 @@ public class UserController {
         confirmarAvatarUseCase.confirmar(
                 new ConfirmarAvatarCommand(actor, request.bucket(), request.ruta()));
         return ResponseEntity.noContent().build();
-    }
-
-    // ─── Baja de cuenta autogestionada (gap #5) — mismo patron GET/POST/DELETE
-    // que /api/v1/mentor/activate-tracking (D-34) ──────────────────────────────
-
-    @RequiresPermission(value = Permission.USE_APP, scope = "self")
-    @GetMapping("/me/account-deletion")
-    public AccountDeletionStatusResponse estadoBajaCuenta(@ActorAutenticado UserId actor) {
-        return AccountDeletionStatusResponse.from(getAccountDeletionStatusUseCase.status(actor));
-    }
-
-    @RequiresPermission(value = Permission.USE_APP, scope = "self")
-    @PostMapping("/me/account-deletion")
-    public AccountDeletionStatusResponse solicitarBajaCuenta(@ActorAutenticado UserId actor,
-                                                              @RequestBody @Valid RequestAccountDeletionRequest request) {
-        var estado = requestAccountDeletionUseCase.request(
-                new RequestAccountDeletionCommand(actor, request.confirmacion()));
-        return AccountDeletionStatusResponse.from(estado);
-    }
-
-    @RequiresPermission(value = Permission.USE_APP, scope = "self")
-    @DeleteMapping("/me/account-deletion")
-    public AccountDeletionStatusResponse cancelarBajaCuenta(@ActorAutenticado UserId actor) {
-        return AccountDeletionStatusResponse.from(cancelAccountDeletionUseCase.cancel(actor));
     }
 }

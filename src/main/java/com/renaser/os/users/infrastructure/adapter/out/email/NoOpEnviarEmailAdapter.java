@@ -84,4 +84,11 @@ public class NoOpEnviarEmailAdapter implements EnviarEmailPort {
                 + "(adaptador placeholder, sin proveedor real todavia; codigo de {} digitos generado)",
                 codigo.length());
     }
+
+    @Override
+    public void enviarCodigoEliminarCuenta(String destinatarioEmail, String codigo) {
+        // Mismo criterio que los otros codigos: ni email ni codigo en el log.
+        log.info("[users.NoOpEnviarEmailAdapter] email de codigo para eliminar la cuenta simulado "
+                + "(sin proveedor real; codigo de {} digitos generado)", codigo.length());
+    }
 }

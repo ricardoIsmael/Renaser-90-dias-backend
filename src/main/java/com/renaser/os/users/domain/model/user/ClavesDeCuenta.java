@@ -32,11 +32,18 @@ import java.util.Objects;
  *       porque el id del dueno que lleva adentro no es el suyo.</li>
  * </ol>
  *
- * <p><b>Fail-closed.</b> Lo que no se reconoce, no se borra. Es deliberado que queden afuera las
- * claves {@code chat/<conversacionId>/...}: no llevan id de usuario, cualquier participante de
- * esa conversacion puede referenciarlas y el borrado de un mensaje es un tombstone
- * ({@code mensajes.eliminado_en}) que no libera nada — no hay forma de decidir aca que son
- * exclusivas, asi que se dejan.
+ * <p><b>Fail-closed.</b> Lo que no se reconoce, no se borra.
+ *
+ * <p><b>Las claves del chat ({@code chat/<conversacionId>/...}) si entran desde D-243.</b> No llevan
+ * id de usuario, asi que la FORMA no dice de quien son; lo dice el modulo {@code chat}, que solo las
+ * declara para los mensajes que el mismo va a borrar con la cuenta (los suyos y los de sus chats 1 a 1
+ * y de soporte), y que despues responde cuales siguen en mensajes que sobreviven. La exclusividad la
+ * decide ese segundo filtro, no este.
+ *
+ * <blockquote><b>Corregido 2026-10-02 (D-243).</b> Decia que las claves {@code chat/} quedaban afuera
+ * a proposito porque no habia forma de decidir aca si eran exclusivas. Era cierto mientras la purga
+ * leia rutas con SQL suelto; ahora cada modulo declara lo que borra, y el dueño pidio borrar tambien
+ * las fotos y audios del chat.</blockquote>
  *
  * <p>Esta clase mira la FORMA de la clave. Que ademas ninguna fila que sobreviva a la purga la
  * siga referenciando lo responde la base (ver {@code RutasDeAlmacenamientoDeCuentaPort}); son
@@ -62,6 +69,9 @@ public final class ClavesDeCuenta {
     /** {@code muro/<carpeta>/<autorId>/<uuid>} ({@code PublicacionMuroService.rutaDeMedia}):
      * aca el id va TERCERO, detras de la carpeta (fotos/videos). */
     private static final String PREFIJO_MURO = "muro";
+
+    /** {@code chat/<conversacionId>/<carpeta>/<uuid>} ({@code MensajeService}): ver el javadoc de la clase. */
+    private static final String PREFIJO_CHAT = "chat";
 
     /** {@code avatares/<usuarioId>}, sin nada detras: la clave del avatar es deterministica y se
      * reescribe en cada cambio de foto ({@code AvatarService.rutaDe}). */
@@ -110,11 +120,24 @@ public final class ClavesDeCuenta {
                 return true;
             }
         }
+        if (comparable.startsWith(PREFIJO_CHAT + "/")) {
+            // chat/<conversacionId>/...: el segundo tramo tiene que ser un UUID y tiene que haber algo detras.
+            String[] partes = comparable.split("/");
+            return partes.length >= 3 && esUuid(partes[1]);
+        }
         if (comparable.startsWith(PREFIJO_MURO + "/")) {
             // muro/<carpeta>/<autorId>/<uuid>: sin las cuatro partes no hay id de autor que mirar.
             String[] partes = comparable.split("/");
             return partes.length >= 4 && idNormalizado.equals(partes[2]);
         }
         return false;
+    }
+
+    private static boolean esUuid(String texto) {
+        try {
+            return java.util.UUID.fromString(texto).toString().equals(texto);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 }

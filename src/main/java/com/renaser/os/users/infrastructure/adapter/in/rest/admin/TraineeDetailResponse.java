@@ -15,11 +15,15 @@ import java.util.UUID;
  * (D-201, E-336). Antes salia la fecha provisional del alta, y el panel —que para {@code null} ya
  * tenia el texto "Todavia no eligio su Dia 1"— ofrecia "Cambiar dia del programa" a alguien sin
  * Dia 1, y el servidor respondia 409.
+ *
+ * <p>{@code deletionScheduledFor} (D-243): si la persona cerro su cuenta, cuando se borra para siempre
+ * (el panel ofrece «Recuperar cuenta» hasta entonces); {@code null} si no.
  */
 public record TraineeDetailResponse(String id, String email, String fullName, UserRole role, UserStatus status,
                                      String avatarUrl, boolean inscrito, int programDay, LocalDate startDate,
                                      FasePrograma phase, UUID cellId, String mentorId,
-                                     UltimoAjusteDiaResponse lastDayAdjustment) {
+                                     UltimoAjusteDiaResponse lastDayAdjustment,
+                                     java.time.Instant deletionScheduledFor) {
 
     public static TraineeDetailResponse from(TraineeDetail detail) {
         var user = detail.user();
@@ -28,6 +32,6 @@ public record TraineeDetailResponse(String id, String email, String fullName, Us
                 user.status(), user.avatarUrl(), participacion.inscrito(), participacion.diaPrograma(),
                 participacion.diaUnoElegido(), participacion.fase(), participacion.celulaId(),
                 participacion.mentorId() == null ? null : participacion.mentorId().toString(),
-                UltimoAjusteDiaResponse.from(detail.ultimoAjuste()));
+                UltimoAjusteDiaResponse.from(detail.ultimoAjuste()), detail.seBorraEl());
     }
 }

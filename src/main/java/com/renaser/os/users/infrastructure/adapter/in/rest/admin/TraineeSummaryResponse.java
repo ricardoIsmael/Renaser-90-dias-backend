@@ -21,14 +21,19 @@ import java.util.UUID;
  * {@code TRAINEE}, {@code MENTOR_LEAD} y {@code ALCHEMIST}. Los dos listados hablan del mismo dato
  * con dos ortografias: quien compare un {@code role} de aca contra uno de alla tiene que traducir.
  * Queda anotado en D-138 como lo primero a unificar si el dueno prefiere una sola.
+ *
+ * <p>{@code deletionScheduledFor} (D-243): si la persona cerro su cuenta, cuando se borra para siempre;
+ * {@code null} si no. Campo agregado al final: una app vieja lo ignora.
  */
 public record TraineeSummaryResponse(String id, String fullName, String email, UserStatus status, int programDay,
-                                      FasePrograma phase, UUID cellId, String mentorId, String role) {
+                                      FasePrograma phase, UUID cellId, String mentorId, String role,
+                                      java.time.Instant deletionScheduledFor) {
 
     public static TraineeSummaryResponse from(ResumenTraineeAdmin resumen) {
         return new TraineeSummaryResponse(resumen.id().toString(), resumen.fullName(), resumen.email(),
                 resumen.status(), resumen.diaPrograma(), resumen.fase(), resumen.celulaId(),
-                resumen.mentorId() == null ? null : resumen.mentorId().toString(), etiquetaDe(resumen.rol()));
+                resumen.mentorId() == null ? null : resumen.mentorId().toString(), etiquetaDe(resumen.rol()),
+                resumen.seBorraEl());
     }
 
     /**

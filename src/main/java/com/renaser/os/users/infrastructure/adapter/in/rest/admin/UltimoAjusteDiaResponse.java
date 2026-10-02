@@ -21,6 +21,6 @@ public record UltimoAjusteDiaResponse(int previousDay, int newDay, int adjustmen
             return null;
         }
         return new UltimoAjusteDiaResponse(ajuste.diaAnterior(), ajuste.diaNuevo(), ajuste.diasAjusteNuevo(),
-                ajuste.motivo(), ajuste.ajustadoPor().toString(), ajuste.ajustadoEn());
+                ajuste.motivo(), ajuste.ajustadoPor() == null ? null : ajuste.ajustadoPor().toString(), ajuste.ajustadoEn());
     }
 }
