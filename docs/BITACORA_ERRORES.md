@@ -13386,3 +13386,15 @@ Expecting empty but was: ["/api/v1/me/emergency-request"]
 **Cómo evitar que vuelva a pasar.** Ya es ejecutable (la prueba lo atrapó antes de subir). Al crear un endpoint bajo
 `/api/v1/me/…`, sumar su matcher en `SecurityConfig` en el mismo cambio; correr `RutasCubiertasPorElFiltroTest` sola tarda
 dos segundos.
+
+## E-497 · El CD falló en `ClavesCompartidasAlBorrarCuentaIT` con «duplicate key value violates unique constraint "conversacion_global_unica_uk"» y no desplegó (pruebas, RESUELTO, 02/10)
+
+**Síntoma (literal, GitHub Actions, run del commit `4666b15e`):**
+`ClavesCompartidasAlBorrarCuentaIT.clavesQueOtrasFilasSiguenNombrando:87->conversacion:147 » DuplicateKey … ERROR: duplicate key value violates unique constraint "conversacion_global_unica_uk" Detail: Key (tipo)=(GLOBAL) already exists.`
+El `verify` local de la misma rama había pasado (5901 + 256); en el CI falló 1 de 256 y el despliegue quedó en `skipped`. Producción no se tocó.
+
+**Causa:** la prueba (D-243) sembraba siempre una conversación `GLOBAL`, pero la comunidad es única por esquema y el Postgres de los IT se comparte entre clases. Si antes corría otra clase que ya la había creado —el orden de las clases cambia entre la laptop y el CI—, el `INSERT` chocaba.
+
+**Solución:** el helper `conversacion` reusa la `GLOBAL` existente y solo la crea si no hay ninguna.
+
+**Para que no vuelva:** en un IT, nada que el esquema declare único globalmente (la comunidad, configuraciones de una sola fila) se siembra sin mirar antes si ya existe. Un `verify` local en verde no garantiza el orden del CI.
