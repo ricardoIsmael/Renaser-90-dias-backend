@@ -14,6 +14,7 @@ import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -57,12 +58,15 @@ public class AcompanamientoService
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
     private final VigenciaDeGrupos vigencia;
+    /** D-243: la lista del mentor no muestra ni cuenta cuentas cerradas esperando su borrado. */
+    private final SinCuentasCerradas sinCerradas;
 
     public AcompanamientoService(LoadAsignacionesPort loadAsignacionesPort, LoadCelulaPort loadCelulaPort,
                                   LoadPoliticaMentoriaPort loadPoliticaMentoriaPort,
                                   AcompanamientoFinder acompanamientoFinder,
                                   ParticipacionProgramaFinder participacionProgramaFinder,
-                                  UserSummaryFinder userSummaryFinder, Clock clock) {
+                                  UserSummaryFinder userSummaryFinder, Clock clock,
+                                  CuentasCerradasFinder cuentasCerradas) {
         this.loadAsignacionesPort = loadAsignacionesPort;
         this.loadCelulaPort = loadCelulaPort;
         this.loadPoliticaMentoriaPort = loadPoliticaMentoriaPort;
@@ -71,6 +75,7 @@ public class AcompanamientoService
         this.userSummaryFinder = userSummaryFinder;
         this.clock = clock;
         this.vigencia = new VigenciaDeGrupos(loadPoliticaMentoriaPort);
+        this.sinCerradas = new SinCuentasCerradas(cuentasCerradas);
     }
 
     @Override
@@ -136,7 +141,9 @@ public class AcompanamientoService
         Celula grupo = loadCelulaPort.porId(grupoId)
                 .orElseThrow(() -> new NoSuchElementException("Grupo no encontrado: " + consulta.grupoId()));
 
-        List<UserId> vigentes = composicion.aprendicesVigentesEn(grupoId, ahora);
+        // Sin las cuentas cerradas esperando su borrado (D-243): antes se listaban con `active=false` y
+        // contaban en el total. Una suspensión a secas se sigue mostrando como hasta ahora.
+        List<UserId> vigentes = sinCerradas.de(composicion.aprendicesVigentesEn(grupoId, ahora), id -> id);
         // findByIds y no findById en un bucle: diez aprendices no justifican diez consultas,
         // y la recepcion puede tener cientos (CLAUDE.MD, operaciones en lote).
         Map<UserId, UserSummary> perfiles = userSummaryFinder.findByIds(vigentes);

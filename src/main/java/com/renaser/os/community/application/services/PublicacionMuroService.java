@@ -39,6 +39,7 @@ import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
@@ -70,6 +71,8 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     private static final Logger log = LoggerFactory.getLogger(PublicacionMuroService.class);
 
     private static final int TAMANO_PAGINA = 20;
+    /** Páginas enteras de cuentas cerradas que el feed saltea antes de devolver una vacía (D-243). */
+    private static final int MAX_PAGINAS_SALTEADAS = 3;
     private static final Duration VALIDEZ_URL_SUBIDA = Duration.ofMinutes(10);
     private static final Duration VALIDEZ_URL_LECTURA = Duration.ofMinutes(15);
     /** Prefijo con el que {@link #rutaDeMedia} arma toda clave del Muro. */
@@ -110,6 +113,8 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
      * {@link ReferenciasExternasDeMediaDelMuro}.
      */
     private final List<ReferenciasExternasDeMediaDelMuro> referenciasExternas;
+    /** D-243: el Muro no muestra lo de cuentas cerradas esperando su borrado. */
+    private final SinCuentasCerradas sinCerradas;
 
     public PublicacionMuroService(LoadPublicacionPort loadPublicacionPort, SavePublicacionPort savePublicacionPort,
                                    EliminarPublicacionPort eliminarPublicacionPort,
@@ -120,7 +125,9 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
                                    ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator,
                                    ParticipacionProgramaFinder participacionFinder,
                                    ReferenciasDeMediaDelMuroPort referenciasDeMediaPort,
-                                   List<ReferenciasExternasDeMediaDelMuro> referenciasExternas) {
+                                   List<ReferenciasExternasDeMediaDelMuro> referenciasExternas,
+                                   CuentasCerradasFinder cuentasCerradas) {
+        this.sinCerradas = new SinCuentasCerradas(cuentasCerradas);
         this.referenciasDeMediaPort = referenciasDeMediaPort;
         this.referenciasExternas = List.copyOf(referenciasExternas);
         this.loadPublicacionPort = loadPublicacionPort;
@@ -339,7 +346,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     public List<ReaccionVista> reacciones(UserId actorId, PublicacionId publicacionId) {
         requireVisible(publicacionId);
         requireActorHabilitado(actorId);
-        List<ReaccionMuro> filas = reaccionMuroPort.listarDe(publicacionId);
+        List<ReaccionMuro> filas = sinCerradas.de(reaccionMuroPort.listarDe(publicacionId), ReaccionMuro::usuarioId);
         if (filas.isEmpty()) {
             return List.of();
         }
@@ -371,8 +378,33 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         if (categoriaClave != null && !categoriasUseCase.clavesExistentes().contains(categoriaClave)) {
             throw new IllegalArgumentException("Categoria desconocida: " + categoriaClave);
         }
-        List<Publicacion> pagina = loadPublicacionPort.feed(cursor, TAMANO_PAGINA, categoriaClave);
-        return aPagina(pagina, actorId);
+        return paginaSinCuentasCerradas(actorId, cursor, categoriaClave, MAX_PAGINAS_SALTEADAS);
+    }
+
+    /**
+     * Una página del feed sin las publicaciones de cuentas cerradas esperando su borrado (D-243).
+     *
+     * <p><b>El cursor sale de la página CRUDA, no de la filtrada.</b> {@code siguiente} es el
+     * {@code creadoEn} de la última fila que devolvió la base, aunque esa fila se haya ocultado: así la
+     * próxima página arranca donde terminó esta y no se repite ni se saltea nada. Que haya más páginas
+     * también se decide con las filas crudas, así que una página más corta (porque se ocultó algo) no
+     * corta el feed: la app sigue pidiendo mientras {@code siguiente} no sea nulo.
+     *
+     * <p>El único caso que la app podría tomar como fin es una página VACÍA con cursor (si todas sus
+     * filas eran de cuentas cerradas). Para no depender de cómo lo trate, se pide la siguiente acá mismo,
+     * con un tope de {@link #MAX_PAGINAS_SALTEADAS} para que un caso patológico no recorra el Muro entero.
+     */
+    private PaginaPublicaciones paginaSinCuentasCerradas(UserId actorId, Instant cursor, String categoriaClave,
+                                                         int saltosRestantes) {
+        List<Publicacion> filasConExtra = loadPublicacionPort.feed(cursor, TAMANO_PAGINA, categoriaClave);
+        boolean hayMas = filasConExtra.size() > TAMANO_PAGINA;
+        List<Publicacion> cruda = hayMas ? filasConExtra.subList(0, TAMANO_PAGINA) : filasConExtra;
+        Instant siguiente = hayMas ? cruda.get(cruda.size() - 1).creadoEn() : null;
+        List<Publicacion> visibles = sinCerradas.de(cruda, Publicacion::autorId);
+        if (visibles.isEmpty() && siguiente != null && saltosRestantes > 0) {
+            return paginaSinCuentasCerradas(actorId, siguiente, categoriaClave, saltosRestantes - 1);
+        }
+        return new PaginaPublicaciones(aVistas(visibles, actorId), siguiente);
     }
 
     /** Misma razon que {@link #feed}: una conexion para toda la pagina, no una por consulta. */
@@ -446,7 +478,14 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Override
     public Optional<String> ultimoAutor(UserId actorId) {
         requireActorActivo(actorId);
-        return loadPublicacionPort.ultimaVisible()
+        // D-243: si la última es de una cuenta cerrada, el autor que se nombra es el de la última
+        // visible de otra cuenta, buscado en la primera página del feed (una consulta más, solo entonces).
+        Optional<Publicacion> ultima = loadPublicacionPort.ultimaVisible();
+        if (ultima.isPresent() && !sinCerradas.de(List.of(ultima.get()), Publicacion::autorId).isEmpty()) {
+            return ultima.flatMap(p -> consultarPerfilUsuarioPort.porId(p.autorId())).map(PerfilUsuario::nombreCompleto);
+        }
+        return sinCerradas.de(loadPublicacionPort.feed(null, TAMANO_PAGINA, null), Publicacion::autorId).stream()
+                .findFirst()
                 .flatMap(p -> consultarPerfilUsuarioPort.porId(p.autorId()))
                 .map(PerfilUsuario::nombreCompleto);
     }

@@ -73,6 +73,8 @@ class PublicacionMuroServiceTest {
     private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
+    private com.renaser.os.users.api.CuentasCerradasFinder cuentasCerradas;
+    @Mock
     private LoadPublicacionPort loadPublicacionPort;
     @Mock
     private SavePublicacionPort savePublicacionPort;
@@ -119,7 +121,7 @@ class PublicacionMuroServiceTest {
         service = new PublicacionMuroService(loadPublicacionPort, savePublicacionPort, eliminarPublicacionPort,
                 loadComentarioPort, reaccionMuroPort, categoriasUseCase, consultarPerfilUsuarioPort,
                 almacenamiento, userSummaryFinder, events, CLOCK, idGenerator,
-                participacionFinder, referenciasDeMediaPort, List.of(referenciasEnElChat));
+                participacionFinder, referenciasDeMediaPort, List.of(referenciasEnElChat), cuentasCerradas);
         // Por defecto nadie mas mira los objetos: cada prueba que necesite lo contrario lo dice.
         lenient().when(referenciasDeMediaPort.referenciadasFueraDe(any(), any())).thenReturn(Set.of());
         lenient().when(referenciasEnElChat.referenciadas(any())).thenReturn(Set.of());
@@ -197,7 +199,7 @@ class PublicacionMuroServiceTest {
         verify(consultarPerfilUsuarioPort, never()).porId(any());
         verify(reaccionMuroPort, never()).contarPorTipo(any());
         verify(reaccionMuroPort, never()).deUsuario(any(), any());
-        verify(loadComentarioPort, never()).contar(any());
+        verify(loadComentarioPort, never()).contarPorAutor(any());
         // Una sola pasada por cada dato, sin importar que sean 20 publicaciones.
         verify(consultarPerfilUsuarioPort, times(1)).porIds(any());
         verify(reaccionMuroPort, times(1)).contarPorTipoDeVarias(any());
@@ -396,6 +398,84 @@ class PublicacionMuroServiceTest {
 
         assertThatThrownBy(() -> service.publicarDesdeEvidencia(comando)).isInstanceOf(NotAuthorizedException.class);
         verify(savePublicacionPort, never()).save(any());
+    }
+
+    // ─── D-243: lo de cuentas cerradas esperando su borrado no se muestra ─────────────────
+
+    private void otroCerroSuCuenta() {
+        when(cuentasCerradas.cerradasEntre(any())).thenAnswer(inv -> {
+            java.util.Collection<UserId> ids = inv.getArgument(0);
+            return ids.stream().filter(otro::equals).collect(java.util.stream.Collectors.toSet());
+        });
+    }
+
+    private Publicacion publicacionDe(UserId autorId, int minutosAtras) {
+        Instant creada = CLOCK.now().minusSeconds(60L * minutosAtras);
+        return Publicacion.rehydrate(PublicacionId.of(UUID.randomUUID()), autorId,
+                com.renaser.os.community.domain.model.publicacion.TipoPublicacion.MANUAL, null, "hola",
+                List.of(), false, creada, creada);
+    }
+
+    @Test
+    @DisplayName("D-243 feed(): sin las publicaciones de cuentas cerradas, y el cursor sale de la página cruda")
+    void feedSinCuentasCerradasYConElCursorDeLaPaginaCruda() {
+        otroCerroSuCuenta();
+        List<Publicacion> filas = new java.util.ArrayList<>();
+        for (int i = 0; i < 21; i++) {
+            filas.add(publicacionDe(i < 2 || i == 19 ? otro : autor, i));
+        }
+        when(loadPublicacionPort.feed(null, 20, null)).thenReturn(filas);
+
+        var pagina = service.feed(autor, null, null);
+
+        assertThat(pagina.publicaciones()).hasSize(17)
+                .allSatisfy(v -> assertThat(v.publicacion().autorId()).isEqualTo(autor));
+        assertThat(pagina.siguienteCursor()).as("el de la fila 20 de la base, aunque esté oculta")
+                .isEqualTo(filas.get(19).creadoEn());
+    }
+
+    @Test
+    @DisplayName("D-243 feed(): una página entera de cuentas cerradas no se devuelve vacía: se pide la siguiente")
+    void feedSalteaUnaPaginaEnteraDeCuentasCerradas() {
+        otroCerroSuCuenta();
+        List<Publicacion> cerradas = java.util.stream.IntStream.range(0, 21)
+                .mapToObj(i -> publicacionDe(otro, i)).toList();
+        Publicacion visible = publicacionDe(autor, 30);
+        when(loadPublicacionPort.feed(null, 20, null)).thenReturn(cerradas);
+        when(loadPublicacionPort.feed(cerradas.get(19).creadoEn(), 20, null)).thenReturn(List.of(visible));
+
+        var pagina = service.feed(autor, null, null);
+
+        assertThat(pagina.publicaciones()).extracting(v -> v.publicacion().id()).containsExactly(visible.id());
+        assertThat(pagina.siguienteCursor()).isNull();
+    }
+
+    @Test
+    @DisplayName("D-243 reacciones(): quien cerró su cuenta no figura entre quienes reaccionaron")
+    void reaccionesSinCuentasCerradas() {
+        otroCerroSuCuenta();
+        Publicacion publicacion = publicacionVisible(autor);
+        when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
+        when(reaccionMuroPort.listarDe(publicacion.id())).thenReturn(List.of(
+                new ReaccionMuro(publicacion.id(), otro, TipoReaccion.ME_GUSTA),
+                new ReaccionMuro(publicacion.id(), admin, TipoReaccion.NO_ME_GUSTA)));
+        when(userSummaryFinder.findByIds(any())).thenReturn(Map.of(
+                admin, new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
+
+        assertThat(service.reacciones(autor, publicacion.id())).extracting(v -> v.usuarioId()).containsExactly(admin);
+    }
+
+    @Test
+    @DisplayName("D-243 ultimoAutor(): si la última publicación es de una cuenta cerrada, se nombra a la anterior visible")
+    void ultimoAutorSaltaLaCuentaCerrada() {
+        otroCerroSuCuenta();
+        Publicacion deOtro = publicacionDe(otro, 0);
+        when(loadPublicacionPort.ultimaVisible()).thenReturn(Optional.of(deOtro));
+        when(loadPublicacionPort.feed(null, 20, null)).thenReturn(List.of(deOtro, publicacionDe(autor, 5)));
+        when(consultarPerfilUsuarioPort.porId(autor)).thenReturn(Optional.of(
+                new ConsultarPerfilUsuarioPort.PerfilUsuario(autor, "Autora Visible", null)));
+
+        assertThat(service.ultimoAutor(autor)).contains("Autora Visible");
     }
 
     // ─── reacciones(): quien reacciono al post (modal "Reacciones del post") ──────────────

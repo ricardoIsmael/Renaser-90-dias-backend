@@ -9,6 +9,7 @@ import com.renaser.os.points.application.ports.out.ranking.SaveRankingSnapshotPo
 import com.renaser.os.points.domain.model.ranking.PosicionRanking;
 import com.renaser.os.points.domain.model.ranking.TipoRanking;
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
@@ -30,6 +31,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.Map;
 import java.util.UUID;
 
@@ -66,6 +68,8 @@ class RankingServiceTest {
     private MedicionAcumuladaFinder medicionAcumuladaFinder;
     @Mock
     private UserSummaryFinder userSummaryFinder;
+    @Mock
+    private CuentasCerradasFinder cuentasCerradas;
 
     private RankingService service;
 
@@ -73,7 +77,7 @@ class RankingServiceTest {
     void setUp() {
         service = new RankingService(loadRankingCandidatosPort, saveRankingSnapshotPort, loadRankingPort,
                 porcentajeHabitosFinder, porcentajeRocasFinder, porcentajeCursosFinder, medicionAcumuladaFinder,
-                userSummaryFinder);
+                userSummaryFinder, cuentasCerradas);
         // Actor activo por defecto: los tests de consultar() no son sobre autorizacion.
         lenient().when(userSummaryFinder.findById(any())).thenAnswer(inv ->
                 Optional.of(new UserSummary(inv.getArgument(0), "Actor", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
@@ -287,6 +291,24 @@ class RankingServiceTest {
 
         assertThatThrownBy(() -> service.consultar(suspendido, TipoRanking.LEAGUE, FECHA))
                 .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("D-243: una cuenta cerrada esperando su borrado sale del ranking y las posiciones se renumeran sin hueco")
+    void consultarSacaLasCuentasCerradasYRenumera() {
+        UserId primero = id();
+        UserId cerrado = id();
+        UserId tercero = id();
+        when(loadRankingPort.porTipoYFecha(TipoRanking.GENERAL, FECHA)).thenReturn(List.of(
+                new EntradaRankingConNombre(primero, "Ana", 1, BigDecimal.valueOf(90)),
+                new EntradaRankingConNombre(cerrado, "Beto", 2, BigDecimal.valueOf(80)),
+                new EntradaRankingConNombre(tercero, "Caro", 3, BigDecimal.valueOf(70))));
+        when(cuentasCerradas.cerradasEntre(List.of(primero, cerrado, tercero))).thenReturn(Set.of(cerrado));
+
+        List<EntradaRanking> resultado = service.consultar(id(), TipoRanking.GENERAL, FECHA);
+
+        assertThat(resultado).extracting(EntradaRanking::participanteId).containsExactly(primero, tercero);
+        assertThat(resultado).extracting(EntradaRanking::posicion).containsExactly(1, 2);
     }
 
     @Test

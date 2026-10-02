@@ -60,6 +60,8 @@ class ConversacionServiceTest {
     private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
+    private com.renaser.os.users.api.CuentasCerradasFinder cuentasCerradas;
+    @Mock
     private LoadConversacionPort loadConversacionPort;
     @Mock
     private SaveConversacionPort saveConversacionPort;
@@ -113,7 +115,7 @@ class ConversacionServiceTest {
         service = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
                 esParticipantePort, new AccesoAChatsDeGrupo(pertenenciaVigentePort, gruposEnCursoPort, userSummaryFinder), marcarLeidoPort, anunciarLectura, contarNoLeidosPort,
                 loadMensajePort, listarUsuariosPort, userSummaryFinder, fotosDeGrupos,
-                new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder), CLOCK, idGenerator, transactionManager);
+                new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder), CLOCK, idGenerator, transactionManager, cuentasCerradas);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
                 Optional.of(new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
@@ -242,6 +244,25 @@ class ConversacionServiceTest {
                         .isNull());
         // Nunca N+1: una sola consulta en lote para todas las conversaciones del actor.
         verify(listarUsuariosPort, times(1)).otroParticipanteDeDirectas(any(), any());
+    }
+
+    /** D-243: el chat directo con alguien que cerró su cuenta para eliminarla ya no se lista; el grupo, sí. */
+    @Test
+    void elChatDirectoConUnaCuentaCerradaNoSeLista() {
+        Conversacion conCerrada = Conversacion.crearDirecta(ConversacionId.of(UUID.randomUUID()), "a", CLOCK.now());
+        Conversacion conActiva = Conversacion.crearDirecta(ConversacionId.of(UUID.randomUUID()), "b", CLOCK.now());
+        Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
+        UserId cerrada = UserId.of(UUID.randomUUID());
+        when(loadConversacionPort.misConversaciones(activo)).thenReturn(List.of(conCerrada, conActiva, global));
+        when(listarUsuariosPort.otroParticipanteDeDirectas(any(), eq(activo)))
+                .thenReturn(Map.of(conCerrada.id(), cerrada, conActiva.id(), otroActivo));
+        when(cuentasCerradas.cerradasEntre(any())).thenReturn(java.util.Set.of(cerrada));
+        when(loadMensajePort.ultimosPorConversacion(any())).thenReturn(Map.of());
+        when(contarNoLeidosPort.contarNoLeidos(eq(activo), any())).thenReturn(Map.of());
+        when(userSummaryFinder.findByIds(any())).thenReturn(Map.of());
+
+        assertThat(service.listar(activo)).extracting(r -> r.conversacion().id())
+                .containsExactlyInAnyOrder(conActiva.id(), global.id());
     }
 
     /**

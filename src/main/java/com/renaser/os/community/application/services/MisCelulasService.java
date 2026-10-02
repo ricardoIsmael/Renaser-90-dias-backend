@@ -18,6 +18,7 @@ import com.renaser.os.community.domain.model.cohorte.Cohorte;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -61,13 +62,16 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
     private final Clock clock;
     private final FotosDeIntegrantesDelGrupo fotos;
     private final VigenciaDeGrupos vigencia;
+    /** D-243: los integrantes y su conteo no incluyen cuentas cerradas esperando su borrado. */
+    private final SinCuentasCerradas sinCerradas;
 
     public MisCelulasService(LoadCelulaPort loadCelulaPort, LoadCohortePort loadCohortePort,
                               LoadAsignacionesPort loadAsignacionesPort,
                               ConsultarCelulaDeParticipantePort consultarCelulaDeParticipantePort,
                               ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort,
                               UserSummaryFinder userSummaryFinder, Clock clock, FotosDeIntegrantesDelGrupo fotos,
-                              LoadPoliticaMentoriaPort loadPoliticaMentoriaPort) {
+                              LoadPoliticaMentoriaPort loadPoliticaMentoriaPort,
+                              CuentasCerradasFinder cuentasCerradas) {
         this.loadCelulaPort = loadCelulaPort;
         this.loadCohortePort = loadCohortePort;
         this.loadAsignacionesPort = loadAsignacionesPort;
@@ -77,6 +81,7 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
         this.clock = clock;
         this.fotos = fotos;
         this.vigencia = new VigenciaDeGrupos(loadPoliticaMentoriaPort);
+        this.sinCerradas = new SinCuentasCerradas(cuentasCerradas);
     }
 
     @Override
@@ -117,7 +122,9 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
                responde "quienes son" seria una asimetria sin motivo. */
             throw new NotAuthorizedException("No perteneces a ese grupo");
         }
-        List<UserId> aprendices = delGrupo.aprendicesVigentesEn(celulaId, ahora);
+        // La pertenencia del ACTOR se decidió arriba con la lista completa; lo que se le muestra va sin
+        // las cuentas cerradas (D-243).
+        List<UserId> aprendices = sinCerradas.de(delGrupo.aprendicesVigentesEn(celulaId, ahora), id -> id);
         Map<UserId, String> rutas = fotos.rutasDeLasFotos(celulaId.value(), aprendices);
         return aprendices.stream().map(id -> new IntegranteDelGrupo(perfilBasico(id), rutas.get(id))).toList();
     }
@@ -168,7 +175,8 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
         // El mentor sale de la asignacion vigente, no de `celulas.mentor_id` (D-240, E-479): es la
         // que ya deciden el acceso, el chat y el semaforo.
         PerfilBasico mentor = delGrupo.mentorVigenteEn(celula.id(), ahora).map(this::perfilBasico).orElse(null);
-        int cantidadMiembros = delGrupo.aprendicesVigentesEn(celula.id(), ahora).size();
+        // Sin cuentas cerradas (D-243), igual que la lista de `integrantesDe`.
+        int cantidadMiembros = sinCerradas.de(delGrupo.aprendicesVigentesEn(celula.id(), ahora), id -> id).size();
         int totalCelulas = loadCelulaPort.porCohorte(celula.cohorteId()).size();
         return new MiCelula(celula, cohorte, mentor, cantidadMiembros, totalCelulas, rutaDeLaFoto(celula, mentor));
     }

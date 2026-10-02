@@ -25,6 +25,7 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -41,6 +42,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -72,6 +74,8 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
      * bloqueada por la transaccion en curso), asi que aislarla no arriesga un auto-interbloqueo.
      */
     private final TransactionTemplate transaccionPropia;
+    /** D-243: un chat directo con una cuenta cerrada esperando su borrado no se lista. */
+    private final CuentasCerradasFinder cuentasCerradas;
 
     public ConversacionService(LoadConversacionPort loadConversacionPort, SaveConversacionPort saveConversacionPort,
                                 AgregarParticipantePort agregarParticipantePort,
@@ -81,7 +85,9 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
                                 ContarNoLeidosPort contarNoLeidosPort, LoadMensajePort loadMensajePort,
                                 ListarUsuariosDeConversacionPort listarUsuariosPort,
                                 UserSummaryFinder userSummaryFinder, FotoPropiaDelGrupoFinder fotosDeGrupos,
-                                NombresDeLosChatsService nombresDeLosChats, Clock clock, IdGenerator idGenerator, PlatformTransactionManager transactionManager) {
+                                NombresDeLosChatsService nombresDeLosChats, Clock clock, IdGenerator idGenerator, PlatformTransactionManager transactionManager,
+                                CuentasCerradasFinder cuentasCerradas) {
+        this.cuentasCerradas = cuentasCerradas;
         this.loadConversacionPort = loadConversacionPort;
         this.saveConversacionPort = saveConversacionPort;
         this.agregarParticipantePort = agregarParticipantePort;
@@ -153,13 +159,15 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     @Override
     public List<ConversacionResumen> listar(UserId actorId) {
         requireActivo(actorId);
-        List<Conversacion> conversaciones = lasQuePuedeAbrir(actorId);
+        List<Conversacion> abribles = lasQuePuedeAbrir(actorId);
+        /* Con quien habla en cada DIRECTA, en UNA consulta. Se pide para todas y se usa solo en
+           las DIRECTAS: filtrar antes obligaria a recorrer dos veces para ahorrar nada. */
+        Map<ConversacionId, UserId> otros = listarUsuariosPort.otroParticipanteDeDirectas(
+                abribles.stream().map(Conversacion::id).toList(), actorId);
+        List<Conversacion> conversaciones = sinDirectosConCuentasCerradas(abribles, otros);
         List<ConversacionId> ids = conversaciones.stream().map(Conversacion::id).toList();
         Map<ConversacionId, Mensaje> ultimos = loadMensajePort.ultimosPorConversacion(ids);
         Map<ConversacionId, Long> noLeidos = contarNoLeidosPort.contarNoLeidos(actorId, ids);
-        /* Con quien habla en cada DIRECTA, en UNA consulta. Se pide para todas y se usa solo en
-           las DIRECTAS: filtrar antes obligaria a recorrer dos veces para ahorrar nada. */
-        Map<ConversacionId, UserId> otros = listarUsuariosPort.otroParticipanteDeDirectas(ids, actorId);
         /* Los nombres, EN LOTE y aca. Dejarselos al cliente contra el directorio de miembros fue
            el primer intento y no servia: ese directorio exige que exista la conversacion GLOBAL y
            donde no existe responde 404, con lo que la bandeja de DMs se quedaba sin nombres por
@@ -177,6 +185,25 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
                             c.celulaId() != null ? fotosPropias.get(c.celulaId()) : null, nombres.get(c.id()));
                 })
                 .sorted(Comparator.comparing(ConversacionService::actividadDe).reversed())
+                .toList();
+    }
+
+    /**
+     * Saca de la lista los chats DIRECTOS cuya contraparte cerró su cuenta y espera el borrado (D-243): ya
+     * no hay con quién hablar, y a los 30 días el chat se borra entero. Una consulta para toda la lista. Los
+     * de grupo, el global y el soporte no cambian; una suspensión a secas tampoco.
+     */
+    private List<Conversacion> sinDirectosConCuentasCerradas(List<Conversacion> conversaciones,
+                                                             Map<ConversacionId, UserId> otros) {
+        if (otros.isEmpty()) {
+            return conversaciones;
+        }
+        Set<UserId> cerradas = cuentasCerradas.cerradasEntre(otros.values().stream().distinct().toList());
+        if (cerradas.isEmpty()) {
+            return conversaciones;
+        }
+        return conversaciones.stream()
+                .filter(c -> c.tipo() != TipoConversacion.DIRECTA || !cerradas.contains(otros.get(c.id())))
                 .toList();
     }
 

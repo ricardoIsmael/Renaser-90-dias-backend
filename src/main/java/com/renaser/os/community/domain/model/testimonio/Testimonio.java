@@ -69,6 +69,18 @@ public final class Testimonio {
                 estrellas, destacado, creadoEn);
     }
 
+    /**
+     * La persona de la que habla el testimonio, si la hay (D-243): solo el promovido desde una publicacion
+     * habla de quien figura en {@code usuarioId} (su nombre, su foto, su texto; siempre lleva la foto de
+     * la publicacion). El cargado a mano guarda en {@code usuarioId} al Admin que lo escribio, con el
+     * nombre de OTRA persona: no habla de el, asi que su cuenta cerrada no lo oculta ni lo borra.
+     * Misma regla que {@code BorradoDeCuentaEnCommunityAdapter}.
+     */
+    public UserId personaDeLaQueHabla() {
+        boolean promovido = publicacionMuroId != null || fotoEventoRuta != null;
+        return promovido ? usuarioId : null;
+    }
+
     public void retirar() {
         this.destacado = false;
     }
