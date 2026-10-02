@@ -80,7 +80,9 @@ class EmergenciaPedidaNotificationListener {
                 .map(UserSummary::fullName)
                 .filter(nombre -> !nombre.isBlank())
                 .orElse(QUIEN_SIN_NOMBRE);
-        return quien + " pide volver al día " + pedido.diaPedido() + " (hoy está en el día " + pedido.diaAlPedir()
-                + "). Te espera en su chat de soporte.";
+        String que = pedido.diaPedido() == null
+                ? " pide ayuda por una emergencia (todavía está en el día " + pedido.diaAlPedir() + ")."
+                : " pide volver al día " + pedido.diaPedido() + " (hoy está en el día " + pedido.diaAlPedir() + ").";
+        return quien + que + " Te espera en su chat de soporte.";
     }
 }

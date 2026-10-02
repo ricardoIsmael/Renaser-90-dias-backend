@@ -11,14 +11,14 @@ class SolicitudDeEmergenciaPersistenceMapper {
 
     SolicitudDeEmergencia toDomain(SolicitudDeEmergenciaJpaEntity e) {
         return SolicitudDeEmergencia.rehydrate(e.getId(), UserId.of(e.getAprendizId()), e.getQueOcurrio(),
-                e.getDiaPedido(), e.getDiaAlPedir(), EstadoDeEmergencia.valueOf(e.getEstado()), e.getCreadaEn(),
+                e.getDiaPedido() == null ? null : e.getDiaPedido().intValue(), e.getDiaAlPedir(), EstadoDeEmergencia.valueOf(e.getEstado()), e.getCreadaEn(),
                 e.getResueltaEn(), e.getResueltaPor() == null ? null : UserId.of(e.getResueltaPor()),
                 e.getDiaAplicado() == null ? null : e.getDiaAplicado().intValue());
     }
 
     SolicitudDeEmergenciaJpaEntity toEntity(SolicitudDeEmergencia s) {
         return new SolicitudDeEmergenciaJpaEntity(s.id(), s.aprendizId().value(), s.queOcurrio(),
-                (short) s.diaPedido(), (short) s.diaAlPedir(), s.estado().name(), s.creadaEn(), s.resueltaEn(),
+                s.diaPedido() == null ? null : s.diaPedido().shortValue(), (short) s.diaAlPedir(), s.estado().name(), s.creadaEn(), s.resueltaEn(),
                 s.resueltaPor() == null ? null : s.resueltaPor().value(),
                 s.diaAplicado() == null ? null : s.diaAplicado().shortValue());
     }

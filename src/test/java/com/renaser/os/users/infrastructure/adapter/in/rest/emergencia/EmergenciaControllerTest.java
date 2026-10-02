@@ -96,13 +96,10 @@ class EmergenciaControllerTest {
     }
 
     @Test
-    @DisplayName("sin día o con un texto de más de 280 es 400 y no llega al caso de uso")
+    @DisplayName("un texto de más de 280 es 400 y no llega al caso de uso")
     void validacion() throws Exception {
         UUID aprendiz = actor(UserRole.TRAINEE, UserStatus.ACTIVE);
 
-        mockMvc.perform(post(RUTA).header("X-Actor-Id", aprendiz.toString())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"queOcurrio\":\"Accidente\"}"))
-                .andExpect(status().isBadRequest());
         mockMvc.perform(post(RUTA).header("X-Actor-Id", aprendiz.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"queOcurrio\":\"" + "a".repeat(281) + "\",\"diaPedido\":3}"))
@@ -110,8 +107,25 @@ class EmergenciaControllerTest {
         verifyNoInteractions(pedirAyuda);
     }
 
+    /** Día 0 (respuesta del dueño, 02/10): sin día llega al caso de uso, que decide si corresponde. */
     @Test
-    @DisplayName("un pedido abierto o antes del Día 1 es 409")
+    @DisplayName("sin día (Día 0) el pedido llega al caso de uso con el día vacío")
+    void sinDia() throws Exception {
+        UUID aprendiz = actor(UserRole.TRAINEE, UserStatus.ACTIVE);
+        when(pedirAyuda.pedir(any())).thenAnswer(inv -> {
+            PedirAyudaCommand c = inv.getArgument(0);
+            return SolicitudDeEmergencia.pedir(UUID.randomUUID(), c.actorId(), c.queOcurrio(), c.diaPedido(), 0, CLOCK);
+        });
+
+        mockMvc.perform(post(RUTA).header("X-Actor-Id", aprendiz.toString())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"queOcurrio\":\"Me enfermé\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.diaPedido").isEmpty())
+                .andExpect(jsonPath("$.diaAlPedir").value(0));
+    }
+
+    @Test
+    @DisplayName("un pedido abierto es 409")
     void conflicto() throws Exception {
         UUID aprendiz = actor(UserRole.TRAINEE, UserStatus.ACTIVE);
         when(pedirAyuda.pedir(any())).thenThrow(new IllegalStateException("Ya nos pediste ayuda."));

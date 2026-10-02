@@ -22,11 +22,15 @@ import java.util.UUID;
  * <ul>
  *   <li>Qué pasó: obligatorio, hasta {@value #LARGO_MAXIMO} caracteres (el tope del motivo de un ajuste de
  *       día, para que quien atiende pueda pasarlo entero).</li>
- *   <li>A qué día: entre 1 y el día que vive hoy. El tope es {@value ParticipacionPrograma#ULTIMO_DIA_AJUSTABLE}
- *       aunque esté en el 90, porque el 90 no se fija a mano (D-194).</li>
- *   <li>Antes del Día 1 no hay a qué día volver: {@link IllegalStateException} (409).</li>
+ *   <li>A qué día: entre 1 y el día que vive hoy, incluido hoy. El tope es
+ *       {@value ParticipacionPrograma#ULTIMO_DIA_AJUSTABLE} aunque esté en el 90, porque el 90 no se fija a mano
+ *       (D-194).</li>
+ *   <li><b>En el Día 0 también se puede pedir</b> (decisión del dueño del 2026-10-02): es solo «necesito
+ *       ayuda», sin día ({@code diaPedido} vacío), porque no hay un día anterior al que volver.</li>
  * </ul>
- * Que haya una sola abierta por persona depende de otras filas: lo revisa el caso de uso y lo cierra el
+ * <blockquote><b>Corregido 2026-10-02 (mismo día, respuesta del dueño).</b> Decía «Antes del Día 1 no hay a qué
+ * día volver: {@link IllegalStateException} (409)». El dueño pidió el botón desde el Día 0.</blockquote>
+ *  * Que haya una sola abierta por persona depende de otras filas: lo revisa el caso de uso y lo cierra el
  * índice único parcial de la tabla.
  */
 @Getter
@@ -37,12 +41,13 @@ public final class SolicitudDeEmergencia {
 
     public static final int LARGO_MAXIMO = 280;
     public static final int PRIMER_DIA = ParticipacionPrograma.PRIMER_DIA_AJUSTABLE;
-    public static final String ANTES_DEL_DIA_UNO = "Tu programa todavía no empezó: no hay un día al que volver.";
+    public static final String SIN_DIA_EN_EL_DIA_CERO = "Todavía estás en el día 0: no hace falta elegir un día.";
 
     private final UUID id;
     private final UserId aprendizId;
     private final String queOcurrio;
-    private final int diaPedido;
+    /** {@code null} si lo pidió en el Día 0: es solo un pedido de ayuda. */
+    private final Integer diaPedido;
     private final int diaAlPedir;
     private EstadoDeEmergencia estado;
     private final Instant creadaEn;
@@ -51,40 +56,53 @@ public final class SolicitudDeEmergencia {
     private Integer diaAplicado;
 
     /**
+     * @param diaPedido a qué día quiere volver; {@code null} (y solo así) si todavía está en el Día 0
      * @param diaActual el día que vive hoy en su zona ({@code ParticipacionPrograma.diaVigente})
-     * @throws IllegalArgumentException si falta el texto, es muy largo o el día está fuera de rango (400)
-     * @throws IllegalStateException si todavía no empezó su Día 1 (409)
+     * @throws IllegalArgumentException si falta el texto, es muy largo o el día no corresponde (400)
      */
-    public static SolicitudDeEmergencia pedir(UUID id, UserId aprendizId, String queOcurrio, int diaPedido,
+    public static SolicitudDeEmergencia pedir(UUID id, UserId aprendizId, String queOcurrio, Integer diaPedido,
                                               int diaActual, Clock clock) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(aprendizId, "aprendizId es obligatorio");
         String texto = requireTexto(queOcurrio);
-        if (diaActual < PRIMER_DIA) {
-            throw new IllegalStateException(ANTES_DEL_DIA_UNO);
-        }
-        int maximo = diaMaximoPedible(diaActual);
-        if (diaPedido < PRIMER_DIA || diaPedido > maximo) {
-            throw new IllegalArgumentException("Elige un día entre " + PRIMER_DIA + " y " + maximo + ".");
-        }
-        return new SolicitudDeEmergencia(id, aprendizId, texto, diaPedido, diaActual, EstadoDeEmergencia.ABIERTA,
+        int dia = Math.max(0, diaActual);
+        requireDiaQueCorresponde(diaPedido, dia);
+        return new SolicitudDeEmergencia(id, aprendizId, texto, diaPedido, dia, EstadoDeEmergencia.ABIERTA,
                 clock.now(), null, null, null);
     }
 
+    private static void requireDiaQueCorresponde(Integer diaPedido, int diaActual) {
+        int maximo = diaMaximoPedible(diaActual);
+        if (maximo == 0) {
+            if (diaPedido != null) {
+                throw new IllegalArgumentException(SIN_DIA_EN_EL_DIA_CERO);
+            }
+            return;
+        }
+        if (diaPedido == null || diaPedido < PRIMER_DIA || diaPedido > maximo) {
+            throw new IllegalArgumentException("Elige un día entre " + PRIMER_DIA + " y " + maximo + ".");
+        }
+    }
+
     /** Solo para el adaptador de persistencia. */
-    public static SolicitudDeEmergencia rehydrate(UUID id, UserId aprendizId, String queOcurrio, int diaPedido,
+    public static SolicitudDeEmergencia rehydrate(UUID id, UserId aprendizId, String queOcurrio, Integer diaPedido,
                                                   int diaAlPedir, EstadoDeEmergencia estado, Instant creadaEn,
                                                   Instant resueltaEn, UserId resueltaPor, Integer diaAplicado) {
         return new SolicitudDeEmergencia(id, aprendizId, queOcurrio, diaPedido, diaAlPedir, estado, creadaEn,
                 resueltaEn, resueltaPor, diaAplicado);
     }
 
-    /** Hasta qué día puede pedir quien vive hoy {@code diaActual}; 0 si todavía no empezó. */
+    /** Hasta qué día puede pedir quien vive hoy {@code diaActual}; 0 en el Día 0 (pide ayuda sin día). */
     public static int diaMaximoPedible(int diaActual) {
         if (diaActual < PRIMER_DIA) {
             return 0;
         }
         return Math.min(diaActual, ParticipacionPrograma.ULTIMO_DIA_AJUSTABLE);
+    }
+
+    /** Si pidió volver a un día (no es un pedido del Día 0). */
+    public boolean pideUnDia() {
+        return diaPedido != null;
     }
 
     public boolean abierta() {

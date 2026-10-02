@@ -25,7 +25,7 @@ public class SolicitudDeEmergenciaJpaEntity {
 
     private String queOcurrio;
 
-    private short diaPedido;
+    private Short diaPedido;
 
     private short diaAlPedir;
 

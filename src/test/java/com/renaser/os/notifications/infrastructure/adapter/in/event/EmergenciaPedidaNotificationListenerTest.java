@@ -95,6 +95,22 @@ class EmergenciaPedidaNotificationListenerTest {
     }
 
     @Test
+    @DisplayName("un pedido del Día 0 dice que pide ayuda, sin día")
+    void pedidoDelDiaCero() {
+        when(participacionFinder.usuariosActivosConRol(any())).thenReturn(List.of(admin));
+        when(userSummaryFinder.findById(ana)).thenReturn(Optional.of(
+                new UserSummary(ana, "Ana Pérez", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        when(soporteFinder.conversacionDeSoporteDe(ana)).thenReturn(Optional.empty());
+
+        oyente().on(new EmergenciaPedidaEvent(UUID.randomUUID(), ana, "Me enfermé", null, 0));
+
+        ArgumentCaptor<EmitirNotificacionCommand> captor = ArgumentCaptor.forClass(EmitirNotificacionCommand.class);
+        verify(emitir).emitir(captor.capture());
+        assertThat(captor.getValue().cuerpo()).isEqualTo(
+                "Ana Pérez pide ayuda por una emergencia (todavía está en el día 0). Te espera en su chat de soporte.");
+    }
+
+    @Test
     @DisplayName("sin nadie que atienda no emite nada")
     void sinAdministradores() {
         when(participacionFinder.usuariosActivosConRol(any())).thenReturn(List.of());

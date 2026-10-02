@@ -17,7 +17,7 @@ class SolicitudDeEmergenciaTest {
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-10-02T15:00:00Z"));
     private final UserId aprendiz = UserId.of(UUID.randomUUID());
 
-    private SolicitudDeEmergencia pedir(String texto, int diaPedido, int diaActual) {
+    private SolicitudDeEmergencia pedir(String texto, Integer diaPedido, int diaActual) {
         return SolicitudDeEmergencia.pedir(UUID.randomUUID(), aprendiz, texto, diaPedido, diaActual, CLOCK);
     }
 
@@ -58,12 +58,24 @@ class SolicitudDeEmergenciaTest {
                 .hasMessage("Elige un día entre 1 y 89.");
     }
 
+    /** Respuesta del dueño (02/10): disponible desde el Día 0. Contra la versión anterior era un 409. */
     @Test
-    @DisplayName("antes del Día 1 es un 409: no hay a qué día volver")
-    void antesDelDiaUno() {
+    @DisplayName("en el Día 0 se pide ayuda sin día; con un día es 400")
+    void enElDiaCeroSePideSinDia() {
         assertThat(SolicitudDeEmergencia.diaMaximoPedible(0)).isZero();
-        assertThatThrownBy(() -> pedir("Accidente", 1, 0)).isInstanceOf(IllegalStateException.class)
-                .hasMessage(SolicitudDeEmergencia.ANTES_DEL_DIA_UNO);
+        SolicitudDeEmergencia s = pedir("Me enfermé antes de empezar", null, 0);
+        assertThat(s.abierta()).isTrue();
+        assertThat(s.pideUnDia()).isFalse();
+        assertThat(s.diaAlPedir()).isZero();
+        assertThatThrownBy(() -> pedir("Accidente", 1, 0)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(SolicitudDeEmergencia.SIN_DIA_EN_EL_DIA_CERO);
+    }
+
+    @Test
+    @DisplayName("desde el Día 1 el día es obligatorio")
+    void desdeElDiaUnoElDiaEsObligatorio() {
+        assertThatThrownBy(() -> pedir("Accidente", null, 5)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Elige un día entre 1 y 5.");
     }
 
     @Test

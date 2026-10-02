@@ -5,6 +5,7 @@ import com.renaser.os.chat.application.ports.in.emergencia.AvisarEmergenciaEnSop
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.EmergenciaPedidaEvent;
+import com.renaser.os.users.api.EmergenciaResueltaEvent;
 import com.renaser.os.users.application.ports.in.emergencia.PedirAyudaPorEmergenciaUseCase;
 import com.renaser.os.users.application.ports.in.emergencia.PedirAyudaPorEmergenciaUseCase.PedirAyudaCommand;
 import com.renaser.os.users.application.ports.in.participante.SetTraineeProgramDayUseCase;
@@ -127,6 +128,29 @@ class EmergenciaDePuntaAPuntaIT {
         assertThat(fila.get("resuelta_en")).isNotNull();
         assertThat(pedirAyuda.consultar(aprendiz).abierta()).isNull();
         assertThat(pedirAyuda.consultar(aprendiz).diaActual()).isEqualTo(12);
+
+        // Pedido del dueño (02/10): el programa le escribe a la persona, una sola vez aunque se reentregue.
+        EmergenciaResueltaEvent resuelta = new EmergenciaResueltaEvent(pedida.id(), aprendiz, 12, 12);
+        avisarEnSoporte.responder(resuelta);
+        avisarEnSoporte.responder(resuelta);
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT texto FROM renaser.mensajes WHERE conversacion_id = ? AND texto LIKE 'Listo:%'",
+                String.class, soporte))
+                .containsExactly("Listo: volviste al día 12. Si necesitas algo más, escríbenos aquí.");
+    }
+
+    @Test
+    @DisplayName("V90 acepta el pedido del Día 0, sin día")
+    void pedidoDelDiaCero() {
+        jdbcTemplate.update("UPDATE renaser.participantes_programa SET programa_activado_en = NULL, dia_programa = 0, "
+                + "fecha_inicio = fecha_inicio + 30 WHERE usuario_id = ?", aprendiz.value());
+
+        SolicitudDeEmergencia pedida = pedirAyuda.pedir(new PedirAyudaCommand(aprendiz, "Me enfermé", null));
+
+        Map<String, Object> fila = jdbcTemplate.queryForMap(
+                "SELECT dia_pedido, dia_al_pedir FROM renaser.solicitudes_emergencia WHERE id = ?", pedida.id());
+        assertThat(fila.get("dia_pedido")).isNull();
+        assertThat(((Number) fila.get("dia_al_pedir")).intValue()).isZero();
     }
 
     @Test

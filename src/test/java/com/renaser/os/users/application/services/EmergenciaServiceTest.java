@@ -4,6 +4,7 @@ import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.EmergenciaPedidaEvent;
+import com.renaser.os.users.api.EmergenciaResueltaEvent;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -148,15 +149,21 @@ class EmergenciaServiceTest {
     }
 
     @Test
-    @DisplayName("sin fila de programa o antes del Día 1: día máximo 0 y pedir es 409")
-    void antesDelDiaUno() {
+    @DisplayName("en el Día 0 (o sin fila de programa) pide ayuda sin día y avisa igual (respuesta del dueño, 02/10)")
+    void enElDiaCeroPideAyudaSinDia() {
         existe(aprendiz, UserRole.TRAINEE, UserStatus.ACTIVE);
         when(loadParticipacionPort.byParticipanteId(aprendiz)).thenReturn(Optional.empty());
+        when(loadSolicitudPort.abiertaDe(aprendiz)).thenReturn(Optional.empty());
+        when(saveSolicitudPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         assertThat(servicio(MEDIODIA).consultar(aprendiz).diaMaximo()).isZero();
-        when(loadSolicitudPort.abiertaDe(aprendiz)).thenReturn(Optional.empty());
+        SolicitudDeEmergencia s = servicio(MEDIODIA).pedir(new PedirAyudaCommand(aprendiz, "Me enfermé", null));
+
+        assertThat(s.diaPedido()).isNull();
+        assertThat(s.diaAlPedir()).isZero();
+        verify(eventos).publishEvent(new EmergenciaPedidaEvent(s.id(), aprendiz, "Me enfermé", null, 0));
         assertThatThrownBy(() -> servicio(MEDIODIA).pedir(new PedirAyudaCommand(aprendiz, "x", 1)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -193,9 +200,10 @@ class EmergenciaServiceTest {
     }
 
     @Test
-    @DisplayName("cerrar sin cambio la deja resuelta sin día aplicado")
+    @DisplayName("cerrar sin cambio la deja resuelta sin día aplicado y avisa con el día que vive hoy")
     void cerrarSinCambio() {
         existe(admin, UserRole.ALCHEMIST, UserStatus.ACTIVE);
+        enCurso();
         UUID id = UUID.randomUUID();
         when(loadSolicitudPort.porId(id)).thenReturn(Optional.of(
                 SolicitudDeEmergencia.pedir(id, aprendiz, "Accidente", 12, 18, MEDIODIA)));
@@ -206,6 +214,7 @@ class EmergenciaServiceTest {
         assertThat(cerrada.estado()).isEqualTo(EstadoDeEmergencia.RESUELTA);
         assertThat(cerrada.resueltaPor()).isEqualTo(admin);
         assertThat(cerrada.diaAplicado()).isNull();
+        verify(eventos).publishEvent(new EmergenciaResueltaEvent(id, aprendiz, null, 20));
     }
 
     @Test
@@ -219,6 +228,8 @@ class EmergenciaServiceTest {
         verify(saveSolicitudPort).save(abierta);
         assertThat(abierta.diaAplicado()).isEqualTo(12);
         assertThat(abierta.resueltaPor()).isEqualTo(admin);
+        // Pedido del dueño (02/10): al aplicar el cambio, el programa le escribe a la persona.
+        verify(eventos).publishEvent(new EmergenciaResueltaEvent(abierta.id(), aprendiz, 12, 12));
 
         UserId otro = UserId.of(UUID.randomUUID());
         when(loadSolicitudPort.abiertaDe(otro)).thenReturn(Optional.empty());

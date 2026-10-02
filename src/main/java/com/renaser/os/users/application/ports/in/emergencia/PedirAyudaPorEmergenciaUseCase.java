@@ -17,11 +17,12 @@ public interface PedirAyudaPorEmergenciaUseCase {
     /**
      * @throws com.renaser.os.shared.domain.NotAuthorizedException si no es un aprendiz activo (403)
      * @throws IllegalArgumentException si el texto o el día no valen (400)
-     * @throws IllegalStateException si todavía no empezó o ya tiene un pedido abierto (409)
+     * @throws IllegalStateException si ya tiene un pedido abierto (409)
      */
     SolicitudDeEmergencia pedir(PedirAyudaCommand command);
 
-    record PedirAyudaCommand(UserId actorId, String queOcurrio, int diaPedido) {
+    /** @param diaPedido {@code null} en el Día 0: el pedido es solo «necesito ayuda». */
+    record PedirAyudaCommand(UserId actorId, String queOcurrio, Integer diaPedido) {
         public PedirAyudaCommand {
             Objects.requireNonNull(actorId, "actorId es obligatorio");
         }
@@ -29,7 +30,7 @@ public interface PedirAyudaPorEmergenciaUseCase {
 
     /**
      * @param diaActual el día que vive hoy en su zona
-     * @param diaMaximo hasta qué día puede pedir (0 si todavía no empezó)
+     * @param diaMaximo hasta qué día puede pedir (0 en el Día 0: pide ayuda sin elegir día)
      * @param abierta   su pedido abierto, o {@code null}
      */
     record MiEmergencia(int diaActual, int diaMaximo, SolicitudDeEmergencia abierta) {

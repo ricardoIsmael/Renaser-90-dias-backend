@@ -22,6 +22,25 @@ class AvisoDeEmergenciaTest {
     }
 
     @Test
+    @DisplayName("en el Día 0 no hay día pedido: pide ayuda")
+    void textoDelDiaCero() {
+        assertThat(new AvisoDeEmergencia(solicitud, "Me enfermé", null, 0).texto())
+                .isEqualTo("Emergencia: Me enfermé\nPide ayuda (todavía está en el día 0).");
+    }
+
+    @Test
+    @DisplayName("la respuesta al resolverlo: con el día aplicado, o sin cambio con el día de hoy")
+    void respuesta() {
+        assertThat(new RespuestaAEmergencia(solicitud, 12, 12).texto())
+                .isEqualTo("Listo: volviste al día 12. Si necesitas algo más, escríbenos aquí.");
+        assertThat(new RespuestaAEmergencia(solicitud, null, 20).texto())
+                .isEqualTo("Revisamos tu pedido; seguimos en el día 20. Escríbenos si necesitas algo.");
+        assertThat(new RespuestaAEmergencia(solicitud, null, 20).idDelMensaje())
+                .isEqualTo(new RespuestaAEmergencia(solicitud, 12, 12).idDelMensaje())
+                .isNotEqualTo(new AvisoDeEmergencia(solicitud, "x", 1, 2).idDelMensaje());
+    }
+
+    @Test
     @DisplayName("el id del mensaje sale del pedido: el mismo pedido, el mismo id; otro pedido, otro id")
     void idDeterministico() {
         var uno = new AvisoDeEmergencia(solicitud, "x", 1, 2);

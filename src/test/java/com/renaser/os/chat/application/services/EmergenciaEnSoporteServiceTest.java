@@ -7,6 +7,8 @@ import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPo
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.emergencia.AvisoDeEmergencia;
+import com.renaser.os.chat.domain.model.emergencia.RespuestaAEmergencia;
+import com.renaser.os.users.api.EmergenciaResueltaEvent;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.EmergenciaPedidaEvent;
 import org.junit.jupiter.api.DisplayName;
@@ -56,6 +58,27 @@ class EmergenciaEnSoporteServiceTest {
             assertThat(pieza.id()).isEqualTo(esperado.idDelMensaje());
             assertThat(pieza.contenido().texto()).isEqualTo(esperado.texto());
             assertThat(pieza.aviso()).isEqualTo(AvisoDeLaPieza.SIN_AVISO);
+        });
+    }
+
+    /** Pedido del dueño (02/10): al resolverlo, el programa le escribe a la persona, con push solo para ella. */
+    @Test
+    @DisplayName("al resolverlo le escribe a la persona en su soporte, con id del pedido y push solo para ella")
+    void respondeALaPersona() {
+        when(conversaciones.porClaveDirecta(Conversacion.claveSoporteDe(ANA))).thenReturn(Optional.of(
+                Conversacion.crearSoporte(SOPORTE, ANA, "Ana – Formación Renaser", Instant.now())));
+        var resuelta = new EmergenciaResueltaEvent(UUID.randomUUID(), ANA, 12, 12);
+
+        new EmergenciaEnSoporteService(conversaciones, delPrograma).responder(resuelta);
+
+        ArgumentCaptor<EntregaDelPrograma> entrega = ArgumentCaptor.forClass(EntregaDelPrograma.class);
+        verify(delPrograma).enviarUnaVez(entrega.capture());
+        var esperada = new RespuestaAEmergencia(resuelta.solicitudId(), 12, 12);
+        assertThat(entrega.getValue().conversacionId()).isEqualTo(SOPORTE);
+        assertThat(entrega.getValue().piezas()).singleElement().satisfies(pieza -> {
+            assertThat(pieza.id()).isEqualTo(esperada.idDelMensaje());
+            assertThat(pieza.contenido().texto()).isEqualTo("Listo: volviste al día 12. Si necesitas algo más, escríbenos aquí.");
+            assertThat(pieza.aviso()).isEqualTo(AvisoDeLaPieza.SOLO_A_QUIEN_SE_REFIERE);
         });
     }
 

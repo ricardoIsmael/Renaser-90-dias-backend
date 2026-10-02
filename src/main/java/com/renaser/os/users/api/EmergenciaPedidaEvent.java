@@ -14,9 +14,10 @@ import java.util.UUID;
  *
  * @param queOcurrio lo que escribió la persona. Va al chat de soporte; el push NO lo lleva (sale en la
  *                   pantalla bloqueada de quien atiende)
+ * @param diaPedido  a qué día quiere volver; {@code null} si lo pidió en el Día 0 (solo «necesito ayuda»)
  * @param diaAlPedir el día que vivía al pedirlo
  */
-public record EmergenciaPedidaEvent(UUID solicitudId, UserId aprendizId, String queOcurrio, int diaPedido,
+public record EmergenciaPedidaEvent(UUID solicitudId, UserId aprendizId, String queOcurrio, Integer diaPedido,
                                     int diaAlPedir) {
 
     public EmergenciaPedidaEvent {

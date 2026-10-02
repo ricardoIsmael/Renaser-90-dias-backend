@@ -25,6 +25,10 @@
 --     «pide volver al día 12, hoy está en el 20» no se podría reconstruir.
 --   · `dia_aplicado`: el día al que la llevó el Admin (NULL si se cerró sin cambiar el día).
 --
+--   · Desde el Día 0 (respuesta del dueño del 2026-10-02): en el Día 0 no hay día al que volver y el pedido
+--     es solo «necesito ayuda»: `dia_pedido` NULL y `dia_al_pedir` 0. Desde el Día 1, `dia_pedido` es
+--     obligatorio y va de 1 al día de hoy (89 como mucho: el 90 no se fija a mano, D-194).
+--
 -- CHECK: lo que se evalúa con la fila. Que `dia_pedido` no pase de `dia_al_pedir` sí entra en la
 -- fila; que el aprendiz esté en curso depende de `participantes_programa` y lo impone el dominio.
 --
@@ -36,14 +40,16 @@ CREATE TABLE solicitudes_emergencia (
     id             uuid        PRIMARY KEY,
     aprendiz_id    uuid        NOT NULL REFERENCES usuarios (id) ON DELETE CASCADE,
     que_ocurrio    text        NOT NULL CHECK (length(btrim(que_ocurrio)) BETWEEN 1 AND 280),
-    dia_pedido     smallint    NOT NULL CHECK (dia_pedido BETWEEN 1 AND 89),
-    dia_al_pedir   smallint    NOT NULL CHECK (dia_al_pedir BETWEEN 1 AND 90),
+    dia_pedido     smallint    CHECK (dia_pedido BETWEEN 1 AND 89),
+    dia_al_pedir   smallint    NOT NULL CHECK (dia_al_pedir BETWEEN 0 AND 90),
     estado         text        NOT NULL CHECK (estado IN ('ABIERTA', 'RESUELTA')),
     creada_en      timestamptz NOT NULL,
     resuelta_en    timestamptz,
     resuelta_por   uuid        REFERENCES usuarios (id) ON DELETE SET NULL,
     dia_aplicado   smallint    CHECK (dia_aplicado BETWEEN 1 AND 89),
-    CONSTRAINT solicitudes_emergencia_dia_coherente CHECK (dia_pedido <= dia_al_pedir),
+    CONSTRAINT solicitudes_emergencia_dia_coherente CHECK (
+        (dia_al_pedir = 0 AND dia_pedido IS NULL)
+        OR (dia_al_pedir >= 1 AND dia_pedido IS NOT NULL AND dia_pedido <= dia_al_pedir)),
     CONSTRAINT solicitudes_emergencia_cierre_coherente CHECK (
         (estado = 'ABIERTA' AND resuelta_en IS NULL AND dia_aplicado IS NULL)
         OR (estado = 'RESUELTA' AND resuelta_en IS NOT NULL))

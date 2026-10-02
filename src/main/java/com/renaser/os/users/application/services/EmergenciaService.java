@@ -5,6 +5,7 @@ import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.EmergenciaPedidaEvent;
+import com.renaser.os.users.api.EmergenciaResueltaEvent;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.application.ports.in.emergencia.AtenderEmergenciaUseCase;
 import com.renaser.os.users.application.ports.in.emergencia.PedirAyudaPorEmergenciaUseCase;
@@ -31,6 +32,10 @@ import java.util.UUID;
  * <p><b>Una sola abierta por persona</b> (límite contra el spam: decidido acá a falta de una regla del
  * dueño, y dicho en el informe). Se revisa antes de guardar para responder un 409 con palabras, y el índice
  * único parcial de V90 cierra la carrera de dos toques a la vez.
+ *
+ * <p><b>Desde el Día 0</b> (respuesta del dueño del 2026-10-02): en el Día 0 el pedido es solo «necesito ayuda»,
+ * sin día. Al resolverlo (cambiando el día o no) se publica {@link EmergenciaResueltaEvent} y {@code chat} le
+ * escribe a la persona en su soporte.
  *
  * <p>El día actual se deriva en SU zona ({@code ParticipacionPrograma.diaVigente}), nunca con la fecha del
  * servidor: a las 02:00 UTC un aprendiz de Lima todavía vive el día de ayer (regla 02).
@@ -87,8 +92,8 @@ public class EmergenciaService implements PedirAyudaPorEmergenciaUseCase, Atende
                 command.actorId(), command.queOcurrio(), command.diaPedido(), diaActual, clock));
         eventos.publishEvent(new EmergenciaPedidaEvent(solicitud.id(), solicitud.aprendizId(), solicitud.queOcurrio(),
                 solicitud.diaPedido(), solicitud.diaAlPedir()));
-        log.info("[users.emergencia] {} pidió volver al día {} desde el {}", command.actorId(), solicitud.diaPedido(),
-                diaActual);
+        log.info("[users.emergencia] {} pidió ayuda (día pedido {}) desde el día {}", command.actorId(),
+                solicitud.diaPedido(), diaActual);
         return solicitud;
     }
 
@@ -97,8 +102,7 @@ public class EmergenciaService implements PedirAyudaPorEmergenciaUseCase, Atende
         requireAdminGuard.requireAdminActivo(actorId);
         return loadSolicitudPort.abiertaDe(aprendizId).map(solicitud -> new EmergenciaParaSoporte(solicitud,
                 loadUserPort.byId(aprendizId).map(User::fullName).orElse(""),
-                loadParticipacionPort.byParticipanteId(aprendizId).map(p -> p.diaVigente(clock))
-                        .orElse(solicitud.diaAlPedir())));
+                diaVigenteDe(aprendizId, solicitud.diaAlPedir())));
     }
 
     /** Recurso primero (404), gate de admin después (403), igual que «Cambiar día» (E-42). */
@@ -109,7 +113,9 @@ public class EmergenciaService implements PedirAyudaPorEmergenciaUseCase, Atende
                 .orElseThrow(() -> new NoSuchElementException("Pedido de emergencia no encontrado: " + solicitudId));
         requireAdminGuard.requireAdminActivo(actorId);
         solicitud.cerrarSinCambio(actorId, clock);
-        return saveSolicitudPort.save(solicitud);
+        SolicitudDeEmergencia cerrada = saveSolicitudPort.save(solicitud);
+        avisarQueSeResolvio(cerrada, diaVigenteDe(cerrada.aprendizId(), cerrada.diaAlPedir()));
+        return cerrada;
     }
 
     @Override
@@ -117,8 +123,19 @@ public class EmergenciaService implements PedirAyudaPorEmergenciaUseCase, Atende
         loadSolicitudPort.abiertaDe(aprendizId).ifPresent(solicitud -> {
             solicitud.resolverConCambioDeDia(actorId, diaNuevo, clock);
             saveSolicitudPort.save(solicitud);
+            avisarQueSeResolvio(solicitud, diaNuevo);
             log.info("[users.emergencia] pedido {} resuelto: {} pasó al día {}", solicitud.id(), aprendizId, diaNuevo);
         });
+    }
+
+    /** En la transacción del cierre (outbox): si el cierre se deshace, el mensaje a la persona no sale. */
+    private void avisarQueSeResolvio(SolicitudDeEmergencia solicitud, int diaActual) {
+        eventos.publishEvent(new EmergenciaResueltaEvent(solicitud.id(), solicitud.aprendizId(), solicitud.diaAplicado(),
+                diaActual));
+    }
+
+    private int diaVigenteDe(UserId aprendizId, int siNoHayFila) {
+        return loadParticipacionPort.byParticipanteId(aprendizId).map(p -> p.diaVigente(clock)).orElse(siNoHayFila);
     }
 
     /** Solo un aprendiz activo: el staff con seguimiento personal no tiene a quién pedirle (su soporte no existe). */
