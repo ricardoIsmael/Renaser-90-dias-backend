@@ -114,7 +114,7 @@ class EmergenciaDePuntaAPuntaIT {
             assertThat(m.get("tipo")).isEqualTo("SISTEMA");
             assertThat(m.get("emisor_id")).isEqualTo(aprendiz.value());
             assertThat(m.get("texto")).isEqualTo(
-                    "Emergencia: Me operaron de urgencia\nPide volver al día 12 (hoy está en el día 20).");
+                    "Emergencia: Me operaron de urgencia.\nPide volver al día 12 (hoy está en el día 20).");
         });
 
         cambiarDia.fijarDia(new SetProgramDayCommand(admin, aprendiz, 12, "Emergencia: Me operaron de urgencia"));

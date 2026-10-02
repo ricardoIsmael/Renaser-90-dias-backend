@@ -27,7 +27,15 @@ public record AvisoDeEmergencia(UUID solicitudId, String queOcurrio, Integer dia
         String pedido = diaPedido == null
                 ? "Pide ayuda (todavía está en el día " + diaAlPedir + ")."
                 : "Pide volver al día " + diaPedido + " (hoy está en el día " + diaAlPedir + ").";
-        return "Emergencia: " + queOcurrio.strip() + "\n" + pedido;
+        return "Emergencia: " + conPunto(queOcurrio.strip()) + "\n" + pedido;
+    }
+
+    /**
+     * Lo que escribió la persona suele terminar sin punto, y con el texto justo al borde de la burbuja el
+     * salto de línea no se distingue: se leía «…sin poder seguir Pide volver al día 12» (e2e 02/10).
+     */
+    private static String conPunto(String texto) {
+        return texto.matches("(?s).*[.!?…)]$") ? texto : texto + ".";
     }
 
     public MensajeId idDelMensaje() {

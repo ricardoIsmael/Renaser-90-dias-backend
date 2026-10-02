@@ -18,14 +18,14 @@ class AvisoDeEmergenciaTest {
     void texto() {
         var aviso = new AvisoDeEmergencia(solicitud, "  Me operaron de urgencia ", 12, 20);
 
-        assertThat(aviso.texto()).isEqualTo("Emergencia: Me operaron de urgencia\nPide volver al día 12 (hoy está en el día 20).");
+        assertThat(aviso.texto()).isEqualTo("Emergencia: Me operaron de urgencia.\nPide volver al día 12 (hoy está en el día 20).");
     }
 
     @Test
     @DisplayName("en el Día 0 no hay día pedido: pide ayuda")
     void textoDelDiaCero() {
         assertThat(new AvisoDeEmergencia(solicitud, "Me enfermé", null, 0).texto())
-                .isEqualTo("Emergencia: Me enfermé\nPide ayuda (todavía está en el día 0).");
+                .isEqualTo("Emergencia: Me enfermé.\nPide ayuda (todavía está en el día 0).");
     }
 
     @Test
@@ -56,5 +56,11 @@ class AvisoDeEmergenciaTest {
     @DisplayName("sin texto no hay aviso")
     void sinTexto() {
         assertThatThrownBy(() -> new AvisoDeEmergencia(solicitud, " ", 1, 2)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @org.junit.jupiter.api.Test
+    void noDuplicaElPuntoSiYaTermina() {
+        assertThat(new AvisoDeEmergencia(java.util.UUID.randomUUID(), "Me caí de la moto!", 3, 5).texto())
+                .isEqualTo("Emergencia: Me caí de la moto!\nPide volver al día 3 (hoy está en el día 5).");
     }
 }
