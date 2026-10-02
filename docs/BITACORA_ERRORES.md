@@ -13149,6 +13149,12 @@ watchers). Ese patrón también calza con la ruta del propio proyecto cuando Met
 el proyecto (por ejemplo, anclarlo a `__dirname + '/.claude/'`). Se deja anotado y no se cambió en D-241 porque
 `metro.config.js` lo usa todo el equipo y el cambio no era de este pedido.
 
+> **Volvió a pasar 02/10 (D-245)**, ahora con `npx expo export -p web` (el mismo bloqueo afecta al export, no solo
+> al servidor de desarrollo). Salida: `Error: Unable to resolve module ./index.ts from …/.claude/worktrees/politica-privacidad/.`
+> Lo que sí funciona: copiar el worktree fuera de `.claude/` (`git ls-files` + archivos nuevos sin commitear + `cp -a
+> --reflink=auto node_modules`) y exportar desde la copia. Ojo: copiar solo `git ls-files` deja afuera lo no
+> commiteado y el export falla con `Unable to resolve` del archivo nuevo.
+
 ---
 
 ## E-486 · Sumar una pantalla a `AdminScreen` rompe `pilaDeAdministracion.test.ts`: `AsyncStorage is null` (app, pruebas, RESUELTO, 01/10)
