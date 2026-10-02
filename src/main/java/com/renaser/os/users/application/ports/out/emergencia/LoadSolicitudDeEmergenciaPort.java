@@ -6,10 +6,10 @@ import com.renaser.os.users.domain.model.emergencia.SolicitudDeEmergencia;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Los pedidos de emergencia (V90). Solo lo que hoy lee alguna pantalla: la abierta de una persona y una por id. */
+/** Los pedidos de emergencia (V91). Solo lo que hoy lee alguna pantalla: la abierta de una persona y una por id. */
 public interface LoadSolicitudDeEmergenciaPort {
 
-    /** La abierta de esa persona; hay a lo sumo una (índice único parcial de V90). */
+    /** La abierta de esa persona; hay a lo sumo una (índice único parcial de V91). */
     Optional<SolicitudDeEmergencia> abiertaDe(UserId aprendizId);
 
     Optional<SolicitudDeEmergencia> porId(UUID id);

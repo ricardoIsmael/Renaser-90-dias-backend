@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Tabla `solicitudes_emergencia` (V90, D-244). */
+/** Tabla `solicitudes_emergencia` (V91, D-244). */
 @Entity
 @Table(name = "solicitudes_emergencia", schema = "renaser")
 @Data

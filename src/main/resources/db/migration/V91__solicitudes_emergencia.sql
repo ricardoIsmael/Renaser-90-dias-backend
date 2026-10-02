@@ -61,4 +61,4 @@ CREATE UNIQUE INDEX solicitudes_emergencia_una_abierta_uk
 CREATE INDEX solicitudes_emergencia_aprendiz_idx ON solicitudes_emergencia (aprendiz_id, creada_en DESC);
 
 COMMENT ON TABLE solicitudes_emergencia IS
-    'Pedidos del aprendiz para volver a un día del programa tras una emergencia (V90, D-244). Nace ABIERTA y se cierra una vez.';
+    'Pedidos del aprendiz para volver a un día del programa tras una emergencia (V91, D-244). Nace ABIERTA y se cierra una vez.';

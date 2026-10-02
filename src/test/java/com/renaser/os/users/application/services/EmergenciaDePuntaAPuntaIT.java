@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * El botón de emergencia (D-244) contra Postgres real: V90 acepta la fila, el índice único parcial deja UNA
+ * El botón de emergencia (D-244) contra Postgres real: V91 acepta la fila, el índice único parcial deja UNA
  * abierta por persona aunque el servicio no lo revise, el mensaje llega al chat de soporte sin repetirse ante una
  * reentrega, y «Cambiar día del programa» deja el pedido resuelto en la misma transacción.
  */
@@ -140,7 +140,7 @@ class EmergenciaDePuntaAPuntaIT {
     }
 
     @Test
-    @DisplayName("V90 acepta el pedido del Día 0, sin día")
+    @DisplayName("V91 acepta el pedido del Día 0, sin día")
     void pedidoDelDiaCero() {
         jdbcTemplate.update("UPDATE renaser.participantes_programa SET programa_activado_en = NULL, dia_programa = 0, "
                 + "fecha_inicio = fecha_inicio + 30 WHERE usuario_id = ?", aprendiz.value());
