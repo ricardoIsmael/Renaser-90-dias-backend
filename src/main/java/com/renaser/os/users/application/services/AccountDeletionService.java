@@ -105,7 +105,7 @@ public class AccountDeletionService implements RequestAccountDeletionUseCase, Ca
         }
         User user = requireActiveUserGuard.of(command.userId());
         // Idempotente: si ya habia una solicitud, User.solicitarBaja no la reinicia.
-        user.solicitarBaja(clock);
+        user.cerrarParaEliminar(clock);
         saveUserPort.save(user);
         return EstadoBajaCuenta.de(user.bajaSolicitadaEn(), clock.now(), diasDeGracia);
     }
@@ -114,7 +114,7 @@ public class AccountDeletionService implements RequestAccountDeletionUseCase, Ca
     @Transactional
     public EstadoBajaCuenta cancel(UserId userId) {
         User user = requireActiveUserGuard.of(userId);
-        user.cancelarBaja();
+        user.recuperarDeEliminacion();
         saveUserPort.save(user);
         return EstadoBajaCuenta.sinSolicitud(diasDeGracia);
     }
@@ -171,7 +171,7 @@ public class AccountDeletionService implements RequestAccountDeletionUseCase, Ca
     @Override
     public ResultadoPurga purgeExpired() {
         var corte = clock.now().minus(diasDeGracia, ChronoUnit.DAYS);
-        List<UserId> candidatas = loadUserPort.pendingDeletionUpTo(corte);
+        List<UserId> candidatas = loadUserPort.cerradasVencidas(corte, null, 1000);
         int purgadas = 0;
         int fallidas = 0;
         for (UserId id : candidatas) {

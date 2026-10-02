@@ -40,11 +40,14 @@ public final class User {
     private String department;
     private Instant lastActiveAt;
     /**
-     * Baja de cuenta autogestionada (usuarios.baja_solicitada_en) - soft-delete diferido,
-     * NO UserStatus: a proposito NO corta hasAccess() (backend viejo,
-     * features/account-deletion/plazo.ts#conservaAcceso - sin acceso durante la gracia no
-     * habria forma de arrepentirse y cancelar). Un cron purga (hard delete) al vencer el
-     * plazo de gracia - ver AccountDeletionService y EstadoBajaCuenta.
+     * Cuando la persona cerro su cuenta para eliminarla ({@code usuarios.baja_solicitada_en}, D-243).
+     * Mientras no sea {@code null} la cuenta esta cerrada: sin acceso (queda SUSPENDED) y fuera de lo
+     * que ven los demas; al vencer la gracia el barrido la borra para siempre.
+     *
+     * <blockquote><b>Corregido 2026-10-02 (D-243).</b> Decia que la baja NO cortaba {@code hasAccess()}
+     * para que la persona pudiera arrepentirse y cancelarla ella misma durante 14 dias (portada del
+     * backend viejo). El dueño decidio lo contrario: la cuenta se cierra al instante y solo un Admin la
+     * recupera, si la persona escribe a soporte dentro de los 30 dias.</blockquote>
      */
     private Instant bajaSolicitadaEn;
 
@@ -133,6 +136,11 @@ public final class User {
      */
     public void reactivate() {
         requireAprobada("se activa aprobando su solicitud de alta");
+        if (bajaPendiente()) {
+            // Reactivar dejaria una cuenta activa con el borrado programado: el barrido la borraria
+            // igual. Se recupera con recuperarDeEliminacion(), que limpia las dos cosas (D-243).
+            throw new IllegalStateException("Esta cuenta se cerro para eliminarla: recuperala en vez de reactivarla");
+        }
         this.status = UserStatus.ACTIVE;
     }
 
@@ -218,19 +226,33 @@ public final class User {
     }
 
     /**
-     * Idempotente a proposito: repetir la solicitud NO reinicia el contador (backend viejo,
-     * service.ts#solicitarBaja) - si reiniciara, pulsar dos veces regalaria dias de gracia
-     * de mas sin que el usuario lo entienda.
+     * La persona elimina su cuenta (D-243): se cierra en el acto y empieza la gracia. Una cuenta
+     * activa pasa a SUSPENDED —no entra, sus sesiones y avisos caen como en cualquier suspension—; una
+     * que ya no tenia acceso (pendiente de aprobacion o suspendida) conserva su estado. Idempotente:
+     * repetirlo NO reinicia el plazo, que regalaria dias de gracia sin que nadie lo entienda.
      */
-    public void solicitarBaja(Clock clock) {
-        if (this.bajaSolicitadaEn == null) {
-            this.bajaSolicitadaEn = clock.now();
+    public void cerrarParaEliminar(Clock clock) {
+        if (bajaPendiente()) {
+            return;
+        }
+        this.bajaSolicitadaEn = clock.now();
+        if (status == UserStatus.ACTIVE) {
+            this.status = UserStatus.SUSPENDED;
         }
     }
 
-    /** Deshace la solicitud. No deja rastro: vuelve a null, igual que el backend viejo. */
-    public void cancelarBaja() {
+    /**
+     * Un Admin recupera una cuenta cerrada dentro de la gracia (la persona escribio a soporte). Vuelve
+     * a dar acceso si estaba suspendida; una pendiente de aprobacion sigue pendiente.
+     */
+    public void recuperarDeEliminacion() {
+        if (!bajaPendiente()) {
+            throw new IllegalStateException("Esta cuenta no esta cerrada para eliminar");
+        }
         this.bajaSolicitadaEn = null;
+        if (status == UserStatus.SUSPENDED) {
+            this.status = UserStatus.ACTIVE;
+        }
     }
 
     public boolean bajaPendiente() {

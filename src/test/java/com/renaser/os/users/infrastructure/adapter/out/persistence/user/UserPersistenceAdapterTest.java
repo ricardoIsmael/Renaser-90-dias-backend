@@ -104,11 +104,11 @@ class UserPersistenceAdapterTest {
         UserId sinBaja = UserId.of(UUID.randomUUID());
         Instant corte = Instant.parse("2026-08-20T00:00:00Z");
         User usuarioConBaja = User.registerTrainee(conBajaVencida, new Email("vencida@renaser.com"), "Vencida");
-        usuarioConBaja.solicitarBaja(com.renaser.os.shared.domain.FixedClock.at(Instant.parse("2026-08-01T00:00:00Z")));
+        usuarioConBaja.cerrarParaEliminar(com.renaser.os.shared.domain.FixedClock.at(Instant.parse("2026-08-01T00:00:00Z")));
         adapter.save(usuarioConBaja);
         adapter.save(User.registerTrainee(sinBaja, new Email("sinbaja@renaser.com"), "Sin Baja"));
 
-        var candidatas = adapter.pendingDeletionUpTo(corte);
+        var candidatas = adapter.cerradasVencidas(corte, null, 100);
 
         assertThat(candidatas).contains(conBajaVencida).doesNotContain(sinBaja);
     }

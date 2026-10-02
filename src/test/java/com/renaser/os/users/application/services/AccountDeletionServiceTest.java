@@ -135,7 +135,7 @@ class AccountDeletionServiceTest {
     void requestEsIdempotente() {
         UserId userId = UserId.of(UUID.randomUUID());
         User user = activo(userId);
-        user.solicitarBaja(FixedClock.at(Instant.parse("2026-08-20T10:00:00Z")));
+        user.cerrarParaEliminar(FixedClock.at(Instant.parse("2026-08-20T10:00:00Z")));
         when(loadUserPort.byId(userId)).thenReturn(Optional.of(user));
 
         var estado = service.request(new RequestAccountDeletionCommand(userId, "ELIMINAR"));
@@ -148,7 +148,7 @@ class AccountDeletionServiceTest {
     void cancelDeshaceLaBaja() {
         UserId userId = UserId.of(UUID.randomUUID());
         User user = activo(userId);
-        user.solicitarBaja(CLOCK);
+        user.cerrarParaEliminar(CLOCK);
         when(loadUserPort.byId(userId)).thenReturn(Optional.of(user));
 
         var estado = service.cancel(userId);
@@ -173,7 +173,7 @@ class AccountDeletionServiceTest {
     void statusNoMuta() {
         UserId userId = UserId.of(UUID.randomUUID());
         User user = activo(userId);
-        user.solicitarBaja(CLOCK);
+        user.cerrarParaEliminar(CLOCK);
         when(loadUserPort.byId(userId)).thenReturn(Optional.of(user));
 
         var estado = service.status(userId);
@@ -190,7 +190,7 @@ class AccountDeletionServiceTest {
         UserId ok1 = UserId.of(UUID.randomUUID());
         UserId ok2 = UserId.of(UUID.randomUUID());
         UserId falla = UserId.of(UUID.randomUUID());
-        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(ok1, ok2, falla));
+        when(loadUserPort.cerradasVencidas(any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(ok1, ok2, falla));
         // lenient(): sin esto, Mockito en modo estricto (default de @ExtendWith(MockitoExtension))
         // no distingue "sin stub" de "stub para otro argumento" en un metodo void — al ver que
         // deleteById tiene un stub especifico para `falla`, cualquier otra invocacion (ok1, ok2)
@@ -210,11 +210,11 @@ class AccountDeletionServiceTest {
     @Test
     @DisplayName("purgeExpired usa el corte correcto: ahora menos los dias de gracia")
     void purgeExpiredUsaElCorteCorrecto() {
-        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of());
+        when(loadUserPort.cerradasVencidas(any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of());
 
         service.purgeExpired();
 
-        verify(loadUserPort).pendingDeletionUpTo(CLOCK.now().minus(DIAS_DE_GRACIA, java.time.temporal.ChronoUnit.DAYS));
+        verify(loadUserPort).cerradasVencidas(CLOCK.now().minus(DIAS_DE_GRACIA, java.time.temporal.ChronoUnit.DAYS), null, 1000);
     }
 
     /** Test de seguridad (CLAUDE.MD §0.3, adaptado): el comando SOLO tiene {@code userId} —
@@ -263,7 +263,7 @@ class AccountDeletionServiceTest {
     void purgeExpiredBorraLosObjetosExclusivos() {
         UserId id = UserId.of(UUID.randomUUID());
         List<String> propias = clavesPropiasDe(id);
-        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(loadUserPort.cerradasVencidas(any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(id));
         when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(propias);
         when(rutasDeAlmacenamientoPort.referenciadasPorTerceros(eq(id), any())).thenReturn(Set.of());
 
@@ -289,7 +289,7 @@ class AccountDeletionServiceTest {
         UserId id = UserId.of(UUID.randomUUID());
         String compartida = "muro/fotos/" + id + "/abc";
         String propiaYSola = "firmas/" + id + "/fase_2.svg";
-        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(loadUserPort.cerradasVencidas(any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(id));
         when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(List.of(compartida, propiaYSola));
         when(rutasDeAlmacenamientoPort.referenciadasPorTerceros(eq(id), any())).thenReturn(Set.of(compartida));
 
@@ -315,7 +315,7 @@ class AccountDeletionServiceTest {
         UserId id = UserId.of(UUID.randomUUID());
         UserId victima = UserId.of(UUID.randomUUID());
         String propia = "evidencia-habitos/" + id + "/reg-1/abc";
-        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(loadUserPort.cerradasVencidas(any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(id));
         when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(List.of(
                 propia,
                 "avatares/" + victima,                       // bitacora nocturna con ruta ajena
@@ -337,7 +337,7 @@ class AccountDeletionServiceTest {
     void purgeExpiredBorraLosObjetosAntesQueLaFila() {
         UserId id = UserId.of(UUID.randomUUID());
         String clave = "firmas/" + id + "/fase_2.svg";
-        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(loadUserPort.cerradasVencidas(any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(id));
         when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(List.of(clave));
         when(rutasDeAlmacenamientoPort.referenciadasPorTerceros(eq(id), any())).thenReturn(Set.of());
 
@@ -355,7 +355,7 @@ class AccountDeletionServiceTest {
     @DisplayName("si el censo de rutas falla, la cuenta NO se purga: mejor reintentarla que borrarla a ciegas")
     void purgeExpiredNoBorraLaFilaSiElCensoFalla() {
         UserId id = UserId.of(UUID.randomUUID());
-        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(loadUserPort.cerradasVencidas(any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(id));
         when(rutasDeAlmacenamientoPort.candidatas(id)).thenThrow(new RuntimeException("postgres caido"));
 
         var resultado = service.purgeExpired();
@@ -372,7 +372,7 @@ class AccountDeletionServiceTest {
         UserId id = UserId.of(UUID.randomUUID());
         String rota = "avatares/" + id;
         String sana = "firmas/" + id + "/fase_2.svg";
-        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(loadUserPort.cerradasVencidas(any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(id));
         when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(List.of(rota, sana));
         when(rutasDeAlmacenamientoPort.referenciadasPorTerceros(eq(id), any())).thenReturn(Set.of());
         doThrow(new RuntimeException("s3 no responde")).when(almacenamientoPort).borrar(rota);
@@ -390,7 +390,7 @@ class AccountDeletionServiceTest {
     @DisplayName("una cuenta sin objetos no consulta referencias ni toca el bucket")
     void purgeExpiredSinObjetosNoTocaElBucket() {
         UserId id = UserId.of(UUID.randomUUID());
-        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(loadUserPort.cerradasVencidas(any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(id));
         when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(List.of());
 
         var resultado = service.purgeExpired();
@@ -411,7 +411,7 @@ class AccountDeletionServiceTest {
     @DisplayName("purgeExpired borra tambien la solicitud de alta de la cuenta purgada")
     void purgeExpiredBorraLaSolicitudDeAlta() {
         UserId id = UserId.of(UUID.randomUUID());
-        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(loadUserPort.cerradasVencidas(any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(id));
         when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(List.of());
 
         var resultado = service.purgeExpired();
@@ -431,7 +431,7 @@ class AccountDeletionServiceTest {
     @DisplayName("la solicitud se borra ANTES que la fila de usuarios: la fila raiz es lo que hace reintentar")
     void purgeExpiredBorraLaSolicitudAntesQueLaFilaDeUsuarios() {
         UserId id = UserId.of(UUID.randomUUID());
-        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(loadUserPort.cerradasVencidas(any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(id));
         when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(List.of());
 
         service.purgeExpired();
@@ -445,7 +445,7 @@ class AccountDeletionServiceTest {
     @DisplayName("si falla el borrado de la solicitud, la cuenta NO se purga: se reintenta manana entera")
     void purgeExpiredNoBorraElUsuarioSiFallaLaSolicitud() {
         UserId id = UserId.of(UUID.randomUUID());
-        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(loadUserPort.cerradasVencidas(any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(id));
         when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(List.of());
         doThrow(new RuntimeException("postgres caido")).when(deleteAccountRequestPort).borrarPorUsuario(id);
 
@@ -462,7 +462,7 @@ class AccountDeletionServiceTest {
     @DisplayName("una cuenta sin solicitud de alta se purga igual")
     void purgeExpiredSinSolicitudSePurgaIgual() {
         UserId id = UserId.of(UUID.randomUUID());
-        when(loadUserPort.pendingDeletionUpTo(any())).thenReturn(List.of(id));
+        when(loadUserPort.cerradasVencidas(any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(id));
         when(rutasDeAlmacenamientoPort.candidatas(id)).thenReturn(List.of());
 
         var resultado = service.purgeExpired();

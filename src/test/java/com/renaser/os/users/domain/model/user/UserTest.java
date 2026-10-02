@@ -160,7 +160,7 @@ class UserTest {
         User user = trainee();
         FixedClock clock = FixedClock.at(Instant.parse("2026-08-26T10:00:00Z"));
 
-        user.solicitarBaja(clock);
+        user.cerrarParaEliminar(clock);
 
         assertThat(user.bajaPendiente()).isTrue();
         assertThat(user.bajaSolicitadaEn()).isEqualTo(clock.now());
@@ -173,8 +173,8 @@ class UserTest {
         FixedClock primero = FixedClock.at(Instant.parse("2026-08-26T10:00:00Z"));
         FixedClock segundo = FixedClock.at(Instant.parse("2026-08-27T10:00:00Z"));
 
-        user.solicitarBaja(primero);
-        user.solicitarBaja(segundo);
+        user.cerrarParaEliminar(primero);
+        user.cerrarParaEliminar(segundo);
 
         assertThat(user.bajaSolicitadaEn()).isEqualTo(primero.now());
     }
@@ -183,9 +183,9 @@ class UserTest {
     @DisplayName("cancelarBaja deshace la solicitud sin dejar rastro")
     void cancelarBajaDeshaceLaSolicitud() {
         User user = trainee();
-        user.solicitarBaja(FixedClock.at(Instant.parse("2026-08-26T10:00:00Z")));
+        user.cerrarParaEliminar(FixedClock.at(Instant.parse("2026-08-26T10:00:00Z")));
 
-        user.cancelarBaja();
+        user.recuperarDeEliminacion();
 
         assertThat(user.bajaPendiente()).isFalse();
         assertThat(user.bajaSolicitadaEn()).isNull();
@@ -196,7 +196,7 @@ class UserTest {
     void bajaSolicitadaNoCortaElAcceso() {
         User user = trainee();
 
-        user.solicitarBaja(FixedClock.at(Instant.parse("2026-08-26T10:00:00Z")));
+        user.cerrarParaEliminar(FixedClock.at(Instant.parse("2026-08-26T10:00:00Z")));
 
         assertThat(user.hasAccess()).isTrue();
     }
