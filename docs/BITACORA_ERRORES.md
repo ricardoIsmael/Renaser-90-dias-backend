@@ -13174,3 +13174,54 @@ de **cada** pantalla que importa `AdminScreen.tsx`. Una pantalla nueva sin su `j
 
 **Cómo evitar que vuelva a pasar.** Toda pantalla nueva que entre en `AdminScreen.tsx` suma su línea en esa lista. El
 mensaje no nombra la prueba ni la pantalla: buscar en la traza la línea `AdminScreen.tsx:<n>` y ver qué importa ahí.
+
+---
+
+## E-495 · La barra de pestañas quedaba a medio esconder al desplazar (animar el ALTO con Reanimated) y Reanimated no carga en Jest: `Cannot read properties of undefined (reading 'loadUnpackers')` (app, RESUELTO, 02/10)
+
+Tres tropiezos al hacer D-246 (barra que se esconde al desplazar). Se anotan juntos porque salen del mismo cambio.
+
+**1. La barra quedaba a ~2/3 del camino, con el botón de TRAINING asomando abajo (emulador Pixel_6, APK de desarrollo).**
+La primera versión animaba con Reanimated el `height` de la caja de la barra (de su alto a `insets.bottom`) y además un
+`translateY`. En el emulador la barra nunca terminaba de salir: el contenido terminaba ~48 dp arriba del borde y la mitad
+de arriba de la barra seguía a la vista. El log de `onLayout` de la barra de adentro mostró además que Yoga la
+**aplastaba** mientras la caja se achicaba, y la medida se retroalimentaba:
+
+```
+ LOG  BARRA medir 100.19049072265625 24
+ LOG  BARRA fijar false 76.19049072265625
+ LOG  BARRA medir 99.4285888671875 24
+ LOG  BARRA medir 98.6666259765625 24
+ LOG  BARRA medir 36.952392578125 24
+```
+
+**Causa.** Animar una propiedad de **layout** (`height`) cuadro a cuadro con Reanimated en Fabric: cada cuadro re-calcula
+el layout, la barra de adentro se encoge con la caja (y `onLayout` reporta cada vez menos), y el estado final no fue el
+que pedía la animación. **Solución:** la barra va `position: 'absolute'` pegada al fondo de su caja y solo se desliza con
+`transform` (no es layout); la caja cambia de alto **una sola vez** por cambio de estado, en JS (`useSyncExternalStore`
+sobre el proveedor, para no volver a dibujar las pantallas). Verificado en el emulador: escondida, el contenido llega al
+borde seguro y no asoma nada; al subir, vuelve entera (capturas en `~/Imágenes/e2e-2026-10-02/barra-*.png`).
+**Cómo evitar que vuelva:** para esconder/mostrar algo con Reanimated, mover con `transform`/`opacity`; si además tiene
+que cambiar el espacio que ocupa, hacerlo de un salto, no animado. Comentario con la corrección en `TabBar.tsx`.
+
+**2. En el emulador la barra no se escondía nunca.** No era un error: el emulador tiene las animaciones del sistema en 0
+(`settings get global animator_duration_scale` → `0`), Android lo informa como «Reducir movimiento» y la barra queda fija
+a propósito (D-246). Metro lo avisa: `WARN  [Reanimated] Reduced motion setting is enabled on this device.` Para probar:
+`adb shell settings put global animator_duration_scale 1` (y las otras dos escalas), **reiniciar la app** (Reanimated lee
+el ajuste al arrancar) y al terminar volver a `0`.
+
+**3. Jest.** Al entrar Reanimated en `TabBar`, la prueba de la barra (y cualquier pantalla que la importe) dejó de cargar:
+
+```
+TypeError: Cannot read properties of undefined (reading 'loadUnpackers')
+  at loadUnpackers (node_modules/react-native-worklets/src/WorkletsModule/NativeWorklets.native.ts:411:23)
+```
+
+El doble oficial `react-native-reanimated/mock` **también** falla igual, porque importa `react-native-worklets`. Y su
+`useSharedValue` crea un valor **nuevo en cada render**: un valor cambiado se pierde al volver a dibujar y una prueba
+puede pasar por casualidad. **Solución:** `jest.setup.js` (en `setupFiles`) con
+`jest.mock('react-native-worklets', () => require('react-native-worklets/lib/module/mock'))` (la ruta `src/mock` rompe
+`tsc`: 3 errores de tipos dentro de `node_modules`) y el doble de Reanimated con `useSharedValue` guardado en `useRef`.
+
+**De paso:** el arranque en frío del APK de desarrollo instalado volvió a caer una vez con la firma de E-452
+(`MountingCoordinator::pullTransaction`): es ese APK viejo sin el arreglo de screens, no este cambio.
