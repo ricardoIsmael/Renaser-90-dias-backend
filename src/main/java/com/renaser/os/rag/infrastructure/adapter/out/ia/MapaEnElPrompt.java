@@ -21,10 +21,26 @@ final class MapaEnElPrompt {
     private MapaEnElPrompt() {
     }
 
+    /**
+     * Sin Rocas Maestras (D-247, E-496): planificar objetivos esta cerrado, y la linea lo dice para que el
+     * modelo ni lo intente. Con el Mapa respondido y sin ellas, la activacion no las creo: tambien se dice.
+     */
+    static final String SIN_COMPLETAR = "Mapa de Renacimiento: sin completar — no se puede planificar NINGUN "
+            + "objetivo (acciones del dia, plan de la semana): todo se rechaza. Si pide planificar su dia o sus "
+            + "objetivos, antes de preguntarle nada dile eso e invitala a completarlo en Plan, \"Ir al Mapa de "
+            + "Renacimiento\". Sus habitos si se ajustan.\n";
+    static final String SIN_ROCAS_MAESTRAS = "Mapa de Renacimiento: respondido, pero sus objetivos de 90 dias "
+            + "(Rocas Maestras) no quedaron creados — no se puede planificar NINGUN objetivo (acciones del dia, plan "
+            + "de la semana): todo se rechaza. Si pide planificar su dia o sus objetivos, antes de preguntarle nada "
+            + "dile eso y sugierele escribir a soporte. Sus habitos si se ajustan.\n";
+
     /** Vacio si no se sabe nada del Mapa ({@code null}): la situacion queda como estaba. */
     static String linea(ResumenDelMapa mapa, int diaPrograma) {
         if (mapa == null) {
             return "";
+        }
+        if (mapa.objetivosBloqueados()) {
+            return mapa.tieneMapa() ? SIN_ROCAS_MAESTRAS : SIN_COMPLETAR;
         }
         if (!mapa.tieneMapa()) {
             return diaPrograma < 7 ? "Mapa de Renacimiento: todavia no (se arma el dia 7).\n"

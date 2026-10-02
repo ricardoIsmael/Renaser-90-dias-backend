@@ -14,6 +14,7 @@ import com.renaser.os.rag.application.ports.out.participante.HabitosDeHoy.Habito
 import com.renaser.os.rag.application.ports.out.participante.HabitosDeHoy.HabitoPausado;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoDelPlan;
+import com.renaser.os.rag.application.ports.out.rocas.ConsultarCompuertaDeRocasPort;
 import com.renaser.os.rag.domain.model.mapa.ResumenDelMapa;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
@@ -46,17 +47,20 @@ public class SituacionDelTurnoService implements ConsultarSituacionDelTurnoUseCa
     private final Clock clock;
     private final ConsultarTratoDeLaPersonaPort tratoPort;
     private final ConsultarMapaDeRenacimientoPort mapaPort;
+    private final ConsultarCompuertaDeRocasPort compuertaPort;
 
     public SituacionDelTurnoService(ConsultarSituacionDelAprendizPort situacionPort,
                                     ConsultarAgendaHabitosPort agendaPort, GestionarPlanDeHabitosPort planPort,
                                     Clock clock, ConsultarTratoDeLaPersonaPort tratoPort,
-                                    ConsultarMapaDeRenacimientoPort mapaPort) {
+                                    ConsultarMapaDeRenacimientoPort mapaPort,
+                                    ConsultarCompuertaDeRocasPort compuertaPort) {
         this.situacionPort = situacionPort;
         this.agendaPort = agendaPort;
         this.planPort = planPort;
         this.clock = clock;
         this.tratoPort = tratoPort;
         this.mapaPort = mapaPort;
+        this.compuertaPort = compuertaPort;
     }
 
     @Override
@@ -73,9 +77,24 @@ public class SituacionDelTurnoService implements ConsultarSituacionDelTurnoUseCa
      */
     private ResumenDelMapa mapaDe(UserId participanteId, int diaPrograma) {
         try {
-            return ResumenDelMapa.de(mapaPort.de(participanteId), diaPrograma);
+            return ResumenDelMapa.de(mapaPort.de(participanteId), diaPrograma)
+                    .conRocasMaestras(rocasMaestrasDe(participanteId));
         } catch (RuntimeException falla) {
             log.warn("[rag] la situacion del turno sale sin el Mapa ({})", falla.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    /**
+     * D-247 (E-496): si {@code rocks} tiene sus Rocas Maestras, la llave para planificar objetivos. Sin ellas
+     * la linea del Mapa lo dice y el modelo no propone planes que fallarian. {@code null} si no se pudo leer.
+     */
+    private Boolean rocasMaestrasDe(UserId participanteId) {
+        try {
+            return compuertaPort.rocasMaestrasCompletas(participanteId);
+        } catch (RuntimeException falla) {
+            log.warn("[rag] la situacion del turno sale sin saber de las Rocas Maestras ({})",
+                    falla.getClass().getSimpleName());
             return null;
         }
     }

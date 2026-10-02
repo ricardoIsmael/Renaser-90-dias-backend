@@ -13,12 +13,12 @@ import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
+import com.renaser.os.rocks.domain.model.rocamaestra.RocasMaestras;
 import com.renaser.os.rocks.domain.model.rocasemanal.EstadoPlazo;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
 import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
-import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,12 +77,7 @@ class AgregarRocaDiariaService implements AgregarRocaDiariaUseCase {
 
     /** Mismo requisito que {@code CrearPlanDiarioUseCase}: sin las tres Rocas Maestras no se planifica. */
     private RocaMaestra maestraDelEje(UserId actorId, EjeObjetivo eje) {
-        List<RocaMaestra> maestras = loadRocaMaestraPort.deParticipante(actorId);
-        if (maestras.size() < EjeObjetivo.values().length) {
-            throw new NotAuthorizedException("ROCKS_LOCKED: completa tu onboarding antes de planificar rocas");
-        }
-        return maestras.stream().filter(maestra -> maestra.eje() == eje).findFirst()
-                .orElseThrow(() -> new NotAuthorizedException("ROCKS_LOCKED: falta la Roca Maestra de " + eje));
+        return RocasMaestras.de(loadRocaMaestraPort.deParticipante(actorId)).exigirDelEje(eje);
     }
 
     /**
@@ -105,8 +100,7 @@ class AgregarRocaDiariaService implements AgregarRocaDiariaUseCase {
     }
 
     private RocaSemanal semanalDeLaFecha(RocaMaestra maestra, SemanaPrograma semanas, LocalDate fecha) {
-        int numeroSemana = semanas.numeroSemanaParaFecha(fecha);
-        return loadRocaSemanalPort.deMaestraYSemana(maestra.id(), numeroSemana)
+        return AccesoARocas.objetivoSemanalDelDia(loadRocaSemanalPort, maestra, semanas, fecha)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "NO_WEEKLY_ROCK: no hay plan semanal activo para el eje " + maestra.eje()));
     }

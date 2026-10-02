@@ -54,7 +54,7 @@ class ProponerPlanDelDiaHerramientaTest {
     private final PlanificarRocasPort planificar = mock(PlanificarRocasPort.class);
     private final ProponerAccionUseCase proponer = mock(ProponerAccionUseCase.class);
     private final ProponerPlanDelDiaHerramienta herramienta =
-            new ProponerPlanDelDiaHerramienta(rocas, planificar, proponer, SIN_MAPA);
+            new ProponerPlanDelDiaHerramienta(rocas, planificar, proponer, SIN_MAPA, CompuertasDePrueba.LIBRE);
 
     @BeforeEach
     void ejes() {

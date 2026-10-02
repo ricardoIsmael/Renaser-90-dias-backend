@@ -67,4 +67,31 @@ class MapaEnElPromptTest {
                 .isEqualTo(GoogleGenAiRenasiaChatAdapter.formatearSituacion(DIA_23.conMapa(null)))
                 .doesNotContain("Mapa de Renacimiento");
     }
+
+    /**
+     * D-247 (E-496): sin Rocas Maestras la linea dice que no se proponga nada de objetivos, tenga o no el
+     * Mapa respondido (con Mapa, la activacion no las creo). Con ellas, o sin saberlo, como antes.
+     */
+    @Test
+    @DisplayName("D-247: sin Rocas Maestras la linea prohibe proponer objetivos, con o sin Mapa respondido")
+    void sinRocasMaestras() {
+        String sinMapa = GoogleGenAiRenasiaChatAdapter.formatearSituacion(DIA_23.conMapa(
+                ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 23).conRocasMaestras(false)));
+        assertThat(sinMapa).contains("Mapa de Renacimiento: sin completar — no se puede planificar NINGUN objetivo "
+                + "(acciones del dia, plan de la semana): todo se rechaza. Si pide planificar su dia o sus objetivos, "
+                + "antes de preguntarle nada dile eso e invitala a completarlo en Plan, \"Ir al Mapa de "
+                + "Renacimiento\". Sus habitos si se ajustan.\n");
+        assertThat(sinMapa.lines().filter(l -> l.contains("Mapa de Renacimiento")).count()).isEqualTo(1);
+
+        assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(mapa("salud", List.of()), 23).conRocasMaestras(false), 23))
+                .isEqualTo(MapaEnElPrompt.SIN_ROCAS_MAESTRAS)
+                .contains("respondido, pero sus objetivos de 90 dias (Rocas Maestras) no quedaron creados");
+        assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 4).conRocasMaestras(false), 4))
+                .isEqualTo(MapaEnElPrompt.SIN_COMPLETAR);
+
+        assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(mapa("salud", List.of()), 23).conRocasMaestras(true), 23))
+                .startsWith("Mapa de Renacimiento: prioridad Salud");
+        assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 23).conRocasMaestras(null), 23))
+                .isEqualTo("Mapa de Renacimiento: no lo tiene guardado.\n");
+    }
 }

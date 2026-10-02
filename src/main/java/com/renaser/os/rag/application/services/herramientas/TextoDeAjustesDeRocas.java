@@ -61,8 +61,7 @@ final class TextoDeAjustesDeRocas {
             case DIA_COMPLETO -> "Ese dia ya tiene todas las acciones que admite. Se puede elegir otro dia.";
             case DATOS_INVALIDOS -> "No se pudo guardar esa accion: revise que el titulo no este vacio ni sea "
                     + "demasiado largo.";
-            case ROCAS_BLOQUEADAS -> "Primero tiene que completar su onboarding (sus Rocas Maestras) para poder "
-                    + "planificar.";
+            case ROCAS_BLOQUEADAS -> TextoDePlanDeRocas.ROCAS_BLOQUEADAS;
             case SIN_PROGRAMA -> "No encontre un programa activo para esta cuenta.";
             case SIN_ACCESO -> "No se pudo guardar: la cuenta esta suspendida o todavia no tiene el programa de "
                     + "rocas activo.";

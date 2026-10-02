@@ -77,16 +77,19 @@ public class ProponerEditarObjetivoSemanalHerramienta implements HerramientaAgen
     private final EditarObjetivoSemanalPort editarPort;
     private final ProponerAccionUseCase proponerAccion;
     private final MapaParaProponer mapa;
+    private final CompuertaParaProponer compuerta;
 
     public ProponerEditarObjetivoSemanalHerramienta(ConsultarRocasDelAprendizPort rocasPort,
                                                     PlanificarRocasPort planificarPort,
                                                     EditarObjetivoSemanalPort editarPort,
-                                                    ProponerAccionUseCase proponerAccion, MapaParaProponer mapa) {
+                                                    ProponerAccionUseCase proponerAccion, MapaParaProponer mapa,
+                                                    CompuertaParaProponer compuerta) {
         this.rocasPort = rocasPort;
         this.planificarPort = planificarPort;
         this.editarPort = editarPort;
         this.proponerAccion = proponerAccion;
         this.mapa = mapa;
+        this.compuerta = compuerta;
     }
 
     @Override
@@ -101,6 +104,10 @@ public class ProponerEditarObjetivoSemanalHerramienta implements HerramientaAgen
             pedida = ArgumentosDeAjusteDeRocas.leerEdicion(invocacion, planificarPort.ejesValidos());
         } catch (PlanMalFormadoException malFormado) {
             return ResultadoHerramienta.fallo(malFormado.getMessage());
+        }
+        Optional<String> bloqueo = compuerta.bloqueoDeObjetivos(actorId);
+        if (bloqueo.isPresent()) {
+            return ResultadoHerramienta.fallo(bloqueo.get());
         }
         RocasDeLaSemana semana;
         try {

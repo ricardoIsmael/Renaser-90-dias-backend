@@ -18,6 +18,7 @@ import com.renaser.os.rocks.domain.model.dashboard.ProgresoSemanal;
 import com.renaser.os.rocks.domain.model.rocadiaria.VentanaPlanificacionDiaria;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
+import com.renaser.os.rocks.domain.model.rocamaestra.RocasMaestras;
 import com.renaser.os.rocks.domain.model.rocasemanal.EstadoPlazo;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
 import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
@@ -85,7 +86,7 @@ public class DashboardRocasService implements ConsultarDashboardRocasUseCase {
 
         ContextoSemana semana = resolverSemana(semanas, hoy);
         List<RocaMaestra> maestras = rocasMaestrasUseCase.misRocasMaestras(actorId);
-        boolean rocasDesbloqueadas = maestras.size() >= EjeObjetivo.values().length;
+        boolean rocasDesbloqueadas = RocasMaestras.de(maestras).completas();
 
         List<RocaSemanalVista> semanalesVista = cargarRocasSemanalesVista(actorId, semana.numeroSemana(), zona, ahora);
         /* Con UNO alcanza (2026-09-22). Decia `>= EjeObjetivo.values().length`, o sea los tres, y
@@ -126,7 +127,7 @@ public class DashboardRocasService implements ConsultarDashboardRocasUseCase {
                                                        LocalDate hoy) {
         List<RocaMaestra> maestras = rocasMaestrasUseCase.misRocasMaestras(actorId);
         Optional<SemanaPrograma.LimitesSemana> limites = progreso.semanas(hoy).map(s -> s.limites(1));
-        boolean rocasDesbloqueadas = maestras.size() >= EjeObjetivo.values().length;
+        boolean rocasDesbloqueadas = RocasMaestras.de(maestras).completas();
         return new DashboardRocas(progreso.diaPrograma(), 1,
                 limites.map(SemanaPrograma.LimitesSemana::inicio).orElse(null),
                 limites.map(SemanaPrograma.LimitesSemana::fin).orElse(null), maestras, rocasDesbloqueadas, false,

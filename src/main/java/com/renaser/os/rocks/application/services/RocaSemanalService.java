@@ -13,6 +13,7 @@ import com.renaser.os.rocks.application.ports.out.rocasemanal.LoadRocaSemanalPor
 import com.renaser.os.rocks.application.ports.out.rocasemanal.SaveRocaSemanalPort;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
+import com.renaser.os.rocks.domain.model.rocamaestra.RocasMaestras;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraId;
 import com.renaser.os.rocks.domain.model.rocasemanal.EstadoPlazo;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
@@ -38,8 +39,6 @@ import java.util.stream.Collectors;
 public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentroDe48hUseCase, CerrarSemanaUseCase,
         ConsultarRocasSemanalesUseCase {
 
-    private static final Set<EjeObjetivo> LOS_TRES_EJES = Set.of(EjeObjetivo.CUERPO, EjeObjetivo.TRABAJO,
-            EjeObjetivo.RELACIONES);
 
     private final LoadRocaMaestraPort loadRocaMaestraPort;
     private final LoadRocaSemanalPort loadRocaSemanalPort;
@@ -194,12 +193,9 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
         }
     }
 
+    /** La regla vive en {@link RocasMaestras} (D-247): la misma que consulta el acompanante. */
     private Map<EjeObjetivo, RocaMaestra> requireRocasMaestrasCompletas(UserId actorId) {
-        List<RocaMaestra> maestras = loadRocaMaestraPort.deParticipante(actorId);
-        if (maestras.size() < LOS_TRES_EJES.size()) {
-            throw new NotAuthorizedException("ROCKS_LOCKED: completa tu onboarding antes de planificar rocas");
-        }
-        return maestras.stream().collect(java.util.stream.Collectors.toMap(RocaMaestra::eje, m -> m));
+        return RocasMaestras.de(loadRocaMaestraPort.deParticipante(actorId)).exigirCompletas();
     }
 
     private RocaSemanal requireRocaSemanalPropia(UserId actorId, RocaSemanalId id) {

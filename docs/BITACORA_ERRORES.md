@@ -13174,3 +13174,41 @@ de **cada** pantalla que importa `AdminScreen.tsx`. Una pantalla nueva sin su `j
 
 **Cómo evitar que vuelva a pasar.** Toda pantalla nueva que entre en `AdminScreen.tsx` suma su línea en esa lista. El
 mensaje no nombra la prueba ni la pantalla: buscar en la traza la línea `AdminScreen.tsx:<n>` y ver qué importa ahí.
+
+## E-496 · SER propuso un plan a una persona sin Mapa de Renacimiento y la tarjeta falló al confirmar: `ROCKS_LOCKED` (rag/rocks, producción, RESUELTO, 02/10)
+
+**Síntoma (reportado por el dueño, 2026-10-02).** SER le propuso a una persona una acción/plan para sus objetivos; al
+tocar «Confirmar» falló. Log literal:
+
+```
+[rocks] plan rechazado por ROCAS_BLOQUEADAS: com.renaser.os.shared.domain.NotAuthorizedException: ROCKS_LOCKED: completa tu onboarding antes de planificar rocas
+[http] POST /api/v1/renasia/propuestas/{id}/confirmar 200 39ms
+```
+
+La persona leyó en la tarjeta «Primero tiene que completar su onboarding (sus Rocas Maestras) para poder planificar.»:
+en tercera persona, con una palabra («onboarding») que la app no usa y sin decir adónde ir.
+
+**Causa.** La cadena de rocas exige las tres Rocas Maestras (las escribe el Mapa de Renacimiento al activarse); sin
+ellas todo plan vuelve con `ROCKS_LOCKED`, y sin objetivo semanal del eje, con `NO_WEEKLY_ROCK`. Esa regla solo se
+evaluaba al **escribir**, o sea al confirmar. Las herramientas de SER (`proponer_plan_del_dia`,
+`proponer_agregar_accion`, `proponer_plan_de_la_semana`, `proponer_editar_objetivo_semanal`,
+`proponer_cerrar_semana`) creaban la tarjeta sin preguntar, y la situación del turno (D-233) solo decía si había
+Mapa, no si existían las maestras. Peor: el prompt decía explícitamente «Sin Mapa: … Si pide proponer algo, proponlo
+igual.» Además, la regla estaba copiada cinco veces dentro de `rocks` (`RocaDiariaService`, `RocaSemanalService`,
+`AgregarRocaDiariaService` y dos en `DashboardRocasService`), sin nada que otro módulo pudiera consultar.
+
+**Solución (D-247).** (1) La regla vive en un solo lugar, `rocks.domain.model.rocamaestra.RocasMaestras`, y el
+objetivo semanal de un día en `AccesoARocas.objetivoSemanalDelDia`; los casos de uso y el dashboard la usan.
+(2) `rocks.api.CompuertaDeRocasFinder` la expone (`rocasMaestrasCompletas`, `ejesSinObjetivoSemanal`). (3) En `rag`,
+`CompuertaParaProponer` la consulta **antes de crear la tarjeta** en las cinco herramientas: si está bloqueada no
+crea propuesta y le devuelve al modelo por qué y qué ofrecer (sin Mapa → completarlo en Plan, «Ir al Mapa de
+Renacimiento»; Mapa respondido sin maestras → escribir a soporte; sin objetivo semanal → ofrecer primero el de la
+semana). (4) La línea del Mapa en la situación del turno dice «sin completar» o «respondido, pero sus objetivos de
+90 días (Rocas Maestras) no quedaron creados — no se puede planificar NINGÚN objetivo». (5) Al confirmar una tarjeta
+vieja, la persona lee «No se pudo: primero completa tu Mapa de Renacimiento (en Plan, "Ir al Mapa de
+Renacimiento")…». (6) El prompt cambió la viñeta «Sin Mapa… proponlo igual».
+
+**Cómo evitar que vuelva a pasar.** Una herramienta que deja una tarjeta que escribe en otro módulo pregunta
+**antes** a ese módulo, por su `api`, con la misma regla que rechaza la escritura; nunca la copia.
+`PropuestasConRocasBloqueadasTest` falla si una de las cinco herramientas vuelve a proponer con la compuerta
+cerrada, y `CompuertaDeRocasIT` fija contra Postgres que la compuerta y la escritura dicen lo mismo.

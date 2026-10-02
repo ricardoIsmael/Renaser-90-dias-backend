@@ -3,12 +3,16 @@ package com.renaser.os.rocks.application.services;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort.ProgresoParticipanteRocks;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort.RolParticipante;
+import com.renaser.os.rocks.application.ports.out.rocasemanal.LoadRocaSemanalPort;
+import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
+import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
 import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 /**
  * La guarda de siempre para operar rocas: participante existente, cuenta no suspendida, y aprendiz
@@ -42,6 +46,16 @@ final class AccesoARocas {
      * programa: se rechaza la fecha, con el mismo código que una fecha fuera de la ventana, en vez de
      * contarla desde la fecha provisional del alta, que no es un Día 1 (D-201).
      */
+    /**
+     * El objetivo semanal del que cuelga una accion de ese dia: el de la Roca Maestra del eje, en la semana
+     * de esa fecha. Vacio = {@code NO_WEEKLY_ROCK}. Una sola regla para crear el plan del dia, agregar una
+     * accion y la compuerta que consulta el acompanante (D-247).
+     */
+    static Optional<RocaSemanal> objetivoSemanalDelDia(LoadRocaSemanalPort loadRocaSemanalPort, RocaMaestra maestra,
+                                                       SemanaPrograma semanas, LocalDate fecha) {
+        return loadRocaSemanalPort.deMaestraYSemana(maestra.id(), semanas.numeroSemanaParaFecha(fecha));
+    }
+
     static SemanaPrograma semanasParaPlanificarUnDia(ProgresoParticipanteRocks progreso, LocalDate hoy) {
         return progreso.semanas(hoy).orElseThrow(() -> new IllegalArgumentException(
                 "INVALID_DATE: todavia no eligio su Dia 1, asi que no hay dias del programa para planificar"));

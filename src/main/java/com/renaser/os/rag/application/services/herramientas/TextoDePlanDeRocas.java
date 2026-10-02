@@ -24,6 +24,19 @@ final class TextoDePlanDeRocas {
     static final String NO_ESTA_HECHO = " TODAVIA NO esta guardado: la persona tiene que tocar Confirmar en la "
             + "app para que se guarde. No digas que ya quedo hecho; dile que confirme con el boton.";
 
+    /**
+     * Lo que ve la persona si confirma una tarjeta y {@code rocks} la rechaza por {@code ROCKS_LOCKED} (D-247,
+     * E-496): le faltan las Rocas Maestras, que escribe su Mapa de Renacimiento al activarse. Lo comparten el
+     * plan del dia, el de la semana y agregar una accion.
+     *
+     * <p><b>Corregido 2026-10-02 (D-247).</b> Decia "Primero tiene que completar su onboarding (sus Rocas
+     * Maestras) para poder planificar.": hablaba de la persona en tercera y nombraba un "onboarding" que en
+     * la app no existe con ese nombre; no decia donde ir.
+     */
+    static final String ROCAS_BLOQUEADAS = "No se pudo: primero completa tu Mapa de Renacimiento (en Plan, "
+            + "\"Ir al Mapa de Renacimiento\"). De ahí salen tus tres objetivos de 90 días, y sin ellos todavía no "
+            + "se pueden planificar acciones ni objetivos.";
+
     private static final String[] DIAS = {"lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"};
 
     private TextoDePlanDeRocas() {
@@ -88,8 +101,7 @@ final class TextoDePlanDeRocas {
     private static String rechazoComun(Motivo motivo) {
         return switch (motivo) {
             case SIN_PROGRAMA -> "No encontre un programa activo para esta cuenta.";
-            case ROCAS_BLOQUEADAS -> "Primero tiene que completar su onboarding (sus Rocas Maestras) para poder "
-                    + "planificar.";
+            case ROCAS_BLOQUEADAS -> ROCAS_BLOQUEADAS;
             default -> "No se pudo guardar el plan: la cuenta esta suspendida o todavia no tiene el programa de "
                     + "rocas activo.";
         };

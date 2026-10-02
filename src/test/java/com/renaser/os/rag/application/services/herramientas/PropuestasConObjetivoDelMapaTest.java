@@ -75,7 +75,7 @@ class PropuestasConObjetivoDelMapaTest {
 
     private ResultadoHerramienta agregarCorrer(ConsultarMapaDeRenacimientoPort mapaPort) {
         return new ProponerAgregarAccionHerramienta(rocas, planificar, proponer, planDeHabitos,
-                new MapaParaProponer(mapaPort, EN_DIA_45)).ejecutar(APRENDIZ, new InvocacionHerramienta(
+                new MapaParaProponer(mapaPort, EN_DIA_45), CompuertasDePrueba.LIBRE).ejecutar(APRENDIZ, new InvocacionHerramienta(
                 ProponerAgregarAccionHerramienta.NOMBRE, Map.of("eje", "CUERPO", "titulo", "Correr 5 km")));
     }
 
@@ -93,7 +93,8 @@ class PropuestasConObjetivoDelMapaTest {
     @Test
     @DisplayName("objetivo semanal de TRABAJO: sin meta redactada, la meta sale de sus numeros")
     void objetivoSemanalConSuObjetivo() {
-        new ProponerPlanDeLaSemanaHerramienta(planificar, proponer, new MapaParaProponer(id -> MAPA, EN_DIA_45))
+        new ProponerPlanDeLaSemanaHerramienta(planificar, proponer, new MapaParaProponer(id -> MAPA, EN_DIA_45),
+                CompuertasDePrueba.LIBRE)
                 .ejecutar(APRENDIZ, new InvocacionHerramienta(ProponerPlanDeLaSemanaHerramienta.NOMBRE,
                         Map.of("plan", "{\"objetivos\":[{\"eje\":\"TRABAJO\",\"titulo\":\"Llamar a 10 clientes\"}]}")));
 
@@ -104,7 +105,7 @@ class PropuestasConObjetivoDelMapaTest {
     @DisplayName("un eje sin objetivo en su Mapa: la tarjeta no inventa uno y el modelo lo dice en una linea")
     void ejeSinObjetivo() {
         ResultadoHerramienta resultado = new ProponerAgregarAccionHerramienta(rocas, planificar, proponer,
-                planDeHabitos, new MapaParaProponer(id -> MAPA, EN_DIA_45)).ejecutar(APRENDIZ, new InvocacionHerramienta(
+                planDeHabitos, new MapaParaProponer(id -> MAPA, EN_DIA_45), CompuertasDePrueba.LIBRE).ejecutar(APRENDIZ, new InvocacionHerramienta(
                 ProponerAgregarAccionHerramienta.NOMBRE, Map.of("eje", "RELACIONES", "titulo", "Llamar a mama")));
 
         assertThat(resumenPropuesto()).doesNotContain("Para tu objetivo");

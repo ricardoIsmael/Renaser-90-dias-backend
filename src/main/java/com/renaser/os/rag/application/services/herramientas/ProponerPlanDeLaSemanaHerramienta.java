@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * {@code proponer_plan_de_la_semana} (R2, 2026-09-23): PROPONE los objetivos semanales —uno por eje,
@@ -61,12 +62,14 @@ public class ProponerPlanDeLaSemanaHerramienta implements HerramientaAgente {
     private final PlanificarRocasPort planificarPort;
     private final ProponerAccionUseCase proponerAccion;
     private final MapaParaProponer mapa;
+    private final CompuertaParaProponer compuerta;
 
     public ProponerPlanDeLaSemanaHerramienta(PlanificarRocasPort planificarPort, ProponerAccionUseCase proponerAccion,
-                                             MapaParaProponer mapa) {
+                                             MapaParaProponer mapa, CompuertaParaProponer compuerta) {
         this.planificarPort = planificarPort;
         this.proponerAccion = proponerAccion;
         this.mapa = mapa;
+        this.compuerta = compuerta;
     }
 
     @Override
@@ -82,6 +85,10 @@ public class ProponerPlanDeLaSemanaHerramienta implements HerramientaAgente {
                     planificarPort.ejesValidos());
         } catch (PlanMalFormadoException malFormado) {
             return ResultadoHerramienta.fallo(malFormado.getMessage());
+        }
+        Optional<String> bloqueo = compuerta.bloqueoDeObjetivos(actorId);
+        if (bloqueo.isPresent()) {
+            return ResultadoHerramienta.fallo(bloqueo.get());
         }
         MapaParaProponer.Vinculo vinculo = mapa.para(actorId, objetivos.stream().map(ObjetivoSemanal::eje).toList());
         String resumen = TextoDePlanDeRocas.resumenDeLaSemana(objetivos) + vinculo.enElResumen();

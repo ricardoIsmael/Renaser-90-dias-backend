@@ -68,12 +68,14 @@ public class ProponerCerrarSemanaHerramienta implements HerramientaAgente {
     private final ConsultarRocasDelAprendizPort rocasPort;
     private final CerrarSemanaDeRocasPort cierrePort;
     private final ProponerAccionUseCase proponerAccion;
+    private final CompuertaParaProponer compuerta;
 
     public ProponerCerrarSemanaHerramienta(ConsultarRocasDelAprendizPort rocasPort, CerrarSemanaDeRocasPort cierrePort,
-                                           ProponerAccionUseCase proponerAccion) {
+                                           ProponerAccionUseCase proponerAccion, CompuertaParaProponer compuerta) {
         this.rocasPort = rocasPort;
         this.cierrePort = cierrePort;
         this.proponerAccion = proponerAccion;
+        this.compuerta = compuerta;
     }
 
     @Override
@@ -89,6 +91,10 @@ public class ProponerCerrarSemanaHerramienta implements HerramientaAgente {
             revisiones = CierreDeSemanaJson.leerDelModelo(invocacion.argumento(ARGUMENTO_CIERRE), reglas);
         } catch (PlanMalFormadoException malFormado) {
             return ResultadoHerramienta.fallo(malFormado.getMessage());
+        }
+        Optional<String> bloqueo = compuerta.bloqueoDeObjetivos(actorId);
+        if (bloqueo.isPresent()) {
+            return ResultadoHerramienta.fallo(bloqueo.get());
         }
         RocasDeLaSemana semana;
         try {
