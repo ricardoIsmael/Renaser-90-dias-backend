@@ -13174,3 +13174,46 @@ de **cada** pantalla que importa `AdminScreen.tsx`. Una pantalla nueva sin su `j
 
 **Cómo evitar que vuelva a pasar.** Toda pantalla nueva que entre en `AdminScreen.tsx` suma su línea en esa lista. El
 mensaje no nombra la prueba ni la pantalla: buscar en la traza la línea `AdminScreen.tsx:<n>` y ver qué importa ahí.
+
+---
+
+## E-491 · `TypeError: A dynamic import callback was invoked without --experimental-vm-modules` en una prueba de jest (app, pruebas, RESUELTO, 02/10)
+
+**Síntoma (D-244, `src/features/emergencia/utils/__tests__/pedidoDeEmergencia.test.ts`).**
+
+```
+TypeError: A dynamic import callback was invoked without --experimental-vm-modules
+  > const { debeBuscarEmergenciaEnElChat } = await import('../pedidoDeEmergencia');
+```
+
+**Causa real.** El jest de la app corre en CommonJS (babel-jest); un `await import(...)` dentro de una prueba necesita el
+modo ESM experimental de Node, que no está prendido. No es un problema del código probado.
+
+**Solución.** Importar arriba, con `import { … } from '../pedidoDeEmergencia'`, como el resto de las pruebas.
+
+**Cómo evitar que vuelva a pasar.** En las pruebas de la app no se usa `import()` dinámico; si hace falta cargar un módulo
+después de un `jest.mock`, se usa `jest.requireActual`/`require`. De paso, en el mismo trabajo se volvió a ver E-430
+(jest en un worktree): además de «rutas antes de la bandera», también funciona separar con `--`:
+`npx jest --testPathIgnorePatterns '/node_modules/' '/e2e/' -- <rutas…>`.
+
+---
+
+## E-492 · `RutasCubiertasPorElFiltroTest`: `Expecting empty but was: ["/api/v1/me/emergency-request"]` (backend, seguridad, RESUELTO, 02/10)
+
+**Síntoma (D-244, primera corrida de `./mvnw clean verify`).**
+
+```
+[Estas rutas no las alcanza ningun matcher .authenticated() de SecurityConfig y tampoco declaran @PublicEndpoint. ...]
+Expecting empty but was: ["/api/v1/me/emergency-request"]
+	at com.renaser.os.RutasCubiertasPorElFiltroTest.ningunaRutaQuedaFueraDelFiltro(RutasCubiertasPorElFiltroTest.java:106)
+```
+
+**Causa real.** La misma familia que E-481: una ruta nueva bajo `/api/v1/me/` que no es `/me/cell…`, `/me/semaforo…` ni
+`/me/caja…` cae en `anyRequest().permitAll()`, y sin sesión la identidad saldría del header `X-Actor-Id` del cliente.
+`/api/v1/admin/**` ya estaba cubierta, por eso las dos rutas de soporte no aparecieron.
+
+**Solución.** `.requestMatchers("/api/v1/me/emergency-request").authenticated()` en `SecurityConfig`, junto a la de la Caja.
+
+**Cómo evitar que vuelva a pasar.** Ya es ejecutable (la prueba lo atrapó antes de subir). Al crear un endpoint bajo
+`/api/v1/me/…`, sumar su matcher en `SecurityConfig` en el mismo cambio; correr `RutasCubiertasPorElFiltroTest` sola tarda
+dos segundos.

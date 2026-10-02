@@ -8,6 +8,7 @@ import com.renaser.os.users.api.AsignacionCelulaPort;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.ParticipacionProgramaFinder.UsuarioConDiaPrograma;
 import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.application.ports.in.emergencia.ResolverEmergenciaAlCambiarDiaUseCase;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.AssignMentorToTraineeUseCase;
 import com.renaser.os.users.application.ports.in.participante.AssignTraineeCellUseCase;
@@ -80,6 +81,8 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     private final LoadUltimoAjusteDiaProgramaPort loadUltimoAjusteDiaProgramaPort;
     private final IdGenerator idGenerator;
     private final Clock clock;
+    /** D-244: cambiar el día resuelve el pedido de emergencia abierto de esa persona. */
+    private final ResolverEmergenciaAlCambiarDiaUseCase resolverEmergencia;
 
     public ParticipacionProgramaService(RequireActiveUserGuard requireActiveUserGuard,
                                          LoadParticipacionProgramaPort loadParticipacionProgramaPort,
@@ -90,7 +93,8 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
                                          RequireAdminGuard requireAdminGuard,
                                          SaveAjusteDiaProgramaPort saveAjusteDiaProgramaPort,
                                          LoadUltimoAjusteDiaProgramaPort loadUltimoAjusteDiaProgramaPort,
-                                         IdGenerator idGenerator, Clock clock) {
+                                         IdGenerator idGenerator, Clock clock,
+                                         ResolverEmergenciaAlCambiarDiaUseCase resolverEmergencia) {
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.loadParticipacionProgramaPort = loadParticipacionProgramaPort;
         this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
@@ -103,6 +107,7 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
         this.loadUltimoAjusteDiaProgramaPort = loadUltimoAjusteDiaProgramaPort;
         this.idGenerator = idGenerator;
         this.clock = clock;
+        this.resolverEmergencia = resolverEmergencia;
     }
 
     @Override
@@ -279,6 +284,8 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
         saveAjusteDiaProgramaPort.save(AjusteDiaPrograma.registrar(idGenerator.newId(), command.traineeId(), diaAnterior,
                 participacion.diaPrograma(), ajusteAnterior, participacion.diasAjuste(), command.motivo(),
                 command.actorId(), clock));
+        // D-244: en la misma transaccion que el ajuste, por el mismo motivo que la bitacora.
+        resolverEmergencia.alCambiarDia(command.traineeId(), command.actorId(), participacion.diaPrograma());
         log.info("[users] dia de programa de {} ajustado de {} a {} por {}", command.traineeId(), diaAnterior,
                 participacion.diaPrograma(), command.actorId());
     }
