@@ -32,8 +32,12 @@ class ConversacionResponseTest {
         assertThat(ConversacionResponse.toWireTipo(TipoConversacion.SOPORTE)).isEqualTo("SUPPORT");
     }
 
-    /** La clave de soporte NO sale al wire: `clave_directa` no esta en la respuesta, y el id del
-     * aprendiz que lleva adentro tampoco tiene por que salir por ahi. */
+    /** La clave de soporte NO sale al wire: `clave_directa` no esta en la respuesta.
+     *
+     * <p><b>Corregido 2026-10-02 (D-244).</b> Decia ademas que «el id del aprendiz que lleva adentro tampoco
+     * tiene por que salir por ahi». Ahora sale, con nombre ({@code supportTraineeId}): quien atiende soporte lo
+     * necesita para ver el pedido de emergencia de esa persona desde el chat. No filtra nada: un soporte solo
+     * lo ven el propio aprendiz y ADMIN/ALCHEMIST. Ver {@link #elSoporteDiceDeQuienEs}. */
     @Test
     @DisplayName("la respuesta de un soporte lleva su nombre y ninguna celula")
     void laRespuestaDeUnSoporteLlevaNombreYNingunaCelula() {
@@ -44,6 +48,21 @@ class ConversacionResponseTest {
         assertThat(respuesta.type()).isEqualTo("SUPPORT");
         assertThat(respuesta.nombre()).isEqualTo("Soporte - Ana Perez");
         assertThat(respuesta.celulaId()).isNull();
+    }
+
+    @Test
+    @DisplayName("supportTraineeId: el aprendiz del soporte; null en grupo, comunidad y 1 a 1")
+    void elSoporteDiceDeQuienEs() {
+        UserId aprendiz = UserId.of(UUID.randomUUID());
+        UserId otro = UserId.of(UUID.randomUUID());
+
+        assertThat(ConversacionResponse.from(Conversacion.crearSoporte(ID, aprendiz, "Ana - Formación Renaser", AHORA))
+                .supportTraineeId()).isEqualTo(aprendiz.value().toString());
+        assertThat(ConversacionResponse.from(Conversacion.crearGlobal(ID, AHORA)).supportTraineeId()).isNull();
+        assertThat(ConversacionResponse.from(Conversacion.crearCelula(ID, UUID.randomUUID(), AHORA)).supportTraineeId())
+                .isNull();
+        assertThat(ConversacionResponse.from(Conversacion.crearDirecta(ID, Conversacion.claveDirectaDe(aprendiz, otro),
+                AHORA)).supportTraineeId()).isNull();
     }
 
     /** D-205: solo un soporte trae la ruta de su foto; lo demás usa la tarjeta sin nombre de la app. */

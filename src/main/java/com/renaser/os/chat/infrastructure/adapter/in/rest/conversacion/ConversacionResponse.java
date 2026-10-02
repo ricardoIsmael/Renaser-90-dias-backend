@@ -15,9 +15,13 @@ import java.time.Instant;
  *
  * <p><b>Corregido 2026-09-27 (D-212).</b> Un GRUPO con foto propia también la trae:
  * {@code /api/v1/chat/conversations/{id}/foto?v=<milisegundos>}, con los de cuándo cambió para que el
- * teléfono baje la nueva. Sin foto propia, {@code null} como antes. La comunidad y los 1 a 1, nunca. */
+ * teléfono baje la nueva. Sin foto propia, {@code null} como antes. La comunidad y los 1 a 1, nunca.
+ *
+ * <p>{@code supportTraineeId} (D-244, 2026-10-02): solo en un SOPORTE, el aprendiz de ese chat. Quien atiende
+ * lo usa para ver si esa persona tiene un pedido de emergencia abierto y abrir «Cambiar día del programa». Ya
+ * viajaba escondido en la clave del soporte; ahora va con nombre. {@code null} en lo demás. */
 public record ConversacionResponse(String id, String type, String celulaId, String nombre, String createdAt,
-                                   String photoPath) {
+                                   String photoPath, String supportTraineeId) {
 
     /** Sin saber la foto propia de un grupo ni su nombre derivado (la respuesta de abrir un 1 a 1). */
     public static ConversacionResponse from(Conversacion c) {
@@ -34,7 +38,8 @@ public record ConversacionResponse(String id, String type, String celulaId, Stri
     public static ConversacionResponse from(Conversacion c, Instant fotoDelGrupoCambiadaEn, String nombre) {
         return new ConversacionResponse(c.id().toString(), toWireTipo(c.tipo()),
                 c.celulaId() != null ? c.celulaId().toString() : null, nombre, c.creadoEn().toString(),
-                rutaDeLaFoto(c, fotoDelGrupoCambiadaEn));
+                rutaDeLaFoto(c, fotoDelGrupoCambiadaEn),
+                c.aprendizDelSoporte().map(aprendiz -> aprendiz.value().toString()).orElse(null));
     }
 
     static String toWireTipo(TipoConversacion tipo) {

@@ -65,6 +65,10 @@ class ParticipacionProgramaServiceTest {
     private com.renaser.os.users.application.ports.out.ajustediaprograma.LoadUltimoAjusteDiaProgramaPort
             loadUltimoAjusteDiaProgramaPort;
 
+    @Mock
+    private com.renaser.os.users.application.ports.in.emergencia.ResolverEmergenciaAlCambiarDiaUseCase
+            resolverEmergencia;
+
     private ParticipacionProgramaService service;
 
     @BeforeEach
@@ -73,7 +77,8 @@ class ParticipacionProgramaServiceTest {
                 loadParticipacionProgramaPort, saveParticipacionProgramaPort, deleteParticipacionProgramaPort,
                 consultarResumenParticipacionPort, loadMentorProfilePort, loadUserPort,
                 new RequireAdminGuard(loadUserPort), saveAjusteDiaProgramaPort, loadUltimoAjusteDiaProgramaPort,
-                UUID::randomUUID, CLOCK, new com.renaser.os.users.domain.model.user.PlazoDeGracia(30));
+                UUID::randomUUID, CLOCK, new com.renaser.os.users.domain.model.user.PlazoDeGracia(30),
+                resolverEmergencia);
     }
 
     private User usuario(UserId id, UserRole role, UserStatus status) {
@@ -332,6 +337,8 @@ class ParticipacionProgramaServiceTest {
         var captor = org.mockito.ArgumentCaptor.forClass(ParticipacionPrograma.class);
         verify(saveParticipacionProgramaPort).save(captor.capture());
         assertThat(captor.getValue().diaPrograma()).isEqualTo(45);
+        // D-244: el pedido de emergencia abierto queda resuelto con el dia aplicado, en la misma transaccion.
+        verify(resolverEmergencia).alCambiarDia(traineeId, actorId, 45);
     }
 
     /**
@@ -353,6 +360,7 @@ class ParticipacionProgramaServiceTest {
 
         verify(saveParticipacionProgramaPort, never()).save(any());
         verify(saveAjusteDiaProgramaPort, never()).save(any());
+        verify(resolverEmergencia, never()).alCambiarDia(any(), any(), org.mockito.ArgumentMatchers.anyInt());
     }
 
     /**
@@ -486,7 +494,8 @@ class ParticipacionProgramaServiceTest {
                 loadParticipacionProgramaPort, saveParticipacionProgramaPort, deleteParticipacionProgramaPort,
                 consultarResumenParticipacionPort, loadMentorProfilePort, loadUserPort,
                 new RequireAdminGuard(loadUserPort), saveAjusteDiaProgramaPort, loadUltimoAjusteDiaProgramaPort,
-                UUID::randomUUID, reloj, new com.renaser.os.users.domain.model.user.PlazoDeGracia(30));
+                UUID::randomUUID, reloj, new com.renaser.os.users.domain.model.user.PlazoDeGracia(30),
+                resolverEmergencia);
     }
 
     /** Un ajuste rechazado no puede dejar rastro en la bitacora. */

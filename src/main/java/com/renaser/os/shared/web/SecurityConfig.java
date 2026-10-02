@@ -188,6 +188,9 @@ public class SecurityConfig {
                         .authenticated()
                         // «Tu Caja Renaser» (D-219): la caja propia; el id sale de la sesion.
                         .requestMatchers("/api/v1/me/caja", "/api/v1/me/caja/**").authenticated()
+                        // D-244: el pedido de emergencia del aprendiz. Sin esta linea quedaba bajo
+                        // anyRequest().permitAll() y la identidad salia del X-Actor-Id del cliente.
+                        .requestMatchers("/api/v1/me/emergency-request").authenticated()
                         /* Gestion del cuerpo de mentores por el Lider de Mentores (D-241). Lo atrapo
                            RutasCubiertasPorElFiltroTest (E-481): sin esta linea las cuatro rutas
                            quedaban sin sesion y el actor salia del header X-Actor-Id. */
