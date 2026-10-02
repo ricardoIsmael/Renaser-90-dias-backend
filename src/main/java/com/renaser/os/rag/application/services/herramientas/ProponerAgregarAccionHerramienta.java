@@ -49,6 +49,9 @@ import java.util.Optional;
  * tambien nombra "Leer", la persona puede querer de verdad una accion aparte: entonces el modelo
  * vuelve a llamar con {@code accion_aparte='si'} y se propone como siempre.
  *
+ * <p><b>Sin tarjeta que va a fallar (D-247, E-496).</b> Sin Rocas Maestras, o sin objetivo semanal de ese
+ * eje esa semana, no se propone: {@link CompuertaParaProponer} le dice al modelo por que y que ofrecer.
+ *
  * <p>Solo existe con {@code renaser.ia.acompanante.confirmacion-con-botones=true}.
  */
 @Component
@@ -90,15 +93,18 @@ public class ProponerAgregarAccionHerramienta implements HerramientaAgente {
     private final ProponerAccionUseCase proponerAccion;
     private final GestionarPlanDeHabitosPort planDeHabitosPort;
     private final MapaParaProponer mapa;
+    private final CompuertaParaProponer compuerta;
 
     public ProponerAgregarAccionHerramienta(ConsultarRocasDelAprendizPort rocasPort, PlanificarRocasPort planificarPort,
                                             ProponerAccionUseCase proponerAccion,
-                                            GestionarPlanDeHabitosPort planDeHabitosPort, MapaParaProponer mapa) {
+                                            GestionarPlanDeHabitosPort planDeHabitosPort, MapaParaProponer mapa,
+                                            CompuertaParaProponer compuerta) {
         this.rocasPort = rocasPort;
         this.planificarPort = planificarPort;
         this.proponerAccion = proponerAccion;
         this.planDeHabitosPort = planDeHabitosPort;
         this.mapa = mapa;
+        this.compuerta = compuerta;
     }
 
     @Override
@@ -139,7 +145,9 @@ public class ProponerAgregarAccionHerramienta implements HerramientaAgente {
             return ResultadoHerramienta.fallo(fecha.equals(manana.minusDays(1)) ? TextoDeAjustesDeRocas.DIA_EN_CURSO
                     : "Ese dia ya paso. Se puede agregar " + TextoDeAjustesDeRocas.FECHAS_QUE_SE_PUEDEN_AGREGAR + ".");
         }
-        return proponer(actorId, fecha, pedida);
+        return compuerta.bloqueoDelDia(actorId, fecha, List.of(pedida.accion().eje()))
+                .map(ResultadoHerramienta::fallo)
+                .orElseGet(() -> proponer(actorId, fecha, pedida));
     }
 
     /** Best-effort: sin el plan, se propone como antes (no se bloquea por no poder mirar). */

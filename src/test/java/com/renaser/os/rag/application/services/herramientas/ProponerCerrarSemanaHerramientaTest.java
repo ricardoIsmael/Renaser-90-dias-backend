@@ -56,7 +56,7 @@ class ProponerCerrarSemanaHerramientaTest {
     private final CerrarSemanaDeRocasPort cierre = mock(CerrarSemanaDeRocasPort.class);
     private final ProponerAccionUseCase proponer = mock(ProponerAccionUseCase.class);
     private final ProponerCerrarSemanaHerramienta herramienta = new ProponerCerrarSemanaHerramienta(rocas, cierre,
-            proponer);
+            proponer, CompuertasDePrueba.LIBRE);
 
     @BeforeEach
     void reglas() {

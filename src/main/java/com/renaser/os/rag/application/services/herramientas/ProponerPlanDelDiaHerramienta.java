@@ -23,6 +23,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.NoSuchElementException;
 
 /**
@@ -68,13 +69,16 @@ public class ProponerPlanDelDiaHerramienta implements HerramientaAgente {
     private final PlanificarRocasPort planificarPort;
     private final ProponerAccionUseCase proponerAccion;
     private final MapaParaProponer mapa;
+    private final CompuertaParaProponer compuerta;
 
     public ProponerPlanDelDiaHerramienta(ConsultarRocasDelAprendizPort rocasPort, PlanificarRocasPort planificarPort,
-                                         ProponerAccionUseCase proponerAccion, MapaParaProponer mapa) {
+                                         ProponerAccionUseCase proponerAccion, MapaParaProponer mapa,
+                                         CompuertaParaProponer compuerta) {
         this.rocasPort = rocasPort;
         this.planificarPort = planificarPort;
         this.proponerAccion = proponerAccion;
         this.mapa = mapa;
+        this.compuerta = compuerta;
     }
 
     @Override
@@ -108,6 +112,11 @@ public class ProponerPlanDelDiaHerramienta implements HerramientaAgente {
         LocalDate fecha = pedido.fecha() == null ? manana.fecha() : pedido.fecha();
         if (esHoyYaArmado(actorId, fecha, manana.fecha())) {
             return ResultadoHerramienta.fallo(TextoDePlanDeRocas.rechazoDelDia(Motivo.YA_PLANIFICADO));
+        }
+        Optional<String> bloqueo = compuerta.bloqueoDelDia(actorId, fecha,
+                pedido.acciones().stream().map(PlanificarRocasPort.AccionDelPlan::eje).toList());
+        if (bloqueo.isPresent()) {
+            return ResultadoHerramienta.fallo(bloqueo.get());
         }
         String resumen = TextoDePlanDeRocas.resumenDelDia(fecha, pedido.acciones()) + avisoDeReemplazo(fecha, manana);
         return proponer(actorId, new PlanDelDia(fecha, pedido.acciones()), resumen);

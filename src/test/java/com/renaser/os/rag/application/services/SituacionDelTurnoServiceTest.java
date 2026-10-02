@@ -3,6 +3,7 @@ package com.renaser.os.rag.application.services;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
 import com.renaser.os.rag.application.ports.out.mapa.ConsultarMapaDeRenacimientoPort;
+import com.renaser.os.rag.application.ports.out.rocas.ConsultarCompuertaDeRocasPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarTratoDeLaPersonaPort;
@@ -52,8 +53,9 @@ class SituacionDelTurnoServiceTest {
     private final GestionarPlanDeHabitosPort planPort = mock(GestionarPlanDeHabitosPort.class);
     private final ConsultarTratoDeLaPersonaPort tratoPort = mock(ConsultarTratoDeLaPersonaPort.class);
     private final ConsultarMapaDeRenacimientoPort mapaPort = mock(ConsultarMapaDeRenacimientoPort.class);
+    private final ConsultarCompuertaDeRocasPort compuertaPort = mock(ConsultarCompuertaDeRocasPort.class);
     private final SituacionDelTurnoService service = new SituacionDelTurnoService(situacionPort, agendaPort, planPort,
-            FixedClock.at(TRES_AM_UTC), tratoPort, mapaPort);
+            FixedClock.at(TRES_AM_UTC), tratoPort, mapaPort, compuertaPort);
 
     /** D-233: la prioridad y el proximo hito del Mapa viajan en la situacion; si falla, sin Mapa y el turno sigue. */
     @Test
@@ -71,6 +73,31 @@ class SituacionDelTurnoServiceTest {
 
         when(mapaPort.de(APRENDIZ)).thenThrow(new IllegalStateException("caida"));
         assertThat(service.de(APRENDIZ).orElseThrow().mapa()).isNull();
+    }
+
+    /**
+     * D-247 (E-496): la situacion sabe si tiene sus Rocas Maestras, aparte de si respondio el Mapa: puede
+     * haber Mapa respondido y la activacion sin crearlas. Si {@code rocks} no responde, no se sabe (null).
+     */
+    @Test
+    @DisplayName("D-247: la situacion dice si tiene sus Rocas Maestras, tambien con el Mapa respondido")
+    void rocasMaestrasEnLaSituacion() {
+        when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
+        when(mapaPort.de(APRENDIZ)).thenReturn(new MapaDeLaPersona(true, true, "salud", List.of(), List.of(), null,
+                List.of(), List.of()));
+        when(compuertaPort.rocasMaestrasCompletas(APRENDIZ)).thenReturn(false);
+
+        var sinMaestras = service.de(APRENDIZ).orElseThrow().mapa();
+        assertThat(sinMaestras.tieneMapa()).isTrue();
+        assertThat(sinMaestras.objetivosBloqueados()).isTrue();
+
+        when(compuertaPort.rocasMaestrasCompletas(APRENDIZ)).thenReturn(true);
+        assertThat(service.de(APRENDIZ).orElseThrow().mapa().objetivosBloqueados()).isFalse();
+
+        when(compuertaPort.rocasMaestrasCompletas(APRENDIZ)).thenThrow(new IllegalStateException("rocks caido"));
+        var sinSaber = service.de(APRENDIZ).orElseThrow().mapa();
+        assertThat(sinSaber.rocasMaestrasCompletas()).isNull();
+        assertThat(sinSaber.prioridad()).isEqualTo("salud");
     }
 
     /** E-457: el trato de su ficha viaja en la situacion; si no se puede leer, neutro y el turno sigue. */

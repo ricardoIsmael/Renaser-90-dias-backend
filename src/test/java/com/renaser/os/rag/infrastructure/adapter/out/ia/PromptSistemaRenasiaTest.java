@@ -560,8 +560,14 @@ class PromptSistemaRenasiaTest {
                         + "habito no se cuelga de un objetivo ni se frena por su Mapa.")
                 .contains("Si lo que pide no se relaciona con\n  ningun objetivo de su Mapa, diselo en una linea y "
                         + "sugiere como conectarlo; si\n  insiste, proponlo igual.")
-                .contains("Sin Mapa: dilo en una linea e invitala a completarlo; no le armes metas. Si\n  pide "
-                        + "proponer algo, proponlo igual.")
+                // D-247 (E-496): sin Mapa (o sin Rocas Maestras) no se propone nada de objetivos.
+                .doesNotContain("pide proponer algo, proponlo igual")
+                .contains("Si la linea del Mapa dice \"sin completar\" o que sus objetivos de 90 dias no\n  quedaron "
+                        + "creados y pide planificar su dia, su semana o una accion de sus\n  objetivos: lo primero que "
+                        + "le dices es que todavia no se puede")
+                .contains("(completarlo en Plan, \"Ir al Mapa de\n  Renacimiento\", o escribir a soporte). No le "
+                        + "preguntes horarios ni acciones\n  para eso")
+                .doesNotContain("D-247")
                 .contains("los objetivos de 90 dias de su Mapa NO se cambian, ni por ti, ni\n  por una "
                         + "herramienta, ni por su mentor. Diselo con calidez")
                 .contains("recuerdale su porque y su proximo hito")

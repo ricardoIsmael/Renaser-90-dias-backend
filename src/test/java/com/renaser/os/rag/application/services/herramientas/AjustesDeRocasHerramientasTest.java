@@ -66,10 +66,12 @@ class AjustesDeRocasHerramientasTest {
 
     private final GestionarPlanDeHabitosPort planDeHabitos = mock(GestionarPlanDeHabitosPort.class);
     private final ProponerAgregarAccionHerramienta agregarAccion =
-            new ProponerAgregarAccionHerramienta(rocas, planificar, proponer, planDeHabitos, SIN_MAPA);
+            new ProponerAgregarAccionHerramienta(rocas, planificar, proponer, planDeHabitos, SIN_MAPA,
+                    CompuertasDePrueba.LIBRE);
     private final AgregarAccionConfirmable agregarConfirmable = new AgregarAccionConfirmable(agregar, planificar);
     private final ProponerEditarObjetivoSemanalHerramienta editarObjetivo =
-            new ProponerEditarObjetivoSemanalHerramienta(rocas, planificar, editar, proponer, SIN_MAPA);
+            new ProponerEditarObjetivoSemanalHerramienta(rocas, planificar, editar, proponer, SIN_MAPA,
+                    CompuertasDePrueba.LIBRE);
     private final EditarObjetivoSemanalConfirmable editarConfirmable = new EditarObjetivoSemanalConfirmable(editar,
             planificar);
 

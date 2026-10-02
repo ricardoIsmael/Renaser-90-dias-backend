@@ -35,6 +35,7 @@ import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
 import com.renaser.os.rocks.domain.model.rocadiaria.VentanaPlanificacionDiaria;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
+import com.renaser.os.rocks.domain.model.rocamaestra.RocasMaestras;
 import com.renaser.os.rocks.domain.model.rocasemanal.EstadoPlazo;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanal;
 import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
@@ -128,9 +129,8 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
             throw new IllegalStateException("ALREADY_PLANNED: ya existen rocas planificadas para " + command.fecha());
         }
 
-        int numeroSemana = semanas.numeroSemanaParaFecha(command.fecha());
         List<RocaDiaria> creadas = command.rocas().stream()
-                .map(item -> planificarUna(command.actorId(), command.fecha(), item, maestras, numeroSemana))
+                .map(item -> planificarUna(command.actorId(), command.fecha(), item, maestras, semanas))
                 .toList();
         return saveRocaDiariaPort.saveAll(creadas);
     }
@@ -253,9 +253,9 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
     }
 
     private RocaDiaria planificarUna(UserId actorId, LocalDate fecha, ItemRocaDiaria item,
-                                      Map<EjeObjetivo, RocaMaestra> maestras, int numeroSemana) {
+                                      Map<EjeObjetivo, RocaMaestra> maestras, SemanaPrograma semanas) {
         RocaMaestra maestra = maestras.get(item.eje());
-        RocaSemanal rocaSemanal = loadRocaSemanalPort.deMaestraYSemana(maestra.id(), numeroSemana)
+        RocaSemanal rocaSemanal = AccesoARocas.objetivoSemanalDelDia(loadRocaSemanalPort, maestra, semanas, fecha)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "NO_WEEKLY_ROCK: no hay plan semanal activo para el eje " + item.eje()));
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
@@ -382,12 +382,9 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         }
     }
 
+    /** La regla vive en {@link RocasMaestras} (D-247): la misma que consulta el acompanante. */
     private Map<EjeObjetivo, RocaMaestra> requireRocasMaestrasCompletas(UserId actorId) {
-        List<RocaMaestra> maestras = loadRocaMaestraPort.deParticipante(actorId);
-        if (maestras.size() < EjeObjetivo.values().length) {
-            throw new NotAuthorizedException("ROCKS_LOCKED: completa tu onboarding antes de planificar rocas");
-        }
-        return maestras.stream().collect(Collectors.toMap(RocaMaestra::eje, m -> m));
+        return RocasMaestras.de(loadRocaMaestraPort.deParticipante(actorId)).exigirCompletas();
     }
 
     private RocaDiaria requireRocaPropia(UserId actorId, RocaDiariaId id) {
