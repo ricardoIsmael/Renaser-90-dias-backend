@@ -14,6 +14,7 @@ import com.renaser.os.points.domain.model.ranking.PuntajeGeneral;
 import com.renaser.os.points.domain.model.ranking.TipoRanking;
 import com.renaser.os.points.api.PorcentajeRocasFinder;
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummaryFinder;
 import com.renaser.os.shared.domain.UserId;
@@ -27,6 +28,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotRankingUseCase {
@@ -40,13 +42,16 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
     /** D-226: los km acumulados del programa, en lote, desde {@code habits}. */
     private final MedicionAcumuladaFinder medicionAcumuladaFinder;
     private final UserSummaryFinder userSummaryFinder;
+    /** D-243: quién está cerrado esperando su borrado, para sacarlo del ranking que ven los demás. */
+    private final CuentasCerradasFinder cuentasCerradas;
 
     public RankingService(LoadRankingCandidatosPort loadRankingCandidatosPort,
                            SaveRankingSnapshotPort saveRankingSnapshotPort, LoadRankingPort loadRankingPort,
                            PorcentajeHabitosFinder porcentajeHabitosFinder,
                            PorcentajeRocasFinder porcentajeRocasFinder,
                            PorcentajeCursosFinder porcentajeCursosFinder,
-                           MedicionAcumuladaFinder medicionAcumuladaFinder, UserSummaryFinder userSummaryFinder) {
+                           MedicionAcumuladaFinder medicionAcumuladaFinder, UserSummaryFinder userSummaryFinder,
+                           CuentasCerradasFinder cuentasCerradas) {
         this.loadRankingCandidatosPort = loadRankingCandidatosPort;
         this.saveRankingSnapshotPort = saveRankingSnapshotPort;
         this.loadRankingPort = loadRankingPort;
@@ -55,6 +60,7 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
         this.porcentajeCursosFinder = porcentajeCursosFinder;
         this.medicionAcumuladaFinder = medicionAcumuladaFinder;
         this.userSummaryFinder = userSummaryFinder;
+        this.cuentasCerradas = cuentasCerradas;
     }
 
     @Override
@@ -114,12 +120,32 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
         return puntajes;
     }
 
+    /**
+     * El snapshot del día, sin las cuentas cerradas esperando su borrado (D-243) y con las posiciones
+     * renumeradas 1..n.
+     *
+     * <p>Se filtra al LEER y no al generar porque el snapshot se regenera una vez al día (05:05 UTC):
+     * quien cierra su cuenta a media mañana seguiría en la tabla hasta el día siguiente. Renumerar es
+     * necesario por lo mismo: sacar al 3.º dejaría «1, 2, 4». El orden es el del snapshot ({@code generar}
+     * numera sin empates), así que la posición nueva es el lugar en la lista.
+     */
     @Override
     public List<EntradaRanking> consultar(UserId actorId, TipoRanking tipo, LocalDate fecha) {
         requireActorActivo(actorId);
-        return loadRankingPort.porTipoYFecha(tipo, fecha).stream()
-                .map(e -> new EntradaRanking(e.participanteId(), e.fullName(), e.posicion(), e.puntaje()))
+        List<LoadRankingPort.EntradaRankingConNombre> filas = loadRankingPort.porTipoYFecha(tipo, fecha).stream()
+                .sorted(Comparator.comparingInt(LoadRankingPort.EntradaRankingConNombre::posicion))
                 .toList();
+        Set<UserId> cerradas = cuentasCerradas.cerradasEntre(
+                filas.stream().map(LoadRankingPort.EntradaRankingConNombre::participanteId).toList());
+        List<LoadRankingPort.EntradaRankingConNombre> visibles = filas.stream()
+                .filter(e -> !cerradas.contains(e.participanteId()))
+                .toList();
+        List<EntradaRanking> entradas = new ArrayList<>(visibles.size());
+        for (int i = 0; i < visibles.size(); i++) {
+            var e = visibles.get(i);
+            entradas.add(new EntradaRanking(e.participanteId(), e.fullName(), i + 1, e.puntaje()));
+        }
+        return entradas;
     }
 
     /** El ranking muestra a TODOS los aprendices: exige actor real y activo, no solo existente. */

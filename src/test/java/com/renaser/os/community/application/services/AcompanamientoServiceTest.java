@@ -69,6 +69,8 @@ class AcompanamientoServiceTest {
     private final Map<UUID, Celula> celulas = new HashMap<>();
     private final Map<UserId, UserSummary> usuarios = new HashMap<>();
     private boolean mentorInscrito = false;
+    /** D-243: las cuentas cerradas esperando su borrado, como las responderia users. */
+    private final java.util.Set<UserId> cerradas = new java.util.HashSet<>();
 
     private final LoadAsignacionesPort cargaAsignaciones = new LoadAsignacionesPort() {
         @Override
@@ -200,7 +202,8 @@ class AcompanamientoServiceTest {
     private AcompanamientoService servicio(Clock reloj) {
         return new AcompanamientoService(cargaAsignaciones, cargaCelulas, cargaPolitica,
                 new AcompanamientoFinderService(cargaAsignaciones, cargaCelulas, cargaPolitica),
-                buscaParticipacion, buscaUsuarios, reloj);
+                buscaParticipacion, buscaUsuarios, reloj,
+                ids -> ids.stream().filter(cerradas::contains).collect(java.util.stream.Collectors.toSet()));
     }
 
     // ── armado ──────────────────────────────────────────────────────────────
@@ -330,6 +333,18 @@ class AcompanamientoServiceTest {
         assertThat(pagina.total()).isEqualTo(2);
         assertThat(pagina.aprendices()).extracting("nombre").containsExactly("Ana Perez", "Luis Gomez");
         assertThat(pagina.siguienteCursor()).isNull();
+    }
+
+    @Test
+    @DisplayName("D-243: un aprendiz que cerró su cuenta para eliminarla no aparece en el roster ni cuenta en el total")
+    void rosterSinCuentasCerradas() {
+        escenarioBase();
+        cerradas.add(LUIS);
+
+        PaginaAprendices pagina = servicio().aprendices(new ConsultaAprendices(MENTOR, MI_GRUPO.value(), null, 25));
+
+        assertThat(pagina.total()).isEqualTo(1);
+        assertThat(pagina.aprendices()).extracting("nombre").containsExactly("Ana Perez");
     }
 
     @Test

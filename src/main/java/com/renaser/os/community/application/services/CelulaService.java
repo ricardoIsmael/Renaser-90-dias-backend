@@ -40,6 +40,7 @@ import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.EspecialidadMentor;
 import com.renaser.os.users.api.PerfilMentorFinder;
 import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -85,6 +86,8 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     private final Clock clock;
     private final IdGenerator idGenerator;
     private final VigenciaDeGrupos vigencia;
+    /** D-243: los compañeros que ve un aprendiz no incluyen cuentas cerradas esperando su borrado. */
+    private final SinCuentasCerradas sinCerradas;
 
     public CelulaService(LoadCelulaPort loadCelulaPort, SaveCelulaPort saveCelulaPort,
                           EliminarCelulaPort eliminarCelulaPort, LoadCohortePort loadCohortePort,
@@ -94,7 +97,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
                           ParticipacionProgramaFinder participacionProgramaFinder,
                           PerfilMentorFinder perfilMentorFinder, LoadAsignacionesPort loadAsignacionesPort,
                           LoadPoliticaMentoriaPort loadPoliticaMentoriaPort, ApplicationEventPublisher events,
-                          Clock clock, IdGenerator idGenerator) {
+                          Clock clock, IdGenerator idGenerator, CuentasCerradasFinder cuentasCerradas) {
         this.loadCelulaPort = loadCelulaPort;
         this.saveCelulaPort = saveCelulaPort;
         this.eliminarCelulaPort = eliminarCelulaPort;
@@ -111,6 +114,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         this.clock = clock;
         this.idGenerator = idGenerator;
         this.vigencia = new VigenciaDeGrupos(loadPoliticaMentoriaPort);
+        this.sinCerradas = new SinCuentasCerradas(cuentasCerradas);
     }
 
     @Override
@@ -244,7 +248,9 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         }
         Cohorte cohorte = requireCohorte(celula.cohorteId());
         PerfilBasico mentor = perfilDelMentor(celula);
-        int cantidadMiembros = consultarMiembrosCelulaPort.contarMiembros(celulaId);
+        // D-243: el conteo es el de la lista de `misCompaneros`, sin cuentas cerradas: no puede decir
+        // «5 integrantes» y listar 4. Antes salía de `contarMiembros`, que cuenta el mismo puntero.
+        int cantidadMiembros = companerosVisibles(celulaId).size();
         int totalCelulas = loadCelulaPort.porCohorte(celula.cohorteId()).size();
         // Sin la foto del mentor (D-206): este es el `/me/cell` viejo y no se le cambia lo que calcula.
         return Optional.of(new MiCelula(celula, cohorte, mentor, cantidadMiembros, totalCelulas, null));
@@ -254,9 +260,13 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     public List<PerfilBasico> misCompaneros(UserId traineeId) {
         requireActorActivo(traineeId);
         return consultarCelulaDeParticipantePort.celulaDeUsuario(traineeId)
-                .map(celulaId -> consultarMiembrosCelulaPort.deCelula(celulaId).stream()
-                        .map(this::perfilBasico).toList())
+                .map(celulaId -> companerosVisibles(celulaId).stream().map(this::perfilBasico).toList())
                 .orElseGet(List::of);
+    }
+
+    /** Los miembros del grupo (el puntero), sin las cuentas cerradas esperando su borrado (D-243). */
+    private List<UserId> companerosVisibles(CelulaId celulaId) {
+        return sinCerradas.de(consultarMiembrosCelulaPort.deCelula(celulaId), id -> id);
     }
 
     /** #25 (docs/PLAN_INTEGRACION_FRONTEND.md sec. 5): dashboard cross-cohorte — a

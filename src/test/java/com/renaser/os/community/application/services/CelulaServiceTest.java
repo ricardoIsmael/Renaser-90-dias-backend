@@ -52,6 +52,8 @@ class CelulaServiceTest {
     private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
+    private com.renaser.os.users.api.CuentasCerradasFinder cuentasCerradas;
+    @Mock
     private LoadCelulaPort loadCelulaPort;
     @Mock
     private SaveCelulaPort saveCelulaPort;
@@ -92,7 +94,7 @@ class CelulaServiceTest {
         service = new CelulaService(loadCelulaPort, saveCelulaPort, eliminarCelulaPort, loadCohortePort,
                 consultarMiembrosCelulaPort, consultarCelulaDeParticipantePort, consultarPerfilUsuarioPort,
                 userSummaryFinder, participacionProgramaFinder, perfilMentorFinder, loadAsignacionesPort,
-                loadPoliticaMentoriaPort, events, CLOCK, idGenerator);
+                loadPoliticaMentoriaPort, events, CLOCK, idGenerator, cuentasCerradas);
         lenient().when(loadAsignacionesPort.porCelula(any())).thenReturn(java.util.List.of());
         lenient().when(loadPoliticaMentoriaPort.porCohorte(any())).thenReturn(Optional.empty());
         lenient().when(perfilMentorFinder.porUsuarios(any())).thenReturn(java.util.Map.of());
@@ -632,6 +634,24 @@ class CelulaServiceTest {
         assertThat(service.miCelula(trainee)).isPresent();
     }
 
+    @Test
+    @DisplayName("D-243: /me/cell y /me/cell/members no muestran ni cuentan a quien cerró su cuenta para eliminarla")
+    void lasCuentasCerradasNoSeVenNiCuentan() {
+        Celula vigente = Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Fenix", null,
+                CohorteId.of(UUID.randomUUID()), null, null, CLOCK.now(), CLOCK.now(), null, null,
+                new PeriodoGrupo(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31)));
+        UserId companera = UserId.of(UUID.randomUUID());
+        UserId cerrada = UserId.of(UUID.randomUUID());
+        when(consultarCelulaDeParticipantePort.celulaDeUsuario(trainee)).thenReturn(Optional.of(vigente.id()));
+        when(loadCelulaPort.porId(vigente.id())).thenReturn(Optional.of(vigente));
+        when(loadCohortePort.porId(vigente.cohorteId())).thenReturn(Optional.of(cohorteExistente(vigente.cohorteId())));
+        when(consultarMiembrosCelulaPort.deCelula(vigente.id())).thenReturn(java.util.List.of(trainee, companera, cerrada));
+        when(cuentasCerradas.cerradasEntre(java.util.List.of(trainee, companera, cerrada))).thenReturn(java.util.Set.of(cerrada));
+
+        assertThat(service.misCompaneros(trainee)).extracting(p -> p.id()).containsExactly(trainee, companera);
+        assertThat(service.miCelula(trainee)).get().extracting(mc -> mc.cantidadMiembros()).isEqualTo(2);
+    }
+
     /** Y un grupo SIN periodo no caduca: es el caso de todas las celulas anteriores a V48. */
     @Test
     @DisplayName("miCelula(): un grupo sin periodo no caduca nunca")
@@ -651,7 +671,7 @@ class CelulaServiceTest {
         return new CelulaService(loadCelulaPort, saveCelulaPort, eliminarCelulaPort, loadCohortePort,
                 consultarMiembrosCelulaPort, consultarCelulaDeParticipantePort, consultarPerfilUsuarioPort,
                 userSummaryFinder, participacionProgramaFinder, perfilMentorFinder, loadAsignacionesPort,
-                loadPoliticaMentoriaPort, events, FixedClock.at(ahora), idGenerator);
+                loadPoliticaMentoriaPort, events, FixedClock.at(ahora), idGenerator, cuentasCerradas);
     }
 
     private static Celula grupoConPeriodo(String nombre, UserId mentorDeLaColumna, LocalDate inicio, LocalDate fin) {

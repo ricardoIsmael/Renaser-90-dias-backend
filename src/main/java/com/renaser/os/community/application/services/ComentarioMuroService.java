@@ -17,6 +17,7 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -27,6 +28,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -42,11 +44,15 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    /** D-243: los comentarios de cuentas cerradas esperando su borrado no se muestran ni cuentan. */
+    private final SinCuentasCerradas sinCerradas;
 
     public ComentarioMuroService(LoadPublicacionPort loadPublicacionPort, LoadComentarioPort loadComentarioPort,
                                   SaveComentarioPort saveComentarioPort,
                                   ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort,
-                                  UserSummaryFinder userSummaryFinder, Clock clock, IdGenerator idGenerator) {
+                                  UserSummaryFinder userSummaryFinder, Clock clock, IdGenerator idGenerator,
+                                  CuentasCerradasFinder cuentasCerradas) {
+        this.sinCerradas = new SinCuentasCerradas(cuentasCerradas);
         this.loadPublicacionPort = loadPublicacionPort;
         this.loadComentarioPort = loadComentarioPort;
         this.saveComentarioPort = saveComentarioPort;
@@ -65,7 +71,7 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
         Comentario comentario = Comentario.escribir(ComentarioId.of(idGenerator.newId()), command.publicacionId(),
                 command.autorId(), command.texto(), clock.now());
         Comentario guardado = saveComentarioPort.save(comentario);
-        int cantidad = loadComentarioPort.contar(command.publicacionId());
+        int cantidad = totalVisible(command.publicacionId());
         return new EscribirComentarioUseCase.Resultado(aVista(guardado), cantidad);
     }
 
@@ -92,7 +98,7 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
         }
         comentario.ocultar(clock.now());
         saveComentarioPort.save(comentario);
-        return new OcultarComentarioUseCase.Resultado(loadComentarioPort.contar(comentario.publicacionId()));
+        return new OcultarComentarioUseCase.Resultado(totalVisible(comentario.publicacionId()));
     }
 
     @Override
@@ -100,15 +106,28 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
         requireVisible(publicacionId);
         List<Comentario> filas = loadComentarioPort.pagina(publicacionId, cursor, TAMANO_PAGINA);
         boolean hayMas = filas.size() > TAMANO_PAGINA;
-        List<Comentario> pagina = hayMas ? filas.subList(0, TAMANO_PAGINA) : filas;
-        int total = loadComentarioPort.contar(publicacionId);
-        Instant siguiente = hayMas ? pagina.get(pagina.size() - 1).creadoEn() : null;
+        List<Comentario> cruda = hayMas ? filas.subList(0, TAMANO_PAGINA) : filas;
+        int total = totalVisible(publicacionId);
+        // El cursor sale de la página CRUDA (D-243): la siguiente arranca donde terminó esta aunque su
+        // último comentario sea de una cuenta cerrada y no se muestre. Ver `PublicacionMuroService.feed`.
+        Instant siguiente = hayMas ? cruda.get(cruda.size() - 1).creadoEn() : null;
+        List<Comentario> pagina = sinCerradas.de(cruda, Comentario::autorId);
         // Los autores de toda la pagina en UNA consulta (V-6, D-180). Antes era una por comentario:
         // 30 comentarios, 30 consultas a `usuarios`.
         Map<UserId, PerfilUsuario> autores = consultarPerfilUsuarioPort.porIds(
                 pagina.stream().map(Comentario::autorId).collect(Collectors.toSet()));
         return new PaginaComentarios(pagina.stream().map(c -> aVista(c, autores.get(c.autorId()))).toList(),
                 siguiente, total);
+    }
+
+    /** Comentarios visibles sin los de cuentas cerradas (D-243): el número y la lista dicen lo mismo. */
+    private int totalVisible(PublicacionId publicacionId) {
+        Map<UserId, Integer> porAutor = loadComentarioPort.contarPorAutor(publicacionId);
+        Set<UserId> cerradas = sinCerradas.cerradasEntre(List.copyOf(porAutor.keySet()), autor -> autor);
+        return porAutor.entrySet().stream()
+                .filter(e -> !cerradas.contains(e.getKey()))
+                .mapToInt(Map.Entry::getValue)
+                .sum();
     }
 
     private ComentarioVista aVista(Comentario comentario) {

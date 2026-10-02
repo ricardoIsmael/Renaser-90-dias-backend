@@ -34,7 +34,13 @@ interface SpringDataComentarioRepository extends JpaRepository<ComentarioJpaEnti
     List<ComentarioJpaEntity> paginaConCursor(@Param("publicacionId") UUID publicacionId,
                                                @Param("cursor") Instant cursor, Pageable pageable);
 
-    long countByPublicacionIdAndOcultoFalse(UUID publicacionId);
+    /** Comentarios visibles por autor (D-243: el total que se muestra excluye cuentas cerradas). */
+    @Query("""
+            SELECT c.autorId, COUNT(c) FROM ComentarioJpaEntity c
+            WHERE c.publicacionId = :publicacionId AND c.oculto = false
+            GROUP BY c.autorId
+            """)
+    List<Object[]> contarPorAutor(@Param("publicacionId") UUID publicacionId);
 
     /** Conteo en lote para una pagina entera del feed (E-80): una sola consulta agrupada en vez
      * de una por publicacion. Devuelve solo las publicaciones QUE TIENEN al menos un comentario

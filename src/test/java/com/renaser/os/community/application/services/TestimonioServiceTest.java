@@ -12,6 +12,7 @@ import com.renaser.os.community.domain.model.publicacion.Publicacion;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.community.domain.model.publicacion.TipoPublicacion;
 import com.renaser.os.community.domain.model.testimonio.Testimonio;
+import com.renaser.os.community.domain.model.testimonio.TestimonioId;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -49,6 +50,8 @@ class TestimonioServiceTest {
     private static final UUID ID_GENERADO = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Mock
+    private com.renaser.os.users.api.CuentasCerradasFinder cuentasCerradas;
+    @Mock
     private LoadTestimonioPort loadTestimonioPort;
     @Mock
     private SaveTestimonioPort saveTestimonioPort;
@@ -70,7 +73,7 @@ class TestimonioServiceTest {
     void setUp() {
         service = new TestimonioService(loadTestimonioPort, saveTestimonioPort, loadPublicacionPort,
                 consultarPerfilUsuarioPort, new NoOpAlmacenamientoAdapter(), userSummaryFinder, CLOCK,
-                idGenerator);
+                idGenerator, cuentasCerradas);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveTestimonioPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -149,5 +152,23 @@ class TestimonioServiceTest {
         var command = new PromoverPublicacionCommand(adminSuspendido, PublicacionId.of(UUID.randomUUID()), 5);
         assertThatThrownBy(() -> service.promover(command)).isInstanceOf(NotAuthorizedException.class);
         verify(saveTestimonioPort, never()).save(any());
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("D-243: la vitrina oculta el testimonio promovido de una cuenta cerrada, no el que un Admin cerrado cargó a mano")
+    void listarDestacadosSinCuentasCerradas() {
+        Testimonio promovido = Testimonio.rehydrate(TestimonioId.of(UUID.randomUUID()), autor,
+                PublicacionId.of(UUID.randomUUID()), "Autor", "Aprendiz", null, "muro/fotos/x/1.jpg",
+                "Me cambio la vida", 5, true, CLOCK.now());
+        Testimonio aMano = Testimonio.rehydrate(TestimonioId.of(UUID.randomUUID()), admin, null, "Ana Perez",
+                "Aprendiz", null, null, "Me cambio la vida", 5, true, CLOCK.now());
+        when(loadTestimonioPort.listarDestacados(50)).thenReturn(List.of(promovido, aMano));
+        when(cuentasCerradas.cerradasEntre(any())).thenAnswer(inv -> {
+            java.util.Collection<UserId> ids = inv.getArgument(0);
+            return ids.stream().filter(id -> id.equals(autor) || id.equals(admin))
+                    .collect(java.util.stream.Collectors.toSet());
+        });
+
+        assertThat(service.listarDestacados()).extracting(v -> v.testimonio().id()).containsExactly(aMano.id());
     }
 }
