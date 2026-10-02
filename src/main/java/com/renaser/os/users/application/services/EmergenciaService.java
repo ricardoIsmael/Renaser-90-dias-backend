@@ -31,7 +31,7 @@ import java.util.UUID;
  *
  * <p><b>Una sola abierta por persona</b> (límite contra el spam: decidido acá a falta de una regla del
  * dueño, y dicho en el informe). Se revisa antes de guardar para responder un 409 con palabras, y el índice
- * único parcial de V90 cierra la carrera de dos toques a la vez.
+ * único parcial de V91 cierra la carrera de dos toques a la vez.
  *
  * <p><b>Desde el Día 0</b> (respuesta del dueño del 2026-10-02): en el Día 0 el pedido es solo «necesito ayuda»,
  * sin día. Al resolverlo (cambiando el día o no) se publica {@link EmergenciaResueltaEvent} y {@code chat} le
