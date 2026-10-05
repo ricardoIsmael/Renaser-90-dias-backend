@@ -13494,3 +13494,13 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 **Qué hacer:** para ver el teclado completo, `adb shell am force-stop com.google.android.inputmethod.latin` y TOCAR el campo, sin `keyevent` antes. Para bajar el teclado, `keyevent 4` sólo si `mInputShown=true`. No usar ESC. `uiautomator dump` puede devolver un archivo viejo si la pantalla se está animando: preferir `mobile_list_elements_on_screen`.
 
 **De paso:** (a) el backend local `backend-ui.jar` (8086, `renaser_ui0210`) no tiene S3: «CONTINUAR» de Términos termina en «No se pudo guardar tu firma» (`WARN No se pudo guardar la firma "terms_signature": el almacenamiento S3 no está configurado en el backend.`); para ver «Elige tu Día 1» se marcó `terminos_aceptados_en` a mano en la base local y se volvió a dejar en `NULL`. (b) El APK de desarrollo instalado en el emulador (29/09) volvió a cerrarse una vez al arrancar en frío con la firma de E-452 (`SIGSEGV … MountingCoordinator::pullTransaction(bool) const+713`); no es del cambio de este día.
+
+## E-507 · «Línea negra» encima de la barra de pestañas en Hoy, Plan, Training y Yo (no en Comunidad) (app, producción, RESUELTO 05/10)
+
+**Síntoma (05/10, el dueño en su teléfono, modo oscuro):** una franja horizontal oscura de ~24 dp entre el contenido y la barra de pestañas (HOY · PLAN · TRAINING · COMUNIDAD · YO) en cuatro pestañas; en Comunidad no aparece. Medido en su captura: la barra es `rgb(22,21,19)` (`c.bg` + 4 % de blanco de `c.cardBg`) y la franja `rgb(12,11,9)` (`c.bg` puro).
+
+**Causa real:** el `SafeAreaView` de `HoyScreen`, `PlanScreen`, `TrainingScreen` y `YoScreen` iba sin `edges` (= los cuatro bordes), así que ponía `paddingBottom = insets.bottom` pintado de `c.bg`; y la `TabBar`, que se dibuja debajo de la pantalla, ya reserva ese mismo inset (`paddingBottom: max(insets.bottom, 14)`). El borde de la barra de gestos se pagaba dos veces. En claro no se ve porque `bg` y `cardBg` son casi iguales. **Es el mismo bug que Comunidad corrigió el 26/09** («franja blanca», comentario en `ComunidadScreen`): se arregló en una pantalla y no en las otras cuatro.
+
+**Solución:** `src/navigation/bordesDeUnaPestana.ts` (`BORDES_DE_UNA_PESTANA = ['top','left','right']`) y las cuatro pantallas lo usan. Con la barra escondida al desplazar, el borde de gestos lo sigue pintando la caja de la `TabBar`. Rama del front `barra-sin-franja` (`1cc21e7`).
+
+**Cómo evitar que vuelva:** `pestanasSinFranjaAbajo.test.ts` exige `edges={BORDES_DE_UNA_PESTANA}` en las cuatro pestañas (falla 4 de 5 contra el código viejo). Regla general: **una pantalla que vive bajo la barra de pestañas nunca aplica el borde seguro de abajo**; si se arregla un bug de layout en una pestaña, revisar las otras cuatro.
