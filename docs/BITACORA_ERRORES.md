@@ -13530,3 +13530,13 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 **Síntoma (05/10, e2e en el emulador):** con la lista de Eventos desplazada, abrir un evento (o volver de él) deja el encabezado de Comunidad escondido y un hueco negro de unos 400 px arriba (captura `junto-22` en `~/Imágenes/e2e-2026-10-05/`).
 
 **Causa probable:** el encabezado que se esconde al desplazar (`useEncabezadoAlDesplazar`, front `c68a5c8`) no se restablece al cambiar de vista dentro de Comunidad. No viene del rediseño del 05/10. **Sin arreglar todavía**: pendiente de decisión del dueño.
+
+## E-517 · `mvn verify` cae con «Se ha excedido la cuota de disco» al leer `Cinzel.ttf` (entorno, laptop, RESUELTO 05/10)
+
+**Síntoma (05/10, agente del backend corriendo `./mvnw clean verify`):** el build se corta con **«Se ha excedido la cuota de disco»** al leer `Cinzel.ttf`. `/tmp` (tmpfs, cuota por usuario ~6,2 GB) estaba en 5,2 GB.
+
+**Causa real:** las copias web que los agentes del rediseño sirven para capturar con Playwright (un checkout entero del front **con `node_modules`**, ~2,1 GB cada una) quedaron en el scratchpad de la sesión, que vive en `/tmp`. Dos copias (`web-antes`, `web-despues`) llenaron la cuota que comparten todos los procesos del usuario, Maven incluido.
+
+**Solución:** se borraron las dos copias (nadie las tenía abiertas): `/tmp` bajó a 962 MB.
+
+**Cómo evitar que vuelva:** las copias para Metro/web van en `~/.cache/renaser-e2e/front-<rama>` (disco), **nunca en el scratchpad de `/tmp`**; y el agente que las crea las borra al terminar si no se van a reusar. Ante «cuota de disco» en un build, mirar primero `df -h /tmp` y `du -sh` del scratchpad.
