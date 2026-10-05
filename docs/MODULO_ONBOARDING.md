@@ -91,7 +91,7 @@ Base `/api/v1/onboarding`. Todos protegidos, todos con `@RequestHeader("X-Actor-
 | PUT | `/state` | `AvanzarEstadoUseCase` |
 | POST | `/milestones` | `AceptarHitoOnboardingUseCase` |
 | POST | `/complete` | `CompletarOnboardingUseCase` |
-| POST | `/answers` | `GuardarRespuestaUseCase` (upsert) |
+| POST | `/answers` | `GuardarRespuestaUseCase` (upsert; un `mediaId` tiene que ser de quien responde, E-528) |
 | POST | `/media/upload-url` | `ObtenerUrlSubidaMediaUseCase` |
 | POST | `/media` | `RegistrarMediaUseCase` |
 | GET | `/pact/signature` | `VerFirmaDelPactoUseCase` (D-253): URL de lectura firmada, 15 min, de la firma del Pacto de quien pregunta; 404 sin firma |
@@ -405,3 +405,8 @@ fotos en `medias_onboarding` (clase `FOTO`). Código en `domain/model/caja/`, `a
 **Cambio en `POST /api/v1/onboarding/answers`:** desde D-219 rechaza con 403 las preguntas del flujo
 `caja_renaser` (antes aceptaba cualquier pregunta del propio actor, y un aprendiz podía marcarse el checklist
 de su caja).
+
+**Otro cambio en `POST /api/v1/onboarding/answers` (2026-10-05, E-528):** si trae `mediaId`, el archivo tiene que
+ser de quien responde (`LoadMediaPort.porIdYUsuario`, el mismo criterio que `/v90-recordings`). Ajeno o
+inexistente: 404 «Ese archivo no existe o no es tuyo», igual en los dos casos, y no se guarda nada. Antes se
+aceptaba el archivo de otra persona.

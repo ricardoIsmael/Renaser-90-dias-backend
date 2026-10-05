@@ -29,8 +29,9 @@ public interface LeerRespuestasPorClavePort {
      * {@code ON DELETE SET NULL}).
      *
      * <p>Lo usa la firma del Pacto (D-253, clave {@code signature}). <b>No garantiza que el archivo sea de
-     * ese usuario</b>: el {@code mediaId} de una respuesta lo manda el cliente (E-528). Quien lo use para
-     * abrir el archivo tiene que comprobar el dueño ({@code MediaOnboarding.esDe}).
+     * ese usuario</b>: el {@code mediaId} de una respuesta lo manda el cliente, y las guardadas antes del cierre
+     * de E-528 pueden apuntar a un archivo ajeno. Quien lo use para abrir el archivo tiene que comprobar el dueño
+     * ({@code MediaOnboarding.esDe}).
      */
     Optional<Long> mediaDe(UserId usuarioId, String clavePregunta);
 

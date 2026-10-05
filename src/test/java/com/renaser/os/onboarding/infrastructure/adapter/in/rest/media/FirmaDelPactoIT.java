@@ -110,7 +110,8 @@ class FirmaDelPactoIT {
     @Test
     @DisplayName("otra persona: si su respuesta apunta al archivo de Ana (E-528), 403 y nada de Ana en la respuesta")
     void otraPersonaNoVeLaFirmaAjena() throws Exception {
-        // Así queda la base si Luis manda POST /onboarding/answers con el mediaId de Ana: hoy se acepta (E-528).
+        // Así quedaba la base si Luis mandaba POST /onboarding/answers con el mediaId de Ana antes del cierre de
+        // E-528 (hoy ese POST da 404, RespuestaConArchivoPropioIT); una fila vieja así puede seguir en la base.
         responderLaFirmaDelPacto(luis, firmaDeAna);
 
         HttpResponse<String> respuesta = pedir(sesionDe(luis));

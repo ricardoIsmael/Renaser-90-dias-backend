@@ -94,8 +94,9 @@ public final class MediaOnboarding {
 
     /**
      * Si el archivo lo subió esa persona. Es la condición para devolverle una URL de lectura (D-253): la
-     * respuesta que apunta a este archivo ({@code respuestas_onboarding.media_id}) la escribe el cliente, y
-     * {@code POST /onboarding/answers} no comprueba de quién es el {@code mediaId} que recibe (E-528).
+     * respuesta que apunta a este archivo ({@code respuestas_onboarding.media_id}) la escribe el cliente.
+     * Desde el cierre de E-528 {@code POST /onboarding/answers} ya no acepta un {@code mediaId} ajeno, pero las
+     * respuestas guardadas antes pueden seguir apuntando a uno: quien abre el archivo lo vuelve a mirar.
      */
     public boolean esDe(UserId persona) {
         return usuarioId.equals(persona);

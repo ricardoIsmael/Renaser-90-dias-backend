@@ -21,9 +21,10 @@ import java.util.NoSuchElementException;
  * {@code pacto}) y no de la última fila de {@code medias_onboarding}: una subida que no llegó a guardarse
  * como respuesta (la app reintenta) no es la firma que quedó sellada.
  *
- * <p><b>Por qué se mira el dueño del archivo.</b> El {@code mediaId} de la respuesta lo manda el cliente y
- * {@code POST /onboarding/answers} no comprueba de quién es (E-528). Sin esta comprobación, alguien que
- * apuntara su respuesta al id de un archivo ajeno recibiría la firma de otra persona.
+ * <p><b>Por qué se mira el dueño del archivo.</b> El {@code mediaId} de la respuesta lo manda el cliente, y
+ * hasta el cierre de E-528 {@code POST /onboarding/answers} no comprobaba de quién era. Hoy lo rechaza al
+ * guardar, pero se sigue mirando acá (defensa en profundidad): una respuesta guardada antes del cierre puede
+ * seguir apuntando a un archivo ajeno, y sin esto quien la tenga recibiría la firma de otra persona.
  *
  * <p>Sin {@code @Transactional}: son dos lecturas y firmar es cálculo local del SDK (sin ida y vuelta a S3).
  */

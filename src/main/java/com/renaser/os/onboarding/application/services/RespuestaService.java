@@ -4,6 +4,7 @@ import com.renaser.os.onboarding.application.ports.in.respuesta.GuardarRespuesta
 import com.renaser.os.onboarding.application.ports.in.respuesta.ObtenerRespuestasUseCase;
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort;
 import com.renaser.os.onboarding.application.ports.out.cuestionario.LoadCuestionarioPort;
+import com.renaser.os.onboarding.application.ports.out.media.LoadMediaPort;
 import com.renaser.os.onboarding.application.ports.out.respuesta.LoadRespuestaPort;
 import com.renaser.os.onboarding.application.ports.out.respuesta.SaveRespuestaPort;
 import com.renaser.os.onboarding.domain.model.caja.CajaRenaser;
@@ -26,17 +27,26 @@ import java.util.stream.Collectors;
 @Service
 public class RespuestaService implements GuardarRespuestaUseCase, ObtenerRespuestasUseCase {
 
+    /**
+     * El mismo texto si el archivo es de otra persona o si no existe (E-528): con dos respuestas distintas, quien
+     * prueba ids ajenos sabría cuáles existen.
+     */
+    static final String MEDIA_AJENA_O_INEXISTENTE = "Ese archivo no existe o no es tuyo";
+
     private final LoadCuestionarioPort loadCuestionarioPort;
     private final LoadRespuestaPort loadRespuestaPort;
     private final SaveRespuestaPort saveRespuestaPort;
+    private final LoadMediaPort loadMediaPort;
     private final ConsultarActorPort actorPort;
     private final Clock clock;
 
     public RespuestaService(LoadCuestionarioPort loadCuestionarioPort, LoadRespuestaPort loadRespuestaPort,
-                             SaveRespuestaPort saveRespuestaPort, ConsultarActorPort actorPort, Clock clock) {
+                             SaveRespuestaPort saveRespuestaPort, LoadMediaPort loadMediaPort,
+                             ConsultarActorPort actorPort, Clock clock) {
         this.loadCuestionarioPort = loadCuestionarioPort;
         this.loadRespuestaPort = loadRespuestaPort;
         this.saveRespuestaPort = saveRespuestaPort;
+        this.loadMediaPort = loadMediaPort;
         this.actorPort = actorPort;
         this.clock = clock;
     }
@@ -48,6 +58,7 @@ public class RespuestaService implements GuardarRespuestaUseCase, ObtenerRespues
         Pregunta pregunta = loadCuestionarioPort.porId(command.preguntaId())
                 .orElseThrow(() -> new NoSuchElementException("Pregunta no encontrada: " + command.preguntaId()));
         requireNoEsDeLaCaja(pregunta);
+        requireMediaPropia(command.mediaId(), command.usuarioId());
 
         Optional<Respuesta> existente = loadRespuestaPort.porUsuarioYPregunta(command.usuarioId(),
                 command.preguntaId());
@@ -96,6 +107,22 @@ public class RespuestaService implements GuardarRespuestaUseCase, ObtenerRespues
         if (deLaCaja) {
             throw new NotAuthorizedException("Las preguntas de la Caja Renaser no se responden por acá");
         }
+    }
+
+    /**
+     * E-528: el {@code mediaId} lo manda el cliente, y hasta este cierre se guardaba sin mirar de quién era el
+     * archivo (el FK solo exige que exista). Mismo criterio y mismo puerto que {@code GrabacionV90Service.registrar}
+     * ({@code porIdYUsuario}): el archivo tiene que ser de quien responde. Se mira para cualquier tipo de pregunta,
+     * no solo FIRMA/AUDIO/ARCHIVO, porque el dominio no le prohíbe un {@code mediaId} a las demás. Ajeno e
+     * inexistente salen iguales (404, {@link #MEDIA_AJENA_O_INEXISTENTE}), y antes de construir nada: no se guarda
+     * ni se toca la respuesta que ya hubiera.
+     */
+    private void requireMediaPropia(Long mediaId, UserId usuarioId) {
+        if (mediaId == null) {
+            return;
+        }
+        loadMediaPort.porIdYUsuario(mediaId, usuarioId)
+                .orElseThrow(() -> new NoSuchElementException(MEDIA_AJENA_O_INEXISTENTE));
     }
 
     private void requireActorActivo(UserId actorId) {

@@ -13440,7 +13440,11 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 **Para que no vuelva:** no mezclar `pkill -f` con otros comandos que repitan el patrón en la misma invocación; preferir siempre `kill` con los PID anotados al levantar cada proceso (los scripts `levantar-*.sh` imprimen `PID`).
 
 
-## E-528 · `POST /onboarding/answers` acepta el `mediaId` de un archivo de OTRA persona (seguridad, ABIERTO — se reporta, no se arregla en D-253, 05/10)
+## E-528 · `POST /onboarding/answers` acepta el `mediaId` de un archivo de OTRA persona (seguridad, RESUELTO, 05/10)
+
+> **Corregido 2026-10-05 (cierre, rama `onboarding-media-propio`).** El título decía «ABIERTO — se reporta, no se
+> arregla en D-253». Se reportó desde D-253 por la regla de alcance; el dueño aprobó cerrarlo de raíz el mismo día.
+> Lo de abajo hasta «Solución propuesta» queda como se escribió al encontrarlo; la solución aplicada va al final.
 
 **Síntoma (encontrado al diseñar D-253, comprobado de punta a punta contra el backend de la rama en `:8089`).** Con la sesión de una cuenta B, `POST /api/v1/onboarding/answers` con `{"questionId": <id de "signature">, "mediaId": <id de la firma de la cuenta A>}` responde **200** y deja la respuesta de B apuntando al PNG de A (`respuestas_onboarding.media_id`).
 
@@ -13450,7 +13454,15 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 
 **Solución propuesta (no aplicada: es otro cambio, regla de alcance).** En `RespuestaService.guardar`, si llega `mediaId`, exigir `loadMediaPort.porIdYUsuario(mediaId, actor)` → 404 como hace V90. Con test que falle contra lo de hoy. La app no se ve afectada (siempre manda el `id` que le devolvió su propio `POST /media`).
 
-**Para que no vuelva:** todo `mediaId`/ruta que venga del cliente se valida contra el dueño en el caso de uso que lo **guarda**, no solo en el que lo **lee**; y todo lector nuevo de un archivo referenciado por otra tabla vuelve a comprobar el dueño (defensa en profundidad, como D-253).
+**Solución aplicada (2026-10-05, la propuesta, sin cambios de fondo).** `RespuestaService.guardar` llama a `requireMediaPropia` antes de leer o construir la respuesta: si llega `mediaId`, exige `LoadMediaPort.porIdYUsuario(mediaId, quien responde)`, el mismo puerto y criterio que `GrabacionV90Service.registrar` (mismo módulo, sin pasar por `api`). Ajeno e inexistente dan **el mismo 404** con el mismo cuerpo, `{"message":"Ese archivo no existe o no es tuyo", …}`: así no se puede averiguar si un id ajeno existe (antes el inexistente daba **409** «La operacion entra en conflicto con datos que ya existen», por el FK, y el ajeno **200**). No se guarda nada, y si ya tenía una respuesta, queda como estaba. Se mira para **cualquier** tipo de pregunta, no solo FIRMA/AUDIO/ARCHIVO, porque `Respuesta.requireCoherenciaConTipo` no le prohíbe un `mediaId` a una de texto. Sin `mediaId`, nada cambia (ni se consulta). Sin migración. La comprobación de D-253 al leer (`MediaOnboarding.esDe`) se queda: es defensa en profundidad para filas guardadas antes del cierre (en la copia `renaser_ui0210` no había ninguna: 0 de 2 respuestas con archivo apuntaban a uno ajeno; producción no se miró).
+
+**Pruebas.** `RespuestaServiceTest` (+6, con un fake de `LoadMediaPort` en vez de un mock, para que «ajeno» sea un archivo que existe y es de otra persona): propio → se guarda; ajeno → 404 y nada se guarda; inexistente → el mismo rechazo; cambiar la propia por una ajena → no toca la guardada; `mediaId` ajeno en una pregunta de texto → rechazo; sin `mediaId` → igual que antes y sin consultar archivos. `RespuestaConArchivoPropioIT` (5, Tomcat + sesión real + Postgres): **contra el código viejo fallan 3 de 5** (ajeno `expected: 404 but was: 200` ×2, inexistente `expected: 200 but was: 409` al comparar con el ajeno); con el arreglo, 5 de 5.
+
+**Prueba real con curl** (backend en `:8091`, gestión `:8101`, base copia `renaser_mediapropio`, almacenamiento de marcador; `e2e-ap-emu` y `e2e-ap-web`, flujo de la app: `upload-url` → `POST /media` → `POST /answers`). Jar viejo (`0b38a287`): web con la firma de emu → **200** y su respuesta en la base apuntando al archivo de emu; inexistente → **409**; web cambia su firma por la de emu → **200**; `GET /pact/signature` de web → 403. Jar nuevo (misma base recién copiada, mismos pasos): web con la firma de emu → **404** «Ese archivo no existe o no es tuyo» y en la base web queda **sin respuesta**; inexistente → **404** con el mismo cuerpo; web con SU firma → 200; web cambia la suya por la de emu → **404** y la base sigue en la suya; Términos con su archivo → 200; texto sin media → 200; `GET /pact/signature` de web → 200. Se apagó por PID (`java`) y se borró la base.
+
+**Compatibilidad con la app.** En el front (ramas `master`, `rediseno-junto`, `pacto-firma` y la actual) el único que manda `mediaId` es `usePersistenciaOnboarding.guardarFirma` (Términos `terms_signature`, Pacto `signature` y la re-firma desde Yo), siempre con el `id` que le acaba de devolver su propio `POST /onboarding/media`. La cola de reintentos es un `useRef` en memoria de la pantalla: no viaja entre cuentas. El Mapa y los capítulos mandan solo valores tipados. Ningún flujo legítimo cambia.
+
+**Para que no vuelva:** todo `mediaId`/ruta que venga del cliente se valida contra el dueño en el caso de uso que lo **guarda**, no solo en el que lo **lee**; y todo lector nuevo de un archivo referenciado por otra tabla vuelve a comprobar el dueño (defensa en profundidad, como D-253). Hoy los dos únicos casos de uso que guardan un `mediaId` del cliente (`/answers` y `/v90-recordings`) lo comprueban.
 
 ## E-529 · `npx jest --testPathIgnorePatterns '/node_modules/' '/e2e/' src/features/yo` corrió TODA la suite menos `src/features/yo` (frontend, entorno, RESUELTO, 05/10)
 
