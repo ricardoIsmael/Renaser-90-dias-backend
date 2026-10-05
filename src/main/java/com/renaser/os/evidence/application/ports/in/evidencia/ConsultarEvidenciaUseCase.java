@@ -21,8 +21,15 @@ public interface ConsultarEvidenciaUseCase {
      *
      * <p>Se firma recien despues de autorizar, nunca antes (plan.md §9): una URL prefirmada es
      * una llave que funciona sola: quien la tenga abre el archivo sin volver a pasar por el
-     * backend. Por eso no viaja en el listado —donde se emitirian decenas por pantallazo, casi
-     * todas sin abrirse— sino solo cuando alguien pide ver una en concreto.
+     * backend. Por eso se emite recien cuando ya se sabe que quien la pide puede ver esa evidencia.
+     *
+     * <p><b>Corregido 2026-10-05 (D-252).</b> Decia: «Por eso no viaja en el listado —donde se
+     * emitirian decenas por pantallazo, casi todas sin abrirse— sino solo cuando alguien pide ver
+     * una en concreto». Cambio porque ahora el listado SI las muestra: Yo pinta la foto real de cada
+     * evidencia en vez de un icono de camara (pedido del dueno). El listado firma solo las fotos de
+     * su pagina (20 como mucho), despues de autorizar, y es calculo local del SDK (sin ida y vuelta a
+     * S3), igual que el {@code mediaUrl} del chat. Este endpoint sigue para el VIDEO y el AUDIO, que
+     * el listado no firma, y para quien abre una sola evidencia sin listar.
      *
      * <p>Vacio cuando la evidencia es de texto: no hay archivo que abrir.
      */

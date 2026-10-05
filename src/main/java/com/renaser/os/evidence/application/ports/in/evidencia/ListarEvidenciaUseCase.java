@@ -14,13 +14,23 @@ import java.util.Objects;
  *
  * <ul>
  *   <li>ADMIN/ALCHEMIST: cualquier evidencia, {@code participanteId} opcional.</li>
- *   <li>MENTOR: {@code participanteId} es OBLIGATORIO (no hay forma pública de listar
- *       "todos mis aprendices" en este alcance — ver docs/MODULO_EVIDENCE.md) y debe ser
- *       el mentor asignado a ese aprendiz, según {@code users.api.ParticipacionProgramaFinder}
- *       (mismo puerto y mismo criterio que {@code support.TicketMentorService.requireMentorAsignado}).</li>
+ *   <li>MENTOR: sin {@code participanteId} (o con el suyo), su propia evidencia — un mentor
+ *       también puede cursar el programa (D-07). Para la de un aprendiz tiene que nombrarlo
+ *       ({@code participanteId}; no hay forma pública de listar "todos mis aprendices" — ver
+ *       docs/MODULO_EVIDENCE.md) y ser el mentor asignado a ese aprendiz, según
+ *       {@code users.api.ParticipacionProgramaFinder} (mismo puerto y mismo criterio que
+ *       {@code support.TicketMentorService.requireMentorAsignado}).
+ *       <b>Corregido 2026-10-05 (E-519).</b> Decía que para el MENTOR {@code participanteId} era
+ *       OBLIGATORIO; desde el arreglo de la autoconsulta ({@code EvidenciaService.resolverFiltroSegunRol})
+ *       no lo es, y este javadoc había quedado atrás.</li>
  *   <li>Cualquier otro rol (TRAINEE, MENTOR_LEAD): solo la propia — {@code participanteId}
  *       nulo o igual a {@code actorId}; cualquier otro valor es 403.</li>
  * </ul>
+ *
+ * <p><b>La foto de cada evidencia (D-252, 2026-10-05).</b> Cada evidencia con foto viaja con su URL de
+ * lectura firmada ({@link EvidenciaListada#fotoUrl()}), para que Yo muestre la foto real y no un
+ * ícono de cámara. Se firma DESPUÉS de autorizar el listado (las reglas de arriba), así que la URL
+ * la recibe solo quien ya podía abrir esa evidencia por {@code GET /api/v1/evidence/{id}/url}.
  */
 public interface ListarEvidenciaUseCase {
 
@@ -46,6 +56,27 @@ public interface ListarEvidenciaUseCase {
         }
     }
 
-    record PaginaEvidencias(List<Evidencia> evidencias, Instant siguienteCursor) {
+    /**
+     * Una fila del listado.
+     *
+     * @param fotoUrl URL de lectura firmada de la foto, o {@code null} si la evidencia no tiene una
+     *                ({@link Evidencia#tieneFoto()}) o si el listado no firma (el del panel admin)
+     */
+    record EvidenciaListada(Evidencia evidencia, String fotoUrl) {
+
+        public EvidenciaListada {
+            Objects.requireNonNull(evidencia, "evidencia es obligatoria");
+        }
+
+        public static EvidenciaListada sinFoto(Evidencia evidencia) {
+            return new EvidenciaListada(evidencia, null);
+        }
+    }
+
+    /**
+     * <b>Corregido 2026-10-05 (D-252).</b> Era {@code List<Evidencia>}: el listado no llevaba la foto
+     * y la app pintaba un ícono de cámara en cada miniatura.
+     */
+    record PaginaEvidencias(List<EvidenciaListada> evidencias, Instant siguienteCursor) {
     }
 }

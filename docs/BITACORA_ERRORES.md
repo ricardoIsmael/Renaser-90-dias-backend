@@ -13521,3 +13521,22 @@ que falle con el módulo web.
 **Para que no vuelva:** una función de expo-* que se usa con `new Modulo.Clase` tiene que tener una prueba por plataforma o
 pasar por la API pública del paquete, que resuelve la plataforma sola.
 
+## E-519 · El javadoc de `ListarEvidenciaUseCase` decía que el MENTOR estaba obligado a mandar `participanteId` (documentación, RESUELTO, 05/10)
+
+**Síntoma (literal, `ListarEvidenciaUseCase.java`, encontrado al agregar D-252):** «MENTOR: {@code participanteId} es OBLIGATORIO (no hay forma pública de listar "todos mis aprendices" en este alcance …)». El código (`EvidenciaService.resolverFiltroSegunRol`) hace lo contrario: un MENTOR sin `participanteId`, o con el suyo, recibe su propia evidencia (autoconsulta, un mentor también cursa el programa — D-07).
+
+**Causa:** el arreglo de la autoconsulta del mentor cambió el servicio y su comentario, pero no el javadoc del puerto `in`, que es lo primero que se lee del caso de uso.
+
+**Solución:** se corrigió el javadoc dejando a la vista qué decía y por qué cambió (D-252 tocaba ese mismo archivo). Sin cambio de comportamiento.
+
+**Para que no vuelva:** cuando se cambia una regla de autorización, buscar su descripción en el puerto `in` y en `docs/MODULO_<módulo>.md`, no solo en el servicio (`grep -rn "OBLIGATORIO\|participanteId" src/main/java/com/renaser/os/<módulo>/application/ports/in`).
+
+## E-520 · El PID anotado con `$!` al levantar el backend de prueba era el de un `bash`, no el de la JVM (entorno, RESUELTO, 05/10)
+
+**Síntoma:** al levantar el backend de D-252 en `:8088` con `cd ~/.cache/renaser-e2e && DB_URL=… SERVER_PORT=8088 setsid nohup java … -jar backend-evidencias.jar > … & echo $! > backend-evidencias.pid`, el archivo quedó con `1219573`, y `ps -o pid,ppid,args -p 1219573` mostró `/bin/bash -c source …/shell-snapshots/…`. La JVM era `1219576` (hija de ese bash), que es la que figura en el log de Spring (`INFO 1219576 --- [renaser-backend]`) y la que escucha en `ss -ltnp` (`users:(("java",pid=1219576…`).
+
+**Causa:** el `&` se aplica a TODA la lista `cd … && … java …`, así que bash la corre en una subshell en segundo plano y `$!` es el PID de esa subshell. Matarla por ese PID no apaga la JVM (queda huérfana escuchando en el puerto).
+
+**Solución:** apagar por el PID que escucha en el puerto (`ss -ltnp | grep :8088`) o el que imprime Spring en el log, verificando con `ps -o pid,args -p <pid>` antes del `kill`.
+
+**Para que no vuelva:** no hacer `cd … && … &` al levantar algo que se va a apagar por PID; usar rutas absolutas y poner el `&` solo sobre el comando (`DB_URL=… setsid nohup java -jar /ruta/abs.jar > log 2>&1 < /dev/null & echo $!`), y al apagar comprobar que el PID es `java`/`node` y no `bash`.

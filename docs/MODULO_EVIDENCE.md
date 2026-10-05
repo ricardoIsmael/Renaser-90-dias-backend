@@ -51,10 +51,12 @@ evidence/
 | Método | Ruta | Caso de uso | Restricción |
 |---|---|---|---|
 | GET | `/api/v1/evidence/{id}` | `ConsultarEvidenciaUseCase` | dueño, o ADMIN/ALCHEMIST |
-| GET | `/api/v1/evidence` | `ListarEvidenciaUseCase` | dueño (propia), MENTOR asignado (con `participanteId`), o ADMIN/ALCHEMIST — hueco #19, ver §12 |
+| GET | `/api/v1/evidence` | `ListarEvidenciaUseCase` | dueño (propia), MENTOR asignado (con `participanteId`), o ADMIN/ALCHEMIST — hueco #19, ver §12. Desde D-252 cada `FOTO`/`CAPTURA` trae `fotoUrl` firmada (15 min), después de autorizar |
 | GET | `/api/v1/admin/evidence` | `ListarEvidenciaAdminUseCase` | ADMIN/ALCHEMIST, sin scoping — hueco #20, ver §12 |
 | POST | `/api/v1/admin/evidence/{id}/review` | `RevisarManualmenteUseCase` | ADMIN/ALCHEMIST, evidencia en `REVISION_MANUAL` |
 | POST | `/api/v1/admin/evidence/{id}/void` | `AnularVeredictoUseCase` | ADMIN/ALCHEMIST, evidencia `VALIDA`/`RECHAZADA` |
+
+**`GET /api/v1/evidence/{id}/url`** (no estaba en esta tabla): URL temporal (10 min) para abrir el archivo de una evidencia, mismas reglas que el detalle más el mentor asignado; 204 si es de texto. **D-252 (2026-10-05):** el listado de la app ya trae la foto firmada (`fotoUrl`) de cada `FOTO`/`CAPTURA` de su página, para las miniaturas de Yo; `/url` queda para el video, el audio y abrir una sola. El detalle y el listado admin mandan `fotoUrl: null`. Ver `docs/MODULOS_A_AVANZAR.md` §8.
 
 No hay endpoint público de "registrar evidencia" — eso solo pasa por `RegistrarEvidenciaPort` (llamado por `rocks`/`habits`), ver decisión E-1.
 

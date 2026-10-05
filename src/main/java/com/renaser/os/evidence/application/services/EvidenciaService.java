@@ -8,6 +8,7 @@ import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaAdm
 import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaAdminUseCase.ListarEvidenciaAdminComando;
 import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase;
 import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase.ListarEvidenciaComando;
+import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase.EvidenciaListada;
 import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase.PaginaEvidencias;
 import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase.TipoDestino;
 import com.renaser.os.evidence.application.ports.in.evidencia.ProcesarColaValidacionUseCase;
@@ -43,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.function.Function;
 
 /**
  * Único servicio de aplicación del módulo. Implementa {@link RegistrarEvidenciaPort}
@@ -61,6 +63,13 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
 
     /** Corta: alcanza para abrir el archivo y no para repartir la llave. */
     private static final Duration VALIDEZ_URL_LECTURA = Duration.ofMinutes(10);
+
+    /**
+     * La de la foto que viaja en el listado (D-252): la misma que el {@code mediaUrl} del chat
+     * ({@code MensajeService.VALIDEZ_URL_LECTURA}). Alcanza para que la pantalla baje la miniatura y
+     * abra el visor; la app guarda la imagen con una clave de cache que no cambia con la firma.
+     */
+    private static final Duration VALIDEZ_FOTO_EN_LISTADO = Duration.ofMinutes(15);
 
     private final LoadEvidenciaPort loadEvidenciaPort;
     private final SaveEvidenciaPort saveEvidenciaPort;
@@ -273,7 +282,8 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
         UserSummary actor = requireActorActivo(comando.actorId());
         FiltroEvidencia filtro = resolverFiltroSegunRol(actor, comando.participanteId(), comando.estado(),
                 comando.tipoDestino(), comando.desde(), comando.hasta());
-        return paginar(loadEvidenciaPort.buscar(filtro, comando.cursor(), TAMANO_PAGINA));
+        // Ya autorizado: recien ahora se firma la foto de cada fila de la pagina (D-252).
+        return paginar(loadEvidenciaPort.buscar(filtro, comando.cursor(), TAMANO_PAGINA), this::conSuFoto);
     }
 
     /**
@@ -285,7 +295,8 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
         requireAdmin(comando.actorId());
         FiltroEvidencia filtro = new FiltroEvidencia(comando.participanteId(), comando.estado(),
                 comando.tipoDestino(), comando.desde(), comando.hasta());
-        return paginar(loadEvidenciaPort.buscar(filtro, comando.cursor(), TAMANO_PAGINA));
+        // Sin foto a proposito: no tiene ninguna pantalla que la muestre (D-252).
+        return paginar(loadEvidenciaPort.buscar(filtro, comando.cursor(), TAMANO_PAGINA), EvidenciaListada::sinFoto);
     }
 
     /**
@@ -332,11 +343,25 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
         }
     }
 
-    private PaginaEvidencias paginar(List<Evidencia> filasConExtra) {
+    private PaginaEvidencias paginar(List<Evidencia> filasConExtra, Function<Evidencia, EvidenciaListada> fila) {
         boolean hayMas = filasConExtra.size() > TAMANO_PAGINA;
         List<Evidencia> pagina = hayMas ? filasConExtra.subList(0, TAMANO_PAGINA) : filasConExtra;
         Instant siguiente = hayMas ? pagina.get(pagina.size() - 1).creadoEn() : null;
-        return new PaginaEvidencias(pagina, siguiente);
+        return new PaginaEvidencias(pagina.stream().map(fila).toList(), siguiente);
+    }
+
+    /**
+     * La foto de una fila del listado, firmada (D-252). Se firma solo lo que la pantalla pinta: la
+     * pagina ya viene cortada en {@link #TAMANO_PAGINA}, y el video y el audio no se firman (no son
+     * una miniatura; se siguen abriendo por {@link #urlDeLectura}). Firmar es calculo local del SDK,
+     * sin ida y vuelta a S3, asi que no es una consulta N+1 — mismo criterio que el chat.
+     */
+    private EvidenciaListada conSuFoto(Evidencia evidencia) {
+        if (!evidencia.tieneFoto()) {
+            return EvidenciaListada.sinFoto(evidencia);
+        }
+        return new EvidenciaListada(evidencia,
+                almacenamientoPort.firmarLectura(evidencia.rutaStorage(), VALIDEZ_FOTO_EN_LISTADO).toString());
     }
 
     private Evidencia requireEvidencia(EvidenciaId id) {

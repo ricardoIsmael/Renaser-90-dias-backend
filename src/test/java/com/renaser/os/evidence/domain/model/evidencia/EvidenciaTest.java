@@ -281,4 +281,36 @@ class EvidenciaTest {
 
         assertThat(requiereReversion).isFalse();
     }
+
+    // ---- tieneFoto (D-252): que miniatura puede pintar el listado de Yo ----
+
+    private Evidencia conArchivo(TipoEvidencia tipo) {
+        return Evidencia.registrar(ID, participante(), destinoHabito(), tipo, "s3-renaser90dias",
+                "evidencia-habitos/u/r/archivo", null, null, null, null, false, CLOCK.now(), CLOCK);
+    }
+
+    @Test
+    @DisplayName("D-252: FOTO y CAPTURA con archivo tienen foto que mostrar")
+    void fotoYCapturaTienenFoto() {
+        assertThat(conArchivo(TipoEvidencia.FOTO).tieneFoto()).isTrue();
+        assertThat(conArchivo(TipoEvidencia.CAPTURA).tieneFoto()).isTrue();
+    }
+
+    @Test
+    @DisplayName("D-252: VIDEO y AUDIO tienen archivo pero no son una imagen; TEXTO no tiene archivo")
+    void videoAudioYTextoNoTienenFoto() {
+        assertThat(conArchivo(TipoEvidencia.VIDEO).tieneFoto()).isFalse();
+        assertThat(conArchivo(TipoEvidencia.AUDIO).tieneFoto()).isFalse();
+        assertThat(evidenciaTexto().tieneFoto()).isFalse();
+    }
+
+    @Test
+    @DisplayName("D-252: una FOTO historica sin ruta guardada no tiene foto que firmar")
+    void fotoSinRutaNoTieneFoto() {
+        Evidencia sinRuta = Evidencia.rehydrate(ID, participante(), destinoHabito(), TipoEvidencia.FOTO, null, null,
+                null, null, CLOCK.now(), null, null, false, EstadoValidacion.VALIDA, null, 0, false, false,
+                CLOCK.now());
+
+        assertThat(sinRuta.tieneFoto()).isFalse();
+    }
 }

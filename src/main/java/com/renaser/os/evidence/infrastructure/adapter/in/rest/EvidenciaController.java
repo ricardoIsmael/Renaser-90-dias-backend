@@ -76,9 +76,14 @@ public class EvidenciaController {
     /**
      * {@code GET /api/v1/evidence/{id}/url} — URL temporal para abrir el archivo.
      *
-     * <p>Endpoint aparte y no un campo del detalle: firmar cuesta y una URL prefirmada es una
-     * llave que funciona sola. Emitir una por cada fila del listado seria repartir decenas de
-     * llaves por pantallazo, casi todas sin usarse.
+     * <p>Endpoint aparte y no un campo del detalle: una URL prefirmada es una llave que funciona
+     * sola, y se emite solo para la evidencia que se pidio.
+     *
+     * <p><b>Corregido 2026-10-05 (D-252).</b> Seguia: «Emitir una por cada fila del listado seria
+     * repartir decenas de llaves por pantallazo, casi todas sin usarse». Desde D-252 el listado SI
+     * trae la foto firmada ({@code fotoUrl}), porque Yo la muestra en cada miniatura; firma solo las
+     * fotos de su pagina (20 como mucho). Este endpoint sigue sirviendo para el video y el audio, que
+     * el listado no firma, y para abrir una sola evidencia.
      *
      * <p>204 cuando la evidencia es de texto: no hay archivo que abrir, y su contenido ya viene
      * en el detalle.

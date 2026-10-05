@@ -189,6 +189,19 @@ public final class Evidencia {
         return teniaPenalizacion;
     }
 
+    /**
+     * Si hay una imagen que mostrar: una {@code FOTO} o una {@code CAPTURA} con su archivo guardado
+     * (D-252, la miniatura del listado de Yo).
+     *
+     * <p>{@code VIDEO} y {@code AUDIO} también tienen archivo, pero no son una imagen: una miniatura
+     * no los puede pintar, y se siguen abriendo por {@code GET /api/v1/evidence/{id}/url}.
+     * {@code TEXTO} no tiene archivo. Es el mismo criterio de «visual» que ya usa el Muro al
+     * publicar una evidencia ({@code FOTO}/{@code CAPTURA} → {@code image/jpeg}).
+     */
+    public boolean tieneFoto() {
+        return (tipo == TipoEvidencia.FOTO || tipo == TipoEvidencia.CAPTURA) && rutaStorage != null;
+    }
+
     private void requireEnPendiente() {
         if (estadoValidacion != EstadoValidacion.PENDIENTE) {
             throw new IllegalStateException(
