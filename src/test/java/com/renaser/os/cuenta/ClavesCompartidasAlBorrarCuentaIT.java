@@ -61,7 +61,7 @@ class ClavesCompartidasAlBorrarCuentaIT {
     }
 
     @Test
-    @DisplayName("chat: en el grupo se van sus mensajes y su lugar; la respuesta de otra queda sin el mensaje citado")
+    @DisplayName("chat: en el grupo se van sus mensajes y su lugar; la respuesta de otra sigue citando el id (V92, D-251)")
     void enElGrupoSoloSeVaLoSuyo() {
         UUID grupo = conversacion("CELULA", jdbc.queryForObject(
                 "SELECT id FROM renaser.celulas WHERE mentor_id = ?", UUID.class, otra), null);
@@ -73,8 +73,10 @@ class ClavesCompartidasAlBorrarCuentaIT {
         modulo("Chat").borrarDatosDe(UserId.of(persona));
 
         assertThat(contar("SELECT count(*) FROM renaser.mensajes WHERE id = ?", suyo)).isZero();
-        assertThat(contar("SELECT count(*) FROM renaser.mensajes WHERE id = ? AND respuesta_a_id IS NULL", respuesta))
-                .isOne();
+        // Corregido 2026-10-05 (D-251): decía `respuesta_a_id IS NULL` (la FK ON DELETE SET NULL de V1). V92 quitó esa FK
+        // para que la respuesta siga siendo respuesta y la app diga «Mensaje eliminado»; el texto del citado sí se fue.
+        assertThat(contar("SELECT count(*) FROM renaser.mensajes WHERE id = ? AND respuesta_a_id = '" + suyo + "'",
+                respuesta)).as("la respuesta de la otra sigue y conserva a qué respondía").isOne();
         assertThat(contar("SELECT count(*) FROM renaser.participantes_conversacion WHERE conversacion_id = ?", grupo))
                 .as("solo queda la otra").isOne();
     }

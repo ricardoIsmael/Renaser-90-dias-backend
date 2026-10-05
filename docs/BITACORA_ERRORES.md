@@ -11929,6 +11929,10 @@ completa del worktree (caché de transformación fría) dio 5 archivos rojos por
 **Cómo evitar que vuelva a pasar.** Rutas primero, bandera al final; y verificar en la salida el número de suites, no solo que
 no falle.
 
+> **Se repitió el 2026-10-05 (D-251, rama `chat-responder`):** `No tests found, exiting with code 1 … testPathIgnorePatterns:
+> /node_modules/, /e2e/, /.claude/ - 0 matches` al correr `npx jest` sin la bandera dentro de `.claude/worktrees`. Mismo
+> arreglo; el comando completo de la suite (`--testPathIgnorePatterns '/node_modules/' '/e2e/'` sin rutas) sí corre todo.
+
 ## E-431 · `avisosALaMismaHora.test.ts` falla solo después del mediodía: `Expected: "recordatorios-habitos-relajar-cuenco" Received: "recordatorios-habitos"` (frontend, 29/09)
 
 **Síntoma.** `cambiar el sonido en Yo → Alarmas no toca horas (E-412) › Despertar con «12:00 desde mañana» sigue
@@ -13438,4 +13442,63 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 **Solución:** apagar por PID: `ps -eo pid,args | grep -E 'patr[o]n'`, mirar la lista y `kill <pid>`; es además lo que pide la regla de apagar «lo tuyo por PID».
 
 **Para que no vuelva:** no mezclar `pkill -f` con otros comandos que repitan el patrón en la misma invocación; preferir siempre `kill` con los PID anotados al levantar cada proceso (los scripts `levantar-*.sh` imprimen `PID`).
+
+
+## E-509 · `NullPointerException` en `ImmutableCollections$MapN.get` al listar mensajes que no responden a nada (chat, desarrollo de D-251, RESUELTO, 05/10)
+
+**Síntoma (literal, `MensajeServiceTest` y `MarcaDeLeidoEnElListadoTest`, 10 pruebas en error):**
+`java.lang.NullPointerException at java.base/java.util.Objects.requireNonNull(Objects.java:220) at java.base/java.util.ImmutableCollections$MapN.get(ImmutableCollections.java:1483) at com.renaser.os.chat.application.services.MensajesParaMostrar.lambda$deLaPagina$4(MensajesParaMostrar.java:66)`
+
+**Causa:** al mover el armado del listado a `MensajesParaMostrar` (D-251) se escribió `citados.get(m.respuestaAId())` para todos los mensajes. Cuando la página no tiene ninguna respuesta, `citados` es `Map.of()`, y los mapas inmutables de Java **rechazan una clave `null` hasta para preguntar** (`HashMap.get(null)` devuelve `null`; `Map.of().get(null)` explota). El código viejo no lo sufría porque llamaba a `originales.get(...)` solo dentro de `respuestaAId() == null ? null : …`.
+
+**Solución:** `citadoDe(mensaje, citados)` pregunta primero `mensaje.esRespuesta()`.
+
+**Para que no vuelva:** antes de `get` sobre un `Map.of()`/`Map.copyOf()`/`toMap` de Collectors con una clave que puede ser `null`, guardarla. Lo atraparon las pruebas que ya existían del listado (no hizo falta una nueva): por eso se corren las de todo el módulo y no solo las del cambio.
+
+## E-510 · El extracto del mensaje citado cortaba en la unidad UTF-16 número 80 y podía partir un emoji por la mitad (chat, latente, RESUELTO, 05/10)
+
+**Síntoma:** ninguno visto en producción (ninguna app publicada manda `replyToId`, así que nunca hubo citas). Se encontró leyendo `MensajeService.recortar` al ampliar el resumen de la cita: `limpio.substring(0, 80) + "…"` con un emoji justo en el corte deja un surrogate alto suelto; en el JSON sale como `\ud83d` sin pareja y la app dibuja «�».
+
+**Causa:** `String.length()`/`substring` cuentan unidades UTF-16, no caracteres. Un emoji (💪, 😂) ocupa dos.
+
+**Solución (D-251):** `MensajesParaMostrar.extracto` corta por caracteres Unicode (`offsetByCodePoints`) y además junta saltos y espacios seguidos en uno (la cita es un renglón). Prueba: `RespuestasEnElChatTest.extractoSinEmojiPartido`. Un emoji compuesto (💪🏽 = 💪 + tono) puede perder el tono en el corte, pero nunca queda un carácter roto.
+
+**Para que no vuelva:** todo recorte de texto que viaja a la app se hace con `offsetByCodePoints`, nunca con `substring(0, n)` sobre texto que escribe una persona. El tope del texto del mensaje (`LARGO_MAXIMO_DEL_TEXTO`, D-215) cuenta en UTF-16 a propósito —igual que el `maxLength` de la app— y ahí no se corta nada, solo se rechaza.
+
+## E-511 · «Se ha excedido la cuota de disco»: `/tmp` es tmpfs con cuota por usuario y una copia de `node_modules` tumbó un `mvn verify` ajeno (entorno, RESUELTO, 05/10)
+
+**Síntoma (literal, dos procesos a la vez):**
+- Front: `cp: error al escribir en '…/scratchpad/front-viejo/node_modules/…': Se ha excedido la cuota de disco`.
+- Backend, en el mismo minuto: el `clean verify` de `responder-mensajes` terminó con `Tests run: 5938, Failures: 0, Errors: 5` —
+  todo `PgVectorNativoAdapterTest» IllegalState Failed to load ApplicationContext`—, causado por
+  `java.io.UncheckedIOException: No se pudo leer la fuente /bienvenida/Cinzel.ttf` ← `java.io.IOException: Se ha excedido la cuota de disco`
+  (`BienvenidaJava2dAdapter` copia la fuente a un temporal de `java.io.tmpdir` al arrancar el contexto).
+
+**Causa:** `/tmp` es un tmpfs de 7,7 GB con **cuota de 6.267 MB por usuario**, compartida por todos los agentes de la laptop (los
+scratchpad de las sesiones viven ahí). Ya había 5,2 GB ocupados (dos copias web de la mañana, 2,1 GB cada una) y el fork del front
+copió un `node_modules` con `cp -a --reflink=auto`: entre sistemas de archivos distintos el reflink no aplica y la copia es real.
+Cualquier JVM que en ese momento escribiera un temporal falló.
+
+**Solución:** el fork borró su copia al instante y rehízo la copia dentro de `.claude/worktrees` (mismo disco, `--reflink=always`);
+el coordinador borró las dos copias web viejas (quedó en 962 MB); el `verify` se repitió entero y pasó.
+
+**Para que no vuelva:** nada con `node_modules` ni copias de la web en `/tmp` (ni en el scratchpad): van a `~/.cache/renaser-e2e/…`
+o a `.claude/worktrees/…`. Si un `verify` falla con errores de arranque de contexto en clases que no se tocaron, mirar primero
+`quota -s` y el `Caused by` más profundo antes de investigar el código.
+
+## E-512 · `ClavesCompartidasAlBorrarCuentaIT.enElGrupoSoloSeVaLoSuyo:77 expected: 1L but was: 0L` tras quitar la FK de `respuesta_a_id` (pruebas, RESUELTO, 05/10)
+
+**Síntoma (literal, failsafe del `clean verify` de D-251):** `Tests run: 270, Failures: 1` —
+`ClavesCompartidasAlBorrarCuentaIT.enElGrupoSoloSeVaLoSuyo:77 … expected: 1L but was: 0L`.
+
+**Causa:** la prueba de D-243 afirmaba el comportamiento viejo a propósito: después de borrar la cuenta, la respuesta de otra
+persona quedaba con `respuesta_a_id IS NULL` (la FK `ON DELETE SET NULL` de V1). V92 (D-251) quita esa FK justamente para que la
+respuesta conserve a qué respondía. El cambio era deliberado; lo que faltó fue buscar antes qué pruebas afirmaban la regla vieja:
+se buscó `respuestaA`/`replyTo` en `chat`, pero esta prueba vive en `cuenta/` y nombra la columna en SQL.
+
+**Solución:** la prueba ahora exige que la respuesta siga con `respuesta_a_id` = el id del mensaje borrado, con la nota de
+corrección. `ResponderMensajesIT.citadoBorradoConLaCuenta` cubre lo que ve la app (`replyToDeleted: true`).
+
+**Para que no vuelva:** al cambiar una restricción de la base, buscar el nombre de la COLUMNA en todo `src/test` (SQL incluido:
+`grep -rn respuesta_a_id src/test`), no solo el del campo Java.
 

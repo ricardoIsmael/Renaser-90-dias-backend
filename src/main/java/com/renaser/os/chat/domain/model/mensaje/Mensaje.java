@@ -92,10 +92,13 @@ public final class Mensaje {
      * {@code IdGenerator} que inyecta el caso de uso ({@code MensajeService.enviar}). Asi la
      * factoria es referencialmente transparente y un test puede fijar el id que espera
      * (CLAUDE.MD §5.4.7).
+     *
+     * @param cita {@code null} si no responde a nada (la app vieja nunca cita). Si viene, ya la validó
+     *             {@link Cita#aResponder}; acá solo se vuelve a exigir que sea de esta conversación (D-251).
      */
     public static Mensaje escribir(MensajeId id, ConversacionId conversacionId, UserId emisorId, TipoMensaje tipo,
                                     String texto, String mediaBucket, String mediaRuta, String mediaMime,
-                                    Integer mediaBytes, Short mediaDuracionS, MensajeId respuestaAId,
+                                    Integer mediaBytes, Short mediaDuracionS, Cita cita,
                                     Instant ahora) {
         Objects.requireNonNull(id, "id es obligatorio");
         requireEscritoPorUnaPersona(tipo);
@@ -103,8 +106,9 @@ public final class Mensaje {
         requireLargoAdmitido(texto);
         requireMediaCompleta(mediaBucket, mediaRuta);
         requirePositivosSiVienen(mediaBytes, mediaDuracionS);
+        requireCitaDeEstaConversacion(cita, conversacionId);
         return new Mensaje(id, conversacionId, emisorId, tipo, texto, mediaBucket, mediaRuta,
-                mediaMime, mediaBytes, mediaDuracionS, false, null, respuestaAId, ahora);
+                mediaMime, mediaBytes, mediaDuracionS, false, null, cita != null ? cita.citado().id() : null, ahora);
     }
 
     /**
@@ -133,6 +137,22 @@ public final class Mensaje {
                 mediaDuracionS, oculto, eliminadoEn, respuestaAId, creadoEn);
     }
 
+    /**
+     * Si es una respuesta (D-251). Lo dice {@code respuestaAId} y nada más: desde V92 la base ya no lo pone en
+     * NULL cuando el citado se borra, así que una respuesta sigue siéndolo aunque lo que citaba ya no esté.
+     */
+    public boolean esRespuesta() {
+        return respuestaAId != null;
+    }
+
+    /**
+     * Ni su autor lo borró ({@code eliminadoEn}) ni la moderación lo retiró ({@code oculto}). Lo pregunta
+     * {@link Cita}, al responder y al mostrar (D-251).
+     */
+    boolean sigueALaVista() {
+        return !oculto && eliminadoEn == null;
+    }
+
     public boolean esDelPrograma() {
         return tipo == TipoMensaje.SISTEMA;
     }
@@ -158,6 +178,12 @@ public final class Mensaje {
     private static void requireEscritoPorUnaPersona(TipoMensaje tipo) {
         if (tipo == TipoMensaje.SISTEMA) {
             throw new IllegalArgumentException("Un mensaje de sistema lo escribe el programa, no una persona");
+        }
+    }
+
+    private static void requireCitaDeEstaConversacion(Cita cita, ConversacionId conversacionId) {
+        if (cita != null && !cita.esDe(conversacionId)) {
+            throw new IllegalArgumentException(Cita.NO_ESTA_EN_LA_CONVERSACION);
         }
     }
 

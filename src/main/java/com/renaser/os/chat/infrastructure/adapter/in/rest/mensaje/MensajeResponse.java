@@ -33,28 +33,46 @@ import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
  * programa. Como {@code senderName}, solo viene resuelto en el listado ({@code GET .../messages}): en la
  * respuesta de enviar y en el último mensaje de la bandeja viaja {@code null}, y la app lo toma como ✓.
  * Es un campo nuevo: los APK publicados lo ignoran (su esquema del mensaje es {@code passthrough} y su
- * mapeador arma la burbuja campo por campo, verificado contra {@code origin/master}). */
+ * mapeador arma la burbuja campo por campo, verificado contra {@code origin/master}).
+ *
+ * <p><b>Responder (D-251, 2026-10-05).</b> {@code replyTo} viaja también en la respuesta de enviar (antes solo
+ * en el listado), y se suman campos, sin quitar ni renombrar ninguno —el APK publicado valida {@code replyTo}
+ * con {@code id}/{@code type} texto obligatorio y {@code text}/{@code deletedAt} presentes, aunque no lo
+ * dibuja—:
+ * <ul>
+ *   <li>{@code replyToId}: el id del citado cuando se lo puede mostrar; {@code null} si no responde a nada o si
+ *       lo que citaba ya no está.</li>
+ *   <li>{@code replyToDeleted} (nuevo): {@code true} si era una respuesta y lo que citaba ya no se puede
+ *       mostrar (borrado, retirado, o se fue con la cuenta de su autor). La app dice «Mensaje eliminado».
+ *       Como {@code replyTo}, solo se resuelve en el listado y en la respuesta de enviar: en el último
+ *       mensaje de la bandeja y al compartir una publicación viaja {@code false}.</li>
+ *   <li>En {@code replyTo}: {@code mediaMime}, {@code mediaDurationSeconds}, {@code mediaUrl} (la miniatura de
+ *       una imagen) y {@code mine}. {@code deletedAt} se conserva y va siempre {@code null}: un citado borrado
+ *       ya no trae resumen, lo dice {@code replyToDeleted}.</li>
+ * </ul> */
 public record MensajeResponse(String id, String conversationId, String senderId, String senderName,
                                String senderAvatarUrl, String type, String text, String mediaBucket,
                                String mediaPath, String mediaMime, Integer mediaBytes,
                                Short mediaDurationSeconds, String mediaUrl, boolean hidden, String replyToId,
-                               ReplyPreviewResponse replyTo, String createdAt, String status) {
+                               ReplyPreviewResponse replyTo, String createdAt, String status,
+                               boolean replyToDeleted) {
 
     public static MensajeResponse from(Mensaje m) {
         return new MensajeResponse(m.id().toString(), m.conversacionId().toString(), m.remitentePublico().toString(),
                 null, null, toWireTipo(m.tipo()), m.texto(), m.mediaBucket(), m.mediaRuta(), m.mediaMime(), m.mediaBytes(),
                 m.mediaDuracionS(), null, m.oculto(),
-                m.respuestaAId() != null ? m.respuestaAId().toString() : null, null, m.creadoEn().toString(), null);
+                m.respuestaAId() != null ? m.respuestaAId().toString() : null, null, m.creadoEn().toString(), null,
+                false);
     }
 
     public static MensajeResponse from(MensajeEnriquecido enriquecido) {
         Mensaje m = enriquecido.mensaje();
+        ReplyPreviewResponse cita = ReplyPreviewResponse.from(enriquecido.respuestaPreview());
         return new MensajeResponse(m.id().toString(), m.conversacionId().toString(), m.remitentePublico().toString(),
                 enriquecido.nombreEmisor(), enriquecido.avatarEmisor(), toWireTipo(m.tipo()), m.texto(),
                 m.mediaBucket(), m.mediaRuta(), m.mediaMime(), m.mediaBytes(), m.mediaDuracionS(),
-                enriquecido.mediaUrl(), m.oculto(), m.respuestaAId() != null ? m.respuestaAId().toString() : null,
-                ReplyPreviewResponse.from(enriquecido.respuestaPreview()), m.creadoEn().toString(),
-                toWireEstado(enriquecido.estadoDeEntrega()));
+                enriquecido.mediaUrl(), m.oculto(), cita != null ? cita.id() : null, cita, m.creadoEn().toString(),
+                toWireEstado(enriquecido.estadoDeEntrega()), enriquecido.citaNoDisponible());
     }
 
     /** La traducción de D-36 para la marca de un mensaje propio (D-208); {@code null} si no lleva. */
@@ -83,16 +101,18 @@ public record MensajeResponse(String id, String conversationId, String senderId,
     }
 
     /** Preview del mensaje original citado — {@code text} son solo los primeros
-     * caracteres, no el mensaje completo (ver {@link MensajeEnriquecido#LARGO_PREVIEW}). */
-    public record ReplyPreviewResponse(String id, String senderName, String type, String text, String deletedAt) {
+     * caracteres, no el mensaje completo (ver {@link MensajeEnriquecido#LARGO_PREVIEW}).
+     * {@code deletedAt} va siempre {@code null} desde D-251 y se conserva para el esquema del APK publicado. */
+    public record ReplyPreviewResponse(String id, String senderName, String type, String text, String deletedAt,
+                                       String mediaMime, Short mediaDurationSeconds, String mediaUrl, boolean mine) {
 
         static ReplyPreviewResponse from(RespuestaPreview preview) {
             if (preview == null) {
                 return null;
             }
             return new ReplyPreviewResponse(preview.id().toString(), preview.nombreEmisor(),
-                    toWireTipo(preview.tipo()), preview.previewTexto(),
-                    preview.eliminadoEn() != null ? preview.eliminadoEn().toString() : null);
+                    toWireTipo(preview.tipo()), preview.previewTexto(), null, preview.mediaMime(),
+                    preview.mediaDuracionS(), preview.mediaUrl(), preview.deQuienMira());
         }
     }
 }

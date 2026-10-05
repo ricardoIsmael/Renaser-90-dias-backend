@@ -116,8 +116,11 @@ de los grupos, no se anonimizan:
   instalada espera siempre un emisor; como no se actualiza por aire, un mensaje sin emisor podía
   romperle el chat a quien no reinstaló.
 - Lo que escribieron los demás **se conserva entero**. Si alguien había respondido a un mensaje
-  borrado, su respuesta queda sin la cita (`respuesta_a_id` pasa a NULL por la FK), igual que hoy
-  cuando un mensaje se elimina.
+  borrado, su respuesta sigue siendo una respuesta y la app muestra la cita como «Mensaje eliminado»
+  (`respuesta_a_id` queda guardado: V92 quitó la FK, D-251); el texto, el autor y el archivo del
+  citado se van con su fila.
+  > **Corregido 2026-10-05 (D-251).** Decía «su respuesta queda sin la cita (`respuesta_a_id` pasa a
+  > NULL por la FK)»: así la respuesta se veía como un mensaje suelto, sin saber a qué contestaba.
 - Borrar es además lo que la persona pidió: que sus datos desaparezcan.
 
 ## 4. Supuestos a confirmar con el dueño

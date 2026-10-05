@@ -236,7 +236,7 @@ class MensajeDeChatAvisoIT {
 
     private Mensaje escribe(String quien, String texto) {
         return enviarMensaje.enviar(new EnviarMensajeCommand(UserId.of(gente.get(quien)), ConversacionId.of(conversacion),
-                TipoMensaje.TEXTO, texto, null, null, null, null, null, null, OrigenMedia.CLIENTE));
+                TipoMensaje.TEXTO, texto, null, null, null, null, null, null, OrigenMedia.CLIENTE)).mensaje();
     }
 
     private String nombreDelChatPara(String quien) {

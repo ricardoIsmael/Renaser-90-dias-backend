@@ -90,4 +90,51 @@ class MensajeResponseTest {
         assertThat(MensajeResponse.from(enriquecido).status()).as("de otra persona").isNull();
         assertThat(MensajeResponse.from(dePersona).status()).as("bandeja y respuesta de enviar").isNull();
     }
+
+    /**
+     * D-251: la cita en el cable. Los campos que el APK publicado valida ({@code replyTo.id}/{@code type} como
+     * texto, {@code text}/{@code deletedAt} presentes) siguen ahí; lo nuevo se suma.
+     */
+    @Test
+    @DisplayName("D-251: una respuesta lleva replyToId, el resumen con sus campos nuevos y replyToDeleted en false")
+    void laCitaEnElCable() {
+        MensajeId citado = MensajeId.of(UUID.randomUUID());
+        Mensaje respuesta = Mensaje.rehydrate(MensajeId.of(UUID.randomUUID()), SOPORTE, ANA, TipoMensaje.TEXTO,
+                "¡Sí!", null, null, null, null, null, false, null, citado, AHORA);
+        var resumen = new MensajeEnriquecido.RespuestaPreview(citado, "Luis Soto", TipoMensaje.IMAGEN,
+                "Sticker Renaser: Muy bien", "image/webp", null, "https://firmada/s", true);
+
+        MensajeResponse cable = MensajeResponse.from(new MensajeEnriquecido(respuesta, "Ana", null, resumen, null));
+
+        assertThat(cable.replyToId()).isEqualTo(citado.toString());
+        assertThat(cable.replyToDeleted()).isFalse();
+        assertThat(cable.replyTo().id()).isEqualTo(citado.toString());
+        assertThat(cable.replyTo().senderName()).isEqualTo("Luis Soto");
+        assertThat(cable.replyTo().type()).isEqualTo("IMAGE");
+        assertThat(cable.replyTo().text()).isEqualTo("Sticker Renaser: Muy bien");
+        assertThat(cable.replyTo().deletedAt()).isNull();
+        assertThat(cable.replyTo().mediaMime()).isEqualTo("image/webp");
+        assertThat(cable.replyTo().mediaUrl()).isEqualTo("https://firmada/s");
+        assertThat(cable.replyTo().mine()).isTrue();
+    }
+
+    @Test
+    @DisplayName("D-251: si lo citado ya no está, replyTo y replyToId van null y replyToDeleted en true; sin cita, todo como antes")
+    void laCitaQueYaNoEsta() {
+        Mensaje respuesta = Mensaje.rehydrate(MensajeId.of(UUID.randomUUID()), SOPORTE, ANA, TipoMensaje.TEXTO,
+                "¡Sí!", null, null, null, null, null, false, null, MensajeId.of(UUID.randomUUID()), AHORA);
+        Mensaje sinCita = Mensaje.escribir(MensajeId.of(UUID.randomUUID()), SOPORTE, ANA, TipoMensaje.TEXTO, "hola",
+                null, null, null, null, null, null, AHORA);
+
+        MensajeResponse sinElCitado = MensajeResponse.from(new MensajeEnriquecido(respuesta, "Ana", null, null, null));
+        MensajeResponse comoAntes = MensajeResponse.from(new MensajeEnriquecido(sinCita, "Ana", null, null, null));
+
+        assertThat(sinElCitado.replyTo()).isNull();
+        assertThat(sinElCitado.replyToId()).as("no se publica un id que ya no lleva a nada").isNull();
+        assertThat(sinElCitado.replyToDeleted()).isTrue();
+        assertThat(comoAntes.replyTo()).isNull();
+        assertThat(comoAntes.replyToId()).isNull();
+        assertThat(comoAntes.replyToDeleted()).isFalse();
+        assertThat(MensajeResponse.from(sinCita).replyToDeleted()).as("bandeja").isFalse();
+    }
 }
