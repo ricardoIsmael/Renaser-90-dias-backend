@@ -13439,3 +13439,58 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 
 **Para que no vuelva:** no mezclar `pkill -f` con otros comandos que repitan el patrón en la misma invocación; preferir siempre `kill` con los PID anotados al levantar cada proceso (los scripts `levantar-*.sh` imprimen `PID`).
 
+
+## E-502 · En «Descanso y salud» la medicación no se podía escribir: quien respondía «Sí» no podía terminar la Ficha Inicial (app, producción, RESUELTO 05/10, D-250)
+
+**Síntoma (visto en el emulador con el código de `origin/master` del front, 05/10):** en el capítulo 2 de la Ficha Inicial, al responder «Sí» a «¿Tomas alguna medicación de forma regular?» y escribir en «Especifica tu medicación y motivo de la toma», el campo **queda vacío** (lo tecleado desaparece). «SIGUIENTE» muestra la alerta literal **«Medicación requerida — Por favor especifica tu medicación y el motivo de la toma.»** Captura: `~/Imágenes/e2e-2026-10-05/onboarding-antes-bug-medicacion-no-se-escribe.png`.
+
+**Causa:** el `onChangeText` del campo hacía `updateField('especificacionMedicacion', val); updateField('motivoMedicacion', val);`, es decir, dos `onChange({ ...data, [k]: v })` seguidos con la MISMA `data` del render, y arriba `FichaInicialScreen` hacía `setFormData({ ...formData, salud })` (forma no funcional). El segundo cambio pisaba al primero: `especificacionMedicacion` volvía al valor anterior (vacío) y el `TextInput` controlado borraba lo escrito.
+
+**Impacto:** cualquier aprendiz que toma medicación no podía pasar del capítulo 2 salvo respondiendo «No». Conviene que los mentores confirmen el dato con quien completó la ficha antes de este arreglo (en la base, una respuesta `medication` vacía o ausente no distingue «no toma» de «no pudo escribirlo»).
+
+**Solución:** una sola llamada, `onChange({ ...data, especificacionMedicacion: val, motivoMedicacion: val })` (commit propio en la rama `onboarding-nativo` del front: «Hacer que la medicación se pueda escribir…»). La pantalla actualiza además con `setFormData(prev => …)`. Prueba `features/onboarding/components/__tests__/pasosSalud.test.ts` — falla contra el código viejo (verificado).
+
+**Para que no vuelva:** nunca dos `onChange` seguidos con el mismo objeto; si un campo alimenta dos claves, se arman en un solo objeto.
+
+## E-503 · Arrastrar «Calidad de tu sueño» devolvía las horas de sueño al valor de antes (app, producción, RESUELTO 05/10, D-250)
+
+**Síntoma (emulador, `origin/master` del front):** en el capítulo 2, escribir `6` en «Horas promedio de sueño» y DESPUÉS arrastrar el deslizador de calidad: las horas vuelven a `7.5`. Captura `onboarding-antes-bug-horas-vuelven-al-arrastrar.png`.
+
+**Causa:** `SleepQualitySlider` arma su `PanResponder` con `useMemo(..., [trackWidth])`. Sus manejadores quedaban con el `onChange` del render en que se midió el riel, y ese `onChange` llevaba adentro la ficha de ESE momento (`{ ...data, calidadSueno }` y arriba `{ ...formData, salud }`): al arrastrar se reescribía la ficha entera con datos viejos.
+
+**Solución:** el deslizador lee el último `onChange` desde un `useRef` actualizado en cada render (mismo commit que E-502). Prueba en `pasosSalud.test.ts` (falla contra el código viejo).
+
+**Para que no vuelva:** todo manejador creado una sola vez (`PanResponder`, `useMemo`, callbacks de animación) lee las props por referencia, nunca por cierre.
+
+## E-504 · Un `<Modal>` dentro de un contenedor con `entering` de Reanimated se abre INVISIBLE en Android (app, desarrollo, RESUELTO 05/10, D-250)
+
+**Síntoma:** en el paso «Sobre ti» de la ficha nueva, tocar «Selecciona tu fecha de nacimiento» no mostraba nada. Pero el selector estaba abierto: `mobile_list_elements_on_screen` listaba «Cerrar el selector de fecha», «CONFIRMAR FECHA», y `adb shell dumpsys window windows` mostraba la ventana del diálogo con `isVisible=true` y `mDrawState=HAS_DRAWN`; la captura, la pantalla sin velo. La persona quedaba trabada sin poder elegir la fecha.
+
+**Causa (empírica):** la animación de montaje `entering={FadeInRight.duration(260)…}` en el contenedor del paso (ancestro del `DatePickerField`). Con `entering={undefined}` en ese mismo contenedor, el modal se ve. Reanimated 4.5.1 + Fabric (RN 0.86) en Android.
+
+**Solución:** la entrada del paso se hace con un valor compartido propio (`EntradaDePaso` en `MarcoDePaso.tsx`: opacidad + `translateX` con `withTiming`), que no toca a los hijos; el modal se ve, verificado en el emulador.
+
+**Para que no vuelva:** no usar `entering`/`exiting` de Reanimated en contenedores que puedan tener un `<Modal>` adentro (`DatePickerField`, `PhoneCountryInput`, `LocationCascadePicker`). Queda escrito en el comentario de `MarcoDePaso`.
+
+## E-505 · `transitionTimingFunction: 'cubic-bezier(…)'` revienta en Reanimated 4.5 (preventivo, no llegó al código, 05/10)
+
+**Síntoma (leído en el fuente antes de usarlo):** `[Reanimated] Invalid predefined timing function "cubic-bezier(0.23, 1, 0.32, 1)". Supported values are: …` — lo lanza `normalizeTimingFunction` (`react-native-reanimated/src/css/native/normalization/common/settings.ts`).
+
+**Causa:** la receta de «press feedback» de la skill `animate-expo` escribe la curva como texto en la propiedad suelta `transitionTimingFunction`. En Reanimated 4.5 el texto `cubic-bezier(…)` sólo se interpreta dentro del atajo `transition: '…'`; la propiedad suelta acepta nombres (`'ease-out'`) o `cubicBezier(…)` importado de Reanimated (que además no está en el doble de Jest).
+
+**Solución:** las animaciones del alta y el onboarding van con valores compartidos y `withTiming` (`theme/movimiento.ts`, comentario incluido).
+
+**Para que no vuelva:** al copiar una receta de transición de estilo, curva propia con `cubicBezier()`, nunca como texto en la propiedad suelta.
+
+## E-506 · Emulador `Pixel_6`: con teclado físico el foco por código no abre el teclado, Gboard queda en «barrita» y ESC hace «atrás» (entorno, 05/10)
+
+**Síntomas (05/10, probando el onboarding nuevo):**
+1. `focus()`/`autoFocus` deja el campo con borde dorado pero `adb shell dumpsys input_method` dice `mInputShown=false`.
+2. Después de mandar teclas con `adb shell input keyevent` (ENTER, DEL, MOVE_END), Gboard deja de mostrar el teclado completo y muestra una **barrita flotante vertical** (micrófono, borrar, `→|`, emoji, ≡). Sigue así aunque se reinicie Gboard.
+3. `adb shell input keyevent 111` (ESC) hace retroceder un paso en la app (Android lo despacha como atrás), igual que `keyevent 4` cuando el teclado ya está abajo.
+
+**Causa:** el AVD tiene `hw.keyboard=yes` y `show_ime_with_hard_keyboard=0`: el sistema da por hecho que hay teclado físico. En un teléfono real (sin teclado físico) el foco por código sí abre el teclado.
+
+**Qué hacer:** para ver el teclado completo, `adb shell am force-stop com.google.android.inputmethod.latin` y TOCAR el campo, sin `keyevent` antes. Para bajar el teclado, `keyevent 4` sólo si `mInputShown=true`. No usar ESC. `uiautomator dump` puede devolver un archivo viejo si la pantalla se está animando: preferir `mobile_list_elements_on_screen`.
+
+**De paso:** (a) el backend local `backend-ui.jar` (8086, `renaser_ui0210`) no tiene S3: «CONTINUAR» de Términos termina en «No se pudo guardar tu firma» (`WARN No se pudo guardar la firma "terms_signature": el almacenamiento S3 no está configurado en el backend.`); para ver «Elige tu Día 1» se marcó `terminos_aceptados_en` a mano en la base local y se volvió a dejar en `NULL`. (b) El APK de desarrollo instalado en el emulador (29/09) volvió a cerrarse una vez al arrancar en frío con la firma de E-452 (`SIGSEGV … MountingCoordinator::pullTransaction(bool) const+713`); no es del cambio de este día.
