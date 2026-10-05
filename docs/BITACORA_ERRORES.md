@@ -13443,6 +13443,17 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 
 **Para que no vuelva:** no mezclar `pkill -f` con otros comandos que repitan el patrón en la misma invocación; preferir siempre `kill` con los PID anotados al levantar cada proceso (los scripts `levantar-*.sh` imprimen `PID`).
 
+> **Volvió a pasar 2026-10-05 (backend del día, rama `backend-del-dia`).** Mismo `Exit code 144` sin salida, ahora
+> dentro de un script: `cp …/target/renaser-backend-0.0.1-SNAPSHOT.jar ~/.cache/renaser-e2e/backend-final.jar &&
+> ~/.cache/renaser-e2e/levantar-backend-final.sh`. El script empezaba, copiado de `levantar-backend-ui.sh`, con
+> `J=$(pgrep -f 'backend-fina[l].jar' | head -1); [ -n "$J" ] && kill $J`: el corchete evita que `pgrep` se
+> encuentre a sí mismo, pero el `bash -c` que llamaba al script tenía `backend-final.jar` literal (en el `cp`), así
+> que `pgrep` devolvió ese shell y el script lo mató. El script siguió vivo y levantó la JVM igual; solo se perdió
+> la salida. **Arreglo:** `levantar-backend-final.sh` ya no usa `pgrep`: apaga con `apagar-backend-final.sh`, que
+> toma el PID que escucha en el puerto (`ss -ltnp | grep :8092`) y comprueba con `ps -o args` que sea ese jar antes
+> del `kill`. **Sigue latente** en `levantar-backend-ui.sh` (`pgrep -f 'backend-u[i].jar'`) y en los demás
+> `levantar-*.sh` con el mismo patrón: no llamarlos desde un comando que nombre su jar.
+
 ## E-502 · En «Descanso y salud» la medicación no se podía escribir: quien respondía «Sí» no podía terminar la Ficha Inicial (app, producción, RESUELTO 05/10, D-250)
 
 **Síntoma (visto en el emulador con el código de `origin/master` del front, 05/10):** en el capítulo 2 de la Ficha Inicial, al responder «Sí» a «¿Tomas alguna medicación de forma regular?» y escribir en «Especifica tu medicación y motivo de la toma», el campo **queda vacío** (lo tecleado desaparece). «SIGUIENTE» muestra la alerta literal **«Medicación requerida — Por favor especifica tu medicación y el motivo de la toma.»** Captura: `~/Imágenes/e2e-2026-10-05/onboarding-antes-bug-medicacion-no-se-escribe.png`.
