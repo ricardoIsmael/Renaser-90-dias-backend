@@ -837,10 +837,30 @@ Este módulo no expone un endpoint propio de "subir evidencia" — eso pasa siem
 { "id":"uuid","participanteId":"uuid","registroHabitoId":"uuid|null","rocaDiariaId":"uuid|null",
   "registroEspirituId":"uuid|null","tipo":"FOTO","contenidoTexto":null,"timestampExif":"...",
   "subidaEn":"...","gpsLat":null,"gpsLng":null,"esPrincipal":true,"estadoValidacion":"PENDIENTE",
-  "notasValidacion":null,"intentosIa":0,"penalizacionAplicada":false,"publicadaEnMuro":false }
+  "notasValidacion":null,"intentosIa":0,"penalizacionAplicada":false,"publicadaEnMuro":false,
+  "fotoUrl":null }
 ```
 
   Exactamente uno de `registroHabitoId`/`rocaDiariaId`/`registroEspirituId` viene no-nulo (arco exclusivo).
+
+- **`fotoUrl`** (D-252, 2026-10-05; campo nuevo, al final): en el detalle viaja **siempre `null`**. Solo
+  viene resuelto en el listado de la app, `GET /api/v1/evidence` (paginado de a 20 con `nextCursor`, mismo
+  formato `{ "evidencias": [...], "nextCursor": "..." }`): URL de lectura firmada, válida 15 minutos (como
+  el `mediaUrl` del chat), para las evidencias `FOTO` y `CAPTURA`; `null` para `TEXTO`, `VIDEO` y `AUDIO`
+  (esas dos se abren por `GET /api/v1/evidence/{id}/url`). Se firma después de autorizar el listado: la
+  recibe el dueño, su mentor asignado (con `participanteId`) o ADMIN/ALCHEMIST. El listado del panel
+  (`GET /api/v1/admin/evidence`) también la manda en `null`. Con el almacenamiento de marcador (local)
+  sale `about:blank#pendiente-s3/<ruta>`.
+
+```json
+{ "evidencias": [ { "id":"uuid","participanteId":"uuid","registroHabitoId":"uuid","rocaDiariaId":null,
+    "registroEspirituId":null,"tipo":"FOTO","contenidoTexto":null,"timestampExif":null,
+    "subidaEn":"2026-10-05T15:00:00Z","gpsLat":null,"gpsLng":null,"esPrincipal":false,
+    "estadoValidacion":"VALIDA","notasValidacion":"...","intentosIa":0,"penalizacionAplicada":false,
+    "publicadaEnMuro":false,
+    "fotoUrl":"https://s3-renaser90dias.s3.us-east-1.amazonaws.com/evidencia-habitos/...?X-Amz-...&X-Amz-Expires=900&X-Amz-Signature=..." } ],
+  "nextCursor": null }
+```
 
 - **Máquina de estados de `estadoValidacion`** (comentario de `EstadoValidacion`, no confirmado que la IA
   esté conectada de verdad — ver trampa abajo):
