@@ -571,6 +571,31 @@ chequeo de rol**, cualquier rol puede usar onboarding.
     }'
   ```
 
+### 20 bis. `GET /api/v1/onboarding/pact/signature` — ver mi firma del Pacto (D-253, 2026-10-05)
+
+- **Sesión:** `X-Auth-Token`. `@RequiresPermission(USE_APP)`. **Sin parámetros:** devuelve siempre la firma
+  de quien pregunta; no hay forma de pedir la de otra persona (un `?userId=` se ignora).
+- **De dónde sale:** la respuesta a la pregunta `signature` (V10, tipo FIRMA, flujo `pacto`) → su `mediaId`
+  → la fila de `medias_onboarding`, que tiene que ser **de quien pregunta** y de clase `firma`.
+- **Response body** (`FirmaDelPactoResponse`), 200:
+  ```json
+  {
+    "url": "https://s3-renaser90dias.s3.us-east-1.amazonaws.com/onboarding/<tu-uuid>/firma/<uuid>?X-Amz-Algorithm=…&X-Amz-Signature=…",
+    "expiresAt": "2026-10-05T22:15:00Z"
+  }
+  ```
+  `url` es una URL de lectura prefirmada (GET directo a S3) válida **15 minutos** (la del `mediaUrl` del
+  chat); `expiresAt` es hasta cuándo abre. Ni bucket, ni ruta, ni `mediaId` como campos propios. Con el
+  almacenamiento de marcador (local, pruebas) la URL sale `about:blank#pendiente-s3/<ruta>`.
+- **Errores:** 404 `"Todavía no hay una firma del Pacto guardada"` (no respondió la firma, o el archivo se
+  borró, o la respuesta apunta a algo que no es una firma); 403 `"Cuenta suspendida"`; 403 `"Esa firma no es
+  tuya"` si su respuesta apunta al archivo de otra persona (`POST /answers` no lo impide, E-528); 403 sin
+  sesión.
+- **curl:**
+  ```bash
+  curl http://localhost:8080/api/v1/onboarding/pact/signature -H "X-Auth-Token: <sesión>"
+  ```
+
 ### 21. `POST /api/v1/onboarding/v90-recordings` — registrar grabación V90
 
 - **Headers:** `X-Actor-Id`.

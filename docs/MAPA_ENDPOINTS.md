@@ -69,6 +69,7 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | POST | `/api/v1/onboarding/complete` |
 | POST | `/api/v1/onboarding/media/upload-url` |
 | POST | `/api/v1/onboarding/media` |
+| GET | `/api/v1/onboarding/pact/signature` (D-253: la firma del Pacto propia, URL de 15 min) |
 | GET · POST | `/api/v1/onboarding/v90-recordings` |
 | GET · POST | `/api/v1/onboarding/v90-recordings/{id}/validation` |
 

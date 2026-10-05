@@ -94,6 +94,7 @@ Base `/api/v1/onboarding`. Todos protegidos, todos con `@RequestHeader("X-Actor-
 | POST | `/answers` | `GuardarRespuestaUseCase` (upsert) |
 | POST | `/media/upload-url` | `ObtenerUrlSubidaMediaUseCase` |
 | POST | `/media` | `RegistrarMediaUseCase` |
+| GET | `/pact/signature` | `VerFirmaDelPactoUseCase` (D-253): URL de lectura firmada, 15 min, de la firma del Pacto de quien pregunta; 404 sin firma |
 | POST | `/v90-recordings` | `RegistrarGrabacionV90UseCase` (upsert por slot) |
 | GET | `/v90-recordings` | `ListarGrabacionesV90UseCase` |
 | POST | `/v90-recordings/{id}/validation` | `ValidarV90UseCase.solicitarValidacion` (202) |
