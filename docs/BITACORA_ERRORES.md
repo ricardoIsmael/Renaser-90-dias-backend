@@ -13502,3 +13502,22 @@ corrección. `ResponderMensajesIT.citadoBorradoConLaCuenta` cubre lo que ve la a
 **Para que no vuelva:** al cambiar una restricción de la base, buscar el nombre de la COLUMNA en todo `src/test` (SQL incluido:
 `grep -rn respuesta_a_id src/test`), no solo el del campo Java.
 
+## E-513 · En la web no se puede grabar una nota de voz: «No se pudo usar el micrófono / Intenta de nuevo en un momento.» (app web, ABIERTO, 05/10)
+
+**Síntoma (literal, web servida desde `chat-responder` y desde `rediseno-junto`, Chromium con micrófono falso):** al tocar
+grabar en el chat sale la alerta «No se pudo usar el micrófono / Intenta de nuevo en un momento.». Afecta también a
+`EvidenciaHabitoModal`. En Android e iOS no pasa.
+
+**Causa (verificada en `node_modules/expo-audio` 57.0.4):** `src/hooks/useGrabadorDeVoz.ts` crea el grabador con
+`new AudioModule.AudioRecorder(…)`. En la web, `AudioModule` es `AudioModule.web.js`, que exporta `AudioRecorderWeb` y no
+`AudioRecorder`: el constructor no existe, la excepción se traga y el hook devuelve `'no-disponible'`. Viene desde E-424
+(commit `6d91177` del front). Lo encontró el fork del front de D-251 al sacar las capturas; para la captura de «grabando» se
+parcheó solo la copia servida, no la rama.
+
+**Solución:** pendiente, fuera del alcance de D-251 (se reporta, no se arregla en el mismo cambio). Camino probable: en la web,
+`AudioRecorderWeb` (o el `useAudioRecorder` público de expo-audio, que ya elige la clase por plataforma), con una prueba
+que falle con el módulo web.
+
+**Para que no vuelva:** una función de expo-* que se usa con `new Modulo.Clase` tiene que tener una prueba por plataforma o
+pasar por la API pública del paquete, que resuelve la plataforma sola.
+
