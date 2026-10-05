@@ -13552,3 +13552,33 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 **Solución:** se quitó el blanco conectado al borde (relleno por inundación con tolerancia) y se des-mezcló el antialiasing del contorno (color-a-alfa sobre blanco en una banda de 3 px). Front `rediseno-junto` `37fdf0e`. Los mensajes viejos con ese sticker siguen mostrando la versión con fondo (la imagen ya está subida a S3); los nuevos salen sin fondo.
 
 **Cómo evitar que vuelva:** al agregar un sticker, medir el blanco opaco antes de commitear (un sticker sano tiene < 5 %): `python3 -c "from PIL import Image; im=Image.open('X.webp').convert('RGBA'); p=list(im.getdata()); print(sum(1 for r,g,b,a in p if a>240 and min(r,g,b)>240)/len(p))"`. No hay prueba de jest porque el entorno de pruebas no decodifica WebP.
+
+## E-525 · La barra de escribir del chat queda ~48 dp por encima del teclado en Android, con una franja vacía en medio (app, producción desde el 26/09, RESUELTO 05/10)
+
+**Síntoma (05/10, prueba nativa en el emulador `Pixel_6`):** con el teclado abierto en una conversación, la barra de escribir flota ~48 dp sobre el teclado y entre las dos queda una franja vacía del color del chat. Medido con logs temporales: `[kav-layout] {"x":0,"y":48.76…,"height":841.52…} insets {"left":0,"bottom":24,"right":0,"top":48.76…}` y `[kbd] {"screenY":577.90…,"height":312.38…}`.
+
+**Causa real:** el `KeyboardAvoidingView` de la conversación (`ComunidadScreen`) llevaba `keyboardVerticalOffset={insets.top}`, pero la `y` que da su `onLayout` ya incluye ese margen: el borde seguro de arriba se restaba dos veces. Viene de `26a5db0` (26/09) y está en master: probablemente también pasa en producción (no verificado en master).
+
+**Solución:** se quitó el desfase. Front `rediseno-junto` `085ccb6`. Tests: uno que lee la fuente y otro que rehace la cuenta de React Native con los números medidos (`comunidadEnAndroid.test.ts`).
+
+**Cómo evitar que vuelva:** `keyboardVerticalOffset` es la distancia entre el **tope de la pantalla** y el tope del `KeyboardAvoidingView` **solo si** su `y` no la incluye ya; medir con `onLayout` antes de sumar insets. Todo cambio de teclado se verifica en Android nativo, no en web.
+
+## E-526 · «Responder» deja el cursor en el campo con el teclado cerrado en Android (app, desarrollo, RESUELTO 05/10)
+
+**Síntoma (05/10, prueba nativa):** al elegir «Responder» en el menú del mensaje, el campo queda enfocado pero el teclado no sale; hay que tocar el campo otra vez. En web no pasa.
+
+**Causa real:** el campo se enfocaba a los 250 ms fijos, cuando la hoja del menú (otra ventana, un `Modal`) todavía estaba en pantalla; Android ignora el pedido de teclado de una ventana que no tiene el foco. Medido: enfocando al desmontarse la hoja, igual sin teclado; 100 ms después, 3 de 3 veces con teclado.
+
+**Solución:** `HojaDesdeAbajo` avisa cuándo se fue del todo (`alTerminarDeCerrar`: al desmontarse, + 150 ms en Android) y recién ahí se enfoca el campo. Front `085ccb6`, tests `alTerminarDeCerrar.test.ts` y `comunidadEnAndroid.test.ts`.
+
+**Cómo evitar que vuelva:** nunca enfocar un campo con un tiempo fijo después de cerrar un `Modal`: esperar `alTerminarDeCerrar`.
+
+## E-527 · «Ver más» se lee «Ver» en el detalle de un curso en Android (app, RESUELTO 05/10)
+
+**Síntoma (05/10, prueba nativa):** en el detalle de un curso el botón dice «Ver», con un hueco antes del chevron; en la tarjeta de la lista se ve bien.
+
+**Causa real:** la caja del texto quedaba una fracción de píxel más angosta que la frase y «más» pasaba a un segundo renglón invisible (redondeo de Yoga en Android). Confirmado alternando con y sin el arreglo.
+
+**Solución:** `paddingRight: 1` en el texto. Front `085ccb6`, con test.
+
+**Cómo evitar que vuelva:** un texto corto en una fila con ícono que se ve truncado sin «…» en Android es casi siempre este redondeo: darle 1 px de aire o `flexShrink: 0`.
