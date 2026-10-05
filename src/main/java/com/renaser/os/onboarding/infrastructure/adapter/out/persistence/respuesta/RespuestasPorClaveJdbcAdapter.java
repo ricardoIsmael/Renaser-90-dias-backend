@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -27,6 +28,15 @@ class RespuestasPorClaveJdbcAdapter implements LeerRespuestasPorClavePort {
               JOIN renaser.preguntas_onboarding  p ON p.id = r.pregunta_id
              WHERE r.usuario_id = :usuarioId
                AND p.clave_pregunta IN (:claves)
+            """;
+
+    private static final String SQL_MEDIA = """
+            SELECT r.media_id
+              FROM renaser.respuestas_onboarding r
+              JOIN renaser.preguntas_onboarding  p ON p.id = r.pregunta_id
+             WHERE r.usuario_id = :usuarioId
+               AND p.clave_pregunta = :clave
+               AND r.media_id IS NOT NULL
             """;
 
     private final JdbcClient jdbcClient;
@@ -51,5 +61,15 @@ class RespuestasPorClaveJdbcAdapter implements LeerRespuestasPorClavePort {
                 })
                 .list();
         return porClave;
+    }
+
+    /** A lo sumo una fila: {@code clave_pregunta} es UNIQUE global y la respuesta, UNIQUE por (usuario, pregunta). */
+    @Override
+    public Optional<Long> mediaDe(UserId usuarioId, String clavePregunta) {
+        return jdbcClient.sql(SQL_MEDIA)
+                .param("usuarioId", usuarioId.value())
+                .param("clave", clavePregunta)
+                .query(Long.class)
+                .optional();
     }
 }

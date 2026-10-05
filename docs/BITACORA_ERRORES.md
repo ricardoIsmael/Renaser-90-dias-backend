@@ -13540,3 +13540,67 @@ pasar por la API pública del paquete, que resuelve la plataforma sola.
 **Solución:** apagar por el PID que escucha en el puerto (`ss -ltnp | grep :8088`) o el que imprime Spring en el log, verificando con `ps -o pid,args -p <pid>` antes del `kill`.
 
 **Para que no vuelva:** no hacer `cd … && … &` al levantar algo que se va a apagar por PID; usar rutas absolutas y poner el `&` solo sobre el comando (`DB_URL=… setsid nohup java -jar /ruta/abs.jar > log 2>&1 < /dev/null & echo $!`), y al apagar comprobar que el PID es `java`/`node` y no `bash`.
+
+## E-528 · `POST /onboarding/answers` acepta el `mediaId` de un archivo de OTRA persona (seguridad, RESUELTO, 05/10)
+
+> **Corregido 2026-10-05 (cierre, rama `onboarding-media-propio`).** El título decía «ABIERTO — se reporta, no se
+> arregla en D-253». Se reportó desde D-253 por la regla de alcance; el dueño aprobó cerrarlo de raíz el mismo día.
+> Lo de abajo hasta «Solución propuesta» queda como se escribió al encontrarlo; la solución aplicada va al final.
+
+**Síntoma (encontrado al diseñar D-253, comprobado de punta a punta contra el backend de la rama en `:8089`).** Con la sesión de una cuenta B, `POST /api/v1/onboarding/answers` con `{"questionId": <id de "signature">, "mediaId": <id de la firma de la cuenta A>}` responde **200** y deja la respuesta de B apuntando al PNG de A (`respuestas_onboarding.media_id`).
+
+**Causa real.** `RespuestaService.guardar` → `Respuesta.crear/actualizarValor` solo exige que una respuesta FIRMA/AUDIO/ARCHIVO **traiga** `mediaId` (`SlotValor.SOLO_MEDIA`); nadie mira de quién es. El FK de la base (`media_id REFERENCES medias_onboarding (id)`) solo exige que exista. `RegistrarGrabacionV90UseCase` sí lo comprueba (`porIdYUsuario`), y `/answers` no.
+
+**Por qué hasta hoy no se notaba.** Ningún endpoint abría el archivo de una respuesta: la referencia cruzada quedaba guardada pero no daba acceso a nada. D-253 es el primer lector, y por eso **comprueba el dueño del archivo** (`MediaOnboarding.esDe`) antes de firmar la lectura: si la respuesta apunta a un archivo ajeno responde **403 «Esa firma no es tuya»** y no firma nada (`FirmaDelPactoServiceTest.respuestaQueApuntaAUnArchivoAjenoEs403`, `FirmaDelPactoIT.otraPersonaNoVeLaFirmaAjena`, y a mano con curl).
+
+**Solución propuesta (no aplicada: es otro cambio, regla de alcance).** En `RespuestaService.guardar`, si llega `mediaId`, exigir `loadMediaPort.porIdYUsuario(mediaId, actor)` → 404 como hace V90. Con test que falle contra lo de hoy. La app no se ve afectada (siempre manda el `id` que le devolvió su propio `POST /media`).
+
+**Solución aplicada (2026-10-05, la propuesta, sin cambios de fondo).** `RespuestaService.guardar` llama a `requireMediaPropia` antes de leer o construir la respuesta: si llega `mediaId`, exige `LoadMediaPort.porIdYUsuario(mediaId, quien responde)`, el mismo puerto y criterio que `GrabacionV90Service.registrar` (mismo módulo, sin pasar por `api`). Ajeno e inexistente dan **el mismo 404** con el mismo cuerpo, `{"message":"Ese archivo no existe o no es tuyo", …}`: así no se puede averiguar si un id ajeno existe (antes el inexistente daba **409** «La operacion entra en conflicto con datos que ya existen», por el FK, y el ajeno **200**). No se guarda nada, y si ya tenía una respuesta, queda como estaba. Se mira para **cualquier** tipo de pregunta, no solo FIRMA/AUDIO/ARCHIVO, porque `Respuesta.requireCoherenciaConTipo` no le prohíbe un `mediaId` a una de texto. Sin `mediaId`, nada cambia (ni se consulta). Sin migración. La comprobación de D-253 al leer (`MediaOnboarding.esDe`) se queda: es defensa en profundidad para filas guardadas antes del cierre (en la copia `renaser_ui0210` no había ninguna: 0 de 2 respuestas con archivo apuntaban a uno ajeno; producción no se miró).
+
+**Pruebas.** `RespuestaServiceTest` (+6, con un fake de `LoadMediaPort` en vez de un mock, para que «ajeno» sea un archivo que existe y es de otra persona): propio → se guarda; ajeno → 404 y nada se guarda; inexistente → el mismo rechazo; cambiar la propia por una ajena → no toca la guardada; `mediaId` ajeno en una pregunta de texto → rechazo; sin `mediaId` → igual que antes y sin consultar archivos. `RespuestaConArchivoPropioIT` (5, Tomcat + sesión real + Postgres): **contra el código viejo fallan 3 de 5** (ajeno `expected: 404 but was: 200` ×2, inexistente `expected: 200 but was: 409` al comparar con el ajeno); con el arreglo, 5 de 5.
+
+**Prueba real con curl** (backend en `:8091`, gestión `:8101`, base copia `renaser_mediapropio`, almacenamiento de marcador; `e2e-ap-emu` y `e2e-ap-web`, flujo de la app: `upload-url` → `POST /media` → `POST /answers`). Jar viejo (`0b38a287`): web con la firma de emu → **200** y su respuesta en la base apuntando al archivo de emu; inexistente → **409**; web cambia su firma por la de emu → **200**; `GET /pact/signature` de web → 403. Jar nuevo (misma base recién copiada, mismos pasos): web con la firma de emu → **404** «Ese archivo no existe o no es tuyo» y en la base web queda **sin respuesta**; inexistente → **404** con el mismo cuerpo; web con SU firma → 200; web cambia la suya por la de emu → **404** y la base sigue en la suya; Términos con su archivo → 200; texto sin media → 200; `GET /pact/signature` de web → 200. Se apagó por PID (`java`) y se borró la base.
+
+**Compatibilidad con la app.** En el front (ramas `master`, `rediseno-junto`, `pacto-firma` y la actual) el único que manda `mediaId` es `usePersistenciaOnboarding.guardarFirma` (Términos `terms_signature`, Pacto `signature` y la re-firma desde Yo), siempre con el `id` que le acaba de devolver su propio `POST /onboarding/media`. La cola de reintentos es un `useRef` en memoria de la pantalla: no viaja entre cuentas. El Mapa y los capítulos mandan solo valores tipados. Ningún flujo legítimo cambia.
+
+**Para que no vuelva:** todo `mediaId`/ruta que venga del cliente se valida contra el dueño en el caso de uso que lo **guarda**, no solo en el que lo **lee**; y todo lector nuevo de un archivo referenciado por otra tabla vuelve a comprobar el dueño (defensa en profundidad, como D-253). Hoy los dos únicos casos de uso que guardan un `mediaId` del cliente (`/answers` y `/v90-recordings`) lo comprueban.
+
+## E-529 · `npx jest --testPathIgnorePatterns '/node_modules/' '/e2e/' src/features/yo` corrió TODA la suite menos `src/features/yo` (frontend, entorno, RESUELTO, 05/10)
+
+**Síntoma (literal).** La corrida terminó en verde con `Test Suites: 273 passed, 273 total` / `Tests: 2266 passed, 2266 total`, y ninguna de las pruebas de `src/features/yo` estaba en la lista. Sin el `--testPathIgnorePatterns`, `npx jest src/features/yo` decía: `No tests found, exiting with code 1` … `testPathIgnorePatterns: /node_modules/, /e2e/, /.claude/ - 0 matches` … `Pattern: src/features/yo - 0 matches`.
+
+**Causa real.** Dos cosas: (1) `jest.config.js` ignora `/.claude/`, y los worktrees viven en `.claude/worktrees/…`: desde un worktree, sin pisar esa opción, no se encuentra ninguna prueba. (2) `--testPathIgnorePatterns` es una opción de lista: se traga todos los argumentos sueltos que le siguen, así que `src/features/yo` pasó a ser **un patrón a ignorar** y no el filtro.
+
+**Solución.** Filtrar con la opción con nombre: `npx jest --testPathIgnorePatterns '/node_modules/' '/e2e/' --testPathPattern 'features/yo'` (`PASS src/features/yo/components/__tests__/pactoFirmado.test.ts` en la lista).
+
+**Para que no vuelva:** después de `--testPathIgnorePatterns` no poner nunca un argumento suelto; el filtro va con `--testPathPattern`. Y mirar que la prueba nueva figure en la salida (`PASS …/pactoFirmado.test.ts`), no solo el total en verde: un total alto en verde no prueba que corrió la que importa.
+
+## E-530 · El PID que imprimió el arranque del S3 de mentira era el de un `bash`, no el de `python3` (entorno, RESUELTO, 05/10)
+
+**Síntoma.** `cd ~/.cache/renaser-e2e/pacto-firma && setsid nohup python3 …/s3_local.py > … & echo "PID $!"` imprimió `PID 1386395`; `ss -ltnp | grep 9089` mostró `users:(("python3",pid=1386397,fd=3))`.
+
+**Causa real.** La misma que E-520 (anotada en la rama `evidencia-fotos`, todavía no integrada): el `&` se aplica a toda la lista `cd … && …`, así que `$!` es la subshell. Se repitió porque E-520 no estaba en `master` cuando se escribió el comando.
+
+**Solución.** Se apagó por el PID que escucha (`ss -ltnp`), verificado con `ps -o pid,args`. El script del backend de esta prueba (`levantar-backend-pacto-firma.sh`) ya pone el `&` solo sobre `java` y su PID coincidió con el de `ss` (`1400729`).
+
+**Para que no vuelva:** lo de E-520: rutas absolutas y el `&` solo sobre el comando; al apagar, comprobar que el PID es `java`/`python3`/`node`.
+
+## E-531 · `Error: Cannot find module 'playwright'` al correr un script de capturas guardado fuera del front (entorno, RESUELTO, 05/10)
+
+**Síntoma (literal).** `node ~/.cache/renaser-e2e/scripts/pacto-firma/cap-pacto-firma.cjs …` desde `~/.cache/renaser-e2e/front-pacto-firma` → `Error: Cannot find module 'playwright'` / `Require stack: - /home/ricardo/.cache/renaser-e2e/scripts/pacto-firma/cap-pacto-firma.cjs`.
+
+**Causa real.** `require` resuelve desde la carpeta del SCRIPT, no desde el directorio actual: `scripts/pacto-firma/` no tiene `node_modules` y Playwright solo está en el `node_modules` de la copia del front.
+
+**Solución.** `NODE_PATH=$PWD/node_modules node …/cap-pacto-firma.cjs` desde la copia del front.
+
+**Para que no vuelva:** los scripts de `~/.cache/renaser-e2e/scripts/` se corren con `NODE_PATH=<copia-del-front>/node_modules` (o se copian dentro de la copia del front).
+
+## E-532 · En oscuro, la firma del Pacto salía con franjas blancas arriba y abajo (frontend, RESUELTO antes del commit, 05/10)
+
+**Síntoma.** Primera captura de `pacto-firma-2-con-firma-oscuro.png`: arriba y abajo del borde dorado del PNG se veía una franja blanca de ~2 px, como un segundo marco.
+
+**Causa real.** La imagen tenía una proporción fija de 5:2 con `contentFit="contain"`, y el PNG real mide 752 × 290 (2,59:1): `contain` lo achica y deja franjas del papel blanco. En claro no se nota (blanco sobre blanco); en oscuro sí.
+
+**Solución.** El papel toma la proporción del PNG al cargar (`onLoad` → `source.width / source.height`; 5:2 solo mientras baja) y el radio del papel baja a 12, el del PNG mostrado a ~0,88 de su ancho. Test: `pactoFirmado.test.ts` «el papel toma la forma del PNG al cargar».
+
+**Para que no vuelva:** una imagen con fondo propio dentro de un marco con otro fondo se mide con la proporción real de la imagen, no con una supuesta; y se mira en los dos temas antes de dar por buena una captura.

@@ -93,6 +93,21 @@ public final class MediaOnboarding {
     }
 
     /**
+     * Si el archivo lo subió esa persona. Es la condición para devolverle una URL de lectura (D-253): la
+     * respuesta que apunta a este archivo ({@code respuestas_onboarding.media_id}) la escribe el cliente.
+     * Desde el cierre de E-528 {@code POST /onboarding/answers} ya no acepta un {@code mediaId} ajeno, pero las
+     * respuestas guardadas antes pueden seguir apuntando a uno: quien abre el archivo lo vuelve a mirar.
+     */
+    public boolean esDe(UserId persona) {
+        return usuarioId.equals(persona);
+    }
+
+    /** Si es la imagen de una firma dibujada (Pacto o Términos), y no un audio, una foto o un documento. */
+    public boolean esFirma() {
+        return clase == ClaseMedia.FIRMA;
+    }
+
+    /**
      * Todo {@code rutaStorage} que un actor registre debe caer bajo su propio prefijo — evita
      * que {@link #registrar} acepte una ruta con el UUID de otro usuario (no hay forma de
      * verificar contra la URL prefirmada real sin guardar estado de la emision, pero esto cierra

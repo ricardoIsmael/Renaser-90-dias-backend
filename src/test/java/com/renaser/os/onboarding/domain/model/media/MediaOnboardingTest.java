@@ -58,6 +58,35 @@ class MediaOnboardingTest {
     }
 
     @Test
+    @DisplayName("esDe(): solo es de quien lo subió (D-253: la condición para firmarle la lectura)")
+    void esDeSoloQuienLoSubio() {
+        UserId duena = newUsuarioId();
+        MediaOnboarding firma = MediaOnboarding.registrar(duena, "pacto", "signature", ClaseMedia.FIRMA,
+                MediaOnboarding.BUCKET_DEFAULT, "onboarding/" + duena + "/firma/uuid", "image/png", null, null, null,
+                CLOCK);
+
+        assertThat(firma.esDe(duena)).isTrue();
+        assertThat(firma.esDe(UserId.of(UUID.fromString(duena.toString())))).as("por valor, no por instancia").isTrue();
+        assertThat(firma.esDe(newUsuarioId())).isFalse();
+    }
+
+    @Test
+    @DisplayName("esFirma(): solo la clase FIRMA; un audio o una foto no se muestran como firma")
+    void esFirmaSoloLaClaseFirma() {
+        UserId usuarioId = newUsuarioId();
+
+        assertThat(media(usuarioId, ClaseMedia.FIRMA).esFirma()).isTrue();
+        assertThat(media(usuarioId, ClaseMedia.AUDIO).esFirma()).isFalse();
+        assertThat(media(usuarioId, ClaseMedia.FOTO).esFirma()).isFalse();
+        assertThat(media(usuarioId, ClaseMedia.DOCUMENTO).esFirma()).isFalse();
+    }
+
+    private static MediaOnboarding media(UserId usuarioId, ClaseMedia clase) {
+        return MediaOnboarding.registrar(usuarioId, "pacto", "signature", clase, MediaOnboarding.BUCKET_DEFAULT,
+                "onboarding/" + usuarioId + "/" + clase.name().toLowerCase() + "/uuid", null, null, null, null, CLOCK);
+    }
+
+    @Test
     @DisplayName("registrar() rechaza bucket/ruta vacios")
     void registrarValidaCamposObligatorios() {
         UserId usuarioId = newUsuarioId();

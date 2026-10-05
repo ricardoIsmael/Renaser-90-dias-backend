@@ -5,11 +5,14 @@ import com.renaser.os.onboarding.application.ports.in.respuesta.ObtenerRespuesta
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort;
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort.ActorOnboarding;
 import com.renaser.os.onboarding.application.ports.out.cuestionario.LoadCuestionarioPort;
+import com.renaser.os.onboarding.application.ports.out.media.LoadMediaPort;
 import com.renaser.os.onboarding.application.ports.out.respuesta.LoadRespuestaPort;
 import com.renaser.os.onboarding.application.ports.out.respuesta.SaveRespuestaPort;
 import com.renaser.os.onboarding.domain.model.cuestionario.Pregunta;
 import com.renaser.os.onboarding.domain.model.cuestionario.Seccion;
 import com.renaser.os.onboarding.domain.model.cuestionario.TipoPreguntaOnboarding;
+import com.renaser.os.onboarding.domain.model.media.ClaseMedia;
+import com.renaser.os.onboarding.domain.model.media.MediaOnboarding;
 import com.renaser.os.onboarding.domain.model.respuesta.Respuesta;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -22,7 +25,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
@@ -48,12 +53,14 @@ class RespuestaServiceTest {
     @Mock
     private ConsultarActorPort actorPort;
 
+    private final MediasEnMemoria medias = new MediasEnMemoria();
     private RespuestaService service;
     private UserId usuarioId;
 
     @BeforeEach
     void setUp() {
-        service = new RespuestaService(loadCuestionarioPort, loadRespuestaPort, saveRespuestaPort, actorPort, CLOCK);
+        service = new RespuestaService(loadCuestionarioPort, loadRespuestaPort, saveRespuestaPort, medias, actorPort,
+                CLOCK);
         usuarioId = UserId.of(UUID.randomUUID());
     }
 
@@ -135,6 +142,128 @@ class RespuestaServiceTest {
 
         assertThat(resultado.id()).isEqualTo(77L);
         assertThat(resultado.valorTexto()).isEqualTo("segundo");
+    }
+
+    // ── guardar() con mediaId — el archivo tiene que ser de quien responde (E-528) ──────
+
+    private Pregunta preguntaFirma() {
+        return new Pregunta(2, (short) 1, "signature", "Firma con tu dedo", TipoPreguntaOnboarding.FIRMA, null, true,
+                (short) 2, null, null, Instant.now());
+    }
+
+    @Test
+    @DisplayName("E-528: firma con un archivo PROPIO -> se guarda apuntando a ese archivo")
+    void guardarConMediaPropiaGuarda() {
+        actorActivo();
+        long propia = medias.subida(usuarioId);
+        when(loadCuestionarioPort.porId(2)).thenReturn(Optional.of(preguntaFirma()));
+        when(loadRespuestaPort.porUsuarioYPregunta(usuarioId, 2)).thenReturn(Optional.empty());
+        when(saveRespuestaPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Respuesta resultado = service.guardar(new GuardarRespuestaCommand(usuarioId, 2, null, null, null, null, null,
+                propia));
+
+        assertThat(resultado.mediaId()).isEqualTo(propia);
+    }
+
+    @Test
+    @DisplayName("E-528: firma con el archivo de OTRA persona -> 404 «Ese archivo no existe o no es tuyo», nada se guarda")
+    void guardarConMediaAjenaSeRechaza() {
+        actorActivo();
+        long deAna = medias.subida(UserId.of(UUID.randomUUID()));
+        when(loadCuestionarioPort.porId(2)).thenReturn(Optional.of(preguntaFirma()));
+
+        var comando = new GuardarRespuestaCommand(usuarioId, 2, null, null, null, null, null, deAna);
+
+        assertThatThrownBy(() -> service.guardar(comando)).isInstanceOf(NoSuchElementException.class)
+                .hasMessage(RespuestaService.MEDIA_AJENA_O_INEXISTENTE);
+        verify(saveRespuestaPort, never()).guardar(any());
+    }
+
+    @Test
+    @DisplayName("E-528: un id que no existe -> el MISMO rechazo que el ajeno (no deja averiguar qué ids existen)")
+    void guardarConMediaInexistenteSeRechazaIgual() {
+        actorActivo();
+        when(loadCuestionarioPort.porId(2)).thenReturn(Optional.of(preguntaFirma()));
+
+        var comando = new GuardarRespuestaCommand(usuarioId, 2, null, null, null, null, null, 999_999L);
+
+        assertThatThrownBy(() -> service.guardar(comando)).isInstanceOf(NoSuchElementException.class)
+                .hasMessage(RespuestaService.MEDIA_AJENA_O_INEXISTENTE);
+        verify(saveRespuestaPort, never()).guardar(any());
+    }
+
+    @Test
+    @DisplayName("E-528: si ya tenía su firma, cambiarla por un archivo ajeno no toca la respuesta guardada")
+    void cambiarLaFirmaPorUnArchivoAjenoNoTocaLaExistente() {
+        actorActivo();
+        long deAna = medias.subida(UserId.of(UUID.randomUUID()));
+        when(loadCuestionarioPort.porId(2)).thenReturn(Optional.of(preguntaFirma()));
+
+        var comando = new GuardarRespuestaCommand(usuarioId, 2, null, null, null, null, null, deAna);
+
+        assertThatThrownBy(() -> service.guardar(comando)).isInstanceOf(NoSuchElementException.class);
+        verify(loadRespuestaPort, never()).porUsuarioYPregunta(any(), org.mockito.ArgumentMatchers.anyInt());
+        verify(saveRespuestaPort, never()).guardar(any());
+    }
+
+    @Test
+    @DisplayName("E-528: el dominio no le prohíbe un mediaId a una pregunta de texto, así que ahí también se mira el dueño")
+    void mediaAjenaEnUnaPreguntaDeTextoTambienSeRechaza() {
+        actorActivo();
+        long deAna = medias.subida(UserId.of(UUID.randomUUID()));
+        when(loadCuestionarioPort.porId(1)).thenReturn(Optional.of(preguntaTexto()));
+
+        var comando = new GuardarRespuestaCommand(usuarioId, 1, "hola", null, null, null, null, deAna);
+
+        assertThatThrownBy(() -> service.guardar(comando)).isInstanceOf(NoSuchElementException.class)
+                .hasMessage(RespuestaService.MEDIA_AJENA_O_INEXISTENTE);
+        verify(saveRespuestaPort, never()).guardar(any());
+    }
+
+    @Test
+    @DisplayName("E-528: sin mediaId, igual que antes: se guarda y no se consulta ningún archivo")
+    void sinMediaNoConsultaArchivos() {
+        actorActivo();
+        when(loadCuestionarioPort.porId(1)).thenReturn(Optional.of(preguntaTexto()));
+        when(loadRespuestaPort.porUsuarioYPregunta(usuarioId, 1)).thenReturn(Optional.empty());
+        when(saveRespuestaPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Respuesta resultado = service.guardar(new GuardarRespuestaCommand(usuarioId, 1, "hola", null, null, null, null,
+                null));
+
+        assertThat(resultado.valorTexto()).isEqualTo("hola");
+        assertThat(medias.consultas).isZero();
+    }
+
+    /**
+     * Los archivos subidos, con su dueño, como los deja {@code POST /onboarding/media}. Un fake y no un mock: así
+     * «ajeno» es de verdad un archivo que existe y es de otra persona, y «inexistente» uno que no está.
+     */
+    private static final class MediasEnMemoria implements LoadMediaPort {
+
+        private final Map<Long, MediaOnboarding> porId = new HashMap<>();
+        private int consultas;
+
+        long subida(UserId dueno) {
+            long id = porId.size() + 1L;
+            porId.put(id, MediaOnboarding.rehydrate(id, dueno, "pacto", "signature", ClaseMedia.FIRMA,
+                    MediaOnboarding.BUCKET_DEFAULT, "onboarding/" + dueno + "/firma/" + UUID.randomUUID(), "image/png",
+                    null, null, null, CLOCK.now(), CLOCK.now()));
+            return id;
+        }
+
+        @Override
+        public Optional<MediaOnboarding> porId(long mediaId) {
+            consultas++;
+            return Optional.ofNullable(porId.get(mediaId));
+        }
+
+        @Override
+        public Optional<MediaOnboarding> porIdYUsuario(long mediaId, UserId usuarioId) {
+            consultas++;
+            return Optional.ofNullable(porId.get(mediaId)).filter(media -> media.usuarioId().equals(usuarioId));
+        }
     }
 
     // ── obtener() — GET /onboarding/answers ─────────────────────────────────────
