@@ -2,6 +2,7 @@ package com.renaser.os.chat.application.services;
 
 import com.renaser.os.chat.application.ports.in.mensaje.CompartirPublicacionUseCase.CompartirPublicacionCommand;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase;
+import com.renaser.os.chat.application.ports.in.mensaje.MensajeEnriquecido;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.EnviarMensajeCommand;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.OrigenMedia;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
@@ -68,14 +69,15 @@ class CompartirPublicacionServiceTest {
         service = new CompartirPublicacionService(enviarMensajeUseCase, publicacionMuroFinder, userSummaryFinder);
         lenient().when(userSummaryFinder.findById(autor)).thenReturn(
                 Optional.of(new UserSummary(autor, "Maria Quispe", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
-        lenient().when(enviarMensajeUseCase.enviar(any())).thenAnswer(inv -> mensajeDe(inv.getArgument(0)));
+        lenient().when(enviarMensajeUseCase.enviar(any()))
+                .thenAnswer(inv -> new MensajeEnriquecido(mensajeDe(inv.getArgument(0)), null, null, null, null));
     }
 
     /** Lo que devolveria el {@code enviar} real, para que el servicio tenga algo que retornar. */
     private static Mensaje mensajeDe(EnviarMensajeCommand cmd) {
         return Mensaje.escribir(MensajeId.of(UUID.randomUUID()), cmd.conversacionId(), cmd.actorId(), cmd.tipo(),
                 cmd.texto(), cmd.mediaBucket(), cmd.mediaRuta(), cmd.mediaMime(), cmd.mediaBytes(),
-                cmd.mediaDuracionS(), cmd.respuestaAId(), AHORA);
+                cmd.mediaDuracionS(), null, AHORA);
     }
 
     private CompartirPublicacionCommand comando() {

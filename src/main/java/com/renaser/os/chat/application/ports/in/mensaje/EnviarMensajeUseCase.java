@@ -1,7 +1,6 @@
 package com.renaser.os.chat.application.ports.in.mensaje;
 
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
-import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
 import com.renaser.os.shared.application.SelfValidating;
@@ -10,7 +9,12 @@ import jakarta.validation.constraints.NotNull;
 
 public interface EnviarMensajeUseCase {
 
-    Mensaje enviar(EnviarMensajeCommand command);
+    /**
+     * Guarda el mensaje y lo devuelve con el resumen de lo que cita, si cita algo (D-251). El resto de
+     * {@link MensajeEnriquecido} (nombre, foto, URL firmada, marca de entrega) viaja vacío: quien envía ya lo
+     * tiene. {@code respuestaAId} es opcional: sin él, todo sigue igual que antes de D-251.
+     */
+    MensajeEnriquecido enviar(EnviarMensajeCommand command);
 
     /**
      * QUIEN eligio {@code mediaRuta}. Es el dato que faltaba para distinguir compartir una

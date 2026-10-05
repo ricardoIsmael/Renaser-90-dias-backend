@@ -5,8 +5,6 @@ import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
 
-import java.time.Instant;
-
 /**
  * Proyeccion de lectura de un {@link Mensaje} para el listado (#29): agrega
  * nombre/avatar del emisor y, si responde a otro mensaje, su preview ya resuelto.
@@ -24,13 +22,17 @@ import java.time.Instant;
  * <p>{@code estadoDeEntrega} (D-208): ✓ o ✓✓ de un mensaje PROPIO de quien mira; {@code null} en los de
  * otras personas y en los del programa, que no llevan marca. Sale de una sola lectura de los
  * participantes por página ({@code ConsultarLecturaUseCase}), nunca por mensaje.
+ *
+ * <p>{@code respuestaPreview} (D-251): el resumen del citado, o {@code null} si el mensaje no responde a nada
+ * o si lo que citaba ya no se puede mostrar. Las dos cosas se separan con {@link #citaNoDisponible}.
  */
 public record MensajeEnriquecido(Mensaje mensaje, String nombreEmisor, String avatarEmisor,
                                   RespuestaPreview respuestaPreview, String mediaUrl,
                                   EstadoDeEntrega estadoDeEntrega) {
 
     /** Cuantos caracteres del texto original entran en el preview de "respuesta a" —
-     * decision propia, no confirmada por producto (ver informe de este encargo). */
+     * decision propia, no confirmada por producto (ver informe de este encargo). Se cuentan en
+     * caracteres Unicode, no en unidades UTF-16: así un emoji nunca queda partido por la mitad (D-251). */
     public static final int LARGO_PREVIEW = 80;
 
     /** Sin marca de entrega: se la pone después {@link #conEstadoDeEntrega}, cuando es de quien mira. */
@@ -43,11 +45,25 @@ public record MensajeEnriquecido(Mensaje mensaje, String nombreEmisor, String av
         return new MensajeEnriquecido(mensaje, nombreEmisor, avatarEmisor, respuestaPreview, mediaUrl, estado);
     }
 
-    /** {@code eliminadoEn} espeja el tombstone del mensaje original (hoy siempre
-     * {@code null}: no existe todavia un caso de uso que borre mensajes — ver
-     * {@link Mensaje}). Se incluye igual para que el frontend no necesite otro campo el
-     * dia que ese caso de uso exista. */
+    /**
+     * Era una respuesta y lo que citaba ya no se puede mostrar (D-251): su autor lo borró, la moderación lo
+     * retiró, o se borró con la cuenta de quien lo escribió. La app dice «Mensaje eliminado».
+     */
+    public boolean citaNoDisponible() {
+        return mensaje.esRespuesta() && respuestaPreview == null;
+    }
+
+    /**
+     * El resumen del mensaje citado (#29, ampliado en D-251): lo justo para dibujar la cita sin otra llamada.
+     *
+     * @param previewTexto los primeros {@link #LARGO_PREVIEW} caracteres, en una sola línea; {@code null} si no
+     *                     tiene texto (una foto o un audio sin pie)
+     * @param mediaMime    para que la app reconozca un sticker igual que en la burbuja (IMAGE + {@code image/webp}
+     *                     + el texto «Sticker Renaser: …»)
+     * @param mediaUrl     la URL firmada, solo si el citado es una imagen: la miniatura de la cita
+     * @param deQuienMira  si el citado lo escribió quien está mirando (la app pone «Tú»)
+     */
     public record RespuestaPreview(MensajeId id, String nombreEmisor, TipoMensaje tipo, String previewTexto,
-                                    Instant eliminadoEn) {
+                                    String mediaMime, Short mediaDuracionS, String mediaUrl, boolean deQuienMira) {
     }
 }

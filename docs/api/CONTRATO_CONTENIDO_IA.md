@@ -272,8 +272,24 @@ curl -s -X POST http://localhost:8080/api/v1/chat/conversations/33333333-3333-33
   ```
   - `type`: `@NotBlank`, valores válidos `TEXT|IMAGE|AUDIO|VIDEO|SYSTEM` — cualquier otro string lanza `IllegalArgumentException("Tipo de mensaje invalido: " + type)` → 400 (parseo a mano en el controller, no un enum de Jackson).
   - Resto de campos: sin `@NotBlank`/`@NotNull` a nivel DTO — la validación real (ej. `SISTEMA` no necesita texto/media, cualquier otro tipo sí; `mediaBucket`/`mediaPath` viajan juntos o ninguno) vive en el dominio (`Mensaje.escribir`), y si se viola lanza `IllegalArgumentException` → 400.
-  - `replyToId`: si viene, debe ser un mensaje **de la misma conversación** — si no, `IllegalArgumentException("No se puede responder a un mensaje de otra conversacion")` → 400; si el mensaje no existe, `NoSuchElementException("Mensaje no encontrado: <id>")` → 404.
-- **201 CREATED** → `MensajeResponse`: `{"id","conversationId","senderId","type","text","mediaBucket","mediaPath","mediaMime","mediaBytes","mediaDurationSeconds","hidden","replyToId","createdAt"}`.
+  - `replyToId` (opcional; la app vieja no lo manda y todo sigue igual): un mensaje **de la misma conversación** que siga a la vista (D-251, `Cita.aResponder`). Si no existe o es de otra conversación → **400** `"El mensaje que quieres responder no está en esta conversación"` (el mismo texto en los dos casos); si su autor lo borró o la moderación lo retiró → **400** `"Ese mensaje fue eliminado y ya no se puede responder"`. Quien no participa recibe el 403 antes de que se mire el citado.
+  > **Corregido 2026-10-05 (D-251).** Decía: otra conversación → 400 `"No se puede responder a un mensaje de otra conversacion"`; inexistente → 404 `"Mensaje no encontrado: <id>"`. Las dos respuestas distintas contaban si un id existía en un chat ajeno.
+- **201 CREATED** → `MensajeResponse` (el mismo de §2.5): `{"id","conversationId","senderId","senderName","senderAvatarUrl","type","text","mediaBucket","mediaPath","mediaMime","mediaBytes","mediaDurationSeconds","mediaUrl","hidden","replyToId","replyTo","createdAt","status","replyToDeleted"}`. En la respuesta de enviar `senderName`, `senderAvatarUrl`, `mediaUrl` y `status` van `null` (quien envía ya los tiene); `replyTo` sí viene resuelto desde D-251. Ejemplo de una respuesta:
+  ```json
+  {
+    "id": "8d0c…", "conversationId": "3333…", "senderId": "1111…", "senderName": null, "senderAvatarUrl": null,
+    "type": "TEXT", "text": "¡Sí, yo también!", "mediaBucket": null, "mediaPath": null, "mediaMime": null,
+    "mediaBytes": null, "mediaDurationSeconds": null, "mediaUrl": null, "hidden": false,
+    "replyToId": "5a1e…",
+    "replyTo": {
+      "id": "5a1e…", "senderName": "Luis Soto", "type": "TEXT", "text": "¿Vamos mañana a correr?",
+      "deletedAt": null, "mediaMime": null, "mediaDurationSeconds": null, "mediaUrl": null, "mine": false
+    },
+    "createdAt": "2026-10-05T18:20:11.123456Z", "status": null, "replyToDeleted": false
+  }
+  ```
+  - `replyTo` (D-251): `text` = los primeros 80 caracteres del citado, en un renglón (o `null` si es una foto/audio sin texto); `type` = `TEXT|IMAGE|AUDIO|VIDEO|SYSTEM`; `mediaMime` para reconocer un sticker (`IMAGE` + `image/webp` + texto `Sticker Renaser: …`); `mediaDurationSeconds` de un audio; `mediaUrl` = miniatura firmada solo si el citado es imagen; `mine` = el citado lo escribió quien mira; `deletedAt` se conserva por el APK publicado y va siempre `null`.
+  - `replyToDeleted` (D-251): `true` si el mensaje era una respuesta y lo citado ya no se puede mostrar (borrado, retirado o borrado con la cuenta de su autor) → la app dice «Mensaje eliminado»; entonces `replyTo` y `replyToId` van `null`.
 - **Errores:** 404 conversación inexistente; **403** `"No sos participante de esta conversacion"` si el actor no es miembro.
 - Efecto secundario: tras el `COMMIT` de la transacción (no antes), publica el mensaje a Redis Pub/Sub (canal `chat:conversacion:{id}`) para el fan-out en vivo por WebSocket — fire-and-forget, si Redis falla solo se loguea (el mensaje ya quedó durable en Postgres). También marca `ultimo_leido_en` del propio emisor (ya "leyó" lo que acaba de escribir).
 

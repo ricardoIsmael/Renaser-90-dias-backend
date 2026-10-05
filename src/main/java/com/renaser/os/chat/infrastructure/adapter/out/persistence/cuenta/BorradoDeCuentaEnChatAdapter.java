@@ -20,8 +20,9 @@ import java.util.UUID;
  *       el que participa se borran ENTEROS, con los mensajes de los dos lados: un uno a uno sin la otra
  *       persona no tiene sentido y la app espera encontrar a la contraparte.</li>
  *   <li>En los chats de grupo ({@code CELULA}) y el {@code GLOBAL} se borran SUS mensajes y su fila de
- *       participante; los demás quedan. Las respuestas de otros a un mensaje suyo quedan con
- *       {@code respuesta_a_id} en NULL (FK {@code ON DELETE SET NULL}). Esto incluye su bienvenida de
+ *       participante; los demás quedan. Las respuestas de otros a un mensaje suyo conservan su
+ *       {@code respuesta_a_id} (sin FK desde V92, D-251) y la app las muestra citando un «Mensaje eliminado»:
+ *       el texto, el autor y el archivo del citado se van con su fila. Esto incluye su bienvenida de
  *       grupo: {@code BienvenidaEnGrupoService} la guarda como mensaje {@code SISTEMA} a nombre del
  *       propio aprendiz ({@code emisor_id}), así que cae con el resto de sus mensajes.</li>
  *   <li>{@code mensajes_bienvenida} (la marca de la bienvenida de soporte) de la persona.</li>

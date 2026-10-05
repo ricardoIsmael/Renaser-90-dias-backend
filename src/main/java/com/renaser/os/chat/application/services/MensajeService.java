@@ -5,7 +5,6 @@ import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.OrigenMedia;
 import com.renaser.os.chat.application.ports.in.mensaje.ListarMensajesUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.MensajeEnriquecido;
-import com.renaser.os.chat.application.ports.in.mensaje.MensajeEnriquecido.RespuestaPreview;
 import com.renaser.os.chat.application.ports.in.mensaje.SolicitarUrlSubidaMediaChatUseCase;
 import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
@@ -17,6 +16,7 @@ import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
+import com.renaser.os.chat.domain.model.mensaje.Cita;
 import com.renaser.os.chat.domain.model.mensaje.ConfirmacionDeLectura;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
@@ -40,12 +40,8 @@ import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -55,7 +51,6 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     private static final int LIMITE_POR_DEFECTO = 30;
     private static final int LIMITE_MAXIMO = 100;
     private static final Duration VALIDEZ_URL_SUBIDA = Duration.ofMinutes(10);
-    private static final Duration VALIDEZ_URL_LECTURA = Duration.ofMinutes(15);
 
     private final LoadConversacionPort loadConversacionPort;
     private final EsParticipantePort esParticipantePort;
@@ -73,6 +68,8 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     private final ApplicationEventPublisher eventos;
     /** D-237: cuanta media se sube al chat, por tipo. */
     private final RegistrarMetricaDelChatPort metricas;
+    /** Nombre, foto, URL firmada y el resumen de la cita, en lote (#29, D-251). */
+    private final MensajesParaMostrar paraMostrar;
 
     public MensajeService(LoadConversacionPort loadConversacionPort, EsParticipantePort esParticipantePort,
                            AccesoAChatsDeGrupo accesoAChatsDeGrupo,
@@ -95,16 +92,22 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         this.clock = clock;
         this.idGenerator = idGenerator;
         this.eventos = eventos;
+        this.paraMostrar = new MensajesParaMostrar(loadMensajePort, userSummaryFinder, almacenamientoPort);
     }
 
+    /**
+     * Devuelve el mensaje guardado con el resumen de lo que cita (D-251), para que la app dibuje la cita en
+     * la burbuja que acaba de agregar sin pedir el historial. El resto de lo enriquecido (nombre, foto, URL
+     * firmada, ✓) sigue viajando {@code null}, como antes: la app lo toma de lo que mandó.
+     */
     @Override
     @Transactional
-    public Mensaje enviar(EnviarMensajeCommand command) {
+    public MensajeEnriquecido enviar(EnviarMensajeCommand command) {
         requireActivo(command.actorId());
         requireParticipante(requireConversacion(command.conversacionId()), command.actorId());
-        if (command.respuestaAId() != null) {
-            requireRespuestaEnMismaConversacion(command.respuestaAId(), command.conversacionId());
-        }
+        // Después de la participación, a propósito: a quien no está en la conversación se le dice 403 antes
+        // de contarle nada sobre el mensaje que quiso citar.
+        Cita cita = citaPedida(command);
 
         /* En microsegundos, que es lo que guarda `timestamptz` (E-344). `Instant.now()` trae
            nanosegundos: la respuesta de este POST decía un `createdAt` que no era el guardado, y la
@@ -116,8 +119,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
                 command.conversacionId());
         Mensaje mensaje = Mensaje.escribir(MensajeId.of(idGenerator.newId()), command.conversacionId(),
                 command.actorId(), command.tipo(), command.texto(), command.mediaBucket(), command.mediaRuta(),
-                command.mediaMime(), command.mediaBytes(), command.mediaDuracionS(), command.respuestaAId(),
-                ahora);
+                command.mediaMime(), command.mediaBytes(), command.mediaDuracionS(), cita, ahora);
         Mensaje guardado = saveMensajePort.save(mensaje);
         // El emisor "ya leyo" hasta el mensaje que acaba de escribir.
         marcarLeidoPort.marcarLeido(command.conversacionId(), command.actorId(), ahora);
@@ -126,7 +128,16 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         if (guardado.mediaRuta() != null && command.origenMedia() != OrigenMedia.MURO_COMPARTIDO) {
             metricas.mediaEnviada(guardado.tipo());
         }
-        return guardado;
+        return paraMostrar.recienEnviado(guardado, cita, command.actorId());
+    }
+
+    /** {@code null} si la app no pidió responder (la app vieja nunca lo pide). Las reglas, en {@link Cita}. */
+    private Cita citaPedida(EnviarMensajeCommand command) {
+        if (command.respuestaAId() == null) {
+            return null;
+        }
+        return Cita.aResponder(command.respuestaAId(), loadMensajePort.porId(command.respuestaAId()),
+                command.conversacionId());
     }
 
     /**
@@ -221,7 +232,8 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         List<Mensaje> resultado = hayMas ? pagina.subList(0, limiteEfectivo) : pagina;
         Instant siguienteCursor = hayMas ? resultado.get(resultado.size() - 1).creadoEn() : null;
 
-        List<MensajeEnriquecido> enriquecidos = conMarcaDeEntrega(enriquecer(resultado), conversacion, actorId);
+        List<MensajeEnriquecido> enriquecidos = conMarcaDeEntrega(paraMostrar.deLaPagina(resultado, actorId),
+                conversacion, actorId);
         return new PaginaMensajes(enriquecidos, siguienteCursor, hayMas);
     }
 
@@ -239,92 +251,6 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
                 .map(enriquecido -> enriquecido.conEstadoDeEntrega(
                         confirmacion.estadoPara(enriquecido.mensaje(), quienMira).orElse(null)))
                 .toList();
-    }
-
-    /**
-     * Resuelve nombre/avatar del emisor de cada mensaje y el preview de "respuesta a"
-     * para TODA la pagina en, como mucho, DOS consultas EN LOTE — una a
-     * {@code loadMensajePort.porIds} (mensajes originales citados) y una a
-     * {@code userSummaryFinder.findByIds} (todos los emisores involucrados, propios y de
-     * los originales) — nunca una consulta por mensaje (#29, mismo criterio que
-     * {@code TracksDelDiaProyeccionService} de `habits`).
-     */
-    private List<MensajeEnriquecido> enriquecer(List<Mensaje> mensajes) {
-        if (mensajes.isEmpty()) {
-            return List.of();
-        }
-        List<MensajeId> idsRespuesta = mensajes.stream().map(Mensaje::respuestaAId).filter(Objects::nonNull)
-                .distinct().toList();
-        Map<MensajeId, Mensaje> originales = idsRespuesta.isEmpty() ? Map.of() : loadMensajePort.porIds(idsRespuesta);
-
-        // Los mensajes del programa no se atribuyen a la persona guardada en emisor_id (D-199): no se la busca.
-        Set<UserId> idsUsuarios = new LinkedHashSet<>();
-        mensajes.stream().filter(m -> !m.esDelPrograma()).forEach(m -> idsUsuarios.add(m.emisorId()));
-        originales.values().stream().filter(o -> !o.esDelPrograma()).forEach(o -> idsUsuarios.add(o.emisorId()));
-        Map<UserId, UserSummary> usuarios = userSummaryFinder.findByIds(idsUsuarios);
-
-        return mensajes.stream().map(m -> aEnriquecido(m, originales, usuarios)).toList();
-    }
-
-    private MensajeEnriquecido aEnriquecido(Mensaje mensaje, Map<MensajeId, Mensaje> originales,
-                                              Map<UserId, UserSummary> usuarios) {
-        RespuestaPreview preview = mensaje.respuestaAId() == null ? null
-                : previewDe(originales.get(mensaje.respuestaAId()), usuarios);
-        if (mensaje.esDelPrograma()) {
-            return new MensajeEnriquecido(mensaje, Mensaje.NOMBRE_DEL_PROGRAMA, null, preview, urlDeLectura(mensaje));
-        }
-        UserSummary emisor = usuarios.get(mensaje.emisorId());
-        return new MensajeEnriquecido(mensaje, emisor != null ? emisor.fullName() : null,
-                emisor != null ? emisor.avatarUrl() : null, preview, urlDeLectura(mensaje));
-    }
-
-    /**
-     * Deja de ser {@code static} a proposito: firmar necesita el puerto de almacenamiento. Se
-     * firma por mensaje y no en lote porque {@code firmarSubida}/{@code firmarLectura} son calculo
-     * local del SDK (no hay ida y vuelta a S3), asi que no es una consulta N+1.
-     */
-    private String urlDeLectura(Mensaje mensaje) {
-        if (mensaje.mediaRuta() == null) {
-            return null;
-        }
-        return almacenamientoPort.firmarLectura(mensaje.mediaRuta(), VALIDEZ_URL_LECTURA).toString();
-    }
-
-    /** {@code null} si el mensaje original ya no esta disponible (no deberia pasar hoy —
-     * no hay borrado fisico — pero no hay razon para reventar el listado completo por
-     * eso). */
-    private static RespuestaPreview previewDe(Mensaje original, Map<UserId, UserSummary> usuarios) {
-        if (original == null) {
-            return null;
-        }
-        return new RespuestaPreview(original.id(), nombreDeQuienFirma(original, usuarios), original.tipo(),
-                recortar(original.texto()), original.eliminadoEn());
-    }
-
-    /** El programa firma sus mensajes; los demás, su emisor (o nadie si su cuenta ya no está). */
-    private static String nombreDeQuienFirma(Mensaje mensaje, Map<UserId, UserSummary> usuarios) {
-        if (mensaje.esDelPrograma()) {
-            return Mensaje.NOMBRE_DEL_PROGRAMA;
-        }
-        UserSummary emisor = usuarios.get(mensaje.emisorId());
-        return emisor != null ? emisor.fullName() : null;
-    }
-
-    private static String recortar(String texto) {
-        if (texto == null) {
-            return null;
-        }
-        String limpio = texto.strip();
-        return limpio.length() <= MensajeEnriquecido.LARGO_PREVIEW ? limpio
-                : limpio.substring(0, MensajeEnriquecido.LARGO_PREVIEW) + "…";
-    }
-
-    private void requireRespuestaEnMismaConversacion(MensajeId respuestaAId, ConversacionId conversacionId) {
-        Mensaje original = loadMensajePort.porId(respuestaAId)
-                .orElseThrow(() -> new NoSuchElementException("Mensaje no encontrado: " + respuestaAId));
-        if (!original.conversacionId().equals(conversacionId)) {
-            throw new IllegalArgumentException("No se puede responder a un mensaje de otra conversacion");
-        }
     }
 
     /**

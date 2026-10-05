@@ -12,6 +12,7 @@ import com.renaser.os.chat.application.ports.out.participante.PertenenciaVigente
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
+import com.renaser.os.chat.domain.model.mensaje.Cita;
 import com.renaser.os.chat.domain.model.mensaje.ConfirmacionDeLectura;
 import com.renaser.os.chat.domain.model.mensaje.ContenidoDelPrograma;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
@@ -125,7 +126,7 @@ class MensajeServiceTest {
     void enviarPublicaElAviso() {
         when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
 
-        Mensaje guardado = service.enviar(comandoDeTexto(activo));
+        Mensaje guardado = service.enviar(comandoDeTexto(activo)).mensaje();
 
         assertThat(publicados).containsExactly(new com.renaser.os.chat.api.MensajeDeChatGuardadoEvent(
                 guardado.id().value(), conversacionId.value()));
@@ -160,7 +161,7 @@ class MensajeServiceTest {
     void enviarGuardaElMensajeYMarcaLeidoAlEmisor() {
         when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
 
-        Mensaje enviado = service.enviar(comandoDeTexto(activo));
+        Mensaje enviado = service.enviar(comandoDeTexto(activo)).mensaje();
 
         assertThat(enviado.id()).isEqualTo(MensajeId.of(ID_GENERADO));
         assertThat(enviado.texto()).isEqualTo("hola");
@@ -182,7 +183,7 @@ class MensajeServiceTest {
         Instant enMicros = Instant.parse("2026-09-27T17:00:26.869554Z");
         when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
 
-        Mensaje enviado = servicioCon(FixedClock.at(conNanos)).enviar(comandoDeTexto(activo));
+        Mensaje enviado = servicioCon(FixedClock.at(conNanos)).enviar(comandoDeTexto(activo)).mensaje();
 
         assertThat(enviado.creadoEn()).isEqualTo(enMicros);
         verify(marcarLeidoPort).marcarLeido(conversacionId, activo, enMicros);
@@ -263,7 +264,7 @@ class MensajeServiceTest {
         when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
         String propia = "chat/" + conversacionId.value() + "/fotos/" + UUID.randomUUID();
 
-        Mensaje enviado = service.enviar(comandoConMedia(propia, OrigenMedia.CLIENTE));
+        Mensaje enviado = service.enviar(comandoConMedia(propia, OrigenMedia.CLIENTE)).mensaje();
 
         assertThat(enviado.mediaRuta()).isEqualTo(propia);
         verify(saveMensajePort).save(any());
@@ -280,7 +281,7 @@ class MensajeServiceTest {
         when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
         String portada = "muro/fotos/" + UUID.randomUUID() + "/" + UUID.randomUUID();
 
-        Mensaje enviado = service.enviar(comandoConMedia(portada, OrigenMedia.MURO_COMPARTIDO));
+        Mensaje enviado = service.enviar(comandoConMedia(portada, OrigenMedia.MURO_COMPARTIDO)).mensaje();
 
         assertThat(enviado.mediaRuta()).isEqualTo(portada);
         verify(saveMensajePort).save(any());
@@ -301,7 +302,7 @@ class MensajeServiceTest {
         when(esParticipantePort.esParticipante(conversacionId, activo)).thenReturn(true);
         String evidencia = "rocas/" + UUID.randomUUID() + "/" + UUID.randomUUID();
 
-        Mensaje enviado = service.enviar(comandoConMedia(evidencia, OrigenMedia.MURO_COMPARTIDO));
+        Mensaje enviado = service.enviar(comandoConMedia(evidencia, OrigenMedia.MURO_COMPARTIDO)).mensaje();
 
         assertThat(enviado.mediaRuta()).isEqualTo(evidencia);
         verify(saveMensajePort).save(any());
@@ -444,7 +445,8 @@ class MensajeServiceTest {
         Mensaje original = Mensaje.escribir(nuevoMensajeId(), conversacionId, otroActivo, TipoMensaje.TEXTO,
                 textoLargo, null, null, null, null, null, null, CLOCK.now());
         Mensaje respuesta = Mensaje.escribir(nuevoMensajeId(), conversacionId, activo, TipoMensaje.TEXTO,
-                "respondo", null, null, null, null, null, original.id(), CLOCK.now());
+                "respondo", null, null, null, null, null, Cita.aResponder(original.id(), Optional.of(original),
+                        conversacionId), CLOCK.now());
 
         when(loadMensajePort.pagina(conversacionId, null, 31)).thenReturn(List.of(respuesta));
         when(loadMensajePort.porIds(List.of(original.id()))).thenReturn(Map.of(original.id(), original));
@@ -501,7 +503,8 @@ class MensajeServiceTest {
         Mensaje delPrograma = Mensaje.delPrograma(nuevoMensajeId(), conversacionId, activo,
                 ContenidoDelPrograma.texto("Te damos la bienvenida"), CLOCK.now());
         Mensaje respuesta = Mensaje.escribir(nuevoMensajeId(), conversacionId, activo, TipoMensaje.TEXTO,
-                "¡Gracias!", null, null, null, null, null, delPrograma.id(), CLOCK.now());
+                "¡Gracias!", null, null, null, null, null, Cita.aResponder(delPrograma.id(), Optional.of(delPrograma),
+                        conversacionId), CLOCK.now());
         when(loadMensajePort.pagina(conversacionId, null, 31)).thenReturn(List.of(respuesta));
         when(loadMensajePort.porIds(List.of(delPrograma.id()))).thenReturn(Map.of(delPrograma.id(), delPrograma));
         when(userSummaryFinder.findByIds(any())).thenReturn(Map.of(

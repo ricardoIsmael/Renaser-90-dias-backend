@@ -93,7 +93,7 @@ public class CompartirPublicacionService implements CompartirPublicacionUseCase 
                 // media no sea del prefijo de la conversacion, y se apoya entera en el
                 // `.filter(!oculta())` de `paraCompartir`, cinco lineas mas arriba: sin esa puerta
                 // esto volveria a ser el permiso incondicional de namespace que era antes.
-                OrigenMedia.MURO_COMPARTIDO));
+                OrigenMedia.MURO_COMPARTIDO)).mensaje();
     }
 
     /**
