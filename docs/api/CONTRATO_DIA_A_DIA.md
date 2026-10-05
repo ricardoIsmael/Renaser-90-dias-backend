@@ -65,9 +65,13 @@ Hábitos (tracks) del día del propio actor.
   "respuestaTexto": null, "calificacionProductividad": null, "completadoEn": null,
   "tituloHabito": "Ducha fría", "tipoHabito": "CHECKBOX", "guia": null,
   "horaDisparo": "06:00:00", "horaLimite": "08:00:00",
-  "puntosEnJuego": 10, "puntosMaximos": 10, "plazoEvidencia": "2026-08-26T16:10:00Z"
+  "puntosEnJuego": 10, "puntosMaximos": 10, "plazoEvidencia": "2026-08-26T16:10:00Z",
+  "tieneEvidencia": false, "medicion": null, "rachaDias": 5
 }]
 ```
+
+> **Corregido 2026-10-05 (D-254).** El ejemplo no traía `tieneEvidencia` (D-113) ni `medicion` (D-226),
+> que el endpoint ya devolvía; se agregan junto con `rachaDias`.
 
 > **Corregido 2026-09-05.** Este bloque decía `List<RegistroHabitoResponse>` y omitía los cinco
 > campos de catálogo (`tituloHabito`, `tipoHabito`, `guia`, `horaDisparo`, `horaLimite`) que el
@@ -97,6 +101,12 @@ Hábitos (tracks) del día del propio actor.
   el día 7 y `true` el día 8. Los registros generados antes del 2026-09-25 conservan la foto que tenían.
   `estado`: `PENDIENTE | EN_CURSO | COMPLETADO | FALLIDO | EXPIRADO` (máquina de estados de
   `EstadoRegistro`). `COMPLETADO`/`FALLIDO`/`EXPIRADO` son terminales.
+
+  `rachaDias` (D-254, 2026-10-05): entero ≥ 0, la racha de **ese hábito** hasta hoy — días programados
+  seguidos en que se cumplió. Un día en que el hábito no le toca, o en pausa, no corta ni suma (no tiene
+  registro); lo pendiente de hoy no corta; un día ya terminado sin cumplir corta. No cuenta días anteriores a
+  `fecha_inicio`. Es el «🔥 N días» de Training. Aditivo: un cliente que no lo conoce lo ignora; la app lo
+  trata como «sin dato» (no muestra racha) cuando no viene. Ver supuestos S-1..S-5 en D-254.
 
 - **Quién puede llamarlo**: cualquier actor, sobre sí mismo (`actorId == participanteId`, siempre, porque el
   endpoint no toma un id de otro en la URL — ambos son el mismo header).

@@ -44,6 +44,11 @@ import java.util.UUID;
  * (hoy KILÓMETROS DIARIOS), {@code null} en los demas. Trae la unidad ({@code "KILOMETROS"}), lo
  * registrado ese dia ({@code valorDelDia}, {@code null} si todavia no) y el {@code total} acumulado del
  * programa hasta ese dia. Aditivo: un cliente que no lo lee no cambia.
+ *
+ * <p><b>Agregado 2026-10-05 (D-254):</b> {@code rachaDias} — cuantos dias programados seguidos cumplio
+ * este habito hasta hoy (el «🔥 N dias» de Training). Los dias en que no le toca y los dias en pausa
+ * no cortan ni suman; hoy pendiente no corta. Aditivo: la app vieja lo ignora ({@code passthrough()}
+ * en su esquema), y la nueva no muestra la racha si el campo no viene.
  */
 public record RegistroHabitoConCatalogoResponse(String id, UUID habitoId, LocalDate fechaEjecucion, int diaPrograma,
                                                   String tipoDia, boolean esOpcional, String estado,
@@ -52,7 +57,8 @@ public record RegistroHabitoConCatalogoResponse(String id, UUID habitoId, LocalD
                                                   String tituloHabito, String tipoHabito, GuiaResumenResponse guia,
                                                   LocalTime horaDisparo, LocalTime horaLimite, Integer puntosEnJuego,
                                                   Integer puntosMaximos, Instant plazoEvidencia,
-                                                  boolean tieneEvidencia, MedicionResponse medicion) {
+                                                  boolean tieneEvidencia, MedicionResponse medicion,
+                                                  Integer rachaDias) {
 
     public static RegistroHabitoConCatalogoResponse from(TrackDelDiaConCatalogo vista) {
         var r = vista.registro();
@@ -64,7 +70,7 @@ public record RegistroHabitoConCatalogoResponse(String id, UUID habitoId, LocalD
                 vista.guia() != null ? GuiaResumenResponse.from(vista.guia()) : null, vista.horaDisparo(),
                 vista.horaLimite(), enJuego != null ? enJuego.siCompletaAhora() : null,
                 enJuego != null ? enJuego.maximo() : null, enJuego != null ? enJuego.plazo() : null,
-                vista.tieneEvidencia(), MedicionResponse.from(vista.medicion()));
+                vista.tieneEvidencia(), MedicionResponse.from(vista.medicion()), vista.rachaDias());
     }
 
     /** D-226. {@code unidad} es el nombre del enum: hoy solo {@code KILOMETROS}. */

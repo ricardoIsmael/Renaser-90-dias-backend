@@ -77,7 +77,8 @@ class TracksDelDiaProyeccionServiceTest {
     void setUp() {
         service = new TracksDelDiaProyeccionService(consultarTracksUseCase, generarTracksUseCase, loadHabitoPort,
                 loadHorarioPort, loadPreferenciaPort, loadGuiaPort, registrosConEvidenciaFinder,
-                loadRenombrePort, new MedicionesDelDia(java.util.List.of(), (p, c, h) -> java.util.Map.of()), FixedClock.at(AHORA),
+                loadRenombrePort, new MedicionesDelDia(java.util.List.of(), (p, c, h) -> java.util.Map.of()),
+                new RachasDeHabitos((p, h, d, a) -> java.util.Map.of()), FixedClock.at(AHORA),
                 org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
     }
 

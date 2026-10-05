@@ -52,7 +52,8 @@ import java.util.stream.Collectors;
  * no una consulta por registro. Desde D-113 son cinco consultas de lote y no cuatro: la
  * quinta le pregunta a {@code evidence} cuales de esos registros ya tienen evidencia
  * ({@code RegistrosConEvidenciaFinder}), para que el cliente no tenga que reconstruirlo
- * cruzando dos endpoints paginados.
+ * cruzando dos endpoints paginados. Desde D-254 se suma la racha de cada habito
+ * ({@link RachasDeHabitos}): una consulta de lote mas en el caso normal.
  */
 @Service
 public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCatalogoUseCase {
@@ -68,6 +69,8 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     private final LoadRenombreHabitoPort loadRenombrePort;
     /** D-226: la unidad y el total acumulado de los habitos medibles del dia (km). */
     private final MedicionesDelDia medicionesDelDia;
+    /** D-254: la racha de cada habito del dia, en consultas de lote por pagina de fechas. */
+    private final RachasDeHabitos rachasDeHabitos;
     private final Clock clock;
     /** V-5: la proyeccion entera en una transaccion de solo lectura (una conexion, sin flush). */
     private final TransactionTemplate soloLectura;
@@ -79,8 +82,8 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
                                           LoadGuiaHabitoPort loadGuiaPort,
                                           RegistrosConEvidenciaFinder registrosConEvidenciaFinder,
                                           LoadRenombreHabitoPort loadRenombrePort,
-                                          MedicionesDelDia medicionesDelDia, Clock clock,
-                                          PlatformTransactionManager transactionManager) {
+                                          MedicionesDelDia medicionesDelDia, RachasDeHabitos rachasDeHabitos,
+                                          Clock clock, PlatformTransactionManager transactionManager) {
         this.consultarTracksUseCase = consultarTracksUseCase;
         this.generarTracksUseCase = generarTracksUseCase;
         this.loadHabitoPort = loadHabitoPort;
@@ -90,6 +93,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         this.registrosConEvidenciaFinder = registrosConEvidenciaFinder;
         this.loadRenombrePort = loadRenombrePort;
         this.medicionesDelDia = medicionesDelDia;
+        this.rachasDeHabitos = rachasDeHabitos;
         this.clock = clock;
         this.soloLectura = new TransactionTemplate(transactionManager);
         this.soloLectura.setReadOnly(true);
@@ -175,6 +179,8 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         MomentoDelParticipante momento = new MomentoDelParticipante(dia.zona(), clock.now());
         // D-226: solo consulta si el dia tiene un habito medible (hoy, los km).
         var mediciones = medicionesDelDia.de(participanteId, registros, habitosPorId, fecha);
+        // D-254: la racha de todos los habitos del dia, de lote y por paginas — nunca una consulta por habito.
+        Map<HabitoId, Integer> rachas = rachasDeHabitos.de(participanteId, dia);
         return new ProyeccionDelDia(fecha, registros.stream()
                 .map(registro -> construirVista(registro, new CatalogoDeHabito(
                         habitosPorId.get(registro.habitoId()),
@@ -182,7 +188,8 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
                         guiasPorHabito.getOrDefault(registro.habitoId(), List.of()),
                         preferenciasPorHabito.get(registro.habitoId()),
                         renombresPorHabito.get(registro.habitoId())), momento,
-                        conEvidencia.contains(registro.id().value())).conMedicion(mediciones.get(registro)))
+                        conEvidencia.contains(registro.id().value())).conMedicion(mediciones.get(registro))
+                        .conRacha(rachas.get(registro.habitoId())))
                 .toList());
     }
 

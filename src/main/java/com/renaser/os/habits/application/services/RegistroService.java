@@ -147,17 +147,19 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     @Override
     @Transactional(readOnly = true)
     public RegistrosDelDia consultarEnSuZona(UserId actorId, UserId participanteId, LocalDate fecha) {
-        ZoneId zona = ZoneId.of(requireSelf(actorId, participanteId).timezone());
-        return new RegistrosDelDia(loadRegistroPort.porParticipanteYFecha(participanteId, fecha), fecha, zona);
+        ProgresoParticipanteHabits progreso = requireSelf(actorId, participanteId);
+        return new RegistrosDelDia(loadRegistroPort.porParticipanteYFecha(participanteId, fecha), fecha,
+                ZoneId.of(progreso.timezone()), progreso.fechaInicio());
     }
 
     @Override
     @Transactional(readOnly = true)
     public RegistrosDelDia consultarHoy(UserId actorId, UserId participanteId) {
-        ZoneId zona = ZoneId.of(requireSelf(actorId, participanteId).timezone());
+        ProgresoParticipanteHabits progreso = requireSelf(actorId, participanteId);
+        ZoneId zona = ZoneId.of(progreso.timezone());
         LocalDate hoyEnSuZona = clock.now().atZone(zona).toLocalDate();
         return new RegistrosDelDia(loadRegistroPort.porParticipanteYFecha(participanteId, hoyEnSuZona), hoyEnSuZona,
-                zona);
+                zona, progreso.fechaInicio());
     }
 
     @Override

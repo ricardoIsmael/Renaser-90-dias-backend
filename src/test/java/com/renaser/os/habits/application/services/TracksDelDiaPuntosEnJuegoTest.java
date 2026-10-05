@@ -90,6 +90,7 @@ class TracksDelDiaPuntosEnJuegoTest {
                 org.mockito.Mockito.mock(
                         com.renaser.os.habits.application.ports.out.renombre.LoadRenombreHabitoPort.class),
                 new MedicionesDelDia(java.util.List.of(), (p, c, h) -> java.util.Map.of()),
+                new RachasDeHabitos((p, h, d, a) -> java.util.Map.of()),
                 FixedClock.at(MADRUGADA_UTC),
                 org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
     }
