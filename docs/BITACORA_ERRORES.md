@@ -13539,12 +13539,6 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 
 **Cómo evitar que vuelva:** `encabezadoAlCambiarDeVista.test.ts` monta la sección real (falla 3 de 4 contra lo viejo: «Expected: 0, Received: -154»), y `pantallasConBarraAlDesplazar.test.ts` exige `vista:` en `SeccionEventos`. Regla: **toda pantalla con varias vistas que comparte el hook le pasa `vista`; el cambio de vista no se puede deducir del scroll.**
 
-## E-517 · `mvn verify` cae con «Se ha excedido la cuota de disco» al leer `Cinzel.ttf` (entorno, laptop, RESUELTO 05/10)
+## E-517 · (duplicado de E-511) cuota de `/tmp` agotada por copias web de los agentes (entorno, 05/10)
 
-**Síntoma (05/10, agente del backend corriendo `./mvnw clean verify`):** el build se corta con **«Se ha excedido la cuota de disco»** al leer `Cinzel.ttf`. `/tmp` (tmpfs, cuota por usuario ~6,2 GB) estaba en 5,2 GB.
-
-**Causa real:** las copias web que los agentes del rediseño sirven para capturar con Playwright (un checkout entero del front **con `node_modules`**, ~2,1 GB cada una) quedaron en el scratchpad de la sesión, que vive en `/tmp`. Dos copias (`web-antes`, `web-despues`) llenaron la cuota que comparten todos los procesos del usuario, Maven incluido.
-
-**Solución:** se borraron las dos copias (nadie las tenía abiertas): `/tmp` bajó a 962 MB.
-
-**Cómo evitar que vuelva:** las copias para Metro/web van en `~/.cache/renaser-e2e/front-<rama>` (disco), **nunca en el scratchpad de `/tmp`**; y el agente que las crea las borra al terminar si no se van a reusar. Ante «cuota de disco» en un build, mirar primero `df -h /tmp` y `du -sh` del scratchpad.
+> **Corregido 05/10, mismo día.** Esta entrada describía el mismo incidente que **E-511** (rama `responder-mensajes`): «`mvn verify` cae con "Se ha excedido la cuota de disco" al leer `Cinzel.ttf`», causado por dos copias web de 2,1 GB en el scratchpad de `/tmp`. Se registró dos veces porque el coordinador y el agente del backend lo anotaron en ramas distintas a la vez. **La entrada válida es E-511**, que además trae el síntoma literal de los dos procesos y la causa completa (cuota de 6.267 MB por usuario, `--reflink` que no aplica entre sistemas de archivos). Este número queda reservado para que no se reuse.
