@@ -14,10 +14,15 @@ import java.util.Objects;
  *
  * <ul>
  *   <li>ADMIN/ALCHEMIST: cualquier evidencia, {@code participanteId} opcional.</li>
- *   <li>MENTOR: {@code participanteId} es OBLIGATORIO (no hay forma pública de listar
- *       "todos mis aprendices" en este alcance — ver docs/MODULO_EVIDENCE.md) y debe ser
- *       el mentor asignado a ese aprendiz, según {@code users.api.ParticipacionProgramaFinder}
- *       (mismo puerto y mismo criterio que {@code support.TicketMentorService.requireMentorAsignado}).</li>
+ *   <li>MENTOR: sin {@code participanteId} (o con el suyo), su propia evidencia — un mentor
+ *       también puede cursar el programa (D-07). Para la de un aprendiz tiene que nombrarlo
+ *       ({@code participanteId}; no hay forma pública de listar "todos mis aprendices" — ver
+ *       docs/MODULO_EVIDENCE.md) y ser el mentor asignado a ese aprendiz, según
+ *       {@code users.api.ParticipacionProgramaFinder} (mismo puerto y mismo criterio que
+ *       {@code support.TicketMentorService.requireMentorAsignado}).
+ *       <b>Corregido 2026-10-05 (E-519).</b> Decía que para el MENTOR {@code participanteId} era
+ *       OBLIGATORIO; desde el arreglo de la autoconsulta ({@code EvidenciaService.resolverFiltroSegunRol})
+ *       no lo es, y este javadoc había quedado atrás.</li>
  *   <li>Cualquier otro rol (TRAINEE, MENTOR_LEAD): solo la propia — {@code participanteId}
  *       nulo o igual a {@code actorId}; cualquier otro valor es 403.</li>
  * </ul>
