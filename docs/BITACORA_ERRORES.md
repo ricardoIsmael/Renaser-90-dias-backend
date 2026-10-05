@@ -13443,6 +13443,80 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 
 **Para que no vuelva:** no mezclar `pkill -f` con otros comandos que repitan el patrón en la misma invocación; preferir siempre `kill` con los PID anotados al levantar cada proceso (los scripts `levantar-*.sh` imprimen `PID`).
 
+## E-502 · En «Descanso y salud» la medicación no se podía escribir: quien respondía «Sí» no podía terminar la Ficha Inicial (app, producción, RESUELTO 05/10, D-250)
+
+**Síntoma (visto en el emulador con el código de `origin/master` del front, 05/10):** en el capítulo 2 de la Ficha Inicial, al responder «Sí» a «¿Tomas alguna medicación de forma regular?» y escribir en «Especifica tu medicación y motivo de la toma», el campo **queda vacío** (lo tecleado desaparece). «SIGUIENTE» muestra la alerta literal **«Medicación requerida — Por favor especifica tu medicación y el motivo de la toma.»** Captura: `~/Imágenes/e2e-2026-10-05/onboarding-antes-bug-medicacion-no-se-escribe.png`.
+
+**Causa:** el `onChangeText` del campo hacía `updateField('especificacionMedicacion', val); updateField('motivoMedicacion', val);`, es decir, dos `onChange({ ...data, [k]: v })` seguidos con la MISMA `data` del render, y arriba `FichaInicialScreen` hacía `setFormData({ ...formData, salud })` (forma no funcional). El segundo cambio pisaba al primero: `especificacionMedicacion` volvía al valor anterior (vacío) y el `TextInput` controlado borraba lo escrito.
+
+**Impacto:** cualquier aprendiz que toma medicación no podía pasar del capítulo 2 salvo respondiendo «No». Conviene que los mentores confirmen el dato con quien completó la ficha antes de este arreglo (en la base, una respuesta `medication` vacía o ausente no distingue «no toma» de «no pudo escribirlo»).
+
+**Solución:** una sola llamada, `onChange({ ...data, especificacionMedicacion: val, motivoMedicacion: val })` (commit propio en la rama `onboarding-nativo` del front: «Hacer que la medicación se pueda escribir…»). La pantalla actualiza además con `setFormData(prev => …)`. Prueba `features/onboarding/components/__tests__/pasosSalud.test.ts` — falla contra el código viejo (verificado).
+
+**Para que no vuelva:** nunca dos `onChange` seguidos con el mismo objeto; si un campo alimenta dos claves, se arman en un solo objeto.
+
+## E-503 · Arrastrar «Calidad de tu sueño» devolvía las horas de sueño al valor de antes (app, producción, RESUELTO 05/10, D-250)
+
+**Síntoma (emulador, `origin/master` del front):** en el capítulo 2, escribir `6` en «Horas promedio de sueño» y DESPUÉS arrastrar el deslizador de calidad: las horas vuelven a `7.5`. Captura `onboarding-antes-bug-horas-vuelven-al-arrastrar.png`.
+
+**Causa:** `SleepQualitySlider` arma su `PanResponder` con `useMemo(..., [trackWidth])`. Sus manejadores quedaban con el `onChange` del render en que se midió el riel, y ese `onChange` llevaba adentro la ficha de ESE momento (`{ ...data, calidadSueno }` y arriba `{ ...formData, salud }`): al arrastrar se reescribía la ficha entera con datos viejos.
+
+**Solución:** el deslizador lee el último `onChange` desde un `useRef` actualizado en cada render (mismo commit que E-502). Prueba en `pasosSalud.test.ts` (falla contra el código viejo).
+
+**Para que no vuelva:** todo manejador creado una sola vez (`PanResponder`, `useMemo`, callbacks de animación) lee las props por referencia, nunca por cierre.
+
+## E-504 · Un `<Modal>` dentro de un contenedor con `entering` de Reanimated se abre INVISIBLE en Android (app, desarrollo, RESUELTO 05/10, D-250)
+
+**Síntoma:** en el paso «Sobre ti» de la ficha nueva, tocar «Selecciona tu fecha de nacimiento» no mostraba nada. Pero el selector estaba abierto: `mobile_list_elements_on_screen` listaba «Cerrar el selector de fecha», «CONFIRMAR FECHA», y `adb shell dumpsys window windows` mostraba la ventana del diálogo con `isVisible=true` y `mDrawState=HAS_DRAWN`; la captura, la pantalla sin velo. La persona quedaba trabada sin poder elegir la fecha.
+
+**Causa (empírica):** la animación de montaje `entering={FadeInRight.duration(260)…}` en el contenedor del paso (ancestro del `DatePickerField`). Con `entering={undefined}` en ese mismo contenedor, el modal se ve. Reanimated 4.5.1 + Fabric (RN 0.86) en Android.
+
+**Solución:** la entrada del paso se hace con un valor compartido propio (`EntradaDePaso` en `MarcoDePaso.tsx`: opacidad + `translateX` con `withTiming`), que no toca a los hijos; el modal se ve, verificado en el emulador.
+
+**Para que no vuelva:** no usar `entering`/`exiting` de Reanimated en contenedores que puedan tener un `<Modal>` adentro (`DatePickerField`, `PhoneCountryInput`, `LocationCascadePicker`). Queda escrito en el comentario de `MarcoDePaso`.
+
+## E-505 · `transitionTimingFunction: 'cubic-bezier(…)'` revienta en Reanimated 4.5 (preventivo, no llegó al código, 05/10)
+
+**Síntoma (leído en el fuente antes de usarlo):** `[Reanimated] Invalid predefined timing function "cubic-bezier(0.23, 1, 0.32, 1)". Supported values are: …` — lo lanza `normalizeTimingFunction` (`react-native-reanimated/src/css/native/normalization/common/settings.ts`).
+
+**Causa:** la receta de «press feedback» de la skill `animate-expo` escribe la curva como texto en la propiedad suelta `transitionTimingFunction`. En Reanimated 4.5 el texto `cubic-bezier(…)` sólo se interpreta dentro del atajo `transition: '…'`; la propiedad suelta acepta nombres (`'ease-out'`) o `cubicBezier(…)` importado de Reanimated (que además no está en el doble de Jest).
+
+**Solución:** las animaciones del alta y el onboarding van con valores compartidos y `withTiming` (`theme/movimiento.ts`, comentario incluido).
+
+**Para que no vuelva:** al copiar una receta de transición de estilo, curva propia con `cubicBezier()`, nunca como texto en la propiedad suelta.
+
+## E-506 · Emulador `Pixel_6`: con teclado físico el foco por código no abre el teclado, Gboard queda en «barrita» y ESC hace «atrás» (entorno, 05/10)
+
+**Síntomas (05/10, probando el onboarding nuevo):**
+1. `focus()`/`autoFocus` deja el campo con borde dorado pero `adb shell dumpsys input_method` dice `mInputShown=false`.
+2. Después de mandar teclas con `adb shell input keyevent` (ENTER, DEL, MOVE_END), Gboard deja de mostrar el teclado completo y muestra una **barrita flotante vertical** (micrófono, borrar, `→|`, emoji, ≡). Sigue así aunque se reinicie Gboard.
+3. `adb shell input keyevent 111` (ESC) hace retroceder un paso en la app (Android lo despacha como atrás), igual que `keyevent 4` cuando el teclado ya está abajo.
+
+**Causa:** el AVD tiene `hw.keyboard=yes` y `show_ime_with_hard_keyboard=0`: el sistema da por hecho que hay teclado físico. En un teléfono real (sin teclado físico) el foco por código sí abre el teclado.
+
+**Qué hacer:** para ver el teclado completo, `adb shell am force-stop com.google.android.inputmethod.latin` y TOCAR el campo, sin `keyevent` antes. Para bajar el teclado, `keyevent 4` sólo si `mInputShown=true`. No usar ESC. `uiautomator dump` puede devolver un archivo viejo si la pantalla se está animando: preferir `mobile_list_elements_on_screen`.
+
+**De paso:** (a) el backend local `backend-ui.jar` (8086, `renaser_ui0210`) no tiene S3: «CONTINUAR» de Términos termina en «No se pudo guardar tu firma» (`WARN No se pudo guardar la firma "terms_signature": el almacenamiento S3 no está configurado en el backend.`); para ver «Elige tu Día 1» se marcó `terminos_aceptados_en` a mano en la base local y se volvió a dejar en `NULL`. (b) El APK de desarrollo instalado en el emulador (29/09) volvió a cerrarse una vez al arrancar en frío con la firma de E-452 (`SIGSEGV … MountingCoordinator::pullTransaction(bool) const+713`); no es del cambio de este día.
+
+## E-507 · «Línea negra» encima de la barra de pestañas en Hoy, Plan, Training y Yo (no en Comunidad) (app, producción, RESUELTO 05/10)
+
+**Síntoma (05/10, el dueño en su teléfono, modo oscuro):** una franja horizontal oscura de ~24 dp entre el contenido y la barra de pestañas (HOY · PLAN · TRAINING · COMUNIDAD · YO) en cuatro pestañas; en Comunidad no aparece. Medido en su captura: la barra es `rgb(22,21,19)` (`c.bg` + 4 % de blanco de `c.cardBg`) y la franja `rgb(12,11,9)` (`c.bg` puro).
+
+**Causa real:** el `SafeAreaView` de `HoyScreen`, `PlanScreen`, `TrainingScreen` y `YoScreen` iba sin `edges` (= los cuatro bordes), así que ponía `paddingBottom = insets.bottom` pintado de `c.bg`; y la `TabBar`, que se dibuja debajo de la pantalla, ya reserva ese mismo inset (`paddingBottom: max(insets.bottom, 14)`). El borde de la barra de gestos se pagaba dos veces. En claro no se ve porque `bg` y `cardBg` son casi iguales. **Es el mismo bug que Comunidad corrigió el 26/09** («franja blanca», comentario en `ComunidadScreen`): se arregló en una pantalla y no en las otras cuatro.
+
+**Solución:** `src/navigation/bordesDeUnaPestana.ts` (`BORDES_DE_UNA_PESTANA = ['top','left','right']`) y las cuatro pantallas lo usan. Con la barra escondida al desplazar, el borde de gestos lo sigue pintando la caja de la `TabBar`. Rama del front `barra-sin-franja` (`1cc21e7`).
+
+**Cómo evitar que vuelva:** `pestanasSinFranjaAbajo.test.ts` exige `edges={BORDES_DE_UNA_PESTANA}` en las cuatro pestañas (falla 4 de 5 contra el código viejo). Regla general: **una pantalla que vive bajo la barra de pestañas nunca aplica el borde seguro de abajo**; si se arregla un bug de layout en una pestaña, revisar las otras cuatro.
+
+## E-508 · Alerta falsa de Grafana «SER falla seguido» con estado `DatasourceError` (observabilidad, producción, RESUELTO 05/10)
+
+**Síntoma (05/10, correo de alertas de Grafana Cloud a renaser.ias@gmail.com):** la regla «SER falla seguido» del grupo `renaser-produccion` se disparó con estado **`DatasourceError`**, sin que SER estuviera fallando. El dueño lo leyó como «producción entró en un bucle».
+
+**Causa real:** la instancia de Grafana Cloud (stack `fearlesswalnut2395`) estaba dormida/sin poder consultar el datasource de Prometheus en ese momento, y las 6 reglas tenían `execErrState=Error`: un error al **consultar** la métrica se trata como alerta disparada. La métrica real de SER mostraba ok=1 y 0 errores.
+
+**Solución:** `execErrState=KeepLast` en las 6 reglas: si la consulta falla, la regla conserva su último estado en vez de disparar.
+
+**Cómo evitar que vuelva:** antes de alarmarse por una alerta, mirar el **estado** que trae el correo: `DatasourceError`/`NoData` habla de la consulta, no de la app. Toda regla nueva se crea con `execErrState=KeepLast` (y `noDataState` pensado caso por caso).
 
 ## E-509 · `NullPointerException` en `ImmutableCollections$MapN.get` al listar mensajes que no responden a nada (chat, desarrollo de D-251, RESUELTO, 05/10)
 
@@ -13521,6 +13595,44 @@ que falle con el módulo web.
 **Para que no vuelva:** una función de expo-* que se usa con `new Modulo.Clase` tiene que tener una prueba por plataforma o
 pasar por la API pública del paquete, que resuelve la plataforma sola.
 
+## E-515 · La hoja desde abajo no seguía al dedo dentro del `Modal` en Android (app, desarrollo, RESUELTO 05/10)
+
+**Síntoma (05/10, e2e en el emulador `Pixel_6` con la app nativa):** al arrastrar la agarradera o la cabecera de `HojaDesdeAbajo` la hoja no se movía; ni el arrastre lento la devolvía ni el golpe rápido la cerraba. En la web (Playwright) funcionaba, por eso pasó la primera verificación.
+
+**Causa real:** en Android el `Modal` de React Native envuelve el contenido en una vista que se queda con el toque al empezar; la cabecera pedía el gesto recién al moverse 6 px (`onMoveShouldSetPanResponder`), y para entonces el sistema ya no le pregunta.
+
+**Solución:** la cabecera toma el dedo al apoyarlo (`onStartShouldSetPanResponder`), y un toque sin arrastre deja la hoja en su lugar; la ✕ y el buscador siguen recibiendo sus toques. Front `rediseno-junto` `2791dfd`, test `arrastreDentroDelModal.test.ts` (2 de 3 fallan contra lo viejo).
+
+**Cómo evitar que vuelva:** un gesto se verifica con el dedo en Android nativo, no solo en la web: la web no reproduce el reparto de toques del `Modal`.
+
+## E-516 · Comunidad → Eventos: al abrir o volver de un evento con la lista desplazada, el encabezado queda escondido y aparece un hueco negro de ~400 px arriba (app, existente, RESUELTO 05/10)
+
+**Síntoma (05/10, e2e en el emulador):** con la lista de Eventos desplazada, abrir un evento (o volver de él) deja el encabezado de Comunidad escondido y un hueco negro de unos 400 px arriba (captura `junto-22` en `~/Imágenes/e2e-2026-10-05/`).
+
+> **Corregido 05/10, mismo día.** Esta entrada decía «Causa probable: el encabezado que se esconde al desplazar no se restablece al cambiar de vista… Sin arreglar todavía». La causa real es más precisa y el dueño pidió arreglarlo:
+
+**Síntoma medido:** el hueco es de 154 dp (404 px en el Pixel 6) arriba de «Volver a Eventos», y la barra de pestañas también queda escondida; al volver a la lista, igual encima de «Mi agenda».
+
+**Causa real (medida con logs en el emulador):** `SeccionEventos` usa una sola instancia de `useOcultarBarraAlDesplazar` para sus cuatro vistas (lista, detalle, formulario, agenda) **sin pasarle `vista`**, que es el caso que el hook documenta. En Android el `ScrollView` se envuelve en `AndroidSwipeRefreshLayout` solo cuando tiene `refreshControl` (lista y agenda sí, detalle y formulario no), así que al cambiar de vista se monta un ScrollView nuevo en y=0, y **un ScrollView recién montado no emite ningún `onScroll`**. El encabezado se quedaba `oculto` (translateY −154) mientras la vista nueva reservaba 154 dp de `paddingTop`. El detalle no se puede desplazar (842 de contenido en 842 de vista): no había gesto para recuperarlo.
+
+**Solución:** `useOcultarBarraAlDesplazar({ onScroll, vista: vista.nombre })` en `SeccionEventos`: cada cambio de vista llama a `mostrar()` y el encabezado y la barra vuelven. Mismo mecanismo que ya usan las secciones de Comunidad y las sub-vistas de Plan y Yo. Front `eventos-encabezado` `fd897f4`.
+
+**Cómo evitar que vuelva:** `encabezadoAlCambiarDeVista.test.ts` monta la sección real (falla 3 de 4 contra lo viejo: «Expected: 0, Received: -154»), y `pantallasConBarraAlDesplazar.test.ts` exige `vista:` en `SeccionEventos`. Regla: **toda pantalla con varias vistas que comparte el hook le pasa `vista`; el cambio de vista no se puede deducir del scroll.**
+
+## E-517 · (duplicado de E-511) cuota de `/tmp` agotada por copias web de los agentes (entorno, 05/10)
+
+> **Corregido 05/10, mismo día.** Esta entrada describía el mismo incidente que **E-511** (rama `responder-mensajes`): «`mvn verify` cae con "Se ha excedido la cuota de disco" al leer `Cinzel.ttf`», causado por dos copias web de 2,1 GB en el scratchpad de `/tmp`. Se registró dos veces porque el coordinador y el agente del backend lo anotaron en ramas distintas a la vez. **La entrada válida es E-511**, que además trae el síntoma literal de los dos procesos y la causa completa (cuota de 6.267 MB por usuario, `--reflink` que no aplica entre sistemas de archivos). Este número queda reservado para que no se reuse.
+
+## E-518 · El sticker «¡Muy bien!» se ve como una tarjeta blanca en el chat (app, producción desde el 30/09, RESUELTO 05/10)
+
+**Síntoma (05/10, el dueño en una captura del chat):** el búho con corona de «¡Muy bien!» aparece sobre un **rectángulo blanco** en vez de recortado sobre el fondo del chat; en modo oscuro, un rectángulo blanco sobre negro. Los otros 16 stickers se ven sin fondo.
+
+**Causa real:** el archivo `assets/stickers/renaser/muy-bien.webp` (front `6d899b7`, 30/09) trae el búho sobre un **recuadro blanco opaco** (x 85–427, todo el alto; 35 % de la imagen blanco con alfa 255). Solo los márgenes laterales eran transparentes. No es la burbuja: `burbujaSticker` ya es `transparent`. Medido con PIL: los demás tienen 0–3 % de blanco opaco.
+
+**Solución:** se quitó el blanco conectado al borde (relleno por inundación con tolerancia) y se des-mezcló el antialiasing del contorno (color-a-alfa sobre blanco en una banda de 3 px). Front `rediseno-junto` `37fdf0e`. Los mensajes viejos con ese sticker siguen mostrando la versión con fondo (la imagen ya está subida a S3); los nuevos salen sin fondo.
+
+**Cómo evitar que vuelva:** al agregar un sticker, medir el blanco opaco antes de commitear (un sticker sano tiene < 5 %): `python3 -c "from PIL import Image; im=Image.open('X.webp').convert('RGBA'); p=list(im.getdata()); print(sum(1 for r,g,b,a in p if a>240 and min(r,g,b)>240)/len(p))"`. No hay prueba de jest porque el entorno de pruebas no decodifica WebP.
+
 ## E-519 · El javadoc de `ListarEvidenciaUseCase` decía que el MENTOR estaba obligado a mandar `participanteId` (documentación, RESUELTO, 05/10)
 
 **Síntoma (literal, `ListarEvidenciaUseCase.java`, encontrado al agregar D-252):** «MENTOR: {@code participanteId} es OBLIGATORIO (no hay forma pública de listar "todos mis aprendices" en este alcance …)». El código (`EvidenciaService.resolverFiltroSegunRol`) hace lo contrario: un MENTOR sin `participanteId`, o con el suyo, recibe su propia evidencia (autoconsulta, un mentor también cursa el programa — D-07).
@@ -13540,6 +13652,36 @@ pasar por la API pública del paquete, que resuelve la plataforma sola.
 **Solución:** apagar por el PID que escucha en el puerto (`ss -ltnp | grep :8088`) o el que imprime Spring en el log, verificando con `ps -o pid,args -p <pid>` antes del `kill`.
 
 **Para que no vuelva:** no hacer `cd … && … &` al levantar algo que se va a apagar por PID; usar rutas absolutas y poner el `&` solo sobre el comando (`DB_URL=… setsid nohup java -jar /ruta/abs.jar > log 2>&1 < /dev/null & echo $!`), y al apagar comprobar que el PID es `java`/`node` y no `bash`.
+
+## E-525 · La barra de escribir del chat queda ~48 dp por encima del teclado en Android, con una franja vacía en medio (app, producción desde el 26/09, RESUELTO 05/10)
+
+**Síntoma (05/10, prueba nativa en el emulador `Pixel_6`):** con el teclado abierto en una conversación, la barra de escribir flota ~48 dp sobre el teclado y entre las dos queda una franja vacía del color del chat. Medido con logs temporales: `[kav-layout] {"x":0,"y":48.76…,"height":841.52…} insets {"left":0,"bottom":24,"right":0,"top":48.76…}` y `[kbd] {"screenY":577.90…,"height":312.38…}`.
+
+**Causa real:** el `KeyboardAvoidingView` de la conversación (`ComunidadScreen`) llevaba `keyboardVerticalOffset={insets.top}`, pero la `y` que da su `onLayout` ya incluye ese margen: el borde seguro de arriba se restaba dos veces. Viene de `26a5db0` (26/09) y está en master: probablemente también pasa en producción (no verificado en master).
+
+**Solución:** se quitó el desfase. Front `rediseno-junto` `085ccb6`. Tests: uno que lee la fuente y otro que rehace la cuenta de React Native con los números medidos (`comunidadEnAndroid.test.ts`).
+
+**Cómo evitar que vuelva:** `keyboardVerticalOffset` es la distancia entre el **tope de la pantalla** y el tope del `KeyboardAvoidingView` **solo si** su `y` no la incluye ya; medir con `onLayout` antes de sumar insets. Todo cambio de teclado se verifica en Android nativo, no en web.
+
+## E-526 · «Responder» deja el cursor en el campo con el teclado cerrado en Android (app, desarrollo, RESUELTO 05/10)
+
+**Síntoma (05/10, prueba nativa):** al elegir «Responder» en el menú del mensaje, el campo queda enfocado pero el teclado no sale; hay que tocar el campo otra vez. En web no pasa.
+
+**Causa real:** el campo se enfocaba a los 250 ms fijos, cuando la hoja del menú (otra ventana, un `Modal`) todavía estaba en pantalla; Android ignora el pedido de teclado de una ventana que no tiene el foco. Medido: enfocando al desmontarse la hoja, igual sin teclado; 100 ms después, 3 de 3 veces con teclado.
+
+**Solución:** `HojaDesdeAbajo` avisa cuándo se fue del todo (`alTerminarDeCerrar`: al desmontarse, + 150 ms en Android) y recién ahí se enfoca el campo. Front `085ccb6`, tests `alTerminarDeCerrar.test.ts` y `comunidadEnAndroid.test.ts`.
+
+**Cómo evitar que vuelva:** nunca enfocar un campo con un tiempo fijo después de cerrar un `Modal`: esperar `alTerminarDeCerrar`.
+
+## E-527 · «Ver más» se lee «Ver» en el detalle de un curso en Android (app, RESUELTO 05/10)
+
+**Síntoma (05/10, prueba nativa):** en el detalle de un curso el botón dice «Ver», con un hueco antes del chevron; en la tarjeta de la lista se ve bien.
+
+**Causa real:** la caja del texto quedaba una fracción de píxel más angosta que la frase y «más» pasaba a un segundo renglón invisible (redondeo de Yoga en Android). Confirmado alternando con y sin el arreglo.
+
+**Solución:** `paddingRight: 1` en el texto. Front `085ccb6`, con test.
+
+**Cómo evitar que vuelva:** un texto corto en una fila con ícono que se ve truncado sin «…» en Android es casi siempre este redondeo: darle 1 px de aire o `flexShrink: 0`.
 
 ## E-528 · `POST /onboarding/answers` acepta el `mediaId` de un archivo de OTRA persona (seguridad, RESUELTO, 05/10)
 
