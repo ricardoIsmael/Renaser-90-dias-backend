@@ -13504,3 +13504,29 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 **Solución:** `src/navigation/bordesDeUnaPestana.ts` (`BORDES_DE_UNA_PESTANA = ['top','left','right']`) y las cuatro pantallas lo usan. Con la barra escondida al desplazar, el borde de gestos lo sigue pintando la caja de la `TabBar`. Rama del front `barra-sin-franja` (`1cc21e7`).
 
 **Cómo evitar que vuelva:** `pestanasSinFranjaAbajo.test.ts` exige `edges={BORDES_DE_UNA_PESTANA}` en las cuatro pestañas (falla 4 de 5 contra el código viejo). Regla general: **una pantalla que vive bajo la barra de pestañas nunca aplica el borde seguro de abajo**; si se arregla un bug de layout en una pestaña, revisar las otras cuatro.
+
+## E-508 · Alerta falsa de Grafana «SER falla seguido» con estado `DatasourceError` (observabilidad, producción, RESUELTO 05/10)
+
+**Síntoma (05/10, correo de alertas de Grafana Cloud a renaser.ias@gmail.com):** la regla «SER falla seguido» del grupo `renaser-produccion` se disparó con estado **`DatasourceError`**, sin que SER estuviera fallando. El dueño lo leyó como «producción entró en un bucle».
+
+**Causa real:** la instancia de Grafana Cloud (stack `fearlesswalnut2395`) estaba dormida/sin poder consultar el datasource de Prometheus en ese momento, y las 6 reglas tenían `execErrState=Error`: un error al **consultar** la métrica se trata como alerta disparada. La métrica real de SER mostraba ok=1 y 0 errores.
+
+**Solución:** `execErrState=KeepLast` en las 6 reglas: si la consulta falla, la regla conserva su último estado en vez de disparar.
+
+**Cómo evitar que vuelva:** antes de alarmarse por una alerta, mirar el **estado** que trae el correo: `DatasourceError`/`NoData` habla de la consulta, no de la app. Toda regla nueva se crea con `execErrState=KeepLast` (y `noDataState` pensado caso por caso).
+
+## E-515 · La hoja desde abajo no seguía al dedo dentro del `Modal` en Android (app, desarrollo, RESUELTO 05/10)
+
+**Síntoma (05/10, e2e en el emulador `Pixel_6` con la app nativa):** al arrastrar la agarradera o la cabecera de `HojaDesdeAbajo` la hoja no se movía; ni el arrastre lento la devolvía ni el golpe rápido la cerraba. En la web (Playwright) funcionaba, por eso pasó la primera verificación.
+
+**Causa real:** en Android el `Modal` de React Native envuelve el contenido en una vista que se queda con el toque al empezar; la cabecera pedía el gesto recién al moverse 6 px (`onMoveShouldSetPanResponder`), y para entonces el sistema ya no le pregunta.
+
+**Solución:** la cabecera toma el dedo al apoyarlo (`onStartShouldSetPanResponder`), y un toque sin arrastre deja la hoja en su lugar; la ✕ y el buscador siguen recibiendo sus toques. Front `rediseno-junto` `2791dfd`, test `arrastreDentroDelModal.test.ts` (2 de 3 fallan contra lo viejo).
+
+**Cómo evitar que vuelva:** un gesto se verifica con el dedo en Android nativo, no solo en la web: la web no reproduce el reparto de toques del `Modal`.
+
+## E-516 · Comunidad → Eventos: al abrir o volver de un evento con la lista desplazada, el encabezado queda escondido y aparece un hueco negro de ~400 px arriba (app, existente, ABIERTO 05/10)
+
+**Síntoma (05/10, e2e en el emulador):** con la lista de Eventos desplazada, abrir un evento (o volver de él) deja el encabezado de Comunidad escondido y un hueco negro de unos 400 px arriba (captura `junto-22` en `~/Imágenes/e2e-2026-10-05/`).
+
+**Causa probable:** el encabezado que se esconde al desplazar (`useEncabezadoAlDesplazar`, front `c68a5c8`) no se restablece al cambiar de vista dentro de Comunidad. No viene del rediseño del 05/10. **Sin arreglar todavía**: pendiente de decisión del dueño.
