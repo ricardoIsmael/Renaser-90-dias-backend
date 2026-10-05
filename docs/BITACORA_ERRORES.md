@@ -13525,11 +13525,19 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 
 **Cómo evitar que vuelva:** un gesto se verifica con el dedo en Android nativo, no solo en la web: la web no reproduce el reparto de toques del `Modal`.
 
-## E-516 · Comunidad → Eventos: al abrir o volver de un evento con la lista desplazada, el encabezado queda escondido y aparece un hueco negro de ~400 px arriba (app, existente, ABIERTO 05/10)
+## E-516 · Comunidad → Eventos: al abrir o volver de un evento con la lista desplazada, el encabezado queda escondido y aparece un hueco negro de ~400 px arriba (app, existente, RESUELTO 05/10)
 
 **Síntoma (05/10, e2e en el emulador):** con la lista de Eventos desplazada, abrir un evento (o volver de él) deja el encabezado de Comunidad escondido y un hueco negro de unos 400 px arriba (captura `junto-22` en `~/Imágenes/e2e-2026-10-05/`).
 
-**Causa probable:** el encabezado que se esconde al desplazar (`useEncabezadoAlDesplazar`, front `c68a5c8`) no se restablece al cambiar de vista dentro de Comunidad. No viene del rediseño del 05/10. **Sin arreglar todavía**: pendiente de decisión del dueño.
+> **Corregido 05/10, mismo día.** Esta entrada decía «Causa probable: el encabezado que se esconde al desplazar no se restablece al cambiar de vista… Sin arreglar todavía». La causa real es más precisa y el dueño pidió arreglarlo:
+
+**Síntoma medido:** el hueco es de 154 dp (404 px en el Pixel 6) arriba de «Volver a Eventos», y la barra de pestañas también queda escondida; al volver a la lista, igual encima de «Mi agenda».
+
+**Causa real (medida con logs en el emulador):** `SeccionEventos` usa una sola instancia de `useOcultarBarraAlDesplazar` para sus cuatro vistas (lista, detalle, formulario, agenda) **sin pasarle `vista`**, que es el caso que el hook documenta. En Android el `ScrollView` se envuelve en `AndroidSwipeRefreshLayout` solo cuando tiene `refreshControl` (lista y agenda sí, detalle y formulario no), así que al cambiar de vista se monta un ScrollView nuevo en y=0, y **un ScrollView recién montado no emite ningún `onScroll`**. El encabezado se quedaba `oculto` (translateY −154) mientras la vista nueva reservaba 154 dp de `paddingTop`. El detalle no se puede desplazar (842 de contenido en 842 de vista): no había gesto para recuperarlo.
+
+**Solución:** `useOcultarBarraAlDesplazar({ onScroll, vista: vista.nombre })` en `SeccionEventos`: cada cambio de vista llama a `mostrar()` y el encabezado y la barra vuelven. Mismo mecanismo que ya usan las secciones de Comunidad y las sub-vistas de Plan y Yo. Front `eventos-encabezado` `fd897f4`.
+
+**Cómo evitar que vuelva:** `encabezadoAlCambiarDeVista.test.ts` monta la sección real (falla 3 de 4 contra lo viejo: «Expected: 0, Received: -154»), y `pantallasConBarraAlDesplazar.test.ts` exige `vista:` en `SeccionEventos`. Regla: **toda pantalla con varias vistas que comparte el hook le pasa `vista`; el cambio de vista no se puede deducir del scroll.**
 
 ## E-517 · `mvn verify` cae con «Se ha excedido la cuota de disco» al leer `Cinzel.ttf` (entorno, laptop, RESUELTO 05/10)
 
